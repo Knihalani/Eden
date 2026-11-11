@@ -8,8 +8,8 @@
  * sync before each request), `backfill` (before the first request, once per user).
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
- *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE] [--intent FILE[,FILE]]
+ *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
+ *     [--json FILE] [--pool-diag FILE] [--intent FILE[,FILE]]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it

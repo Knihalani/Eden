@@ -126,9 +126,53 @@ record where a search row is a summary, and Eden's version is title and text (D2
 unchanged item would send a false "updated:" packet. Any fix (comparing only what both copies hold, or holding the
 fetched copy as the item's text from the start) needs a captured reply pair per provider and is not built here.
 
-## 5. The connector lab, end to end (weak point 8)
+## 5. The connector lab, end to end (weak point 8, D842)
 
-See §5 of this note once filled in by the lab run below.
+The four presets point at two kinds of server. `gmail` and `google-calendar` are Google's hosted servers: not open
+source, so they cannot run in the lab, and capturing their replies needs an account (the pilot, D489, docs/PILOT.md).
+`caldav` and `obsidian` point at the lab's pinned OSS servers, which were built and run over the seeded world
+(seed 1000) in Docker: `bun packages/sim/src/lab/build.ts radicale caldav mcpvault`, then
+`bun packages/sim/src/lab/capture-preset-tools.ts packages/sources/src/fixtures/lab-preset-tools.json`. All three
+images built at the pinned commits with no fix needed.
+
+| Server | Tools (none annotated `readOnlyHint`) | Get by id | Fetched copy = searched copy | Listing for the sync (D57) |
+| --- | --- | --- | --- | --- |
+| caldav (madbonez/caldav-mcp @6db4975, Radicale) | `caldav_list_calendars`, `caldav_create_event`, `caldav_get_event_by_uid`, `caldav_delete_event`, `caldav_search_events`, `caldav_get_events`, `caldav_get_today_events`, `caldav_get_week_events` | `caldav_get_event_by_uid` → `{uid}`; the search row's ref is the uid | **Yes**: the whole `ContextItem` equal for both captured events | No: `caldav_get_events` is by start time over a week, no cursor |
+| mcpvault (bitbonsai/mcpvault @adda860, `--read-only`) | `read_note`, `list_directory`, `search_notes`, `read_multiple_notes`, `get_notes_info`, `get_frontmatter`, `get_vault_stats`, `list_all_tags`, `wiki_link`, `get_note_outline`, `read_note_lines` | `read_note` maps (`path`) but the ref is the row's `uri`: error result; batch tools take arrays | **No**: the search row is held as its JSON with an excerpt, `read_note` gives `{fm, content}` with no id (null) | No: `get_vault_stats` gives 20 `{path, modified}` rows, no paging |
+
+So the `caldav` preset names `caldav_get_event_by_uid` (D842); obsidian keeps `noFetch` with the reason above. What
+caldav's fetch buys: D126's re-read of a copy a signal doubted, and ref notices (D347) for an integrator who forwards
+CalDAV changes by uid; with no listing the preset is not synced, so the weekly sweep (D356) does not apply. Caveats
+read from the server's source and not tested: it searches a year either side of its own clock (an event outside is a
+null, kept as held), and it expands no recurrences (the lab world has none).
+
+**Still needs a real account:** Gmail's and Google Calendar's search and get replies (whether a `get_event` copy
+equals `search_events'`, and the shape a Gmail thread mapping would need, D415); the hosted servers' read-only
+annotations (D294: a connect fails closed without them); Slack's and Notion's hosted servers (§4); OAuth scopes and
+token refresh against a real provider (`examples/oauth-directory`); latency and rate limits of real connectors (every
+lab latency figure is assumed).
+
+## 6. Why calendars got none: a bug in the simulation (D842)
+
+Traced at the parent's request, one moved calendar event at a time (`--move-after 3`, seeds 41–48). Of the three
+calendar items moved mid-session, two were `unpolled` (the calendar was not listed between the move and the
+session's end: a quiet source, as designed) and one, `calendar:event-1486`, was `unseen`: the calendar *was* listed
+after the move (3 → 4 listings) and the cache still held the backfill's copy. The cause was in the world, not the
+engine: `buildWorld` gives an event an `updatedAt` 2–20 days before its start (routine events, 10 days before), so an
+event weeks out was last changed in the future (36 of 85 calendar items in seed 41's world, up to 337 hours ahead).
+`SimSource.list` lists the most recently changed first, so an event edited now sat below every one of those and never
+reached the poll's first page. Clamped to an hour before the world's present (`Math.min`, no new random draw). After
+the fix event-1486 is `updated`, and over 16 users:
+
+| Case | Calendar updates arrived | All owed updates arrived | Request calls a request (41–48 / 49–56) |
+| --- | --- | --- | --- |
+| Hardest (before the last request), before → after | 0/15 → 6/15 | 176/260 → 182/261 | 1.334 → 1.472 / 1.232 → 1.390 |
+| `--move-after 3`, before → after | 0/15 → 7/15 | 196/260 → 204/261 | 1.341 → 1.479 / 1.234 → 1.393 |
+
+The calendar now looks like a source that changes, so its learned rate rises and it is polled more (about +0.14 calls
+a request). The remaining calendar losses are `unpolled`: the quiet source, which only a notice fixes. Eval
+(0.65/0.52/0) and funnel (315/276) are unchanged by the fix; the figures in §1–§2 were measured before it, and §2's
+conclusion does not depend on it (a calendar the poll now sees needs re-reads even less).
 
 ## Reproduce
 
