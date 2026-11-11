@@ -137,6 +137,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import { DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -225,6 +226,7 @@ const cli = flags(
         "check-model",
         "check-cache",
         "check-log",
+        "check-dump",
         "templates",
         "connect-at",
         "connect-tick-s",
@@ -586,6 +588,10 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
       }
     : checkModel;
 const checkLanes: PushChecker[] = [];
+/** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
+const CHECK_DUMP = opt("check-dump", "");
+if (CHECK_DUMP && CHECK === "none") throw new Error("--check-dump needs --check");
+if (CHECK_DUMP) writeFileSync(CHECK_DUMP, "");
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -1043,7 +1049,19 @@ async function runSeed(
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
   const laneCheck = loggedCheck({ suite, seed, variant });
-  const checker = laneCheck ? new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }) : null;
+  const dumpTasks = new Map<string, DumpTask>();
+  const checker = !laneCheck
+    ? null
+    : CHECK_DUMP
+      ? ((kept) =>
+          new DumpingChecker(
+            { model: kept.model, budget: new Budget(UNCAPPED) },
+            kept.replies,
+            CHECK_DUMP,
+            (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
+            (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
+          ))(replyKeeping(laneCheck))
+      : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
@@ -1219,6 +1237,7 @@ async function runSeed(
     // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
+    dumpTasks.set(sessionId, { suite, seed, variant, template: task.template, planted: id });
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();
