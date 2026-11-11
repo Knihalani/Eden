@@ -170,3 +170,17 @@ every arm here costs more):**
 **Budget.** About $10 **[EST]**: short three arms about $5.5, days about $1.3, Sonnet regrades about $3 (N5: two
 arms short $3.35, days $0.77, regrades $1.9). No arm, seed, bound or rule changes after the first call; anything later
 is an addendum written before its own run.
+
+### 2.4 Addendum C (before any call it covers): the check arms lose the open shape's pushes
+
+Written after reading A's form 2 funnel rows (seeds 42–43) and before any form 3 row was read. Form 2 handed fewer
+planted facts than the default (271 against 291 of 384), where N5's Kp handed more (403 against 370 of 576). The
+cause is in the code, not the check: since D710 the default also pushes for requests whose verb is on no list
+(`pushOpen`), and that path is off whenever `pushCheck` is on (D702 left the check's paid call off it). So every
+check arm silently lost those pushes (31 of train's 192 templates).
+
+- **Trial `pushCheckOpen` (D823, off):** with `pushCheck`, opened pushes start and are checked as listed ones.
+- **A's screen, added:** once A's form 3 runs finish, each form is run again on seeds 42–43 with `pushCheckOpen`
+  (its recorded replies replayed, the opened pushes' calls made live, about $0.05 **[EST]**), and those rows are
+  reported beside A's. A's rule is applied to A's own rows, unchanged.
+- **B's arms, amended:** `eden~N*` and `eden~S*` also set `pushCheckOpen` true. Nothing else in B changes.

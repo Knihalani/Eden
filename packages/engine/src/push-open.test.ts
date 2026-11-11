@@ -163,6 +163,37 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(model.calls.length).toBe(0);
   });
 
+  test("pushCheckOpen (P2, D823): with the check, an opened message is pushed and checked like a listed one", async () => {
+    const model = new FakeModel(() => '{"items":[{"i":1,"on":"Premium Bonds hold","hits":"its bonds","act":true}]}');
+    const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
+    const partner = new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: {
+        ...CORE_CONFIG,
+        askReader: true,
+        readerPush: true,
+        readerGate: true,
+        confidentScore: 99,
+        fallbackMatchedTerms: 99,
+        pushCandidates: 2,
+        pushOpen: true,
+        pushCheck: true,
+        pushCheckForm: 2,
+        pushCheckOpen: true,
+      },
+      checker: new PushChecker({ model, budget: new Budget() }),
+    });
+    const got = await packets(partner, REQUEST);
+    expect(model.calls.length).toBe(1);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.citations.map((c) => c.itemId)).toEqual([ITEMS[0]!.id]);
+  });
+
   test("an opened message is not kept as an acting request for plan alerts (D301)", async () => {
     const acted = (p: ContextPartner) =>
       (p as unknown as { sessions: Map<string, { acted?: unknown[] }> }).sessions.values().next().value?.acted

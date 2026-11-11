@@ -186,6 +186,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckForm: [...PUSH, "pushCheck"],
   pushCheckSilent: [...PUSH, "pushCheck"],
   pushCheckAnchored: [...PUSH, "pushCheck"],
+  pushCheckOpen: [...PUSH, "pushCheck", "pushOpen"],
   pushWidenEmbed: [...PUSH, "pushCheck", "pushWiden"],
   pushWidenIntent: [...PUSH, "pushCheck", "pushWiden"],
   pushWidenDeep: [...PUSH, "pushCheck", "pushWiden"],

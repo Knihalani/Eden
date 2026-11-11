@@ -760,6 +760,12 @@ export interface EngineConfig {
    */
   pushCheckAnchored: boolean;
   /**
+   * P2 (D823; a trial, off): with `pushCheck`, the open shape (`pushOpen`, D702) starts the push too, and its pool is
+   * checked as a listed request's. Without it a check arm silently loses every opened push the default makes (31 of
+   * train's 192 templates), so an arm measured against today's default reads lower than the check is.
+   */
+  pushCheckOpen: boolean;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates` and without
    * `pushCheck`, the push also runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -945,6 +951,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckForm: 1,
   pushCheckSilent: true,
   pushCheckAnchored: false,
+  pushCheckOpen: false,
   pushOpen: true,
   pushIndirect: false,
   pushWidenEmbed: 3,
