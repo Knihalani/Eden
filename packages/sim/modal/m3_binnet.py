@@ -33,12 +33,13 @@ def run_remote(run: str, args: str, train: str, ev: str, ev2: str) -> dict:
     out = f"/tmp/{run}"
     os.makedirs(out, exist_ok=True)
     cmd = ["python", "-u", "/app/binnet.py", *shlex.split(args), "--train", f"/vol/data/g/{train}",
-           "--eval", f"/vol/data/g/{ev}", "--out", f"{out}/result.json"]
+           "--eval", f"/vol/data/g/{ev}", "--out", f"{out}/result.json", "--save", f"/vol/models/{run}.pt"]
     if "--arch pair" in args or "--arch notwin" in args:
         cmd += ["--ranks", f"{out}/ranks.jsonl"]
         if ev2:
             cmd += ["--eval2", f"/vol/data/g/{ev2}", "--ranks2", f"{out}/ranks-m2.jsonl"]
     p = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ, "BINNET_THREADS": "8"})
+    vol.commit()
     files = {}
     for name in ("result.json", "ranks.jsonl", "ranks-m2.jsonl"):
         path = f"{out}/{name}"

@@ -292,3 +292,18 @@ Against the pre-registered bar (all 157 held-out hidden requests; the shipped de
 H1 alone holds 109 facts in its five against the shipped pool's 123 (its candidates have no intent hits) with **decoys
 83 → 59 (−29%)**; fused with the shipped pool (k 5) facts 133 (+6.4 points) and decoys 87: **fail** on both bars. The
 ranker hands a cleaner five than the shipped pool but not more facts; fused, it adds facts and loses the decoy cut.
+
+**H1 with the hard-twin curriculum and a fact-over-twin margin** (40% of hidden training templates keep their twin;
+margin 1.0, weight 1.0; otherwise as above):
+
+| check | fact@1 | fact@5 | twin@5 | silent controls |
+|---|---|---|---|---|
+| 150 / 300 steps | 56 / 54 | 95 / 103 | 48 / 67 | 131 / 126 |
+| end of epoch 0 | 53 | 98 | 54 | 140 |
+| 450 / 600 / 750 steps | 56 / 47 / 52 | 99 / 83 / 93 | 62 / 47 / 50 | 122–125 |
+| end of epoch 1 | 48 | 82 | 48 | 142 |
+
+The margin moves the ranker along the same trade-off, twins down by giving up facts (47–54 twins at 82–98 facts,
+against 59 at 109 without it); it does not escape it. Reading: what separates a fact from its twin on the sim's held-out
+families is about AUC 0.75 even read from the item alone with all the data (§7e), and the pair net adds little to that.
+The owner's targets (twin@5 near 0, fact@5 in the high 130s) are not reachable from these signals on these families.

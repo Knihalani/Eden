@@ -822,6 +822,10 @@ def run(o):
             print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
     else:
         raise SystemExit(f"unknown arch {o.arch}")
+    if o.save:
+        # The trained network (state dict and the settings that rebuild it), for the CPU export and the wiring.
+        torch.save({"state": net.state_dict(), "arch": o.arch, "float": o.float, "bits": o.bits,
+                    "prior_cuts": PRIOR["cuts"], "args": vars(o)}, o.save)
     out = {"arch": o.arch, "float": o.float, "bits": o.bits, "worlds": len(train), "epochs": o.epochs,
            "seconds": round(time.time() - t0), "curve": curve[-10:], "result": result}
     if o.out:
@@ -890,6 +894,7 @@ if __name__ == "__main__":
     a.add_argument("--eval-steps", type=int, default=0, help="pair: a held-out check every N steps (best kept)")
     a.add_argument("--held", default="train5,train6")
     a.add_argument("--out", default="")
+    a.add_argument("--save", default="", help="write the trained network here (torch state dict + settings)")
     a.add_argument("--ranks", default="", help="pair/notwin: write the eval's ranks (score.py's format) here")
     a.add_argument("--eval2", default="", help="a second eval file to rank (M2's test split)")
     a.add_argument("--train2", default="", help="tags: export groups whose planted items are added to training")
