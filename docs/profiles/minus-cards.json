@@ -6,5 +6,6 @@
   "intentByKind": false,
   "cardsSourceAware": false,
   "cardsOrder": false,
-  "cardsLanes": 1
+  "cardsLanes": 1,
+  "cardsRequestsFix": false
 }

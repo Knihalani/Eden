@@ -530,7 +530,7 @@ Anthropic-direct lab figures, Haiku 5.5, thinking off.
   are about two thirds of its price, the output about a quarter. A pool of 10 items of 140 characters cut $ a call
   26.5% ($0.000171) and handed 20 fewer facts of 384 (D1050). The push reaches the call about 9 ms after the request,
   so the wait is the call itself.
-- **Card-and-intent call** (400 items, batches of 20): $0.000073 a item, 201 input tokens a item (66 cached) and 118
+- **Card-and-intent call** (400 items, batches of 20): $0.000073 an item, 201 input tokens an item (66 cached) and 118
   output: **output is about 80% of its price.** On batches whose reply lists requests, batches of 40 cost the same a
   item; a compact reply (no key names) 27% less (D1052). Neither is taken. The shipped prompt leaves the requests
   list out of about a quarter of its replies (D1053), so its price per item given requests is about a third higher
@@ -539,6 +539,19 @@ Anthropic-direct lab figures, Haiku 5.5, thinking off.
   and $0.058–0.060 against 7 calls and $0.0074–0.0080, with 70–74 s to idle against 3.5–6.3 s; about $0.000040 a
   item sent. At 50 new items a day **[EST]** about +$0.04 a user-month after a one-time +$0.051. Not taken: the same
   requests on every item read no more facts than the lean selection's (funnel), see D1053 for the live pair.
+
+### The card prompt's requests fix (`cardsRequestsFix`, D1060, D1062; docs/research/h2-requests-fix.md)
+
+Anthropic-direct lab figures, Haiku 5.5, thinking off. The shipped enricher's card calls with the fix, over the 84
+worlds of train1–6 and longtail × seeds 41–44 × hidden, control and neutral (`cold-start.ts`): $0.63, 581 calls of
+which 17 re-asks (2.9%), 97.7% of items sent given requests. On train's 72 worlds alone $0.0075 a world against P7's
+$0.0070 with the old prompt on the same 72 (+8% **[EST]**: two runs months apart, not interleaved). A call writes
+more because more items get requests: on H2's 400 items $0.0000770 against $0.0000766 an item
+over the batches that list requests, and 379 against 260 items given requests (D1053). A re-ask is one
+requests-only call for a batch, reserved on the enricher's `Budget` like a card call (about $0.0008 for 20 items
+**[EST]**: R20's $0.0000419 an item). Per user-month **[EST]**: about +8% of the background card spend (COST-MODEL's
+$0.026 first month, about +$0.002). Pi (agent and Eden per task): −$0.001 per 1,000 tasks (−0.008..+0.006), wall
+−0.007 s.
 
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
@@ -654,6 +667,19 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 **[EST]**. Asking the check's question once per item at ingest (rejected, D526) cost $0.000053–0.000055 an item on
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
+
+## The turn gate (`pushGate`, M13, in the default since D1014)
+
+No model call and no network call: a local model decides, on the fast path, whether a user turn starts the push.
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| CPU a user turn | 42.6 µs mean, 37.9 µs p50, 99.3 µs p99 (84,051 dev turns, one core) | `bun packages/sim/lab/m13/bench.ts` |
+| Weights and load | 1,590,904 bytes held once a process; 5.1 ms to load at the first user message | the same |
+| Paid calls it moves | the push check's call follows each push started (D828); the gate starts more pushes on non-English, terse and reworded requests and fewer on chatter, statements and logs | Pi pair below |
+| Per 1,000 task runs, Haiku 5.5 agent (train and reworded, seeds 41–42) | $0.479 → $0.482 (agent and Eden per task); wall 4.14 → 4.12 s | `packages/sim/lab/p3/report.py` on `pi.sh`'s runs |
+
+A turn whose weights cannot be read is decided by `pushStart` alone, at its old cost.
 
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
