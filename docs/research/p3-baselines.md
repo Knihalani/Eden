@@ -125,12 +125,14 @@ intent index off** (`--intent none`). Without it the pool-recall gap is at its w
 full reach; the paid run's users w45 on had intent requests only for the items a card call read.
 `packages/sim/lab/p3/pool.py` sorts each request's planted item into o3-pointer §3.2's buckets.
 
-| Arm | hidden pushed at its request | handed earlier that day | not in the pool | pooled, fails the constraint test | pooled, below the cut | decoys pushed at their request |
-| --- | --- | --- | --- | --- | --- | --- |
-| default (`--intent none`) | 184 | 94 | **112** | 27 | 12 | 184 |
-| + `aliasTerms` (dates and names) | 190 | 93 | 108 | 25 | 13 | **197** |
-| + dates only | 189 | 92 | 112 | 24 | 12 | 195 |
-| + names only | 187 | 95 | 107 | 27 | 13 | 184 |
+| Arm | hidden pushed at its request | handed earlier that day | not in the pool | pooled, fails the constraint test | pooled, below the cut | no push | decoys pushed at their request |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| default (`--intent none`) | 184 | 94 | **112** | 27 | 12 | 4 | 184 |
+| + `aliasTerms` (dates and names) | 190 | 93 | 108 | 25 | 13 | 4 | **197** |
+| + dates only | 189 | 92 | 112 | 24 | 12 | 4 | 195 |
+| + names only | 187 | 95 | 107 | 27 | 13 | 4 | 184 |
+
+Readout: `packages/sim/lab/p3/wp2-pool.txt` (the alias rows at commit f39b431f, which this tree no longer holds).
 
 (With intent replayed, w41–w44: 26 pushed, 13 earlier that day, 2 not in the pool of 46, as O3 read.)
 
@@ -139,7 +141,7 @@ full reach; the paid run's users w45 on had intent requests only for the items a
 A days user's world (`userWorldOf`) holds the base world's ~1,490 items plus one planted item for each of its own
 hidden and control requests (about 28), not every template's. `--pool-diag` now counts, for each request, how many of
 the pool's items are **other requests' planted items** (`poolPlanted`, `handedPlanted`): on average 1.3 of a hidden
-request's ~15 pool items and 0.7 of its handed ones. Among the 112 facts not in the pool, the pool held none of them
+request's pool of 12.9 items (at most 15) and 0.7 of its handed ones. Among the 112 facts not in the pool, the pool held none of them
 in 40 cases, one in 40, two in 16 and three to six in 16. N2 found that a 60-item pool takes in only 10 of 72 such
 facts (they are not ranked just below the cut; they are not ranked). So removing every other planted item would free
 about one seat and would not bring these facts in: **the miss is the product's, not the lab's density.** (The lab may
@@ -263,7 +265,7 @@ Haiku 5.5 as the agent, Sonnet's grade (`b-short.txt`, `b-days.txt`, `b-mix.txt`
   66; it has no not-twice ledger), but the agent raises fewer of them (73% against 83%) and far fewer of those
   handed earlier the same day (11 of 41 against 23 of 40): five look-alikes on every request bury the fact.
 - **Silence is not what separates them.** Eden puts a packet on 97% of nothing-to-add requests against `hits`' 100%,
-  with 3.8 items against 5.0 (weak point Q4 stands). No arm had a Sonnet-confirmed false concern.
+  with 4.6 items a packet against 5.0 one request a session and 3.8 against 5.0 over days (weak point Q4 stands). No arm had a Sonnet-confirmed false concern.
 - **Cost.** One request a session `hits` is $0.10 per 1,000 tasks cheaper and 0.68 s faster than `eden`: Eden's
   agent calls `ask_context` (0.64 tool calls a task) and takes half a model turn more. Over days `hits` is $0.017 per
   1,000 dearer: five items on every request stay in the day's transcript.

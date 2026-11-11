@@ -1,0 +1,14 @@
+# p3-baselines.md §3: pool.py over days-calls --pool-diag (32 users w41-w72, --days 8, --intent none; alias rows at commit f39b431f)
+nointent-41-72.jsonl: hidden 433; pushed 184, earlier today 94, not in pool 112, pooled, fails test 27, pooled, below cut 12, no push 4; got (push or ask) 184
+nointent-41-72.jsonl: control 433; pushed 184, earlier today 97, not in pool 115, pooled, fails test 17, pooled, below cut 17, no push 3; got (push or ask) 184
+alias-nointent-41-72.jsonl: hidden 433; pushed 190, earlier today 93, not in pool 108, pooled, fails test 25, pooled, below cut 13, no push 4; got (push or ask) 190
+alias-nointent-41-72.jsonl: control 433; pushed 197, earlier today 94, not in pool 110, pooled, fails test 16, pooled, below cut 13, no push 3; got (push or ask) 197
+alias-dates.jsonl: hidden 433; pushed 189, earlier today 92, not in pool 112, pooled, fails test 24, pooled, below cut 12, no push 4; got (push or ask) 189
+alias-dates.jsonl: control 433; pushed 195, earlier today 91, not in pool 114, pooled, fails test 17, pooled, below cut 13, no push 3; got (push or ask) 195
+alias-names.jsonl: hidden 433; pushed 187, earlier today 95, not in pool 107, pooled, fails test 27, pooled, below cut 13, no push 4; got (push or ask) 187
+alias-names.jsonl: control 433; pushed 184, earlier today 97, not in pool 113, pooled, fails test 17, pooled, below cut 19, no push 3; got (push or ask) 184
+# fresh users w45-w60, --days 4, the cards and intent requests (b)'s paid run made
+fresh-base.jsonl: hidden 113; pushed 41, earlier today 25, not in pool 30, pooled, fails test 6, pooled, below cut 10, no push 1; got (push or ask) 41
+fresh-base.jsonl: control 113; pushed 42, earlier today 30, not in pool 33, pooled, fails test 4, pooled, below cut 4; got (push or ask) 42
+fresh-alias.jsonl: hidden 113; pushed 41, earlier today 25, not in pool 30, pooled, fails test 6, pooled, below cut 10, no push 1; got (push or ask) 41
+fresh-alias.jsonl: control 113; pushed 42, earlier today 30, not in pool 33, pooled, fails test 4, pooled, below cut 4; got (push or ask) 42
