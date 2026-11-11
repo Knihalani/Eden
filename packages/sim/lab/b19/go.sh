@@ -26,6 +26,17 @@ SPENT=$(python3 -I -c "import json;print(sum(json.loads(l).get('costUsd',0) for 
 export CAP
 CAP=$(python3 -I -c "print(round(min(40.0, $SPENT + 25.0), 2))")
 echo "$(date -u +%FT%TZ) go: final=$FINAL harness=$HARNESS spent=$SPENT cap=$CAP" | tee -a $L/starts.log
+# A step's arms run side by side; if any of them fails, the run stops before the next step spends anything.
+PIDS=()
+step_done() {
+  local fail=0
+  for pid in "${PIDS[@]}"; do wait "$pid" || fail=1; done
+  PIDS=()
+  if [ $fail -ne 0 ]; then
+    echo "$(date -u +%FT%TZ) go: an arm of step $1 failed (see its log): stopped" | tee -a $L/starts.log >&2
+    exit 1
+  fi
+}
 MARKET=(--source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload)
 SUITE=${SUITE:-heldout19}
 IFS=, read -r -a SEEDS <<<"${SEEDS:-41,42,43,44}"
@@ -52,30 +63,34 @@ fi
 for a in raw before final; do
   KIND=hermes HC=4 bash packages/sim/lab/b19/run.sh $a $P-h-$a --suite "$SUITE" --seeds "$SEEDLIST" \
     --variants hidden,control,neutral --budget 6 "${MARKET[@]}" ${EXTRA[@]+"${EXTRA[@]}"} >$L/$P-h-$a.log 2>&1 &
+  PIDS+=($!)
 done
-wait
+step_done 1
 # 2. Hermes over a user's days: all four users in one process an arm (one stream a user), two days of 20 requests
 # (heldout19's 40 templates bound a user), the day's transcript kept (D1044).
 for a in raw before final; do
   KIND=hermes HC=4 bash packages/sim/lab/b19/run.sh $a $P-hd-$a --suite "$SUITE" --seeds "$SEEDLIST" --days 2 \
     --day-size 20 --budget 4 "${MARKET[@]}" >$L/$P-hd-$a.log 2>&1 &
+  PIDS+=($!)
 done
-wait
+step_done 2
 # 3. Pi, one request a session: one seed a process (memory), the three arms of a seed side by side.
 for s in "${SEEDS[@]}"; do
   for a in raw before final; do
     KIND=pi bash packages/sim/lab/b19/run.sh $a $P-ps-$a-$s --suite "$SUITE" --seeds $s \
       --variants hidden,control,neutral \
       --budget 2 --tenant-prompt "${MARKET[@]}" ${EXTRA[@]+"${EXTRA[@]}"} >$L/$P-ps-$a-$s.log 2>&1 &
+    PIDS+=($!)
   done
-  wait
+  step_done 3
 done
 # 4. Pi over a user's days: one user a process, two days of 20 requests (heldout19's 40 templates bound a user).
 for s in "${SEEDS[@]}"; do
   for a in raw before final; do
     KIND=pi bash packages/sim/lab/b19/run.sh $a $P-pd-$a-$s --suite "$SUITE" --seeds $s --days 2 --day-size 20 \
       --budget 2 --tenant-prompt "${MARKET[@]}" >$L/$P-pd-$a-$s.log 2>&1 &
+    PIDS+=($!)
   done
-  wait
+  step_done 4
 done
 echo "$(date -u +%FT%TZ) go: done" | tee -a $L/starts.log

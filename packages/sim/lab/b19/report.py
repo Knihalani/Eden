@@ -9,7 +9,8 @@ with the same condition name (Eden before and Eden final) are told apart by file
 Per arm: hidden facts raised (the run's grader; run.sh grades with Sonnet 5.5), false concerns on control tasks
 (the planted look-alike) and on neutral tasks, neutral-turn packets (share of neutral tasks handed any item, items a
 neutral task), agent tokens a task, Eden's own spend per 1,000 tasks by ledger role (every `eden.*` line of the arm's
-label, background cards included), connector calls a task (the agent's `search_<source>` calls, the calls Eden's
+label, background cards and recap turns included, over the tasks that finished without an error), connector
+calls a task (the agent's `search_<source>` calls, the calls Eden's
 decision traces count on the task's clock, and the background backfill's reads spread over the arm's tasks), and
 wall time a task, p50 and p90
 (each stream's first task excluded: it pays the worker's start-up).
@@ -122,7 +123,22 @@ def read_arm(stem, ledger_rows):
             roles[x.get("role", "?")][0] += 1
             roles[x.get("role", "?")][1] += x.get("costUsd", 0.0)
     bg_conn = sum(b.get("sourceCalls", 0) for b in res.get("background", []))
-    return {"label": label, "header": res, "rows": rows, "roles": dict(roles), "bgConn": bg_conn, "n": n, "days": days}
+    flags = {
+        "partial": bool(res.get("partial")),
+        "stoppedStreams": res.get("stoppedStreams", 0),
+        "errored": sum(1 for r in res["results"] if r.get("error")),
+        "resumed": res.get("resumed"),
+    }
+    return {
+        "label": label,
+        "header": res,
+        "rows": rows,
+        "roles": dict(roles),
+        "bgConn": bg_conn,
+        "n": n,
+        "days": days,
+        "flags": flags,
+    }
 
 
 def read_arms(stems, ledger_rows):
@@ -143,6 +159,12 @@ def read_arms(stems, ledger_rows):
         "bgConn": sum(p["bgConn"] for p in parts),
         "n": sum(p["n"] for p in parts),
         "days": any(p["days"] for p in parts),
+        "flags": {
+            "partial": any(p["flags"]["partial"] for p in parts),
+            "stoppedStreams": sum(p["flags"]["stoppedStreams"] for p in parts),
+            "errored": sum(p["flags"]["errored"] for p in parts),
+            "resumed": [p["flags"]["resumed"] for p in parts if p["flags"]["resumed"]],
+        },
     }
 
 
@@ -160,6 +182,7 @@ def summary(arm):
     n = max(1, arm["n"])
     eden_roles = {k: v for k, v in arm["roles"].items() if k.startswith("eden")}
     return {
+        "flags": arm["flags"],
         "tasks": arm["n"],
         "hidden": {"raised": sum(hid), "n": len(hid), "rate": mean(hid)},
         "controlConcerns": {"concerns": sum(ctl), "n": len(ctl), "rate": mean(ctl)},
@@ -250,6 +273,14 @@ def main():
             f"{fmt(cc['agent'])}, {fmt(cc['edenOnTask'])}, {fmt(cc['edenBackground'])}  "
             f"{fmt(s['wallSeconds']['p50'], 1):>8}  {fmt(s['wallSeconds']['p90'], 1)}"
         )
+    for k, s in sums.items():
+        f = s["flags"]
+        if f["partial"] or f["stoppedStreams"] or f["errored"] or f["resumed"]:
+            print(
+                f"NOTE {k}: partial {f['partial']}, stopped streams {f['stoppedStreams']}, errored tasks "
+                f"{f['errored']} (left out), resumed {bool(f['resumed'])}"
+                + (" BIASED" if any(x.get("biased") for x in f["resumed"] or []) else "")
+            )
     for k, s in sums.items():
         roles = ", ".join(
             f"{r} ${v:.3f} ({s['edenCallsPer1kByRole'][r]:.0f} calls)" for r, v in s["edenUsdPer1kByRole"].items()

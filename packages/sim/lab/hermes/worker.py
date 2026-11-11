@@ -93,9 +93,11 @@ def run(req):
     system = getattr(agent, "_cached_system_prompt", None) or ""
     messages = result.get("messages") or []
     # The tool calls as the transcript has them (the callbacks' shapes vary between Hermes versions).
+    # Hermes returns the history it was given plus this turn: only this turn's tool calls are this request's.
+    turn = messages[len(history) :] if history and len(messages) >= len(history) else messages
     from_messages = [
         tc.get("function", {}).get("name", "?")
-        for m in messages
+        for m in turn
         if isinstance(m, dict) and m.get("role") == "assistant"
         for tc in (m.get("tool_calls") or [])
         if isinstance(tc, dict)

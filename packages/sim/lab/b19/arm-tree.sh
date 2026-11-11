@@ -22,7 +22,7 @@ cd "$DIR"
 paths=()
 for p in "${PRODUCT[@]}"; do paths+=("packages/$p"); done
 # Files added to the product packages after EDEN (tests, new modules) would otherwise survive the checkout.
-git diff --name-only --diff-filter=A "$EDEN" "$HARNESS" -- "${paths[@]}" | xargs -r rm -f
+git diff --no-renames --name-only --diff-filter=A "$EDEN" "$HARNESS" -- "${paths[@]}" | xargs -r git rm -q --
 git checkout "$EDEN" -- "${paths[@]}"
 bun install --frozen-lockfile >/dev/null 2>&1 || bun install >/dev/null
 hash=$(git ls-files -s -- "${paths[@]}" | sha256sum | cut -c1-16)
