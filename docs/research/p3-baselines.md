@@ -19,7 +19,7 @@ arithmetic or judgement; every other number comes from a command named beside it
 - **Weak point 2 is not the lab's density and not lexical (D833).** Of 112 facts outside the push's pool, 60 share no
   word with their request. A per-user alias table (dates and names written another way) moved 3–5 facts in 433 and
   more decoys; on fresh users with the shipped pipeline, nothing. Deleted.
-- Spend: $21.04 Anthropic of $30 (every call Anthropic-direct; 0 OpenRouter), $0 Modal.
+- Spend: $19.06 Anthropic booked of $30 (every call Anthropic-direct; 0 OpenRouter), $0 Modal.
 
 ## 0. What was measured at $0 before anything was spent
 
