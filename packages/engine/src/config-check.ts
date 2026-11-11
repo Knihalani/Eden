@@ -40,6 +40,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cardsOrder: "cards",
   cardsLanes: "cards",
   cardsSourceAware: "cards",
+  cardsRequestsFix: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
@@ -142,6 +143,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   cardsOrder: ["cards"],
   cardsLanes: ["cards"],
   cardsSourceAware: ["cards", "sync"],
+  cardsRequestsFix: ["cards", "intent"],
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
@@ -170,12 +172,16 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
   pushIndirect: PUSH,
+<<<<<<< HEAD
   pushWide: PUSH,
   poolExpand: PUSH,
   poolExpandTerms: PUSH,
   poolScan: PUSH,
   poolScanItems: PUSH,
   poolScanKeep: PUSH,
+=======
+  pushGate: PUSH,
+>>>>>>> origin/main
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],

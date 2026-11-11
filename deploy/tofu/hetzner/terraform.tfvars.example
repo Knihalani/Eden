@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (gitignored). Secrets go in the environment, never here:
+#   export TF_VAR_hcloud_token=...   (and TF_VAR_s3_access_key / TF_VAR_s3_secret_key with manage_bucket)
+
+# A single box (docs/DEPLOY.md §2):
+node_count   = 1
+router_count = 0
+node_type    = "ccx23" # 4 vCPU, 16 GB; check price and stock at order time
+
+# A cluster (docs/DEPLOY.md §9) instead:
+# node_count    = 3
+# router_count  = 2
+# node_type     = "ccx33"
+# manage_bucket = true
+
+location        = "hel1"
+admin_cidr      = "203.0.113.4/32"
+ssh_public_keys = { ops = "ssh-ed25519 AAAA... ops@example" }
+eden_git_url    = "https://github.com/KaiavN/Eden.git"
+eden_ref        = "main"

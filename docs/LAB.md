@@ -68,7 +68,7 @@ a benchmark answers its question and no other, and each has a bias that moves it
 | Benchmark | Question it answers | Known biases (what it cannot see) |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `bun run eval` | Did an engine change move behaviour on the hand-written scenarios? (precision 0.65, recall 0.52, falseFireRate 0 on main) | Its `falseFireRate` does not count candidates on nothing-to-add requests, and cards and intent are inert in it (B1). A merge gate, not a level |
-| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (281/264 on seeds 41–42; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
+| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (295/268 on seeds 41–42 since D1062, 281/264 before; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
 | Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
 | Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
 | `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks plans repeat neutral requests (only on templates never planted for the user, D874); recaps move each day's planted times |
@@ -391,8 +391,8 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 281/264 at
-shipped coverage, the funnel's default since D877)
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 295/268 at
+shipped coverage, the funnel's default since D877, 281/264 before D1062)
 (314/274 before, when it read 307/281 on the second draw, which was not re-run after D710; 314/273 before D483's
 tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
@@ -564,6 +564,19 @@ from `days_hidden.py`, and the packet characters the agent re-reads over a day f
 `--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a time is
 `--max-streams 4`. `default minus check` is `eden~minus-check`.
 
+### 1f2. The card prompt's forms in replay (D1060, D1062; docs/research/h2-requests-fix.md)
+
+Since D1062 the default asks the card model in form 3 (`cardsRequestsFix`: the requests list shown in the first
+example, a dropped list re-asked for requests only). A replay line made by form 3 is keyed `<hash>:f3` (`formKey`),
+so a file can hold both forms and neither answers the other. `cards-shipped.jsonl.gz` holds the shipped form's lines
+and, after them, form 3's for train, reworded and longtail seeds 41–44 (`cold-start.ts --set
+'{"cardsRequestsFix":true}' --cards-out`, $0.63 for 84 worlds); heldout19 has none, so shipped coverage refuses a
+run asking in form 3 there (`shippedUncovered(…, form)`): such a run passes `--coverage full` with lines it recorded
+(B19's harness does). A file with no
+form-3 line at all (`intent-v2`, `cards-v2`, the reader recipes' cards) is replayed as recorded under form 3, and its
+live misses are made in the shipped form: label such a run's cards as the shipped form's. `--set
+'{"cardsRequestsFix":false}'` replays the shipped form's lines (the pre-D1062 default: 281/264 on train 41–42).
+
 ### 1g. Indirect requests (D820, D828; docs/research/p2-push-check.md)
 
 `--suite train-rw` is train with each request reworded into one of ten indirect forms (`reword.ts`; P7's hand-written
@@ -605,6 +618,39 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus
   --out .local/m5/led.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 5 --concurrency 6
 python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus .local/m5/corpus.jsonl \
   --pool .local/m5/pool.jsonl --only fit
+```
+
+### 1i. Packet parts, part labels and trimmer screens (M6, D920–D921; docs/research/m6-trimmer.md)
+
+The trimmer was stopped (D920); the tooling stays. `--packet-parts` (with `--packets`) adds each delivered item's
+parts as compaction reads them; `m6/label.ts` names a planted item's key parts and tokens (Haiku, pay once, about
+$0.00005 an item); `../lab/m6/` turns dumps and labels into a part set and screens no-model budgets and learned
+trimmers on it, and `screen_funnel.py` reads real packets (an arm against the default). Synth dumps: 30 seeds a call.
+
+```bash
+bun run funnel --suite synth-val --seeds $(seq -s, 1 30) --jobs 3 -- --neutral --packets .local/m6/v.jsonl --packet-parts
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m6/label.ts .local/m6/v.jsonl --out .local/m6/l.jsonl --spend-cap 1
+python3 -I packages/sim/lab/m6/prep.py --labels .local/m6/l.jsonl --out .local/m6/set .local/m6/v.jsonl
+python3 -I packages/sim/lab/m6/baselines.py .local/m6/set/items.jsonl --sets val
+```
+
+### 1j. Distilled students of the push check (M1, D890–D899, D980–D982; docs/research/m1-student.md)
+
+Lab tooling only: both tracks stopped (D899, D982) and the engine trial was deleted with them (D983).
+`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
+`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and scores the teacher over pair groups.
+`packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
+screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
+
+### 1k. A day's packet bytes at $0 (E1, D1030; docs/research/e1-lean.md)
+
+`days-calls.ts --packets F` writes, one line a request, every packet and ask answer the `--days` user was handed
+(`how`: push, pending or ask; the text; the cited ids in line order), for a byte breakdown by fixed text and items or a
+repeat count by item id over a day. Not with `--resume`.
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42,43,44 --days 8 --ask \
+  --cards .local/cards-all.jsonl --packets .local/e1/days-base.jsonl          # ~7 s; --set '{…}' for an arm
 ```
 
 ### 2. The same with Eden's reader live (NEW)

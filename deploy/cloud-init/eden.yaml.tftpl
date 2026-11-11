@@ -1,0 +1,91 @@
+#cloud-config
+# One Eden machine on Ubuntu 24.04 (docs/DEPLOY.md §2, §9): Docker from Ubuntu's archive, a firewall, unattended
+# security upgrades, log limits, and a systemd unit that runs the role's compose project. Rendered by OpenTofu
+# (deploy/tofu/hetzner) or by deploy/scripts/render-cloud-init.py for a dedicated server or any other VM.
+#
+# NO SECRETS HERE: user-data is readable by any process on the box through the metadata service and is kept by the
+# provider. The .env file (API keys, the persistence key, store credentials) is copied over SSH after boot
+# (deploy/scripts/push-secrets.sh) and the unit starts once it exists.
+#
+# role: ${role}   (single | node | router)
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - ufw
+  - unattended-upgrades
+  - sqlite3
+
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      { "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "5" }, "live-restore": true }
+  - path: /etc/systemd/journald.conf.d/eden.conf
+    content: |
+      [Journal]
+      SystemMaxUse=1G
+  - path: /etc/sysctl.d/90-eden.conf
+    content: |
+      # Eden is memory-bound: keep it in RAM, and let the kernel take what the cache freed back promptly.
+      vm.swappiness=1
+      net.core.somaxconn=4096
+  - path: /etc/systemd/system/eden.service
+    content: |
+      [Unit]
+      Description=Eden (${role})
+      After=docker.service network-online.target
+      Requires=docker.service
+      ConditionPathExists=/opt/eden/deploy/compose/${compose_dir}/.env
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/eden/deploy/compose/${compose_dir}
+      Environment=EDEN_VERSION=${eden_ref}
+      ExecStart=/usr/bin/docker compose up -d --build --remove-orphans
+      ExecStop=/usr/bin/docker compose stop -t 40
+      TimeoutStartSec=900
+      TimeoutStopSec=60
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /etc/systemd/system/eden-backup.service
+    content: |
+      [Unit]
+      Description=Eden backup of the source map and frozen users
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/eden/deploy/scripts/backup.sh /opt/eden/deploy/compose/${compose_dir}
+  - path: /etc/systemd/system/eden-backup.timer
+    content: |
+      [Unit]
+      Description=Eden backup, daily
+      [Timer]
+      OnCalendar=*-*-* 03:17:00
+      RandomizedDelaySec=900
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  - sysctl --system
+  - systemctl restart docker
+  # The code at a pinned ref: the image is built on the box (nothing is pulled from a registry we publish).
+  - git clone --depth 1 --branch ${eden_ref} ${eden_git_url} /opt/eden
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow from ${admin_cidr} to any port 22 proto tcp
+%{ if role == "node" ~}
+  # A node takes Eden's API only from the private network (the cluster router), never from the internet.
+  - ufw allow from ${private_cidr} to any port 8790 proto tcp
+%{ else ~}
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw allow 443/udp
+%{ endif ~}
+  - ufw --force enable
+  - systemctl daemon-reload
+  - systemctl enable eden.service eden-backup.timer
+  - systemctl start eden-backup.timer

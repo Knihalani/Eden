@@ -855,6 +855,54 @@ export class ItemCache {
     return n;
   }
 
+  /**
+   * Hands a user to another process (D992): writes them as `flush` would (warm when live, so the new owner thaws in
+   * milliseconds; a frozen user again, so the owner's extra is current), then drops them from memory without deleting
+   * the blob it just wrote, and without `dropped` treating it as a forget of derived state elsewhere (the caller does
+   * that). Returns whether the blob was written; false also when the user is not held here. With `write` false (a
+   * fenced node, review of D992: another machine has served the user since) nothing is written and the local file is
+   * dropped: the store's copy, newer than anything here, stands.
+   */
+  release(scope: Scope, write = true): boolean {
+    const key = scopeKey(scope);
+    const x = this.users.get(key);
+    if (x === undefined) return false;
+    let written = false;
+    if (!write) {
+      if (this.disk?.thawed) this.disk.thawed(scope);
+      else this.disk?.delete(scope);
+    } else if (this.disk !== null) {
+      if (x instanceof FrozenUser) written = this.write(x);
+      else if (x.items.size > 0) {
+        const steps = this.freezeSteps(x, this.limits.warmIdleMs > 0);
+        let r = steps.next();
+        while (!r.done) r = steps.next();
+        written = this.write(r.value);
+      }
+    }
+    this.users.delete(key);
+    this.restoring.delete(key);
+    this.thawing.delete(key);
+    clearDecoded();
+    // The user's gone-holds go too, as on a forget: the new owner holds its own.
+    const held = this.holds.get(scope.tenantId);
+    if (held) {
+      held.forget(scope.userId);
+      if (held.size === 0 && held.evicted === 0) this.holds.delete(scope.tenantId);
+    }
+    const n = (this.perTenant.get(scope.tenantId) ?? 1) - 1;
+    if (n <= 0) this.perTenant.delete(scope.tenantId);
+    else this.perTenant.set(scope.tenantId, n);
+    return written;
+  }
+
+  /** Every user this process holds, live or frozen (D992: a release walks them to find who moved). */
+  heldScopes(): Scope[] {
+    const out: Scope[] = [];
+    for (const x of this.users.values()) out.push(x.scope);
+    return out;
+  }
+
   /** The cache's clock: the last `put`'s `now` moved on by wall time since (the wall clock before any put). */
   private clock(): number {
     return this.lastWall === 0 ? Date.now() : this.lastNow + (Date.now() - this.lastWall);
@@ -1228,6 +1276,8 @@ export class ItemCache {
       n++;
     }
     if (held) this.holdsEvictedTotal += held.evicted - evicted;
+    // Deleted at their source: a shared store's older copy (D992) must not bring them back on a failover.
+    if (n > 0) this.disk?.invalidate?.(scope);
     return n;
   }
 
@@ -2134,8 +2184,15 @@ export class ItemCache {
    * is still queued, a later caller waits on it too, even if a read (or a forget) already ended the frozen state:
    * otherwise a session's later event would run before its earlier one, still waiting in the queue.
    */
-  ready(scope: Scope): Promise<void> | null {
+  ready(scope: Scope, fetched = false): Promise<void> | null {
     const key = scopeKey(scope);
+    // D992: a user this process does not hold may be in a store shared with other machines; it is fetched (async)
+    // before the synchronous read below, so the wait is this request's, never the event loop's. Once per call: a
+    // store that cannot be reached answers by failing, and the user then starts here.
+    if (!fetched && this.disk?.fetch && !this.users.has(key) && !this.thawing.has(key)) {
+      const fetching = this.disk.fetch(scope);
+      if (fetching) return fetching.then(() => this.ready(scope, true) ?? undefined, noop);
+    }
     // A user an earlier process froze to disk (D425) is read back here, then thawed in slices like any other.
     const x = this.users.get(key) ?? this.load(key, scope);
     const running = this.thawing.get(key);
@@ -2214,8 +2271,10 @@ export class ItemCache {
       this.freezes.thawed++;
       this.freezes.thawMs += performance.now() - t0;
     }
-    // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes.
-    this.disk?.delete(u.scope);
+    // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes. A
+    // shared store keeps its copy (D992: the failover copy), so `thawed` when the store has one.
+    if (this.disk?.thawed) this.disk.thawed(u.scope);
+    else this.disk?.delete(u.scope);
     if (f.fromDisk && this.persistHooks) {
       const items: ContextItem[] = [];
       for (const e of u.items.values()) items.push(e.item);
@@ -2368,6 +2427,8 @@ export class ItemCache {
     const u = this.peek(scope);
     if (!u) return;
     for (const e of [...u.items.values()]) if (e.item.sourceId === sourceId) this.drop(u, e);
+    // A copy in a shared store still holds the source's items (D992): it goes, so no failover reads them back.
+    this.disk?.invalidate?.(scope);
     if (this.limits.releaseTerms) {
       // Compact now: every term no live item holds is released. Then if the vocabulary holds exactly the terms live
       // items do, no term of the source's content is left that a rebuild would remove, and none is needed.

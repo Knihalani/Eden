@@ -1,0 +1,33 @@
+# TLS for Eden (docs/DEPLOY.md §3). Caddy gets and renews the certificate from Let's Encrypt for EDEN_DOMAIN, whose
+# DNS A/AAAA record must point at this box (with Cloudflare in front: proxy "Full (strict)", or DNS only).
+{
+	email {$ACME_EMAIL}
+}
+
+{$EDEN_DOMAIN} {
+	encode zstd gzip
+
+	# Operator-only routes stay off the internet: scrape /metrics on the box (127.0.0.1:8790), and the cluster
+	# membership route is for the cluster router on the private network only.
+	@private path /metrics /internal/*
+	respond @private 404
+
+	reverse_proxy eden:8790 {
+		# While Eden restarts (an upgrade, 5-15 s), hold requests and retry instead of failing them: callers see a
+		# slower answer, not an error. Eden's client fails open on its own timeout either way.
+		lb_try_duration 20s
+		lb_try_interval 250ms
+		health_uri /readyz
+		health_interval 2s
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	log {
+		output stdout
+		format json
+	}
+}
