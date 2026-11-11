@@ -60,3 +60,18 @@ bun packages/sim/src/lab/days-calls.ts --seeds 45,46,47,48,49,50,51,52 --cards .
 bun packages/sim/src/lab/days-calls.ts --seeds 45,46,47,48,49,50,51,52 --cards .local/o3/cards-45-52.jsonl \
   --intent .local/o3/intent45/intent-v2.jsonl --pool-diag B.jsonl   # full coverage
 ```
+
+## 3. The cut, screened at $0 (not pre-registered; a screen only)
+
+The same eight users, shipped coverage, `--set` on the default:
+
+| setting | pushed at its own request | handed earlier that day | outside the pool | decoy pushed | handed items a request |
+|---|---|---|---|---|---|
+| the default (five candidates, two when settled) | 59 | 31 | 16 | 57 | 4.18 |
+| `pushCandidatesSettled` 0 | 57 | 33 | 16 | 55 | 4.98 |
+| `pushCandidates` 8 | 58 | 37 | 14 | 58 | 6.32 |
+| both | 53 | 44 | 13 | 57 | 7.95 |
+
+Handing more does not push more facts at their own request: it hands them at earlier, unrelated requests instead
+(31 to 44), where the live agent raises them about 60% of the time against 88% (o3-pointer.md §3.1), and the
+not-twice ledger then keeps them out of the packet at their own request. A wider packet is not a lever over days.
