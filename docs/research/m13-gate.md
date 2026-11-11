@@ -240,13 +240,15 @@ python3 -I packages/sim/lab/m13/gen_train.py .local/m13/train/gen.jsonl --calls-
 bun packages/sim/lab/m13/parity.ts G.bin P.json && bun packages/sim/lab/m13/bench.ts G.bin .local/m13/sets/dev.jsonl
 ```
 
-## 6. Ready state
+## 6. Ready state (the shipped gate)
 
-On the branch after merging origin/main: `CHECK_COLD=1 bun run check` passed (format, types, every test, 64 s);
-`bun run eval` precision 0.65, recall 0.52, falseFireRate 0, acting block 19 of 28 neutral packets (1.18 items), 10
-of 11 facts handed, 3 of 10 look-alikes; `bun run funnel` hidden 281/384, decoys 264/384: main's numbers, as the
-engine, server and client are byte-identical to main (the trial's code is deleted). No `reviewer` run: the branch
-leaves no engine, server or privacy change (CLAUDE.md's rule).
+On the branch after merging origin/main, with `pushGate` in the default (round-3 weights, union, veto 0.25, the
+D1015 stopgap): `CHECK_COLD=1 bun run check` passed (format, types, every test, 61 s); `bun run eval` precision 0.65,
+recall 0.52, falseFireRate 0, acting block 19 of 28 neutral packets (1.18 items), 10 of 11 facts, 3 of 10
+look-alikes; `bun run funnel` (train, seeds 41–42, shipped coverage) hidden 281/384, decoys 264/384, main's numbers.
+The funnel facts of §7 re-run with the stopgap gave the same counts on all three suites (train 521, reworded 465,
+train-rw 588 handed; neutral packets 751, 707, 748). The `reviewer` ran once on the promotion; its findings are fixed
+(§7.3).
 
 ## 7. The owner's decision (D1014) and the promotion's checks
 
@@ -319,3 +321,13 @@ least three words (`MIN_ADD_WORDS`). With it the probe list starts 1 of 23; fixt
 "annule-le", "buch es", "cancélalo" start nothing, as under the rule alone; the five round-3 misses stay). The
 funnel and Pi figures of §7 are the round-3 model's; the guard only removes gate-only starts on turns under three
 words, which no train, reworded or train-rw request is (the funnel re-run below confirms it).
+
+### 7.3 The review of the promotion (fixed)
+
+The reviewer asked for, and the branch now has: the `minus-candidates` and `minus-reader` profiles and a new
+`minus-gate` profile matching `PARTS`; a start only the gate makes needs `pushOpen` with the candidates, so no part
+or custom configuration can turn a gate-only start into a paid reader push; the weights file validated in full at
+load (every array present, at its size and inside the file) and `read` wrapped in the partner, so a bad file or a
+throw leaves `pushStart` deciding; the clause split bounded; the weights read when the partner is built, not on a
+user's first message; partner tests for fail-open, the guard on parts and a kept rule start; the eval's `decisions`
+block stated (one reader-push decision, four planned lookups).

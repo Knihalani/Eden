@@ -324,7 +324,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   neither (`turn-gate.test.ts` pins sums and ids), then re-export the weights with `packages/sim/lab/m13/export.py`
   and run its `parity.ts` (64/64). Retraining or a new veto is a new measurement (funnel facts at shipped coverage on
   train, `reworded` and `train-rw`; the blind sets of m13-gate.md are read). It reads any language, but its known
-  weak spots are Hindi requests and Portuguese chatter (D1014).
+  weak spots are Hindi requests and Portuguese chatter (D1014). A start only the gate makes needs `pushOpen` with the
+  candidates (never a paid reader push) and, as a stopgap, a turn of at least `MIN_ADD_WORDS` (3) words (D1015: the
+  weights read "hello", "hi", "?" as terse commands; a retrain that fixed it raised false starts elsewhere).
 - **Indirect requests (`pushIndirect`, P2, D820; in the default since D828, part `indirect`; p2-push-check.md §1, §7).** `pushStart`
   decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
   ("I need to …", "Should I …?", "We should …", "I want you to …"), or a request after a first clause of context
