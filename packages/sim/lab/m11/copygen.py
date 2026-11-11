@@ -224,79 +224,8 @@ def rows_of(items, a):
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--name", required=True)
-    ap.add_argument("--ctx", default="mean")
-    ap.add_argument("--gen", default="mlp")
-    ap.add_argument("--loss", default="bce")
-    ap.add_argument("--rank-w", type=float, default=1.0)
-    ap.add_argument("--buckets", type=int, default=1 << 16)
-    ap.add_argument("--tbuckets", type=int, default=1 << 15)
-    ap.add_argument("--dim", type=int, default=64)
-    ap.add_argument("--tdim", type=int, default=32)
-    ap.add_argument("--bits", type=int, default=256)
-    ap.add_argument("--hidden", type=int, default=128)
-    ap.add_argument("--codes", type=int, default=256)
-    ap.add_argument("--vocab", type=int, default=4096)
-    ap.add_argument("--cap", type=int, default=400)
-    ap.add_argument("--epochs", type=int, default=8)
-    ap.add_argument("--bs", type=int, default=64)
-    ap.add_argument("--lr", type=float, default=3e-3)
-    ap.add_argument("--posw", type=float, default=4.0)
-    ap.add_argument("--kc", type=int, default=12)
-    ap.add_argument("--kg", type=int, default=6)
-    ap.add_argument("--theta-c", type=float, default=0.25)
-    ap.add_argument("--theta-g", type=float, default=0.15)
-    ap.add_argument("--lift", type=float, default=0.0, help="generated term kept only at p/prior >= lift")
-    ap.add_argument("--delex", action="store_true")
-    ap.add_argument("--lenaug", action="store_true")
-    ap.add_argument("--twins", action="store_true", help="look-alike twins of training templates as rank negatives")
-    ap.add_argument("--extra", default="", help="Haiku-labelled rows (m11-enrich.ts + stem.ts): title, text, terms, target")
-    ap.add_argument("--extra-n", type=int, default=0)
-    ap.add_argument("--synth", default="", help="M2 rows (m11-synth.ts): fact + requests, decoy and neutrals as negatives")
-    ap.add_argument("--synth-n", type=int, default=0, help="at most this many synth rows (0: all)")
-    ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--save", default="")
-    a = ap.parse_args()
-    random.seed(a.seed)
-    torch.manual_seed(a.seed)
-    items, worlds = D.load()
-    rows = rows_of(items, a)
-    if a.extra:
-        ex = D.read_jsonl(a.extra)
-        random.shuffle(ex)
-        for x in ex[: a.extra_n or None]:
-            reqs = x["target"]
-            c = Counter(t for r in reqs for t in set(r))
-            rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
-                         "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()}})
-    if a.synth:
-        sr = D.read_jsonl(a.synth)
-        random.shuffle(sr)
-        for x in sr[: a.synth_n or None]:
-            reqs = x["target"]
-            c = Counter(t for r in reqs for t in set(r))
-            rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
-                         "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()},
-                         "negs": [{"h": None, "text": f"{n['title']}\n{n['text']}", "terms": n["terms"],
-                                   "title": n.get("titleTerms") or [], "tw": None} for n in x["negs"]]})
-    twin_of = {}
-    if a.twins:
-        for f, c, q, suite, seed, _ in D.twins(worlds):
-            if items[f]["split"] == "train" and items[c]["split"] == "train":
-                twin_of[f] = c
-    df = Counter(t for r in rows for t in r["tw"] if t not in set(r["terms"]))
-    vocab = [t for t, v in df.most_common(a.vocab) if v >= 2]
-    vid = {t: i for i, t in enumerate(vocab)}
-    prior = torch.full((len(vocab),), 1e-3)
-    for t, i in vid.items():
-        prior[i] += df[t] / len(rows)
-    model = Net(a, len(vocab))
-    opt = torch.optim.Adam(model.parameters(), lr=a.lr)
-    byh = {r["h"]: r for r in rows if r["h"]}
-    t0 = time.time()
-    for ep in range(a.epochs):
+def fit(model, opt, rows, a, epochs, vid, twin_of, byh, t0, tag):
+    for ep in range(epochs):
         random.shuffle(rows)
         tot = 0.0
         model.train()
@@ -330,7 +259,93 @@ def main():
             loss.backward()
             opt.step()
             tot += loss.item() * len(b)
-        print(f"epoch {ep} loss {tot / len(rows):.4f} ({time.time() - t0:.0f}s)", flush=True)
+        print(f"{tag}epoch {ep} loss {tot / len(rows):.4f} ({time.time() - t0:.0f}s)", flush=True)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--ctx", default="mean")
+    ap.add_argument("--gen", default="mlp")
+    ap.add_argument("--loss", default="bce")
+    ap.add_argument("--rank-w", type=float, default=1.0)
+    ap.add_argument("--buckets", type=int, default=1 << 16)
+    ap.add_argument("--tbuckets", type=int, default=1 << 15)
+    ap.add_argument("--dim", type=int, default=64)
+    ap.add_argument("--tdim", type=int, default=32)
+    ap.add_argument("--bits", type=int, default=256)
+    ap.add_argument("--hidden", type=int, default=128)
+    ap.add_argument("--codes", type=int, default=256)
+    ap.add_argument("--vocab", type=int, default=4096)
+    ap.add_argument("--cap", type=int, default=400)
+    ap.add_argument("--epochs", type=int, default=8)
+    ap.add_argument("--bs", type=int, default=64)
+    ap.add_argument("--lr", type=float, default=3e-3)
+    ap.add_argument("--posw", type=float, default=4.0)
+    ap.add_argument("--kc", type=int, default=12)
+    ap.add_argument("--kg", type=int, default=6)
+    ap.add_argument("--theta-c", type=float, default=0.25)
+    ap.add_argument("--theta-g", type=float, default=0.15)
+    ap.add_argument("--lift", type=float, default=0.0, help="generated term kept only at p/prior >= lift")
+    ap.add_argument("--delex", action="store_true")
+    ap.add_argument("--lenaug", action="store_true")
+    ap.add_argument("--twins", action="store_true", help="look-alike twins of training templates as rank negatives")
+    ap.add_argument("--extra", default="", help="Haiku-labelled rows (m11-enrich.ts + stem.ts): title, text, terms, target")
+    ap.add_argument("--extra-n", type=int, default=0)
+    ap.add_argument("--pretrain", default="", help="rows trained first (e.g. M2 items Haiku-labelled), then the rest")
+    ap.add_argument("--pre-epochs", type=int, default=2)
+    ap.add_argument("--synth", default="", help="M2 rows (m11-synth.ts): fact + requests, decoy and neutrals as negatives")
+    ap.add_argument("--synth-n", type=int, default=0, help="at most this many synth rows (0: all)")
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--save", default="")
+    a = ap.parse_args()
+    random.seed(a.seed)
+    torch.manual_seed(a.seed)
+    items, worlds = D.load()
+    rows = rows_of(items, a)
+    if a.extra:
+        ex = D.read_jsonl(a.extra)
+        random.shuffle(ex)
+        for x in ex[: a.extra_n or None]:
+            reqs = x["target"]
+            c = Counter(t for r in reqs for t in set(r))
+            rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
+                         "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()}})
+    if a.synth:
+        sr = D.read_jsonl(a.synth)
+        random.shuffle(sr)
+        for x in sr[: a.synth_n or None]:
+            reqs = x["target"]
+            c = Counter(t for r in reqs for t in set(r))
+            rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
+                         "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()},
+                         "negs": [{"h": None, "text": f"{n['title']}\n{n['text']}", "terms": n["terms"],
+                                   "title": n.get("titleTerms") or [], "tw": None} for n in x["negs"]]})
+    twin_of = {}
+    if a.twins:
+        for f, c, q, suite, seed, _ in D.twins(worlds):
+            if items[f]["split"] == "train" and items[c]["split"] == "train":
+                twin_of[f] = c
+    pre = []
+    if a.pretrain:
+        for x in D.read_jsonl(a.pretrain):
+            reqs = x["target"]
+            c = Counter(t for r in reqs for t in set(r))
+            pre.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
+                        "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()}})
+    df = Counter(t for r in rows + pre for t in r["tw"] if t not in set(r["terms"]))
+    vocab = [t for t, v in df.most_common(a.vocab) if v >= 2]
+    vid = {t: i for i, t in enumerate(vocab)}
+    prior = torch.full((len(vocab),), 1e-3)
+    for t, i in vid.items():
+        prior[i] += df[t] / len(rows + pre)
+    model = Net(a, len(vocab))
+    opt = torch.optim.Adam(model.parameters(), lr=a.lr)
+    byh = {r["h"]: r for r in rows if r["h"]}
+    t0 = time.time()
+    if a.pretrain:
+        fit(model, opt, pre, a, a.pre_epochs, vid, twin_of, byh, t0, "pre")
+    fit(model, opt, rows, a, a.epochs, vid, twin_of, byh, t0, "")
     model.eval()
     held = [it for it in items.values() if it["split"] == "held"]
     exp = expand_all(model, a, held, vocab, prior)

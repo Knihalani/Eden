@@ -35,6 +35,8 @@ for (const line of readFileSync(WORLDS, "utf8").split("\n")) {
     todo.push([h, s]);
   }
 }
+// `--reverse`: from the end, so a second process can run beside the first (stop both once they meet).
+if (args.includes("--reverse")) todo.reverse();
 const MAX = Number(opt("max-items", "0"));
 if (MAX > 0) todo.splice(MAX);
 const BATCH = 20;
