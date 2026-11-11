@@ -628,7 +628,7 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
-## The constraint tagger (`constraintTag`, in the default since D908; M3, docs/research/m3-arch.md §7h)
+## The constraint tagger (`constraintTag`, D908, a trial, off; M3, docs/research/m3-arch.md §7h)
 
 No model call and no money: CPU and memory only. The weights ship with the engine (`packages/engine/models/tags-v1.bin`,
 4,214,052 bytes; a test keeps it under 4.5 MB) and are read once per process, shared by every user

@@ -64,7 +64,7 @@ describe("TagMemo", () => {
   test("the memo's reading is the network's (to 1/255), and a second read tags nothing", () => {
     const m = new TagMemo(t);
     const p = m.read(A, HOLD);
-    expect(Math.abs(p - t.factProbability(HOLD))).toBeLessThanOrEqual(1 / 255);
+    expect(Math.abs(p - t.constraintProbability(HOLD))).toBeLessThanOrEqual(1 / 255);
     m.read(A, HOLD);
     expect(m.stats.tagged).toBe(1);
   });

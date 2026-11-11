@@ -716,9 +716,9 @@ export interface EngineConfig {
    */
   pushOpen: boolean;
   /**
-   * M3 (D908, in the default at 0.5, part `tag`; docs/research/m3-arch.md §7h; 0 = off): a small binarised item tagger
-   * (`tagger.ts`, the shipped weights, no model call) reads each stored item's probability of being a binding fact
-   * rather than an all-clear; a pooled item counts as constraint-like (the push gate, plan alerts) only when it passes
+   * M3 (D908, a trial, 0 = off; docs/research/m3-arch.md §7h): a small binarised item tagger
+   * (`tagger.ts`, the shipped weights, no model call) reads each stored item's probability of not being an all-clear
+   * or look-alike; a pooled item counts as constraint-like (the push gate, plan alerts) only when it passes
    * the existing test (`constraintLike`) **and** its tag probability is at least this threshold: a veto, so fewer
    * look-alike packets go. Missing weights, or a tagger that throws, veto nothing.
    */
@@ -891,7 +891,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushOpen: true,
-  constraintTag: 0.5,
+  constraintTag: 0,
   pushIndirect: true,
   revisionDiff: true,
 };

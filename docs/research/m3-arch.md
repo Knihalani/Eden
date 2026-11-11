@@ -375,6 +375,25 @@ alone. The lab tagger encoded 492 distinct items in 377 ms in that run (0.77 ms 
 the pair with the push check S live in front (the shipped path with a key; pre-registered in commit after e6aef109,
 running), and Pi.
 
+**Rule 2, continued: the result does not transfer; not promoted.** While promoting (the parent's go, conditional on
+the check-on run), the default's own tests showed the veto silencing a short real constraint: the tagger's `fact`
+probability is 0.16 for "Do not pay Zed Quinn: the Globex renewal payment is on hold until legal signs off" and 0.02
+for "Payments to Harlow are on hold until the deposit dispute ends." Short items read as `other`, the tag training gave
+to background items, which in M2 and the sim are short filler while facts and look-alikes are long, formatted
+documents. Reading `1 − P(all-clear tags)` instead (pre-registered in 2709dc28 before the runs) keeps such items, and
+fails rule 2 (same funnels, the plan-alert veto on, baselines the same switch-off runs):
+
+| | control+neutral packets | hidden surfaced | decoys delivered | check calls |
+|---|---|---|---|---|
+| no check: P(fact) | 949 → 493 (−48.1%) | 281 → 281 | 243 → 125 | |
+| no check: 1 − P(all-clear) | 949 → 944 (−0.5%) | 281 → 281 | 243 → 237 | |
+| check live: P(fact) | 688 → 483 (−29.8%) | 306 → 307 | 147 → 109 | 706 → 497 tasks |
+| check live: 1 − P(all-clear) | 688 → 670 (−2.6%) | 306 → 307 | 147 → 141 | 706 → 751 tasks |
+
+The sim's gain came from the length cue, not from reading all-clears; on real short snippets it would cost facts.
+Recommendation: delete `constraintTag` and the shipped weights (D814); a tagger trained with short items in every class
+(and short all-clears) would re-enter as a new trial on the same rule.
+
 **Rule 1, supersession (`pushSupersede`), amended before any result.** (a) The suite: `synth:<M2 v2 val>+stale`
 (`+stale`, D884's synth family, a separate option: a hidden silent-change task's earlier revision stays as a background
 item beside the fact; the default suites are unchanged, `synth.test.ts` pins it), worlds H10 never trained on. (b) The
