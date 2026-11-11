@@ -551,3 +551,33 @@ why: at p0.80 it catches 93 of 117 against the float's 104, and the gap widens o
 Volume `eden-retriever`, `models/m3b-teacher-s7.pt` (M2-only float teacher), `models/m3b-pool-float.pt`,
 `models/m3b-final-r16-d128-rev.pt`, `models/m3b-final-r32-d128-rev.pt`, round 2's `models/m3b-r2-*.pt`; data
 `data/g/m3b-{core,dev}.jsonl`, `data/g/m3b-pool-{train,calib}.jsonl.gz`.
+
+**Option (c), the float quantised (parent's decision: size limit raised to ≤ 10 MB; pre-registered e8b59386).**
+pool-float exactly, its table int4 with a float32 scale a row (packed two a byte), its item code int8, head float, θ
+0.53 unchanged, no retraining: 8.85 MB shipped (7.6× under 67.3 MB), 256 B an item, 64 of 64 decisions against
+PyTorch (max logit error 1e-5). On the same test read it hands stale 22 of 95 (off 57, −61%) and facts 450 of 759 (off
+451): the float's result exactly. The trial now asks about a push pass's pairs in one call, so each item's half of the
+head's first layer is computed once a pass (outputs identical): a pass is about 180 µs plus 17 µs a pair. Pass times
+(p50 / p90 / p99): funnel on M2 val 0.55 / 0.78 / 1.21 ms; days-calls 0.59 / 0.99–1.06 / 1.5–1.7 ms; train worlds
+0.63–0.70 / 1.10–1.18 / 2.4–2.5 ms (the parent set this part's bar at p90 ≤ 1.5 ms, p99 ≤ 3 ms: the push already waits
+for its check). Encode 0.22–0.25 ms an item.
+
+**The sim reads.** `days-calls --recap-notice none`, fresh seeds 301–320: identical to off for every user (hidden
+104/270, decoys 118/270, owed updates 0/333 in both): its 483 silent changes edit the same item in place, so there is
+never a second item to pair. On the funnel's train1–6 (seeds 41–42) the model changes 2 of 768 tasks, one a false swap
+that loses a hidden fact (an MSA's pricing terms "replaced" by an unrelated customer DPA register, logit 0.36 against
+θ's 0.12).
+
+**The hand-written gate (pre-registered 989ce68c before any model run): fails.** `train5|6|5r|6r+revision`
+(`revision.ts`): each hidden fact stays as the current version and a stale earlier copy goes beside it in place of a
+noise item of its source, three days older, one detail of its body changed by a fixed rule (seed 41: 74 dates, 12
+times, 8 amounts, 12 counts, 22 "Draft:" marks of 128). Funnel seeds 41–44, $0:
+
+| arm | stale handed | facts handed | control decoys handed |
+|---|---|---|---|
+| off | 226 / 483 | 236 / 512 | 249 / 512 |
+| int4, θ 0.53 | 226 (0%) | 236 | 249 |
+
+Of the 226 stale hand-outs, 193 had their (stale, fact) pair scored (33 had no fact in the pool): logits −7.19 to
+−0.44, median −4.31, against θ's 0.12; no swap. H10 recognises M2's model-written revisions and the push pool's pairs
+of them, not a hand-written fact as the correction of a copy one detail apart: the transfer failure M6 met (D920).
