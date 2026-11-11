@@ -55,6 +55,15 @@ const scratch = new Uint32Array(2);
 /** `lens` of a released id: no folded length is this, so `find` never matches it and `rehash` skips it. */
 const RELEASED = 0xffff_ffff;
 
+/** What `Vocab.snapshot` saves (D860). */
+export interface VocabSnapshot {
+  terms: string[];
+  free: number[];
+  h1: Uint32Array;
+  h2: Uint32Array;
+  lens: Uint32Array;
+}
+
 export class Vocab {
   private slots: Int32Array;
   private mask: number;
@@ -153,6 +162,53 @@ export class Vocab {
   internRange(s: string, start: number, end: number, h: number, g: number, len: number): number {
     const id = this.find(h >>> 0, g >>> 0, len);
     return id >= 0 ? id : this.add(foldString(s.slice(start, end)), h >>> 0, g >>> 0, len);
+  }
+
+  /**
+   * The vocabulary as plain arrays (a frozen user's blob, D860): each id's term ("" when released), the free list in
+   * order, and the fingerprints, so `Vocab.restore` rebuilds it without hashing a term again.
+   */
+  snapshot(): VocabSnapshot {
+    const n = this.strings.length;
+    return {
+      terms: this.strings.slice(),
+      free: this.free.slice(),
+      h1: this.h1.slice(0, n),
+      h2: this.h2.slice(0, n),
+      lens: this.lens.slice(0, n),
+    };
+  }
+
+  /**
+   * The vocabulary `snapshot` saved: the same ids for the same terms, the same free list. Without the fingerprints
+   * (a caller that saves bytes by leaving them out), each term is hashed again: its id's term is already folded.
+   */
+  static restore(s: VocabSnapshot | Omit<VocabSnapshot, "h1" | "h2" | "lens">): Vocab {
+    const n = s.terms.length;
+    const v = new Vocab(Math.max(256, n));
+    if ("h1" in s) {
+      v.h1.set(s.h1.subarray(0, n));
+      v.h2.set(s.h2.subarray(0, n));
+      v.lens.set(s.lens.subarray(0, n));
+    } else {
+      const released = new Uint8Array(n);
+      for (const id of s.free) released[id] = 1;
+      for (let id = 0; id < n; id++) {
+        if (released[id] === 1) {
+          v.lens[id] = RELEASED;
+          continue;
+        }
+        const t = s.terms[id]!;
+        hashTerm(t, scratch);
+        v.h1[id] = scratch[0]!;
+        v.h2[id] = scratch[1]!;
+        v.lens[id] = foldedLength(t);
+      }
+    }
+    for (let id = 0; id < n; id++) v.strings.push(s.terms[id]!);
+    for (const id of s.free) v.free.push(id);
+    v.rehash(v.slots.length);
+    return v;
   }
 
   private find(h: number, g: number, len: number): number {
