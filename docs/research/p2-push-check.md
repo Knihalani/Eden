@@ -197,3 +197,47 @@ check arm silently lost those pushes (31 of train's 192 templates).
   the default's own packet cost on train (it adds no model call of Eden's; on train it changes no task at $0, §1.2).
   Otherwise the switch is deleted at its end date.
 - **Budget:** about $4 **[EST]** (two arms, four seeds, regrades).
+
+## 3. Results
+
+### 3.1 A: the short reply fails its rule; form 2 goes live (D822)
+
+Funnel, train seeds 42–43 (384 tasks a variant), live check, `pushCheckWaitMs` 60,000, every gated push checked
+(`compare.py`, `calls.py` on `.local/p2/ledger.jsonl`):
+
+| Arm | $ a call | in (cached) / out tokens | p50 / p90 s | Planted handed | Decoy handed | Neutral packets |
+| --- | --- | --- | --- | --- | --- | --- |
+| default | | | | 291 | 247 | 370 |
+| F2 (form 2) | 0.000233 | 2,752 (1,182) / 127 | 1.03 / 1.52 | 271 | 69 | 81 |
+| F3 (form 3) | 0.000202 | 2,627 (1,058) / 67 | 0.84 / 1.16 | 274 | **185** | 106 |
+
+Form 3 halves the output and cuts 0.19 s at p50 and 0.36 s at p90, and keeps the facts (274 against 271), but lets
+look-alikes back in (185 against 69: the rule allows 79). Form 2 goes live. Form 3 is deleted (code in ffe6285c).
+The stop sequence at the first `"hits":"none"`: on F2's 471 seed-42 replies it keeps 83% of the characters and loses
+31 yes entries; rejected with it.
+
+### 3.2 Addendum C: opened pushes checked
+
+Both F2 runs read lower than the default on planted handed. With `pushCheckOpen` (the same replies replayed, the
+opened pushes' calls made live), seeds 42–43:
+
+| Arm | Calls a seed | Planted handed | Decoy handed | Neutral packets |
+| --- | --- | --- | --- | --- |
+| default | 0 | 291 | 247 | 370 |
+| F2 | 470–472 | 271 (+35 −55) | 69 | 81 |
+| F2 + `pushCheckOpen` | 563–566 | **316 (+37 −12)** | **82** | **100** |
+
+The check arms that go live set `pushCheckOpen`: +25 planted facts handed against the default, look-alikes −67%,
+neutral packets −73%, for about 20% more calls than F2.
+
+### 3.3 The review (before any Pi call)
+
+The `reviewer` subagent ran on d5d504f0..8b84d745 (REQUEST_CHANGES; eval 0.65 / 0.52 / 0, funnel 315 / 276, the cold
+gate red on one test). Fixed in 1927cc19 before the Pi runs: card distillation counted `train-rw` as held out (the
+red test); `indirectRest` handed on a rejoined 400-character head (now the message itself from where the lead-in
+ends, whole); the strict open shape refused requests with clock times or dates ("Bump Thursday's 09:00 call to
+10:30") and any message opening with a greeting (now a greeting needs a listed verb after it); "eat", "chat", "stay"
+read as acting. Rescored after the fixes (labelled post hoc: the sets were read): set 1 the same; set 2 indirect 76
+of 120, logs 4 of 30, chatter 6 of 40, statements 13 of 40, questions 0 of 30. Left as known: a plan alert (D301)
+for an indirect request quotes the imperative, not the user's words; with the reader's own push
+(`pushCandidates` 0) an explicit ask in the same request does not reuse the push's reading of an indirect request.
