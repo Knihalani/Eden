@@ -108,20 +108,24 @@ false concerns, inside a wait an interactive agent can take, and how does it sta
   seeds 49–64, Haiku's checks) and about $2 for the regrade; cap $14 for this step. Modal: the endpoint's H100 for
   the run's length (about $4 an hour **[EST]**) and the shards.
 
-## 2d. Pre-registration: Pi round 2 (D898), written after round 1 and before any round-2 choice was read
+## 2d. Pre-registration: Pi round 2 (D898), amended before any round-2 run
 
-Round 1 (§4d) showed the student stricter than Haiku on Pi worlds. Round 2 asks whether a more lenient mark, and the
-student retrained with M2's synthetic families, close that gap. It is motivated by round 1's diagnostics, so it runs
-on **fresh worlds** (seeds 65–88) and every choice below is fixed by a rule on the dev split before the run.
+Written after round 1 (§4d) and amended, before any round-2 choice was read, to the parent's version: the push check
+("S", Haiku's compare-first silent check, opened and indirect pushes checked, `pushCheckWaitMs` 1,500) is now in the
+default (D828), so the student is measured as a drop-in for S's call, and it must win on cost, not only quality.
 
-- **Student:** of `t8b-truth-a` (train suites only) and `s8b-a` (the same recipe on the train suites plus M2's v0
-  synthetic train families, §4e), the one with the higher planted-vs-decoy AUC on the train suites' **dev**
-  templates; within 0.01, the higher on M2's synthetic **val** families.
+- **Arms:** `eden` (the default at the merge, S) against `eden~local` (the default with `pushCheckLocal` on: the same
+  rule, the student's scores in place of Haiku's call). Pi on Modal, the 40 held-out templates, **fresh seeds 65–88**,
+  hidden, control and neutral, Sonnet-regraded as §2c. Cap $6 Anthropic.
+- **Student:** of every run trained in this session, the **cheapest** by $ a check at 50% utilisation on the cheapest
+  measured GPU whose 15-item pool p90 is at most 1,000 ms, among runs whose **dev** planted-vs-decoy AUC is at least
+  0.85; a tie (within 10%) goes to the higher dev AUC. Its eval figure is then read once, if not read before.
 - **Mark:** the most lenient `pushCheckLocalPass` of 0.5, 0.2, 0.05, 0.01 and 0.002 whose dev-template funnel (seeds
-  41–48, cached scores) hands at most **10%** of the default's decoys (13 of 131). For `t8b-truth-a` that is 0.01
-  (12 handed; 0.002 hands 24), read before this section was written.
-- **Harness, arms, regrade, outcomes and rule:** as §2c (40 held-out templates, `eden`, `eden~local` with the chosen
-  student and mark, `eden~check`), seeds 65–88. Budget about $4 for the shards and $1.6 for the regrade.
+  41–48, the merged default as base, the student's scores) hands at most 10% of the default's decoys.
+- **Rule (the parent's):** promote the student's check only if, against `eden`: hidden facts are not worse (the
+  template-clustered lower bound above **−2.0 points**); Sonnet-confirmed concerns are not up by more than **1 per
+  1,000** tasks; and the cost per 1,000 tasks is **lower**, counting the student's serving at **50% utilisation**
+  (reported also at 10% and 100%). Wall time against `eden` is reported. Otherwise stop and record it.
 
 ## 3. The pipeline (D891)
 
