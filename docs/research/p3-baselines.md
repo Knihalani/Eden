@@ -331,3 +331,38 @@ concern ($0.46). Readouts `c-days-hidden.txt`, `c-days.txt`, `c-mix.txt`.
   "Eden's selection earns its keep over days" if the lower bound is above 0; if the interval includes 0, the report
   says plain retrieval matches Eden over days within the interval found, and Eden's measured edge over days is its
   cost and its look-alike handling, not facts raised. No engine change follows either way.
+
+## 10. Results: (b3), and the pre-registration of (b4)
+
+(b3) ran 32 more fresh users (w105–w136); with (b2)'s 16 (`eden` from (b), `hits` from (b2)) that is 48 users, 384
+hidden tasks (`b3-days.txt`, `b23-days.txt`, `b23-mix.txt`).
+
+| Over days, 48 fresh users, users resampled | `hits` | `eden` |
+| --- | --- | --- |
+| Hidden raised (Sonnet's grade) | 55.7% (214) | 59.1% (227): **`eden` − `hits` +3.4 (−2.1..+8.3)** |
+| (b3)'s 32 users alone | | +2.3 (−4.7..+9.0) |
+| Handed at its own request; raised of those | 232; 81.9% | 194; 80.9% |
+| Handed only earlier that day; raised of those | 105; 24 | 141; 70 |
+| Confirmed concerns, control; neutral | 0; 1 | 0; 1 |
+| Neutral requests with a packet; items a packet | 100%; 5.0 | 97%; 3.8 |
+| $ per 1,000 tasks; wall a task | **+$0.018 (+0.014..+0.022)**; +0.045 s | $0.235; 1.45 s |
+
+**Read by the rule (§9): over days the interval includes 0, so plain retrieval matches Eden on facts raised within
+−2.1..+8.3 points.** Eden's measured edge over days is that it is cheaper, sends fewer items, and gets far more of the
+facts it handed earlier in the day raised later (70 of 141 against 24 of 105): `hits` hands the fact at its own
+request more often (232 against 194, no not-twice ledger), Eden's ledger keeps it out there.
+
+**A confound in the comparison of horizons.** The short runs (seeds 41–42) replayed the full intent index, which the
+shipped pipeline does not build (D714, D877); the days users had only the requests their in-run card calls made. So
+"+25.8 one request a session against +3.4 over days" may be coverage as much as horizon. At $0 one request a session
+the candidates hand 289 facts at full coverage and 259 at shipped coverage (`bun run funnel`, `--coverage full`), the
+five best hits 201.
+
+### Pre-registration of (b4) (written before any call of it)
+
+- **Run:** short, fresh seeds 45 and 46 (no replayed intent; cards and requests made in-run, as shipped), train,
+  `--variants hidden,control,neutral`, arms `eden` and `hits`, Haiku 5.5 agent, `--budget 0.8` a process, both at
+  once; Sonnet regrade. Cost [EST] about $1.5.
+- **Read:** `eden` − `hits` one request a session at shipped coverage, templates resampled. If its lower bound is above
+  0, Eden's selection earns its keep one request a session as shipped; the report then states the days result (§10)
+  as a property of the days horizon. If not, the report says the +25.8 was the full index's.
