@@ -286,3 +286,24 @@ Hidden raised, gate − default: **+1.2 points (−1.4..+3.8)**, 767 pairs in 38
 reworded +1.3, −2.6..+5.0). The pre-registered rule holds (lower bound above −1.5, confirmed concerns not up):
 promoted (D1014). Spend: $3.42 (four runs $0.62–0.65 each, the regrade batch $0.88). No new held-out read: the veto
 was not tuned, so §4's read of this frozen model stands.
+
+### 7.1 Addendum C: round 4, short throwaway turns (pre-registered before its training)
+
+The review's cold check found the shipped model starting a push on short throwaway turns: 7 of 23 probed ("hello",
+"hi", "hello there", "hallo zusammen", "ciao a tutti", "asdf", "?"). The veto cannot reach them (gate-only starts).
+The parent chose a targeted retrain: 1,645 generated greetings and throwaway turns in the nine languages
+(`gen_extra.py --short`) join the training set; R2f's configuration is retrained (6 epochs, seeds 1 and 2) and frozen
+by §0.2's rule. The probe list then overlaps the training data and is reported only. **Round 4 ships if all hold**,
+each against the round-3 model (or `eden`) as named:
+
+1. fixtures.json and fixtures-2.json: no more wrong rows than round 3's 5 of 135;
+2. one S5 read: acting across nine languages at least 91.7 (round 3: 92.7), false starts at most 102 of 703 (93);
+3. funnel at shipped coverage, seeds 41–44: hidden handed by the push on train at least 520 (`eden` 525, −1%), and on
+   `reworded` and `train-rw` at least `eden`'s (431, 580);
+4. Pi pair as §7 (train and reworded, seeds 41–42, Sonnet regrade): hidden raised gate − `eden`, clustered lower bound
+   above −1.5; confirmed concerns not up; **neutral requests given a packet not up against `eden`** (the parent's
+   clause; neutral turns share the hidden requests' text, so a gate that starts more acting requests tends to raise
+   them: this clause may fail for that reason alone, and is applied as written).
+
+If any fails, the round-3 model ships with a stopgap guard on gate-only starts (no start for a turn of fewer than
+three words that the rule does not start), documented as such. Anthropic cap raised to $10 by the parent.
