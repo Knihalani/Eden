@@ -359,7 +359,8 @@ train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
 `packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710
-(314/274 before, when it read 307/281 on the second draw; 314/273 before D483's tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
+(314/274 before, when it read 307/281 on the second draw, which was not re-run after D710; 314/273 before D483's
+tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
 
 A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
@@ -975,6 +976,9 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
 --cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal] [--set JSON]`, about 10 s. pi-ab's 2 h
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
   gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
+  `--pool-diag FILE` (O3, D712) writes one row a hidden or control request: whether the candidates' pass ran, the
+  planted item's place in the push's pool, the constraint test on it, and whether it was handed then or earlier that
+  day (docs/research/o3-pointer.md §3.2).
 - The results header records both (`sourceProfile`, `push`).
 - **The same at $0 (A18):** `bun run funnel` takes them after `--`, with `--time 1`: `-- --time 1 --source-profile
   F --push signals|payload|refs` (and `--fetch-gone false`: sources whose fetch null proves nothing, as an MCP tool's).

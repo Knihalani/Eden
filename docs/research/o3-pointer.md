@@ -116,9 +116,33 @@ other items went. A user's world holds every template's constraint and decoy at 
 candidates fill with other requests' constraints. That is a ranking question a $0 screen can study; no model call
 found it here.
 
+### 3.2 Where the missing fact was, at $0 (`days-calls.ts --pool-diag`)
+
+The same users through Eden alone (no agent, no ask, time scale 0), reading the push's pool at each hidden request
+(`onPushPool`: 15 items at most, five handed, two when the request is settled):
+
+| users | cards and intent requests | hidden | pushed at its request | handed earlier that day | not in the pool | pooled, fails the constraint test | pooled, below the cut |
+|---|---|---|---|---|---|---|---|
+| w41–w44 | replayed (the checked-in files) | 46 | 26 | 13 | 2 | 2 | 3 |
+| w41–w44 | cards replayed, `intent` off | 46 | 26 | 4 | 11 | 2 | 3 |
+| w45–w52 | the cards the paid run made (`--cards-out`) | 113 | 59 | 31 | 16 | 5 | 2 |
+
+The first row agrees with the paid run's `eden~O` arm on the same four users (27 at its request, 13 earlier that
+day, 6 not that day), so the replay is a fair screen. Two things follow, both from small samples:
+
+- **The misses are mostly pool recall.** Of the hidden facts neither pushed nor handed earlier that day, the planted
+  item was not among the pool's 15 in 2 of 7 (w41–w44) and 16 of 23 (w45–w52); the constraint test and the cut took
+  the rest. Without the intent index 11 of 46 are outside the pool.
+- **28 of the 32 users ran without replayed intent requests** (pi-ab's header: `intent inert: no replay` for w45 on;
+  §2 said so). In the paid run's default arm the fact was not in the day's transcript in 8 of 46 tasks for w41–w44
+  (17%) and 126 of 387 for w45–w72 (33%). Every arm of a user ran the same way, so §3's paired differences stand;
+  the levels, and how large the pool-recall gap is with a full intent index, need users whose requests are made
+  first (about $0.02 a user of card calls [EST], not run).
+
 ```bash
 .local/o3/days4.sh d4 41 … 72      # pi.sh per user: --days 8, arms eden,eden~O,eden~P,eden~OP, --budget 1.0
 bun packages/sim/src/lab/i3-regrade.ts --results .local/o3/d4/s41/out.json,… --spend-ledger … --spend-cap 25
 python3 -I packages/sim/lab/n5/days_hidden.py --base eden --arms 'eden~O,eden~P,eden~OP' .local/o3/d4/s*/
 python3 -I packages/sim/lab/n5/mix.py --days --base eden --arms 'eden~O,eden~P,eden~OP' .local/o3/d4/s*/out.json
+bun packages/sim/src/lab/days-calls.ts --seeds 41,42,43,44 --cards .local/o3/cards-all.jsonl --pool-diag F  # §3.2
 ```

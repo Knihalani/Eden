@@ -8,7 +8,8 @@ context the agent needs in front of it before it knows to ask. Most of the time 
 - **Model as last resort.** Cues, a learned source map and a local index decide most turns, with no model call.
   With `OPENROUTER_API_KEY` set, one model (`EDEN_MODEL`, default Claude Haiku 5.5 via OpenRouter, ZDR routing) writes
   implication cards and the intent index in the background, under per-session budgets and a per-tenant daily cap. For
-  a request that acts, Eden hands the agent the five best candidates it found, framed to be checked against the
+  a request that acts or opens like an instruction, Eden hands the agent the five best candidates it found, framed to
+  be checked against the
   request, with no model call of its own (D237); without a key the same default runs its no-model path, the
   candidates included (D276).
 - **Read-only, per-user, redacted.** It never calls a write tool; users never share state; secrets are scrubbed
@@ -37,7 +38,8 @@ seeds the same no-key path caught the deciding item for 208 of 384 requests (D29
 Needs [Bun](https://bun.sh) 1.4+ (`bun.lock` is lockfile format 2, which Bun 1.3.14 refuses), or Docker:
 `docker build -t eden .` then `docker run -p 127.0.0.1:8790:8790 -e EDEN_DEV=1 eden` (the `Dockerfile` header has the
 production flags; D280). Everything below runs without any API key: Eden's default answers from its
-no-model path, and for a request that acts it hands the agent candidates to check (D237, D276).
+no-model path, and for a request that acts or opens like an instruction it hands the agent candidates to check
+(D237, D276, D710).
 
 ```bash
 bun install

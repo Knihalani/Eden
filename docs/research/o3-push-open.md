@@ -161,9 +161,9 @@ runs of the same arm. Stage 2 ran on d63681c8's code as stage 1 did. Spend figur
 
 ## 6. Pre-registration, addendum: `pushOpen` over a user's days (committed before its first call)
 
-§4 measured one request a session, with the looser test. This run is on the tree as shipped (daf758a3, §5's test). Over a user's days the agent keeps the day's transcript, so a packet on nearly
-every request (98% of neutral requests against 81%) is carried and re-read all day: the cost clause has to be read
-there too.
+§4 measured one request a session, with the looser test. This run is on the tree as shipped (daf758a3, §5's test).
+Over a user's days the agent keeps the day's transcript, so a packet on nearly every request (98% of neutral requests
+against 81%) is carried and re-read all day: the cost clause has to be read there too.
 
 - **Run:** pi-ab `--days 8`, users w41–w48 (one user a process, one at a time), arms `eden` and `eden~O`, the bench
   recipe; every hidden answer and every control or neutral concern regraded by Sonnet 5.5.

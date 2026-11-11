@@ -72,7 +72,8 @@ Work still running when the wait ends arrives later through `pending`/`collect`,
   the agent the five best candidates, framed to be checked against the request (about 950 bytes a request on the
   lab's worlds), with no model call; on Pi with payload notices Eden's time on the agent's path was about 10 ms a
   request (docs/research/cl-cl6.md). The candidates are not vetted: up to five items that may not bear on the request
-  reach your agent's model on most acting requests (in the lab, 86% of nothing-to-add requests got a packet), so the
+  reach your agent's model on nearly every request (in the lab, 98% of nothing-to-add requests got a packet over
+  simulated users' days, D710; 87% with `pushOpen: false`), so the
   agent must be able to ignore a look-alike when told to check who, what and when. The default wait still covers the
   search and the on-demand sync poll. The reader below applies with `pushCandidates: 0` (`minus-candidates`).
 - **The reader (`readerPush` with `askReader`, with `pushCandidates: 0`, D98, D112) needs about 3,000 ms.**
@@ -591,7 +592,7 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
   and per user is in [COST-MODEL.md](COST-MODEL.md); disclose the model provider to your users
   ([PRIVACY.md](PRIVACY.md)).
 - **Without a key**, the same default runs its no-model path: nothing to change. The push's candidates make no model
-  call and run there too (D276): a request that acts gets up to five items to check, at $0.
+  call and run there too (D276): a request that acts or opens like an instruction gets up to five items to check, at $0.
 - Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.
 - `EDEN_ENGINE_CONFIG` takes a JSON file of settings over the default, usually one of `docs/profiles/minus-*.json`
   ("default minus a part") for a comparison. New behaviour arrives as a trial switch with an owner and an end date

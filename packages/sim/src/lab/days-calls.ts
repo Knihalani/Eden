@@ -9,6 +9,7 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
+ *     [--pool-diag FILE]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
@@ -19,7 +20,7 @@ import { writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { CardEnricher, ContextPartner, ItemCache, type EngineConfig } from "@eden/engine";
+import { CardEnricher, ContextPartner, ItemCache, type EngineConfig, type PushPoolReport } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
@@ -48,6 +49,33 @@ export interface DaysCallsOptions {
   notifyShare?: number | null;
   /** `--noise-sources N` (N1): N unrelated connectors beside the world's five (`noise-sources.ts`), 20 items each. */
   noiseSources?: number;
+  /**
+   * `--pool-diag FILE` (O3, D712): one row per hidden or control request saying where its planted item was in the
+   * push's pool (`onPushPool`): ids and flags only.
+   */
+  onPlanted?: (row: PlantedRow) => void;
+}
+
+/** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
+export interface PlantedRow {
+  seed: number;
+  task: string;
+  kind: string;
+  day: number;
+  /** Whether the request's observe ran the candidates' pass at all. */
+  pushRan: boolean;
+  poolSize: number;
+  /** The planted item's place in the pool (0 first), -1 when it is not in it. */
+  rank: number;
+  /** `readerGate`'s constraint test on it, when pooled. */
+  like: boolean;
+  /** Pool items before it that pass the constraint test. */
+  likeAhead: number;
+  handed: number;
+  /** Handed by the push; handed at all (the ask included, with `--ask`); handed earlier the same day. */
+  pushed: boolean;
+  got: boolean;
+  today: boolean;
 }
 
 export interface DaysCallsUser {
@@ -120,6 +148,8 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   let phase: Phase = "backfill";
   const eden = sources.map((s) => counted(s, () => phase, counts, fetched));
   let clock = world.now;
+  /** The current request's candidates pass, when it ran (`onPlanted`). */
+  let pooled: PushPoolReport | null = null;
   const cards = o.cards ? new CardEnricher({ maker: o.cards, budget: new Budget(), now: () => clock }) : undefined;
   const cache = new ItemCache();
   const partner = new ContextPartner({
@@ -132,6 +162,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     now: () => clock,
     config: o.config ?? {},
     ...(cards ? { cards } : {}),
+    ...(o.onPlanted ? { onPushPool: (r: PushPoolReport) => void (pooled = r) } : {}),
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
   // The harness reads the engine's session table, as hidden-funnel does: whether a session's lookup is still running.
@@ -168,6 +199,8 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const requestsByDay: number[] = [];
   /** The item ids the agent was handed in the current request. */
   const handed = new Set<string>();
+  /** Planted items handed so far in the current day's session (`onPlanted`'s `today`). */
+  const handedToday = new Set<string>();
   const requestCalls = () => callsWhere(counts, (p) => p === "request");
   const take = () => {
     for (const i of partner.takePending({ ...scope, sessionId: session })) {
@@ -185,6 +218,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       dayNo++;
       session = `${userPrefix}:day${dayNo}`;
       planted.clear();
+      handedToday.clear();
     }
     newDay = isRecap(task);
     if (isRecap(task)) {
@@ -214,6 +248,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     const ev = { ...scope, sessionId: session, at: clock };
     if (!isRecap(task)) requests++;
     handed.clear();
+    pooled = null;
     const callsBefore = requestCalls();
     const arriving = task.event === "external" ? { source: "gmail" } : {};
     const r = await partner.observe({ ...ev, kind: task.event, text: task.text, ...arriving } as AgentEvent, {
@@ -224,6 +259,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     // The lookup's work left running (the push behind its poll, a second reading) settles before the next request.
     for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     take();
+    const pushed = task.planted ? handed.has(task.planted) : false;
     if (o.ask && !isRecap(task)) {
       const a = await partner.ask({ ...scope, sessionId: session, question: task.text });
       for (const c of a.citations) handed.add(c.itemId);
@@ -238,7 +274,27 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
         const row = (surfaced[task.kind] ??= { n: 0, got: 0 });
         row.n++;
         if (handed.has(task.planted)) row.got++;
+        if (o.onPlanted) {
+          const report = pooled as PushPoolReport | null;
+          const rank = report ? report.pool.indexOf(task.planted) : -1;
+          o.onPlanted({
+            seed,
+            task: task.id,
+            kind: task.kind,
+            day: dayNo,
+            pushRan: report !== null,
+            poolSize: report?.pool.length ?? 0,
+            rank,
+            like: rank >= 0 && report!.constraintLike[rank] === true,
+            likeAhead: rank >= 0 ? report!.constraintLike.slice(0, rank).filter(Boolean).length : 0,
+            handed: report?.handed.length ?? 0,
+            pushed,
+            got: handed.has(task.planted),
+            today: handedToday.has(task.planted),
+          });
+        }
       }
+      for (const id of handed) handedToday.add(id);
     }
     if (cards) await cards.idle();
     if (!isRecap(task) && task.planted) planted.add(task.planted);
@@ -306,8 +362,12 @@ if (import.meta.main) {
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
+  const diag = opt("pool-diag", "");
+  const planted: PlantedRow[] = [];
+  if (diag) o.onPlanted = (row) => void planted.push(row);
   const users: DaysCallsUser[] = [];
   for (const seed of seeds) users.push(await daysCalls(seed, o));
+  if (diag) writeFileSync(diag, planted.map((r) => `${JSON.stringify(r)}\n`).join(""));
   const requests = users.reduce((n, u) => n + u.requests, 0);
   const days = users.reduce((n, u) => n + u.days, 0);
   const total: Counts = {};
