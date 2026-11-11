@@ -47,11 +47,20 @@ def words(t):
     return out
 
 
+def fin(x, k):
+    """A gram's id from its running FNV state and its length (so 1- to 4-grams from one start share one pass)."""
+    return ((x ^ (k + 0x5BD1)) * FNVP) & M32
+
+
 def grams(cps, lo, hi, salt, out, mask):
     n = len(cps)
-    for k in range(lo, hi + 1):
-        for i in range(n - k + 1):
-            out.add(h(salt + k, cps[i:i + k]) & mask)
+    seed = ((FNV0 ^ salt) * FNVP) & M32
+    for i in range(n):
+        x = seed
+        for k in range(1, min(hi, n - i) + 1):
+            x = ((x ^ cps[i + k - 1]) * FNVP) & M32
+            if k >= lo:
+                out.add(fin(x, k) & mask)
 
 
 def featurise(text, groups="chewp", bits=16):
