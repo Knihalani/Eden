@@ -1,6 +1,7 @@
 # O3: naming what was handed earlier (`pushPointer`)
 
-Status: 2026-11-10, branch `claude/o3-k-behind`, session O3. Decision D708. Train suites only; heldout18 is not
+Status: 2026-11-11, branch `claude/o3-k-behind`, session O3. Decisions D708–D711. **Result (§3): `pushPointer`
+failed its rule and is deleted; `pushOpen` passed over days and is in the default.** Train suites only; heldout18 is not
 dumped, labelled or run. Paid calls go to Anthropic directly with `HAIKU_API_KEY` through the lab (D97):
 **Anthropic-direct lab figures**. Numbers marked **[EST]** are arithmetic or judgement; every other number comes from
 a command in this note or the note it names.
@@ -59,3 +60,45 @@ finished user's results are not used.
 - **Also reported, no bar:** `eden~OP` against each single arm; of the hidden tasks whose fact was handed only
   earlier, in how many the pointer named it and how many of those were raised; pointers a task by kind.
 - **Budget [EST]:** $4 a half (runs $3.5, regrade $0.5).
+
+## 3. Result (2026-11-11)
+
+Both halves ran (the booked total after the first was $17.43): 32 users, 4,103 task runs an arm (433 hidden, 433
+control, 3,237 neutral), no errors, none ungraded. Sonnet regraded 1,858 answers in two batches (one batch's
+worst-case reservation did not fit under the ledger's cap), none unreadable. The run cost $5.74 and the regrade $0.97.
+
+| against `eden` (hidden 53.6%, 232 of 433) | hidden raised, points (users resampled) | confirmed concerns of 3,670 | cost per 1,000 tasks | wall, s a task |
+|---|---|---|---|---|
+| `eden` | | 3 (1 control, 2 neutral) | $0.228 | 1.387 |
+| `eden~O` (`pushOpen`) | **+2.1** (−1.6..+5.6); 55.7% | 1 | +$0.012 (+0.009..+0.014) | +0.018 (−0.003..+0.042) |
+| `eden~P` (`pushPointer`) | **−1.2** (−4.8..+2.3); 52.4% | 4 (2 control, 2 neutral) | +$0.004 (+0.002..+0.006) | −0.012 (−0.028..+0.004) |
+| `eden~OP` (both) | +4.6 (+0.9..+8.4); 58.2% | 1 | +$0.018 (+0.015..+0.022) | +0.009 (−0.016..+0.036) |
+
+- **`pushPointer` fails** (hidden −1.2 against a bar of +4.0 with the lower bound above 0; concerns 4 against 3) and
+  is deleted with its code and tests (D711; the code is in commits 31ac72ad and f8d8cfdd).
+- **`pushOpen` passes over days** (lower bound −1.6, above −2.0; concerns 1 against 3; cost and wall inside their
+  bounds). With D706's pass one request a session it is promoted into the default as the part `open` (D710).
+- **No bar:** `eden~OP` against `eden~O` reads +2.5 points (+0.2..+4.9), against `eden~P` +5.8 (+1.7..+9.9). The
+  pointer alone reads below the default and beside the open push above it. This is one of several unplanned
+  comparisons on one sample and the rule was written for the pointer alone, so it changes nothing here; a pointer on
+  the new default would need its own pre-registered run on fresh users.
+- **Where the fact was** (the run's timelines; Sonnet's grade): handed at its own request, only at an earlier request
+  that day, or never, with the number raised.
+
+  | arm | own request | earlier only | of those, a packet at the fact's request | never |
+  |---|---|---|---|---|
+  | `eden` | 189 (166 raised) | 190 (66) | 159 (51) | 54 (0) |
+  | `eden~O` | 197 (170) | 192 (71) | 178 (65) | 44 (0) |
+  | `eden~P` | 189 (163) | 189 (64) | 161 (53) | 55 (0) |
+  | `eden~OP` | 196 (175) | 193 (77) | 191 (77) | 44 (0) |
+
+  Facts handed only earlier are still raised in about a third of tasks in every arm (35%, 37%, 34%, 40%): naming them
+  again did not move that. The timelines do not record which packets carried a pointer or how many, so the two
+  counts §2 listed (tasks where the pointer named the fact; pointers a task by kind) are **not reported**.
+
+```bash
+.local/o3/days4.sh d4 41 … 72      # pi.sh per user: --days 8, arms eden,eden~O,eden~P,eden~OP, --budget 1.0
+bun packages/sim/src/lab/i3-regrade.ts --results .local/o3/d4/s41/out.json,… --spend-ledger … --spend-cap 25
+python3 -I packages/sim/lab/n5/days_hidden.py --base eden --arms 'eden~O,eden~P,eden~OP' .local/o3/d4/s*/
+python3 -I packages/sim/lab/n5/mix.py --days --base eden --arms 'eden~O,eden~P,eden~OP' .local/o3/d4/s*/out.json
+```

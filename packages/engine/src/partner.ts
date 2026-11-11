@@ -132,7 +132,6 @@ import {
   CANDIDATES_LEAD,
   citationsOf,
   PLAN_LEAD,
-  POINTER_LEAD,
   renderAnswer,
   renderPacket,
   shownText,
@@ -2141,18 +2140,6 @@ export class ContextPartner {
           s.ledger.isFresh(x.item.id, s.turn) ||
           (internal.again !== undefined && s.ledger.revised(x.item.id, versionOf(x.item), s.turn)),
       );
-      // `pushPointer` (O3, D708): this request's candidates that the agent was handed before this request began. The
-      // ledger keeps them out of the packet; the packet's lead names them.
-      const began = internal.turn ?? s.turn;
-      const pointed =
-        this.config.pushPointer && candidates
-          ? flagged
-              .filter((x) => {
-                const at = s.ledger.entry(x.item.id);
-                return !fresh.includes(x) && at !== undefined && at.turn < began && !this.saidTitle(s, x.item);
-              })
-              .slice(0, POINTER_MAX)
-          : [];
       // The re-reads come first (`verifyItems`, which may wait on a connector), then the delivery, so a user message
       // that arrives meanwhile still keeps the packet out: nothing is marked delivered that is not queued.
       // As `deliverChecked` (audit A11): an item whose ledger entry changed over the re-reads' await was handed out
@@ -2165,10 +2152,7 @@ export class ContextPartner {
         return now === undefined || sameEntry(was.get(x.item.id), now);
       });
       const still = internal.request === undefined || internal.request === s.requests;
-      // `pushPointer` (D708): with nothing new to hand, the names of what was handed before still go, as a packet
-      // with no item of its own.
-      const pointing = pointed.length > 0 && checked.length === 0 && fresh.length === 0;
-      const delivering = (checked.length > 0 || pointing) && !s.closed && still;
+      const delivering = checked.length > 0 && !s.closed && still;
       if (replacing && (delivering || !candidates)) {
         const at = s.pending.indexOf(prev!);
         if (at >= 0) {
@@ -2188,7 +2172,7 @@ export class ContextPartner {
       // A first reading whose poll runs behind may be withdrawn by the second: its ledger entries are kept to restore.
       const undo = behind ? new Map(checked.map((x) => [x.item.id, s.ledger.entry(x.item.id)])) : null;
       const injection =
-        delivering && (checked.length > 0 || pointing)
+        delivering && checked.length > 0
           ? candidates
             ? this.deliver(
                 s,
@@ -2197,7 +2181,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined, pointed),
+                this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2950,38 +2934,16 @@ export class ContextPartner {
     }
   }
 
-  /**
-   * `pushPointer` (D708): whether a recent message of the agent's own holds every content word of the item's title
-   * (two or more): it has already spoken of the item, so it is not pointed back to it. Best effort and no model:
-   * a title the session's vocabulary lacks a word of was not said; an integration that reports no agent messages
-   * (the client's `withContext`, the lab's Pi harness) never sets it, the proxy does.
-   */
-  private saidTitle(s: Session, item: ContextItem): boolean {
-    if (!s.agentHas.some((h) => h.said)) return false;
-    const words = item.title.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [];
-    const ids: number[] = [];
-    for (const w of new Set(words)) {
-      const { ids: got, n } = termIds(w, s.vocab, false);
-      if (n !== 1) return false;
-      ids.push(got[0]!);
-    }
-    if (ids.length < 2) return false;
-    return s.agentHas.some((h) => h.said && ids.every((id) => sortedHas(h.terms, id)));
-  }
-
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false, pointed: readonly Scored[] = []): PacketFrame {
+  private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: `${nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD}${pointerLine(pointed)}`,
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
-      maxBytes: Math.max(
-        this.config.maxInjectionBytes,
-        400 + k * (each + 120) + pointed.length * (POINTER_TITLE_CHARS + 60),
-      ),
+      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
     };
   }
 
@@ -3407,9 +3369,7 @@ export class ContextPartner {
     s.window.push(`${event.kind}: ${text.slice(0, 1_000)}`);
     if (s.window.length > this.config.windowEvents) s.window.shift();
     if (event.kind === "tool_result" || event.kind === "agent_message") {
-      const held = heldOf(text, s.vocab);
-      if (event.kind === "agent_message") held.said = true;
-      s.agentHas.push(held);
+      s.agentHas.push(heldOf(text, s.vocab));
       if (s.agentHas.length > this.config.windowEvents) s.agentHas.shift();
     }
     for (let i = 0; i < terms.length; i++) {
@@ -6298,8 +6258,7 @@ export class ContextPartner {
       text: renderPacket(items, options),
       citations: this.cited(items),
       reason,
-      // A packet may hold no item of its own (`pushPointer`, D708: only the names of items handed before).
-      score: scored.length > 0 ? Math.max(...scored.map((x) => x.score)) : 0,
+      score: Math.max(...scored.map((x) => x.score)),
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
@@ -6421,23 +6380,6 @@ export const EXPLAIN_TRACES = 32;
  */
 function pendingOf(s: Session): boolean {
   return s.inflight !== null || !!s.behind || s.pending.length > 0;
-}
-
-/** `pushPointer` (D708): the most earlier-handed items one packet names, and the most of a title it quotes. */
-const POINTER_MAX = 3;
-const POINTER_TITLE_CHARS = 80;
-
-/**
- * `pushPointer` (D708): the lead's sentence naming items handed earlier, or nothing. A title is source text: made
- * one inert line (`safeLine`), cut, its double quotes made single, as a plan alert quotes a request (D301).
- */
-function pointerLine(pointed: readonly Scored[]): string {
-  if (pointed.length === 0) return "";
-  const names = pointed.map((x) => {
-    const title = safeLine(head(x.item.title, POINTER_TITLE_CHARS)).replace(/["“”]/g, "'");
-    return `"${title}" (${safeLine(x.item.sourceId)})`;
-  });
-  return ` ${POINTER_LEAD} ${names.join("; ")}.`;
 }
 
 /** `pushCandidates` (D236): the most of an item a candidate's excerpt says, whatever `compactItemBytes` is set to. */
@@ -6750,9 +6692,7 @@ function rebuildVocab(s: Session, maxTerms: number): void {
     // New ids do not keep the old order, so both arrays are sorted again after the remap.
     const terms = held.terms.map(remap);
     const pairs = held.pairs.map((p) => pairKey(remap(Math.floor(p / PAIR_BASE)), remap(p % PAIR_BASE)));
-    const kept: Held = { terms: sortedUnique(terms), pairs: sortedUnique(pairs) };
-    if (held.said) kept.said = true;
-    agentHas.unshift(kept);
+    agentHas.unshift({ terms: sortedUnique(terms), pairs: sortedUnique(pairs) });
   }
   s.agentHas = agentHas;
   s.vocab = vocab;
@@ -6850,8 +6790,6 @@ function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offs
 interface Held {
   terms: Uint32Array;
   pairs: Float64Array;
-  /** The event was the agent's own message, not a tool result (`pushPointer`, D708: what the agent has said). */
-  said?: boolean;
 }
 
 /**

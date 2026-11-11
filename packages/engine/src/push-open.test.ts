@@ -108,9 +108,9 @@ describe("isOpenRequest (D702): a message that opens like an instruction, whatev
   });
 });
 
-describe("pushOpen (D702)", () => {
-  test("off in the default", () => {
-    expect(DEFAULT_CONFIG.pushOpen).toBe(false);
+describe("pushOpen (D702, promoted by D710)", () => {
+  test("on in the default", () => {
+    expect(DEFAULT_CONFIG.pushOpen).toBe(true);
   });
 
   test("off, a request with an unlisted verb starts no push; on, it gets the candidates", async () => {

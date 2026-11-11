@@ -4,7 +4,9 @@ Status: 2026-11-10, branch `claude/o3-k-behind`, session O3, measured. Decisions
 `pushOpen` passes its pre-registered rule one request a session on eight train seeds (hidden +4.1 points,
 +1.6..+6.7, concerns level, +$0.006 per 1,000 tasks, no added wait) and fails the hidden clause over a user's days
 (−2.0 points on 101 tasks, −10.0..+5.3): not promoted, an off trial whose deletion is the owner's call (§7).
-`candidatesSpecifics` fails and is deleted.** Train suites only (train1–6);
+`candidatesSpecifics` fails and is deleted.** **Since (2026-11-11):** the days clause was replaced (D709) and a
+32-user days run passed it (+2.1 points, −1.6..+5.6; o3-pointer.md §3), so `pushOpen` is in the default (D710).
+Train suites only (train1–6);
 heldout18 is not dumped, labelled or run. Paid calls go to Anthropic directly with `HAIKU_API_KEY` through the lab
 (D97): **Anthropic-direct lab figures**. Numbers marked **[EST]** are arithmetic or judgement; every other number
 comes from a command in this note.

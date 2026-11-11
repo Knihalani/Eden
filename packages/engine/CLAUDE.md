@@ -136,7 +136,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lane with the batches they had. One lane (`cardsLanes: 1`, part `cards`) is `drain` itself with no wrapper: keep it
   so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
   sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
-  sentence. Re-run the default funnel after touching it (314 / 274, card calls 382–392 by load).
+  sentence. Re-run the default funnel after touching it (315 / 276, card calls 382–392 by load).
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool
@@ -309,16 +309,18 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the funnel. A check answered from labels made at ingest (`pushCheckStored`, `pushCheckGate`) was measured and
   deleted (D526, D529): with no request in hand a model cannot tell a fact from a look-alike that is a real
   constraint about another venue, person or day.
-- **The push starts on a verb list; `pushOpen` (O3, D702, D706, a trial, off) reads the request's shape instead.**
-  `observe` starts the push only when `isImperative` knows the request's verb (a gate from the reader's paid push);
-  132 of 768 hidden train requests start none. With `pushOpen` and `pushCandidates` (and `pushCheck` off: an opened push never makes
-  the check's paid call), `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener;
-  a question mark only on a polite ask; bounded input) also starts it. An opened message is not `noteActed`: a plan
-  alert (D301) quotes only a listed-verb request. Live:
-  hidden +4.1 points, confirmed concerns level, the decoy handed more often too (docs/research/o3-push-open.md). The
-  funnel always asks, so its "surfaced" cannot see this; read `pushHanded` (`n2/compare.py`) and measure live. Deleted
-  beside it: the push check run behind the packet (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of
-  768 hidden tasks, hidden +0.0) and a lead line asking for the item's specifics (`candidatesSpecifics`, D705: +2.0).
+- **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
+  `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
+  requests are on none. With `pushCandidates` (and `pushCheck` off: an opened push never makes the check's paid
+  call), `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark
+  only on a polite ask; bounded input) also starts it. An opened message is not `noteActed`: a plan alert (D301)
+  quotes only a listed-verb request. Live: hidden +4.1 points one request a session (D706) and +2.1 (−1.6..+5.6) over
+  users' days (D710), confirmed concerns not up, the decoy handed more often too (docs/research/o3-push-open.md,
+  o3-pointer.md §3). The funnel always asks, so its "surfaced" barely sees this (315 / 276 against 314 / 274); read
+  `pushHanded` (`n2/compare.py`) and measure live. Deleted beside it: the push check run behind the packet
+  (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
+  asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
+  earlier request (`pushPointer`, D711: −1.2 over days).
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a

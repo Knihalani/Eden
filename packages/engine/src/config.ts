@@ -718,20 +718,14 @@ export interface EngineConfig {
    */
   pushCheckAnchored: boolean;
   /**
-   * O3 (D702; a trial, off; docs/research/o3-push-open.md): with `pushCandidates` and without `pushCheck`, the push
-   * also runs for a message whose verb is on no list but which does not open as a question, a remark or a statement
-   * (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`, kept for the reader's
-   * paid push and the check's) guard nothing there; the candidates' own gate (a constraint-like item in the pool)
-   * still decides whether a packet goes. An opened message is not kept as an acting request for plan alerts (D301).
+   * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates` and without
+   * `pushCheck`, the push also runs for a message whose verb is on no list but which does not open as a question, a
+   * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
+   * kept for the reader's paid push and the check's) guard nothing there; the candidates' own gate (a
+   * constraint-like item in the pool) still decides whether a packet goes. An opened message is not kept as an
+   * acting request for plan alerts (D301).
    */
   pushOpen: boolean;
-  /**
-   * O3 (D708; a trial, off; docs/research/o3-pointer.md): with `pushCandidates`, when candidates of this request were
-   * handed for an earlier request of the session (so the not-twice ledger keeps them out of the packet), the
-   * packet's lead names them by title (`POINTER_LEAD`, at most three), so the agent looks at them again. No item
-   * text is sent twice and nothing is added when the packet has no new item.
-   */
-  pushPointer: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -896,8 +890,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckForm: 1,
   pushCheckSilent: true,
   pushCheckAnchored: false,
-  pushOpen: false,
-  pushPointer: false,
+  pushOpen: true,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

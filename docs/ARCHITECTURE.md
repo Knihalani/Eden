@@ -472,8 +472,8 @@ ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
 
-**The push for any request (`pushOpen`, O3, D702, D706; a trial, off).** `observe` starts the push only for a request
-whose verb `isImperative` lists, a gate from the reader's paid push. With `pushOpen`, `pushCandidates` and no
+**The push for any request (`pushOpen`, O3, D702, D706; in the default since D710).** `observe` starts the push only for a request
+whose verb `isImperative` lists, a gate from the reader's paid push. With `pushCandidates` and no
 `pushCheck`, a message that does not open as a question, a remark or a statement (`isOpenRequest`) starts it too: no
 model call, the candidates' own gate unchanged, and no acting request recorded for plan alerts
 (docs/research/o3-push-open.md).

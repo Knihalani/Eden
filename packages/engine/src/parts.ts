@@ -106,7 +106,13 @@ export const PARTS = {
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
    * the reader reads both again.
    */
-  candidates: { pushCandidates: 0, askNudge: false, askNudgeDeep: false, pushCandidatesSettled: 0 },
+  candidates: {
+    pushCandidates: 0,
+    askNudge: false,
+    askNudgeDeep: false,
+    pushCandidatesSettled: 0,
+    pushOpen: false,
+  },
   /**
    * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next
    * take whatever the agent asks then (D301).
@@ -122,6 +128,11 @@ export const PARTS = {
    * first that settles it, not five (D400, promoted by D404).
    */
   fewer: { pushCandidatesSettled: 0 },
+  /**
+   * The candidates' push also starts for a request whose verb is on no list but which opens like an instruction
+   * (`isOpenRequest`; D702, promoted by D710).
+   */
+  open: { pushOpen: false },
   /**
    * `checkAction` holds a call adding a recipient, guest or payee account only Eden's packets showed, not the user's
    * request or correspondence (D375, D376).
