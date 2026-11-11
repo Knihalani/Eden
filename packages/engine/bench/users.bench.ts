@@ -17,7 +17,7 @@
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
  * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
- * [--persist] [--sources=N] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
+ * [--persist] [--sources=N] [--cards] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
  * `--persist`: frozen users are also written, encrypted, to a temp directory (D425).
  * Before D862 (no warm freeze, a 10-minute tick): `--cache='{"warmIdleMs":0,"expireEveryMs":600000}'`.
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
@@ -37,6 +37,7 @@ import type { EngineConfig } from "../src/config";
 import { ContextPartner } from "../src/partner";
 import { EncryptedFrozenDisk } from "../src/persist";
 import { termIds } from "../src/text";
+import { stubCards } from "./stub-cards";
 import { buildWorkload } from "./workload";
 
 const PROSE = process.argv.includes("--prose");
@@ -203,7 +204,10 @@ if (PERSIST) {
   });
   cache.persist(disk);
 }
+/** `--cards`: a $0 stub card maker (`stub-cards.ts`): the card and intent state of a user with a model key (D998). */
+const enricher = process.argv.includes("--cards") ? stubCards(now) : undefined;
 const partner = new ContextPartner({
+  ...(enricher ? { cards: enricher } : {}),
   sources: async (scope) => byUser.get(scope.userId)!,
   // A file, as the servers open (in memory its pages would count in RSS as user state; a file's page cache is bounded).
   sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-users-")), "source-map.db")),
@@ -238,6 +242,7 @@ for (let w = 0; w < WAVES; w++) {
     await sync.tick();
   }
 }
+if (enricher) await enricher.idle();
 const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
 for (const { sources } of users) for (const s of sources) s.items = [];

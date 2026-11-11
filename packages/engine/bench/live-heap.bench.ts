@@ -21,6 +21,7 @@ import type { ListPage, Source } from "@eden/sources";
 import { ItemCache } from "../src/cache";
 import { ContextPartner } from "../src/partner";
 import { termIds } from "../src/text";
+import { stubCards } from "./stub-cards";
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const USERS = Number(args[0] ?? 12);
@@ -102,7 +103,11 @@ for (let u = 0; u < USERS; u++) {
 const byUser = new Map(users.map((x) => [x.scope.userId, x.sources]));
 const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Math.max(5_000, PER_USER) });
 cache.close();
+/** `--cards`: a $0 stub card maker (`stub-cards.ts`), so the card and intent state a user with a key holds counts. */
+const CARDS = process.argv.includes("--cards");
+const enricher = CARDS ? stubCards(() => clock) : undefined;
 const partner = new ContextPartner({
+  ...(enricher ? { cards: enricher } : {}),
   sources: async (scope) => byUser.get(scope.userId)!,
   sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-live-heap-")), "source-map.db")),
   cache,
@@ -119,6 +124,7 @@ for (let i = 0; users.reduce((s, { scope }) => s + cache.syncedCount(scope), 0) 
   clock += 1_000;
   await sync.tick();
 }
+if (enricher) await enricher.idle();
 for (const { sources } of users) for (const s of sources) s.items = [];
 // `--thaw`: every user frozen by idle ticks and read once (a cache search), as `users.bench.ts`'s "after thaw" line:
 // a live user as most are, rather than straight after a backfill.
@@ -250,9 +256,18 @@ for (const [, s] of syncUsers) {
   add("sync: rare terms", walk(s.rare));
   add("sync: rest of user", walk(s));
 }
+if (enricher) {
+  const cardUsers = (enricher as unknown as { users: Map<string, Any> }).users;
+  for (const u of cardUsers.values()) {
+    for (const k of ["byHash", "byItem", "holders", "bySentence", "sentenceOf", "intent", "queue"]) {
+      add(`cards: ${k}`, walk(u[k]));
+    }
+  }
+  console.log(`cards: ${JSON.stringify(enricher.stats)}`);
+}
 add(
   "partner: everything else",
-  walk(partner, (v) => v === cache || v === sync),
+  walk(partner, (v) => v === cache || v === sync || v === enricher),
 );
 
 const total = [...parts.values()].reduce((a, b) => a + b, 0);
@@ -300,4 +315,44 @@ if (process.argv.includes("--types")) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 25);
   for (const [k, n] of top) console.log(`${k.padEnd(28)} ${(n / USERS).toFixed(0).padStart(8)} a user`);
+}
+
+if (enricher && process.argv.includes("--forget-cards")) {
+  // Subtractive: every user's cards forgotten (`CardEnricher.forget`), then the heap and RSS a user again.
+  const before = await mem();
+  for (const { scope } of users) enricher.forget(scope);
+  const after = await mem();
+  console.log(
+    `forgetting every user's cards freed heap ${((before.heap - after.heap) / USERS / MB).toFixed(2)} MB, ` +
+      `RSS ${((before.rss - after.rss) / USERS / MB).toFixed(2)} MB a user`,
+  );
+}
+
+if (process.argv.includes("--snapshot")) {
+  // JSC's heap snapshot: every cell's size summed by class (typed arrays' stores included as their cell's size).
+  Bun.gc(true);
+  const snap = Bun.generateHeapSnapshot() as unknown as { nodes: number[]; nodeClassNames: string[] };
+  const by = new Map<string, [number, number]>();
+  // JSC's snapshot rows: id, size, classNameIndex, flags (four numbers a node).
+  for (let i = 0; i < snap.nodes.length; i += 4) {
+    const name = snap.nodeClassNames[snap.nodes[i + 2]!]!;
+    const row = by.get(name) ?? [0, 0];
+    row[0] += snap.nodes[i + 1]!;
+    row[1]++;
+    by.set(name, row);
+  }
+  const sizes = new Map<number, number>();
+  for (let i = 0; i < snap.nodes.length; i += 4) {
+    if (snap.nodeClassNames[snap.nodes[i + 2]!] !== "Cell Butterfly") continue;
+    const sz = 2 ** Math.ceil(Math.log2(Math.max(1, snap.nodes[i + 1]!)));
+    sizes.set(sz, (sizes.get(sz) ?? 0) + 1);
+  }
+  console.log(
+    "butterflies by size (rounded up to a power of two):",
+    JSON.stringify([...sizes].sort((a, b) => a[0] - b[0])),
+  );
+  for (const [k, [b, n]] of [...by].sort((a, b) => b[1][0] - a[1][0]).slice(0, 20))
+    console.log(
+      `${k.padEnd(28)} ${(b / USERS / MB).toFixed(3).padStart(7)} MB ${(n / USERS).toFixed(0).padStart(7)} cells a user`,
+    );
 }
