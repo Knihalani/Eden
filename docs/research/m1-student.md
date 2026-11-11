@@ -170,6 +170,38 @@ D895's bar on the held-out templates: decoys handed −146 (≤ −32), planted 
 decoys surfaced −16 (≤ +4), neutral packets 252 → 2: **pass**. The dev loss of planted facts (−20) is one template
 for most of it: `isa-allowance-used`, whose fact the student scores −8.9 on every seed.
 
+### 4d. Pi, round 1 (D897's rule): the student's check fails live
+
+Pi on Modal as pre-registered (§2c), commit 29860d5b, 24 shards one at a time, 8,640 task runs, 0 errors, 0 of
+about 26,000 agent requests retried on a 429; $3.78 Anthropic. Sonnet 5.5 regraded all 2,880 hidden answers and the
+47 concerns ($1.59, 0 failed). Intervals: template-clustered bootstrap (`bench_report.py --sonnet`).
+
+| Outcome | eden~local − eden | eden~check (Haiku) − eden | eden~local − eden~check |
+| --- | --- | --- | --- |
+| **Hidden raised, Sonnet** (eden 50.9%) | **+2.4 (−3.6..+8.5)** | **+6.9 (+1.5..+12.4)** | **−4.5 (−9.3..−0.3)** |
+| Confirmed concerns (control, neutral; 1,920 pairs) | 1 vs 0 | 1 vs 0 | 1 vs 1 |
+| Wall mean, s | +0.57 (+0.43..+0.72) | +1.04 (+0.85..+1.22) | −0.47 (−0.59..−0.33) |
+| Agent + Eden billed $/1k (serving not counted) | −0.007 (−0.028..+0.012) | +0.181 (+0.145..+0.215) | −0.189 |
+| `ask_context` calls a task | +0.30 | +0.25 | +0.05 |
+| Eden on the critical path, ms a task | 123 → 499 | 123 → 1,031 | |
+
+Haiku's grade said the same (hidden 54.7%, 57.9%, 61.8%). **Against the rule:** hidden is not better (the interval
+holds zero), concerns are not up, the wall clause fails (+0.57 s against +0.3 s), and the student is below Haiku's
+check by more than a point. **The student's check fails its live rule.**
+
+**Why the funnel's win did not carry** (each hidden task's packet from the timelines, Sonnet's verdicts):
+
+| Arm | Planted fact in the push's packet | Raised when in it | Raised when not | Hidden pushes silenced |
+| --- | --- | --- | --- | --- |
+| eden | 607 / 960 | 474 (78%) | 15 / 353 | 1 |
+| eden~check (Haiku) | **711** / 960 | 538 (76%) | 17 / 249 | 77 |
+| eden~local (student, pass 0.5) | 647 / 960 | 469 (72%) | 43 / 313 | **102** |
+
+The student keeps the look-alikes out and silences neutral requests (packets on 29% of neutral tasks against 99%),
+but on these worlds it lets fewer facts in than Haiku: 102 hidden pushes it found nothing in, and 64 fewer facts in
+the packet. Its endpoint round trip (p50 274 ms, p90 835 ms from the Modal shards, 0.99 calls a task, 0 failures)
+and the asks a silent push prompts (+0.30 a task) make the extra wait.
+
 ## Reproduce
 
 ```bash
