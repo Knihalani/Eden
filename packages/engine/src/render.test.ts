@@ -167,3 +167,24 @@ describe("the envelope", () => {
     );
   });
 });
+
+describe("onParts (lab only, D921)", () => {
+  test("reads each compacted item's parts and kept text without changing the packet", () => {
+    const items = [
+      item("m1", "Re: pricing", REPLY),
+      item("m2", "Plain", "One line about the Globex renewal on 22 Nov."),
+    ];
+    const options = { maxBytes: 1200, focus: new Set(["globex", "pricing"]), split: true };
+    const seen: { id: string; parts: number; kept: string }[] = [];
+    const watched = renderPacket(items, {
+      ...options,
+      onParts: (it, parts, kept) => seen.push({ id: it.id, parts: parts.length, kept }),
+    });
+    expect(watched).toBe(renderPacket(items, options));
+    expect(seen.map((s) => s.id)).toEqual(["m1", "m2"]);
+    for (const s of seen) {
+      expect(s.parts).toBeGreaterThan(0);
+      expect(watched).toContain(s.kept.slice(0, 40));
+    }
+  });
+});
