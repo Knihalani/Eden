@@ -51,4 +51,27 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
     expect(fetchesAtRequest(signals.counts)).toBeGreaterThan(5);
     expect(signals.staleHeld).toBe(0);
   });
+
+  // P4 (D841): `--move-after N` moves a handed item mid-session and reads its fate when the session ends.
+  test("moveAfter: with notices every mid-session move is updated; without, owed updates by source add up", async () => {
+    const told = await daysCalls(41, { days: 2, push: "payload", moveAfter: 2 });
+    const mid = Object.values(told.midFates).reduce((a, b) => a + b, 0);
+    expect(mid).toBeGreaterThan(0);
+    expect(told.midFates.updated).toBe(mid);
+    expect(told.midDelays.length).toBe(mid);
+    for (const d of told.midDelays) expect(d).toBeGreaterThanOrEqual(0);
+    const silent = await daysCalls(41, { days: 2, push: "payload", recapSilent: true, moveAfter: 2 });
+    const owed = Object.values(silent.bySource).reduce((a, r) => a + r.owed, 0);
+    const updated = Object.values(silent.bySource).reduce((a, r) => a + r.updated, 0);
+    const recapOwed = silent.fates.updated + silent.fates.unpolled + silent.fates.unseen + silent.fates.undelivered;
+    const midOwed = Object.values(silent.midFates).reduce((a, b) => a + b, 0);
+    expect(owed).toBe(recapOwed + midOwed);
+    expect(updated).toBe(silent.fates.updated + silent.midFates.updated);
+    // Off, nothing moves mid-session and the recap's fates are the run's.
+    const off = await daysCalls(41, { days: 2, push: "payload", recapSilent: true });
+    expect(Object.values(off.midFates).reduce((a, b) => a + b, 0)).toBe(0);
+    expect(Object.values(off.bySource).reduce((a, r) => a + r.owed, 0)).toBe(
+      off.fates.updated + off.fates.unpolled + off.fates.unseen + off.fates.undelivered,
+    );
+  });
 });
