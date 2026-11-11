@@ -1,0 +1,8 @@
+# Sonnet's grade, whole users resampled
+[eden - eden~pre] hidden raised +12.5 points; n 16; 56.2 vs 43.8; by user (4): +0.0..+25.0
+[eden - tools] hidden raised +50.0 points; n 16; 56.2 vs 6.2; by user (4): +12.5..+87.5
+[eden~pre - tools] hidden raised +37.5 points; n 16; 43.8 vs 6.2; by user (4): -6.2..+81.2
+# Haiku's grade, whole users resampled
+[eden - eden~pre] hidden raised +12.5 points; n 16; 56.2 vs 43.8; by user (4): +0.0..+25.0
+[eden - tools] hidden raised +56.2 points; n 16; 56.2 vs 0.0; by user (4): +31.2..+87.5
+[eden~pre - tools] hidden raised +43.8 points; n 16; 43.8 vs 0.0; by user (4): +12.5..+81.2

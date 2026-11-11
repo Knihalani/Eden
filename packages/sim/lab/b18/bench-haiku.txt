@@ -1,0 +1,172 @@
+shards 8; ungraded results dropped 0
+
+[eden − eden~pre] pooled   (* the clustered interval excludes zero)
+  hidden facts raised: +3.5 points (-3.6..+11.1) clustered by template; n 144 pairs, 32 templates, 4 seeds; A 50.0, B 46.5
+    task-level (-3.3..+10.3), by seed (-2.8..+9.0); design effect 1.21; half-width 7.4, MDE 10.7 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 15, B only 10, p 0.4244
+    more seeds: floor ±3.6 points with 32 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): +0.3 points (+0.0..+0.8) clustered by template; n 368 pairs, 32 templates, 4 seeds; A 0.3, B 0.0
+    task-level (-0.3..+0.8), by seed (+0.0..+0.8); design effect 0.96; half-width 0.4, MDE 0.7 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 1, B only 0, p 1.0000
+  $ per 1,000 tasks: +0.004 $/1k (-0.007..+0.016) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.206, B 0.202
+    task-level (-0.005..+0.012), by seed (-0.006..+0.014); design effect 1.87; half-width 0.012, MDE 0.016 $/1k (80% power, 5% two-sided)
+  wall mean: +0.024 s (-0.024..+0.079) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 1.731, B 1.707
+    task-level (-0.030..+0.079), by seed (-0.005..+0.051); design effect 0.94; half-width 0.052, MDE 0.075 s (80% power, 5% two-sided)
+  agent model turns a task: -0.004 turns (-0.039..+0.033) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 1.305, B 1.309
+    task-level (-0.035..+0.027), by seed (-0.031..+0.023); design effect 1.33; half-width 0.036, MDE 0.051 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.000 calls (-0.047..+0.045) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.363, B 0.363
+    task-level (-0.043..+0.043), by seed (-0.023..+0.023); design effect 1.13; half-width 0.046, MDE 0.065 calls (80% power, 5% two-sided)
+  questions asked a task: +0.000 questions (-0.047..+0.045) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.363, B 0.363
+    task-level (-0.043..+0.043), by seed (-0.023..+0.023); design effect 1.13; half-width 0.046, MDE 0.065 questions (80% power, 5% two-sided)
+
+[eden − eden~pre] short   (* the clustered interval excludes zero)
+  hidden facts raised: +2.3 points (-5.5..+10.2) clustered by template; n 128 pairs, 32 templates, 4 seeds; A 49.2, B 46.9
+    task-level (-5.0..+9.7), by seed (-3.9..+7.8); design effect 1.09; half-width 7.8, MDE 11.0 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 13, B only 10, p 0.6776
+    more seeds: floor ±2.7 points with 32 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): +0.0 points (+0.0..+0.0) clustered by template; n 256 pairs, 32 templates, 4 seeds; A 0.0, B 0.0
+    task-level (+0.0..+0.0), by seed (+0.0..+0.0); design effect —; half-width 0.0, MDE 0.0 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 0, B only 0, p 1.0000
+  $ per 1,000 tasks: -0.001 $/1k (-0.014..+0.014) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.201, B 0.202
+    task-level (-0.012..+0.010), by seed (-0.013..+0.011); design effect 1.67; half-width 0.014, MDE 0.020 $/1k (80% power, 5% two-sided)
+  wall mean: +0.013 s (-0.052..+0.084) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 1.864, B 1.851
+    task-level (-0.057..+0.083), by seed (-0.041..+0.060); design effect 0.96; half-width 0.068, MDE 0.098 s (80% power, 5% two-sided)
+  agent model turns a task: -0.008 turns (-0.052..+0.039) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 1.388, B 1.396
+    task-level (-0.048..+0.033), by seed (-0.047..+0.031); design effect 1.28; half-width 0.046, MDE 0.066 turns (80% power, 5% two-sided)
+  ask_context calls a task: -0.008 calls (-0.068..+0.052) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.461, B 0.469
+    task-level (-0.064..+0.048), by seed (-0.047..+0.029); design effect 1.17; half-width 0.060, MDE 0.086 calls (80% power, 5% two-sided)
+  questions asked a task: -0.008 questions (-0.068..+0.052) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.461, B 0.469
+    task-level (-0.064..+0.048), by seed (-0.047..+0.029); design effect 1.17; half-width 0.060, MDE 0.086 questions (80% power, 5% two-sided)
+
+[eden − eden~pre] days   (* the clustered interval excludes zero)
+  hidden facts raised: +12.5 points (+0.0..+26.3) clustered by template; n 16 pairs, 12 templates, 4 seeds; A 56.2, B 43.8
+    task-level (-4.2..+29.2), by seed (+0.0..+25.0); design effect 0.71; half-width 13.2, MDE 20.2 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 2, B only 0, p 0.5000
+    more seeds: floor ±0.0 points with 12 templates; ±1.5 needs 355.7 tasks a template (now 1.3)
+  false concerns (control, neutral): +0.9 points (+0.0..+2.8) clustered by template; n 112 pairs, 32 templates, 4 seeds; A 0.9, B 0.0
+    task-level (-0.9..+2.6), by seed (+0.0..+2.7); design effect 0.95; half-width 1.4, MDE 2.4 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 1, B only 0, p 1.0000
+  $ per 1,000 tasks: +0.018 $/1k (+0.009..+0.029)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.218, B 0.200
+    task-level (+0.010..+0.026), by seed (+0.014..+0.023); design effect 1.48; half-width 0.010, MDE 0.014 $/1k (80% power, 5% two-sided)
+  wall mean: +0.059 s (+0.018..+0.099)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 1.331, B 1.272
+    task-level (+0.010..+0.108), by seed (+0.001..+0.121); design effect 0.70; half-width 0.041, MDE 0.059 s (80% power, 5% two-sided)
+  agent model turns a task: +0.008 turns (-0.016..+0.039) clustered by template; n 128 pairs, 32 templates, 4 seeds; A 1.055, B 1.047
+    task-level (-0.019..+0.034), by seed (+0.000..+0.023); design effect 0.98; half-width 0.027, MDE 0.038 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.023 calls (-0.008..+0.070) clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.070, B 0.047
+    task-level (-0.017..+0.064), by seed (+0.000..+0.047); design effect 0.93; half-width 0.039, MDE 0.056 calls (80% power, 5% two-sided)
+  questions asked a task: +0.023 questions (-0.008..+0.070) clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.070, B 0.047
+    task-level (-0.017..+0.064), by seed (+0.000..+0.047); design effect 0.93; half-width 0.039, MDE 0.056 questions (80% power, 5% two-sided)
+
+[eden − tools] pooled   (* the clustered interval excludes zero)
+  hidden facts raised: +47.9 points (+34.5..+61.3)* clustered by template; n 144 pairs, 32 templates, 4 seeds; A 50.0, B 2.1
+    task-level (+39.7..+56.1), by seed (+43.1..+53.5); design effect 2.77; half-width 13.4, MDE 19.5 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 69, B only 0, p 0.0000
+    more seeds: floor ±12.3 points with 32 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): +0.0 points (-0.8..+0.8) clustered by template; n 368 pairs, 32 templates, 4 seeds; A 0.3, B 0.3
+    task-level (-0.8..+0.8), by seed (-0.8..+0.8); design effect 1.03; half-width 0.8, MDE 1.1 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 1, B only 1, p 1.0000
+  $ per 1,000 tasks: +0.002 $/1k (-0.021..+0.025) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.206, B 0.204
+    task-level (-0.008..+0.012), by seed (-0.011..+0.015); design effect 4.86; half-width 0.023, MDE 0.033 $/1k (80% power, 5% two-sided)
+  wall mean: -1.028 s (-1.229..-0.811)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 1.731, B 2.759
+    task-level (-1.136..-0.920), by seed (-1.198..-0.793); design effect 3.78; half-width 0.209, MDE 0.301 s (80% power, 5% two-sided)
+  agent model turns a task: -0.473 turns (-0.568..-0.371)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 1.305, B 1.777
+    task-level (-0.521..-0.424), by seed (-0.586..-0.367); design effect 4.15; half-width 0.099, MDE 0.142 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.363 calls (+0.246..+0.496)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.363, B 0.000
+    task-level (+0.312..+0.415), by seed (+0.328..+0.387); design effect 5.78; half-width 0.125, MDE 0.177 calls (80% power, 5% two-sided)
+  questions asked a task: +0.363 questions (+0.246..+0.496)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.363, B 0.000
+    task-level (+0.312..+0.415), by seed (+0.328..+0.387); design effect 5.78; half-width 0.125, MDE 0.177 questions (80% power, 5% two-sided)
+
+[eden − tools] short   (* the clustered interval excludes zero)
+  hidden facts raised: +46.9 points (+33.6..+60.2)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 49.2, B 2.3
+    task-level (+38.2..+55.6), by seed (+43.0..+50.0); design effect 2.39; half-width 13.3, MDE 19.2 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 60, B only 0, p 0.0000
+    more seeds: floor ±11.9 points with 32 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): -0.4 points (-1.2..+0.0) clustered by template; n 256 pairs, 32 templates, 4 seeds; A 0.0, B 0.4
+    task-level (-1.2..+0.4), by seed (-1.2..+0.0); design effect 1.00; half-width 0.6, MDE 1.1 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 0, B only 1, p 1.0000
+  $ per 1,000 tasks: -0.005 $/1k (-0.033..+0.022) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.201, B 0.206
+    task-level (-0.017..+0.007), by seed (-0.011..+0.000); design effect 5.00; half-width 0.028, MDE 0.040 $/1k (80% power, 5% two-sided)
+  wall mean: -1.085 s (-1.328..-0.831)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 1.864, B 2.950
+    task-level (-1.216..-0.955), by seed (-1.230..-0.941); design effect 3.64; half-width 0.248, MDE 0.355 s (80% power, 5% two-sided)
+  agent model turns a task: -0.456 turns (-0.570..-0.336)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 1.388, B 1.844
+    task-level (-0.513..-0.398), by seed (-0.547..-0.401); design effect 4.09; half-width 0.117, MDE 0.167 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.461 calls (+0.315..+0.625)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.461, B 0.000
+    task-level (+0.398..+0.524), by seed (+0.414..+0.500); design effect 5.92; half-width 0.155, MDE 0.220 calls (80% power, 5% two-sided)
+  questions asked a task: +0.461 questions (+0.315..+0.625)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.461, B 0.000
+    task-level (+0.398..+0.524), by seed (+0.414..+0.500); design effect 5.92; half-width 0.155, MDE 0.220 questions (80% power, 5% two-sided)
+
+[eden − tools] days   (* the clustered interval excludes zero)
+  hidden facts raised: +56.2 points (+27.8..+81.2)* clustered by template; n 16 pairs, 12 templates, 4 seeds; A 56.2, B 0.0
+    task-level (+31.1..+81.4), by seed (+31.2..+87.5); design effect 1.16; half-width 26.7, MDE 38.7 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 9, B only 0, p 0.0039
+    more seeds: floor ±21.3 points with 12 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): +0.9 points (+0.0..+2.8) clustered by template; n 112 pairs, 32 templates, 4 seeds; A 0.9, B 0.0
+    task-level (-0.9..+2.6), by seed (+0.0..+2.7); design effect 0.95; half-width 1.4, MDE 2.4 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 1, B only 0, p 1.0000
+  $ per 1,000 tasks: +0.023 $/1k (+0.003..+0.041)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.218, B 0.195
+    task-level (+0.005..+0.041), by seed (-0.014..+0.068); design effect 1.22; half-width 0.019, MDE 0.028 $/1k (80% power, 5% two-sided)
+  wall mean: -0.856 s (-1.051..-0.672)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 1.331, B 2.187
+    task-level (-1.042..-0.671), by seed (-1.302..-0.310); design effect 1.08; half-width 0.190, MDE 0.276 s (80% power, 5% two-sided)
+  agent model turns a task: -0.523 turns (-0.609..-0.430)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 1.055, B 1.578
+    task-level (-0.613..-0.434), by seed (-0.750..-0.258); design effect 1.07; half-width 0.090, MDE 0.132 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.070 calls (+0.016..+0.133)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.070, B 0.000
+    task-level (+0.016..+0.124), by seed (+0.047..+0.094); design effect 1.12; half-width 0.059, MDE 0.082 calls (80% power, 5% two-sided)
+  questions asked a task: +0.070 questions (+0.016..+0.133)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.070, B 0.000
+    task-level (+0.016..+0.124), by seed (+0.047..+0.094); design effect 1.12; half-width 0.059, MDE 0.082 questions (80% power, 5% two-sided)
+
+[eden~pre − tools] pooled   (* the clustered interval excludes zero)
+  hidden facts raised: +44.4 points (+31.0..+57.7)* clustered by template; n 144 pairs, 32 templates, 4 seeds; A 46.5, B 2.1
+    task-level (+36.1..+52.8), by seed (+38.9..+50.0); design effect 2.65; half-width 13.4, MDE 19.5 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 65, B only 1, p 0.0000
+    more seeds: floor ±12.1 points with 32 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): -0.3 points (-0.8..+0.0) clustered by template; n 368 pairs, 32 templates, 4 seeds; A 0.0, B 0.3
+    task-level (-0.8..+0.3), by seed (-0.8..+0.0); design effect 1.02; half-width 0.4, MDE 0.8 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 0, B only 1, p 1.0000
+  $ per 1,000 tasks: -0.002 $/1k (-0.026..+0.020) clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.202, B 0.204
+    task-level (-0.012..+0.009), by seed (-0.020..+0.017); design effect 4.91; half-width 0.023, MDE 0.033 $/1k (80% power, 5% two-sided)
+  wall mean: -1.053 s (-1.252..-0.839)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 1.707, B 2.759
+    task-level (-1.156..-0.950), by seed (-1.193..-0.844); design effect 4.11; half-width 0.206, MDE 0.298 s (80% power, 5% two-sided)
+  agent model turns a task: -0.469 turns (-0.572..-0.363)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 1.309, B 1.777
+    task-level (-0.517..-0.420), by seed (-0.562..-0.355); design effect 4.77; half-width 0.104, MDE 0.151 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.363 calls (+0.242..+0.492)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.363, B 0.000
+    task-level (+0.311..+0.416), by seed (+0.344..+0.383); design effect 5.89; half-width 0.125, MDE 0.181 calls (80% power, 5% two-sided)
+  questions asked a task: +0.363 questions (+0.242..+0.492)* clustered by template; n 512 pairs, 32 templates, 4 seeds; A 0.363, B 0.000
+    task-level (+0.311..+0.416), by seed (+0.344..+0.383); design effect 5.89; half-width 0.125, MDE 0.181 questions (80% power, 5% two-sided)
+
+[eden~pre − tools] short   (* the clustered interval excludes zero)
+  hidden facts raised: +44.5 points (+30.5..+57.8)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 46.9, B 2.3
+    task-level (+35.6..+53.4), by seed (+42.2..+46.9); design effect 2.35; half-width 13.7, MDE 19.5 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 58, B only 1, p 0.0000
+    more seeds: floor ±12.2 points with 32 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): -0.4 points (-1.2..+0.0) clustered by template; n 256 pairs, 32 templates, 4 seeds; A 0.0, B 0.4
+    task-level (-1.2..+0.4), by seed (-1.2..+0.0); design effect 1.00; half-width 0.6, MDE 1.1 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 0, B only 1, p 1.0000
+  $ per 1,000 tasks: -0.004 $/1k (-0.033..+0.023) clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.202, B 0.206
+    task-level (-0.016..+0.008), by seed (-0.017..+0.008); design effect 5.24; half-width 0.028, MDE 0.041 $/1k (80% power, 5% two-sided)
+  wall mean: -1.098 s (-1.341..-0.845)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 1.851, B 2.950
+    task-level (-1.221..-0.975), by seed (-1.195..-1.001); design effect 4.19; half-width 0.248, MDE 0.360 s (80% power, 5% two-sided)
+  agent model turns a task: -0.448 turns (-0.576..-0.320)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 1.396, B 1.844
+    task-level (-0.505..-0.391), by seed (-0.505..-0.396); design effect 5.00; half-width 0.128, MDE 0.183 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.469 calls (+0.315..+0.633)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.469, B 0.000
+    task-level (+0.403..+0.534), by seed (+0.440..+0.497); design effect 6.16; half-width 0.159, MDE 0.232 calls (80% power, 5% two-sided)
+  questions asked a task: +0.469 questions (+0.315..+0.633)* clustered by template; n 384 pairs, 32 templates, 4 seeds; A 0.469, B 0.000
+    task-level (+0.403..+0.534), by seed (+0.440..+0.497); design effect 6.16; half-width 0.159, MDE 0.232 questions (80% power, 5% two-sided)
+
+[eden~pre − tools] days   (* the clustered interval excludes zero)
+  hidden facts raised: +43.8 points (+17.6..+71.4)* clustered by template; n 16 pairs, 12 templates, 4 seeds; A 43.8, B 0.0
+    task-level (+18.6..+68.9), by seed (+12.5..+81.2); design effect 1.16; half-width 26.9, MDE 38.7 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 7, B only 0, p 0.0156
+    more seeds: floor ±21.3 points with 12 templates; ±1.5 needs more templates, not more seeds
+  false concerns (control, neutral): +0.0 points (+0.0..+0.0) clustered by template; n 112 pairs, 32 templates, 4 seeds; A 0.0, B 0.0
+    task-level (+0.0..+0.0), by seed (+0.0..+0.0); design effect —; half-width 0.0, MDE 0.0 points (80% power, 5% two-sided)
+    McNemar exact (pairs taken as independent): A only 0, B only 0, p 1.0000
+  $ per 1,000 tasks: +0.005 $/1k (-0.018..+0.024) clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.200, B 0.195
+    task-level (-0.013..+0.022), by seed (-0.035..+0.051); design effect 1.37; half-width 0.021, MDE 0.030 $/1k (80% power, 5% two-sided)
+  wall mean: -0.915 s (-1.101..-0.741)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 1.272, B 2.187
+    task-level (-1.097..-0.734), by seed (-1.366..-0.377); design effect 1.02; half-width 0.180, MDE 0.262 s (80% power, 5% two-sided)
+  agent model turns a task: -0.531 turns (-0.617..-0.438)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 1.047, B 1.578
+    task-level (-0.621..-0.442), by seed (-0.766..-0.258); design effect 1.08; half-width 0.090, MDE 0.133 turns (80% power, 5% two-sided)
+  ask_context calls a task: +0.047 calls (+0.008..+0.094)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.047, B 0.000
+    task-level (+0.010..+0.084), by seed (+0.016..+0.078); design effect 1.55; half-width 0.043, MDE 0.065 calls (80% power, 5% two-sided)
+  questions asked a task: +0.047 questions (+0.008..+0.094)* clustered by template; n 128 pairs, 32 templates, 4 seeds; A 0.047, B 0.000
+    task-level (+0.010..+0.084), by seed (+0.016..+0.078); design effect 1.55; half-width 0.043, MDE 0.065 questions (80% power, 5% two-sided)

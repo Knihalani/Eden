@@ -1,0 +1,240 @@
+
+== hidden facts raised: all
+  short, haiku: 128 hidden tasks, 32 clusters (template)
+    tools    3/128 =   2.3% (0.0..6.2)
+    pre     60/128 =  46.9% (33.6..60.2)
+    now     63/128 =  49.2% (35.9..62.5)
+    now - pre:  +2.3 points (-5.5..+10.2); only now 13, only pre 10
+    now - tools: +46.9 points (+33.6..+60.2); only now 60, only tools 0
+    pre - tools: +44.5 points (+31.2..+58.6); only pre 58, only tools 1
+  days (users resampled), haiku: 16 hidden tasks, 4 clusters (seed)
+    tools    0/16 =   0.0% (0.0..0.0)
+    pre      7/16 =  43.8% (12.5..81.2)
+    now      9/16 =  56.2% (31.2..87.5)
+    now - pre: +12.5 points (+0.0..+25.0); only now 2, only pre 0
+    now - tools: +56.2 points (+31.2..+87.5); only now 9, only tools 0
+    pre - tools: +43.8 points (+12.5..+81.2); only pre 7, only tools 0
+  days (templates resampled), haiku: 16 hidden tasks, 12 clusters (template)
+    tools    0/16 =   0.0% (0.0..0.0)
+    pre      7/16 =  43.8% (18.8..71.4)
+    now      9/16 =  56.2% (28.6..82.4)
+    now - pre: +12.5 points (+0.0..+26.3); only now 2, only pre 0
+    now - tools: +56.2 points (+28.6..+82.4); only now 9, only tools 0
+    pre - tools: +43.8 points (+18.8..+71.4); only pre 7, only tools 0
+  short + days, haiku: 144 hidden tasks, 32 clusters (template)
+    tools    3/144 =   2.1% (0.0..5.5)
+    pre     67/144 =  46.5% (33.8..59.9)
+    now     72/144 =  50.0% (36.5..63.3)
+    now - pre:  +3.5 points (-4.1..+11.3); only now 15, only pre 10
+    now - tools: +47.9 points (+34.5..+61.2); only now 69, only tools 0
+    pre - tools: +44.4 points (+31.5..+58.0); only pre 65, only tools 1
+  short, sonnet: 128 hidden tasks, 32 clusters (template)
+    tools    4/128 =   3.1% (0.0..7.8)
+    pre     63/128 =  49.2% (35.2..63.3)
+    now     75/128 =  58.6% (45.3..71.9)
+    now - pre:  +9.4 points (+1.6..+18.8); only now 20, only pre 8
+    now - tools: +55.5 points (+40.6..+69.5); only now 73, only tools 2
+    pre - tools: +46.1 points (+31.2..+60.9); only pre 61, only tools 2
+  days (users resampled), sonnet: 16 hidden tasks, 4 clusters (seed)
+    tools    1/16 =   6.2% (0.0..18.8)
+    pre      7/16 =  43.8% (12.5..81.2)
+    now      9/16 =  56.2% (31.2..87.5)
+    now - pre: +12.5 points (+0.0..+25.0); only now 2, only pre 0
+    now - tools: +50.0 points (+12.5..+87.5); only now 9, only tools 1
+    pre - tools: +37.5 points (-6.2..+81.2); only pre 7, only tools 1
+  days (templates resampled), sonnet: 16 hidden tasks, 12 clusters (template)
+    tools    1/16 =   6.2% (0.0..21.4)
+    pre      7/16 =  43.8% (18.8..71.4)
+    now      9/16 =  56.2% (28.6..82.4)
+    now - pre: +12.5 points (+0.0..+26.3); only now 2, only pre 0
+    now - tools: +50.0 points (+14.3..+80.0); only now 9, only tools 1
+    pre - tools: +37.5 points (+6.2..+68.8); only pre 7, only tools 1
+  short + days, sonnet: 144 hidden tasks, 32 clusters (template)
+    tools    5/144 =   3.5% (0.0..9.1)
+    pre     70/144 =  48.6% (34.3..63.0)
+    now     84/144 =  58.3% (44.3..71.7)
+    now - pre:  +9.7 points (+2.0..+18.7); only now 22, only pre 8
+    now - tools: +54.9 points (+38.9..+69.5); only now 82, only tools 3
+    pre - tools: +45.1 points (+29.3..+60.3); only pre 68, only tools 3
+
+== hidden facts raised: seeds 41-42
+  short, haiku: 64 hidden tasks, 32 clusters (template)
+    tools    2/64 =   3.1% (0.0..9.4)
+    pre     31/64 =  48.4% (34.4..62.5)
+    now     30/64 =  46.9% (31.2..62.5)
+    now - pre:  -1.6 points (-14.1..+9.4); only now 6, only pre 7
+    now - tools: +43.8 points (+28.1..+59.4); only now 28, only tools 0
+    pre - tools: +45.3 points (+29.7..+60.9); only pre 30, only tools 1
+  days (users resampled), haiku: 8 hidden tasks, 2 clusters (seed)
+    tools    0/8 =   0.0% (0.0..0.0)
+    pre      3/8 =  37.5% (25.0..50.0)
+    now      4/8 =  50.0% (50.0..50.0)
+    now - pre: +12.5 points (+0.0..+25.0); only now 1, only pre 0
+    now - tools: +50.0 points (+50.0..+50.0); only now 4, only tools 0
+    pre - tools: +37.5 points (+25.0..+50.0); only pre 3, only tools 0
+  days (templates resampled), haiku: 8 hidden tasks, 8 clusters (template)
+    tools    0/8 =   0.0% (0.0..0.0)
+    pre      3/8 =  37.5% (12.5..75.0)
+    now      4/8 =  50.0% (12.5..87.5)
+    now - pre: +12.5 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +50.0 points (+12.5..+87.5); only now 4, only tools 0
+    pre - tools: +37.5 points (+12.5..+75.0); only pre 3, only tools 0
+  short + days, haiku: 72 hidden tasks, 32 clusters (template)
+    tools    2/72 =   2.8% (0.0..8.7)
+    pre     34/72 =  47.2% (31.9..62.5)
+    now     34/72 =  47.2% (31.4..63.0)
+    now - pre:  +0.0 points (-11.6..+11.8); only now 7, only pre 7
+    now - tools: +44.4 points (+28.6..+60.3); only now 32, only tools 0
+    pre - tools: +44.4 points (+28.2..+60.3); only pre 33, only tools 1
+  short, sonnet: 64 hidden tasks, 32 clusters (template)
+    tools    2/64 =   3.1% (0.0..7.8)
+    pre     29/64 =  45.3% (31.2..59.4)
+    now     36/64 =  56.2% (42.2..70.3)
+    now - pre: +10.9 points (-1.6..+23.4); only now 13, only pre 6
+    now - tools: +53.1 points (+37.5..+68.8); only now 35, only tools 1
+    pre - tools: +42.2 points (+26.6..+57.8); only pre 28, only tools 1
+  days (users resampled), sonnet: 8 hidden tasks, 2 clusters (seed)
+    tools    0/8 =   0.0% (0.0..0.0)
+    pre      3/8 =  37.5% (25.0..50.0)
+    now      4/8 =  50.0% (50.0..50.0)
+    now - pre: +12.5 points (+0.0..+25.0); only now 1, only pre 0
+    now - tools: +50.0 points (+50.0..+50.0); only now 4, only tools 0
+    pre - tools: +37.5 points (+25.0..+50.0); only pre 3, only tools 0
+  days (templates resampled), sonnet: 8 hidden tasks, 8 clusters (template)
+    tools    0/8 =   0.0% (0.0..0.0)
+    pre      3/8 =  37.5% (12.5..75.0)
+    now      4/8 =  50.0% (12.5..87.5)
+    now - pre: +12.5 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +50.0 points (+12.5..+87.5); only now 4, only tools 0
+    pre - tools: +37.5 points (+12.5..+75.0); only pre 3, only tools 0
+  short + days, sonnet: 72 hidden tasks, 32 clusters (template)
+    tools    2/72 =   2.8% (0.0..7.1)
+    pre     32/72 =  44.4% (29.3..60.0)
+    now     40/72 =  55.6% (40.3..69.9)
+    now - pre: +11.1 points (-1.3..+24.0); only now 14, only pre 6
+    now - tools: +52.8 points (+36.6..+68.5); only now 39, only tools 1
+    pre - tools: +41.7 points (+26.0..+57.5); only pre 31, only tools 1
+
+== hidden facts raised: anchored
+  short, haiku: 52 hidden tasks, 13 clusters (template)
+    tools    0/52 =   0.0% (0.0..0.0)
+    pre     15/52 =  28.8% (11.5..50.0)
+    now     16/52 =  30.8% (11.5..51.9)
+    now - pre:  +1.9 points (-9.6..+15.4); only now 5, only pre 4
+    now - tools: +30.8 points (+11.5..+51.9); only now 16, only tools 0
+    pre - tools: +28.8 points (+11.5..+50.0); only pre 15, only tools 0
+  days (users resampled), haiku: 7 hidden tasks, 4 clusters (seed)
+    tools    0/7 =   0.0% (0.0..0.0)
+    pre      3/7 =  42.9% (0.0..100.0)
+    now      4/7 =  57.1% (14.3..100.0)
+    now - pre: +14.3 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +57.1 points (+14.3..+100.0); only now 4, only tools 0
+    pre - tools: +42.9 points (+0.0..+100.0); only pre 3, only tools 0
+  days (templates resampled), haiku: 7 hidden tasks, 4 clusters (template)
+    tools    0/7 =   0.0% (0.0..0.0)
+    pre      3/7 =  42.9% (0.0..85.7)
+    now      4/7 =  57.1% (0.0..100.0)
+    now - pre: +14.3 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +57.1 points (+0.0..+100.0); only now 4, only tools 0
+    pre - tools: +42.9 points (+0.0..+85.7); only pre 3, only tools 0
+  short + days, haiku: 59 hidden tasks, 13 clusters (template)
+    tools    0/59 =   0.0% (0.0..0.0)
+    pre     18/59 =  30.5% (12.5..51.6)
+    now     20/59 =  33.9% (11.9..56.5)
+    now - pre:  +3.4 points (-8.6..+17.2); only now 6, only pre 4
+    now - tools: +33.9 points (+11.9..+56.5); only now 20, only tools 0
+    pre - tools: +30.5 points (+12.5..+51.6); only pre 18, only tools 0
+  short, sonnet: 52 hidden tasks, 13 clusters (template)
+    tools    0/52 =   0.0% (0.0..0.0)
+    pre     15/52 =  28.8% (9.6..51.9)
+    now     23/52 =  44.2% (23.1..67.3)
+    now - pre: +15.4 points (+3.8..+30.8); only now 8, only pre 0
+    now - tools: +44.2 points (+23.1..+67.3); only now 23, only tools 0
+    pre - tools: +28.8 points (+9.6..+51.9); only pre 15, only tools 0
+  days (users resampled), sonnet: 7 hidden tasks, 4 clusters (seed)
+    tools    0/7 =   0.0% (0.0..0.0)
+    pre      3/7 =  42.9% (0.0..100.0)
+    now      4/7 =  57.1% (14.3..100.0)
+    now - pre: +14.3 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +57.1 points (+14.3..+100.0); only now 4, only tools 0
+    pre - tools: +42.9 points (+0.0..+100.0); only pre 3, only tools 0
+  days (templates resampled), sonnet: 7 hidden tasks, 4 clusters (template)
+    tools    0/7 =   0.0% (0.0..0.0)
+    pre      3/7 =  42.9% (0.0..85.7)
+    now      4/7 =  57.1% (0.0..100.0)
+    now - pre: +14.3 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +57.1 points (+0.0..+100.0); only now 4, only tools 0
+    pre - tools: +42.9 points (+0.0..+85.7); only pre 3, only tools 0
+  short + days, sonnet: 59 hidden tasks, 13 clusters (template)
+    tools    0/59 =   0.0% (0.0..0.0)
+    pre     18/59 =  30.5% (10.5..54.4)
+    now     27/59 =  45.8% (22.8..68.8)
+    now - pre: +15.3 points (+3.3..+30.0); only now 9, only pre 0
+    now - tools: +45.8 points (+22.8..+68.8); only now 27, only tools 0
+    pre - tools: +30.5 points (+10.5..+54.4); only pre 18, only tools 0
+
+== hidden facts raised: not anchored
+  short, haiku: 76 hidden tasks, 19 clusters (template)
+    tools    3/76 =   3.9% (0.0..10.5)
+    pre     45/76 =  59.2% (43.4..75.0)
+    now     47/76 =  61.8% (47.4..76.3)
+    now - pre:  +2.6 points (-7.9..+11.8); only now 8, only pre 6
+    now - tools: +57.9 points (+42.1..+72.4); only now 44, only tools 0
+    pre - tools: +55.3 points (+38.2..+72.4); only pre 43, only tools 1
+  days (users resampled), haiku: 9 hidden tasks, 4 clusters (seed)
+    tools    0/9 =   0.0% (0.0..0.0)
+    pre      4/9 =  44.4% (12.5..77.8)
+    now      5/9 =  55.6% (36.4..87.5)
+    now - pre: +11.1 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +55.6 points (+36.4..+87.5); only now 5, only tools 0
+    pre - tools: +44.4 points (+12.5..+77.8); only pre 4, only tools 0
+  days (templates resampled), haiku: 9 hidden tasks, 8 clusters (template)
+    tools    0/9 =   0.0% (0.0..0.0)
+    pre      4/9 =  44.4% (11.1..87.5)
+    now      5/9 =  55.6% (25.0..87.5)
+    now - pre: +11.1 points (+0.0..+27.3); only now 1, only pre 0
+    now - tools: +55.6 points (+25.0..+87.5); only now 5, only tools 0
+    pre - tools: +44.4 points (+11.1..+87.5); only pre 4, only tools 0
+  short + days, haiku: 85 hidden tasks, 19 clusters (template)
+    tools    3/85 =   3.5% (0.0..9.2)
+    pre     49/85 =  57.6% (41.8..73.5)
+    now     52/85 =  61.2% (46.0..75.9)
+    now - pre:  +3.5 points (-6.0..+11.9); only now 9, only pre 6
+    now - tools: +57.6 points (+42.2..+72.9); only now 49, only tools 0
+    pre - tools: +54.1 points (+37.0..+71.2); only pre 47, only tools 1
+  short, sonnet: 76 hidden tasks, 19 clusters (template)
+    tools    4/76 =   5.3% (0.0..13.2)
+    pre     48/76 =  63.2% (46.1..78.9)
+    now     52/76 =  68.4% (52.6..82.9)
+    now - pre:  +5.3 points (-3.9..+17.1); only now 12, only pre 8
+    now - tools: +63.2 points (+43.4..+80.3); only now 50, only tools 2
+    pre - tools: +57.9 points (+38.2..+76.3); only pre 46, only tools 2
+  days (users resampled), sonnet: 9 hidden tasks, 4 clusters (seed)
+    tools    1/9 =  11.1% (0.0..37.5)
+    pre      4/9 =  44.4% (12.5..77.8)
+    now      5/9 =  55.6% (36.4..87.5)
+    now - pre: +11.1 points (+0.0..+37.5); only now 1, only pre 0
+    now - tools: +44.4 points (+12.5..+77.8); only now 5, only tools 1
+    pre - tools: +33.3 points (-22.2..+77.8); only pre 4, only tools 1
+  days (templates resampled), sonnet: 9 hidden tasks, 8 clusters (template)
+    tools    1/9 =  11.1% (0.0..37.5)
+    pre      4/9 =  44.4% (11.1..87.5)
+    now      5/9 =  55.6% (25.0..87.5)
+    now - pre: +11.1 points (+0.0..+27.3); only now 1, only pre 0
+    now - tools: +44.4 points (+0.0..+87.5); only now 5, only tools 1
+    pre - tools: +33.3 points (-11.1..+77.8); only pre 4, only tools 1
+  short + days, sonnet: 85 hidden tasks, 19 clusters (template)
+    tools    5/85 =   5.9% (0.0..14.9)
+    pre     52/85 =  61.2% (43.7..78.0)
+    now     57/85 =  67.1% (50.6..82.4)
+    now - pre:  +5.9 points (-2.4..+16.7); only now 13, only pre 8
+    now - tools: +61.2 points (+39.5..+80.0); only now 55, only tools 3
+    pre - tools: +55.3 points (+33.7..+75.0); only pre 50, only tools 3
+
+== concerns on control and neutral answers: Haiku-flagged / confirmed by Sonnet / answers
+  short control  tools 0 / 0 / 128   pre 0 / 0 / 128   now 0 / 0 / 128
+  short neutral  tools 1 / 0 / 128   pre 0 / 0 / 128   now 0 / 0 / 128
+  days  control  tools 0 / 0 / 16   pre 0 / 0 / 16   now 0 / 0 / 16
+  days  neutral  tools 0 / 0 / 96   pre 0 / 0 / 96   now 1 / 0 / 96
+  both  control  tools 0 / 0 / 144   pre 0 / 0 / 144   now 0 / 0 / 144
+  both  neutral  tools 1 / 0 / 224   pre 0 / 0 / 224   now 1 / 0 / 224
