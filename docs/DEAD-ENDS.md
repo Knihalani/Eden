@@ -55,6 +55,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D821 | Rejected: narrowing the default's packet with no model (`pushNarrow`, P2; deleted). | Funnel, train 41–44: neutral given a packet 738 → 216 of 768, but planted handed 582 → 348 (−234) and 334… |
 | D822 | Rejected: the push check's short compare-first reply. | Fails the decoy clause: without the separate verdict and the longer comparison the check lets look-alikes… |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
+| D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
 
 ## Reader
 

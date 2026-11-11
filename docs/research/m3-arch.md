@@ -383,6 +383,22 @@ search per handed item would be a second lookup. (c) Arms: off, binary H10 at θ
 here, not read from val). Read: stale versions handed (`staleHanded`) down ≥ 50%, facts handed (`pushHanded`) not
 down > 2%; recall@p0.95 of each export reported from its own offline run beside them.
 
+**Rule 1 result: fails; `pushSupersede` deleted (code in 3a74a4c4).** `bun run funnel --suite
+'synth:.local/m3/m2v2/worlds-val.jsonl+stale@4' --seeds 1..25 --jobs 2` (738 hidden tasks, 98 with a stale version;
+intent inert: no card replay covers synth worlds, the same in every arm; $0):
+
+| arm | stale handed | facts handed (`pushHanded`) | hidden surfaced | decoys handed (control) | per pair |
+|---|---|---|---|---|---|
+| off | 64 of 98 | 457 of 738 | 580 | 356 | |
+| binary H10, θ 0.5 | 51 (−20%) | 457 | 579 | 355 | 47 µs (6,096 pairs, 285 ms) |
+| float H10, θ 0.5 | 52 (−19%) | 458 | 579 | 355 | 48 µs |
+
+The bar was −50%. In 63 of the 64 stale hand-outs the fact was in the same pool, so the newer item was there to
+swap in: the pair model (with the anchor gate on the newer item) replaced 13. End to end, then, the pair reads
+"replaces" on about one stale/fresh pair in five of the sim's planted worlds, far under its offline recall on M2 val
+(binary recall@p0.95 0.71, AUC 0.965; float 0.815, 0.986). M3b's compression work (claude/m3b-h10) inherits this
+measurement and the `+stale` suite; a better H10 re-enters as a new trial against the same rule.
+
 **H1, set-level variant (Haiku round, local CPU slice, 150 worlds): killed.** On fold A's held-out train5–6 days
 requests (`score.py --at5 --key all`, eval-ship) its own ranking hands facts@5 33 of 56 against the shipped pool's
 47, and every fusion with the shipped pool is below the shipped pool (hyb10: 45 facts at 27 decoys against 47 at 26).

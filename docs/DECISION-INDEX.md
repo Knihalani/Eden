@@ -575,3 +575,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
 | D908 | 2026-11-11 | Trial: `constraintTag`, a small binarised item tagger's veto on the push gate's constraint test | trial |
+| D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
