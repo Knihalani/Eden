@@ -228,8 +228,8 @@ Deleted by addendum B's rule: `pushGate`, `turn-gate.ts` in the engine, its weig
 
 ```bash
 python3 -m venv .venv-m3 && .venv-m3/bin/pip install numpy torch --index-url https://download.pytorch.org/whl/cpu
-python3 -I packages/sim/lab/m13/gen_train.py .local/m13/train/gen.jsonl --calls-scale 1.5   # + M13_WORK=1 run, gen_logs, gen_extra
-.venv-m3/bin/python -I packages/sim/lab/m13/build.py          # needs M2 v2 (claude/m9-data), M14's G2/G3, the blind sets
+python3 -I packages/sim/lab/m13/gen_train.py .local/m13/train/gen.jsonl --calls-scale 1.5  # + gen_logs, gen_extra
+.venv-m3/bin/python -I packages/sim/lab/m13/build.py  # needs M2 v2 (claude/m9-data), M14's G2/G3, the blind sets
 .venv-m3/bin/python -I packages/sim/lab/m13/gate.py --arch bag --bits 16 --dim 24 --hidden 128 --quant int8 \
   --rule2 --kind-weight 1.0 --epochs 6 --seed 1 --out .local/m13/r3/R2f-s1
 .venv-m3/bin/python -I packages/sim/lab/m13/score.py .local/m13/r3/R2f-s1.pt --s5
