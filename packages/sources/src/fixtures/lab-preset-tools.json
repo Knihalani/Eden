@@ -1,0 +1,875 @@
+{
+ "caldav": {
+  "connector": "caldav",
+  "tools": [
+   {
+    "name": "caldav_list_calendars",
+    "description": "List all available calendars",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_create_event",
+    "description": "Create a new event in the calendar",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      },
+      "title": {
+       "type": "string",
+       "description": "Event title"
+      },
+      "description": {
+       "type": "string",
+       "description": "Event description",
+       "default": ""
+      },
+      "location": {
+       "type": "string",
+       "description": "Event location",
+       "default": ""
+      },
+      "start_time": {
+       "type": "string",
+       "description": "Start time in ISO format (e.g., '2025-01-20T14:00:00'). If not provided, defaults to tomorrow at 14:00"
+      },
+      "end_time": {
+       "type": "string",
+       "description": "End time in ISO format (e.g., '2025-01-20T15:00:00'). If not provided, uses duration_hours from start_time"
+      },
+      "duration_hours": {
+       "type": "number",
+       "description": "Duration in hours (used if end_time not provided)",
+       "default": 1
+      },
+      "reminders": {
+       "type": "array",
+       "description": "List of reminders. Each reminder is an object with: minutes_before (integer), action ('DISPLAY', 'EMAIL', or 'AUDIO'), and optional description (string)",
+       "items": {
+        "type": "object",
+        "properties": {
+         "minutes_before": {
+          "type": "integer"
+         },
+         "action": {
+          "type": "string",
+          "enum": [
+           "DISPLAY",
+           "EMAIL",
+           "AUDIO"
+          ]
+         },
+         "description": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "minutes_before",
+         "action"
+        ]
+       }
+      },
+      "attendees": {
+       "type": "array",
+       "description": "List of attendee email addresses (strings) or objects with 'email' and 'status' (ACCEPTED/DECLINED/TENTATIVE/NEEDS-ACTION)",
+       "items": {
+        "oneOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "object",
+          "properties": {
+           "email": {
+            "type": "string"
+           },
+           "status": {
+            "type": "string",
+            "enum": [
+             "ACCEPTED",
+             "DECLINED",
+             "TENTATIVE",
+             "NEEDS-ACTION"
+            ]
+           }
+          },
+          "required": [
+           "email"
+          ]
+         }
+        ]
+       }
+      },
+      "categories": {
+       "type": "array",
+       "description": "List of category/tag strings",
+       "items": {
+        "type": "string"
+       }
+      },
+      "priority": {
+       "type": "integer",
+       "description": "Priority 0-9 (0 = highest, 9 = lowest)",
+       "minimum": 0,
+       "maximum": 9
+      },
+      "recurrence": {
+       "type": "object",
+       "description": "Recurrence rule for repeating events",
+       "properties": {
+        "frequency": {
+         "type": "string",
+         "enum": [
+          "DAILY",
+          "WEEKLY",
+          "MONTHLY",
+          "YEARLY"
+         ],
+         "description": "How often the event repeats"
+        },
+        "interval": {
+         "type": "integer",
+         "description": "Interval between occurrences (default: 1)",
+         "default": 1
+        },
+        "count": {
+         "type": "integer",
+         "description": "Number of occurrences"
+        },
+        "until": {
+         "type": "string",
+         "description": "End date in ISO format"
+        },
+        "byday": {
+         "type": "string",
+         "description": "Days of week (e.g., 'MO,WE,FR' for Monday, Wednesday, Friday)"
+        },
+        "bymonthday": {
+         "type": "integer",
+         "description": "Day of month (1-31)"
+        },
+        "bymonth": {
+         "type": "integer",
+         "description": "Month (1-12)"
+        }
+       },
+       "required": [
+        "frequency"
+       ]
+      }
+     },
+     "required": [
+      "title"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_get_event_by_uid",
+    "description": "Get a specific event by its UID",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "uid": {
+       "type": "string",
+       "description": "Event UID"
+      },
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      }
+     },
+     "required": [
+      "uid"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_delete_event",
+    "description": "Delete an event by its UID",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "uid": {
+       "type": "string",
+       "description": "Event UID to delete"
+      },
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      }
+     },
+     "required": [
+      "uid"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_search_events",
+    "description": "Search events by text, attendees, or location",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      },
+      "query": {
+       "type": "string",
+       "description": "Search query string"
+      },
+      "search_fields": {
+       "type": "array",
+       "description": "Fields to search in: 'title', 'description', 'location', 'attendees'. If not provided, searches in all fields",
+       "items": {
+        "type": "string",
+        "enum": [
+         "title",
+         "description",
+         "location",
+         "attendees"
+        ]
+       }
+      },
+      "start_date": {
+       "type": "string",
+       "description": "Start date for search period in ISO format"
+      },
+      "end_date": {
+       "type": "string",
+       "description": "End date for search period in ISO format"
+      }
+     },
+     "required": [
+      "start_date",
+      "end_date"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_get_events",
+    "description": "Get events from calendar for a specified period",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      },
+      "start_date": {
+       "type": "string",
+       "description": "Start date in ISO format (e.g., '2025-01-20T00:00:00'). Defaults to today 00:00"
+      },
+      "end_date": {
+       "type": "string",
+       "description": "End date in ISO format (e.g., '2025-01-27T23:59:59'). Defaults to 7 days from start_date"
+      },
+      "include_all_day": {
+       "type": "boolean",
+       "description": "Include all-day events",
+       "default": true
+      }
+     }
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_get_today_events",
+    "description": "Get all events for today",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      }
+     }
+    },
+    "annotations": null
+   },
+   {
+    "name": "caldav_get_week_events",
+    "description": "Get all events for the week",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "calendar_index": {
+       "type": "integer",
+       "description": "Index of the calendar (default: 0)",
+       "default": 0
+      },
+      "start_from_today": {
+       "type": "boolean",
+       "description": "Start from today (True) or from Monday (False)",
+       "default": true
+      }
+     }
+    },
+    "annotations": null
+   }
+  ],
+  "search": {
+   "tool": "caldav_search_events",
+   "arguments": {
+    "query": "Robin Carter",
+    "start_date": "2026-09-27",
+    "end_date": "2027-01-25"
+   },
+   "isError": false,
+   "reply": {
+    "content": [
+     {
+      "type": "text",
+      "text": "[\n  {\n    \"uid\": \"calendar-event-1394\",\n    \"title\": \"Team standup\",\n    \"start\": \"2026-10-19T10:30:00+00:00\",\n    \"end\": \"2026-10-19T11:30:00+00:00\",\n    \"description\": \"When: Monday 19 Oct 2026, 10:30–11:30\\nWhere: Room 2\\nAttendees: Robin Carter\",\n    \"location\": \"Room 2\",\n    \"all_day\": false,\n    \"categories\": [],\n    \"priority\": null,\n    \"recurrence\": null,\n    \"attendees\": []\n  },\n  {\n    \"uid\": \"calendar-event-1379\",\n    \"title\": \"Gym\",\n    \"start\": \"2026-10-19T12:00:00+00:00\",\n    \"end\": \"2026-10-19T13:00:00+00:00\",\n    \"description\": \"When: Monday 19 Oct 2026, 12:00–13:00\\nWhere: Room 2\\nAttendees: Robin Carter\",\n    \"location\": \"Room 2\",\n    \"all_day\": false,\n    \"categories\": [],\n    \"priority\": null,\n    \"recurrence\": null,\n    \"attendees\": []\n  }\n]",
+      "trimmedFrom": 85
+     }
+    ],
+    "isError": false
+   }
+  },
+  "gets": [
+   {
+    "tool": "caldav_get_event_by_uid",
+    "arguments": {
+     "uid": "calendar-event-1394"
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\n  \"uid\": \"calendar-event-1394\",\n  \"title\": \"Team standup\",\n  \"start\": \"2026-10-19T10:30:00+00:00\",\n  \"end\": \"2026-10-19T11:30:00+00:00\",\n  \"description\": \"When: Monday 19 Oct 2026, 10:30–11:30\\nWhere: Room 2\\nAttendees: Robin Carter\",\n  \"location\": \"Room 2\",\n  \"all_day\": false,\n  \"categories\": [],\n  \"priority\": null,\n  \"recurrence\": null,\n  \"attendees\": []\n}"
+      }
+     ],
+     "isError": false
+    }
+   },
+   {
+    "tool": "caldav_get_event_by_uid",
+    "arguments": {
+     "uid": "calendar-event-1379"
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\n  \"uid\": \"calendar-event-1379\",\n  \"title\": \"Gym\",\n  \"start\": \"2026-10-19T12:00:00+00:00\",\n  \"end\": \"2026-10-19T13:00:00+00:00\",\n  \"description\": \"When: Monday 19 Oct 2026, 12:00–13:00\\nWhere: Room 2\\nAttendees: Robin Carter\",\n  \"location\": \"Room 2\",\n  \"all_day\": false,\n  \"categories\": [],\n  \"priority\": null,\n  \"recurrence\": null,\n  \"attendees\": []\n}"
+      }
+     ],
+     "isError": false
+    }
+   }
+  ],
+  "lists": [
+   {
+    "tool": "caldav_get_events",
+    "arguments": {
+     "start_date": "2026-09-27",
+     "end_date": "2027-01-25"
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "[\n  {\n    \"uid\": \"calendar-event-1394\",\n    \"title\": \"Team standup\",\n    \"start\": \"2026-10-19T10:30:00+00:00\",\n    \"end\": \"2026-10-19T11:30:00+00:00\",\n    \"description\": \"When: Monday 19 Oct 2026, 10:30–11:30\\nWhere: Room 2\\nAttendees: Robin Carter\",\n    \"location\": \"Room 2\",\n    \"all_day\": false,\n    \"categories\": [],\n    \"priority\": null,\n    \"recurrence\": null,\n    \"attendees\": []\n  },\n  {\n    \"uid\": \"calendar-event-1379\",\n    \"title\": \"Gym\",\n    \"start\": \"2026-10-19T12:00:00+00:00\",\n    \"end\": \"2026-10-19T13:00:00+00:00\",\n    \"description\": \"When: Monday 19 Oct 2026, 12:00–13:00\\nWhere: Room 2\\nAttendees: Robin Carter\",\n    \"location\": \"Room 2\",\n    \"all_day\": false,\n    \"categories\": [],\n    \"priority\": null,\n    \"recurrence\": null,\n    \"attendees\": []\n  }\n]",
+       "trimmedFrom": 85
+      }
+     ],
+     "isError": false
+    }
+   }
+  ]
+ },
+ "mcpvault": {
+  "connector": "mcpvault",
+  "tools": [
+   {
+    "name": "read_note",
+    "description": "Read a note from the Obsidian vault",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string",
+       "description": "Path to the note relative to vault root"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "path"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "list_directory",
+    "description": "List files and directories in the vault (includes non-note filenames, while read/write tools remain note-only)",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string",
+       "description": "Path relative to vault root (default: '/')",
+       "default": "/"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     }
+    },
+    "annotations": null
+   },
+   {
+    "name": "search_notes",
+    "description": "Search for notes in the vault by content or frontmatter",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "description": "Search query text"
+      },
+      "limit": {
+       "type": "number",
+       "description": "Maximum number of results (default: 5, max: 20)",
+       "default": 5
+      },
+      "searchContent": {
+       "type": "boolean",
+       "description": "Search in note content (default: true)",
+       "default": true
+      },
+      "searchFrontmatter": {
+       "type": "boolean",
+       "description": "Search in frontmatter (default: false)",
+       "default": false
+      },
+      "caseSensitive": {
+       "type": "boolean",
+       "description": "Case sensitive search (default: false)",
+       "default": false
+      },
+      "pathPrefix": {
+       "type": "string",
+       "description": "Restrict the search to a vault subtree, e.g. \"Projects/2026\" (directory prefix)"
+      },
+      "excludePaths": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Skip files under these subtrees, e.g. [\"Archive\", \"meta\"] (directory prefixes)"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "query"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "read_multiple_notes",
+    "description": "Read multiple notes in a batch (max 10 files)",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "paths": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Array of note paths to read",
+       "maxItems": 10
+      },
+      "includeContent": {
+       "type": "boolean",
+       "description": "Include note content (default: true)",
+       "default": true
+      },
+      "includeFrontmatter": {
+       "type": "boolean",
+       "description": "Include frontmatter (default: true)",
+       "default": true
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "paths"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "get_notes_info",
+    "description": "Get metadata for notes without reading full content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "paths": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Array of note paths to get info for"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "paths"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "get_frontmatter",
+    "description": "Extract frontmatter from a note without reading the content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string",
+       "description": "Path to the note relative to vault root"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "path"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "get_vault_stats",
+    "description": "Get vault statistics including total notes, folders, size, and recently modified files. Useful for understanding vault scope before batch operations.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "recentCount": {
+       "type": "number",
+       "description": "Number of recently modified files to return (default: 5, max: 20)",
+       "default": 5
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     }
+    },
+    "annotations": null
+   },
+   {
+    "name": "list_all_tags",
+    "description": "List all tags across the vault with occurrence counts. Returns both frontmatter tags and inline #hashtags, deduplicated and sorted by frequency. Useful for discovering existing tags before creating or organizing notes.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     }
+    },
+    "annotations": null
+   },
+   {
+    "name": "wiki_link",
+    "description": "Read an Obsidian wiki link. Accepts the same syntax as Obsidian: [[Document Name]] or [[Document Name|Display Text]], including table-authored escapes like [[Document Name\\|Display]] and path-qualified links like [[folder/Document Name]]. A #fragment suffix in the input is ignored. Searches the vault for an exact basename match (or exact vault-relative path match when the name contains '/') and returns the file's content. When multiple files share the basename, picks the first (vault root first, then alphabetical by path) and lists the other paths in structuredContent.alternatives. Content is returned bare — ready for direct use in context.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "document": {
+       "type": "string",
+       "description": "The document name — what goes inside [[ ]]. e.g. 'My-Document'. Brackets and display text (|...) are stripped if present. The .md extension is always appended (never include it)."
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "document"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "get_note_outline",
+    "description": "Get the heading structure of a note without reading its full content. Returns headings with level, text, and line number. Use this first to navigate large notes efficiently, then call read_note_lines to read only the section you need.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string",
+       "description": "Path to the note relative to vault root"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "path"
+     ]
+    },
+    "annotations": null
+   },
+   {
+    "name": "read_note_lines",
+    "description": "Read a specific line range from a note. Use after get_note_outline to read only the section you need instead of the full file.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string",
+       "description": "Path to the note relative to vault root"
+      },
+      "startLine": {
+       "type": "number",
+       "description": "First line to read (1-indexed, inclusive)"
+      },
+      "endLine": {
+       "type": "number",
+       "description": "Last line to read (1-indexed, inclusive)"
+      },
+      "prettyPrint": {
+       "type": "boolean",
+       "description": "Format JSON response with indentation (default: false)",
+       "default": false
+      }
+     },
+     "required": [
+      "path",
+      "startLine",
+      "endLine"
+     ]
+    },
+    "annotations": null
+   }
+  ],
+  "search": {
+   "tool": "search_notes",
+   "arguments": {
+    "query": "Jamie Fox",
+    "limit": 20
+   },
+   "isError": false,
+   "reply": {
+    "content": [
+     {
+      "type": "text",
+      "text": "[\n  {\n    \"p\": \"calendar/calendar-event-0.md\",\n    \"t\": \"calendar-event-0\",\n    \"ex\": \"# Dinner with Jamie Fox\\n\\nWhen: Thursday...\",\n    \"mc\": 6,\n    \"ln\": 1,\n    \"uri\": \"obsidian:////vault/calendar/calendar-event-0\"\n  },\n  {\n    \"p\": \"gmail/gmail-mail-3.md\",\n    \"t\": \"gmail-mail-3\",\n    \"ex\": \"...in@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail...\",\n    \"mc\": 13,\n    \"ln\": 4,\n    \"uri\": \"obsidian:////vault/gmail/gmail-mail-3\"\n  }\n]",
+      "trimmedFrom": 6
+     }
+    ]
+   }
+  },
+  "gets": [
+   {
+    "tool": "read_note",
+    "arguments": {
+     "path": "calendar/calendar-event-0.md"
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\"fm\":{},\"content\":\"# Dinner with Jamie Fox\\n\\nWhen: Thursday 29 Oct 2026, 19:30–21:00\\nWhere: Barrafina, London\\nAttendees: Robin Carter, Jamie Fox\\n\"}"
+      }
+     ]
+    }
+   },
+   {
+    "tool": "read_note",
+    "arguments": {
+     "path": "obsidian:////vault/calendar/calendar-event-0"
+    },
+    "isError": true,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Error: File not found: obsidian:////vault/calendar/calendar-event-0. Use list_directory to see available files, or check the path spelling."
+      }
+     ],
+     "isError": true
+    }
+   },
+   {
+    "tool": "read_multiple_notes",
+    "arguments": {
+     "paths": [
+      "calendar/calendar-event-0.md"
+     ]
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\"ok\":[{\"path\":\"calendar/calendar-event-0.md\",\"obsidianUri\":\"obsidian:////vault/calendar/calendar-event-0\",\"frontmatter\":{},\"content\":\"# Dinner with Jamie Fox\\n\\nWhen: Thursday 29 Oct 2026, 19:30–21:00\\nWhere: Barrafina, London\\nAttendees: Robin Carter, Jamie Fox\\n\"}],\"err\":[]}"
+      }
+     ]
+    }
+   },
+   {
+    "tool": "get_notes_info",
+    "arguments": {
+     "paths": [
+      "calendar/calendar-event-0.md"
+     ]
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "[{\"path\":\"calendar/calendar-event-0.md\",\"size\":127,\"modified\":1794406529734,\"hasFrontmatter\":false,\"obsidianUri\":\"obsidian:////vault/calendar/calendar-event-0\"}]"
+      }
+     ]
+    }
+   },
+   {
+    "tool": "read_note",
+    "arguments": {
+     "path": "gmail/gmail-mail-3.md"
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\"fm\":{},\"content\":\"# Re: Dinner next week\\n\\nFrom: Robin Carter <robin@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail.com>\\nDate: Wed, 21 Oct 2026 22:00\\n\\nHi Jamie,\\n\\nThanks again for your time yesterday. Perfect, booked Barrafina for Thursday 19:30. See you then! Happy to jump on a call if easier.\\n\\nThanks,\\nR\\nSent from my iPhone\\n\\nOn Wed, 21 Oct 2026 12:00, Jamie Fox <jamie.fox@gmail.com> wrote:\\n> Robin,\\n>\\n> Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\\n>\\n> Kind regards,\\n> Jamie\\n>\\n> On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\\n> > Hey Jamie,\\n> >\\n> > Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\\n> >\\n> > Thanks!\\n> > Robin\\n\"}"
+      }
+     ]
+    }
+   },
+   {
+    "tool": "read_note",
+    "arguments": {
+     "path": "obsidian:////vault/gmail/gmail-mail-3"
+    },
+    "isError": true,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Error: File not found: obsidian:////vault/gmail/gmail-mail-3. Use list_directory to see available files, or check the path spelling."
+      }
+     ],
+     "isError": true
+    }
+   },
+   {
+    "tool": "read_multiple_notes",
+    "arguments": {
+     "paths": [
+      "gmail/gmail-mail-3.md"
+     ]
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\"ok\":[{\"path\":\"gmail/gmail-mail-3.md\",\"obsidianUri\":\"obsidian:////vault/gmail/gmail-mail-3\",\"frontmatter\":{},\"content\":\"# Re: Dinner next week\\n\\nFrom: Robin Carter <robin@northwind.co>\\nTo: Jamie Fox <jamie.fox@gmail.com>\\nDate: Wed, 21 Oct 2026 22:00\\n\\nHi Jamie,\\n\\nThanks again for your time yesterday. Perfect, booked Barrafina for Thursday 19:30. See you then! Happy to jump on a call if easier.\\n\\nThanks,\\nR\\nSent from my iPhone\\n\\nOn Wed, 21 Oct 2026 12:00, Jamie Fox <jamie.fox@gmail.com> wrote:\\n> Robin,\\n>\\n> Yes, would love to! Thursday at 19:30 works. I'll have to leave by 20:45 for school pickup. Speak soon.\\n>\\n> Kind regards,\\n> Jamie\\n>\\n> On Wed, 21 Oct 2026 00:00, Robin Carter <robin@northwind.co> wrote:\\n> > Hey Jamie,\\n> >\\n> > Quick one from me. Fancy dinner sometime next week? I was thinking Barrafina. Happy to jump on a call if easier.\\n> >\\n> > Thanks!\\n> > Robin\\n\"}],\"err\":[]}"
+      }
+     ]
+    }
+   },
+   {
+    "tool": "get_notes_info",
+    "arguments": {
+     "paths": [
+      "gmail/gmail-mail-3.md"
+     ]
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "[{\"path\":\"gmail/gmail-mail-3.md\",\"size\":749,\"modified\":1794406529738,\"hasFrontmatter\":false,\"obsidianUri\":\"obsidian:////vault/gmail/gmail-mail-3\"}]"
+      }
+     ]
+    }
+   }
+  ],
+  "lists": [
+   {
+    "tool": "get_vault_stats",
+    "arguments": {
+     "recentCount": 5
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\"notes\":1499,\"folders\":5,\"size\":1620969,\"recent\":[{\"path\":\"gmail/gmail-mail-1498.md\",\"modified\":1794406529895},{\"path\":\"crm/crm-deal-1490.md\",\"modified\":1794406529894},{\"path\":\"crm/crm-deal-1491.md\",\"modified\":1794406529894},{\"path\":\"drive/drive-doc-1495.md\",\"modified\":1794406529894},{\"path\":\"gmail/gmail-mail-1493.md\",\"modified\":1794406529894}]}"
+      }
+     ]
+    }
+   },
+   {
+    "tool": "list_directory",
+    "arguments": {
+     "path": "/"
+    },
+    "isError": false,
+    "reply": {
+     "content": [
+      {
+       "type": "text",
+       "text": "{\"dirs\":[\"calendar\",\"crm\",\"drive\",\"gmail\",\"slack\"],\"files\":[]}"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}
