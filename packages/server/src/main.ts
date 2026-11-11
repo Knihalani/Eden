@@ -23,6 +23,15 @@ const config = configOrExit();
 if (config.dev && !config.child && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
   console.error(`eden: EDEN_DEV=1 on ${config.host}: anyone who can reach this port is served without a key`);
 }
+// D858: a dev server (the quick start, the examples, smoke runs) inheriting OPENROUTER_API_KEY from a shell turned its
+// model roles on and made paid calls nobody asked for. It refuses to start unless the calls are wanted.
+if (config.dev && !config.child && process.env.OPENROUTER_API_KEY && process.env.EDEN_ALLOW_MODEL_ROLES !== "1") {
+  console.error(
+    "eden: EDEN_DEV=1 with OPENROUTER_API_KEY set would make paid model calls; start it with " +
+      "`env -u OPENROUTER_API_KEY …`, or set EDEN_ALLOW_MODEL_ROLES=1 to allow them (D858)",
+  );
+  process.exit(2);
+}
 try {
   if (config.processes > 1) {
     await runRouter(config);

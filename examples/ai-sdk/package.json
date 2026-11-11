@@ -1,0 +1,16 @@
+{
+  "name": "@eden/example-ai-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Eden in a Vercel AI SDK agent: one middleware, one tool, one guard (D854).",
+  "dependencies": {
+    "@eden/client": "workspace:*"
+  },
+  "devDependencies": {
+    "ai": "7.0.154",
+    "@ai-sdk/anthropic": "4.0.89",
+    "@eden/server": "workspace:*",
+    "@eden/sources": "workspace:*"
+  }
+}

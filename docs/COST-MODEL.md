@@ -630,6 +630,16 @@ own costs: `RareTerms`, at most 1 MB a user (+0.72 MB at 1,000 sources in the la
 in the frozen blob, so freezing a user does not shrink it until the sync drops the user after `syncDropMs`), and 3–5 µs a new word on the
 sync's store path (30–70 ms for a page of 100 items of 150 new words each).
 
+## `ask_context` through the proxy (D851, opt-in `askTool`, off unless set; D857)
+
+With `EDEN_PROXY_ASK=1` the proxy adds Eden's `ask_context` to the model's tools and answers the calls itself. Each
+round the model asks is one more upstream model call on the tenant's own bill (the conversation so far plus the
+round), and one `/v1/ask` per question (at most four a round, three rounds a request). On the shipped default an ask
+makes no model call (D237: the candidates; Eden's time about 5 ms at p50, D64); with the reader's configuration each
+ask may make one reader call under its own `Budget`. D70 measured the SDK arm without the tool at 27% lower agent
+cost and 11.9 points fewer hidden facts raised; the proxy's figure is not measured (docs/research/p5-integrator.md
+§4b). A streamed asking round is buffered, so the agent's first token waits for the rounds.
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers

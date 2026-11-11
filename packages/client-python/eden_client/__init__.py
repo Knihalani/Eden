@@ -22,7 +22,9 @@ import hashlib
 import inspect
 import json
 import math
+import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -33,7 +35,10 @@ __all__ = [
     "DEFAULT_WAIT_MS",
     "MAX_PUSHED_ITEMS",
     "EdenClient",
+    "default_on_error",
+    "eden_env",
     "eden_id",
+    "fix_for",
     "guard_tool",
     "guard_tools",
     "held_result",
@@ -60,6 +65,86 @@ _ERROR_BODY_BYTES = 2_048
 _ERROR_TEXT_CHARS = 300
 _REASONS = {"push-off", "not-synced", "not-notifying"}
 _SEQUENCES = (list, tuple, set, frozenset)
+
+
+# -- the default on_error (D850; ``on-error.ts`` in @eden/client) ---------------------------------------------------
+
+_UNSET: Any = object()
+_PRINTED: set = set()
+_MAX_PRINTED = 256
+
+
+def eden_env(env: Optional[Dict[str, str]] = None) -> str:
+    """``"production"`` when ``EDEN_ENV`` (else ``NODE_ENV``) says so, else ``"development"``."""
+    e = os.environ if env is None else env
+    v = (e.get("EDEN_ENV") if e.get("EDEN_ENV") is not None else e.get("NODE_ENV", "")) or ""
+    return "production" if v.strip().lower() in ("production", "prod") else "development"
+
+
+def fix_for(message: str) -> Optional[str]:
+    """The fix for a client error, as ``fixFor`` in @eden/client words it; None when there is no specific advice."""
+    rules = (
+        (r"must be 1-128 characters",
+         "map user and session ids with edenId(raw) (Python: eden_id) before passing them; the same mapping everywhere"),
+        (r"cannot reach",
+         "start the server (bun run dev, or the Docker image) and check baseUrl (default http://127.0.0.1:8790)"),
+        (r": 401\b",
+         "the server refused the key: pass apiKey (one of EDEN_API_KEYS on the server), or omit it against EDEN_DEV=1"),
+        (r": 403\b", "the key belongs to another tenant: drop tenantId or use that tenant's key"),
+        (r": 404\b", "baseUrl should be the server's root (no /v1 suffix); upgrade an older server"),
+        (r": 413\b", "the event is too large: send the text the agent saw, not whole attachments"),
+        (r": 429\b", "the tenant's rate cap was hit; Eden stays silent until it frees"),
+        (r": 400\b", "the server refused the request's shape; the reason above names the field"),
+        (r": 5\d\d\b", "the server failed internally; its log has the cause (the agent was not affected)"),
+        (r"not an? \w+ answer|unreadable answer",
+         "something other than Eden answered at baseUrl (a proxy or another service on that port)"),
+    )
+    for pattern, fix in rules:
+        if re.search(pattern, message):
+            return fix
+    return None
+
+
+def _kind_of(message: str) -> str:
+    m = re.match(r"^eden (\S+?):? (\d{3}|cannot reach|not an? \w+|an unreadable)", message)
+    return f"{m.group(1)} {m.group(2)}" if m else message[:80]
+
+
+def default_on_error(env: Optional[str] = None,
+                     warn: Optional[Callable[[str], Any]] = None) -> Callable[[Exception], None]:
+    """The ``on_error`` a client uses when none is passed (D850), as ``defaultOnError`` in @eden/client.
+
+    Development (the default): each distinct problem printed once to stderr with its fix. Production (``EDEN_ENV``
+    or ``NODE_ENV`` is ``production``): the first problem of each route and status, once per process. Never raises.
+    ``on_error=None`` silences it.
+    """
+    mode = env or eden_env()
+
+    def out(line: str) -> None:
+        if warn is not None:
+            warn(line)
+        else:
+            print(line, file=sys.stderr)
+
+    def on_error(e: Exception) -> None:
+        message = str(e)
+        key = ("p:" + _kind_of(message)) if mode == "production" else ("d:" + message)
+        if key in _PRINTED or len(_PRINTED) >= _MAX_PRINTED:
+            return
+        _PRINTED.add(key)
+        fix = fix_for(message)
+        tail = (" (Eden failed open; further errors of this kind are not printed. Set on_error to log them.)"
+                if mode == "production" else
+                " (Eden failed open: the agent got no context. Set on_error to handle errors yourself, or None to "
+                "silence.)")
+        out(message + tail + (f"\n  fix: {fix}" if fix else ""))
+
+    return on_error
+
+
+def _reset_default_on_error() -> None:
+    """Clears what the default has printed (tests)."""
+    _PRINTED.clear()
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -247,18 +332,21 @@ class EdenClient:
         base_url: Optional[str] = None,
         timeout_s: Optional[float] = None,
         default_wait_ms: Optional[int] = None,
-        on_error: Optional[Callable[[Exception], Any]] = None,
+        on_error: Optional[Callable[[Exception], Any]] = _UNSET,
         shadow: bool = False,
     ) -> None:
         # None is the default, as `??` reads it in TypeScript: `base_url=os.environ.get(...)` when it is unset.
-        self._base = ("http://127.0.0.1:8790" if base_url is None else base_url).rstrip("/")
-        self._key = api_key
+        # Unset: the environment's EDEN_URL and EDEN_API_KEY, as the TS client, the proxy and `eden doctor` (D856).
+        env_url = os.environ.get("EDEN_URL") or None
+        self._base = (base_url if base_url is not None else env_url or "http://127.0.0.1:8790").rstrip("/")
+        self._key = api_key if api_key is not None else (os.environ.get("EDEN_API_KEY") or None)
         self._tenant = tenant_id
         self._user = user_id
         self._session = session_id
         self._timeout = 0.8 if timeout_s is None else timeout_s
         self._default_wait = DEFAULT_WAIT_MS if default_wait_ms is None else default_wait_ms
-        self._on_error = on_error
+        # Unset: the default (D850) prints misuse with its fix, so a refused key is not mistaken for silence.
+        self._on_error = default_on_error() if on_error is _UNSET else on_error
         # Shadow mode (the TS client's `shadow`, D282): what Eden returns is not given to the agent, so the server is
         # told (`?shadow=1` on events and pending) and learns nothing from it as if the agent had been shown it.
         self._shadow = shadow is True
