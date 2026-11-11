@@ -67,8 +67,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckWaitMs: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
-  pushCheckLocal: "checker",
-  pushCheckLocalPass: "checker",
 };
 
 /**
@@ -176,8 +174,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
-  pushCheckLocal: [...PUSH, "pushCheck"],
-  pushCheckLocalPass: [...PUSH, "pushCheck", "pushCheckLocal"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -244,7 +240,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
-  pushCheckLocalPass: { min: 0.001, max: 0.999 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
 };

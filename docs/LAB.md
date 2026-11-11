@@ -549,15 +549,6 @@ of a live search: read "hidden surfaced" (`TOTAL hidden`), not it. Figures for t
 
 The default has the check on; the funnel wires a checker only with `-- --check live|replay --check-cache F` (without it
 the part is inert and the funnel is the no-model screen). A live check keeps the funnel to one process: run one seed a
-
-### 1j. A distilled student as the push check (M1, D890–D898; docs/research/m1-student.md)
-
-`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
-`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and serves it (bearer key from
-`EDEN_LAB_CHECKER_KEY`, an ephemeral secret; stop it with `modal app stop -y eden-m1-checker`). The funnel and pi-ab
-wire it for an arm with `pushCheckLocal`: `--checker-url URL` (live), `--checker-cache F` (answers kept and replayed
-at $0), `--checker-log F` (funnel: each check's items and scores). `packages/sim/lab/m1-student/compare.py` reads a
-screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
 process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
 call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant;
 `python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token). `--
@@ -629,6 +620,14 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m6/label.ts .local/m6/v.jsonl
 python3 -I packages/sim/lab/m6/prep.py --labels .local/m6/l.jsonl --out .local/m6/set .local/m6/v.jsonl
 python3 -I packages/sim/lab/m6/baselines.py .local/m6/set/items.jsonl --sets val
 ```
+
+### 1j. Distilled students of the push check (M1, D890–D899, D980–D982; docs/research/m1-student.md)
+
+Lab tooling only: both tracks stopped (D899, D982) and the engine trial was deleted with them (D983).
+`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
+`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and scores the teacher over pair groups.
+`packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
+screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
 
 ### 2. The same with Eden's reader live (NEW)
 

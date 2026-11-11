@@ -108,10 +108,6 @@ def _run(shard_dict):
 
 
 haiku = [modal.Secret.from_name(HAIKU_SECRET)]
-# M1 (D894): an arm with `pushCheckLocal` calls the student's lab endpoint (`m1_serve.py`) with the bearer key from
-# the launching shell, handed over as an ephemeral `Secret.from_dict` (nothing stored in the workspace).
-if os.environ.get("EDEN_LAB_CHECKER_KEY"):
-    haiku.append(modal.Secret.from_dict({"EDEN_LAB_CHECKER_KEY": os.environ["EDEN_LAB_CHECKER_KEY"]}))
 
 
 @app.function(secrets=haiku, cpu=plan.CPUS["pi-ab"], memory=plan.MEMORY_MIB["pi-ab"], timeout=12 * HOURS)

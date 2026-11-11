@@ -452,12 +452,6 @@ dependency (no model key: no checker, and the part is inert), waits at most `pus
 error or a refusal hands the unchecked candidates; a late answer is traced "check-late" and kept for a second pass),
 and costs about 1 s a call on the agent's path (docs/research/p2-push-check.md; COST-MODEL.md). A widened pool, an
 anchored gate and a never-silent form were measured and deleted (D828).
-
-`pushCheckLocal` (M1, D894, a trial, off; docs/research/m1-student.md) takes the check's verdict from a distilled
-student's scores instead of the model call: the embedder wires a `LocalPushChecker` (a `PushCheckScorer` that scores
-each pool item alone on its title and first 700 characters) behind the same `PushCheck` interface, and items at or
-above `pushCheckLocalPass` change the action. The partner reads the wired checker's `local` flag, not the switch alone:
-with the paid checker wired the switch is inert. No server wires a student; the lab serves one on a GPU (D893).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search

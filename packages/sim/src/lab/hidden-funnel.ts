@@ -88,8 +88,6 @@ import {
   automated,
   type PushPoolReport,
   PushChecker,
-  LocalPushChecker,
-  type PushCheck,
   worthCarding,
   worthCardingStrict,
   ECONOMY_CARD_LIMITS,
@@ -153,7 +151,6 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { HttpScorer } from "./m1-scorer";
 import {
   coverageLines,
   intentPlace,
@@ -231,9 +228,6 @@ const cli = flags(
         "check-model",
         "check-cache",
         "check-log",
-        "checker-url",
-        "checker-cache",
-        "checker-log",
         "check-dump",
         "templates",
         "connect-at",
@@ -580,24 +574,6 @@ const checkModel =
           : null,
         CHECK_MODEL,
       );
-/**
- * `--checker-url URL` / `--checker-cache F` (M1, D894): the `pushCheckLocal` trial's student, served by
- * `packages/sim/modal/m1_serve.py` (key from `EDEN_LAB_CHECKER_KEY`), its answers kept in the cache and replayed (a
- * cache alone replays; a miss fails open to the default's candidates and is counted).
- */
-const CHECKER_URL = opt("checker-url", "");
-const CHECKER_CACHE = opt("checker-cache", "");
-if ((CHECKER_URL || CHECKER_CACHE) && !RUN.pushCheckLocal)
-  throw new Error("--checker-url/--checker-cache are inert unless pushCheckLocal is on");
-if (RUN.pushCheckLocal && !CHECKER_CACHE) throw new Error("pushCheckLocal needs --checker-cache FILE");
-if (RUN.pushCheckLocal && CHECK !== "none") throw new Error("pushCheckLocal replaces --check's model");
-const localScorer = RUN.pushCheckLocal
-  ? new HttpScorer({
-      ...(CHECKER_URL ? { url: CHECKER_URL, key: process.env.EDEN_LAB_CHECKER_KEY ?? "" } : {}),
-      cacheFile: CHECKER_CACHE,
-      ...(opt("checker-log", "") ? { logFile: opt("checker-log", "") } : {}),
-    })
-  : null;
 /** `--check-log FILE` (N5): each check call's prompt (request and items as read) and reply, sim data only. */
 const CHECK_LOG = opt("check-log", "");
 if (CHECK_LOG) writeFileSync(CHECK_LOG, "");
@@ -613,7 +589,7 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
         },
       }
     : checkModel;
-const checkLanes: PushCheck[] = [];
+const checkLanes: PushChecker[] = [];
 /** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
 const CHECK_DUMP = opt("check-dump", "");
 if (CHECK_DUMP && CHECK === "none") throw new Error("--check-dump needs --check");
@@ -1083,20 +1059,18 @@ async function runSeed(
   const readerReports = new Map<string, ReaderReport[]>();
   const laneCheck = loggedCheck({ suite, seed, variant });
   const dumpTasks = new Map<string, DumpTask>();
-  const checker: PushCheck | null = localScorer
-    ? new LocalPushChecker({ scorer: localScorer, pass: RUN.pushCheckLocalPass })
-    : !laneCheck
-      ? null
-      : CHECK_DUMP
-        ? ((kept) =>
-            new DumpingChecker(
-              { model: kept.model, budget: new Budget(UNCAPPED) },
-              kept.replies,
-              CHECK_DUMP,
-              (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
-              (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
-            ))(replyKeeping(laneCheck))
-        : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
+  const checker = !laneCheck
+    ? null
+    : CHECK_DUMP
+      ? ((kept) =>
+          new DumpingChecker(
+            { model: kept.model, budget: new Budget(UNCAPPED) },
+            kept.replies,
+            CHECK_DUMP,
+            (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
+            (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
+          ))(replyKeeping(laneCheck))
+      : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
@@ -1501,10 +1475,7 @@ async function runSeed(
         };
       });
       const line = { suite, seed, variant, template: task.template, request: task.text, detail: task.detail };
-      // The user's day at the ask, as the push check is given it (`PushCheckInput.today`; M1's student reads it).
-      const today = new Date(askAt + cache.offsetOf(scope) * 60_000).toISOString().slice(0, 10);
       const extra = {
-        today,
         planted: id,
         at: ids.indexOf(id),
         ...(push?.unsettled !== undefined ? { unsettled: push.unsettled } : {}),
@@ -1956,7 +1927,7 @@ if (READER_SUBSET && readerModel) {
 /** `--check` (I3, D500): the push check's calls over the whole run, every phase (neutral included). */
 const checkUse = checkModel
   ? (() => {
-      const sum = (k: keyof PushCheck["stats"]) => checkLanes.reduce((n, c) => n + c.stats[k], 0);
+      const sum = (k: keyof PushChecker["stats"]) => checkLanes.reduce((n, c) => n + c.stats[k], 0);
       const lat = checkModel.quantiles();
       return {
         asked: sum("asked"),
@@ -1982,14 +1953,6 @@ if (checkUse) {
       `($${per(checkUse.costUsdAsMade).toFixed(6)} a call); ${per(checkUse.inputTokens).toFixed(0)} in ` +
       `(${per(checkUse.cachedInputTokens).toFixed(0)} cached) / ${per(checkUse.outputTokens).toFixed(0)} out a call; ` +
       `as made p50 ${checkUse.p50Ms.toFixed(0)} ms, p90 ${checkUse.p90Ms.toFixed(0)} ms`,
-  );
-}
-if (localScorer) {
-  const asked = checkLanes.reduce((n, c) => n + c.stats.asked, 0);
-  const failed = checkLanes.reduce((n, c) => n + c.stats.failures, 0);
-  console.log(
-    `CHECK (M1, pushCheckLocal, pass ${RUN.pushCheckLocalPass}): ${asked} asked, ${failed} failed open; ` +
-      localScorer.summary(),
   );
 }
 if (LIVE) {

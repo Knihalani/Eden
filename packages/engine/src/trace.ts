@@ -53,8 +53,6 @@ export interface Trace {
    */
   checkCalls?: number;
   checkCostUsd?: number;
-  /** `pushCheckLocal` (D894): the check was a student's scores, not a model call (not counted in `modelCalls`). */
-  checkLocal?: boolean;
   /** On a "reader-push" trace: the push handed out candidates (`pushCandidates`, D237), not a reading. */
   candidates?: boolean;
   itemIds: string[];
