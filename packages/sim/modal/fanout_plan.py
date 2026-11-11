@@ -133,6 +133,10 @@ def plan_funnel(suites, seeds, run, args=(), shards=0):
     if "live" in args:
         raise PlanError("funnel shards are $0: a live reader or judge (`live`) runs on pi-ab or locally with a ledger")
     check_suites(suites, args)
+    # One coverage for the whole grid (D877): funnel.ts picks shipped per run where it covers that run, so shards of a
+    # partly covered grid would mix two indexes into one level. The planner keeps the full index unless told.
+    if "--coverage" not in flag_names(args):
+        args = ["--coverage", "full", *args]
     # shard_command adds --blind to each shard that holds a held-out suite.
     args = [a for a in args if a != "--blind"]
     cells = [(s, d) for d in seeds for s in suites]

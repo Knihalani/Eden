@@ -34,6 +34,9 @@ per suite for train1–6 and held-out 10–12.
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout17` | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`) | **Read** (A29 Pi, 2026-11-07, a29-heldout17.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout18` | Blind, M6's (m6-heldout18.md, D465); 32 new templates over the same 8 areas, with `neutral`; 8 late arrivals (`HELDOUT18_LATE`); 13 short anchored requests (`HELDOUT18_ANCHORED`, D466) | Run once and read by B18, 2026-11-11 (b18-heldout18.md, D802); cards and intent cached, 41–44     |
+| `heldout19` | Blind, P7's for the end-of-wave confirmation (p7-benchmarks.md, D870); 40 templates over the 8 areas, with `neutral`; indirect, question and non-English requests (`HELDOUT19_INDIRECT`, `HELDOUT19_NON_ENGLISH`), anchored requests, facts in rarely used connectors (`HELDOUT19_RARE`) and silent edits (`HELDOUT19_SILENT`, with `heldout19Before`) | **Unread** (`UNREAD_BLIND`): nobody runs it before the parent's end-of-wave call; cards and intent only at shipped coverage |
+| `train1r`–`train6r` (`--suite reworded`) | Train with every request reworded as a need, a plan or a question, 6 of 32 a suite in another language (reworded.ts, D871); same worlds, so train's caches replay | Tuning set (Q6); out of `all` |
+| `longtail` | 24 templates, every fact and decoy in one of eight rarely used connectors (rare-sources.ts, D873); with `neutral` | Tuning and measurement, not blind; out of `all`; pair with `days-calls.ts --arrive-days` |
 
 **The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
@@ -49,9 +52,30 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
   written by an author who saw no engine code.
 - `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
   have been read (D72, D80, D85, D98, D112), 14 by RealUse-1 and 15 by RealUse-2: treat the list as "not in `all`",
-  not as "fresh". Held-out 18 (M6, D465) was spent by B18 (D802): no suite is unread (`UNREAD_BLIND` is
-  empty), and the next blind check needs a new one.
+  not as "fresh". Held-out 18 (M6, D465) was spent by B18 (D802). Held-out 19 (P7, D870) is the one unread suite:
+  its single use is the end-of-wave confirmation the parent calls; `bun run funnel` says so when a run names it.
+- **Worlds with rare connectors** (heldout19, longtail; rare-sources.ts): eight more connectors (notes, whatsapp,
+  bank, health, school, trips, residents, tasks) with 6–8 old filler items each, added by `prepareWorld(suite, …)`
+  before the planted items in every variant; every harness calls it, and planting without it throws.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
+
+## The benchmark map: which question each benchmark answers, and its known biases
+
+P7 (D876; docs/research/p7-benchmarks.md, B1–B13 of docs/research/weak-points-1111.md). Read a figure with its row:
+a benchmark answers its question and no other, and each has a bias that moves its level.
+
+| Benchmark | Question it answers | Known biases (what it cannot see) |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `bun run eval` | Did an engine change move behaviour on the hand-written scenarios? (precision 0.65, recall 0.52, falseFireRate 0 on main) | Its `falseFireRate` does not count candidates on nothing-to-add requests, and cards and intent are inert in it (B1). A merge gate, not a level |
+| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (281/264 on seeds 41–42; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
+| Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
+| Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
+| `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks plans repeat neutral requests (only on templates never planted for the user, D874); recaps move each day's planted times |
+| Held-out suites (`--blind`) | Does the default generalise to an author who never saw the engine? | Levels differ by suite (Q10: 73% on heldout17, 47–49% on heldout18 with one default), so compare arms within a suite; each is blind once. heldout19 is unread (D870) |
+| Pi short (`pi-ab.ts`) | Does a live agent raise the fact with Eden, against the agent alone? | One agent model (Haiku) for most decisions, graders that disagree by 7 points (B9); the baseline has search tools, with no "top five search hits" arm (B10); single runs (B11) |
+| Pi days (`pi-ab --days`) | The same over a user's mixed days, with cost and wall time | 2–8 compressed days, four to eight users in most runs (B7; `days-calls.ts` is the $0 weeks view); sessions reset daily, never compacted (A3) |
+| Connector lab, the pilot | Real MCP servers; one consenting account's data | The pilot is built, not run (B2): no figure here comes from real data |
+| Prices (COST-MODEL.md, pi-cost) | What a task, a user-day and a backfill cost | List prices assumed; Anthropic-direct lab transport, not the shipped OpenRouter route (B12) |
 
 ## Configurations (`presets.ts`)
 
@@ -107,6 +131,7 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Intent requests (D87)                                                             | `cards-enrich.ts --intent --dir D`                | `--intent D/intent-v2.jsonl` (needs `--cards`)                                                                                              | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, plus held-out 13 and 14 (seeds 41–44; 14 topped up on Haiku 5.5 for RealUse-1), yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
 | Bridge queries (D89)                                                              | `bridge-enrich.ts --out F`                        | `--bridge F`                                                                                                                                | no                                                                                                                                                                                                                                                                                                                                                                                    |
 | Reader calls (D95)                                                                | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no                                                 |
+| Cards and intent at shipped coverage (D872) | `cold-start.ts --users suite:seed:variant,… --cards-out F` (the enricher `buildPartner` builds, recorded) | `bun run funnel --coverage shipped` (as `--cards` and `--intent`; SHIPPED_COVERS in cards-disk.ts) | yes: `packages/sim/lab/distilled/cards-shipped.jsonl.gz` (train1–6 and reworded, longtail, heldout19, seeds 41–44, every variant; Haiku 5.5, lab transport); `cards-shipped-weeks.jsonl.gz` (the 24 weeks users of recipe 1h) |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -137,9 +162,9 @@ never be read back as a recorded one) and leaves its approximated calls out of t
 are the default's 15), recorded once live (recipe 2) into `W/rc-wide.jsonl`:
 
 ```bash
-bun run funnel --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
+bun run funnel --coverage full --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
   --reader-cache W/rc-wide.jsonl --reader-log W/log-wide.jsonl          # $0: the wide run's verdicts, logged
-bun run funnel --jobs 4 --allow-misses -- --reader replay --reader-model claude-haiku-5-5 \
+bun run funnel --jobs 4 --allow-misses --coverage full -- --reader replay --reader-model claude-haiku-5-5 \
   --reader-cache W/rc-wide.jsonl --reader-subset W/log-wide.jsonl         # the default's pool, approximated
 ```
 
@@ -365,7 +390,8 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 281/264 at
+shipped coverage, the funnel's default since D877)
 (314/274 before, when it read 307/281 on the second draw, which was not re-run after D710; 314/273 before D483's
 tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
@@ -542,6 +568,26 @@ eden --arms eden~V OUT.json…` (`--days` for a days run) and days' hidden facts
 Modal, `--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a
 time is `--max-streams 4`.
 
+### 1h. Weeks, many users and the long tail at $0 (P7, D874, D875)
+
+```bash
+gunzip -c packages/sim/lab/distilled/cards-shipped-weeks.jsonl.gz > .local/weeks.cards.jsonl   # the users' shipped cards
+bun packages/sim/src/lab/days-calls.ts --seeds 41-64 --days 28 --night-h 20 --suite train,longtail \
+  --arrive-days 0-10 --cards .local/weeks.cards.jsonl --intent .local/weeks.cards.jsonl   # 24 users, four weeks, $0
+```
+
+The cards file is what the shipped enricher wrote for those 24 users (`cold-start.ts --users user:41,…,user:64
+--suite train,longtail --days 28 --cards-out F`, $0.26, D872); another seed, suite or day count needs its own.
+One process, 127 s on the shared 4-core box (measured 2026-11-11, with the train card file).
+
+`--arrive-days LO-HI` holds each planted item until LO–HI days before its request and releases it with no notice, so
+only a poll, a sweep or the request's own reads can find it; the surfaced lines split by connector class (`rare`,
+`common`) and arrival lag (`0d`, `1-6d`, `7d+`, `backfill`), and a line prices the rare connectors' listings. Add
+`--set '{"syncUnusedSweepMs":0}'` for every source swept daily, `--push none` for sources that never notify, and
+`--noise-sources N --noise-vocab 1000` for the unused connectors a weekly sweep or dormancy rule is about (with 13
+connectors the sweep setting moved nothing, D875). Past about 12 days a plan is a weeks plan
+(D874): planted templates are drawn first and neutral requests repeat only templates never planted for the user.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
@@ -588,7 +634,8 @@ The cache is plain JSONL that a live reader appends to, so it is unpacked under 
 
 ```bash
 gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
-bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/haiku-default.json -- --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --coverage full --json .local/haiku-default.json \
+  -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
@@ -630,7 +677,8 @@ main file it replays `-- --neutral` with 0 misses (without it, 608 neutral reade
 ```bash
 (gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz; \
  gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz) > .local/reader-train.jsonl
-bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/h18.json -- --neutral --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --coverage full --json .local/h18.json -- --neutral \
+  --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-train.jsonl
 ```
 

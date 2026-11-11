@@ -35,6 +35,7 @@ describe("days-calls --resume (D813)", () => {
         midFates: { unhanded: 0, updated: 0, unpolled: 0, unseen: 0, undelivered: 0 },
         midDelays: [],
         bySource: {},
+        surfacedBy: {},
       };
     };
   const quiet = () => {};

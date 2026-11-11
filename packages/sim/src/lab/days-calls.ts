@@ -14,6 +14,16 @@
  * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
  * (D813, `main` below).
  *
+ * Weeks and more users (P7, D874, D875): `--days 28 --night-h 20` is four weeks of Eden's clock, long enough for the
+ * weekly sweep of unused sources (D356) to run three times; past about 12 days the plan is a weeks plan
+ * (`planWeeks`). `--seeds 41-64` runs 24 users (a range or a list). `--suite train,longtail` adds the long-tail suite's
+ * facts in rarely used connectors (rare-sources.ts); `--day-size` and `--mix` as pi-ab takes them. `--arrive-days
+ * LO-HI`: each planted item (fact or decoy) is not there at the backfill but appears at its connector LO to HI days
+ * before its request, with no notice (a quiet source), so only a poll, a sweep or the request's own reads find it.
+ * The surfaced lines then split by connector (`rare`, `common`) and by how long before its request the item arrived
+ * (`0d` the same day, `1-6d`, `7d+`, `backfill`), and a line gives the rare connectors' listings a user-day: the two
+ * sides of a sweep or dormancy decision.
+ *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
@@ -25,7 +35,11 @@ import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
 import { CardEnricher, ContextPartner, ItemCache, type EngineConfig, type PushPoolReport } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
+import { RARE_SOURCE_IDS } from "../rare-sources";
+import { Rng } from "../rng";
 import { REALISTIC, simSources, type SimSource } from "../sources";
+import type { World, WorldItem } from "../world";
+import type { Task } from "./ab-common";
 import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
 import { noiseSources } from "./noise-sources";
@@ -72,6 +86,16 @@ export interface DaysCallsOptions {
   noiseSources?: number;
   /** `--noise-vocab N` (O1): words of its own for each noise connector (`noiseSources`). */
   noiseVocab?: number;
+  /** `--suite` (D875): the suites the user's requests come from (default train). */
+  suites?: string[];
+  /** `--day-size`, `--mix` (as pi-ab): requests a day and the hidden:control:neutral shares (12-20, 1:1:8). */
+  daySize?: [number, number];
+  mix?: { hidden: number; control: number; neutral: number };
+  /**
+   * `--arrive-days LO-HI` (D875): each planted item appears silently at its connector LO-HI days before its request's
+   * day (at the start of that day, before its first request); one due before the first day is there from the backfill.
+   */
+  arriveDays?: [number, number] | null;
   /**
    * `--pool-diag FILE` (O3, D712): one row per hidden or control request saying where its planted item was in the
    * push's pool (`onPushPool`): ids and flags only.
@@ -129,6 +153,11 @@ export interface DaysCallsUser {
    * task's kind: "hidden" (the fact) and "control" (its all-clear decoy). The funnel's "surfaced", over a user's days.
    */
   surfaced: Record<string, { n: number; got: number }>;
+  /**
+   * The same, keyed `<kind> <rare|common> <lag>` (D875): the planted item's connector class and how long before its
+   * request it arrived (`backfill` when it was there from the start; with `--arrive-days`, `0d`, `1-6d` or `7d+`).
+   */
+  surfacedBy: Record<string, { n: number; got: number }>;
   /** Request-time calls by day (index 0 is the first day). */
   requestCallsByDay: number[];
   requestsByDay: number[];
@@ -159,13 +188,15 @@ function counted(source: SimSource, phase: () => Phase, into: Counts, fetched: M
 export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<DaysCallsUser> {
   const gapMs = o.gapMs ?? 10 * 60_000;
   const nightMs = o.nightMs ?? 2 * 3_600_000;
-  const plan = planUser(seed, suiteTemplates(seed, parseSuites("train")), {
+  const plan = planUser(seed, suiteTemplates(seed, o.suites ?? parseSuites("train")), {
     days: o.days,
-    size: parseDaySize("12-20"),
-    mix: parseMix("1:1:8"),
+    size: o.daySize ?? parseDaySize("12-20"),
+    mix: o.mix ?? parseMix("1:1:8"),
   });
   const u = userWorldOf(seed, plan);
   const world = { ...u.world, items: u.world.items.map((i) => ({ ...i })) };
+  // `--arrive-days`: hold each planted item until its day (`arrivals`, by plan day), drawn before the sources exist.
+  const { arrivals, lagOf } = scheduleArrivals(world, u.tasks, u.daySizes, seed, o.arriveDays ?? null);
   const userPrefix = `w${seed}:user`;
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
@@ -275,6 +306,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const listsOf = (source: string) => callsWhere(counts, (_p, src, op) => src === source && op === "list");
   const f0 = { ...partner.freshness };
   const surfaced: DaysCallsUser["surfaced"] = {};
+  const surfacedBy: DaysCallsUser["surfacedBy"] = {};
   const requestCallsByDay: number[] = [];
   const requestsByDay: number[] = [];
   /** The item ids the agent was handed in the current request. */
@@ -293,6 +325,14 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   };
   for (const task of tasks) {
     clock += newDay && dayNo >= 0 ? nightMs : gapMs;
+    if (newDay) {
+      // The day's arrivals appear overnight at their connectors with no notice; the tick below may or may not list
+      // them (an unused connector is swept weekly).
+      const due = arrivals.get(dayNo + 1) ?? [];
+      for (const it of due) world.items.push({ ...it, updatedAt: clock - 3_600_000 });
+      const touched = new Set(due.map((it) => it.sourceId));
+      for (const s of sources) if (touched.has(s.id)) s.reindex();
+    }
     phase = "tick";
     await sync.tick();
     if (newDay) {
@@ -364,6 +404,11 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
         const row = (surfaced[task.kind] ??= { n: 0, got: 0 });
         row.n++;
         if (handed.has(task.planted)) row.got++;
+        const src = world.items.find((it) => it.id === task.planted)?.sourceId ?? "";
+        const by = `${task.kind} ${RARE_SOURCE_IDS.includes(src) ? "rare" : "common"} ${lagOf.get(task.id) ?? "backfill"}`;
+        const rowBy = (surfacedBy[by] ??= { n: 0, got: 0 });
+        rowBy.n++;
+        if (handed.has(task.planted)) rowBy.got++;
         if (o.onPlanted) {
           const report = pooled as PushPoolReport | null;
           const rank = report ? report.pool.indexOf(task.planted) : -1;
@@ -462,9 +507,63 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     bySource,
     staleHeld,
     surfaced,
+    surfacedBy,
     requestCallsByDay,
     requestsByDay,
   };
+}
+
+/**
+ * `--arrive-days` (D875): take each planted item of `tasks` out of `world.items` and give it a plan day to arrive on,
+ * LO-HI days before its request's day (drawn per task, deterministic per seed). Items due on day 0 or before stay (they
+ * are there at the backfill). `lagOf`: task id → `0d`, `1-6d` or `7d+` for the held ones.
+ */
+export function scheduleArrivals(
+  world: World,
+  tasks: readonly Task[],
+  daySizes: readonly number[],
+  seed: number,
+  range: [number, number] | null,
+): { arrivals: Map<number, WorldItem[]>; lagOf: Map<string, string> } {
+  const arrivals = new Map<number, WorldItem[]>();
+  const lagOf = new Map<string, string>();
+  if (!range) return { arrivals, lagOf };
+  const r = new Rng(seed * 7_919 + 875);
+  const dayOf: number[] = daySizes.flatMap((n, d) => Array.from({ length: n }, () => d));
+  const hold = new Map<string, number>();
+  tasks.forEach((t, i) => {
+    if (!t.planted || t.kind === "neutral") return;
+    const lag = r.int(range[0], range[1]);
+    const day = dayOf[i]! - lag;
+    if (day <= 0) return;
+    hold.set(t.planted, day);
+    lagOf.set(t.id, lag === 0 ? "0d" : lag < 7 ? "1-6d" : "7d+");
+  });
+  world.items = world.items.filter((it) => {
+    const day = hold.get(it.id);
+    if (day === undefined) return true;
+    arrivals.set(day, [...(arrivals.get(day) ?? []), it]);
+    return false;
+  });
+  return { arrivals, lagOf };
+}
+
+/** `LO-HI` or `N` with 0 ≤ LO ≤ HI. */
+export function parseRange(arg: string, flag: string): [number, number] {
+  const m = /^(\d+)(?:-(\d+))?$/.exec(arg.trim());
+  if (!m) throw new Error(`${flag} takes N or LO-HI, not "${arg}"`);
+  const lo = Number(m[1]);
+  const hi = m[2] === undefined ? lo : Number(m[2]);
+  if (hi < lo) throw new Error(`${flag} ${arg}: needs LO ≤ HI`);
+  return [lo, hi];
+}
+
+/** `--seeds`: a comma list of seeds and ranges (`41-64`, `41,45-48`). */
+export function parseSeeds(arg: string): number[] {
+  return arg.split(",").flatMap((part) => {
+    const [lo, hi] = parseRange(part, "--seeds");
+    return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+  });
 }
 
 /** Calls in `counts` whose key passes `pred`. */
@@ -494,7 +593,7 @@ export async function main(
     const i = argv.indexOf(`--${name}`);
     return i >= 0 ? (argv[i + 1] ?? fallback) : fallback;
   };
-  const seeds = opt("seeds", "41,42").split(",").map(Number);
+  const seeds = parseSeeds(opt("seeds", "41,42"));
   const push = opt("push", "payload") as PushMode;
   if (!["none", "signals", "payload"].includes(push)) throw new Error("--push must be none, signals or payload");
   const recap = opt("recap-notice", "push");
@@ -516,6 +615,10 @@ export async function main(
     noiseVocab: Number(opt("noise-vocab", "0")),
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
+    suites: parseSuites(opt("suite", "train")),
+    daySize: parseDaySize(opt("day-size", "12-20")),
+    mix: parseMix(opt("mix", "1:1:8")),
+    arriveDays: opt("arrive-days", "") ? parseRange(opt("arrive-days", ""), "--arrive-days") : null,
   };
   const diag = opt("pool-diag", "");
   const out = opt("json", "");
@@ -596,6 +699,22 @@ export async function main(
     return `${got}/${n}`;
   };
   log(`surfaced (a packet or the ask's citations): hidden facts ${surf("hidden")}, control decoys ${surf("control")}`);
+  // D875: by connector class and arrival lag, and what the rare connectors cost in listings.
+  const byKeys = [...new Set(users.flatMap((u) => Object.keys(u.surfacedBy)))].sort();
+  for (const k of byKeys) {
+    const n = users.reduce((x, u) => x + (u.surfacedBy[k]?.n ?? 0), 0);
+    const got = users.reduce((x, u) => x + (u.surfacedBy[k]?.got ?? 0), 0);
+    log(`  surfaced ${k.padEnd(24)} ${got}/${n}`);
+  }
+  if (o.suites!.includes("longtail") || o.arriveDays) {
+    const rareLists = (ps: Phase[]) =>
+      callsWhere(total, (p, src, op) => ps.includes(p) && op === "list" && RARE_SOURCE_IDS.includes(src));
+    log(
+      `rare connectors (${RARE_SOURCE_IDS.length}): listings ${(rareLists(["tick", "notice"]) / days).toFixed(2)} a ` +
+        `user-day in the background, ${(rareLists(["request"]) / requests).toFixed(3)} a request, ` +
+        `${(rareLists(["backfill"]) / users.length).toFixed(1)} at backfill a user`,
+    );
+  }
   const byDay = Array.from({ length: Math.max(...users.map((u) => u.requestCallsByDay.length)) }, (_, d) => {
     const c = users.reduce((x, u) => x + (u.requestCallsByDay[d] ?? 0), 0);
     const r = users.reduce((x, u) => x + (u.requestsByDay[d] ?? 0), 0);
