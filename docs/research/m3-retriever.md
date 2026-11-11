@@ -187,3 +187,32 @@ request alone, on the held-out families' days requests:
 
 The table finds facts (+14 over plain BM25) and look-alikes faster (+22): **stop** for this lever. Entity links and
 day anchors are D330's and D331's screens (a span window, aliases), already spent.
+
+### 3d. Asym with generated families, fold A (asym-s1): both bars pass
+
+asym-s1 is asym-a2's recipe (2 epochs, table lr 2e-3, 4 negatives) on train1–4 plus the generated families of §3
+(train5–6's themes left out). Held-out days requests:
+
+| variant | facts @15 (113) | decoys @15 (85) | §1 bar | facts @5 against shipped (123) | decoys @5 (83) | §1b @5 bar |
+|---|---|---|---|---|---|---|
+| model alone | **152** (+24.8) | **86** | **pass** | 136 (+8.3) | 59 | fail (+8.3) |
+| hybrid k 5 | 150 | 104 | pass | 148 (+15.9) | 94 (1.133 against 1.203) | **pass** |
+| hybrid k 10 | 154 | 104 | pass | **149** (+16.6) | 92 (1.108 against 1.211) | **pass** |
+| hybrid k 15 | 154 | 105 | pass | 147 (+15.3) | 91 (1.096 against 1.195) | **pass** |
+
+Alone it holds 152 of 157 held-out facts in its first 15 with decoys flat (a world holds about 26 planted facts and
+decoys, so this is not "planted-looking items first"). Fused with the shipped pool it clears §1b's @5 bar at every k.
+Fold B with generated families (asym-sb1) decides the go.
+
+### 3e. M2's held-out families (`eden-synth` v0 test split; secondary)
+
+`m3r/m2_worlds.py` sets each of M2's 24 test worlds (182 tasks, 1,435 requests over every style and language) beside
+one export world's base items (about 1,500) and ranks there; the lexical list is this screen's own BM25 (M2's worlds
+are not yet a funnel suite), facts @15 1,276 of 1,435 and @5 1,211: M2's requests share more words with their facts
+than the sim's do, so there is little room.
+
+| run (rank only) | facts @15 alone / hybrid k 10 | decoys @15 alone / hybrid k 10 (BM25 1,133) |
+|---|---|---|
+| asym-a2 (train only) | 1,007 / 1,330 | 740 / 1,163 |
+| sparse-a1 (train only) | 1,328 / 1,366 | 1,164 / 1,222 |
+| sparse-s1 (with generated families) | 1,356 / 1,374 | 1,183 / 1,225 |
