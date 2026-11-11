@@ -241,3 +241,19 @@ read as acting. Rescored after the fixes (labelled post hoc: the sets were read)
 of 120, logs 4 of 30, chatter 6 of 40, statements 13 of 40, questions 0 of 30. Left as known: a plan alert (D301)
 for an indirect request quotes the imperative, not the user's words; with the reader's own push
 (`pushCandidates` 0) an explicit ask in the same request does not reuse the push's reading of an indirect request.
+
+### 3.4 Pre-registration E: does the silent check pay for itself with a dear agent? (committed before its first call)
+
+Written after B's short and days runs were read. On B's days run the silent check (S) cut the packet characters the
+Haiku agent re-reads by 57% and its prompt tokens by 1,731 a task; priced at Sonnet's rates those tokens would be
+**[EST]** −$0.71 per 1,000 tasks against the check's +$0.22. The Haiku agent's tokens are not a Sonnet agent's, so
+this is measured directly once.
+
+- **Arms:** `eden` and `eden~S` (B's S: `pushCheck`, form 2, silent, `pushCheckWaitMs` 1500, `pushCheckOpen`), Pi on
+  Modal with B's harness except `--model claude-sonnet-5-5` (the agent only; grader, cards and check Haiku 5.5),
+  `--days 8`, users w41–w44, two shards at a time, cap $9.
+- **Measures:** agent $, Eden $ and total $ per 1,000 tasks, wall, and the agent's tokens by class, paired, whole users
+  resampled; hidden raised (Sonnet regrade), reported but not decided on (about 50 hidden tasks an arm).
+- **Reading:** "S costs no more in total than the default with a Sonnet agent" holds if the total's paired
+  difference has its interval's upper bound at or below zero; "S costs less" if the whole interval is below zero.
+  Otherwise the [EST] above is wrong and is reported so.

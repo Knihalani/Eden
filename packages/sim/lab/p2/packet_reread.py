@@ -2,10 +2,10 @@
 
     python3 -I packet_reread.py --base eden OUT.json [OUT.json ...]
 
-A day is the tasks between two recap tasks (`…:dayN:recap`); the agent's transcript keeps every packet of the day
-(D336's kept layout, the shipped one). Every model request of a task reads the day's earlier packets and the task's own
+A day is a run of `user.worlds[0].daySizes` tasks; the agent's transcript keeps every packet of the day (D336's kept
+layout, the shipped one). The day's recap turn is not counted (it is not a graded task). Every model request of a task reads the day's earlier packets and the task's own
 again, so a task re-reads (packet characters handed earlier that day + its own) x its model requests. Per arm, per
-task (recaps included as readers, not counted as tasks): packet characters handed, characters re-read, the same in
+task: packet characters handed, characters re-read, the same in
 tokens at 4 characters a token **[EST]**, and the agent's measured prompt tokens a task (`promptTokens`: plain, cache
 read and cache write together); against `--base`, the paired difference of each, intervals by whole users resampled.
 """
@@ -23,32 +23,26 @@ def rows_of(path):
     res = defaultdict(dict)
     for r in j["results"]:
         res[r["condition"]][r["task"]] = r
+    # Day boundaries: the run's day sizes (`user.worlds[0].daySizes`), which sum to the task list.
+    sizes = j["user"]["worlds"][0]["daySizes"]
+    starts, at = set(), 0
+    for n in sizes:
+        starts.add(at)
+        at += n
     out = {}
     for cond, by in res.items():
         day_chars = 0
         per = {}
-        for tid in order:
-            r = by.get(tid)
-            if tid.endswith(":recap"):
-                if r:
-                    per.setdefault("_recap", []).append((day_chars + r.get("injectedChars", 0)) * r.get("modelCalls", 0))
+        for k, tid in enumerate(order):
+            if k in starts:
                 day_chars = 0
-                continue
+            r = by.get(tid)
             if not r or kind.get(tid) is None:
                 continue
             own = r.get("injectedChars", 0)
             calls = r.get("modelCalls", 0)
-            per[tid] = {
-                "handed": own,
-                "reread": (day_chars + own) * calls,
-                "prompt": r.get("promptTokens", 0),
-            }
+            per[tid] = {"handed": own, "reread": (day_chars + own) * calls, "prompt": r.get("promptTokens", 0)}
             day_chars += own
-        recaps = per.pop("_recap", [])
-        # A day's recap reads the day's packets too: spread over the day's tasks so the totals hold.
-        n = max(1, len(per))
-        for v in per.values():
-            v["reread"] += sum(recaps) / n
         out[cond] = per
     return seed, out
 
