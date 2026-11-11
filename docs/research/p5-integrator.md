@@ -122,6 +122,24 @@ bun packages/sim/src/lab/i3-regrade.ts --results … --spend-ledger .local/p5/le
 python3 -I packages/sim/modal/bench_report.py --pair 'eden~S:eden' --group p5=.local/p5 --sonnet
 ```
 
+**Result (D859, rejected and deleted).** Modal run `p5-short` at `aca2a914`: 4 shards, 0 of 10,953 requests retried
+on a 429, $1.4358 (agent $1.1760, Eden $0.0069, grader $0.2529); Sonnet regrade of 1,556 answers, $0.8610 (batch).
+`bench_report.py --pair eden~short:eden --sonnet`:
+
+| Readout | `eden~short` − `eden` (95% interval, clustered by template) |
+|---|---|
+| Hidden facts raised (Sonnet) | −1.4 points (−3.8..+0.9); by seed −2.3..−0.5; A 64.8%, B 66.3% |
+| False concerns, control and neutral (Sonnet) | −0.1 points (−0.2..+0.0) |
+| Agent cost | −$0.021 per 1,000 tasks (−0.026..−0.016), $0.246 against $0.267 |
+| Wall, mean | −0.12 s (−0.16..−0.08) |
+| `ask_context` calls a task | −0.104 (−0.136..−0.075), 0.420 against 0.524 |
+
+The rule asked for the hidden interval above −3 points; it reached −3.8, so the switch, its two constants and its
+tests are deleted. The fall in asks is the likely mechanism: `ASK_NUDGE`'s longer words ("before answering, call
+ask_context with those specifics") get the agent to ask a fifth more often than the short form did, and an ask is how
+it finds what the push's candidates missed (D257, D316). A shorter lead that keeps the nudge's words whole is the
+cheaper candidate left; it is not built.
+
 ### 4b. `askTool` through the proxy (D851)
 
 - **Arms:** Pi's agent with its own tools, Eden's context through the proxy's Messages route (`both`, what a proxy
