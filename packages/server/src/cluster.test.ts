@@ -42,7 +42,7 @@ writeFileSync(
 );
 
 /** Starts one machine (`main.ts`); resolves with its URL once it listens. */
-async function machine(id: string, processes: number) {
+async function machine(id: string, processes: number, extra: Record<string, string> = {}) {
   const proc = Bun.spawn(["bun", MAIN], {
     env: {
       ...process.env,
@@ -62,6 +62,7 @@ async function machine(id: string, processes: number) {
       EDEN_SHUTDOWN_GRACE_MS: "4000",
       EDEN_TENANT_RPS: "10000",
       EDEN_TENANT_BURST: "10000",
+      ...extra,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -196,6 +197,83 @@ describe("the cluster router over three machines (D992)", () => {
     expect(anon.status).toBe(401);
     expect((await fetch(`http://127.0.0.1:${cluster.port}/internal/cluster`, { method: "POST" })).status).toBe(404);
     expect(BUCKETS).toBe(65_536);
+    await cluster.stop();
+  }, 120_000);
+});
+
+describe("fencing (review of D992)", () => {
+  const event = async (base: string, userId: string, session: string) => {
+    const res = await fetch(`${base}/v1/events?waitMs=2000`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ userId, sessionId: session, kind: "user_message", text: "Globex renewal with Dana Lee" }),
+    });
+    await res.arrayBuffer();
+    return res.status;
+  };
+
+  test("a node frozen and resumed drops its stale users before it is admitted again; a draining node hands its users over", async () => {
+    const [a, b, c] = await Promise.all([
+      machine("fa", 1),
+      machine("fb", 1),
+      machine("fc", 1, { EDEN_DRAIN_DELAY_MS: "3000" }),
+    ]);
+    const cluster = await startCluster({
+      config: {
+        port: 0,
+        host: "127.0.0.1",
+        keys: new Map([[KEY, "acme"]]),
+        dev: false,
+        cluster: { key: CLUSTER_KEY, size: 3 },
+      },
+      nodes: [
+        { id: "fa", url: a.url },
+        { id: "fb", url: b.url },
+        { id: "fc", url: c.url },
+      ],
+      healthEveryMs: 0,
+      failAfter: 2,
+      recoverAfter: 1,
+      log: () => {},
+    });
+    const via = `http://127.0.0.1:${cluster.port}`;
+    const users = Array.from({ length: 30 }, (_, i) => `fence-${i}`);
+    const three = new OwnerTable(["fa", "fb", "fc"]);
+    const onB = users.filter((u) => three.owner(bucketOf("acme", u)) === "fb");
+    expect(onB.length).toBeGreaterThan(0);
+    for (const u of users) expect(await event(via, u, "s1")).toBe(200);
+    expect(await metric(b.url, "eden_users_held")).toBe(onB.length);
+
+    // b freezes (a stall, a partition): dropped; its users are served elsewhere meanwhile.
+    b.proc.kill("SIGSTOP");
+    let dropped = null;
+    for (let i = 0; i < 6 && !dropped; i++) dropped = await cluster.checkHealth();
+    expect(dropped?.reason).toContain("fb stopped answering");
+    for (const u of onB) expect(await event(via, u, "s2")).toBe(200);
+    // b resumes, still holding its users from before: it must not serve them from memory.
+    b.proc.kill("SIGCONT");
+    let back = null;
+    for (let i = 0; i < 6 && !back; i++) back = await cluster.checkHealth();
+    expect(back?.reason).toContain("fb is back");
+    expect(back?.released).toBe(onB.length); // the interim owners handed them over
+    expect(await metric(b.url, "eden_users_held")).toBe(0); // its stale copies were dropped, not served
+    for (const u of onB) expect(await event(via, u, "s3")).toBe(200);
+    expect(await metric(b.url, "eden_users_held")).toBe(onB.length);
+    expect(await metric(b.url, "eden_store_fetched_total")).toBe(onB.length);
+
+    // The fence: a node answers 503 for a user another machine owns, even when called directly.
+    const notMine = users.find((u) => three.owner(bucketOf("acme", u)) !== "fa")!;
+    expect(await event(a.url, notMine, "s4")).toBe(503);
+    expect(await metric(a.url, "eden_cluster_fenced_total")).toBe(1);
+
+    // c is stopped (SIGTERM): its /readyz says draining, so it is a planned leave: it hands its users over first.
+    const onC = users.filter((u) => three.owner(bucketOf("acme", u)) === "fc");
+    c.proc.kill("SIGTERM");
+    await Bun.sleep(200);
+    const leave = await cluster.checkHealth();
+    expect(leave?.reason).toContain("fc is draining");
+    expect(leave?.released).toBe(onC.length);
+    for (const u of onC) expect(await event(via, u, "s5")).toBe(200);
     await cluster.stop();
   }, 120_000);
 });

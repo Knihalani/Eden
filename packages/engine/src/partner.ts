@@ -1632,13 +1632,14 @@ export class ContextPartner {
    * only once they are in that blob. Returns whether the blob was written (false when not persisting: the new owner
    * then starts the user over, as before D992).
    */
-  release(scope: Scope): boolean {
+  release(scope: Scope, write = true): boolean {
     const key = scopeKey(scope);
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
-    const written = this.deps.cache.release(scope);
+    const written = this.deps.cache.release(scope, write);
     this.unverifiable.delete(key);
-    if (written) this.deps.sourceMap.forget(scope);
+    // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
+    if (written || !write) this.deps.sourceMap.forget(scope);
     this.fanout.forget(scope);
     this.deps.planner?.forget(scope);
     this.economy.forget(scope);
@@ -1654,7 +1655,11 @@ export class ContextPartner {
    * released and how many of them were written. Users past the deadline stay here, unserved (the router no longer
    * routes them here); their new owner fetches their last stored blob, or re-syncs them.
    */
-  releaseMoved(moved: (scope: Scope) => boolean, deadlineMs: number): { released: Scope[]; written: number } {
+  releaseMoved(
+    moved: (scope: Scope) => boolean,
+    deadlineMs: number,
+    write = true,
+  ): { released: Scope[]; written: number } {
     const t0 = performance.now();
     const released: Scope[] = [];
     let written = 0;
@@ -1662,7 +1667,7 @@ export class ContextPartner {
       if (performance.now() - t0 > deadlineMs) break;
       if (!moved(scope)) continue;
       released.push(scope);
-      if (this.release(scope)) written++;
+      if (this.release(scope, write)) written++;
     }
     return { released, written };
   }

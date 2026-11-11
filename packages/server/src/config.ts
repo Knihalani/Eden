@@ -188,7 +188,8 @@ export function loadConfig(env = process.env, cores = machineCores(), memoryByte
     host: env.HOST ?? "127.0.0.1",
     keys,
     dev,
-    sourceMapPath: env.EDEN_SOURCE_MAP ?? join(edenHome(), "source-map.db"),
+    // From the env given (a test's, the router's), not only the process's: EDEN_HOME of this env wins.
+    sourceMapPath: env.EDEN_SOURCE_MAP ?? join(env.EDEN_HOME || edenHome(), "source-map.db"),
     tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS") / share,
     tenantBurst: Math.max(1, positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST") / share),
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
@@ -198,7 +199,7 @@ export function loadConfig(env = process.env, cores = machineCores(), memoryByte
     processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
     persist: persistConfig(env, share, dev, memoryBytes),
-    cluster: clusterConfig(env),
+    cluster: clusterConfig(env, persistConfigured(env)),
     shutdownGraceMs: Math.max(2_000, positive(env.EDEN_SHUTDOWN_GRACE_MS, 10_000, "EDEN_SHUTDOWN_GRACE_MS")),
     drainDelayMs: drainDelay(env.EDEN_DRAIN_DELAY_MS),
   };
@@ -254,11 +255,17 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memo
   }
   const mb = positive(max === "" ? undefined : max, defaultPersistMb(memoryBytes), "EDEN_PERSIST_MAX_MB");
   return {
-    dir: dir === "" ? join(edenHome(), "frozen") : dir,
+    dir: dir === "" ? join(env.EDEN_HOME || edenHome(), "frozen") : dir,
     key: new PersistKey(key),
     maxBytes: Math.floor((mb * 1_048_576) / share),
     store: storeConfig(env),
   };
+}
+
+/** Whether persistence is on for this env (the same rule as `persistConfig`, without its checks). */
+function persistConfigured(env: NodeJS.ProcessEnv): boolean {
+  if (env.EDEN_NODES || env.EDEN_NODES_FILE || env.EDEN_PERSIST === "off") return false;
+  return Boolean(env.EDEN_PERSIST_KEY);
 }
 
 /** EDEN_DRAIN_DELAY_MS: 0-60,000 ms, default 0. */
@@ -270,9 +277,17 @@ function drainDelay(raw: string | undefined): number {
 }
 
 /** EDEN_CLUSTER_KEY and EDEN_CLUSTER_SIZE (D992); the key's value is never in a message. */
-function clusterConfig(env: NodeJS.ProcessEnv): { key: string | null; size: number } {
+function clusterConfig(env: NodeJS.ProcessEnv, persisting: boolean): { key: string | null; size: number } {
   const key = env.EDEN_CLUSTER_KEY ?? "";
   if (key !== "" && key.length < 24) throw new Error("EDEN_CLUSTER_KEY must be 24+ characters (openssl rand -hex 24)");
+  // A cluster node that persists to its own disk only would keep stale blobs of users it released and read them back
+  // if they returned (review of D992): a node needs the shared store, or no persistence at all.
+  const router = Boolean(env.EDEN_NODES || env.EDEN_NODES_FILE);
+  if (key !== "" && !router && persisting && !env.EDEN_PERSIST_STORE) {
+    throw new Error(
+      "a cluster node (EDEN_CLUSTER_KEY) that persists needs EDEN_PERSIST_STORE, the store every node reaches",
+    );
+  }
   const size = positive(env.EDEN_CLUSTER_SIZE, 1, "EDEN_CLUSTER_SIZE");
   if (!Number.isInteger(size) || size > 1_000) throw new Error("EDEN_CLUSTER_SIZE must be a whole number, 1-1000");
   return { key: key === "" ? null : key, size };

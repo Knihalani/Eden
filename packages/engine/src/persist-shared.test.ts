@@ -39,6 +39,7 @@ class MemoryStore implements BlobStore {
   readonly objects = new Map<string, { bytes: Uint8Array; modified: number }>();
   down = false;
   delayMs = 0;
+  getDelayMs = 0;
   gets = 0;
   async put(key: string, bytes: Uint8Array): Promise<void> {
     if (this.delayMs) await Bun.sleep(this.delayMs);
@@ -47,6 +48,7 @@ class MemoryStore implements BlobStore {
   }
   async get(key: string): Promise<Uint8Array | null> {
     this.gets++;
+    if (this.getDelayMs) await Bun.sleep(this.getDelayMs);
     if (this.down) throw new Error("down");
     return this.objects.get(key)?.bytes ?? null;
   }
@@ -155,6 +157,48 @@ describe("a store shared between machines (D992)", () => {
     expect(store.objects.size).toBe(1);
     expect(d.local.has(alice)).toBe(false);
     expect(c.frozenCount + c.userCount).toBe(0); // alice released, bob forgotten
+  });
+
+  test("a forget that lands while the store's copy is being read does not bring the user back (review of D992)", async () => {
+    const store = new MemoryStore();
+    const a = freezing();
+    const da = shared(store);
+    a.persist(da);
+    a.put(alice, items("alice", 10), T0);
+    freezeAll(a, T0);
+    await da.settle(1_000);
+    const b = freezing();
+    const db = shared(store);
+    b.persist(db);
+    store.getDelayMs = 50;
+    const reading = b.ready(alice);
+    expect(reading).not.toBeNull();
+    b.forget(alice); // the whole-user forget does not wait for the read
+    await reading;
+    await db.settle(1_000);
+    expect(b.userCount + b.frozenCount).toBe(0);
+    expect(db.local.has(alice)).toBe(false);
+    expect(store.objects.size).toBe(0);
+    expect(db.remote.cancelled).toBe(1);
+  });
+
+  test("forgetting one source, or items deleted at their source, deletes the store's older copy (review of D992)", async () => {
+    for (const how of ["source", "removed"] as const) {
+      const store = new MemoryStore();
+      const c = freezing();
+      const d = shared(store);
+      c.persist(d);
+      c.put(alice, [...items("alice", 4), { ...items("alice", 1)[0]!, id: "docs:x", sourceId: "docs", ref: "x" }], T0);
+      freezeAll(c, T0);
+      await d.settle(1_000);
+      await c.ready(alice); // thawed: the store keeps the failover copy
+      expect(store.objects.size).toBe(1);
+      if (how === "source") c.forget(alice, "docs");
+      else c.removeItems(alice, ["docs:x"], T0);
+      await d.settle(1_000);
+      expect(store.objects.size).toBe(0);
+      expect(find(c, alice, "quarterly budget review", T0).length).toBe(4); // the rest stay live
+    }
   });
 
   test("processes sharing a directory each index only their own buckets", () => {

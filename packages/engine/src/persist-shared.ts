@@ -61,8 +61,20 @@ export class SharedFrozenDisk implements FrozenDisk {
   /** Users looked up in the store and not found, since the last membership change (`forgetAbsent`). */
   private readonly absent = new Set<string>();
   private readonly fetching = new Map<string, Promise<void>>();
+  /** Per file name with a fetch in flight, the deletes it saw meanwhile: a fetch that saw one is not adopted. */
+  private readonly gens = new Map<string, number>();
   private idle: (() => void)[] = [];
-  readonly remote = { put: 0, deleted: 0, fetched: 0, missed: 0, failed: 0, bytesPut: 0, bytesFetched: 0 };
+  readonly remote = {
+    put: 0,
+    deleted: 0,
+    fetched: 0,
+    missed: 0,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+    bytesPut: 0,
+    bytesFetched: 0,
+  };
 
   constructor(options: SharedDiskOptions) {
     const { store, prefix, concurrency, tries, ...disk } = options;
@@ -100,12 +112,21 @@ export class SharedFrozenDisk implements FrozenDisk {
     return this.local.write(scope, user, now);
   }
 
-  /** Expired, evicted or forgotten: gone here and from the store. */
+  /**
+   * Expired, evicted or forgotten: gone here and from the store. A fetch of the user still on the wire is cancelled
+   * (its generation moves on): a forget that lands while the store's copy is being read must not bring it back.
+   */
   delete(scope: Scope): void {
     const name = this.local.nameOf(scope);
     this.local.delete(scope);
+    if (this.fetching.has(name)) this.gens.set(name, (this.gens.get(name) ?? 0) + 1);
     this.absent.add(name);
     this.enqueue(name, { kind: "delete" });
+  }
+
+  /** A source forgotten or items deleted at their source (review of D992): the store's older copy goes too. */
+  invalidate(scope: Scope): void {
+    this.delete(scope);
   }
 
   /** Thawed: the local file goes (D425); the store keeps the failover copy (D992). */
@@ -125,10 +146,16 @@ export class SharedFrozenDisk implements FrozenDisk {
     if (this.queued.has(name) || this.running.has(name)) return null;
     const known = this.fetching.get(name);
     if (known) return known;
+    const gen = this.gens.get(name) ?? 0;
     const p = this.store
       .get(this.prefix + name)
       .then(
         (bytes) => {
+          // Deleted (forgotten, expired, invalidated) while the read was on the wire: the bytes are not adopted.
+          if ((this.gens.get(name) ?? 0) !== gen) {
+            this.remote.cancelled++;
+            return;
+          }
           if (bytes === null) {
             this.remote.missed++;
             this.absent.add(name);
@@ -144,7 +171,10 @@ export class SharedFrozenDisk implements FrozenDisk {
           this.remote.failed++;
         },
       )
-      .finally(() => this.fetching.delete(name));
+      .finally(() => {
+        this.fetching.delete(name);
+        this.gens.delete(name);
+      });
     this.fetching.set(name, p);
     return p;
   }
@@ -207,7 +237,23 @@ export class SharedFrozenDisk implements FrozenDisk {
     return this.queued.size + this.active;
   }
 
+  /**
+   * Which buckets this process may write to the store (D992, review): in a cluster, its own machine's as the last
+   * membership said. A process that lost a bucket (a failover it was not told of in time, a request still running at
+   * a release) must neither overwrite nor delete the copy its new owner relies on. Default: every bucket.
+   */
+  setWritable(writable: (bucket: number) => boolean): void {
+    this.writable = writable;
+  }
+
+  private writable: (bucket: number) => boolean = () => true;
+
   private enqueue(name: string, job: Job): void {
+    const m = NAME.exec(name);
+    if (m && !this.writable(parseInt(m[1]!, 16))) {
+      this.remote.skipped++;
+      return;
+    }
     this.queued.set(name, job);
     this.pump();
   }

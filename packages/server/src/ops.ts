@@ -5,9 +5,13 @@
  *   cluster router stops sending before it stops. `/healthz` (liveness) stays as it was.
  * - `GET /metrics`: Prometheus text: requests and their latency by route, users held (live, warm, frozen), the
  *   persistence store's counters, memory. Counts only, no tenant or user (D56's rule for traces applies).
- * - `POST /internal/cluster` (`EDEN_CLUSTER_KEY` as the bearer): the cluster router's membership. The process
- *   releases every user the new membership gives another machine (written with their sync state and source-map rows,
- *   then dropped here), waits for their blobs to reach the store, and forgets which users the store lacked.
+ * - `POST /internal/cluster` (`EDEN_CLUSTER_KEY` as the bearer): the cluster router's membership, numbered by an
+ *   epoch (an older one is ignored). Mode `release` (a planned change): every user the new membership gives another
+ *   machine is written with their sync state and source-map rows, handed to the store and dropped here, and only then
+ *   does the process take the new table. Mode `drop` (a failover, or a node re-admitted after one): the table first,
+ *   then those users are dropped without writing anything, since another machine has served them since. With a table,
+ *   the process fences itself (review of D992): an API request for a user another machine owns gets 503 "not the
+ *   owner", and nothing of such a user is written to or deleted from the store.
  *
  * The router (router.ts) answers the same three for the whole machine: readiness of every child, the children's
  * metrics summed, and the cluster message sent to every child, their answers summed.
@@ -42,7 +46,14 @@ export interface ClusterMessage {
   self: string;
   /** Every node of the new membership (ids). */
   nodes: string[];
+  /** The router's membership number; a message older than the last one applied is ignored. */
+  epoch?: number;
+  /** `release` (default): write and hand over moved users; `drop`: discard them, another machine has newer state. */
+  mode?: "release" | "drop";
 }
+
+/** Routes that reach every node whoever owns the user (`/v1/forget` and `/v1/usage` fan out), never fenced. */
+const FAN_OUT = new Set(["/v1/forget", "/v1/usage"]);
 
 export interface ClusterAnswer {
   released: number;
@@ -68,6 +79,7 @@ export class Ops {
   /** The machine-level owner of each bucket, once a cluster router said (null: not in a cluster yet). */
   private table: OwnerTable | null = null;
   private self = "";
+  private epoch = -1;
   private readonly kids: Uint8Array;
 
   constructor(
@@ -77,14 +89,26 @@ export class Ops {
       clusterKey?: string;
       child: { index: number; count: number };
       releaseMs: number;
+      /** The request's user, for the ownership fence: the tenant from its key, the body's `userId`. */
+      userOf?: (req: Request) => Promise<{ tenantId: string; userId: string } | null>;
+      /** Called for each released or dropped user (their connections close, as on a forget). */
+      onReleased?: (scope: Scope) => void;
     },
   ) {
     this.kids = childTable(opts.child.count);
+    if (disk && "setWritable" in disk) disk.setWritable((b) => this.machineOwns(b));
   }
 
-  /** Whether this process owns a bucket in the store's sweep: this machine's (as last told) and this child's. */
-  ownsInStore = (bucket: number): boolean =>
-    this.table !== null && this.table.owner(bucket) === this.self && this.kids[bucket] === this.opts.child.index;
+  /** Whether this machine owns a bucket as last told; true outside a cluster (no table yet). */
+  machineOwns(bucket: number): boolean {
+    return this.table === null || this.table.owner(bucket) === this.self;
+  }
+
+  /**
+   * Whether this process owns a bucket in the store's sweep: this child's, and this machine's as last told (outside a
+   * cluster every bucket is the machine's, so a single machine with a store sweeps its own copies too).
+   */
+  ownsInStore = (bucket: number): boolean => this.kids[bucket] === this.opts.child.index && this.machineOwns(bucket);
 
   /** Wraps the API handler: answers the ops routes itself and times every other request. */
   wrap(handler: (req: Request) => Promise<Response> | Response): (req: Request) => Promise<Response> {
@@ -112,11 +136,28 @@ export class Ops {
         if (
           typeof msg?.self !== "string" ||
           !Array.isArray(msg.nodes) ||
-          !msg.nodes.every((n) => typeof n === "string")
+          !msg.nodes.every((n) => typeof n === "string") ||
+          (msg.epoch !== undefined && !Number.isInteger(msg.epoch)) ||
+          (msg.mode !== undefined && msg.mode !== "release" && msg.mode !== "drop")
         ) {
-          return Response.json({ error: "body must be {self, nodes[]}" }, { status: 400 });
+          return Response.json({ error: "body must be {self, nodes[], epoch?, mode?}" }, { status: 400 });
         }
         return Response.json(await this.cluster(msg));
+      }
+      // The fence: a user another machine owns is not served here (a request still in flight when this machine
+      // released them, or a router that has not caught up), so this process never holds them again.
+      if (this.table !== null && req.method === "POST" && !FAN_OUT.has(path) && this.opts.userOf) {
+        const who = await this.opts.userOf(req.clone() as Request);
+        if (who && !this.machineOwns(bucketOf(who.tenantId, who.userId))) {
+          this.add("eden_cluster_fenced_total", 1);
+          return Response.json(
+            { error: "not the owner of this user here (rebalancing): retry" },
+            {
+              status: 503,
+              headers: { "retry-after": "1" },
+            },
+          );
+        }
       }
       const t0 = performance.now();
       const res = await handler(req);
@@ -125,15 +166,28 @@ export class Ops {
     };
   }
 
-  /** Applies a membership (`/internal/cluster`): releases the users another machine now owns. */
+  /** Applies a membership (`/internal/cluster`): see the file's comment for the two modes. */
   async cluster(msg: ClusterMessage): Promise<ClusterAnswer> {
     const t0 = performance.now();
+    const epoch = msg.epoch ?? this.epoch + 1;
+    if (epoch < this.epoch) return { released: 0, written: 0, pending: 0, ms: 0 };
+    this.epoch = epoch;
     const table = new OwnerTable(msg.nodes);
-    this.table = table;
-    this.self = msg.self;
     const moved = (s: Scope) => table.owner(bucketOf(s.tenantId, s.userId)) !== msg.self;
-    const { released, written } = this.partner.releaseMoved(moved, this.opts.releaseMs);
     const shared = this.disk && "handOff" in this.disk ? this.disk : null;
+    if (msg.mode === "drop") {
+      // Fenced first: nothing of these users is written or deleted from here on, then they go from memory and disk.
+      this.table = table;
+      this.self = msg.self;
+      const { released } = this.partner.releaseMoved(moved, Number.POSITIVE_INFINITY, false);
+      shared?.local.dropWhere((b) => table.owner(b) === msg.self);
+      shared?.forgetAbsent();
+      for (const s of released) this.opts.onReleased?.(s);
+      this.add("eden_cluster_dropped_users_total", released.length);
+      return { released: released.length, written: 0, pending: 0, ms: Math.round(performance.now() - t0) };
+    }
+    // Released under the old table, so their writes reach the store; the new table (and the fence) after.
+    const { released, written } = this.partner.releaseMoved(moved, this.opts.releaseMs);
     let pending = 0;
     if (shared) {
       // Each released user's blob must be in the store before the router sends them to their new owner.
@@ -144,6 +198,9 @@ export class Ops {
       if ((await deadline) === 1) pending = shared.backlog;
       shared.forgetAbsent();
     }
+    this.table = table;
+    this.self = msg.self;
+    for (const s of released) this.opts.onReleased?.(s);
     this.add("eden_cluster_released_users_total", released.length);
     return { released: released.length, written, pending, ms: Math.round(performance.now() - t0) };
   }

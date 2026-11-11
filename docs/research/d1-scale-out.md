@@ -134,7 +134,24 @@ change since the last one (the request-cost lever d1-providers.md names; at Hetz
 
 ## 4. Latency at a realistic rate (2-core budget)
 
-STEADY_SECTION
+`bun packages/sim/src/perf-cli.ts steady --synced` in the 2-core 12 GB cgroup: the real server (one process) under
+300 simulated agents at real pacing and the realistic connector profile, every user backfilled first (296 of 300
+warm after 407 s and 5,240 listing calls), then 90 s of traffic: 3,520 events and 7,782 requests (39.1 events and
+86.5 requests a second), none failed open. The reviewer's runs shared the machine (core 2), so read the tails as
+contended.
+
+| Call | n | p50 | p95 | p99 |
+| --- | --- | --- | --- | --- |
+| observe, all kinds | 3,520 | 0.95 ms | 9.75 ms | 21.66 ms |
+| observe, user message | 1,279 | 2.91 ms | 11.53 ms | 25.41 ms |
+| `ask_context` | 149 | 6.37 ms | 18.93 ms | 32.31 ms |
+| pending | 3,520 | 0.35 ms | 5.87 ms | 22.8 ms |
+| time to context (an injection's wait) | 467 | 6.16 ms | 16.56 ms | 36.72 ms |
+
+Server: 17.1% of a core, RSS 1,818 MB for 300 users of the sim world (about 1,500 items each), event-loop lag p99
+7.1 ms. At 50 requests a heavy user a day, 87 requests a second is the traffic of about 150,000 heavy users at the
+day's average **[arithmetic]**: CPU is not what bounds a box; memory is (§1). (`steady` without `--synced` timed out
+on its warm-up at Bun's default fetch timeout; perf-cli's warm-up call has no client timeout now.)
 
 ## 5. ARM64 (D990)
 

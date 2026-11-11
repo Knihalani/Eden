@@ -109,6 +109,12 @@ export interface FrozenDisk {
    * shared store keeps its copy (D992): it is what another machine fails over from, the user's last compact freeze.
    */
   thawed?(scope: Scope): void;
+  /**
+   * The user's state changed in a way an older blob must not outlive (a source forgotten, items deleted at their
+   * source): a shared store's copy goes (D992, review). A local store holds no file of a live user, so it has nothing
+   * to do.
+   */
+  invalidate?(scope: Scope): void;
 }
 
 export interface DiskOptions {
@@ -332,6 +338,18 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     this.bytes += file.length - old;
     this.files.set(name, { bytes: file.length, at, life: lifetime(at, file.readDoubleLE(24), this.o.maxAgeMs) });
     return true;
+  }
+
+  /** Deletes the local files whose bucket `keep` rejects (D992: a fenced node drops what it no longer owns). */
+  dropWhere(keep: (bucket: number) => boolean): number {
+    let n = 0;
+    for (const name of [...this.files.keys()]) {
+      const m = NAME.exec(name);
+      if (!m || keep(parseInt(m[1]!, 16))) continue;
+      this.remove(name);
+      n++;
+    }
+    return n;
   }
 
   private ownsBucket(bucket: number): boolean {

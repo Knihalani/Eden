@@ -79,6 +79,10 @@ interface NodeState extends NodeSpec {
   oks: number;
   /** Listed in the current membership (a node removed from the list is still released before it is left). */
   member: boolean;
+  /** Stopping (its /readyz says "draining"): told to release, then left out. */
+  draining: boolean;
+  /** Taken out unplanned (or silent at a release): told to drop everything before it is admitted again. */
+  reset: boolean;
 }
 
 export interface Rebalance {
@@ -144,7 +148,15 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   const fail = (status: number, error: string, headers: Record<string, string> = {}) =>
     Response.json({ error }, { status, headers });
 
-  let nodes: NodeState[] = options.nodes.map((n) => ({ ...n, up: false, fails: 0, oks: 0, member: true }));
+  let nodes: NodeState[] = options.nodes.map((n) => ({
+    ...n,
+    up: false,
+    fails: 0,
+    oks: 0,
+    member: true,
+    draining: false,
+    reset: false,
+  }));
   let table = new OwnerTable([]);
   const moving = new Uint8Array(BUCKETS);
   const rebalances: Rebalance[] = [];
@@ -154,56 +166,89 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   // Rebalances run one at a time, in order.
   let chain: Promise<unknown> = Promise.resolve();
 
-  const probe = async (n: NodeState): Promise<boolean> => {
+  /** One `/readyz` probe: up, draining (a stop in progress: a planned leave), or down. */
+  const probe = async (n: NodeState): Promise<"up" | "draining" | "down"> => {
     try {
       const r = await fetch(`${n.url}/readyz`, { signal: AbortSignal.timeout(1_500) });
-      void r.arrayBuffer().catch(() => {});
-      return r.ok;
+      if (r.ok) {
+        void r.arrayBuffer().catch(() => {});
+        return "up";
+      }
+      const body = (await r.json().catch(() => null)) as { error?: string } | null;
+      return body?.error === "draining" ? "draining" : "down";
     } catch {
-      return false;
+      return "down";
     }
   };
 
+  // Membership numbers: wall-clock based, so a restarted router's first message is newer than its predecessor's.
+  let epoch = 0;
+  const nextEpoch = () => (epoch = Math.max(Date.now(), epoch + 1));
+
   /** The membership message to one node; its answer, or null. */
-  const tell = async (n: NodeState, ids: string[]): Promise<{ released: number } | null> => {
+  const tell = async (
+    n: NodeState,
+    ids: string[],
+    mode: "release" | "drop",
+    e: number,
+    timeoutMs = rebalanceMs,
+  ): Promise<{ released: number; pending: number } | null> => {
     try {
       const r = await fetch(`${n.url}/internal/cluster`, {
         method: "POST",
         headers: { authorization: `Bearer ${clusterKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ self: n.id, nodes: ids }),
-        signal: AbortSignal.timeout(rebalanceMs),
+        body: JSON.stringify({ self: n.id, nodes: ids, epoch: e, mode }),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!r.ok) {
         void r.arrayBuffer().catch(() => {});
         return null;
       }
-      return (await r.json()) as { released: number };
+      return (await r.json()) as { released: number; pending: number };
     } catch {
       return null;
     }
   };
 
   /**
-   * Moves routing to the owners the live members give. Every live node (members and nodes leaving) is told the new
-   * membership first and releases what it no longer owns; buckets that change owner answer 503 until it is done.
+   * Moves routing to the owners the live members give. `release` (a planned change: a node added, removed, back or
+   * draining): every live node, and a draining one, is told the new membership first and hands over what it no longer
+   * owns; buckets that change owner answer 503 until it is done. `drop` (a node stopped answering): the others are
+   * told, and the lost node too as far as it can be reached, to discard what they no longer own without writing it
+   * (another machine now serves those users from the store). A node that does not answer a release is not trusted
+   * with its old users: it is taken out and must be reset before it is admitted again (review of D992).
    */
-  const rebalance = (reason: string): Promise<Rebalance | null> => {
+  const rebalance = (reason: string, mode: "release" | "drop" = "release"): Promise<Rebalance | null> => {
     const run = async (): Promise<Rebalance | null> => {
       const ids = nodes.filter((n) => n.member && n.up).map((n) => n.id);
       const next = new OwnerTable(ids);
       const movedBuckets = table.moved(next);
-      // Nodes no longer listed and already released are forgotten.
-      const told = nodes.filter((n) => n.up);
-      if (movedBuckets.length === 0 && told.every((n) => n.member)) {
+      // Every node that can hear it: the live ones, a draining one (it still holds users), and for a drop the lost one.
+      const told = nodes.filter((n) => n.up || n.draining || (mode === "drop" && n.reset));
+      if (movedBuckets.length === 0 && told.every((n) => n.member && n.up)) {
         table = next;
         return null;
       }
       const t0 = performance.now();
+      const e = nextEpoch();
       for (const b of movedBuckets) moving[b] = 1;
-      const answers = await Promise.all(told.map((n) => tell(n, ids)));
+      const answers = await Promise.all(
+        told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? rebalanceMs : 2_000)),
+      );
+      const silent = told.filter((n, i) => answers[i] === null && n.up && mode === "release");
+      for (const n of silent) {
+        n.up = false;
+        n.reset = true;
+        n.oks = 0;
+      }
+      if (silent.length > 0) {
+        // Routing excludes them now; the next round re-places their buckets the drop way.
+        void Promise.resolve().then(() => rebalance(`no answer from ${silent.map((n) => n.id).join(", ")}`, "drop"));
+      }
       table = next;
       for (const b of movedBuckets) moving[b] = 0;
-      nodes = nodes.filter((n) => n.member);
+      for (const n of told) if (n.draining && answers[told.indexOf(n)] !== null) n.draining = false;
+      nodes = nodes.filter((n) => n.member || n.up || n.draining);
       const r: Rebalance = {
         reason,
         moved: movedBuckets.length,
@@ -213,10 +258,13 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
         unanswered: told.filter((_, i) => answers[i] === null).map((n) => n.id),
       };
       rebalances.push(r);
+      const pending = answers.reduce((s, a) => s + (a?.pending ?? 0), 0);
       log(
         `eden cluster: ${reason}: ${r.moved} of ${BUCKETS} buckets moved (${(r.share * 100).toFixed(1)}%), ` +
-          `${r.released} users released in ${r.ms} ms; nodes ${ids.join(", ") || "none"}` +
-          (r.unanswered.length > 0 ? `; no answer from ${r.unanswered.join(", ")}` : ""),
+          `${r.released} users ${mode === "drop" ? "dropped" : "released"} in ${r.ms} ms; nodes ` +
+          `${ids.join(", ") || "none"}` +
+          (r.unanswered.length > 0 ? `; no answer from ${r.unanswered.join(", ")}` : "") +
+          (pending > 0 ? `; ${pending} store writes still pending (those users may start from an older copy)` : ""),
       );
       return r;
     };
@@ -225,32 +273,56 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     return p;
   };
 
+  /**
+   * Re-admits a node that was taken out (it stopped answering, or did not answer a release): first it is told a
+   * membership without itself, in drop mode, so whatever it still holds from before (older than what others served
+   * since) is discarded; then it joins. False when it cannot be reset (it stays out).
+   */
+  const reset = async (n: NodeState): Promise<boolean> => {
+    if (!n.reset) return true;
+    const ids = nodes.filter((m) => m.member && m.up).map((m) => m.id);
+    const ok = (await tell(n, ids, "drop", nextEpoch())) !== null;
+    if (ok) n.reset = false;
+    return ok;
+  };
+
   const checkHealth = async (): Promise<Rebalance | null> => {
     const results = await Promise.all(nodes.map(probe));
     let changed = "";
-    nodes.forEach((n, i) => {
-      if (results[i]) {
+    let mode: "release" | "drop" = "release";
+    for (const [i, n] of nodes.entries()) {
+      const state = results[i]!;
+      if (state === "up") {
         n.fails = 0;
         n.oks++;
-        if (!n.up && n.oks >= recoverAfter) {
+        if (!n.up && !n.draining && n.member && n.oks >= recoverAfter && (await reset(n))) {
           n.up = true;
           changed ||= `node ${n.id} is back`;
         }
+      } else if (state === "draining" && n.up) {
+        // A stop in progress: a planned leave, its users handed over while it still serves (D994's drain delay).
+        n.up = false;
+        n.draining = true;
+        n.reset = true;
+        n.oks = 0;
+        changed ||= `node ${n.id} is draining`;
       } else {
         n.oks = 0;
         n.fails++;
         if (n.up && n.fails >= failAfter) {
           n.up = false;
+          n.reset = true;
           changed ||= `node ${n.id} stopped answering`;
+          mode = "drop";
         }
       }
-    });
-    return changed ? rebalance(changed) : null;
+    }
+    return changed ? rebalance(changed, mode) : null;
   };
 
   // First membership: every node that answers now (one probe each, no waiting for `recoverAfter`).
   const first = await Promise.all(nodes.map(probe));
-  nodes.forEach((n, i) => (n.up = first[i]!));
+  nodes.forEach((n, i) => (n.up = first[i] === "up"));
   if (!nodes.some((n) => n.up)) log("eden cluster: no node answers /readyz yet; serving 503 until one does");
   await rebalance("start");
 
@@ -412,12 +484,12 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
       for (const s of specs) {
         const known = nodes.find((n) => n.id === s.id);
         if (known) known.url = s.url;
-        else nodes.push({ ...s, up: false, fails: 0, oks: 0, member: true });
+        else nodes.push({ ...s, up: false, fails: 0, oks: 0, member: true, draining: false, reset: false });
       }
       // A new node joins once it answers: probe the new ones now rather than waiting for the timer's rounds.
       return Promise.all(
         nodes.map(async (n) => {
-          if (n.member && !n.up && (await probe(n))) {
+          if (n.member && !n.up && !n.draining && (await probe(n)) === "up" && (await reset(n))) {
             n.up = true;
             n.oks = recoverAfter;
           }

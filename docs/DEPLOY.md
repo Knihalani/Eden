@@ -157,7 +157,10 @@ Read the prose rows for real mail (the sim's templated text compresses better th
 agents by the heavy peak row**: when a tenant's users all work the same hours, every one is active within 30 minutes
 and most are frozen warm (D862), whose blobs are about twice the compact ones; that, not the item count, is what
 costs 5.29 MB against 3.36 at a quarter active. (A shorter warm window would trade that memory for 200 ms compact
-thaws on users back after a few minutes; not measured as a trial, not changed.) Latency at a realistic rate on the 2-core budget: STEADY_LATENCY.
+thaws on users back after a few minutes; not measured as a trial, not changed.) Latency at a realistic rate on the 2-core budget (`bun run sim:perf steady --synced`: 300 synced users of the sim
+world at real pacing and connector latency, 39 events and 87 requests a second, one server process, the reviewer's
+runs sharing the machine): observe p50 0.95 ms, p99 21.7 ms (a user's message 2.9 / 25.4 ms), `ask_context` 6.4 /
+32.3 ms, with the server at 17% of a core.
 CPU is not the limit at these counts (estimate: 14,000 heavy users at 50 requests a day is 8 requests a second on
 average; a request costs tens of milliseconds); a cold start without persisted users is (14,000 users x 3,000 items
 x 0.35 ms of ingest each is about 4 hours of one core), which is why persistence is on (D991).
@@ -221,7 +224,10 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
 - **A failure:** a node failing `/readyz` three probes in a row (2 s apart: 4.6 s measured) is dropped; its users go
   to their second-choice nodes, which read their last stored blob (the 30-minute compact freeze, the last release or
   shutdown) and poll their sources for what changed. Users that were live and never stored re-sync. When it answers
-  again, its users move back the planned way.
+  again it is first told to drop everything it still holds (older than what the others served since), then its
+  users move back the planned way (D995). A node being stopped (`/readyz` says "draining") is a planned leave: it
+  hands its users over during its drain delay. Every node refuses requests for users another machine owns (503
+  "not the owner") and writes nothing of them to the store.
 - **Latency through the router:** +0.05-0.1 ms at p50 and +0.6-1.4 ms at p99 on one host (a network hop adds its
   round trip).
 

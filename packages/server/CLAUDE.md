@@ -148,6 +148,10 @@ its model roles.
   `forget` (minus the blob). The cluster router holds each tenant's whole rate; children keep 1/N; spend is divided by
   N x `EDEN_CLUSTER_SIZE` (D993). `/internal/cluster` needs `EDEN_CLUSTER_KEY`; nodes listen on a private network.
   Shutdown drains within `EDEN_SHUTDOWN_GRACE_MS` (D994); a test that stops a server and waits should allow for it.
+  Fencing (D995): membership messages carry an epoch and a mode (`release` planned, `drop` after a failover); a node
+  taken out is told to drop everything before re-admission; with a table a node refuses (503) requests for users it
+  does not own and writes nothing of them to the store. A new route that serves a user goes through `Ops.wrap`'s
+  fence; a new fan-out route joins `FAN_OUT`.
 - **Warm freezing (D862, in the default).** Users idle 2 minutes are frozen warm, compact at 30 (the cache's
   defaults, docs/research/p6-scale.md). With persistence on, warm users are written only at SIGTERM's flush; the
   compact freeze writes as before.

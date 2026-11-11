@@ -859,14 +859,19 @@ export class ItemCache {
    * Hands a user to another process (D992): writes them as `flush` would (warm when live, so the new owner thaws in
    * milliseconds; a frozen user again, so the owner's extra is current), then drops them from memory without deleting
    * the blob it just wrote, and without `dropped` treating it as a forget of derived state elsewhere (the caller does
-   * that). Returns whether the blob was written; false also when the user is not held here.
+   * that). Returns whether the blob was written; false also when the user is not held here. With `write` false (a
+   * fenced node, review of D992: another machine has served the user since) nothing is written and the local file is
+   * dropped: the store's copy, newer than anything here, stands.
    */
-  release(scope: Scope): boolean {
+  release(scope: Scope, write = true): boolean {
     const key = scopeKey(scope);
     const x = this.users.get(key);
     if (x === undefined) return false;
     let written = false;
-    if (this.disk !== null) {
+    if (!write) {
+      if (this.disk?.thawed) this.disk.thawed(scope);
+      else this.disk?.delete(scope);
+    } else if (this.disk !== null) {
       if (x instanceof FrozenUser) written = this.write(x);
       else if (x.items.size > 0) {
         const steps = this.freezeSteps(x, this.limits.warmIdleMs > 0);
@@ -879,6 +884,12 @@ export class ItemCache {
     this.restoring.delete(key);
     this.thawing.delete(key);
     clearDecoded();
+    // The user's gone-holds go too, as on a forget: the new owner holds its own.
+    const held = this.holds.get(scope.tenantId);
+    if (held) {
+      held.forget(scope.userId);
+      if (held.size === 0 && held.evicted === 0) this.holds.delete(scope.tenantId);
+    }
     const n = (this.perTenant.get(scope.tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(scope.tenantId);
     else this.perTenant.set(scope.tenantId, n);
@@ -1265,6 +1276,8 @@ export class ItemCache {
       n++;
     }
     if (held) this.holdsEvictedTotal += held.evicted - evicted;
+    // Deleted at their source: a shared store's older copy (D992) must not bring them back on a failover.
+    if (n > 0) this.disk?.invalidate?.(scope);
     return n;
   }
 
@@ -2396,6 +2409,8 @@ export class ItemCache {
     const u = this.peek(scope);
     if (!u) return;
     for (const e of [...u.items.values()]) if (e.item.sourceId === sourceId) this.drop(u, e);
+    // A copy in a shared store still holds the source's items (D992): it goes, so no failover reads them back.
+    this.disk?.invalidate?.(scope);
     if (this.limits.releaseTerms) {
       // Compact now: every term no live item holds is released. Then if the vocabulary holds exactly the terms live
       // items do, no term of the source's content is left that a rebuild would remove, and none is needed.

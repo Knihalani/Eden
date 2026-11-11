@@ -17,7 +17,8 @@ import { S3BlobStore } from "./blob-store";
 import { nodesFromEnv, runCluster } from "./cluster";
 import { Ops } from "./ops";
 import { childOwns, prunePersistDirs } from "./persist";
-import { rehomeSourceMaps, runRouter } from "./router";
+import { keyOf } from "./auth";
+import { rehomeSourceMaps, runRouter, userOf } from "./router";
 
 const started = performance.now();
 const config = configOrExit();
@@ -143,6 +144,16 @@ async function serve(config: ServerConfig): Promise<void> {
     clusterKey: config.cluster?.key ?? undefined,
     child: child ?? { index: 0, count: 1 },
     releaseMs: Math.max(5_000, grace),
+    // The fence's view of a request (only in a cluster): the tenant from its key, the user from its body.
+    userOf: async (req) => {
+      const key = keyOf(req);
+      const tenantId = key && config.keys.has(key) ? config.keys.get(key)! : config.dev && !key ? "dev" : null;
+      if (tenantId === null) return null;
+      const userId = userOf(new Uint8Array(await req.arrayBuffer()));
+      return userId === "" ? null : { tenantId, userId };
+    },
+    // A released user's connections close, as on a forget (D108).
+    onReleased: (scope) => sources.userSources?.forget(scope),
   });
   if (persist instanceof SharedFrozenDisk) {
     // Store copies past the 7-day bound, in buckets this machine and child own (the bucket's lifecycle rule is the

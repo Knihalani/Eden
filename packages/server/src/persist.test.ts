@@ -43,6 +43,25 @@ describe("EDEN_PERSIST_* (D425, on by default since D991)", () => {
     expect(loadConfig({ ...dev, EDEN_PERSIST_KEY: HEX }).persist).not.toBeNull();
   });
 
+  test("a cluster node that persists needs the shared store; the cluster router and EDEN_PERSIST=off do not", () => {
+    const node = { ...prod, EDEN_PERSIST_KEY: HEX, EDEN_CLUSTER_KEY: "cluster-key-0123456789abcdef" };
+    expect(() => loadConfig(node)).toThrow(/needs EDEN_PERSIST_STORE/);
+    const store = { EDEN_S3_ACCESS_KEY_ID: "a", EDEN_S3_SECRET_ACCESS_KEY: "secret-0123456789" };
+    expect(loadConfig({ ...node, ...store, EDEN_PERSIST_STORE: "s3://eden-frozen/" }).persist!.store!.bucket).toBe(
+      "eden-frozen",
+    );
+    expect(
+      loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_CLUSTER_KEY: node.EDEN_CLUSTER_KEY }).cluster!.key,
+    ).not.toBeNull();
+    expect(
+      loadConfig({ ...prod, EDEN_NODES: "a=http://h:1", EDEN_CLUSTER_KEY: node.EDEN_CLUSTER_KEY }).persist,
+    ).toBeNull();
+    // Paths come from the env given, not only the process's (review of D992).
+    expect(loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_HOME: "/x/home" }).sourceMapPath).toBe(
+      "/x/home/source-map.db",
+    );
+  });
+
   test("the default cap is the machine's memory (a cgroup limit lowers it), at least 4,096 MB", () => {
     const GB = 1_073_741_824;
     const env = { ...prod, EDEN_PERSIST_KEY: HEX };
