@@ -116,12 +116,59 @@ to `.local/m1/runs/<run>/`).
 
 ## 4. Results
 
-### Zero-shot rungs (eval split, untrained; no choice made)
+### 4a. The ladder on the train suites' own labels (D892)
 
-| Base | planted vs decoy | planted vs other | decoys rejected at 90% planted recall | 15-item pool, L40S/H100 p50 |
-| --- | --- | --- | --- | --- |
-| Qwen3-0.6B | 0.344 (0.230..0.445) | 0.710 | 4.6% | 75 ms (L40S) |
-| Qwen3-1.7B | 0.480 | 0.742 | 6.1% | 142 ms (L40S) |
+All rungs trained on the train split (126 templates × 8 seeds: 659 planted, 674 decoys, at most 6 other items a
+group; 7,329 rows), construction labels, 1 epoch, the settings of §1. Dev: 24 templates (136 planted, 141 decoys).
+Each rung's run was chosen on dev (best point; within 0.01 the cheaper), then its eval figure read once.
+
+| Rung | Zero-shot dev / eval | Runs tried (dev planted vs decoy) | Chosen | **Eval planted vs decoy** (95% CI, by template) | planted vs other | decoys rejected at 90% planted recall | train s (GPU) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Qwen3-0.6B | — / 0.344 | truth 0.701, teacher 0.606, mix 0.643 | truth | 0.641 (0.542..0.748) | 0.853 | 23% | 212 (L40S) |
+| Qwen3-1.7B | — / 0.480 | truth 0.655 | truth | 0.682 (0.563..0.798) | 0.916 | 26% | 390 (L40S) |
+| Qwen3-4B-2507 | 0.750 / 0.714 | truth 0.893, truth 2 ep 0.899 | truth | **0.866** (0.755..0.948) | 0.990 | 54% | 457 (H100) |
+| Qwen3-8B | 0.825 / 0.770 | truth 0.919, mix 0.858, truth 2 ep 0.919 | truth | **0.968** (0.920..0.999) | 0.995 | 95% | 598 (H100) |
+| (Opus 5.5, I2's prompt, the group shown together) | | | | 0.886 | 0.993 | | |
+
+Eval reads: the four chosen runs, once each, plus the 0.6B truth run's, which printed before the sealing code was in
+(it is also the chosen 0.6B run). The 8B at p = 0.5: yes to 147 of 206 planted facts, 8 of 197 decoys, 44 of
+6,497 other items. Leakage check: no template name or request is shared between splits; a planted or decoy text
+shares a median 12% of its 8-word runs (mostly mail headers) with any training fact or decoy.
+
+**Teacher against construction labels** (train suites, 29,656 pairs labelled): agreement 97.8%, Cohen's κ 0.70; Opus
+says no to 191 of 999 planted facts and yes to 123 of 1,011 decoys and 339 of 27,646 other items. Opus's own
+planted-vs-decoy AUC: eval 0.886, dev 0.963, train templates 0.951. On the 0.6B and 8B rungs the construction labels
+made the better student on dev (§ table), so the ladder trained on them.
+
+### 4b. Latency (D893)
+
+| Build | 15-item pool, p50 | Notes |
+| --- | --- | --- |
+| CPU, int8 dynamic (torch), 4 threads, Qwen3-0.6B | 8,102 ms | 4,667 tokens a pool; every larger rung is slower: CPU is out |
+| L40S, bf16, 0.6B / 1.7B (zero-shot runs) | 75 / 142 ms | one batch, no prefix sharing |
+| H100, bf16, 4B / 8B (zero-shot runs) | 142 / 209 ms | one batch, no prefix sharing |
+| H100, 8B merged (`m1_serve.py bench`) | 201 ms plain, **121 ms prefix-shared** | prefix scores differ from plain by mean 0.11, max 0.75 log-odds |
+| Lab endpoint, client round trip from the cloud container (8B, H100) | 314–415 ms p50, 495–590 ms p90 | network to us-east and Modal's routing included |
+
+### 4c. The funnel screen (D895, D896)
+
+First run (pass 0.05): the check ran on fewer pushes than the default makes: with `pushCheck` on, D702's opened
+pushes never start (they would add a paid call), so 27 dev and 23 held-out planted facts the default hands were not
+handed at all. A student's check is not a paid call, so with `pushCheckLocal` the opened push runs and is checked
+(D896, `push-check-local.test.ts`). The screen was rerun on the fixed tree; the figures below are that run's.
+
+Dev templates (200 tasks a variant), choosing the mark (planted handed − decoys handed; the default's −12): pass 0.5
+**95**, 0.2 92, 0.05 92, 0.01 95. Tie → **0.5**.
+
+| Templates (seeds 41–48) | Hidden surfaced | Decoys surfaced | Planted handed | Decoys handed | Neutral packets | Packet KB (hid/ctl/neu) |
+| --- | --- | --- | --- | --- | --- | --- |
+| dev, 200 a variant | 127 → 133 (+7 −1) | 136 → 136 | 119 → 99 | 131 → 4 | 161 → 2 | 259/250/169 → 110/45/12 |
+| in-sample, 1,016 | 613 → 668 (+55 −0) | 606 → 540 | 555 → 644 | 536 → 0 | 813 → 7 | 1,353/1,321/919 → 556/229/63 |
+| **held-out, 320 (the bar)** | **168 → 201 (+33 −0)** | **169 → 153 (+0 −16)** | **152 → 176** | **155 → 9** | **252 → 2** | 449/424/274 → 205/72/14 |
+
+D895's bar on the held-out templates: decoys handed −146 (≤ −32), planted handed +24 (≥ −10), hidden +33 (≥ −4),
+decoys surfaced −16 (≤ +4), neutral packets 252 → 2: **pass**. The dev loss of planted facts (−20) is one template
+for most of it: `isa-allowance-used`, whose fact the student scores −8.9 on every seed.
 
 ## Reproduce
 
