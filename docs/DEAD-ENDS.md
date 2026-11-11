@@ -128,6 +128,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D602 | Not kept: dormant sources (`syncDormantMs`), built, screened at $0 and removed after two reviews. | because nothing can end the trial (D112): the lab's noise connectors never hold a fact and `--days` never… |
 | D604 | Trial `syncSweepSpread`: an unused source is swept at its own point in the week | killed by D817 |
 | D606 | part of: no fix holds polls level, and `syncOwedPollMs` (built to test it) is deleted | because the item's source was not polled |
+| D910 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | stopped on its pre-registered rule |
 
 ## Ask
 
@@ -187,3 +188,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D335 | Rejected and deleted: a search-like `ask_context` question. | measured hidden +5.6 points (n.s.); killed for another reason (read the row) |
 | D507 | Rejected at $0 and deleted: reusing a search's answer across a user's day | A user's searches do not repeat: about one search a task matches an earlier (source, text) of the same user… |
 | D515 | Trial `takeSettleMs`, opened and closed 2026-11-10: not promoted, deleted. | measured hidden +1.4 points (−4.2..+6.9); killed for another reason (read the row) |
+| D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
