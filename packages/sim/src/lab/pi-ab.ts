@@ -104,6 +104,7 @@ import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import {
   CardEnricher,
   ContextPartner,
+  CARD_FORM_REQUESTS,
   DEFAULT_CONFIG,
   ItemCache,
   ModelCardMaker,
@@ -417,6 +418,8 @@ const COVERAGE = harnessCoverage({
   intent: opt("intent", "default"),
   suites: SUITE_LIST,
   seeds: SEEDS,
+  // The default's card prompt form (D1062): shipped coverage covers only the shards that hold its lines (D1063).
+  form: DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0,
 });
 const CARDS_FILE = COVERAGE.cards;
 /**
@@ -875,9 +878,11 @@ async function runWorld(
     const cap = CARDS_CALLS * Math.max(1, effective(config).cardsLanes);
     let calls = 0;
     return {
-      make: (items, today, signal, retry, intent) =>
-        calls++ < cap
-          ? maker.make(items, today, signal, retry, intent)
+      // A requests-only re-ask (`cardsRequestsFix`, D1060) belongs to the card call before it: not counted, and
+      // answered only while the cap's calls are (a batch past the cap made no card and is not asked again).
+      make: (items, today, signal, retry, intent, options) =>
+        (options?.requestsOnly ? calls <= cap : calls++ < cap)
+          ? maker.make(items, today, signal, retry, intent, options)
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };
   };
@@ -887,8 +892,8 @@ async function runWorld(
     const maker = cappedMaker();
     if (CARDS_MS <= 0) return maker;
     return {
-      make: (items, today, signal, retry, intent) =>
-        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent)),
+      make: (items, today, signal, retry, intent, options) =>
+        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent, options)),
     };
   };
   const cards =
@@ -1771,6 +1776,8 @@ const intentCount =
     ? intentCoverage(
         worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
         diskCards.requests,
+        // Under the default's card prompt form (D1062, D1063), as the run's enrichment reads them.
+        (it) => diskCards.requestKey(it, DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0),
       )
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });

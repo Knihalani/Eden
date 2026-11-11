@@ -68,6 +68,7 @@ import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, wri
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { CARD_FORM_REQUESTS } from "@eden/engine";
 import { flags, labConfig, parseJson } from "./flags";
 import { INTENT_FILE, INTENT_PATH, intentUncovered, SHIPPED_FILE, SHIPPED_PATH, shippedUncovered } from "./cards-disk";
 import {
@@ -243,13 +244,18 @@ const endpoint = opt("cards-endpoint", "");
 // The default (D877): shipped coverage wherever the file covers the run and no card or intent source is named; a run
 // it does not cover, or one that names its own, keeps the full index's default and says so.
 const ownCards = !!endpoint || cli.has("cards") || cli.has("intent") || has("--intent") || has("--cards");
-const coverage = opt("coverage", !ownCards && !shippedUncovered(suites, seedList).length ? "shipped" : "full");
+// The card prompt's form the run asks in (D1062, D1063): shipped coverage covers only the shards holding its lines.
+const cardForm = run.cards === true && run.intent === true && run.cardsRequestsFix === true ? CARD_FORM_REQUESTS : 0;
+const coverage = opt(
+  "coverage",
+  !ownCards && !shippedUncovered(suites, seedList, cardForm).length ? "shipped" : "full",
+);
 if (coverage !== "full" && coverage !== "shipped") fail(`--coverage takes full or shipped, not ${coverage}`);
 let shippedFile = "";
 if (coverage === "shipped") {
   if (ownCards)
     fail("--coverage shipped replays its own cards and requests: drop --cards, --intent and --cards-endpoint");
-  const uncovered = shippedUncovered(suites, seedList);
+  const uncovered = shippedUncovered(suites, seedList, cardForm);
   if (uncovered.length) fail(`--coverage shipped: ${SHIPPED_FILE} does not cover ${uncovered.join(", ")}`);
   shippedFile = join(scratch, "shipped.jsonl");
   writeFileSync(shippedFile, gunzipSync(readFileSync(SHIPPED_PATH)));

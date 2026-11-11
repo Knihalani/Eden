@@ -75,6 +75,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
+  CARD_FORM_REQUESTS,
   cardKey,
   intentCut,
   intentReach,
@@ -422,11 +423,13 @@ const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry, intent) => {
-    const got = await make(items, today, signal, retry, intent);
-    if (!retry) {
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const got = await make(items, today, signal, retry, intent, options);
+    // A requests-only re-ask (`cardsRequestsFix`, D1060) makes no card: its batch was logged by the card call.
+    if (!retry && !options?.requestsOnly) {
       const lines = items.map((it, k) => {
-        const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
+        const kind =
+          got.cards[k]?.kind ?? (cardMaker.cards.has(cardMaker.cardKeyFor(it, options?.form)) ? "none" : "uncovered");
         return JSON.stringify({ h: cardKey(it), title: it.title, text: it.text.slice(0, 2_700), kind });
       });
       appendFileSync(CARD_LOG, lines.map((l) => `${l}\n`).join(""));
@@ -441,11 +444,12 @@ if (CARD_LOG && cardMaker) {
 const intentUse = { asked: 0, found: 0 };
 if (cardMaker && RUN.intent) {
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry, intent) => {
-    const got = await make(items, today, signal, retry, intent);
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const got = await make(items, today, signal, retry, intent, options);
     if (intent && !retry) {
-      const requests = "requests" in got ? got.requests : [];
-      intentUse.asked += items.length;
+      const requests = got.requests ?? [];
+      // A requests-only re-ask (`cardsRequestsFix`, D1060) reads the same items again: found, not asked again.
+      if (!options?.requestsOnly) intentUse.asked += items.length;
       intentUse.found += requests.filter((r) => r !== null && r.length > 0).length;
     }
     return got;
@@ -457,8 +461,9 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
+const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
-  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardKey(item)) : null;
+  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
 const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
@@ -964,9 +969,9 @@ async function runSeed(
       ? {
           // Not `async`: the maker's own promise, so the drain batches as without `--ask-diag` (an async wrapper's
           // microtask hops cut the cards-use calls from 822 to 766 and moved when requests were held).
-          make: (items, today, signal, retry, intent) => {
+          make: (items, today, signal, retry, intent, options) => {
             for (const it of items) sentToCards.add(cardKey(it));
-            return cardMaker.make(items, today, signal, retry, intent);
+            return cardMaker.make(items, today, signal, retry, intent, options);
           },
         }
       : cardMaker;
@@ -976,11 +981,13 @@ async function runSeed(
   const cappedMaker: CardMaker | null =
     laneMaker && CARDS_CALLS >= 0
       ? {
-          make: (items, today, signal, retry, intent) =>
-            cardCalls++ < CARDS_CALLS
-              ? laneMaker.make(items, today, signal, retry, intent)
+          // A requests-only re-ask (`cardsRequestsFix`, D1060) belongs to the card call before it: not counted, and
+          // answered only while the cap's calls are (past it, `--cards-rest cards` strips requests as before).
+          make: (items, today, signal, retry, intent, options) =>
+            (options?.requestsOnly ? cardCalls <= CARDS_CALLS : cardCalls++ < CARDS_CALLS)
+              ? laneMaker.make(items, today, signal, retry, intent, options)
               : CARDS_REST === "cards"
-                ? laneMaker.make(items, today, signal, retry, intent).then((b) => cardsOnly(b, items.length))
+                ? laneMaker.make(items, today, signal, retry, intent, options).then((b) => cardsOnly(b, items.length))
                 : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
         }
       : laneMaker;
@@ -988,8 +995,8 @@ async function runSeed(
   const timedMaker: CardMaker | null =
     cappedMaker && CARDS_MS > 0
       ? {
-          make: (items, today, signal, retry, intent) =>
-            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent)),
+          make: (items, today, signal, retry, intent, options) =>
+            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent, options)),
         }
       : cappedMaker;
   const cards = timedMaker
