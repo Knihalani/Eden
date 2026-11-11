@@ -619,6 +619,18 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
+## Connector calls at about 1,000 sources and the earn rule (O1, D603)
+
+No model call. With `sourceYieldEarn`, `sourceYieldNames` and `sourceYieldEngage` in the default (Pi, train, 995
+noise connectors with words of their own, Anthropic-direct lab figures; docs/research/o1-earn.md §2e): Eden's
+connector calls 23.3 → 5.5 a task one request a session and 7.3 → 2.4 over a user's eight days (8.3 → 1.9 on 24
+more users); agent + Eden $ per 1,000 tasks level (+0.002, −0.002..+0.006); steady first-party with background
+cards 0.581 → 0.331 short and 0.386 → 0.296 over days (the unrelated connectors' items no longer reach the card
+model); on a per-call plan at list prices (assumed), Zapier MCP $645 → $175 short and $213 → $77 over days. The
+backfill (about 1,005 listings a new user, once) and the weekly sweep of unused sources (D356) are unchanged. Its
+own costs: `RareTerms`, at most 1 MB a user (+0.72 MB at 1,000 sources in the lab), and 3–5 µs a new word on the
+sync's store path (30–70 ms for a page of 100 items of 150 new words each).
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers

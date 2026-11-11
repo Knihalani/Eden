@@ -23,7 +23,8 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
-| `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, on in the default): per (user, source) a run of live reads with nothing used, and per user two pooled rates (reads on no evidence, reads on words alone); the partner's `spentSources` skips live reads by them |
+| `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
+| `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); `push-check.test.ts`                |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
@@ -394,15 +395,31 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   A new path that makes live reads must book them there, or its sources never earn or lose anything; a new path
   that hands the agent an injection must go through `handOut`, which ends the sources' runs. A whole copy keeps its
   poll (dropped, an ask called it failed). An ask's status for a cut copy it did not search is "unsearched"
-  (`UNSEARCHED`; `reachAnswer` names it apart from failures, never an all-clear, D127). The pools count only sources
-  with nothing used yet: counting the user's own mail's reads kept the words pool alive and noise sources read
-  (57 → 40 calls a request instead of 13). A read for a request that names an entity the source mentioned is never
-  skipped: a cap on those lost recall where sources are few. With five sources nothing is booked (no copy is cut),
-  so the usual funnel cannot see this: screen with `-- --noise-sources 995 --limit 16 --notify-share 0.05` and
-  `days-calls.ts --noise-sources 995` (it learns over a user's days). Deleted beside it: a push that searches
-  nothing live (`pushLazy`, D506: stale deliveries 15 → 19, hidden −2.3 points one request a session), a longer
-  reuse window for search pages (D507: a user's searches do not repeat) and one search of a source a lookup (D508:
-  the probes' budget goes elsewhere).
+  (`UNSEARCHED`; `reachAnswer` names it apart from failures, never an all-clear, D127). A read on strong evidence
+  (`evidenceFor` 2) is never skipped: a cap on those lost recall where sources are few. With five sources nothing is
+  booked (no copy is cut), so the usual funnel cannot see this: screen with `-- --noise-sources 995 --limit 16
+  --notify-share 0.05 --noise-vocab 1000` and `days-calls.ts --noise-sources 995 --noise-vocab 1000`. Deleted beside
+  it: a push that searches nothing live (`pushLazy`, D506: stale deliveries 15 → 19, hidden −2.3 points one request
+  a session), a longer reuse window for search pages (D507: a user's searches do not repeat), one search of a source
+  a lookup (D508: the probes' budget goes elsewhere) and the pooled rates (D505, deleted by D603: they started flat,
+  about 44 unpaid reads a pool for every new user, and a look-alike listed in an ask kept the words pool open).
+- **A source earns its live reads (`sourceYieldEarn`, `sourceYieldNames`, `sourceYieldEngage`; O1, D600, D601,
+  D603, on in the default; docs/research/o1-earn.md).** A warm copy with nothing used is read live only on strong
+  evidence (`evidenceFor` 2: a name its items mentioned, or a request word at most `sourceYieldRare` sources hold,
+  `Sync.rareHolders`), from a user's first request. "Which few sources hold this word" is not read from the
+  sketches (a thousand two-probe sketches give about 27 false holders a word) but from `RareTerms`
+  (`rare-terms.ts`): one table a user, filled in `Sync.store` with or without the sketch, four bytes a word, at most
+  1 MB, saved in the snapshot (`PERSIST_FORMAT` 3); it fails towards "common" when full, and a dropped source's
+  number is retired (`forgetSource`). `sourceYieldNames`: a name more than that many sources mention is strong only
+  for a source with an item used. `sourceYieldEngage` (only with the earn rule): `searchLive` does not `engage` a
+  source it reads nothing live of (no deep copy, daily sweep or card call for it). `SourceYield` is in memory only:
+  after a restart, or once a source falls out of its 4,096 a user, the source is unearned again, as for a new user.
+  A held item that is handed over makes its source "used" (`handOut`), so a unit test of weak evidence must keep the
+  evidence out of the held copy (past the cut), as `source-yield-partner.test.ts` does; a test of an ask whose cut
+  copies are searched on its words sets `sourceYieldEarn: false` (`ask-behind.test.ts`). Screen with the 995-source
+  funnel and `days-calls.ts`, both with `--noise-vocab 1000`: the lab's noise connectors otherwise share 45 words
+  and their sketches collide, which hid the false holders. The five-source funnel sees none of this (314 / 274).
+  Dormant sources (`syncDormantMs`, D602) were built and removed: nothing in the lab can price a dropped copy.
 - **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
   Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
   left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden

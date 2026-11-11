@@ -60,6 +60,9 @@ export const PARTS = {
     syncEngagedDeep: false,
     syncUnusedSweepMs: 0,
     sourceYield: false,
+    sourceYieldEarn: false,
+    sourceYieldNames: 0,
+    sourceYieldEngage: false,
   },
   /**
    * Routing by the user's own index: sources holding the request's best local matches first (D265), and by each
