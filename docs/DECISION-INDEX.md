@@ -650,8 +650,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
 | D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
 | D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
-| D1070 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | finding |
-| D1071 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | rejected |
+| D1070 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | adopted |
+| D1071 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | adopted |
 | D940 | 2026-11-11 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | superseded (deleted by D948) |
 | D941 | 2026-11-11 | Adopted (lab tooling, M8), at commit d42d30b9 with the engine hooks it needs; the Python trainers stay in `packages/sim/lab/m8/`… | lab |
 | D942 | 2026-11-11 | Pre-registered rule for D940 | lab |
