@@ -52,7 +52,6 @@ export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { isImperative, isOpenRequest, MORE_VERBS, pushStart, requestedRange } from "./probes";
-export { gateFeatures, gateNorm, TurnGate, turnGate, type TurnVerdict } from "./turn-gate";
 export {
   ACTIONS,
   CARD_KINDS,

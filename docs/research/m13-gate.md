@@ -1,6 +1,22 @@
 # M13: a tiny learned gate for the push (does this turn need context, and what kind of turn is it)
 
-Status: in progress, branch `claude/m13-gate`. Decisions D1010–D1019.
+Status: 2026-11-11, branch `claude/m13-gate`. **Rejected by its pre-registered bar after three rounds (D1010); the
+engine switch, module, weights and tests are deleted; the lab kit stays (D1013).** Decisions D1010–D1013. Every paid
+call went to Anthropic directly (`HAIKU_API_KEY`, lab transport): $2.75 for data and blind sets; Modal $0 (unreachable
+from this container). Numbers marked **[EST]** are judgement; every other number comes from a command in this note.
+
+**In plain words.**
+
+- A 1.6 MB character-level model can tell, in any of nine languages, whether a turn asks for something far better
+  than the shipped rules: on blind sets it starts the push for 93–99% of acting requests against the rules' 77–80%
+  (non-English 99.7 against 39.1, terse notes 95.4 against 12.7) and for 61–82% fewer chatter, statements and
+  personal wants. It runs in 43 µs a turn in TypeScript.
+- It only works beside the rules: alone, trained on generated text, it missed hand-written English requests the
+  rules catch (D1011). Generated text also taught it the wrong cues until the data was rebuilt (D1012).
+- It still failed the bar set before it was scored: where the rules are already near-perfect (hand-written English,
+  95%) it is not better, Hindi requests and Portuguese chatter fell outside the five-point parity band, and a few
+  hard-gate turns ("yes please cancel it", "Who won the 2018 World Cup?") came out wrong. So it is deleted, as the
+  pre-registration said. The data, harness and scorer stay for a next attempt.
 
 ## 0. Pre-registration (committed before any held-out set is written or scored)
 
@@ -156,3 +172,60 @@ rounds only if nothing clearly beats the rules). S3 and S4 are read: they are re
   was made from it): `fixtures-2.json`, 57 new hard-gate turns (short commands, indirect and non-English requests,
   bare replies, retractions, general and personal questions, wants, logs). Bar item 7 now needs every row of both
   files right.
+
+## 4. Round 3 (addenda B, B2) and its read of S5 (once, 8f2c7dba)
+
+Training added general-knowledge questions, bare replies, retractions, social remarks and wants for a thing, in the
+nine languages (4,939 rows). Dev (no held-out set): R2f seed 1 0.925 under the union (veto 0.25), R2f seed 2 0.919,
+R2i 0.923 / 0.917; R2f seed 1 frozen. Weights 1,590,904 bytes; parity 64/64 (worst logit gap 4.5e-6); 42.6 µs a turn
+mean (p50 37.9, p99 99.3) over dev's 84,051 turns, load 5.1 ms.
+
+| | Gate (union) | Rule |
+| --- | --- | --- |
+| S5 English acting (129) | 95.3 | 94.6 |
+| S5 acting, nine languages (764) | **92.7** | 79.7 |
+| M2T (17,243) | **98.4** (terse 94.7, non-English 98.7, follow-up 97.1) | 79.4 (12.7, 39.1, 46.9) |
+| SIM56 / its reworded part | **99.4 / 99.0** | 96.1 / 94.6 |
+| S5 English chatter, statements and wants started | **23 of 158** | 75 |
+| S5 all chatter, statements and wants started | **93 of 703** | 530 |
+| S5 logs / info questions started | 0 / 18.8% | 31.0 / 57.5% |
+
+By language (S5 acting / false starts; M2T acting): en 94.6 / 14.6; 98.3; de 92.1 / 10.3; 99.4; fr 92.8 / 13.9; 98.6;
+es 94.9 / 12.5; 99.3; it 92.5 / 11.1; 99.3; pt 96.2 / **25.0**; 97.4; nl 92.0 / 12.7; 99.3; pl 92.5 / 8.6; 97.7; hi
+**84.4** / 10.0; 98.4 (the rule: acting 66.7–91.3, false starts 47.5–90.0).
+
+**The bar fails** on: S5's English acting (the rule is above 88% there, so the bar asks 98%; the gate reads 95.3),
+Hindi acting (84.4, more than 5 points under English's 94.6), Portuguese false starts (25.0, more than 5 over
+English's 14.6), and 5 of 135 fixtures ("We need the big oven", "yes please cancel it", "Who won the 2018 World
+Cup?", "Che caldo oggi", "ERROR 502 Bad Gateway upstream timed out after 30000ms"). The "S3 log" guard is empty on
+S5's English part (S5's logs are tagged `xx`): a scorer artefact, neither a pass nor a fail.
+
+## 5. Decision (D1010–D1013) and what was not run
+
+Deleted by addendum B's rule: `pushGate`, `turn-gate.ts` in the engine, its weights and tests. Kept as lab tooling:
+`packages/sim/lab/m13/` (the TypeScript forward moved there) and the data on `claude/m13-data`.
+
+- **Funnel and eval** (before deletion): `bun run eval` gave the same JSON with the switch on and off (the eval's
+  turns are English imperatives the union passes; acting block 19 of 28 neutral packets, 10 of 11 facts, 3 of 10
+  look-alikes). The funnel (train 41–44, `--neutral`, round 2's provisional model, not a frozen candidate) surfaced
+  575 hidden and 528 look-alikes either way and handed 512 hidden by the push against 525. The funnel covers train5–6,
+  SIM56's suites; no selection used it.
+- **Pi pair:** not run. The pre-registration ran it only after an offline pass.
+- **Helpers:** round 1 ran on four Haiku helper sessions; in round 2 three of them treated the peer message as
+  needing a human's go-ahead, so their configurations ran in this session instead.
+- **Next, if anyone tries again [EST]:** the misses are where the rule is already right (hand-written English) and
+  where the generated data is thin (Hindi requests, Portuguese chatter); a gate that only ever adds starts to the rule
+  for non-English and terse turns, and vetoes only the rule's open-shape starts, would keep English exactly as it is.
+
+## Reproduce
+
+```bash
+python3 -m venv .venv-m3 && .venv-m3/bin/pip install numpy torch --index-url https://download.pytorch.org/whl/cpu
+python3 -I packages/sim/lab/m13/gen_train.py .local/m13/train/gen.jsonl --calls-scale 1.5   # + M13_WORK=1 run, gen_logs, gen_extra
+.venv-m3/bin/python -I packages/sim/lab/m13/build.py          # needs M2 v2 (claude/m9-data), M14's G2/G3, the blind sets
+.venv-m3/bin/python -I packages/sim/lab/m13/gate.py --arch bag --bits 16 --dim 24 --hidden 128 --quant int8 \
+  --rule2 --kind-weight 1.0 --epochs 6 --seed 1 --out .local/m13/r3/R2f-s1
+.venv-m3/bin/python -I packages/sim/lab/m13/score.py .local/m13/r3/R2f-s1.pt --s5
+.venv-m3/bin/python -I packages/sim/lab/m13/export.py .local/m13/r3/R2f-s1.pt G.bin P.json
+bun packages/sim/lab/m13/parity.ts G.bin P.json && bun packages/sim/lab/m13/bench.ts G.bin .local/m13/sets/dev.jsonl
+```

@@ -113,7 +113,6 @@ import {
   startMinutes,
   topicOf,
 } from "./probes";
-import { turnGate } from "./turn-gate";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
@@ -844,21 +843,13 @@ export class ContextPartner {
     // `pushCheck` its pool is checked as a listed request's (D823, D828).
     // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
     // and the push's lookup is given that imperative; the open shape then refuses log lines and chatter.
-    const ruled =
+    const start =
       event.kind === "user_message"
         ? pushStart(event.text, {
             open: this.config.pushOpen && this.config.pushCandidates > 0,
             indirect: this.config.pushIndirect,
           })
         : null;
-    // `pushGate` (M13, D1010): the turn gate decides whether the push starts; the rule's request text (a lead-in's
-    // imperative) is kept when it read one. No weights, no gate: the rule stands (fail open).
-    const said = event.kind === "user_message" ? event.text : "";
-    const gate = this.config.pushGate && event.kind === "user_message" ? turnGate() : null;
-    const verdict = gate
-      ? gate.read(said, { how: ruled?.how ?? "none", rest: ruled !== null && ruled.request !== said })
-      : null;
-    const start = verdict ? (verdict.needs ? (ruled ?? { how: "opened" as const, request: said }) : null) : ruled;
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
     // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can

@@ -61,6 +61,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
 | D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
 | D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
+| D1010 | Rejected (deleted by its pre-registered bar, M13): `pushGate`, a tiny learned turn gate in place of `pushStart`'s verb lists and lead-ins | deleted by its pre-registered bar, M13 |
 
 ## Reader
 

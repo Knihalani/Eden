@@ -4,7 +4,7 @@
  *   bun packages/sim/lab/m13/bench.ts GATE.bin .local/m13/sets/dev.jsonl
  */
 import { readFileSync } from "node:fs";
-import { TurnGate } from "@eden/engine";
+import { TurnGate } from "./turn-gate.ts";
 
 const [bin, set] = process.argv.slice(2);
 const t0 = performance.now();

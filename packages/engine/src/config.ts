@@ -724,14 +724,6 @@ export interface EngineConfig {
    */
   pushIndirect: boolean;
   /**
-   * M13 (D1010, trial; docs/research/m13-gate.md): the push's start is decided by the turn gate (`turn-gate.ts`), a
-   * tiny local model over hashed character n-grams that reads any language, instead of `pushStart`'s verb lists and
-   * lead-ins. A turn the gate passes starts the push with the rule's own request text when the rule read one (a
-   * lead-in's imperative), else the whole message; one it refuses starts nothing. No model call: local CPU, loaded
-   * once a process; if its weights cannot be loaded the push falls back to `pushStart` (fail open to the rules).
-   */
-  pushGate: boolean;
-  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -892,6 +884,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushOpen: true,
   pushIndirect: true,
-  pushGate: false,
   revisionDiff: true,
 };
