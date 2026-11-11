@@ -11,16 +11,11 @@
  */
 import { createReadStream, writeFileSync, appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { routerTerms, routerNames } from "@eden/engine";
+import { SOURCES as SIM_DESCRIPTIONS } from "../world";
+import { requestFeatures, routerNames, routerTerms, sourceKeys } from "@eden/engine";
 
-/** Descriptions of the five common sources, which M2's worlds do not carry (rare ones carry theirs). */
-export const COMMON_DESCRIPTIONS: Record<string, string> = {
-  gmail: "The user's email (Gmail): messages, receipts, newsletters and threads",
-  calendar: "The user's calendar (Google Calendar): events, meetings and invitations",
-  drive: "The user's documents (Google Drive): docs, sheets and shared files",
-  slack: "The user's work chat (Slack): channels and direct messages",
-  crm: "The user's CRM (HubSpot): contacts, deals and notes",
-};
+/** Descriptions of the five common sources as the sim's connectors give them (rare ones are the world's own). */
+export const COMMON_DESCRIPTIONS: Record<string, string> = SIM_DESCRIPTIONS;
 
 interface M2Item {
   id: string;
@@ -61,6 +56,7 @@ async function main(): Promise<void> {
     const sources = [...ids].sort().map((id) => ({
       id,
       d: routerTerms(`${id} ${w.sources[id] ?? COMMON_DESCRIPTIONS[id] ?? ""}`),
+      k: [...sourceKeys(id, w.sources[id] ?? COMMON_DESCRIPTIONS[id] ?? "")],
     }));
     const index = new Map(w.items.map((it, k) => [it.id, k]));
     const items = w.items.map((it) => ({
@@ -85,6 +81,7 @@ async function main(): Promise<void> {
           style: r.style,
           h: routerTerms(r.text),
           n: routerNames(r.text),
+          f: [...requestFeatures(routerTerms(r.text))],
         })),
       };
     });

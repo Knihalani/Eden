@@ -923,6 +923,28 @@ export class SyncManager {
     return out;
   }
 
+  /**
+   * `routerGate` (M8, D940): what the connector router reads of a user's synced copy of a source, content-free: warm,
+   * whole (`complete`), hours since its last complete poll, its learned change rate (items an hour) and how many ids it
+   * holds. Undefined for a source not synced. O(1) but for `complete`'s rare re-check, no I/O.
+   */
+  routeState(
+    scope: Scope,
+    sourceId: string,
+    now = this.deps.now(),
+  ): { warm: boolean; whole: boolean; hours: number; rate: number; size: number } | undefined {
+    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+    if (!s) return undefined;
+    const warm = s.phase === "warm";
+    return {
+      warm,
+      whole: warm && this.complete(scope, sourceId, now),
+      hours: Number.isFinite(s.polledAt) ? Math.max(0, now - s.polledAt) / HOUR : 1e4,
+      rate: s.alpha / s.beta,
+      size: s.ids.size,
+    };
+  }
+
   /** Users synced now. */
   get userCount(): number {
     return this.users.size;

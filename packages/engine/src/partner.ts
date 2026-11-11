@@ -82,6 +82,17 @@ import {
 import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
+import {
+  conjScore,
+  defaultRouterWeights,
+  requestFeatures,
+  routeProbabilities,
+  ROUTER_NF,
+  ROUTER_NULL_NF,
+  routerTerms,
+  sourceKeys,
+  type RouterWeights,
+} from "./router";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
@@ -218,6 +229,34 @@ export interface PartnerDeps {
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
+  /**
+   * `routerGate` (M8, D940): the connector router's weights. Absent: the shipped asset (`defaultRouterWeights`, read
+   * once a process); a router with no weights is inert.
+   */
+  router?: RouterWeights | null;
+  /**
+   * A lab hook (`days-calls.ts --route-log`, M8): each routed lookup's per-source inputs and probabilities, ids and
+   * numbers only (no content).
+   */
+  onRoute?: (r: RouteReport) => void;
+}
+
+/** One routed lookup (`PartnerDeps.onRoute`): ids and numbers only. */
+export interface RouteReport {
+  sessionId: string;
+  turn: number;
+  sources: string[];
+  /** The request's hashed features (`requestFeatures`): numbers, for the lab's trainer to score other tables. */
+  features: number[];
+  /** Per source, `ROUTER_NF` inputs, row by row. */
+  x: number[];
+  summary: number[];
+  p: number[];
+  pNull: number;
+  /** Sources the router added to the spent set (no live read). */
+  skipped: string[];
+  /** Per source, whether `sourceYield` had already spent it (no live read before the router). */
+  spentBefore: boolean[];
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -3879,7 +3918,9 @@ export class ContextPartner {
     // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
     // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
     // cut copy with the rest (more reads, never fewer facts).
-    const spent = this.spentSources(s, cue, all, boost);
+    let spent = this.spentSources(s, cue, all, boost);
+    // `routerGate` (M8, D940): the router's unlikely warm copies join the spent ones.
+    if (this.config.routerGate && wide) spent = this.routerSpent(s, cue, all, localHits, boost, spent);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -4208,6 +4249,104 @@ export class ContextPartner {
       if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
     }
     return out;
+  }
+
+  /**
+   * `routerGate` (M8, D940; `router.ts`): scores each of the user's sources for the request and adds to `spent` every
+   * warm copy whose probability of holding what it needs is under the floor. Never throws: without weights, or on any
+   * error, `spent` is returned as it was (fail open: the lookup reads what it read before). No call, no model call.
+   */
+  private routerSpent(
+    s: Session,
+    cue: Cue,
+    all: readonly Source[],
+    localHits: ReadonlyMap<string, number> | undefined,
+    boost: ReadonlyMap<string, number> | undefined,
+    spent: Set<string> | null,
+  ): Set<string> | null {
+    try {
+      const w = this.deps.router === undefined ? defaultRouterWeights() : this.deps.router;
+      if (!w || !this.sync || !this.yields) return spent;
+      const now = this.now();
+      // The request's own words (the trainer reads requests as written; entities are in them).
+      const terms = routerTerms(cue.text);
+      const feats = requestFeatures(terms);
+      const named = new Set<string>();
+      for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
+      const rare =
+        this.config.sourceYieldRare > 0
+          ? this.sync.rareHolders(
+              s.scope,
+              sketchTerms(`${cue.text} ${cue.entities.join(" ")}`)
+                .slice(0, MAX_SKETCH_TERMS)
+                .map(termHashes),
+              this.config.sourceYieldRare,
+            )
+          : new Set<string>();
+      const n = all.length;
+      const x = new Float64Array(n * ROUTER_NF);
+      // Sources of one kind and description share their conjunction score (a tenant's many Jira projects).
+      const conjMemo = new Map<string, number>();
+      let maxConj = -Infinity;
+      let maxLocal = 0;
+      for (let i = 0; i < n; i++) {
+        const src = all[i]!;
+        const memo = `${src.id.replace(/[-_]?\d+$/, "")}\u0000${src.description}`;
+        let c = conjMemo.get(memo);
+        if (c === undefined) {
+          c = conjScore(w, feats, routerSourceKeys(src.id, src.description));
+          conjMemo.set(memo, c);
+        }
+        const local = localHits?.get(src.id) ?? 0;
+        const st = this.sync.routeState(s.scope, src.id, now);
+        const o = i * ROUTER_NF;
+        x[o] = c;
+        x[o + 1] = local;
+        x[o + 2] = Math.max(0, (boost?.get(src.id) ?? 0) - local);
+        x[o + 3] = named.has(src.id) ? 1 : 0;
+        x[o + 4] = rare.has(src.id) ? 1 : 0;
+        x[o + 5] = this.yields.hasYielded(s.scope, src.id) ? 1 : 0;
+        x[o + 6] = this.yields.run(s.scope, src.id, now);
+        x[o + 7] = st?.whole ? 1 : 0;
+        x[o + 8] = Math.log1p(Math.min(st?.hours ?? 1e4, 1e4));
+        x[o + 9] = Math.log1p(st?.size ?? 0);
+        x[o + 10] = Math.log1p(100 * (st?.rate ?? 0));
+        if (c > maxConj) maxConj = c;
+        if (local > maxLocal) maxLocal = local;
+      }
+      const summary = new Float64Array(ROUTER_NULL_NF);
+      summary[0] = n > 0 ? maxConj : 0;
+      summary[1] = maxLocal;
+      summary[2] = named.size > 0 ? 1 : 0;
+      summary[3] = rare.size > 0 ? 1 : 0;
+      summary[4] = Math.log1p(terms.length);
+      const p = new Float64Array(n);
+      const pNull = routeProbabilities(w, x, n, summary, p);
+      const floor = this.config.routerFloor > 0 ? this.config.routerFloor : w.floor;
+      const skipped: string[] = [];
+      const spentBefore = all.map((a) => spent?.has(a.id) === true);
+      for (let i = 0; i < n; i++) {
+        const id = all[i]!.id;
+        if (p[i]! >= floor || spent?.has(id) || !this.sync.isWarm(s.scope, id)) continue;
+        (spent ??= new Set()).add(id);
+        skipped.push(id);
+      }
+      this.deps.onRoute?.({
+        sessionId: s.id,
+        turn: s.turn,
+        sources: all.map((a) => a.id),
+        features: [...feats],
+        x: [...x],
+        summary: [...summary],
+        p: [...p],
+        pNull,
+        skipped,
+        spentBefore,
+      });
+      return spent;
+    } catch {
+      return spent;
+    }
   }
 
   /**
@@ -6668,6 +6807,23 @@ function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities
       .slice(0, 20)
       .map((e) => e.text),
   }));
+}
+
+/**
+ * `routerGate`: a source's router keys by its id and description, a pure function of the two (no user state), held
+ * for the process: at most `ROUTER_KEYS_HELD`, the oldest dropped first.
+ */
+const routerKeys = new Map<string, Uint32Array>();
+const ROUTER_KEYS_HELD = 16_384;
+function routerSourceKeys(id: string, description: string): Uint32Array {
+  const k = `${id}\u0000${description}`;
+  let keys = routerKeys.get(k);
+  if (!keys) {
+    keys = sourceKeys(id, description);
+    if (routerKeys.size >= ROUTER_KEYS_HELD) routerKeys.delete(routerKeys.keys().next().value!);
+    routerKeys.set(k, keys);
+  }
+  return keys;
 }
 
 /** `routeSketch`: a request's terms matched against the sources' sketches, at most (its first). */

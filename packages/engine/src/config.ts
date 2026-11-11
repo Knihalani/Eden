@@ -344,6 +344,17 @@ export interface EngineConfig {
   sourceYieldNames: number;
   sourceYieldEngage: boolean;
   /**
+   * Trial (M8, D940, off): the connector router (`router.ts`). Each lookup scores every source of the user with a small
+   * learned model over the request's words and the source's evidence (its identity and description, its items among
+   * the request's best local matches, its sketch, names, rare words, its yield history and its copy's state), and a
+   * warm copy whose probability of holding what the request needs is under `routerFloor` gets no live read: it joins
+   * `sourceYield`'s spent copies (no search behind, no probe, no poll of a cut copy). Needs `sourceYield`. Inert
+   * without weights (`PartnerDeps.router`, else the shipped asset).
+   */
+  routerGate: boolean;
+  /** `routerGate`'s floor; 0 takes the floor fitted with the weights (for the offline recall target). */
+  routerFloor: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -823,6 +834,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldRare: 2,
   sourceYieldNames: 4,
   sourceYieldEngage: true,
+  routerGate: false,
+  routerFloor: 0,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

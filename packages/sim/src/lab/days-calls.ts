@@ -30,13 +30,19 @@
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
 import {
   CardEnricher,
   ContextPartner,
+  parseRouterWeights,
+  ROUTER_NF,
+  ROUTER_NULL_NF,
+  sourceKeys,
+  type RouteReport,
+  type RouterWeights,
   ItemCache,
   ModelCardMaker,
   sanitizeItem,
@@ -116,6 +122,33 @@ export interface DaysCallsOptions {
    * cache holds it (redacted), one line a user, for offline retrieval screens. Simulated items only.
    */
   onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
+  /**
+   * `--route-log FILE` (M8, D941): each request's first routed lookup (`PartnerDeps.onRoute`), with the planted item's
+   * source, for the router's trainer. `router` sets the weights the engine scores with (null: inert; a zero table
+   * logs the inputs and skips nothing).
+   */
+  onRoute?: (row: RouteRow) => void;
+  /** The user's sources' router keys (`sourceKeys`), once a user before their rows, so a trainer can score any table. */
+  onRouteKeys?: (seed: number, keys: Record<string, number[]>) => void;
+  router?: RouterWeights | null;
+}
+
+/** One request's routed lookup (`--route-log`): ids, numbers and the planted source, no content. */
+export interface RouteRow {
+  seed: number;
+  day: number;
+  task: string;
+  kind: string;
+  /** The planted item's source (a fact for hidden, its look-alike for control), "" for none. */
+  planted: string;
+  lag: string;
+  features: number[];
+  pNull: number;
+  /** Rows kept: every source with evidence, the planted one, and a sample of the rest, each with its weight. */
+  rows: { id: string; w: number; x: number[]; p: number; spent: boolean }[];
+  /** All sources of the lookup and how many the router skipped. */
+  n: number;
+  skipped: number;
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -204,6 +237,87 @@ function counted(source: SimSource, phase: () => Phase, into: Counts, fetched: M
   };
 }
 
+/** `--route-log`'s numbers to five significant digits (the file is large at 1,000 sources). */
+function roundX(this: unknown, key: string, v: unknown): unknown {
+  return typeof v === "number" && !Number.isInteger(v) ? Number(v.toPrecision(5)) : v;
+}
+
+/** Weights that score every source alike and skip nothing: the router's inputs are logged as the gate sees them. */
+export function zeroRouter(): RouterWeights {
+  return {
+    buckets: 2,
+    conj: new Int8Array(2),
+    conjScale: 0,
+    hidden: 1,
+    mu: new Float32Array(ROUTER_NF),
+    sd: new Float32Array(ROUTER_NF).fill(1),
+    w1: new Float32Array(ROUTER_NF),
+    b1: new Float32Array(1),
+    w2: new Float32Array(1),
+    b2: 0,
+    nullBias: 0,
+    nullW: new Float32Array(ROUTER_NULL_NF),
+    temperature: 1,
+    floor: 0,
+  };
+}
+
+/** Sources kept unsampled when they have evidence (inputs 1-6 of `ROUTER_FEATURES`), and how many others to sample. */
+const ROUTE_SAMPLE = 40;
+export function routeRow(
+  r: RouteReport,
+  seed: number,
+  day: number,
+  task: string,
+  kind: string,
+  planted: string,
+  lag: string,
+  rng: Rng,
+): RouteRow {
+  const n = r.sources.length;
+  const nf = ROUTER_NF;
+  const keep: number[] = [];
+  const rest: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let ev = r.sources[i] === planted;
+    for (let f = 1; f <= 6 && !ev; f++) if (r.x[i * nf + f]! !== 0) ev = true;
+    (ev ? keep : rest).push(i);
+  }
+  const rows = keep.map((i) => ({
+    id: r.sources[i]!,
+    w: 1,
+    x: r.x.slice(i * nf, i * nf + nf),
+    p: r.p[i]!,
+    spent: r.spentBefore[i]!,
+  }));
+  const take = Math.min(ROUTE_SAMPLE, rest.length);
+  for (let k = 0; k < take; k++) {
+    const j = k + rng.int(0, rest.length - 1 - k);
+    [rest[k], rest[j]] = [rest[j]!, rest[k]!];
+    const i = rest[k]!;
+    rows.push({
+      id: r.sources[i]!,
+      w: rest.length / take,
+      x: r.x.slice(i * nf, i * nf + nf),
+      p: r.p[i]!,
+      spent: r.spentBefore[i]!,
+    });
+  }
+  return {
+    seed,
+    day,
+    task,
+    kind,
+    planted,
+    lag,
+    features: r.features,
+    pNull: r.pNull,
+    rows,
+    n,
+    skipped: r.skipped.length,
+  };
+}
+
 /** One user's `--days` run through Eden alone, counting its connector calls. */
 export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<DaysCallsUser> {
   const gapMs = o.gapMs ?? 10 * 60_000;
@@ -237,6 +351,11 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed, o.noiseVocab ?? 0) : []),
   ];
   applyNotifyShare(sources, o.notifyShare ?? null, seed);
+  if (o.onRouteKeys) {
+    const keys: Record<string, number[]> = {};
+    for (const x of sources) keys[x.id] = [...sourceKeys(x.id, x.description)];
+    o.onRouteKeys(seed, keys);
+  }
   const counts: Counts = {};
   const fetched = new Map<string, number>();
   let phase: Phase = "backfill";
@@ -244,6 +363,9 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   let clock = world.now;
   /** The current request's candidates pass, when it ran (`onPlanted`). */
   let pooled: PushPoolReport | null = null;
+  /** The current request's first routed lookup (`onRoute`). */
+  let routed: RouteReport | null = null;
+  const sampler = new Rng(seed * 31 + 7);
   const cards = o.cards ? new CardEnricher({ maker: o.cards, budget: new Budget(), now: () => clock }) : undefined;
   const cache = new ItemCache();
   const partner = new ContextPartner({
@@ -257,6 +379,8 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     config: o.config ?? {},
     ...(cards ? { cards } : {}),
     ...(o.onPlanted ? { onPushPool: (r: PushPoolReport) => void (pooled = r) } : {}),
+    ...(o.router !== undefined ? { router: o.router } : {}),
+    ...(o.onRoute ? { onRoute: (r: RouteReport) => void (routed ??= r) } : {}),
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
   // The harness reads the engine's session table, as hidden-funnel does: whether a session's lookup is still running.
@@ -406,6 +530,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     if (!isRecap(task)) requests++;
     handed.clear();
     pooled = null;
+    routed = null;
     const callsBefore = requestCalls();
     const arriving = task.event === "external" ? { source: "gmail" } : {};
     const r = await partner.observe({ ...ev, kind: task.event, text: task.text, ...arriving } as AgentEvent, {
@@ -427,6 +552,22 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     }
     take();
+    if (o.onRoute && routed && !isRecap(task)) {
+      const rr: RouteReport = routed;
+      const src = task.planted ? (world.items.find((it) => it.id === task.planted)?.sourceId ?? "") : "";
+      o.onRoute(
+        routeRow(
+          rr,
+          seed,
+          dayNo,
+          task.id,
+          task.kind,
+          task.kind === "neutral" ? "" : src,
+          lagOf.get(task.id) ?? "backfill",
+          sampler,
+        ),
+      );
+    }
     if (!isRecap(task)) {
       requestCallsByDay[dayNo] = (requestCallsByDay[dayNo] ?? 0) + requestCalls() - callsBefore;
       requestsByDay[dayNo] = (requestsByDay[dayNo] ?? 0) + 1;
@@ -680,11 +821,27 @@ export async function main(
     process.exit(2);
   }
   const widenFile = "";
+  // `--route-log FILE` (M8): the router's inputs per request, with the gate on; `--router FILE` scores and skips with
+  // those weights, else a zero table (inputs logged, nothing skipped).
+  const routeLog = opt("route-log", "");
+  const routerFile = opt("router", "");
+  if (routerFile) o.router = parseRouterWeights(new Uint8Array(readFileSync(routerFile)));
+  if (routeLog || routerFile) {
+    o.config = { routerGate: true, ...o.config };
+    o.router ??= zeroRouter();
+  }
+  if (routeLog) {
+    writeFileSync(routeLog, "");
+    o.onRoute = (row) => appendFileSync(routeLog, `${JSON.stringify(row, roundX)}\n`);
+    o.onRouteKeys = (seed, keys) => appendFileSync(routeLog, `${JSON.stringify({ seed, keys })}\n`);
+  }
   const diag = opt("pool-diag", "");
   const corpus = opt("corpus-dump", "");
   const out = opt("json", "");
   if (argv.includes("--resume") && !out) throw new JournalRefused("--resume reads the journal beside --json FILE");
   // A resumed user is not run again, so its corpus line would be missing: the dump is made in one run, never resumed.
+  if (argv.includes("--resume") && routeLog)
+    throw new JournalRefused("--route-log is written whole: run it without --resume");
   if (argv.includes("--resume") && corpus)
     throw new JournalRefused("--corpus-dump is written whole: run it without --resume");
   if (corpus) {
@@ -705,12 +862,22 @@ export async function main(
             "--pool-diag",
             "--resume",
             "--corpus-dump",
+            "--route-log",
             "--cards-out",
             "--spend-ledger",
             "--spend-cap",
           ]),
           inputs: argvFiles(
-            ["--cards", cardsFile, "--intent", cardsFile ? intentFiles.join(",") : "", "--widen-ranks", widenFile],
+            [
+              "--cards",
+              cardsFile,
+              "--intent",
+              cardsFile ? intentFiles.join(",") : "",
+              "--widen-ranks",
+              widenFile,
+              "--router",
+              routerFile,
+            ],
             [],
           ),
           env: envFields(),
