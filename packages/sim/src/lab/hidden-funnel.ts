@@ -74,6 +74,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
   loadPoolExpansion,
+  loadPoolPair,
   AskReader,
   CardEnricher,
   cardKey,
@@ -206,6 +207,7 @@ const cli = flags(
         "ask-diag",
         "pool-dump",
         "pool-model",
+        "pool-pair",
         "corpus-dump",
         "label",
         "json",
@@ -655,6 +657,9 @@ const POOL_DUMP = opt("pool-dump", "");
 /** `--pool-model FILE` (M12, D1001): the `poolExpand` table, loaded once for the run (`loadPoolExpansion`). */
 const POOL_MODEL = opt("pool-model", "");
 const poolExpansion = POOL_MODEL ? loadPoolExpansion(new Uint8Array(readFileSync(POOL_MODEL))) : undefined;
+/** `--pool-pair FILE` (M12, D1002): the `poolScan` scorer (EP12), loaded once for the run (`loadPoolPair`). */
+const POOL_PAIR = opt("pool-pair", "");
+const poolPair = POOL_PAIR ? loadPoolPair(new Uint8Array(readFileSync(POOL_PAIR))) : undefined;
 /**
  * `--corpus-dump FILE` (a diagnostic, docs/research/a2-quality.md): per suite world, its items (title, text head) and
  * its tasks with their planted ids, for offline retrieval screens. Since A15 (docs/research/a15-retrieval.md) each
@@ -1095,6 +1100,7 @@ async function runSeed(
     ...(onCandidates ? { onCandidates } : {}),
     // `pushCandidates`' pool per pass (`--pool-dump`, and `pushPoolAt` in each task's row).
     ...(poolExpansion ? { poolExpansion } : {}),
+    ...(poolPair ? { poolPair } : {}),
     onPushPool: (r: PushPoolReport) => {
       const list = pushPools.get(r.sessionId) ?? [];
       pushPools.set(r.sessionId, list);

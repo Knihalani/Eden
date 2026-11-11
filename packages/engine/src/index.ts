@@ -129,3 +129,4 @@ export {
 } from "./push-check";
 export { mayConstrain } from "./conflict";
 export { loadPoolExpansion, type PoolExpansion } from "./pool-expand";
+export { gramsOf, loadPoolPair, type PoolPair } from "./pool-pair";

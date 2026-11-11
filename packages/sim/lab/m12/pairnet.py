@@ -53,6 +53,7 @@ ap.add_argument("--eval-every", type=int, default=0)
 ap.add_argument("--threads", type=int, default=0)
 ap.add_argument("--out", default="")
 ap.add_argument("--load", default="")
+ap.add_argument("--len-aug", type=float, default=0.0, help="share of items seen cut to their title and first terms")
 ap.add_argument("--dot-weight", type=float, default=0.0, help="also train the codes' agreement q.i as a scan score")
 ap.add_argument("--fit-terms", default="", help="sim fit worlds (m12-export --corpus): the code scan's screen")
 ap.add_argument("--scan", type=int, default=30, help="items the code scan adds to the candidates")
@@ -93,7 +94,8 @@ def load_terms(path, limit=0):
     for i, w in enumerate(D.read_jsonl(path)):
         if limit and i >= limit:
             break
-        items = [{"id": it["id"], "g": grams(it["title"] + it["text"])} for it in w["items"]]
+        items = [{"id": it["id"], "g": grams(it["title"] + it["text"]),
+                  "s": grams(it["title"] + it["text"][:20]) if args.len_aug else None} for it in w["items"]]
         reqs = []
         for t in w["tasks"]:
             for r in t["requests"]:
@@ -186,7 +188,8 @@ teacher = D.load_teacher(args.teacher)
 train = load_terms(args.train, args.worlds)
 val = load_terms(args.val)
 vteacher = D.load_teacher(args.val_teacher) if args.val_teacher else {}
-dist = [{"g": grams(it["title"] + it["text"])} for it in next(D.read_jsonl(args.distract))["items"]]
+dist = [{"g": grams(it["title"] + it["text"]), "s": grams(it["title"] + it["text"][:20])}
+        for it in next(D.read_jsonl(args.distract))["items"]]
 allitems = [it for w in train for it in w["items"]] + dist
 print(f"loaded {len(train)} train worlds ({len(allitems)} items), {len(val)} val ({time.time() - t0:.0f}s)", flush=True)
 net = PairNet(args.float)
@@ -203,7 +206,10 @@ def step(batch):
         if r["fact"] not in keys and r["fact"] in byid:
             keys.append(r["fact"])
         lg = [tch.get(k, max(tch.values()) if tch else 0.0) for k in keys]
-        c = [byid[k]["g"] for k in keys] + [random.choice(allitems)["g"] for _ in range(args.neg)]
+        def pick(it):
+            return it["s"] if args.len_aug and it.get("s") and random.random() < args.len_aug else it["g"]
+
+        c = [pick(byid[k]) for k in keys] + [pick(random.choice(allitems)) for _ in range(args.neg)]
         floor = min(lg) - 3.0 if lg else -10.0
         p = torch.softmax(torch.tensor(lg + [floor] * args.neg) / args.tau, 0)
         one = torch.zeros(len(c))
@@ -421,6 +427,23 @@ def eval_scan(tag):
             if not cand:
                 continue
             s = net.score(qc, codes[[pos[x] for x in cand]].unsqueeze(0))[0].numpy()
+            if v == "h" and t["planted"] in pos:
+                # The length probe: the fact cut to its title and first 20 terms, everything else as it was.
+                k = pos[t["planted"]]
+                it = w["items"][k]
+                sc = net.ienc([grams(it["title"] + it["text"][:20])])
+                sd = float(net.dot(qc, sc.unsqueeze(0))[0, 0])
+                rank_full = int((d > d[k]).sum())
+                rank_short = int((d > sd).sum()) - int(d[k] > sd)
+                tot["short_scan_full"] = tot.get("short_scan_full", 0) + (rank_full < 60)
+                tot["short_scan_cut"] = tot.get("short_scan_cut", 0) + (rank_short < 60)
+                if t["planted"] in cand:
+                    j = cand.index(t["planted"])
+                    ss = float(net.score(qc, sc.unsqueeze(0))[0, 0])
+                    rf = int((s > s[j]).sum())
+                    rs = int((s > ss).sum()) - int(s[j] > ss)
+                    tot["short_sel_full"] = tot.get("short_sel_full", 0) + (rf < 5)
+                    tot["short_sel_cut"] = tot.get("short_sel_cut", 0) + (rs < 5)
             order = [cand[i] for i in np.argsort(-s, kind="stable")]
             for S in seats:
                 head = pool[: max(0, min(len(pool), 15) - S)]
@@ -428,7 +451,9 @@ def eval_scan(tag):
                 new = hs | set([x for x in order if x not in hs][: 15 - len(head)])
                 tot[f"{v}{S}"] = tot.get(f"{v}{S}", 0) + (t["planted"] in new)
     line = (f"[{tag} scan] hidden {tot.get('h0')}/{tot.get('h')} decoys {tot.get('c0')}/{tot.get('c')}; scan holds "
-            f"{tot.get('hscan', 0)} missed facts, {tot.get('cscan', 0)} missed decoys")
+            f"{tot.get('hscan', 0)} missed facts, {tot.get('cscan', 0)} missed decoys; length probe: facts in the scan's "
+            f"first 60 full {tot.get('short_scan_full')} cut {tot.get('short_scan_cut')}, in the selector's first 5 full "
+            f"{tot.get('short_sel_full')} cut {tot.get('short_sel_cut')}")
     for S in seats:
         line += f" | S={S}: hidden {tot.get(f'h{S}')} decoys {tot.get(f'c{S}')}"
     print(line, flush=True)

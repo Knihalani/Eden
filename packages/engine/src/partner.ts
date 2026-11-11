@@ -37,7 +37,7 @@ import {
   type SourceChangedResult,
 } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { hashString, Vocab, type WorkerPool } from "@eden/primitives";
+import { hashString, tokenize, Vocab, type WorkerPool } from "@eden/primitives";
 import {
   PlanError,
   PlannedSource,
@@ -138,6 +138,7 @@ import {
 } from "./parties";
 import { safeLine } from "./line";
 import type { PoolExpansion } from "./pool-expand";
+import type { PoolPair } from "./pool-pair";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -224,6 +225,8 @@ export interface PartnerDeps {
    * (`loadPoolExpansion`); absent, the switch is inert.
    */
   poolExpansion?: PoolExpansion;
+  /** M12 (`poolScan`, D1002): the distilled request × item scorer, loaded once per process; absent, inert. */
+  poolPair?: PoolPair;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -594,6 +597,8 @@ const MAX_OUTSTANDING = 64;
 
 export class ContextPartner {
   readonly config: EngineConfig;
+  /** `poolScan` (D1002): each cached item object's code, computed once (a changed or thawed copy is a new object). */
+  private readonly poolCodes = new WeakMap<ContextItem, Int32Array>();
   private readonly sessions = new Map<string, Session>();
   /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
   private readonly userSessions = new Map<string, Set<Session>>();
@@ -2422,6 +2427,7 @@ export class ContextPartner {
       }
       pool = this.poolTail(s, cue, pool, wide, cap);
     }
+    if (this.config.poolScan > 0 && this.deps.poolPair) pool = this.poolScanned(s, cue, pool, wide ?? [], cap);
     const cards =
       pool.length > 0 && this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -2431,6 +2437,68 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     return { pool, like: pool.map((x) => this.constraintLike(x, cards)), ...(wide ? { wide } : {}) };
+  }
+
+  /**
+   * `poolScan` (D1002): the pool's last seats, chosen by the distilled scorer among the pool, the wide candidates and
+   * the scan's best new items. An item's code is computed once a cached copy (`poolCodes`, keyed by the cached object,
+   * so a changed or thawed item gets a new one and nothing is shared across users).
+   */
+  private poolScanned(s: Session, cue: Cue, pool: Scored[], wide: readonly Scored[], cap: number): Scored[] {
+    const net = this.deps.poolPair!;
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    const seats = Math.min(this.config.poolScan, cap);
+    if (!vocab || seats <= 0) return pool;
+    const scratch = new Vocab(64);
+    const q = net.code(
+      tokenize(cue.text, scratch).filter((t) => !isStopword(t)),
+      "request",
+    );
+    const codeOf = (item: ContextItem): Int32Array => {
+      let c = this.poolCodes.get(item);
+      if (!c) {
+        c = net.code([...tokenize(item.title ?? "", scratch), ...tokenize(item.text, scratch)], "item");
+        this.poolCodes.set(item, c);
+      }
+      return c;
+    };
+    const seen = new Set<string>([...pool, ...wide].map((x) => x.item.id));
+    // The scan: every held item's code against the request's, the best `poolScanItems` new ones kept.
+    const k = this.config.poolScanItems;
+    const best: { id: string; s: number }[] = [];
+    const now = this.now();
+    this.deps.cache.eachLive(s.scope, now, (item) => {
+      if (seen.has(item.id)) return;
+      const sc = net.scan(q, codeOf(item));
+      if (best.length === k && sc <= best[k - 1]!.s) return;
+      let p = best.length < k ? best.length : k - 1;
+      best[p] = { id: item.id, s: sc };
+      while (p > 0 && best[p - 1]!.s < sc) {
+        best[p] = best[p - 1]!;
+        p--;
+      }
+      best[p] = { id: item.id, s: sc };
+    });
+    const scanned: Scored[] = [];
+    for (const b of best) {
+      const h = this.deps.cache.hitOf(s.scope, b.id, now);
+      if (h) scanned.push({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc });
+    }
+    const cands = [...pool, ...wide, ...scanned];
+    const scores = new Map(cands.map((x) => [x, net.score(q, codeOf(x.item))] as const));
+    const head = pool.slice(0, Math.max(0, Math.min(pool.length, cap) - seats));
+    const kept = new Set(head.map((x) => x.item.id));
+    const rest = cands
+      .filter((x) => !kept.has(x.item.id))
+      .sort((a, b) => scores.get(b)! - scores.get(a)!);
+    const out = [...head];
+    for (const x of rest) {
+      if (out.length >= cap) break;
+      if (kept.has(x.item.id)) continue;
+      kept.add(x.item.id);
+      out.push(x);
+    }
+    return out;
   }
 
   /**

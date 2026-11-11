@@ -737,6 +737,14 @@ export interface EngineConfig {
   poolExpand: number;
   poolExpandTerms: number;
   /**
+   * M12 (D1002, trial, off at 0): the pool's last seats chosen by a request × item scorer distilled from a teacher
+   * (`pool-pair.ts`, wired as `PartnerDeps.poolPair`) over the pool, `pushWide`'s candidates and the `poolScanItems`
+   * items whose codes agree best with the request's (a scan of every held item). With `poolScan` S, the pool keeps its
+   * first `15 - S` items as ranked.
+   */
+  poolScan: number;
+  poolScanItems: number;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -900,5 +908,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushWide: 0,
   poolExpand: 0,
   poolExpandTerms: 8,
+  poolScan: 0,
+  poolScanItems: 30,
   revisionDiff: true,
 };
