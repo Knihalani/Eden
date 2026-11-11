@@ -136,8 +136,8 @@ export function isOpenRequest(raw: string, strict = false, minWords = 4): boolea
 }
 
 /**
- * `pushIndirect` (P2, D820; in the default since D828): chatter openers a remark starts with beyond `REMARKS` ("haha, …", "ugh …",
- * "morning! …"), and contractions `isOpenRequest` reads as words once their apostrophe is stripped ("I'd", "Let's",
+ * `pushIndirect` (P2, D820; in the default since D828): chatter openers a remark starts with beyond `REMARKS`
+ * ("haha, …", "ugh …", "morning! …"), and contractions `isOpenRequest` reads as words once their apostrophe is stripped ("I'd", "Let's",
  * "we'd": statements or the indirect lead-ins `indirectRest` reads). Only with the switch.
  */
 const CHATTER = new Set(
@@ -240,8 +240,8 @@ const DATED =
   /[£$€]\s?\d|\b\d{1,2}(?::\d{2}|\/\d{1,2})\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b\d{1,2}\s?(?:am|pm)\b|\b(?:today|tomorrow|tonight|next week)\b/i;
 
 /**
- * `pushIndirect` (P2, D820; in the default since D828): the request inside an indirect lead-in, verb first, with no closing
- * question mark ("Should I book the 7am flight to Leeds?" is "book the 7am flight to Leeds"), or null when the
+ * `pushIndirect` (P2, D820; in the default since D828): the request inside an indirect lead-in, verb first, with no
+ * closing question mark ("Should I book the 7am flight to Leeds?" is "book the 7am flight to Leeds"), or null when the
  * message has no lead-in (after `OPENERS`), when what follows is under two words, or when its verb thinks or waits
  * (`NOT_ACTING`). The push then reads the request as its imperative: listed or opened as any other.
  */
