@@ -11,39 +11,49 @@
   sees a burst of a thousand.
 - **The change (a trial, off).** Each unused source gets its own point in the week, a hash of the tenant, the user
   and the source, and is swept there every week. Nothing is saved for it. A source whose last sweep was not at its
-  point (after the backfill, after the user was away more than a week and a half, after `sweepSoon`) waits for
-  its point: between 4 and 11 days, once, in place of 7. So the spread adds no sweep on average (the first build
+  point (after the backfill, after an absence of more than three days over its point, after `sweepSoon`) waits
+  for its point: between 4 and 11 days in place of 7, and never more than 11. This happens again each time an
+  absence takes a source off its point: for a user away four days of every week some sources run on gaps of up
+  to 11 days for good (the review's probe; the first build of this form had them on 14). So the spread adds no
+  sweep on average (the first build
   swept early instead and cost a whole extra sweep in week one; the parent asked for this form). Copies not swept
   for more than a day are re-read before delivery as ever (D356), which is what makes the 11 days safe to hand
-  over; what can be late is a new or deleted item's discovery, by up to four days, once.
+  over; what can be late is a new or deleted item's discovery, by up to four days.
 - **Measured** (`source-days.bench.ts 1000 300 23`, one run each; counts move by a few percent between runs):
 
   | Background listings | Off | On |
   | --- | --- | --- |
   | Worst day | 1,035 | 196 |
   | A steady week (days 15–21) | 1,293 | 1,291 |
-  | Days 2–22 (three sweeps each) | 3,727 | 3,212 |
+  | Days 2–22 | 3,727 | 3,212 |
   | The first week (days 1–7) | 148 | 497 |
 
   The first week is higher because three sevenths of the sources have their point on days 5–7; the other four
-  sevenths come on days 8–11, later than the default's day 8.
+  sevenths come on days 8–11, later than the default's day 8. Days 2–22 are lower only because of where the
+  window ends (sources first swept on days 9–11 have their third sweep on days 23–25): over any span the two
+  arms differ by under one sweep a source.
   - Bench wall time on its worst day: 11.9 s → 2.3 s; over the steady week 14.9 s → 13.4 s (one run, this box).
-  - **Card calls rise, carded items fall.** Steady week: 176 → 253 calls (+44%) for 1,422 → 871 items. Items that
+  - **Card calls rise, carded items fall.** Steady week: 176 → 253 calls (+44%) for 1,422 → 871 items; the
+    bench prices a call flat, so its own dollar column reads $0.0319 → $0.0458 (+44%). Items that
     arrive a few at a time make smaller batches. A call's fixed cost is small: in run 3's ledgers (3,142 card calls)
     the fixed prefix is 1,319 tokens and was read from the prompt cache in all but 2 calls, 2% of the card bill
-    at list prices; uncached input (the items' text) is 37% and output 59%. So the bill follows the items carded,
-    not the calls, and would be lower with the spread: **an estimate, not a measurement**, and I did not find why
-    fewer items are carded, so I do not claim it as a saving.
-  - Stale and deleted deliveries with every source unused (`quality-cli --never-used`, 16 users × 20 sessions):
-    stale 11 of 122 → 11 of 137 updates, deleted items delivered 2 of 4 → 2 of 8, re-reads 2,461 → 2,294. Level;
-    no interval.
+    at list prices; uncached input (the items' text) is 37% and output 59%. So the bill follows the items carded
+    more than the calls, and would be lower with the spread **only because fewer items are carded**, which I
+    did not explain: at equal items, more calls cost a little more. An estimate, not a measurement, and not
+    claimed as a saving.
+  - `quality-cli --never-used` (16 users × 20 sessions): stale 11 of 122 → 11 of 137 updates, deleted items
+    delivered 2 → 2 (cited 4 → 8), re-reads 2,461 → 2,294, ask precision 0.446 → 0.38. **Not evidence either
+    way:** its background-call column is 0 in both arms and I did not confirm its clock reaches a first long
+    sweep (4 to 11 days), so the differences may be run-to-run noise. The safety argument is D356's doubt, which
+    the review probed directly (a deleted item in a source six days unswept was re-read and not cited).
 - **Not measured.** The worst single tick with the spread on (sweeps run only while the user is active, so the
-  points that pass overnight come due at the day's first tick: about a seventh of the sources against all of
-  them); a connector's real rate limits; the cards' token cost; many users on one server (their points differ by
+  points that pass while the user is away come due at the first tick back: the review's probe of a Monday-to-
+  Friday user had 83 of 200 sources in Monday's first tick, against all 200 with the switch off, a 2.4 times cut
+  where the always-on bench shows 5); a connector's real rate limits; the cards' token cost; many users on one server (their points differ by
   the hash, and they connect at different times anyway).
 - **Verdict: a trial for the owner, not promoted.** The parent's bar was "the worst-day cut with no first-week
-  increase and stale deliveries not up". The worst day is five times smaller and stale deliveries are level, but
-  the first week still rises (148 → 497 listings, repaid by day 22) and the card calls' cost is an estimate. It is
+  increase and stale deliveries not up". The worst day is five times smaller, but the first week still rises
+  (148 → 497 listings), stale deliveries were not really measured, and the card calls' cost is an estimate. It is
   promoted if a run that prices card tokens reads them not higher; else deleted on its end date.
 
 ## Memory per user with the rare-word table (asked by the parent after D603)
@@ -78,7 +88,8 @@ python3 packages/sim/lab/f1/fresh.py off=.local/n1/q-spread-off.json on=.local/n
 Outputs: `packages/sim/lab/o1/sweep/` (`days-off.txt`, `days-on.txt`, `quality.txt`). Test:
 `packages/engine/src/unused-sweep.test.ts` (40 unused sources, two users, four weeks: off, all on one day; on, at
 most half on any day, the first 4 to 11 days after the backfill, then every seven days, no more listings than off,
-the two users' points apart, and every sweep waits for the user's cache first, the review's finding).
+the two users' points apart; a user away four days of every week has no source wait past the bound; with a
+short long period a turn inside a day of the last sweep waits for the user's cache, the reviews' findings).
 
 The first build (commit ea151a3d) swept a source at the first tick past its point whatever its last sweep: the
 worst day 1,041 → 207, but the first week 183 → 1,220 listings, and the review found it could sweep a frozen

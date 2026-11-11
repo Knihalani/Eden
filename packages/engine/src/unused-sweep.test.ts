@@ -363,4 +363,60 @@ describe("syncUnusedSweepMs (D356)", () => {
     // Another user's sources of the same ids have points of their own.
     expect(on.alice.filter((d, k) => d[0] === on.bob[k]![0]).length).toBeLessThan(20);
   });
+
+  test("syncSweepSpread: a user away four days of every week has no source wait past 11 days", async () => {
+    const all = Array.from({ length: 60 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
+    const t = setup(new Map([["alice", all]]), { ...ON, syncSweepSpread: true });
+    await warm(t.partner, alice);
+    const last = all.map(() => 0);
+    const counts = all.map((x) => x.lists);
+    let longest = 0;
+    let sweeps = 0;
+    // Ten weeks, active 09:00-18:00 on three days of each (T0 is 09:00); the clock runs through the rest.
+    for (let day = 0; day < 70; day++) {
+      for (let k = 0; k < 144; k++) {
+        t.advance(10 * MIN);
+        if (day % 7 < 3 && k < 54) {
+          t.partner.sync!.track(alice, t.now());
+          await t.partner.sync!.tick();
+        }
+      }
+      all.forEach((x, k) => {
+        if (x.lists === counts[k]) return;
+        counts[k] = x.lists;
+        sweeps++;
+        longest = Math.max(longest, day - last[k]!);
+        last[k] = day;
+      });
+    }
+    // The bound is 11 days; the user's next active day after it is at most four days on.
+    expect(longest).toBeLessThanOrEqual(15);
+    expect(sweeps).toBeLessThanOrEqual(60 * 10);
+  });
+
+  test("syncSweepSpread: with a short long period, a turn inside a day of the last sweep waits for the cache", async () => {
+    const all = Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
+    const t = setup(new Map([["alice", all]]), { syncUnusedSweepMs: 1.2 * DAY, syncSweepSpread: true });
+    let ready = 0;
+    const real = t.cache.ready.bind(t.cache);
+    t.cache.ready = (scope) => {
+      ready++;
+      return real(scope);
+    };
+    await warm(t.partner, alice);
+    let early = 0;
+    // The first 23 hours: the daily rule calls for nothing yet, so every listing is a spread turn.
+    for (let k = 0; k < 23 * 6; k++) {
+      const lists = all.reduce((n, x) => n + x.lists, 0);
+      const before = ready;
+      t.advance(10 * MIN);
+      t.partner.sync!.track(alice, t.now());
+      await t.partner.sync!.tick();
+      if (all.reduce((n, x) => n + x.lists, 0) > lists) {
+        early++;
+        expect(ready).toBeGreaterThan(before);
+      }
+    }
+    expect(early).toBeGreaterThan(0);
+  });
 });

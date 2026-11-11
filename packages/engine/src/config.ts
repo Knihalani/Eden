@@ -370,7 +370,8 @@ export interface EngineConfig {
    * Trial (D604, O1; off). With `syncUnusedSweepMs`: each unused source is swept at its own point in the period (a
    * hash of the user and the source) instead of a period after its last sweep, so the sources a user connected
    * together are not all listed in one tick a week later (1,000 listings in a minute on the day bench). A source
-   * whose last sweep was off its point (the backfill, a long absence) waits 4/7 to 11/7 of the period, once.
+   * whose last sweep was off its point (the backfill, a long absence) waits 4/7 to 11/7 of the period (never
+   * longer), again each time an absence takes it off its point.
    */
   syncSweepSpread: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */

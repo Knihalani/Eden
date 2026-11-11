@@ -105,7 +105,8 @@ export interface SyncOptions {
    * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
    * user and the source) and is swept there, so a user's unused sources are not all listed in the tick a week
    * after the backfill. A source swept off its point (the backfill, a return) waits 4/7 to 11/7 of a period for
-   * its next sweep, once (`sweepTurn`); its unswept copies are doubted as ever (`sweepLapsed`).
+   * its next sweep (`sweepTurn`), again each time a long absence takes it off its point; its unswept copies are
+   * doubted as ever (`sweepLapsed`).
    */
   sweepSpread?: boolean;
   /**
@@ -863,21 +864,23 @@ export class SyncManager {
    * `unusedSweepMs` (D356): a source the user does not use whose connector can fetch by ref is swept that often. One
    * without a fetch keeps the daily sweep: its copies could not be re-read before delivery.
    */
+  private onLongSweep(s: SourceSync): boolean {
+    return (this.o.unusedSweepMs ?? 0) > 0 && !s.engaged && s.fetches;
+  }
+
   /**
    * `sweepSpread`: the source's own point in the long period has come, counted from `SPREAD_EARLY` of a period
    * before its sweep would be due. The point is a hash of the tenant, the user and the source, so it needs no saved
    * state and two users' sweeps do not line up. A source swept at its point is swept a period later (the margin
    * takes a sweep that ran up to three days late, a weekend the user was away); one swept off its point (the
-   * backfill, `sweepSoon`, a return) waits between 4/7 and 11/7 of a period, once, so the spread costs no sweep.
+   * backfill, `sweepSoon`, a return) waits between 4/7 and 11/7 of a period. Never longer: past 11/7 it is due
+   * whatever its point (the review: a user away four days of every week kept some sources on a two-period gap).
    */
   private sweepTurn(u: UserSync, s: SourceSync, now: number, every: number): boolean {
+    if (now - s.sweptAt >= every + (1 - SPREAD_EARLY) * every) return true;
     const at = hashString(`${u.scope.tenantId}\0${u.scope.userId}\0${s.id}`, 0x5eed) % every;
     const from = s.sweptAt + every - SPREAD_EARLY * every;
     return Math.floor((now + at) / every) > Math.floor((from + at) / every);
-  }
-
-  private onLongSweep(s: SourceSync): boolean {
-    return (this.o.unusedSweepMs ?? 0) > 0 && !s.engaged && s.fetches;
   }
 
   private isCurrent(s: SourceSync, now: number): boolean {
