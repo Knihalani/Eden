@@ -629,7 +629,7 @@ commit d42d30b9; the Python trainers stay in `packages/sim/lab/m8/` (README ther
 `eden-m8`. Kept in the tree: `days-calls.ts --pool-diag` rows carry the planted item's `source`, arrival `lag` and
 whether it was `held` after its request (D946's stage table).
 
-### 1l. Transfer: the leave-one-generator-out screen (M14, D1020–D1023; docs/research/m14-transfer.md)
+### 1l. Transfer: the leave-one-generator-out screen (M14, D1020–D1025; docs/research/m14-transfer.md)
 
 Every micro model that looked strong on M2's synthetic worlds failed on the sim's hand-written families (D908, D909,
 D914, D920). The LOGO screen is the standard check before any wiring: train on all but one **source** (a generator of

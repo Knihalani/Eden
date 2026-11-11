@@ -661,3 +661,9 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
 | D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
 | D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
+| D1020 | 2026-11-11 | Adopted (lab tooling, M14): two more task generators on M2's schema and labels, G2 and G3. | lab |
+| D1021 | 2026-11-11 | Adopted (lab tooling, M14): the leave-one-generator-out screen is the standard transfer check for a micro model. | lab |
+| D1022 | 2026-11-11 | Finding: M2's fact-versus-twin separation is mostly length. | finding |
+| D1023 | 2026-11-11 | Finding: no transfer recipe closes the gap to the sim's hand-written families; mixing generators does not beat M2 alone. | finding |
+| D1024 | 2026-11-11 | Adopted (lab data, M14): a length-debiased M2 (`m2lb`), the M2 slice a micro model is screened on. | lab |
+| D1025 | 2026-11-11 | Rejected: the recipes that did not help on the held-out sources. | rejected |
