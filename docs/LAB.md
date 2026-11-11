@@ -755,6 +755,26 @@ an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (h
 4 s a task. Free models: a 4-task smoke took 16 requests and 20.8 s (edge-freelab.md); add `--allow-logging
 --max-requests N` and free model ids.
 
+**A killed run resumes without paying twice (`--resume`, R4, D813).** pi-ab appends each finished unit to
+`<out>.partial.jsonl` (beside `--out`, `pi-ab.json` → `pi-ab.partial.jsonl`) as it lands: one JSON line per task, or
+under `--day`/`--days` per whole day through its recap (a day shares one transcript and its recap moves the world).
+A unit is written once its grades are in and nothing in it failed (an error, a failed grading, a recap that
+failed): those run again. Start the same command again with `--resume` after a kill, a restart or a cap: the units
+in the journal call no model and add no line to the spend ledger; their results, timeline lines, day summaries and
+spend are merged in as if they had just run (`--budget` counts their spend, so the cap stays the whole run's), and
+the results file says `resumed: {journal, units, tasks, spentUsd}`. A torn last line is dropped and its unit runs
+again. What a reused unit's Eden would have left behind (its reads, its session) is not rebuilt: the stream's clock,
+the sync's ticks, a recap's moves and `--late`'s arrivals are replayed so later units see the same world and clock.
+The key is the command's flags less those that only name outputs or caps (`--out`, `--timeline`, `--cards-out`,
+`--budget`, `--spend-*`, `--run-label`, `--max-requests`, `--rpm`, `--replay-timing`), the contents of every file a
+flag names, the tasks, the harness version and prompts hash, and the code (the `packages/` tree and `bun.lock`, with
+uncommitted changes; `EDEN_COMMIT_SHA` in a Modal shard): any difference is refused, naming what changed. An
+existing journal without `--resume` is refused too (exit 2); a run that finished every unit deletes it.
+`--connect-at` runs users in real time and is not journalled. Each resumed stream backfills again: with `--cards`
+the cards the killed attempt made live are replayed from its `--cards-out` (read back as `--cards` runs always do);
+without `--cards` a stream's live cards are made, and paid, again. Test: `pi-ab-resume.test.ts` ($0, a stand-in
+OpenRouter preloaded, `fake-openrouter.ts`).
+
 **Dressed worlds (`--dress`, D287).** Many requests name a person or firm no item of their generated world names, so
 the agent's first lookups cannot succeed (`bun packages/sim/lab/a6/census.ts [--dress]` counts absent names broadly).
 `pi-ab --dress` adds, per such person or firm, one ordinary message from it (no constraint wording, the same in every
@@ -1016,7 +1036,9 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
 --cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal|none] [--set JSON]`, about 10 s. pi-ab's 2 h
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
-  gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
+  gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md). With `--json F` each user is
+  appended to `F.partial.jsonl` as it finishes and `--resume` reuses them (D813: keyed on the flags but `--seeds`,
+  `--json`, `--pool-diag`, the cards and intent files' contents and the code, so more seeds can be added on a resume).
   `--recap-notice none` (O1, D605) moves the day's items with no notice at all, so only a poll or a sweep finds the
   change: the screen that prices fewer polls (update packets, old copies held undoubted). The line `moved items at
   their recap` says what became of each (unhanded, updated, unpolled, unseen, undelivered; D606).
@@ -1090,7 +1112,11 @@ estimated cost of each run): `lab_fanout.py` fans pi-ab seeds or funnel shards o
 shard, 16 GiB, 24 GiB at `--noise-sources` ≥ 100; a hard `--cap` split across shard ledgers) and runs pi-ab-report /
 pi-cost-report or the funnel score locally on `.local/modal/<run>/`; `cards_distill.py` trains, evaluates and serves
 a small open model on Haiku's cards; `embed_screen.py` ranks planted items by embedding against the push's lexical
-pool. Without a token:
+pool. `lab_fanout.py` saves each shard under `.local/modal/<run>/<shard>/` the moment it returns (a
+`returned.json` marker last); after the local collector dies, the same command with `--run <run> --resume` reads the
+shards that exited 0 back and re-launches only the rest (D813; a plan or commit that differs is refused). Shards
+cut off with the collector are paid again: a shard's pi-ab journal lives in its container and dies with it. Without
+a token:
 
 ```bash
 bun packages/sim/src/lab/cards-distill.ts export --out .local/modal/cards/data      # the training set, ~60 s, $0

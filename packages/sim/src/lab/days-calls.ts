@@ -9,7 +9,10 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE] [--intent FILE[,FILE]]
+ *     [--pool-diag FILE] [--intent FILE[,FILE]] [--resume]
+ *
+ * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
+ * (D813, `main` below).
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
@@ -28,6 +31,7 @@ import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
+import { argvFields, argvFiles, codeVersion, JournalRefused, partialPath, RunJournal } from "./run-journal";
 import { parseSuites } from "./suites";
 
 export type Phase = "backfill" | "tick" | "notice" | "request";
@@ -389,8 +393,22 @@ export const callsWhere = (counts: Counts, pred: (phase: Phase, source: string, 
     return pred(p, s, op) ? n + v : n;
   }, 0);
 
-if (import.meta.main) {
-  const argv = process.argv.slice(2);
+/** One user's line in the `--json` journal (D813): the user and, with `--pool-diag`, their planted rows. */
+interface UserUnit {
+  user: DaysCallsUser;
+  planted: PlantedRow[];
+}
+
+/**
+ * The CLI (above), with the user run injectable for tests. With `--json F` each user is appended to
+ * `F.partial.jsonl` as it finishes, and `--resume` reuses the users found there (keyed on the flags but `--seeds`,
+ * `--json`, `--pool-diag` and `--resume`, the cards and intent files' contents and the code: `run-journal.ts`).
+ */
+export async function main(
+  argv: string[],
+  run: (seed: number, o: DaysCallsOptions) => Promise<DaysCallsUser> = daysCalls,
+  log: (line: string) => void = console.log,
+): Promise<void> {
   const opt = (name: string, fallback: string) => {
     const i = argv.indexOf(`--${name}`);
     return i >= 0 ? (argv[i + 1] ?? fallback) : fallback;
@@ -418,10 +436,37 @@ if (import.meta.main) {
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
   const diag = opt("pool-diag", "");
+  const out = opt("json", "");
+  if (argv.includes("--resume") && !out) throw new JournalRefused("--resume reads the journal beside --json FILE");
+  const journal = out
+    ? RunJournal.open<UserUnit>(
+        partialPath(out),
+        {
+          harness: "days-calls",
+          argv: argvFields(argv, ["--seeds", "--json", "--pool-diag", "--resume"]),
+          inputs: argvFiles(["--cards", cardsFile, "--intent", cardsFile ? intentFiles.join(",") : ""], []),
+          code: codeVersion(),
+        },
+        argv.includes("--resume"),
+      )
+    : null;
   const planted: PlantedRow[] = [];
-  if (diag) o.onPlanted = (row) => void planted.push(row);
   const users: DaysCallsUser[] = [];
-  for (const seed of seeds) users.push(await daysCalls(seed, o));
+  let reused = 0;
+  for (const seed of seeds) {
+    const done = journal?.done.get(`w${seed}`);
+    if (done) {
+      reused++;
+      users.push(done.user);
+      planted.push(...done.planted);
+      continue;
+    }
+    const mine: PlantedRow[] = [];
+    const user = await run(seed, diag ? { ...o, onPlanted: (row) => void mine.push(row) } : o);
+    journal?.write(`w${seed}`, { user, planted: mine });
+    users.push(user);
+    planted.push(...mine);
+  }
   if (diag) writeFileSync(diag, planted.map((r) => `${JSON.stringify(r)}\n`).join(""));
   const requests = users.reduce((n, u) => n + u.requests, 0);
   const days = users.reduce((n, u) => n + u.days, 0);
@@ -431,8 +476,8 @@ if (import.meta.main) {
   const label =
     `push ${push}${o.recapSignal ? " (recap: bare signal)" : ""}${o.ask ? ", one ask a request" : ""}` +
     `${cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
-  console.log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
-  console.log("phase     source    op       calls   per request  per user-day");
+  log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
+  log("phase     source    op       calls   per request  per user-day");
   // With noise connectors, one row for all of them a phase and operation: a thousand rows say nothing more.
   const world5 = new Set(["gmail", "calendar", "drive", "slack", "crm"]);
   const rows: Counts = {};
@@ -445,12 +490,12 @@ if (import.meta.main) {
     const v = rows[k]!;
     const per = p === "backfill" ? "" : (v / requests).toFixed(3);
     const perDay = p === "backfill" ? `${(v / users.length).toFixed(1)} a user` : (v / days).toFixed(2);
-    console.log(
+    log(
       `${p.padEnd(9)} ${s.padEnd(9)} ${op.padEnd(7)} ${String(v).padStart(6)}   ${per.padStart(10)}  ${perDay.padStart(12)}`,
     );
   }
   const at = (ps: Phase[]) => callsWhere(total, (p) => ps.includes(p));
-  console.log(
+  log(
     `request-time ${(at(["request"]) / requests).toFixed(3)} a request; background (tick + notice) ` +
       `${(at(["tick", "notice"]) / days).toFixed(2)} a user-day, ${(at(["tick", "notice"]) / requests).toFixed(3)} ` +
       `a request; steady ${(at(["request", "tick", "notice"]) / requests).toFixed(3)} a request; backfill ` +
@@ -461,17 +506,15 @@ if (import.meta.main) {
     const got = users.reduce((x, u) => x + (u.surfaced[kind]?.got ?? 0), 0);
     return `${got}/${n}`;
   };
-  console.log(
-    `surfaced (a packet or the ask's citations): hidden facts ${surf("hidden")}, control decoys ${surf("control")}`,
-  );
+  log(`surfaced (a packet or the ask's citations): hidden facts ${surf("hidden")}, control decoys ${surf("control")}`);
   const byDay = Array.from({ length: Math.max(...users.map((u) => u.requestCallsByDay.length)) }, (_, d) => {
     const c = users.reduce((x, u) => x + (u.requestCallsByDay[d] ?? 0), 0);
     const r = users.reduce((x, u) => x + (u.requestsByDay[d] ?? 0), 0);
     return (c / Math.max(1, r)).toFixed(1);
   });
-  console.log(`request-time calls a request, by day: ${byDay.join(" ")}`);
+  log(`request-time calls a request, by day: ${byDay.join(" ")}`);
   for (const u of users)
-    console.log(
+    log(
       `  w${u.seed}: verify ${JSON.stringify(u.freshness)}; items re-read ${u.fetchedItems}, more than once ` +
         `${u.refetched}; moved ${u.changed}, update packets ${u.updatePackets}, stale copies held ${u.staleHeld}`,
     );
@@ -479,7 +522,22 @@ if (import.meta.main) {
     for (const [k, v] of Object.entries(u.fates)) all[k] = (all[k] ?? 0) + v;
     return all;
   }, {});
-  console.log(`moved items at their recap: ${JSON.stringify(fates)}`);
-  const out = opt("json", "");
+  log(`moved items at their recap: ${JSON.stringify(fates)}`);
   if (out) writeFileSync(out, JSON.stringify({ label, seeds, days: o.days, requests, userDays: days, total, users }));
+  if (journal) {
+    if (reused || journal.torn) {
+      log(`resumed: ${reused} of ${seeds.length} users from ${journal.path} (${journal.torn} torn lines run again)`);
+    }
+    journal.finish(true);
+  }
+}
+
+if (import.meta.main) {
+  try {
+    await main(process.argv.slice(2));
+  } catch (e) {
+    if (!(e instanceof JournalRefused)) throw e;
+    console.error(`days-calls: ${e.message}`);
+    process.exit(2);
+  }
 }

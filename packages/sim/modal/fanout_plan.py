@@ -7,6 +7,7 @@ merging what the shards return. `lab_fanout.py` runs these on Modal; `tests/test
 
 prints the shards and their commands without starting anything (no token needed).
 """
+import hashlib
 import json
 import math
 import os
@@ -487,6 +488,81 @@ def write_shard(run_dir, result):
         json.dump({k: result.get(k) for k in ("name", "kind", "code", "seconds", "command", "spentUsd", "capUsd")},
                   f, indent=2)
     return written
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Resuming a run (R4, D813): each shard's files are written under run_dir/<name>/ the moment it returns, with a
+# `returned.json` marker written last, so a collector that dies (a restarted machine) loses no finished shard. The
+# same command again with `--resume` reads the finished shards back and re-launches only the rest.
+
+RETURNED = "returned.json"
+
+
+def shard_fingerprint(shard, commit=""):
+    """Everything that decides what a shard computes: its plan (suites, seeds, args, cap, label) and the commit."""
+    blob = json.dumps({**asdict(shard), "commit": commit}, sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+def save_shard(run_dir, result, fingerprint):
+    """Writes one returned shard at once (`write_shard`), then its marker, atomically: a marker means whole files."""
+    write_shard(run_dir, result)
+    base = os.path.join(run_dir, safe_rel(result["name"]))
+    marker = {"fingerprint": fingerprint, **{k: result.get(k) for k in ("code", "seconds", "command", "commit")}}
+    tmp = os.path.join(base, RETURNED + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(marker, f, indent=2)
+    os.replace(tmp, os.path.join(base, RETURNED))
+
+
+def load_shard(run_dir, shard):
+    """A returned shard as `_run` returned it (its files unpacked), read back from run_dir/<name>/."""
+    base = os.path.join(run_dir, safe_rel(shard.name))
+    with open(os.path.join(base, RETURNED)) as f:
+        marker = json.load(f)
+    files = {}
+    for root, _, names in os.walk(base):
+        for n in names:
+            rel = os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
+            if rel in (RETURNED, "status.json") or rel.endswith(".tmp"):
+                continue
+            with open(os.path.join(root, n), "rb") as f:
+                files[rel] = f.read()
+    return {"name": shard.name, "kind": shard.kind, "code": marker.get("code"), "seconds": marker.get("seconds"),
+            "command": marker.get("command"), "capUsd": shard.cap_usd, "commit": marker.get("commit"),
+            "files": files}
+
+
+def resume_plan(run_dir, planned, commit, resume=False):
+    """The shards an earlier attempt finished (read back, to merge) and those still to run. Only a shard that exited 0
+    under the same fingerprint is reused; a failed one runs again. Refused: finished shards without `resume` (they
+    would be overwritten), and a run directory written by another plan or commit (its results are not this run's)."""
+    if not os.path.isdir(run_dir):
+        return [], list(planned)
+    returned = sorted(d for d in os.listdir(run_dir) if os.path.exists(os.path.join(run_dir, d, RETURNED)))
+    if returned and not resume:
+        raise PlanError(f"{run_dir} already holds {len(returned)} returned shards: pass --resume to reuse the finished "
+                        "ones (nothing is paid twice), or name a new --run")
+    by_name = {s.name: s for s in planned}
+    stray = [d for d in returned if d not in by_name]
+    if stray:
+        raise PlanError(f"{run_dir} holds shards this plan does not ({', '.join(stray[:3])}): another plan wrote it; "
+                        "name a new --run")
+    finished, left = [], []
+    for s in planned:
+        if s.name not in returned:
+            left.append(s)
+            continue
+        with open(os.path.join(run_dir, s.name, RETURNED)) as f:
+            marker = json.load(f)
+        if marker.get("fingerprint") != shard_fingerprint(s, commit):
+            raise PlanError(f"{s.name} in {run_dir} ran another plan or commit: its results cannot stand for this "
+                            "one; run the earlier command, or name a new --run")
+        if marker.get("code") == 0:
+            finished.append(load_shard(run_dir, s))
+        else:
+            left.append(s)
+    return finished, left
 
 
 def merge(run_dir, results, cap_usd=None):
