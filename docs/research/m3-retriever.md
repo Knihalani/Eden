@@ -271,3 +271,19 @@ architecture):
   in: `pushRetrieve` fails open to it), so it need not delay `syncKick`'s first value, but it competes for the same
   cores as every user's requests.
 - **The route that avoids both** is an item side with no transformer: `bag` (§5), being trained.
+
+## 5. `bag`: no transformer on either side (D905)
+
+Items as a learned weighted sum of their WordPiece tokens' vectors and hashed token bigrams (2^18 buckets), then a
+two-layer MLP; requests through asym's token table. Trained as asym-s1 (train1–4 plus the generated families, 2
+epochs). Fold A, held-out days requests:
+
+| run | variant | facts @15 (113) | decoys @15 (85) | facts @5 vs shipped (123) | decoys @5 (83) | bars |
+|---|---|---|---|---|---|---|
+| bag-s1 | model alone | 128 | 91 | 107 | 66 | fail |
+| bag-s1 | hybrid k 5 | — | — | 138 (+9.6) | 91 | @5: fail by 0.4 point |
+| bag-s1 | hybrid k 10 | 140 (+17.2) | 107 (ratio 1.259 against 1.239) | 137 | 90 | @15: fail on decoys |
+
+Ingest becomes a lookup and two small products an item, so no dependency and no backfill CPU to speak of; it reaches
+about two thirds of asym's gain at @5 and misses both bars by a hair. The transformer at ingest is what buys asym's
+separation (alone 152 against 128 at @15).
