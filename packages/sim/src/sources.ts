@@ -598,9 +598,12 @@ export function simIndexes(world: World): SimIndex[] {
   return Object.keys(world.sources).map((id) => new SimIndex(id, world));
 }
 
-/** One user's connectors over shared indexes. */
+/**
+ * One user's connectors over shared indexes. A source the profile set does not name (a synth world's rare source,
+ * D884: notes, bank, health app...) is served with drive's profile, a relevance-searched store of documents.
+ */
 export function sourcesFor(indexes: SimIndex[], profiles: ProfileSet, timeScale: number, seed: number, track = true) {
-  return indexes.map((ix, i) => new SimSource(ix, profiles[ix.id]!, timeScale, seed * 31 + i, track));
+  return indexes.map((ix, i) => new SimSource(ix, profiles[ix.id] ?? profiles.drive!, timeScale, seed * 31 + i, track));
 }
 
 /** One SimSource per source id in the world, all with the same profile set. */

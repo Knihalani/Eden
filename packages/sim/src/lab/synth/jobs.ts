@@ -58,9 +58,47 @@ export function parseJson(text: string): unknown {
     try {
       return JSON.parse(body);
     } catch {
-      return JSON.parse(repairEarlyClose(body));
+      try {
+        return JSON.parse(repairEarlyClose(body));
+      } catch {
+        return mergeObjects(body);
+      }
     }
   }
+}
+
+/**
+ * Haiku sometimes splits its answer over consecutive top-level objects (`{"persona": …, "people": …}` then
+ * `{"persona": null, "items": …}`): each is parsed and their non-null members merged, the first value winning.
+ */
+export function mergeObjects(text: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let start = -1;
+  let parts = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === "{" || c === "[") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (c === "}" || c === "]") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const o = JSON.parse(text.slice(start, i + 1)) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(o)) if (v !== null && out[k] === undefined) out[k] = v;
+        parts++;
+      }
+    }
+  }
+  if (parts < 2) throw new Error("no JSON object in reply");
+  return out;
 }
 
 /**
@@ -249,7 +287,11 @@ async function collect(
           custom_id: string;
           result: {
             type: string;
-            message?: { content: { type: string; text?: string }[]; usage: Record<string, number>; stop_reason: string };
+            message?: {
+              content: { type: string; text?: string }[];
+              usage: Record<string, number>;
+              stop_reason: string;
+            };
           };
         };
         const k = keys.get(r.custom_id);

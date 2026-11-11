@@ -157,8 +157,8 @@ ${Object.entries(STYLES)
 - "foreign": when asked, the request once more in the given language, as a native speaker types it.
 - "followups": when asked, two follow-up messages a few days later about the same intent ("Did you…?", "Any update on…", "Ok go ahead and…").
 - "fact": the item that changes what a careful assistant should do. It must state the constraint concretely (dates, amounts, names, reference numbers) and be about the very same person, thing and date as the request.
-- "decoy": the fact's all-clear twin, of the decoy kind asked for: same kind of item, same topic, mostly the same wording and people, so a quick reader could confuse them; but on a careful reading it gives no reason to change the request.
-- "neutrals": two more items about the same topic that are routine and all clear (a confirmation, a reminder, a related thread), bearing on nothing.
+- "decoy": the fact's all-clear twin, of the decoy kind asked for: same kind of item, same topic, mostly the same wording and people, so a quick reader could confuse them; but on a careful reading it gives no reason to change the request. Read it as if it were the only item the assistant had: it must not leave anything open or pending, must not give a different date, place or amount for the thing the request is about, and must not restrict anyone or anything the request involves. For "other-entity", the other person or thing plays no part in the request at all. Its text must differ from the fact's in the detail that makes it all clear.
+- "neutrals": two more items about the same topic that are routine and all clear (a booking confirmation, a receipt, a reminder that agrees with the request, a friendly related thread). They must not mention anything pending, conditional, rescheduled or still to be confirmed, nor any date, time, place or amount that differs from the request's.
 
 Each item must read like a real item of its source (a note is written by the user, a bank or health-app entry is a structured notification, a chat is lines between people) and fit the person's life.
 The fact and the decoy both exist in the person's data: the decoy must not mention the fact (no shared reference numbers) and must not contradict it; it is a separate, all-clear item that resembles it (except in a silent change, where the decoy is the item before its edit).
@@ -208,3 +208,61 @@ export const TIMING_TEXT = {
   multiday: (asked: string, at: string, again: string) =>
     `a MULTI-DAY timeline. The user first asks on ${asked}; the fact arrives on ${at}; the user follows up on ${again}. The decoy is already in the user's data before the first request.`,
 };
+
+// ---------------------------------------------------------------------------------------------------------------
+// Stage 4: revision. The writer re-reads its own test case against the faults the pilot's audit found (D883) and
+// rewrites what fails. It is construction, not judging: every label still comes from the item's role.
+
+export function reviseSystem(): string {
+  return `You check and repair one test case for the context helper of a personal AI assistant, written earlier for a synthetic person. Everything is fictional. Today is ${dayName(0)}, 09:00.
+
+Calendar (use it so weekdays and dates agree):
+${calendar()}
+
+${ITEM_FORMAT}
+
+The test case has a request, a FACT (must change what a careful assistant does about the request), a DECOY (a look-alike that must be all clear) and NEUTRAL items (same topic, routine, all clear). Check each against this list and rewrite only the items that fail:
+
+FACT
+- It bears on this very request: the same person, thing and date or period, and the date is current or upcoming (not a past event that no longer matters), and it applies to this person (not a different model, account, child or event than the request's).
+- It states the constraint itself; it does not rely on another item to make the point.
+- It does not bear on any of the person's OTHER requests listed.
+
+DECOY
+- Read alone, it gives no reason to do anything other than what was asked: nothing pending or conditional, no rule that the request would break, no limit the request would exceed, no different date, time, place or amount for the same thing, no restriction on anyone the request involves.
+- It does not show the thing as already done or already booked (that would change the request too).
+- It still resembles the fact (same kind of item, topic and people where possible).
+
+NEUTRALS
+- Routine and all clear: nothing pending, conditional, rescheduled or still to be confirmed; no date, time, place or amount that differs from the request's; nothing that shows the request is already done; nothing that reveals or hints at the fact (e.g. a person's new employer, a form still to send).
+
+ALL ITEMS
+- None bears on the person's OTHER requests listed.
+- Each reads like a real item of its source.
+
+Reply with one JSON object: {"fact": {item} or null, "decoy": {item} or null, "neutrals": [{item} or null, {item} or null], "changed": "one short line on what you changed, or empty"}. null means the item passes and stays as it is; a rewritten item keeps its source and its "day" and "time".`;
+}
+
+export function revisePrompt(s: {
+  request: string;
+  detail: string;
+  timing: string;
+  fact: unknown;
+  decoy: unknown;
+  neutrals: unknown[];
+  others: string[];
+}): string {
+  return `Request: ${s.request}
+Hidden consideration (what the fact should establish): ${s.detail}
+Timing: ${s.timing}
+
+FACT: ${JSON.stringify(s.fact)}
+
+DECOY: ${JSON.stringify(s.decoy)}
+
+NEUTRALS:
+${s.neutrals.map((n, i) => `${i + 1}. ${JSON.stringify(n)}`).join("\n")}
+
+The person's OTHER requests (nothing above may bear on them):
+${s.others.map((o) => `- ${o}`).join("\n")}`;
+}

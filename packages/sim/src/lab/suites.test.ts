@@ -7,7 +7,9 @@ import { parseSuites, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./s
 
 describe("suite registry", () => {
   test("task ids are unique across a suite's hidden and control variants (runners key results by id)", () => {
-    for (const [name, plant] of Object.entries(SUITES)) {
+    // SUITE_NAMES, not SUITES: a generated split registered by another test file's parseSuites needs local data.
+    for (const name of SUITE_NAMES) {
+      const plant = SUITES[name]!;
       const ids = (["hidden", "control"] as const).flatMap((v) =>
         plant(buildWorld({ seed: 41_000 }), 41, v).map((t) => t.id),
       );

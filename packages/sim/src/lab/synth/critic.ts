@@ -65,11 +65,14 @@ const readJsonl = <T>(f: string): T[] =>
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l) as T);
 
-const show = (it: SynthItem) =>
-  `source: ${it.source} (${it.kind})\ntitle: ${it.title}\n${it.text.slice(0, 1_500)}`;
+const show = (it: SynthItem) => `source: ${it.source} (${it.kind})\ntitle: ${it.title}\n${it.text.slice(0, 1_500)}`;
 
 /** A fixed sample: tasks drawn without replacement by the seed, each with one request and five shuffled items. */
-export function probes(worlds: SynthWorld[], n: number, seed: number): { probe: Probe; text: Map<string, SynthItem> }[] {
+export function probes(
+  worlds: SynthWorld[],
+  n: number,
+  seed: number,
+): { probe: Probe; text: Map<string, SynthItem> }[] {
   const rng = new Rng(seed);
   const all = worlds.flatMap((w) => w.tasks.map((t) => ({ w, t })));
   return rng.sample(all, Math.min(n, all.length)).map(({ w, t }) => {
@@ -142,7 +145,12 @@ async function critic() {
           json: true,
         });
         usd += r.costUsd ?? 0;
-        const j = parseJson(r.text) as { labels: Record<string, string>; leak: boolean; realism: number; issue: string };
+        const j = parseJson(r.text) as {
+          labels: Record<string, string>;
+          leak: boolean;
+          realism: number;
+          issue: string;
+        };
         const row: CriticRow = {
           ...probe,
           model,

@@ -7,7 +7,7 @@
  * ask), `notice` (the recap's change notice and what it starts, settled as pi-ab settles it), `tick` (the background
  * sync before each request), `backfill` (before the first request, once per user).
  *
- *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
+ *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask] [--suite train]
  *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
  *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
@@ -44,6 +44,8 @@ export type MovedFate = "unhanded" | "updated" | "unpolled" | "unseen" | "undeli
 
 export interface DaysCallsOptions {
   days: number;
+  /** The suites the user's requests come from (`--suite`, default `train`; `synth-val` etc. run generated worlds, D884). */
+  suites?: readonly string[];
   push: PushMode;
   /** One `ask` per request after its push (the eden arm's agent asks about once a request one at a time). */
   ask?: boolean;
@@ -143,7 +145,7 @@ function counted(source: SimSource, phase: () => Phase, into: Counts, fetched: M
 export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<DaysCallsUser> {
   const gapMs = o.gapMs ?? 10 * 60_000;
   const nightMs = o.nightMs ?? 2 * 3_600_000;
-  const plan = planUser(seed, suiteTemplates(seed, parseSuites("train")), {
+  const plan = planUser(seed, suiteTemplates(seed, o.suites ?? parseSuites("train")), {
     days: o.days,
     size: parseDaySize("12-20"),
     mix: parseMix("1:1:8"),
@@ -405,6 +407,7 @@ if (import.meta.main) {
   const intentFiles = opt("intent", INTENT_PATH).split(",");
   const o: DaysCallsOptions = {
     days: Number(opt("days", "8")),
+    suites: parseSuites(opt("suite", "train")),
     push,
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",

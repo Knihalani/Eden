@@ -6,7 +6,8 @@
  *   bun packages/sim/src/lab/synth/gen.ts plan --worlds N             (adds plans N worlds long, deterministic)
  *   bun packages/sim/src/lab/synth/gen.ts worlds [--mode direct|batch] [--limit N]
  *   bun packages/sim/src/lab/synth/gen.ts tasks [--mode direct|batch] [--limit N]
- *   bun packages/sim/src/lab/synth/gen.ts assemble                    (validate, QC, write worlds/<split>.jsonl)
+ *   bun packages/sim/src/lab/synth/gen.ts revise [--mode direct|batch] (the writer re-checks each task, D883)
+ *   bun packages/sim/src/lab/synth/gen.ts assemble [--no-revise]      (validate, QC, write worlds/<split>.jsonl)
  *   common: [--dir .local/m2/synth] [--spend-ledger .local/m2/ledger.jsonl] [--spend-cap 60] [--concurrency 24]
  *
  * Families are abstract scenarios (area × archetype × angle, Haiku, no names), deduped against each other and the
@@ -26,6 +27,8 @@ import {
   TIMING_TEXT,
   dayName,
   familyPrompt,
+  revisePrompt,
+  reviseSystem,
   taskPrompt,
   taskSystem,
   worldPrompt,
@@ -183,25 +186,75 @@ interface Plan {
 }
 
 const REGIONS = [
-  "Leeds, UK", "Bristol, UK", "Glasgow, Scotland", "Cardiff, Wales", "London, UK", "Manchester, UK", "Dublin, Ireland",
-  "Cork, Ireland", "Toronto, Canada", "Vancouver, Canada", "Austin, Texas", "Chicago, Illinois", "Portland, Oregon",
-  "Boston, Massachusetts", "Atlanta, Georgia", "Melbourne, Australia", "Brisbane, Australia", "Auckland, New Zealand",
-  "Bengaluru, India", "Mumbai, India", "Singapore", "Berlin, Germany (expat)", "Amsterdam, Netherlands (expat)",
-  "Lisbon, Portugal (expat)", "Cape Town, South Africa", "a village in Devon, UK", "rural Vermont, USA",
+  "Leeds, UK",
+  "Bristol, UK",
+  "Glasgow, Scotland",
+  "Cardiff, Wales",
+  "London, UK",
+  "Manchester, UK",
+  "Dublin, Ireland",
+  "Cork, Ireland",
+  "Toronto, Canada",
+  "Vancouver, Canada",
+  "Austin, Texas",
+  "Chicago, Illinois",
+  "Portland, Oregon",
+  "Boston, Massachusetts",
+  "Atlanta, Georgia",
+  "Melbourne, Australia",
+  "Brisbane, Australia",
+  "Auckland, New Zealand",
+  "Bengaluru, India",
+  "Mumbai, India",
+  "Singapore",
+  "Berlin, Germany (expat)",
+  "Amsterdam, Netherlands (expat)",
+  "Lisbon, Portugal (expat)",
+  "Cape Town, South Africa",
+  "a village in Devon, UK",
+  "rural Vermont, USA",
 ];
 const AGES = ["19-24", "25-31", "32-39", "40-48", "49-58", "59-67", "68-78"];
 const HOUSEHOLDS = [
-  "lives alone", "lives with a partner", "partner and two young children", "single parent of a teenager",
-  "shares a flat with two housemates", "partner, one baby and a dog", "cares for an elderly parent at home",
-  "grown-up children have left; lives with spouse", "lives with partner and a stepchild every other week",
-  "student in halls", "lives with parents while saving", "partner and three school-age children",
+  "lives alone",
+  "lives with a partner",
+  "partner and two young children",
+  "single parent of a teenager",
+  "shares a flat with two housemates",
+  "partner, one baby and a dog",
+  "cares for an elderly parent at home",
+  "grown-up children have left; lives with spouse",
+  "lives with partner and a stepchild every other week",
+  "student in halls",
+  "lives with parents while saving",
+  "partner and three school-age children",
 ];
 const WORK = [
-  "nurse on rotating shifts", "secondary-school teacher", "freelance graphic designer", "software engineer",
-  "account manager at a SaaS firm", "owns a small café", "retired civil servant", "warehouse supervisor",
-  "solicitor", "PhD student", "delivery driver (self-employed)", "head of operations at a charity", "electrician",
-  "sales director", "GP receptionist", "management consultant", "stay-at-home parent", "university lecturer",
-  "pharmacist", "product manager", "estate agent", "chef", "accountant", "physiotherapist", "civil engineer",
+  "nurse on rotating shifts",
+  "secondary-school teacher",
+  "freelance graphic designer",
+  "software engineer",
+  "account manager at a SaaS firm",
+  "owns a small café",
+  "retired civil servant",
+  "warehouse supervisor",
+  "solicitor",
+  "PhD student",
+  "delivery driver (self-employed)",
+  "head of operations at a charity",
+  "electrician",
+  "sales director",
+  "GP receptionist",
+  "management consultant",
+  "stay-at-home parent",
+  "university lecturer",
+  "pharmacist",
+  "product manager",
+  "estate agent",
+  "chef",
+  "accountant",
+  "physiotherapist",
+  "civil engineer",
 ];
 const COMMON_FOR: Record<Area, string[]> = {
   work: ["gmail", "slack", "calendar", "drive", "crm"],
@@ -289,7 +342,10 @@ function plan() {
     });
     // The world's background also uses each rare source its facts use, and one or two more, so a rare source is
     // never a tell on its own.
-    const extra = rng.sample(Object.keys(RARE_SOURCES).filter((s) => !rareUsed.has(s)), rng.int(1, 2));
+    const extra = rng.sample(
+      Object.keys(RARE_SOURCES).filter((s) => !rareUsed.has(s)),
+      rng.int(1, 2),
+    );
     const fam = new Map(fams.map((f) => [f.id, f]));
     const work = rng.pick(WORK);
     const seed: WorldSeed = {
@@ -416,6 +472,72 @@ function taskJobs(): Job[] {
   return jobs;
 }
 
+const REVISE_SYSTEM = reviseSystem();
+
+function rawTask(p: Plan, task: string): RawTask | undefined {
+  const r = readResult(DIR, `task/${p.id}/${task}`);
+  if (!r) return undefined;
+  try {
+    const t = parseJson(r.text) as RawTask;
+    return t?.fact && t.decoy && Array.isArray(t.requests) && Array.isArray(t.neutrals) ? t : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** One revision call a task whose reply parsed: the writer checks its own items against the audit's fault list. */
+function reviseJobs(): Job[] {
+  const jobs: Job[] = [];
+  for (const p of plans()) {
+    const raws = p.tasks.map((t) => ({ t, raw: rawTask(p, t.task) }));
+    const first = (r?: RawTask) =>
+      r?.requests.find((q) => q.style === "imperative")?.text ?? r?.requests[0]?.text ?? "";
+    for (const { t, raw } of raws) {
+      if (!raw) continue;
+      jobs.push({
+        key: `revise/${p.id}/${t.task}`,
+        role: "m2.revise",
+        system: REVISE_SYSTEM,
+        user: revisePrompt({
+          request: first(raw),
+          detail: String(raw.detail ?? ""),
+          timing: t.timing,
+          fact: raw.fact,
+          decoy: raw.decoy,
+          neutrals: raw.neutrals.slice(0, 3),
+          others: raws.filter((x) => x.t.task !== t.task && x.raw).map((x) => first(x.raw)),
+        }),
+        maxTokens: 5_000,
+      });
+    }
+  }
+  return jobs;
+}
+
+/** The task reply with its revision applied (an item the revision rewrote replaces the original, keeping its time). */
+function revised(p: Plan, task: string, raw: RawTask, rej: Rejects): RawTask {
+  const r = readResult(DIR, `revise/${p.id}/${task}`);
+  if (!r) return raw;
+  let v: { fact?: RawItem | null; decoy?: RawItem | null; neutrals?: (RawItem | null)[] };
+  try {
+    v = parseJson(r.text) as typeof v;
+  } catch {
+    rej["revise: unparsable (kept original)"] = (rej["revise: unparsable (kept original)"] ?? 0) + 1;
+    return raw;
+  }
+  const keep = (orig: RawItem, next: RawItem | null | undefined, what: string) => {
+    if (!next || typeof next !== "object" || !next.text) return orig;
+    rej[`revise: ${what} rewritten`] = (rej[`revise: ${what} rewritten`] ?? 0) + 1;
+    return { ...orig, ...next, source: orig.source, day: orig.day, time: orig.time };
+  };
+  return {
+    ...raw,
+    fact: keep(raw.fact, v.fact, "fact"),
+    decoy: keep(raw.decoy, v.decoy, "decoy"),
+    neutrals: raw.neutrals.map((n, i) => keep(n, v.neutrals?.[i], "neutral")),
+  };
+}
+
 // -----------------------------------------------------------------------------------------------------------------
 // Assembly: raw replies to validated worlds.
 
@@ -534,6 +656,11 @@ function assembleWorld(
       bump("task: incomplete");
       continue;
     }
+    if (!args.includes("--no-revise")) {
+      raw = revised(p, tp.task, raw, rej);
+      const rv = readResult(DIR, `revise/${p.id}/${tp.task}`);
+      if (rv) ((usd += rv.usd), calls++);
+    }
     const f = fams.get(tp.family)!;
     // The fact's source and time are the plan's (the timing is built in), whatever the reply wrote.
     const factRaw = { ...raw.fact, source: tp.source };
@@ -552,6 +679,12 @@ function assembleWorld(
       bump("task: invalid item");
       continue;
     }
+    // A decoy that repeats the fact word for word is no twin (pilot: one in 300 critic probes).
+    const norm = (x: SynthItem) => `${x.title}\n${x.text}`.replace(/\s+/g, " ").trim().toLowerCase();
+    if (norm(fact) === norm(decoy) || fact.text.replace(/\s+/g, " ") === decoy.text.replace(/\s+/g, " ")) {
+      bump("task: decoy repeats the fact");
+      continue;
+    }
     // A static or silent fact sits before the request; one Haiku dated later is pulled back to the morning.
     if (tp.timing === "static" && fact.at > tp.requestAt) fact.at = SYNTH_NOW - 2 * HOUR;
     if (decoy.at > tp.requestAt) decoy.at = SYNTH_NOW - 26 * HOUR;
@@ -566,7 +699,8 @@ function assembleWorld(
       reqs.push({ style: "foreign", lang: tp.foreign, text: String(raw.foreign.text).trim(), at: tp.requestAt });
     if (tp.timing === "multiday")
       for (const x of (raw.followups ?? []).slice(0, 2))
-        if (typeof x === "string" && x.trim()) reqs.push({ style: "follow-up", lang: "en", text: x.trim(), at: tp.followAt! });
+        if (typeof x === "string" && x.trim())
+          reqs.push({ style: "follow-up", lang: "en", text: x.trim(), at: tp.followAt! });
     // The lexical leak check flags, it does not drop: in the pilot most flags were amounts and names the user states
     // themself (D882). Whether a request gives the fact away is the critic's question.
     for (const q of reqs) {
@@ -577,7 +711,10 @@ function assembleWorld(
       }
     }
     const kept = reqs;
-    if (kept.filter((q) => q.lang === "en").length < 4 || (tp.timing === "multiday" && !kept.some((q) => q.style === "follow-up"))) {
+    if (
+      kept.filter((q) => q.lang === "en").length < 4 ||
+      (tp.timing === "multiday" && !kept.some((q) => q.style === "follow-up"))
+    ) {
       bump("task: too few requests");
       continue;
     }
@@ -587,7 +724,7 @@ function assembleWorld(
     let which = "";
     train.sets.forEach((s, i) => {
       const sim = jaccard(probe, s);
-      if (sim > best) (best = sim), (which = train.names[i]!);
+      if (sim > best) ((best = sim), (which = train.names[i]!));
     });
     if (best >= 0.25) {
       notes.push({ world: p.id, task: tp.task, nearTrain: which, sim: best });
@@ -611,7 +748,9 @@ function assembleWorld(
     });
   }
   const sources = Object.fromEntries(
-    [...new Set(items.map((i) => i.source))].filter((s) => s in RARE_SOURCES).map((s) => [s, RARE_SOURCES[s]!.description]),
+    [...new Set(items.map((i) => i.source))]
+      .filter((s) => s in RARE_SOURCES)
+      .map((s) => [s, RARE_SOURCES[s]!.description]),
   );
   let world: SynthWorld = {
     v: 1,
@@ -651,8 +790,7 @@ function assembleWorld(
       else badItems.add(m[1]!);
       bump(`repair: ${prob.replace(/^[it]\d+(r\d+)?: /, "").replace(/ .*$/, "")}`);
     }
-    for (const t of world.tasks)
-      if ([t.fact, t.decoy, ...t.neutrals].some((x) => badItems.has(x))) badTasks.add(t.id);
+    for (const t of world.tasks) if ([t.fact, t.decoy, ...t.neutrals].some((x) => badItems.has(x))) badTasks.add(t.id);
     const drop = new Set(
       world.tasks.filter((t) => badTasks.has(t.id)).flatMap((t) => [t.fact, t.decoy, ...t.neutrals]),
     );
@@ -758,8 +896,8 @@ else if (cmd === "worlds") {
     for (const t of p.tasks) dropResult(DIR, `task/${p.id}/${t.task}`);
   }
   await run(worldJobs());
-}
-else if (cmd === "tasks") await run(taskJobs());
+} else if (cmd === "tasks") await run(taskJobs());
+else if (cmd === "revise") await run(reviseJobs());
 else if (cmd === "assemble") assemble();
 else {
   console.log("usage: gen.ts families|plan|worlds|tasks|assemble [flags] (see the header)");

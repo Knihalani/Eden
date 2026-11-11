@@ -21,13 +21,15 @@ export const ARCHETYPES = {
   "plan-changed": "the thing the request assumes was moved, cancelled, relocated or reorganised",
   "terms-changed": "a price, fee, address, account, contact detail or term changed since the user last looked",
   "commitment-penalty": "acting now triggers a lock-in, cancellation fee, forfeit or lost deposit",
-  "preference-constraint": "a known allergy, accessibility need, dislike, dietary rule or stated wish rules an option out",
+  "preference-constraint":
+    "a known allergy, accessibility need, dislike, dietary rule or stated wish rules an option out",
   "deadline-shift": "the real deadline or date differs from the one the request assumes",
   "sensitive-situation": "a dispute, bereavement, complaint, legal hold or conflict makes the action unwise as asked",
   "safety-risk": "a recall, interaction, warning or hazard makes the action unsafe as asked",
   "wrong-target": "the account, address, person or item the request names is closed, replaced or the wrong one",
   "blocked-dependency": "the action waits on someone else's pending decision, delivery or approval",
-  "better-route": "a voucher, warranty, credit, entitlement or cover makes the request unnecessary or cheaper another way",
+  "better-route":
+    "a voucher, warranty, credit, entitlement or cover makes the request unnecessary or cheaper another way",
 } as const;
 export type Archetype = keyof typeof ARCHETYPES;
 export const ARCHETYPE_NAMES = Object.keys(ARCHETYPES) as Archetype[];
@@ -58,27 +60,43 @@ export const COMMON_SOURCES = ["gmail", "calendar", "drive", "crm", "slack"] as 
 /** Sources the base sim never has: a fact there is a fact in a rarely used source. Id → (description, item kind). */
 export const RARE_SOURCES: Record<string, { description: string; kind: "chat" | "doc" | "notification" | "event" }> = {
   sms: { description: "The user's text messages (SMS): short texts, one per line as 'Name: message'", kind: "chat" },
-  whatsapp: { description: "The user's WhatsApp chats (family and friend groups): lines as 'Name: message'", kind: "chat" },
-  notes: { description: "The user's personal notes (Apple Notes), written by the user themself: terse, lists, reminders", kind: "doc" },
-  tasks: { description: "The user's to-do lists (Todoist): tasks the user or someone sharing a project added, with due dates and comments", kind: "doc" },
+  whatsapp: {
+    description: "The user's WhatsApp chats (family and friend groups): lines as 'Name: message'",
+    kind: "chat",
+  },
+  notes: {
+    description: "The user's personal notes (Apple Notes), written by the user themself: terse, lists, reminders",
+    kind: "doc",
+  },
+  tasks: {
+    description:
+      "The user's to-do lists (Todoist): tasks the user or someone sharing a project added, with due dates and comments",
+    kind: "doc",
+  },
   bank: { description: "The user's bank account: transactions and statements (open banking)", kind: "notification" },
-  health: { description: "The user's health app: appointments, prescriptions and results (NHS App)", kind: "notification" },
+  health: {
+    description: "The user's health app: appointments, prescriptions and results (NHS App)",
+    kind: "notification",
+  },
   files: { description: "The user's file storage (Dropbox)", kind: "doc" },
   tickets: { description: "The work issue tracker (Linear)", kind: "doc" },
   school: { description: "The children's school app: letters and notices (ParentMail)", kind: "notification" },
-  household: { description: "The shared household app: bills, chores and shopping (Splitwise / OurHome)", kind: "notification" },
+  household: {
+    description: "The shared household app: bills, chores and shopping (Splitwise / OurHome)",
+    kind: "notification",
+  },
 };
 export const RARE_SHARE = 0.25;
 
 /** The ways a request is phrased. Every task gets each English style once and, half the time, one non-English one. */
 export const STYLES = {
-  imperative: "a direct instruction (\"Book…\", \"Send…\", \"Cancel…\")",
-  "should-i": "an indirect question starting \"Should I…\" or \"Is it worth…\"",
-  "i-need": "a statement of need starting \"I need to…\" or \"I have to…\" or \"I want to…\"",
-  "we-should": "a collective suggestion starting \"We should…\" or \"Let's…\"",
-  question: "a question about the thing (\"When is…?\", \"Can you check whether…?\", \"What's the best way to…?\")",
+  imperative: 'a direct instruction ("Book…", "Send…", "Cancel…")',
+  "should-i": 'an indirect question starting "Should I…" or "Is it worth…"',
+  "i-need": 'a statement of need starting "I need to…" or "I have to…" or "I want to…"',
+  "we-should": 'a collective suggestion starting "We should…" or "Let\'s…"',
+  question: 'a question about the thing ("When is…?", "Can you check whether…?", "What\'s the best way to…?")',
   chatter: "a casual, chatty message that mentions the intent in passing among other small talk (2-3 sentences)",
-  terse: "a terse fragment, as typed on a phone (\"dentist thurs - move it?\")",
+  terse: 'a terse fragment, as typed on a phone ("dentist thurs - move it?")',
 } as const;
 export type Style = keyof typeof STYLES | "foreign";
 export const LANGS = ["es", "fr", "de", "pt", "it", "nl", "pl", "hi"] as const;
