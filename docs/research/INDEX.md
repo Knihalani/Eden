@@ -15,6 +15,8 @@ Dates are each note's status date, or its decision's date in docs/DECISIONS.md. 
 table. The historical recommended configurations by name: H (D55) ⊂ R (D62) ⊂ ALL (D64) ⊂ ALL3 (D80) ⊂ NEW (D98) ⊂
 NEWL (D99) ⊂ the unified default (D112); ALL5 (D92) and ALL4 (D84) branched off ALL3. The named presets were deleted by
 D112: the lab's presets are only `default`, `minus-<part>` and `minus-all` (`packages/sim/src/lab/presets.ts`).
+Every decision in one line with its status: [DECISION-INDEX.md](../DECISION-INDEX.md); every killed idea by topic:
+[DEAD-ENDS.md](../DEAD-ENDS.md) (both generated, D812).
 
 ## Foundations: primitives, language, architecture
 

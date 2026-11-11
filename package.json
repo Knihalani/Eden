@@ -30,7 +30,8 @@
     "pilot": "bun packages/sim/src/pilot/pilot.ts",
     "digest": "bun packages/server/src/digest.ts",
     "funnel": "bun packages/sim/src/lab/funnel.ts",
-    "gate-traffic": "bun packages/sim/src/lab/gate-traffic.ts"
+    "gate-traffic": "bun packages/sim/src/lab/gate-traffic.ts",
+    "decisions:index": "bun scripts/decision-index.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
