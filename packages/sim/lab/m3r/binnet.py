@@ -391,7 +391,8 @@ def write_ranks(net, worlds, path):
                 order = torch.argsort(-s[0]).tolist()
                 ids = [w["ids"][r["cands"][k]] for k in order]
                 f.write(json.dumps({"rid": r["rid"], "all": ids,
-                                    "top": [x for x, k in zip(ids, order) if float(s[0][k]) > float(nl[0])]}) + "\n")
+                                    "top": [x for x, k in zip(ids, order) if float(s[0][k]) > float(nl[0])],
+                                    "margin": round(float(s[0].max()) - float(nl[0]), 4)}) + "\n")
     net.train()
 
 
@@ -471,6 +472,15 @@ def run(o):
                 logits = torch.cat([nl.unsqueeze(1), s.masked_fill(mask, -1e4)], 1)
                 y = torch.tensor([r["target"] + 1 if r["target"] >= 0 else 0 for r in rs])
                 loss = nn.functional.cross_entropy(logits, y)
+                if o.margin > 0:
+                    # The hard-twin objective: where the fact's own twin is among the candidates, the fact must beat
+                    # it by `margin`.
+                    pairs_ = [(a, r["target"], r["twin_cand"]) for a, r in enumerate(rs)
+                              if r.get("twin_cand", -1) >= 0 and r["target"] >= 0]
+                    if pairs_:
+                        a_ = torch.tensor([x[0] for x in pairs_])
+                        gap = s[a_, torch.tensor([x[1] for x in pairs_])] - s[a_, torch.tensor([x[2] for x in pairs_])]
+                        loss = loss + o.margin_weight * torch.relu(o.margin - gap).mean()
                 if net.aux:
                     # Multi-task: each request's planted item is a constraint (hidden) or its all-clear twin (control).
                     pl = [(r["planted"], 1.0 if r["kind"] == "hidden" else 0.0) for r in rs if r["planted"] >= 0]
@@ -736,7 +746,17 @@ def run(o):
             y = [x[2] for x in Pe]
             tp = sum(1 for a, b in zip(p, y) if a > 0 and b == 1)
             fp = sum(1 for a, b in zip(p, y) if a > 0 and b == 0)
-            result = {"auc_replaces": round(auc(p, y), 3), "auc_jaccard_baseline": base, "precision@0": round(tp / max(1, tp + fp), 3),
+            def recall_at(prec):
+                best = 0.0
+                for th in sorted(set(p)):
+                    tp_ = sum(1 for a_, b_ in zip(p, y) if a_ >= th and b_ == 1)
+                    fp_ = sum(1 for a_, b_ in zip(p, y) if a_ >= th and b_ == 0)
+                    if tp_ and tp_ / (tp_ + fp_) >= prec:
+                        best = max(best, tp_ / max(1, sum(y)))
+                return round(best, 3)
+
+            result = {"recall@p0.95": recall_at(0.95), "recall@p0.90": recall_at(0.90),
+                      "auc_replaces": round(auc(p, y), 3), "auc_jaccard_baseline": base, "precision@0": round(tp / max(1, tp + fp), 3),
                       "recall@0": round(tp / max(1, sum(y)), 3), "pairs": len(Pe), "positives": sum(y), "train_pairs": len(P)}
             print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
     elif o.arch == "tags":
@@ -860,6 +880,8 @@ if __name__ == "__main__":
     a.add_argument("--aux", action="store_true", help="pair: multi-task constraint head on item codes, its bit as input")
     a.add_argument("--aux-weight", type=float, default=1.0)
     a.add_argument("--width", type=int, default=128)
+    a.add_argument("--margin", type=float, default=0.0, help="pair: fact-over-own-twin margin (needs --both groups)")
+    a.add_argument("--margin-weight", type=float, default=1.0)
     a.add_argument("--worlds", type=int, default=40)
     a.add_argument("--every", type=int, default=10)
     a.add_argument("--epochs", type=int, default=3)

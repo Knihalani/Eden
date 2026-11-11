@@ -17,7 +17,7 @@ import framerank as R  # noqa: E402
 
 
 def world_groups(args):
-    w, suites, table, seed, train = args
+    w, suites, table, seed, train, both_frac = args
     rng = random.Random(seed)
     if train:
         tasks = [t for t in w["tasks"] if t["suite"] in suites]
@@ -26,28 +26,33 @@ def world_groups(args):
         for t in tasks:
             keyed.setdefault((t["template"], t["pos"]), []).append(t)
         hid = {k: rng.random() < 0.5 for k in keyed}
-        drop = {(ts[0]["decoy"] if hid[k] else ts[0]["pos"]) for k, ts in keyed.items()}
+        # `--both` (the hard-twin curriculum): some hidden templates keep their twin in the world too.
+        both = {k for k in keyed if hid[k] and rng.random() < both_frac}
+        drop = {(ts[0]["decoy"] if hid[k] else ts[0]["pos"]) for k, ts in keyed.items() if k not in both}
         items = [i for i in w["items"] if i["id"] not in away and i["id"] not in drop]
         reqs = [(t["request"], t["pos"] if hid[k] else None, "hidden" if hid[k] else "control", t["template"], "",
-                 t["pos"] if hid[k] else t["decoy"]) for k, ts in keyed.items() for t in ts]
+                 t["pos"] if hid[k] else t["decoy"], t["decoy"] if k in both else None)
+                for k, ts in keyed.items() for t in ts]
         rng.shuffle(reqs)
         reqs = reqs[:80]
         key = f"train/{w.get('seed', '')}"
     else:
         items = w["items"]
         reqs = [(r["request"], r["planted"] if r["kind"] == "hidden" else None, r["kind"], r["template"], r["rid"],
-                 r["planted"]) for r in w["requests"]]
+                 r["planted"], None) for r in w["requests"]]
         key = w["key"]
     W = F.World(R.frames_of(items))
     idx = {f["id"]: k for k, f in enumerate(W.items)}
     nbr = W.neighbours()
     out = []
-    for text, pos, kind, tpl, rid, plant in reqs:
+    for text, pos, kind, tpl, rid, plant, twin_id in reqs:
         ids, rows = R.pair_rows(W, text, table)
         target = ids.index(idx[pos]) if pos is not None and idx.get(pos) in ids else -1
         # `planted`: the fact (hidden) or its all-clear twin (control) as an index into the world's items, -1 if absent.
         out.append({"rid": rid, "request": text, "kind": kind, "template": tpl, "cands": ids, "target": target,
                     "planted": idx.get(plant, -1),
+                    # The fact's own twin among the candidates (the curriculum's hard negative), as a candidate index.
+                    "twin_cand": ids.index(idx[twin_id]) if twin_id is not None and idx.get(twin_id) in ids else -1,
                     "fact_lost": int(pos is not None and target < 0), "feats": rows})
     texts = []
     for i in items:
@@ -66,6 +71,7 @@ if __name__ == "__main__":
     a.add_argument("--n-synth", type=int, default=150)
     a.add_argument("--n-m2", type=int, default=227)
     a.add_argument("--procs", type=int, default=4)
+    a.add_argument("--both", type=float, default=0.0, help="train: share of hidden templates keeping their twin too")
     o = a.parse_args()
     if o.cmd == "train":
         fs = R.FOLDS[o.fold]
@@ -74,10 +80,10 @@ if __name__ == "__main__":
                  (f"{R.D}/m2-train-worlds.jsonl.gz", o.n_m2)]
         table, _ = R.learn_table([p for p, _ in files], suites, 5, 3, 60)
         json.dump(table, open(o.out.replace(".jsonl.gz", ".table.json"), "w"))
-        jobs = [(w, suites, table, k, True) for p, n in files for k, w in enumerate(R.worlds(p, n))]
+        jobs = [(w, suites, table, k, True, o.both) for p, n in files for k, w in enumerate(R.worlds(p, n))]
     else:
         table = json.load(open(o.table))
-        jobs = [(w, set(), table, 0, False) for w in R.worlds(o.eval) if w["key"].startswith("days/")]
+        jobs = [(w, set(), table, 0, False, 0.0) for w in R.worlds(o.eval) if w["key"].startswith("days/")]
     n = lost = reqs = 0
     with Pool(o.procs) as pool, gzip.open(o.out, "wt") as g:
         for row in pool.imap(world_groups, jobs, chunksize=1):
