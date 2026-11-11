@@ -53,10 +53,9 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D703 | Trial `candidatesSpecifics`: the candidates' lead asks for the item's specifics once it applies | killed by D705: The line raised hidden facts +2.0 points (+0.2..+3.7) on eight seeds (bar: +4.0) for +$0.013 per 1,000… |
 | D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D832: the rule asked for +2.0 with the lower bound above 0 |
 | D711 | `pushPointer` (D708) failed its rule and is deleted with its code and tests | Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
-| D833 | Rejected: a per-user alias table for the push's recall. |  |
-| D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D711: Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
 | D821 | Rejected: narrowing the default's packet with no model (`pushNarrow`, P2; deleted). | Funnel, train 41–44: neutral given a packet 738 → 216 of 768, but planted handed 582 → 348 (−234) and 334… |
 | D822 | Rejected: the push check's short compare-first reply. | Fails the decoy clause: without the separate verdict and the longer comparison the check lets look-alikes… |
+| D833 | Rejected: a per-user alias table for the push's recall. |  |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
 
 ## Reader
