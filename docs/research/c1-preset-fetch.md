@@ -1,5 +1,9 @@
 # C1: should connector presets name a fetch tool? (D415)
 
+**Update (D842, [p4-reread.md](p4-reread.md) §5):** the connector lab has since run the caldav and mcpvault
+servers end to end: `caldav` now names `caldav_get_event_by_uid` (its fetched copy equals the searched one);
+mcpvault keeps no fetch tool, for the reason given there. Gmail and Google Calendar below are unchanged.
+
 ## In plain words
 
 Eden can check a stored item is still current by asking the source for that one item by its id (a "fetch").
