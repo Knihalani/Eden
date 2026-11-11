@@ -113,3 +113,9 @@ Not done: `bun run eval --live` (no engine scoring, threshold or delivery change
   help: 301, 354 and 359 ms in 3 of 3 runs. The heap is the freeze's garbage (300 users' live structures let go a
   moment before); a real server frees it gradually as users go idle over minutes, not all in 0.7 s. No cheap fix:
   forcing a collection after a sliced freeze would move the same pause. Left as a finding.
+- **Gates (round 2, d7d4d9c6, main 530807c6 merged):** `CHECK_COLD=1 bun run check` passed in 58 s (2,350 tests in
+  241 files, the tail's 465 in 25, 0 fail); `bun run eval` 0.65 / 0.52 / 0 with counts and the acting block identical
+  to main's; `bun run funnel` 295/384 hidden, 268/384 decoys. The reviewer's REQUEST_CHANGES (the rotation refusal
+  in a cluster, a hung store blocking the start, an expired blob of the key, the variable's tests, a misplaced doc
+  comment) is fixed in d7d4d9c6. Not done: a ranged GET for the sample's headers (8 whole blobs at most, once, only
+  for a store with no marker yet).
