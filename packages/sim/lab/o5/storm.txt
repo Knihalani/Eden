@@ -1,0 +1,7 @@
+bun packages/engine/bench/storm.bench.ts [--config], 2026-11-11, 4 vCPU, Bun 1.4.4; ticks back to back. Run before D755: "config {}" is the switch off (now --config={"syncKick":false})
+300 storm users x 1000 items (3 connectors, 20-80 ms a listing), 20 warm users sending an event every 10 ms; config {}
+storm: 76.3 s wall, 83.5 s CPU, 3.9 users/s
+warm users' observe during the storm (7630 events): p50 15.25 ms, p99 50.3 ms, max 93.6 ms; loop lag p99 58.2 ms, max 326.6 ms
+300 storm users x 1000 items (3 connectors, 20-80 ms a listing), 20 warm users sending an event every 10 ms; config {"syncKick":true}
+storm: 76.8 s wall, 84.1 s CPU, 3.9 users/s
+warm users' observe during the storm (7681 events): p50 15.16 ms, p99 48.5 ms, max 75.6 ms; loop lag p99 58.5 ms, max 333.5 ms

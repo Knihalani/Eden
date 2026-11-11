@@ -1,0 +1,36 @@
+== today: 3072 rows
+  at s (sent, mean) |  n | hidden surfaced | by push | warm at request | items held | decoys surfaced
+      0 (   0.0)    | 192 |  86  44.8%     |  70     |   0             |       0    |  83 of 192
+     10 (  11.2)    | 192 |  62  32.3%     |  46     |   0             |       0    |  61 of 192
+     25 (  25.2)    | 192 |  85  44.3%     |  61     |   0             |       0    |  72 of 192
+     35 (  35.1)    | 192 | 108  56.2%     |  89     |   0             |     393    | 108 of 192
+     45 (  45.1)    | 192 | 132  68.8%     | 110     |  67             |     806    | 128 of 192
+     60 (  60.1)    | 192 | 132  68.8%     | 103     |  86             |     838    | 125 of 192
+     90 (  90.0)    | 192 | 134  69.8%     | 113     |  86             |     838    | 126 of 192
+    180 ( 180.0)    | 192 | 153  79.7%     | 128     | 191             |    1504    | 140 of 192
+== trial: 3072 rows
+  at s (sent, mean) |  n | hidden surfaced | by push | warm at request | items held | decoys surfaced
+      0 (   0.0)    | 192 |  92  47.9%     |  72     |   0             |       0    |  95 of 192
+     10 (  10.0)    | 192 | 149  77.6%     | 126     | 142             |    1455    | 136 of 192
+     25 (  25.0)    | 192 | 154  80.2%     | 130     | 192             |    1510    | 140 of 192
+     35 (  35.0)    | 192 | 154  80.2%     | 130     | 192             |    1510    | 140 of 192
+     45 (  45.0)    | 192 | 154  80.2%     | 130     | 192             |    1510    | 140 of 192
+     60 (  60.0)    | 192 | 154  80.2%     | 130     | 192             |    1510    | 140 of 192
+     90 (  90.0)    | 192 | 154  80.2%     | 130     | 192             |    1510    | 140 of 192
+    180 ( 180.0)    | 192 | 154  80.2%     | 130     | 192             |    1510    | 140 of 192
+
+== the runs' own lines (hidden-funnel, one a shard): listing calls and request calls
+-- today
+sync: backfill 1194 calls (18.7/user); request 7.38/task; amortised total 9.50/task; local sources 2.27/lookup; demand items 0, background items 97088
+sync: backfill 1188 calls (18.6/user); request 7.61/task; amortised total 9.62/task; local sources 2.42/lookup; demand items 0, background items 96320
+sync: backfill 1188 calls (18.6/user); request 7.69/task; amortised total 9.65/task; local sources 2.36/lookup; demand items 0, background items 96704
+sync: backfill 1163 calls (18.2/user); request 7.59/task; amortised total 9.60/task; local sources 2.34/lookup; demand items 0, background items 94777
+sync: backfill 1187 calls (18.5/user); request 7.96/task; amortised total 10.02/task; local sources 2.49/lookup; demand items 0, background items 96896
+sync: backfill 1176 calls (18.4/user); request 7.17/task; amortised total 9.21/task; local sources 2.58/lookup; demand items 0, background items 95744
+-- kick
+sync: backfill 1152 calls (18.0/user); request 2.73/task; amortised total 4.03/task; local sources 4.52/lookup; demand items 0, background items 97088
+sync: backfill 1152 calls (18.0/user); request 2.73/task; amortised total 4.06/task; local sources 4.53/lookup; demand items 0, background items 96320
+sync: backfill 1152 calls (18.0/user); request 2.56/task; amortised total 3.85/task; local sources 4.55/lookup; demand items 0, background items 96704
+sync: backfill 1152 calls (18.0/user); request 2.90/task; amortised total 4.16/task; local sources 4.49/lookup; demand items 0, background items 97216
+sync: backfill 1152 calls (18.0/user); request 3.01/task; amortised total 4.31/task; local sources 4.51/lookup; demand items 0, background items 96896
+sync: backfill 1152 calls (18.0/user); request 2.68/task; amortised total 4.02/task; local sources 4.54/lookup; demand items 0, background items 95744

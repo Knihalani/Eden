@@ -471,6 +471,27 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   revision, read marks 0 (another process's marks mean nothing here) and moves `seqs` past its own. Any new field a
   `FrozenEntry`, `FrozenBody`, `PersistedUser` or `SyncSnapshot` carries bumps `PERSIST_FORMAT`; a new path that drops
   or rewrites a user's items must go through `peek`/`touch`/`dropUser` (which delete the blob) or call `disk.delete`.
+- **A new user's backfill starts with their first event (`syncKick`, D751, D753, on in the default since D755, part
+  `sync`; docs/research/o4-new-user.md).** Without it `track` only notes the user; their backfill starts at the next
+  tick (60 s on the servers), and a backfill that stops (its call budget's burst spent, a page refused by our own
+  guard while a request holds the source, a failed call) waits for the tick after. With it, `observe` calls
+  `SyncManager.kick` for a user `track` just added, and the kicked step resumes itself (`KICK_RESUME_MS`, the budget's wait, a back-off's end; `KICK_RESUMES` at most). A
+  kicked user's backfill is `backfillPool` (`syncKickLanes` 32: a lane takes the next source when its page lands;
+  `backfill`'s batches wait for their slowest page, two minutes for 1,000 sources), a copy of `backfill`'s page
+  handling: a fix to one belongs in the other. A
+  tick that meets a kicked step waits for it (`UserSync.kicked`), and a kick or a resume that meets a tick's step
+  (`UserSync.ticking`) looks again later: never start a second step for one user, or its pages are read twice.
+  Since D753: every kick wait goes through `SyncDeps.after`, a timer on the engine's clock (`PartnerDeps.after`;
+  `setTimeout` when absent, right only when `now` is the wall clock: an embedder or a test with another clock passes
+  its own, or the waits are in the wrong unit); at most `KICKS_AT_ONCE` (4) kicked steps run across users, the rest
+  queue, a tick skips a user whose kick is queued or timed, and only a kicked step reads as a pool (a tick stepping
+  queued users as pools read 512 listings at once, the second review); `stopSync` cancels timers and queue (`stopKicks`); a first backfill page that failed once is retried after
+  `syncKickRetryMs` (1.5 s), then 30 s and doubling. `sync-kick.test.ts` drives the clock and the timer by hand and
+  each test names the mechanism it holds: after a change there, run
+  `python3 packages/sim/lab/o5/mutate-sync-kick.py` (34 mutations of the engine, each must fail the file; update its
+  list with the code), or a test that still passes proves nothing. Measure any change here with the funnel's
+  `--connect-at` or `pi-ab --connect-at` (docs/LAB.md): the usual harnesses backfill before the first request and
+  cannot see it.
 - **`syncIngestTurns` (D328, on in the default since D370).** A background sync page waits its turn (one per
   event-loop turn) before it is redacted and stored, so a cold-start storm no longer stalls every request
   (`bench/storm.bench.ts`). The card drain gathers what still waits its turn before calling (`CardEnricher.gather`,

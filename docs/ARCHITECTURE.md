@@ -223,6 +223,16 @@ backfill reads 8 sources' pages at once, newest unread first (`syncBackfillLanes
 source's share of the cap were measured and deleted (D262). With no more sources than the lookup searches, and none cut,
 none of this changes anything.
 
+A user the sync has not seen is backfilled from their first event (`syncKick`, D751, D753, in the default since
+D755): the step starts at once, off the event's path, is taken up again as soon as its call budget, a guard or a
+back-off allows instead of at the sync's next tick, and reads 32 sources at once as a pool; at most four users'
+kicked steps run at once, a tick leaves a user alone while a kick holds them, and the ticks (60 s on the servers)
+remain behind them. A first page that failed once
+is tried again after 1.5 s. Measured on new users, full strength comes at about 25 s instead of 180 s with five
+sources and at about 45 s instead of past 300 s with 1,000; with an agent, hidden facts raised ten seconds after
+connecting go from 34.9% to 65.1% (docs/research/o4-new-user.md). Without the switch the backfill starts at the
+next tick and every stop waits for the tick after.
+
 A13 (D320–D324, all in the default; docs/research/a13-scale.md) adds what a user with many sources needs past A1. A
 source a lookup routed to on evidence of its items (a name it mentioned, or the request's words among its held items:
 `Sync.engage`) is one the user uses. Such a source's copy, if the cap cut it, is read again from the top, two pages a

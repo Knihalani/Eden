@@ -258,6 +258,26 @@ export interface EngineConfig {
    */
   syncIngestTurns: boolean;
   /**
+   * On in the default (D751, D753, promoted by D755; part `sync`): a user the sync has not seen starts their
+   * backfill with their first event (`SyncManager.kick`), not at the sync's next tick (`startSync`, every 60 s),
+   * and it goes on without the ticks. A new user's first requests otherwise run on live searches alone, with no
+   * cards and no intent index, for up to a minute.
+   */
+  syncKick: boolean;
+  /**
+   * With `syncKick` (D751): pages a kicked user's backfill reads at once, as a pool (a lane takes the next source as
+   * soon as it is free; `syncBackfillLanes` reads batches and waits for each batch's slowest page). Each lane is
+   * another source, under that source's own budget and guards. 0: the ticks' batches. Only a kicked step reads so:
+   * a tick's step for the same user reads batches.
+   */
+  syncKickLanes: number;
+  /**
+   * With `syncKick` (D753): a backfill page that fails for the first time is tried again after this long (ms); a
+   * second failure in a row waits 30 s and it doubles from there, as every failure does without it. A new user's
+   * lookups wait on each source's first page, and a failed one otherwise holds them 30 s. 0: 30 s from the first.
+   */
+  syncKickRetryMs: number;
+  /**
    * On in the default (D264): a synced source answers a lookup from the local index only when the user's copy holds
    * all of it; one cut at `syncMaxItems` (the backfill stopped before its listing ended, or a trim dropped some of its
    * items) is searched live, as an unsynced source is. Off: a cut copy answers from the index and misses what is
@@ -828,6 +848,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncPollWidth: 8,
   syncBackfillLanes: 8,
   syncIngestTurns: true,
+  syncKick: true,
+  syncKickLanes: 32,
+  syncKickRetryMs: 1_500,
   syncLocalComplete: true,
   pushCutBehind: true,
   askBehind: true,
