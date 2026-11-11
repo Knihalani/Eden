@@ -223,7 +223,7 @@ for a heavy user, whose arrays reach the same size by doubling (33 B per item in
 500 items). `sketch.bench.ts` (ExpiringSet, Bloom, count-min; no `TextSketcher`) was re-run as a control: its memory
 figures are identical before and after.
 
-## IdSet (2026-11-07, D371)
+## IdSet (2026-11-07, D371; room given back, 2026-11-11, D752)
 
 `IdSet` replaces `Set<string>` for the sync's per-source ids, which outlive a frozen user's cache (D325). A new
 primitive, so "before" is the `Set` it replaces. `bench/idset.bench.ts`, back to back on an idle 4-core VM:
@@ -238,3 +238,14 @@ primitive, so "before" is the `Set` it replaces. `bench/idset.bench.ts`, back to
 
 The trade is memory for speed on calls that are rare per item (docs/research/a24-scale.md). On Bun 1.4 `heapUsed`
 includes typed arrays' stores, so the `IdSet` rows are its whole cost; `external` repeats them (D372).
+
+D752 (O4): a new set shares empty arrays until its first `add`, and a `delete` that leaves a quarter of the slots
+live, or none, moves what is left into arrays sized for it (never while an iterator is open). The sync's per-source
+sets grew to a page of ids and were then trimmed to a few: 1.34 → 0.83 MB a user with 1,000 sources
+(docs/research/o4-per-source.md). `bench/idset.bench.ts` on a 4-core VM, 2026-11-11, alternating runs, main → D752,
+as two review passes reported them (not re-run by the author). First pass, three runs each: `has` present 98 / 103
+/ 109 → 100 / 102 / 107 ns, absent 89 / 95 / 97 → 101 / 94 / 100 ns, `delete` + `add` 312 / 338 / 344 → 299 / 323 /
+312 ns, iterating 3,000 176 / 244 / 231 → 203 / 266 / 234 µs. Second pass, two runs each: present 99 / 107 → 103 /
+109 ns, absent 92 / 100 → 121 / 107 ns, `delete` + `add` 286 / 302 → 319 / 326 ns, iterating 267 / 237 → 247 / 216
+µs. Heap per id at 3,000: 37.2 → 37.1 B. No consistent slowdown within the runs' spread. The bench's sets stay at
+3,000 ids, so it does not time the shrink itself.
