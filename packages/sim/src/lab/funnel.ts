@@ -338,7 +338,8 @@ const out = opt("json", join(scratch, "funnel.json"));
 
 // A repeated seed would run twice in one process but once per block when grouped, so the merge refuses it up front.
 if (new Set(seedList.map(Number)).size !== seedList.length) fail(`--seeds ${seeds} repeats a seed`);
-const label = presetName + (cli.has("set") ? "+set" : "");
+// The ledger's label names the coverage too (D877), so a recorded level says which index it was measured with.
+const label = presetName + (cli.has("set") ? "+set" : "") + (shippedFile ? "@shipped" : "");
 
 /** hidden-funnel.ts's arguments for some suites and seeds, writing its rows to `json`; `pass`: the flags after `--`. */
 const funnelArgsFor = (suiteList: string, seedList: string, json: string, pass = passthrough) => [
