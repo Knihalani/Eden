@@ -7,6 +7,13 @@ import { describe, expect, test } from "bun:test";
 import { backtrackingEngine, linearEngine, RE2_RULES, rulesWith, sanitizeForStore, secretRules } from "./secrets";
 import { CEILING_MS, costMs, craftedInputs, SHARDS, shardRules, slowOn } from "./redos-sweep";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 // The crafted-input sweep is split by rule index over this file (shard 0) and redos-{1,2,3}.test.ts (redos-sweep.ts).
 describe("rules left on JavaScript's engine stay cheap on crafted input", () => {
   test("shard 0 of every gitleaks rule outside RE2_RULES, and every Eden rule", () => {
@@ -42,9 +49,9 @@ describe("no input makes the gate super-linear", () => {
   for (const unit of ["%", "%2"]) {
     test(`a 1 MB presigned value of ${JSON.stringify(unit)} is redacted in linear time`, () => {
       const text = `get https://b/q?${"X-Amz-" + "Signature="}${unit.repeat(Math.ceil(1_048_576 / unit.length))} now`;
-      const t0 = performance.now();
+      const t0 = cpuMs();
       const out = sanitizeForStore(text);
-      expect(performance.now() - t0).toBeLessThan(1_000);
+      expect(cpuMs() - t0).toBeLessThan(1_000);
       expect(out).toBe("get https://b/q?X-Amz-Signature=[REDACTED] now");
     });
   }
@@ -68,9 +75,9 @@ describe("no input makes the gate super-linear", () => {
   for (const [rule, unit] of attacks) {
     test(`128 KB built against ${rule}: ${JSON.stringify(unit.slice(0, 20))}`, () => {
       const text = unit.repeat(Math.ceil(131_072 / unit.length)) + (rule === "eden-url-userinfo" ? "://" : "");
-      const t0 = performance.now();
+      const t0 = cpuMs();
       sanitizeForStore(text);
-      expect(performance.now() - t0).toBeLessThan(1_000);
+      expect(cpuMs() - t0).toBeLessThan(1_000);
     });
   }
 });

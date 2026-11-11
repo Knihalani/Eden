@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readerMessages } from "@eden/engine";
+import { CHECK_SYSTEM, readerMessages } from "@eden/engine";
 import { OpenRouterModel, type ChatRequest, type ChatResponse, type Model, type OpenRouterOptions } from "@eden/llm";
 import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "@eden/server";
 import { EVAL_TENANT, fromEnvVia, liveWiring, ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
@@ -161,6 +161,9 @@ describe("eval harness: the reader family (--reader stub|oracle)", () => {
 
   test("flags whose dependency the eval does not wire are named", () => {
     expect(unwiredFlags({}, { reader: false })).toEqual([]);
+    // The push check (D828) is wired only under `--live`.
+    expect(unwiredFlags({ pushCheck: true }, { reader: false })[0]).toMatch(/^pushCheck/);
+    expect(unwiredFlags({ pushCheck: true }, { reader: true, checker: true })).toEqual([]);
     expect(unwiredFlags({ askReader: true }, { reader: true })).toEqual([]);
     const named = unwiredFlags({ askReader: true, cards: true, intent: true }, { reader: false }).map(
       (s) => s.split(" ")[0],
@@ -222,9 +225,11 @@ describe("eval harness: --live wires what ships (D128)", () => {
       readerModel: live.readerModel,
       spend: live.spend,
     });
-    expect(made[0]!.calls.length).toBe(0);
-    // The push ran and read nothing: its traces are there, with no model call.
+    // The shipped default (D828) makes no reader call; its only calls are the push check's, on the same role model,
+    // as `buildPartner` wires it (this fake's reply is not a check's, so each push fails open to its candidates).
+    for (const c of made[0]!.calls) expect(c.messages[0]!.content).toBe(CHECK_SYSTEM);
     expect(shipped.decisions["reader-push"]).toBeGreaterThan(0);
+    const checks = made[0]!.calls.length;
     const m = await runScenarios([freeze], {
       model: live.model,
       waitMs: 1_000,
@@ -232,7 +237,7 @@ describe("eval harness: --live wires what ships (D128)", () => {
       spend: live.spend,
       config: READS,
     });
-    const calls = made[0]!.calls;
+    const calls = made[0]!.calls.slice(checks).filter((c) => c.messages[0]!.content !== CHECK_SYSTEM);
     expect(calls.length).toBeGreaterThan(0);
     // Every call is the reader's, made as ModelReaderMaker makes it: its prompt, JSON, no reasoning (D144); no judge.
     for (const c of calls) {
@@ -342,7 +347,7 @@ describe("scenarios", () => {
     for (const s of all) {
       const ids = new Set(s.sources.flatMap((src) => src.docs.map((d) => `${src.id}:${d.ref}`)));
       const wanted = [
-        ...s.sessions.flatMap((x) => x.turns.flatMap((t) => (t.expect && t.expect !== "silent" ? t.expect.items : []))),
+        ...s.sessions.flatMap((x) => x.turns.flatMap((t) => (typeof t.expect === "object" ? t.expect.items : []))),
         ...(s.asks ?? []).flatMap((a) => a.expect),
       ];
       for (const id of wanted) expect(`${s.id}: ${id} ${ids.has(id)}`).toBe(`${s.id}: ${id} true`);
@@ -353,6 +358,72 @@ describe("scenarios", () => {
     const large = all.filter((s) => s.id.startsWith("large-"));
     expect(large.length).toBeGreaterThanOrEqual(3);
     for (const s of large) expect(s.sources.reduce((n, src) => n + src.docs.length, 0)).toBeGreaterThanOrEqual(50);
+  });
+});
+
+describe("the acting suite (D810)", () => {
+  const dir = join(import.meta.dir, "..", "scenarios", "acting");
+  const acting = readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
+  const labelled = acting.flatMap((s) => s.sessions.flatMap((x) => x.turns.filter((t) => t.expect)));
+  const run = (config = {}) => runScenarios(acting, { model: null, waitMs: 2_000, planner: true, config });
+
+  test("every label is a request, and every owed fact and look-alike exists in its scenario's sources", () => {
+    expect(acting.length).toBeGreaterThanOrEqual(30);
+    // One request a user: a scenario is one session of a start and one labelled request, so a request is scored on its
+    // own user's state and the order of the files changes nothing (the review found 18 of 28 neutral packets in order,
+    // 21 alone, when a world's requests shared a user).
+    for (const s of acting) {
+      expect(s.sessions).toHaveLength(1);
+      const turns = s.sessions[0]!.turns;
+      expect(turns.filter((t) => t.expect)).toHaveLength(1);
+      expect(turns.at(-1)!.expect).toBeDefined();
+    }
+    for (const t of labelled) {
+      expect(t.event.kind).toBe("user_message");
+      expect(t.expect === "neutral" || (typeof t.expect === "object" && (t.expect.decoys?.length ?? 0) > 0)).toBe(true);
+    }
+    for (const s of acting) {
+      const ids = new Set(s.sources.flatMap((src) => src.docs.map((d) => `${src.id}:${d.ref}`)));
+      for (const t of s.sessions.flatMap((x) => x.turns)) {
+        if (typeof t.expect !== "object") continue;
+        for (const id of [...t.expect.items, ...(t.expect.decoys ?? [])])
+          expect(`${s.id}: ${id} ${ids.has(id)}`).toBe(`${s.id}: ${id} true`);
+        // A look-alike is never also the owed fact.
+        for (const id of t.expect.decoys ?? []) expect(t.expect.items).not.toContain(id);
+      }
+    }
+  });
+
+  test("the default starts its push on every labelled request, and the block counts what it hands", async () => {
+    const m = await run();
+    // Every neutral and owed request acts (a listed verb or an opened one): the suite measures the push, not its gate.
+    expect(m.decisions["reader-push"]).toBe(labelled.length);
+    const a = m.acting!;
+    expect(a.neutralTurns).toBe(labelled.filter((t) => t.expect === "neutral").length);
+    expect(a.owedTurns + a.neutralTurns).toBe(labelled.length);
+    expect(a.decoyTurns).toBe(a.owedTurns);
+    expect(a.packetsOnNeutral).toBeGreaterThan(0);
+    expect(a.factsHanded).toBeGreaterThan(0);
+    // Neutral and look-alike labels never enter the three headline numbers: no silent turn in the suite.
+    expect(m.counts.silentTurns).toBe(0);
+    expect(m.counts.expected).toBe(a.factsOwed);
+  });
+
+  test("it sees the push's parts: pushOpen and the candidates move it", async () => {
+    const on = (await run()).acting!;
+    const open = (await run({ pushOpen: false })).acting!;
+    const none = (await run({ pushCandidates: 0 })).acting!;
+    expect(open.packetsOnNeutral).toBeLessThan(on.packetsOnNeutral);
+    expect(none.packetsOnNeutral).toBeLessThan(open.packetsOnNeutral);
+    expect(none.factsHanded).toBeLessThan(on.factsHanded);
+  }, 30_000); // Three runs of the suite: about 1.5 s alone.
+
+  test("a scenario without its labels reports no acting block", async () => {
+    const m = await runScenarios([scenario], { model: null, waitMs: 0 });
+    expect(m.acting).toBeUndefined();
   });
 });
 

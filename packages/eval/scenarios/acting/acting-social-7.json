@@ -1,0 +1,74 @@
+{
+  "id": "acting-social-7",
+  "category": "relationships",
+  "description": "Social plans. Two requests owe a stored fact (a friend's stated dates away, the restaurant's group booking rule) beside a look-alike (another friend's, another venue's); the rest are social errands that share names and words with stored items without depending on them.",
+  "clock": "2026-11-10T18:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-jo-away",
+          "title": "Re: catch up?",
+          "text": "Jo: I'm away from 14 to 22 November, can't do anything until I'm back."
+        },
+        {
+          "ref": "msg-joe-away",
+          "title": "Joe's out-of-office",
+          "text": "Joe Marsh is away until 11 November with no access to email."
+        },
+        {
+          "ref": "msg-bistro",
+          "title": "Bistro Lune: group bookings",
+          "text": "Groups of 8 or more must pre-order and pay a 20 GBP deposit per person."
+        },
+        {
+          "ref": "msg-pizza",
+          "title": "Pizzeria Uno: party bookings",
+          "text": "Party bookings over 20 people need 2 weeks notice."
+        },
+        {
+          "ref": "msg-bookclub",
+          "title": "Book club",
+          "text": "This month's book is The Overstory; we meet at Kim's, bring snacks."
+        }
+      ]
+    },
+    {
+      "id": "messages",
+      "description": "The user's chats",
+      "docs": [
+        {
+          "ref": "chat-kim",
+          "title": "Kim",
+          "text": "Kim: Yes Thursday works, I'll host, but parking is restricted after 6."
+        },
+        {
+          "ref": "chat-tom",
+          "title": "Tom",
+          "text": "Tom: congrats on the new job!!"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "acting-social-7",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Make a shared playlist called Saturday dinner for the group chat"
+          },
+          "expect": "neutral"
+        }
+      ]
+    }
+  ]
+}

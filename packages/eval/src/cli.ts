@@ -10,7 +10,7 @@
  * OpenRouterModel.fromEnv, no live reader; --reader stub|oracle as before), kept so earlier numbers can be re-run.
  * Lookups go through the query planner, as the server's do by default (D33); --no-planner measures without it.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
 // The server's own log line for a failing reader (one line, key removed, redacted).
@@ -62,10 +62,16 @@ const dir =
   args.find((a, i) => !a.startsWith("--") && !valued.includes(args[i - 1] ?? "")) ??
   join(import.meta.dir, "..", "scenarios");
 
-const scenarios = readdirSync(dir)
-  .filter((f) => f.endsWith(".json"))
-  .sort()
-  .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
+const load = (from: string) =>
+  readdirSync(from)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => JSON.parse(readFileSync(join(from, f), "utf8")) as Scenario);
+const scenarios = load(dir);
+// The acting suite (D810): requests that act, neutral or owing a fact beside a look-alike. Run on its own, so the
+// three headline numbers stay those of the scenarios above, comparable with every earlier run; its block is `acting`.
+const actingDir = join(dir, "acting");
+const actingScenarios = existsSync(actingDir) ? load(actingDir) : [];
 
 const wiring = live ? liveWiring({ judge, usdCap: usdCap! }) : null;
 if (live && !wiring) fail("--live needs OPENROUTER_API_KEY", 1);
@@ -82,7 +88,7 @@ const config = { ...extra } as Partial<EngineConfig>;
 // labelled in the output and on stderr. An override that names askReader itself without a reader is refused (its run
 // would read as the reader's).
 const run = { ...DEFAULT_CONFIG, ...config };
-const unwired = unwiredFlags(run, { reader: reader !== undefined || shipped });
+const unwired = unwiredFlags(run, { reader: reader !== undefined || shipped, checker: shipped });
 if (config.askReader && reader === undefined && !shipped) {
   console.error(`this configuration has askReader: pass --reader stub (or oracle). Unwired: ${unwired.join("; ")}`);
   process.exit(2);
@@ -103,6 +109,12 @@ const options = {
 // With the oracle, the headline metrics come from the stub run; the oracle's run is reported only as a proxy.
 const metrics = await runScenarios(scenarios, { ...options, ...(reader ? { reader: "stub" as const } : {}) });
 const proxy = reader === "oracle" ? proxyOf(await runScenarios(scenarios, { ...options, reader: "oracle" })) : null;
+// Not under --live: its reader calls would share the run's cap and spend with the headline run, and `spentUsd` would
+// no longer compare with earlier live runs. The acting block measures the no-model push.
+const actingRun =
+  actingScenarios.length && !live
+    ? await runScenarios(actingScenarios, { ...options, ...(reader ? { reader: "stub" as const } : {}) })
+    : null;
 console.log(
   JSON.stringify(
     {
@@ -123,6 +135,11 @@ console.log(
       ...(unwired.length ? { inert: unwired } : {}),
       ...metrics,
       ...(proxy ? { oracleProxy: proxy } : {}),
+      ...(actingRun
+        ? { acting: { scenarios: actingRun.scenarios, ...actingRun.acting, decisions: actingRun.decisions } }
+        : actingScenarios.length
+          ? { acting: "not run under --live (its reader calls would share the cap; run it without --live)" }
+          : {}),
     },
     null,
     2,

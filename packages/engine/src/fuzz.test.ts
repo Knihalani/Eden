@@ -40,14 +40,8 @@ const CONFIGS: Record<string, WorldOptions> = {
   // What ships, with tenant t1 behind the proxy's shadow mode (D282): its events and takes say `shadow`, so nothing
   // they return may be learned from; tenant t0 is live beside it.
   "default-shadow": { config: DEFAULT_CONFIG, shadowTenant: "t1", notTwice: true },
-  // A10 (D305): every item carries an injection payload; the inert invariant runs. With the trials of D306 and D307
-  // on, no payload's instruction words reach a handout.
+  // A10 (D305): every item carries an injection payload; the inert invariant runs.
   "default-hostile": { config: DEFAULT_CONFIG, hostile: true, notTwice: true },
-  "default-hostile-shielded": {
-    config: { ...DEFAULT_CONFIG, guardLine: true, quarantineInstructions: true },
-    hostile: true,
-    notTwice: true,
-  },
   // Every part out (no sync, no push: a removal does not act, so the deletes check has nothing to hold).
   core: { config: CORE_CONFIG, notTwice: true },
 };

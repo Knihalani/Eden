@@ -181,31 +181,6 @@ describe("router rate limit, divided", () => {
   );
 
   test.concurrent(
-    "with EDEN_SPEND_LEASES=1 each child holds its lease start (cap/4N), not cap/N (D327)",
-    async () => {
-      const dir = tempDir("eden-router-lease-");
-      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, EDEN_MODEL_USD_PER_TENANT_DAY: "8" };
-      const config = { ...loadConfig(env), port: 0, processes: 2, spendLeases: true };
-      let out = "";
-      const router = await startRouter({ config, env, log: () => {}, onOutput: (_i, t) => (out += t) });
-      try {
-        const res = await fetch(`http://127.0.0.1:${router.port}/v1/usage`, {
-          method: "POST",
-          headers: { authorization: `Bearer ${KEY}` },
-          body: "{}",
-        });
-        const usage = (await res.json()) as { capUsd: number; processes: number };
-        expect(usage.processes).toBe(2);
-        expect(usage.capUsd).toBe(2); // 8 / (4 x 2) a child, before any lease.
-        expect(out).toContain("model spend leased from the router (D327)");
-      } finally {
-        await router.stop();
-      }
-    },
-    30_000,
-  );
-
-  test.concurrent(
     "a child that cannot start fails the router's start, and every child is stopped",
     async () => {
       const dir = tempDir("eden-router-bad-");

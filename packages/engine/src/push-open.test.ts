@@ -10,6 +10,13 @@ import { CORE_CONFIG } from "./parts";
 import { isImperative, isOpenRequest, MORE_VERBS } from "./probes";
 import { PushChecker } from "./push-check";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 // O3 (D702): `pushOpen` starts the candidates' push for a request whose verb is on no list.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -100,9 +107,9 @@ describe("isOpenRequest (D702): a message that opens like an instruction, whatev
 
   test("bounded: a megabyte of text is read at its head and tail only", () => {
     const long = "cash in the bonds ".repeat(60_000);
-    const t0 = performance.now();
+    const t0 = cpuMs();
     for (let k = 0; k < 50; k++) isOpenRequest(long);
-    expect(performance.now() - t0).toBeLessThan(50);
+    expect(cpuMs() - t0).toBeLessThan(50);
     expect(isOpenRequest(long)).toBe(true);
     expect(isOpenRequest(`${long}?`)).toBe(false);
   });
@@ -136,8 +143,8 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(partner.takePending(other)).toEqual([]);
   });
 
-  test("with pushCheck on, an opened message starts no push: the check's paid call stays on listed verbs", async () => {
-    const model = new FakeModel(() => '{"items":[]}');
+  test("with the check (D823, D828), an opened message is pushed and checked like a listed one", async () => {
+    const model = new FakeModel(() => '{"items":[{"i":1,"on":"Premium Bonds hold","hits":"its bonds","act":true}]}');
     const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
     const partner = new ContextPartner({
       sources: async () => [source],
@@ -159,8 +166,10 @@ describe("pushOpen (D702, promoted by D710)", () => {
       },
       checker: new PushChecker({ model, budget: new Budget() }),
     });
-    expect((await packets(partner, REQUEST)).length).toBe(0);
-    expect(model.calls.length).toBe(0);
+    const got = await packets(partner, REQUEST);
+    expect(model.calls.length).toBe(1);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.citations.map((c) => c.itemId)).toEqual([ITEMS[0]!.id]);
   });
 
   test("an opened message is not kept as an acting request for plan alerts (D301)", async () => {

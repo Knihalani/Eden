@@ -4,7 +4,7 @@
 # --cards-calls 4: the arm with K lanes gets 4 × K calls, the moment one lane has made four.
 L=$1; shift
 mkdir -p .local/n4/runs
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions 'eden,eden~l2,eden~l4' \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --conditions 'eden,eden~l2,eden~l4' \
   --config default --variant-config '{"l2":{"cardsLanes":2},"l4":{"cardsLanes":4}}' --tenant-prompt --cards-calls 4 \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload \

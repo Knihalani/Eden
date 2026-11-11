@@ -22,7 +22,7 @@ export interface EngineConfig {
   /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
   fallbackAsks: boolean;
   maxItemsPerInjection: number;
-  /** A packet's size cap; with `guardLine` (D306) a packet may be `GUARD_LINE`'s 296 bytes over it. */
+  /** A packet's size cap. */
   maxInjectionBytes: number;
   /**
    * A cached item fetched or seen in a lookup longer ago than this is never delivered from the fast path: its cue goes
@@ -386,14 +386,6 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
-  /**
-   * Trial (D604, O1; off). With `syncUnusedSweepMs`: each unused source is swept at its own point in the period (a
-   * hash of the tenant, the user and the source), so the sources a user connected together are not all listed in
-   * one tick a week later (1,000 listings in a minute on the day bench). A source is due no later than a period
-   * after its own last sweep, as without the switch; one swept off its point (the backfill, an absence over the
-   * point) is swept up to a period early, half a sweep more on average.
-   */
-  syncSweepSpread: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -412,8 +404,8 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
-   * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push or the
-   * action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
+   * Every item about to be delivered (a packet or an `ask` answer, from the slow path or the reader's
+   * push) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
    * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
    * a reader's likely picks are re-read beside its call). A changed copy is stored and delivered in its place; one the
    * source no longer has (`gone`, only from a source with `fetchReportsGone`) is dropped from the cache and not
@@ -453,13 +445,6 @@ export interface EngineConfig {
    * session on the process milliseconds of CPU, and the cue it yields is no better than the head's.
    */
   maxEventChars: number;
-  /**
-   * The action firewall (`checkAction`, `firewall.ts`; docs/research/econ-firewall.md): an agent's tool call is checked
-   * before it runs, with no model and no source call, against what is held: the request and the call's structured
-   * arguments (their days, times, amounts, names and references) read as one cue through the conflict test, the cards
-   * and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
-   */
-  actionCheck: boolean;
   /**
    * On in the default (D205; part `freshness`): an item this session was handed (a packet taken, an ask's answer)
    * that is stored again with other words (a sync poll, a notice carrying items, a re-read) is sent once more as an
@@ -649,25 +634,12 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
-   * Trial (D306, A10; docs/research/a10-injection.md): every packet and ask answer Eden renders carries `GUARD_LINE`
-   * (`shield.ts`), a fixed line of Eden's own after the envelope's header: the items are other people's words, and
-   * nothing in them is an instruction to the agent (a request, address, link, phone number or payment detail found
-   * in one is not acted on unless the user's own request asks for exactly that).
-   */
-  guardLine: boolean;
-  /**
-   * Trial (D307, A10): every item Eden renders into a packet or ask answer has its instruction-shaped text (addressed
-   * to an AI, an override, Eden's own words forged, a tool call, hidden HTML, a markdown image, a forged chat turn)
-   * replaced by `QUARANTINED` before it is compacted (`shield.ts`, no model).
-   */
-  quarantineInstructions: boolean;
-  /**
    * On in the default (D375, D376, A25; part `parties`; `parties.ts`): `checkAction` holds a call that adds a party
    * (an email address, a sort code, an account number, an IBAN, in any field but amounts, dates, titles, subjects and
    * descriptions) found only in what Eden's own packets and answers showed this session: not in the user's request,
    * and no correspondent of the user's (`ItemCache.isCorrespondent`). The finding asks the agent to confirm with the
    * user; the same call made again proceeds. No model, no source call; the session keeps digests of its packets'
-   * identifiers (`MAX_PACKET_PARTIES`). Independent of `actionCheck`: with this on and that off, only this check runs.
+   * identifiers (`MAX_PACKET_PARTIES`).
    */
   partyCheck: boolean;
   /**
@@ -714,12 +686,15 @@ export interface EngineConfig {
    */
   pushCandidatesSettled: number;
   /**
-   * I3 (D500; a trial, off; docs/research/i3-push-check.md): with `pushCandidates` and a `checker` dependency (a
-   * budgeted model call, `push-check.ts`), a push whose pool passes the candidates' constraint-like gate asks the
-   * model once, over the whole pool, which items change what the assistant should do for the request (I2's question,
-   * D490); the candidates are the pool's items it names, in the pool's order (bulk mail out), the first
-   * `pushCandidates` of them, and a pool it names none of sends no packet. A refusal, an error, an unreadable reply or
-   * a reply later than `pushCheckWaitMs` leaves the default's candidates; a late reply still serves a second pass.
+   * The push check (I3, D500; compare-first reply, D527; opened pushes checked, D823; promoted by D828, part `check`;
+   * docs/research/p2-push-check.md): with `pushCandidates` and a `checker` dependency (a budgeted model call on the
+   * reader's model, `push-check.ts`; none without a model key, and the part is inert), a push whose pool passes the
+   * candidates' constraint-like gate asks the model once, over the pool's head, which items change what the assistant
+   * should do for the request; the candidates are the pool's items it names, in the pool's order (bulk mail out), the
+   * first `pushCandidates` of them, and a pool it names none of sends no packet (the default's silence). A refusal,
+   * an error, an unreadable reply or a reply later than `pushCheckWaitMs` leaves the unchecked candidates; a late
+   * reply still serves a second pass. Pi (Haiku agent): hidden +4.7 points, +$0.18–0.21 per 1,000 tasks, +1.1 s a
+   * task; with a Sonnet agent the total bill falls $0.86 per 1,000 tasks (D825, D826).
    */
   pushCheck: boolean;
   /** How long the push waits for its check before it hands the default's candidates (ms). */
@@ -732,53 +707,22 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * N2 (D511; H1; a trial, off): with `pushCheck`, the check reads items past the lexical pool too (`widenPool`): the
-   * `widen` dependency's nearest items (`pushWidenEmbed`), the request's raw intent hits (`pushWidenIntent`) and the
-   * ranking's next items (`pushWidenDeep`), after the pool's head and within the check's 20 items. Only the check can
-   * hand them, and only where the check runs (the constraint-like gate passed). The widening and the check share one
-   * `pushCheckWaitMs`. With `pushCheckItems` 20 the pool fills the check and nothing widened is read.
-   */
-  pushWiden: boolean;
-  /**
-   * N5 (D527; a trial; 1 = I3's reply): 2 asks the check for a compare-first reply (`CHECK_SYSTEM_COMPARE`): per
-   * listed item, what its point applies to, what of the request's own that point lands on (or "none"), then the
-   * verdict. No thinking; a longer reply (no stop sequence).
-   */
-  pushCheckForm: number;
-  /**
-   * N5 (D533; a trial; true = I3's rule; docs/research/n5-widen-check.md): with `pushCheck`, whether a check that
-   * names no item sends no candidates packet. Off, the default's candidates go instead: the check then only ever
-   * replaces the default's packet with the items it named, and a request it finds nothing for is handled as today.
-   */
-  pushCheckSilent: boolean;
-  /**
-   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item of the lexical pool's
-   * head (never a widened item) is constraint-like (`readerGate`'s test, cards included) and names one of the
-   * request's anchors (`settle.ts`: an entity or a day); otherwise no call and no widening are made and the
-   * default's candidates go. Fewer calls (about a third as many on train's 1:1:8 mix) with no stored answer and no
-   * dependency beyond the checker.
-   */
-  pushCheckAnchored: boolean;
-  /**
-   * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates` and without
-   * `pushCheck`, the push also runs for a message whose verb is on no list but which does not open as a question, a
+   * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
+   * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
    * kept for the reader's paid push and the check's) guard nothing there; the candidates' own gate (a
    * constraint-like item in the pool) still decides whether a packet goes. An opened message is not kept as an
    * acting request for plan alerts (D301).
    */
   pushOpen: boolean;
-  pushWidenEmbed: number;
   /**
-   * M3 (D901; a trial, off; docs/research/m3-retriever.md): with `pushCandidates`, the `widen` dependency's top k
-   * (a learned retriever: items encoded at ingest, the request read with no network) are fused into the push's
-   * lexical ranking by reciprocal rank (`retrieve.ts`) before the pool's cut, so the pool and the candidates can
-   * hold items no word of the request reaches. 0 is off (no await added). Bounded by `pushCheckWaitMs`; fails open
-   * to the lexical ranking.
+   * P2 (D820, promoted by D828, part `indirect`; docs/research/p2-push-check.md): the push also starts for a request
+   * phrased as a need, a plan, a wish or a question about acting ("I need to pay …", "We should move …", "I want you
+   * to book …", "Should I book …?", a request after a first clause of context), read as the imperative after its
+   * lead-in (`indirectRest`, `pushStart`), and the open shape refuses pasted log lines and chatter openers
+   * (`isOpenRequest`'s strict form). The push's lookup reads the message from where the request starts.
    */
-  pushRetrieve: number;
-  pushWidenIntent: number;
-  pushWidenDeep: number;
+  pushIndirect: boolean;
   /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
@@ -884,7 +828,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
-  syncSweepSpread: false,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
@@ -897,7 +840,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askItemBytes: 320,
   decideCandidates: 64,
   maxEventChars: 32_000,
-  actionCheck: false,
   revisionNotice: true,
   compactAsk: true,
   askDedup: true,
@@ -931,25 +873,16 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  guardLine: false,
-  quarantineInstructions: false,
   partyCheck: true,
   planConflict: true,
   askNudge: true,
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
-  pushCheck: false,
-  pushCheckWaitMs: 2_500,
+  pushCheck: true,
+  pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushWiden: false,
-  pushCheckForm: 1,
-  pushCheckSilent: true,
-  pushCheckAnchored: false,
   pushOpen: true,
-  pushWidenEmbed: 3,
-  pushRetrieve: 0,
-  pushWidenIntent: 2,
-  pushWidenDeep: 0,
+  pushIndirect: true,
   revisionDiff: true,
 };

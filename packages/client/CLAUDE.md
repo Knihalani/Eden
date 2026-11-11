@@ -9,7 +9,8 @@ an action before it runs (`check`), and put injections into a message list (`wit
 | File | Owns |
 |---|---|
 | `src/client.ts` | `EdenClient`: `observe`, `pending`, `collect`, `ask`, `check`, `feedback`, `health` (a never-throwing probe, `/v1/whoami`), `explain` (the session's last decisions and why, `/v1/explain`, D277; `[]` on failure), `sourceChanged(sourceId, { refs, items, removed })` (a change notice with the refs it names, the documented default, D347, D421: `/v1/sources/refs`; with its items when it carries them, D210: `/v1/sources/items` and `/removed` in batches of `MAX_PUSHED_ITEMS`; the bare signal sent as well when a part is not taken; none of them is the bare signal, `/v1/sources/changed`); one `post` with a timeout (default 800 ms; an observe adds its `waitMs`). `edenId(raw)`: maps any string to a valid id injectively (escapes UTF-16 code units, else `h:` + SHA-256) |
-| `src/messages.ts` | `withContext` (injections into a chat message list as data), `heldResult` (a firewall finding as a held tool's result, D69) |
+| `src/on-error.ts` | `defaultOnError` (D850): the `onError` used when none is set: each distinct error printed once with its fix (`fixFor`) in development, the first of each route and status once per process in production (`edenEnv`: `EDEN_ENV`, else `NODE_ENV`); `onError: null` silences it. Python's `default_on_error`/`fix_for` mirror it (`python.test.ts` compares `fix_for`) |
+| `src/messages.ts` | `withContext` (injections into a chat message list as data), `heldResult` (a check's finding as a held tool's result, D69) |
 | `src/guard.ts` | `guardTool`/`guardTools` (D420): an agent's acting tools wrapped so each call is `check`ed first; a finding is the tool's result (`heldResult`, or the `held` option) and the tool does not run; fails open on any check or policy error; the tool's own errors propagate |
 | `src/index.ts` | Public exports, re-exporting the `ask_context` descriptions and protocol types |
 | `pack.ts` | `bun run pack:client [outDir]` (D365): the client as a standalone npm package (default `dist/eden-client`): one ESM bundle with the protocol inlined, declarations under `types/` with Node16-style `.js` specifiers. Its smoke test is `examples/onboarding/client-package.test.ts` (Node imports it, tsc with Node16 resolution checks it) |
@@ -17,7 +18,7 @@ an action before it runs (`check`), and put injections into a message list (`wit
 ## Rules that apply here
 
 - **Fail open, always (D14).** No call may throw into the agent's loop: a network error, a timeout, a non-2xx or an
-  answer of the wrong shape is "no context" (`null`, `[]`, or `proceed` for `check`). Errors go to `onError` only.
+  answer of the wrong shape is "no context" (`null`, `[]`, or `proceed` for `check`). Errors go to `onError` only (unset: `defaultOnError`, which prints, never throws).
   Every new method needs a test for each failure shape (`client.test.ts` has the pattern). A 2xx is checked too:
   `post`'s `valid` drops an answer of another shape (`observe`: a record whose `injection` is null or has string
   `id`/`text`; `pending`: an `injections` array, malformed elements dropped; `ask`: a string `answer` and a

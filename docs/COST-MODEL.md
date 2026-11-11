@@ -150,7 +150,8 @@ endpoints, with very different reasoning lengths:
 **Every Haiku 5.5 reader and card figure in this file is "lab provider, cached" (D145)** unless it says otherwise: it
 was measured on the lab's `AnthropicModel` (Anthropic directly, thinking off, the system prompt always read from the
 prompt cache after the first call), not on the path the servers ship, which reaches `anthropic/claude-haiku-5.5`
-through OpenRouter and sends no cache breakpoint (`anthropicCache` is a trial, off). Re-priced with no cache, the lab
+through OpenRouter and sends no cache breakpoint (`anthropicCache` is a documented, untested opt-in, off and set by
+nothing in the servers, D817). Re-priced with no cache, the lab
 ledger's `eden.reader` rows cost 1.32x and its `eden.cards` rows 1.27x what they did (D145; the gap at lab traffic
 density, an upper bound for sparser traffic). The OpenRouter path's cost and latency are **unmeasured**: this
 audit's runs could call Anthropic only.
@@ -317,12 +318,8 @@ Sync push (D66) was deleted by D112.
 The knowledge graph (`graph`, D58) and its judge seat were deleted by D225 (2026-11-07;
 docs/research/fix-w2a-parts.md): no measured value on train with the paid reader replayed.
 
-The action firewall (`actionCheck`, off by default; proposed D69, docs/research/econ-firewall.md) adds no model call
-and no source call: each check of an agent's tool call is CPU on what is held (the cache, the probes' memo, the
-cards), 4–5 ms p50 and at most 28 ms per check in the no-model replay of the track's recorded calls (seeds 41–43,
-ALL). Its cost is the agent's: a held call costs the agent about one more model request to read the finding and
-answer, +$0.3–0.6 per 1,000 such tasks and +5–7 s on them (the track's live runs, in-sample; agent cost over
-all tasks, within noise).
+The action firewall (`actionCheck`, D69) was deleted by D815; the party check that `POST /v1/check` runs (D376) adds
+no model call and no source call.
 
 These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
 is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
@@ -597,7 +594,7 @@ request, measured again before any promotion: **[EST]** I3's short-reply request
 300 output tokens, 2–3 s and $0.0004 a call (n2-recall.md §8). I3's no-thinking check (D500–D502) is the cheap end:
 $0.0002 a call, p50 0.9 s, which cannot gate a widened pool (D511).
 
-## The compare-first push check and its gate (N5, `pushCheckForm` 2, `pushCheckAnchored`; trials, off; D527–D536)
+## The push check (in the default since D828; N5 and P2 measurements, D527–D536, D825, D826)
 
 The per-push call of I3's check with another reply (docs/research/n5-widen-check.md): the same fixed instructions
 plus a compare-first format (about 1,185 tokens, read from the cache on Anthropic direct), the request and at most 20
@@ -611,6 +608,18 @@ p90 1.44–1.52 s.
 | every gated push, with `pushWiden` (K) | 0.81–0.83 | 0.21–0.22 | +0.214; +0.173 | +1.06 s; +0.85 s |
 | every gated push (Kp) | 0.81–0.83 | 0.18–0.19 | +0.183; +0.156 | +1.04 s; +0.88 s |
 | `pushCheckAnchored`, `pushCheckSilent` off (N) | 0.30; 0.40 | 0.07; 0.09 | +0.043; +0.083 | +0.31 s; +0.41 s |
+| N with `pushCheckOpen`, wait 1,500 ms (P2's N) | 0.35; 0.48 | 0.08; 0.11 | +0.050; +0.103 | +0.32 s; +0.57 s |
+| Kp with `pushCheckOpen`, wait 1,500 ms (P2's S) | 0.96; 0.99 | 0.21; 0.22 | +0.213; +0.178 | +1.09 s; +1.15 s |
+
+**In the default (D828) is P2's S row:** with a Haiku 5.5 agent +$0.21 per 1,000 tasks one request a session (1:1:8)
+and +$0.18 over days, +1.1 s a task; **with a Sonnet 5.5 agent the total bill falls $0.86 per 1,000 tasks
+(−1.24..−0.59) over days**, wall +0.57 s (D826): the agent carries 67% fewer packet characters all day. The other rows
+are measured arms whose switches were deleted (D828). A server with no model key makes no check call.
+
+P2 (docs/research/p2-push-check.md, D823): checking the open shape's pushes too, so the call rate rises
+by about a sixth (funnel, seeds 42–43: 470 → 565 calls a seed). Over days the silent arm (S) cuts the packet
+characters the agent carries all day by 57% and its prompt tokens by 1,731 a task: the Haiku agent's own bill falls
+$0.242 → $0.198 per 1,000 tasks; the same tokens priced at Sonnet's rates **[EST]** fall $4.17 → $3.46.
 
 The agent's own spend is flat to lower with the check (−$0.01 to −$0.05 per 1,000 tasks over days: smaller packets
 in the day's transcript); a silent push adds agent turns one request a session (`ask_context` +0.30 a task, D532).
@@ -632,6 +641,16 @@ backfill (about 1,005 listings a new user, once) and the weekly sweep of unused 
 own costs: `RareTerms`, at most 1 MB a user (+0.72 MB at 1,000 sources in the lab; it lives with the sync, not
 in the frozen blob, so freezing a user does not shrink it until the sync drops the user after `syncDropMs`), and 3–5 µs a new word on the
 sync's store path (30–70 ms for a page of 100 items of 150 new words each).
+
+## `ask_context` through the proxy (D851, opt-in `askTool`, off unless set; D857)
+
+With `EDEN_PROXY_ASK=1` the proxy adds Eden's `ask_context` to the model's tools and answers the calls itself. Each
+round the model asks is one more upstream model call on the tenant's own bill (the conversation so far plus the
+round), and one `/v1/ask` per question (at most four a round, three rounds a request). On the shipped default an ask
+makes no model call (D237: the candidates; Eden's time about 5 ms at p50, D64); with the reader's configuration each
+ask may make one reader call under its own `Budget`. D70 measured the SDK arm without the tool at 27% lower agent
+cost and 11.9 points fewer hidden facts raised; the proxy's figure is not measured (docs/research/p5-integrator.md
+§4b). A streamed asking round is buffered, so the agent's first token waits for the rounds.
 
 ## Levers, in order of leverage
 

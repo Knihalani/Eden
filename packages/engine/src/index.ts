@@ -25,7 +25,6 @@ export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
-export { GUARD_LINE, QUARANTINED, quarantine, quarantineItem } from "./shield";
 export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";
 export { contentTerms, distinctTermIds, extractEntities, extractTypedEntities, isChatter, termIds } from "./text";
@@ -44,7 +43,7 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink
 export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
-export { requestedRange } from "./probes";
+export { isImperative, isOpenRequest, MORE_VERBS, pushStart, requestedRange } from "./probes";
 export {
   ACTIONS,
   CARD_KINDS,
@@ -108,15 +107,12 @@ export {
 } from "./reader";
 export {
   CHECK_MAX_ITEMS,
-  CHECK_STOP,
   CHECK_SYSTEM,
-  CHECK_SYSTEM_COMPARE,
   parseCompare,
   CHECK_VERSION,
   checkKey,
   checkMessages,
   DEFAULT_CHECK_LIMITS,
-  parseCheck,
   PushChecker,
   type PushCheckInput,
   type PushCheckLimits,

@@ -4,7 +4,7 @@
 # One Eden arm per process: pi-ab runs every world of a seed at once, each with its own 995 simulated connectors.
 L=$1; CONDS=$2; shift 2
 mkdir -p .local/c4/runs
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite ${SUITE:-train} --conditions $CONDS \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite ${SUITE:-train} --conditions $CONDS \
   --config default \
   --cards .local/c4/cards-all.jsonl --cards-out .local/c4/runs/$L.cards.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

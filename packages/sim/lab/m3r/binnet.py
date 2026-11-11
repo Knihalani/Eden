@@ -135,15 +135,18 @@ def prior_size():
 
 
 class Pair(nn.Module):
-    def __init__(self, q, bits, twin=True, prior=0, aux=False, width=128):
+    def __init__(self, q, bits, twin=True, prior=0, aux=False, width=128, setlevel=False):
         super().__init__()
-        self.q, self.twin, self.prior, self.aux = q, twin, prior, aux
+        self.q, self.twin, self.prior, self.aux, self.setlevel = q, twin, prior, aux, setlevel
         self.ienc, self.qenc = Enc(q, bits), Enc(q, bits)
         # `aux` (multi-task): a constraint head on the item's own code (fact against its all-clear twin), trained on
         # every request's planted item; its sign is one more input bit a candidate, beside the lexical prior.
         self.tag = BinLin(q, bits, 32) if aux else None
         self.tag_head = nn.Linear(32, 1) if aux else None
-        self.l1 = BinLin(q, (5 if twin else 3) * bits + prior + (8 if aux else 0), width)
+        # `setlevel`: each candidate also against the set's pooled code (a majority vote over the candidates) and
+        # against its nearest sibling (the other candidate whose code agrees with it most), so candidates are scored
+        # in the context of the others.
+        self.l1 = BinLin(q, (5 if twin else 3) * bits + prior + (8 if aux else 0) + (2 * bits if setlevel else 0), width)
         self.l2 = BinLin(q, width, 32)
         self.head = nn.Linear(32, 1)
         self.n1 = BinLin(q, bits, 32)
@@ -157,6 +160,13 @@ class Pair(nn.Module):
         R, K, B = ic.shape
         qq = qc.unsqueeze(1).expand(R, K, B)
         parts = [qq * ic, qq, ic] + ([ic * tc, tc] if self.twin else []) + ([pb] if self.prior else [])
+        if self.setlevel:
+            pool = self.q.act(ic.sum(1, keepdim=True))  # (R, 1, B)
+            agree = ic @ ic.transpose(1, 2)  # (R, K, K)
+            eye = torch.eye(K, dtype=torch.bool).unsqueeze(0)
+            sib = agree.masked_fill(eye, -1e9).argmax(-1)  # (R, K)
+            sib_c = torch.gather(ic, 1, sib.unsqueeze(-1).expand(R, K, B))
+            parts += [ic * pool.expand(R, K, B), ic * sib_c]
         if self.aux:
             t = self.q.act(self.constraint(ic.reshape(R * K, B))).view(R, K, 1)
             parts.append(t.expand(R, K, 8))  # the tag bit, repeated so a binary layer can weigh it
@@ -447,7 +457,8 @@ def run(o):
     if o.prior:
         fit_prior(train)
     if o.arch in ("pair", "notwin"):
-        net = Pair(q, o.bits, twin=o.arch == "pair", prior=prior_size() if o.prior else 0, aux=o.aux, width=o.width)
+        net = Pair(q, o.bits, twin=o.arch == "pair", prior=prior_size() if o.prior else 0, aux=o.aux, width=o.width,
+                   setlevel=o.setlevel)
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
         best = None
         base = {"fact@5_lexical": sum(1 for w in ev for r in w["reqs"] if held(r, heldout) and r["kind"] == "hidden"
@@ -884,6 +895,7 @@ if __name__ == "__main__":
     a.add_argument("--aux", action="store_true", help="pair: multi-task constraint head on item codes, its bit as input")
     a.add_argument("--aux-weight", type=float, default=1.0)
     a.add_argument("--width", type=int, default=128)
+    a.add_argument("--setlevel", action="store_true", help="pair: set-pooled and nearest-sibling inputs")
     a.add_argument("--margin", type=float, default=0.0, help="pair: fact-over-own-twin margin (needs --both groups)")
     a.add_argument("--margin-weight", type=float, default=1.0)
     a.add_argument("--worlds", type=int, default=40)

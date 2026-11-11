@@ -19,15 +19,31 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "heldout16",
   "heldout17",
   "heldout18",
+  "heldout19",
   "train1",
   "train2",
   "train3",
   "train4",
   "train5",
   "train6",
+  "longtail",
+  "train1r",
+  "train2r",
+  "train3r",
+  "train4r",
+  "train5r",
+  "train6r",
+  // P2's reworded train (reword.ts): the same neutral tasks, reworded.
+  "train1rw",
+  "train2rw",
+  "train3rw",
+  "train4rw",
+  "train5rw",
+  "train6rw",
 ];
 
-export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);
+/** Generated suites (`synth-*`, `synth:<file>`, D884) build `neutral` too: their planting function plants nothing. */
+export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite) || suite.startsWith("synth");
 
 /**
  * The variants a harness runs for a suite: those asked for, minus `neutral` where the suite does not build it.

@@ -6,9 +6,10 @@ import { gzipSync } from "node:zlib";
 import { cardKey, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
 import { REALISTIC, simSources } from "../sources";
-import { buildWorld } from "../world";
+import { buildWorld, type World } from "../world";
 import {
   DiskCardMaker,
+  harnessCoverage,
   harnessIntent,
   INTENT_PATH,
   intentCoverage,
@@ -16,6 +17,8 @@ import {
   loadCards,
   loadRequests,
   samePath,
+  SHIPPED_PATH,
+  shippedUncovered,
 } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
 import { INTENT_INERT } from "./reader-stub";
@@ -315,7 +318,7 @@ describe("the harnesses' intent replay (D158)", () => {
   test("default replays the checked-in file only where it covers every suite and seed", () => {
     expect(harnessIntent("default", run)).toEqual({
       files: [INTENT_PATH],
-      note: "intent-v2.jsonl.gz by default, D158",
+      note: "intent-v2.jsonl.gz by default, D158; coverage full: every item, D714",
     });
     expect(harnessIntent("default", { ...run, suites: ["train1", "heldout10"], seeds: ["41", "42"] }).files).toEqual([
       INTENT_PATH,
@@ -350,14 +353,29 @@ describe("the harnesses' intent replay (D158)", () => {
   // 5 s (one of three timed checks failed on it, 5,410 ms; RealUse-1 part E).
   test("the checked-in file covers held-out 13 to 18 items (the shards INTENT_COVERS claims)", () => {
     const requests = loadRequests(INTENT_PATH);
+    // One base world per seed, shared by its twelve suite-variant worlds (D819): each gets its own lists and maps
+    // over the same item objects, so the sources' per-item analysis (memoised on the object) is done once a seed, not
+    // twelve times. The worlds are the ones a fresh build gives: a suite plants new items and `clearSlot` filters the
+    // list, and neither may change a base item, which the fingerprint check after each seed's worlds asserts.
+    const fingerprint = (w: World) => JSON.stringify([w.items, [...w.facts], w.arcs, w.people, w.user, w.sources]);
+    const bases = new Map([41, 44].map((s) => [s, buildWorld({ seed: s * 1_000 })] as const));
+    const printed = new Map([...bases].map(([s, w]) => [s, fingerprint(w)] as const));
     for (const [suite, seed] of [41, 44].flatMap((s) =>
       (["heldout13", "heldout14", "heldout15", "heldout16", "heldout17", "heldout18"] as const).map(
         (x) => [x, s] as const,
       ),
     )) {
       for (const variant of ["hidden", "control"] as const) {
-        // As hidden-funnel.ts and ab-common's worldOf build each world.
-        const world = buildWorld({ seed: seed * 1_000 });
+        // As hidden-funnel.ts and ab-common's worldOf build each world, over the seed's shared base items.
+        const base = bases.get(seed)!;
+        const world: World = {
+          ...base,
+          people: [...base.people],
+          arcs: [...base.arcs],
+          facts: new Map(base.facts),
+          items: [...base.items],
+          sources: { ...base.sources },
+        };
         const before = world.items.length;
         const tasks = SUITES[suite]!(world, seed, variant);
         const planted = world.items.slice(before);
@@ -374,5 +392,49 @@ describe("the harnesses' intent replay (D158)", () => {
         expect(mine.found).toBe(mine.of);
       }
     }
+    for (const [seed, base] of bases) expect(fingerprint(base)).toBe(printed.get(seed)!);
   }, 180_000); // Twenty-four worlds now (held-out 13 to 18), six times the earlier four.
+});
+
+// P7 (D872): the shipped-coverage file covers every suite its decisions name, so `--coverage shipped` never refuses
+// the end-of-wave heldout19 read, and the checked-in file is there.
+describe("shipped coverage (D872)", () => {
+  test("covers train, reworded, longtail and heldout19 on seeds 41-44, and nothing else", () => {
+    expect(shippedUncovered(["train1", "train6r", "longtail", "heldout19"], [41, 42, 43, 44])).toEqual([]);
+    expect(shippedUncovered(["heldout18"], [41])).toEqual(["heldout18 seed 41"]);
+    expect(shippedUncovered(["train1"], [45])).toEqual(["train1 seed 45"]);
+    expect(existsSync(SHIPPED_PATH)).toBe(true);
+  });
+});
+
+// D878: the live harnesses' coverage, resolved as the funnel's (D877).
+describe("harnessCoverage (D878)", () => {
+  const run = { suites: ["train1"], seeds: [41, 42] };
+  test("shipped by default where covered, replayed as cards and intent", () => {
+    const c = harnessCoverage({ coverage: "", cards: "", intent: "default", ...run });
+    expect(c.coverage).toBe("shipped");
+    expect(c.cards).toBe(c.intent);
+    expect(existsSync(c.cards)).toBe(true);
+  });
+  test("an uncovered run keeps its files; own files need --coverage full; a bad value throws", () => {
+    const off = harnessCoverage({
+      coverage: "",
+      cards: "x.jsonl",
+      intent: "default",
+      suites: ["heldout18"],
+      seeds: [41],
+    });
+    expect([off.coverage, off.cards, off.intent]).toEqual(["full", "x.jsonl", "default"]);
+    expect(() => harnessCoverage({ coverage: "", cards: "x.jsonl", intent: "default", ...run })).toThrow(
+      /--coverage full/,
+    );
+    const pinned = harnessCoverage({ coverage: "full", cards: "x.jsonl", intent: "none", ...run });
+    expect([pinned.coverage, pinned.cards, pinned.intent]).toEqual(["full", "x.jsonl", "none"]);
+    expect(() =>
+      harnessCoverage({ coverage: "shipped", cards: "", intent: "default", suites: ["heldout18"], seeds: [41] }),
+    ).toThrow(/does not cover/);
+    expect(() => harnessCoverage({ coverage: "most", cards: "", intent: "default", ...run })).toThrow(
+      /shipped or full/,
+    );
+  });
 });

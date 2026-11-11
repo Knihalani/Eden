@@ -40,14 +40,6 @@ describe("uptake recording", () => {
     expect(f.asks?.[0]?.text).toHaveLength(ANSWER_CHARS);
   });
 
-  test("a firewall finding counts its ids with the packets' but places no packet", () => {
-    const log = new UptakeLog();
-    log.finding({ citations: cites("f") });
-    log.packet({ text: "p1", citations: cites("a") });
-    expect(log.packets).toEqual(["p1"]);
-    expect(log.fields()).toEqual({ packets: "p1", cited: ["f", "a"], askCited: [] });
-  });
-
   test("a task with no packet records none, and long packets are cut", () => {
     expect(new UptakeLog().fields()).toEqual({ cited: [], askCited: [] });
     const log = new UptakeLog();

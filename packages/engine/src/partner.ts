@@ -80,16 +80,6 @@ import {
   type ReaderVerdict,
 } from "./reader";
 import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
-import {
-  accounts,
-  actionKey,
-  actionText,
-  FIREWALL_GROUNDS,
-  domainsOf,
-  MAX_CHECKED,
-  setsTime,
-  structuralTie,
-} from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -109,7 +99,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
-  isOpenRequest,
+  pushStart,
   MORE_VERBS,
   LEADING,
   isScheduling,
@@ -138,6 +128,7 @@ import {
 } from "./render";
 import {
   callParties,
+  MAX_CHECKED,
   MAX_PACKET_PARTIES,
   namesParty,
   partiesIn,
@@ -145,9 +136,7 @@ import {
   partyKey,
   type Party,
 } from "./parties";
-import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
-import { rrfOrder } from "./retrieve";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -225,15 +214,10 @@ export interface PartnerDeps {
    */
   onPushPool?: PushPoolSink;
   /**
-   * I3 (D500, trial `pushCheck`): the push check's model call (`push-check.ts`), with its own budget. Absent, or the
-   * flag off: no call is made and the default's candidates go.
+   * The push check's model call (`push-check.ts`, `pushCheck`, D500, in the default since D828), with its own budget.
+   * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
-  /**
-   * N2 (D511, trial `pushWiden`): item ids a non-lexical retrieval ranks first for the request (at most `k`, best
-   * first). The lab wires an embedding table; no server wires one.
-   */
-  widen?: (scope: Scope, request: string, k: number) => Promise<readonly string[]>;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -255,15 +239,14 @@ export interface PushPoolReport {
   anchorKinds?: { entities: number; day: boolean };
   /**
    * `pushCheck` (D500): what the pass's check did ("yes": it answered; "none": no call, the gate found nothing
-   * constraint-like or `pushCheckAnchored` left the push to the default; "late", "failed": the default's candidates
-   * went) and, when it answered, per pool item whether it said the item changes the action (all false with
-   * `pushCheckSilent` off is an answer that named nothing: the default's candidates went).
+   * constraint-like; "late", "failed": the default's candidates went) and, when it answered, per pool item whether it
+   * said the item changes the action (all false: the push sent no packet).
    */
   check?: "yes" | "none" | "late" | "failed";
   checked?: boolean[];
   /**
    * This pass made the check's model call and had its answer within the wait: not a pass that read a kept answer,
-   * that `pushCheckAnchored` skipped, or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
+   * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
 }
@@ -358,8 +341,8 @@ interface Session {
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
   /**
-   * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
-   * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
+   * With `partyCheck`: the tools and parties a finding named (`partyFinding`, bounded by `MAX_CHECKED`, oldest
+   * first). The same parties added again to the same tool are the agent's informed choice, and proceed.
    */
   checked?: Set<string>;
   /**
@@ -478,16 +461,10 @@ type ProbeSend = (
   keep?: boolean,
   onAnswer?: (sourceId: string, page: ContextItem[]) => void,
 ) => Promise<ContextItem[]>;
-/** How a probe run differs from a lookup's own (`Partner.probe`); the action firewall's reads offline. */
+/** How a probe run differs from a lookup's own (`Partner.probe`). */
 interface ProbeOpts {
   /** Source calls it may make (default `probeCalls`). */
   budget?: number;
-  /** No call at all: what the memo and the economy hold for each query. */
-  offline?: boolean;
-  /** The action class to read or ask (default: `consequenceProbe`'s own). */
-  cls?: ActionClass | null;
-  /** The class is read from what is cached, with no call. */
-  classOffline?: boolean;
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
@@ -499,8 +476,6 @@ interface ProbeOpts {
 const ASK_FUSE_K = 2;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
-/** The action firewall: a party named on more than this share of a user's items is the user's own organisation. */
-const SELF_DOMAIN_SHARE = 0.1;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
@@ -788,7 +763,6 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            sweepSpread: c.syncSweepSpread,
           },
         )
       : null;
@@ -814,9 +788,6 @@ export class ContextPartner {
             }
           });
         },
-        // D652: the file of a user held on disk only did not open. Their sync starts over on the next event, as a new
-        // user's does.
-        lost: (scope) => sync?.forget(scope),
       };
     }
   }
@@ -868,17 +839,22 @@ export class ContextPartner {
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
     const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
-    // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list. Not with
-    // `pushCheck`: an opened push would add the check's paid call, which D702 did not measure or cost.
-    const listed = event.kind === "user_message" && isImperative(event.text, MORE_VERBS);
-    const opened =
-      !listed &&
-      event.kind === "user_message" &&
-      this.config.pushOpen &&
-      this.config.pushCandidates > 0 &&
-      !this.config.pushCheck &&
-      isOpenRequest(event.text);
-    if (opened) internal.open = true;
+    // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list; with
+    // `pushCheck` its pool is checked as a listed request's (D823, D828).
+    // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
+    // and the push's lookup is given that imperative; the open shape then refuses log lines and chatter.
+    const start =
+      event.kind === "user_message"
+        ? pushStart(event.text, {
+            open: this.config.pushOpen && this.config.pushCandidates > 0,
+            indirect: this.config.pushIndirect,
+          })
+        : null;
+    const listed = start?.how === "listed";
+    const opened = start?.how === "opened";
+    // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can
+    // read as listed, and D301 measured only listed-verb requests (the review of D820).
+    if (opened || (start && event.kind === "user_message" && start.request !== event.text)) internal.open = true;
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -890,7 +866,7 @@ export class ContextPartner {
       (listed || opened)
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
-          this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
+          this.ask({ ...event, question: head(start!.request, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
             () => null,
           )
         : null;
@@ -1476,17 +1452,13 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    // The quarantine (D307) reads the item's own title, before Eden's tag and note go round it: a title it replaces
-    // whole must not take "updated:" and "this version replaces it" with it.
-    const own = (t: string) => (this.config.quarantineInstructions ? quarantineTitle(t) : t);
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${own(it.title)}${this.updatedNote(s, it)}` }));
-    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes, ...this.shield() });
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${this.updatedNote(s, it)}` }));
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
     let n = renderedCount(items, text);
     if (n === 0) {
       // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
       text = renderPacket(tagged.slice(0, 1), {
         maxBytes: Math.max(this.config.maxInjectionBytes, 512),
-        ...this.shield(),
       });
       n = 1;
     }
@@ -1654,14 +1626,13 @@ export class ContextPartner {
   }
 
   /**
-   * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
-   * against what is held, with no model and no source call. The session's request and the call's arguments read as
-   * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
-   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, a
-   * card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
-   * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
+   * The party check (`partyCheck`, D375, D376; docs/research/a25-action-guard.md): an agent's tool call, before it
+   * runs, checked with no model and no source call for a party (an address, an account) it adds that this session's
+   * packets showed, the user's own request does not name and no correspondent of the user's vouches for
+   * (`partyFinding`). Anything else proceeds, as does a call to the same tool adding the same parties again after a
    * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
-   * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
+   * is its own. With the check off, every call proceeds and no state is touched. Never throws: a failure proceeds.
+   * (The action firewall that also read the call's grounds, `actionCheck`, D69, was deleted by D815.)
    */
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
@@ -1673,154 +1644,30 @@ export class ContextPartner {
       reason,
       latencyMs: Math.round(performance.now() - t0),
     });
-    if ((!this.config.actionCheck && !this.config.partyCheck) || event.kind !== "tool_call") return proceed("off");
-    // The party check alone (the default, D376): a session Eden handed no identifier has nothing to hold, and none is
-    // opened for a call in a session Eden never saw.
-    if (!this.config.actionCheck && !this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
+    if (!this.config.partyCheck || event.kind !== "tool_call") return proceed("off");
+    // A session Eden handed no identifier has nothing to hold, and none is opened for a call in a session Eden never
+    // saw.
+    if (!this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
     try {
       const s = this.session(event);
-      const key = actionKey(event.tool, event.input);
-      if (s.checked?.has(key)) return proceed("repeat");
-      // The request the call serves: the session's latest user message or arriving message, as remembered.
-      const asked = [...s.window].reverse().find((w) => w.startsWith("user_message: ") || w.startsWith("external: "));
-      const request = asked ? asked.slice(asked.indexOf(": ") + 2) : "";
-      if (this.config.partyCheck) {
-        // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.
-        const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
-        const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
-        if (found) {
-          const latencyMs = Math.round(performance.now() - t0);
-          this.trace(s, {
-            sessionId: s.id,
-            turn: s.turn,
-            event: "tool_call",
-            decision: "fast",
-            reason: "action-party",
-            latencyMs,
-            sourceCalls: 0,
-            modelCalls: 0,
-            costUsd: 0,
-            itemIds: found.citations.map((c) => c.itemId),
-          });
-          return { verdict: "finding", finding: found, reason: "party", latencyMs };
-        }
-        if (!this.config.actionCheck) return proceed("clear");
-      }
-      // What the call commits to (its days, amounts, names, references), without what the agent wrote in it.
-      const call = sanitizeForStore(actionText(event.tool, event.input, { prose: false }));
-      // The call first: its time is the one the clash test reads (`requestedSpan` reads the first).
-      const text = sanitizeForStore(head(`${call}\n${request}`, this.config.maxEventChars));
-      if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
-      const terms = distinctTermIds(text, s.vocab);
-      const offset = this.deps.cache.offsetOf(s.scope);
-      const cue = buildCue(text, terms, s.vocab, event.at, offset, this.config.probes);
-      // The days the call acts on are its own when it names any: an agent that moved the dinner to another evening
-      // acts on that evening, not the one the request asked for.
-      const own = timeWindow(call, event.at, offset);
-      if (own && own.days.size > 0) cue.time = own;
-      cue.arrived = this.now();
-      // The probes' last answers and the class's cached finds, with no call.
-      const out: ProbeOut = { calls: 0, kept: [] };
-      if (this.config.probes) {
-        const all = await within(this.deps.sources(s.scope), CHECK_SOURCES_MS);
-        if (all && all.length > 0 && !s.closed) {
-          await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
-            offline: true,
-            cls: actionClass(cue.raw, true),
-            classOffline: true,
-            local: this.localOf(s, all),
-          });
-        }
-      }
-      if (s.closed) return proceed("closed");
-      const carded = this.cardFinds(s, cue);
-      const extra = [...out.kept, ...(out.consequence?.ids ?? []), ...carded.keys()];
-      // Delivered already or not: what the agent is about to do is checked, not whether it was told.
-      const scored = this.rank(s, cue, { ignoreLedger: true, probed: extra });
-      const bridged = this.bridgedOf(scored, cue, out.consequence);
-      const g = this.grounded(
-        s,
-        cue,
-        this.eligible(scored, cue, new Set(out.kept), bridged, carded),
-        "action",
-        bridged,
-        out.consequence?.cls,
-        carded,
-      );
-      if (g.items.length === 0) return proceed("clear");
-      if (!FIREWALL_GROUNDS.has(g.how)) return proceed(`quiet-${g.how}`);
-      // Only a call that commits the user at a time clashes with the calendar: one with a start, or one serving a
-      // request to schedule ("accept the invite … at 10:00" as a generic action).
-      if (g.how === "clash" && !setsTime(event.input) && !isScheduling(request)) return proceed("untimed");
-      // And only at a time the user asked for: a reminder or a task the agent placed at a slot of its own choosing
-      // overlaps a meeting without clashing with anything the user asked (it would be held at every slot it tries).
-      if (g.how === "clash" && requestedSpan(request) === null) return proceed("agent-timed");
-      // Read from shared words, a conflict (the conflict test's, a card's) holds the action only on a tie
-      // the words cannot fake (`structuralTie`: a span over its day, an expiry before it, a limit on its amount, a
-      // statement binding a party it names), an identifier or qualified reference the call names, or the action
-      // class's find about a party it names.
-      const frame = this.frame(cue);
-      // Identifiers the CALL names: in a request of several steps ("pay INV-4821, then email Jamie"), an identifier
-      // only the request names ties the payment, not the email.
-      const callFrame = frameOf(call, null, localNow(cue));
-      const named = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
-      // The parties: names of two words or more and the user's people the call and request name ("Team" and "Open" in
-      // a call's title are not parties), and the organisations of the addresses the call writes to. Never the user,
-      // whose name is on everything they hold, nor anything on more than a tenth of their items (their organisation).
-      const self = this.deps.cache.selfOf(s.scope)?.toLowerCase().split(/\s+/) ?? [];
-      const rare = (n: string) => n.split(/\s+/).some((w) => this.deps.cache.isRare(s.scope, w, SELF_DOMAIN_SHARE));
-      const parties = named.filter((e) => e.trim().includes(" ") || this.deps.cache.isPerson(s.scope, e));
-      const full = parties.map((e) => e.toLowerCase());
-      // A first name alone is a party only when no fuller name has it: "Sam" beside "Sam Ortiz" is Sam Ortiz, and Sam
-      // Patel's diet is not his.
-      const whole = full.filter((n) => n.includes(" ") || !full.some((m) => m !== n && m.split(/\s+/).includes(n)));
-      const names = [...whole, ...domainsOf(call)].filter(
-        (n) => rare(n) && !self.some((w) => w.length > 2 && n.split(/\s+/).includes(w)),
-      );
-      // The call's topic words, without the user's own name (on every item they hold).
-      const topical = { ...frame, wordTies: new Set([...frame.wordTies].filter((w) => !self.includes(w))) };
-      // The action class's find binds the call when it names a party the call names: "a payment to Cyberdyne was sent"
-      // does not bind a payment to the gym, nor a client's no-gifts policy flowers for a sister.
-      const tied = (x: Scored) =>
-        g.how === "clash" ||
-        g.how === "away" ||
-        namesRef(callFrame, x.item, true) ||
-        (bridged.has(x.item.id) && whole.some((n) => names.includes(n) && mentions(n, x.item))) ||
-        structuralTie(`${x.item.title}. ${x.item.text}`, topical, names, localNow(cue), call);
-      const held = g.items.filter(tied);
-      if (held.length === 0) return proceed("untied");
-      // What the call already takes into account (its notes name the allergy, its email the absence) is not repeated.
-      const written = sanitizeForStore(actionText(event.tool, event.input));
-      const items = held.filter((x) => !accounts(x.item.text, written, request));
-      if (items.length === 0) return proceed("accounted");
-      const checked = (s.checked ??= new Set());
-      // The same tool held for the same items before: the agent has been told and acts anyway (its new attempt may
-      // differ only in a fresh request id or timestamp, so the exact-arguments key alone would hold it every time).
-      const informed = `${event.tool}\u0000${items
-        .map((x) => x.item.id)
-        .sort()
-        .join(",")}`;
-      if (checked.has(informed)) return proceed("repeat");
-      checked.add(key);
-      checked.add(informed);
-      while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
-      const finding = await this.deliverChecked(s, items, "proactive", `action-${g.how}:${cue.id}`, cue);
-      // Every item the finding rested on is gone at its source (`verifyDelivery`): nothing stands in the way.
-      if (!finding) return proceed("gone");
-      this.handOut(s, finding);
+      // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.
+      const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
+      const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
+      if (!found) return proceed("clear");
+      const latencyMs = Math.round(performance.now() - t0);
       this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "tool_call",
         decision: "fast",
-        reason: `action-${g.how}`,
-        latencyMs: Math.round(performance.now() - t0),
+        reason: "action-party",
+        latencyMs,
         sourceCalls: 0,
         modelCalls: 0,
         costUsd: 0,
-        itemIds: items.map((x) => x.item.id),
+        itemIds: found.citations.map((c) => c.itemId),
       });
-      return { verdict: "finding", finding, reason: g.how, latencyMs: Math.round(performance.now() - t0) };
+      return { verdict: "finding", finding: found, reason: "party", latencyMs };
     } catch {
       return proceed("error");
     }
@@ -1848,8 +1695,7 @@ export class ContextPartner {
     }
     if (flagged.length === 0) return null;
     // The agent was told about these parties for this tool: a call adding them again proceeds, whatever else changed
-    // in it (a fresh request id, a reworded body after the user said yes). A key of its own, so a repeat after a party
-    // finding still meets the firewall (`actionCheck`), which the exact-arguments key would skip.
+    // in it (a fresh request id, a reworded body after the user said yes).
     const informed = `party\u0000${event.tool}\u0000${flagged
       .map((p) => partyKey(p.norm))
       .sort()
@@ -2094,44 +1940,12 @@ export class ContextPartner {
       if (this.config.planConflict && internal.again === undefined && !internal.open) this.noteActed(s, cue);
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
-      // `pushRetrieve` (M3, D901): a learned retriever's top k fused into the ranking before the pool's cut. Off, no
-      // await is added.
-      const retrieving = candidating && this.config.pushRetrieve > 0 && !!this.deps.widen;
-      const ranked = retrieving ? await this.retrieveFuse(s, cue, [...order, ...scored]) : [...order, ...scored];
-      // The session closed while the retriever answered: nothing is pushed for it.
-      if (retrieving && s.closed)
-        return {
-          answer: "",
-          citations: [],
-          usedModel: false,
-          costUsd: 0,
-          latencyMs: Math.round(performance.now() - t0),
-        };
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const gate = candidating ? this.pushGate(s, cue, ranked) : null;
-      // `pushCheck` (D500): one budgeted call over the pool, only when the gate would hand candidates. Off, no await
-      // is added: the push's timing (which turn it lands in) stays the default's.
-      // `pushWiden` (N2, D511): items no lexical rank reached join what the check reads, after the pool; only the
-      // check can hand them, so it runs only where the check would.
-      // One wait for both: the check gets what the widening left of `pushCheckWaitMs` (D500's bound holds).
-      const widenFrom = performance.now();
-      // `pushCheckAnchored` (N5, D534) decides first: a push it leaves to the default makes no widening look either.
-      if (gate && this.config.pushCheck && this.config.pushCheckAnchored && this.deps.checker)
-        gate.skip = !this.anchoredPool(cue, gate);
-      if (
-        gate &&
-        !gate.skip &&
-        this.config.pushCheck &&
-        this.config.pushWiden &&
-        this.deps.checker &&
-        gate.like.some(Boolean)
-      )
-        gate.widened = await this.widenPool(s, cue, [...order, ...scored], gate.pool);
-      const check =
-        gate && this.config.pushCheck && this.deps.checker
-          ? await this.checkPush(s, cue, gate, performance.now() - widenFrom)
-          : null;
-      if ((check || gate?.widened) && s.closed) {
+      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      // `pushCheck` (D500, D828): one budgeted call over the pool, only when the gate would hand candidates. With no
+      // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
+      const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
+      if (check && s.closed) {
         // The session closed while the check ran: its call was paid for, so it is traced on its own.
         if (check?.called) this.traceCheck(s, check, t0);
         return {
@@ -2596,26 +2410,23 @@ export class ContextPartner {
   }
 
   /**
-   * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item, no
-   * request text, or `pushCheckAnchored` left the push to the default). Waits at most `pushCheckWaitMs`; a check
+   * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item or no
+   * request text). Waits at most `pushCheckWaitMs`; a check
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
    * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
-  private async checkPush(s: Session, cue: Cue, gate: PushGate, spentMs = 0): Promise<PushCheckRead | null> {
+  private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean) || gate.skip) return null;
+    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const focus = readerFocus(cue.raw);
-    const head = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
-    // `pushWiden` (D511): the widened items after the pool's head, within the check's item cap.
-    const read = [...head, ...(gate.widened ?? []).slice(0, Math.max(0, CHECK_MAX_ITEMS - head.length))];
+    const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
-      ...(this.config.pushCheckForm === 2 ? { form: 2 as const } : {}),
     };
     const key = checkKey(input);
     const asked = `${input.today}\n${request}`;
@@ -2651,8 +2462,7 @@ export class ContextPartner {
     const running = kept.read;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<null>((done) => {
-      // `spentMs`: what `pushWiden`'s look took of the same wait (D511), so the push never waits longer than D500's.
-      timer = setTimeout(() => done(null), Math.max(0, this.config.pushCheckWaitMs - spentMs));
+      timer = setTimeout(() => done(null), this.config.pushCheckWaitMs);
     });
     try {
       const got = await Promise.race([running, late]);
@@ -2671,17 +2481,6 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  /**
-   * `pushCheckAnchored` (N5, D534): whether some item of the pool's head (what the check reads of the lexical pool) is
-   * constraint-like and names one of the request's anchors (a person, a thing, a day). The constraint test and the
-   * anchors are the default's own: no model, no stored answer. False: no call, no widening, the default's candidates.
-   */
-  private anchoredPool(cue: Cue, gate: PushGate): boolean {
-    const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-    const head = Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS);
-    return gate.pool.slice(0, head).some((x, i) => gate.like[i] && anchored(x.item, anchors));
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2715,14 +2514,11 @@ export class ContextPartner {
     check: PushCheckRead | null = null,
   ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const { like } = gate;
-    // `pushCheckSilent` off (N5, D533): a check that names nothing leaves the default's candidates instead of sending
-    // no packet, so the check only ever replaces the default's packet with the items it named.
-    const named = check?.yes ?? null;
-    const yes = named && named.size === 0 && !this.config.pushCheckSilent ? null : named;
-    // `pushWiden` (D511): widened items are read only by the check and handed only when it names them, after the
-    // pool's own; the nudge's deeper look, `anchoredPast` and the returned pool stay the lexical pool's.
+    // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
+    // with nothing to add.
+    const yes = check?.yes ?? null;
     const pool = gate.pool;
-    const reported = yes && gate.widened?.length ? [...pool, ...gate.widened] : pool;
+    const reported = pool;
     if (reported.length === 0) return { items: [], pool };
     const open = reported.filter((x) => !bulkMail(x.item));
     let items = yes
@@ -2762,103 +2558,14 @@ export class ContextPartner {
         : {}),
       ...(this.config.pushCheck && this.deps.checker
         ? {
-            // What the check said, whatever `pushCheckSilent` then handed: an answer naming nothing is still "yes".
-            check: named ? "yes" : !check ? "none" : check.late ? "late" : "failed",
-            ...(named ? { checked: reported.map((x) => named.has(x.item.id)) } : {}),
+            // What the check said: an answer naming nothing is still "yes".
+            check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
+            ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
           }
         : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
-  }
-
-  /**
-   * `pushWiden` (N2, D511): items the push pool's lexical order did not reach, for the check only: the request's
-   * nearest items by the `widen` dependency (an embedding table in the lab, `pushWidenEmbed`, bounded by
-   * `pushCheckWaitMs`), its raw intent hits (no thresholds, `pushWidenIntent`) and the ranking's next items
-   * (`pushWidenDeep`), in that order. Current cached copies only, bulk mail out, none already in the pool. No model
-   * call; every route fails open to no widening.
-   */
-  private async widenPool(s: Session, cue: Cue, ranked: readonly Scored[], pool: readonly Scored[]): Promise<Scored[]> {
-    const c = this.config;
-    const now = this.now();
-    const have = new Set(pool.map((x) => x.item.id));
-    const out: Scored[] = [];
-    const add = (ids: readonly string[], n: number) => {
-      let k = 0;
-      for (const id of ids) {
-        if (k >= n) break;
-        if (have.has(id)) continue;
-        const item = this.deps.cache.get(s.scope, id, now);
-        if (!item || bulkMail(item)) continue;
-        have.add(id);
-        out.push({ item, score: 0, matched: 0, sketch: null });
-        k++;
-      }
-    };
-    if (c.pushWidenEmbed > 0 && this.deps.widen) {
-      const widen = this.deps.widen;
-      // Fail open: a dependency that throws, rejects or is late widens nothing.
-      const ids = await within(
-        Promise.resolve()
-          .then(() => widen(s.scope, sanitizeForStore(cue.raw), c.pushWidenEmbed * 2))
-          .catch(() => [] as string[]),
-        c.pushCheckWaitMs,
-      );
-      if (s.closed) return [];
-      add(ids ?? [], c.pushWidenEmbed);
-    }
-    const enricher = this.deps.cards;
-    if (c.pushWidenIntent > 0 && c.cards && c.intent && enricher) {
-      const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
-      const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
-      try {
-        const rows = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.pushWidenIntent * 2, accept);
-        add(
-          rows.flatMap((r) => r.ids),
-          c.pushWidenIntent,
-        );
-      } catch {
-        // Fail open: the widening is extra reach, never a reason to lose the push.
-      }
-    }
-    if (c.pushWidenDeep > 0) {
-      const deep: string[] = [];
-      for (const x of ranked) if (!have.has(x.item.id) && !deep.includes(x.item.id)) deep.push(x.item.id);
-      add(deep, c.pushWidenDeep);
-    }
-    return out;
-  }
-
-  /**
-   * `pushRetrieve` (M3, D901): the ranking with the `widen` dependency's top `pushRetrieve` ids fused in by reciprocal
-   * rank (`rrfOrder`). Current cached copies only, bulk mail out; an id the ranking holds keeps its own entry. Bounded
-   * by `pushCheckWaitMs`; a dependency that throws, rejects or is late leaves the ranking as it was.
-   */
-  private async retrieveFuse(s: Session, cue: Cue, ranked: readonly Scored[]): Promise<Scored[]> {
-    const k = this.config.pushRetrieve;
-    const widen = this.deps.widen!;
-    const ids = await within(
-      Promise.resolve()
-        .then(() => widen(s.scope, sanitizeForStore(cue.raw), k))
-        .catch(() => [] as string[]),
-      this.config.pushCheckWaitMs,
-    );
-    if (!ids || ids.length === 0 || s.closed) return [...ranked];
-    const now = this.now();
-    const byId = new Map<string, Scored>();
-    for (const x of ranked) if (!byId.has(x.item.id)) byId.set(x.item.id, x);
-    const lexical = [...byId.keys()];
-    const found: string[] = [];
-    for (const id of ids.slice(0, k)) {
-      if (!byId.has(id)) {
-        const item = this.deps.cache.get(s.scope, id, now);
-        if (!item || bulkMail(item)) continue;
-        byId.set(id, { item, score: 0, matched: 0, sketch: null });
-      }
-      found.push(id);
-    }
-    return rrfOrder([lexical, found]).map((id) => byId.get(id)!);
   }
 
   /**
@@ -3761,17 +3468,10 @@ export class ContextPartner {
   }
 
   /**
-   * Whether a request acts on someone (scheduling, writing to them, a task), arrives from outside, or is a tool call
-   * the action firewall checks (`checkAction`, "action").
+   * Whether a request acts on someone (scheduling, writing to them, a task) or arrives from outside.
    */
   private acts(s: Session, cue: Cue, eventKind: string): boolean {
-    return (
-      eventKind === "external" ||
-      eventKind === "ask" ||
-      eventKind === "action" ||
-      ACTING.has(s.situation) ||
-      ACTS_ON.test(cue.raw)
-    );
+    return eventKind === "external" || eventKind === "ask" || ACTING.has(s.situation) || ACTS_ON.test(cue.raw);
   }
 
   /**
@@ -4666,13 +4366,12 @@ export class ContextPartner {
       window?: SearchQuery["window"],
       keep = true,
       onAnswer?: (sourceId: string, page: ContextItem[]) => void,
-      offline = opts.offline === true,
     ): Promise<ContextItem[]> => {
-      if (!spans) return sendOne(kind, sources, text, window, keep, onAnswer, offline, 0);
-      const sp = spans.open(`probe.${kind}`, probesSpan!.id, { async: true, sources: sources.length, offline });
+      if (!spans) return sendOne(kind, sources, text, window, keep, onAnswer, 0);
+      const sp = spans.open(`probe.${kind}`, probesSpan!.id, { async: true, sources: sources.length });
       const callsBefore = out.calls;
       try {
-        return await sendOne(kind, sources, text, window, keep, onAnswer, offline, sp.id);
+        return await sendOne(kind, sources, text, window, keep, onAnswer, sp.id);
       } finally {
         spans.close(sp, { calls: out.calls - callsBefore });
       }
@@ -4684,7 +4383,6 @@ export class ContextPartner {
       window: SearchQuery["window"] | undefined,
       keep: boolean,
       onAnswer: ((sourceId: string, page: ContextItem[]) => void) | undefined,
-      offline: boolean,
       parent: number,
     ): Promise<ContextItem[]> => {
       // Synced sources whose copy is current answer from the local index (D57), at no call and outside `probeCalls`.
@@ -4710,17 +4408,6 @@ export class ContextPartner {
       // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
       const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
       const reused: ContextItem[] = [];
-      // Offline (the action firewall's read, and its class read): what each source last answered to this query,
-      // while still cached, and no call.
-      if (offline) {
-        const now = this.now();
-        for (const source of sources) {
-          const last = this.economy.lastIds(s.scope, source.id, asked);
-          if (last) for (const h of this.deps.cache.hits(s.scope, last, now)) reused.push(h.item);
-        }
-        if (keep) for (const i of reused) if (!kept.includes(i.id)) kept.push(i.id);
-        return [...here, ...reused];
-      }
       let live = sources;
       if (this.config.probeFresh || this.config.probeYield) {
         live = [];
@@ -4873,19 +4560,17 @@ export class ContextPartner {
     const byId = sourcesById(all);
     const allIds = all.map((x) => x.id);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
-      opts.offline
-        ? all
-        : this.deps.sourceMap
-            .route({
-              scope: s.scope,
-              entities: [name],
-              situation: s.situation,
-              sourceIds: allIds,
-              limit,
-              ...(opts.boost ? { boost: opts.boost } : {}),
-            })
-            .map((r) => byId.get(r.sourceId)!)
-            .filter(Boolean);
+      this.deps.sourceMap
+        .route({
+          scope: s.scope,
+          entities: [name],
+          situation: s.situation,
+          sourceIds: allIds,
+          limit,
+          ...(opts.boost ? { boost: opts.boost } : {}),
+        })
+        .map((r) => byId.get(r.sourceId)!)
+        .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
     // would: held-out funnels returned as many planted items without it, at fewer calls).
@@ -4917,14 +4602,7 @@ export class ContextPartner {
     // An imperative or an arriving message, not `isAction` or `ACTS_ON` (which match "tell", "ping" anywhere): a
     // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
     const acts = isImperative(cue.raw) || cue.external === true;
-    const cls =
-      opts.cls !== undefined
-        ? opts.cls
-        : c.consequenceProbe && !off.has("consequence")
-          ? actionClass(cue.raw, acts)
-          : null;
-    // The class read with no call (the action firewall's): the class's queries earlier lookups sent, as cached.
-    const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
+    const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
@@ -4932,7 +4610,7 @@ export class ContextPartner {
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
       ...(topic ? [send("topic", found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
       // Last: a source's probe calls go one at a time, and the request's own probes go first.
-      ...(cls ? [this.consequence(s, cls, all, found, opts.classOffline ? offlineSend : send, out)] : []),
+      ...(cls ? [this.consequence(s, cls, all, found, send, out)] : []),
     ]);
     if (probesSpan) spans!.close(probesSpan, { calls: out.calls });
   }
@@ -5664,27 +5342,6 @@ export class ContextPartner {
   }
 
   /**
-   * The consequence finds that conflict with the request (`consequenceProbe`, or the action firewall's class read): a
-   * freeze over the day a release is asked for, not one last month; and not a limit on an amount the request does not
-   * state ("travel over £500 needs pre-approval" for printer paper).
-   */
-  private bridgedOf(scored: Scored[], cue: Cue, consequence?: { cls: ActionClass; ids: string[] }): Set<string> {
-    if (!consequence || consequence.ids.length === 0) return new Set();
-    const ids = new Set(consequence.ids);
-    const ties = classTies(consequence.cls);
-    return new Set(
-      scored
-        .filter(
-          (x) =>
-            ids.has(x.item.id) &&
-            !unmeasuredLimit(this.frame(cue), x.item) &&
-            this.verdict(x.item, cue, ties) === "conflict",
-        )
-        .map((x) => x.item.id),
-    );
-  }
-
-  /**
    * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
    * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
    */
@@ -6176,23 +5833,9 @@ export class ContextPartner {
     this.deps.budget.settle(r, actualUsd);
   }
 
-  /**
-   * The citations of what was rendered. With `quarantineInstructions` (D307) their titles are quarantined as the
-   * packet's are: the MCP route prints each citation's title under the answer (`Sources:`), so a subject written for
-   * an AI would otherwise reach the agent beside the packet that removed it (A10's review).
-   */
+  /** The citations of what was rendered. */
   private cited(items: readonly ContextItem[]): Citation[] {
-    const cites = citationsOf([...items]);
-    if (!this.config.quarantineInstructions) return cites;
-    return cites.map((c) => ({ ...c, title: quarantineTitle(c.title) }));
-  }
-
-  /** The A10 trials' render options (D306, D307): Eden's guard line and the instruction quarantine, when on. */
-  private shield(): { guard?: true; quarantine?: true } {
-    return {
-      ...(this.config.guardLine ? { guard: true as const } : {}),
-      ...(this.config.quarantineInstructions ? { quarantine: true as const } : {}),
-    };
+    return citationsOf([...items]);
   }
 
   /**
@@ -6206,7 +5849,6 @@ export class ContextPartner {
     const dense = compact && this.config.densePacket;
     return {
       maxBytes: 4_000,
-      ...this.shield(),
       ...(compact
         ? {
             focus: focusOf(cue),
@@ -6311,7 +5953,6 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
-      ...this.shield(),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -6708,9 +6349,6 @@ interface IntentFind {
   matched: number;
 }
 
-/** How long the action firewall waits for the source resolver (ms): an answer held, or none at once. */
-const CHECK_SOURCES_MS = 5;
-
 /**
  * `p`'s value if it settles within `ms`, else null (it runs on; a rejection after the bound is swallowed). Not an
  * async function: an answer already in settles as soon as awaiting `p` itself would.
@@ -6975,10 +6613,6 @@ interface KeptCheck {
 interface PushGate {
   pool: Scored[];
   like: boolean[];
-  /** `pushWiden` (D511): items past the pool, for the check only. */
-  widened?: Scored[];
-  /** `pushCheckAnchored` (D534): the gate left this push to the default (no check call, no widening). */
-  skip?: boolean;
 }
 
 /** What a re-read found (`verifyDelivery`). */
