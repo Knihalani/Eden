@@ -521,6 +521,25 @@ is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message B
 and two intent requests instead of four (D243: −7%, hidden facts lost). Prompt caching saves 10–28% of a card call
 and about 23% of a reader call on the Anthropic transport; on OpenRouter the cache is off until D145's probe.
 
+### The two Haiku calls that stay: where their price is (H2, D1050–D1054; docs/research/h2-haiku-lean.md)
+
+Anthropic-direct lab figures, Haiku 5.5, thinking off.
+
+- **Push check** (train seeds 42–43, 1,121 calls): $0.000232 a call, 2,738 input tokens (1,184 cached: the
+  instructions, shared by every user) and 128 output; p50 0.92 s, p90 1.34 s, time to first token 0.45 s. The items
+  are about two thirds of its price, the output about a quarter. A pool of 10 items of 140 characters cut $ a call
+  26.5% ($0.000171) and handed 20 fewer facts of 384 (D1050). The push reaches the call about 9 ms after the request,
+  so the wait is the call itself.
+- **Card-and-intent call** (400 items, batches of 20): $0.000073 a item, 201 input tokens a item (66 cached) and 118
+  output: **output is about 80% of its price.** On batches whose reply lists requests, batches of 40 cost the same a
+  item; a compact reply (no key names) 27% less (D1052). Neither is taken. The shipped prompt leaves the requests
+  list out of about a quarter of its replies (D1053), so its price per item given requests is about a third higher
+  than its price per item sent. A requests-only call (no cards) costs 45% less an item, 57% with a compact reply.
+- **Every item read for intent** (`cardsLean` false; D1053): a heavy user's backfill (about 1,500 items) is 74 calls
+  and $0.058–0.060 against 7 calls and $0.0074–0.0080, with 70–74 s to idle against 3.5–6.3 s; about $0.000040 a
+  item sent. At 50 new items a day **[EST]** about +$0.04 a user-month after a one-time +$0.051. Not taken: the same
+  requests on every item read no more facts than the lean selection's (funnel), see D1053 for the live pair.
+
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
 20 calls and $0.02 per session; $0.25 per user per day; each call reserved before its real cost is known, at about its
