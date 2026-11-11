@@ -355,6 +355,22 @@ def pick(pools, target):
     return best
 
 
+def curve(pools, fracs=(0.1, 0.2, 0.3, 0.4)):
+    """Threshold-free: the disagreement when the pools with the lowest top item are settled silent, at each share."""
+    mx = np.array([max(pr) for pr, _ in pools])
+    silent = np.array([len(y) == 0 for _, y in pools])
+    order = np.argsort(mx, kind="stable")
+    out = []
+    for f in fracs:
+        k = max(1, int(f * len(pools)))
+        out.append((f, float((~silent[order[:k]]).mean())))
+    return out
+
+
+def curve_line(pools):
+    return "curve (settled share: disagreement) " + ", ".join(f"{f:.0%}: {d:.1%}" for f, d in curve(pools))
+
+
 def pools_of(rows, probs, groups):
     out = []
     for gi, r in enumerate(rows):
@@ -431,7 +447,8 @@ def main():
 
     auc = roc_auc_score(Yte, pte) if len(set(Yte)) > 1 else float("nan")
     n, s, b, sil, pas = score_rule(pools_of(te, pte, Gte), ts, tp, tl)
-    res = {"model": args.model, "heldout_calls": n, "settled": s, "settled_frac": s / max(1, n), "disagree": b,
+    print("HELD-OUT " + curve_line(pools_of(te, pte, Gte)))
+    res = {"model": args.model, "curve": curve(pools_of(te, pte, Gte)), "heldout_calls": n, "settled": s, "settled_frac": s / max(1, n), "disagree": b,
            "disagree_frac": b / max(1, s), "silent": sil, "pass": pas, "item_auc": auc,
            "thresholds": [ts, tp, tl]}
     print(f"HELD-OUT {args.heldout}: settled {s}/{n} ({s/max(1,n):.1%}), disagree {b} ({b/max(1,s):.2%}), "

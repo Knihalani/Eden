@@ -336,8 +336,9 @@ def main():
     auc = roc_auc_score(dte.Y.numpy(), probs)
     print(f"HELD-OUT {args.heldout}: settled {s}/{n} ({s/max(1,n):.1%}), disagree {b} ({b/max(1,s):.2%}), "
           f"silent {sil}, pass {pas}; item AUC {auc:.3f}")
+    print("HELD-OUT " + m7.curve_line(hp))
     if args.json:
-        json.dump({"arch": args.arch, "float": args.float, "heldout_calls": n, "settled": s, "disagree": b,
+        json.dump({"arch": args.arch, "curve": m7.curve(hp), "float": args.float, "heldout_calls": n, "settled": s, "disagree": b,
                    "silent": sil, "pass": pas, "item_auc": auc, "thresholds": [ts, tp, tl],
                    "oof": [len(oof_pools), *m7.score_rule(oof_pools, ts, tp, tl)[1:3]]}, open(args.json, "w"))
 
