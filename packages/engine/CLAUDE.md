@@ -25,6 +25,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
+| `router.ts`, `../assets/router.bin`                                        | The connector router (`routerGate`, M8, D940, D948; part `router`): the router's features (`routerTerms` over the shared tokenizer, `requestFeatures`, `sourceKeys`), the int8 conjunction table and the 16-unit network over `ROUTER_FEATURES` with a "nothing needed" head (`routeProbabilities`, `routerSummary`); the weights file (`parseRouterWeights`, read once a process by `defaultRouterWeights`); the partner's `routerSpent` adds a lookup's unlikely warm copies to `sourceYield`'s spent set; `routerDormantMs` (D949, part `dormant`) sweeps a source it has not found likely for 28 days every 28 days |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `turn-gate.ts`, `turn-gate.bin`                                            | The turn gate (`pushGate`, M13, D1014; part `gate`): hashed character and word n-grams of one user turn (`gateFeatures`, the twin of `packages/sim/lab/m13/feats.py`), an int8 bag with one hidden layer and the rule's reading after pooling (`TurnGate.read`), 1.59 MB of weights read once a process (`turnGate()`; null on any failure, and the rule stands) |
 | `push-check.ts`                                                            | The push check (`pushCheck`, D500, in the default since D828, part `check`): one budgeted call a push names the pool's items that change the action, compare-first (`CHECK_SYSTEM`, `parseCompare`, `PushChecker`, D527); `push-check.test.ts`                |
@@ -442,6 +443,17 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   funnel and `days-calls.ts`, both with `--noise-vocab 1000`: the lab's noise connectors otherwise share 45 words
   and their sketches collide, which hid the false holders. The five-source funnel sees none of this (no task differs).
   Dormant sources (`syncDormantMs`, D602) were built and removed: nothing in the lab can price a dropped copy.
+- **The connector router (`routerGate`, D940, D948; `router.ts`, docs/research/m8-router.md).** `routerSpent` runs
+  over the lookup's width (`wide`) after `spentSources`, scores every source and adds unlikely warm copies to the
+  spent set; it never adds a call, never skips a copy a rare word of the request points to (D945; names it leaves to
+  the network), and returns the spent set unchanged on any error (fail open). Its inputs are each user's own state
+  (`SourceYield.view`, `Sync.routeView`): no per-user state of its own. A new input changes `ROUTER_NF` and the
+  weights file: retrain (`train_router.py`), regenerate `packages/sim/lab/m8/parity.json` and keep
+  `m8-parity.test.ts` at 64 of 64; `train_router.py`'s `summary` and `routerSummary` must agree. A unit test of
+  another mechanism whose cut copies must be searched sets `routerGate: false` (as `ask-behind.test.ts` does). Weeks
+  of calls are its measure: screen with `days-calls.ts --noise-sources 995 --noise-vocab 1000` (docs/LAB.md 1i), not
+  the five-source funnel (identical there). The dormant sweep (`routerDormantMs`, D949) is safe only through D356's
+  re-reads (`sweepLapsed`) and the synced items' 7-day life: keep both (`router-dormant.test.ts`).
 - **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
   Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
   left its path time unchanged (one live search of a cut copy that matters costs a connector's latency) and hidden

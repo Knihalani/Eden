@@ -46,7 +46,7 @@ const REQUESTS = [
   "Renew the car insurance on the Audi",
 ];
 let rng = 7;
-const rand = () => ((rng = (Math.imul(rng, 1103515245) + 12345) >>> 0) / 2 ** 32);
+const rand = () => (rng = (Math.imul(rng, 1103515245) + 12345) >>> 0) / 2 ** 32;
 const x = new Float64Array(N * ROUTER_NF);
 const p = new Float64Array(N);
 const summary = new Float64Array(ROUTER_NULL_NF);

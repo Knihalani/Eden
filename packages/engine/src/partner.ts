@@ -89,6 +89,7 @@ import {
   routeProbabilities,
   ROUTER_NF,
   ROUTER_NULL_NF,
+  ROUTER_REQUEST_TERMS,
   routerSummary,
   routerTerms,
   sourceKeys,
@@ -4376,7 +4377,7 @@ export class ContextPartner {
       if (!w || !this.sync || !this.yields) return spent;
       const now = this.now();
       // The request's own words (the trainer reads requests as written; entities are in them).
-      const terms = routerTerms(cue.text);
+      const terms = routerTerms(cue.text).slice(0, ROUTER_REQUEST_TERMS);
       const feats = requestFeatures(terms);
       const named = new Set<string>();
       for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
@@ -4423,12 +4424,14 @@ export class ContextPartner {
       routerSummary(x, n, terms.length, summary);
       const p = new Float64Array(n);
       const pNull = routeProbabilities(w, x, n, summary, p);
+      // Weights from an embedder may hold a value that cannot score: no skip then (fail open).
+      if (!Number.isFinite(pNull)) return spent;
       const floor = this.config.routerFloor > 0 ? this.config.routerFloor : w.floor;
       const skipped: string[] = [];
       // `routerDormantMs` (D943): the sources found likely keep their weekly sweep.
       if (this.config.routerDormantMs > 0) {
         const likely: string[] = [];
-        for (let i = 0; i < n; i++) if (p[i]! >= floor) likely.push(all[i]!.id);
+        for (let i = 0; i < n; i++) if (!(p[i]! < floor)) likely.push(all[i]!.id);
         this.sync.routed(s.scope, likely, now);
       }
       const spentBefore = this.deps.onRoute ? all.map((a) => spent?.has(a.id) === true) : [];
@@ -4436,7 +4439,8 @@ export class ContextPartner {
       // skipped: the strongest evidence there is, and rare connectors' facts hang on it (D945: skipping these lost two
       // of 105 rare-connector facts at $0; names stay the network's to weigh, or the user's mailbox is never skipped).
       for (let i = 0; i < n; i++) {
-        if (p[i]! >= floor || warm[i] === 0) continue;
+        // Skipped only when it scores under the floor: a NaN probability reads as likely.
+        if (!(p[i]! < floor) || warm[i] === 0) continue;
         const id = all[i]!.id;
         if (spent?.has(id) || rare.has(id)) continue;
         (spent ??= new Set()).add(id);
@@ -6562,7 +6566,7 @@ function reachAnswer(
     // True of both rules that skip a read (the source's run, and a source with nothing used yet, D603): neither
     // skips a source the request names. The run rule can skip one the request's common words touch, so the line
     // says "names", not "points there" (review of the D603 merge).
-    notes.push(`Not searched past what is held of ${some(skipped)}: nothing in the request names it`);
+    notes.push(`Not searched past what is held of ${some(skipped)}: it looked unlikely to hold what the request needs`);
   }
   if (told === "Nothing in the connected sources.") {
     const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";

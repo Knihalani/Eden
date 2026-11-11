@@ -695,6 +695,26 @@ own costs: `RareTerms`, at most 1 MB a user (+0.72 MB at 1,000 sources in the la
 in the frozen blob, so freezing a user does not shrink it until the sync drops the user after `syncDropMs`), and 3–5 µs a new word on the
 sync's store path (30–70 ms for a page of 100 items of 150 new words each).
 
+## Connector calls with the connector router and its dormant sweep (M8, D948, D949)
+
+No model call; no connector call added. The router (`routerGate`) scores each of a user's sources for a request in
+about 0.8 ms at 1,000 sources (0.22 ms of it the scoring; docs/research/m8-router.md §4.5) and its 267 KB of weights
+are read once a process. `days-calls.ts`, 24 users × 28 days, 995 noise connectors (5% notifying), $0:
+
+| Run | Arm | Request-time calls a request | Steady (request + background) a request | Zapier MCP list price ($25.8 / 1,000 calls; assumed), steady, per 1,000 requests |
+| --- | --- | --- | --- | --- |
+| seeds 41–64, train + longtail (pre-registered) | main | 5.33 | 13.35 | $344 |
+| | router | 3.68 | 11.58 | $299 |
+| seeds 89–112, held-out families | main | 4.94 | 12.88 | $332 |
+| | router | 3.64 | 11.50 | $297 |
+| | router + dormant sweep (the default) | 2.19 | 3.46 | $89 |
+
+Background listings are most of a many-source user's calls (8.0 of 13.4 a request on main): the weekly sweep of
+995 unused connectors. The dormant sweep lists a source the router has not found likely for 28 days once in 28 days:
+background 126–128 → 20 listings a user-day. The one-time backfill (about 1,012 listings a new user) is unchanged.
+Hidden facts, rare-connector facts and look-alikes handed were level in every pair (§4.3 of the note). Per user the
+dormant sweep adds one number a source held by the sync (`routedAt`); the router adds no state of its own.
+
 ## `ask_context` through the proxy (D851, opt-in `askTool`, off unless set; D857)
 
 With `EDEN_PROXY_ASK=1` the proxy adds Eden's `ask_context` to the model's tools and answers the calls itself. Each

@@ -13,6 +13,8 @@ import { classOf, CLASS, fnv1a, foldString, mix32, WORD_PART, WORD_START } from 
 
 /** Words a request or item is read for at most (bounded input: the router never reads more). */
 export const ROUTER_MAX_TERMS = 512;
+/** Request terms the router scores at most (its cost is terms × source keys; trained requests have at most 16). */
+export const ROUTER_REQUEST_TERMS = 64;
 
 function isStart(c: number): boolean {
   return ((c < 128 ? CLASS[c]! : classOf(c)) & WORD_START) !== 0;
@@ -218,7 +220,7 @@ export function parseRouterWeights(bytes: Uint8Array): RouterWeights {
     return Float32Array.from(a);
   };
   const hidden = Number(head.hidden);
-  return {
+  const w: RouterWeights = {
     buckets,
     conj,
     conjScale: Number(head.conjScale),
@@ -234,6 +236,20 @@ export function parseRouterWeights(bytes: Uint8Array): RouterWeights {
     temperature: Number(head.temperature),
     floor: Number(head.floor),
   };
+  // Weights that cannot score (a NaN or an infinity, a zero spread, a floor outside (0, 1)) are refused: the router is
+  // then inert, never a gate that skips every source.
+  const finite = (a: ArrayLike<number>) => Array.prototype.every.call(a, (v: number) => Number.isFinite(v));
+  const ok =
+    Number.isInteger(hidden) &&
+    hidden > 0 &&
+    [w.conjScale, w.b2, w.nullBias, w.temperature, w.floor].every(Number.isFinite) &&
+    [w.mu, w.sd, w.w1, w.b1, w.w2, w.nullW].every(finite) &&
+    Array.prototype.every.call(w.sd, (v: number) => v > 0) &&
+    w.temperature > 0 &&
+    w.floor > 0 &&
+    w.floor < 1;
+  if (!ok) throw new Error("router weights: a value that cannot score");
+  return w;
 }
 
 /** Writes the weights file (the lab's export, and tests). */

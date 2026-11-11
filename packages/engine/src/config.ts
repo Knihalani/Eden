@@ -344,20 +344,22 @@ export interface EngineConfig {
   sourceYieldNames: number;
   sourceYieldEngage: boolean;
   /**
-   * Trial (M8, D940, off): the connector router (`router.ts`). Each lookup scores every source of the user with a small
-   * learned model over the request's words and the source's evidence (its identity and description, its items among
-   * the request's best local matches, its sketch, names, rare words, its yield history and its copy's state), and a
-   * warm copy whose probability of holding what the request needs is under `routerFloor` gets no live read: it joins
-   * `sourceYield`'s spent copies (no search behind, no probe, no poll of a cut copy). Needs `sourceYield`. Inert
-   * without weights (`PartnerDeps.router`, else the shipped asset).
+   * On in the default (M8, D940, D948; part `router`): the connector router (`router.ts`). Each lookup scores every
+   * source of the user with a small learned model over the request's words and the source's evidence (its kind and
+   * description, its items among the request's best local matches and the place of its best one, its sketch, names,
+   * rare words, its yield history and whether its copy is whole), and a warm copy whose probability of holding what
+   * the request needs is under `routerFloor` gets no live read: it joins `sourceYield`'s spent copies (no search
+   * behind, no probe, no poll of a cut copy). A copy a rare word of the request points to is always read (D945).
+   * Needs `sourceYield`. Inert without weights (`PartnerDeps.router`, else the shipped `assets/router.bin`).
    */
   routerGate: boolean;
   /** `routerGate`'s floor; 0 takes the floor fitted with the weights (for the offline recall target). */
   routerFloor: number;
   /**
-   * Trial (M8, D943, 0 = off): a source on the weekly sweep of unused sources (`syncUnusedSweepMs`) that the router
-   * has not found likely for any request within this long is swept this often instead. Needs `routerGate` and
-   * `verifyDelivery` (deliveries re-read what the longer sweep has not vouched for, as D356's do).
+   * 28 days in the default (M8, D943, D949; part `dormant`; 0 = off): a source on the weekly sweep of unused
+   * sources (`syncUnusedSweepMs`) that the router has not found likely for any request within this long is swept this
+   * often instead. Needs `routerGate` and `verifyDelivery` (deliveries re-read what the longer sweep has not vouched
+   * for, as D356's do; a synced copy not listed for `syncTtlMs`, 7 days, is no longer held at all).
    */
   routerDormantMs: number;
   /**
@@ -858,9 +860,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldRare: 2,
   sourceYieldNames: 4,
   sourceYieldEngage: true,
-  routerGate: false,
+  routerGate: true,
   routerFloor: 0,
-  routerDormantMs: 0,
+  routerDormantMs: 28 * 24 * 3_600_000,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

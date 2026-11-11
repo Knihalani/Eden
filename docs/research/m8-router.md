@@ -19,7 +19,10 @@ from a command run in this session; **[EST]** marks arithmetic or judgement.
   its copy is whole), through a 16-unit network with a "nothing needed" option. A source under a fitted floor gets
   no live read for that request (it joins `sourceYield`'s spent copies), except a source a rare word of the request
   points to, which is always read.
-- **What it did.** See §5 (decision) and §4 (measurements).
+- **What it did.** At 1,000 sources over four weeks, request-time connector calls fell 31% (the aim was 40%) with
+  hidden facts, rare-connector facts and look-alikes level. With the router, sources it has not found likely for 28
+  days are swept every 28 days instead of weekly: steady calls (request-time plus background) fell 70–73% on fresh
+  users, facts level. Both are in the default (D948, D949), the router's −40% aim recorded as missed.
 
 ## 1. Pre-registration (commit 8525b9b5, before any paid run)
 
@@ -104,11 +107,82 @@ first-layer rows for them). The table adds about a point.
 
 ## 4. Measurements
 
-(Filled from the final runs below.)
+### 4.1 The frozen model (commit c2923a86; `packages/engine/assets/router.bin`, 266,698 bytes)
+
+Sixteen hidden units over the engine's inputs with the three surface cues dropped (size, change rate, hours since
+poll: zero first-layer rows), the place of the source's best local match added (`top`), and a "nothing needed" head
+over nine request-level inputs (`routerSummary`). The conjunction table: 2^18 int8 weights (256 KB) trained on M2's
+exported worlds (123,540 requests, every style and language) with the 995 noise connectors' keys as negatives. The
+network: 150 synth-train users (route logs `v3`), 4 epochs. The floor (0.00227) is the lower of the two 98%-recall
+floors fitted on synth-val (40 users, 1,112 hidden) and on sim train1–4 users (18 users; the parent's note after M6:
+validation must include sim families). The same training ran on Modal (`m8_router.py`, run `m8-final-a`, an earlier
+summary head): val cut 51.4%, test recall 97.1%.
+
+### 4.2 Offline, held-out families
+
+| Set | Hidden requests | Needed source kept | Rare kept | Live-readable sources cut |
+| --- | --- | --- | --- | --- |
+| synth-test (80 users, M2's test families) | 2,226 | 96.8% | 93.5% | 53.9% |
+| synth-test at the floor that keeps 98% there (read off, not chosen) | 2,226 | 98.0% | 95.5% | 45.0% |
+| sim train1–4 (18 users, never trained on; floor-fitting set) | 821 | 98.5% | (none rare) | 62.1% |
+| sim held-out families, fresh seeds 65–88 (from the e2e run's route log) | 1,128 | 93.7% | 85.7% | 59.1% |
+
+The pre-registered offline clause (98% kept with at least 50% fewer reads) is missed on both held-out sets. "Kept"
+counts a source; on the same fresh-seed requests the router handed more facts than main (§4.3), because most of
+the skipped sources' facts were already held. The parent amended clause 1 accordingly (D947): facts handed decide,
+the source proxy is a diagnostic.
+
+### 4.3 End to end at $0 (`days-calls.ts`, 24 users × 28 days, 995 noise connectors, 5% notifying)
+
+| Run | Arm | Request-time calls a request | Steady (request + background) | Hidden handed | Rare-connector facts | Decoys |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pre-registered: seeds 41–64, train + longtail, shipped weeks cards | main | 5.327 | 13.35 | 509/1,129 | 39/105 | 465 |
+| | router (frozen) | **3.676 (−31.0%)** | 11.58 (−13.3%) | 511 | 39 | 457 |
+| Fresh seeds 65–88, held-out families (train5, train6, train5r, train6r, longtail), no cards | main | 4.534 | 12.35 | 422/1,130 | 53/175 | 342 |
+| | router | 3.298 (−27.3%) | 11.07 | 429 | 53 | 346 |
+| | router + dormant sweep | 2.349 (−48.2%) | 3.60 (−70.8%) | 432 | 52 | 337 |
+| Fresh seeds 89–112, held-out families, no cards (dormancy's powered re-test, D949) | main | 4.939 | 12.88 | 442/1,104 | 59/184 | 333 |
+| | router | 3.639 (−26.3%) | 11.50 | 445 | 63 | 335 |
+| | router + dormant sweep | 2.193 (−55.6%) | 3.46 (−73.1%) | 453 | 62 | 340 |
+
+Two runs of main on the same seeds were identical (`days-calls` at time scale 0 is deterministic). The pre-freeze
+model (§3, e1 with the rare-word rule) read −43.2% on the pre-registered seeds; it was picked after seeing them, so it
+does not count. The frozen model's calls rise as a user's sources get used (2.1 a request in the first week, 4.2 in
+the fourth; main 2.9 → 5.8): items reaching the agent mark their sources used, which the network reads.
+
+**The −40% aim was missed (−31.0%).** Every harm guard passed: hidden facts, rare-connector facts and decoys. The
+parent decided (D947) that D112's standard, better or neutral at no extra paid cost, governs promotion, with the Pi
+pair's clauses deciding.
+
+### 4.4 Pi pair (`packages/sim/lab/m8/run.sh`, preset `bench-router`; Haiku 5.5 in every role, Anthropic direct)
+
+PI_TABLE
+
+### 4.5 Speed and size
+
+- **Scoring** (`bench/router.bench.ts`, 1,000 sources, 2,000 requests, the frozen weights): 0.223 ms p50, 0.339 p90,
+  0.81 p99 (the request's features, one conjunction score per distinct source key set, the network over every source).
+- **In the engine** (the lab hook's own timing, `days-calls` seeds 41–44, 1,785 lookups at 1,000 sources, one
+  process): 0.81 ms p50, 1.05 p90, 2.42 p99, every input read included (the per-user maps of 1,000 sources).
+- **Shared model**: 266,698 bytes, read once a process. **Per user**: nothing new for the router (it reads
+  `SourceYield` and the sync's state); the dormant sweep adds one number a (user, source), `routedAt` (8 bytes, about
+  8 KB a user at 1,000 sources) **[EST: a JS number in an existing object]**.
+- Parity: the engine's functions with the shipped asset against Python on 64 held-out requests: 64 of 64 agree
+  (probabilities to 1e-6, every gate decision; `m8-parity.test.ts`).
 
 ## 5. Decision
 
-(Filled below.)
+- **D948: the router joins the default (part `router`)**, PI_DECISION
+- **D949: the dormant sweep joins the default (part `dormant`)** on its powered re-test (pre-registered in acacab82):
+  steady calls 11.50 → 3.46 a request against the router alone (−69.9%, bar −40%), hidden 453 against main's 442
+  (bar −1%), rare-connector facts 62 against main's 59 (bar: main − 2% of 184 planted, 55.3), decoys 340 against 333.
+  Its first test (seeds 65–88, rule d3951a6c) failed by one rare fact (52 against 53) and stands as read; the parent
+  ordered the powered re-test with a pre-stated noise allowance (main's rare rate differed by 2.0 points between the
+  seed halves, 27/92 against 26/83).
+- **Deletion lag does not grow.** A synced item is held at most `syncTtlMs` (7 days) after its source last listed
+  it, so a dormant source's copy lapses at day 7 (tested); between day 7 and 28 the source is read live only when the
+  router finds it likely, and a copy D356 has not vouched for is re-read before it is delivered (tested). A source
+  whose integrator forwards change notices is polled at its notice, dormant or not (tested).
 
 ## 6. Findings beside the router
 

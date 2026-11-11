@@ -87,6 +87,14 @@ other end), `m11-synth.ts` (M2 rows: fact, English requests, decoy and neutrals)
 (`data.py`: validation families train3–4/3r–4r, held-out train5–6/5r–6r/longtail), the offline screen and twin gate
 (`screen.py`) and the rejected expansion trainers. The `intentMicro` switch they fed is deleted (code in ff961a42).
 
+**The connector router's lab (M8, D941; docs/LAB.md 1i):** `days-calls.ts --route-log F` (each request's first routed
+lookup: the engine's own router inputs per source, sampled, with the planted source and the sources' keys once a
+user) and `--router FILE` (score and skip with those weights; with `--route-log` alone a zero table logs and skips
+nothing); `--pool-diag` rows carry the planted item's source, arrival lag and whether it was held after the request.
+`m8-export.ts` writes M2's worlds as the router's features with Eden's own tokenizer. The trainers and the round-1
+candidates are Python in `../../lab/m8/` (`train_router.py`, `routers.py`, `harness.py`, `parity.py`, `gen.sh`, the
+Pi pair's `run.sh`); `m8-parity.test.ts` checks the shipped asset against `parity.json`.
+
 **Offline retrieval screens over days (M3, M5; D911):** `days-calls.ts --corpus-dump F` (each user's items, redacted,
 1,200 characters), `--pool-diag F` rows with the planted id, request, template and pool ids, `--cards-live MODEL
 --cards-out F` (the shipped card coverage, carded live and recorded; needs the spend flags) and `--intent none`.

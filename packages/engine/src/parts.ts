@@ -64,12 +64,23 @@ export const PARTS = {
     sourceYieldEarn: false,
     sourceYieldNames: 0,
     sourceYieldEngage: false,
+    routerGate: false,
+    routerDormantMs: 0,
   },
   /**
    * Routing by the user's own index: sources holding the request's best local matches first (D265), and by each
    * source's vocabulary sketch (D322).
    */
   routing: { routeLocalHits: false, routeSketch: false },
+  /**
+   * The connector router (M8, D940, D948): a small learned model scores each of the user's sources for the request,
+   * and a warm copy unlikely to hold what it needs gets no live read (a source a rare word of the request points to
+   * always does); with it, a source the router has not found likely for 28 days is swept every 28 days instead of
+   * weekly (D943, D949). Out, `sourceYield` alone decides live reads, and unused sources keep the weekly sweep.
+   */
+  router: { routerGate: false, routerDormantMs: 0 },
+  /** The router's dormant sweep (D943, D949): out, every unused source keeps the weekly sweep (D356). */
+  dormant: { routerDormantMs: 0 },
   /**
    * A delivered item its source signalled a change to since it was read is read again first (D126); a handed item
    * changed at its source is sent again as an "updated:" packet (D205), naming the times it no longer has (D342).

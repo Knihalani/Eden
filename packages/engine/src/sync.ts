@@ -296,6 +296,12 @@ interface UserSync {
   key: string;
   scope: Scope;
   sources: Map<string, SourceSync>;
+  /**
+   * `dormantMs` (D943, D949): when the router last scored the user's sources (undefined: never in this process), and
+   * when the user was read back from a snapshot (the sources' `routedAt` is not saved, so their clocks restart then).
+   */
+  routerAt?: number;
+  restoredAt?: number;
   activeAt: number;
   /** Set when the user is dropped or forgotten: work still in flight for them stores nothing. */
   gone: boolean;
@@ -613,6 +619,7 @@ export class SyncManager {
       s.noticedMark = signal;
       u.sources.set(s.id, s);
     }
+    u.restoredAt = this.deps.now();
     this.users.set(key, u);
     return true;
   }
@@ -953,10 +960,14 @@ export class SyncManager {
     };
   }
 
-  /** `dormantMs` (D943): the router found these sources likely for a request now. O(ids), no I/O. */
+  /**
+   * `dormantMs` (D943, D949): the router scored the user's sources now and found these likely for a request (none is
+   * fine: the scoring itself counts). O(ids), no I/O.
+   */
   routed(scope: Scope, sourceIds: Iterable<string>, now = this.deps.now()): void {
     const u = this.users.get(scopeKey(scope));
     if (!u) return;
+    u.routerAt = now;
     for (const id of sourceIds) {
       const s = u.sources.get(id);
       if (s) s.routedAt = now;
@@ -1176,8 +1187,12 @@ export class SyncManager {
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
     // A sweep reads the cache: a frozen user is thawed first (`ready`, D325).
-    // `dormantMs` (D943): a source on the longer sweep that the router has not found likely for that long waits longer.
-    const dormant = (s: SourceSync) => (this.o.dormantMs ?? 0) > 0 && now - s.routedAt >= this.o.dormantMs!;
+    // `dormantMs` (D943, D949): a source on the longer sweep that the router has not found likely for that long waits
+    // longer, only while the router is scoring this user (not for one it cannot score: no weights, a user with no more
+    // sources than a lookup reads, a router that fails), and from the user's restore at the earliest.
+    const scored = (this.o.dormantMs ?? 0) > 0 && u.routerAt !== undefined && now - u.routerAt < this.o.dormantMs!;
+    const dormant = (s: SourceSync) =>
+      scored && now - Math.max(s.routedAt, u.restoredAt ?? -Infinity) >= this.o.dormantMs!;
     const long = (s: SourceSync) =>
       this.onLongSweep(s)
         ? Math.max(dormant(s) ? this.o.dormantMs! : this.o.unusedSweepMs!, this.o.unusedSweepMs!, this.o.sweepMs)

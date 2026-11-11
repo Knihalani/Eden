@@ -128,7 +128,7 @@ export interface DaysCallsOptions {
    * logs the inputs and skips nothing).
    */
   onRoute?: (row: RouteRow) => void;
-  /** The user's sources' router keys (`sourceKeys`), once a user before their rows, so a trainer can score any table. */
+  /** The user's sources' router keys (`sourceKeys`), once a user before their rows: a trainer can score any table. */
   onRouteKeys?: (seed: number, keys: Record<string, number[]>) => void;
   router?: RouterWeights | null;
   /**

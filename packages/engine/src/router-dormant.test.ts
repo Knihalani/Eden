@@ -103,7 +103,11 @@ function weights(): RouterWeights {
 
 const DORMANT = 28 * DAY;
 
-function setup(byUser: Map<string, Source[]>, config: Record<string, unknown>) {
+function setup(
+  byUser: Map<string, Source[]>,
+  config: Record<string, unknown>,
+  router: RouterWeights | null = weights(),
+) {
   let clock = T0;
   const cache = new ItemCache();
   const partner = new ContextPartner({
@@ -113,7 +117,7 @@ function setup(byUser: Map<string, Source[]>, config: Record<string, unknown>) {
     budget: new Budget(),
     model: null,
     now: () => clock,
-    router: weights(),
+    router,
     config: {
       ...CORE_CONFIG,
       sync: true,
@@ -149,6 +153,11 @@ async function live(t: ReturnType<typeof setup>, scope: Scope, days: number, eac
   }
 }
 
+/** `live` with one request a day that the router scores and finds nothing likely for (no held item matches it). */
+let asked = 0;
+const scoredLive = (t: ReturnType<typeof setup>, scope: Scope, days: number) =>
+  live(t, scope, days, () => t.partner.ask({ ...scope, sessionId: `q${asked++}`, question: "zzz qqq" }));
+
 const cites = async (p: ContextPartner, scope: Scope, sessionId: string, question = "Have I used my isa allowance?") =>
   (await p.ask({ ...scope, sessionId, question })).citations.map((c) => c.itemId);
 
@@ -156,15 +165,31 @@ describe("routerDormantMs (D943)", () => {
   test("off: an unused source is swept weekly; on: one the router never found likely waits for the longer sweep", async () => {
     for (const on of [false, true]) {
       const { all } = world();
-      const t = setup(new Map([["alice", all]]), on ? { routerDormantMs: DORMANT } : {});
+      const t = setup(new Map([["alice", all]]), { syncOnDemand: false, ...(on ? { routerDormantMs: DORMANT } : {}) });
       await warm(t.partner, alice);
       const before = all.map((s) => s.lists);
-      await live(t, alice, 9);
+      await scoredLive(t, alice, 9);
       const swept = all.map((s, k) => s.lists - before[k]!);
       for (const n of swept)
         if (on) expect(n).toBe(0);
         else expect(n).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  test("no dormancy where the router does not score: no weights, or a user with no more sources than a lookup reads", async () => {
+    const { all } = world();
+    const inert = setup(new Map([["alice", all]]), { routerDormantMs: DORMANT, syncOnDemand: false }, null);
+    await warm(inert.partner, alice);
+    const before = all.map((s) => s.lists);
+    await scoredLive(inert, alice, 9);
+    for (let k = 0; k < all.length; k++) expect(all[k]!.lists - before[k]!).toBeGreaterThanOrEqual(1);
+    // Two sources, under the lookup's width of three: the router never runs for them.
+    const two = world().all.slice(0, 2);
+    const small = setup(new Map([["alice", two]]), { routerDormantMs: DORMANT, syncOnDemand: false });
+    await warm(small.partner, alice);
+    const was = two.map((s) => s.lists);
+    await scoredLive(small, alice, 9);
+    for (let k = 0; k < two.length; k++) expect(two[k]!.lists - was[k]!).toBeGreaterThanOrEqual(1);
   });
 
   test("a source the router finds likely for a request keeps its weekly sweep", async () => {
@@ -184,7 +209,7 @@ describe("routerDormantMs (D943)", () => {
     const { bank, all } = world();
     const t = setup(new Map([["alice", all]]), { routerDormantMs: DORMANT });
     await warm(t.partner, alice);
-    await live(t, alice, 10);
+    await scoredLive(t, alice, 10);
     // Deleted at the source, the integrator's notice lost; no sweep has run since the backfill, so the copy is in
     // doubt (D356's rule): a delivery or citation re-reads it first.
     expect(t.partner.sync!.sweepLapsed(alice, "bank", t.now())).toBe(true);
@@ -199,9 +224,9 @@ describe("routerDormantMs (D943)", () => {
     const { all } = world();
     const t = setup(new Map([["alice", all]]), { routerDormantMs: DORMANT });
     await warm(t.partner, alice);
-    await live(t, alice, 6);
+    await scoredLive(t, alice, 6);
     expect(t.cache.get(alice, itemId("bank", REF), t.now())).not.toBeNull();
-    await live(t, alice, 2);
+    await scoredLive(t, alice, 2);
     // Not listed again for 8 days (no sweep, no poll past its newest page): no longer held, so nothing deleted at the
     // source can be delivered from it; a request the router finds it likely for reads it live.
     expect(t.cache.get(alice, itemId("bank", REF), t.now())).toBeNull();
@@ -211,7 +236,7 @@ describe("routerDormantMs (D943)", () => {
     const { bank, all } = world();
     const t = setup(new Map([["alice", all]]), { routerDormantMs: DORMANT });
     await warm(t.partner, alice);
-    await live(t, alice, 10);
+    await scoredLive(t, alice, 10);
     const at = bank.items.findIndex((i) => i.ref === REF);
     bank.items[at] = { ...bank.items[at]!, text: "isa allowance statement for this year: allowance fully used" };
     const reply = await t.partner.ask({ ...alice, sessionId: "s1", question: "Have I used my isa allowance?" });
@@ -224,7 +249,7 @@ describe("routerDormantMs (D943)", () => {
     bank.notifies = true;
     const t = setup(new Map([["alice", all]]), { routerDormantMs: DORMANT, syncPush: true });
     await warm(t.partner, alice);
-    await live(t, alice, 10);
+    await scoredLive(t, alice, 10);
     bank.items.push(item("bank", 99, "isa allowance raised to the new limit", t.now() - MIN));
     expect(t.partner.sourceChanged(alice, "bank")).toBe(true);
     const reads = bank.lists + bank.searches;
@@ -249,6 +274,8 @@ describe("routerDormantMs (D943)", () => {
     let n = 0;
     for (let d = 0; d < 9; d++) {
       await t.partner.ask({ ...alice, sessionId: `a${n++}`, question: "card fees this month" });
+      // Bob's requests are scored too, and find nothing likely.
+      await t.partner.ask({ ...bob, sessionId: `b${n++}`, question: "zzz qqq" });
       for (let k = 0; k < DAY / (10 * MIN); k++) {
         t.advance(10 * MIN);
         t.partner.sync!.track(alice, t.now());

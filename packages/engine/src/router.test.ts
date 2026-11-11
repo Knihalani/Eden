@@ -254,6 +254,26 @@ describe("routerGate at the partner (D940)", () => {
     expect((await p.request(u1, BLIND)).searched).toEqual((await q.request(u1, BLIND)).searched);
   });
 
+  test("weights that cannot score are refused by the parser, and a NaN from an embedder's weights skips nothing", async () => {
+    expect(() => parseRouterWeights(encodeRouterWeights(weights({ floor: Number.NaN })))).toThrow();
+    expect(() => parseRouterWeights(encodeRouterWeights(weights({ sd: new Float32Array(ROUTER_NF) })))).toThrow();
+    expect(() => parseRouterWeights(encodeRouterWeights(weights({ temperature: 0 })))).toThrow();
+    const p = await partnerOf(weights({ floor: Number.NaN }));
+    const q = await partnerOf(null, false);
+    expect((await p.request(u1, BLIND)).searched).toEqual((await q.request(u1, BLIND)).searched);
+    const r = await partnerOf(onInputs(["local"], 10, { b2: Number.NaN }));
+    expect((await r.request(u1, BLIND)).searched).toEqual((await q.request(u1, BLIND)).searched);
+  });
+
+  test("an ask over copies the router skipped names them unsearched, never an all-clear", async () => {
+    const p = await partnerOf(onInputs(["sketch", "local"]));
+    const ref = { ...u1, sessionId: "ask1" };
+    const a = await p.partner.ask({ ...ref, question: "Is the quarterly offsite catering arranged?" });
+    expect(a.answer).not.toContain("Nothing in the connected sources.");
+    expect(a.answer).toContain("not an all-clear");
+    expect(a.sources?.some((x) => x.status === "unsearched")).toBe(true);
+  });
+
   test("no weights: inert", async () => {
     const p = await partnerOf(null);
     const q = await partnerOf(null, false);

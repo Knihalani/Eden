@@ -105,6 +105,8 @@ async function partnerOf(
       sourceYieldEarn: false,
       sourceYieldNames: 0,
       sourceYieldEngage: false,
+      // The router (D948) adds its own skips to `sourceYield`'s: `router.test.ts` tests them.
+      routerGate: false,
       ...config,
     },
   });
@@ -273,7 +275,7 @@ describe("sourceYieldEarn (D600, D603)", () => {
     expect(sum(asked.searched)).toBe(0);
     expect(asked.answer.answer).toContain("Not searched past what is held of");
     // The reason given is true of a user nothing was ever read for (not "used lately": the review of D603).
-    expect(asked.answer.answer).toContain("nothing in the request names it");
+    expect(asked.answer.answer).toContain("it looked unlikely to hold what the request needs");
     expect(asked.answer.answer).toContain("not an all-clear");
   });
 

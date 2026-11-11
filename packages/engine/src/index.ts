@@ -145,6 +145,7 @@ export {
   routeProbabilities,
   ROUTER_FEATURES,
   ROUTER_MAX_TERMS,
+  ROUTER_REQUEST_TERMS,
   ROUTER_NF,
   ROUTER_NULL_NF,
   routerNames,
