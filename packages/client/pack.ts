@@ -87,15 +87,15 @@ export async function packClient(out: string): Promise<string> {
     types: "./types/client/src/index.d.ts",
     exports: { ".": { types: "./types/client/src/index.d.ts", default: "./index.js" } },
     engines: { node: ">=18" },
-    license: "SEE LICENSE IN LICENSE",
+    license: "MIT",
+    keywords: ["agents", "llm", "context", "eden"],
+    sideEffects: false,
+    // A scoped package is private by default on npm; the first publish would be refused without this (D853).
+    publishConfig: { access: "public" },
   };
   writeFileSync(join(out, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   cpSync(join(packages, "..", "LICENSE"), join(out, "LICENSE"));
-  writeFileSync(
-    join(out, "README.md"),
-    "# @eden/client\n\nBuilt by `bun run pack:client` from the Eden repository (packages/client). See the repository's" +
-      " README and docs/INTEGRATION.md.\n",
-  );
+  cpSync(join(here, "README.npm.md"), join(out, "README.md"));
   return out;
 }
 
