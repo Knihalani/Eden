@@ -309,7 +309,6 @@ function bodyBytes(raw: string | undefined): number {
   return n;
 }
 
-/** An on/off variable: "1" on, "0" or unset off; anything else stops startup. */
 /**
  * Default 0 (D26): on the real engine with realistic source latency the pool was neutral in steady state and cost
  * more CPU. Deployments whose sources return large or keyword-dense items may gain; more than cores − 1 never helps.
