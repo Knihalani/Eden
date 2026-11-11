@@ -102,3 +102,40 @@ removed before anything is wired.
 Unchanged (m3-retriever.md §1b): on the held-out families' days requests, recall@5 at least +10 points over the
 shipped default's pool with decoys rising no faster than facts, or recall@15 at least +15 points over the no-intent
 lexical path with the same decoy clause; confirmed on fold B; reported on M2's test split. Go or stop the same day.
+
+## 5. The owner's final scope (2026-11-11, relayed): no embeddings, so TwinSlot v1 is withdrawn
+
+The owner ruled out dense vectors of any kind (asym, bi-encoders, token vectors, anything retrieving by vector
+similarity) and asked for one novel, hyper-optimised model: far more facts handed at @5 against shipped, decoys and
+neutral packets **down**, microseconds a request, negligible ingest, tiny memory a user. TwinSlot v1 (§1) carries
+d-vectors in its slots and a token-embedding table, so it was stopped before its first full run read (the asym and
+sparse tracks and every Modal job with them; their numbers stay in m3-retriever.md as references).
+
+### FrameRank (D906): frames, symbolic channels and a small learned ranker over integer features
+
+- **Ingest: a frame an item** (`m3r/frames.py`, regular expressions and closed lexicons, no model): its terms (a
+  counter), title terms, normalised dates (day of year), amounts, e-mail addresses and capitalised names, a thread
+  key (title without Re:/Fwd:), the sender, the header date, kind and an automated-sender flag, and two bit fields:
+  **status** (cancelled, done/paid, moved, on hold, negation, cleared/resolved, away, closed) and **obligation**
+  (must, approval, deadline, limit, policy, ask). Per user: inverted indexes over terms, days, names, threads and
+  senders, and each item's **twin partner** (its most term-similar item, Jaccard over its 40 rarest terms).
+- **Request: a frame too** (terms, days, amounts, names, a verb class, status and obligation bits).
+- **Candidates from five symbolic channels** (bit per channel): BM25 over the terms (40), items naming a day the
+  request names (25), items naming a person it names (25), the threads and senders of the lexical head (20), and a
+  **learned term-pair table** (request word → item words with a scalar weight each, learned from the training
+  pairs; m3r/qexpand.py) searched as an expanded BM25 (25). No vectors: every weight is a number on a symbol pair.
+- **Ranker:** gradient-boosted trees (LightGBM, binary objective, 400 trees of 31 leaves) over 48 integer and flag
+  features a (request, candidate) pair: lexical (BM25 quantised, ranks, coverage, title hits, the learned table's
+  score), date comparators (same day, days apart, the item's age, future-dated), amount comparators (equal, above),
+  shared people, the item's status and obligation bits crossed by the trees with the request's verb class and bits,
+  **twin contrast** (the partner's overlap, the status bits that differ, which is newer, whether the partner clears
+  what this item asserts or the reverse), **supersession** (a newer item in the same thread that cancels, clears or
+  moves it; whether this is the thread's newest), **graph** (links to the lexical head by thread and sender, the
+  channel bits). The score is an absolute probability, so a threshold can keep a request silent.
+- **Request-time path:** five index lookups, then per candidate (about 95) 48 integer features and 400 trees of
+  depth ≤ 9: about 4,000 comparisons a candidate, about 0.4M a request [EST], **well under a millisecond** in a
+  TypeScript port (the trees are arrays of thresholds and child indices). **Ingest:** a few regular expressions an
+  item and index appends. **Memory:** frames as ids and bit fields (no floats except the learned table and the
+  trees, shared by all users).
+- **Ablations:** each feature group out (`--ablate lex,date,amount,people,status,twin,supersede,graph,kind`) and
+  the learned channel out.
