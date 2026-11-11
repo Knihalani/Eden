@@ -1,4 +1,7 @@
-/** M11: the card keys of export items the card prefilter (`worthCarding`) passes. bun prefilter.ts ITEMS.jsonl... > OUT */
+/**
+ * M11: the card keys of export items the card prefilter (`worthCarding`) passes.
+ *   bun prefilter.ts ITEMS.jsonl... > OUT
+ */
 import { readFileSync } from "node:fs";
 import { worthCarding } from "../../../engine/src/cards";
 

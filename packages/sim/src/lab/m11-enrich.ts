@@ -3,7 +3,8 @@
  * expansion (the shipped card + intent prompt, `ModelCardMaker` with intent, batches of 20 as `cardsEconomy` sends).
  * Every item of the given worlds (redacted as the cache holds it) is sent; lines `{h, title, text, terms, titleTerms,
  * r, c}` go to OUT, and items already there are skipped. Anthropic only, through the spend ledger.
- *   bun packages/sim/src/lab/m11-enrich.ts --worlds .local/m2/synth/worlds/train.jsonl --out .local/m11/m2-intent.jsonl \
+ *   bun packages/sim/src/lab/m11-enrich.ts --worlds .local/m2/synth/worlds/train.jsonl \
+ *     --out .local/m11/m2-intent.jsonl \
  *     --model claude-haiku-5-5 --spend-ledger .local/m11/ledger.jsonl --spend-cap 2.5 [--concurrency 6] [--max-items N]
  * Never the test split (D884).
  */

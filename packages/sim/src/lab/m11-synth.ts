@@ -1,7 +1,7 @@
 /**
- * M11 (D970-D979): M2 v2 synthetic worlds as CopyGen training rows (lab only). Each task's fact, as the cache would hold
- * it (`sanitizeItem`), with its English requests stemmed as the engine stems them (`intentTerms`) as the target; its
- * all-clear decoy and its neutrals as the look-alikes it must outrank for those requests.
+ * M11 (D970-D979): M2 v2 synthetic worlds as CopyGen training rows (lab only). Each task's fact, as the cache would
+ * hold it (`sanitizeItem`), with its English requests stemmed as the engine stems them (`intentTerms`) as the target;
+ * its all-clear decoy and its neutrals as the look-alikes it must outrank for those requests.
  *   bun packages/sim/src/lab/m11-synth.ts .local/m2/synth/worlds/train.jsonl .local/m11/synth-train.jsonl
  * Never point it at test (measurement only, D884).
  */

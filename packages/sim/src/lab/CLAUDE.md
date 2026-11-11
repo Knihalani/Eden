@@ -79,6 +79,13 @@ or look-alike's key parts and tokens with Haiku (pay once); `../../lab/m6/` buil
 nine trimmer architectures (`cands.py`) and reads real funnel packets (`screen_funnel.py`). The trimmer itself was
 deleted (D920: it did not transfer to the sim's hand-written families). Run synth dumps 30 seeds a call.
 
+**Intent labels and expansion screens (M11, D970–D972):** `m11-export.ts` (each world's items, tasks, planted keys and
+the checked-in Haiku requests by card key; look-alike twins pair by suite, seed and template), `m11-enrich.ts` (Haiku
+intent labels for any worlds, the shipped prompt, through the spend ledger; `--reverse` runs a second process from the
+other end), `m11-synth.ts` (M2 rows: fact, English requests, decoy and neutrals); `../../lab/m11/` holds the split
+(`data.py`: validation families train3–4/3r–4r, held-out train5–6/5r–6r/longtail), the offline screen and twin gate
+(`screen.py`) and the rejected expansion trainers. The `intentMicro` switch they fed is deleted (code in ff961a42).
+
 **Offline retrieval screens over days (M3, M5; D911):** `days-calls.ts --corpus-dump F` (each user's items, redacted,
 1,200 characters), `--pool-diag F` rows with the planted id, request, template and pool ids, `--cards-live MODEL
 --cards-out F` (the shipped card coverage, carded live and recorded; needs the spend flags) and `--intent none`.
