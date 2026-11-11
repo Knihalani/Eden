@@ -17,6 +17,7 @@ M=[
  ("kicks unbounded", "if (this.kicking >= KICKS_AT_ONCE) {", "if (false) {", 1),
  ("queue never drained", "          this.kickDue(next);\n", "", 1),
  ("stopKicks keeps timers", "    for (const u of this.users.values()) this.unkick(u);\n", "", 1),
+ ("stopKicks leaves waiting users marked (no tick would read them)", "    for (const u of this.kickQueue) u.queued = false;\n", "", 1),
  ("stopKicks keeps the queue", "    this.kickQueue = [];\n", "", 1),
  ("stopKicks does not stop kicks", "    this.kicksStopped = true;\n", "", 1),
  ("startKicks does nothing", "    this.kicksStopped = false;\n", "", 1),

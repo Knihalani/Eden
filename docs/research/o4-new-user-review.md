@@ -14,10 +14,10 @@ their outputs are in
    the tests see a page listed twice (batches) or more reads at once than the pool's lanes.
 2. **The tests passed with most of the new code removed.** Rewritten (`sync-kick.test.ts`, 28 tests). The clock and
    the timer are the test's own and move only when told, so a budget stop is real and each wait is read in the
-   clock's milliseconds. `packages/sim/lab/o5/mutate-sync-kick.py` applies 34 mutations to the engine (the resume
+   clock's milliseconds. `packages/sim/lab/o5/mutate-sync-kick.py` applies 35 mutations to the engine (the resume
    timer, what its wait is made of, the cap, the timer's clearing in `forget` and `drop`, both waits of finding 1,
    the bound across users and its queue, `stopKicks`, the pool's `left` set, its back-off check, its lanes, a gone
-   user's page, the first retry, and the second review's: see below) and runs the file after each: all 34 fail it. One
+   user's page, the first retry, and the second review's: see below) and runs the file after each: all 35 fail it. One
    line found redundant that way
    was removed (a source its budget stopped needs no place in `left`: a refused `take` spends nothing).
 3. **The resume wait mixed clocks.** `SyncDeps.after` (`PartnerDeps.after`): one timer on `now`'s clock, used for
@@ -82,7 +82,7 @@ results (identical), found the paid check's conclusion sound, and returned four 
    kicked (a later event, or a user tracked another way, starts nothing); the pool at the user's cap keeps and cuts
    what the batches do; a kick after a tick's step ended unfinished; the quick retry only in a first backfill (a
    warm source that fails waits 30 s); a user forgotten while waiting for a turn; the budget's wait in batches.
-   The mutation list is 34 now, all failing the file. One is listed there as not held: warming, at the cap, a
+   The mutation list is 35 now, all failing the file. One is listed there as not held: warming, at the cap, a
    source whose page is still on the wire, which changes nothing a test can see.
 3. **The paid check's per-checkpoint intervals resampled each seed's task on its own**, not a task's seeds
    together as registered. Fixed in `new-user-pi.py`; the intervals widened a little (o4-new-user.md §6b) and no
@@ -94,3 +94,17 @@ results (identical), found the paid check's conclusion sound, and returned four 
 Nits taken: comments that still said "a trial"; `stopKicks`' comment; the storm bench, TESTING.md and LAB.md now
 say the off arm needs `{"syncKick":false}`; LAB.md's `run.sh` arguments; the p50 sentence above; the resolver being
 asked at each resume and the queue being first come across tenants, both said in `sync.ts`; long prose lines.
+
+## The third pass (on c908ef50, replayed onto main): APPROVE
+
+The reviewer re-ran the gates on the tree replayed onto main (cold gate green, eval 0.65 / 0.52 / 0, funnel 315 /
+276 with the switch on and off, rows identical apart from timing), the mutation check (34 of 34), its own probes
+(the first: 128 listings at once, was 512; a harsher one, 40 users of 40 three-page sources with failures and a
+tick every 300 ms: 149 at once against 128 with the switch off, all users read in 5.9 s against 33.4 s, no page
+twice) and the paid check's reports (byte for byte), and approved. Four small points, taken in the same change:
+the funnel figure quoted for the promotion was the first base's (now 315 / 276); `stopKicks` clearing the waiting
+users' mark had no test, though a tick now depends on it (tested, and the 35th mutation); a clock or timer that
+throws in a kicked step's last lines could keep the turn from the users waiting (caught now); the storm files were
+taken before the second review's fix (said in them, with the reviewer's re-run: 78.7 s and 79.0 s, p99 49.3 and
+50.9 ms).
+

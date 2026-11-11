@@ -226,7 +226,8 @@ none of this changes anything.
 A user the sync has not seen is backfilled from their first event (`syncKick`, D751, D753, in the default since
 D755): the step starts at once, off the event's path, is taken up again as soon as its call budget, a guard or a
 back-off allows instead of at the sync's next tick, and reads 32 sources at once as a pool; at most four users'
-kicked steps run at once, a tick leaves a user alone while they wait for a kick turn, and the ticks (60 s on the servers)
+kicked steps run at once, a tick leaves a user alone while they wait for a kick turn, and the ticks (60 s on the
+servers)
 remain behind them. A first page that failed once
 is tried again after 1.5 s. Measured on new users, full strength comes at about 25 s instead of 180 s with five
 sources and at about 45 s instead of past 300 s with 1,000; with an agent, hidden facts raised ten seconds after

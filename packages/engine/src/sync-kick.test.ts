@@ -648,6 +648,9 @@ describe("syncKick (D751)", () => {
     expect(lists("u6")).toBe(0);
     partner.stopSync();
     expect(sync.warm(scopeOf("u8"))).toBe(false);
+    // And a tick does read them: the stop took them out of the kicks' queue, which a tick would otherwise skip.
+    await sync.tick();
+    expect(lists("u6")).toBe(4);
   });
 
   test("a kick syncs only the user whose event it was", async () => {

@@ -134,7 +134,8 @@ the lookups wait for is each source being known complete or cut, which needs its
   most 128 times (`KICK_RESUMES`), then the ticks take over. Every wait is on the engine's clock, through one
   injected timer (`SyncDeps.after`, D753).
 - At most four kicked steps run at once across users (`KICKS_AT_ONCE`: the 128 listings at once a tick already
-  allows); the rest wait their turn, and a tick leaves a user alone while they wait for a kick turn. Only a kicked step reads as a pool; a tick's step reads batches. `stopSync` cancels them (D753).
+  allows); the rest wait their turn, and a tick leaves a user alone while they wait for a kick turn. Only a kicked
+  step reads as a pool; a tick's step reads batches. `stopSync` cancels them (D753).
 - A page of a first backfill that failed once is tried again after 1.5 s (`syncKickRetryMs`), then 30 s and
   doubling as before (D753).
 - A kicked user's backfill reads as a pool: a lane takes the next source, newest unread page first, as soon as it is
@@ -143,7 +144,7 @@ the lookups wait for is each source being known complete or cut, which needs its
   the tick's lane takes the path it took.
 
 Tests: `sync-kick.test.ts`, 28 tests on a clock and a timer the test moves by hand, each holding one mechanism:
-34 mutations of the engine each fail it (`packages/sim/lab/o5/mutate-sync-kick.py`; o4-new-user-review.md).
+35 mutations of the engine each fail it (`packages/sim/lab/o5/mutate-sync-kick.py`; o4-new-user-review.md).
 
 ## 5. What is left
 
@@ -252,7 +253,7 @@ by a user of its own: 4,608 task runs, 2,304 users, no errors, none ungraded. An
 | Hidden raised at 45 s: lower end above −5 points | 228, 59.4% | 245, 63.8% | +4.4 (+0.5 to +8.6) | yes |
 | Confirmed concerns, control and neutral: not up by more than 1 point | 1 of 1,536 | 1 of 1,536 | +0.0 (−0.2 to +0.2) | yes |
 | Connector calls a user: not up by more than 2% | 42.34 | 18.00 | −57.5% | yes |
-| The eval and the default funnel unchanged with the switch on | 0.65 / 0.52 / 0; 314 / 274 | the same; 768 of 768 task rows identical | | yes |
+| The eval and the default funnel unchanged with the switch on | 0.65 / 0.52 / 0; 315 / 276 on main's tree (314 / 274 on the first base) | the same; 768 of 768 task rows identical | | yes |
 
 Before the Sonnet regrade the run's own grader called 11 control and neutral answers concerns today and 13 with the
 change (+0.13 points, −0.52 to +0.78); Sonnet confirmed one in each arm (24 answers regraded, $0.027). The

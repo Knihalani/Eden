@@ -475,7 +475,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `sync`; docs/research/o4-new-user.md).** Without it `track` only notes the user; their backfill starts at the next
   tick (60 s on the servers), and a backfill that stops (its call budget's burst spent, a page refused by our own
   guard while a request holds the source, a failed call) waits for the tick after. With it, `observe` calls
-  `SyncManager.kick` for a user `track` just added, and the kicked step resumes itself (`KICK_RESUME_MS`, the budget's wait, a back-off's end; `KICK_RESUMES` at most). A
+  `SyncManager.kick` for a user `track` just added, and the kicked step resumes itself (`KICK_RESUME_MS`, the budget's
+  wait, a back-off's end; `KICK_RESUMES` at most). A
   kicked user's backfill is `backfillPool` (`syncKickLanes` 32: a lane takes the next source when its page lands;
   `backfill`'s batches wait for their slowest page, two minutes for 1,000 sources), a copy of `backfill`'s page
   handling: a fix to one belongs in the other. A
@@ -488,7 +489,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   queued users as pools read 512 listings at once, the second review); `stopSync` cancels timers and queue (`stopKicks`); a first backfill page that failed once is retried after
   `syncKickRetryMs` (1.5 s), then 30 s and doubling. `sync-kick.test.ts` drives the clock and the timer by hand and
   each test names the mechanism it holds: after a change there, run
-  `python3 packages/sim/lab/o5/mutate-sync-kick.py` (34 mutations of the engine, each must fail the file; update its
+  `python3 packages/sim/lab/o5/mutate-sync-kick.py` (35 mutations of the engine, each must fail the file; update its
   list with the code), or a test that still passes proves nothing. Measure any change here with the funnel's
   `--connect-at` or `pi-ab --connect-at` (docs/LAB.md): the usual harnesses backfill before the first request and
   cannot see it.

@@ -442,12 +442,18 @@ export class SyncManager {
       .finally(() => {
         u.kicked = null;
         this.kicking--;
-        const filling = [...u.sources.values()].filter((x) => x.phase === "backfill");
-        if (!u.gone && filling.length > 0) {
-          const now = this.deps.now();
-          // The soonest any source left can be read: its back-off's end, the budget's wait, never at once.
-          const retryIn = Math.min(...filling.map((x) => Math.max(0, x.retryAt - now)));
-          this.kickLater(u, Math.max(KICK_RESUME_MS, u.budgetWaitMs ?? 0, retryIn));
+        // An embedder's clock or timer that throws must not keep the turn from the users waiting below (a tick
+        // skips them), nor reach a tick that waits on this step: the user is then left to the ticks.
+        try {
+          const filling = [...u.sources.values()].filter((x) => x.phase === "backfill");
+          if (!u.gone && filling.length > 0) {
+            const now = this.deps.now();
+            // The soonest any source left can be read: its back-off's end, the budget's wait, never at once.
+            const retryIn = Math.min(...filling.map((x) => Math.max(0, x.retryAt - now)));
+            this.kickLater(u, Math.max(KICK_RESUME_MS, u.budgetWaitMs ?? 0, retryIn));
+          }
+        } catch {
+          u.resume = null;
         }
         // The turn this step held goes to the users waiting, first come first.
         while (this.kicking < KICKS_AT_ONCE && this.kickQueue.length > 0) {
