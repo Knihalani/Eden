@@ -1,4 +1,4 @@
-"""M6 (D920-D929): the trimmer's part dataset from `--packets --packet-parts` dumps and label.ts's labels.
+"""M6 (D920-D921): the trimmer's part dataset from `--packets --packet-parts` dumps and label.ts's labels.
 
     python3 -I packages/sim/lab/m6/prep.py --labels L.jsonl [--labels L2.jsonl] --out DIR DUMP.jsonl [DUMP ...]
 

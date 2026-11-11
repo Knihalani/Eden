@@ -1,10 +1,10 @@
-"""M6 (D920-D929, docs/research/m6-trimmer.md): the packet trimmer's candidates trained on Modal CPU containers.
+"""M6 (D920-D921, docs/research/m6-trimmer.md): the packet trimmer's candidates trained on Modal CPU containers.
 
 Runs `packages/sim/lab/m6/cands.py` against the part dataset on the Volume `eden-m6` (`data/items.jsonl`, built by
 `prep.py` from `--packets --packet-parts` dumps and label.ts's labels; simulated and synthetic worlds only) and keeps
 the run's report and weights under `runs/<run>/`.
 
-    modal volume put eden-m6 .local/m6/full/items.jsonl data/items.jsonl
+    modal volume put eden-m6 .local/m6/r2/items.jsonl.gz data/r2/items.jsonl.gz
     modal run packages/sim/modal/m6_trim.py --run h1-full --args "--arch h1 --epochs 4"
 """
 

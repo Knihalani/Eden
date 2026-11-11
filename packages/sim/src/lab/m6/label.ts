@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * M6 (D920–D929, docs/research/m6-trimmer.md), LAB ONLY: labels which parts of a delivered planted item carry the
+ * M6 (D920–D921, docs/research/m6-trimmer.md), LAB ONLY: labels which parts of a delivered planted item carry the
  * fact, for training and screening a packet trimmer. Reads `--packets … --packet-parts` dumps; each planted item that
  * reached a packet (the fact on a hidden task, its look-alike on a control task) is shown to Haiku with its parts as
  * compaction splits them and the task's detail (from construction), ten items a call. The reply names the parts that
@@ -8,11 +8,12 @@
  * which the screen requires a trimmed line to keep. Pay once: replies are stored by key (jobs.ts) and re-read.
  *
  *   bun packages/sim/src/lab/m6/label.ts DUMP.jsonl [DUMP…] --out labels.jsonl [--mode direct|batch]
- *     [--dir .local/m6/label] [--spend-ledger .local/m6/ledger.jsonl] [--spend-cap 2] [--limit N] [--dry]
+ *     [--dir .local/m6/label] --spend-ledger F --spend-cap USD [--limit N] [--dry]
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { isStopword } from "@eden/engine";
+import { sanitizeForStore } from "@eden/redact";
 import { SpendLedger } from "../spend";
 import { parseJson, readResult, runBatch, runDirect, type Job } from "../synth/jobs";
 
@@ -21,7 +22,9 @@ const opt = (name: string, d = "") => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1]! : d;
 };
-const files = args.filter((a, i) => !a.startsWith("--") && (i === 0 || !args[i - 1]!.startsWith("--")));
+// Flags that take a value; every other argument not starting "--" is a dump file (a boolean flag takes none).
+const VALUED = new Set(["out", "dir", "mode", "spend-ledger", "spend-cap", "limit", "concurrency", "run-label"]);
+const files = args.filter((a, i) => !a.startsWith("--") && !(i > 0 && VALUED.has(args[i - 1]!.replace(/^--/, ""))));
 const DIR = opt("dir", ".local/m6/label");
 const PER_CALL = 10;
 
@@ -83,9 +86,10 @@ export function prompt(units: Unit[]): string {
     .map((u, k) =>
       [
         `<entry n="${k + 1}" role="${u.role === "fact" ? "fact" : "look-alike"}">`,
-        `FACT: ${u.detail}`,
-        `TITLE: ${u.title}`,
-        ...u.parts.map((p, j) => `[${j + 1}] ${p}`),
+        // D10: what goes to a model passes the redactor (sim text, but the rule holds for every prompt).
+        `FACT: ${sanitizeForStore(u.detail)}`,
+        `TITLE: ${sanitizeForStore(u.title)}`,
+        ...u.parts.map((p, j) => `[${j + 1}] ${sanitizeForStore(p)}`),
         "</entry>",
       ].join("\n"),
     )
@@ -150,12 +154,11 @@ if (import.meta.main) {
   }));
   console.log(`${use.length} units (${units.filter((u) => u.role === "fact").length} facts), ${jobs.length} calls`);
   if (!args.includes("--dry")) {
-    const ledger = new SpendLedger(
-      opt("spend-ledger", ".local/m6/ledger.jsonl"),
-      Number(opt("spend-cap", "2")),
-      opt("run-label", "m6-label"),
-      0.1,
-    );
+    const cap = Number(opt("spend-cap"));
+    // D97: no paid call without a ledger and a finite, positive cap (a NaN cap would refuse nothing).
+    if (!opt("spend-ledger") || !Number.isFinite(cap) || cap <= 0)
+      throw new Error("m6 label: --spend-ledger FILE and --spend-cap USD (> 0) are required (or --dry)");
+    const ledger = new SpendLedger(opt("spend-ledger"), cap, opt("run-label", "m6-label"), 0.1);
     const todo = jobs.filter((j) => !readResult(DIR, j.key));
     const r =
       opt("mode", "direct") === "batch"

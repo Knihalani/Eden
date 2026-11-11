@@ -1,4 +1,4 @@
-"""M6 (D920-D929): shared pieces for the trimmer's trainers and screen. Pure Python + numpy; no pretrained weights.
+"""M6 (D920-D921): shared pieces for the trimmer's trainers and screen. Pure Python + numpy; no pretrained weights.
 
 The unit is a *part* (a sentence or line as `messageParts` splits it, render.ts). A trimmer gives each part of a
 delivered item a keep score; `render_line` rebuilds the item's packet line from the kept parts the way render.ts

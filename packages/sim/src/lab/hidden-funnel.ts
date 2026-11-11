@@ -1118,8 +1118,10 @@ async function runSeed(
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   /**
    * `--packet-parts`: the packets' items re-rendered from the cache with the shipped options (focus, 320 bytes an item,
-   * year, the user's name, dense, split), each item's parts and kept text recorded, and its rendered line, so a reader
-   * can check the re-render matches the packet. The fold and the lead are not re-run (the packet's own text has them).
+   * year, the user's name, dense, split), each item's id, source, title, parts and kept text recorded; a reader checks
+   * the kept text against the packet's own line (404 of 406 on train1 seed 41, D921). The options are the shipped
+   * default's as of D921, written out here, not read from the config: re-check that match after a change to
+   * compaction. The fold and the lead are not re-run (the packet's own text has them).
    */
   const packetParts = (packets: readonly { citations: readonly { itemId: string }[] }[], request: string, at: number) =>
     packets.map((p) => {

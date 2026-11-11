@@ -1,4 +1,4 @@
-"""M6 (D920-D929): the pre-registered offline screen on real funnel packets (the engine's trimmer in the loop).
+"""M6 (D920-D921): the pre-registered offline screen on real funnel packets (the engine's trimmer in the loop).
 
     python3 -I packages/sim/lab/m6/screen_funnel.py --labels L.jsonl [--labels ...] --base BASE.jsonl --arm ARM.jsonl
 

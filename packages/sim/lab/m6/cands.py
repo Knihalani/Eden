@@ -1,4 +1,4 @@
-"""M6 (D920-D929): the trimmer candidates H1-H9 (docs/research/m6-trimmer.md §3), one trainer, CPU torch.
+"""M6 (D920-D921): the trimmer candidates H1-H9 (docs/research/m6-trimmer.md §3), one trainer, CPU torch.
 
     python packages/sim/lab/m6/cands.py --items DIR/items.jsonl --arch h1 [--train-limit N] [--epochs 3]
         [--buckets 262144] [--bits 128] [--seed 1] [--out RUN_DIR]

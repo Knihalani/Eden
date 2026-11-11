@@ -1,5 +1,7 @@
 # M6: a packet trimmer (each delivered item cut to the parts that carry the fact)
 
+(This M6 is the 2026-11-11 trimmer session; the earlier M6 of D465 is docs/research/m6-heldout18.md.)
+
 Status: 2026-11-11, branch `claude/m6-trimmer` (from main e4f3649a), session M6, decisions D920–D921. **Stopped on
 its pre-registered rule (D920): the trimmer keeps 97.8% of facts on generated held-out families but 73.2% on the
 sim's train5–6; deleted, no Pi run.** The lab tooling stays (D921). Paid calls go
@@ -159,7 +161,7 @@ retrieval.
   lost 13% of facts with every part allowed; removing parts only from `pick`'s own selection starts at the shipped
   line and lets the threshold buy bytes.
 - **Context over an item's parts carries the decision.** A tiny bidirectional GRU over per-part sign codes beat a
-  linear model, a binarised pair net, a bilinear one and trees by 11–20 points of bytes at the same keep on val.
+  binarised pair net, a linear model, a bilinear one and trees by 7–20 points of bytes at the same keep on val.
 - **At 97% keep the bytes come off items that carry nothing for the request.** Planted facts and look-alikes keep
   about 94% of their bytes; non-planted items keep 31%. Under the shipped push check (S) most of those items no
   longer reach the packet, so the live cut would be well under the offline one, and with S's packets about 1,061 of
