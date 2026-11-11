@@ -24,7 +24,7 @@ import { isId } from "@eden/protocol";
 import { readTrace, traceReport, type TraceReport } from "./trace-report";
 
 /** What kind of help a trace that spoke gave, in words a stakeholder reads. */
-export type Kind = "conflict" | "candidates" | "match" | "cached" | "answer" | "update" | "judged" | "firewall";
+export type Kind = "conflict" | "candidates" | "match" | "cached" | "answer" | "update" | "judged" | "party";
 
 const KIND_WORDS: Record<Kind, string> = {
   conflict: "a clash or a person/day match with the request (no model)",
@@ -34,7 +34,7 @@ const KIND_WORDS: Record<Kind, string> = {
   answer: "answers to the agent's own questions (ask_context)",
   update: "a newer version of something already shown",
   judged: "a match a model judged",
-  firewall: "a finding on a tool call about to run",
+  party: "a finding on a tool call about to run (the party check)",
 };
 
 /** Connector plans, $ per 1,000 tool calls (packages/sim/lab/before-after/market.py's `CONNECTORS`). */
@@ -110,7 +110,7 @@ function kindOf(t: Trace): Kind | null {
     case "model":
       return "judged";
     case "fast":
-      return t.reason.startsWith("action-") ? "firewall" : "cached";
+      return t.reason.startsWith("action-") ? "party" : "cached";
     case "sources":
       return t.reason.startsWith("grounded-") ? "conflict" : "match";
     default:
@@ -255,7 +255,7 @@ function connectorCalls(traces: Trace[], syncRuns: Map<string, { done: number; l
       t.decision === "reader-push" ||
       (t.decision === "skipped" && (t.reason === "sync poll behind" || t.reason === "cut search behind")) ||
       t.reason.startsWith("updated:") ||
-      // The firewall's finding on a tool call the agent also reported: the same call, traced twice (`checkAction`).
+      // The party check's finding on a tool call the agent also reported: the same call, traced twice (`checkAction`).
       t.reason.startsWith("action-");
     if (followUp) continue;
     if (t.event === "user_message") requests++;

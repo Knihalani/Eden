@@ -6,7 +6,7 @@ import { StaticSource } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { callParties, namesParty, partiesIn } from "./parties";
+import { callParties, namesParty, orgLabel, partiesIn } from "./parties";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
 // fail it the way wall time did (weak-points-1111.md R1).
@@ -62,6 +62,12 @@ describe("parties: reading identifiers", () => {
     const [a] = partiesIn("a@b.example");
     expect(namesParty("email A@B.example the deck", a!)).toBe(true);
     expect(namesParty("email the deck", a!)).toBe(false);
+  });
+
+  test("free mail names no organisation; a country suffix is not the name", () => {
+    expect(orgLabel("gmail.com")).toBeNull();
+    expect(orgLabel("mail.globex.co.uk")).toBe("globex");
+    expect(orgLabel("umbrellahealth.com")).toBe("umbrellahealth");
   });
 
   test("bounded on a huge input", () => {
@@ -169,6 +175,25 @@ describe("checkAction with partyCheck", () => {
     await primed(p, w, "Email Priya that the board pack draft is fine.");
     const r = await p.checkAction(ev(w, email(["compliance@client-services.example"])));
     expect(r).toMatchObject({ verdict: "proceed", reason: "off" });
+  });
+
+  test("a session Eden never saw: nothing to hold, and no session is opened", async () => {
+    const p = partner({});
+    const r = await p.checkAction(ev(who("u8"), { kind: "tool_call", tool: "send_payment", input: { amount: "1" } }));
+    expect(r).toMatchObject({ verdict: "proceed", finding: null, reason: "clear" });
+    expect(p.sessionCount).toBe(0);
+  });
+
+  test("an internal failure proceeds (fails open) with its reason, and other events are not checked", async () => {
+    const p = partner({});
+    const w = who("u9");
+    await primed(p, w, "Email Priya that the board pack draft is fine.");
+    (p as unknown as { partyFinding: () => never }).partyFinding = () => {
+      throw new Error("boom");
+    };
+    const r = await p.checkAction(ev(w, email(["compliance@client-services.example"])));
+    expect(r).toMatchObject({ verdict: "proceed", finding: null, reason: "error" });
+    expect((await p.checkAction(ev(w, { kind: "user_message", text: "hi" }))).reason).toBe("off");
   });
 
   test("isolation: another session of the same user, and another user, were shown nothing", async () => {

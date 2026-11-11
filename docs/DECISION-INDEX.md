@@ -85,7 +85,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D66 | 2026-10-31 | A cheaper background, behind flags, off by default. | adopted |
 | D67 | 2026-10-31 | A found conflict is delivered whatever path spoke first. | superseded (deleted by D112) |
 | D68 | 2026-10-31 | Packets say dates whole. | superseded (deleted by D112) |
-| D69 | 2026-10-31 | The action firewall behind `actionCheck`, off by default (`firewall.ts`, `ContextPartner.checkAction`, `POST /v1/check`… | trial |
+| D69 | 2026-10-31 | The action firewall behind `actionCheck`, off by default (`firewall.ts`, `ContextPartner.checkAction`, `POST /v1/check`… | adopted |
 | D70 | 2026-10-31 | One-turn packets are rejected: the proactive packet does not carry the no-model gate's held-back candidates or a coverage line (the… | rejected |
 | D71 | 2026-10-31 | Agent cost in a live comparison is reported twice: as billed, and re-priced at fixed endpoint prices (Z.AI's list price and Wafer-us for… | adopted |
 | D72 | 2026-10-31 | The pre-registered blind evaluation of the econ work is recorded and its bars applied: ALL2 (ALL plus `syncPollBehind`, `decideConflict`… | adopted |
@@ -160,7 +160,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D142 | 2026-11-05 | Backfill and sweeps may list big pages, min(`syncBigPageSize`, `Source.listPageMax`), only where the source declares a max; off in the… | superseded (deleted by D143) |
 | D143 | 2026-11-05 | The big-pages trial ends: `syncBigPageSize`, `Source.listPageMax` and the big-page code are deleted (ends D142's trial early) | rejected |
 | D144 | 2026-11-05 | The reader's reasoning defaults to "off" (`ModelReaderMaker`), so the shipped reader is the measured one; amends the `reader.ts` comment… | adopted |
-| D145 | 2026-11-05 | OpenRouter's `anthropicCache` option becomes a trial; until it ends, every reader and card cost figure in COST-MODEL.md is labelled "lab… | trial |
+| D145 | 2026-11-05 | OpenRouter's `anthropicCache` option becomes a trial; until it ends, every reader and card cost figure in COST-MODEL.md is labelled "lab… | adopted |
 | D146 | 2026-11-05 | Cards and intent stay on the synchronous model endpoint; a batch tier (Message Batches) or a cheaper endpoint for request-only items is… | adopted |
 | D147 | 2026-11-05 | The reader is not streamed to settle the push early, and a local distilled reader is not built | rejected |
 | D148 | 2026-11-05 | A change notice drops the source's held search pages whether or not it is synced; an ignored notice says why; a lookup whose poll used up… | adopted |
@@ -297,8 +297,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D301 | 2026-11-07 | Promoted: plan-conflict proactivity (`planConflict`, on in the default, part `plans`; A9). | adopted |
 | D302 | 2026-11-07 | Lab only: `pi-ab --day K --late` (`pi-late.ts`) is kept as the instrument for facts that arrive after the agent acted | lab |
 | D305 | 2026-11-07 | A10's prompt-injection suite, live and at $0. | adopted |
-| D306 | 2026-11-07 | `guardLine` (trial, off): a fixed Eden line after every packet's and answer's header | trial |
-| D307 | 2026-11-07 | `quarantineInstructions` (trial, off): text written for an AI is replaced by Eden's marker in every rendered item and citation title | trial |
+| D306 | 2026-11-07 | `guardLine` (trial, off): a fixed Eden line after every packet's and answer's header | adopted |
+| D307 | 2026-11-07 | `quarantineInstructions` (trial, off): text written for an AI is replaced by Eden's marker in every rendered item and citation title | adopted |
 | D308 | 2026-11-07 | `senderDomains` (a compacted From line keeping its address's domain) measured and deleted with its code and tests | rejected |
 | D309 | 2026-11-07 | docs/THREAT-MODEL.md's T1 and open items carry A10's measured numbers | adopted |
 | D310 | 2026-11-07 | Server input edges under abuse (A11; amends D100 and D163). | adopted |
@@ -317,7 +317,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D324 | 2026-11-07 | `bench/source-days.bench.ts`, and the daily sweep's floor accepted for now. | adopted |
 | D325 | 2026-11-07 | Idle users are frozen in memory and thawed exactly on next use (`CacheLimits.freezeIdleMs` 30 min, on by default; pure memory compaction… | adopted |
 | D326 | 2026-11-07 | `POST /v1/usage`: a tenant's own usage today, summed over the router's children (A14; A4's blocker 10). | adopted |
-| D327 | 2026-11-07 | Trial `EDEN_SPEND_LEASES` (off): a tenant's daily model-spend cap holds across router children without being divided by N (amends D163 for… | trial |
+| D327 | 2026-11-07 | Trial `EDEN_SPEND_LEASES` (off): a tenant's daily model-spend cap holds across router children without being divided by N (amends D163 for… | adopted |
 | D328 | 2026-11-07 | Trial `syncIngestTurns` (off): a page the background sync listed is redacted and stored at its turn, one per turn of the event loop. | adopted (by D370) |
 | D329 | 2026-11-07 | Memory per user is measured as JS heap plus `external`, and as RSS once it stops falling, at the sync cap; machines are sized on RSS. | adopted |
 | D330 | 2026-11-07 | Rejected and deleted: two extra push slots for facts that share few words with the request. | rejected |
@@ -480,12 +480,12 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D601 | 2026-11-10 | Trials `sourceYieldNames` (4) and `sourceYieldEngage`. | adopted |
 | D602 | 2026-11-10 | Not kept: dormant sources (`syncDormantMs`), built, screened at $0 and removed after two reviews. | rejected |
 | D603 | 2026-11-11 | `sourceYieldEarn`, `sourceYieldNames` (4) and `sourceYieldEngage` are in `DEFAULT_CONFIG` | adopted |
-| D604 | 2026-11-11 | Trial `syncSweepSpread`: an unused source is swept at its own point in the week | trial |
+| D604 | 2026-11-11 | Trial `syncSweepSpread`: an unused source is swept at its own point in the week | superseded (deleted by D817) |
 | D605 | 2026-11-11 | Finding: fewer on-demand polls of sources that send no notice is not free; `syncStaleChance` stays 0.15 | finding |
 | D606 | 2026-11-11 | Finding: with no change notice, a third of the updates owed to the agent are lost, all because the item's source was not polled; no fix… | finding |
 | D650 | 2026-11-10 | A test file that passed on exactly the inputs it has now is not run again | adopted |
 | D651 | 2026-11-10 | Finding: the capacity bench's "quarter active" steady state was half active; a 4-core 16 GB box holds about 3,460 synced users at a… | finding |
-| D652 | 2026-11-10 | Trial (off): with frozen users persisted (D425), the memory's copy of a frozen user's blob is let go once the file is written | trial |
+| D652 | 2026-11-10 | Trial (off): with frozen users persisted (D425), the memory's copy of a frozen user's blob is let go once the file is written | adopted |
 | D653 | 2026-11-10 | The proxy serves Anthropic's Messages API | adopted |
 | D656 | 2026-11-10 | The proxy serves OpenAI's Responses API | adopted |
 | D657 | 2026-11-10 | The test-result cache (D650) is for the loop, never the gate, and fails closed | adopted |
@@ -520,6 +520,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D811 | 2026-11-11 | The merge gate runs its three steps at once, runs the tests that wait on real time in a tail after the rest, bounds work in CPU time, and… | adopted |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
 | D813 | 2026-11-11 | Lab only: paid lab runs write each finished unit as it lands and resume without paying for it again | lab |
+| D814 | 2026-11-11 | A trial is decided in the branch or session that opened it, as soon as its evidence is in. | adopted |
+| D815 | 2026-11-11 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | rejected |
+| D816 | 2026-11-11 | tsgo is the merge gate's checker: `scripts/typecheck.sh` defaults to tsgo (TypeScript 7's native preview, pinned), `TYPECHECK=tsc` and… | adopted |
+| D817 | 2026-11-11 | Deleted: `syncSweepSpread` (D604), `EDEN_SPEND_LEASES` (D327) and `EDEN_PERSIST_DISK_ONLY` (D652); `anthropicCache` (D145) is a… | rejected |
 | D818 | 2026-11-11 | Lab scripts refuse to start while `OPENROUTER_API_KEY` is set, unless `EDEN_ALLOW_OPENROUTER=1` | adopted |
 | D819 | 2026-11-11 | The cold gate trusts the content-addressed Prettier set, and five heavy end-to-end tests share their work | adopted |
 | D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | rejected |

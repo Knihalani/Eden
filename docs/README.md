@@ -6,7 +6,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, data flow, the two speeds, the learning loop |
 | [DECISIONS.md](DECISIONS.md) | Every design decision, numbered. It wins conflicts |
 | [ROADMAP.md](ROADMAP.md) | Milestones M0–M6 |
-| [INTEGRATION.md](INTEGRATION.md) | Advice for a tenant's agent loop: packet placement, caching, `ask_context`, the firewall (unmeasured) |
+| [INTEGRATION.md](INTEGRATION.md) | Advice for a tenant's agent loop: packet placement, caching, `ask_context`, the party check on actions |
 | [COST-MODEL.md](COST-MODEL.md) | Prices, per-call bounds, measured costs, levers |
 | [PRIVACY.md](PRIVACY.md) | Data flow, subprocessors, ZDR, controls, open items |
 | [RESEARCH.md](RESEARCH.md) | The Meta PMA paper and open questions |
