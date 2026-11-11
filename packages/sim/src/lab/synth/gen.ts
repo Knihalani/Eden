@@ -661,6 +661,16 @@ function assembleWorld(
       const rv = readResult(DIR, `revise/${p.id}/${tp.task}`);
       if (rv) ((usd += rv.usd), calls++);
     }
+    // The writer sometimes reasons aloud in the detail ("... wait, correction", "the scenario family must be
+    // adapted"): v1's audit found such tasks incoherent, so they are dropped (1.1% of v1's tasks).
+    if (
+      /\.\.\.\s*wait\b|\bwait,|\bhmm\b|doesn't fit|does not fit|scenario family|adapted for this|the parallel is/i.test(
+        String(raw.detail),
+      )
+    ) {
+      bump("task: writer reasoning in the detail");
+      continue;
+    }
     const f = fams.get(tp.family)!;
     // The fact's source and time are the plan's (the timing is built in), whatever the reply wrote.
     const factRaw = { ...raw.fact, source: tp.source };
@@ -832,6 +842,9 @@ function assemble() {
   for (const p of ps) {
     if (!readResult(DIR, `world/${p.id}`)) continue;
     if (!p.tasks.every((t) => readResult(DIR, `task/${p.id}/${t.task}`))) continue;
+    // `--require-revise`: a world is published only once every task has had its revision pass (D883).
+    if (args.includes("--require-revise") && !p.tasks.every((t) => readResult(DIR, `revise/${p.id}/${t.task}`)))
+      continue;
     planned++;
     const w = assembleWorld(p, fams, train, rej, notes);
     if (w) out[w.split]!.push(w);
