@@ -1,9 +1,8 @@
 /**
- * M13's turn gate (D1010-D1013, docs/research/m13-gate.md; lab only since the trial was deleted by its pre-registered
- * bar): a tiny learned model that reads one user turn and says whether it starts the push (an acting request or a
- * question about acting) and what kind of turn it is. Features are hashed character and word n-grams (no tokenizer,
- * no pretrained table), so it reads any language. The Python twin is feats.py beside it: the two must give the same
- * ids for the same text (parity.ts checks a model end to end, 64 rows). Weights come from export.py.
+ * M13's turn gate (D1010-D1019, docs/research/m13-gate.md): a tiny learned model that reads one user turn and says
+ * whether it starts the push (an acting request or a question about acting) and what kind of turn it is. Features
+ * are hashed character and word n-grams (no tokenizer, no pretrained table), so it reads any language. The Python
+ * twin is packages/sim/lab/m13/feats.py: the two must give the same ids for the same text (`turn-gate.test.ts`).
  */
 
 import { readFileSync } from "node:fs";
@@ -269,4 +268,12 @@ export function loadTurnGate(file: URL | string): TurnGate | null {
   } catch {
     return null;
   }
+}
+
+let loaded: TurnGate | null | undefined;
+
+/** The shipped gate (`turn-gate.bin` beside this file), read once a process (D1010). */
+export function turnGate(): TurnGate | null {
+  if (loaded === undefined) loaded = loadTurnGate(new URL("./turn-gate.bin", import.meta.url));
+  return loaded;
 }

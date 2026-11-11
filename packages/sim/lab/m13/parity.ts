@@ -5,7 +5,7 @@
  *   bun packages/sim/lab/m13/parity.ts GATE.bin PARITY.json
  */
 import { readFileSync } from "node:fs";
-import { TurnGate } from "./turn-gate.ts";
+import { TurnGate } from "@eden/engine";
 
 const [bin, par] = process.argv.slice(2);
 const gate = new TurnGate(new Uint8Array(readFileSync(bin!)));
