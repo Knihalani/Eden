@@ -64,3 +64,14 @@ character n-grams work the same in any script. They differ in what they read and
 Surface cues are balanced in the data rather than hoped away: M13's training set is contrastive (each set holds all
 kinds on one topic, at one length and one punctuation style, in one language), and rows are weighted so every
 (language, needs) cell carries the same weight.
+
+### 0.1 Addendum A (before any held-out read; after the parent's transfer lesson from M6, D920)
+
+Models fitted on generated text transferred badly to the sim's hand-written families in M6. So:
+
+- **Selection** (threshold, architecture, round tables) uses a dev set that holds the sim families train3–4 (with
+  train3r–4r and train3rw–4rw), none of them in training; round tables report generated rows and sim rows apart.
+- **SIM56**, a fourth held-out set: the requests of train5–6, train5r–6r and train5rw–6rw (every one acting), never
+  trained or selected on. Bar item 1 adds: the gate's start rate on SIM56 is at least the shipped rule's − 1 point
+  (the rule is near 100% there, so no +10 is possible), and on its reworded part (5r, 6r, 5rw, 6rw) alone likewise.
+- The Pi pair (bar item 5) runs locally with the Anthropic lab provider (no Modal needed), cap $8; it is required.

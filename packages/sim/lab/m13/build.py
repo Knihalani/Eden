@@ -29,7 +29,7 @@ def m2(path, split_all=None):
 
 def main():
     os.makedirs(f"{L}/sets", exist_ok=True)
-    out = {"train": [], "dev": [], "s3": [], "s4": [], "m2t": []}
+    out = {"train": [], "dev": [], "s3": [], "s4": [], "m2t": [], "sim56": []}
     for r in m2(f"{L}/data/train-300.jsonl.gz"):
         out[r["split"]].append(r)
     for r in m2(f"{L}/data/test.jsonl.gz", "m2t"):
@@ -42,10 +42,14 @@ def main():
             r["needs"] = r["kind"] in NEEDS
             r["split"] = "dev" if dev_of(r["group"]) else "train"
             out[r["split"]].append(r)
+    # The sim's hand-written families: train1-2 (and their rewordings) train, train3-4 select (dev), train5-6 are held
+    # out (SIM56, addendum A): models fit on generated text transfer badly to differently written text (M6, D920).
     for line in open(f"{L}/train/suites.jsonl"):
         r = json.loads(line)
-        out["train"].append({"text": r["text"], "needs": True, "kind": "act", "lang": "en", "src": "suite:" + r["src"],
-                             "group": "suite-" + r["src"], "split": "train"})
+        fam = int(r["src"][5])
+        split = "train" if fam <= 2 else "dev" if fam <= 4 else "sim56"
+        out[split].append({"text": r["text"], "needs": True, "kind": "act", "lang": "en", "src": "suite:" + r["src"],
+                           "group": "suite-" + r["src"], "split": split})
     for f in sorted(glob.glob("packages/eval/scenarios/acting/*.json")):
         for s in json.load(open(f))["sessions"]:
             for t in s["turns"]:
