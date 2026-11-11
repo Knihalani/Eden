@@ -8,6 +8,7 @@ choices they drove are in [docs/research/primitives.md](../../docs/research/prim
 | Module | What | Use it for |
 |---|---|---|
 | `hash.ts` | FNV-1a (in-place over a string range), murmur3 (bytes), `mix32`, `hashString` (native xxHash32) | Hash tables, sketches, dedup keys |
+| `placement.ts` | `jumpHash`, `childTable` (jump consistent hash over 65,536 buckets), `OwnerTable` (rendezvous hashing of buckets over named nodes), D992 | Placing users over processes and machines; not on a hot path (a table per membership) |
 | `charclass.ts` | Per-code-unit class and fold tables (lowercase, accents dropped), filled lazily | Anything that scans text |
 | `vocab.ts` | `Vocab`: term ↔ dense id, 64-bit fingerprint identity, range lookups without slicing, `release` (ids reused) | Indexes, sets, counters keyed by term |
 | `tokenize.ts` | `tokenizeInto`: fused scan + fold + hash + intern into a `Uint32Array` | Indexing, queries, usage tracking |

@@ -1,0 +1,76 @@
+// Grafana Alloy on each Eden machine (docs/DEPLOY.md §8): scrapes Eden's /metrics (D994) on loopback and the
+// machine's own memory, CPU and disk, and sends them to Grafana Cloud's free tier (or any Prometheus remote_write).
+// Logs: Docker's json-file logs of the eden containers, content-free by rule (D56, D293).
+//
+// Credentials come from the environment (GRAFANA_PROM_URL, GRAFANA_PROM_USER, GRAFANA_API_KEY, GRAFANA_LOKI_URL,
+// GRAFANA_LOKI_USER), set in Alloy's systemd unit drop-in (chmod 600), never here.
+
+prometheus.exporter.unix "host" {
+  set_collectors = ["cpu", "meminfo", "filesystem", "loadavg", "netdev", "pressure"]
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.relabel.instance.receiver]
+  scrape_interval = "30s"
+}
+
+prometheus.scrape "eden" {
+  // The single box, a node, or the cluster router: each serves /metrics on its loopback port (compose publishes
+  // 127.0.0.1:8790), summed over its processes; the cluster router's also sums every node's.
+  targets         = [{ __address__ = "127.0.0.1:8790", job = "eden" }]
+  metrics_path    = "/metrics"
+  forward_to      = [prometheus.relabel.instance.receiver]
+  scrape_interval = "30s"
+}
+
+prometheus.relabel "instance" {
+  forward_to = [prometheus.remote_write.cloud.receiver]
+  rule {
+    target_label = "instance"
+    replacement  = constants.hostname
+  }
+}
+
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_PROM_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_PROM_USER")
+      password = sys.env("GRAFANA_API_KEY")
+    }
+  }
+}
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "eden" {
+  targets = discovery.docker.containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/eden.*"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "eden" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.eden.output
+  forward_to = [loki.write.cloud.receiver]
+}
+
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_LOKI_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_LOKI_USER")
+      password = sys.env("GRAFANA_API_KEY")
+    }
+  }
+}

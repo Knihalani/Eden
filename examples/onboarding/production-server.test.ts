@@ -9,6 +9,8 @@ import { join, resolve } from "node:path";
 
 const main = resolve(import.meta.dir, "../../packages/server/src/main.ts");
 const KEY = "k_onboarding_0123456789abcdef";
+/** A test persistence key (D991): 32 bytes as hex; never a real one. */
+const PERSIST_KEY = "0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0";
 
 /** Collects a stream's text in the background (a pipe nobody reads could fill and stall the server). */
 const collect = (stream: ReadableStream<Uint8Array>) => {
@@ -66,6 +68,8 @@ describe("the production server (Dockerfile's command)", () => {
         PORT: "0",
         EDEN_HOME: join(home, "data"),
         EDEN_API_KEYS: `acme:${KEY}`,
+        // On by default (D991): the operator's key, from a secret store in production.
+        EDEN_PERSIST_KEY: PERSIST_KEY,
         EDEN_PROCESSES: "2",
         EDEN_USER_SOURCES_FILE: users,
       }),
@@ -91,6 +95,8 @@ describe("the production server (Dockerfile's command)", () => {
         if (health === null) await Bun.sleep(100);
       }
       expect(health).toEqual({ ok: true, processes: 2, up: 2 });
+      // Each child says it persists idle users (D991).
+      expect(out.text.match(/frozen users persisted, encrypted/g)?.length).toBe(2);
 
       const observe = (userId: string, key?: string) =>
         fetch(`${base}/v1/events?waitMs=3000`, {
@@ -126,7 +132,11 @@ describe("the production server (Dockerfile's command)", () => {
       const cases: [Record<string, string>, string][] = [
         [{}, "eden: set EDEN_API_KEYS (or EDEN_DEV=1 for local development)"],
         [{ EDEN_API_KEYS: "acme:short" }, "eden: EDEN_API_KEYS entries must be tenant:key, keys 16+ chars"],
-        [{ EDEN_API_KEYS: `acme:${KEY}`, EDEN_USER_SOURCES_FILE: join(home, "missing.json") }, "missing.json"],
+        [{ EDEN_API_KEYS: `acme:${KEY}` }, "eden: EDEN_PERSIST_KEY is not set: idle users are persisted"],
+        [
+          { EDEN_API_KEYS: `acme:${KEY}`, EDEN_PERSIST: "off", EDEN_USER_SOURCES_FILE: join(home, "missing.json") },
+          "missing.json",
+        ],
       ];
       for (const [env, says] of cases) {
         const { err, code } = await run({ ...base, ...env });
@@ -144,7 +154,13 @@ describe("the production server (Dockerfile's command)", () => {
     const home = mkdtempSync(join(tmpdir(), "eden-prod-"));
     const busy = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
     try {
-      const base = { NODE_ENV: "production", EDEN_HOME: home, EDEN_PROCESSES: "2", EDEN_API_KEYS: `acme:${KEY}` };
+      const base = {
+        NODE_ENV: "production",
+        EDEN_HOME: home,
+        EDEN_PROCESSES: "2",
+        EDEN_API_KEYS: `acme:${KEY}`,
+        EDEN_PERSIST_KEY: PERSIST_KEY,
+      };
       const port = await run({ ...base, PORT: String(busy.port) });
       expect(port.code).toBe(2);
       expect(port.err.trim()).toBe(
