@@ -257,6 +257,8 @@ export interface RouteReport {
   skipped: string[];
   /** Per source, whether `sourceYield` had already spent it (no live read before the router). */
   spentBefore: boolean[];
+  /** The router's own time for this lookup, ms (its inputs, the network and the gate). */
+  ms: number;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -802,6 +804,7 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
+            dormantMs: c.routerGate && c.verifyDelivery ? c.routerDormantMs : 0,
           },
         )
       : null;
@@ -4265,6 +4268,7 @@ export class ContextPartner {
     spent: Set<string> | null,
   ): Set<string> | null {
     try {
+      const started = performance.now();
       const w = this.deps.router === undefined ? defaultRouterWeights() : this.deps.router;
       if (!w || !this.sync || !this.yields) return spent;
       const now = this.now();
@@ -4285,17 +4289,18 @@ export class ContextPartner {
           : new Set<string>();
       const n = all.length;
       const x = new Float64Array(n * ROUTER_NF);
-      // Sources of one kind and description share their conjunction score (a tenant's many Jira projects).
-      const conjMemo = new Map<string, number>();
+      // Sources of one kind and description share their keys, so their conjunction score (a tenant's many Jira
+      // projects): `routerSourceKeys` hands them one array.
+      const conjMemo = new Map<Uint32Array, number>();
       let maxConj = -Infinity;
       let maxLocal = 0;
       for (let i = 0; i < n; i++) {
         const src = all[i]!;
-        const memo = `${src.id.replace(/[-_]?\d+$/, "")}\u0000${src.description}`;
-        let c = conjMemo.get(memo);
+        const keys = routerSourceKeys(src.id, src.description);
+        let c = conjMemo.get(keys);
         if (c === undefined) {
-          c = conjScore(w, feats, routerSourceKeys(src.id, src.description));
-          conjMemo.set(memo, c);
+          c = conjScore(w, feats, keys);
+          conjMemo.set(keys, c);
         }
         const local = localHits?.get(src.id) ?? 0;
         const st = this.sync.routeState(s.scope, src.id, now);
@@ -4325,6 +4330,13 @@ export class ContextPartner {
       const floor = this.config.routerFloor > 0 ? this.config.routerFloor : w.floor;
       const skipped: string[] = [];
       const spentBefore = all.map((a) => spent?.has(a.id) === true);
+      // `routerDormantMs` (D943): the sources found likely keep their weekly sweep.
+      if (this.config.routerDormantMs > 0)
+        this.sync.routed(
+          s.scope,
+          all.filter((_, i) => p[i]! >= floor).map((a) => a.id),
+          now,
+        );
       for (let i = 0; i < n; i++) {
         const id = all[i]!.id;
         if (p[i]! >= floor || spent?.has(id) || !this.sync.isWarm(s.scope, id)) continue;
@@ -4342,6 +4354,7 @@ export class ContextPartner {
         pNull,
         skipped,
         spentBefore,
+        ms: performance.now() - started,
       });
       return spent;
     } catch {
@@ -6814,14 +6827,20 @@ function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities
  * for the process: at most `ROUTER_KEYS_HELD`, the oldest dropped first.
  */
 const routerKeys = new Map<string, Uint32Array>();
+/** Key arrays by their content, so sources with equal keys share one array (and one conjunction score a lookup). */
+const routerKeysShared = new Map<string, Uint32Array>();
 const ROUTER_KEYS_HELD = 16_384;
 function routerSourceKeys(id: string, description: string): Uint32Array {
   const k = `${id}\u0000${description}`;
   let keys = routerKeys.get(k);
   if (!keys) {
-    keys = sourceKeys(id, description);
+    const made = sourceKeys(id, description);
+    const content = made.join(",");
+    keys = routerKeysShared.get(content) ?? made;
     if (routerKeys.size >= ROUTER_KEYS_HELD) routerKeys.delete(routerKeys.keys().next().value!);
+    if (routerKeysShared.size >= ROUTER_KEYS_HELD) routerKeysShared.delete(routerKeysShared.keys().next().value!);
     routerKeys.set(k, keys);
+    routerKeysShared.set(content, keys);
   }
   return keys;
 }

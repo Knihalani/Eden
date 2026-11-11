@@ -355,6 +355,12 @@ export interface EngineConfig {
   /** `routerGate`'s floor; 0 takes the floor fitted with the weights (for the offline recall target). */
   routerFloor: number;
   /**
+   * Trial (M8, D943, 0 = off): a source on the weekly sweep of unused sources (`syncUnusedSweepMs`) that the router
+   * has not found likely for any request within this long is swept this often instead. Needs `routerGate` and
+   * `verifyDelivery` (deliveries re-read what the longer sweep has not vouched for, as D356's do).
+   */
+  routerDormantMs: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -836,6 +842,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldEngage: true,
   routerGate: false,
   routerFloor: 0,
+  routerDormantMs: 0,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

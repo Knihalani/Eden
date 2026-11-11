@@ -100,13 +100,14 @@ const TRAILING_NUMBER = /[-_]?\d+$/;
 
 /**
  * A source's keys: its identity without a trailing number ("jira-3" and "jira-7" are one kind of connector), then up
- * to 12 distinct terms of its id and description (what reaches a connector no training saw).
+ * to 12 distinct terms of that kind and its description (what reaches a connector no training saw).
  */
 export function sourceKeys(id: string, description: string): Uint32Array {
   const kind = id.replace(TRAILING_NUMBER, "");
   const keys = [mix32(fnv1a(kind, 0, kind.length))];
   const seen = new Set<number>();
-  for (const t of routerTerms(`${id} ${description}`)) {
+  // The kind, not the id: a tenant's many connectors of one kind share their keys (and one score a lookup).
+  for (const t of routerTerms(`${kind} ${description}`)) {
     if (seen.has(t)) continue;
     seen.add(t);
     keys.push((mix32(t) ^ 0x5bd1e995) >>> 0);

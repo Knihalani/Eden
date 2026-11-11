@@ -130,6 +130,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   sourceYieldEngage: ["sync", "sourceYield", "sourceYieldEarn"],
   routerGate: ["sync", "sourceYield"],
   routerFloor: ["sync", "sourceYield", "routerGate"],
+  routerDormantMs: ["sync", "sourceYield", "routerGate", "verifyDelivery"],
   syncKeepCut: SYNC,
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,

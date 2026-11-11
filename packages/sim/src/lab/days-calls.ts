@@ -149,6 +149,8 @@ export interface RouteRow {
   /** All sources of the lookup and how many the router skipped. */
   n: number;
   skipped: number;
+  /** The router's time for the lookup, ms. */
+  ms: number;
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -315,6 +317,7 @@ export function routeRow(
     rows,
     n,
     skipped: r.skipped.length,
+    ms: r.ms,
   };
 }
 

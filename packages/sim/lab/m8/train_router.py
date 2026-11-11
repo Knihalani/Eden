@@ -143,6 +143,46 @@ def train_conj(a):
 # ---------------------------------------------------------------------------------------------------------------
 
 
+def train_conj_logs(W: np.ndarray, pattern: str, epochs: int, lr: float):
+    """Fine-tunes the conjunction table on route logs' hidden requests: listwise over the logged sources (sampled
+    ones by their weight), the planted source the target. Starts from the M2-trained table."""
+    G = np.full(len(W), 1e-2, dtype=np.float32)
+    mask = len(W) - 1
+    reqs = []
+    for keys, d in read_logs(pattern):
+        if d["kind"] != "hidden":
+            continue
+        ids = [r["id"] for r in d["rows"]]
+        if d["planted"] not in ids:
+            continue
+        f = np.asarray(d["features"], dtype=np.uint64)
+        ks = [keys.get(i, np.zeros(0, np.uint64)) for i in ids]
+        lw = np.log(np.asarray([r["w"] for r in d["rows"]], dtype=np.float64))
+        reqs.append((f, ks, lw, ids.index(d["planted"])))
+    rng = np.random.default_rng(3)
+    for ep in range(epochs):
+        loss = 0.0
+        for i in rng.permutation(len(reqs)):
+            f, ks, lw, y = reqs[i]
+            idx = [buckets_of(f, k, mask).ravel() if len(k) else np.zeros(0, np.int64) for k in ks]
+            norm = [math.sqrt(len(f) * len(k)) if len(k) else 1.0 for k in ks]
+            s = np.asarray([W[j].sum() / z for j, z in zip(idx, norm)]) + lw
+            p = to_probs(s)
+            loss -= math.log(max(1e-12, p[y]))
+            g = p.copy()
+            g[y] -= 1
+            for si, (j, z) in enumerate(zip(idx, norm)):
+                if abs(g[si]) < 1e-4 or len(j) == 0:
+                    continue
+                gr = np.float32(g[si] / z)
+                np.add.at(G, j, gr * gr)
+                np.add.at(W, j, -lr * gr / np.sqrt(G[j]))
+        print(f"conjlogs epoch {ep}: loss {loss / max(1, len(reqs)):.4f} over {len(reqs)}", file=sys.stderr, flush=True)
+
+
+DROP: list[int] = []  # input columns left out (`--drop`): zeroed in training, their first-layer rows zero at save
+
+
 def examples(pattern: str, W: np.ndarray):
     """Per request: X (rows × NF, conj recomputed), log-weights, summary, label row (or -1 for nothing), meta."""
     out = []
@@ -153,12 +193,13 @@ def examples(pattern: str, W: np.ndarray):
         f = np.asarray(d["features"], dtype=np.uint64)
         X = np.asarray([r["x"] for r in rows], dtype=np.float64)
         X[:, 0] = conj_scores(W, f, [keys.get(r["id"], np.zeros(0, np.uint64)) for r in rows])
+        X[:, DROP] = 0.0
         lw = np.log(np.asarray([r["w"] for r in rows], dtype=np.float64))
         spent = np.asarray([bool(r.get("spent")) for r in rows])
         ids = [r["id"] for r in rows]
         y = ids.index(d["planted"]) if d["kind"] == "hidden" and d["planted"] in ids else -1
         summ = np.asarray(
-            [X[:, 0].max(), X[:, 1].max(), float(X[:, 3].max() > 0), float(X[:, 4].max() > 0), math.log1p(len(f) / 2)]
+            [X[:, 0].max(), X[:, 1].max(), float(X[:, 3].max() > 0), float(X[:, 4].max() > 0), math.log1p((len(f) + 1) / 2)]
         )
         out.append(
             {
@@ -314,6 +355,9 @@ def fit_floor(net: Net, val, target: float) -> float:
 
 
 def save(net: Net, W: np.ndarray, path: str):
+    for c in DROP:
+        net.W1[c, :] = 0.0
+        net.mu[c], net.sd[c] = 0.0, 1.0
     np.savez(
         path,
         conj=W,
@@ -358,7 +402,16 @@ def main():
     ap.add_argument("--hidden", type=int, default=16)
     ap.add_argument("--recall", type=float, default=0.98)
     ap.add_argument("--int8", action="store_true", help="score with the int8 table, as the engine does")
+    ap.add_argument("--drop", default="", help="input names to leave out, e.g. size,rate,hours")
     a = ap.parse_args()
+    names = ["conj", "local", "sketch", "named", "rare", "used", "run", "whole", "hours", "size", "rate"]
+    DROP[:] = [names.index(x) for x in a.drop.split(",") if x]
+    if a.cmd == "conjlogs":
+        model, logs = a.args
+        _, W = load(model)
+        train_conj_logs(W, logs, a.epochs, a.lr)
+        np.savez(model, conj=W)
+        return
     if a.cmd == "conj":
         a.m2, a.logs, a.out = a.args
         train_conj(a)

@@ -110,6 +110,11 @@ export interface SyncOptions {
    */
   unusedSweepMs?: number;
   /**
+   * `routerDormantMs` (M8, D943, trial; 0 or absent: off): a source on the longer sweep (`unusedSweepMs`) that the
+   * connector router has not found likely for any request (`routed`) within this long is swept this often instead.
+   */
+  dormantMs?: number;
+  /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
    */
@@ -283,6 +288,8 @@ interface SourceSync {
    * complete sweep, because the source was on the longer one. Its copies older than `sweepMs` are then in doubt.
    */
   skipped: boolean;
+  /** `dormantMs`: when the router last found the source likely for a request (-Infinity: never). */
+  routedAt: number;
 }
 
 interface UserSync {
@@ -926,7 +933,7 @@ export class SyncManager {
   /**
    * `routerGate` (M8, D940): what the connector router reads of a user's synced copy of a source, content-free: warm,
    * whole (`complete`), hours since its last complete poll, its learned change rate (items an hour) and how many ids it
-   * holds. Undefined for a source not synced. O(1) but for `complete`'s rare re-check, no I/O.
+   * holds. Undefined for a source not synced. O(1), no I/O.
    */
   routeState(
     scope: Scope,
@@ -938,11 +945,23 @@ export class SyncManager {
     const warm = s.phase === "warm";
     return {
       warm,
-      whole: warm && this.complete(scope, sourceId, now),
+      // The cut flag alone (no re-check against the cache, which reads every id of the copy): a feature, not a
+      // promise; `complete` decides what answers from the index.
+      whole: warm && !s.cut,
       hours: Number.isFinite(s.polledAt) ? Math.max(0, now - s.polledAt) / HOUR : 1e4,
       rate: s.alpha / s.beta,
       size: s.ids.size,
     };
+  }
+
+  /** `dormantMs` (D943): the router found these sources likely for a request now. O(ids), no I/O. */
+  routed(scope: Scope, sourceIds: Iterable<string>, now = this.deps.now()): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    for (const id of sourceIds) {
+      const s = u.sources.get(id);
+      if (s) s.routedAt = now;
+    }
   }
 
   /** Users synced now. */
@@ -1158,7 +1177,12 @@ export class SyncManager {
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
     // A sweep reads the cache: a frozen user is thawed first (`ready`, D325).
-    const long = (s: SourceSync) => (this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : 0);
+    // `dormantMs` (D943): a source on the longer sweep that the router has not found likely for that long waits longer.
+    const dormant = (s: SourceSync) => (this.o.dormantMs ?? 0) > 0 && now - s.routedAt >= this.o.dormantMs!;
+    const long = (s: SourceSync) =>
+      this.onLongSweep(s)
+        ? Math.max(dormant(s) ? this.o.dormantMs! : this.o.unusedSweepMs!, this.o.unusedSweepMs!, this.o.sweepMs)
+        : 0;
     const longDue = (s: SourceSync) => now - s.sweptAt >= (long(s) || this.o.sweepMs);
     const due = (s: SourceSync) =>
       s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || longDue(s));
@@ -1977,6 +2001,7 @@ function newSourceSync(id: string): SourceSync {
     sketch: null,
     fetches: false,
     skipped: false,
+    routedAt: -Infinity,
   };
 }
 
