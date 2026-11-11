@@ -150,8 +150,8 @@ export const UNRUN_BLIND = [
   "heldout18",
 ];
 /** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
- * read by A29 (D399); held-out 18 (M6, D465) is unread: move it out once its blind read has run. */
-export const UNREAD_BLIND: string[] = ["heldout18"];
+ * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802): none is unread now; a blind round needs a new suite. */
+export const UNREAD_BLIND: string[] = [];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**
