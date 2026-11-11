@@ -115,6 +115,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D960 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | micro 205 / 167 / 250 (hidden −1.4%): fails |
 | D963 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). |  |
 | D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
+| D998 | part of: card state frozen with its user rejected | Merged with main (b99f0171), RSS a user after a thaw 8.61 / 8.60 → 7.31 / 7.46 MB (−13% to −15%; −20% to… |
 | D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
 
 ## Check

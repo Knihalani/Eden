@@ -282,5 +282,5 @@ Back to back on a 4-core VM (two cores busy with other benches), main → D998, 
 The `contentTerms` row was run on the tree before the one-pass commit (5ace457e), which does not touch `term`.
 
 A cold term and a sketch cost about a tenth to a quarter more; both run once per new term or per item hit, not per
-event. The end-to-end anchor (`packages/engine/bench/pipeline.bench.ts`, three alternating runs each) did not move:
-observe p99 4,850 / 4,699 / 3,799 µs on main against 4,334 / 3,711 / 3,817 µs.
+event. The end-to-end anchor (`packages/engine/bench/pipeline.bench.ts`, six alternating pairs on main b99f0171 and
+the merged branch): observe p99 medians 4,144 and 4,381 µs (+5.7%), p50 118-134 against 115-125 µs.
