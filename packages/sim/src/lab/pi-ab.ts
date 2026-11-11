@@ -104,7 +104,6 @@ import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import {
   CardEnricher,
   ContextPartner,
-  CARD_FORM_REQUESTS,
   DEFAULT_CONFIG,
   ItemCache,
   ModelCardMaker,
@@ -115,6 +114,9 @@ import {
   sanitizeItem,
   type CardMaker,
 } from "@eden/engine";
+import * as engineExports from "@eden/engine";
+// B19 (D1047): read so an older engine without it loads (packages/sim/lab/b19/compat.py).
+const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";

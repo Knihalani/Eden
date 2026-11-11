@@ -62,7 +62,6 @@ import { z } from "zod";
 import {
   CardEnricher,
   ContextPartner,
-  CARD_FORM_REQUESTS,
   DEFAULT_CONFIG,
   ItemCache,
   ModelCardMaker,
@@ -71,6 +70,9 @@ import {
   PushChecker,
   type CardMaker,
 } from "@eden/engine";
+import * as engineExports from "@eden/engine";
+// B19 (D1047): read so an older engine without it loads (packages/sim/lab/b19/compat.py).
+const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
 import { SourceMap } from "@eden/graph";
 import { Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
