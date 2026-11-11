@@ -68,6 +68,12 @@ class SynthDataTest(unittest.TestCase):
             if g.get("neutral"):
                 self.assertNotIn("planted", [i["truth"] for i in g["items"]])
         self.assertEqual(gs, sd.pair_groups(self.worlds, other=4, seed=1))
+        # Visibility agrees with pairs() (a silent change's earlier revision is gone once the edit lands).
+        vis = {(p["world"], p["request"], p["item"]): p["visible"] for w in self.worlds for p in sd.pairs(w, False)}
+        for g in gs:
+            req = g["group"].split("/")[3]
+            for i in g["items"]:
+                self.assertEqual(i["visible"], vis[(g["world"], req, i["key"])], g["group"])
 
 
 if __name__ == "__main__":

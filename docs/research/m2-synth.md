@@ -14,14 +14,16 @@ Every number below comes from a command run in this session; **[EST]** marks jud
   school app, household app). Each user also has six to eight tasks in the train suites' format: requests in many
   phrasings, a planted fact, its look-alike twin, and neutral items. Labels come from how each item was made, never
   from a model's judgement.
-- **What came out.** See [DATASHEET.md](../../packages/sim/lab/synth/DATASHEET.md) for the final counts. `v1` holds
-  1,810 worlds, 13,615 tasks over 3,505 scenario families, 106,273 requests and 5.58 million labelled
-  (request, item) pairs. It is published on the Modal Volume `eden-synth`, with M1's pair groups beside it.
+- **What came out.** `v2` holds 2,695 worlds (train/val/test 2,128/274/293), 20,083 tasks over 3,513 scenario
+  families, 156,633 requests and 8.19 million labelled (request, item) pairs: 156,633 `changes`, 452,684 `clear`
+  and 7.58 million `unrelated`. It is published on the Modal Volume `eden-synth`, with 196,171 pair groups for M1
+  beside it. [DATASHEET.md](../../packages/sim/lab/synth/DATASHEET.md) has every count. It was published in stages
+  for M1 and M3: `v0` (270 worlds), then `v1` (1,810), then `v2`.
 - **How good.** A blind Sonnet audit and my own hand reading put about one task in seven with at least one wrong
   label. The fact itself is wrong in about 2% of tasks. The rest is almost all a look-alike or "neutral" item that
   still bears on the request. A revision pass by the writer roughly halved the confirmed errors.
-- **Cost.** About $0.012 a world on direct calls (the Batch API was planned to halve that, but its queue did not
-  start within the session's patience).
+- **Cost.** $35.10 of the $60 Anthropic cap, or $0.0109 a valid world for generation. The Batch API was meant to
+  halve that, but its queue did not start within the session, so most calls were direct.
 - **The splits.** Train, validation and test are split by family cluster, so test templates are ones no train world
   saw: the generalisation D491 failed at.
 
@@ -122,7 +124,7 @@ truth.
 The Haiku critic is too noisy to grade decoys: in my hand reading, two of three of its decoy disputes were its own
 error. Sonnet agrees far more.
 
-**Hand audit.** I read every Sonnet dispute, and random tasks Sonnet passed:
+**Hand audit.** I read every Sonnet dispute, and random tasks Sonnet passed. The reviewer's fixes (pair-group visibility for silent changes, `--days` worlds keeping synth background items) apply to v2 and later:
 
 | Run | Disputes that were real errors | Hidden errors among tasks Sonnet passed |
 | --- | --- | --- |
@@ -188,8 +190,9 @@ Ledger by role, Anthropic only:
 | Haiku critic | $0.39 |
 | Sonnet audit | $1.78 |
 
-That is $28.40 at the v1 audit. Generation on direct calls costs $0.0123 a valid world (v1's assembly, revision
-included), or 1.2 cents. Modal: three short CPU validation runs and volume storage, a few cents **[EST]**.
+That was $28.40 at the v1 audit. The final ledger is **$35.10**: families $0.50, worlds $7.20, tasks $18.57,
+revision $6.66, critics $2.17, over 52,319 calls. Generation costs $0.0109 a valid world (v2's assembly, revision
+included). Modal: three short CPU validation runs and volume storage, a few cents **[EST]**.
 
 ## 7. What it does not do
 

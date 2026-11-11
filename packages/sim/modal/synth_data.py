@@ -189,6 +189,7 @@ def pair_groups(worlds, other=6, neutral_share=0.25, seed=1):
     for w in worlds:
         items = {i["id"]: i for i in w["items"]}
         owned = {x for t in w["tasks"] for x in [t["fact"], t["decoy"], *t["neutrals"]]}
+        gone = _replaced_at(w)
         for t in w["tasks"]:
             pool = [i for i in w["items"] if i["id"] not in {t["fact"], t["decoy"], *t["neutrals"]}]
             for r in t["requests"]:
@@ -202,7 +203,7 @@ def pair_groups(worlds, other=6, neutral_share=0.25, seed=1):
                         "source": i["source"],
                         "truth": truth,
                         "role": role,
-                        "visible": i["at"] <= r["at"],
+                        "visible": i["at"] <= r["at"] and (gone.get(i["id"]) is None or gone[i["id"]] > r["at"]),
                     }
 
                 base = [row(items[t["decoy"]], "decoy", "decoy")]

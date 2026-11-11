@@ -216,8 +216,16 @@ export async function runBatch(dir: string, jobs: Job[], ledger: SpendLedger, ch
     (id) => !read(id).booked,
   );
   const inFlight = new Set(pending.flatMap((id) => read(id).keys.map((k) => k[1])));
-  const todo = jobs.filter((j) => !has(dir, j.key) && !inFlight.has(j.key));
   const release = new Map<string, () => void>();
+  // A batch an earlier run sent and did not book is still owed: its worst case is reserved again before anything new
+  // is sent, so the cap check sees it, and released once it is booked.
+  for (const id of pending) {
+    const st = read(id);
+    const meter = ledger.meter(st.role);
+    meter.reserve(st.worst);
+    release.set(id, () => meter.release(st.worst));
+  }
+  const todo = jobs.filter((j) => !has(dir, j.key) && !inFlight.has(j.key));
   for (let s = 0; s < todo.length; s += chunk) {
     const part = todo.slice(s, s + chunk);
     const worst = part.reduce(
@@ -273,7 +281,9 @@ async function collect(
 ): Promise<number> {
   const keys = new Map(st.keys);
   for (;;) {
-    const s = (await (await fetch(`${base}/${st.id}`, { headers })).json()) as {
+    const res = await fetch(`${base}/${st.id}`, { headers });
+    if (!res.ok) throw new Error(`batch ${st.id} status ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const s = (await res.json()) as {
       processing_status: string;
       request_counts: Record<string, number>;
       results_url?: string;

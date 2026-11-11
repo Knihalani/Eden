@@ -170,7 +170,9 @@ const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
 function registerSynth(name: string): boolean {
   if (name in SUITES) return true;
   // `@K`: K synth worlds a seed (a `--days` user needs 12-20 requests a day; one world has 6-8).
-  const [base, k] = name.split("@") as [string, string | undefined];
+  const at = name.lastIndexOf("@");
+  const [base, k] =
+    at > 0 && /^\d+$/.test(name.slice(at + 1)) ? [name.slice(0, at), name.slice(at + 1)] : [name, undefined];
   const perSeed = k === undefined ? 1 : Number(k);
   if (!Number.isInteger(perSeed) || perSeed < 1) return false;
   const split = SYNTH_SPLITS.includes(base) ? base.slice("synth-".length) : undefined;
@@ -211,5 +213,7 @@ export function parseSuites(arg: string): string[] {
     }
   }
   if (!out.length) throw new Error("no suite given");
+  if (out.length > 1 && out.some((n) => /^synth-test(@\d+)?$/.test(n)))
+    throw new Error("synth-test is the generated test split (D884): name it on its own");
   return out;
 }

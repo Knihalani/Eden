@@ -16,10 +16,10 @@ python3 -m venv .venv-modal && .venv-modal/bin/pip install -r packages/sim/modal
 export SSL_CERT_FILE=/root/.ccr/ca-bundle.crt        # cloud containers only
 mkdir -p .local/m2/synth/worlds
 for s in train val test; do
-  .venv-modal/bin/modal volume get eden-synth v1/worlds/$s.jsonl .local/m2/synth/worlds/$s.jsonl
+  .venv-modal/bin/modal volume get eden-synth v2/worlds/$s.jsonl .local/m2/synth/worlds/$s.jsonl
 done
-.venv-modal/bin/modal volume get eden-synth v1/families.jsonl .local/m2/synth/families.jsonl
-.venv-modal/bin/modal volume get eden-synth v1/manifest.json .local/m2/synth/manifest.json
+.venv-modal/bin/modal volume get eden-synth v2/families.jsonl .local/m2/synth/families.jsonl
+.venv-modal/bin/modal volume get eden-synth v2/manifest.json .local/m2/synth/manifest.json
 ```
 
 ## Load it

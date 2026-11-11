@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../../world";
 import { parseSuites, SUITES } from "../suites";
 import { supportsNeutral } from "../neutral";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "../pi-user";
 import { mergeObjects, parseJson, repairEarlyClose } from "./jobs";
 import { pairsOf } from "./labels";
 import { jaccard, leaks, splitOfCluster, wordSet } from "./qc";
@@ -135,5 +136,29 @@ describe("the synth suite family (D884)", () => {
     const tasks = SUITES["synth-sample@3"]!(buildWorld({ seed: 42_000 }), 42, "hidden");
     expect(new Set(tasks.map((t) => t.template.split("-t")[0])).size).toBe(3);
     expect(() => parseSuites("synth-nope")).toThrow(/unknown suite/);
+  });
+
+  test("a `--days` user's world keeps the synth background and neutral items, not only the planted ones", () => {
+    const suites = parseSuites("synth-sample@4");
+    const plan = planUser(41, suiteTemplates(41, suites), {
+      days: 1,
+      size: parseDaySize("12-20"),
+      mix: parseMix("1:1:8"),
+    });
+    const { world } = userWorldOf(41, plan);
+    const titles = new Set(world.items.map((i) => i.text));
+    const neutrals = sample().flatMap((w) =>
+      w.tasks.flatMap((t) => t.neutrals.map((n) => w.items.find((i) => i.id === n)!)),
+    );
+    // Every world of the sample is planted at @4, so its neutral items are in the user's world (renamed, so by text
+    // after the persona's own name is replaced: compare items that do not name the persona).
+    const plain = neutrals.filter((n) => !sample().some((w) => n.text.includes(w.persona.first)));
+    expect(plain.length).toBeGreaterThan(5);
+    expect(plain.filter((n) => titles.has(n.text)).length).toBe(plain.length);
+  });
+
+  test("synth-test is held out: never in a list with other suites", () => {
+    expect(() => parseSuites("synth-test,synth-train")).toThrow(/synth-test/);
+    expect(parseSuites(`synth:/tmp/a@b.jsonl`)).toEqual([`synth:/tmp/a@b.jsonl`]);
   });
 });

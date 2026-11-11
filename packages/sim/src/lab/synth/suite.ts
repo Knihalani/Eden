@@ -81,7 +81,8 @@ export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) 
     const ws = Array.from({ length: Math.min(perSeed, n) }, (_, j) => all[(((seed * perSeed + j) % n) + n) % n]!);
     const renames = ws.map((w) => renamer(w, world.user));
     // Background and neutral items take the place of base noise items, spread evenly over them.
-    const noise = world.items.map((it, i) => (it.noise ? i : -1)).filter((i) => i >= 0);
+    // Items carrying a planted secret stay: the harnesses' secret checks are built from the base world.
+    const noise = world.items.map((it, i) => (it.noise && !it.secret ? i : -1)).filter((i) => i >= 0);
     const extra = ws.flatMap((w, k) => {
       const planted = new Set(w.tasks.flatMap((t) => [t.fact, t.decoy]));
       return w.items.filter((i) => !planted.has(i.id)).map((it) => ({ it, rename: renames[k]! }));
@@ -100,6 +101,7 @@ export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) 
       const items = new Map(w.items.map((i) => [i.id, i]));
       return w.tasks.map((t, ti) => {
         const english = t.requests.filter((r) => r.lang === "en" && r.style !== "follow-up");
+        if (!english.length) throw new Error(`synth: ${w.id} ${t.id} has no English request but follow-ups`);
         const req = english[(seed + ti) % english.length]!;
         if (variant !== "neutral") {
           const p = items.get(variant === "hidden" ? t.fact : t.decoy)!;
