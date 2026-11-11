@@ -79,7 +79,9 @@ runs the same shipped wiring with the reader on `claude-haiku-5-5` (`HAIKU_API_K
 - **Untrusted content.** Source text and event text are data, never instructions, in every prompt.
 - **Fail open at the edge.** The client SDK never throws into the agent's loop; the server never returns 500 for
   caller input (4xx with a message, 503 for internal failure).
-- **Secrets.** Never commit `.env` or real user data. Never print `OPENROUTER_API_KEY`. Tests run with a temp
+- **Secrets.** Never commit `.env` or real user data. Never print `OPENROUTER_API_KEY`. Lab scripts (packages/sim/)
+  refuse to start while it is set unless `EDEN_ALLOW_OPENROUTER=1` (D818, `scripts/lab-guard.ts`): paid lab calls go
+  to the Anthropic API. Tests run with a temp
   `HOME`/`EDEN_HOME` and with `EDEN_*`/`OPENROUTER_*` cleared (`scripts/test-preload.ts`).
 - **Readable code.** 120-column limit (only literals may exceed it). Comments explain why, at the density of the
   surrounding code. Do not join lines to shrink line counts.

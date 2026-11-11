@@ -111,6 +111,9 @@ narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds
 - **A stronger agent (N4, D520):** `--model claude-sonnet-5-5` or `claude-opus-5-5` changes only the Pi agent
   (`../../lab/n4/run.sh`). Opus 5.5 cannot run with thinking off: it runs `adaptive` at effort `low`
   (`anthropicThinkingOff`); say so beside its numbers. Budget about $0.009 (Sonnet) and $0.015 (Opus) a task run.
+- **No OpenRouter from the lab (D818).** Every script under packages/sim/ refuses to start while `OPENROUTER_API_KEY`
+  is set (bunfig.toml's preload, `scripts/lab-guard.ts`), unless `EDEN_ALLOW_OPENROUTER=1` for a run the owner
+  approved: run the lab with `env -u OPENROUTER_API_KEY` or after `unset OPENROUTER_API_KEY`.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
 - **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new
