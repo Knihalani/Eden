@@ -103,10 +103,9 @@ export interface SyncOptions {
   unusedSweepMs?: number;
   /**
    * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
-   * user and the source) and is swept at the first tick past it, so a user's unused sources are not all listed in
-   * the tick a week after the backfill. Never later than `unusedSweepMs` after its last sweep; an early sweep
-   * follows each time its last sweep was off its point (the first, a return after a week idle, `sweepSoon`, a source
-   * no longer used).
+   * user and the source) and is swept there, so a user's unused sources are not all listed in the tick a week
+   * after the backfill. A source swept off its point (the backfill, a return) waits 4/7 to 11/7 of a period for
+   * its next sweep, once (`sweepTurn`); its unswept copies are doubted as ever (`sweepLapsed`).
    */
   sweepSpread?: boolean;
   /**
@@ -157,6 +156,8 @@ interface PollResume {
 
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
+/** `sweepSpread`: how much of a period before a sweep is due its source's point is taken (`sweepTurn`). */
+const SPREAD_EARLY = 3 / 7;
 const HOUR = 3_600_000;
 /** Pushed item ids held per source between polls (`SourceSync.pushed`); past it the oldest are let go. */
 const MAX_PUSHED = 1_000;
@@ -863,12 +864,16 @@ export class SyncManager {
    * without a fetch keeps the daily sweep: its copies could not be re-read before delivery.
    */
   /**
-   * `sweepSpread`: the source's own point in the long period has passed since its last sweep. The point is a hash
-   * of the tenant, the user and the source, so it needs no saved state and two users' sweeps do not line up.
+   * `sweepSpread`: the source's own point in the long period has come, counted from `SPREAD_EARLY` of a period
+   * before its sweep would be due. The point is a hash of the tenant, the user and the source, so it needs no saved
+   * state and two users' sweeps do not line up. A source swept at its point is swept a period later (the margin
+   * takes a sweep that ran up to three days late, a weekend the user was away); one swept off its point (the
+   * backfill, `sweepSoon`, a return) waits between 4/7 and 11/7 of a period, once, so the spread costs no sweep.
    */
   private sweepTurn(u: UserSync, s: SourceSync, now: number, every: number): boolean {
     const at = hashString(`${u.scope.tenantId}\0${u.scope.userId}\0${s.id}`, 0x5eed) % every;
-    return Math.floor((now + at) / every) > Math.floor((s.sweptAt + at) / every);
+    const from = s.sweptAt + every - SPREAD_EARLY * every;
+    return Math.floor((now + at) / every) > Math.floor((from + at) / every);
   }
 
   private onLongSweep(s: SourceSync): boolean {
@@ -962,12 +967,15 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
-    // A sweep reads the cache: a frozen user is thawed first (`ready`, D325), for a spread sweep's turn too (it can
-    // come inside a day of the last sweep; the review).
+    // A sweep reads the cache: a frozen user is thawed first (`ready`, D325), for a spread sweep's turn too (with a
+    // long period near `sweepMs` it can come inside a day of the last sweep; the review).
     const long = (s: SourceSync) => (this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : 0);
-    const turn = (s: SourceSync) => this.o.sweepSpread === true && long(s) > 0 && this.sweepTurn(u, s, now, long(s));
+    const spread = (s: SourceSync) => this.o.sweepSpread === true && long(s) > 0;
+    // `sweepSpread`: a long-sweep source is due at its own point, not a period after its last sweep.
+    const longDue = (s: SourceSync) =>
+      spread(s) ? this.sweepTurn(u, s, now, long(s)) : now - s.sweptAt >= (long(s) || this.o.sweepMs);
     const due = (s: SourceSync) =>
-      s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || turn(s));
+      s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || longDue(s));
     thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
     if (thawing) await thawing;
     if (u.gone) return;
@@ -975,8 +983,7 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        const every = long(s) || this.o.sweepMs;
-        if (s.sweep !== null || now - s.sweptAt >= every || turn(s)) await this.run(s, () => this.sweep(u, s, source));
+        if (s.sweep !== null || longDue(s)) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),
     );

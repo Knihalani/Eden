@@ -309,12 +309,11 @@ describe("syncUnusedSweepMs (D356)", () => {
     }
   });
 
-  test("syncSweepSpread (D604): unused sources are swept at their own points in the week, none later", async () => {
+  test("syncSweepSpread (D604): unused sources are swept at their own points in the week, at no extra sweep", async () => {
     const days = async (spread: boolean) => {
-      const make = (prefix: string) =>
-        Array.from({ length: 40 }, (_, k) => new FetchSource(`${prefix}s${k}`, [item(`${prefix}s${k}`, 0, "x")], true));
-      const mine = make("");
-      const theirs = make("");
+      const make = () => Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
+      const mine = make();
+      const theirs = make();
       const t = setup(
         new Map([
           ["alice", mine],
@@ -322,58 +321,46 @@ describe("syncUnusedSweepMs (D356)", () => {
         ]),
         { ...ON, syncSweepSpread: spread },
       );
+      let ready = 0;
+      const real = t.cache.ready.bind(t.cache);
+      t.cache.ready = (scope) => {
+        ready++;
+        return real(scope);
+      };
       await warm(t.partner, alice);
       await warm(t.partner, bob);
-      // The day (after the backfill) of each source's sweeps over three weeks.
+      // The day (after the backfill) of each source's sweeps over four weeks.
       const seen = [...mine, ...theirs].map(() => [] as number[]);
       const counts = [...mine, ...theirs].map((x) => x.lists);
-      for (let day = 0; day < 21; day++) {
+      for (let day = 0; day < 28; day++) {
+        const before = ready;
         await live(t, [alice, bob], 1);
+        let swept = false;
         [...mine, ...theirs].forEach((x, k) => {
-          for (; counts[k]! < x.lists; counts[k]!++) seen[k]!.push(day);
+          for (; counts[k]! < x.lists; counts[k]!++, swept = true) seen[k]!.push(day);
         });
+        // A sweep reads the cache: the user's frozen cache is waited for first (D325).
+        if (swept) expect(ready).toBeGreaterThan(before);
       }
       return { alice: seen.slice(0, 40), bob: seen.slice(40) };
     };
     const off = await days(false);
     // Off: every source a week after the backfill, in the same tick.
-    for (const d of off.alice) expect(d).toEqual([6, 13, 20]);
+    for (const d of off.alice) expect(d).toEqual([6, 13, 20, 27]);
     const on = await days(true);
-    const perDay = Array.from({ length: 21 }, (_, day) => on.alice.filter((d) => d.includes(day)).length);
+    const perDay = Array.from({ length: 28 }, (_, day) => on.alice.filter((d) => d.includes(day)).length);
     expect(Math.max(...perDay)).toBeLessThan(20);
     for (const d of [...on.alice, ...on.bob]) {
-      // The first within a week of the backfill, then weekly: three or four sweeps in three weeks, never a longer gap.
-      expect(d[0]!).toBeLessThanOrEqual(6);
-      expect(d.length === 3 || d.length === 4).toBe(true);
+      // The first 4 to 11 days after the backfill, then weekly: never more sweeps than off, never a longer gap.
+      expect(d[0]!).toBeGreaterThanOrEqual(3);
+      expect(d[0]!).toBeLessThanOrEqual(11);
+      expect(d.length).toBeLessThanOrEqual(4);
+      expect(d.length).toBeGreaterThanOrEqual(3);
       for (let k = 1; k < d.length; k++) expect(d[k]! - d[k - 1]!).toBe(7);
     }
+    // No more listings than off over the four weeks.
+    expect(on.alice.flat().length).toBeLessThanOrEqual(off.alice.flat().length);
     // Another user's sources of the same ids have points of their own.
     expect(on.alice.filter((d, k) => d[0] === on.bob[k]![0]).length).toBeLessThan(20);
-  });
-
-  test("syncSweepSpread: a sweep inside a day of the last one waits for the user's cache first (D325)", async () => {
-    const all = Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
-    const t = setup(new Map([["alice", all]]), { ...ON, syncSweepSpread: true });
-    let ready = 0;
-    const real = t.cache.ready.bind(t.cache);
-    t.cache.ready = (scope) => {
-      ready++;
-      return real(scope);
-    };
-    await warm(t.partner, alice);
-    let swept = 0;
-    // The first 23 hours: no daily sweep is due, so every listing is a source's turn.
-    for (let k = 0; k < 23 * 6; k++) {
-      const lists = all.reduce((n, x) => n + x.lists, 0);
-      const before = ready;
-      t.advance(10 * MIN);
-      t.partner.sync!.track(alice, t.now());
-      await t.partner.sync!.tick();
-      if (all.reduce((n, x) => n + x.lists, 0) > lists) {
-        swept++;
-        expect(ready).toBeGreaterThan(before);
-      }
-    }
-    expect(swept).toBeGreaterThan(0);
   });
 });
