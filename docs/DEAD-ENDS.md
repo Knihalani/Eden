@@ -67,6 +67,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1031 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | Failed its rule (pre-registered in b3cc3f12, extended once in 9ba0cc2d before the call): hidden raised… |
 | D1050 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | stopped on its pre-registered screen |
 | D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
+| D1000 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | deleted with its code |
 
 ## Reader
 
@@ -212,4 +213,6 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
 | D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
 | D996 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | stopped on its pre-registered rule, 327c9fb2 |
+| D1001 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | deleted with its code |
+| D1002 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… |  |
 | D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |

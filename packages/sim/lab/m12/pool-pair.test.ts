@@ -55,7 +55,12 @@ describe("pool-pair (M12, D1002)", () => {
     const a = net.code(["strike", "thursday"], "request");
     expect(Array.from(net.code(["strike", "thursday"], "request"))).toEqual(Array.from(a));
     expect(net.scan(a, a)).toBeCloseTo(32 * 0.125, 6);
-    expect(net.scan(a, Int32Array.from(a, (x) => ~x))).toBeCloseTo(-32 * 0.125, 6);
+    expect(
+      net.scan(
+        a,
+        Int32Array.from(a, (x) => ~x),
+      ),
+    ).toBeCloseTo(-32 * 0.125, 6);
     expect(Number.isFinite(net.score(a, net.itemCode(["strike"], ["no", "services"])))).toBe(true);
     const capped = loadPoolPair(tiny(64, (k) => k * 2654435761, 2));
     const long = capped.itemCode(["notice"], ["one", "two", "three", "four"]);

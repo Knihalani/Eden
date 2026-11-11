@@ -6,8 +6,8 @@
  * tokenizer's folded terms, as `ItemCache` indexes them) and `requests` (id or template, the query's terms: folded,
  * stopwords out, as `rank` builds its query), plus the labels the input carries (fact, decoy, neutrals; planted).
  *
- *   bun packages/sim/src/lab/m12-export.ts --synth .local/m2/synth/worlds/val.jsonl --out .local/m12/data/sval.terms.jsonl
- *   bun packages/sim/src/lab/m12-export.ts --corpus .local/m12/base/fit-corpus.jsonl --out .local/m12/data/fit.terms.jsonl
+ *   bun packages/sim/src/lab/m12-export.ts --synth .local/m2/synth/worlds/val.jsonl --out sval.terms.jsonl
+ *   bun packages/sim/src/lab/m12-export.ts --corpus fit-corpus.jsonl --out fit.terms.jsonl
  */
 import { createReadStream, createWriteStream } from "node:fs";
 import { createInterface } from "node:readline";
@@ -34,16 +34,16 @@ let n = 0;
 for await (const line of lines) {
   if (!line.trim()) continue;
   const w = JSON.parse(line);
-  const items = (w.items as { id?: string; key?: string; title?: string; text?: string; source?: string; at?: number }[]).map(
-    (it) => ({
-      id: it.id ?? it.key,
-      source: it.source ?? (it.id ?? "").split(":")[0],
-      at: it.at ?? null,
-      title: terms(it.title ?? ""),
-      text: terms(it.text ?? ""),
-      chars: (it.text ?? "").length,
-    }),
-  );
+  const items = (
+    w.items as { id?: string; key?: string; title?: string; text?: string; source?: string; at?: number }[]
+  ).map((it) => ({
+    id: it.id ?? it.key,
+    source: it.source ?? (it.id ?? "").split(":")[0],
+    at: it.at ?? null,
+    title: terms(it.title ?? ""),
+    text: terms(it.text ?? ""),
+    chars: (it.text ?? "").length,
+  }));
   if (synth) {
     const tasks = (w.tasks as any[]).map((t) => ({
       id: t.id,
@@ -51,7 +51,13 @@ for await (const line of lines) {
       fact: t.fact,
       decoy: t.decoy,
       neutrals: t.neutrals ?? [],
-      requests: (t.requests as any[]).map((r) => ({ id: r.id, style: r.style, lang: r.lang, at: r.at, q: query(r.text) })),
+      requests: (t.requests as any[]).map((r) => ({
+        id: r.id,
+        style: r.style,
+        lang: r.lang,
+        at: r.at,
+        q: query(r.text),
+      })),
     }));
     out.write(`${JSON.stringify({ world: w.id, split: w.split, items, tasks })}\n`);
   } else {

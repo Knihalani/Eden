@@ -1,5 +1,6 @@
 /**
- * M12 (D1000–D1009, trial `poolExpand`; docs/research/m12-pool.md): a request's expansion into item vocabulary,
+ * M12 (lab only; D1001 rejected the trial `poolExpand` and deleted its engine wiring; docs/research/m12-pool.md): a
+ * request's expansion into item vocabulary,
  * learned offline from a teacher's scores (packages/sim/lab/m12/train.py) and served as a table: each request term
  * has at most a few item terms with a weight. No vectors, no model call: a request's expansion is the sum of its
  * terms' rows, read in microseconds.

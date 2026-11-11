@@ -5,13 +5,21 @@
  *   bun packages/sim/lab/m12/pair-parity.ts OUT.ep12 OUT.checks.json
  */
 import { readFileSync } from "node:fs";
-import { loadPoolPair } from "@eden/engine";
+import { loadPoolPair } from "./pool-pair";
 
 const [model, checks] = process.argv.slice(2);
 if (!model || !checks) throw new Error("usage: pair-parity.ts MODEL.ep12 CHECKS.json");
 const net = loadPoolPair(new Uint8Array(readFileSync(model)));
 const { cases } = JSON.parse(readFileSync(checks, "utf8")) as {
-  cases: { q: string[]; title: string[]; text: string[]; qcode: number[]; icode: number[]; dot: number; score: number }[];
+  cases: {
+    q: string[];
+    title: string[];
+    text: string[];
+    qcode: number[];
+    icode: number[];
+    dot: number;
+    score: number;
+  }[];
 };
 const bits = (c: Int32Array) => Array.from({ length: net.bits }, (_, b) => ((c[b >>> 5]! >>> (b & 31)) & 1 ? 1 : -1));
 let ok = 0;

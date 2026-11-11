@@ -733,29 +733,6 @@ export interface EngineConfig {
    */
   pushIndirect: boolean;
   /**
-   * M12 (D1000, trial, off at 0; docs/research/m12-pool.md): how many lexical hits the push's and the ask's lookup
-   * reads before it builds the pool (12 when 0), so a re-ranker can bring a held fact ranked below the twelfth into
-   * the pool's last seats.
-   */
-  pushWide: number;
-  /**
-   * M12 (D1001, trial, off at 0): the pool's last `poolExpand` seats go to the request's expansion (`pool-expand.ts`,
-   * a table learned from a teacher's scores: request terms → item terms), searched in the index, when a model is
-   * wired (`PartnerDeps.poolExpansion`); its first `poolExpandTerms` item terms are searched.
-   */
-  poolExpand: number;
-  poolExpandTerms: number;
-  /**
-   * M12 (D1002, trial, off at 0): the pool's last seats chosen by a request × item scorer distilled from a teacher
-   * (`pool-pair.ts`, wired as `PartnerDeps.poolPair`) over the pool, `pushWide`'s candidates and the `poolScanItems`
-   * items whose codes agree best with the request's (a scan of every held item). With `poolScan` S, the pool keeps its
-   * first `15 - S` items as ranked.
-   */
-  poolScan: number;
-  poolScanItems: number;
-  /** `poolScan`: a pooled item's score bonus against a new candidate (its place in the lexical order is evidence). */
-  poolScanKeep: number;
-  /**
    * M13 (D1010, promoted by the owner's D1014, part `gate`; docs/research/m13-gate.md): the turn gate
    * (`turn-gate.ts`), a local model over hashed character n-grams that reads any language, decides the push's start
    * beside `pushStart`: a rule start stands unless the gate's score is under its veto, and the gate adds a start where
@@ -926,12 +903,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushOpen: true,
   pushIndirect: true,
-  pushWide: 0,
-  poolExpand: 0,
-  poolExpandTerms: 8,
-  poolScan: 0,
-  poolScanItems: 30,
-  poolScanKeep: 0,
   pushGate: true,
   revisionDiff: true,
 };

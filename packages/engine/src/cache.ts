@@ -1523,24 +1523,6 @@ export class ItemCache {
     return kept;
   }
 
-  /**
-   * `poolScan` (M12, D1002): every live item of the user, with its index doc, for a scan that scores each one
-   * (`fn` is called once an item; nothing is allocated an item).
-   */
-  eachLive(scope: Scope, now: number, fn: (item: ContextItem, doc: number) => void): void {
-    const u = this.peek(scope);
-    if (!u) return;
-    for (const e of u.items.values()) if (this.alive(e, now)) fn(e.item, e.doc);
-  }
-
-  /** The hit for one live item (its sketch made), as `hits` gives it; null when gone. */
-  hitOf(scope: Scope, id: string, now = Date.now()): CacheHit | null {
-    const u = this.peek(scope);
-    const e = u?.items.get(id);
-    if (!u || !e || !this.alive(e, now)) return null;
-    return { item: e.item, sketch: sketched(u, e), doc: e.doc, score: 0, coverage: 0, matched: 0 };
-  }
-
   /** A probe this user made within `maxAgeMs` (D46): its ids, when every one is still cached and fresh; else null. */
   probeHits(scope: Scope, key: string, maxAgeMs: number, now = Date.now()): CacheHit[] | null {
     const memo = this.peek(scope)?.probes.get(key);

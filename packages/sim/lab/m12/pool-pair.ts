@@ -1,5 +1,6 @@
 /**
- * M12 (D1000–D1009, trial `poolScan`; docs/research/m12-pool.md): a request × item scorer distilled offline from an
+ * M12 (lab only; D1002 rejected the trial `poolScan` and deleted its engine wiring; docs/research/m12-pool.md): the
+ * TypeScript forward of the request × item scorer distilled offline from an
  * 8B teacher's scores (packages/sim/lab/m12/pairnet.py), served as a binary network. No model call, no vectors from a
  * pretrained model: hashed word, character 3/4-gram and word-bigram ids of the engine's own terms, a ternary table
  * into a sign code (an item's at ingest or first use, the request's once), then
@@ -44,10 +45,7 @@ function crcRange(c: number, s: string, start: number, end: number): number {
     else if (u < 0x800) c = step(step(c, 0xc0 | (u >> 6)), 0x80 | (u & 63));
     else if (u < 0x10000) c = step(step(step(c, 0xe0 | (u >> 12)), 0x80 | ((u >> 6) & 63)), 0x80 | (u & 63));
     else
-      c = step(
-        step(step(step(c, 0xf0 | (u >> 18)), 0x80 | ((u >> 12) & 63)), 0x80 | ((u >> 6) & 63)),
-        0x80 | (u & 63),
-      );
+      c = step(step(step(step(c, 0xf0 | (u >> 18)), 0x80 | ((u >> 12) & 63)), 0x80 | ((u >> 6) & 63)), 0x80 | (u & 63));
   }
   return c;
 }
@@ -190,7 +188,10 @@ export function loadPoolPair(buf: Uint8Array): PoolPair {
       return encode(qe, terms);
     },
     itemCode(title, text) {
-      return encode(ie, itemCap > 0 && text.length > itemCap ? [...title, ...text.slice(0, itemCap)] : [...title, ...text]);
+      return encode(
+        ie,
+        itemCap > 0 && text.length > itemCap ? [...title, ...text.slice(0, itemCap)] : [...title, ...text],
+      );
     },
     scan(q, i) {
       let diff = 0;
