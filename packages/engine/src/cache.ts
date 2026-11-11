@@ -23,12 +23,20 @@
  * rebuild stays as the fallback (a term interned but never indexed, ids left sparse after a mass eviction).
  */
 import { createHash } from "node:crypto";
-import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/primitives";
+import {
+  dedupText,
+  hamming64,
+  SparseIndex,
+  TextSketcher,
+  Vocab,
+  type IndexSnapshot,
+  type VocabSnapshot,
+} from "@eden/primitives";
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
-import { clearDecoded, packItem, repackLike } from "./packed-text";
+import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
 import { orgLabel } from "./firewall";
@@ -139,13 +147,18 @@ class UserCache {
   constructor(
     readonly scope: Scope,
     releaseTerms: boolean,
+    /** A fast thaw's saved vocabulary and index (D860), else a new, empty pair. */
+    saved?: { vocab: Omit<VocabSnapshot, "h1" | "h2" | "lens">; index: IndexSnapshot },
   ) {
+    this.vocab = saved ? Vocab.restore(saved.vocab) : new Vocab(256); // Grows by doubling: most users hold few terms.
+    this.sketcher = new TextSketcher(this.vocab, 8_192, 3);
     // With `releaseTerms`, a term no live item holds is released once the index has compacted it away.
-    this.index = new SparseIndex({
+    const options = {
       fields: 2,
       weights: [2, 1],
-      onTermFreed: releaseTerms ? (t) => this.vocab.release(t) : undefined,
-    });
+      onTermFreed: releaseTerms ? (t: number) => this.vocab.release(t) : undefined,
+    };
+    this.index = saved ? SparseIndex.restore(saved.index, options) : new SparseIndex(options);
   }
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
@@ -160,9 +173,9 @@ class UserCache {
   /** How many of `items` are synced (D57). */
   synced = 0;
   readonly byDoc: (Entry | undefined)[] = [];
-  readonly vocab = new Vocab(256); // Grows by doubling: most users hold few terms.
+  readonly vocab: Vocab;
   readonly index: SparseIndex;
-  readonly sketcher = new TextSketcher(this.vocab, 8_192, 3);
+  readonly sketcher: TextSketcher;
   /** The UTC offset most of the user's events carry (minutes), computed on demand; reset as events come and go. */
   offset: number | undefined;
   /** How many items' `meta.start` carry each UTC offset (`offsetOf`): kept as items come and go. */
@@ -220,9 +233,12 @@ class FrozenUser {
     readonly extra?: unknown,
   ) {
     this.bytes = blob?.byteLength ?? 0;
+    this.warm = blob !== null && isFast(blob);
   }
   /** The blob's size, kept when the blob itself is on disk only (D652). */
   readonly bytes: number;
+  /** Frozen warm (`CacheLimits.warmIdleMs`, D862): to be frozen again in the compact form once idle long enough. */
+  readonly warm: boolean;
 }
 
 /**
@@ -246,6 +262,105 @@ interface FrozenBody {
   parties: [string, number][];
   partied: number;
   offsets: [number, number][];
+}
+
+/**
+ * One entry of a fast-thaw blob (D860): `FrozenEntry`'s fields, the item without its text when the text is packed
+ * (`p`: its deflated bytes' length in the blob's text section, and 1 when they decode as Latin-1), and its doc number.
+ */
+interface FastEntry {
+  i: Omit<ContextItem, "text"> | ContextItem;
+  p?: [number, 0 | 1];
+  d: number;
+  f: number;
+  m: number;
+  s: 0 | 1;
+  r?: number;
+  k?: [number, number, number] | null;
+  q: number;
+}
+
+/** The JSON head of a fast-thaw blob's zstd section; `arrays` gives each array's kind and length, in order. */
+interface FastHead {
+  entries: FastEntry[];
+  parties: [string, number][];
+  partied: number;
+  offsets: [number, number][];
+  baseline: number;
+  terms: string[];
+  free: number[];
+  index: {
+    docs: number;
+    live: number;
+    keys: number;
+    totalPostings: number;
+    liveTerms: number;
+    deltaCap: number;
+    chained: boolean;
+  };
+  arrays: [number, number][];
+  /** `keyStart`, `fDocs`, `fFwd` (held as `gaps`): each one's length, and 1 when it is a Uint32Array. */
+  wide: [number, 0 | 1][];
+}
+
+/**
+ * An array of non-negative integers as varints of the zigzag gap from the one before: postings and a doc's terms
+ * mostly ascend in small steps, so most gaps take a byte, and zstd shrinks the rest (O4's screen 1: about 0.6 of the
+ * raw bytes after zstd at 3,000 items of prose).
+ */
+function gaps(a: Uint16Array | Uint32Array): Uint8Array {
+  const out = new Uint8Array(a.length * 5);
+  let at = 0;
+  let prev = 0;
+  for (let i = 0; i < a.length; i++) {
+    const d = (a[i]! - prev) | 0;
+    prev = a[i]!;
+    let v = ((d << 1) ^ (d >> 31)) >>> 0;
+    while (v >= 0x80) {
+      out[at++] = (v & 0x7f) | 0x80;
+      v >>>= 7;
+    }
+    out[at++] = v;
+  }
+  return out.slice(0, at);
+}
+
+/** `gaps` read back into `out` (its length the original's). */
+function ungaps<T extends Uint16Array | Uint32Array>(g: Uint8Array, out: T): T {
+  let at = 0;
+  let prev = 0;
+  for (let i = 0; i < out.length; i++) {
+    let v = 0;
+    let shift = 0;
+    let b: number;
+    do {
+      b = g[at++]!;
+      v |= (b & 0x7f) << shift;
+      shift += 7;
+    } while (b >= 0x80);
+    v >>>= 0;
+    prev = (prev + ((v >>> 1) ^ -(v & 1))) | 0;
+    out[i] = prev >>> 0;
+  }
+  return out;
+}
+
+type FastArray = Uint8Array | Uint16Array | Uint32Array | Int32Array | Float32Array | Float64Array;
+const ARRAY_KINDS = [Uint8Array, Uint16Array, Uint32Array, Int32Array, Float32Array, Float64Array] as const;
+function arrayKind(a: FastArray): number {
+  return ARRAY_KINDS.findIndex((k) => a instanceof k);
+}
+function align8(n: number): number {
+  return (n + 7) & ~7;
+}
+
+/**
+ * A fast-thaw blob starts with these four bytes, then the zstd section's length (u32), the section, and the packed
+ * texts; any other blob is the zstd JSON of `FrozenBody` (zstd's own magic is 28 B5 2F FD).
+ */
+const FAST_MAGIC = new Uint8Array([0x45, 0x44, 0x46, 0x32]); // "EDF2"
+function isFast(blob: Uint8Array): boolean {
+  return blob.byteLength >= 8 && blob[0] === 0x45 && blob[1] === 0x44 && blob[2] === 0x46 && blob[3] === 0x32;
 }
 
 /** Entries per step of a freeze or thaw (`freezeSteps`, `thawSteps`): a few milliseconds of work at most. */
@@ -423,6 +538,22 @@ export interface CacheLimits {
    * 0: never.
    */
   freezeIdleMs: number;
+  /**
+   * Trial (D860, D862; 0, off): a user idle this long (ms, counted in expiry ticks as `freezeIdleMs` is, at least two)
+   * is frozen "warm": in a blob that keeps what a thaw would otherwise rebuild, each item's deflated text bytes as
+   * they are and the vocabulary and the compacted index as arrays (`fastFreezeSteps`), so the thaw is mostly copying
+   * (about 10-20 ms at 3,000 items against 150-260). The warm blob is larger than the compact one (per-item deflate
+   * shares no words across items), so a user still idle at `freezeIdleMs` is frozen again in the compact form. Set
+   * `expireEveryMs` to at most half of it, or the ticks are too coarse to freeze on time. Below `freezeIdleMs` only;
+   * a thaw reads either form.
+   */
+  warmIdleMs: number;
+  /**
+   * Trial (D861, off): at each expiry tick a live user idle two ticks or more has its index compacted
+   * (`SparseIndex.compact`): the delta tier merged and its spare room let go, an eighth of a heavy user's items held
+   * at about three times a merged item's index bytes.
+   */
+  idleCompact: boolean;
 }
 
 export const DEFAULT_CACHE_LIMITS: CacheLimits = {
@@ -436,6 +567,8 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   releaseTerms: true,
   packText: true,
   freezeIdleMs: 30 * 60_000,
+  warmIdleMs: 0,
+  idleCompact: false,
 };
 
 /**
@@ -715,7 +848,8 @@ export class ItemCache {
     for (const x of this.users.values()) {
       if (performance.now() - t0 > deadlineMs) break;
       if (!(x instanceof UserCache) || x.items.size === 0) continue;
-      const steps = this.freezeSteps(x);
+      // Warm when the trial is on (D862): a restart then thaws its users in milliseconds.
+      const steps = this.freezeSteps(x, this.limits.warmIdleMs > 0);
       let r = steps.next();
       while (!r.done) r = steps.next();
       if (this.write(r.value)) n++;
@@ -1532,8 +1666,14 @@ export class ItemCache {
     for (const [key, x] of this.users) {
       let u: UserCache;
       if (x instanceof FrozenUser) {
-        // A frozen user is thawed here only when something of theirs expired (and frozen again below if still idle).
-        if (!this.frozenExpired(x, now)) continue;
+        // A frozen user is thawed here only when something of theirs expired, or when a warm one has been idle long
+        // enough to be held compact (D862); frozen again below if still idle.
+        if (!this.frozenExpired(x, now)) {
+          if (!this.coldDue(x, freezeTicks)) continue;
+          if (sliced) this.later.add(key);
+          else this.freeze(key, this.thaw(key, x), false);
+          continue;
+        }
         // D652: everything a user held on disk only has expired, and so has their file (D428). Dropped as an
         // expired user is, without a read that would find no file and count them lost.
         if (this.allExpired(x, now)) {
@@ -1551,9 +1691,15 @@ export class ItemCache {
         n++;
         continue;
       }
-      if (!this.freezable(u, freezeTicks)) continue;
+      const form = this.freezeForm(u, freezeTicks);
+      if (form === null) {
+        // D861: an idle user's index merged at the tick, its delta's spare room let go (a no-op when already done).
+        // Idle two ticks, as a freeze: a lookup that took term ids before an await is not left holding a released one.
+        if (this.limits.idleCompact && this.epoch - u.seen >= 2) u.index.compact();
+        continue;
+      }
       if (sliced) this.later.add(key);
-      else this.freeze(key, u);
+      else this.freeze(key, u, form === "warm");
     }
     if (sliced && this.later.size > 0) this.drainLater();
     return n;
@@ -1566,9 +1712,29 @@ export class ItemCache {
     return Math.max(2, Math.ceil(freezeIdleMs / expireEveryMs));
   }
 
-  /** Whether a user has been idle long enough to freeze (`freezeIdleMs`). */
-  private freezable(u: UserCache, freezeTicks: number): boolean {
-    return freezeTicks > 0 && u.items.size > 0 && this.epoch - u.seen >= freezeTicks;
+  /** `warmIdleMs` in expiry ticks (at least two, as `freezeTicks`); 0 when off or not below `freezeTicks`. */
+  private warmTicks(freezeTicks: number): number {
+    const { warmIdleMs, expireEveryMs } = this.limits;
+    if (!(warmIdleMs > 0) || !(expireEveryMs > 0)) return 0;
+    const t = Math.max(2, Math.ceil(warmIdleMs / expireEveryMs));
+    return freezeTicks > 0 && t >= freezeTicks ? 0 : t;
+  }
+
+  /**
+   * How an idle user is frozen now, or null while not idle long enough: compact once idle `freezeIdleMs`, warm
+   * (D862) once idle `warmIdleMs` before that.
+   */
+  private freezeForm(u: UserCache, freezeTicks: number): "warm" | "compact" | null {
+    if (u.items.size === 0) return null;
+    const idle = this.epoch - u.seen;
+    if (freezeTicks > 0 && idle >= freezeTicks) return "compact";
+    const warm = this.warmTicks(freezeTicks);
+    return warm > 0 && idle >= warm ? "warm" : null;
+  }
+
+  /** Whether a warm frozen user has been idle long enough to be held compact (D862). */
+  private coldDue(f: FrozenUser, freezeTicks: number): boolean {
+    return f.warm && freezeTicks > 0 && this.epoch - f.seen >= freezeTicks;
   }
 
   /**
@@ -1587,7 +1753,16 @@ export class ItemCache {
     const now = this.lastNow + (Date.now() - this.lastWall);
     let x = this.users.get(key);
     if (x instanceof FrozenUser) {
-      if (!this.frozenExpired(x, now)) return;
+      if (!this.frozenExpired(x, now)) {
+        if (!this.coldDue(x, this.freezeTicks())) return;
+        // D862: a warm user idle long enough, thawed (cheap, warm) and frozen again compact.
+        yield* this.thawJob(key, x);
+        x = this.users.get(key);
+        if (x instanceof UserCache && this.freezeForm(x, this.freezeTicks()) === "compact") {
+          yield* this.freezeJob(key, x, false);
+        }
+        return;
+      }
       if (this.allExpired(x, now)) {
         this.dropUser(key, x.scope.tenantId);
         return;
@@ -1596,7 +1771,8 @@ export class ItemCache {
       x = this.users.get(key);
       if (!(x instanceof UserCache) || this.expireUser(key, x, now)) return;
     }
-    if (x instanceof UserCache && this.freezable(x, this.freezeTicks())) yield* this.freezeJob(key, x);
+    const form = x instanceof UserCache ? this.freezeForm(x, this.freezeTicks()) : null;
+    if (form !== null) yield* this.freezeJob(key, x as UserCache, form === "warm");
   }
 
   /**
@@ -1676,17 +1852,17 @@ export class ItemCache {
    * Freezes an idle user (D325): their entries and tallies serialized in `items` order, each with its insertion
    * sequence, compressed into one blob; the user's vocabulary, index, sketcher and entries are let go.
    */
-  private freeze(key: string, u: UserCache): void {
-    const steps = this.freezeSteps(u);
+  private freeze(key: string, u: UserCache, warm: boolean): void {
+    const steps = this.freezeSteps(u, warm);
     let r = steps.next();
     while (!r.done) r = steps.next();
     this.install(key, r.value);
   }
 
   /** `freeze` as a sliced job: given up if the user is read, written or replaced before it is done. */
-  private *freezeJob(key: string, u: UserCache): Generator<undefined, void> {
+  private *freezeJob(key: string, u: UserCache, warm: boolean): Generator<undefined, void> {
     const { seen, revision } = u;
-    const steps = this.freezeSteps(u);
+    const steps = this.freezeSteps(u, warm);
     for (let r = steps.next(); ; r = steps.next()) {
       if (this.users.get(key) !== u || u.seen !== seen || u.revision !== revision) return;
       if (r.done) return this.install(key, r.value);
@@ -1707,7 +1883,8 @@ export class ItemCache {
   }
 
   /** The work of a freeze, a step per `STEP_ITEMS` entries (reading each item's text inflates it). */
-  private *freezeSteps(u: UserCache): Generator<undefined, FrozenUser> {
+  private *freezeSteps(u: UserCache, warm = false): Generator<undefined, FrozenUser> {
+    if (warm) return yield* this.fastFreezeSteps(u);
     const parts: string[] = [];
     let chunk: FrozenEntry[] = [];
     let maxSeq = 0;
@@ -1736,6 +1913,200 @@ export class ItemCache {
     // 42.7 µs an item (500 workload items, `.local` scratch measurement; docs/research/a14-scale-users.md).
     const blob = Bun.zstdCompressSync(utf8.encode(json), { level: 3 });
     return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen, maxSeq);
+  }
+
+  /**
+   * A freeze in the fast-thaw form (`CacheLimits.fastThaw`, D860), a step per `STEP_ITEMS` entries: the entries'
+   * fields as JSON with each packed text's bytes kept apart, and the vocabulary and the compacted index as arrays.
+   * Nothing is inflated or deflated; the JSON and the arrays go through zstd, the text bytes (deflated already) do not.
+   */
+  private *fastFreezeSteps(u: UserCache): Generator<undefined, FrozenUser> {
+    const texts: Uint8Array[] = [];
+    let textBytes = 0;
+    const recs: FastEntry[] = [];
+    let maxSeq = 0;
+    const oldest: [number, number] = [Number.NaN, Number.NaN];
+    const newest: [number, number] = [Number.NaN, Number.NaN];
+    let n = 0;
+    for (const e of u.items.values()) {
+      const s = e.synced ? SYNCED : LOOSE;
+      if (Number.isNaN(oldest[s])) oldest[s] = e.fetchedAt;
+      newest[s] = e.fetchedAt;
+      if (e.seq > maxSeq) maxSeq = e.seq;
+      const packed = packedOf(e.item);
+      const rec: FastEntry = {
+        i: packed ? withoutText(e.item) : e.item,
+        d: e.doc,
+        f: e.fetchedAt,
+        m: e.readMark,
+        s: e.synced ? 1 : 0,
+        q: e.seq,
+      };
+      if (packed) {
+        rec.p = [packed.bytes.byteLength, packed.latin1 ? 1 : 0];
+        texts.push(packed.bytes);
+        textBytes += packed.bytes.byteLength;
+      }
+      if (e.raw !== undefined) rec.r = e.raw;
+      if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
+      recs.push(rec);
+      if (++n % STEP_ITEMS === 0) yield;
+    }
+    const index = u.index.snapshot(); // Compacts first: no delta, no dead docs.
+    const vocab = u.vocab.snapshot();
+    // The vocabulary's fingerprints are left out (hashed again at the thaw: about 12 bytes a term, which zstd barely
+    // shrinks); the postings, forward arena and key offsets go as varint gaps (`gaps`), which zstd then shrinks well.
+    const arrays: FastArray[] = [
+      index.totalLens,
+      index.df,
+      index.lens,
+      index.where,
+      index.fwdStart,
+      index.fwdLen,
+      index.nPost,
+      gaps(index.keyStart),
+      gaps(index.fDocs),
+      index.fTfs,
+      gaps(index.fFwd),
+      index.bigTf,
+      index.freeDocs,
+    ];
+    const wide = [index.keyStart, index.fDocs, index.fFwd].map((a) => [a.length, a instanceof Uint32Array ? 1 : 0]);
+    const head: FastHead = {
+      entries: recs,
+      parties: [...u.parties],
+      partied: u.partied,
+      offsets: [...u.offsets],
+      baseline: u.baseline,
+      terms: vocab.terms,
+      free: vocab.free,
+      index: {
+        docs: index.docs,
+        live: index.live,
+        keys: index.keys,
+        totalPostings: index.totalPostings,
+        liveTerms: index.liveTerms,
+        deltaCap: index.deltaCap,
+        chained: index.chained,
+      },
+      arrays: arrays.map((a) => [arrayKind(a), a.length]),
+      wide: wide as [number, 0 | 1][],
+    };
+    const json = utf8.encode(JSON.stringify(head));
+    let size = 8 + json.byteLength;
+    for (const a of arrays) size = align8(size) + a.byteLength;
+    const body = new Uint8Array(size);
+    const view = new DataView(body.buffer);
+    view.setUint32(0, json.byteLength, true);
+    body.set(json, 8);
+    let at = 8 + json.byteLength;
+    for (const a of arrays) {
+      at = align8(at);
+      body.set(new Uint8Array(a.buffer, a.byteOffset, a.byteLength), at);
+      at += a.byteLength;
+    }
+    yield;
+    const packedBody = Bun.zstdCompressSync(body, { level: 3 });
+    const blob = new Uint8Array(8 + packedBody.byteLength + textBytes);
+    blob.set(FAST_MAGIC, 0);
+    new DataView(blob.buffer).setUint32(4, packedBody.byteLength, true);
+    blob.set(packedBody, 8);
+    let t = 8 + packedBody.byteLength;
+    for (const b of texts) {
+      blob.set(b, t);
+      t += b.byteLength;
+    }
+    return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen, maxSeq);
+  }
+
+  /**
+   * The thaw of a fast-thaw blob (D860): the vocabulary and index restored from their arrays, each item rebuilt
+   * around a copy of its packed bytes. Doc numbers and vocabulary ids are the frozen user's own, so `Entry.doc` holds.
+   */
+  private *fastThawSteps(f: FrozenUser, blob: Uint8Array): Generator<undefined, UserCache> {
+    const dv = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+    const bodyLen = dv.getUint32(4, true);
+    const body = Bun.zstdDecompressSync(blob.subarray(8, 8 + bodyLen));
+    const jsonLen = new DataView(body.buffer, body.byteOffset, body.byteLength).getUint32(0, true);
+    const head = JSON.parse(fromUtf8.decode(body.subarray(8, 8 + jsonLen))) as FastHead;
+    const arrays: FastArray[] = [];
+    let at = 8 + jsonLen;
+    for (const [kind, length] of head.arrays) {
+      at = align8(at);
+      const bytes = length * ARRAY_KINDS[kind]!.BYTES_PER_ELEMENT;
+      // A copy: its own buffer, aligned, and nothing else of the blob kept alive by it.
+      const copy = (body.buffer as ArrayBuffer).slice(body.byteOffset + at, body.byteOffset + at + bytes);
+      arrays.push(new ARRAY_KINDS[kind]!(copy));
+      at += bytes;
+    }
+    const [totalLens, df, lens, where, fwdStart, fwdLen, nPost, keyGaps, docGaps, fTfs, fwdGaps, bigTf, freeDocs] =
+      arrays;
+    const [keyStart, fDocs, fFwd] = [keyGaps, docGaps, fwdGaps].map((g, i) => {
+      const [length, wide] = head.wide[i]!;
+      return ungaps(g as Uint8Array, wide === 1 ? new Uint32Array(length) : new Uint16Array(length));
+    });
+    const ix = head.index;
+    const u = new UserCache(f.scope, this.limits.releaseTerms, {
+      vocab: { terms: head.terms, free: head.free },
+      index: {
+        fields: 2,
+        ...ix,
+        totalLens: totalLens as Float64Array,
+        df: df as Uint32Array,
+        lens: lens as Float32Array,
+        where: where as Uint8Array,
+        fwdStart: fwdStart as Uint32Array,
+        fwdLen: fwdLen as Uint32Array,
+        nPost: nPost as Uint32Array,
+        keyStart: keyStart as Uint32Array,
+        fDocs: fDocs as Uint16Array | Uint32Array,
+        fTfs: fTfs as Uint8Array,
+        fFwd: fFwd as Uint16Array | Uint32Array,
+        bigTf: bigTf as Float64Array,
+        freeDocs: freeDocs as Int32Array,
+      },
+    });
+    yield;
+    u.revision = f.revision;
+    u.seen = f.seen;
+    u.probes = f.probes;
+    u.parties = new Map(head.parties);
+    u.partied = head.partied;
+    u.offsets = new Map(head.offsets);
+    u.baseline = head.baseline;
+    let t = 8 + bodyLen;
+    const entries = head.entries;
+    for (let j = 0; j < entries.length; j++) {
+      const r = entries[j]!;
+      let item: ContextItem;
+      if (r.p) {
+        // `slice` copies: each item owns its bytes, as `packItem` would have made them.
+        item = packedFrom(r.i, blob.slice(t, t + r.p[0]), r.p[1] === 1);
+        t += r.p[0];
+      } else item = r.i as ContextItem;
+      const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
+      const entry: Entry = {
+        item,
+        fetchedAt: r.f,
+        // Another process's marks mean nothing here: 0 is older than any signal this process takes (D425).
+        readMark: f.fromDisk ? 0 : r.m,
+        doc: r.d,
+        sketch,
+        prev: null,
+        next: null,
+        raw: r.r,
+        seq: r.q,
+      };
+      if (r.s === 1) {
+        entry.synced = true;
+        u.synced++;
+      }
+      u.items.set(item.id, entry);
+      link(u, entry);
+      u.byDoc[r.d] = entry;
+      if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
+    }
+    return u;
   }
 
   /**
@@ -1874,6 +2245,7 @@ export class ItemCache {
       this.lost.add(empty);
       return empty;
     }
+    if (isFast(blob)) return yield* this.fastThawSteps(f, blob);
     const body = JSON.parse(fromUtf8.decode(Bun.zstdDecompressSync(blob))) as FrozenBody;
     yield;
     const u = new UserCache(f.scope, this.limits.releaseTerms);
@@ -1923,6 +2295,13 @@ export class ItemCache {
     u.index.settle();
     u.baseline = u.vocab.size;
     return u;
+  }
+
+  /** Users held frozen warm (D862). */
+  get warmCount(): number {
+    let n = 0;
+    for (const x of this.users.values()) if (x instanceof FrozenUser && x.warm) n++;
+    return n;
   }
 
   /** Users held frozen (D325). */

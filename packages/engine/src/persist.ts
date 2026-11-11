@@ -43,7 +43,9 @@ import type { Scope } from "@eden/protocol";
  */
 // 2: the header's expiry (1 had none: such files are discarded as "version"). 3: the sync snapshot's `rare`
 // (`RareTerms`, D603): a user saved without it would wait for each source's next listing to fill the table.
-export const PERSIST_FORMAT = 3;
+// 4: a blob may be a warm one (D860, D862: "EDF2", its text bytes deflated and its index as arrays); a build before
+// it would not read one.
+export const PERSIST_FORMAT = 4;
 
 const MAGIC = Buffer.from("EDNF", "latin1");
 const HEADER = 44;
