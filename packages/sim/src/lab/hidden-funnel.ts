@@ -1481,6 +1481,10 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `+stale` synth suites (D908 rule 1): the stale version's place in that pool, and whether it was handed.
+      ...(push && task.stale
+        ? { stalePoolAt: push.pool.indexOf(task.stale), staleHanded: push.handed.includes(task.stale) }
+        : {}),
       ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),
