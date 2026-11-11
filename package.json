@@ -32,7 +32,8 @@
     "funnel": "bun packages/sim/src/lab/funnel.ts",
     "gate-traffic": "bun packages/sim/src/lab/gate-traffic.ts",
     "doctor": "bun packages/server/src/doctor.ts",
-    "eden": "bun packages/server/src/cli.ts"
+    "eden": "bun packages/server/src/cli.ts",
+    "publish:check": "bun scripts/publish-check.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

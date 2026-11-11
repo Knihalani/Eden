@@ -183,4 +183,5 @@ docs/INTEGRATION.md).
 M0 (scaffold) done; M1, an eval worth tuning against, in progress, with every measured result in
 [docs/research/INDEX.md](docs/research/INDEX.md). See [docs/ROADMAP.md](docs/ROADMAP.md). Nothing is published to
 npm, PyPI or an image registry yet: install from a checkout as above (`bun run pack:client`, `pip install
-./packages/client-python`, `docker build`).
+./packages/client-python`, `docker build`). `bun run publish:check` builds all three and runs each registry's dry
+run (D853).

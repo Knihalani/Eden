@@ -41,3 +41,6 @@ for d in eden.explain():                                           # why Eden sp
 Install from a checkout: `pip install ./packages/client-python` (or copy `eden_client/__init__.py`; it is one file).
 Tests: `bun run test:pkg client-python` (the unit tests, an end-to-end run against the real HTTP handler, and id
 parity with TypeScript), or `python3 -m unittest -v test_eden_client` from this directory.
+
+Install from a checkout: `pip install ./packages/client-python` (not yet on PyPI). `bun run publish:check` builds the
+sdist and wheel and runs `twine check` (D853).
