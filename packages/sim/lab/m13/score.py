@@ -40,7 +40,7 @@ def main():
     o = ap.parse_args()
     m, a, thr, skel = model_of(o.model)
     res, ok = {}, {}
-    sets = {s: G.load(s) for s in ("s3", "s4", "m2t")}
+    sets = {s: G.load(s) for s in ("s3", "s4", "m2t", "sim56")}
     fx = [dict(r, rule="none", rest=False, lang="en", src="fix", kind="") for r in
           json.load(open("packages/sim/lab/m13/fixtures.json"))]
     for name, rows in list(sets.items()) + [("fix", fx)]:
@@ -48,7 +48,7 @@ def main():
         for r, x in zip(rows, g):
             r["gate"] = x
             r["ruled"] = r["rule"] != "none"
-    s3, s4, m2t = sets["s3"], sets["s4"], sets["m2t"]
+    s3, s4, m2t, sim = sets["s3"], sets["s4"], sets["m2t"], sets["sim56"]
     kind = lambda r: r["src"].split(":")[1]
     # 1. acting detected
     acting = {"S3 indirect": [r for r in s3 if kind(r) == "indirect"],
@@ -58,6 +58,11 @@ def main():
         need = 0.98 if rl > 0.88 else rl + 0.10
         res[f"acting {k}"] = (round(g, 3), round(rl, 3), len(rs))
         ok[f"1 acting {k}"] = g >= need - 1e-9
+    # 1 (addendum A): SIM56, the held-out hand-written families, and their reworded part
+    for k, rs in {"SIM56": sim, "SIM56 reworded": [r for r in sim if r["src"].endswith(("r", "rw"))]}.items():
+        g, rl = rate([r["gate"] for r in rs]), rate([r["ruled"] for r in rs])
+        res[f"acting {k}"] = (round(g, 3), round(rl, 3), len(rs))
+        ok[f"1 acting {k}"] = g >= rl - 0.01
     # 2. false starts
     fs = {"S3 chatter+statement": [r for r in s3 if kind(r) in ("chatter", "statement")],
           "S4 chatter+intent+statement": [r for r in s4 if kind(r) in ("chatter", "intent", "statement")]}
