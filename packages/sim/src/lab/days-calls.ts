@@ -9,22 +9,32 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
- *     [--json FILE] [--pool-diag FILE] [--intent FILE[,FILE]]
+ *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none]
+ *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD] [--widen-ranks FILE]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
  */
-import { writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { CardEnricher, ContextPartner, ItemCache, type EngineConfig, type PushPoolReport } from "@eden/engine";
+import {
+  CardEnricher,
+  ContextPartner,
+  ItemCache,
+  ModelCardMaker,
+  sanitizeItem,
+  type EngineConfig,
+  type PushPoolReport,
+} from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
+import { keyFor, labAccess, labModel } from "./free";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
@@ -73,6 +83,40 @@ export interface DaysCallsOptions {
    * push's pool (`onPushPool`): ids and flags only.
    */
   onPlanted?: (row: PlantedRow) => void;
+  /**
+   * `--corpus-dump FILE` (M3, D900): the user's world as its sources list it and the cache holds it (redacted), one
+   * line a user, for offline retrieval screens. Simulated items only.
+   */
+  onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
+  /** `--widen-ranks FILE` (M3, D901): per user, the `widen` dependency `pushRetrieve` reads (`widenRanks`). */
+  widen?: (seed: number) => (scope: unknown, request: string, k: number) => Promise<readonly string[]>;
+}
+
+/** Requests reach the engine redacted and may differ in spacing: matched on letters and digits. */
+const normRequest = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+/**
+ * M3 (D901): a retriever's ranks precomputed offline (`m3r/widen_table.py`: per seed and request, the user's item ids
+ * a model ranks first, from a fold that never trained on the request's template), served as the `widen` dependency.
+ * Lab only; the push makes no call.
+ */
+export function widenRanks(path: string): DaysCallsOptions["widen"] {
+  const table = new Map<number, Map<string, string[]>>();
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    const r = JSON.parse(line) as { seed: number; request: string; top: string[] };
+    let m = table.get(r.seed);
+    if (!m) table.set(r.seed, (m = new Map()));
+    m.set(normRequest(r.request), r.top);
+  }
+  return (seed) => {
+    const m = table.get(seed);
+    return async (_scope, request, k) => (m?.get(normRequest(request)) ?? []).slice(0, k);
+  };
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -95,6 +139,11 @@ export interface PlantedRow {
   pushed: boolean;
   got: boolean;
   today: boolean;
+  /** M3 (D900): the planted item's id, the request's text and template, and the pool's ids in order. */
+  planted?: string;
+  request?: string;
+  template?: string;
+  pool?: string[];
 }
 
 export interface DaysCallsUser {
@@ -166,6 +215,16 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
+  if (o.onCorpus) {
+    const rows = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
+    o.onCorpus(
+      seed,
+      rows.map((raw) => {
+        const it = sanitizeItem(raw);
+        return { id: raw.id, title: it.title, text: it.text.slice(0, 1_200) };
+      }),
+    );
+  }
   if (o.push !== "none") for (const s of own) s.notifies = true;
   const sources = [
     ...own,
@@ -192,6 +251,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     config: o.config ?? {},
     ...(cards ? { cards } : {}),
     ...(o.onPlanted ? { onPushPool: (r: PushPoolReport) => void (pooled = r) } : {}),
+    ...(o.widen ? { widen: o.widen(seed) } : {}),
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
   // The harness reads the engine's session table, as hidden-funnel does: whether a session's lookup is still running.
@@ -377,6 +437,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
             pushed,
             got: handed.has(task.planted),
             today: handedToday.has(task.planted),
+            planted: task.planted,
+            request: task.text,
+            template: `${task.suite}/${task.type}`,
+            pool: report?.pool ?? [],
           });
         }
       }
@@ -482,8 +546,21 @@ if (import.meta.main) {
   const recap = opt("recap-notice", "push");
   if (!["push", "signal", "none"].includes(recap)) throw new Error("--recap-notice must be push, signal or none");
   const cardsFile = opt("cards", "");
-  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
-  const intentFiles = opt("intent", INTENT_PATH).split(",");
+  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one; `none`
+  // replays no requests file (M3: only the requests the run's own card calls wrote, the shipped coverage).
+  const intentArg = opt("intent", INTENT_PATH);
+  const intentFiles = intentArg === "none" ? [] : intentArg.split(",");
+  // `--cards-live MODEL --cards-out FILE` (M3, D900): items the cards file does not hold are carded live, as the
+  // shipped enricher asks for them (its coverage, its requests), and recorded to FILE for later replay. A `claude-*`
+  // model needs `--spend-ledger` and `--spend-cap` (D97).
+  const cardsLive = opt("cards-live", "");
+  const cardsOut = opt("cards-out", "");
+  if (cardsLive && !cardsOut) throw new Error("--cards-live needs --cards-out FILE");
+  const liveMaker = cardsLive
+    ? new ModelCardMaker(
+        labModel(labAccess(argv, [cardsLive]), { apiKey: keyFor(cardsLive), model: cardsLive }, "eden.cards"),
+      )
+    : undefined;
   const o: DaysCallsOptions = {
     days: Number(opt("days", "8")),
     push,
@@ -491,7 +568,13 @@ if (import.meta.main) {
     recapSignal: recap === "signal",
     recapSilent: recap === "none",
     moveAfter: Number(opt("move-after", "0")),
-    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
+    cards:
+      cardsFile || liveMaker
+        ? new DiskCardMaker(cardsFile || cardsOut, liveMaker, {
+            ...(cardsOut ? { out: cardsOut } : {}),
+            requests: intentFiles,
+          })
+        : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
@@ -499,7 +582,14 @@ if (import.meta.main) {
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
+  const widenFile = opt("widen-ranks", "");
+  if (widenFile) o.widen = widenRanks(widenFile);
   const diag = opt("pool-diag", "");
+  const corpus = opt("corpus-dump", "");
+  if (corpus) {
+    writeFileSync(corpus, "");
+    o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
+  }
   const planted: PlantedRow[] = [];
   if (diag) o.onPlanted = (row) => void planted.push(row);
   const users: DaysCallsUser[] = [];
@@ -512,7 +602,7 @@ if (import.meta.main) {
   const set = Object.keys(o.config!).length ? `, set ${JSON.stringify(o.config)}` : "";
   const label =
     `push ${push}${o.recapSignal ? " (recap: bare signal)" : ""}${o.ask ? ", one ask a request" : ""}` +
-    `${cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
+    `${cardsLive ? `, cards live (${cardsLive}, recorded)` : cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
   console.log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
   console.log("phase     source    op       calls   per request  per user-day");
   // With noise connectors, one row for all of them a phase and operation: a thousand rows say nothing more.
