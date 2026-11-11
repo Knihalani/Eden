@@ -855,7 +855,8 @@ async function runSeed(
   if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(plantedAll.map((it) => it.id));
+  // A `+revision` or `+stale` task's stale version is kept from the slot clearing too (D914).
+  const keep = new Set([...plantedAll.map((it) => it.id), ...all.flatMap((t) => (t.stale ? [t.stale] : []))]);
   for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.slotText ?? task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
