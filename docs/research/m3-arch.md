@@ -165,3 +165,23 @@ container while three cores ran the data export, so an upper bound): an item's 1
 through a ternary table held as two bit-planes **60 µs**; a candidate's score (640 input bits through 128 and 32
 binary neurons by XNOR-popcount, an int8 head) **6.1 µs**; a request with 95 candidates **0.59 ms**. Memory: **48 KB a
 user** at 3,000 items (16 bytes a code), 2.1 MB of shared model (the ternary table's two planes dominate).
+
+## 7. Hypotheses (step 1 of the owner's process, written before the round-1 results were read)
+
+The process: hypotheses → a first Haiku test round (each a small local training on a slice, run by a Haiku
+subagent) → develop those with signal → a second round → winners → full training on Modal, wiring, funnel and Pi.
+Shared ground rules for every entry: no pretrained weights, no embedding table, no vector retrieval; text as hashed
+n-grams; CPU microseconds at request time. Slices: export_groups.py's fold-A groups (train1–4, generated families, M2
+train), held out on train5–6's days requests (157 hidden, 148 control), unless said. "Kill" is fixed now.
+
+| # | hypothesis | spot | architecture | why it could work | kills it (round 1) |
+|---|---|---|---|---|---|
+| H1 | **TwinXor**: a binarised cross-scorer picks the fact among the candidates and rejects its twin | top-5 ranking, twin rejection | request × candidate × its corpus twin as XNOR/AND bit patterns, two binary layers, a NULL head (`binnet.py pair`) | reading request and item together compares them, which a stored-vector dot cannot; the twin pathway sees what differs from the nearest look-alike | fact@5 among candidates not above the lexical order's (86 of 147 in the smoke) |
+| H2 | binarisation costs little | the same | H1 with float weights and tanh codes (`--float`) | the decision depends on a few bits (status words, dates) | (a reference: H1's cost is H2 − H1) |
+| H3 | the twin pathway earns its place | twin rejection | H1 without twin inputs (`notwin`) | if H1 ≈ H3 the corpus twin adds nothing | — (an ablation) |
+| H4 | an item alone says whether it is a constraint (ingest understanding) | ingest; the constraint test | a binary byte-n-gram tagger, one stored bit an item (`tagger`) | facts carry constraint wording; twins carry the all-clear | AUC fact vs others < 0.75 |
+| H5 | the push/silence decision can be learned from the request and its first five candidates as a set | push or silence | binarised set network, majority-vote pooling (`silence`) | a control request's five candidates hold only the all-clear twin and noise | AUC hidden vs control < 0.6 |
+| H6 | learned discrete keys reach facts that share no word with the request | no-word-overlap recall | items and requests → 4 keys of 256 codes each, argmax with a straight-through estimator, exact lookup (`keys`) | a key learned from "pay"-requests and "invoice paid" facts groups them without shared words | facts keyed among those outside the lexical candidates ≤ 10% at ≤ 300 keyed items a request |
+| H7 | **BloomMatch**: which request n-grams occur in an item, as a bit pattern, is enough to score | top-5 ranking, twin rejection | each item a 2,048-bit Bloom filter of its n-grams (ingest); a request's n-grams probe it, bucketed into 256 match bits; the item's twin probed too; binary layers over [match, request, match XOR twin-match] (`bloom`) | explicit term matching in bits, with the twin's difference as a learned contrast; per candidate only bit tests | fact@5 not above the lexical order's |
+| H8 | request intent (which kind of constraint to look for) is predictable from the request alone, in any language and phrasing | request intent and phrasing | binary char-n-gram classifier → M2's 16 archetypes (`intent`; M2's train/val worlds, every style and language) | archetypes have phrasing tells ("book", "pay", "should I") | accuracy on M2's held-out split ≤ 2× the majority class |
+| H9 | supersession and change detection need item pairs with revisions | change detection, supersession | a binary pair tagger over (older, newer) items of a thread | M2 marks `revisionOf` | **not tested in round 1**: the exported slices carry no revision pairs (M2's raw worlds do; deferred to round 2 if a slice is built) |
