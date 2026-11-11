@@ -261,9 +261,9 @@ PART_VARIANTS = {
 # One switch of the default turned off (not a whole part, so not checked against PARTS): N1b's arm, D540.
 SWITCH_VARIANTS = {
     "off-yield": {"sourceYield": False},
-    # A trial switch turned on over the default: O1's arm, D600.
-    "earn": {"sourceYieldEarn": True},
-    # The same with its two companions (D601): common names weak, unread sources not marked used.
+    # The earn rule and its two companions off (D600, D601, in the default since D603): O1's arm, turned around.
+    "off-earn": {"sourceYieldEarn": False, "sourceYieldNames": 0, "sourceYieldEngage": False},
+    # The same three switched on by name, as O1's runs 2 and 3 and its days check passed them (a no-op since D603).
     "earn2": {"sourceYieldEarn": True, "sourceYieldNames": 4, "sourceYieldEngage": True},
 }
 # A user with about 1,000 connected sources, 5% of whose connectors send change notices (N1's shape, D509).
@@ -291,12 +291,14 @@ PRESETS = {
                     "args": _bench(["eden", "eden~off-yield"], ["off-yield"], SCALE),
                     "about": "the default against the default with sourceYield off, at ~1,000 sources (N1b, D540)"},
     "bench-earn": {"kind": "pi-ab", "suites": "train",
-                   "args": _bench(["eden", "eden~earn"], ["earn"], SCALE),
-                   "about": "the default against the default with sourceYieldEarn on, at ~1,000 sources (O1, D600)"},
+                   "args": _bench(["eden", "eden~off-earn"], ["off-earn"], [*SCALE, "--noise-vocab", "1000"]),
+                   "about": "the default against the default with the earn rule off (sourceYieldEarn, "
+                            "sourceYieldNames, sourceYieldEngage), at ~1,000 sources with words of their own "
+                            "(O1, D603; before D603 the arms were eden and eden~earn2, runs o1-earn2*)"},
     "bench-earn2": {"kind": "pi-ab", "suites": "train",
                     "args": _bench(["eden", "eden~earn2"], ["earn2"], SCALE),
-                    "about": "the default against sourceYieldEarn with sourceYieldNames 4 and sourceYieldEngage, at "
-                             "~1,000 sources (O1, D601)"},
+                    "about": "O1's runs 2 and 3 as they were paid (D601): the pre-D603 default against the three "
+                             "switches on; on a tree at or after D603 both arms are the default"},
 }
 
 

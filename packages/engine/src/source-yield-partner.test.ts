@@ -98,8 +98,11 @@ async function partnerOf(
       syncMaxItems: 20,
       syncCallsPerMin: 6_000,
       probes: false,
-      // On in the default (D509): each test turns it on itself.
+      // On in the default (D509, D603): each test turns on what it tests.
       sourceYield: false,
+      sourceYieldEarn: false,
+      sourceYieldNames: 0,
+      sourceYieldEngage: false,
       ...config,
     },
   });
@@ -160,7 +163,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("a source whose run of unused reads is spent is not searched again; one whose item is used is", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 });
     const a = await p.request(u1, BLIND);
     const b = await p.request(u1, BLIND);
     expect(sum(a.searched)).toBeGreaterThan(0);
@@ -178,7 +181,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("a spent source is read again for a request that has evidence for it, and a use ends its run", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 });
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
     expect(sum((await p.request(u1, BLIND)).searched)).toBe(0);
     // The request's words are in source 0's sketch (its fact is past the cut): evidence, so it is searched.
@@ -192,7 +195,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("runs are per user: another user's sources are still searched; forget drops a source's run or the user's", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 }, [u1, u2]);
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 }, [u1, u2]);
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
     expect(sum((await p.request(u1, BLIND)).searched)).toBe(0);
     expect(sum((await p.request(u2, BLIND)).searched)).toBeGreaterThan(0);
@@ -209,7 +212,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("with the probes on, a spent source gets no probe either", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0, probes: true });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, probes: true });
     const first = await p.request(u1, "Ask Zed Quinn about the offsite catering");
     expect(sum(first.searched)).toBeGreaterThan(0);
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
@@ -217,7 +220,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("an outage is not a run of unused reads: a source that failed is searched again when it is back", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 });
     for (const s of p.sources) s.down = true;
     for (let i = 0; i < 6; i++) expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
     for (const s of p.sources) s.down = false;
@@ -225,7 +228,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("one request books one read of a source, however many lookups joined its call", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99 });
     const r = await p.request(u1, BLIND);
     const yields = (p.partner as unknown as { yields: SourceYield }).yields;
     for (const [k, s] of p.sources.entries()) {
@@ -235,11 +238,11 @@ describe("sourceYield (D505)", () => {
 
   test("a whole copy keeps its poll: an ask never calls a spent whole copy failed or still being read", async () => {
     // Source 3 has two items: its copy is whole, the others are cut.
-    const cfg = { sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0.05, sourceYieldHalfLifeMs: 1e15 };
+    const cfg = { sourceYield: true, sourceYieldRun: 99, sourceYieldEarn: true };
     const p = await partnerOf(cfg, [u1], [10, 10, 10, 2]);
     expect(p.partner.sync!.complete(u1, "src3")).toBe(true);
-    let last = await p.request(u1, BLIND);
-    for (let i = 0; i < 60; i++) last = await p.request(u1, BLIND);
+    // Nothing of any source has been used: every copy is spent for a request with no evidence.
+    const last = await p.request(u1, BLIND);
     expect(sum(last.searched)).toBe(0);
     // Days on, every copy is stale.
     p.advance(3 * 24 * HOUR);
@@ -253,22 +256,9 @@ describe("sourceYield (D505)", () => {
     expect(asked.answer.answer).not.toContain("Could not reach");
     expect(asked.answer.sources?.some((x) => x.status === "error")).toBe(false);
   });
-
-  test("the pooled rule: once the user's reads on no evidence do not pay, unused sources are not read on none", async () => {
-    // The run alone would never skip (99); the pool does after its warm-up.
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0.05 });
-    let last = await p.request(u1, BLIND);
-    expect(sum(last.searched)).toBeGreaterThan(0);
-    for (let i = 0; i < 30; i++) last = await p.request(u1, BLIND);
-    expect(sum(last.searched)).toBe(0);
-    // Evidence still gets its read, and the fact still arrives.
-    const named = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
-    expect(named.searched[0]).toBeGreaterThan(0);
-    expect(named.handed).toContain(p.fact.id);
-  });
 });
 
-describe("sourceYieldEarn (D600, a trial)", () => {
+describe("sourceYieldEarn (D600, D603)", () => {
   const EARN = { sourceYield: true, sourceYieldEarn: true };
   const FACT = "Pay Zed Quinn for the Globex renewal today";
 
@@ -336,19 +326,19 @@ describe("sourceYieldEarn (D600, a trial)", () => {
     p.partner.forget(u1);
     expect(sync.restore(u1, { ...snap, rare: { ids: [1], segments: "x" } })).toBe(true);
     expect(sync.rareHolders(u1, word, 2).size).toBe(0);
-    // The default keeps no table and saves none.
+    // With the rule off there is no table and none is saved.
     const off = await partnerOf({ sourceYield: true });
     expect(off.partner.sync!.rareHolders(u1, word, 2).size).toBe(0);
     expect("rare" in (off.partner.sync!.snapshot(u1) as object)).toBe(false);
   });
 
-  test("off (the default): a new user's first request on no evidence is read live", async () => {
+  test("off: a new user's first request on no evidence is read live", async () => {
     const p = await partnerOf({ sourceYield: true });
     expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
   });
 });
 
-describe("sourceYieldNames, sourceYieldEngage (D601, trials)", () => {
+describe("sourceYieldNames, sourceYieldEngage (D601, D603)", () => {
   const EARN = { sourceYield: true, sourceYieldEarn: true };
   /**
    * Sources 1 to 3 each listed an old item naming Dana Reyes, past the cut: the source map has her in three sources

@@ -126,8 +126,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   askBehindWaitMs: [...POLL_BEHIND, "syncLocalComplete", "pushCutBehind", "askBehind"],
   sourceYield: SYNC,
   sourceYieldRun: ["sync", "sourceYield"],
-  sourceYieldFloor: ["sync", "sourceYield"],
-  sourceYieldWords: ["sync", "sourceYield"],
   sourceYieldHalfLifeMs: ["sync", "sourceYield"],
   sourceYieldPolls: ["sync", "sourceYield", "syncOnDemand"],
   sourceYieldEarn: ["sync", "sourceYield"],

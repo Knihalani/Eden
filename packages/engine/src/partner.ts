@@ -443,9 +443,6 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
-  /** `sourceYield`: the lookup's routing boost and its evidence test, for the reads its probes book later. */
-  boost?: ReadonlyMap<string, number> | undefined;
-  evidence?: (id: string) => Evidence;
 }
 
 /**
@@ -4120,7 +4117,6 @@ export class ContextPartner {
     // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
     // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
     // cut copy with the rest (more reads, never fewer facts).
-    if (this.yields) cue.boost = boost;
     const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
@@ -4424,9 +4420,9 @@ export class ContextPartner {
    * `sourceYield` (D505): the user's warm synced copies this request skips live reads of (no probe, no cut-copy
    * poll, no search behind; a lookup that waits for its poll still searches a spent cut copy): a source whose own run
    * of reads with nothing used has reached `sourceYieldRun` (never for a request that names an entity the source
-   * mentioned), or one with no item ever used while the user's reads on the request's kind of evidence for it are not
-   * paying (`SourceYield.poolSpent`). Only a warm copy: it answers from what is held, where a source with no copy
-   * would answer nothing. Null when the trial is off or no source is spent.
+   * mentioned), or, with `sourceYieldEarn` (D600, D603), one with no item ever used that the request has no strong
+   * evidence for. Only a warm copy: it answers from what is held, where a source with no copy would answer nothing.
+   * Null when the switch is off or no source is spent.
    */
   private spentSources(
     s: Session,
@@ -4439,12 +4435,6 @@ export class ContextPartner {
     if (!this.yields || !this.sync || (!c.sourceYieldEarn && this.yields.size(s.scope) === 0)) return null;
     const now = this.now();
     const evidence = this.evidenceFor(s, cue, boost);
-    const pooled = c.sourceYieldEarn
-      ? [true, true]
-      : [
-          this.yields.poolSpent(s.scope, 0, c.sourceYieldFloor, now),
-          c.sourceYieldWords && this.yields.poolSpent(s.scope, 1, c.sourceYieldFloor, now),
-        ];
     let out: Set<string> | null = null;
     for (const x of all) {
       const kind = evidence(x.id);
@@ -4452,8 +4442,7 @@ export class ContextPartner {
       const limit = kind === 2 ? 0 : c.sourceYieldRun;
       // Half a read of slack: a run decays from the moment of its last read, so 4 reads read 3.999 a minute later.
       const spent =
-        (limit > 0 && run > limit - 0.5) ||
-        (kind < 2 && pooled[kind] === true && !this.yields.hasYielded(s.scope, x.id));
+        (limit > 0 && run > limit - 0.5) || (c.sourceYieldEarn && kind < 2 && !this.yields.hasYielded(s.scope, x.id));
       if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
     }
     return out;
@@ -4492,8 +4481,8 @@ export class ContextPartner {
    * `sourceYield` (D505): books a live read against each source that answered one, once a source a turn: the push,
    * its probes and an ask of the same turn often join one call. Only an answer counts ("ok": the connector was
    * called and replied): a failure, a timeout or a guard's refusal says nothing about what the source holds, and a
-   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its reads
-   * would fill the pools with reads the rule cannot act on.
+   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its run
+   * would count reads the rule cannot act on.
    */
   private noteLiveRead(s: Session, cue: Cue, outcomes: readonly FanoutOutcome[]): void {
     if (!this.yields || !this.sync || s.closed) return;
@@ -4506,8 +4495,7 @@ export class ContextPartner {
       fresh.push(o.sourceId);
     }
     if (fresh.length === 0) return;
-    const evidence = (cue.evidence ??= this.evidenceFor(s, cue, cue.boost));
-    this.yields.read(s.scope, fresh, this.now(), evidence);
+    this.yields.read(s.scope, fresh, this.now());
   }
 
   /**

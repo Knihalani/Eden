@@ -291,38 +291,31 @@ export interface EngineConfig {
   askBehindWaitMs: number;
   /**
    * On in the default (D505, D509, N1; docs/research/n1-calls.md). With `sync`: each of a user's sources keeps a run
-   * of the live reads it answered since one of its items last reached the agent (`source-yield.ts`), and the user's
-   * reads are
-   * pooled by what the request had for the source: nothing, its words alone (among the source's held items or in its
-   * sketch), or a name the source's items mentioned. A warm synced copy is not read live (no search of its cut copy
-   * behind, no probe, and with `sourceYieldPolls` no on-demand poll; a lookup that waits for its poll still searches
-   * a spent cut copy; otherwise it answers from what is held, and an ask names
-   * it "not searched") when its own run is at `sourceYieldRun` or more and the request names nothing it mentioned, or
-   * when none of its items has ever reached the agent and the user's reads on that kind of evidence are surely
-   * paying under `sourceYieldFloor` (uses per read; 0: the pooled rule off). The pool of reads on nothing always
-   * acts; `sourceYieldWords` turns on the pool of reads on words; a read on a name is never pooled. Runs and pools
-   * halve every `sourceYieldHalfLifeMs`, so sources are tried again.
+   * of the live reads it answered since one of its items last reached the agent (`source-yield.ts`). A warm synced
+   * copy is not read live (no search of its cut copy behind, no probe, and with `sourceYieldPolls` no on-demand
+   * poll; it answers from what is held, and an ask names it "not searched") when its own run is at `sourceYieldRun`
+   * or more and the request has no strong evidence for it, or by `sourceYieldEarn` below. Runs halve every
+   * `sourceYieldHalfLifeMs`, so sources are tried again. The pooled rates of D505 (`sourceYieldFloor`,
+   * `sourceYieldWords`) were replaced by `sourceYieldEarn` and deleted (D603).
    */
   sourceYield: boolean;
   sourceYieldRun: number;
-  sourceYieldFloor: number;
-  sourceYieldWords: boolean;
   sourceYieldHalfLifeMs: number;
   sourceYieldPolls: boolean;
   /**
-   * A trial, off (D600, O1; docs/research/o1-earn.md). With `sourceYield`: a source earns its live reads on weak
-   * evidence. A warm copy none of whose items has ever reached the agent is read live only on strong evidence: a
-   * name its items mentioned, or a word of the request that at most `sourceYieldRare` (1 or 2) of the user's
-   * sources hold, read from the user's table of rare words (`RareTerms`, at most 1 MB; 0: names only). The pooled
-   * rates (`sourceYieldFloor`, `sourceYieldWords`) are not consulted: they start flat, so every new user paid about
-   * 44 reads a pool before they acted, and a look-alike listed in an ask kept the words pool open (33 calls a task
-   * at 1,000 sources, 8 with this). A source with an item used is read as before (`sourceYieldRun`), and a rare
-   * word counts as a name for its run too.
+   * On in the default (D600, promoted by D603; O1, docs/research/o1-earn.md). With `sourceYield`: a source earns
+   * its live reads on weak evidence. A warm copy none of whose items has ever reached the agent is read live only on
+   * strong evidence: a name its items mentioned, or a word of the request that at most `sourceYieldRare` (1 or 2) of
+   * the user's sources hold, read from the user's table of rare words (`RareTerms`, at most 1 MB; 0: names only).
+   * It acts from a user's first request. A source with an item used is read as before (`sourceYieldRun`), and a
+   * rare word counts as a name for its run too. At about 1,000 sources: 23 → 5.5 connector calls a task one request
+   * a session and 7.3 → 2.4 over a user's days, hidden facts level (D603).
    */
   sourceYieldEarn: boolean;
   sourceYieldRare: number;
   /**
-   * Trials, off (D601, O1; docs/research/o1-earn.md), both with `sourceYieldEarn`. `sourceYieldNames` (0: off): a
+   * On in the default (D601, promoted by D603; O1, docs/research/o1-earn.md), both with `sourceYieldEarn`.
+   * `sourceYieldNames` (0: off): a
    * name more than this many of the user's sources mention is weak evidence for a source with nothing used (a
    * teammate's name is in hundreds of tickets and channels); it stays strong for a source with an item used.
    * `sourceYieldEngage`: a source the request reads nothing live of (`spentSources`) is not marked used by it
@@ -840,14 +833,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askBehindWaitMs: 0,
   sourceYield: true,
   sourceYieldRun: 4,
-  sourceYieldFloor: 0.05,
-  sourceYieldWords: true,
   sourceYieldHalfLifeMs: 7 * 24 * 3_600_000,
   sourceYieldPolls: true,
-  sourceYieldEarn: false,
+  sourceYieldEarn: true,
   sourceYieldRare: 2,
-  sourceYieldNames: 0,
-  sourceYieldEngage: false,
+  sourceYieldNames: 4,
+  sourceYieldEngage: true,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
