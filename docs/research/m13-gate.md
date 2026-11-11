@@ -83,3 +83,72 @@ Full training: R2i (`--arch mil --bits 16 --dim 24 --hidden 64 --quant int8 --ru
 frozen candidate is the one run of the four with the highest dev `macro_union_veto` (its threshold and veto as
 picked on dev by gate.py); ties go to the smaller and faster bag. It is then exported, parity-checked and scored once
 on S3, S4, M2T and SIM56 (score.py), with the union as shipped (the gate alone reported beside it, not decided on).
+
+## 2. Rounds 1 and 2 (dev only)
+
+Round 1 (four Haiku helper sessions, round-1 data, dev = M2 split, generated split, P2 sets 1–2; score = acting
+recall − 2 × false starts): H2b (bag + hidden 64, int8) 0.905, H2a 0.877, H8b (skeleton) 0.875, H7b (clauses + rule
+features pooled) 0.870, H4b (clauses) 0.860, H1b (linear) 0.859, H3b (binary sign code, 16.8M parameters) 0.851, H5b
+(char CNN) 0.735, H6b (minGRU) 0.327. Every model beat the rule on generated and non-English rows and **lost to it on
+hand-written English** (P2 set 1 indirect 77–92% against 97%). With the sim's train3–4 in dev (addendum A), H2b
+started 74% of train3's requests (rule 100%): plain imperatives with engineering words ("Give Dana read access to the
+production customer database …", score 0.00) read as statements, because generated pasted logs taught "tech words =
+statement", and the generated `intent` class taught "I want to <task>" = a wish.
+
+Round 2 (data v2: work-topic contrastive sets, acting requests that quote logs, "a concrete task is never an
+intent", P2 set 1 in training; dev adds M14's G2/G3 requests; H7' feeds the rule's reading after pooling; the union
+keeps a rule start unless the gate's score is under a veto picked on dev). Start rates, gate → union:
+
+| Run | Architecture | Veto | Sim acting | P2 acting | Gen-EN neg | Other-language neg | P2 neg |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| rule | `pushStart` | | 99.0 | 89.2 | 25.0 | 71.6 | 7.3 |
+| R2a | bag h64 int8 | | 92.8 | 95.0 | 1.9 | 2.2 | 4.5 |
+| R2b | + rule after pooling | 0.07 | 92.0 → 98.6 | 93.3 → 95.8 | 0.8 → 2.2 | 1.6 → 4.0 | 3.6 → 4.5 |
+| R2c | clauses + rule | 0.02 | 87.7 → 98.6 | 91.7 → 97.5 | 1.2 → 4.3 | 2.7 → 9.2 | 5.5 → 8.2 |
+| R2d | + skeleton | none fits | 88.9 | 94.2 | 1.4 | 2.4 | 7.3 |
+| R2f | bag h128 + rule, kind weight 1 | 0.11 | 94.7 → 98.6 | 94.2 → 95.8 | 1.3 → 2.4 | 1.9 → 4.1 | 5.5 → 6.4 |
+| R2i | clauses + rule, kind weight 1 | 0.09 | 94.4 → 98.6 | 95.0 → 96.7 | 1.0 → 2.6 | 2.4 → 4.3 | 1.8 → 2.7 |
+
+Full training (6 epochs, 2 seeds, §0.2's rule): R2i seed 1 frozen (dev macro under the union 0.919; R2i s2 0.891, R2f
+0.894 / 0.893), threshold 0.28, veto 0.04; 1,581,944 bytes of weights, parity 64/64 (worst logit gap 5.6e-6), 68 µs
+a turn mean in TypeScript (p50 43, p99 240; dev's 83,046 turns, one core).
+
+## 3. The held-out read of the round-2 candidate (once, 48d94573)
+
+| | Gate (union) | Rule |
+| --- | --- | --- |
+| S3 indirect acting | **98.3** | 79.2 |
+| S4 act + qact, 9 languages | **94.5** | 76.8 |
+| M2T, all 17,243 | **99.0** (terse 95.4, non-English 99.7, follow-up 97.4) | 79.4 (12.7, 39.1, 46.9) |
+| SIM56 / its reworded part | **100 / 100** | 96.1 / 94.6 |
+| S3 chatter + statements started | **7 of 75** | 18 |
+| S4 chatter + intent + statements started | **182 of 641** | 479 |
+| Logs started, S3 / S4 | 0 / 2.4% | 12 / 33% |
+| Info questions started, S3 / S4 | 20.0 / 19.8% | 3.3 / 60.4% |
+
+**The bar fails** on three items: S3's information questions (6 of 30 start, all general-knowledge: "How many calories
+are in a medium avocado?"; the training set held only questions about the user's own world), language parity (fr,
+es, pl false starts 33–37% against English's 28%; pt acting 89.6 against 97.4), and the fixtures (7 of 78 wrong:
+"Yes", "Got it", "Sorry, please disregard, wrong chat", "Long day, will you be home for dinner?", "We need the big
+oven", "I need to stop paying for Netflix", "Ich brauche ein neues Bett"). Post hoc: S4's chatter rows often hold a
+real request (79 of 213 start; "ti ricordi di mettere …", Hindi "याद दिला", remind me), so S4's false starts overstate,
+but no row is relabelled after reading. The gate alone (no union, reported only) starts fewer negatives (148) and
+fewer acting requests (S4 91.7), and fails more languages. Not promoted.
+
+### 3.1 Addendum B: round 3 (committed before its data, its blind set or any of its training)
+
+The headline beats the rule by far more than the bar asks, so one more round (the owner's rule: stop after two
+rounds only if nothing clearly beats the rules). S3 and S4 are read: they are reported, never decided on again.
+
+- **Training additions** (generated, a new brief): questions for general knowledge and facts about the world, in the
+  nine languages; bare replies and acknowledgements ("yes", "got it", "ok cool"); retractions ("never mind",
+  "ignore that, wrong chat"); questions to the assistant about itself or the user's day that ask nothing done ("will
+  you be home for dinner?" style chatter); and wants for a thing with no task, in every language.
+- **S5**, a new blind set: gen_blind4.py's brief with stricter definitions (chatter and statements hold no request,
+  question or reminder for the assistant; asks include general knowledge), new seeds, the same nine languages and
+  kinds, plus 200 English turns in P2's style (indirect requests, chatter, statements, questions, logs). Written
+  before round 3's training starts and not read before the frozen candidate is scored.
+- **The bar** is §0's, applied to S5 in place of S3 and S4 (S5's English part for item 1's "indirect" and item 2's
+  S3 lines), with M2T and SIM56 as before, and fixtures.json unchanged (bar item 7). Freeze rule as §0.2 on the
+  round-3 runs (R2i's and R2f's configurations).
+- If this candidate fails the bar, the trial is deleted with its engine code and tests; the lab kit stays.
