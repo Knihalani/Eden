@@ -1,0 +1,20 @@
+== 32 runs, arms eden, hits, hits@b2; clusters: seed
+  eden             hidden raised 78/128 =  60.9% (51.6..69.5); handed at its request 66 (52%), raised 55 = 83.3% (72.1..92.9); in hand not raised 16.7%
+                   earlier that day only 40 (raised 23); not that day 22 (raised 0)
+                   control: 128; concerns 0, confirmed 0; packet on 125 (98%), items a packet 3.4
+                   neutral: 768; concerns 6, confirmed 0; packet on 746 (97%), items a packet 3.8
+                   cost per 1,000 task runs $0.236 (agent + Eden per task), wall 1.47 s
+  hits             hidden raised 62/128 =  48.4% (41.4..55.5); handed at its request 70 (55%), raised 51 = 72.9% (62.7..82.8); in hand not raised 27.1%
+                   earlier that day only 41 (raised 11); not that day 17 (raised 0)
+                   control: 128; concerns 1, confirmed 0; packet on 128 (100%), items a packet 5.0
+                   neutral: 768; concerns 5, confirmed 0; packet on 768 (100%), items a packet 5.0
+                   cost per 1,000 task runs $0.254 (agent + Eden per task), wall 1.51 s
+  hits@b2          hidden raised 71/128 =  55.5% (47.7..63.3); handed at its request 70 (55%), raised 57 = 81.4% (71.4..91.2); in hand not raised 18.6%
+                   earlier that day only 41 (raised 14); not that day 17 (raised 0)
+                   control: 128; concerns 0, confirmed 0; packet on 128 (100%), items a packet 5.0
+                   neutral: 768; concerns 3, confirmed 1; packet on 768 (100%), items a packet 5.0
+                   cost per 1,000 task runs $0.250 (agent + Eden per task), wall 1.49 s
+  [eden - hits@b2] hidden raised +5.5 points (-3.9..+14.1), 128 pairs, 16 clusters; only eden 24, only hits@b2 17
+             handed at its request in both: 49; raised 39 against 40 (-2.0 points)
+  [hits@b2 - hits] hidden raised +7.0 points (+1.6..+12.5), 128 pairs, 16 clusters; only hits@b2 15, only hits 6
+             handed at its request in both: 70; raised 57 against 51 (+8.6 points)

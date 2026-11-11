@@ -1,0 +1,13 @@
+== 8 runs, arms eden@haiku, eden@sonnet; clusters: seed
+  eden@haiku       hidden raised 18/32 =  56.2% (43.8..68.8); handed at its request 17 (53%), raised 12 = 70.6% (44.4..95.2); in hand not raised 29.4%
+                   earlier that day only 13 (raised 6); not that day 2 (raised 0)
+                   control: 32; concerns 0, confirmed 0; packet on 29 (91%), items a packet 3.3
+                   neutral: 192; concerns 2, confirmed 0; packet on 183 (95%), items a packet 3.8
+                   cost per 1,000 task runs $0.237 (agent + Eden per task), wall 1.50 s
+  eden@sonnet      hidden raised 27/32 =  84.4% (78.1..87.5); handed at its request 28 (88%), raised 25 = 89.3% (80.0..100.0); in hand not raised 10.7%
+                   earlier that day only 4 (raised 2); not that day 0 (raised 0)
+                   control: 32; concerns 0, confirmed 0; packet on 27 (84%), items a packet 2.9
+                   neutral: 192; concerns 2, confirmed 0; packet on 179 (93%), items a packet 3.6
+                   cost per 1,000 task runs $9.959 (agent + Eden per task), wall 5.55 s
+  [eden@sonnet - eden@haiku] hidden raised +28.1 points (+15.6..+43.8), 32 pairs, 4 clusters; only eden@sonnet 10, only eden@haiku 1
+             handed at its request in both: 16; raised 15 against 11 (+25.0 points)
