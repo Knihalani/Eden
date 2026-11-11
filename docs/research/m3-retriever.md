@@ -148,3 +148,18 @@ each beside the export worlds' base items. dense-s1 is dense-a1's recipe on trai
 Generated families move the dense model alone from 127 to 142 held-out facts and the sparse one from 129 to 143: D491's reading (more families, not more
 pairs) holds for retrieval. A fold-B confirmation needs generated families with train1–2's themes left out
 (`domains-b.txt`), being written.
+
+### 3b. Fold B for asym, and the reading of the rule
+
+asym-b2 (asym-a2's recipe trained on train3–6, held out train1–2; no generated families):
+
+| variant | facts @15 (76) | decoys @15 (107) | §1 bar | facts @5 against shipped (83) | decoys @5 (114) | §1b @5 bar |
+|---|---|---|---|---|---|---|
+| hybrid k 5 | 88 | 115 | fail | 83 | 112 | fail |
+| hybrid k 10 | 94 (+15.3) | 117 (ratio 1.093 against 1.237) | **pass** | 86 | 109 | fail |
+| hybrid k 15 | 96 (+16.9) | 118 (ratio 1.103 against 1.263) | **pass** | 88 (+4.2) | 110 | fail |
+
+**Reading (§1's rule).** Asym fused with the lexical pool at k 10 and 15 passes the @15 bar on fold A (asym-a2) and
+on fold B (asym-b2), and fails at k 5 on both: a **go on the @15 bar, flagged fragile** (one of three k fails on each
+fold). No variant passes §1b's @5 bar against the shipped default on either fold. A go on @15 is a go against the
+no-intent lexical path only: per §1b, promotion needs a Pi gain over the shipped default.
