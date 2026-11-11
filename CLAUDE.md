@@ -42,7 +42,7 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
 GitHub Actions is off (the user does not pay for minutes). Before every merge, on the final tree:
 
 ```bash
-CHECK_COLD=1 bun run check   # = format:check (prettier + 120-col line check) && typecheck && test, no caches
+CHECK_COLD=1 bun run check   # format:check (prettier + 120-col line check), typecheck and test at once, no caches
 bun run eval    # no-model metrics; paste the JSON in the PR when engine behaviour changes
 ```
 

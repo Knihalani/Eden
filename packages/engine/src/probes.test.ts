@@ -27,6 +27,13 @@ import {
 import { extractEntities } from "./text";
 import { CORE_CONFIG } from "./parts";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 const item = (text: string, meta?: Record<string, string>): ContextItem => ({
   id: `x:${text.slice(0, 8)}`,
   sourceId: "x",
@@ -104,9 +111,9 @@ describe("probes: what a request implies", () => {
 
   test("the time parsers stay linear on hostile text", () => {
     for (const hostile of ["1" + " ".repeat(32_000), "1:00" + " ".repeat(32_000), "1 - ".repeat(8_000)]) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       requestedSpan(hostile);
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(cpuMs() - t0).toBeLessThan(50);
     }
   });
 
@@ -214,9 +221,9 @@ describe("probes: what a request implies", () => {
       `${"a <".repeat(2_600)}b@c.d`,
       `${"a1 ".repeat(2_600)}b@c.d `.repeat(2),
     ]) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       orgsOf(["Dana Lee"], [item(hostile), item(hostile)]);
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(cpuMs() - t0).toBeLessThan(50);
     }
   });
 

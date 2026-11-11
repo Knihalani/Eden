@@ -11,6 +11,13 @@ import { cleanEntities } from "./probes";
 import { extractEntities } from "./text";
 import { CORE_CONFIG } from "./parts";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const item = (title: string, text: string): ContextItem => ({
@@ -209,11 +216,11 @@ describe("conflict: what would change the action", () => {
       `${"7".repeat(2_000)}%`,
     ];
     for (const text of shapes) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       const f = frameOf(text, null, NOW, [text.slice(0, 40)]);
       assess(f, item(text.slice(0, 200), text), NOW);
       assess(frame("Pay £50k to Hooli by Friday 30 October"), item("x", text), NOW);
-      expect(performance.now() - t0).toBeLessThan(300);
+      expect(cpuMs() - t0).toBeLessThan(300);
     }
   });
 });

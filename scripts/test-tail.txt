@@ -1,0 +1,30 @@
+# Test files scripts/test.sh runs after the rest, eight at a time (D811). Each waits on real time and asserts on it:
+# a deadline met, a sleeping connector overtaken, a child process started within a bound. Under the main run's CPU
+# contention those waits stretched and the files flaked (rare-terms and push-cut-behind failed once each in cold runs,
+# weak-points-1111.md R1, o2-dev-loop.md); there they also held a worker while doing nothing (52.6 s of wall time,
+# 19.3 s of CPU, 2026-11-11). A file belongs here when it asserts on elapsed wall time around a wait, or spends at
+# least three times its CPU time waiting and takes a second or more. A bound on work alone is measured in CPU time
+# instead (`cpuMs`), and stays in the main run.
+packages/client-python/src/python.test.ts
+packages/client/src/client.test.ts
+packages/engine/src/ask-behind.test.ts
+packages/engine/src/ask-deadline-held.test.ts
+packages/engine/src/ask-deadline.test.ts
+packages/engine/src/cards.test.ts
+packages/engine/src/freshen-deadline.test.ts
+packages/engine/src/probes.test.ts
+packages/engine/src/push-cut-behind.test.ts
+packages/engine/src/reader.test.ts
+packages/engine/src/source-refs.test.ts
+packages/engine/src/sync-calls.test.ts
+packages/primitives/src/pool.test.ts
+packages/proxy/src/proxy-a11.test.ts
+packages/proxy/src/proxy.test.ts
+packages/server/src/http.test.ts
+packages/server/src/router-processes.test.ts
+packages/server/src/router.test.ts
+packages/server/src/user-sources.test.ts
+packages/sources/src/deadline-unwatched.test.ts
+packages/sources/src/guarded.test.ts
+packages/sources/src/list.test.ts
+packages/sources/src/regressions.test.ts

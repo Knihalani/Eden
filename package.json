@@ -17,7 +17,7 @@
     "format": "./scripts/format.sh",
     "format:check": "./scripts/format.sh --check",
     "eval": "bun run packages/eval/src/cli.ts",
-    "check": "bun run format:check && bun run typecheck && bun run test",
+    "check": "./scripts/check.sh",
     "check:fast": "bun run format:check && bun run typecheck:fast && bun run test:changed",
     "sim": "bun run packages/sim/src/quality-cli.ts",
     "sim:perf": "bun run packages/sim/src/perf-cli.ts",

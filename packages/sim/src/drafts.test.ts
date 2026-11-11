@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { draftOf } from "./drafts";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 describe("draftOf", () => {
   test("the first clause ends at punctuation followed by a space, or before a joining word", () => {
     expect(draftOf("Set up dinner with Jamie Fox on Thursday at 19:00 and send Jamie an invite.", "clause")).toBe(
@@ -21,10 +28,10 @@ describe("draftOf", () => {
 
   test("hostile input stays linear", () => {
     for (const s of [",".repeat(100_000), " and".repeat(50_000), "a ".repeat(100_000), "—".repeat(100_000)]) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       draftOf(s, "clause");
       draftOf(s, "half");
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(cpuMs() - t0).toBeLessThan(50);
     }
   });
 });

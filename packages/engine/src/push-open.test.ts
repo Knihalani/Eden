@@ -10,6 +10,13 @@ import { CORE_CONFIG } from "./parts";
 import { isImperative, isOpenRequest, MORE_VERBS } from "./probes";
 import { PushChecker } from "./push-check";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 // O3 (D702): `pushOpen` starts the candidates' push for a request whose verb is on no list.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -100,9 +107,9 @@ describe("isOpenRequest (D702): a message that opens like an instruction, whatev
 
   test("bounded: a megabyte of text is read at its head and tail only", () => {
     const long = "cash in the bonds ".repeat(60_000);
-    const t0 = performance.now();
+    const t0 = cpuMs();
     for (let k = 0; k < 50; k++) isOpenRequest(long);
-    expect(performance.now() - t0).toBeLessThan(50);
+    expect(cpuMs() - t0).toBeLessThan(50);
     expect(isOpenRequest(long)).toBe(true);
     expect(isOpenRequest(`${long}?`)).toBe(false);
   });

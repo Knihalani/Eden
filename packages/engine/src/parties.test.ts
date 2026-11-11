@@ -8,6 +8,13 @@ import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { callParties, namesParty, partiesIn } from "./parties";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 // Tuesday 27 October 2026, 09:00 UTC.
 const NOW = Date.UTC(2026, 9, 27, 9);
 
@@ -58,10 +65,10 @@ describe("parties: reading identifiers", () => {
   });
 
   test("bounded on a huge input", () => {
-    const t0 = performance.now();
+    const t0 = cpuMs();
     partiesIn("a".repeat(500_000) + "@" + "b.".repeat(100_000));
     partiesIn("0".repeat(500_000));
-    expect(performance.now() - t0).toBeLessThan(500);
+    expect(cpuMs() - t0).toBeLessThan(500);
   });
 });
 

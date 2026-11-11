@@ -4,7 +4,7 @@
 
 | Command | What it runs | When |
 |---|---|---|
-| `bun run test` | Every `*.test.ts` under packages/, examples/, scripts/, in parallel (`scripts/test.sh`) | Before a merge (part of `check`) |
+| `bun run test` | Every `*.test.ts` under packages/, examples/, scripts/, in parallel, slowest first, then the real-time tail (`scripts/test.sh`, D811) | Before a merge (part of `check`) |
 | `bun run test:changed` | Packages touched since the merge base with origin/main, plus their dependents, minus six end-to-end files of packages that are only dependents (D161, below) | The inner loop |
 | `bun run test:pkg engine sim` | Named packages | Working inside one package |
 | `bun run check:fast` | format:check + typecheck:fast (tsgo) + test:changed | Before pushing a work-in-progress commit |
@@ -153,6 +153,46 @@ The test's bound is now `TIMEOUT * 1.5` (750 ms) instead of `TIMEOUT + 250`: one
 regression to two deadlines (D140) lands at 1,000 ms, 250 ms clear. A cut to 300 ms with the fixed +250 ms would have
 left 50 ms between the two. Observed time before the reader at 500 ms: 501-601 ms (three runs, five asks each). Under
 load (four busy-loop processes on the 4 cores) the file passed 20 of 20 runs, 2.83-3.14 s each.
+
+## The cold gate at once, a tail for real-time tests, CPU-time bounds (D811, 2026-11-11, 4-core container, Bun 1.4.4)
+
+`CHECK_COLD=1 bun run check` took 83.1 s and 85.3 s on a quiet machine (format:check 16.6 and 16.9 s, typecheck 12.3
+and 12.4 s, tests 54.2 and 56.0 s, one after another), and failed under load: `rare-terms.test.ts` "bounded…" timed
+out in the weak-point analysis's run, again in two of this session's cold runs at load 15-18, and in the base tree with
+four busy loops beside it (142.0 s, red). Profile (each of the 235 files alone, `bun test <file>`): 191.8 s of wall
+time and 208.4 s of CPU in all. The tests are CPU-bound: four workers cannot go under about 52 s, and the parallel run
+was within a few seconds of that. Neither `--smol` (the container's `BUN_OPTIONS`; 54.0-58.5 s either way) nor
+`--no-isolate` (about 10% less CPU, but files would see each other's leftovers) was taken.
+
+What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `scripts/test-report.ts`):
+
+- **The three steps run at once.** Prettier and tsc are single processes; one after another they left cores idle.
+- **The slowest files start first** (`bun test --timings`, last run's durations under the git common dir; an order,
+  never a result): 51.7-51.9 s against 54-56 s for the tests alone.
+- **A tail.** 23 files that wait on real time and assert on it (a deadline met, a sleeping connector overtaken, a
+  child process started within a bound), or spend at least three times their CPU waiting for a second or more, run
+  after the rest, eight at a time, on a machine nothing else loads: 8.1-9.2 s. Before, they flaked under contention
+  and held a worker while idle (52.6 s of wall, 19.3 s of CPU).
+- **Bounds on work are CPU time.** 22 wall-clock ceilings around synchronous code (ReDoS and linearity guards in
+  engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
+  not on how long the scheduler kept the test waiting.
+- **20 s a test unless it names its own** (`TEST_TIMEOUT_MS`): the limit catches a hang; Bun's 5 s default failed
+  CPU-bound tests under load. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
+  visible. `rare-terms.test.ts`'s two full-table tests fill 300,000 words, not 400,000 (still 38,000 past the table's
+  cap; about 0.5 s less), and carry 30 s.
+
+| `CHECK_COLD=1 bun run check` | Quiet | Four busy loops beside it |
+|---|---|---|
+| Before (the base tree, steps one after another) | 83.1 s, 85.3 s | 142.0 s, 1 fail (rare-terms timeout) |
+| After | 64.2 s, 62.9 s | 92.4 s, 0 fail |
+
+1.33x, not the 3x aimed at. The rest is CPU: about 242 s of it (tests 195-208 s, Prettier about 29 s, tsc about
+15 s) on four cores. Further gains need one of these, each an owner's call: tsgo as the gate's checker (about 5x faster
+than tsc, `typecheck:parity` checks they agree); Prettier's content-addressed known-formatted set trusted by the cold
+gate (the key is the content, Prettier's version and its configuration); or smaller end-to-end tests. The heaviest by
+CPU alone: `funnel-flags.test.ts` 21.7 s (thirteen funnel processes), `injection-suite` 9.0, `sim.test` 8.8,
+`cards-disk` 8.2 (24 worlds' intent coverage), `client-package` 7.5, `router-processes` 7.0, `reader-stub` 5.8,
+`pilot` 5.2, `neutral` 4.9, `days-calls` 4.6, `linear` 4.2, `fuzz` 4.0.
 
 ## Caches in format:check and typecheck
 
@@ -453,10 +493,12 @@ they would contend for CPU and GC, and the stage differences are per-mode subtra
 - Behaviour changes get a test first (CLAUDE.md); a regression found in review gets its own test.
 - New state gets an isolation test (two users, two tenants or two sessions).
 - No real network, no real keys: fake `fetch`, `FakeModel`, injected clocks (`pacing.test.ts`).
-- Wall-clock ceilings only for ReDoS-style guards, best of three, with headroom for a parallel run. To show that
+- A ceiling on work (a ReDoS or linearity guard) measures CPU time (`cpuMs`, D811), not wall time. A test that must
+  measure a wait in wall time goes in `scripts/test-tail.txt`. To show that
   work was done ahead of time, count the work (`warm.test.ts` counts pattern compilations and first runs through
   counting engines) rather than timing the call.
-- A test over 5 s gives its own timeout and says why.
+- A test over 5 s alone gives its own timeout and says why (the run's default is 20 s, D811; the report at the end
+  of `bun run test` lists every test over 3.5 s).
 - A heap bound measures in a process of its own (`Bun.spawn` of a scenario script, as
   `packages/sources/src/cache-heap.scenario.ts`): under `--parallel` a file shares its worker's heap with the files
   run before it, whose leftovers moved one reading by 1.2 MB (docs/research/b2-deflake.md).
