@@ -9,7 +9,7 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
- *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none] [--resume]
+ *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--packets FILE] [--intent FILE[,FILE]|none] [--resume]
  *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD]
  *
  * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
@@ -116,6 +116,16 @@ export interface DaysCallsOptions {
    * cache holds it (redacted), one line a user, for offline retrieval screens. Simulated items only.
    */
   onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
+  /**
+   * `--packets FILE` (E1, D1030): every packet and ask answer the agent was handed, one line a request (the day, the
+   * request's kind, and each text with how it came: `push`, `pending`, `ask`), for the packet-bytes screen over days.
+   */
+  onPackets?: (row: {
+    seed: number;
+    day: number;
+    kind: string;
+    texts: { how: string; text: string; ids: string[] }[];
+  }) => void;
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -351,8 +361,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   /** Planted items handed so far in the current day's session (`onPlanted`'s `today`). */
   const handedToday = new Set<string>();
   const requestCalls = () => callsWhere(counts, (p) => p === "request");
+  let texts: { how: string; text: string; ids: string[] }[] = [];
   const take = () => {
     for (const i of partner.takePending({ ...scope, sessionId: session })) {
+      texts.push({ how: "pending", text: i.text, ids: i.citations.map((c) => c.itemId) });
       if (i.text.includes(UPDATED_MARK)) {
         updatePackets++;
         noteUpdated(i.citations.map((c) => c.itemId));
@@ -412,6 +424,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     const ev = { ...scope, sessionId: session, at: clock };
     if (!isRecap(task)) requests++;
     handed.clear();
+    texts = [];
     pooled = null;
     const callsBefore = requestCalls();
     const arriving = task.event === "external" ? { source: "gmail" } : {};
@@ -423,6 +436,9 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       noteUpdated(r.injection.citations.map((c) => c.itemId));
     }
     for (const c of r.injection?.citations ?? []) handed.add(c.itemId);
+    if (r.injection) {
+      texts.push({ how: "push", text: r.injection.text, ids: r.injection.citations.map((c) => c.itemId) });
+    }
     // The lookup's work left running (the push behind its poll, a second reading) settles before the next request.
     for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     take();
@@ -430,10 +446,12 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     if (o.ask && !isRecap(task)) {
       const a = await partner.ask({ ...scope, sessionId: session, question: task.text });
       for (const c of a.citations) handed.add(c.itemId);
+      if (a.answer) texts.push({ how: "ask", text: a.answer, ids: a.citations.map((c) => c.itemId) });
       // The ask's reads behind (D430) settle before the next request, as the push's do.
       for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     }
     take();
+    o.onPackets?.({ seed, day: dayNo, kind: isRecap(task) ? "recap" : task.kind, texts });
     if (!isRecap(task)) {
       requestCallsByDay[dayNo] = (requestCallsByDay[dayNo] ?? 0) + requestCalls() - callsBefore;
       requestsByDay[dayNo] = (requestsByDay[dayNo] ?? 0) + 1;
@@ -697,13 +715,20 @@ export async function main(
   // A resumed user is not run again, so its corpus line would be missing: the dump is made in one run, never resumed.
   if (argv.includes("--resume") && corpus)
     throw new JournalRefused("--corpus-dump is written whole: run it without --resume");
+  const packets = opt("packets", "");
+  if (packets) {
+    if (argv.includes("--resume")) throw new JournalRefused("--packets is written whole: run it without --resume");
+    writeFileSync(packets, "");
+    o.onPackets = (row) => appendFileSync(packets, `${JSON.stringify(row)}\n`);
+  }
   if (corpus) {
     writeFileSync(corpus, "");
     o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
   }
-  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, and `--cards-out`, which a live run
-  // also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags; `--cards-live` (the
-  // model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so recorded runs replay.
+  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, `--packets`, and `--cards-out`, which
+  // a live run also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags;
+  // `--cards-live` (the model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so
+  // recorded runs replay.
   const journal = out
     ? RunJournal.open<UserUnit>(
         partialPath(out),
@@ -715,6 +740,7 @@ export async function main(
             "--pool-diag",
             "--resume",
             "--corpus-dump",
+            "--packets",
             "--cards-out",
             "--spend-ledger",
             "--spend-cap",

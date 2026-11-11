@@ -85,9 +85,13 @@ async function startServer(extra: string[]): Promise<Server> {
   };
 }
 
+// No client timeout: `sync-warm` backfills every user first, past Bun's default 300 s on a 2-core box (D1).
 const sim = async (base: string, path: string, body?: unknown) =>
   (await (
-    await fetch(`${base}/sim/${path}`, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) })
+    await fetch(`${base}/sim/${path}`, {
+      ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }),
+      timeout: false,
+    } as RequestInit)
   ).json()) as Record<string, unknown>;
 
 const load = (base: string, o: Partial<LoadOptions>) =>

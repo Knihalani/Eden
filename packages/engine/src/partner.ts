@@ -16,7 +16,7 @@
  * queued for a session (or a user) that is gone.
  */
 import { createHash } from "node:crypto";
-import type { SourceMap } from "@eden/graph";
+import type { SourceMap, UserRows } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
   type Citation,
@@ -774,10 +774,20 @@ export class ContextPartner {
     // not persisted). Set only when the embedder made the cache persist.
     if (deps.cache.persisting) {
       deps.cache.persistHooks = {
-        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null }),
+        // D992: the user's source-map rows (routing and planner learning) go with them, so a user moved to another
+        // process or machine keeps what was learned; they are replaced, not merged, where they land.
+        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null, rows: this.deps.sourceMap.exportUser(scope) }),
         restored: (scope, items, extra) => {
-          const saved = (extra as { sync?: unknown } | null | undefined)?.sync;
+          const carried = extra as { sync?: unknown; rows?: UserRows } | null | undefined;
+          const saved = carried?.sync;
           if (sync && saved) sync.restore(scope, saved);
+          if (carried?.rows && typeof carried.rows === "object") {
+            try {
+              this.deps.sourceMap.importUser(scope, carried.rows);
+            } catch {
+              // Fails open: the user keeps whatever this process's file holds for them (or learns again).
+            }
+          }
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
           const checked = sync ? sync.reconcile(scope, this.config.sourceTimeoutMs) : Promise.resolve(0);
@@ -1613,6 +1623,53 @@ export class ContextPartner {
    */
   persistLive(deadlineMs: number): number {
     return this.deps.cache.flush(deadlineMs);
+  }
+
+  /**
+   * Hands a user to the process that now owns them (D992: a machine joined or left, or a machine's child count
+   * changed): their sessions end, their state is written with their sync state and source-map rows (`release`), and
+   * everything this process held for them goes as on `forget`, except the blob just written. The rows are deleted here
+   * only once they are in that blob. Returns whether the blob was written (false when not persisting: the new owner
+   * then starts the user over, as before D992).
+   */
+  release(scope: Scope, write = true): boolean {
+    const key = scopeKey(scope);
+    for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
+    this.recorded.get(scope.tenantId)?.delete(key);
+    const written = this.deps.cache.release(scope, write);
+    this.unverifiable.delete(key);
+    // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
+    if (written || !write) this.deps.sourceMap.forget(scope);
+    this.fanout.forget(scope);
+    this.deps.planner?.forget(scope);
+    this.economy.forget(scope);
+    this.yields?.forget(scope);
+    this.sync?.forget(scope);
+    this.deps.cards?.forget(scope);
+    this.deps.reader?.forget(scope);
+    return written;
+  }
+
+  /**
+   * Releases every held user `moved` says another process now owns (D992), within `deadlineMs`; returns the users
+   * released and how many of them were written. Users past the deadline stay here, unserved (the router no longer
+   * routes them here); their new owner fetches their last stored blob, or re-syncs them.
+   */
+  releaseMoved(
+    moved: (scope: Scope) => boolean,
+    deadlineMs: number,
+    write = true,
+  ): { released: Scope[]; written: number } {
+    const t0 = performance.now();
+    const released: Scope[] = [];
+    let written = 0;
+    for (const scope of this.deps.cache.heldScopes()) {
+      if (performance.now() - t0 > deadlineMs) break;
+      if (!moved(scope)) continue;
+      released.push(scope);
+      if (this.release(scope, write)) written++;
+    }
+    return { released, written };
   }
 
   /**
@@ -3036,6 +3093,18 @@ export class ContextPartner {
     this.deps.cards?.forget(scope, sourceId);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
+  }
+
+  /** Users held and their states, for an operator's metrics (D992's `/metrics`): counts only. */
+  held(): { users: number; frozen: number; warm: number; frozenBytes: number; sessions: number } {
+    const c = this.deps.cache;
+    return {
+      users: c.userCount,
+      frozen: c.frozenCount,
+      warm: c.warmCount,
+      frozenBytes: c.frozenBytes,
+      sessions: this.sessions.size,
+    };
   }
 
   get sessionCount(): number {

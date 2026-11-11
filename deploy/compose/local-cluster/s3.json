@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "eden",
+      "credentials": [{ "accessKey": "local-access", "secretKey": "local-secret-0123456789" }],
+      "actions": ["Read", "Write", "List", "Tagging", "Admin"]
+    }
+  ]
+}

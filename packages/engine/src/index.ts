@@ -21,6 +21,7 @@ export {
   type PersistedUser,
   type PersistEvent,
 } from "./persist";
+export { SharedFrozenDisk, type BlobStore, type SharedDiskOptions } from "./persist-shared";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
 export { CANDIDATES_LEAD, inert, oneLine, renderAnswer, renderPacket } from "./render";
@@ -63,6 +64,7 @@ export {
   ModelCardMaker,
   parseCards,
   parseRequests,
+  readForIntent,
   requestActions,
   worthCarding,
   worthCardingStrict,

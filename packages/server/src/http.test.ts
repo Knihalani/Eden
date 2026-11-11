@@ -372,10 +372,12 @@ describe("audit regressions (2026-10-29)", () => {
 
   test("EDEN_API_KEYS: a key may hold ':', and one key for two tenants is refused", () => {
     const full = "0123456789abcdef:ZZZZ-rest-of-key";
-    const config = loadConfig({ EDEN_API_KEYS: `acme:${full}` });
+    const config = loadConfig({ EDEN_API_KEYS: `acme:${full}`, EDEN_PERSIST: "off" });
     expect(config.keys.has("0123456789abcdef")).toBe(false);
     expect(config.keys.get(full)).toBe("acme");
-    expect(() => loadConfig({ EDEN_API_KEYS: "acme:0123456789abcdef,globex:0123456789abcdef" })).toThrow(/two tenants/);
+    expect(() =>
+      loadConfig({ EDEN_API_KEYS: "acme:0123456789abcdef,globex:0123456789abcdef", EDEN_PERSIST: "off" }),
+    ).toThrow(/two tenants/);
   });
 });
 
