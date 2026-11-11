@@ -459,6 +459,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
+- **Warm freezing (D860, D862, a trial, off; `CacheLimits.warmIdleMs`, `WARM_FREEZE_LIMITS`, the servers'
+  `EDEN_WARM_FREEZE=1`; docs/research/p6-scale.md).** A user idle `warmIdleMs` (2 min, with a 1-minute expiry
+  tick) is frozen warm (`fastFreezeSteps`): the "EDF2" blob holds each item's deflated text bytes as they are
+  (`packedOf`/`packedFrom`), the vocabulary's terms and the compacted index as arrays (`Vocab.snapshot`,
+  `SparseIndex.snapshot`, postings and forward arena as varint gaps), so `fastThawSteps` copies instead of
+  tokenizing, indexing and deflating (10-20 ms at 3,000 items against 150-300). Doc numbers and term ids are the
+  frozen user's own, so `Entry.doc` carries over: a change to how the index numbers docs must keep `snapshot` exact
+  (`sparse-index-snapshot.test.ts`). A warm user still idle at `freezeIdleMs` is thawed and frozen again compact
+  (`coldDue`, `laterJob`); `thawSteps` reads either form by its magic. A warm freeze writes nothing to disk (D425):
+  `flush` writes warm users at a shutdown. A new per-user field of `UserCache` must be carried by both forms.
+- **Idle compaction (D861, in the default; `idleCompact`).** At each expiry tick a live user not used since the last
+  one has `index.compact()` (a full merge, the delta's spare room let go). Its purge can release terms, as a write's
+  purge can.
 - **Frozen users on disk only (D652, a trial, off; `persist-disk-only.test.ts`).** With `persist(disk, { diskOnly:
   true })` a frozen user's `blob` is null once its file is written, and the file is the only copy: any new path that
   deletes a file without dropping the user loses the user (`thawSteps` then yields an empty one and `persistHooks.lost`
