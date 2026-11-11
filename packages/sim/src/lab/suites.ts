@@ -286,8 +286,8 @@ function registerSynth(name: string): boolean {
 
 /**
  * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
- * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's, `reword.ts`)
- * or `synth` (the generated train and validation splits);
+ * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's,
+ * `reword.ts`) or `synth` (the generated train and validation splits);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {

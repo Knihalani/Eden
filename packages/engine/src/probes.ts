@@ -192,7 +192,7 @@ const INDIRECT = new RegExp(
       `(?:need|have|got)\\s+to|gotta|time\\s+to`,
       // Wishes: "I'd like to …", "would like to …", "would be good to …".
       `(?:(?:i|we)${A}d|(?:i|we)\\s+would|would)\\s+(?:like|love|prefer)\\s+to`,
-      `(?:it\\s+)?(?:would|${A}d|might)\\s+be\\s+(?:good|great|nice|best|handy|helpful|useful|wise|worth)\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
+      `(?:it${A}d|(?:it\\s+)?(?:would|might))\\s+be\\s+(?:good|great|nice|best|handy|helpful|useful|wise|worth)\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
       // Hedges (P2 v4): "might be worth chasing …", "it'd help to …", "I'm planning to …", "should probably …".
       `(?:it\\s+)?might\\s+be\\s+(?:worth|a\\s+good\\s+idea\\s+to)|(?:we|you|i)?\\s*might\\s+want\\s+to`,
       `it(?:${A}d|\\s+would|\\s+might|\\s+could)\\s+help\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
@@ -222,14 +222,22 @@ const INDIRECT = new RegExp(
 const NOT_ACTING = new Set(
   (
     "know think see say admit wonder believe feel understand remember hear learn be have look figure decide wait " +
-    "sleep talk mention point note consider worry rest relax celebrate chat stay eat learn retire exercise drink read"
+    "sleep talk mention point note consider worry rest relax celebrate chat stay eat retire drink imagine bother " +
+    "ignore disregard"
   ).split(" "),
 );
 /** Someday words: a lead-in followed by one is a resolution or a wish, not a request (P2 v4). */
 const VAGUE =
   /\b(?:one day|some ?day|sometime(?! (?:this|next|today|tomorrow|tonight|before|on|by))|eventually|at some point|one of these (?:days|years)|more often|in (?:the )?future|in general|again sometime)\b/i;
 /** Adverbs a lead-in may carry before its verb ("We should probably …"). */
-const ADVERBS = new Set("really probably maybe definitely just still also quickly actually perhaps finally".split(" "));
+const ADVERBS = new Set(
+  "really probably maybe definitely just still also quickly actually perhaps finally even".split(" "),
+);
+/** A clause that holds an action back or tells the assistant something rather than asking it to act (review of v4). */
+const HOLD_BACK = /^(?:not|n['’]t|never|don['’]?t|do not|hold off|wait)\b|^(?:tell|show|ask) (?:you|me)\b/i;
+/** A date, a clock time, a weekday or an amount: a plan with one is a request, not a someday idea. */
+const DATED =
+  /[£$€]\s?\d|\b\d{1,2}(?::\d{2}|\/\d{1,2})\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:today|tomorrow|tonight|next week)\b/i;
 
 /**
  * `pushIndirect` (P2, D820; a trial, off): the request inside an indirect lead-in, verb first, with no closing
@@ -262,16 +270,18 @@ export function indirectRest(raw: string): string | null {
   // A resolution or a someday idea is not a request (P2 v4): "I need to stop eating biscuits", "we should go to
   // Iceland one day", "I want to get fitter by spring". A date or an amount keeps it a request.
   const tail = head.slice(at);
-  if (/^(?:stop|quit)\s+\p{L}+ing\b/iu.test(tail)) return null;
-  if (!/\d/.test(tail) && (VAGUE.test(tail) || /^(?:get|be|become|feel)\s+\p{L}+er\b/iu.test(tail))) return null;
+  if (HOLD_BACK.test(tail.trimStart())) return null;
+  // A habit to stop is a resolution ("I need to stop eating biscuits"); "stop paying for Netflix" is a request.
+  if (
+    /^(?:stop|quit)\s+(?:eating|drinking|smoking|snacking|biting|worrying|procrastinating|overthinking|scrolling)\b/i.test(
+      tail,
+    )
+  )
+    return null;
+  if (!DATED.test(tail) && (VAGUE.test(tail) || /^(?:get|be|become|feel)\s+\p{L}+er\b/iu.test(tail))) return null;
   return raw.slice(at).replace(/\s*\?\s*$/, "");
 }
 
-/**
- * How a user message starts the push: "listed" (its verb is on a list: an acting request), "opened" (`pushOpen`'s
- * shape) or null. With `indirect` (`pushIndirect`, D820) an indirect lead-in is read as its imperative
- * (`indirectRest`, whose text is returned as `request`), and `isOpenRequest` runs strict (no log lines, no chatter).
- */
 /**
  * `pushIndirect` (P2 v4): where a request follows a first clause of context ("The boiler's making that noise again,
  * can you book Ferguson's for Tuesday?", "Mum's prescription runs out Sunday so please reorder it"): the offset of
@@ -284,11 +294,27 @@ function secondClause(raw: string): number {
   for (const m of head.matchAll(CLAUSE_BREAK)) {
     const at = m.index! + m[0].length;
     const tail = head.slice(at);
-    if (POLITE_ASK.test(tail) || INDIRECT.test(tail)) return at;
+    // The polite ask's verb gets the lead-in's tests: "can you believe it?", "please ignore my last message" and
+    // "can you hold off on booking" ask for nothing (review of v4).
+    const ask = POLITE_ASK.exec(tail);
+    if (ask) {
+      const rest = tail.slice(ask[0].length).replace(/^please\s+/i, "");
+      const verb = rest
+        .split(/\s+/, 1)[0]!
+        .toLowerCase()
+        .replace(/[^\p{L}]/gu, "");
+      if (verb && !NOT_ACTING.has(verb) && !HOLD_BACK.test(rest) && verb !== "be") return at;
+    } else if (INDIRECT.test(tail) && indirectRest(tail) !== null) return at;
   }
   return -1;
 }
 
+/**
+ * How a user message starts the push: "listed" (its verb is on a list: an acting request), "opened" (`pushOpen`'s
+ * shape) or null. With `indirect` (`pushIndirect`, D820) an indirect lead-in is read as its imperative
+ * (`indirectRest`, whose text is returned as `request`), a request after a first clause of context is read from where
+ * it starts (`secondClause`), and `isOpenRequest` runs strict (no log lines, no chatter).
+ */
 export function pushStart(
   raw: string,
   opts: { open: boolean; indirect: boolean },
@@ -303,9 +329,14 @@ export function pushStart(
  * `pushIndirect` (P2 v4): a need for something to be done, with no verb first ("I'll need the Dublin hotel changed to a
  * king room", "We need the drawings signed off by Carl", "We could really use the delivery sorted"): read whole.
  */
+/** Participles of a job done for the user (a list: "bed", "oven", "garden" end the same way, review of v4). */
+const DONE =
+  "(?:changed|signed|booked|sorted|sent|fixed|done|cancelled|canceled|moved|paid|renewed|updated|filed|forwarded|" +
+  "scanned|checked|resubmitted|submitted|approved|arranged|ordered|reordered|replaced|repaired|serviced|cleaned|" +
+  "rebooked|transferred|refunded|returned|posted|printed|delivered|collected|confirmed|reviewed|merged|deployed)";
 const PASSIVE_NEED = new RegExp(
   `^(?:i|we)(?:${A}ll|\\s+will|${A}d|\\s+would)?\\s+(?:really\\s+)?(?:need|want|like|could\\s+(?:really\\s+)?(?:use|do\\s+with))` +
-    `\\s+(?:the|my|our|his|her|their|a|an)\\s+[^,.;!?]{2,80}?\\s+\\p{L}+(?:ed|en)\\b`,
+    `\\s+(?:the|my|our|his|her|their|a|an)\\s+[^,.;!?]{2,80}?\\s+${DONE}\\b`,
   "iu",
 );
 

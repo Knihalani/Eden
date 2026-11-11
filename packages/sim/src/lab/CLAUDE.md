@@ -56,12 +56,12 @@ refuses `--suite`, `--days`, `--day`, `--variants`, `--templates`, `--dress`, `-
 role not on a `claude-*` model, and `--allow-logging` (real data stays off OpenRouter). Only `bun run pilot run`
 should start it on real data (docs/PILOT.md).
 
-**The push check in the lab (I3, N2, N5):** `--check live|replay --check-cache F` wires the check's model in the
-funnel (`--check-log F` writes each prompt and reply; a row's `pushCheckCalled` says whether the task made the call),
-pi-ab wires it for any arm with `pushCheck`. `--widen-table` (N2, ids, short worlds) or `--widen-hash` (N5, D530, item
-content, any world of the same seed; `n2-widen.ts`) is the `widen` dependency of an arm with `pushWiden`.
-`../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix; `days_hidden.py` resamples
-whole users. Recipes: docs/LAB.md 1f, 1g.
+**The push check in the lab (I3, N5, P2; in the default since D828):** `--check live|replay --check-cache F` wires the
+check's model in the funnel (`--check-log F` writes each prompt and reply; a row's `pushCheckCalled` says whether the
+task made the call); without `--check` the funnel wires no checker and the part is inert. pi-ab wires it for any arm
+with `pushCheck` (the default). `../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix;
+`days_hidden.py` resamples whole users; `../../lab/p2/packet_reread.py` reads the packet characters an agent re-reads
+over a day. The widening's table and flags were deleted (D828).
 
 **Reworded requests (P2, D820):** `--suite train-rw` runs train with each request reworded into an indirect form
 (`reword.ts`; ids `<suite>rw`, same worlds, cards and intent replayed); `../../lab/p2/compare_rw.py` pairs it with a

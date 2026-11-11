@@ -460,3 +460,38 @@ On the fit sets v4 reads set 1: 97 of 100 indirect, 3 of 105 negatives; set 2: 1
 train-rw (seeds 41–44, `--coverage full`, as §1.2): planted handed 580 of 768, as v3; on train, no request starts
 differently (`reword.test.ts`). Statements of intent now start fewer pushes than today's gate, not more. The Pi pair
 of §3.8 ran v3; v4 differs from it only on messages train-rw does not hold.
+
+## 8. Promotion (D828, D829) and the last review
+
+**Decided by the parent on the owner's directive ("decide now"):** S and `pushIndirect` are in `DEFAULT_CONFIG` (parts
+`check` and `indirect`); every other push-check switch is deleted with its code and tests: I3's reply, `pushCheckForm`,
+`pushCheckSilent`, `pushCheckAnchored`, `pushCheckOpen` (always on), the widened pool and its lab tables and flags.
+The check's prompt and cache key are byte-identical to the measured form 2. One more confirmed false concern is
+accepted for `pushIndirect` (D829).
+
+**The review of v4 (before promotion), fixed:**
+- A second clause now gets the lead-in's tests: "Wow, can you believe the price of eggs?", "Thanks, please ignore my
+  last message", "can you hold off on booking …", "Great news, I need to tell you something" start nothing.
+- A passive need ("I'll need the hotel changed …") needs a participle from a list: "I need a new bed", "We need a
+  bigger kitchen" start nothing.
+- The someday veto is lifted only by a date, a clock time, a weekday or an amount, not any digit ("Iceland one day,
+  maybe in 2028" stays a someday idea); "read" and "exercise" no longer refuse ("I need to read the contract and sign
+  it by Friday" starts a push, and so, again, does "I need to finally read Middlemarch"); only a habit to stop
+  ("stop eating …") is a resolution ("stop paying for Netflix" is a request).
+- `it'd be good to …` now matches its lead-in; two doc blocks were stacked.
+
+**Set 3 is not fully independent of the rule.** Its writer's brief (`packages/sim/lab/p2/blind-gate-3.prompt.md`)
+carried the two second-clause examples and the hedge phrases the rule's author wrote while writing v4, and set 3
+repeats the two examples nearly word for word. Read its second-clause and hedge counts as optimistic.
+
+**Re-scored after the fixes (post hoc: every set has been read):**
+
+| | Set 1 (fit) | Set 2 (fit) | Set 3 |
+| --- | --- | --- | --- |
+| Indirect requests that start a push (today → shipped) | 43 → 97 of 100 | 56 → 107 of 120 | 54 → 95 of 120 |
+| Log lines | 24 → 0 of 25 | 29 → 1 of 30 | 25 → 3 of 25 |
+| Chatter | 11 → 2 of 30 | 15 → 1 of 40 | 18 → 5 of 30 |
+| Statements | 1 → 1 of 25 | 4 → 6 of 40 | 15 → 13 of 45 |
+| Questions | 0 → 0 of 25 | 0 → 0 of 30 | 1 → 1 of 30 |
+
+Statements of intent start fewer pushes than today's gate on set 3, the same on set 1, and two more on set 2.

@@ -202,9 +202,48 @@ describe("pushIndirect v4 (P2): second clauses, hedges, passive needs, someday i
       "I need to stop eating biscuits at 11pm",
       "We should go to Iceland one day, the lights look unreal",
       "I want to get fitter by spring",
-      "I need to finally read Middlemarch",
     ])
       expect(start(raw)).toBeNull();
     expect(start("Let's set up a postmortem with Łukasz sometime this week")).not.toBeNull();
+  });
+});
+
+describe("pushIndirect v4, review: what a second clause or a participle must not start", () => {
+  test("a second clause that asks for nothing, or holds an action back, starts nothing", () => {
+    for (const raw of [
+      "Wow, can you believe the price of eggs?",
+      "The meeting went well, can you believe it?",
+      "Ha, could you imagine Dave running a marathon?",
+      "Long day, will you be home for dinner?",
+      "Thanks so much, please ignore my last message",
+      "Sorry, please disregard, wrong chat",
+      "No worries, please don't book anything yet",
+      "Not sure yet, can you hold off on booking anything until I confirm?",
+      "Great news, I need to tell you something",
+      "Honestly, should I even bother?",
+    ])
+      expect(start(raw)).toBeNull();
+  });
+
+  test("a noun ending like a participle is not a job done", () => {
+    for (const raw of [
+      "I need a new bed",
+      "We need the big oven",
+      "We need a bigger kitchen",
+      "We'd like a quiet weekend in Sweden",
+      "I could really do with a hot bath and an early bed",
+    ])
+      expect(start(raw)).toBeNull();
+    expect(start("I'll need the Dublin hotel reservation changed to a king room")).not.toBeNull();
+  });
+
+  test("dated requests stay requests; a bare year does not make a someday idea a plan", () => {
+    for (const raw of [
+      "I need to read the contract and sign it by Friday",
+      "I need to stop paying for Netflix",
+      "We should stop using the old Redis cluster on Monday",
+    ])
+      expect(start(raw)).not.toBeNull();
+    expect(start("We should go to Iceland one day, maybe in 2028")).toBeNull();
   });
 });

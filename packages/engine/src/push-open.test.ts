@@ -6,7 +6,6 @@ import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
-import { checkEngineConfig } from "./config-check";
 import { CORE_CONFIG } from "./parts";
 import { isImperative, isOpenRequest, MORE_VERBS } from "./probes";
 import { PushChecker } from "./push-check";
@@ -144,34 +143,7 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(partner.takePending(other)).toEqual([]);
   });
 
-  test("with pushCheck on, an opened message starts no push: the check's paid call stays on listed verbs", async () => {
-    const model = new FakeModel(() => '{"items":[]}');
-    const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
-    const partner = new ContextPartner({
-      sources: async () => [source],
-      sourceMap: new SourceMap(),
-      cache: new ItemCache(),
-      budget: new Budget(),
-      model: null,
-      now: () => NOW,
-      config: {
-        ...CORE_CONFIG,
-        askReader: true,
-        readerPush: true,
-        readerGate: true,
-        confidentScore: 99,
-        fallbackMatchedTerms: 99,
-        pushCandidates: 2,
-        pushOpen: true,
-        pushCheck: true,
-      },
-      checker: new PushChecker({ model, budget: new Budget() }),
-    });
-    expect((await packets(partner, REQUEST)).length).toBe(0);
-    expect(model.calls.length).toBe(0);
-  });
-
-  test("pushCheckOpen (P2, D823): with the check, an opened message is pushed and checked like a listed one", async () => {
+  test("with the check (D823, D828), an opened message is pushed and checked like a listed one", async () => {
     const model = new FakeModel(() => '{"items":[{"i":1,"on":"Premium Bonds hold","hits":"its bonds","act":true}]}');
     const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
     const partner = new ContextPartner({
@@ -191,8 +163,6 @@ describe("pushOpen (D702, promoted by D710)", () => {
         pushCandidates: 2,
         pushOpen: true,
         pushCheck: true,
-        pushCheckForm: 2,
-        pushCheckOpen: true,
       },
       checker: new PushChecker({ model, budget: new Budget() }),
     });
@@ -200,14 +170,6 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(model.calls.length).toBe(1);
     expect(got).toHaveLength(1);
     expect(got[0]!.citations.map((c) => c.itemId)).toEqual([ITEMS[0]!.id]);
-  });
-
-  test("pushCheckOpen needs pushCheck and pushOpen (D823)", () => {
-    const deps = { deps: { cards: true, reader: true, checker: true } };
-    expect(() => checkEngineConfig({ pushCheck: true, pushOpen: false, pushCheckOpen: true }, deps)).toThrow(
-      /pushOpen/,
-    );
-    expect(() => checkEngineConfig({ pushCheckOpen: true }, deps)).toThrow(/pushCheck/);
   });
 
   test("an opened message is not kept as an acting request for plan alerts (D301)", async () => {
