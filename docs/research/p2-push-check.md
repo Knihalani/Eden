@@ -426,3 +426,12 @@ python3 -I packages/sim/lab/p2/packet_reread.py --base eden .local/modal/p2-days
 
 The run scripts are this session's (`.local/p2/run-*.sh`, not kept): each is `lab_fanout.py` with the arms of §2.3,
 §1.5 and §3.4 as written there.
+
+## 6. Ready state
+
+On the branch after merging origin/main at c5df42bf (P7's `train1r`–`train6r` kept beside `train1rw`–`train6rw`):
+`CHECK_COLD=1 bun run check` green (2,763 tests, 243 files); `bun run eval` precision 0.65, recall 0.52,
+falseFireRate 0; `bun run funnel` hidden 281/384, decoys 264/384 at main's shipped coverage (D877; 315/276 at the
+full index before that merge, also unchanged). Every P2 switch is off, so neither moves. The `reviewer` subagent ran
+twice (before the paid runs and on the merged branch before c5df42bf); its findings are fixed (§3.3 and the final
+review's doc figures).
