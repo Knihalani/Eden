@@ -121,11 +121,9 @@ poll or a sweep can find the change (4 users, 8 days, 79 moved items, `--notify-
 | 0.4 | 0.70 | 13 | 113 |
 | 0.8 | 0.42 | 3 | 218 |
 
-Halving the polls halves the updates that reach the agent. Not kept: the default stands. Two things this shows
-beside the answer: the earlier "free" readings (moon-sync.md's 0.3 and 0.5 on the funnel) were of a static world;
-and at the default, a change with no notice already reaches the agent as an update in only 28 of 79 cases on this
-screen, which is the larger problem and a quality one (one run, simulated; the screen's moves happen at the day's
-recap, so it is a hard case).
+Halving the polls halves the update packets. Not kept: the default stands. The earlier "free" readings
+(moon-sync.md's 0.3 and 0.5 on the funnel) were of a static world. The table counts packets; what each changed
+item came to is the next section.
 
 ## The card calls' prompt cache: checked, nothing to fix
 
@@ -141,3 +139,55 @@ prompt, cached part included):
 
 The cache already works. What a card call costs is its items' text going in and the cards and requests coming out;
 a cut there changes what a card says, which is a quality change, not a caching fix. Nothing built.
+
+## Where silent changes are lost, and what a fix costs (D606; $0, nothing kept)
+
+The owner expects most connectors to send no change notices. `days-calls.ts` now says what became of each item its
+day's recap moved (`moved items at their recap`): `unhanded` (the agent was not handed it that day, so no update is
+owed), `updated` (an "updated:" packet cited it), `unpolled` (its source was not listed between the move and the
+end of the recap's request, after which the session ends), `unseen` (listed, the cache's copy still old),
+`undelivered` (the new copy held, no packet). Default config, `--notify-share 0.05`, 8 days, 16 users; each line
+repeats exactly on a second run:
+
+| Users | Notice | Updates owed | Updated | Unpolled | Unseen | Undelivered |
+| --- | --- | --- | --- | --- | --- | --- |
+| seeds 41–48 | sent | 131 | 131 | 0 | 0 | 0 |
+| seeds 41–48 | none | 131 | 96 | 34 | 1 | 0 |
+| seeds 49–56 | sent | 148 | 148 | 0 | 0 | 0 |
+| seeds 49–56 | none | 148 | 92 | 56 | 0 | 0 |
+
+So with no notice **188 of 279 owed updates arrive (67%)**, and all but one of the 91 lost are lost one way: the
+source was not polled. (My earlier "28 of 79" counted packets against every moved item, 100 of which over these
+users were never handed to the agent; it overstated the loss.) Nothing is lost after a poll: the listing shows the
+change and the packet goes out.
+
+By source (seeds 41–48): mail 90 of 99 updated; chat 6 of 24; calendar 0 of 6; documents 0 of 2. A copy is polled
+before a request when its source has probably gained an item since the last poll (`syncStaleChance` against the
+source's learned rate of new items). A busy mailbox is polled at nearly every request; a quiet source is taken as
+current for up to `syncMaxStaleMs` (6 hours). The rate is of new items, and says nothing about an edit to an
+item the agent was handed. That is the cause.
+
+**The fix tried** (`syncOwedPollMs`, built and deleted the same day): before a request, also poll a source that
+sends no notices, when the session's agent holds an item from it and its last poll is that old. Seeds 41–48:
+
+| Rule | Request-time calls a request | Updated of 131 |
+| --- | --- | --- |
+| Default | 1.34 | 96 |
+| Sources of any item the session holds, 5 min | 4.39 | 124 |
+| Sources of held items that say a time or date, 5 min | 3.62 | 124 |
+| the same, 20 min | 2.33 | 105 |
+| the same, 60 min | 1.55 | 98 |
+| Only when the request's own local matches include such an item, 1 or 5 min | 1.98 | 94 |
+
+About one more connector call a request for every 12 more updates of 131. The targeted form the parent suggested
+(poll what the request points at) spends calls and gains nothing here, because the lab's recap does not name the
+moved items: the update is owed at a request about something else. No rule holds total polls level, so by the
+parent's bar nothing is kept and the code is deleted.
+
+**What this measures, and what it does not.** The lab moves an item just before the last request of its
+session, the hardest case there is: only a poll at that very request can save the update. In real use a change
+lands at any time and the session goes on, so the question is how late the update is, which this screen cannot
+show. The cause above still gives the answer for quiet sources: up to six hours, or never if the session ends
+first. A cheaper cure than polling is a connector that says when something changed (a notice costs one poll of
+one source, at the right time): with notices every owed update arrived. For connectors that cannot, the owner's
+choice is on the curve above.

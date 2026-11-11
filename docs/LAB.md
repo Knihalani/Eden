@@ -1018,7 +1018,8 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
   gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
   `--recap-notice none` (O1, D605) moves the day's items with no notice at all, so only a poll or a sweep finds the
-  change: the screen that prices fewer polls (update packets, old copies held undoubted).
+  change: the screen that prices fewer polls (update packets, old copies held undoubted). The line `moved items at
+  their recap` says what became of each (unhanded, updated, unpolled, unseen, undelivered; D606).
   `--pool-diag FILE` (O3, D712) writes one row a hidden or control request: whether the candidates' pass ran, the
   planted item's place in the push's pool, the constraint test on it, and whether it was handed then or earlier that
   day (docs/research/o3-pointer.md §3.2).
