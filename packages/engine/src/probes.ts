@@ -137,8 +137,8 @@ export function isOpenRequest(raw: string, strict = false, minWords = 4): boolea
 
 /**
  * `pushIndirect` (P2, D820; in the default since D828): chatter openers a remark starts with beyond `REMARKS`
- * ("haha, …", "ugh …", "morning! …"), and contractions `isOpenRequest` reads as words once their apostrophe is stripped ("I'd", "Let's",
- * "we'd": statements or the indirect lead-ins `indirectRest` reads). Only with the switch.
+ * ("haha, …", "ugh …", "morning! …"), and contractions `isOpenRequest` reads as words once their apostrophe is
+ * stripped ("I'd", "Let's", "we'd": statements or the indirect lead-ins `indirectRest` reads). Only with the switch.
  */
 const CHATTER = new Set(
   (

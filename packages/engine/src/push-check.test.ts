@@ -12,7 +12,8 @@ import { CORE_CONFIG } from "./parts";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
-// change what the agent should do; the candidates are those, in pool order; none named sends no packet; any failure leaves the default's.
+// change what the agent should do; the candidates are those, in pool order; none named sends no packet; any failure
+// leaves the unchecked candidates.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const item = (id: string, title: string, text: string, ageH: number): ContextItem => ({
