@@ -206,3 +206,9 @@ would have taken the plan past $24. Stopping the queue also stopped `r-reworded-
 recorded and shared by both arms), `r-reworded-45` reran from scratch the same way, and each later `reworded` run
 replays its seed's `train` cards. A full run is back to about $0.64 (`r-train-46`), so the hidden-only seeds are
 **49–56 again**, as first registered: 4,608 hidden pairs less `r-train-45`'s cut runs.
+
+**Third amendment, still before any re-test result was read (23:18 UTC; the cap, not the data).** The Sonnet regrade
+reads both arms' hidden answers (about $0.00058 each), so 4,608 pairs would cost about $5.3 to grade, and with the
+runs made so far (ledger $16.04, the stopped runs included) the plan no longer fits the $24 cap. The hidden-only
+seeds stop at **49–52**: about 3,050 hidden pairs (2× the first pair's), with the full seeds 45–48 for concerns.
+Runs for seeds 53–56 are stopped before they finish and are not read.
