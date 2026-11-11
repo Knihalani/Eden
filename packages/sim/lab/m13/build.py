@@ -29,12 +29,13 @@ def m2(path, split_all=None):
 
 def main():
     os.makedirs(f"{L}/sets", exist_ok=True)
-    out = {"train": [], "dev": [], "s3": [], "s4": [], "m2t": [], "sim56": []}
+    out = {"train": [], "dev": [], "s3": [], "s4": [], "s5": [], "m2t": [], "sim56": []}
     for r in m2(f"{L}/data/train-300.jsonl.gz"):
         out[r["split"]].append(r)
     for r in m2(f"{L}/data/test.jsonl.gz", "m2t"):
         out["m2t"].append(r)
-    for path in [f"{L}/train/gen.jsonl", f"{L}/train/logs.jsonl", f"{L}/train/gen-work.jsonl"]:
+    for path in [f"{L}/train/gen.jsonl", f"{L}/train/logs.jsonl", f"{L}/train/gen-work.jsonl",
+                 f"{L}/train/extra.jsonl"]:
         if not os.path.exists(path):
             continue
         for line in open(path):
@@ -86,11 +87,13 @@ def main():
     for r in json.load(open("packages/sim/lab/p2/blind-gate-3.json")):
         out["s3"].append({"text": r["text"], "needs": P2_KIND[r["kind"]] == "act", "kind": P2_KIND[r["kind"]],
                           "lang": "en", "src": "s3:" + r["kind"], "group": "s3", "split": "s3"})
-    if os.path.exists(f"{L}/held/blind-gate-4.json"):
-        for r in json.load(open(f"{L}/held/blind-gate-4.json")):
-            k = "statement" if r["kind"] in ("intent", "log") else r["kind"]
-            out["s4"].append({"text": r["text"], "needs": r["kind"] in NEEDS, "kind": k, "lang": r["lang"],
-                              "src": "s4:" + r["kind"], "group": "s4", "split": "s4"})
+    for s in ("s4", "s5"):
+        path = f"{L}/held/blind-gate-{s[1]}.json"
+        if os.path.exists(path):
+            for r in json.load(open(path)):
+                k = "statement" if r["kind"] in ("intent", "log") else r["kind"]
+                out[s].append({"text": r["text"], "needs": r["kind"] in NEEDS, "kind": k, "lang": r["lang"],
+                               "src": f"{s}:" + r["kind"], "group": s, "split": s})
     for name, rows in out.items():
         tmp = f"{L}/sets/{name}.raw.jsonl"
         with open(tmp, "w") as f:

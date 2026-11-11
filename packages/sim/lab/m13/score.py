@@ -51,12 +51,19 @@ def main():
     ap.add_argument("model")
     ap.add_argument("--json")
     ap.add_argument("--no-veto", action="store_true", help="the gate alone, without the rule union")
+    ap.add_argument("--s5", action="store_true", help="addendum B: S5 decides in place of S3 and S4 (S5's English "
+                    "part for S3's lines, all of S5 for S4's)")
     o = ap.parse_args()
     m, a, thr, skel, veto = model_of(o.model)
     if o.no_veto:
         veto = None
     res, ok = {}, {}
     sets = {s: G.load(s) for s in ("s3", "s4", "m2t", "sim56")}
+    if o.s5:
+        s5 = G.load("s5")
+        sets["s3"] = [dict(r, src="s3:" + {"act": "indirect", "ask": "question", "intent": "statement"}.get(r["src"][3:], r["src"][3:]))
+                      for r in s5 if r["lang"] == "en" and r["src"][3:] != "qact"]
+        sets["s4"] = s5
     fx = [dict(r, lang="en", src="fix", kind="") for r in json.load(open("packages/sim/lab/m13/fixtures.json"))]
     fx = rule_reading(fx)
     for name, rows in list(sets.items()) + [("fix", fx)]:
