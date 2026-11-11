@@ -3,7 +3,8 @@
  *
  *   <base>[-act][~variant][+flag ...][@w<ms>]
  *
- * - base: none, tools, eden, both, eden-judge or both-judge (see pi-ab.ts);
+ * - base: none, tools, eden, both, eden-judge, both-judge or hits (see pi-ab.ts; hits is P3's plain retrieval arm,
+ *   `lexical-hits.ts`: no Eden, no tools, the top BM25 hits pushed on every request);
  * - `-act`: the stub action tools (`act.ts`); only in `--act` runs, a mode of its own because it changes the system
  *   prompt and the tools, and there every condition gets it (`--act --conditions tools,eden` runs tools-act and
  *   eden-act);
@@ -32,7 +33,7 @@ export type Variants = Record<string, Record<string, unknown>>;
 export interface Condition {
   /** As results and timelines record it (`--act` adds `-act` to a name without it). */
   name: string;
-  base: "none" | "tools" | "eden" | "both" | "eden-judge" | "both-judge";
+  base: "none" | "tools" | "eden" | "both" | "eden-judge" | "both-judge" | "hits";
   act: boolean;
   /** The engine configuration of this condition: `--config` with its variant's settings and flags over it. */
   config: Record<string, unknown>;
@@ -49,6 +50,8 @@ export interface Condition {
   noKey: boolean;
   /** `+ephemeral`, `+ephemeralBp` (D336): how earlier requests' packets stay in the transcript; else `kept`. */
   packets: PacketLayout;
+  /** `hits` (P3): the top lexical hits pushed on every request (`lexical-hits.ts`), no partner, tools or ask. */
+  hits: boolean;
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
@@ -58,7 +61,7 @@ const NOKEY_FLAG = "nokey";
 /** The harness flags of D336's packet layouts, never sent to the engine. */
 const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];
 
-const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge"] as const;
+const BASES = ["none", "tools", "eden", "both", "eden-judge", "both-judge", "hits"] as const;
 const SHAPE = /^([a-z-]+?)(-act)?(?:~([A-Za-z0-9_.-]+))?((?:\+[^+@~]+)*)(?:@(.*))?$/;
 
 /** `--variant-config`: a JSON object mapping each variant name to the settings it adds. */
@@ -105,6 +108,9 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
       `condition ${name}: +nokey takes Eden's model roles away, so only eden or both (no judge, which needs a model) takes it`,
     );
   }
+  if (base === "hits" && (actTag || variant !== undefined || allFlags.length || wait !== undefined)) {
+    throw new Error(`condition ${name}: hits runs no Eden, so it takes no -act, variant, flag or wait`);
+  }
   const askTool = base.startsWith("eden") || askFlag;
   const layouts = LAYOUT_FLAGS.filter((f) => allFlags.includes(f));
   if (layouts.length > 1) throw new Error(`condition ${name}: +ephemeral and +ephemeralBp are two layouts; name one`);
@@ -135,7 +141,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   const waitMs = wait === undefined ? 3_000 : wait.startsWith("w") ? Number(wait.slice(1)) : NaN;
   if (!Number.isFinite(waitMs) || waitMs < 0) throw new Error(`bad wait in ${name}: use @w<ms>`);
   const act = !!options.act;
-  const useEden = base !== "none" && base !== "tools";
+  const useEden = base !== "none" && base !== "tools" && base !== "hits";
   return {
     name: act && !actTag ? name.replace(base, `${base}-act`) : name,
     base,
@@ -153,6 +159,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     judge: base.endsWith("-judge"),
     noKey,
     packets: layouts[0] ?? "kept",
+    hits: base === "hits",
   };
 }
 

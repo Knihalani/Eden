@@ -1,0 +1,26 @@
+# short, 1:1:8 mix, templates resampled
+[hits - eden] 1152 pairs ({'hidden': 384, 'control': 384, 'neutral': 384}), 192 templates, short: weighted 1:1:8
+  agent $/1k   -0.104 (-0.116..-0.091)   base 0.264
+  Eden $/1k    +0.000 (+0.000..+0.000)   base 0.000
+  total $/1k   -0.104 (-0.116..-0.091)   base 0.264
+  wall s       -0.678 (-0.761..-0.592)   base 2.202
+  Eden calls   +0.000 (+0.000..+0.000)   base 0.000
+  agent turns  -0.495 (-0.553..-0.439)   base 1.495
+  agent tools  -0.640 (-0.718..-0.560)   base 0.640
+[tools - eden] 1152 pairs ({'hidden': 384, 'control': 384, 'neutral': 384}), 192 templates, short: weighted 1:1:8
+  agent $/1k   -0.040 (-0.053..-0.027)   base 0.264
+  Eden $/1k    +0.000 (+0.000..+0.000)   base 0.000
+  total $/1k   -0.040 (-0.054..-0.026)   base 0.264
+  wall s       +1.050 (+0.893..+1.215)   base 2.202
+  Eden calls   +0.000 (+0.000..+0.000)   base 0.000
+  agent turns  +0.290 (+0.227..+0.354)   base 1.495
+  agent tools  +1.490 (+1.318..+1.653)   base 0.640
+# days, users resampled
+[hits - eden] 1024 pairs ({'hidden': 128, 'control': 128, 'neutral': 768}), 16 users, days: plain mean
+  agent $/1k   +0.017 (+0.011..+0.024)   base 0.236
+  Eden $/1k    +0.000 (+0.000..+0.000)   base 0.000
+  total $/1k   +0.017 (+0.011..+0.024)   base 0.236
+  wall s       +0.041 (-0.008..+0.100)   base 1.474
+  Eden calls   +0.000 (+0.000..+0.000)   base 0.000
+  agent turns  -0.056 (-0.067..-0.045)   base 1.056
+  agent tools  -0.062 (-0.074..-0.051)   base 0.062
