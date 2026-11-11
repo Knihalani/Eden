@@ -1,0 +1,74 @@
+{
+  "id": "acting-travel-3",
+  "category": "travel",
+  "description": "Travel. Two requests owe a stored constraint (the visa's validity, the fare's change fee window) beside a look-alike (a lapsed visa, another airline's rule); the rest are travel errands that share words with stored items but do not depend on them.",
+  "clock": "2026-11-09T10:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-visa",
+          "title": "Your India e-Visa",
+          "text": "Your e-Visa is valid for entry until 3 December 2026; stays are limited to 30 days per visit."
+        },
+        {
+          "ref": "msg-visa-old",
+          "title": "Your India e-Visa (2024)",
+          "text": "Your e-Visa was valid for entry until 2 March 2024; stays were limited to 90 days."
+        },
+        {
+          "ref": "msg-fare",
+          "title": "Your TAP booking LIS-DEL",
+          "text": "Changes are free until 72 hours before departure; after that a 120 EUR fee applies."
+        },
+        {
+          "ref": "msg-fare-other",
+          "title": "Your Lufthansa booking FRA-JFK",
+          "text": "Economy Light fares cannot be changed; refunds are restricted to taxes."
+        },
+        {
+          "ref": "msg-lounge",
+          "title": "Lounge pass",
+          "text": "Your lounge pass for Lisbon airport expires 31 December; one guest is allowed."
+        },
+        {
+          "ref": "msg-insurance",
+          "title": "Travel insurance renewal",
+          "text": "Your annual travel policy renews on 5 January; prices are locked until then."
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-delhi",
+          "title": "Delhi trip",
+          "text": "Fly out 28 November, back 20 December."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "acting-travel-3",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Make a packing list for Delhi in late November"
+          },
+          "expect": "neutral"
+        }
+      ]
+    }
+  ]
+}

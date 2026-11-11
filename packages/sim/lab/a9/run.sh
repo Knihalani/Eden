@@ -3,7 +3,7 @@
 # run.sh with A9's ledger (cap $2.5) and arms (A9_VC names each trial switch's variant); A9_SUITE (default train).
 L=$1; PUSH=$2; CONDS=$3; shift 3
 VC=${A9_VC:-'{}'}
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite ${A9_SUITE:-train} --conditions $CONDS \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite ${A9_SUITE:-train} --conditions $CONDS \
   --config default --variant-config "$VC" \
   --cards .local/a9/cards-all.jsonl --cards-out .local/a9/runs/$L.cards.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

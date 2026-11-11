@@ -4,7 +4,7 @@
 
 | Command | What it runs | When |
 |---|---|---|
-| `bun run test` | Every `*.test.ts` under packages/, examples/, scripts/, in parallel (`scripts/test.sh`) | Before a merge (part of `check`) |
+| `bun run test` | Every `*.test.ts` under packages/, examples/, scripts/, in parallel, slowest first, then the real-time tail (`scripts/test.sh`, D811) | Before a merge (part of `check`) |
 | `bun run test:changed` | Packages touched since the merge base with origin/main, plus their dependents, minus six end-to-end files of packages that are only dependents (D161, below) | The inner loop |
 | `bun run test:pkg engine sim` | Named packages | Working inside one package |
 | `bun run check:fast` | format:check + typecheck:fast (tsgo) + test:changed | Before pushing a work-in-progress commit |
@@ -153,6 +153,134 @@ The test's bound is now `TIMEOUT * 1.5` (750 ms) instead of `TIMEOUT + 250`: one
 regression to two deadlines (D140) lands at 1,000 ms, 250 ms clear. A cut to 300 ms with the fixed +250 ms would have
 left 50 ms between the two. Observed time before the reader at 500 ms: 501-601 ms (three runs, five asks each). Under
 load (four busy-loop processes on the 4 cores) the file passed 20 of 20 runs, 2.83-3.14 s each.
+
+## The cold gate at once, a tail for real-time tests, CPU-time bounds (D811, 2026-11-11, 4-core container, Bun 1.4.4)
+
+`CHECK_COLD=1 bun run check` took 83.1 s and 85.3 s on a quiet machine (format:check 16.6 and 16.9 s, typecheck 12.3
+and 12.4 s, tests 54.2 and 56.0 s, one after another), and failed under load: `rare-terms.test.ts` "bounded…" timed
+out in the weak-point analysis's run, again in two of this session's cold runs at load 15-18, and in the base tree with
+four busy loops beside it (142.0 s, red). Profile (each of the 235 files alone, `bun test <file>`): 191.8 s of wall
+time and 208.4 s of CPU in all. The tests are CPU-bound: four workers cannot go under about 52 s, and the parallel run
+was within a few seconds of that. Neither `--smol` (the container's `BUN_OPTIONS`; 54.0-58.5 s either way) nor
+`--no-isolate` (about 10% less CPU, but files would see each other's leftovers) was taken.
+
+What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `scripts/test-report.ts`):
+
+- **The three steps run at once.** Prettier and tsc are single processes; one after another they left cores idle.
+- **The slowest files start first** (`bun test --timings`, last run's durations under the git common dir; an order,
+  never a result): 51.7-51.9 s against 54-56 s for the tests alone.
+- **A tail.** 25 files that wait on real time and assert on it (a deadline met, a sleeping connector overtaken, a
+  child process started within a bound), or spend at least three times their CPU waiting for a second or more, run
+  after the rest, eight at a time, on a machine nothing else loads: 8.1-9.2 s. Before, they flaked under contention
+  and held a worker while idle (52.6 s of wall, 19.3 s of CPU).
+- **Bounds on work are CPU time.** 22 wall-clock ceilings around synchronous code (ReDoS and linearity guards in
+  engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
+  not on how long the scheduler kept the test waiting.
+- **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`): the limit catches a hang; Bun's 5 s
+  default failed CPU-bound tests under load. The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
+  assert nothing about time relied on it, and the tail runs unloaded. A name filter (`bun run test -- -t X`) runs one
+  invocation, unsplit, since a part it matched nothing in would fail. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
+  visible. `rare-terms.test.ts`'s two full-table tests fill 300,000 words, not 400,000 (still 38,000 past the table's
+  cap; about 0.5 s less), and carry 30 s.
+
+| `CHECK_COLD=1 bun run check` | Quiet | Four busy loops beside it |
+|---|---|---|
+| Before (the base tree, steps one after another) | 83.1 s, 85.3 s | 142.0 s, 1 fail (rare-terms timeout) |
+| After | 64.2 s, 62.9 s | 92.4 s, 0 fail |
+
+1.33x, not the 3x aimed at. The rest is CPU: about 242 s of it (tests 195-208 s, Prettier about 29 s, tsc about
+15 s) on four cores. Further gains need one of these, each an owner's call: tsgo as the gate's checker (about 5x faster
+than tsc, `typecheck:parity` checks they agree); Prettier's content-addressed known-formatted set trusted by the cold
+gate (the key is the content, Prettier's version and its configuration); or smaller end-to-end tests. The heaviest by
+CPU alone: `funnel-flags.test.ts` 21.7 s (thirteen funnel processes), `injection-suite` 9.0, `sim.test` 8.8,
+`cards-disk` 8.2 (24 worlds' intent coverage), `client-package` 7.5, `router-processes` 7.0, `reader-stub` 5.8,
+`pilot` 5.2, `neutral` 4.9, `days-calls` 4.6, `linear` 4.2, `fuzz` 4.0.
+
+### D819: slimmer end-to-end tests (2026-11-11, 4-core container shared with other agents, Bun 1.4.4)
+
+Part 1 of D819 is the Prettier set the cold gate now trusts (`scripts/format.sh`, `scripts/format-key.test.ts`). Part
+2 shares work inside five heavy test files; no `expect` was removed, and each runs on the same or a smaller input:
+
+- `funnel-flags.test.ts`: one pair of `funnel.ts` runs (`--time 0.05`, `--jobs 1` and `2`) now writes the per-task
+  output files too, and the output-file test reads them; the second pair at `--time 0` (two processes, about 6.5 s of
+  CPU) is gone. The merge code (`partFiles`, `partArgs`, `mergeOutputs`) does not read `--time`, and the five files
+  were byte for byte the same between the two runs in three of three trials at load 7-10. The `--time 0` grouping
+  still runs end to end in the SIGTERM run, and `groupShards` keeps its unit tests (funnel-merge.test.ts).
+- `cards-disk.test.ts` (the coverage claim over held-out 13-18, seeds 41 and 44): every suite and seed is still
+  covered. One base world per seed is built and shared by its twelve suite-variant worlds (own lists and maps, the
+  same item objects), so the sources' per-item analysis, memoised on the object, runs once a seed. All 24 worlds' item
+  lists and coverage counts were identical to fresh builds; a new check fails if a suite or `clearSlot` changes a
+  base item.
+- `injection-suite.test.ts` (quarantine over the train suites): every item still counts, but each distinct title,
+  text and branch is checked once (18,124 items, 1,871 distinct); `quarantineItem` reads only the title and text. D815
+  then deleted `quarantineInstructions` and this test with it (shield.ts; M8 and M9 below were run before that).
+  The `expect()` count falls from 18,241 to 1,978 for this reason.
+- `days-calls.test.ts`: the plain payload run and the `onPlanted` run are one run (the callback only observes; the two
+  reports were identical).
+- `neutral.test.ts`: the two `--neutral` runs cap the sync at 100 items a user (`syncLocalComplete: false`), as
+  funnel-flags.test.ts and reader-stub.test.ts do.
+
+Each file alone, base version then new version, back to back (`TIMEFORMAT='%R %U %S'; time bun test ./file`; CPU =
+user + sys, children included; load is the 1-minute average at the start of each run; the machine was shared):
+
+| File | Base CPU (s) | New CPU (s) | Base wall (s) | New wall (s) | Load base / new |
+|---|---|---|---|---|---|
+| `funnel-flags.test.ts` | 20.70, 22.80 | 15.03, 15.47 | 15.7, 19.7 | 13.5, 13.6 | 16.8-26.0 / 36.4-41.4 |
+| `cards-disk.test.ts` | 8.60, 9.22 | 5.03, 5.54 | 12.1, 11.2 | 7.5, 6.5 | 38.4-41.8 / 36.2-36.8 |
+| `injection-suite.test.ts` | 8.90, 8.62 | 7.23, 6.83 | 10.8, 10.7 | 9.4, 6.9 | 34.6-35.6 / 31.4-33.5 |
+| `days-calls.test.ts` | 7.78, 8.00 | 7.36, 6.83 | 7.9, 5.9 | 5.3, 4.8 | 23.0-25.7 / 19.7-21.3 |
+| `neutral.test.ts` | 5.86, 5.63 | 4.47, 4.63 | 4.0, 4.0 | 3.8, 3.9 | 17.2-18.3 / 16.5-17.2 |
+| Sum of the means | 53.1 | 39.2 | | | |
+
+About 13.9 s of CPU less, about 7% of the 208 s the tests take. At lower load earlier in the session: funnel-flags
+23.08 and 22.50 s (load 6.8-7.9) against 15.34 and 14.42 (1.5-4.0); cards-disk 9.19 and 9.39 (8.8-9.6) against
+4.68 and 4.84 (3.5-3.6).
+
+`CHECK_COLD=1 bun run check`, total CPU of the command and wall (load: 1, 5, 15-minute averages before and after):
+
+| | CPU (s) | Wall (s) | Load before → after | Result |
+|---|---|---|---|---|
+| Before 1 | 222.7 | 64.7 | 2.8, 6.1, 7.0 → 7.4, 7.0, 7.2 | 1 fail (`pilot-review.test.ts`, below) |
+| Before 2 | 230.0 | 149.4 | 3.8, 6.1, 6.9 → 30.3, 15.4, 10.2 | 2 fail (a WorkerPool and a D100 test, under load) |
+| Before 3 | 240.0 | 137.9 | 30.3, 15.4, 10.2 → 19.7, 18.9, 12.4 | 2 fail (sim.test, linear: 20 s timeouts under load) |
+| After 1 | 230.4 | 100.6 | 14.5, 18.3, 13.6 → 17.2, 17.7, 13.9 | green |
+| After 2 | 233.6 | 97.6 | 17.2, 17.7, 13.9 → 15.8, 17.6, 14.3 | green |
+| After 3 (the committed tree) | 219.0 | 85.0 | 7.7, 14.3, 13.4 → 12.3, 14.7, 13.7 | green |
+
+The gate's figures do not resolve a 14 s change: other agents kept the load between 3 and 41, and CPU time itself
+grows under that contention (the same file's CPU varies by 10-20% between loads). The per-file pairs above are the
+measure. A quiet-machine gate figure is still owed.
+
+`pilot-review.test.ts` failed on the base (D818's guard refused the placeholder key its pi-ab child is given): the
+test now sets `EDEN_ALLOW_OPENROUTER=1` for that child, whose key is a placeholder and whose run is `--dry`.
+
+Mutation spot-check: each edit made to the source under test, the file's tests run, the edit reverted.
+
+| # | Source edit | Test file | Result |
+|---|---|---|---|
+| M1 | funnel.ts merges only the first process's part | funnel-flags | fails: output files shard |
+| M2 | funnel-merge.ts `mergeLines` keeps arrival order | funnel-flags | fails: output files shard |
+| M3 | funnel.ts at `--time` > 0: one process a suite, not a shard | funnel-flags | fails: output files shard |
+| M4 | funnel.ts does not delete parts after the merge | funnel-flags | passes: equivalent, the exit handler deletes them |
+| M4b | M4 and no deletion at exit either | funnel-flags | fails: output files shard; SIGTERM leaves no part |
+| M5 | cards-disk.ts `intentCoverage` counts 50 items too many | cards-disk | fails: coverage claim; `--intent none` header |
+| M6 | cards-disk.ts `loadRequests` drops one key in sixteen | cards-disk | fails: coverage claim |
+| M7 | hidden-context.ts `clearSlot` edits a base item | cards-disk | fails: coverage claim (the shared-world check) |
+| M8 | shield.ts `quarantine` removes nothing | injection-suite | fails: guardLine and quarantineInstructions |
+| M9 | shield.ts `quarantineItem` always copies | injection-suite | fails: quarantine leaves planted facts alone |
+| M10 | days-calls.ts `onPlanted` skips each kind's first request | days-calls | fails: onPlanted rows |
+| M11 | hidden-funnel.ts keeps one neutral row | neutral | fails: `--neutral` block |
+
+M7 passes on the base test (it built every world afresh); the check that catches it is new. A first M6, `dress` doing
+nothing, passed on both the base and the new test: the coverage claim does not see undressed planted items.
+
+Left alone: `client-package` (packs the client, runs Node and tsc: the cost is the code under test),
+`router-processes` (each test starts and stops a two-process router; sharing one would couple tests that kill
+processes), `reader-stub` (its three runs already go out together and share their checks), `pilot` (a dozen short CLI
+calls, each its own assertion), `sim.test` (its two-user merge run is already the smallest with a shard boundary;
+three sessions instead of six in the updates test measured no difference and was reverted), `linear` and `fuzz`
+(differential and fuzz corpora: seeds × inputs kept), and the smaller files (`sparse-index-packed`, `deletes`,
+`cache-freeze`, `unused-sweep`, `eval/run.test`), not reached.
 
 ## Caches in format:check and typecheck
 
@@ -459,10 +587,12 @@ they would contend for CPU and GC, and the stage differences are per-mode subtra
 - Behaviour changes get a test first (CLAUDE.md); a regression found in review gets its own test.
 - New state gets an isolation test (two users, two tenants or two sessions).
 - No real network, no real keys: fake `fetch`, `FakeModel`, injected clocks (`pacing.test.ts`).
-- Wall-clock ceilings only for ReDoS-style guards, best of three, with headroom for a parallel run. To show that
+- A ceiling on work (a ReDoS or linearity guard) measures CPU time (`cpuMs`, D811), not wall time. A test that must
+  measure a wait in wall time goes in `scripts/test-tail.txt`. To show that
   work was done ahead of time, count the work (`warm.test.ts` counts pattern compilations and first runs through
   counting engines) rather than timing the call.
-- A test over 5 s gives its own timeout and says why.
+- A test over 5 s alone gives its own timeout and says why (the run's default is 20 s, D811; the report at the end
+  of `bun run test` lists every test over 3.5 s).
 - A heap bound measures in a process of its own (`Bun.spawn` of a scenario script, as
   `packages/sources/src/cache-heap.scenario.ts`): under `--parallel` a file shares its worker's heap with the files
   run before it, whose leftovers moved one reading by 1.2 MB (docs/research/b2-deflake.md).

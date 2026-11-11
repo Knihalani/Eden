@@ -1,0 +1,84 @@
+{
+  "id": "acting-work-ops-8",
+  "category": "work",
+  "description": "Work operations. Two requests owe a stored rule (the deploy freeze, the expense approval cap) beside a look-alike (last quarter's freeze, another team's cap); the rest are routine acts that share words with stored rules but are not governed by them.",
+  "clock": "2026-11-10T09:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's work email",
+      "docs": [
+        {
+          "ref": "msg-freeze",
+          "title": "Deploy freeze this week",
+          "text": "No production deploys from Wednesday 11 November until Monday 16 November; hotfixes need Priya's sign-off."
+        },
+        {
+          "ref": "msg-freeze-q2",
+          "title": "Deploy freeze (Q2 close)",
+          "text": "No production deploys from 26 June until 1 July for the quarter close."
+        },
+        {
+          "ref": "msg-expenses",
+          "title": "Expenses policy for the platform team",
+          "text": "Expenses above 500 GBP must be approved by your director before booking."
+        },
+        {
+          "ref": "msg-expenses-sales",
+          "title": "Sales team: travel expenses",
+          "text": "Sales travel above 2,000 GBP is limited to economy and needs VP approval."
+        },
+        {
+          "ref": "msg-standup",
+          "title": "Standup moved",
+          "text": "Standup is now at 09:45 because the room is restricted until 09:30."
+        },
+        {
+          "ref": "msg-badge",
+          "title": "Office access badges",
+          "text": "Badges must be renewed every 12 months at reception; the deadline for yours is March."
+        },
+        {
+          "ref": "msg-allhands",
+          "title": "All-hands recording",
+          "text": "The recording of Tuesday's all-hands is up on the intranet; slides are pending review."
+        }
+      ]
+    },
+    {
+      "id": "tickets",
+      "description": "The team's issue tracker",
+      "docs": [
+        {
+          "ref": "tkt-412",
+          "title": "INC-412 login timeouts",
+          "text": "Pending a fix from the identity team; customers must retry after 30 seconds."
+        },
+        {
+          "ref": "tkt-388",
+          "title": "OPS-388 rotate staging certificates",
+          "text": "Staging certificates expire 30 November; locked until the security review closes."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "acting-work-ops-8",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Collect the badge photos from the team folder into one zip for reception"
+          },
+          "expect": "neutral"
+        }
+      ]
+    }
+  ]
+}
