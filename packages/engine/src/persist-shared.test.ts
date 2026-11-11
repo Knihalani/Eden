@@ -244,6 +244,52 @@ describe("a store shared between machines (D992)", () => {
     expect(d2.remote.skipped).toBeGreaterThan(0);
   });
 
+  test("the store's key check: a marker of the key, sampling before there is one, rotation, a down or hung store (R1b)", async () => {
+    const store = new MemoryStore();
+    const OLD = KEY;
+    const NEW = new Uint8Array(32).map((_, i) => 250 - i);
+    const disk = (key: Uint8Array, s: BlobStore = store) =>
+      new SharedFrozenDisk({
+        dir: tempDir(),
+        key,
+        maxBytes: 64 << 20,
+        maxAgeMs: 7 * 24 * HOUR,
+        store: s,
+        prefix: "f/",
+      });
+    // Blobs written under the old key by a server from before the marker: none names the key yet.
+    const c = freezing();
+    const old = disk(OLD);
+    c.persist(old);
+    for (const u of ["a", "b", "c"]) c.put({ tenantId: "t", userId: u }, items(u, 3), T0);
+    freezeAll(c, T0);
+    await old.settle(1_000);
+    expect(store.objects.size).toBe(3);
+    // No marker: the blobs are sampled; all foreign is refused and nothing is written.
+    expect(await disk(NEW).verifyStoreKey(false)).toMatchObject({ verdict: "foreign", sampled: 3, foreign: 3 });
+    expect(store.objects.has("f/key-id")).toBe(false);
+    // The old key's own start writes the marker.
+    expect(await disk(OLD).verifyStoreKey(false)).toMatchObject({ verdict: "ok" });
+    expect(store.objects.has("f/key-id")).toBe(true);
+    // A rotation: discarding moves the marker to the new key; the old blobs stay (the age sweep takes them), and the
+    // next start with the new key is not refused by them, however many there are (the review of R1b).
+    expect(await disk(NEW).verifyStoreKey(true)).toMatchObject({ verdict: "discarded" });
+    expect(await disk(NEW).verifyStoreKey(false)).toMatchObject({ verdict: "ok" });
+    expect(store.objects.size).toBe(4); // three old blobs and the marker
+    // The old key is now the foreign one.
+    expect(await disk(OLD).verifyStoreKey(false)).toMatchObject({ verdict: "foreign" });
+    // An empty store: ok, and the marker is written.
+    const empty = new MemoryStore();
+    expect(await disk(NEW, empty).verifyStoreKey(false)).toMatchObject({ verdict: "ok" });
+    expect(empty.objects.has("f/key-id")).toBe(true);
+    // Down or hung: unknown, the start goes ahead (fail open).
+    store.down = true;
+    expect(await disk(NEW).verifyStoreKey(false)).toMatchObject({ verdict: "unknown" });
+    store.down = false;
+    store.getDelayMs = 1_000;
+    expect(await disk(NEW).verifyStoreKey(false, 50)).toMatchObject({ verdict: "unknown" });
+  });
+
   test("users remembered as absent from the store are bounded (R1)", async () => {
     const store = new MemoryStore();
     const d = new SharedFrozenDisk({
