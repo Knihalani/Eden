@@ -232,6 +232,36 @@ describe("frozen users on disk (D425)", () => {
     expect(events).toEqual([{ kind: "discarded", reason: "expired" }]);
   });
 
+  test("a warm freeze writes nothing; the compact one writes; a shutdown writes warm users, read back the same (D862)", () => {
+    const dir = tempDir();
+    // Warm after two idle ticks, compact after five.
+    const a = new ItemCache({ warmIdleMs: 1, freezeIdleMs: 5, expireEveryMs: 1 });
+    a.close();
+    a.persist(disk(dir).d);
+    a.put(alice, items("alice", 30), T0, false, false, 5);
+    a.put(bob, items("bob", 30), T0, false, false, 5);
+    const before = find(a, alice, "quarterly budget review Friday", T0).map((i) => i.id);
+    for (let i = 0; i < 3; i++) a.expireIdle(T0);
+    expect(a.warmCount).toBe(2);
+    expect(files(dir)).toEqual([]);
+    // Bob is used again; alice stays idle until she is held compact, and written.
+    find(a, bob, "budget", T0);
+    for (let i = 0; i < 3; i++) a.expireIdle(T0);
+    expect(a.warmCount).toBe(1);
+    expect(files(dir).length).toBe(1);
+    // A shutdown writes the warm one (bob) too.
+    expect(a.flush()).toBe(1);
+    expect(files(dir).length).toBe(2);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    expect(find(b, alice, "quarterly budget review Friday", T0).map((i) => i.id)).toEqual(before);
+    expect(find(b, bob, "budget", T0).every((i) => i.ref.startsWith("bob"))).toBe(true);
+    // Read back from a file: another process's read marks mean nothing here, warm or compact (D425).
+    for (const s of [alice, bob]) for (const it of items(s.userId, 30)) expect(b.readMark(s, it.id)).toBe(0);
+    expect(b.freezes.loaded).toBe(2);
+    expect(files(dir)).toEqual([]);
+  });
+
   // D428: a file lives until its newest item (or probe) expires, not the 7-day cap, even if nothing reads it back.
   test("a file whose items have all expired is deleted by the sweep and at open, and nothing is restored", () => {
     const dir = tempDir();

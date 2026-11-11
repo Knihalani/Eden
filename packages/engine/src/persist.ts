@@ -43,7 +43,11 @@ import type { Scope } from "@eden/protocol";
  */
 // 2: the header's expiry (1 had none: such files are discarded as "version"). 3: the sync snapshot's `rare`
 // (`RareTerms`, D603): a user saved without it would wait for each source's next listing to fill the table.
-export const PERSIST_FORMAT = 3;
+// 4: a blob may be a warm one (D860, D862: "EDF2", its text bytes deflated and its index as arrays); a build before
+// it would not read one, and discards it as another version. Files of 3 are still read (`READABLE_FORMATS`).
+export const PERSIST_FORMAT = 4;
+/** Formats a file may have and still be read: 3's blobs are compact ones, which this build still reads (D862). */
+const READABLE_FORMATS = new Set([3, PERSIST_FORMAT]);
 
 const MAGIC = Buffer.from("EDNF", "latin1");
 const HEADER = 44;
@@ -302,7 +306,7 @@ export class EncryptedFrozenDisk implements FrozenDisk {
 
   private headerProblem(file: Buffer, now: number): "version" | "key" | "expired" | "corrupt" | null {
     if (file.length < HEADER || !file.subarray(0, 4).equals(MAGIC)) return "corrupt";
-    if (file.readUInt16LE(4) !== PERSIST_FORMAT) return "version";
+    if (!READABLE_FORMATS.has(file.readUInt16LE(4))) return "version";
     if (!file.subarray(8, 16).equals(this.keyId)) return "key";
     const at = file.readDoubleLE(16);
     const until = file.readDoubleLE(24);
