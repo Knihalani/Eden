@@ -16,11 +16,13 @@ def spent():
         return 0.0
 
 
-def call(system, user, run, max_tokens=4000, model="claude-haiku-5-5", effort="low"):
+def call(system, user, run, max_tokens=4000, model="claude-haiku-5-5", effort="low", think=True):
     if spent() >= CAP:
         raise RuntimeError(f"spend cap ${CAP} reached")
     body = {"model": model, "max_tokens": max_tokens, "system": system, "output_config": {"effort": effort},
             "messages": [{"role": "user", "content": user}]}
+    if not think:
+        body["thinking"] = {"type": "disabled"}
     req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(body).encode(), headers={
         "x-api-key": os.environ["HAIKU_API_KEY"], "anthropic-version": "2023-06-01", "content-type": "application/json"})
     for attempt in range(5):

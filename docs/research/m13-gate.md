@@ -44,3 +44,23 @@ brief and generator from S4's).
 
 Promote (D814) only if 1–4, 6 and 7 hold (and 5 where run): into `DEFAULT_CONFIG` with a `PARTS` entry, the rules it
 replaces deleted. Otherwise delete the gate's engine code and tests, keep the lab kit.
+
+## 1. Hypotheses (written before the first training round)
+
+Every gate reads one user turn, character by character, with no tokenizer and no pretrained table: hashed
+character n-grams work the same in any script. They differ in what they read and how they compose it.
+
+| # | Hypothesis | What it bets on |
+| --- | --- | --- |
+| H1 | **Hashed n-gram bag, linear** (`bag`, groups chewp: char 1–4-grams, the turn's head and tail grams, words, word bigrams, positional first/last words) | The cheap baseline: the opener and the ending carry most of the decision in every language |
+| H2 | **The same bag with one hidden layer, int8 table** | Interactions (a lead-in AND a concrete object) that a linear bag cannot form, at 1 byte a weight |
+| H3 | **Binary codes**: ternary table, mean-pooled into a sign code (128 bits), XNOR-popcount layers (M3's kernel) | Size and speed: the decision as a Hamming test on a 128-bit code |
+| H4 | **Clause multiple-instance** (`mil`): the same encoder over the whole turn and each clause; needs is the max | A request in a second clause ("the boiler's broken again, can you book …") is one clause's decision, not the turn's |
+| H5 | **Character CNN** over code points (hashed to 4,096), two widths, max-pool | Local word shapes and suffixes (imperative endings: -ez, -en Sie, -ar/-er) without any word list |
+| H6 | **Tiny recurrent reader** (minGRU, 32–48 units) over the first 96 code points | Order: "can you believe" vs "can you book" is decided by what follows the opener |
+| H7 | **Rule residual**: the bag plus the shipped rule's own reading (listed / opened / none, lead-in read) as features | Keep what the rules know in English and learn only where they fail (other languages, terse, chatter) |
+| H8 | **Function-word skeleton**: words outside the training set's K commonest become their shape, and skeleton n-grams are hashed | "I need to <verb> the <noun> by <day>" vs "I need a <adj> <noun>": structure over vocabulary, so it transfers to new topics |
+
+Surface cues are balanced in the data rather than hoped away: M13's training set is contrastive (each set holds all
+kinds on one topic, at one length and one punctuation style, in one language), and rows are weighted so every
+(language, needs) cell carries the same weight.
