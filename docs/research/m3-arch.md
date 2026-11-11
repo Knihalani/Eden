@@ -249,3 +249,21 @@ its val split unless said; or fold A's groups as before.
 | H5 | silence as a set classifier | AUC 0.567 | — | **killed** |
 | H6 | discrete keys | 1 of 10 unreachable facts | — | **killed** here (no room); H6′ to test on M2's rare-source facts |
 | H8 | intent from the request | accuracy 0.19–0.20 (majority 0.094) | — | **killed** for now (2.1× majority, memorises families) |
+
+### 7e. Step 6: full trainings on Modal (8-core CPU containers, no GPU)
+
+**H13, the ingest tagger** (M2 v2 train, 2,128 worlds, plus fold A's sim and generated-family items; 256 bits; 4
+epochs; held out: M2 v2 val families and the sim's train5–6):
+
+| version | fact vs its own twin, M2 val | fact vs twin, sim fold A | fact vs neutral / other (M2) | fact recall |
+|---|---|---|---|---|
+| binary | 0.947 / 0.946 / 0.947 / 0.944 | 0.731 / 0.773 / 0.759 / 0.765 | 0.995 / 0.997–0.998 | 0.91–0.93 |
+| float | 0.957 / 0.957 / 0.954 / 0.953 | 0.744 / 0.756 / 0.754 / 0.750 | 0.995–0.997 / 0.997–0.998 | — |
+
+Binarisation costs about 0.01 AUC. On M2's held-out families the item alone separates a fact from its all-clear twin at
+0.95; on the sim's held-out families at about 0.76, and the sim's own items in training do not lift that (the earlier
+M2-only tagger: 0.767). The sim's train5–6 twins differ from their facts in ways an item-only reading catches less often.
+
+**H10, supersession** (M2 v2, float, 6 epochs): AUC 0.990 / 0.986 / 0.980 / 0.979 / 0.981 / 0.979 against Jaccard's
+0.791 (4,662 val pairs, 297 replacements); at threshold 0 precision 0.99–1.0, recall 0.39–0.52. Rerun with recall at
+fixed precision (0.95, 0.90), binary and float.
