@@ -94,6 +94,8 @@ import {
   type Trace,
   readerMessages,
   sanitizeItem,
+  renderPacket,
+  isStopword,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
@@ -234,7 +236,7 @@ const cli = flags(
     ),
     ...Object.fromEntries(
       ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"]
-        .concat("call-split")
+        .concat("call-split", "packet-parts")
         .map((k) => [k, B]),
     ),
   },
@@ -621,6 +623,12 @@ const TIMELINE = opt("timeline", "");
  */
 const PACKETS = opt("packets", "");
 if (PACKETS) writeFileSync(PACKETS, "");
+/**
+ * `--packet-parts` (with `--packets`; M6, docs/research/m6-trimmer.md): each packet item's parts as compaction reads
+ * them (`messageParts`) and the text it kept, re-rendered from the cache with the shipped packet options, so a part
+ * trimmer can be trained on items as the engine renders them. Sim and synth worlds only (no user data).
+ */
+const PACKET_PARTS = cli.has("packet-parts");
 /**
  * `--candidates out.jsonl`: every no-model decision's candidates with their facts (`decide.ts`), one line per task with
  * the planted item's id and variant, for the decision analysis (docs/research/econ-decide.md). Ids and numbers only.
@@ -1091,6 +1099,36 @@ async function runSeed(
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
   /**
+   * `--packet-parts`: the packets' items re-rendered from the cache with the shipped options (focus, 320 bytes an item,
+   * year, the user's name, dense, split), each item's parts and kept text recorded, and its rendered line, so a reader
+   * can check the re-render matches the packet. The fold and the lead are not re-run (the packet's own text has them).
+   */
+  const packetParts = (packets: readonly { citations: readonly { itemId: string }[] }[], request: string, at: number) =>
+    packets.map((p) => {
+      const items = p.citations.map((c) => cache.get(scope, c.itemId, at)).filter((x) => x !== null);
+      const words = request.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      const out: { id: string; source: string; title: string; parts: [string, number][]; kept: string }[] = [];
+      renderPacket(items, {
+        maxBytes: 100_000,
+        focus: new Set(words.filter((w) => w.length > 1 && !isStopword(w))),
+        itemBytes: 320,
+        year: new Date(at).getUTCFullYear(),
+        self: cache.selfOf(scope),
+        dense: true,
+        split: true,
+        onParts: (item, parts, kept) =>
+          out.push({
+            id: item.id,
+            source: item.sourceId,
+            title: item.title,
+            // Each part's text and flags: 1 quoted, 2 a header.
+            parts: parts.map((x) => [x.text, (x.quoted ? 1 : 0) | (x.header ? 2 : 0)]),
+            kept,
+          }),
+      });
+      return out;
+    });
+  /**
    * `--ask-diag`: whether the intent index could reach a planted item at its ask (`ask-coverage.ts`). Read after the
    * ask, at no call: the replay's requests for its content, the requests the engine held, whether the card model was
    * sent it and whether the prefilter rejects it, and its hit for the question (`intentPlace`) as the engine
@@ -1388,6 +1426,7 @@ async function runSeed(
       // so a byte cut can be checked for the fact it keeps (docs/research/gen-tokens.md).
       const extra = {
         detail: task.detail,
+        ...(PACKET_PARTS ? { parts: packetParts([...injections, ...pendingSeen], task.text, askAt) } : {}),
         plantedText: planted[i] ? `${planted[i]!.title} ${planted[i]!.text}` : "",
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };

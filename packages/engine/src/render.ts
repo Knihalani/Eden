@@ -44,6 +44,11 @@ export function renderPacket(
      * made single).
      */
     lead?: string;
+    /**
+     * Lab only (M6's dump, `--packets`): told each compacted item's parts as `messageParts` read them and the text
+     * compaction kept. Reads only; never set by the engine.
+     */
+    onParts?: (item: ContextItem, parts: readonly Part[], text: string) => void;
   },
 ): string {
   const before = options.shownBefore;
@@ -78,6 +83,7 @@ export function renderPacket(
       );
       // `compactText`, with what this session showed of the item before as known too.
       const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
+      options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
       return { ...item, text };
@@ -304,7 +310,7 @@ function withoutEcho(part: string, title: string[]): string {
     [prev, cur] = [cur, prev];
   }
   // From the end: a run ending at word i covers words i-run+1..i; take it whole and continue before it.
-  for (let i = words.length - 1; i >= 0;) {
+  for (let i = words.length - 1; i >= 0; ) {
     const run = best[i]!;
     if (run >= ECHO_RUN) {
       const a = words[i - run + 1]!;
