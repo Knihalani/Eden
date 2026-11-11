@@ -52,13 +52,15 @@ the tenant's agent ──(its prompt, Eden's packets inside)──▶ the tenant
    Eden ──(content-free traces and usage records, EDEN_TRACE=1; D56, D279, D293)──▶ operator logs
 ```
 
-**What the candidates default sends to the tenant's model (D237, D276).** For a request that acts, Eden hands the
-agent up to five items it found, unvetted by any model, each a redacted excerpt of at most 320 bytes, after one fixed
-line of Eden's own telling the agent to check each against the request and ignore it if it does not match. This runs
-with or without a model key. So, on most acting requests, text from the user's sources that may be unrelated to the
-request reaches the tenant's model: on the lab's worlds 86% of nothing-to-add requests got a packet (docs/PRIVACY.md).
-That is a data-minimisation cost the tenant must disclose, and it widens the prompt-injection surface below. Taking
-the part out (`EDEN_ENGINE_CONFIG` with `pushCandidates: 0`) returns to the reader (with a key) or rule paths only.
+**What the candidates default sends to the tenant's model (D237, D276, D710).** For a request that acts or opens like
+an instruction (`isOpenRequest`), Eden hands the agent up to five items it found, unvetted by any model, each a
+redacted excerpt of at most 320 bytes, after one fixed line of Eden's own telling the agent to check each against the
+request and ignore it if it does not match. This runs with or without a model key. So, on nearly every request, text
+from the user's sources that may be unrelated to the request reaches the tenant's model: on the lab's worlds 98% of
+nothing-to-add requests got a packet (3,160 of 3,237 over 32 simulated users' days, D710; 87% with `pushOpen: false`,
+the part `open` taken out; docs/PRIVACY.md). That is a data-minimisation cost the tenant must disclose, and it widens
+the prompt-injection surface below. Taking the part out (`EDEN_ENGINE_CONFIG` with `pushCandidates: 0`) returns to the
+reader (with a key) or rule paths only.
 
 **Eden's own model calls (D12, D112).** Only with `OPENROUTER_API_KEY`: cards and intent requests read redacted item
 text in the background, ten items a call, under per-session, per-user-day and per-tenant-day budgets; the ask-time

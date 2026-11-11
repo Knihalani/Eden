@@ -325,7 +325,8 @@ back within its cooldown even when the agent took it for an earlier, unrelated r
 run did not show re-showing it better (docs/research/a26-reshow.md).
 
 **New items against what the agent already acted on** (D301, `planConflict`, on in the default, part `plans`): each
-session keeps the cues of its last 12 requests the push ran for (the acting requests). Items the sync stores after
+session keeps the cues of its last 12 listed-verb requests the push ran for (the acting requests; a push opened on
+the request's shape, D702, is not kept). Items the sync stores after
 that (a poll, a notice's payload) wait, per session, for its next take (`takePending`, or an observe that starts no
 push): there each is checked against those requests by `candidatesOf`'s rule (among the first `pushCandidates` of the
 request's ranked pool, bulk mail out, the pool holding something constraint-like, cards included, which by then have
@@ -471,6 +472,12 @@ with no verdict, or one that flagged an item changed since it read it, leaves th
 ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
+
+**The push for any request (`pushOpen`, O3, D702, D706; in the default since D710).** `observe` starts the push only
+for a request whose verb `isImperative` lists, a gate from the reader's paid push. With `pushCandidates` and no
+`pushCheck`, a message that does not open as a question, a remark or a statement (`isOpenRequest`) starts it too: no
+model call, the candidates' own gate unchanged, and no acting request recorded for plan alerts
+(docs/research/o3-push-open.md).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests

@@ -73,6 +73,61 @@ export function isImperative(raw: string, more?: ReadonlySet<string>): boolean {
   return false;
 }
 
+/** Words that open a reply or a remark, not a request (`isOpenRequest`). */
+const REMARKS = new Set(
+  "thanks thank thx cheers great nice cool perfect lovely yes yep yeah no nope sure sorry lol sounds looks seems".split(
+    " ",
+  ),
+);
+/** Words that open a question, with or without its question mark (`isOpenRequest`). */
+const ASKING = new Set(
+  (
+    "what when where which who whom whose why how is are am was were do does did has have had should shall may " +
+    "might must"
+  ).split(" "),
+);
+/** Words that open a statement about something, not an instruction (`isOpenRequest`); apostrophes are stripped. */
+const STATING = new Set(
+  "i im ive ill we were weve it its the this that these those there theres my our your he she they a an".split(" "),
+);
+/** Openers that, followed by "you", make a polite request ("Can you tag v2.8.0 … ?"); else they open a question. */
+const POLITE = new Set(["can", "could", "would", "will"]);
+/** How much of a message `isOpenRequest` reads: its head for the words, its tail for a question mark. */
+const OPEN_HEAD_CHARS = 400;
+
+/**
+ * `pushOpen` (O3, D702): a message that opens like an instruction whatever its verb. `isImperative` knows a closed
+ * list of verbs, and users do not keep to it ("Cash in £3,000 of my Premium Bonds", "Top up Maya's dinner account",
+ * "Reimburse Oskar the £180"): 132 of 768 hidden train requests open with a verb on no list. No verb can be
+ * recognised without a list, so this reads what the message is not: at least four words, and its first word after
+ * the openers ("please", "hey", "can you") is not a remark's ("Thanks, …"), a question's ("What …", "Is …"; "Will the
+ * bonds cover it" too: a polite opener not followed by "you"), a statement's ("I think …", "The boiler …") or a
+ * request to be told ("let me know …"). A question mark is allowed only on a polite ask ("Could you …?"). It errs
+ * towards yes for anything else (a pasted log line passes): the candidates' own gate still decides the packet.
+ * Bounded: it reads the first `OPEN_HEAD_CHARS` characters and the last few.
+ */
+export function isOpenRequest(raw: string): boolean {
+  const words = raw.slice(0, OPEN_HEAD_CHARS).trim().split(/\s+/, 12);
+  if (words.length < 4) return false;
+  const clean = (w: string | undefined) => (w ?? "").toLowerCase().replace(/[^\p{L}-]/gu, "");
+  let i = 0;
+  let polite = false;
+  while (i < words.length - 1 && i < 8 && OPENERS.has(clean(words[i]))) {
+    // "Can you …", "Hey could you …": the opener asks for the thing. "Will the bonds cover …": it asks about it.
+    if (POLITE.has(clean(words[i]))) {
+      if (clean(words[i + 1]) !== "you") return false;
+      polite = true;
+    }
+    i++;
+  }
+  const first = clean(words[i]);
+  if (!first || REMARKS.has(first) || ASKING.has(first) || STATING.has(first)) return false;
+  const next = clean(words[i + 1]);
+  if (TELL_ME.has(first) && (next === "me" || next === "us")) return false;
+  if (/\?\s*$/.test(raw.slice(-32))) return polite;
+  return true;
+}
+
 /**
  * `conflictVocab` (D75): more verbs that open a request to act, beside `LEADING` (which also cleans names, so it
  * is not widened): moving money, renewing, raising, reserving, granting or removing, releasing.
