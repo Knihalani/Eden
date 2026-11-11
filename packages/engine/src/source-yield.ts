@@ -137,16 +137,16 @@ export class SourceYield {
   }
 
   /**
-   * `routerGate` (M8): one user's runs and uses read many times in one lookup with one user lookup (the router reads
-   * every source of a user with 1,000 connectors). Absent sources read as never read and never used.
+   * `routerGate` (M8): one user's runs and uses, read many times in one lookup with one user lookup (the router reads
+   * every source of a user with 1,000 connectors). The returned function writes `used` (1 or 0) and the decayed run
+   * into `out[at]` and `out[at + 1]`; a source with no record reads as never read and never used.
    */
-  view(scope: Scope, now: number): (sourceId: string) => { run: number; used: boolean } {
+  view(scope: Scope, now: number): (sourceId: string, out: Float64Array, at: number) => void {
     const held = this.user(scope, false)?.sources;
-    const none = { run: 0, used: false };
-    if (!held) return () => none;
-    return (id) => {
-      const r = held.get(id);
-      return r ? { run: this.fade(r.empty, r.at, now), used: r.used } : none;
+    return (id, out, at) => {
+      const r = held?.get(id);
+      out[at] = r?.used ? 1 : 0;
+      out[at + 1] = r ? this.fade(r.empty, r.at, now) : 0;
     };
   }
 

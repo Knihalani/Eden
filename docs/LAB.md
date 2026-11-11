@@ -602,6 +602,33 @@ python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus
   --pool .local/m5/pool.jsonl --only fit
 ```
 
+### 1i. The connector router: route logs, training, parity (M8, D940–D949; docs/research/m8-router.md)
+
+Route logs are the engine's own router inputs per request (`days-calls.ts --route-log F`, $0; with no `--router` a
+zero table logs the inputs and skips nothing). M2's worlds planted into days users train it; the e2e suites never do.
+
+```bash
+G=packages/sim/lab/m8/gen.sh   # one days-calls a seed, 10 days, 1:1:3, arrivals 0-6 days, 995 noise connectors
+$G synth-train@10 1 150 .local/m8/logs3/train
+$G synth-val@10 1 40 .local/m8/logs3/val
+$G synth-test@10 1 80 .local/m8/logs3/test
+bun packages/sim/src/lab/m8-export.ts .local/m2/synth/worlds/train.jsonl .local/m8/v2/x-train.jsonl  # M2 features
+T=packages/sim/lab/m8/train_router.py
+python3 -I $T conj .local/m8/v2 .local/m8/logs3/val W.npz --epochs 2          # the conjunction table on M2
+python3 -I $T mlp W.npz ".local/m8/logs3/train/*.jsonl" ".local/m8/logs3/val/*.jsonl" --drop size,rate,hours --int8
+python3 -I $T eval W.npz ".local/m8/logs3/test/*.jsonl"   # held-out families: recall, rare recall, reads cut
+python3 -I $T export W.npz packages/engine/assets/router.bin
+python3 -I packages/sim/lab/m8/parity.py W.npz ".local/m8/logs3/test/*.jsonl" packages/sim/lab/m8/parity.json
+bun test ./packages/sim/src/lab/m8-parity.test.ts          # 64 of 64 requests agree with the shipped asset
+bun packages/engine/bench/router.bench.ts 1000 2000         # scoring 1,000 sources, ms a request
+modal run packages/sim/modal/m8_router.py --run NAME --tag v3   # the same training on Modal (CPU, Volume eden-m8)
+```
+
+`gen.sh` is a loop over seeds (a seed whose worlds do not fit the base world's noise is dropped); the logs are on the
+Volume `eden-m8` (`/logs/v3.tgz`). `packages/sim/lab/m8/routers.py` holds round 1's ten offline candidates on M2's
+exported worlds (`harness.py`). The e2e screen is P7's 1h recipe with `--router packages/engine/assets/router.bin`
+(or `--set '{"routerGate":true}'` on a tree where the asset ships); the Pi pair is `packages/sim/lab/m8/run.sh`.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

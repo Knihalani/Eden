@@ -4298,30 +4298,27 @@ export class ContextPartner {
       const conjMemo = new Map<Uint32Array, number>();
       const yields = this.yields.view(s.scope, now);
       const copies = this.sync.routeView(s.scope, now);
+      const warm = new Uint8Array(n);
       for (let i = 0; i < n; i++) {
         const src = all[i]!;
-        const keys = routerSourceKeys(src.id, src.description);
+        const id = src.id;
+        const keys = routerSourceKeys(src);
         let c = conjMemo.get(keys);
         if (c === undefined) {
           c = conjScore(w, feats, keys);
           conjMemo.set(keys, c);
         }
-        const local = localHits?.get(src.id) ?? 0;
-        const st = copies(src.id);
-        const y = yields(src.id);
+        const local = localHits?.get(id) ?? 0;
         const o = i * ROUTER_NF;
         x[o] = c;
         x[o + 1] = local;
-        x[o + 2] = Math.max(0, (boost?.get(src.id) ?? 0) - local);
-        x[o + 3] = named.has(src.id) ? 1 : 0;
-        x[o + 4] = rare.has(src.id) ? 1 : 0;
-        x[o + 5] = y.used ? 1 : 0;
-        x[o + 6] = y.run;
-        x[o + 7] = st?.whole ? 1 : 0;
-        x[o + 8] = Math.log1p(Math.min(st?.hours ?? 1e4, 1e4));
-        x[o + 9] = Math.log1p(st?.size ?? 0);
-        x[o + 10] = Math.log1p(100 * (st?.rate ?? 0));
-        x[o + 11] = localTop?.get(src.id) ?? 0;
+        x[o + 2] = boost ? Math.max(0, (boost.get(id) ?? 0) - local) : 0;
+        x[o + 3] = named.has(id) ? 1 : 0;
+        x[o + 4] = rare.has(id) ? 1 : 0;
+        // Both views write into `x` (no object a source): used and run, then whole, hours, size and rate.
+        yields(id, x, o + 5);
+        warm[i] = copies(id, x, o + 7) ? 1 : 0;
+        x[o + 11] = localTop?.get(id) ?? 0;
       }
       const summary = new Float64Array(ROUTER_NULL_NF);
       routerSummary(x, n, terms.length, summary);
@@ -4329,23 +4326,24 @@ export class ContextPartner {
       const pNull = routeProbabilities(w, x, n, summary, p);
       const floor = this.config.routerFloor > 0 ? this.config.routerFloor : w.floor;
       const skipped: string[] = [];
-      const spentBefore = all.map((a) => spent?.has(a.id) === true);
       // `routerDormantMs` (D943): the sources found likely keep their weekly sweep.
-      if (this.config.routerDormantMs > 0)
-        this.sync.routed(
-          s.scope,
-          all.filter((_, i) => p[i]! >= floor).map((a) => a.id),
-          now,
-        );
+      if (this.config.routerDormantMs > 0) {
+        const likely: string[] = [];
+        for (let i = 0; i < n; i++) if (p[i]! >= floor) likely.push(all[i]!.id);
+        this.sync.routed(s.scope, likely, now);
+      }
+      const spentBefore = this.deps.onRoute ? all.map((a) => spent?.has(a.id) === true) : [];
       // A source a word of the request points to (at most `sourceYieldRare` of the user's sources hold it) is never
       // skipped: the strongest evidence there is, and rare connectors' facts hang on it (D945: skipping these lost two
       // of 105 rare-connector facts at $0; names stay the network's to weigh, or the user's mailbox is never skipped).
       for (let i = 0; i < n; i++) {
+        if (p[i]! >= floor || warm[i] === 0) continue;
         const id = all[i]!.id;
-        if (p[i]! >= floor || spent?.has(id) || !copies(id)?.warm || rare.has(id)) continue;
+        if (spent?.has(id) || rare.has(id)) continue;
         (spent ??= new Set()).add(id);
         skipped.push(id);
       }
+      const ms = performance.now() - started;
       this.deps.onRoute?.({
         sessionId: s.id,
         turn: s.turn,
@@ -4357,7 +4355,7 @@ export class ContextPartner {
         pNull,
         skipped,
         spentBefore,
-        ms: performance.now() - started,
+        ms,
       });
       return spent;
     } catch {
@@ -6830,24 +6828,22 @@ function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities
 }
 
 /**
- * `routerGate`: a source's router keys by its id and description, a pure function of the two (no user state), held
- * for the process: at most `ROUTER_KEYS_HELD`, the oldest dropped first.
+ * `routerGate`: a source's router keys (a pure function of its id and description, no user state), held per source
+ * object for as long as the object lives; equal keys share one array, at most `ROUTER_KEYS_HELD` of those held.
  */
-const routerKeys = new Map<string, Uint32Array>();
+const routerKeys = new WeakMap<Source, Uint32Array>();
 /** Key arrays by their content, so sources with equal keys share one array (and one conjunction score a lookup). */
 const routerKeysShared = new Map<string, Uint32Array>();
 const ROUTER_KEYS_HELD = 16_384;
-function routerSourceKeys(id: string, description: string): Uint32Array {
-  const k = `${id}\u0000${description}`;
-  let keys = routerKeys.get(k);
+function routerSourceKeys(src: Source): Uint32Array {
+  let keys = routerKeys.get(src);
   if (!keys) {
-    const made = sourceKeys(id, description);
+    const made = sourceKeys(src.id, src.description);
     const content = made.join(",");
     keys = routerKeysShared.get(content) ?? made;
-    if (routerKeys.size >= ROUTER_KEYS_HELD) routerKeys.delete(routerKeys.keys().next().value!);
     if (routerKeysShared.size >= ROUTER_KEYS_HELD) routerKeysShared.delete(routerKeysShared.keys().next().value!);
-    routerKeys.set(k, keys);
     routerKeysShared.set(content, keys);
+    routerKeys.set(src, keys);
   }
   return keys;
 }

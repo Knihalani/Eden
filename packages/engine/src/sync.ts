@@ -932,27 +932,24 @@ export class SyncManager {
 
   /**
    * `routerGate` (M8, D940): what the connector router reads of a user's synced copies, content-free, with one user
-   * lookup for the many reads of a lookup: per source, warm, whole (the cut flag alone, with no re-check against the
-   * cache, which reads every id of the copy: a feature, not a promise; `complete` decides what answers from the
-   * index), hours since its last complete poll, its learned change rate (items an hour) and how many ids it holds.
-   * Undefined for a source not synced. O(1) a source, no I/O.
+   * lookup for the many reads of a lookup. The returned function writes, from `out[at]`: whole (the cut flag alone,
+   * with no re-check against the cache, which reads every id of the copy: a feature, not a promise; `complete` decides
+   * what answers from the index), log1p of hours since its last complete poll (1e4 for none), log1p of the ids it
+   * holds and log1p of 100 times its learned change rate (items an hour); and returns whether the copy is warm. A
+   * source not synced writes 0, log1p(1e4), 0, 0 and is not warm. O(1) a source, no I/O.
    */
-  routeView(
-    scope: Scope,
-    now = this.deps.now(),
-  ): (sourceId: string) => { warm: boolean; whole: boolean; hours: number; rate: number; size: number } | undefined {
+  routeView(scope: Scope, now = this.deps.now()): (sourceId: string, out: Float64Array, at: number) => boolean {
     const u = this.users.get(scopeKey(scope));
-    return (sourceId) => {
+    return (sourceId, out, at) => {
       const s = u?.sources.get(sourceId);
-      if (!s) return undefined;
-      const warm = s.phase === "warm";
-      return {
-        warm,
-        whole: warm && !s.cut,
-        hours: Number.isFinite(s.polledAt) ? Math.max(0, now - s.polledAt) / HOUR : 1e4,
-        rate: s.alpha / s.beta,
-        size: s.ids.size,
-      };
+      const warm = s?.phase === "warm";
+      out[at] = warm && !s!.cut ? 1 : 0;
+      out[at + 1] = Math.log1p(
+        s && Number.isFinite(s.polledAt) ? Math.min(Math.max(0, now - s.polledAt) / HOUR, 1e4) : 1e4,
+      );
+      out[at + 2] = Math.log1p(s ? s.ids.size : 0);
+      out[at + 3] = Math.log1p(s ? (100 * s.alpha) / s.beta : 0);
+      return warm;
     };
   }
 
