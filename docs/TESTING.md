@@ -196,6 +196,91 @@ CPU alone: `funnel-flags.test.ts` 21.7 s (thirteen funnel processes), `injection
 `cards-disk` 8.2 (24 worlds' intent coverage), `client-package` 7.5, `router-processes` 7.0, `reader-stub` 5.8,
 `pilot` 5.2, `neutral` 4.9, `days-calls` 4.6, `linear` 4.2, `fuzz` 4.0.
 
+### D819: slimmer end-to-end tests (2026-11-11, 4-core container shared with other agents, Bun 1.4.4)
+
+Part 1 of D819 is the Prettier set the cold gate now trusts (`scripts/format.sh`, `scripts/format-key.test.ts`). Part
+2 shares work inside five heavy test files; no `expect` was removed, and each runs on the same or a smaller input:
+
+- `funnel-flags.test.ts`: one pair of `funnel.ts` runs (`--time 0.05`, `--jobs 1` and `2`) now writes the per-task
+  output files too, and the output-file test reads them; the second pair at `--time 0` (two processes, about 6.5 s of
+  CPU) is gone. The merge code (`partFiles`, `partArgs`, `mergeOutputs`) does not read `--time`, and the five files
+  were byte for byte the same between the two runs in three of three trials at load 7-10. The `--time 0` grouping
+  still runs end to end in the SIGTERM run, and `groupShards` keeps its unit tests (funnel-merge.test.ts).
+- `cards-disk.test.ts` (the coverage claim over held-out 13-18, seeds 41 and 44): every suite and seed is still
+  covered. One base world per seed is built and shared by its twelve suite-variant worlds (own lists and maps, the
+  same item objects), so the sources' per-item analysis, memoised on the object, runs once a seed. All 24 worlds' item
+  lists and coverage counts were identical to fresh builds; a new check fails if a suite or `clearSlot` changes a
+  base item.
+- `injection-suite.test.ts` (quarantine over the train suites): every item still counts, but each distinct title,
+  text and branch is checked once (18,124 items, 1,871 distinct); `quarantineItem` reads only the title and text.
+  The `expect()` count falls from 18,241 to 1,978 for this reason.
+- `days-calls.test.ts`: the plain payload run and the `onPlanted` run are one run (the callback only observes; the two
+  reports were identical).
+- `neutral.test.ts`: the two `--neutral` runs cap the sync at 100 items a user (`syncLocalComplete: false`), as
+  funnel-flags.test.ts and reader-stub.test.ts do.
+
+Each file alone, base version then new version, back to back (`TIMEFORMAT='%R %U %S'; time bun test ./file`; CPU =
+user + sys, children included; load is the 1-minute average at the start of each run; the machine was shared):
+
+| File | Base CPU (s) | New CPU (s) | Base wall (s) | New wall (s) | Load base / new |
+|---|---|---|---|---|---|
+| `funnel-flags.test.ts` | 20.70, 22.80 | 15.03, 15.47 | 15.7, 19.7 | 13.5, 13.6 | 16.8-26.0 / 36.4-41.4 |
+| `cards-disk.test.ts` | 8.60, 9.22 | 5.03, 5.54 | 12.1, 11.2 | 7.5, 6.5 | 38.4-41.8 / 36.2-36.8 |
+| `injection-suite.test.ts` | 8.90, 8.62 | 7.23, 6.83 | 10.8, 10.7 | 9.4, 6.9 | 34.6-35.6 / 31.4-33.5 |
+| `days-calls.test.ts` | 7.78, 8.00 | 7.36, 6.83 | 7.9, 5.9 | 5.3, 4.8 | 23.0-25.7 / 19.7-21.3 |
+| `neutral.test.ts` | 5.86, 5.63 | 4.47, 4.63 | 4.0, 4.0 | 3.8, 3.9 | 17.2-18.3 / 16.5-17.2 |
+| Sum of the means | 53.1 | 39.2 | | | |
+
+About 13.9 s of CPU less, about 7% of the 208 s the tests take. At lower load earlier in the session: funnel-flags
+23.08 and 22.50 s (load 6.8-7.9) against 15.34 and 14.42 (1.5-4.0); cards-disk 9.19 and 9.39 (8.8-9.6) against
+4.68 and 4.84 (3.5-3.6).
+
+`CHECK_COLD=1 bun run check`, total CPU of the command and wall (load: 1, 5, 15-minute averages before and after):
+
+| | CPU (s) | Wall (s) | Load before → after | Result |
+|---|---|---|---|---|
+| Before 1 | 222.7 | 64.7 | 2.8, 6.1, 7.0 → 7.4, 7.0, 7.2 | 1 fail (`pilot-review.test.ts`, below) |
+| Before 2 | 230.0 | 149.4 | 3.8, 6.1, 6.9 → 30.3, 15.4, 10.2 | 2 fail (a WorkerPool and a D100 test, under load) |
+| Before 3 | 240.0 | 137.9 | 30.3, 15.4, 10.2 → 19.7, 18.9, 12.4 | 2 fail (sim.test, linear: 20 s timeouts under load) |
+| After 1 | 230.4 | 100.6 | 14.5, 18.3, 13.6 → 17.2, 17.7, 13.9 | green |
+| After 2 | 233.6 | 97.6 | 17.2, 17.7, 13.9 → 15.8, 17.6, 14.3 | green |
+| After 3 (the committed tree) | 219.0 | 85.0 | 7.7, 14.3, 13.4 → 12.3, 14.7, 13.7 | green |
+
+The gate's figures do not resolve a 14 s change: other agents kept the load between 3 and 41, and CPU time itself
+grows under that contention (the same file's CPU varies by 10-20% between loads). The per-file pairs above are the
+measure. A quiet-machine gate figure is still owed.
+
+`pilot-review.test.ts` failed on the base (D818's guard refused the placeholder key its pi-ab child is given): the
+test now sets `EDEN_ALLOW_OPENROUTER=1` for that child, whose key is a placeholder and whose run is `--dry`.
+
+Mutation spot-check: each edit made to the source under test, the file's tests run, the edit reverted.
+
+| # | Source edit | Test file | Result |
+|---|---|---|---|
+| M1 | funnel.ts merges only the first process's part | funnel-flags | fails: output files shard |
+| M2 | funnel-merge.ts `mergeLines` keeps arrival order | funnel-flags | fails: output files shard |
+| M3 | funnel.ts at `--time` > 0: one process a suite, not a shard | funnel-flags | fails: output files shard |
+| M4 | funnel.ts does not delete parts after the merge | funnel-flags | passes: equivalent, the exit handler deletes them |
+| M4b | M4 and no deletion at exit either | funnel-flags | fails: output files shard; SIGTERM leaves no part |
+| M5 | cards-disk.ts `intentCoverage` counts 50 items too many | cards-disk | fails: coverage claim; `--intent none` header |
+| M6 | cards-disk.ts `loadRequests` drops one key in sixteen | cards-disk | fails: coverage claim |
+| M7 | hidden-context.ts `clearSlot` edits a base item | cards-disk | fails: coverage claim (the shared-world check) |
+| M8 | shield.ts `quarantine` removes nothing | injection-suite | fails: guardLine and quarantineInstructions |
+| M9 | shield.ts `quarantineItem` always copies | injection-suite | fails: quarantine leaves planted facts alone |
+| M10 | days-calls.ts `onPlanted` skips each kind's first request | days-calls | fails: onPlanted rows |
+| M11 | hidden-funnel.ts keeps one neutral row | neutral | fails: `--neutral` block |
+
+M7 passes on the base test (it built every world afresh); the check that catches it is new. A first M6, `dress` doing
+nothing, passed on both the base and the new test: the coverage claim does not see undressed planted items.
+
+Left alone: `client-package` (packs the client, runs Node and tsc: the cost is the code under test),
+`router-processes` (each test starts and stops a two-process router; sharing one would couple tests that kill
+processes), `reader-stub` (its three runs already go out together and share their checks), `pilot` (a dozen short CLI
+calls, each its own assertion), `sim.test` (its two-user merge run is already the smallest with a shard boundary;
+three sessions instead of six in the updates test measured no difference and was reverted), `linear` and `fuzz`
+(differential and fuzz corpora: seeds × inputs kept), and the smaller files (`sparse-index-packed`, `deletes`,
+`cache-freeze`, `unused-sweep`, `eval/run.test`), not reached.
+
 ## Caches in format:check and typecheck
 
 Both caches carry to a fresh git worktree (each audit fixer, reviewer and integrator gets one), and
