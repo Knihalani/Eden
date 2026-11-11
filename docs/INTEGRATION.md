@@ -21,7 +21,9 @@ const tools = guardTools(eden, { send_email, book_meeting });
 await eden.sourceChanged(sourceId, { refs: changedIds, removed: deletedIds });
 ```
 
-On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
+On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below. On the Vercel AI SDK,
+`examples/ai-sdk/eden-ai-sdk.ts` does (D854): `edenSession(eden)`, then `session.wrap(model)`, `session.tools` and
+`session.guard(actingTools)` in `generateText`/`streamText` ([examples/ai-sdk](../examples/ai-sdk/README.md)).
 
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
   session (D9); a shared id would mix users' context.
@@ -34,8 +36,11 @@ On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
   finds the user's state next time. Never fold a bad id by replacing characters (`+` to `-` would merge
   `alice+work@x.com` with `alice-work@x.com`). The client reports a bad id once through `onError` when it is
   constructed.
-- **Set `onError`.** A refused key or id, a wrong port and a down server all look like Eden's normal silence
-  otherwise: the SDK swallows every error (it fails open) and has no default logger. The error's message carries the
+- **Read what `onError` prints, then set your own.** The SDK swallows every error (it fails open). With no `onError`
+  it uses `defaultOnError` (D850): in development each distinct problem is printed once with `console.warn` (Python:
+  stderr) followed by its fix (`fix: start the server … and check baseUrl`); with `EDEN_ENV=production` (or
+  `NODE_ENV=production`) only the first problem of each route and status is printed. Pass your logger to keep them
+  all, or `onError: null` (`on_error=None`) to silence it. The error's message carries the
   server's reason (`eden /v1/events: 400 userId must be 1-128 characters of [A-Za-z0-9._:@-]`), capped at 300
   characters; it never includes the request or the key.
 - **Check the setup with `health()`** at startup: `await eden.health()` resolves `{ ok: true }` when the server
@@ -43,6 +48,9 @@ On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
   changes no state (`POST /v1/whoami`).
 - **Report every event**: user messages, the agent's tool calls and results, arriving messages. Eden stays silent on
   most of them; the ones it reads are how it knows what the agent is about to do.
+- **`collect` takes what it returns.** `pending` drains the session's queue, and an item is handed out once per
+  session: if your model call then fails, retry it with the same messages (with the packet already in them), not
+  with a fresh `collect`.
 - **Inject before each model call, not only the first**: work Eden finishes after the first request (the slow path, a
   poll behind the lookup, D65) is delivered at the next one through `collect`/`pending`.
 - **The SDK fails open.** A timeout or an error is "no context", never an exception in the agent's loop. Keep it that
@@ -410,7 +418,15 @@ EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDE
 # Anthropic's Messages API (D653): the same proxy, the SDK's base URL without /v1
 EDEN_PROXY_UPSTREAM=https://api.anthropic.com/v1 bun run proxy
 # the agent: Anthropic(base_url="http://127.0.0.1:8791", default_headers={"x-eden-user-id": user_id})
+
+# The same request by hand (proxy on PROXY_PORT=8791, Eden on EDEN_URL; keep max_tokens above the model's thinking)
+curl -s http://127.0.0.1:8791/v1/messages -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" -H "x-eden-user-id: u1" -H "x-eden-session-id: chat-1" \
+  -d '{"model":"claude-haiku-5-5","max_tokens":1024,"messages":[{"role":"user","content":"Can you move my lunch with Priya Raman to 11:30 on Thursday?"}]}'
 ```
+
+The packet is not in the answer: it went to the model. To see what Eden added, ask the server
+(`POST $EDEN_URL/v1/explain {"userId":"u1","sessionId":"chat-1"}` lists the item ids it handed out and why).
 
 `EDEN_PROXY_UPSTREAM` keeps the provider's version path (`/v1`, `/api/v1`; the proxy warns at startup when it has no
 path). `EDEN_URL` defaults to `http://127.0.0.1:8790`; `EDEN_API_KEY` is one of the server's `EDEN_API_KEYS` keys
@@ -457,14 +473,41 @@ not as a line per request.
   lets it decide, but forwards each request unchanged and prints one JSON line (user, session, packet count, item ids;
   no text) per request Eden would have changed. Run it on real traffic for a week, then read `bun run trace-report`
   on the Eden server's `EDEN_TRACE=1` log and `/v1/explain` on the sessions that matter, before letting it inject.
-- **What it does not do.** It adds no `ask_context` tool (give the agent the MCP server for that, D70 says keep it),
-  it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`, with
+- **`ask_context` in the proxy (opt-in, `EDEN_PROXY_ASK=1`, D851, D857).** The proxy adds Eden's `ask_context` to the
+  request's tools, with Eden's own description, on all three routes, and answers the model's calls to it itself: it
+  asks Eden, appends the call and the answer to a copy of the conversation and calls the model again, at most three
+  rounds a request (the request after the third forbids tool calls). The agent sees one model answer, never the tool.
+  Costs: each ask is one more model call on your bill, and a streamed answer that asks is buffered, so the agent's
+  first token waits for the asking rounds to finish. A request that already has a tool called `ask_context` (Eden's
+  MCP server) is left alone. Off unless you set it: D70's −11.9 points without the tool were measured on the SDK, and
+  nothing has measured it through the proxy.
+- **What it does not do.** Without `EDEN_PROXY_ASK=1` it adds no `ask_context` tool (give the agent the MCP server
+  for that, D70 says keep it), it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`, with
   their refs), and it cannot check a tool call before it runs (the agent runs it between two requests): wrap the
   acting tools with `guardTools`/`guard_tools` in the agent ("Agents that act").
 - **Checked live** (2026-11-07): a plain Python `urllib` call to Anthropic's OpenAI-compatible endpoint
   (`claude-haiku-5-5`) through the proxy and a no-key Eden on the example sources, asking "Can you move my lunch with
   Priya Raman to 11:30 on Thursday?", got back "Priya emailed that she can't do anything before 12:15, so 11:30 may
   not work for her": the candidate packet carried the mail the agent had no tool to read. One run, not a measurement.
+
+## Check your integration (`eden doctor`, D852)
+
+Each step of the loop above has a measured cost when it is skipped, and Eden's answer to a skipped step is silence,
+which is also its normal answer. `eden doctor` names the ones your integration skips:
+
+```bash
+EDEN_API_KEY=… bun run doctor --url http://127.0.0.1:8790    # no key against a dev server; or: bun run eden doctor
+docker exec <container> bun packages/server/src/cli.ts doctor --env   # in the image, with the server's own config
+```
+
+It reads the server's content-free counters for the key's tenant (`/v1/usage`'s `integration`: event kinds, the wait
+sent on each user message, `pending` replies and takes, asks, checks of acting tools, change notices by form, refused
+requests; since the server started), an `EDEN_TRACE=1` log when given, and with `--env` the environment it runs in
+(variable names and the user-sources file's flags, never a value; so run that where the server runs). For each
+obligation it prints `ok`, `FIX` or `?` (no evidence either way yet, normal on a first run with a few requests) and
+what it saw in counts; for each `FIX` the measured cost of missing it, with its source, and the fix (`--verbose` adds
+them for `?`). It exits 1 when something needs fixing, so it can run in your CI against a staging server. It cannot
+see whether you keep packets in your transcript (D336): that one is always `?`.
 
 ## Why did Eden say this, or stay silent? (`explain`, D277)
 
@@ -672,12 +715,14 @@ EDEN_PERSIST_KEY=$(openssl rand -hex 32)      # 32 bytes, hex or base64; keep it
 EDEN_PERSIST_MAX_MB=4096                      # optional; the directory's cap across processes (default 4,096)
 ```
 
-A user idle 20-30 minutes is then also written to that directory, encrypted (AES-256-GCM, a file per user under a
+A user idle 30 minutes (frozen compact; the two-minute warm freeze, D862, writes nothing) is then also written to
+that directory, encrypted (AES-256-GCM, a file per user under a
 keyed-hash name, bound to its tenant and user), with the sync's position for them. After a restart each user is read
 back the first time they are used and their sources are polled for what is new. Measured (200 users, the bench in
 docs/research/c3-persist-frozen.md): synced again in 14.1-14.2 s instead of 42.9-44.0 s at 1,000 items a user,
 and 32.4 s instead of 121.8 s at the 3,000-item cap; listing calls 2,400 → 600 and 6,000 → 600. Live users are
-written at SIGTERM (within 1.5 s); a crash loses only what was live.
+written at SIGTERM (within 1.5 s), warm users with them; a crash loses users used within the last 30 minutes (they
+re-sync), as before D862.
 
 Trial (D652, off): `EDEN_PERSIST_DISK_ONLY=1` also lets go of the memory's copy of a frozen user once their file
 is written, and reads the file back when they return (a thaw 6-9 ms slower at the median). A frozen user then holds

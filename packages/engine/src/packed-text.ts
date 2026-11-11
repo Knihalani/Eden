@@ -116,3 +116,28 @@ export function decodedCount(): number {
 export function isPacked(item: ContextItem): boolean {
   return PACKED in item;
 }
+
+/**
+ * A packed item's deflated bytes and how they decode, or undefined for an item held plain (D860: a fast freeze copies
+ * the bytes into the frozen blob as they are, so a thaw does not deflate them again).
+ */
+export function packedOf(item: ContextItem): { bytes: Uint8Array; latin1: boolean } | undefined {
+  if (!isPacked(item)) return undefined;
+  const desc = Object.getOwnPropertyDescriptor(item, "text")!;
+  return { bytes: (item as Packed)[PACKED], latin1: desc.get === LATIN1_TEXT.get };
+}
+
+/** Every own field of `item` but `text`, without reading `text` (a packed item's getter would inflate it). */
+export function withoutText(item: ContextItem): Omit<ContextItem, "text"> {
+  const rest: Record<string, unknown> = {};
+  for (const k of Object.keys(item)) if (k !== "text") rest[k] = (item as unknown as Record<string, unknown>)[k];
+  return rest as Omit<ContextItem, "text">;
+}
+
+/** A packed item from `rest` and bytes `packedOf` gave (D860): the inverse of `withoutText` plus `packedOf`. */
+export function packedFrom(rest: Omit<ContextItem, "text">, bytes: Uint8Array, latin1: boolean): ContextItem {
+  const item = { ...rest };
+  Object.defineProperty(item, PACKED, { value: bytes, enumerable: false });
+  Object.defineProperty(item, "text", latin1 ? LATIN1_TEXT : UTF8_TEXT);
+  return item as ContextItem;
+}

@@ -106,3 +106,14 @@ python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led-v1.jsonl --cor
   --pool .local/m5/d/pool.jsonl --only fit   # --only held: the one held-out read
 # Short worlds and neutral: bun run funnel --seeds 41,42,43,44 -- --neutral --pool-dump P --corpus-dump C
 ```
+
+## 4. Version 3, the typed mapping (pre-registered, the parent's request)
+
+v1's records and prompt, unchanged ($0 extraction); the matcher adds three typed comparisons with no model: an
+amount the request names against a record's limit or threshold, a role word the request uses ("babysitter",
+"Mum", "approver") against a record's person through the record's own sentence, and a destination the request
+names against a record's category through a small hand-built gazetteer of the sim's places. **Fit** on train3–6,
+**read once** on train1–2 (157 hidden in v1's run is train5–6; train1–2 counts are in §5). Same bar: facts @5 at
+least +8 points over the shipped pool with decoys @5 rising by no larger ratio. Anthropic cap for this version $5.
+**Caveat, written before the read:** train1–2 were in v1's fit split and v1's miss examples from them were read
+while building v1, so this fold is not blind to the author; the read is a second fold, not a clean held-out set.

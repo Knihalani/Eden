@@ -404,7 +404,10 @@ cost (docs/research/a13-scale.md). 1,000 sources × 20 items × 3 days runs in ~
 shipped wiring over N users with three instant connectors each; backfill CPU, memory per user live and frozen (D325;
 JS heap plus `external`, which `heapUsed` alone leaves out: typed-array stores, most of an index and every packed
 text; and RSS read once it stops falling), thaw time per user, the sliced freeze and thaw's event-loop lag.
-`--waves=4` is the steady state where three quarters of the users are idle. `bun packages/engine/bench/storm.bench.ts
+`--waves=4` is the steady state where three quarters of the users are idle; `--warm-waves=J` holds the J waves before the
+live one warm (D862), `--prose` takes item text from docs/ instead of the sim's templates, `--cache=<json>` sets cache
+limits (`'{"warmIdleMs":0,"expireEveryMs":600000}'` is the cache before D862). `restart.bench.ts --warm` writes and reads
+warm files (docs/research/p6-scale.md). `bun packages/engine/bench/storm.bench.ts
 [users=300] [itemsPerUser=1000] [--config=<json>] [--tick-ms=N]`: a cold-start storm on the wall clock with 20-80 ms
 connectors while warm users send events (open loop): storm time and their `observe` p99. With
 the default each storm user is kicked as their first event would (D753, D755; `--config='{"syncKick":false}'` is

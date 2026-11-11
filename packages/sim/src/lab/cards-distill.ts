@@ -62,7 +62,7 @@ import { buildWorld } from "../world";
 import { INTENT_PATH, loadCards, loadRequests } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
 import { variantsFor } from "./neutral";
-import { parseSuites, SUITES } from "./suites";
+import { parseSuites, prepareWorld, SUITES } from "./suites";
 
 /** The day `cards-enrich.ts` made every checked-in card and request with: the prompt's "Today is", so its hash. */
 export const DISTILL_TODAY = "2026-10-27";
@@ -98,12 +98,13 @@ export function syncItems(
       for (const seed of seeds) {
         // As hidden-funnel.ts and cards-enrich.ts build each world.
         const world = buildWorld({ seed: seed * 1_000 });
+        prepareWorld(suite, world, seed);
         const before = world.items.length;
         const tasks = SUITES[suite]!(world, seed, variant);
         const plantedItems = world.items.slice(before);
         for (const it of plantedItems) dress(world, it);
         const keep = new Set(plantedItems.map((it) => it.id));
-        for (const task of tasks) clearSlot(world, task.text, keep);
+        for (const task of tasks) clearSlot(world, task.slotText ?? task.text, keep);
         const cache = new ItemCache({ maxItemsPerUser: 100_000 });
         const raw = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
         for (const it of cache.put({ tenantId: "t", userId: "u" }, raw, 0)) {
@@ -259,7 +260,8 @@ export function buildRows(
 
 /** Every suite that is not a train suite, whose planted items are kept out of the set. */
 export function guardedSuites(): string[] {
-  return Object.keys(SUITES).filter((s) => !TRAIN.has(s));
+  // A reworded train suite (`train1r`, D871) plants train's own items: guarding it would hold train out of training.
+  return Object.keys(SUITES).filter((s) => !TRAIN.has(s) && !TRAIN.has(s.replace(/r$/, "")));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
