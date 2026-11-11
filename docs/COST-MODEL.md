@@ -655,6 +655,19 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
+## The turn gate (`pushGate`, M13, in the default since D1014)
+
+No model call and no network call: a local model decides, on the fast path, whether a user turn starts the push.
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| CPU a user turn | 42.6 µs mean, 37.9 µs p50, 99.3 µs p99 (84,051 dev turns, one core) | `bun packages/sim/lab/m13/bench.ts` |
+| Weights and load | 1,590,904 bytes held once a process; 5.1 ms to load at the first user message | the same |
+| Paid calls it moves | the push check's call follows each push started (D828); the gate starts more pushes on non-English, terse and reworded requests and fewer on chatter, statements and logs | Pi pair below |
+| Per 1,000 task runs, Haiku 5.5 agent (train and reworded, seeds 41–42) | $0.479 → $0.482 (agent and Eden per task); wall 4.14 → 4.12 s | `packages/sim/lab/p3/report.py` on `pi.sh`'s runs |
+
+A turn whose weights cannot be read is decided by `pushStart` alone, at its old cost.
+
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
 No model call. With `sourceYieldEarn`, `sourceYieldNames` and `sourceYieldEngage` in the default (Pi, train, 995

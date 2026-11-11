@@ -26,6 +26,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
+| `turn-gate.ts`, `turn-gate.bin`                                            | The turn gate (`pushGate`, M13, D1014; part `gate`): hashed character and word n-grams of one user turn (`gateFeatures`, the twin of `packages/sim/lab/m13/feats.py`), an int8 bag with one hidden layer and the rule's reading after pooling (`TurnGate.read`), 1.59 MB of weights read once a process (`turnGate()`; null on any failure, and the rule stands) |
 | `push-check.ts`                                                            | The push check (`pushCheck`, D500, in the default since D828, part `check`): one budgeted call a push names the pool's items that change the action, compare-first (`CHECK_SYSTEM`, `parseCompare`, `PushChecker`, D527); `push-check.test.ts`                |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default; `checkAction`'s only check since D815 deleted the action firewall and A10's text filters): identifiers a call adds and its packets showed; `orgLabel`, which `ItemCache.isCorrespondent` reads with the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -314,6 +315,18 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
   asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
   earlier request (`pushPointer`, D711: −1.2 over days; again on the new default, D832: +2.4, −0.5..+5.5).
+- **The turn gate decides the push's start (`pushGate`, M13, D1010, D1014; part `gate`; docs/research/m13-gate.md).**
+  `pushStart` reads the turn first; the gate then keeps a rule start unless its score is under the veto, and adds a
+  start where the rule has none when its score clears the threshold (both in `turn-gate.bin`'s header). A start the
+  rule made keeps the rule's request text (a lead-in's imperative); one only the gate made pushes the whole message
+  as an opened start (no plan alert). No model call: local CPU, about 43 µs a turn, loaded once a process; a missing
+  or unreadable file leaves `pushStart` alone (fail open). The features are feats.py's to the bit: change both or
+  neither (`turn-gate.test.ts` pins sums and ids), then re-export the weights with `packages/sim/lab/m13/export.py`
+  and run its `parity.ts` (64/64). Retraining or a new veto is a new measurement (funnel facts at shipped coverage on
+  train, `reworded` and `train-rw`; the blind sets of m13-gate.md are read). It reads any language, but its known
+  weak spots are Hindi requests and Portuguese chatter (D1014). A start only the gate makes needs `pushOpen` with the
+  candidates (never a paid reader push) and, as a stopgap, a turn of at least `MIN_ADD_WORDS` (3) words (D1015: the
+  weights read "hello", "hi", "?" as terse commands; a retrain that fixed it raised false starts elsewhere).
 - **Indirect requests (`pushIndirect`, P2, D820; in the default since D828, part `indirect`; p2-push-check.md §1, §7).** `pushStart`
   decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
   ("I need to …", "Should I …?", "We should …", "I want you to …"), or a request after a first clause of context

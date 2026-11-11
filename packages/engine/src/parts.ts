@@ -107,6 +107,7 @@ export const PARTS = {
     pushCandidatesSettled: 0,
     pushCheck: false,
     pushIndirect: false,
+    pushGate: false,
   },
   /**
    * The push's candidates for the agent to judge, in place of the reader's push and ask readings (D236, D237): out,
@@ -119,8 +120,10 @@ export const PARTS = {
     pushCandidatesSettled: 0,
     pushOpen: false,
     pushCheck: false,
-    // The reader's own push then starts only where the old default's did: no paid read of indirect starts (D828).
+    // The reader's own push then starts only where the old default's did: no paid read of indirect starts (D828), nor
+    // of the turn gate's (D1014).
     pushIndirect: false,
+    pushGate: false,
   },
   /**
    * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next
@@ -153,6 +156,11 @@ export const PARTS = {
    * open shape refuses log lines and chatter (D820, promoted by D828).
    */
   indirect: { pushIndirect: false },
+  /**
+   * The turn gate (M13, D1010, D1014): a local model over hashed character n-grams decides whether a turn starts the
+   * push, beside `pushStart` (a rule start stands unless the gate vetoes it), in any language. Out, `pushStart` alone.
+   */
+  gate: { pushGate: false },
   /**
    * `checkAction` holds a call adding a recipient, guest or payee account only Eden's packets showed, not the user's
    * request or correspondence (D375, D376).
