@@ -610,6 +610,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D932 | 2026-11-11 | Adopted (lab tooling, M7): the funnel's `--check-dump F` (`check-dump.ts`): one row a push-check call (the request head, day and pool… | lab |
 | D950 | 2026-11-11 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | rejected |
 | D951 | 2026-11-11 | Adopted (lab tooling, M9): `packages/sim/lab/m9/` (`links.py` per-user link state, `screen.py` fronting screen, `oracle.py` and… | lab |
+| D960 | 2026-11-11 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | rejected |
+| D961 | 2026-11-11 | Finding: what the engine consumes of a card, at $0. | finding |
+| D962 | 2026-11-11 | Adopted (lab tooling, M10): `packages/sim/src/lab/m10/` (`export.ts` items with the tagger's candidates from the train and longtail… | lab |
+| D963 | 2026-11-11 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). | rejected |
 | D970 | 2026-11-11 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | rejected |
 | D971 | 2026-11-11 | Finding: Haiku's intent value is its bridge terms, and a $0 item-side model does not learn them for new families. | finding |
 | D972 | 2026-11-11 | Adopted (lab tooling, M11): `m11-export.ts` (items, worlds, tasks, twins and the checked-in Haiku requests by card key), `m11-enrich.ts`… | lab |
