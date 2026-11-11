@@ -368,7 +368,9 @@ class Builder {
       kind: "event",
       title,
       text,
-      updatedAt: start - this.r.int(2, 20) * DAY,
+      // Booked 2-20 days ahead of its start, and never after the world's present (P4, D842): an event weeks out was
+      // otherwise last changed in the future, and a listing newest-changed first put an event edited now below it.
+      updatedAt: Math.min(start - this.r.int(2, 20) * DAY, NOW - HOUR),
       facts,
       noise: false,
       meta: { people: who.map((p) => `${p.full} <${p.email}>`).join("; "), start: new Date(start).toISOString() },
@@ -1077,7 +1079,7 @@ class Builder {
           "All hands",
         ]),
         text: `When: ${dayLabel(at)} ${new Date(at).getUTCFullYear()}, ${clock(at)}–${clock(at + HOUR)}\nWhere: ${r.pick(["", "Room 2", "Google Meet"])}\nAttendees: ${this.user.full}`,
-        updatedAt: at - 10 * DAY,
+        updatedAt: Math.min(at - 10 * DAY, NOW - HOUR), // never after the present (P4, D842)
         facts: [],
         noise: true,
         meta: { start: new Date(at).toISOString() },
