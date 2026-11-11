@@ -74,7 +74,7 @@ function toWorldItem(it: SynthItem, ref: string, now: number, rename: (s: string
  * The planting function for one worlds file under one suite name, `perSeed` worlds a seed (worlds `seed * perSeed`
  * onward, wrapping): one for funnel and pi-ab, more for a `--days` user, who needs 12-20 requests a day.
  */
-export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) {
+export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1, stale = false) {
   let cache: SynthWorld[] | undefined;
   return (world: World, seed: number, variant: Variant): HiddenTask[] => {
     cache ??= load();
@@ -89,16 +89,24 @@ export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) 
     const noise = world.items
       .map((it, i) => (it.noise && !it.secret && !WRITTEN.has(it) ? i : -1))
       .filter((i) => i >= 0);
+    // `stale` (M3, D908's rule 1): a hidden silent-change task's earlier revision (its decoy) stays in the world as a
+    // background item beside the fact, as a separate item, so a request meets the stale version and its replacement.
+    const staleOf = (t: SynthWorld["tasks"][number]) => stale && variant === "hidden" && t.timing === "silent";
     const extra = ws.flatMap((w, k) => {
       const planted = new Set(w.tasks.flatMap((t) => [t.fact, t.decoy]));
-      return w.items.filter((i) => !planted.has(i.id)).map((it) => ({ it, rename: renames[k]! }));
+      const old = new Set(w.tasks.filter(staleOf).map((t) => t.decoy));
+      return w.items
+        .filter((i) => !planted.has(i.id) || old.has(i.id))
+        .map((it) => ({ it, rename: renames[k]!, key: old.has(it.id) ? `${w.id}\u0000${it.id}` : undefined }));
     });
     if (extra.length > noise.length) throw new Error(`synth: ${name} has more items than the base world has noise`);
     const step = Math.max(1, Math.floor(noise.length / Math.max(1, extra.length)));
-    extra.forEach(({ it, rename }, k) => {
+    const staleIds = new Map<string, string>();
+    extra.forEach(({ it, rename, key }, k) => {
       const at = noise[k * step]!;
       const ref = world.items[at]!.ref;
       const written = { ...toWorldItem(it, ref, world.now, rename), noise: true };
+      if (key) staleIds.set(key, written.id);
       WRITTEN.add(written);
       world.items[at] = written;
     });
@@ -120,6 +128,7 @@ export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) 
           template: `${w.id}-${t.id}`,
           text: rename(req.text),
           detail: rename(t.detail),
+          ...(staleIds.has(`${w.id}\u0000${t.decoy}`) ? { stale: staleIds.get(`${w.id}\u0000${t.decoy}`)! } : {}),
         };
       });
     });

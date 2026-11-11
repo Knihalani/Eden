@@ -223,6 +223,11 @@ export interface PartnerDeps {
    * tagger the embedder wires (the lab wires a binarised one). Read only when `constraintTag` is above 0.
    */
   constraintTag?: (scope: Scope, item: ContextItem) => number | null;
+  /**
+   * M3 (D908 rule 1, trial `pushSupersede`): the probability that `newer` replaces `older` (a later version, a
+   * correction, a cancellation), from a small pair model the embedder wires. Read only when `pushSupersede` is above 0.
+   */
+  supersede?: (scope: Scope, older: ContextItem, newer: ContextItem) => number | null;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -2547,6 +2552,8 @@ export class ContextPartner {
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
+    if (items.length > 0 && this.config.pushSupersede > 0 && this.deps.supersede)
+      items = this.superseded(s, cue, pool, items);
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
@@ -2587,6 +2594,44 @@ export class ContextPartner {
         : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
+  }
+
+  /**
+   * `pushSupersede` (M3, D908 rule 1): each handed item that a newer, anchor-holding, not bulk item of the pool replaces
+   * (the dependency's probability at least the threshold) is handed as that newer item instead; the most probable
+   * replacement wins, and an item already handed is not handed twice. A dependency that throws or answers null
+   * replaces nothing (fail open).
+   */
+  private superseded(s: Session, cue: Cue, pool: readonly Scored[], items: Scored[]): Scored[] {
+    const th = this.config.pushSupersede;
+    const dep = this.deps.supersede!;
+    const anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+    const later = pool.filter((x) => !bulkMail(x.item) && anchored(x.item, anchors));
+    const out: Scored[] = [];
+    const ids = new Set<string>();
+    for (const h of items) {
+      let best: Scored | null = null;
+      let bestP = th;
+      for (const n of later) {
+        if (n.item.id === h.item.id || (n.item.updatedAt ?? 0) <= (h.item.updatedAt ?? 0)) continue;
+        let p: number | null = null;
+        try {
+          p = dep(s.scope, h.item, n.item);
+        } catch {
+          p = null;
+        }
+        if (p !== null && p >= bestP) {
+          best = n;
+          bestP = p;
+        }
+      }
+      const x = best ?? h;
+      if (!ids.has(x.item.id)) {
+        ids.add(x.item.id);
+        out.push(x);
+      }
+    }
+    return out;
   }
 
   /**

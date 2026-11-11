@@ -375,6 +375,14 @@ alone. The tagger encoded 492 distinct items in 377 ms (0.77 ms an item, cached 
 the pair with the push check S live in front (the shipped path with a key; pre-registered in commit after e6aef109,
 running), and Pi.
 
+**Rule 1, supersession (`pushSupersede`), amended before any result.** (a) The suite: `synth:<M2 v2 val>+stale`
+(`+stale`, D884's synth family, a separate option: a hidden silent-change task's earlier revision stays as a background
+item beside the fact; the default suites are unchanged, `synth.test.ts` pins it), worlds H10 never trained on. (b) The
+newer item is looked for in the push pool (15), not the whole cache: both versions match the request, and a cache-wide
+search per handed item would be a second lookup. (c) Arms: off, binary H10 at θ 0.5, float H10 at θ 0.5 (θ fixed
+here, not read from val). Read: stale versions handed (`staleHanded`) down ≥ 50%, facts handed (`pushHanded`) not
+down > 2%; recall@p0.95 of each export reported from its own offline run beside them.
+
 **H1, set-level variant (Haiku round, local CPU slice, 150 worlds): killed.** On fold A's held-out train5–6 days
 requests (`score.py --at5 --key all`, eval-ship) its own ranking hands facts@5 33 of 56 against the shipped pool's
 47, and every fusion with the shipped pool is below the shipped pool (hyb10: 45 facts at 27 decoys against 47 at 26).

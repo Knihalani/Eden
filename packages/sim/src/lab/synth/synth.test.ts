@@ -127,6 +127,37 @@ describe("the synth suite family (D884)", () => {
     for (const id of Object.keys(w.sources)) expect(h!.world.sources[id]).toBeTruthy();
   });
 
+  test("`+stale` (M3, D908 rule 1) keeps a silent change's earlier revision beside the fact; the default is unchanged", () => {
+    parseSuites("synth-sample+stale");
+    const base = buildWorld({ seed: 41_000 }).items.length;
+    const plain = buildWorld({ seed: 41_000 });
+    const plainTasks = SUITES["synth-sample"]!(plain, 41, "hidden");
+    const world = buildWorld({ seed: 41_000 });
+    const tasks = SUITES["synth-sample+stale"]!(world, 41, "hidden");
+    const w = sample()[41 % sample().length]!;
+    const silent = w.tasks.filter((t) => t.timing === "silent");
+    expect(silent.length).toBeGreaterThan(0);
+    // The default suite names no stale item; the variant names one for each silent task and no other.
+    expect(plainTasks.some((t) => t.stale)).toBe(false);
+    expect(tasks.filter((t) => t.stale).map((t) => t.template)).toEqual(silent.map((t) => `${w.id}-${t.id}`));
+    // The planted facts are the same and still last, one a task; the world keeps its length.
+    expect(world.items.length).toBe(base + tasks.length);
+    expect(world.items.slice(base).map((i) => i.text)).toEqual(plain.items.slice(base).map((i) => i.text));
+    expect(tasks.map((t) => t.text)).toEqual(plainTasks.map((t) => t.text));
+    for (const t of tasks.filter((x) => x.stale)) {
+      const st = world.items.find((i) => i.id === t.stale)!;
+      const fact = world.items[base + tasks.indexOf(t)]!;
+      const decoy = w.items.find((i) => i.id === w.tasks.find((x) => `${w.id}-${x.id}` === t.template)!.decoy)!;
+      expect(st).toBeTruthy();
+      expect(world.items.indexOf(st)).toBeLessThan(base);
+      expect(st.updatedAt).toBeLessThan(fact.updatedAt);
+      expect(st.title).toBe(decoy.title.replace(new RegExp(`\\b${w.persona.first}\\b`, "g"), world.user.first));
+    }
+    // Control and neutral plant no stale version.
+    for (const v of ["control", "neutral"] as const)
+      expect(SUITES["synth-sample+stale"]!(buildWorld({ seed: 41_000 }), 41, v).some((t) => t.stale)).toBe(false);
+  });
+
   test("synth names parse: splits and files register on use, `@K` plants K worlds a seed, none is in `all`", () => {
     expect(parseSuites("all").some((s) => s.startsWith("synth"))).toBe(false);
     expect(parseSuites("synth")).toEqual(["synth-train", "synth-val"]);
