@@ -697,6 +697,12 @@ export interface EngineConfig {
    * task; with a Sonnet agent the total bill falls $0.86 per 1,000 tasks (D825, D826).
    */
   pushCheck: boolean;
+  /**
+   * M7 (D930, trial; docs/research/m7-prescreen.md): with `pushCheck` and a pre-screen wired (`PartnerDeps.prescreen`),
+   * a pool the pre-screen settles (no model call: clearly silent, or the obvious fact) takes its verdict as the check's
+   * answer and makes no call; one it abstains on is checked as before.
+   */
+  pushPrescreen: boolean;
   /** How long the push waits for its check before it hands the default's candidates (ms). */
   pushCheckWaitMs: number;
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
@@ -880,6 +886,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,
+  pushPrescreen: false,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushOpen: true,

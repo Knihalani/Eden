@@ -107,6 +107,8 @@ export interface PushCheckRead {
   overBudget: boolean;
   /** The push stopped waiting before the check answered (`pushCheckWaitMs`); the call itself goes on. */
   late?: boolean;
+  /** The pre-screen settled the pool (`pushPrescreen`, D930): no call was made. */
+  screened?: boolean;
 }
 
 const head = (text: string) =>

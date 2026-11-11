@@ -172,6 +172,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushIndirect: PUSH,
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
+  pushPrescreen: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],

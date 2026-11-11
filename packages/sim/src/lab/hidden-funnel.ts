@@ -137,6 +137,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import { DumpingChecker, RecordingPrescreen, type DumpTask } from "./prescreen-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -225,6 +226,7 @@ const cli = flags(
         "check-model",
         "check-cache",
         "check-log",
+        "prescreen-dump",
         "templates",
         "connect-at",
         "connect-tick-s",
@@ -586,6 +588,14 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
       }
     : checkModel;
 const checkLanes: PushChecker[] = [];
+/** `--prescreen-dump FILE` (M7, D930): each check call as a pre-screen training row (`prescreen-dump.ts`). */
+const PRESCREEN_DUMP = opt("prescreen-dump", "");
+if (PRESCREEN_DUMP && CHECK === "none") throw new Error("--prescreen-dump needs --check");
+if (PRESCREEN_DUMP && !RUN.pushPrescreen)
+  throw new Error(
+    "--prescreen-dump reads the pre-screen hook: --set pushPrescreen=true (it abstains, so no pool changes)",
+  );
+if (PRESCREEN_DUMP) writeFileSync(PRESCREEN_DUMP, "");
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -1043,7 +1053,15 @@ async function runSeed(
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
   const laneCheck = loggedCheck({ suite, seed, variant });
-  const checker = laneCheck ? new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }) : null;
+  const dumpTasks = new Map<string, DumpTask>();
+  const screen = PRESCREEN_DUMP ? new RecordingPrescreen() : null;
+  const checker = !laneCheck
+    ? null
+    : screen
+      ? new DumpingChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }, PRESCREEN_DUMP, screen, (key) =>
+          dumpTasks.get(key.slice(key.indexOf("#") + 1)),
+        )
+      : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
@@ -1059,6 +1077,7 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
+    ...(screen ? { prescreen: screen } : {}),
     ...(reader
       ? {
           reader,
@@ -1219,6 +1238,7 @@ async function runSeed(
     // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
+    dumpTasks.set(sessionId, { suite, seed, variant, template: task.template, planted: id });
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();
