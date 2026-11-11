@@ -268,18 +268,34 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
 
   /** The last membership a child accepted (`/internal/cluster`), replayed to a child that (re)starts after it. */
   let lastMembership: { auth: string; body: Uint8Array } | null = null;
+  /**
+   * Children listening and being told `lastMembership`, not up yet: a newer membership reaches them too (review of
+   * R1), or one that lands during the replay would be missed and the child would serve on the older table. The
+   * child's epoch check keeps the newer one whatever order they arrive in.
+   */
+  const replaying = new Set<Child>();
+  /** A membership being sent to the children now (`clusterEverywhere`): a replay sends it rather than the last. */
+  let deliveringMembership: { auth: string; body: Uint8Array } | null = null;
   const replayMembership = async (port: number): Promise<void> => {
-    if (!lastMembership) return;
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/internal/cluster`, {
-        method: "POST",
-        headers: { authorization: lastMembership.auth, "content-type": "application/json" },
-        body: lastMembership.body,
-        signal: AbortSignal.timeout(10_000),
-      });
-      await r.arrayBuffer();
-    } catch {
-      // The child serves as before (no table); the cluster router's next membership reaches it.
+    // Until what it sent is still the newest: a membership that began its fan-out before this child was `replaying`
+    // skipped it, so the replay sends that one too (at most a few rounds; the epoch check orders them).
+    let sent: { auth: string; body: Uint8Array } | null = null;
+    for (let round = 0; round < 4; round++) {
+      const m = deliveringMembership ?? lastMembership;
+      if (!m || m === sent) return;
+      sent = m;
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/internal/cluster`, {
+          method: "POST",
+          headers: { authorization: m.auth, "content-type": "application/json" },
+          body: m.body,
+          signal: AbortSignal.timeout(10_000),
+        });
+        await r.arrayBuffer();
+      } catch {
+        // The child serves as before (no table); the cluster router's next membership reaches it.
+        return;
+      }
     }
   };
 
@@ -313,7 +329,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
           c.port = port;
           // A restarted child is told the last cluster membership before it serves (R1): without it it has no table,
           // so no fence, and it would write and delete store copies of buckets this machine no longer owns.
+          replaying.add(c);
           void replayMembership(port).finally(() => {
+            replaying.delete(c);
             if (c.proc === proc) {
               c.up = true;
               c.restartMs = baseRestartMs;
@@ -497,9 +515,11 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     if (req.method !== "POST") return fail(405, "POST only");
     if (!clusterKeyMatches(config.cluster?.key ?? undefined, req)) return fail(401, "missing or wrong cluster key");
     const body = new Uint8Array(await req.arrayBuffer());
+    const membership = { auth: req.headers.get("authorization") ?? "", body };
+    deliveringMembership = membership;
     const answers = await Promise.all(
       children.map(async (c) => {
-        if (!c.up) return null;
+        if (!c.up && !replaying.has(c)) return null;
         try {
           const r = await fetch(`http://127.0.0.1:${c.port}/internal/cluster`, {
             method: "POST",
@@ -512,9 +532,10 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         }
       }),
     );
+    if (deliveringMembership === membership) deliveringMembership = null;
     const got = answers.filter((a): a is Record<string, number> => a !== null);
     if (got.length === 0) return fail(503, UNAVAILABLE);
-    lastMembership = { auth: req.headers.get("authorization") ?? "", body };
+    lastMembership = membership;
     const sum = { released: 0, written: 0, pending: 0, ms: 0, processesDown: n - got.length };
     for (const a of got) {
       sum.released += a.released ?? 0;

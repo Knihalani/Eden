@@ -54,8 +54,11 @@ export interface ClusterMessage {
 
 /** Routes that reach every node whoever owns the user (`/v1/forget` and `/v1/usage` fan out), never fenced. */
 const FAN_OUT = new Set(["/v1/forget", "/v1/usage"]);
-/** The most nodes `OwnerTable` places over (placement.ts): a larger membership is refused with a 400. */
-const MAX_NODES = 32_767;
+/**
+ * The most distinct nodes a membership may name (R1): far above any cluster this serves, and far under placement's
+ * own 32,767, whose table takes about 1 ms a node to build on the event loop. A larger membership is a 400.
+ */
+const MAX_NODES = 1_024;
 
 export interface ClusterAnswer {
   released: number;
@@ -153,7 +156,7 @@ export class Ops {
           !Array.isArray(msg.nodes) ||
           !msg.nodes.every((n) => typeof n === "string") ||
           // Placement's own bound (`OwnerTable`): past it the table throws (R1).
-          msg.nodes.length > MAX_NODES ||
+          new Set(msg.nodes).size > MAX_NODES ||
           (msg.epoch !== undefined && !Number.isInteger(msg.epoch)) ||
           (msg.mode !== undefined && msg.mode !== "release" && msg.mode !== "drop")
         ) {

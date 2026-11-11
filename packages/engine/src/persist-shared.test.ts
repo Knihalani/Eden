@@ -207,6 +207,27 @@ describe("a store shared between machines (D992)", () => {
     await d.settle(1_000);
     expect([...store.objects.keys()]).toEqual([`f/${d.local.nameOf(alice)}`]);
 
+    // Without a forget, a put still queued when the fence moves is not written either: the new owner decides.
+    const store3 = new MemoryStore();
+    const c3 = freezing();
+    const d3 = new SharedFrozenDisk({
+      dir: tempDir(),
+      key: KEY,
+      maxBytes: 64 << 20,
+      maxAgeMs: 7 * 24 * HOUR,
+      store: store3,
+      prefix: "f/",
+      concurrency: 1,
+    });
+    c3.persist(d3);
+    store3.delayMs = 40;
+    c3.put(alice, items("alice", 3), T0);
+    c3.put(bob, items("bob", 3), T0);
+    freezeAll(c3, T0);
+    d3.setWritable(() => false);
+    await d3.settle(1_000);
+    expect([...store3.objects.keys()]).toEqual([`f/${d3.local.nameOf(alice)}`]);
+
     // A put that failed once and is waiting to retry is not retried once its bucket is fenced.
     const store2 = new MemoryStore();
     const c2 = freezing();

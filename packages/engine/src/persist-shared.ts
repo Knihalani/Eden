@@ -312,8 +312,9 @@ export class SharedFrozenDisk implements FrozenDisk {
     const run = async () => {
       const m = NAME.exec(name);
       for (let attempt = 1; ; attempt++) {
-        // Fenced while waiting to retry (R1): the bucket's new owner decides what the store holds now.
-        if (attempt > 1 && m && !this.writable(parseInt(m[1]!, 16))) {
+        // Fenced before it ran or while waiting to retry (R1): the bucket's new owner decides what the store holds
+        // now. A write queued behind a release past its deadline would overwrite the new owner's newer copy.
+        if (m && !this.writable(parseInt(m[1]!, 16))) {
           this.remote.skipped++;
           return;
         }
