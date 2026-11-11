@@ -60,3 +60,7 @@ UTC) would cut the run, the pair is read on whole seeds (both suites) finished b
 Read (§1b's bar): hidden raised (Sonnet), D − default, clustered lower bound > −1.5 points; Sonnet-confirmed concerns
 (control and neutral) not up; the check's $ per 1,000 tasks from the pair's ledger (role `eden.check`, by arm) at
 least 20% lower. Reported beside it: the check's p50 and p90, Eden's and the agent's $ per 1,000 tasks, wall, asks.
+
+Amended before any result was read: pi-ab's per-process cap defaults to $0.60, about one run's cost (M13: $0.62–0.65
+a run), so the first two runs were stopped after about 30 seconds and restarted with `--budget 1.2` (`pi.sh`); their
+partial output was deleted unread.

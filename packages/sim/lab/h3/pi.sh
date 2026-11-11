@@ -15,4 +15,4 @@ exec env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --config defaul
   --model $H --grader $H --card-model $H --reader-model $H \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload \
   --spend-ledger .local/h3/ledger.jsonl --spend-cap 15 --spend-headroom 0.3 --run-label $L \
-  --timeline $R/out.tl --out $R/out.json "$@"
+  --budget 1.2 --timeline $R/out.tl --out $R/out.json "$@"
