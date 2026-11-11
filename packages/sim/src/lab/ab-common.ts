@@ -444,6 +444,15 @@ export interface RunResult {
   leaked?: boolean;
   /** `--act` (act.ts): each action tool call, its firewall verdict and whether it executed, in order. */
   actions?: ActionRecord[];
+  /**
+   * `pi-ab --connect-at` (O5): the request's checkpoint (s after the user's first event), when it was sent, which of
+   * the world's users sent it, and whether their backfill was complete and what it held then.
+   */
+  connectS?: number;
+  sinceConnectMs?: number;
+  replica?: number;
+  warmAtRequest?: boolean;
+  syncedAtRequest?: number;
 }
 
 export const emptyResult = (task: string, condition: string): RunResult => ({

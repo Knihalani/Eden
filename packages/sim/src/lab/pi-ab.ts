@@ -65,6 +65,18 @@
  * `--day K --late` (A9, pi-late.ts): each request's planted item arrives right after its answer; the agent's later
  * replies that day are graded against that request (`lateFacts`).
  *
+ * `--connect-at 10,45` (O5, D753; docs/research/o4-new-user.md §6): new users, in real time, as the funnel's flag of
+ * the same name. Each world runs once per task and arm as a user of its own (a replica): their first event comes at
+ * second 0 with nothing synced, the sync ticks as the servers' timer does (`--connect-tick-s`, 30, then every 60 s),
+ * nothing waits for the backfill or the cards, and the user makes one request at each checkpoint (replica r asks
+ * task (r + j) mod T at checkpoint j, so every task is asked at every checkpoint once). Replicas start
+ * `--connect-stagger-s` (2) apart, at most `--connect-users` (48) at once. A replayed card call takes `--cards-ms`
+ * (2,700). After their last request a user is kept until their backfill is complete or `--connect-settle-s` (200)
+ * since their first event, so both arms' connector calls a user are a whole backfill's. Results carry `connectS`,
+ * `sinceConnectMs`, `replica`, `warmAtRequest` and `syncedAtRequest`, and the results file `connect.users` (each
+ * user's connector calls). Not with `--days`, `--day`, `--late`, `--reuse-arms` or `--world-file`;
+ * `../../lab/o5/new-user-pi.py` reads it.
+ *
  * `--templates a,b` runs only those hidden-context templates. Free models go through `free.ts` (above).
  *
  * --budget is a hard cap on everything this run spends (agent, Eden's judge, grader): each call reserves its
@@ -261,6 +273,31 @@ const NOISE_ITEMS = Number(opt("noise-items", "20"));
 const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
   throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
+// `--connect-at` (O5): see the header.
+const CONNECT_AT = opt("connect-at", "")
+  .split(",")
+  .filter((x) => x !== "")
+  .map(Number);
+if (CONNECT_AT.some((x) => !(x >= 0))) throw new Error("--connect-at takes seconds, each at least 0");
+const CONNECT = CONNECT_AT.length > 0;
+const CONNECT_TICK_S = Number(opt("connect-tick-s", "30"));
+const CONNECT_STAGGER_S = Number(opt("connect-stagger-s", "2"));
+const CONNECT_USERS = Number(opt("connect-users", "48"));
+const CONNECT_SETTLE_S = Number(opt("connect-settle-s", "200"));
+const CARDS_MS = Number(opt("cards-ms", CONNECT ? "2700" : "0"));
+if (CONNECT && (DAY > 0 || USER_DAYS > 0 || WORLD_FILE || args.includes("--late") || opt("reuse-arms", ""))) {
+  throw new Error("--connect-at runs new users: not with --days, --day, --late, --reuse-arms or --world-file");
+}
+/** `--connect-at`: each user's connector calls (every call Eden made for them) and what they held at the end. */
+const connectUsers: {
+  seed: number;
+  suite: string;
+  kind: string;
+  condition: string;
+  replica: number;
+  sourceCalls: number;
+  warmS: number | null;
+}[] = [];
 /** Either day mode: `--day K` (fixed days per suite and variant) or `--days D` (a user's mixed days). */
 const DAYS_ON = DAY > 0 || USER_DAYS > 0;
 // `--late` (A9, pi-late.ts): each request's planted item arrives right after the agent answers it; what the agent
@@ -703,7 +740,10 @@ async function runWorld(
   grading: Promise<void>[],
   /** `--days`: the user's requests per day, in order. */
   daySizes?: readonly number[],
+  /** `--connect-at`: which of the world's users this stream is, of how many, and when they connect (`now()`'s ms). */
+  connect?: { replica: number; replicas: number; startAt: number },
 ): Promise<RunResult[]> {
+  if (connect) await Bun.sleep(Math.max(0, connect.startAt - performance.now()));
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
   const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
@@ -711,11 +751,13 @@ async function runWorld(
   const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
   let dayLate: { entry: LateEntry; r: RunResult }[] = [];
   const userPrefix = `w${seed}:user`;
-  const tasks = daySizes
-    ? withDayRecaps(baseTasks, daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`))
-    : DAY > 0
-      ? withRecaps(baseTasks, DAY)
-      : baseTasks;
+  const tasks = connect
+    ? CONNECT_AT.map((_, j) => baseTasks[(connect.replica + j) % baseTasks.length]!)
+    : daySizes
+      ? withDayRecaps(baseTasks, daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`))
+      : DAY > 0
+        ? withRecaps(baseTasks, DAY)
+        : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
   const {
@@ -732,7 +774,7 @@ async function runWorld(
     noKey,
     packets: layout,
   } = cond;
-  const scope = { tenantId: "ab", userId: `w${seed}` };
+  const scope = { tenantId: "ab", userId: connect ? `w${seed}r${connect.replica}` : `w${seed}` };
   let clock = world.now;
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
@@ -800,10 +842,20 @@ async function runWorld(
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };
   };
+  // `--cards-ms`: a card call takes this long, as a model's does (a replayed card otherwise answers at once, and a
+  // new user's cards would be in before their first request).
+  const timedMaker = (): CardMaker => {
+    const maker = cappedMaker();
+    if (CARDS_MS <= 0) return maker;
+    return {
+      make: (items, today, signal, retry, intent) =>
+        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent)),
+    };
+  };
   const cards =
     // `+nokey` (D291): a server with no model key builds no card enricher and no reader (models.ts NO_MODELS).
     withPartner && !noKey && effective(config).cards
-      ? new CardEnricher({ maker: cappedMaker(), budget: new Budget(), now: () => clock })
+      ? new CardEnricher({ maker: timedMaker(), budget: new Budget(), now: () => clock })
       : undefined;
   if (cards) budgeted.cards.push(cards);
   // A stream with Eden but no cards (`+nokey`, D291) is booked too, for its connector calls (the backfill, ticks); it
@@ -857,11 +909,13 @@ async function runWorld(
   const idOf = (hash: string) =>
     (byHash ??= new Map(worldItems().map((it) => [cardKey(it).slice(0, 20), it.id] as const))).get(hash);
   const variantOf = new Map(baseTasks.map((t) => [widenKey(sanitizeForStore(t.text)), t.kind as string]));
+  const itemCache = new ItemCache();
+  const sourceMap = new SourceMap(":memory:", { seed });
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
-        sourceMap: new SourceMap(":memory:", { seed }),
-        cache: new ItemCache(),
+        sourceMap,
+        cache: itemCache,
         budget: new Budget(),
         model: judge
           ? meteredModel(labModel(ACCESS, { apiKey: KEY!, model: MODEL }, "eden.judge"), (start, end, data) =>
@@ -911,7 +965,36 @@ async function runWorld(
   // `sync`: the user's sources are backfilled before the first task, as a long-running sync would have them, and the
   // sync ticks once per task (an hour of the world's clock). Cards for what it stored are made before tasks start.
   const sync = partner?.sync ?? null;
-  if (sync) {
+  // `--connect-at`: the user's first event is now; the clock runs with the wall from here and the sync ticks as the
+  // servers' timer does. Nothing is waited for.
+  const connectedAt = performance.now();
+  const timers: ReturnType<typeof setInterval>[] = [];
+  let warmS: number | null = null;
+  if (connect) {
+    const start = clock;
+    const wall = () => (clock = start + (performance.now() - connectedAt));
+    timers.push(
+      setInterval(() => {
+        wall();
+        if (warmS === null && sync?.warm(scope)) warmS = (performance.now() - connectedAt) / 1_000;
+      }, 100),
+    );
+    if (partner) {
+      await partner.observe({ ...scope, sessionId: "connect", at: clock, kind: "session_start" } as AgentEvent);
+    }
+    if (sync) {
+      const tick = () => {
+        wall();
+        void sync.tick();
+      };
+      timers.push(
+        setTimeout(() => {
+          tick();
+          timers.push(setInterval(tick, 60_000));
+        }, CONNECT_TICK_S * 1_000),
+      );
+    }
+  } else if (sync) {
     // As the simulation does: the backfill runs from half an hour before the first task, a minute per tick (the
     // sync's own per-source budget paces it), and the tasks then start on the same clock as without it.
     const start = clock;
@@ -925,7 +1008,7 @@ async function runWorld(
     if (!sync.warm(scope))
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
-  if (cards) await cards.idle();
+  if (cards && !connect) await cards.idle();
   // What the backfill's enrichment cost before the first request (one-time per user, H16): the rest of the stream's
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
@@ -988,20 +1071,28 @@ async function runWorld(
   let dayKind = "";
   let dayMessages: AgentMessage[] = [];
   const dayPackets: string[][] = [];
+  let asked = -1;
   for (const task of tasks) {
+    asked++;
     if (exhausted()) break;
     if (PACER.remaining < TASK_REQUESTS) {
       capStopped++;
       break;
     }
+    if (connect) {
+      // The checkpoint, in real time since the user's first event; the session before it is closed first.
+      await closePrevious();
+      const wait = connectedAt + CONNECT_AT[asked]! * 1_000 - performance.now();
+      if (wait > 0) await Bun.sleep(wait);
+    }
     // An hour between tasks: Eden's clock, for its caches and planner. `--days`: `--gap-min` between requests and
     // `--night-h` before each day after the first (the recap closed the day before).
-    clock += daySizes ? (newDay && dayNo >= 0 ? NIGHT_MS : GAP_MS) : 3_600_000;
+    if (!connect) clock += daySizes ? (newDay && dayNo >= 0 ? NIGHT_MS : GAP_MS) : 3_600_000;
     // Between tasks no task's timeline is current: the sync's tick, the notices and a recap's notice are background,
     // counted in the stream's `sourceCalls` and not in the previous task's window (A3 review; before it they were).
     current = null;
-    if (sync) await sync.tick();
-    notify(partner, scope);
+    if (sync && !connect) await sync.tick();
+    if (!connect) notify(partner, scope);
     if (DAYS_ON && newDay) {
       dayNo++;
       // One Eden session per day, named once: a suite whose ids do not share a prefix keeps it too.
@@ -1055,6 +1146,13 @@ async function runWorld(
     }
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);
+    if (connect) {
+      r.connectS = CONNECT_AT[asked]!;
+      r.sinceConnectMs = Math.round(performance.now() - connectedAt);
+      r.replica = connect.replica;
+      r.warmAtRequest = sync?.warm(scope) ?? false;
+      r.syncedAtRequest = partner ? itemCache.syncedCount(scope) : 0;
+    }
     if (startsDay) await closePrevious();
     const tl = new Timeline();
     current = tl;
@@ -1522,6 +1620,36 @@ async function runWorld(
   if (day) DAYS.push({ ...day.summary(), seed, kind: dayKind, partial: true });
   await closePrevious();
   current = null;
+  if (connect) {
+    // The user is kept until their backfill is complete (bounded), so an arm that reads it later is not counted
+    // short; what a lookup left reading behind it is counted too. Then the user is let go.
+    while (sync && !sync.warm(scope) && performance.now() - connectedAt < CONNECT_SETTLE_S * 1_000) {
+      await Bun.sleep(250);
+    }
+    await Bun.sleep(2_000);
+    for (const t of timers) clearInterval(t);
+    partner?.stopSync();
+    // The user is done: the run's lists keep only what its last lines read. An enricher or a reader left in them
+    // holds this stream's sources, cache and partner through its closures (about 11 MB a user: two seeds at once
+    // were on their way past 16 GB a third of the way in, the first attempt of o4-new-user.md 6a).
+    const done = <T extends { stats: { overBudget: number } }>(list: T[], x: T | undefined) => {
+      const i = x ? list.indexOf(x) : -1;
+      if (i >= 0) list[i] = { stats: { overBudget: x!.stats.overBudget } } as T;
+    };
+    done(budgeted.cards, cards);
+    done(budgeted.reader, reader);
+    itemCache.forget(scope);
+    sourceMap.close();
+    connectUsers.push({
+      seed,
+      suite: tasks[0]?.suite ?? "",
+      kind: tasks[0]?.kind ?? "",
+      condition,
+      replica: connect.replica,
+      sourceCalls: edenCalls,
+      warmS,
+    });
+  }
   return out;
 }
 
@@ -1629,10 +1757,33 @@ const records: TaskRecord[] = [...reused.records];
 const grading: Promise<void>[] = [];
 const results: RunResult[] = [...reused.results];
 const t0 = performance.now();
+/** `--connect-at`: users running at once, so a process holds `--connect-users` users' sources and caches at most. */
+let connectSlots = CONNECT_USERS;
+const connectWaiters: (() => void)[] = [];
+async function connected<T>(run: () => Promise<T>): Promise<T> {
+  if (connectSlots > 0) connectSlots--;
+  else await new Promise<void>((r) => connectWaiters.push(r));
+  try {
+    return await run();
+  } finally {
+    const next = connectWaiters.shift();
+    if (next) next();
+    else connectSlots++;
+  }
+}
+let connectSlot = 0;
+const live = CONDITIONS.filter((c) => !reused.conditions.includes(c.name));
 const streams = worlds.flatMap((w) =>
-  CONDITIONS.filter((c) => !reused.conditions.includes(c.name)).map((c) =>
-    runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes),
-  ),
+  CONNECT
+    ? // One user a task and arm, each in a slot of their own, a task's arms side by side.
+      w.tasks.flatMap((_, replica) =>
+        live.map((c) => {
+          const startAt = t0 + connectSlot++ * CONNECT_STAGGER_S * 1_000;
+          const who = { replica, replicas: w.tasks.length, startAt };
+          return connected(() => runWorld(w.world, w.seed, w.tasks, c, records, grading, undefined, who));
+        }),
+      )
+    : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes)),
 );
 for (const settled of await Promise.allSettled(streams)) {
   if (settled.status === "fulfilled") results.push(...settled.value);
@@ -1673,6 +1824,18 @@ writeFileSync(
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
       ...(LATE ? { late: true } : {}),
+      ...(CONNECT
+        ? {
+            connect: {
+              at: CONNECT_AT,
+              tickS: CONNECT_TICK_S,
+              staggerS: CONNECT_STAGGER_S,
+              settleS: CONNECT_SETTLE_S,
+              cardsMs: CARDS_MS,
+              users: connectUsers,
+            },
+          }
+        : {}),
       ...(DAYS_ON
         ? { ...(DAY > 0 ? { day: DAY } : {}), days: DAYS, daysPooled: poolDays(DAYS), recapNotice: RECAP_NOTICE }
         : {}),
