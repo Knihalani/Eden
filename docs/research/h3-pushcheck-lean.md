@@ -187,3 +187,15 @@ raised difference has its template-clustered 95% lower bound above −1.5 points
 The check's $ per 1,000 tasks and its p50 and p90 are reported from the full runs (`checks.py`, `n5/mix.py`). If the
 deadline would cut the runs, the pair is read on the runs finished by 03:15 UTC (whole seeds, both suites), the rest
 unrun; no seed is added after a result is read.
+
+**Amended before any re-test result was read (23:10 UTC).** Seeds 45+ are outside the recorded card files, so
+pi-ab writes cards live in both arms (`coverage full`, card model Haiku 5.5): about $0.59 a full run, which put
+`r-train-45` at its $1.20 per-process cap (1,132 of 1,152 task runs; the cut runs are left out of the pairs) and
+would have taken the plan past $24. Stopping the queue also stopped `r-reworded-45` mid-run. From here:
+
+- `r-reworded-45` is resumed from its journal (`--resume`, the same key) with `H3_BUDGET=2` (pi.sh's cap).
+- Seeds 46–48 (`hidden,control,neutral`): `train` first with `H3_BUDGET=2`, then `reworded` replaying that run's
+  cards (`--cards .local/h3/pi/r-train-N/out.cards.jsonl`).
+- Hidden-only seeds are **49–54** (not 56), the same way. Hidden pairs: 1,536 (45–48) + 2,304 = 3,840 (2.5×).
+- Both arms of a run always share its cards, so each pair stays matched; between runs the cards differ (live, or
+  replayed), and pairs are never formed across runs. Everything else in the rule stands.
