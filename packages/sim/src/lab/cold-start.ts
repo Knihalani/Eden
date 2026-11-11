@@ -19,10 +19,10 @@
  * `worldOf` builds them).
  *
  * `--cards-out FILE` (P7, D872): append every card and intent request the shipped enricher made, one `{h, c, r}` line
- * per item it read (`h` the card key, `c` the card, `r` the requests; either left out where the call gave none), the format `--cards` and
- * `--intent` replay. Run over a suite's worlds this gives the shipped-coverage caches (`cards-shipped.jsonl.gz`,
- * cards-disk.ts): the cards and requests a deployment would hold for those users, not `cards-enrich.ts --intent`'s
- * every-item index (D714).
+ * per item it read (`h` the card key, `c` the card, `r` the requests; either left out where the call gave none), the
+ * format `--cards` and `--intent` replay. Run over a suite's worlds this gives the shipped-coverage caches
+ * (`cards-shipped.jsonl.gz`, cards-disk.ts): the cards and requests a deployment would hold for those users, not
+ * `cards-enrich.ts --intent`'s every-item index (D714).
  *
  * `--set JSON`: engine settings over the default (e.g. `{"cardsLeanDays":30}`, CL3's comparison with D244). The
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.

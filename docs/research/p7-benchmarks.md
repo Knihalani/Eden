@@ -108,9 +108,14 @@ Three readings:
 
 ### 2.3 The long tail one request a session
 
-`bun run funnel --suite longtail --seeds 41,42` gives hidden 29/48 and decoys 23/48 (stub reader, intent inert: no
-cache covers it). It is easy at this horizon, since every connector is read at the backfill. Its question is a days
-one.
+`bun run funnel --suite longtail --seeds 41,42,43,44` (stub reader):
+
+| Coverage | Hidden | Decoys |
+| --- | --- | --- |
+| none (no cache covers it; intent inert) | 56/96 | 47/96 |
+| shipped | 60/96 | 56/96 |
+
+Every connector is read at the backfill, so at this horizon its question barely shows; it is a days question.
 
 ## 3. Shipped coverage (D872), and the recommendation
 
@@ -148,7 +153,17 @@ of seeds 41–44 against 45–48. The reworded gap is the same under both covera
 
 ## 4. Costs
 
-ANTHROPIC_PENDING. Modal: $0.
+Anthropic, all on the card role (Haiku 5.5, lab transport), from the spend ledger `.local/p7/ledger.jsonl`:
+
+| Run | Worlds | USD |
+| --- | --- | --- |
+| Smoke runs | 2 | 0.018 |
+| train1–6 × 41–44 × three variants | 72 | 0.501 |
+| longtail and heldout19 × 41–44 × three variants | 24 | 0.171 |
+| The 24 weeks users | 24 | WEEKS_USD |
+| **Ledger total** | | LEDGER_USD |
+
+Modal: $0. Every days-calls and funnel run is $0.
 
 ## 5. Known biases of the new suites
 

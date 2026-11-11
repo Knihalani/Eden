@@ -85,9 +85,11 @@ export function dayKinds(n: number, mix: UserOptions["mix"]): { hidden: number; 
 
 /**
  * A user's D days: per day a size in the range, its kinds by `dayKinds`, its requests drawn from the suites' templates
- * without replacement (a template appears once per user until all have been used; then the pool is refilled and a
- * template may return as a request, but never planted twice) and put in a random order. Deterministic per seed.
- * Throws when the suites hold too few templates for the days, or a neutral request falls on a suite without it.
+ * without replacement (a template appears once per user) and put in a random order. Deterministic per seed. Throws
+ * when a neutral request falls on a suite without it.
+ *
+ * Weeks (P7, D874): when the templates run out before the last day, the plan is made by `planWeeks` instead, so every
+ * plan that fits is exactly what it was before weeks existed.
  */
 export function planUser(
   seed: number,
@@ -97,43 +99,77 @@ export function planUser(
   const rng = new Rng(seed * 7_919 + 16_016);
   const all = Object.entries(templates).flatMap(([suite, names]) => names.map((template) => ({ suite, template })));
   const pool = rng.sample(all, Number.MAX_SAFE_INTEGER);
-  /** Templates already planted (hidden or control) for this user: a planted item is never planted twice. */
-  const plantedBefore = new Set<string>();
-  const keyOf = (t: { suite: string; template: string }) => `${t.suite}|${t.template}`;
   const days: UserPlanEntry[][] = [];
   for (let d = 0; d < options.days; d++) {
     const n = rng.int(options.size[0], options.size[1]);
-    // Weeks (P7, D874): once the templates run out the pool is refilled with a fresh shuffle, so a template comes back
-    // as a request; only the planted slots must be templates not planted before. A plan that never runs out is the
-    // same as before the refill existed.
-    if (pool.length < n) pool.push(...rng.sample(all, Number.MAX_SAFE_INTEGER));
-    if (pool.length < n) {
-      throw new Error(`--days ${options.days}: the suites hold too few templates (${pool.length} left for day ${d})`);
-    }
+    if (pool.length < n) return planWeeks(seed, all, options);
     const k = dayKinds(n, options.mix);
-    let drawn = pool.splice(0, n);
-    // Fresh templates first (a stable reorder), so the day's planted slots take them; with no refill all are fresh.
-    if (drawn.some((t) => plantedBefore.has(keyOf(t)))) {
-      const fresh = (t: { suite: string; template: string }) => !plantedBefore.has(keyOf(t));
-      // Too few fresh ones drawn: pull the next unplanted templates forward from the pool, returning stale ones.
-      for (let need = k.hidden + k.control - drawn.filter(fresh).length; need > 0; need--) {
-        const at = pool.findIndex(fresh);
-        const stale = drawn.findLastIndex((t) => !fresh(t));
-        if (at < 0 || stale < 0) throw new Error(`--days ${options.days}: day ${d} runs out of unplanted templates`);
-        [drawn[stale], pool[at]] = [pool[at]!, drawn[stale]!];
-      }
-      drawn = [...drawn.filter(fresh), ...drawn.filter((t) => !fresh(t))];
-    }
-    for (const t of drawn.slice(0, k.hidden + k.control)) plantedBefore.add(keyOf(t));
+    const drawn = pool.splice(0, n);
     const day: UserPlanEntry[] = drawn.map((t, i) => ({
       ...t,
       variant: i < k.hidden ? "hidden" : i < k.hidden + k.control ? "control" : "neutral",
     }));
-    for (const e of day) {
-      if (e.variant === "neutral" && !supportsNeutral(e.suite)) {
-        throw new Error(`${e.suite} builds no neutral variant (neutral.ts): a long horizon needs suites that do`);
-      }
+    checkNeutral(day);
+    days.push(rng.sample(day, day.length));
+  }
+  return days;
+}
+
+const checkNeutral = (day: readonly UserPlanEntry[]) => {
+  for (const e of day) {
+    if (e.variant === "neutral" && !supportsNeutral(e.suite)) {
+      throw new Error(`${e.suite} builds no neutral variant (neutral.ts): a long horizon needs suites that do`);
     }
+  }
+};
+
+/**
+ * A plan longer than the templates (D874). A user's world holds every planted item from the start, so a template
+ * planted for the user must never also be asked as a neutral request (its fact or decoy would be in that request's
+ * world, and a grader would count raising it as a false concern). So the planted slots of all days are drawn first,
+ * without replacement, and the neutral requests cycle through the templates never planted for this user (reshuffled
+ * each time round, never twice in one day). Throws when the planted slots need more templates than there are, or
+ * none is left for the neutral requests. Its own random stream: a weeks plan shares nothing with the short one.
+ */
+export function planWeeks(
+  seed: number,
+  all: readonly { suite: string; template: string }[],
+  options: UserOptions,
+): UserPlanEntry[][] {
+  const rng = new Rng(seed * 7_919 + 874);
+  const sizes = Array.from({ length: options.days }, () => rng.int(options.size[0], options.size[1]));
+  const kinds = sizes.map((n) => dayKinds(n, options.mix));
+  const plantedSlots = kinds.reduce((x, k) => x + k.hidden + k.control, 0);
+  const shuffled = rng.sample(all, Number.MAX_SAFE_INTEGER);
+  if (plantedSlots > shuffled.length) {
+    throw new Error(`--days ${options.days}: ${plantedSlots} planted requests need more templates than ${all.length}`);
+  }
+  const planted = shuffled.slice(0, plantedSlots);
+  const neutralSet = shuffled.slice(plantedSlots);
+  if (!neutralSet.length && kinds.some((k) => k.neutral > 0)) {
+    throw new Error(`--days ${options.days}: no template is left for the neutral requests`);
+  }
+  let queue: { suite: string; template: string }[] = [];
+  const days: UserPlanEntry[][] = [];
+  for (const [d, k] of kinds.entries()) {
+    const day: UserPlanEntry[] = [];
+    for (let i = 0; i < k.hidden + k.control; i++) {
+      day.push({ ...planted.shift()!, variant: i < k.hidden ? "hidden" : "control" });
+    }
+    const today = new Set<string>();
+    for (let i = 0; i < k.neutral; i++) {
+      if (today.size >= neutralSet.length) throw new Error(`--days: day ${d} has more neutral requests than templates`);
+      // Next in the cycle not yet asked today; a new round reshuffles the never-planted templates.
+      let at = queue.findIndex((t) => !today.has(`${t.suite}|${t.template}`));
+      while (at < 0) {
+        queue = [...queue, ...rng.sample(neutralSet, Number.MAX_SAFE_INTEGER)];
+        at = queue.findIndex((t) => !today.has(`${t.suite}|${t.template}`));
+      }
+      const [t] = queue.splice(at, 1);
+      today.add(`${t!.suite}|${t!.template}`);
+      day.push({ ...t!, variant: "neutral" });
+    }
+    checkNeutral(day);
     days.push(rng.sample(day, day.length));
   }
   return days;

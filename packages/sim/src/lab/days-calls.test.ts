@@ -92,7 +92,7 @@ describe("days-calls: weeks, the long tail and silent arrivals (D874, D875)", ()
       days: 14,
       push: "payload",
       nightMs: 20 * 3_600_000,
-      suites: ["train1", "longtail"],
+      suites: ["train1", "train2", "longtail"],
       arriveDays: [0, 8],
     });
     expect(u.days).toBe(14);

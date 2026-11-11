@@ -23,7 +23,8 @@ describe("suite registry", () => {
       );
       expect({ name, dupes: ids.length - new Set(ids).size }).toEqual({ name, dupes: 0 });
     }
-  });
+    // Two prepared worlds for each of about 45 suites: under a second alone, past bun's 5 s under parallel load.
+  }, 30_000);
 
   test("every blind suite is registered, so the blind run can name it (heldout5-9)", () => {
     for (const n of [5, 6, 7, 8, 9]) expect(SUITE_NAMES).toContain(`heldout${n}`);
@@ -360,7 +361,7 @@ describe("reworded train (P7, D871)", () => {
     for (const n of [1, 2, 3, 4, 5, 6]) {
       const base = `train${n}`;
       expect(Object.values(REWORDED[base]!).filter((w) => w.lang).length).toBe(6);
-      for (const seed of [41, 47, 52]) {
+      for (let seed = 41; seed <= 52; seed++) {
         for (const v of ["hidden", "control", "neutral"] as const) {
           const a = preparedWorld(base, seed);
           const b = preparedWorld(`${base}r`, seed);
@@ -379,5 +380,5 @@ describe("reworded train (P7, D871)", () => {
       }
     }
     expect(parseSuites("all")).not.toContain("train1r");
-  });
+  }, 60_000);
 });

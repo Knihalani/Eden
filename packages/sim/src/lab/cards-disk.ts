@@ -96,13 +96,14 @@ export const INTENT_COVERS: Record<string, string[]> = {
  * The shipped-coverage caches (P7, D872): the cards and intent requests the shipped enricher (`buildPartner`'s own
  * `CardEnricher`, DEFAULT_CONFIG and DEFAULT_LIMITS) made for each world of these suite × seed shards, recorded by
  * `cold-start.ts --cards-out` over the hidden, control and neutral worlds with the card role on Haiku 5.5 (Anthropic,
- * lab transport, D97). One file holds both: `bun run funnel --coverage shipped` replays it as `--cards` and
- * `--intent`. Where several worlds of a seed carded the same item, the last line read wins.
+ * lab transport, D97). Train's lines come last, so train's cards win where a longtail or heldout19 world carded the
+ * same base item. One file holds both: `bun run funnel --coverage shipped` replays it as `--cards` and `--intent`.
+ * Where several worlds of a seed carded the same item, the last line read wins.
  */
 export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
 export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
 export const SHIPPED_COVERS: Record<string, string[]> = {
-  ...Object.fromEntries(parseSuites("train,reworded").map((s) => [s, ["41", "42", "43", "44"]])),
+  ...Object.fromEntries(parseSuites("train,reworded,longtail,heldout19").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
 /** The suite × seed shards SHIPPED_FILE was not made for. */

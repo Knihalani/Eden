@@ -54,7 +54,8 @@ const wa = (lines: [Person | string, string, number][]) =>
   lines
     .map(([who, text, t]) => {
       const d = new Date(t);
-      const stamp = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/2026, ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+      const two = (n: number) => String(n).padStart(2, "0");
+      const stamp = `${two(d.getUTCDate())}/${two(d.getUTCMonth() + 1)}/2026, ${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
       return `[${stamp}] ${typeof who === "string" ? who : who.first}: ${text}`;
     })
     .join("\n");

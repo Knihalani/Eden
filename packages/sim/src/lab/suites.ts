@@ -176,11 +176,12 @@ export const SUITES: Record<string, Plant> = {
   // person, thing or date the planted item words differently (`HELDOUT18_ANCHORED`, for the askNudge question,
   // D455-D457). Unread: do not run it (funnel or agent) except as the blind read it was made for; never tune on it.
   heldout18: plantHeldout18,
-  // P7's blind suite for the end-of-wave confirmation (docs/research/p7-benchmarks.md), written by an isolated author who
-  // saw only a format scaffold (helpers and planting function, one invented example), the HiddenTask interface, the sim
-  // world API and rare-sources.ts; with `neutral`; indirect, question and non-English requests, anchored requests,
-  // facts in rarely used connectors and silent edits (HELDOUT19_* lists). Its worlds hold the eight rare connectors
-  // (`prepareWorld`). Unread: nobody runs it (funnel or agent) before the parent's end-of-wave call; never tune on it.
+  // P7's blind suite for the end-of-wave confirmation (docs/research/p7-benchmarks.md, D870), written by an isolated
+  // author who saw only a format scaffold (helpers and planting function, one invented example), the HiddenTask
+  // interface, the sim world API and rare-sources.ts; with `neutral`; indirect, question and non-English requests,
+  // anchored requests, facts in rarely used connectors and silent edits (HELDOUT19_* lists). Its worlds hold the eight
+  // rare connectors (`prepareWorld`). Unread: nobody runs it (funnel or agent) before the parent's end-of-wave call;
+  // never tune on it.
   heldout19: needsPrepared("heldout19", plantHeldout19),
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.

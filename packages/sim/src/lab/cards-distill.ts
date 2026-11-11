@@ -260,7 +260,8 @@ export function buildRows(
 
 /** Every suite that is not a train suite, whose planted items are kept out of the set. */
 export function guardedSuites(): string[] {
-  return Object.keys(SUITES).filter((s) => !TRAIN.has(s));
+  // A reworded train suite (`train1r`, D871) plants train's own items: guarding it would hold train out of training.
+  return Object.keys(SUITES).filter((s) => !TRAIN.has(s) && !TRAIN.has(s.replace(/r$/, "")));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
