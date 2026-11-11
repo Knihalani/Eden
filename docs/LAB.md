@@ -346,6 +346,13 @@ Measured on train1–6, seeds 41–42, 4 cores, no key set:
 
 Limits: the rows of the table above ran before D158, intent inert (the intent index finds nothing without a replay
 file), so their pools lack the intent hits that the paid screens had; the prompt sizes are of the stub's reads only.
+**Which intent coverage a run measured (D714).** The checked-in `intent-v2.jsonl.gz` has requests for about 99% of a
+covered seed's items (`cards-enrich.ts --intent` sends every item). The shipped pipeline writes requests only for the
+items a card call reads: about 14% of a user's items when cards are made in-run (181 to 238 of about 1,490 on days
+users w45–w52). So a run that replays the file (the funnel, pi-ab on train seeds 41–44) measures the **full**
+coverage and a run on uncovered seeds with cards made in-run measures the **shipped** coverage; say which beside
+any level you quote, and do not compare levels across the two. Paired differences within one run stand.
+
 Since D158 `bun run funnel` replays the checked-in `intent-v2.jsonl.gz` by default when it covers the run's suites and
 seeds (train seeds 41–44, held-out 10–11 seeds 41–42), and prints `intent: live|inert (why)` under the score header;
 `--intent none` gives the old inert shape. A run says when it is inert: with `intent` on and no replayed request

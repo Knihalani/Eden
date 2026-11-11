@@ -138,6 +138,13 @@ day, 6 not that day), so the replay is a fair screen. Two things follow, both fr
   (17%) and 126 of 387 for w45–w72 (33%). Every arm of a user ran the same way, so §3's paired differences stand;
   the levels, and how large the pool-recall gap is with a full intent index, need users whose requests are made
   first (about $0.02 a user of card calls [EST], not run).
+- **How far apart the two groups' intent indexes are** (the saved card files, each user's items keyed as the cache
+  keys them): the checked-in requests cover 1,485 to 1,495 of each of w41–w44's about 1,495 items, every hidden
+  planted item among them (46 of 46). The card calls the paid run made for w45–w52, which is the shipped pipeline
+  (requests only for the items a card call reads), cover 181 to 238 of about 1,490 items a user and 63 of 113 hidden
+  planted items. Of those users' 16 facts outside the pool, 8 had requests and 8 had none. So the train figures on
+  seeds 41–44 (the funnel, every short Pi run) are measured with an intent index about seven times fuller than the
+  shipped pipeline builds; what that is worth in hidden facts raised has not been measured on the same users.
 
 ```bash
 .local/o3/days4.sh d4 41 … 72      # pi.sh per user: --days 8, arms eden,eden~O,eden~P,eden~OP, --budget 1.0

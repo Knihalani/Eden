@@ -9,7 +9,7 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE]
+ *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
@@ -350,12 +350,14 @@ if (import.meta.main) {
   const recap = opt("recap-notice", "push");
   if (recap !== "push" && recap !== "signal") throw new Error("--recap-notice must be push or signal");
   const cardsFile = opt("cards", "");
+  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
+  const intentFiles = opt("intent", INTENT_PATH).split(",");
   const o: DaysCallsOptions = {
     days: Number(opt("days", "8")),
     push,
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",
-    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: [INTENT_PATH] }) : null,
+    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
