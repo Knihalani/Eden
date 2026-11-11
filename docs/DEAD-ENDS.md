@@ -58,8 +58,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D833 | Rejected: a per-user alias table for the push's recall. |  |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
 | D908 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | stopped on its pre-registered rules; deleted with its code, weights and tests |
-| D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
 | D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
+| D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
 
 ## Reader
 
