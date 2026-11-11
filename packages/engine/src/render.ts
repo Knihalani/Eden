@@ -319,7 +319,7 @@ function withoutEcho(part: string, title: string[]): string {
     [prev, cur] = [cur, prev];
   }
   // From the end: a run ending at word i covers words i-run+1..i; take it whole and continue before it.
-  for (let i = words.length - 1; i >= 0; ) {
+  for (let i = words.length - 1; i >= 0;) {
     const run = best[i]!;
     if (run >= ECHO_RUN) {
       const a = words[i - run + 1]!;
@@ -485,6 +485,11 @@ function keepScored(parts: Part[], t: { scores: ArrayLike<number>; threshold: nu
       room -= b;
     }
     keep.sort((a, b) => a - b);
+    // Nothing fits: the best part alone, cut to the budget (as `pick` cuts when nothing fits).
+    if (keep.length === 0 && kept.length > 0) {
+      const best = kept.reduce((a, b) => (t.scores[b]! > t.scores[a]! ? b : a));
+      return truncateUtf8(parts[best]!.text, maxBytes - 3) + "…";
+    }
   }
   return joinParts(parts, keep);
 }

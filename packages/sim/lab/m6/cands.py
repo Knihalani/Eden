@@ -39,6 +39,11 @@ ap.add_argument("--lr", type=float, default=0.02)
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--target", type=float, default=0.97)
 ap.add_argument("--out", default="")
+ap.add_argument("--listwise", type=float, default=0.0, help="weight of the within-item softmax loss toward key parts")
+ap.add_argument("--within-pick", action="store_true", help="only parts pick kept (the shipped line) can be kept")
+ap.add_argument("--decode", default="", help="thr | mass | top1 (default: mass for h6, thr otherwise)")
+ap.add_argument("--dump-fail", default="", help="write val facts that lose their key tokens at --dump-tau")
+ap.add_argument("--dump-tau", type=float, default=0.1)
 ap.add_argument("--eval-sets", default="none", help="held-out sets read at the tuned threshold (test,sim): final runs only")
 A = ap.parse_args()
 random.seed(A.seed)
@@ -386,9 +391,16 @@ def masks(rows, d, s, tau, mode="thr", gate=None):
                     break
                 keep[j] = True
                 acc += sc[j]
+        elif mode == "top1":
+            # Every item keeps its best part, and any other part at or above the threshold.
+            best = int(np.argmax(sc)) if sc else -1
+            keep = [x >= tau or j == best for j, x in enumerate(sc)]
         else:
             t = tau if gate is None or gate[ri] else 2.0
             keep = [x >= t for x in sc]
+        if A.within_pick:
+            # Subtractive: a unit pick did not keep (not in the shipped line) cannot be kept.
+            keep = [kk and u[0] in r["shipped"] for u, kk in zip(us, keep)]
         keep = fit([u[0] for u in us], keep, sc)
         if A.arch == "h4":
             out[ri] = " ".join(u[0] for u, kk in zip(us, keep) if kk)
@@ -402,11 +414,15 @@ def fit(texts, keep, sc, budget=L.ITEM_BYTES):
     if sum(len(t.encode()) + 3 for t, k in zip(texts, keep) if k) <= budget:
         return keep
     out, room = [False] * len(keep), budget
-    for j in sorted([j for j, k in enumerate(keep) if k], key=lambda j: -sc[j]):
+    ranked = sorted([j for j, k in enumerate(keep) if k], key=lambda j: -sc[j])
+    for j in ranked:
         b = len(texts[j].encode()) + 3
         if b <= room:
             out[j] = True
             room -= b
+    if not any(out) and ranked:
+        # Nothing fits: the best part alone, cut to the budget (as `pick` cuts when nothing fits).
+        out[ranked[0]] = True
     return out
 
 
@@ -435,6 +451,47 @@ def auc(y, s):
     ranks = np.empty(len(order))
     ranks[order] = np.arange(1, len(order) + 1)
     return (ranks[: len(pos)].sum() - len(pos) * (len(pos) + 1) / 2) / (len(pos) * len(neg))
+
+
+def export_lr(model, tau, rows, path):
+    """The linear model for trim.ts: int8 hashed weights (scale max|w|/127), the dense head, the threshold, and 64
+    parity parts from val scored with the quantised weights (trim.ts must give the same keep decisions)."""
+    import base64
+
+    w = model.emb.weight.detach().numpy()[:, 0]
+    scale = float(np.abs(w).max() / 127) or 1.0
+    q = np.clip(np.round(w / scale), -127, 127).astype(np.int8)
+    dw = model.dense.weight.detach().numpy()[0]
+    bias = float(model.dense.bias.detach().numpy()[0])
+    checks = []
+    rng = random.Random(7)
+    pool = [r for r in rows if r["role"] != "other"] + rng.sample(rows, min(len(rows), 200))
+    rng.shuffle(pool)
+    for r in pool:
+        if sum(len(c["parts"]) for c in checks) >= 64:
+            break
+        d = featurize([r], A.arch != "h5")
+        o = d["offs"].tolist() + [len(d["ids"])]
+        sc = []
+        for k in range(len(o) - 1):
+            z = float(sum(int(q[i]) for i in d["ids"][o[k] : o[k + 1]].tolist()) * scale)
+            z += float(np.dot(d["dense"][k].numpy(), dw)) + bias
+            sc.append(1 / (1 + math.exp(-z)))
+        checks.append({"request": r["request"], "title": r["title"], "parts": r["parts"], "scores": sc})
+    json.dump(
+        {
+            "arch": "lr",
+            "request": A.arch != "h5",
+            "buckets": B,
+            "weights": base64.b64encode(q.tobytes()).decode(),
+            "scale": scale,
+            "dense": [float(x) for x in dw],
+            "bias": bias,
+            "threshold": float(tau),
+            "checks": checks,
+        },
+        open(path, "w"),
+    )
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -486,14 +543,27 @@ else:
         for idx in item_batches(dt["where"], len(dt["y"])):
             b = subset(dt, idx)
             b["seg"] = segments(dt["where"], idx)
-            loss = nn.functional.binary_cross_entropy_with_logits(model(b), b["y"], pos_weight=pos_w)
+            z = model(b)
+            loss = nn.functional.binary_cross_entropy_with_logits(z, b["y"], pos_weight=pos_w)
+            if A.listwise > 0:
+                # Within each labelled item, the key parts should take the softmax's mass over the item's parts:
+                # the fit to the item budget keeps the best-ranked parts, so the rank inside an item is what counts.
+                lw, n_items = 0.0, 0
+                for a_, b_ in b["seg"]:
+                    y_ = b["y"][a_:b_]
+                    if y_.sum() > 0 and b_ - a_ > 1:
+                        z_ = z[a_:b_]
+                        lw = lw + torch.logsumexp(z_, 0) - torch.logsumexp(z_[y_ > 0.5], 0)
+                        n_items += 1
+                if n_items:
+                    loss = loss + A.listwise * lw / n_items
             opt.zero_grad()
             loss.backward()
             opt.step()
             tl += loss.item()
             nb += 1
         sv = scores_of(model, dv)
-        mode = "mass" if A.arch == "h6" else "thr"
+        mode = A.decode or ("mass" if A.arch == "h6" else "thr")
         gate = None
         if A.arch == "h9":
             # The item gate: an item is "worth a part" if its best part scores above the 3rd percentile of the
@@ -505,7 +575,11 @@ else:
             gcut = float(np.percentile(facts, 2)) if facts else 0.0
             gate = {ri: best_part.get(ri, 0.0) >= gcut for ri in range(len(val))}
         best = tune(val, dv, sv, mode, gate)
-        ep = {"epoch": epoch, "loss": tl / max(nb, 1), "auc_val": auc(dv["y"].numpy(), sv), "s": time.time() - t0}
+        curve = []
+        for t in ([0.0, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0] if mode == "mass" else [0.0, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.4]):
+            m = run_screen(val, dv, sv, t, "", mode, gate)
+            curve.append([t, round(m["fact_keep"], 4), round(m["decoy_keep"], 4), round(m["bytes"], 4)])
+        ep = {"curve": curve, "epoch": epoch, "loss": tl / max(nb, 1), "auc_val": auc(dv["y"].numpy(), sv), "s": time.time() - t0}
         if best:
             ep["tau"] = float(best[0])
             ep["val"] = best[1]
@@ -520,9 +594,24 @@ else:
                 ep[k] = run_screen(v, de[k], se, best[0], k, mode, g)
         report["epochs"].append(ep)
         print(json.dumps(ep), flush=True)
+        if A.dump_fail:
+            mk = masks(val, dv, sv, A.dump_tau, mode, gate)
+            per = {}
+            for i, (ri, k) in enumerate(dv["where"]):
+                per.setdefault(ri, []).append(round(float(sv[i]), 4))
+            with open(A.dump_fail, "w") as f:
+                for ri, r in enumerate(val):
+                    if r["role"] != "fact" or not r["words"] or not L.key_ok(r, r["shipped"]):
+                        continue
+                    text = mk[ri] if isinstance(mk[ri], str) else L.trimmed_text(r, mk[ri])
+                    if not L.key_ok(r, text):
+                        f.write(json.dumps({**r, "scores": per.get(ri, []), "trimmed": text}) + "\n")
     if A.out:
         os.makedirs(A.out, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(A.out, "model.pt"))
+        if isinstance(model, LR):
+            tau = report["epochs"][-1].get("tau", 0.5) if report["epochs"] else 0.5
+            export_lr(model, tau, val, os.path.join(A.out, "trim-model.json"))
 if A.out:
     os.makedirs(A.out, exist_ok=True)
     json.dump(report, open(os.path.join(A.out, "report.json"), "w"), indent=1)

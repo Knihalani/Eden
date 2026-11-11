@@ -23,7 +23,8 @@ export {
 } from "./persist";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
-export { inert, oneLine, renderAnswer, renderPacket, type Part } from "./render";
+export { inert, oneLine, renderAnswer, renderPacket } from "./render";
+export { PartTrimmer, TRIM_MODEL_PATH } from "./trim";
 export { safeBlock, safeLine } from "./line";
 export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";

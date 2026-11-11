@@ -171,7 +171,7 @@ if (import.meta.main) {
     c.forEach((u, k) => {
       const l = labels[k];
       if (!l) bad++;
-      else rows.push(JSON.stringify({ key: u.key, role: u.role, title: u.title, parts: u.parts, ...l }));
+      else rows.push(JSON.stringify({ key: u.key, role: u.role, title: u.title, ...l, texts: u.parts }));
     });
   });
   if (opt("out")) writeFileSync(opt("out"), rows.map((r) => r + "\n").join(""));

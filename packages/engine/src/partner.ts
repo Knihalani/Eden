@@ -126,6 +126,7 @@ import {
   renderPacket,
   shownText,
 } from "./render";
+import { PartTrimmer } from "./trim";
 import {
   callParties,
   MAX_CHECKED,
@@ -1422,7 +1423,7 @@ export class ContextPartner {
       if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
     }
     // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
-    for (let rest = changed; rest.length > 0;) {
+    for (let rest = changed; rest.length > 0; ) {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
@@ -4547,7 +4548,7 @@ export class ContextPartner {
     const windows: SearchQuery["window"][] = [];
     if (!off.has("day") && !listed && days.length > 0 && days.length <= 7 && isScheduling(cue.raw)) {
       const next = (d: string) => new Date(Date.parse(d) + 86_400_000).toISOString().slice(0, 10);
-      for (let i = 0; i < days.length;) {
+      for (let i = 0; i < days.length; ) {
         let j = i;
         while (j + 1 < days.length && days[j + 1] === next(days[j]!)) j++;
         windows.push({ start: days[i]!, end: next(days[j]!), offsetMinutes: cue.offset });
@@ -5893,6 +5894,16 @@ export class ContextPartner {
    * `shown` is what the agent receives when it is not the injection's own text (an ask's answer). With
    * `compactInjection`, each item is cut to what bears on `cue` (`compactText`) rather than to its first bytes.
    */
+  /**
+   * `packetTrim` (D920): each compacted item's parts scored for the request by the trimmer, which is read once per
+   * process; without its weights (a missing file) the packet compacts with `pick` as before.
+   */
+  private trimFor(cue: Cue): Pick<Parameters<typeof renderPacket>[1], "trim"> {
+    const t = sharedTrimmer();
+    if (!t) return {};
+    return { trim: (title, parts) => ({ scores: t.score(cue.text, title, parts), threshold: t.threshold }) };
+  }
+
   private deliver(
     s: Session,
     scored: Scored[],
@@ -5963,6 +5974,7 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.compactParts ? { split: true } : {}),
+      ...(this.config.packetTrim && this.config.compactInjection ? this.trimFor(cue) : {}),
     };
     const injection: Injection = {
       ...s.scope,
@@ -6373,6 +6385,13 @@ function spanDays(c: { start?: string; end?: string }): number {
 }
 
 /** The request's words and its people's names, lowercased: what a compacted packet keeps the parts holding. */
+let trimmer: PartTrimmer | null | undefined;
+/** The packet trimmer's weights, read on first use and kept for the process (null when they cannot be read). */
+function sharedTrimmer(): PartTrimmer | null {
+  if (trimmer === undefined) trimmer = PartTrimmer.load();
+  return trimmer;
+}
+
 function focusOf(cue: Cue): Set<string> {
   const words = `${cue.text} ${cue.entities.join(" ")}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   return new Set(words.filter((w) => w.length > 1 && !isStopword(w)));
