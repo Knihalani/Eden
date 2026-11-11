@@ -59,6 +59,35 @@ if ! cmp -s "$L/tasks-hash-$B9.txt" "$L/tasks-hash-$F9.txt"; then
   exit 2
 fi
 
+# 0b. Shipped coverage for the final default (D1046). A card prompt the final main changed keys its cards apart (H2's
+# `cardsRequestsFix`, D1060: `<hash>:f3`), and the shipped file holds no such lines for this suite. Then the final
+# tree's own enricher records them over the suite's worlds and users (`cold-start.ts --cards-out`, as P7 made the
+# shipped file), and every arm replays the same file: the shipped lines plus those (`--coverage full`). The before
+# arm's keys are the shipped file's, so each arm finds what its own enricher would have written.
+# RECORD_COVERAGE=auto (the default) records only when the final default has that switch on; yes or no forces it.
+F_TREE="$TREES/$F9-on-$HARNESS"
+REC=${RECORD_COVERAGE:-auto}
+if [ "$REC" = auto ]; then
+  ON='import { DEFAULT_CONFIG as C } from "./packages/engine/src/index.ts"; console.log(!!(C as any).cardsRequestsFix'
+  REC=$(cd "$F_TREE" && env -u OPENROUTER_API_KEY bun -e "$ON ? \"yes\" : \"no\")")
+fi
+COV=()
+if [ "$REC" = yes ]; then
+  ROOT=$PWD
+  USERS=$(for s in "${SEEDS[@]}"; do printf '%s:%s,%s:%s:control,%s:%s:neutral,user:%s,' \
+    "$SUITE" "$s" "$SUITE" "$s" "$SUITE" "$s" "$s"; done)
+  [ -e "$L/$P-coverage-final.jsonl" ] || (cd "$F_TREE" && env -u OPENROUTER_API_KEY bun \
+    packages/sim/src/lab/cold-start.ts --users "${USERS%,}" --suite "$SUITE" --days 2 --day-size 20 \
+    --cards-out "$ROOT/$L/$P-coverage-final.part.jsonl" --spend-ledger "$ROOT/$L/ledger.jsonl" --spend-cap "$CAP" \
+    --spend-headroom 0.2 --run-label "$P-coverage" --out "$ROOT/$L/$P-coverage-final.json" \
+    && mv "$ROOT/$L/$P-coverage-final.part.jsonl" "$ROOT/$L/$P-coverage-final.jsonl")
+  gunzip -c packages/sim/lab/distilled/cards-shipped.jsonl.gz >"$L/$P-coverage.jsonl"
+  cat "$L/$P-coverage-final.jsonl" >>"$L/$P-coverage.jsonl"
+  COV=(--coverage full --cards "$ROOT/$L/$P-coverage.jsonl" --intent "$ROOT/$L/$P-coverage.jsonl")
+fi
+echo "$(date -u +%FT%TZ) go: coverage ${COV[*]:-shipped}" | tee -a $L/starts.log
+MARKET+=(${COV[@]+"${COV[@]}"})
+
 # 1. Hermes, one request a session: all four seeds in one process an arm, four workers each.
 for a in raw before final; do
   KIND=hermes HC=4 bash packages/sim/lab/b19/run.sh $a $P-h-$a --suite "$SUITE" --seeds "$SEEDLIST" \
