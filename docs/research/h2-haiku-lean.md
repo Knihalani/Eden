@@ -266,3 +266,10 @@ and the cards in the example reply; about 250 system tokens, under Haiku's 512-t
 with the compact `r`, the item number first). `--arms B20,R20,RK20`. Reported: $ a item, tokens, items given requests,
 requests a item and request words against B20's (Jaccard), beside §2b's B20 and B20b. A measurement for the parent
 and M10; no rule decides anything here (no cards would be M10's decision).
+
+**Amended before §1e's run (after the review found the dropped requests lists, §2b):** a fourth arm, **B20r**: the
+shipped prompt with `"requests":[...]` added to its first example reply (the card format sentence), nothing else
+changed. The shipped first example shows `{"cards":[...]}` alone, and B20 and B20b left the whole requests list out of
+3 and 5 of 20 replies. Read: batches with no requests list, items given requests, $ a item, card kind and request
+words against B20. `--arms B20,B20r,R20,RK20`. A measurement: a prompt change for the shipped call would be a trial of
+its own (it changes every card cache key's replay), pre-registered in a later session if this reads well.
