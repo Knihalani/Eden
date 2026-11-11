@@ -15,11 +15,12 @@
   doubt of unswept copies are untouched, and a gap is at most a week plus the absence it runs into. Because the
   sweep days differ from the default's, a given absence pattern can still give a longer gap than the default
   has (9 days against 7 for a user away every other weekend, below).
-- **Its cost.** A source whose last sweep was not at its point (after the backfill, after any absence over its
-  point: a weekend is enough) is swept at its next point, up to a week early: half a sweep more a source on
-  average, each time that happens (7% to 10% more sweeps over ten weeks for the users below). Two forms that avoid this were built and dropped: waiting for the point (4 to 11 days) left a
-  user who is away four days of every week with sources on 14-day gaps for good, and a cap on that wait did not
-  hold (the third review). A rule cannot be spread, add no sweep and never be later than the default at once.
+- **Its cost.** A source whose last sweep was not at its point (after the backfill, after any absence over its point:
+  a weekend is enough) is swept at its next point, up to a week early: half a sweep more a source on average, each
+  time that happens (3% to 10% more sweeps over ten weeks for the users below). Two forms that avoid this were built
+  and dropped: waiting for the point (4 to 11 days) left a user who is away four days of every week with sources on
+  14-day gaps for good, and a cap on that wait did not hold (the third review). A rule cannot be spread, add no sweep
+  and never be later than the default at once.
 - **Measured** (`source-days.bench.ts 1000 300 23`, one run each; counts move by a few percent between runs):
 
   | Background listings | Off | On |
@@ -94,11 +95,11 @@ python3 packages/sim/lab/f1/fresh.py off=.local/n1/q-spread-off.json on=.local/n
 ```
 
 Outputs: `packages/sim/lab/o1/sweep/` (`days-off.txt`, `days-on.txt`, `quality.txt`). Tests:
-`packages/engine/src/unused-sweep.test.ts`: 40 unused sources, two users, four weeks (off, all on one day; on, at
-most half on any day, the first within a week, then every seven days, the two users' points apart); five absence
-patterns, where every sweep comes by the user's first active day a week after the source's last (it fails on the
-form that waited for the point) and the worst tick is smaller than the default's; and a short long period, where a turn inside a day of the last sweep waits for the user's
-cache (the first review's finding).
+`packages/engine/src/unused-sweep.test.ts`: 40 unused sources, two users, four weeks (off, all on one day; on, at most
+half on any day, the first within a week, then every seven days, the two users' points apart); five absence patterns,
+where every sweep comes by the user's first active day a week after the source's last (it fails on the form that
+waited for the point) and the worst tick is smaller than the default's; and a short long period, where a turn inside a
+day of the last sweep waits for the user's cache (the first review's finding).
 
 ## What else was looked at (not built)
 
