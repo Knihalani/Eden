@@ -24,7 +24,7 @@ checker and no reader (the push check is inert without a model, so packets carry
 | ask answers | 509 B | 77 B | 432 B |
 | all | 1,679 B | 475 B (28%) | 1,204 B |
 
-Per packet (asks apart): 921 B, 313 B fixed, 609 B items (3.4 items of 186 B). The lead is the single largest fixed
+Per packet (asks apart): 921 B, 313 B fixed, 609 B items (a candidates packet's item line averages 186 B). The lead is the single largest fixed
 piece: 144 KB of the 806 KB the four users were handed, 18%. The header is 66 B on every packet and answer (9%).
 
 **Repetition across a day is already handled.** Matched by item id within a day, an item first handed in a packet is
@@ -42,7 +42,7 @@ what is written nor what is read. No lever was built.
 ## 2. The two parts built
 
 - **`leadOnce`** (trial, D1031): the session's first candidates packet handed out says `CANDIDATES_LEAD` whole; later
-  ones say "Eden: more unchecked candidates; the same check as above." (54 B for 252 B). `ASK_NUDGE` was never
+  ones say "Eden: more unchecked candidates; the same check as above." (57 B for 252 B). `ASK_NUDGE` was never
   shortened: P5's shorter lead and nudge lost hidden facts through fewer asks (D859). The mark was set at hand-out
   (a packet withdrawn untaken showed the agent nothing), per session.
 - **`leanItems`** (trial, D1032): with `densePacket`, compaction also dropped a lone sign-off name that is the sender's,
@@ -107,8 +107,9 @@ the rules. **`leanItems` fails** (lower bound −2.4; train5r −2.3) and is del
 | both, hidden | +3.9 (+1.0..+6.8) | | |
 | confirmed concerns (main / `leadOnce` / both) | 3 / 1 / 2 | 1 / 0 | |
 
-Live packets over days (pi-ab timelines): main 516 B a packet (206 fixed, 310 items), `leadOnce` 451 B (141, 310),
-both 442 B (141, 301): −13% to −14% a packet, −32% of the fixed text. The day's re-read packet characters fell 3,806 →
+Live packets over days (pi-ab timelines), users 105–112: main 0.80 packets a task of 516 B (206 fixed, 310 items),
+`leadOnce` 451 B (141, 310), both 442 B (141, 301): −13% to −14% a packet, −32% of the fixed text. Users 113–120:
+main 0.78 packets a task of 544 B (223, 321), `leadOnce` 0.77 of 469 B (150, 319). The day's re-read packet characters fell 3,806 →
 3,385 a task; **agent prompt tokens a task −93 (−350..+187) pooled, about −1.7%** (`p2/packet_reread.py`), far
 from −10%: with the push check in the default a day's packets are about 360–410 characters a task in a ~5,500-token
 prompt. Agent and Eden $ per 1,000 tasks on the 1:1:8 mix: 0.426 → 0.422 (105–112), 0.422 → 0.420 (113–120).

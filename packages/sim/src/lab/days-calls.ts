@@ -725,7 +725,7 @@ export async function main(
     writeFileSync(corpus, "");
     o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
   }
-  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, and `--cards-out`, which a live run
+  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, `--packets`, and `--cards-out`, which a live run
   // also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags; `--cards-live` (the
   // model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so recorded runs replay.
   const journal = out
