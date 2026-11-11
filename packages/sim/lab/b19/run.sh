@@ -39,7 +39,11 @@ esac
 EDEN=$(git rev-parse --short=9 "$EDEN^{commit}")
 H=$(git rev-parse --short=9 "$HARNESS^{commit}")
 T=$TREES/$EDEN-on-$H
-[ -d "$T" ] || bash packages/sim/lab/b19/arm-tree.sh "$EDEN" "$T" "$H" >&2
+# Arms started together share a tree (raw and final): one builds it while the others wait.
+(
+  flock 9
+  [ -d "$T" ] || bash packages/sim/lab/b19/arm-tree.sh "$EDEN" "$T" "$H" >&2
+) 9>"$TREES/.lock"
 grep -q "\"eden\":\"$EDEN\",\"harness\":\"$H\"" "$T/b19-arm.json" || {
   echo "run.sh: $T is not $EDEN on $H" >&2
   exit 2

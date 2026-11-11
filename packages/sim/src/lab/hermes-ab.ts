@@ -55,6 +55,7 @@ import {
   ModelCardMaker,
   AskReader,
   ModelReaderMaker,
+  PushChecker,
   type CardMaker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -147,7 +148,20 @@ const usesCards = CONDITIONS.some((c) => c.withPartner && effective(c.config).ca
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
-const RUN_MODELS = [MODEL, GRADER, ...(usesCards ? [CARD_MODEL] : []), ...(USES_READER ? [READER_MODEL] : [])];
+/**
+ * `pushCheck` (D500, in the default since D828): the push check, on the reader's model as the servers wire it
+ * (`buildPartner`), `--check-model` (default Haiku 5.5). Before B19 (D1042) hermes-ab wired no checker, so every
+ * Hermes run left the default's `check` part inert.
+ */
+const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
+const USES_CHECK = CONDITIONS.some((c) => c.withPartner && effective(c.config).pushCheck);
+const RUN_MODELS = [
+  MODEL,
+  GRADER,
+  ...(usesCards ? [CARD_MODEL] : []),
+  ...(USES_READER ? [READER_MODEL] : []),
+  ...(USES_CHECK ? [CHECK_MODEL] : []),
+];
 const ACCESS = labAccess(args, RUN_MODELS);
 // Every model on Anthropic (`claude-*`, D97): no OpenRouter key needed, and none is used.
 if (!KEY && !DRY && RUN_MODELS.some((m) => !isAnthropic(m))) throw new Error("needs OPENROUTER_API_KEY");
@@ -195,6 +209,8 @@ let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
 /** Every lane's reader and cards, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
 const budgeted: Budgeted = { reader: [], cards: [] };
+/** Every stream's push checker, for the run's CHECK line. */
+const checkers: PushChecker[] = [];
 /** Each stream's background spend (cards), for the report's all-in cost columns (ab-common.ts). */
 const background: Background[] = [];
 function reserve(est: number): void {
@@ -455,6 +471,21 @@ async function runWorld(
         })
       : undefined;
   if (reader) budgeted.reader.push(reader);
+  // `pushCheck` (D500, D828): one budgeted call per push whose pool is constraint-like, charged to the running task.
+  const checker =
+    withPartner && effective(config).pushCheck
+      ? new PushChecker({
+          model: meteredModel(
+            ownedModel(
+              labModel(ACCESS, { apiKey: KEY ?? "", model: CHECK_MODEL, timeoutMs: 60_000 }, "eden.check"),
+              () => readerTask,
+            ),
+            (start, end, data) => current?.span("eden.check", "eden", "path", start, end, data),
+          ),
+          budget: new Budget(),
+        })
+      : undefined;
+  if (checker) checkers.push(checker);
   const partner = withPartner
     ? new ContextPartner({
         sources: async () => edenSources,
@@ -467,12 +498,13 @@ async function runWorld(
         config,
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
+        ...(checker ? { checker } : {}),
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
           if (!owner) return;
-          // The reader's part is charged by `ownedModel` (a late call too), so it is not counted again here.
-          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0);
-          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0);
+          // The reader's and the check's parts are charged by `ownedModel` (a late call too): not counted again here.
+          owner.r.edenModelCalls += t.modelCalls - (t.readerCalls ?? 0) - (t.checkCalls ?? 0);
+          owner.r.edenCostUsd += t.costUsd - (t.readerCostUsd ?? 0) - (t.checkCostUsd ?? 0);
           owner.tl.point(t.decision === "fast" ? "eden.cache-hit" : "eden.decision", {
             decision: t.decision,
             event: t.event,
@@ -905,6 +937,13 @@ console.error(
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));
+if (checkers.length) {
+  const sum = (k: keyof PushChecker["stats"]) => checkers.reduce((n, c) => n + c.stats[k], 0);
+  console.error(
+    `CHECK (${CHECK_MODEL}): ${sum("calls")} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
+      `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}`,
+  );
+}
 // Traffic-weighted rows (pi-ab-weighted.ts): most traffic is silent, so the hidden-only cost columns understate. The
 // full report (pi-ab-report.ts on OUT) prints the same rows beside the outcome tables.
 {
