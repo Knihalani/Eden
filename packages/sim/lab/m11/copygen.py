@@ -253,6 +253,8 @@ def main():
     ap.add_argument("--lenaug", action="store_true")
     ap.add_argument("--twins", action="store_true", help="look-alike twins of training templates as rank negatives")
     ap.add_argument("--extra", default="")
+    ap.add_argument("--synth", default="", help="M2 rows (m11-synth.ts): fact + requests, decoy and neutrals as negatives")
+    ap.add_argument("--synth-n", type=int, default=0, help="at most this many synth rows (0: all)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--save", default="")
     a = ap.parse_args()
@@ -266,6 +268,16 @@ def main():
             c = Counter(t for r in reqs for t in set(r))
             rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
                          "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()}})
+    if a.synth:
+        sr = D.read_jsonl(a.synth)
+        random.shuffle(sr)
+        for x in sr[: a.synth_n or None]:
+            reqs = x["target"]
+            c = Counter(t for r in reqs for t in set(r))
+            rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],
+                         "title": x.get("titleTerms") or [], "tw": {t: v / len(reqs) for t, v in c.items()},
+                         "negs": [{"h": None, "text": f"{n['title']}\n{n['text']}", "terms": n["terms"],
+                                   "title": n.get("titleTerms") or [], "tw": None} for n in x["negs"]]})
     twin_of = {}
     if a.twins:
         for f, c, q, suite, seed, _ in D.twins(worlds):
@@ -292,6 +304,8 @@ def main():
                     c = twin_of.get(r["h"])
                     if c and c in byh:
                         b.append({**byh[c], "twin_of": r["h"]})
+                    for n in r.get("negs") or []:
+                        b.append({**n, "twin_of": "synth"})
             x, tlist = batch(b, a)
             gen, cp = model(*x)
             yc = torch.tensor([(b[n]["tw"] or {}).get(t, 0.0) if b[n].get("twin_of") is None else 0.0 for n, t in tlist])

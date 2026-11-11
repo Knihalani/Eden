@@ -61,6 +61,23 @@ concerns not up by more than 1 per 1,000; cap $8.
 **Decision (D814), the same day:** pass → `intentMicro` 1 (or 2) joins `DEFAULT_CONFIG` with a `PARTS` entry and a
 COST-MODEL entry; fail → the switch, the model and their tests are deleted.
 
+### 1a. Amendments (committed before any model was selected on a held-out read)
+
+1. **Validation families (the parent's M6 lesson).** Planted items of train3, train4, train3r and train4r are held
+   out of training too and are the selection set (`VAL_SUITES`): every round picks on them and on the offline screen
+   over them, never on the held-out families. `funnel_arms.py` hides the held-out rows unless `--held`, which is
+   passed once, for the bar. Read before this amendment and not used for any choice: one 2-epoch smoke model's
+   held-out funnel rows and the Haiku replay ceiling (§1).
+2. **The owner's bar: Haiku is cut out, and the replacement must beat it.** The funnel bar of §1 stands (arm A
+   against main, which is Haiku's requests at shipped coverage). The Pi pair is **micro against Haiku**: hidden facts
+   point estimate at least +1 point, clustered lower bound > 0, confirmed concerns no higher. The headline is the
+   joint "no Haiku at ingest" arm with M10's micro cards, which must beat the shipped Haiku cards + intent arm. If no
+   candidate beats Haiku after two development rounds, the switch is deleted and the note reports the numbers; no
+   downgrade ships.
+3. **M2 v2.** 600 train worlds and the val split (side branch `claude/m-synth-data`) join training and selection
+   (`m11-synth.ts`: each fact with its English requests as the target, its decoy and neutrals as negatives). The
+   sim's held-out families stay the bar; `synth-test` is read once at the end and reported apart.
+
 ## 2. Hypotheses (step 1, written before the round-1 results)
 
 Shared: no text generation, no pretrained weights or embedding tables, inputs as hashed word, character 3/4-gram and
