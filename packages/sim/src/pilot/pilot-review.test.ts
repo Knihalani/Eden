@@ -270,7 +270,13 @@ test("third pass: pi-ab refuses a world file with any role off Anthropic, or wit
         ...extra,
       ],
       {
-        env: { ...process.env, OPENROUTER_API_KEY: "not-a-real-key", HAIKU_API_KEY: "not-a-real-key" },
+        // A placeholder key, so the lab guard (D818) is told to let pi-ab start: its own refusal is what is tested.
+        env: {
+          ...process.env,
+          OPENROUTER_API_KEY: "not-a-real-key",
+          HAIKU_API_KEY: "not-a-real-key",
+          EDEN_ALLOW_OPENROUTER: "1",
+        },
         encoding: "utf8",
       },
     );

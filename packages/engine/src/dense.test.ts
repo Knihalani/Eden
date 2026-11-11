@@ -9,6 +9,13 @@ import { ContextPartner } from "./partner";
 import { compactText, messageParts } from "./render";
 import { CORE_CONFIG } from "./parts";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 const item = (id: string, sourceId: string, title: string, text: string): ContextItem => ({
   id,
   sourceId,
@@ -128,13 +135,13 @@ describe("folding echoes (densePacket)", () => {
         `${"x ".repeat(n / 2)}Join with Google Meet`,
         "Morning ".repeat(n / 8),
       ];
-      const t0 = performance.now();
+      const t0 = cpuMs();
       for (const j of junk) {
         anchorsOf(j);
         compactText(j, new Set(["x"]), 320, () => false, 2026, "Robin Carter", { title: j.slice(0, 400) });
         fold([event, x("h", "gmail", j.slice(0, 200), j)]);
       }
-      expect(performance.now() - t0).toBeLessThan(1_500);
+      expect(cpuMs() - t0).toBeLessThan(1_500);
     }
   });
 });

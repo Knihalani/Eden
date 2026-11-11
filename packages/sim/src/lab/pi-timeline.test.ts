@@ -13,6 +13,13 @@ import {
   type Span,
 } from "./pi-timeline";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 const span = (ev: string, cat: Span["cat"], start: number, end: number, lane: Span["lane"] = "path"): Span => ({
   ev,
   cat,
@@ -83,9 +90,9 @@ describe("timeline: the arithmetic behind pi-ab's report", () => {
 
   test("the sweep stays fast on a long timeline", () => {
     const spans = Array.from({ length: 400 }, (_, i) => span("m", i % 2 ? "model" : "tool", i * 10, i * 10 + 15));
-    const t0 = performance.now();
+    const t0 = cpuMs();
     perSecond(spans, 4_000);
-    expect(performance.now() - t0).toBeLessThan(500);
+    expect(cpuMs() - t0).toBeLessThan(500);
   });
 });
 
@@ -126,10 +133,10 @@ describe("engine spans in the Pi timeline", () => {
     const got: [string, number][] = [];
     const route = spanRouter((session, s) => got.push([session, s.id]));
     // 20k children of open roots, each root a background call (sync.list) that closes with no session.
-    const t0 = performance.now();
+    const t0 = cpuMs();
     for (let i = 0; i < 20_000; i++) route(sp(100_000 + i, 1_000 + i, "search"));
     for (let i = 0; i < 20_000; i++) route(sp(1_000 + i, 0, "sync.list"));
-    expect(performance.now() - t0).toBeLessThan(1_000);
+    expect(cpuMs() - t0).toBeLessThan(1_000);
     expect(got).toEqual([]);
     // A deep chain under a root that names the session at its close.
     route(sp(3, 2, "probe.person"));

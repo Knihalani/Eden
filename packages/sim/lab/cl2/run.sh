@@ -5,7 +5,7 @@
 # tree `eden` is the stop arm; pass a variant with "readerStopEarly": false to rebuild the old default).
 # run.sh SEED LABEL SUITE VARIANTS LIMIT [extra...]
 SEED=$1; L=$2; SUITE=$3; VARS=$4; LIM=$5; shift 5
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite $SUITE --seeds $SEED --limit $LIM \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite $SUITE --seeds $SEED --limit $LIM \
   --variants $VARS --conditions ${CONDS:-tools,eden,eden~diet} --config default \
   --variant-config '{"diet":{"askReaderPool":10,"readerStopEarly":true},"stop":{"readerStopEarly":true}}' \
   --cards .local/cl2/cards.jsonl --cards-out .local/cl2/$L.cards.jsonl \

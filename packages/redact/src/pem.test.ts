@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { REDACTED } from "./redact";
 import { redactPem } from "./redact";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 /** The old behaviour: one lazy regex, block first, banner alone otherwise. Quadratic, so only on small inputs. */
 const OLD =
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|-----BEGIN [A-Z ]*PRIVATE KEY-----/gi;
@@ -30,9 +37,9 @@ describe("redactPem", () => {
 
   test("is linear on banners with no END (the old regex took ~25 s at 1 MB)", () => {
     const s = "-----BEGIN RSA PRIVATE KEY-----x".repeat(30_000); // ~1 MB
-    const t0 = performance.now();
+    const t0 = cpuMs();
     const out = redactPem(s);
-    expect(performance.now() - t0).toBeLessThan(500);
+    expect(cpuMs() - t0).toBeLessThan(500);
     expect(out).not.toContain("BEGIN RSA PRIVATE KEY");
   });
 });

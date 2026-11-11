@@ -172,6 +172,32 @@ export interface Metrics {
   ask: { cases: number; answered: number; recall: number };
   /** Only with `RunOptions.reader`. */
   readerPool?: ReaderPoolMetrics;
+  /** The acting suite's labels (`"neutral"`, `decoys`; D810): present when a scenario carries one. */
+  acting?: ActingMetrics;
+}
+
+/**
+ * The push of candidates on requests that act (D810), which the three headline numbers do not see: their silent turns
+ * are remarks and questions, where no push starts, so `pushOpen` on or off read the same. A neutral request acts but
+ * owes no fact, so a packet on it is a false fire of the default's main delivery path; an owed request's fact should be
+ * handed by its turn or the next (recall's window), and a look-alike beside it should not.
+ */
+export interface ActingMetrics {
+  neutralTurns: number;
+  /** Neutral requests that got any packet, and their share. */
+  packetsOnNeutral: number;
+  packetsOnNeutralRate: number;
+  /** Items handed on neutral requests, per neutral request. */
+  itemsPerNeutralTurn: number;
+  owedTurns: number;
+  /** Owed facts, those handed in their window, and the share. */
+  factsOwed: number;
+  factsHanded: number;
+  factsHandedRate: number;
+  /** Owed requests with a labelled look-alike, those where one was handed, and the share. */
+  decoyTurns: number;
+  decoyHanded: number;
+  decoyHandedRate: number;
 }
 
 export interface CategoryMetrics {
@@ -248,6 +274,8 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
   };
   let readerCalls = 0;
   let readerFailures = 0;
+  const acting = { labelled: false, neutral: 0, neutralFired: 0, neutralItems: 0, owed: 0, facts: 0, handed: 0 };
+  const decoy = { turns: 0, handed: 0 };
 
   for (const scenario of scenarios) {
     const category = scenario.category ?? "general";
@@ -318,7 +346,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
         turns++;
         marks.push(reports.length);
         // The oracle flags what this turn expects (the push's reader reads the request inside this observe).
-        if (oracle) oracle.bearing = new Set(turn.expect && turn.expect !== "silent" ? turn.expect.items : []);
+        if (oracle) oracle.bearing = new Set(typeof turn.expect === "object" ? turn.expect.items : []);
         const event = { ...who, sessionId: session.id, at: clock++, ...turn.event } as AgentEvent;
         const t0 = performance.now();
         const result = await partner.observe(event, { waitMs: options.waitMs });
@@ -340,7 +368,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       if (reader) {
         // An expected item counts as in the pool when a reader pool held it by its turn or the next one.
         session.turns.forEach((turn, i) => {
-          if (!turn.expect || turn.expect === "silent") return;
+          if (typeof turn.expect !== "object") return;
           const seen = pooled(session.id, marks[i]!, marks[Math.min(i + 2, marks.length - 1)]!);
           const hit = turn.expect.items.filter((id) => seen.has(id)).length;
           for (const t of [pool, poolTally]) {
@@ -370,6 +398,23 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
         const before = new Set(had);
         for (const id of got) had.add(id);
         if (!turn.expect) return;
+        // The acting suite's labels (D810) are scored apart, so the three headline numbers keep their meaning.
+        if (turn.expect === "neutral") {
+          acting.labelled = true;
+          acting.neutral++;
+          if (got.length > 0) acting.neutralFired++;
+          acting.neutralItems += got.length;
+          return;
+        }
+        if (turn.expect !== "silent" && turn.expect.decoys) {
+          acting.labelled = true;
+          // Scored as recall is: on what the turn caused (its own delivery, or a late one traced to it).
+          decoy.turns++;
+          if (turn.expect.decoys.some((id) => got.includes(id))) decoy.handed++;
+          acting.owed++;
+          acting.facts += turn.expect.items.length;
+          acting.handed += turn.expect.items.filter((id) => got.includes(id) || before.has(id)).length;
+        }
         const want = turn.expect === "silent" ? null : new Set(turn.expect.items);
         for (const t of tallies) {
           t.scoredTurns++;
@@ -452,6 +497,23 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
             expectedInPool: pool.expectedInPool,
             ask: pool.ask,
             byCategory: Object.fromEntries([...pool.byCategory].sort(([a], [b]) => a.localeCompare(b))),
+          },
+        }
+      : {}),
+    ...(acting.labelled
+      ? {
+          acting: {
+            neutralTurns: acting.neutral,
+            packetsOnNeutral: acting.neutralFired,
+            packetsOnNeutralRate: acting.neutral ? acting.neutralFired / acting.neutral : 0,
+            itemsPerNeutralTurn: acting.neutral ? acting.neutralItems / acting.neutral : 0,
+            owedTurns: acting.owed,
+            factsOwed: acting.facts,
+            factsHanded: acting.handed,
+            factsHandedRate: acting.facts ? acting.handed / acting.facts : 0,
+            decoyTurns: decoy.turns,
+            decoyHanded: decoy.handed,
+            decoyHandedRate: decoy.turns ? decoy.handed / decoy.turns : 0,
           },
         }
       : {}),
