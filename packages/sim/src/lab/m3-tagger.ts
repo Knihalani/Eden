@@ -39,3 +39,46 @@ export function loadTagger(dir: string): Tagger {
     stats: () => ({ items: memo.size, ms: Number(ms.toFixed(1)) }),
   };
 }
+
+export interface Superseder {
+  replaces: (scope: { tenantId: string; userId: string }, older: ContextItem, newer: ContextItem) => number;
+  /** Items encoded, pairs scored, and the time each took (ms). */
+  stats: () => { items: number; pairs: number; encodeMs: number; pairMs: number };
+}
+
+/**
+ * M3 (D908 rule 1): the `pushSupersede` trial's dependency from an exported binnet `supersede` network (H10): the
+ * probability that `newer` replaces `older`, read as binnet did in training (title, a newline, text). An item's code
+ * is cached by user, id and content (paid once per item version, as at ingest); a pair is scored per request.
+ */
+export function loadSuperseder(dir: string): Superseder {
+  const net = network(dir);
+  if (net.meta.arch !== "supersede") throw new Error(`--supersede: ${dir} holds a ${net.meta.arch} network`);
+  const codes = new Map<string, Float32Array>();
+  let encodeMs = 0;
+  let pairMs = 0;
+  let pairs = 0;
+  const code = (scope: { tenantId: string; userId: string }, it: ContextItem) => {
+    const key = `${scope.tenantId}/${scope.userId}\u0000${it.id}\u0000${it.title ?? ""}\u0000${it.text}`;
+    let c = codes.get(key);
+    if (!c) {
+      const t0 = performance.now();
+      c = net.encode(`${it.title ?? ""}\n${it.text}`);
+      encodeMs += performance.now() - t0;
+      codes.set(key, c);
+    }
+    return c;
+  };
+  return {
+    replaces: (scope, older, newer) => {
+      const a = code(scope, older);
+      const b = code(scope, newer);
+      const t0 = performance.now();
+      const logit = net.replaces(a, b);
+      pairMs += performance.now() - t0;
+      pairs++;
+      return 1 / (1 + Math.exp(-logit));
+    },
+    stats: () => ({ items: codes.size, pairs, encodeMs: +encodeMs.toFixed(1), pairMs: +pairMs.toFixed(2) }),
+  };
+}
