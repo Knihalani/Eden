@@ -34,6 +34,15 @@ describe("EDEN_PERSIST_* (D425)", () => {
     expect(() => loadConfig({ ...dev, EDEN_PERSIST_DISK_ONLY: "1" })).toThrow(/without EDEN_PERSIST_FROZEN_DIR/);
   });
 
+  test("EDEN_WARM_FREEZE (D862, a trial) is off by default, on with 1, with or without persistence", () => {
+    expect(loadConfig(dev).warmFreeze).toBe(false);
+    expect(loadConfig({ ...dev, EDEN_WARM_FREEZE: "1" }).warmFreeze).toBe(true);
+    expect(loadConfig({ ...dev, EDEN_WARM_FREEZE: "0" }).warmFreeze).toBe(false);
+    expect(() => loadConfig({ ...dev, EDEN_WARM_FREEZE: "yes" })).toThrow(/EDEN_WARM_FREEZE/);
+    const on = { ...dev, EDEN_PERSIST_FROZEN_DIR: root, EDEN_PERSIST_KEY: HEX, EDEN_WARM_FREEZE: "1" };
+    expect(loadConfig(on).warmFreeze).toBe(true);
+  });
+
   test("the key is 32 bytes (hex or base64), never a placeholder, and no message or log shows it", () => {
     const base64 = Buffer.from(HEX, "hex").toString("base64");
     for (const k of [HEX, base64]) {

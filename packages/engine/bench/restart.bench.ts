@@ -15,7 +15,8 @@
  * Both restarts start from the same moment (`--downtime` minutes after the freeze, default 5): the restored copies
  * are polled as the sync's learned chance says they are stale. No model, no network.
  *
- * Run: `bun packages/engine/bench/restart.bench.ts [users=200] [itemsPerUser=1000] [--latency=1] [--downtime=5]`.
+ * Run: `bun packages/engine/bench/restart.bench.ts [users=200] [itemsPerUser=1000] [--latency=1] [--downtime=5]
+ * [--warm]`. `--warm`: users are frozen, written and read back in the warm form (D862).
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,6 +36,8 @@ const USERS = Number(args[0] ?? 200);
 const PER_USER = Number(args[1] ?? 1_000);
 const LATENCY = opt("latency") !== "0";
 const DOWNTIME_MS = Number(opt("downtime") ?? 5) * 60_000;
+/** `--warm` (D862): every freeze is warm (`warmIdleMs`), so what is written, and read back, is the warm blob. */
+const WARM = process.argv.includes("--warm");
 const SOURCES = ["mail", "calendar", "docs"] as const;
 const random = rng(11);
 
@@ -107,7 +110,8 @@ const disk = () =>
   });
 
 function processState(persist: EncryptedFrozenDisk | null) {
-  const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, freezeIdleMs: 1, expireEveryMs: 1 });
+  const freeze = WARM ? { warmIdleMs: 1, freezeIdleMs: 1_000_000 } : { freezeIdleMs: 1 };
+  const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, expireEveryMs: 1, ...freeze });
   cache.close(); // The bench runs its ticks.
   if (persist) cache.persist(persist);
   const partner = new ContextPartner({

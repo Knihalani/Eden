@@ -40,6 +40,9 @@
  * EDEN_PERSIST_DISK_ONLY=1 trial (D652; needs the two above): a frozen user written to disk keeps no copy of its items
  *                    in memory; the file is read back when they return (a few ms). A file that does not open: the
  *                    user is synced again.
+ * EDEN_WARM_FREEZE=1 trial (D862): a user idle two minutes is frozen warm (a blob that thaws in 10-20 ms at 3,000
+ *                    items, not 150-300) and frozen again compact at the usual 20-30 minutes; the cache's expiry tick
+ *                    runs every minute instead of ten. Works with or without the persistence above.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -83,6 +86,8 @@ export interface ServerConfig {
    * default) writes no content to disk (D8). `maxBytes` is the whole directory's; a router child gets 1/N of it.
    */
   persist?: { dir: string; key: PersistKey; maxBytes: number; diskOnly?: boolean } | null;
+  /** Trial (D862, EDEN_WARM_FREEZE=1): idle users frozen warm after two minutes, compact after the usual bound. */
+  warmFreeze?: boolean;
 }
 
 /**
@@ -164,6 +169,7 @@ export function loadConfig(env = process.env, cores = machineCores()): ServerCon
     child,
     spendLeases: flag(env.EDEN_SPEND_LEASES, "EDEN_SPEND_LEASES"),
     persist: persistConfig(env, share),
+    warmFreeze: flag(env.EDEN_WARM_FREEZE, "EDEN_WARM_FREEZE"),
   };
 }
 

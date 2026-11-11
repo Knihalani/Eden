@@ -572,6 +572,12 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
 };
 
 /**
+ * The warm freeze's trial settings (D862; the servers' EDEN_WARM_FREEZE=1): users idle two minutes frozen warm, the
+ * expiry tick every minute so they freeze on time, compact still at `freezeIdleMs` (30 minutes, so 30 ticks).
+ */
+export const WARM_FREEZE_LIMITS: Partial<CacheLimits> = { warmIdleMs: 2 * 60_000, expireEveryMs: 60_000 };
+
+/**
  * A source item made safe to hold: every text field redacted, text clipped, and an id that never embeds a secret (a
  * ref that held one gets an id from a hash of the raw ref, so two refs that redact alike stay distinct).
  */

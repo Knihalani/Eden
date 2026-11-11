@@ -11,7 +11,14 @@ export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
 export { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 export { checkEngineConfig, NEEDS_DEP, PARENTS, type ConfigCheckOptions, type ConfigDep } from "./config-check";
-export { DEFAULT_CACHE_LIMITS, ItemCache, sanitizeItem, type CacheHit, type CacheLimits } from "./cache";
+export {
+  DEFAULT_CACHE_LIMITS,
+  ItemCache,
+  sanitizeItem,
+  WARM_FREEZE_LIMITS,
+  type CacheHit,
+  type CacheLimits,
+} from "./cache";
 export { SyncManager, type SyncOptions, type SyncSnapshot, type SyncStats } from "./sync";
 export {
   EncryptedFrozenDisk,
