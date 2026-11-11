@@ -153,26 +153,26 @@ export class Vocab {
 
   /**
    * FNV-1a over the term's characters (`hash.ts`'s `fnv1a` of `term(id)`), read from the arena without making the
-   * string; -1 for a term held in `wide` (the caller reads `term(id)`). For `TextSketcher`, which hashes each term of
-   * every text it loads.
+   * string; -1 for a term held in `wide` (the caller reads `term(id)`). The same pass notes whether the term holds an
+   * ASCII digit (`lastHadDigit`). For `TextSketcher`, which hashes each term of every text it loads.
    */
   termFnv(id: number): number {
     const n = this.blen[id]!;
     if (n === WIDE) return -1;
     const b = this.bytes;
     let h = 0x811c9dc5 | 0;
-    for (let i = this.start[id]!, end = i + n; i < end; i++) h = Math.imul(h ^ b[i]!, 0x01000193);
+    let digit = false;
+    for (let i = this.start[id]!, end = i + n; i < end; i++) {
+      const c = b[i]!;
+      if (c >= 48 && c <= 57) digit = true;
+      h = Math.imul(h ^ c, 0x01000193);
+    }
+    this.lastHadDigit = digit;
     return h >>> 0;
   }
 
-  /** Whether the term holds an ASCII digit, read from the arena; false for a term in `wide` (see `termFnv`). */
-  termHasDigit(id: number): boolean {
-    const n = this.blen[id]!;
-    if (n === WIDE) return false;
-    const b = this.bytes;
-    for (let i = this.start[id]!, end = i + n; i < end; i++) if (b[i]! >= 48 && b[i]! <= 57) return true;
-    return false;
-  }
+  /** Whether the term the last `termFnv` hashed holds an ASCII digit. */
+  lastHadDigit = false;
 
   /** Calls `fn(id)` whenever an id is released (`release`): per-id state kept outside must be dropped then. */
   onRelease(fn: (id: number) => void): void {
@@ -351,18 +351,27 @@ export class Vocab {
   /** Holds `term` as id's (the id's arrays already fit it). */
   private put(id: number, term: string): void {
     const n = term.length;
-    let latin1 = n < WIDE;
-    for (let i = 0; latin1 && i < n; i++) if (term.charCodeAt(i) > 0xff) latin1 = false;
-    if (!latin1) {
-      this.wide.set(id, term);
-      this.blen[id] = WIDE;
-      return;
+    if (n < WIDE) {
+      if (this.used + n > this.bytes.length) this.room(n);
+      // Checked and copied in one pass (a native write per term cost a cold tokenize a quarter more, vocab.bench).
+      const b = this.bytes;
+      const at = this.used;
+      let i = 0;
+      for (; i < n; i++) {
+        const c = term.charCodeAt(i);
+        if (c > 0xff) break;
+        b[at + i] = c;
+      }
+      if (i === n) {
+        this.start[id] = at;
+        this.blen[id] = n;
+        this.used = at + n;
+        return;
+      }
+      b.fill(0, at, at + i); // a term past Latin-1: what was copied goes
     }
-    if (this.used + n > this.bytes.length) this.room(n);
-    this.bytes.write(term, this.used, n, "latin1");
-    this.start[id] = this.used;
-    this.blen[id] = n;
-    this.used += n;
+    this.wide.set(id, term);
+    this.blen[id] = WIDE;
   }
 
   /**

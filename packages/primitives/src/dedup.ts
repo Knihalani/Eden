@@ -132,7 +132,7 @@ export class TextSketcher {
       const fnv = vocab.termFnv(id);
       if (fnv >= 0) {
         const h = mix32(fnv);
-        if (vocab.termHasDigit(id)) numbers = (numbers + mix32(h ^ 0x7f4a7c15)) | 0;
+        if (vocab.lastHadDigit) numbers = (numbers + mix32(h ^ 0x7f4a7c15)) | 0;
         seq[n++] = h;
         continue;
       }

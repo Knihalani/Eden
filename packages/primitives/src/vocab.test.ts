@@ -184,14 +184,14 @@ describe("Vocab's term arena (D998)", () => {
     expect(arena).toBeLessThanOrEqual(Math.max(256, 4 * live));
   });
 
-  test("termFnv and termHasDigit read the arena as fnv1a and a digit test read the string", () => {
+  test("termFnv reads the arena as fnv1a and a digit test read the string", () => {
     const v = new Vocab(16);
     for (const w of ["renewal", "3pm", "zoë", "東京", "2026-11-20", "x".repeat(70_000)]) {
       const id = v.intern(w);
       const t = v.term(id);
       const latin1 = [...t].every((c) => c.charCodeAt(0) <= 0xff) && t.length < 0xffff;
       expect(v.termFnv(id)).toBe(latin1 ? fnv1a(t, 0, t.length) : -1);
-      expect(v.termHasDigit(id)).toBe(latin1 && /[0-9]/.test(t));
+      if (latin1) expect(v.lastHadDigit).toBe(/[0-9]/.test(t));
     }
   });
 });
