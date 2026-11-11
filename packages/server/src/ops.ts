@@ -52,6 +52,14 @@ export interface ClusterMessage {
   mode?: "release" | "drop";
 }
 
+/**
+ * `Bun.serve`'s `error` handler for every server (R1): a throw past `Ops.wrap` is the 503 an integration treats as
+ * silence, never Bun's default 500.
+ */
+export function serveError(): Response {
+  return Response.json({ error: "temporarily unable to serve context" }, { status: 503 });
+}
+
 /** Routes that reach every node whoever owns the user (`/v1/forget` and `/v1/usage` fan out), never fenced. */
 const FAN_OUT = new Set(["/v1/forget", "/v1/usage"]);
 /**

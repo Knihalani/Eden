@@ -15,7 +15,7 @@ import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { termIds } from "./text";
-import { EncryptedFrozenDisk, PERSIST_FORMAT, type PersistEvent } from "./persist";
+import { EncryptedFrozenDisk, PERSIST_FORMAT, PersistKeyMismatch, type PersistEvent } from "./persist";
 
 const HOUR = 3_600_000;
 const T0 = Date.now() - HOUR; // Wall-clock based: the store dates its blobs on the cache's clock.
@@ -172,6 +172,52 @@ describe("frozen users on disk (D425)", () => {
     e.put(alice, items("alice", 2), T0);
     freezeAll(e, T0);
     expect(disk(dir, { maxAgeMs: 1 }).events).toEqual([{ kind: "discarded", reason: "expired" }]);
+    expect(files(dir)).toEqual([]);
+  });
+
+  test("refusing a foreign key: a directory no blob of which the key opens stops the open and keeps the files (R1b)", () => {
+    const dir = tempDir();
+    const a = freezing();
+    a.persist(disk(dir).d);
+    for (const s of [alice, bob]) a.put(s, items(s.userId, 3), T0);
+    freezeAll(a, T0);
+    expect(files(dir).length).toBe(2);
+    const open = (key: Uint8Array) =>
+      new EncryptedFrozenDisk({ dir, key, maxBytes: 64 << 20, maxAgeMs: 7 * 24 * HOUR, refuseForeignKey: true });
+    let err: unknown = null;
+    try {
+      open(OTHER_KEY);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(PersistKeyMismatch);
+    expect((err as PersistKeyMismatch).foreign).toBe(2);
+    expect(files(dir).length).toBe(2); // nothing deleted: the right key still reads them
+    expect(open(KEY).count).toBe(2);
+    // Partial: one blob the key opens beside one it does not starts, and only the foreign one goes.
+    const otherDir = tempDir();
+    const other = freezing();
+    other.persist(disk(otherDir, { key: OTHER_KEY }).d);
+    other.put(carol, items("carol", 2), T0);
+    freezeAll(other, T0);
+    for (const f of files(otherDir)) copyFileSync(join(otherDir, f), join(dir, f));
+    expect(files(dir).length).toBe(3);
+    const events: PersistEvent[] = [];
+    const d = new EncryptedFrozenDisk({
+      dir,
+      key: KEY,
+      maxBytes: 64 << 20,
+      maxAgeMs: 7 * 24 * HOUR,
+      refuseForeignKey: true,
+      report: (e) => events.push(e),
+    });
+    expect(d.count).toBe(2);
+    expect(events).toEqual([{ kind: "discarded", reason: "key" }]);
+    expect(files(dir).length).toBe(2);
+    // An expired blob of this key beside a foreign one shows the key is right: no refusal (review of R1b).
+    for (const f of files(otherDir)) copyFileSync(join(otherDir, f), join(dir, f));
+    const late = new EncryptedFrozenDisk({ dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 1, refuseForeignKey: true });
+    expect(late.count).toBe(0);
     expect(files(dir)).toEqual([]);
   });
 

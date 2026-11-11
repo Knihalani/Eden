@@ -81,3 +81,41 @@ On the branch's final tree (main 793a4c47 merged), with `OPENROUTER_API_KEY` uns
   persistence report and the turn-gate log line.
 
 Not done: `bun run eval --live` (no engine scoring, threshold or delivery change; no paid calls allowed tonight).
+
+## Round 2 (the parent's decisions on what round 1 left, D1071)
+
+- **A wrong `EDEN_PERSIST_KEY` (finding 11): fixed.** A start whose key opens none of the blobs on disk (its own
+  buckets) exits 2 with `eden: cannot start: EDEN_PERSIST_KEY opens none of the N persisted users in <dir> (a
+  mistyped or changed key?): … or EDEN_PERSIST_DISCARD=1 …`, and deletes no foreign blob; with a shared store, a marker object of the key's id (`<prefix>key-id`) decides, and a
+  store from before the marker is sampled (up to 8 blobs, all foreign stops it) before the marker is written. The
+  reviewer found that sampling alone refused the right key after a rotation in a cluster (the old key's blobs stay
+  until the 7-day age sweep: a probe with 5 of 20 users rewritten sampled 8 of 8 foreign), and that an unanswering
+  store blocked the start: the marker fixes the first, a 3 s bound the second (unknown: the start goes ahead). Some blob
+  opening is a key that works: the foreign ones are discarded and logged, as before. `EDEN_PERSIST_DISCARD=1` starts
+  and logs `EDEN_PERSIST_DISCARD=1: discarded N persisted users written with another key`. Tests: engine
+  `persist.test.ts` (all foreign: refused, files kept; partial: starts, one discarded; an expired blob of the key
+  beside a foreign one: not refused), `persist-shared.test.ts` (no marker: sampled; the marker written; a rotation;
+  an empty, a down and a hung store), server `persist.test.ts` (a real process: exit 2 and both blobs kept, then the
+  override starts and the blobs go; the variable's values). Not driven end to end: a cluster node's start refused by
+  the marker (the engine test covers the check, `cluster.test.ts`'s machines start through it). DEPLOY.md (§ secrets
+  table, restore, key leak) and the quickstart say so.
+- **Pins for round 1's lows:** the 1.25x kill (`router-processes.test.ts`: a child that ignores SIGTERM under a 400 ms
+  grace takes at least 480 ms to go; fails at 1x), the 503 `error` handler (`serveError`, passed by `main.ts`), the
+  shutdown flush (a flipped ciphertext byte read after start is logged at SIGTERM; fails without the flush), the
+  turn-gate notice (`turnGateNotice`).
+- **An unknown GET (finding 13): fixed.** A path the API does not have is 404 whatever the method; a route asked
+  with GET stays 405.
+- **The 300-user thaw stall (finding 12): GC, not fixed** (re-run on main 530807c6 with #272's memory levers: 351,
+  164 and 22 ms in three runs, live heap 0.86 MB a user). With `BUN_JSC_logGC=1` and lag probes timestamped, the
+  stall coincides each time with a JSC `FullCollection` of a 590-670 MB heap at the start of the thaw-all (one run:
+  heap 491 MB before, 210 MB at the probe after a 270 ms gap); no engine step runs longer than `SLICE_MS` (5 ms)
+  between yields. Runs without a long stall also had full collections there (48 ms at most). `bun --smol` does not
+  help: 301, 354 and 359 ms in 3 of 3 runs. The heap is the freeze's garbage (300 users' live structures let go a
+  moment before); a real server frees it gradually as users go idle over minutes, not all in 0.7 s. No cheap fix:
+  forcing a collection after a sliced freeze would move the same pause. Left as a finding.
+- **Gates (round 2, d7d4d9c6, main 530807c6 merged):** `CHECK_COLD=1 bun run check` passed in 58 s (2,350 tests in
+  241 files, the tail's 465 in 25, 0 fail); `bun run eval` 0.65 / 0.52 / 0 with counts and the acting block identical
+  to main's; `bun run funnel` 295/384 hidden, 268/384 decoys. The reviewer's REQUEST_CHANGES (the rotation refusal
+  in a cluster, a hung store blocking the start, an expired blob of the key, the variable's tests, a misplaced doc
+  comment) is fixed in d7d4d9c6. Not done: a ranged GET for the sample's headers (8 whole blobs at most, once, only
+  for a store with no marker yet).

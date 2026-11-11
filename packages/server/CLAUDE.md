@@ -133,7 +133,9 @@ its model roles.
 - **Secrets.** Never log API keys or request bodies; `EDEN_API_KEYS` entries need keys of 16+ characters.
 - **Persisted frozen users (D425; on by default since D991).** `EDEN_PERSIST_KEY` is required (32 bytes as hex or
   base64, held in `PersistKey`, which prints `[redacted]`; no message names its value): startup stops without it
-  unless `EDEN_PERSIST=off` (which refuses the other variables beside it) or `EDEN_DEV=1` with none of them set. Never
+  unless `EDEN_PERSIST=off` (which refuses the other variables beside it) or `EDEN_DEV=1` with none of them set. A
+  key that opens none of the persisted users stops the start with exit 2 and deletes nothing, unless
+  `EDEN_PERSIST_DISCARD=1` (D1071; in a cluster the store's key marker decides, bounded at 3 s). Never
   generate a key here: one beside the files protects nothing. `EDEN_PERSIST_FROZEN_DIR` defaults to
   `$EDEN_HOME/frozen`; `EDEN_PERSIST_MAX_MB` to the machine's memory (`machineMemory`, a cgroup limit lowers it; at
   least 4,096; `defaultPersistMb`), divided by N in a child. A test or bench that starts a non-dev server and does
