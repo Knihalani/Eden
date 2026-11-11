@@ -2721,17 +2721,6 @@ export class ContextPartner {
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
-    // `pushNarrow` (P2, D821; a trial, off): with no check answer, the default's packet goes only when an item of the
-    // pool's head is constraint-like and names one of the request's anchors (`anchoredPool`, no model); at 2 the
-    // packet keeps only the constraint-like or anchored items of those it would hand.
-    if (!yes && items.length > 0 && this.config.pushNarrow > 0) {
-      if (!this.anchoredPool(cue, gate)) items = [];
-      else if (this.config.pushNarrow >= 2) {
-        const marks = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-        const likeOf = new Map(pool.map((x, i) => [x.item.id, like[i] === true]));
-        items = items.filter((x) => likeOf.get(x.item.id) || anchored(x.item, marks));
-      }
-    }
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;

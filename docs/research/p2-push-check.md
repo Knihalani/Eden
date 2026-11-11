@@ -85,7 +85,7 @@ funnel has no non-English suite**. Which languages Eden supports is the owner's 
 
 ### 2.1 No-model narrowing first ($0): option (b) costs too many facts
 
-Trial `pushNarrow` (D821): with no check, the default's packet goes only when an item of the pool's head is
+`pushNarrow` (D821, rejected and deleted; code in 1feae213): with no check, the default's packet goes only when an item of the pool's head is
 constraint-like and names one of the request's anchors (N5's `pushCheckAnchored` test, used to silence instead of to
 call); at 2 the packet keeps only constraint-like or anchored items. Funnel, train 41–44, 768 a variant:
 

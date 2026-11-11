@@ -60,6 +60,11 @@ content, any world of the same seed; `n2-widen.ts`) is the `widen` dependency of
 `../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix; `days_hidden.py` resamples
 whole users. Recipes: docs/LAB.md 1f, 1g.
 
+**Reworded requests (P2, D820):** `--suite train-rw` runs train with each request reworded into an indirect form
+(`reword.ts`; ids `<suite>rw`, same worlds, cards and intent replayed); `../../lab/p2/compare_rw.py` pairs it with a
+train run. `gate-negatives.ts` holds log lines, chatter, statements and questions for the push's request gate;
+`../../lab/p2/calls.py` reads a ledger's check calls (tokens, p50, time to first token).
+
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run
 inside `bun run check` through `modal-python.test.ts`. **The powered bench (F3, D487):** `lab_fanout.py --preset

@@ -26,7 +26,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
-| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); `push-check.test.ts`                |
+| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); form 3, its short form (`CHECK_SYSTEM_COMPACT`, D822); `push-check.test.ts`                |
 | `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -322,6 +322,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
   asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
   earlier request (`pushPointer`, D711: −1.2 over days).
+- **Indirect requests (`pushIndirect`, P2, D820, a trial, off; docs/research/p2-push-check.md §1).** `pushStart`
+  decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
+  ("I need to …", "Should I …?", "We should …", "I want you to …") read as the imperative after it (`indirectRest`),
+  which the push's lookup is then given as its question; the open shape runs strict (`looksLogged`, `CHATTER`). With
+  the switch off `pushStart` is the old gate exactly. Screen a change on `train-rw` (the reworded train) and on both
+  blind gate sets' counts (§1.3), never on `gate-negatives.ts` alone: the rule was fitted there. A no-model narrowing
+  of the packet (`pushNarrow`, D821) lost 40% of the push's facts and was deleted.
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a
