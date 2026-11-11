@@ -634,6 +634,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
 | D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
 | D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D1000 | 2026-11-11 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | rejected |
+| D1001 | 2026-11-11 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | rejected |
+| D1002 | 2026-11-11 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… | rejected |
+| D1003 | 2026-11-11 | Finding: distilling the 8B teacher did not reach facts the pool misses on the sim. | finding |
+| D1004 | 2026-11-11 | Adopted (lab tooling, M12): `packages/sim/lab/m12/` (expansion and pair-scorer trainers, re-rank, PRF and ceiling screens, `poolscore.py`… | lab |
 | D1010 | 2026-11-11 | Rejected: `pushGate`, a tiny learned turn gate in place of `pushStart`'s verb lists and lead-ins | superseded (replaced by D1014) |
 | D1011 | 2026-11-11 | Finding: a learned gate transfers to hand-written text only beside the rule, as a union with a veto. | finding |
 | D1012 | 2026-11-11 | Finding: what generated training text teaches a gate besides the task. | finding |
