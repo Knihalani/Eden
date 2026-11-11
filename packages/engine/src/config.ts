@@ -716,13 +716,6 @@ export interface EngineConfig {
    */
   pushOpen: boolean;
   /**
-   * M3 (D908 rule 1; a trial, 0 = off; docs/research/m3-arch.md §7f, §7i): with a `supersede` dependency (a small pair
-   * model: the probability that one item replaces another), a handed candidate that a newer, not bulk item of the pool
-   * replaces, with probability at least this, is handed as that newer item instead (D914: no anchor gate on the newer
-   * item; the threshold is the model's own, set on engine-drawn calibration pairs).
-   */
-  pushSupersede: number;
-  /**
    * P2 (D820, promoted by D828, part `indirect`; docs/research/p2-push-check.md): the push also starts for a request
    * phrased as a need, a plan, a wish or a question about acting ("I need to pay …", "We should move …", "I want you
    * to book …", "Should I book …?", a request after a first clause of context), read as the imperative after its
@@ -890,7 +883,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushOpen: true,
-  pushSupersede: 0,
   pushIndirect: true,
   revisionDiff: true,
 };

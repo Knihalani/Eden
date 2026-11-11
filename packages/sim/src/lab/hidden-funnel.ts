@@ -149,7 +149,6 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { loadSuperseder } from "./m3-superseder";
 import {
   coverageLines,
   intentPlace,
@@ -233,7 +232,6 @@ const cli = flags(
         "connect-tick-s",
         "connect-stagger-s",
         "cards-ms",
-        "supersede",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -557,12 +555,6 @@ const CHECK_CACHE = opt("check-cache", "");
 if (CHECK !== "none" && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
 if (CHECK !== "none" && !RUN.pushCheck)
   throw new Error("--check is inert unless pushCheck is on (--set pushCheck=true)");
-/** `--supersede DIR` (M3, D908 rule 1; M3b, D914): the `pushSupersede` trial's pair model: an `h10.py export`
- * student or a binnet `supersede` export. */
-const SUPERSEDE_DIR = opt("supersede", "");
-if (SUPERSEDE_DIR && !(RUN.pushSupersede > 0)) throw new Error("--supersede is inert unless pushSupersede > 0 (--set)");
-const superseder = SUPERSEDE_DIR ? loadSuperseder(SUPERSEDE_DIR) : null;
-if (superseder) process.on("exit", () => console.error(`SUPERSEDE ${JSON.stringify(superseder.stats())}`));
 /** The judge's, the reader's and the check's requests: paced, capped and retried, with the run's logging choice. */
 const ACCESS = labAccess(args, [
   ...(LIVE ? [MODEL] : []),
@@ -1086,7 +1078,6 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(superseder ? { supersede: superseder.replaces } : {}),
     ...(reader
       ? {
           reader,
@@ -1425,8 +1416,6 @@ async function runSeed(
     const push = pushPools.get(sessionId)?.at(-1);
     // `pushCheck`: whether any pass of this task made the check's call (N5's call rate by variant).
     const checkCalled = (pushPools.get(sessionId) ?? []).some((r) => r.checkCalled);
-    // `pushSupersede` (D914): pairs every push pass of the request scored, for its per-request cost.
-    const supersedePairs = (pushPools.get(sessionId) ?? []).reduce((n, r) => n + (r.supersedePairs ?? 0), 0);
     pushPools.delete(sessionId);
     if (POOL_DUMP) {
       const ids = push?.pool ?? [];
@@ -1512,13 +1501,13 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
-      ...(push?.supersedePairs !== undefined ? { supersedePairs } : {}),
-      // `+stale` synth suites (D908 rule 1): the stale version's place in that pool, and whether it was handed.
+      // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
+      // it was handed.
       ...(push && task.stale
         ? {
             stalePoolAt: push.pool.indexOf(task.stale),
             staleHanded: push.handed.includes(task.stale),
-            // M3b (D914): the ids, to join the superseder's pair trace (M3B_SUPERSEDE_TRACE) and label pool pairs.
+            // M3b (D914): the ids, to label engine-drawn pairs (h10_pool_pairs.py) and read where a stale version went.
             staleId: task.stale,
             factId: id,
             user: scope.userId,

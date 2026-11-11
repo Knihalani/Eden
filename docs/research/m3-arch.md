@@ -581,3 +581,10 @@ times, 8 amounts, 12 counts, 22 "Draft:" marks of 128). Funnel seeds 41–44, $0
 Of the 226 stale hand-outs, 193 had their (stale, fact) pair scored (33 had no fact in the pool): logits −7.19 to
 −0.44, median −4.31, against θ's 0.12; no swap. H10 recognises M2's model-written revisions and the push pool's pairs
 of them, not a hand-written fact as the correction of a copy one detail apart: the transfer failure M6 met (D920).
+
+**Decision (D914): rejected; the trial is deleted, the lab kit kept.** `pushSupersede` (engine, the funnel's and
+days-calls' `--supersede`, the lab superseder) is removed; its last code is in commit 94dbb31c. Kept: `h10.py` (the
+students, distillation, pool pairs, export, int4 quantisation), `h10-forward.ts` (the TypeScript forward with a
+byte-level n-gram hasher giving binnet's ids, the batched pair scorer, int4 read in place), `h10_pool_pairs.py`,
+`packages/sim/modal/m3b_h10.py`, the `+revision` suites (`revision.ts`) and the funnel's stale ids. Spend: Modal about
+$1, Anthropic $0 from this session; four Haiku helper sessions about $0.21.

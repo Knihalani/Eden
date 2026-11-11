@@ -41,7 +41,6 @@ import {
   ModelCardMaker,
   sanitizeItem,
   type EngineConfig,
-  type PartnerDeps,
   type PushPoolReport,
 } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
@@ -57,7 +56,6 @@ import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { argvFields, argvFiles, codeVersion, envFields, JournalRefused, partialPath, RunJournal } from "./run-journal";
-import { loadSuperseder } from "./m3-superseder";
 import { parseSuites } from "./suites";
 
 export type Phase = "backfill" | "tick" | "notice" | "request";
@@ -113,8 +111,6 @@ export interface DaysCallsOptions {
    * push's pool (`onPushPool`): ids and flags, and since M3 the request's text and template and the pool's ids.
    */
   onPlanted?: (row: PlantedRow) => void;
-  /** `--supersede DIR` (M3b, D914): the `pushSupersede` trial's pair model, wired as the partner's dependency. */
-  supersede?: PartnerDeps["supersede"];
   /**
    * `--corpus-dump FILE` (M3, D900 on the unmerged M3 branch; D911): the user's world as its sources list it and the
    * cache holds it (redacted), one line a user, for offline retrieval screens. Simulated items only.
@@ -267,7 +263,6 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     now: () => clock,
     config: o.config ?? {},
     ...(cards ? { cards } : {}),
-    ...(o.supersede ? { supersede: o.supersede } : {}),
     ...(o.onPlanted ? { onPushPool: (r: PushPoolReport) => void (pooled = r) } : {}),
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
@@ -689,13 +684,6 @@ export async function main(
     mix: parseMix(opt("mix", "1:1:8")),
     arriveDays: opt("arrive-days", "") ? parseRange(opt("arrive-days", ""), "--arrive-days") : null,
   };
-  const supersedeDir = opt("supersede", "");
-  if (supersedeDir) {
-    if (!(o.config?.pushSupersede ?? 0)) throw new Error("--supersede is inert unless pushSupersede > 0 (--set)");
-    const sup = loadSuperseder(supersedeDir);
-    o.supersede = sup.replaces;
-    process.on("exit", () => console.error(`SUPERSEDE ${JSON.stringify(sup.stats())}`));
-  }
   // `--widen-ranks` fed the widened pool behind the push check, deleted by D828: refused rather than ignored.
   if (opt("widen-ranks", "")) {
     console.error("days-calls: --widen-ranks fed pushWiden, deleted by D828 (the engine has no widen dependency)");
