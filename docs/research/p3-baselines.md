@@ -88,3 +88,22 @@ Cost [EST]: about $3 with the regrade.
 above 0 on short and on days, and `eden`'s confirmed concerns are not above `hits`'. If `hits` is within 2 points of
 `eden` (interval including 0) on either horizon, the report says that Eden's selection adds nothing measurable over
 plain retrieval there, and what `eden` costs over `hits`.
+
+## 4. Pre-registration: (a2) a second grade of "in hand, not raised" (D830, a measurement)
+
+Written after (a)'s first read and before any call of this grade. (a)'s rule reads Sonnet's "in hand, not raised" at
+20 of 193 (10.4%, short and days pooled), just over its 10% bar. A hand read of those answers (one reader, P3) found
+most state the fact and leave out one clause of a multi-part detail (the grade asks for every clause). To replace the
+hand read with an independent one:
+
+- **What is graded:** every `eden` answer to a hidden task in (a)'s and (b)'s runs (seed 41–42 short, w41–w44 days)
+  whose planted item was handed at its own request and which Sonnet's grade marks not raised; and, as a check of the
+  rubric, a fixed sample of 40 such answers Sonnet marks raised (the first 40 by task id).
+- **Grader:** Opus 5.5 (`core-grade.ts`, adaptive thinking at effort low, the nearest setting it accepts), asked
+  whether the answer tells the user the core of the consideration (the fact that bears on the request and changes
+  what should be done), even if it leaves out secondary details. JSON `{"core": true|false}`. Cost [EST] under $1.
+- **Read:** per agent, of handed-not-raised answers, the share Opus calls core-stated; "in hand, core not stated" =
+  handed answers neither grade calls raised, as a share of handed. **Rule (replacing nothing; added to (a)'s):** if
+  Sonnet as the agent has "in hand, core not stated" under 5%, the docs say weak point 6 is the agent model plus the
+  grade's every-clause rule, and no Eden lever is built for it. The rubric check must call at least 38 of the 40
+  raised answers core-stated, or the second grade is not used.
