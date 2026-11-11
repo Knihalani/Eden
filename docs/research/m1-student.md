@@ -322,6 +322,19 @@ and no Pi pair were made. The 8B teacher stays the only model past Haiku on the 
 GPU (D893). Kept: the harness (`packages/sim/lab/m1-student/`), the teacher's scores over M2 v2 and M14's rows
 (`eden-synth:v2/pairgroups/*.t8b.jsonl.gz`; branch `claude/m1-teacher-logo`, never merged).
 
+### 5c. If the owner wants the 8B later: what serving it would take
+
+The 8B teacher (`t8b-truth-a`) is the only model measured past Haiku's check on the sim (D980): on the held-out
+templates it names facts 162 of 230 (Haiku 171), look-alikes 16 (Haiku 40), neutral speaks 2 (Haiku 40). It also
+passed the funnel bar (§4c), but its one live Pi round failed (D897): hidden +2.4 against Haiku's +6.9, because it let
+fewer facts in. Measured serving figures (§4b): CPU is out (the 0.6B alone takes 8.1 s a pool on 4 threads); on an
+H100 the 8B scores a 15-item pool in **121 ms** with the prompt head shared (201 ms plain); a client round trip to the
+lab endpoint read 314–415 ms p50 and 495–590 ms p90. Cost, arithmetic on those figures and an H100 at about $4 an hour
+**[EST]**: one GPU at full use checks about 30,000 pools an hour, about **$0.13 per 1,000 checks** ($0.27 at 50% use),
+against Haiku's check at about $0.20 per 1,000 tasks (§5b). The floor is the GPU itself: kept warm, about $95 a day
+**[EST]**; scaled to zero, each cold start (not measured here) lands on a request's wait. So the 8B pays only at steady
+volume on a warm GPU, and only if a new live round shows the quality D897 did not.
+
 ## Reproduce
 
 ```bash
