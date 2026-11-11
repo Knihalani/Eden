@@ -282,6 +282,10 @@ export class Vocab {
       }
     }
     v.count = n; // first: an arena growth inside `put` copies the ids below `count`
+    // The arena sized once for every term, with an eighth to spare for the terms that follow (a thaw, D860).
+    let bytes = 0;
+    for (let id = 0; id < n; id++) bytes += s.terms[id]!.length;
+    v.bytes = Buffer.alloc(Math.max(256, Math.ceil(bytes * 1.125)));
     for (let id = 0; id < n; id++) v.put(id, s.terms[id]!);
     for (const id of s.free) v.free.push(id);
     v.rehash(v.slots.length);
@@ -382,8 +386,9 @@ export class Vocab {
 
   /** Room for `n` more bytes: the live terms copied down when most of the arena is dead, else a doubled arena. */
   private room(n: number): void {
+    // Half again what is live: a power of two would leave up to three quarters of a large vocabulary's arena empty.
     const live = this.used - this.dead;
-    const size = Math.max(256, 2 ** Math.ceil(Math.log2((live + n) * 2)));
+    const size = Math.max(256, Math.ceil((live + n) * 1.5));
     const bytes = Buffer.alloc(size);
     let at = 0;
     for (let id = 0; id < this.count; id++) {
