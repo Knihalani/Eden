@@ -56,7 +56,8 @@ wait
 # 2. Pi, one request a session: one seed a process (memory), the three arms of a seed side by side.
 for s in "${SEEDS[@]}"; do
   for a in raw before final; do
-    KIND=pi bash packages/sim/lab/b19/run.sh $a $P-ps-$a-$s --suite "$SUITE" --seeds $s --variants hidden,control,neutral \
+    KIND=pi bash packages/sim/lab/b19/run.sh $a $P-ps-$a-$s --suite "$SUITE" --seeds $s \
+      --variants hidden,control,neutral \
       --budget 2 --tenant-prompt "${MARKET[@]}" ${EXTRA[@]+"${EXTRA[@]}"} >$L/$P-ps-$a-$s.log 2>&1 &
   done
   wait

@@ -21,7 +21,7 @@ section 3 is filled in after it.
   - **pi-ab could not load against an older engine.** It imported P3's `hits` helper, which needs engine exports
     5026ba512 lacks. It now loads that helper only for the `hits` arm (D1041).
 - **Hermes has no days mode; only pi-ab has `--days`.** So the days arm runs on Pi (D1043).
-- **The dry runs cost $2.07** in total (3,805 ledger lines), all on train, seeds 41–44. They covered 13 small runs
+- **The dry runs cost $2.30** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They covered 13 small runs
   of all three arms: Hermes short in three connector settings, Pi short, and Pi days.
 - **The final run should cost about $6.5** (estimate, from the dry runs' cost a task). Its hard cap is $25.
 
@@ -136,6 +136,10 @@ harness and price the final run, and **none of them is a result**.
 | `dry4-ps` | Pi short, `direct`, payload, tenant prompt          |           90 | 1/30, 18/30, 23/30          | 0.17 / 0.40              |          $0.42 |
 | `dry4-pd` | Pi days, 2 × 16, same                               |           32 | 0/4, 2/4, 3/4               | 0.21 / 0.40              |          $0.14 |
 | `dry5-h`  | Hermes, `direct`, payload                           |           36 | 0/12, 8/12, 9/12            | 0.42 / 0.69              |          $0.26 |
+
+`go.sh` itself was rehearsed on train1, seed 42 (`SUITE=train1 SEEDS=42 PREFIX=reh EXTRA="--limit 1" FINAL=HEAD`).
+It built both trees, the hashes matched, and all nine processes ran: Hermes short, Pi short and Pi days, 3, 3 and
+40 tasks an arm, with 0 ungraded. It cost $0.23. `analyze.sh` (`PREFIX=reh SEEDS=42`) wrote the three reports.
 
 In every dry run with the check wired, the `final` arm hands a packet on fewer neutral turns. The counts are
 18/30 vs 29/30 (dry3-h), 16/30 vs 28/30 (dry4-ps), 8/24 vs 21/24 (dry4-pd) and 5/12 vs 12/12 (dry5-h), and the
