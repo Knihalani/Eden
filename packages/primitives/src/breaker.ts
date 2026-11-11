@@ -55,6 +55,17 @@ export class CircuitBreaker {
   }
 
   /**
+   * Whether the breaker holds nothing a new one would not: closed, with no call counted in its window. (A caller
+   * that drops an idle breaker and makes a new one later, as the fan-out's `park` does, asks this first.)
+   */
+  get idle(): boolean {
+    if (this.state !== "closed") return false;
+    const horizon = this.now() - this.bucketMs * this.calls.length;
+    for (let i = 0; i < this.calls.length; i++) if (this.stamps[i]! > horizon && this.calls[i]! > 0) return false;
+    return true;
+  }
+
+  /**
    * Whether a call may go now. In half-open, one probe is allowed until it reports back; a probe that never reports
    * (its caller was aborted) is forgotten after `openMs`, so the breaker cannot stay half-open forever.
    */
