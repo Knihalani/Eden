@@ -639,3 +639,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1012 | 2026-11-11 | Finding: what generated training text teaches a gate besides the task. | finding |
 | D1013 | 2026-11-11 | Adopted (lab tooling, M13): `packages/sim/lab/m13/`: contrastive data generators (`gen_train.py`, `gen_logs.py`, `gen_extra.py`)… | lab |
 | D1014 | 2026-11-11 | The owner's decision: `pushGate` (M13's turn gate, round 3's frozen model, the union with `pushStart` at veto 0.25) is in… | adopted |
+| D1015 | 2026-11-11 | Stopgap on D1014's gate: no start by the gate alone for a turn of fewer than three words (`MIN_ADD_WORDS`, `turn-gate.ts`); round 4's… | adopted |

@@ -144,6 +144,8 @@ interface Header {
 }
 
 const RULE_IDS = { listed: 1, opened: 2, none: 3 } as const;
+/** The stopgap's floor (D1015): the fewest words a turn needs for the gate alone to start the push. */
+export const MIN_ADD_WORDS = 3;
 const CLAUSE = /(?<=[,;:.!?¿¡—–])\s+|\s+(?=(?:but|so|and then|anyway|also)\s)/i;
 
 /** A turn's clauses for the clause gate (H4): at most six, none when the turn is one clause. */
@@ -285,8 +287,13 @@ export class TurnGate {
         const vc = this.encode(c);
         logit = Math.max(logit, this.dot("needsW", 0, vc) + this.arr.get("needsB")![0]!);
       }
-    const ruled = rule !== undefined && rule.how !== "none" && this.h.veto !== null && logit >= this.h.veto;
-    return { needs: logit >= this.h.logit || ruled, kind: this.h.kinds[best]!, logit };
+    const started = rule !== undefined && rule.how !== "none";
+    const ruled = started && this.h.veto !== null && logit >= this.h.veto;
+    // Stopgap (D1015): a start the gate alone would make on a turn of fewer than `MIN_ADD_WORDS` words is refused.
+    // The round-3 weights read short throwaway turns ("hello", "hi", "?", "asdf") as terse commands; a retrain that
+    // fixed them raised false starts elsewhere (m13-gate.md §7.2). Rule starts ("cancel it", "book it") are untouched.
+    const adds = logit >= this.h.logit && (started || gateWords(gateNorm(text)).length >= MIN_ADD_WORDS);
+    return { needs: adds || ruled, kind: this.h.kinds[best]!, logit };
   }
 }
 

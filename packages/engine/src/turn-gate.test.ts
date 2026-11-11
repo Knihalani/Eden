@@ -82,6 +82,12 @@ describe("the shipped gate", () => {
     "Wow, can you believe the price of eggs?",
     "What time is my dentist appointment on Thursday?",
     "connection refused 10.0.4.17:5432 pg pool exhausted, 20 of 20 in use",
+    // The stopgap (D1015): short throwaway turns the weights alone would start.
+    "hello",
+    "hi",
+    "hello there",
+    "asdf",
+    "?",
   ])("starts nothing: %s", (text) => {
     expect(gate!.read(text, rule(text)).needs).toBe(false);
   });

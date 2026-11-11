@@ -307,3 +307,15 @@ each against the round-3 model (or `eden`) as named:
 
 If any fails, the round-3 model ships with a stopgap guard on gate-only starts (no start for a turn of fewer than
 three words that the rule does not start), documented as such. Anthropic cap raised to $10 by the parent.
+
+### 7.2 Round 4's read and the stopgap (D1015)
+
+Dev: R2f seed 1 0.927 under the union (veto 0.15), seed 2 0.925; seed 1 frozen (weights 1,590,904 bytes, parity
+64/64). Against addendum C: probe list 0 of 23 start (in-sample); fixtures 4 of 135 wrong (clause 1 holds); S5 acting
+92.4 across nine languages (clause 2's acting holds), **S5 false starts 107 of 703 (bar 102; round 3 93): clause 2
+fails**. M2T 98.5, SIM56 99.4, S5 English acting 93.8, S5 English false starts 32 of 158 (round 3 23). By the
+pre-registered fallback the round-3 weights ship with a guard: a start only the gate would make needs a turn of at
+least three words (`MIN_ADD_WORDS`). With it the probe list starts 1 of 23; fixtures 9 of 135 wrong ("do it",
+"annule-le", "buch es", "cancélalo" start nothing, as under the rule alone; the five round-3 misses stay). The
+funnel and Pi figures of §7 are the round-3 model's; the guard only removes gate-only starts on turns under three
+words, which no train, reworded or train-rw request is (the funnel re-run below confirms it).
