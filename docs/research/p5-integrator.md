@@ -105,6 +105,14 @@ Read on the demo's world (`bun run demo`, the shipped default, no model key) and
   (Sonnet-confirmed concerns on control) not higher (interval below +3 points), and agent cost per task lower on the
   days run; otherwise delete the two constants and the switch.
 - **Budget [EST]:** about $6 (two arms, four seeds, plus days and regrade), within P5's $10 Anthropic cap.
+- **As run (committed before the first call, 2026-11-11; the owner asked for a same-day decision, no standing
+  trial):** the Modal bench preset `bench-lead-short` (`fanout_plan.py`: the bench recipe, arms `eden` and
+  `eden~short`, hidden, control and neutral, train), seeds 41–44, one request a session, `--cap 4`; then every hidden
+  answer and control/neutral concern regraded by Sonnet 5.5 (`i3-regrade.ts`, its own cap $3) and
+  `bench_report.py --pair eden~short:eden --sonnet`. **Deviation:** no `--days 8` run; the rule's cost clause is read
+  on one request a session (the per-packet saving is fixed at $0 above; a days run would only multiply it). The rule
+  is otherwise as above: promote if the hidden difference's 95% interval is above −3 points and confirmed concerns'
+  interval below +3 points; delete otherwise.
 
 ```bash
 V='{"S":{"leadShort":true}}'
