@@ -991,9 +991,11 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
 - **Connector calls over a user's days at $0 (A8, `days-calls.ts`):** the `--days` user through Eden alone (no agent,
   no model, time scale 0), every connector call counted by source, operation and phase (request, notice, the sync's
   tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
---cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal] [--set JSON]`, about 10 s. pi-ab's 2 h
+--cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal|none] [--set JSON]`, about 10 s. pi-ab's 2 h
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
   gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
+  `--recap-notice none` (O1, D605) moves the day's items with no notice at all, so only a poll or a sweep finds the
+  change: the screen that prices fewer polls (update packets, old copies held undoubted).
   `--pool-diag FILE` (O3, D712) writes one row a hidden or control request: whether the candidates' pass ran, the
   planted item's place in the push's pool, the constraint test on it, and whether it was handed then or earlier that
   day (docs/research/o3-pointer.md §3.2).

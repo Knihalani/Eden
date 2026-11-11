@@ -89,3 +89,31 @@ After D603 the calls left on a short task at 1,000 sources (4.8 on the funnel's 
 user's own five connectors: 2.1–2.4 on-demand poll listings, 1.3–1.5 lookup searches and 0.8–1.2 searches of a cut
 copy behind; the noise connectors take 0.1–0.4. Over a real week the unused sources' sweep (1,000 listings) is
 about as many calls as everything else in this bench (D602 records why skipping it cannot be priced in the lab).
+
+## Fewer on-demand polls for sources that send no notice: screened at $0, not kept (D605)
+
+The parent asked whether the notify path's saving (2.2 calls a task with notices) can be had for connectors that
+send none. The knob that exists is `syncStaleChance` (0.15): a copy is polled before a request when the chance
+that its source gained an item since the last poll passes it. On static worlds a higher value looks free:
+
+| `syncStaleChance` | Funnel, 5 sources, seed 41: poll listings a task | Surfaced | Days, 4 users: steady calls a request |
+| --- | --- | --- | --- |
+| 0.15 (default) | 2.7 | 154 / 142 | 1.34 |
+| 0.4 | 1.7 | 154 / 142 | 0.65 |
+| 0.8 | 1.0 | 154 / 142 | 0.42 |
+
+Those screens cannot see staleness: the funnel's world does not change, and the days screen's changed items came
+with a notice. `days-calls.ts --recap-notice none` (new, lab only) moves the day's items with no notice, so only a
+poll or a sweep can find the change (4 users, 8 days, 79 moved items, `--notify-share 0.05`):
+
+| `syncStaleChance` | Steady calls a request | Update packets (of 79 moved) | Requests holding an old copy undoubted |
+| --- | --- | --- | --- |
+| 0.15 (default) | 1.46 | 28 | 80 |
+| 0.4 | 0.70 | 13 | 113 |
+| 0.8 | 0.42 | 3 | 218 |
+
+Halving the polls halves the updates that reach the agent. Not kept: the default stands. Two things this shows
+beside the answer: the earlier "free" readings (moon-sync.md's 0.3 and 0.5 on the funnel) were of a static world;
+and at the default, a change with no notice already reaches the agent as an update in only 28 of 79 cases on this
+screen, which is the larger problem and a quality one (one run, simulated; the screen's moves happen at the day's
+recap, so it is a hard case).

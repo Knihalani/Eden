@@ -8,7 +8,7 @@
  * sync before each request), `backfill` (before the first request, once per user).
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
- *     [--cards FILE] [--recap-notice push|signal] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
+ *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
  *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
@@ -41,6 +41,8 @@ export interface DaysCallsOptions {
   ask?: boolean;
   /** pi-ab's recap before D272: a bare signal whatever `push` says. */
   recapSignal?: boolean;
+  /** `--recap-notice none` (O1): the moved items' sources say nothing, so only a poll or a sweep finds the change. */
+  recapSilent?: boolean;
   cards?: DiskCardMaker | null;
   config?: Partial<EngineConfig>;
   gapMs?: number;
@@ -243,7 +245,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       const touched = new Set(world.items.filter((i) => changed.has(i.id)).map((i) => i.sourceId));
       for (const s of sources) if (touched.has(s.id)) s.reindex();
       phase = "notice";
-      if (o.push !== "none") {
+      if (o.push !== "none" && !o.recapSilent) {
         if (o.recapSignal) for (const id of touched) partner.sourceChanged(scope, id);
         else await recapNotice(partner, scope, sources, changed, o.push);
         await partner.revisionsSettled(scope);
@@ -353,7 +355,7 @@ if (import.meta.main) {
   const push = opt("push", "payload") as PushMode;
   if (!["none", "signals", "payload"].includes(push)) throw new Error("--push must be none, signals or payload");
   const recap = opt("recap-notice", "push");
-  if (recap !== "push" && recap !== "signal") throw new Error("--recap-notice must be push or signal");
+  if (!["push", "signal", "none"].includes(recap)) throw new Error("--recap-notice must be push, signal or none");
   const cardsFile = opt("cards", "");
   // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
   const intentFiles = opt("intent", INTENT_PATH).split(",");
@@ -362,6 +364,7 @@ if (import.meta.main) {
     push,
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",
+    recapSilent: recap === "none",
     cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
