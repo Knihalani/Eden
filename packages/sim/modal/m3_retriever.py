@@ -407,12 +407,166 @@ def rank_remote(family: str, run: str, eval_name: str, max_len: int = 256) -> li
     return ranks
 
 
+def load_asym(run):
+    """A trained asym run: the item encoder and the request's token table, frozen."""
+    import torch
+
+    d = f"/vol/models/{run}"
+    tok, model, enc = dense_encoder(d)
+    table, qweight, squery = static_query(tok, model)
+    saved = torch.load(f"{d}/query_table.pt")
+    table.weight.data.copy_(saved["table"].cuda())
+    qweight.data.copy_(saved["weight"].cuda())
+    model.eval()
+    return enc, (lambda qs: squery(qs, grad=False))
+
+
+class SetRanker:
+    """`setrank` (M3, D903): reads a request and its K candidates at once. Each candidate is its ingest vector d, the
+    request's vector q, d*q and their cosine, projected and passed through a small transformer encoder with a learned
+    NULL slot (nothing here); each candidate's score is read against NULL's. Input is vectors only: no text model at
+    request time."""
+
+    def __init__(self, dim=384, width=256, layers=2, heads=4):
+        import torch
+
+        class Net(torch.nn.Module):
+            def __init__(s):
+                super().__init__()
+                s.inp = torch.nn.Linear(3 * dim + 1, width)
+                s.null = torch.nn.Parameter(torch.zeros(1, 1, width))
+                lay = torch.nn.TransformerEncoderLayer(width, heads, 2 * width, dropout=0.1, batch_first=True)
+                s.enc = torch.nn.TransformerEncoder(lay, layers)
+                s.out = torch.nn.Linear(width, 1)
+
+            def forward(s, q, D, mask):
+                # q: (B, dim); D: (B, K, dim); mask: (B, K) True where padded.
+                qq = q.unsqueeze(1).expand_as(D)
+                cos = (qq * D).sum(-1, keepdim=True)
+                x = s.inp(torch.cat([D, qq, qq * D, cos], -1))
+                x = torch.cat([s.null.expand(x.shape[0], 1, -1), x], 1)
+                m = torch.cat([torch.zeros_like(mask[:, :1]), mask], 1)
+                h = s.enc(x, src_key_padding_mask=m)
+                return s.out(h).squeeze(-1).masked_fill(m, -1e4)  # (B, 1 + K): index 0 is NULL
+
+        self.net = Net().cuda()
+
+
+def set_groups(enc, query, files, suites, K, max_worlds, rng):
+    """Per training request two lists: the world's top K by the asym score with the fact in (target: the fact) and
+    with the fact out and its twin in (target: NULL). Candidates are ids into the world's vectors."""
+    import torch
+
+    out = []
+    for name in files:
+        for wi, w in enumerate(worlds(f"/vol/data/{name}")):
+            if wi >= max_worlds:
+                break
+            away = {x for t in w["tasks"] if t["suite"] not in suites for x in (t["pos"], t["decoy"])}
+            items = [i for i in w["items"] if i["id"] not in away]
+            idx = {i["id"]: k for k, i in enumerate(items)}
+            tasks = [t for t in w["tasks"] if t["suite"] in suites and t["pos"] in idx and t["decoy"] in idx]
+            if not tasks:
+                continue
+            with torch.no_grad():
+                texts = [item_text(i) for i in items]
+                D = torch.cat([enc(texts[i : i + 256], 256) for i in range(0, len(texts), 256)]).half()
+                Q = torch.cat([query([t["request"] for t in tasks[i : i + 256]]) for i in range(0, len(tasks), 256)])
+                S = Q.float() @ D.float().T
+            for qi, t in enumerate(tasks):
+                p, dcy = idx[t["pos"]], idx[t["decoy"]]
+                order = [k for k in torch.topk(S[qi], K + 2).indices.tolist() if k not in (p, dcy)][: K - 1]
+                hid = order[:]
+                hid.insert(int(rng.integers(0, K)), p)
+                ctl = order[:]
+                ctl.insert(int(rng.integers(0, K)), dcy)
+                out.append((Q[qi].half().cpu(), D[hid].cpu(), hid.index(p) + 1))
+                out.append((Q[qi].half().cpu(), D[ctl].cpu(), 0))
+    return out
+
+
+@app.function(gpu=["L4", "A10G"], volumes={"/vol": vol}, timeout=6 * 3600, memory=32768)
+def setrank_remote(asym_run: str, files: list, suites: list, run: str, K: int, epochs: float, lr: float, batch: int,
+                   max_worlds: int, eval_names: list) -> dict:
+    import numpy as np
+    import torch
+
+    t0 = time.time()
+    torch.manual_seed(7)
+    rng = np.random.default_rng(7)
+    enc, query = load_asym(asym_run)
+    data = set_groups(enc, query, files, set(suites), K, max_worlds, rng)
+    t_data = time.time() - t0
+    sr = SetRanker()
+    net = sr.net
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=0.01)
+    total = int(len(data) / batch * epochs)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, s / max(1, total // 20)) * max(0.0, 1 - s / total))
+    log, step = [], 0
+    net.train()
+    while step < total:
+        perm = rng.permutation(len(data))
+        for i in range(0, len(perm) - batch + 1, batch):
+            if step >= total:
+                break
+            b = [data[j] for j in perm[i : i + batch]]
+            q = torch.stack([x[0] for x in b]).float().cuda()
+            D = torch.stack([x[1] for x in b]).float().cuda()
+            y = torch.tensor([x[2] for x in b], device="cuda")
+            logits = net(q, D, torch.zeros(D.shape[:2], dtype=torch.bool, device="cuda"))
+            loss = torch.nn.functional.cross_entropy(logits, y)
+            opt.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
+            opt.step()
+            sched.step()
+            if step % 200 == 0:
+                log.append({"step": step, "loss": round(float(loss), 4), "s": round(time.time() - t0)})
+                print(log[-1], flush=True)
+            step += 1
+    net.eval()
+    out_dir = f"/vol/models/{run}"
+    os.makedirs(out_dir, exist_ok=True)
+    torch.save(net.state_dict(), f"{out_dir}/setrank.pt")
+    # Eval: each request's asym top K re-read by the set ranker. `top` holds the candidates scored above NULL (best
+    # first), then `rest` the others: the hybrid fuses `top` only, so an item the ranker puts below silence adds nothing.
+    ranks = {}
+    with torch.no_grad():
+        for name in eval_names:
+            rows = []
+            for w in worlds(f"/vol/data/{name}"):
+                reqs = [r["request"] for r in w["requests"]]
+                if not reqs:
+                    continue
+                ids = [i["id"] for i in w["items"]]
+                texts = [i["text"] for i in w["items"]]
+                D = torch.cat([enc(texts[i : i + 256], 256) for i in range(0, len(texts), 256)])
+                for i in range(0, len(reqs), 128):
+                    Q = query(reqs[i : i + 128])
+                    S = Q @ D.T
+                    top = torch.topk(S, K, dim=1).indices
+                    logits = net(Q, D[top], torch.zeros(top.shape, dtype=torch.bool, device="cuda"))
+                    for r, cand, lg in zip(w["requests"][i : i + 128], top.tolist(), logits.tolist()):
+                        null = lg[0]
+                        order = sorted(range(K), key=lambda k: -lg[k + 1])
+                        rows.append({"rid": r["rid"], "top": [ids[cand[k]] for k in order if lg[k + 1] > null],
+                                     "rest": [ids[cand[k]] for k in order if lg[k + 1] <= null]})
+            ranks[name] = rows
+    meta = {"family": "setrank", "asym": asym_run, "files": files, "suites": suites, "run": run, "K": K,
+            "epochs": epochs, "lr": lr, "batch": batch, "examples": len(data), "data_s": round(t_data),
+            "total_s": round(time.time() - t0), "gpu": torch.cuda.get_device_name(0), "log": log}
+    json.dump(meta, open(f"{out_dir}/meta.json", "w"), indent=1)
+    vol.commit()
+    return {"meta": meta, "ranks": ranks}
+
+
 @app.local_entrypoint()
 def main(upload: str = "", family: str = "dense", base: str = "BAAI/bge-small-en-v1.5",
          suites: str = "train1,train2,train3,train4", run: str = "", epochs: float = 1.0, lr: float = 3e-5,
          batch: int = 32, n_neg: int = 4, max_len: int = 256, flops: float = 0.0, max_seeds: int = 0,
          temp: float = 0.05, first: str = "", first_k: int = 15, data: str = "train-worlds.jsonl.gz",
-         table_lr: float = 1e-3, rank_only: str = "", eval_name: str = "eval-m2.jsonl.gz"):
+         table_lr: float = 1e-3, rank_only: str = "", eval_name: str = "eval-m2.jsonl.gz",
+         asym: str = "asym-s1", set_k: int = 32):
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     if upload:
         with vol.batch_upload(force=True) as b:
@@ -420,6 +574,20 @@ def main(upload: str = "", family: str = "dense", base: str = "BAAI/bge-small-en
                 if name.endswith(".jsonl.gz"):
                     b.put_file(os.path.join(upload, name), f"/data/{name}")
         print("uploaded")
+        return
+    if family == "setrank":
+        evals = ["eval.jsonl.gz", "eval-m2.jsonl.gz"]
+        got = setrank_remote.remote(asym, data.split(","), suites.split(","), run, set_k, epochs, lr, batch,
+                                    max_seeds or 10_000, evals)
+        for name, rows in got["ranks"].items():
+            out = os.path.join(root, ".local", "m3", "runs", f"{run}@{name.split('.')[0]}")
+            os.makedirs(out, exist_ok=True)
+            with open(os.path.join(out, "ranks.jsonl"), "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r) + "\n")
+            json.dump(got["meta"], open(os.path.join(out, "meta.json"), "w"), indent=1)
+            print(out)
+        print(json.dumps({k: v for k, v in got["meta"].items() if k != "log"}))
         return
     if rank_only:
         ranks = rank_remote.remote(family, rank_only, eval_name)
