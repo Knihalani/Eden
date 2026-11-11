@@ -394,7 +394,13 @@ def export(o):
     if cfg["table"] in ("int8", "int4"):
         lv = {"int8": 127, "int4": 7}[cfg["table"]]
         sc = W.abs().amax(1, keepdim=True).clamp_min(1e-8) / lv
-        arrays["table"] = (W / sc).round().clamp(-lv, lv).to(torch.int8).numpy()
+        q = (W / sc).round().clamp(-lv, lv).to(torch.int8).numpy()
+        if cfg["table"] == "int4":
+            # Two values a byte (column 2k in the low nibble, 2k+1 in the high), two's complement in 4 bits: what ships.
+            u = (q.astype(np.int16) & 0xF).astype(np.uint8)
+            arrays["table4"] = (u[:, 0::2] | (u[:, 1::2] << 4)).astype(np.uint8)
+        else:
+            arrays["table"] = q
         arrays["row_scale"] = f32(sc.squeeze(1))
     elif cfg["table"] == "ternary":
         a = W.abs().mean()
@@ -444,6 +450,17 @@ def export(o):
                       "checks": len(chk)}))
 
 
+def quantize(o):
+    """A trained Student with its storage widths changed and nothing retrained (D914, the parent's option c): the
+    table to `--table` (int4: a float32 scale a row) and the item code to `--code`; the forward then applies them."""
+    ck = torch.load(o.model, map_location="cpu", weights_only=False)
+    cfg = {**ck["cfg"], "table": o.table, "code": o.code}
+    net = Student(**cfg)
+    net.load_state_dict(ck["state"])
+    torch.save({"state": net.state_dict(), "cfg": cfg, "args": {"quantized_from": o.model}}, o.out)
+    print(json.dumps({"out": o.out, "cfg": cfg, "size_bytes": net.size_bytes(), "code_bytes": net.code_bytes()}))
+
+
 def threshold_at(p, y, prec):
     """The lowest score threshold whose precision on (p, y) is at least `prec` (the operating point for recall)."""
     order = sorted(range(len(p)), key=lambda i: -p[i])
@@ -459,7 +476,7 @@ def threshold_at(p, y, prec):
 
 if __name__ == "__main__":
     a = argparse.ArgumentParser()
-    a.add_argument("cmd", choices=["score", "teach", "train", "export"])
+    a.add_argument("cmd", choices=["score", "teach", "train", "export", "quantize"])
     a.add_argument("--model", default="")
     a.add_argument("--pairs", nargs="+", default=[])
     a.add_argument("--out", default="")
@@ -497,6 +514,9 @@ if __name__ == "__main__":
     o = a.parse_args()
     if o.cmd == "export":
         export(o)
+        sys.exit(0)
+    if o.cmd == "quantize":
+        quantize(o)
         sys.exit(0)
     if o.cmd == "train":
         train(o)

@@ -219,10 +219,12 @@ export interface PartnerDeps {
    */
   checker?: PushChecker;
   /**
-   * M3 (D908 rule 1, trial `pushSupersede`): the probability that `newer` replaces `older` (a later version, a
-   * correction, a cancellation), from a small pair model the embedder wires. Read only when `pushSupersede` is above 0.
+   * M3 (D908 rule 1, trial `pushSupersede`): for each (older, newer) pair, the probability that `newer` replaces
+   * `older` (a later version, a correction, a cancellation), from a small pair model the embedder wires; null for a
+   * pair it cannot read. One call a push pass with all of its pairs (D914), so the model computes each item's half of
+   * its first layer once a pass, not once a pair. Read only when `pushSupersede` is above 0.
    */
-  supersede?: (scope: Scope, older: ContextItem, newer: ContextItem) => number | null;
+  supersede?: (scope: Scope, pairs: readonly (readonly [ContextItem, ContextItem])[]) => readonly (number | null)[];
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -242,6 +244,8 @@ export interface PushPoolReport {
    */
   anchored?: boolean[];
   anchorKinds?: { entities: number; day: boolean };
+  /** `pushSupersede` (D914): how many (handed, newer pooled) pairs the pass asked the pair model about. */
+  supersedePairs?: number;
   /**
    * `pushCheck` (D500): what the pass's check did ("yes": it answered; "none": no call, the gate found nothing
    * constraint-like; "late", "failed": the default's candidates went) and, when it answered, per pool item whether it
@@ -2531,8 +2535,9 @@ export class ContextPartner {
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
+    let supersedePairs: number | undefined;
     if (items.length > 0 && this.config.pushSupersede > 0 && this.deps.supersede)
-      items = this.superseded(s, pool, items);
+      ({ items, pairs: supersedePairs } = this.superseded(s, pool, items));
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
@@ -2556,6 +2561,7 @@ export class ContextPartner {
       pool: reported.map((x) => x.item.id),
       constraintLike: reported.length > like.length ? [...like, ...reported.slice(like.length).map(() => false)] : like,
       handed: items.map((x) => x.item.id),
+      ...(supersedePairs !== undefined ? { supersedePairs } : {}),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
       ...(read
         ? {
@@ -2582,35 +2588,45 @@ export class ContextPartner {
    * replaces nothing (fail open). The newer item need not hold one of the request's anchors (D914): it is in the
    * request's own pool already, and requiring it kept 34 of 62 stale versions on the `+stale` screen from being asked.
    */
-  private superseded(s: Session, pool: readonly Scored[], items: Scored[]): Scored[] {
+  private superseded(s: Session, pool: readonly Scored[], items: Scored[]): { items: Scored[]; pairs: number } {
     const th = this.config.pushSupersede;
-    const dep = this.deps.supersede!;
     const later = pool.filter((x) => !bulkMail(x.item));
+    // Every (handed, newer pooled) pair, asked about in one call (D914).
+    const asked: [number, Scored][] = [];
+    items.forEach((h, k) => {
+      for (const n of later)
+        if (n.item.id !== h.item.id && (n.item.updatedAt ?? 0) > (h.item.updatedAt ?? 0)) asked.push([k, n]);
+    });
+    let probs: readonly (number | null)[] = [];
+    if (asked.length > 0) {
+      try {
+        probs = this.deps.supersede!(
+          s.scope,
+          asked.map(([k, n]) => [items[k]!.item, n.item] as const),
+        );
+      } catch {
+        probs = []; // fail open: nothing is replaced
+      }
+    }
+    const best: (Scored | null)[] = items.map(() => null);
+    const bestP: number[] = items.map(() => th);
+    asked.forEach(([k, n], i) => {
+      const p = probs[i];
+      if (typeof p === "number" && p >= bestP[k]!) {
+        best[k] = n;
+        bestP[k] = p;
+      }
+    });
     const out: Scored[] = [];
     const ids = new Set<string>();
-    for (const h of items) {
-      let best: Scored | null = null;
-      let bestP = th;
-      for (const n of later) {
-        if (n.item.id === h.item.id || (n.item.updatedAt ?? 0) <= (h.item.updatedAt ?? 0)) continue;
-        let p: number | null = null;
-        try {
-          p = dep(s.scope, h.item, n.item);
-        } catch {
-          p = null;
-        }
-        if (p !== null && p >= bestP) {
-          best = n;
-          bestP = p;
-        }
-      }
-      const x = best ?? h;
+    items.forEach((h, k) => {
+      const x = best[k] ?? h;
       if (!ids.has(x.item.id)) {
         ids.add(x.item.id);
         out.push(x);
       }
-    }
-    return out;
+    });
+    return { items: out, pairs: asked.length };
   }
 
   /**

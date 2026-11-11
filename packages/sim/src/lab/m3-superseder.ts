@@ -14,9 +14,22 @@ const TRACE = process.env.M3B_SUPERSEDE_TRACE ?? "";
 const TRACE_TEXT = process.env.M3B_SUPERSEDE_TRACE_TEXT === "1";
 
 export interface Superseder {
-  replaces: (scope: { tenantId: string; userId: string }, older: ContextItem, newer: ContextItem) => number;
-  /** Items encoded, pairs scored, and the time each took (ms). */
-  stats: () => { items: number; pairs: number; encodeMs: number; pairMs: number };
+  /** The partner's `supersede` dependency: one call a push pass, every (older, newer) pair's probability. */
+  replaces: (
+    scope: { tenantId: string; userId: string },
+    pairs: readonly (readonly [ContextItem, ContextItem])[],
+  ) => number[];
+  /** Items encoded, pairs scored, passes, and the time each took (ms; `passMs`: pair scoring a pass, summed). */
+  stats: () => {
+    items: number;
+    pairs: number;
+    passes: number;
+    encodeMs: number;
+    pairMs: number;
+    passMsP50: number;
+    passMsP90: number;
+    passMsP99: number;
+  };
 }
 
 /**
@@ -27,17 +40,22 @@ export interface Superseder {
 export function loadSuperseder(dir: string): Superseder {
   // M3b (D914): `h10.py export`'s students (a `cfg` in meta.json) or binnet's `supersede` export.
   const meta = existsSync(join(dir, "meta.json")) ? JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) : {};
-  let net: { encode: (t: string) => Float32Array | Int8Array; replaces: (a: never, b: never) => number };
-  if (meta.cfg) net = h10Network(dir) as typeof net;
-  else {
+  type Code = Float32Array | Int8Array;
+  let net: { encode: (t: string) => Code; many: (pairs: readonly (readonly [Code, Code])[]) => number[] };
+  if (meta.cfg) {
+    const h = h10Network(dir);
+    net = { encode: h.encode, many: h.replacesMany };
+  } else {
     const n = network(dir);
     if (n.meta.arch !== "supersede") throw new Error(`--supersede: ${dir} holds a ${n.meta.arch} network`);
-    net = n as typeof net;
+    net = { encode: n.encode, many: (ps) => ps.map(([a, b]) => n.replaces(a as Float32Array, b as Float32Array)) };
   }
   const codes = new Map<string, Float32Array | Int8Array>();
   let encodeMs = 0;
   let pairMs = 0;
   let pairs = 0;
+  let passes = 0;
+  const passMs: number[] = [];
   const code = (scope: { tenantId: string; userId: string }, it: ContextItem) => {
     const key = `${scope.tenantId}/${scope.userId}\u0000${it.id}\u0000${it.title ?? ""}\u0000${it.text}`;
     let c = codes.get(key);
@@ -50,32 +68,51 @@ export function loadSuperseder(dir: string): Superseder {
     return c;
   };
   return {
-    replaces: (scope, older, newer) => {
-      const a = code(scope, older);
-      const b = code(scope, newer);
+    replaces: (scope, batch) => {
+      const cs = batch.map(([older, newer]) => [code(scope, older), code(scope, newer)] as const);
       const t0 = performance.now();
-      const logit = net.replaces(a as never, b as never);
-      pairMs += performance.now() - t0;
-      pairs++;
+      const logits = net.many(cs);
+      const dt = performance.now() - t0;
+      pairMs += dt;
+      passMs.push(dt);
+      pairs += batch.length;
+      passes++;
       // M3b's diagnosis (D914): every scored pair, when M3B_SUPERSEDE_TRACE names a file (one JSON line a pair).
       if (TRACE)
         appendFileSync(
           TRACE,
-          JSON.stringify({
-            user: scope.userId,
-            older: older.id,
-            newer: newer.id,
-            olderAt: older.updatedAt,
-            newerAt: newer.updatedAt,
-            logit: +logit.toFixed(4),
-            // With M3B_SUPERSEDE_TRACE_TEXT=1 the texts too (synthetic worlds only), to train on engine-drawn pairs.
-            ...(TRACE_TEXT
-              ? { a: `${older.title ?? ""}\n${older.text}`, b: `${newer.title ?? ""}\n${newer.text}` }
-              : {}),
-          }) + "\n",
+          batch
+            .map(([older, newer], i) =>
+              JSON.stringify({
+                user: scope.userId,
+                older: older.id,
+                newer: newer.id,
+                olderAt: older.updatedAt,
+                newerAt: newer.updatedAt,
+                logit: +logits[i]!.toFixed(4),
+                // With M3B_SUPERSEDE_TRACE_TEXT=1 the texts too (synthetic worlds only), to train on engine pairs.
+                ...(TRACE_TEXT
+                  ? { a: `${older.title ?? ""}\n${older.text}`, b: `${newer.title ?? ""}\n${newer.text}` }
+                  : {}),
+              }),
+            )
+            .join("\n") + "\n",
         );
-      return 1 / (1 + Math.exp(-logit));
+      return logits.map((l) => 1 / (1 + Math.exp(-l)));
     },
-    stats: () => ({ items: codes.size, pairs, encodeMs: +encodeMs.toFixed(1), pairMs: +pairMs.toFixed(2) }),
+    stats: () => {
+      const q = [...passMs].sort((x, y) => x - y);
+      const at = (f: number) => (q.length ? +q[Math.min(q.length - 1, Math.floor(f * q.length))]!.toFixed(3) : 0);
+      return {
+        items: codes.size,
+        pairs,
+        passes,
+        encodeMs: +encodeMs.toFixed(1),
+        pairMs: +pairMs.toFixed(2),
+        passMsP50: at(0.5),
+        passMsP90: at(0.9),
+        passMsP99: at(0.99),
+      };
+    },
   };
 }

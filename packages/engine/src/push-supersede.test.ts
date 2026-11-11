@@ -27,7 +27,8 @@ const REQUEST = "Pay the Harlow invoice for the venue deposit today.";
 const OLD = item("old", "Harlow venue", "Payments to Harlow are on hold until the deposit dispute ends.", 48);
 const NEW = item("new", "Harlow venue update", "The Harlow deposit dispute is settled: payments to Harlow resume.", 2);
 
-type Dep = (scope: { tenantId: string; userId: string }, older: ContextItem, newer: ContextItem) => number | null;
+type Scope = { tenantId: string; userId: string };
+type Dep = (scope: Scope, older: ContextItem, newer: ContextItem) => number | null;
 
 function setup(config: Record<string, unknown>, dep?: Dep, items: ContextItem[] = [OLD, NEW]) {
   const pools: PushPoolReport[] = [];
@@ -50,7 +51,13 @@ function setup(config: Record<string, unknown>, dep?: Dep, items: ContextItem[] 
       ...config,
     },
     onPushPool: (r) => void pools.push(r),
-    ...(dep ? { supersede: dep } : {}),
+    // The partner asks about a pass's pairs in one call (D914); the tests' models answer pair by pair.
+    ...(dep
+      ? {
+          supersede: (sc: Scope, pairs: readonly (readonly [ContextItem, ContextItem])[]) =>
+            pairs.map(([o, n]) => dep(sc, o, n)),
+        }
+      : {}),
   });
   return { p, pools };
 }
@@ -93,6 +100,24 @@ describe("pushSupersede (M3, D908 rule 1)", () => {
     await say(p);
     expect(asked).toContain(`${OLD.id}>${plain.id}`);
     expect(pools.at(-1)!.handed).not.toContain(OLD.id);
+  });
+
+  test("one call a pass with all its pairs (D914); a pair answered null is not replaced", async () => {
+    const calls: number[] = [];
+    const third = item("third", "Harlow venue final", "Harlow confirms the deposit is released today.", 1);
+    const { p, pools } = setup(
+      { pushSupersede: 0.5 },
+      (_, o, n) => (n.id === third.id ? null : o.id === OLD.id ? 0.9 : 0),
+      [OLD, NEW, third],
+    );
+    const inner = (p as unknown as { deps: { supersede: (...a: unknown[]) => unknown } }).deps;
+    const batch = inner.supersede;
+    inner.supersede = (...a: unknown[]) => (calls.push((a[1] as unknown[]).length), batch(...a));
+    await say(p);
+    expect(calls.length).toBe(1);
+    expect(calls[0]).toBeGreaterThan(1);
+    expect(pools.at(-1)!.handed).not.toContain(OLD.id);
+    expect(pools.at(-1)!.supersedePairs).toBe(calls[0]);
   });
 
   test("under the threshold, or with a model that throws or answers null, nothing is replaced (fail open)", async () => {

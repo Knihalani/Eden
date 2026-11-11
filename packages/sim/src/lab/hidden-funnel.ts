@@ -1424,6 +1424,8 @@ async function runSeed(
     const push = pushPools.get(sessionId)?.at(-1);
     // `pushCheck`: whether any pass of this task made the check's call (N5's call rate by variant).
     const checkCalled = (pushPools.get(sessionId) ?? []).some((r) => r.checkCalled);
+    // `pushSupersede` (D914): pairs every push pass of the request scored, for its per-request cost.
+    const supersedePairs = (pushPools.get(sessionId) ?? []).reduce((n, r) => n + (r.supersedePairs ?? 0), 0);
     pushPools.delete(sessionId);
     if (POOL_DUMP) {
       const ids = push?.pool ?? [];
@@ -1509,6 +1511,7 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      ...(push?.supersedePairs !== undefined ? { supersedePairs } : {}),
       // `+stale` synth suites (D908 rule 1): the stale version's place in that pool, and whether it was handed.
       ...(push && task.stale
         ? {
