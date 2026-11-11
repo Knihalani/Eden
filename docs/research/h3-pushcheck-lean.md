@@ -33,3 +33,30 @@ settings). **Bar:** hidden facts raised, template-clustered 95% lower bound abov
 hidden answers if the Haiku grade's bound falls under it); Sonnet-confirmed concerns on control and neutral not up;
 the check's $ per 1,000 tasks at least 20% lower (or its wait 20% lower) on the pair's own ledger. Pass: the arm's
 settings join `DEFAULT_CONFIG` (D814). Fail: the switch, its code and tests are deleted.
+
+## 2. The screen's result, and the Pi pair's addendum (before its first call)
+
+**Screen** (`split-screen.ts`, base42's recorded pools re-asked live, 553 rows with a recorded answer: 189 hidden,
+183 control, 181 neutral; five arms interleaved, 16 lanes; $0.000234 a check for W):
+
+| Arm | $ a check (vs W) | Wall p50 / p90 s | Planted named | Look-alike named | Neutral with a yes | Items named | Unreadable |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| W (shipped) | 0.000234 | 0.89 / 1.34 | 149 | 36 | 53 / 179 | 598 | 7 |
+| D | 0.000204 (−12.8%) | 0.87 / 1.23 | 153 | 36 | 44 / 179 | 474 | 5 |
+| D12 | 0.000194 (−17.1%) | 0.87 / 1.24 | 150 | 34 | 49 / 178 | 490 | 7 |
+| D11 | 0.000184 (−21.4%) | 0.86 / 1.19 | 152 | **41** | 52 / 181 | 484 | 0 |
+| D10 | **0.000175 (−25.2%)** | 0.86 / 1.21 | 151 | 35 | 52 / 180 | 452 | 7 |
+
+D12 fails the cost clause (bar 0.000187), D11 the look-alike clause (41 against a ceiling of 40). **D10 passes**
+every clause and goes to Pi as `pushCheckDedupe: 10`.
+
+**Pi pair, exactly** (`packages/sim/lab/h3/pi.sh LABEL 10 …`, one process a run, two at a time, in this order):
+`train` and `reworded` (`--suite train` / `--suite reworded`), seeds 41, 42, 43, 44 (`--seeds N`),
+`--variants hidden,control,neutral`; 8 runs. Then `bun packages/sim/src/lab/i3-regrade.ts --results <the runs'
+out.json> --conditions eden,eden~D --spend-ledger .local/h3/ledger.jsonl --spend-cap 15 --run-label h3-sonnet`, and
+`python3 -I packages/sim/lab/p3/report.py --pair eden~D:eden --cluster template <run dirs>`. If the deadline (04:00
+UTC) would cut the run, the pair is read on whole seeds (both suites) finished by 03:00 UTC, the rest unrun.
+
+Read (§1b's bar): hidden raised (Sonnet), D − default, clustered lower bound > −1.5 points; Sonnet-confirmed concerns
+(control and neutral) not up; the check's $ per 1,000 tasks from the pair's ledger (role `eden.check`, by arm) at
+least 20% lower. Reported beside it: the check's p50 and p90, Eden's and the agent's $ per 1,000 tasks, wall, asks.
