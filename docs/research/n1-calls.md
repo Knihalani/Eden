@@ -208,6 +208,9 @@ name, which the rule never skips. That is the rule's known limit (section 6).
 
 ## 3. The switches
 
+(Since D603 the pooled rule below is deleted: `sourceYieldEarn` replaced it, docs/research/o1-earn.md. The table
+describes the code as N1 measured it.)
+
 **`sourceYield`** (D505; part `sync`, `docs/profiles/minus-sync.json`; `source-yield.ts`, `SourceYield`):
 
 | Piece | Where | What |

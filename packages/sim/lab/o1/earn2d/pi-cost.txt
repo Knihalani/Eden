@@ -1,0 +1,73 @@
+.local/modal/o1-earn2d-long-49-54/s000-train-49/out.json: user w49, 8 days (17,13,13,17,19,20,12,18), 1 clashes
+.local/modal/o1-earn2d-long-49-54/s001-train-50/out.json: user w50, 8 days (15,19,19,19,19,13,20,15), 2 clashes
+.local/modal/o1-earn2d-long-49-54/s002-train-51/out.json: user w51, 8 days (18,20,16,15,15,15,16,13), 1 clashes
+.local/modal/o1-earn2d-long-49-54/s003-train-52/out.json: user w52, 8 days (19,16,20,19,17,19,15,13), 0 clashes
+.local/modal/o1-earn2d-long-49-54/s004-train-53/out.json: user w53, 8 days (14,20,14,15,19,12,16,20), 1 clashes
+.local/modal/o1-earn2d-long-49-54/s005-train-54/out.json: user w54, 8 days (18,20,17,16,20,16,18,14), 1 clashes
+.local/modal/o1-earn2d-long-55-60/s000-train-55/out.json: user w55, 8 days (15,15,20,17,12,18,17,16), 4 clashes
+.local/modal/o1-earn2d-long-55-60/s001-train-56/out.json: user w56, 8 days (19,14,13,15,18,18,16,12), 0 clashes
+.local/modal/o1-earn2d-long-55-60/s002-train-57/out.json: user w57, 8 days (14,17,15,17,16,18,13,15), 4 clashes
+.local/modal/o1-earn2d-long-55-60/s003-train-58/out.json: user w58, 8 days (15,18,13,17,16,17,13,12), 0 clashes
+.local/modal/o1-earn2d-long-55-60/s004-train-59/out.json: user w59, 8 days (12,13,18,15,20,17,16,14), 2 clashes
+.local/modal/o1-earn2d-long-55-60/s005-train-60/out.json: user w60, 8 days (17,15,16,15,16,19,14,20), 3 clashes
+.local/modal/o1-earn2d-long-61-66/s000-train-61/out.json: user w61, 8 days (18,18,20,14,15,17,17,14), 4 clashes
+.local/modal/o1-earn2d-long-61-66/s001-train-62/out.json: user w62, 8 days (15,16,20,12,13,17,20,20), 1 clashes
+.local/modal/o1-earn2d-long-61-66/s002-train-63/out.json: user w63, 8 days (17,19,18,14,16,17,16,15), 0 clashes
+.local/modal/o1-earn2d-long-61-66/s003-train-64/out.json: user w64, 8 days (12,12,14,19,13,20,16,19), 0 clashes
+.local/modal/o1-earn2d-long-61-66/s004-train-65/out.json: user w65, 8 days (20,12,18,19,12,16,18,13), 0 clashes
+.local/modal/o1-earn2d-long-61-66/s005-train-66/out.json: user w66, 8 days (19,14,15,16,13,15,18,12), 2 clashes
+.local/modal/o1-earn2d-long-67-72/s000-train-67/out.json: user w67, 8 days (20,17,19,15,15,12,17,12), 3 clashes
+.local/modal/o1-earn2d-long-67-72/s001-train-68/out.json: user w68, 8 days (15,13,15,20,20,20,19,18), 1 clashes
+.local/modal/o1-earn2d-long-67-72/s002-train-69/out.json: user w69, 8 days (19,20,13,13,15,12,19,14), 2 clashes
+.local/modal/o1-earn2d-long-67-72/s003-train-70/out.json: user w70, 8 days (18,20,12,12,15,18,20,18), 0 clashes
+.local/modal/o1-earn2d-long-67-72/s004-train-71/out.json: user w71, 8 days (16,12,20,13,15,13,15,20), 0 clashes
+.local/modal/o1-earn2d-long-67-72/s005-train-72/out.json: user w72, 8 days (15,14,14,20,19,16,16,17), 3 clashes
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           3114    24   0.235   0.000   0.179   0.415   0.415   0.415    0.415           0.0000 (in-run)      0.00         8.25           0.06      1.48  1.62    0.0937
+eden~earn2     3114    24   0.230   0.000   0.094   0.324   0.324   0.323    0.323           0.0000 (in-run)      0.00         1.91           0.05      1.42  1.55    0.0919
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden           agent 0.00  Eden 8.25  background 1.07  mix 9.31  backfill 1005/user (24 users)
+eden~earn2     agent 0.00  Eden 1.91  background 0.47  mix 2.38  backfill 1005/user (24 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden           first-party (quota only)     steady   0.415  all-in   0.415  mix st   0.415  mix all   0.415
+eden           Composio (overage)           steady   3.209  all-in   5.532  mix st   3.209  mix all   5.532
+eden           Unified.to (Pro)             steady   7.401  all-in  13.209  mix st   7.400  mix all  13.209
+eden           Arcade.dev (Team)            steady  93.565  all-in 171.009  mix st  93.557  mix all 171.001
+eden           Pipedream Connect (overage)  steady 112.195  all-in 205.128  mix st 112.186  mix all 205.118
+eden           Zapier MCP (10k tasks)       steady 240.742  all-in 440.547  mix st 240.722  mix all 440.527
+eden~earn2     first-party (quota only)     steady   0.324  all-in   0.324  mix st   0.323  mix all   0.323
+eden~earn2     Composio (overage)           steady   1.038  all-in   3.361  mix st   1.038  mix all   3.361
+eden~earn2     Unified.to (Pro)             steady   2.109  all-in   7.917  mix st   2.110  mix all   7.918
+eden~earn2     Arcade.dev (Team)            steady  24.132  all-in 101.576  mix st  24.139  mix all 101.583
+eden~earn2     Pipedream Connect (overage)  steady  28.894  all-in 121.826  mix st  28.902  mix all 121.835
+eden~earn2     Zapier MCP (10k tasks)       steady  61.750  all-in 261.555  mix st  61.768  mix all 261.573
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden    332  raised 168/332 (50.6%)  $0.241/1k  p50 1.56
+eden           control   332  raised 2/332 (0.6%)  $0.240/1k  p50 1.52
+eden           neutral  2450  raised 24/2450 (1.0%)  $0.234/1k  p50 1.46
+eden~earn2     hidden    332  raised 178/332 (53.6%)  $0.236/1k  p50 1.48
+eden~earn2     control   332  raised 2/332 (0.6%)  $0.234/1k  p50 1.45
+eden~earn2     neutral  2450  raised 21/2450 (0.9%)  $0.228/1k  p50 1.40
+
+per day (long horizon): n, agent and Eden $ per 1k tasks, wall p50 s
+eden           day 0  397  agent   0.245  Eden  0.000  p50 1.42
+eden           day 1  387  agent   0.230  Eden  0.000  p50 1.45
+eden           day 2  392  agent   0.221  Eden  0.000  p50 1.45
+eden           day 3  384  agent   0.230  Eden  0.000  p50 1.45
+eden           day 4  388  agent   0.242  Eden  0.000  p50 1.50
+eden           day 5  395  agent   0.235  Eden  0.000  p50 1.46
+eden           day 6  397  agent   0.243  Eden  0.000  p50 1.55
+eden           day 7  374  agent   0.237  Eden  0.000  p50 1.52
+eden~earn2     day 0  397  agent   0.249  Eden  0.000  p50 1.45
+eden~earn2     day 1  387  agent   0.218  Eden  0.000  p50 1.35
+eden~earn2     day 2  392  agent   0.223  Eden  0.000  p50 1.43
+eden~earn2     day 3  384  agent   0.231  Eden  0.000  p50 1.42
+eden~earn2     day 4  388  agent   0.234  Eden  0.000  p50 1.41
+eden~earn2     day 5  395  agent   0.221  Eden  0.000  p50 1.40
+eden~earn2     day 6  397  agent   0.232  Eden  0.000  p50 1.44
+eden~earn2     day 7  374  agent   0.228  Eden  0.000  p50 1.42

@@ -1,36 +1,29 @@
 /**
- * `sourceYield` (D505, on in the default since D509): what each of a user's sources has given back for the live
- * reads made of it. A live read (a search of a copy the cap cut, a probe) is booked against its source when the
- * connector answers it, once a turn; an item of the source that reaches the agent (a packet, an ask's answer) clears
- * the source's run. Two rules skip a read, both learned:
+ * `sourceYield` (D505, on in the default since D509; the earn rule since D603): what each of a user's sources has
+ * given back for the live reads made of it. A live read (a search of a copy the cap cut, a probe) is booked
+ * against its source when the connector answers it, once a turn; an item of the source that reaches the agent (a
+ * packet, an ask's answer) clears the source's run and marks the source used. The partner's `spentSources` skips a
+ * read by two rules:
  *
- * - **The source's own run.** A source whose run of reads with nothing used is long is not read live again on no
- *   name until the run decays (one half-life halves it), so a source that starts to matter is tried again. A read
- *   for a request that names an entity the source's items mentioned is never skipped by the run.
- * - **The user's reads on weak evidence.** With hundreds of sources a per-source run fills too slowly to matter (a
- *   source is read a few times a week), so the user's reads are pooled by what the request had for the source:
- *   nothing, or only its words. Each pool counts the reads sent to sources with nothing used yet, and how many of
- *   those sources then had their first item reach the agent. While a pool's rate is surely under `floor` (the
- *   upper `CONFIDENCE` bound of its Beta
- *   posterior, after `POOL_WARMUP` reads), a source that has never had an item reach the agent is not read on that
- *   kind of evidence. A source that has is exempt, a read on a name the source mentioned is never pooled, and the
- *   pools decay with the same half-life, so such reads resume now and then.
+ * - **The source's own run.** A source whose run of reads with nothing used is long is not read live again on weak
+ *   evidence until the run decays (one half-life halves it), so a source that starts to matter is tried again.
+ * - **A source earns its reads on weak evidence** (`sourceYieldEarn`, D600, D603). A source with nothing ever used
+ *   is read live only on strong evidence: a name its items mentioned, or a word few of the user's sources hold. The
+ *   pooled rates this replaced (per user, reads on no evidence and on words alone, D505) started flat, so every
+ *   new user paid about 44 reads a pool before they acted, and a look-alike listed in an ask kept one open; their
+ *   code is in commit 5861a56d.
  *
  * Unlike a budget per lookup (D390, deleted), nothing here bounds how many sources a lookup reads: each source earns
  * or loses its own reads. It never adds a call. All state is per user (tenant/user scope key), bounded, held in
  * memory only, content-free (a source id, a count, a time), and dropped with the user or the source (`forget`).
  */
 import { scopeKey, type Scope } from "@eden/protocol";
-import { betaIncInv } from "@eden/primitives";
 
-/** Reads on no evidence a user must have sent before the pooled rate may skip one. */
-export const POOL_WARMUP = 24;
-/** The most reads a pool remembers (two half-lives bring it under the warm-up again). */
-export const POOL_MAX = 4 * POOL_WARMUP - 1;
-/** The posterior bound the pooled rate must reach the floor at: skipped when 90% sure it is below. */
-const CONFIDENCE = 0.9;
-
-/** Sources kept per user, least recently read dropped first (a dropped source starts again: read live). */
+/**
+ * Sources kept per user, least recently read dropped first. A dropped source starts again with nothing used, as
+ * every source does after a restart (this state is in memory only): read live on strong evidence until an item of
+ * it reaches the agent, the state every new user starts in.
+ */
 const MAX_SOURCES = 4_096;
 /** Users kept per tenant and in all, least recently used dropped first (as `ProbeEconomy`). */
 const MAX_USERS_PER_TENANT = 1_000;
@@ -42,29 +35,16 @@ interface Run {
   at: number;
   /** An item of the source has reached the agent. */
   used: boolean;
-  /** The pools with a read of the source open: its next use is a win for each (a bit per pool). */
-  open: number;
-}
-
-/**
- * Reads sent on one kind of evidence to sources with nothing used yet, and how many of those sources then had their
- * first item reach the agent; decayed, as of `at`.
- */
-interface Pool {
-  reads: number;
-  wins: number;
-  at: number;
 }
 
 interface User {
   sources: Map<string, Run>;
-  pools: [Pool, Pool];
 }
 
 /**
- * What a request has for a source: nothing (0), its words among the source's held items or in its sketch (1), or a
- * name the source's items mentioned (2). Reads on nothing and reads on words are pooled, each apart; a read on a name
- * is never pooled, so it is never skipped.
+ * What a request has for a source: nothing (0), its words among the source's held items or in its sketch (1), or
+ * strong evidence (2): a name the source's items mentioned, or a word few of the user's sources hold. A read on
+ * strong evidence is never skipped.
  */
 export type Evidence = 0 | 1 | 2;
 
@@ -95,13 +75,7 @@ export class SourceYield {
       const oldest = this.users.keys().next().value!;
       this.drop(oldest, this.tenants.get(oldest)!);
     }
-    const fresh: User = {
-      sources: new Map(),
-      pools: [
-        { reads: 0, wins: 0, at: 0 },
-        { reads: 0, wins: 0, at: 0 },
-      ],
-    };
+    const fresh: User = { sources: new Map() };
     this.users.set(key, fresh);
     this.tenants.set(key, scope.tenantId);
     this.perTenant.set(scope.tenantId, (this.perTenant.get(scope.tenantId) ?? 0) + 1);
@@ -135,51 +109,17 @@ export class SourceYield {
     return this.user(scope, false)?.sources.get(sourceId)?.used === true;
   }
 
-  /**
-   * Whether the user's reads on this kind of evidence (0 nothing, 1 words) are not paying: after `POOL_WARMUP` such
-   * reads, the upper bound of the rate at which their sources went on to be used is under `floor`.
-   */
-  poolSpent(scope: Scope, kind: 0 | 1, floor: number, now: number): boolean {
-    const pool = this.user(scope, false)?.pools[kind];
-    if (!pool || floor <= 0) return false;
-    const reads = this.fade(pool.reads, pool.at, now);
-    if (reads < POOL_WARMUP) return false;
-    const wins = Math.min(reads, this.fade(pool.wins, pool.at, now));
-    return betaIncInv(CONFIDENCE, wins + 1, reads - wins + 1) < floor;
-  }
-
-  private bump(pool: Pool, reads: number, wins: number, now: number): void {
-    pool.reads = this.fade(pool.reads, pool.at, now) + reads;
-    pool.wins = this.fade(pool.wins, pool.at, now) + wins;
-    pool.at = now;
-    // Bounded memory: past `POOL_MAX` reads the pool is scaled back (its rate kept), so a pool that stops being
-    // read falls under its warm-up within a few half-lives however long it was fed.
-    if (pool.reads > POOL_MAX) {
-      pool.wins *= POOL_MAX / pool.reads;
-      pool.reads = POOL_MAX;
-    }
-  }
-
-  /**
-   * Live reads were sent to these sources (once a source a lookup, however many calls it took), each on the evidence
-   * the request had for it.
-   */
-  read(scope: Scope, sourceIds: Iterable<string>, now: number, evidence: (sourceId: string) => Evidence): void {
+  /** Live reads were sent to these sources (once a source a lookup, however many calls it took). */
+  read(scope: Scope, sourceIds: Iterable<string>, now: number): void {
     let u: User | undefined;
     for (const id of sourceIds) {
       u ??= this.user(scope, true)!;
       const run = u.sources.get(id);
-      const kind = evidence(id);
-      // The pools are about sources with nothing used yet (the ones they may skip): a read of a source that has
-      // earned its place says nothing about them.
-      const used = run?.used ?? false;
-      if (!used && kind !== 2) this.bump(u.pools[kind], 1, 0, now);
       u.sources.delete(id);
       u.sources.set(id, {
         empty: (run ? this.fade(run.empty, run.at, now) : 0) + 1,
         at: now,
-        used,
-        open: used || kind === 2 ? (run?.open ?? 0) : (run?.open ?? 0) | (1 << kind),
+        used: run?.used ?? false,
       });
       if (u.sources.size > MAX_SOURCES) u.sources.delete(u.sources.keys().next().value!);
     }
@@ -190,10 +130,8 @@ export class SourceYield {
     let u: User | undefined;
     for (const id of sourceIds) {
       u ??= this.user(scope, true)!;
-      const open = u.sources.get(id)?.open ?? 0;
-      for (const kind of [0, 1] as const) if (open & (1 << kind)) this.bump(u.pools[kind], 0, 1, now);
       u.sources.delete(id);
-      u.sources.set(id, { empty: 0, at: now, used: true, open: 0 });
+      u.sources.set(id, { empty: 0, at: now, used: true });
       if (u.sources.size > MAX_SOURCES) u.sources.delete(u.sources.keys().next().value!);
     }
   }

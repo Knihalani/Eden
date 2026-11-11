@@ -443,9 +443,6 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
-  /** `sourceYield`: the lookup's routing boost and its evidence test, for the reads its probes book later. */
-  boost?: ReadonlyMap<string, number> | undefined;
-  evidence?: (id: string) => Evidence;
 }
 
 /**
@@ -558,7 +555,10 @@ const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
 const ASK_BEHIND = "ask-behind:";
 /** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
 const SEARCHING = "searching";
-/** `sourceYield` (D505): a cut copy an ask did not search, its source's run of unused live reads being spent. */
+/**
+ * `sourceYield` (D505, D603): a cut copy an ask did not search: its source's run of unused live reads is spent, or
+ * nothing of the source has ever been used, and the request has no name or rare word for it.
+ */
 const UNSEARCHED = "unsearched";
 
 /** How the answer names a status that did not answer (`unreached`). */
@@ -775,6 +775,7 @@ export class ContextPartner {
             pushMaxStaleMs: c.syncPushMaxStaleMs,
             keepCut: c.syncKeepCut,
             sketch: c.routeSketch,
+            rareTerms: c.sourceYield && c.sourceYieldEarn && c.sourceYieldRare > 0,
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
@@ -4119,7 +4120,6 @@ export class ContextPartner {
     // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
     // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
     // cut copy with the rest (more reads, never fewer facts).
-    if (this.yields) cue.boost = boost;
     const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
@@ -4226,7 +4226,12 @@ export class ContextPartner {
     this.engageSources(
       s,
       cue,
-      ranked.filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0).map((r) => r.sourceId),
+      ranked
+        .filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0)
+        // `sourceYieldEngage` (D601): a source this request reads nothing live of has not earned a deep copy, a
+        // daily sweep or the card model either.
+        .filter((r) => !(this.config.sourceYieldEarn && this.config.sourceYieldEngage && spent?.has(r.sourceId)))
+        .map((r) => r.sourceId),
     );
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
     const found = local ? routed.filter((x) => !local.has(x.id)) : routed;
@@ -4418,9 +4423,9 @@ export class ContextPartner {
    * `sourceYield` (D505): the user's warm synced copies this request skips live reads of (no probe, no cut-copy
    * poll, no search behind; a lookup that waits for its poll still searches a spent cut copy): a source whose own run
    * of reads with nothing used has reached `sourceYieldRun` (never for a request that names an entity the source
-   * mentioned), or one with no item ever used while the user's reads on the request's kind of evidence for it are not
-   * paying (`SourceYield.poolSpent`). Only a warm copy: it answers from what is held, where a source with no copy
-   * would answer nothing. Null when the trial is off or no source is spent.
+   * mentioned), or, with `sourceYieldEarn` (D600, D603), one with no item ever used that the request has no strong
+   * evidence for. Only a warm copy: it answers from what is held, where a source with no copy would answer nothing.
+   * Null when the switch is off or no source is spent.
    */
   private spentSources(
     s: Session,
@@ -4428,14 +4433,11 @@ export class ContextPartner {
     all: readonly Source[],
     boost: ReadonlyMap<string, number> | undefined,
   ): Set<string> | null {
-    if (!this.yields || !this.sync || this.yields.size(s.scope) === 0) return null;
-    const now = this.now();
     const c = this.config;
+    // `sourceYieldEarn` (D600) acts from a user's first request: nothing has been read yet, and nothing has earned.
+    if (!this.yields || !this.sync || (!c.sourceYieldEarn && this.yields.size(s.scope) === 0)) return null;
+    const now = this.now();
     const evidence = this.evidenceFor(s, cue, boost);
-    const pooled = [
-      this.yields.poolSpent(s.scope, 0, c.sourceYieldFloor, now),
-      c.sourceYieldWords && this.yields.poolSpent(s.scope, 1, c.sourceYieldFloor, now),
-    ];
     let out: Set<string> | null = null;
     for (const x of all) {
       const kind = evidence(x.id);
@@ -4443,8 +4445,7 @@ export class ContextPartner {
       const limit = kind === 2 ? 0 : c.sourceYieldRun;
       // Half a read of slack: a run decays from the moment of its last read, so 4 reads read 3.999 a minute later.
       const spent =
-        (limit > 0 && run > limit - 0.5) ||
-        (kind < 2 && pooled[kind] === true && !this.yields.hasYielded(s.scope, x.id));
+        (limit > 0 && run > limit - 0.5) || (c.sourceYieldEarn && kind < 2 && !this.yields.hasYielded(s.scope, x.id));
       if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
     }
     return out;
@@ -4452,14 +4453,28 @@ export class ContextPartner {
 
   /**
    * `sourceYield` (D505): what the request has for a source: 2, it names an entity the source's items mentioned (the
-   * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing.
+   * source map); 1, its words are among the source's held items or in its sketch (`boost`); 0, nothing. With
+   * `sourceYieldEarn` (D600) a word of the request that few of the user's sources hold counts as a name (2), and
+   * with `sourceYieldNames` (D601) a name many of them mention counts only for a source with an item used.
    */
   private evidenceFor(s: Session, cue: Cue, boost: ReadonlyMap<string, number> | undefined): (id: string) => Evidence {
     let named: Set<string> | undefined;
     return (id) => {
       if (!named) {
         named = new Set();
-        for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
+        // `sourceYieldNames` (D601): a name more sources than that mention says little about any one of them; it
+        // stays evidence for a source that has had an item used (the user's own mailbox names most people).
+        const common = this.config.sourceYieldEarn ? this.config.sourceYieldNames : 0;
+        for (const e of cue.entities) {
+          const holders = this.deps.sourceMap.sourcesFor(s.scope, e);
+          const weak = common > 0 && holders.length > common;
+          for (const m of holders) if (!weak || this.yields?.hasYielded(s.scope, m.sourceId)) named.add(m.sourceId);
+        }
+        if (this.config.sourceYieldEarn && this.config.sourceYieldRare > 0 && this.sync) {
+          const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
+          const rare = this.sync.rareHolders(s.scope, terms.map(termHashes), this.config.sourceYieldRare);
+          for (const id of rare) named.add(id);
+        }
       }
       return named.has(id) ? 2 : (boost?.get(id) ?? 0) > 0 ? 1 : 0;
     };
@@ -4469,8 +4484,8 @@ export class ContextPartner {
    * `sourceYield` (D505): books a live read against each source that answered one, once a source a turn: the push,
    * its probes and an ask of the same turn often join one call. Only an answer counts ("ok": the connector was
    * called and replied): a failure, a timeout or a guard's refusal says nothing about what the source holds, and a
-   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its reads
-   * would fill the pools with reads the rule cannot act on.
+   * page from the fan-out's cache was no call. Only a warm copy's source: no other is ever skipped, so its run
+   * would count reads the rule cannot act on.
    */
   private noteLiveRead(s: Session, cue: Cue, outcomes: readonly FanoutOutcome[]): void {
     if (!this.yields || !this.sync || s.closed) return;
@@ -4483,8 +4498,7 @@ export class ContextPartner {
       fresh.push(o.sourceId);
     }
     if (fresh.length === 0) return;
-    const evidence = (cue.evidence ??= this.evidenceFor(s, cue, cue.boost));
-    this.yields.read(s.scope, fresh, this.now(), evidence);
+    this.yields.read(s.scope, fresh, this.now());
   }
 
   /**
@@ -6589,7 +6603,10 @@ function reachAnswer(
   if (reading.length > 0)
     notes.push(`Still reading ${some(reading)}: anything there that fits follows as a later packet`);
   if (skipped.length > 0) {
-    notes.push(`Not searched past what is held of ${some(skipped)}: nothing found there has been used lately`);
+    // True of both rules that skip a read (the source's run, and a source with nothing used yet, D603): neither
+    // skips a source the request names. The run rule can skip one the request's common words touch, so the line
+    // says "names", not "points there" (review of the D603 merge).
+    notes.push(`Not searched past what is held of ${some(skipped)}: nothing in the request names it`);
   }
   if (told === "Nothing in the connected sources.") {
     const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";

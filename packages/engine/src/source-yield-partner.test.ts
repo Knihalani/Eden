@@ -1,6 +1,8 @@
 /**
  * `sourceYield` at the partner (D505, N1; docs/research/n1-calls.md): a source whose live reads go unused is not
- * read live, an ask names it "unsearched", and a request with evidence for it reads it again.
+ * read live, an ask names it "unsearched", and a request with evidence for it reads it again. And the earn rule
+ * with its companions (D600, D601, D603; docs/research/o1-earn.md): a source with nothing used is read live only on
+ * a name or a rare word.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
@@ -9,6 +11,7 @@ import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/pro
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
+import { sketchTerms, termHashes } from "./sketch";
 import type { SourceYield } from "./source-yield";
 
 const HOUR = 3_600_000;
@@ -69,8 +72,15 @@ function world(sizes: number[]): { sources: Counting[]; fact: ContextItem } {
   return { sources, fact };
 }
 
-async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1], sizes = [10, 10, 10, 10]) {
+async function partnerOf(
+  config: Record<string, unknown>,
+  scopes: Scope[] = [u1],
+  sizes = [10, 10, 10, 10],
+  /** Changes the world before anything is synced. */
+  tweak: (sources: Counting[]) => void = () => {},
+) {
   const { sources, fact } = world(sizes);
+  tweak(sources);
   let clock = T0;
   const partner = new ContextPartner({
     sources: async () => sources,
@@ -90,8 +100,11 @@ async function partnerOf(config: Record<string, unknown>, scopes: Scope[] = [u1]
       syncMaxItems: 20,
       syncCallsPerMin: 6_000,
       probes: false,
-      // On in the default (D509): each test turns it on itself.
+      // On in the default (D509, D603): each test turns on what it tests.
       sourceYield: false,
+      sourceYieldEarn: false,
+      sourceYieldNames: 0,
+      sourceYieldEngage: false,
       ...config,
     },
   });
@@ -152,7 +165,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("a source whose run of unused reads is spent is not searched again; one whose item is used is", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 });
     const a = await p.request(u1, BLIND);
     const b = await p.request(u1, BLIND);
     expect(sum(a.searched)).toBeGreaterThan(0);
@@ -170,7 +183,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("a spent source is read again for a request that has evidence for it, and a use ends its run", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 });
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
     expect(sum((await p.request(u1, BLIND)).searched)).toBe(0);
     // The request's words are in source 0's sketch (its fact is past the cut): evidence, so it is searched.
@@ -184,7 +197,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("runs are per user: another user's sources are still searched; forget drops a source's run or the user's", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 }, [u1, u2]);
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 }, [u1, u2]);
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
     expect(sum((await p.request(u1, BLIND)).searched)).toBe(0);
     expect(sum((await p.request(u2, BLIND)).searched)).toBeGreaterThan(0);
@@ -201,7 +214,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("with the probes on, a spent source gets no probe either", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0, probes: true });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, probes: true });
     const first = await p.request(u1, "Ask Zed Quinn about the offsite catering");
     expect(sum(first.searched)).toBeGreaterThan(0);
     for (let i = 0; i < 6; i++) await p.request(u1, BLIND);
@@ -209,7 +222,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("an outage is not a run of unused reads: a source that failed is searched again when it is back", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 2 });
     for (const s of p.sources) s.down = true;
     for (let i = 0; i < 6; i++) expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
     for (const s of p.sources) s.down = false;
@@ -217,7 +230,7 @@ describe("sourceYield (D505)", () => {
   });
 
   test("one request books one read of a source, however many lookups joined its call", async () => {
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0 });
+    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99 });
     const r = await p.request(u1, BLIND);
     const yields = (p.partner as unknown as { yields: SourceYield }).yields;
     for (const [k, s] of p.sources.entries()) {
@@ -227,11 +240,11 @@ describe("sourceYield (D505)", () => {
 
   test("a whole copy keeps its poll: an ask never calls a spent whole copy failed or still being read", async () => {
     // Source 3 has two items: its copy is whole, the others are cut.
-    const cfg = { sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0.05, sourceYieldHalfLifeMs: 1e15 };
+    const cfg = { sourceYield: true, sourceYieldRun: 99, sourceYieldEarn: true };
     const p = await partnerOf(cfg, [u1], [10, 10, 10, 2]);
     expect(p.partner.sync!.complete(u1, "src3")).toBe(true);
-    let last = await p.request(u1, BLIND);
-    for (let i = 0; i < 60; i++) last = await p.request(u1, BLIND);
+    // Nothing of any source has been used: every copy is spent for a request with no evidence.
+    const last = await p.request(u1, BLIND);
     expect(sum(last.searched)).toBe(0);
     // Days on, every copy is stale.
     p.advance(3 * 24 * HOUR);
@@ -245,17 +258,141 @@ describe("sourceYield (D505)", () => {
     expect(asked.answer.answer).not.toContain("Could not reach");
     expect(asked.answer.sources?.some((x) => x.status === "error")).toBe(false);
   });
+});
 
-  test("the pooled rule: once the user's reads on no evidence do not pay, unused sources are not read on none", async () => {
-    // The run alone would never skip (99); the pool does after its warm-up.
-    const p = await partnerOf({ sourceYield: true, sourceYieldRun: 99, sourceYieldFloor: 0.05 });
-    let last = await p.request(u1, BLIND);
-    expect(sum(last.searched)).toBeGreaterThan(0);
-    for (let i = 0; i < 30; i++) last = await p.request(u1, BLIND);
-    expect(sum(last.searched)).toBe(0);
-    // Evidence still gets its read, and the fact still arrives.
-    const named = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
+describe("sourceYieldEarn (D600, D603)", () => {
+  const EARN = { sourceYield: true, sourceYieldEarn: true };
+  const FACT = "Pay Zed Quinn for the Globex renewal today";
+
+  test("a new user's source with nothing used is not read live on no evidence, from the first request", async () => {
+    const p = await partnerOf(EARN);
+    const first = await p.request(u1, BLIND);
+    expect(sum(first.searched)).toBe(0);
+    // The ask names what it did not search, and is not an all-clear (D127).
+    const asked = await p.ask(first.ref, "Is the offsite catering arranged?");
+    expect(sum(asked.searched)).toBe(0);
+    expect(asked.answer.answer).toContain("Not searched past what is held of");
+    // The reason given is true of a user nothing was ever read for (not "used lately": the review of D603).
+    expect(asked.answer.answer).toContain("nothing in the request names it");
+    expect(asked.answer.answer).toContain("not an all-clear");
+  });
+
+  test("a word only one source's sketch holds is read there, and a use earns the source its reads", async () => {
+    const p = await partnerOf(EARN);
+    const named = await p.request(u1, FACT);
     expect(named.searched[0]).toBeGreaterThan(0);
+    expect(sum(named.searched.slice(1))).toBe(0);
     expect(named.handed).toContain(p.fact.id);
+    // Source 0 has had an item used: it is read on no evidence now, the others still are not.
+    const after = await p.request(u1, BLIND);
+    expect(after.searched[0]).toBeGreaterThan(0);
+    expect(sum(after.searched.slice(1))).toBe(0);
+  });
+
+  test("the rare word alone, no name in the request: read with sourceYieldRare, not with it at 0", async () => {
+    // No capitalised name, so the source map gives nothing: only source 0's sketch holds "renewal" and "payment".
+    const RARE = "please check the renewal payment status";
+    const on = await partnerOf(EARN);
+    expect((await on.request(u1, RARE)).searched).toEqual([1, 0, 0, 0]);
+    const off = await partnerOf({ ...EARN, sourceYieldRare: 0 });
+    expect(sum((await off.request(u1, RARE)).searched)).toBe(0);
+    // The table does not need the routing sketch ("default minus routing" keeps the rare word, the review of D603).
+    const unsketched = await partnerOf({ ...EARN, routeSketch: false });
+    expect((await unsketched.request(u1, RARE)).searched).toEqual([1, 0, 0, 0]);
+  });
+
+  test("a word most sources hold is weak evidence: nothing is read for it", async () => {
+    const p = await partnerOf(EARN);
+    // "filler" and "words" are in every source's items.
+    expect(sum((await p.request(u1, "Tidy the filler words in the report")).searched)).toBe(0);
+  });
+
+  test("what a source earned is per user", async () => {
+    const p = await partnerOf(EARN, [u1, u2]);
+    await p.request(u1, FACT);
+    expect((await p.request(u1, BLIND)).searched[0]).toBeGreaterThan(0);
+    expect(sum((await p.request(u2, BLIND)).searched)).toBe(0);
+  });
+
+  test("the table of rare words is per user, saved only with the rule on, and survives a restore", async () => {
+    const word = sketchTerms("globex").map(termHashes);
+    const p = await partnerOf(EARN, [u1, u2]);
+    const sync = p.partner.sync!;
+    expect([...sync.rareHolders(u1, word, 2)]).toEqual(["src0"]);
+    expect([...sync.rareHolders(u2, word, 2)]).toEqual(["src0"]);
+    const snap = JSON.parse(JSON.stringify(sync.snapshot(u1)));
+    expect(snap.rare).toBeDefined();
+    p.partner.forget(u1);
+    expect(sync.rareHolders(u1, word, 2).size).toBe(0);
+    expect([...sync.rareHolders(u2, word, 2)]).toEqual(["src0"]);
+    expect(sync.restore(u1, snap)).toBe(true);
+    expect([...sync.rareHolders(u1, word, 2)]).toEqual(["src0"]);
+    // A source the user drops is no longer named; a saved table that is not one restores as none.
+    p.partner.forget(u2, "src0");
+    expect(sync.rareHolders(u2, word, 2).size).toBe(0);
+    p.partner.forget(u1);
+    expect(sync.restore(u1, { ...snap, rare: { ids: [1], segments: "x" } })).toBe(true);
+    expect(sync.rareHolders(u1, word, 2).size).toBe(0);
+    // With the rule off there is no table and none is saved.
+    const off = await partnerOf({ sourceYield: true });
+    expect(off.partner.sync!.rareHolders(u1, word, 2).size).toBe(0);
+    expect("rare" in (off.partner.sync!.snapshot(u1) as object)).toBe(false);
+  });
+
+  test("off: a new user's first request on no evidence is read live", async () => {
+    const p = await partnerOf({ sourceYield: true });
+    expect(sum((await p.request(u1, BLIND)).searched)).toBeGreaterThan(0);
+  });
+});
+
+describe("sourceYieldNames, sourceYieldEngage (D601, D603)", () => {
+  const EARN = { sourceYield: true, sourceYieldEarn: true };
+  /**
+   * Sources 1 to 3 each listed an old item naming Dana Reyes, past the cut: the source map has her in three sources
+   * and no held item names her (one that did would be handed over, and its source would have had an item used).
+   */
+  const dana = (sources: Counting[]) => {
+    for (const s of sources.slice(1)) s.items.at(-1)!.text = "Dana Reyes left a comment on the rollout plan";
+  };
+  const NAMED = "Please email Dana Reyes about lunch";
+
+  test("a name more sources mention than sourceYieldNames is weak evidence for a source with nothing used", async () => {
+    const off = await partnerOf(EARN, [u1], [10, 10, 10, 10], dana);
+    expect(sum((await off.request(u1, NAMED)).searched.slice(1))).toBeGreaterThan(0);
+    const on = await partnerOf({ ...EARN, sourceYieldNames: 2 }, [u1], [10, 10, 10, 10], dana);
+    expect(sum((await on.request(u1, NAMED)).searched)).toBe(0);
+    // Within the bound the name is still strong evidence.
+    const wide = await partnerOf({ ...EARN, sourceYieldNames: 3 }, [u1], [10, 10, 10, 10], dana);
+    expect(sum((await wide.request(u1, NAMED)).searched.slice(1))).toBeGreaterThan(0);
+  });
+
+  test("a common name still reads a source that has had an item used", async () => {
+    const p = await partnerOf({ ...EARN, sourceYieldNames: 2 }, [u1], [10, 10, 10, 10], (sources) => {
+      dana(sources);
+      // Source 0's fact, past the cut, names her too.
+      sources[0]!.items.at(-1)!.text += " (Dana Reyes has the details)";
+    });
+    const fact = await p.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    expect(fact.handed).toContain(p.fact.id);
+    const named = await p.request(u1, NAMED);
+    expect(named.searched[0]).toBeGreaterThan(0);
+    expect(sum(named.searched.slice(1))).toBe(0);
+  });
+
+  test("a source the request reads nothing live of is not marked used by it", async () => {
+    const off = await partnerOf({ ...EARN, sourceYieldNames: 2 }, [u1], [10, 10, 10, 10], dana);
+    await off.request(u1, NAMED);
+    expect(off.partner.sync!.engaged(u1, "src1")).toBe(true);
+    const on = await partnerOf({ ...EARN, sourceYieldNames: 2, sourceYieldEngage: true }, [u1], [10, 10, 10, 10], dana);
+    await on.request(u1, NAMED);
+    expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
+    // A source it does read is used as before.
+    await on.request(u1, "Pay Zed Quinn for the Globex renewal today");
+    expect(on.partner.sync!.engaged(u1, "src0")).toBe(true);
+    // It is part of the earn rule: with that off, the switch alone changes nothing.
+    const alone = await partnerOf({ sourceYield: true, sourceYieldEngage: true }, [u1], [10, 10, 10, 10], dana);
+    await alone.request(u1, NAMED);
+    expect(alone.partner.sync!.engaged(u1, "src1")).toBe(true);
+    expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
   });
 });

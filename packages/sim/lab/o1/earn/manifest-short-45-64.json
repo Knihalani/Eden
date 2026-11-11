@@ -1,0 +1,169 @@
+{
+  "shards": [
+    {
+      "name": "s000-train-45",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.127033,
+      "capUsd": 0.18,
+      "seconds": 171.6
+    },
+    {
+      "name": "s001-train-46",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.127492,
+      "capUsd": 0.18,
+      "seconds": 192.9
+    },
+    {
+      "name": "s002-train-47",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.130271,
+      "capUsd": 0.18,
+      "seconds": 181.5
+    },
+    {
+      "name": "s003-train-48",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.135807,
+      "capUsd": 0.18,
+      "seconds": 192.0
+    },
+    {
+      "name": "s004-train-49",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.129404,
+      "capUsd": 0.18,
+      "seconds": 175.5
+    },
+    {
+      "name": "s005-train-50",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.128513,
+      "capUsd": 0.18,
+      "seconds": 181.5
+    },
+    {
+      "name": "s006-train-51",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.131862,
+      "capUsd": 0.18,
+      "seconds": 178.6
+    },
+    {
+      "name": "s007-train-52",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.134404,
+      "capUsd": 0.18,
+      "seconds": 180.5
+    },
+    {
+      "name": "s008-train-53",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.134255,
+      "capUsd": 0.18,
+      "seconds": 181.5
+    },
+    {
+      "name": "s009-train-54",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.122678,
+      "capUsd": 0.18,
+      "seconds": 187.7
+    },
+    {
+      "name": "s010-train-55",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.136724,
+      "capUsd": 0.18,
+      "seconds": 174.6
+    },
+    {
+      "name": "s011-train-56",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.129227,
+      "capUsd": 0.18,
+      "seconds": 186.8
+    },
+    {
+      "name": "s012-train-57",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.129254,
+      "capUsd": 0.18,
+      "seconds": 176.9
+    },
+    {
+      "name": "s013-train-58",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.132656,
+      "capUsd": 0.18,
+      "seconds": 179.5
+    },
+    {
+      "name": "s014-train-59",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.135257,
+      "capUsd": 0.18,
+      "seconds": 176.9
+    },
+    {
+      "name": "s015-train-60",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.122729,
+      "capUsd": 0.18,
+      "seconds": 186.5
+    },
+    {
+      "name": "s016-train-61",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.133,
+      "capUsd": 0.18,
+      "seconds": 180.7
+    },
+    {
+      "name": "s017-train-62",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.12945,
+      "capUsd": 0.18,
+      "seconds": 184.0
+    },
+    {
+      "name": "s018-train-63",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.127986,
+      "capUsd": 0.18,
+      "seconds": 178.1
+    },
+    {
+      "name": "s019-train-64",
+      "kind": "pi-ab",
+      "code": 0,
+      "spentUsd": 0.129963,
+      "capUsd": 0.18,
+      "seconds": 179.7
+    }
+  ],
+  "spentUsd": 2.607965,
+  "capUsd": 3.6,
+  "failed": [],
+  "overCap": [],
+  "withinCap": true
+}

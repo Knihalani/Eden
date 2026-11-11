@@ -97,8 +97,8 @@ export interface AskResponse {
    * index), or, not answered: "error", "timeout", "open" (circuit open), "busy", "limited" (Eden's own rate limit
    * skipped the call), "throttled" (the connector answered 429, D212), "searching" (its poll or live search was
    * still running when the ask answered; what it finds that fits follows as a later packet, D430) or "unsearched"
-   * (the engine's `sourceYield` trial, D505: a copy the user's item cap cut was answered from what is held and not
-   * searched live, nothing from the source having been used before). A source the
+   * (the engine's `sourceYield`, D505, D603: a copy the user's item cap cut was answered from what is held and not
+   * searched live, the request having no name or rare word that points to the source). A source the
    * router did not choose is not listed. An empty answer is an all-clear only when every listed source answered;
    * otherwise the answer text names the sources that did not (the text carries it too, since an MCP caller sees only
    * the text).

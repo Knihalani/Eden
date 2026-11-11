@@ -237,6 +237,9 @@ describe("routeLocalHits (D265)", () => {
         syncStaleChance: 0.99,
         syncMaxStaleMs: 24 * HOUR,
         syncLocalComplete: true,
+        // The routing order is what is tested: with the earn rule (D603) a new user's cut copy is not searched on
+        // the request's common words at all.
+        sourceYieldEarn: false,
         ...config,
       });
       await warm(partner);

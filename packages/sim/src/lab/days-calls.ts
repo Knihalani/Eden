@@ -9,7 +9,7 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE]
+ *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
@@ -49,6 +49,8 @@ export interface DaysCallsOptions {
   notifyShare?: number | null;
   /** `--noise-sources N` (N1): N unrelated connectors beside the world's five (`noise-sources.ts`), 20 items each. */
   noiseSources?: number;
+  /** `--noise-vocab N` (O1): words of its own for each noise connector (`noiseSources`). */
+  noiseVocab?: number;
   /**
    * `--pool-diag FILE` (O3, D712): one row per hidden or control request saying where its planted item was in the
    * push's pool (`onPushPool`): ids and flags only.
@@ -141,7 +143,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
   if (o.push !== "none") for (const s of own) s.notifies = true;
-  const sources = [...own, ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed) : [])];
+  const sources = [
+    ...own,
+    ...(o.noiseSources ? noiseSources(world, o.noiseSources, 20, 0, seed, o.noiseVocab ?? 0) : []),
+  ];
   applyNotifyShare(sources, o.notifyShare ?? null, seed);
   const counts: Counts = {};
   const fetched = new Map<string, number>();
@@ -350,15 +355,18 @@ if (import.meta.main) {
   const recap = opt("recap-notice", "push");
   if (recap !== "push" && recap !== "signal") throw new Error("--recap-notice must be push or signal");
   const cardsFile = opt("cards", "");
+  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
+  const intentFiles = opt("intent", INTENT_PATH).split(",");
   const o: DaysCallsOptions = {
     days: Number(opt("days", "8")),
     push,
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",
-    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: [INTENT_PATH] }) : null,
+    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
+    noiseVocab: Number(opt("noise-vocab", "0")),
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
