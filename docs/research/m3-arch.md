@@ -337,3 +337,16 @@ on), all of: **facts @5 ≥ 135 of 157** (shipped 123), **decoys @5 ≤ 42** (sh
 TypeScript forward, **≤ 4 MB of shared model**, no embeddings, and its silence head **loses at most 5** of the hidden
 requests on which the shipped pool speaks. A variant that clears it on the screen goes straight to wiring and a Pi pair
 against main e4f3649a.
+
+**Amendments to §7f, before any of their results** (both found while wiring):
+
+- **Rule 2 (ingest tag) is a veto, not an OR.** As written ("the tag bit joins `constraintLike`… a pooled item is
+  tag-positive or card-positive") it could only add packets, against its own goal of fewer. The trial is
+  `constraintTag` (a threshold; 0 off): a pooled item counts as constraint-like only when it passes the existing test
+  **and** the tagger's constraint probability is at least the threshold. The rule's numbers stand (packets on control
+  and neutral down ≥ 20%, hidden surfaced not down > 1%, funnel train against e4f3649a; the train5–6 rows, which the
+  tagger never trained on, reported apart).
+- **Rule 1 (supersession) cannot be read on `synth-val` as it stands.** In all 297 of M2 v2 val's silent-change
+  tasks the older version is the task's decoy, and the synth suite plants the fact *or* the decoy, never both: no
+  request ever meets a stale version beside its replacement. Reading the rule needs a variant that plants both (the
+  older version as background beside the fact); raised with the parent before building it.
