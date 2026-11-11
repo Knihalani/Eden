@@ -1,6 +1,6 @@
 # O3: naming what was handed earlier (`pushPointer`)
 
-Status: 2026-11-11, branch `claude/o3-k-behind`, session O3. Decisions D708–D711. **Result (§3): `pushPointer`
+Status: 2026-11-11, branch `claude/o3-k-behind`, session O3. Decisions D708–D712. **Result (§3): `pushPointer`
 failed its rule and is deleted; `pushOpen` passed over days and is in the default.** Train suites only; heldout18 is not
 dumped, labelled or run. Paid calls go to Anthropic directly with `HAIKU_API_KEY` through the lab (D97):
 **Anthropic-direct lab figures**. Numbers marked **[EST]** are arithmetic or judgement; every other number comes from
@@ -92,9 +92,29 @@ worst-case reservation did not fit under the ledger's cap), none unreadable. The
   | `eden~P` | 189 (163) | 189 (64) | 161 (53) | 55 (0) |
   | `eden~OP` | 196 (175) | 193 (77) | 191 (77) | 44 (0) |
 
-  Facts handed only earlier are still raised in about a third of tasks in every arm (35%, 37%, 34%, 40%): naming them
-  again did not move that. The timelines do not record which packets carried a pointer or how many, so the two
-  counts §2 listed (tasks where the pointer named the fact; pointers a task by kind) are **not reported**.
+  The timelines do not record which packets carried a pointer or how many, so the two counts §2 listed (tasks
+  where the pointer named the fact; pointers a task by kind) are **not reported**.
+
+### 3.1 "Earlier only" was two groups (a correction to §0 and D707's reading)
+
+The agent's transcript resets each day (`pi-ab --days`), and so does Eden's session and its not-twice ledger. Split
+by whether the earlier handing was the same day (the plan's day sizes give each request's day):
+
+| arm | handed at its own request | handed earlier the same day only | not in that day's transcript at all |
+|---|---|---|---|
+| `eden` | 189 (166 raised, 88%) | 110 (66, 60%) | 134 (0) |
+| `eden~O` | 197 (170) | 115 (71, 62%) | 121 (0) |
+| `eden~P` | 189 (163) | 108 (63, 58%) | 136 (1) |
+| `eden~OP` | 196 (175) | 119 (77, 65%) | 118 (0) |
+
+So of the default's 190 "earlier only" tasks, 80 had the fact handed on another day only: the agent no longer held
+it and Eden did not hand it at its own request, the same miss as "never" (54). A fact handed earlier the same day is
+raised 60% of the time, not a third. The pointer could only reach that same-day group (it reads the session's
+ledger) and did not move it (58% against 60%). **The larger gap over days is the 134 of 433 hidden tasks (31%) where
+the fact is not among the request's candidates at all**: in 67 of the 80 other-day tasks a candidates packet of
+other items went. A user's world holds every template's constraint and decoy at once, and the request's five
+candidates fill with other requests' constraints. That is a ranking question a $0 screen can study; no model call
+found it here.
 
 ```bash
 .local/o3/days4.sh d4 41 … 72      # pi.sh per user: --days 8, arms eden,eden~O,eden~P,eden~OP, --budget 1.0
