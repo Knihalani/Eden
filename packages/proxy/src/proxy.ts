@@ -26,6 +26,19 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, withContext } from "@eden/client";
 import { keylessOriginAllowed, MAX_TEXT_CHARS, type Injection } from "@eden/protocol";
+import {
+  ASK_LOOP_MS,
+  MAX_ASK_ROUNDS,
+  MAX_ASKS_PER_ROUND,
+  NO_CONTEXT,
+  conversationOf,
+  readRound,
+  withAskTool,
+  type AskRouteName,
+} from "./ask";
+import { withMessages } from "./with-messages";
+
+export { withMessages };
 
 export interface ProxyOptions {
   /** The model's OpenAI-compatible base URL, with its version path (`https://api.openai.com/v1`). */
@@ -63,6 +76,12 @@ export interface ProxyOptions {
    * conversations at most (`maxSessions` lowers it).
    */
   maxKeptBytes?: number;
+  /**
+   * Trial (D851; owner P5, ends 2026-12-10): add Eden's `ask_context` to each request's tools and answer the model's
+   * calls to it in the proxy (`ask.ts`), so a proxy user gets the tool D70 measured at +11.9 points on the SDK. Off by
+   * default until a Pi run through the proxy is read; `EDEN_PROXY_ASK=1`. Never in shadow mode.
+   */
+  askTool?: boolean;
   /** In shadow mode, per request Eden would have changed: the user, session and the packets' item ids (no text). */
   onShadow?: (record: { userId: string; sessionId: string; packets: number; itemIds: string[] }) => void;
   fetch?: typeof fetch;
@@ -232,6 +251,8 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
   const maxSessions = options.maxSessions ?? 10_000;
   const keepPackets = options.keepPackets ?? true;
   const conversations = new Map<string, Conversation>();
+  /** The client `withEden` made for a request whose user it identified, for the ask rounds (`askTool`). */
+  const clients = new WeakMap<Request, EdenClient>();
   let warnedNoUser = false;
   const report = (e: unknown) => {
     try {
@@ -366,6 +387,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       ...(options.shadow ? { shadow: true } : {}),
       ...(options.waitMs !== undefined ? { defaultWaitMs: options.waitMs } : {}),
     });
+    clients.set(req, eden);
     const keep = (got: Injection[]) => {
       // A newer turn started meanwhile (a concurrent request): this turn's packets are not carried into it.
       if (conv.turn !== turn) return;
@@ -418,6 +440,71 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       return keptInPlace(conv, messages as Message[], packets, turn, options.maxKeptBytes ?? MAX_KEPT_BYTES);
     }
     return withContext(messages as { role: string; content: unknown }[], packets);
+  };
+
+  /**
+   * `askTool` (D851): the request with `ask_context` added goes upstream; each answer that calls it is answered here
+   * from Eden and the model called again with the round appended. The first answer that does not ask goes to the agent
+   * byte for byte. Anything else falls back to the request as the agent sent it (`original`, no tool), so the agent
+   * gets what it would have had with the trial off: an upstream error on a later round (the rewrite may be what the
+   * provider refused), a round that cannot be read or rewritten, and an answer that still asks after
+   * `MAX_ASK_ROUNDS` rounds. The agent is never handed a call to a tool it does not know (D14).
+   */
+  const askRounds = async (
+    req: Request,
+    path: string,
+    raw: string,
+    original: string,
+    route: AskRouteName,
+    eden: EdenClient,
+  ): Promise<Response> => {
+    const deadline = Date.now() + ASK_LOOP_MS;
+    const fallback = (why: string) => {
+      // The reason only (a round number, a status): never the request or an answer.
+      report(new Error(`eden proxy: ask_context ${why}; the request went upstream without the tool`));
+      return forward(req, path, original);
+    };
+    let current = raw;
+    for (let round = 0; ; round++) {
+      const res = await forward(req, path, current);
+      if (!res.ok) {
+        // Round 0 is the agent's request with the tool added, so a refusal of its shape may be the trial's doing (a
+        // model with no tool support): the agent's own request goes instead. An auth, rate or server error is the
+        // upstream's answer to any request and goes to the agent as it came.
+        const own = round === 0 && (res.status >= 500 || [401, 403, 429].includes(res.status));
+        return own ? res : fallback(`round ${round} answered ${res.status}`);
+      }
+      const streamed = (res.headers.get("content-type") ?? "").includes("text/event-stream");
+      let bytes: ArrayBuffer;
+      try {
+        bytes = await res.arrayBuffer();
+      } catch {
+        // The answer broke off mid-read (a reset): the agent's own request instead (a caller gone aborts it: 499).
+        return fallback(`round ${round} could not be read`);
+      }
+      const asked = readRound(route, new TextDecoder().decode(bytes), streamed);
+      if (!asked) return new Response(bytes, { status: res.status, statusText: res.statusText, headers: res.headers });
+      if (round === MAX_ASK_ROUNDS) return fallback(`still asking after ${MAX_ASK_ROUNDS} rounds`);
+      try {
+        // At most `MAX_ASKS_PER_ROUND` asks a round and one deadline for all of them; none once the caller has gone.
+        const answers = await Promise.all(
+          asked.asks.map(async (a, i) => {
+            if (i >= MAX_ASKS_PER_ROUND) return NO_CONTEXT;
+            if (!a.question) return "ask_context needs a question.";
+            const left = deadline - Date.now();
+            if (left <= 0 || req.signal.aborted) return NO_CONTEXT;
+            return (await eden.ask(a.question, { timeoutMs: left }))?.answer ?? NO_CONTEXT;
+          }),
+        );
+        const conv = conversationOf(route, JSON.parse(current) as Record<string, unknown>);
+        const next = withMessages(current, [...conv.items, ...asked.append(answers)], conv.key);
+        if (next === null) return fallback(`round ${round} could not be rewritten`);
+        current = next;
+      } catch (e) {
+        report(e);
+        return fallback(`round ${round} failed`);
+      }
+    }
   };
 
   const openAiError = (status: number, message: string) => Response.json({ error: { message } }, { status });
@@ -517,7 +604,26 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     }
     // The agent hung up during Eden's wait: nobody reads the answer, so the model is not called (audit A11).
     if (req.signal.aborted) return fail(499, "eden proxy: the caller closed the request");
+    // `askTool` (D851): only for a request whose user was identified, and never in shadow mode (nothing changes).
+    const eden = options.askTool && !options.shadow ? clients.get(req) : undefined;
+    const route: AskRouteName = anthropic ? "anthropic" : responses ? "responses" : "chat";
+    let asking: string | null = null;
+    // Not on a Responses request whose history the provider holds or does not store (`previous_response_id`,
+    // `conversation`, `store: false`): a round would have to chain response ids, and re-sent items are refused there
+    // (the review of D851). Such a request goes as it would without the trial.
+    const held =
+      responses &&
+      ["previous_response_id", "conversation"].some((k) => (body as Record<string, unknown> | null)?.[k] != null);
+    const unstored = responses && (body as Record<string, unknown> | null)?.store === false;
+    if (eden && !held && !unstored && body && typeof body === "object" && !Array.isArray(body)) {
+      try {
+        asking = withAskTool(sent, body as Record<string, unknown>, route);
+      } catch (e) {
+        report(e);
+      }
+    }
     try {
+      if (eden && asking !== null) return await askRounds(req, path, asking, sent, route, eden);
       return await forward(req, path, sent);
     } catch (e) {
       if (req.signal.aborted) return fail(499, "eden proxy: the caller closed the request");
@@ -766,65 +872,4 @@ function keptInPlace(
     out.push(m);
   }
   return inserted ? out : null;
-}
-
-/**
- * `raw` (a JSON object's text) with its top-level `messages` value replaced (or `key`'s: the Responses route's
- * `input`), every other byte as it came: parsing and
- * re-serialising the whole body changed fields the proxy never touches (an integer past 2^53, such as a 64-bit
- * `seed`, lost its digits; audit A5). The last `messages` key wins, as in `JSON.parse`. Null when there is none.
- */
-export function withMessages(raw: string, messages: unknown, key = "messages"): string | null {
-  const quoted = JSON.stringify(key);
-  let depth = 0;
-  let at: [number, number] | null = null;
-  let i = 0;
-  const skipString = (k: number): number => {
-    for (k++; k < raw.length; k++) {
-      if (raw[k] === "\\") k++;
-      else if (raw[k] === '"') return k + 1;
-    }
-    return k;
-  };
-  while (i < raw.length) {
-    const c = raw[i]!;
-    if (c === '"') {
-      const end = skipString(i);
-      if (depth === 1 && raw.slice(i, end) === quoted) {
-        let k = end;
-        while (/\s/.test(raw[k] ?? "")) k++;
-        if (raw[k] === ":") {
-          k++;
-          while (/\s/.test(raw[k] ?? "")) k++;
-          const start = k;
-          // The value: a string, or a run up to the next comma or brace at this depth.
-          let d = 0;
-          while (k < raw.length) {
-            const v = raw[k]!;
-            if (v === '"') {
-              k = skipString(k);
-              continue;
-            }
-            if (v === "[" || v === "{") d++;
-            else if (v === "]" || v === "}") {
-              if (d === 0) break;
-              d--;
-            } else if (v === "," && d === 0) break;
-            k++;
-          }
-          let stop = k;
-          while (stop > start && /\s/.test(raw[stop - 1]!)) stop--;
-          at = [start, stop];
-          i = k;
-          continue;
-        }
-      }
-      i = end;
-      continue;
-    }
-    if (c === "{" || c === "[") depth++;
-    else if (c === "}" || c === "]") depth--;
-    i++;
-  }
-  return at ? raw.slice(0, at[0]) + JSON.stringify(messages) + raw.slice(at[1]) : null;
 }

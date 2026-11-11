@@ -79,6 +79,8 @@ void new EdenClient({
   ...(process.env.EDEN_API_KEY ? { apiKey: process.env.EDEN_API_KEY } : {}),
   userId: "proxy-startup",
   sessionId: "probe",
+  // The probe's error is printed below with the proxy's own wording; the client's default would print it twice.
+  onError: null,
 })
   // Seconds, not the client's 800 ms: a server still warming up (its gate, a router's children) is not "unusable".
   .health({ timeoutMs: 5_000 })
