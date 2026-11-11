@@ -244,3 +244,24 @@ On the branch after merging origin/main: `CHECK_COLD=1 bun run check` passed (fo
 of 11 facts handed, 3 of 10 look-alikes; `bun run funnel` hidden 281/384, decoys 264/384: main's numbers, as the
 engine, server and client are byte-identical to main (the trial's code is deleted). No `reviewer` run: the branch
 leaves no engine, server or privacy change (CLAUDE.md's rule).
+
+## 7. The owner's decision (D1014) and the promotion's checks
+
+The owner accepts the failed clauses (language parity, the strict English clause, the fixtures) as not blocking and
+asks for the gate in the default, with facts as the remaining guard.
+
+**Funnel facts at shipped coverage** (round-3 model, union, veto 0.25; seeds 41–44, `-- --neutral`;
+`packages/sim/lab/m13/fpair.py`): hidden facts handed by the push train 525 → 521 (−0.8%, inside the owner's −1%;
+two templates' rule starts vetoed, `audit-iam-snapshot-hold`, `dpia-before-pilot`), P7's reworded train 431 → **465**,
+P2's train-rw 580 → **588**; surfaced unchanged on all three (575, 536, 629); look-alikes handed 482 → 482, 400 → 426,
+503 → 511; neutral tasks given a packet 746 → 751, 668 → 707, 740 → 748 of 768 (neutral tasks share the hidden
+requests' text, so a start gained there is a neutral packet too; the push check silences those live). The veto is
+not tuned: facts are level.
+
+**Pi pair, pre-registered (this commit, before any call):** `packages/sim/lab/m13/pi.sh` (P3's recipe: Haiku 5.5 as
+agent, grader, card and reader model, cards replayed, `--tenant-prompt`, payload notices, the `direct` profile),
+arms `eden` and `eden~G` (`pushGate` on), `--variants hidden,control,neutral`, seed 41 on `train` and on
+`reworded`, then seed 42 on both if the ledger allows; one ledger, hard cap $8. Promote if hidden facts raised
+(Haiku grade) have a template-clustered 95% lower bound above −1.5 points (gate − default, both suites pooled) and
+control and neutral concerns are not up (Sonnet regrade of the concerns if the Haiku counts differ). Neutral packets
+and false starts reported.
