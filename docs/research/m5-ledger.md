@@ -31,3 +31,14 @@ exact-anchor miss (the request must name one of the record's specific anchors as
 - **Go** if held-out facts @5 rise by at least **+8 points** over the shipped pool with decoys @5 rising by no larger
   ratio than facts, at an extraction cost of at most about **$0.01 per user per day**; then a trial switch and a Pi
   pair the same day. **Otherwise stop**: the note says what was reached, and nothing is wired.
+
+## 2. Frozen before the held-out read
+
+Prompt v1 (`LEDGER_VERSION` 1 in `m5-ledger.ts`), matcher defaults of `m5_match.py` at this commit: a record matches
+at score ≥ 2 (a person's name token 2, an organisation 2.5 or its rarest token 2, a reference 4, each plain thing the
+request says 2; anchors in more than 5% of the user's records, the user's own name, do not count); `clears` records
+other than kind `done`, and `blocks` records a later `clears` shares a specific anchor and a thing with, never match;
+a dated record whose days miss every day the request names is rejected; the first two matches go before the shipped
+pool. Fit split (train1–4 days requests): facts @5 186 → 205 of 276, decoys @5 211 → 211 of 285. Prompt v2 (roles,
+up to 8 broader request words in `things`; $1.72 for the days corpora) was worse on the fit split (best 186 → 196,
+decoys 211 → 220): broader words bring the twins back (D526's failure), and it was rejected before any held-out read.
