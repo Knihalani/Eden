@@ -284,3 +284,23 @@ them when the request depends on them." and Eden's compaction. The item ids hand
   (b), two processes at a time; hidden answers and concerns regraded by Sonnet. Cost [EST] about $1.
 - **Read and rule:** as (b), with `eden` taken from (b)'s runs and paired task by task (the same seeds, plans and
   worlds). (b2) replaces (b)'s `hits` figures in D831 whichever way it reads; (b)'s are kept in §6 as run.
+
+## 8. Results: (c) the pointer on today's default — rejected and deleted (D832)
+
+32 fresh users (w73–w104), `pi-ab --days 8`, Haiku 5.5 as the agent, arms `eden` and `eden~P`, 4,031 task runs an arm
+(413 hidden, 413 control, 3,205 neutral), no run stopped on its budget, Sonnet regraded every hidden answer and
+concern ($0.46). Readouts `c-days-hidden.txt`, `c-days.txt`, `c-mix.txt`.
+
+| against `eden` (hidden 53.5%, 221 of 413) | hidden raised, users resampled | confirmed concerns | $ per 1,000 tasks | wall a task |
+| --- | --- | --- | --- | --- |
+| `eden~P` (`pushPointer`) | **+2.4 (−0.5..+5.5)**; 55.9% | 2 against 1 | +$0.007 (+0.006..+0.009) | +0.017 s (+0.003..+0.030) |
+
+- **The rule fails** (+2.0 with the lower bound above 0 was asked; the lower bound is −0.5). `pushPointer` is deleted
+  for good with its code and tests (the code is in commit 0a6a0506, and 31ac72ad and f8d8cfdd).
+- **Where it acts:** facts handed only at an earlier request that day were raised in 71 of 174 tasks with it against 56
+  of 173 without; facts handed at their own request 160 of 191 against 165 of 194; not that day 0 of 48 and 0 of 46.
+  So naming an earlier-handed item does get some of them raised (weak point Q3), but the lift is about 2.4 points
+  overall, and two runs on different users (O3 +2.5, +0.2..+4.9; here +2.4, −0.5..+5.5) cannot separate it from zero
+  at the +2-point bar. A revival needs a different mechanism, not this line.
+- The review's findings on the pointer (titles in Eden's lead not quarantined, a pointer-only packet repeated after a
+  behind poll, no citations for removal guards) are moot with the code gone; they would apply to any similar line.

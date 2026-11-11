@@ -768,14 +768,6 @@ export interface EngineConfig {
    * acting request for plan alerts (D301).
    */
   pushOpen: boolean;
-  /**
-   * O3 (D708), revived by P3 (D832; a trial, off; docs/research/o3-pointer.md, p3-baselines.md §2): with
-   * `pushCandidates`, when candidates of this request were handed for an earlier request of the session (so the
-   * not-twice ledger keeps them out of the packet), the packet's lead names them by title (`POINTER_LEAD`, at most
-   * three), so the agent looks at them again. No item text is sent twice and nothing is added when the packet has no
-   * new item.
-   */
-  pushPointer: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -947,7 +939,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSilent: true,
   pushCheckAnchored: false,
   pushOpen: true,
-  pushPointer: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,
