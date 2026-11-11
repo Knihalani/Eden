@@ -23,7 +23,7 @@ import argparse, gzip, json, os, random, re, sys, time, zlib
 import torch
 import torch.nn as nn
 
-torch.set_num_threads(1)
+torch.set_num_threads(int(os.environ.get("BINNET_THREADS", "1")))
 BUCKETS = 1 << 16
 
 
@@ -188,6 +188,27 @@ def held(r, heldout):
     return r["template"].split("/")[0] in heldout
 
 
+def write_ranks(net, worlds, path):
+    """Every eval request's candidates in the scorer's order (world ids), and the NULL margin of each: the file
+    score.py reads (`top`: above NULL, `all`: the whole order)."""
+    net.eval()
+    with torch.no_grad(), open(path, "w") as f:
+        for w in worlds:
+            rs = [r for r in w["reqs"] if r["cands"]]
+            if not rs:
+                continue
+            codes = net.ienc(w["texts"])
+            for r in rs:
+                c = torch.tensor(r["cands"])
+                t = torch.tensor([w["twin"][k] if w["twin"][k] >= 0 else k for k in r["cands"]])
+                s, nl = net(net.qenc([r["request"]]), codes[c].unsqueeze(0), codes[t].unsqueeze(0))
+                order = torch.argsort(-s[0]).tolist()
+                ids = [w["ids"][r["cands"][k]] for k in order]
+                f.write(json.dumps({"rid": r["rid"], "all": ids,
+                                    "top": [x for x, k in zip(ids, order) if float(s[0][k]) > float(nl[0])]}) + "\n")
+    net.train()
+
+
 def eval_pair(net, worlds, heldout):
     """Held-out requests: fact in the scorer's first 5 / first 1 (hidden, fact among candidates), twin in its first 5
     (control), and silence: share of control requests whose best candidate scores below NULL, of hidden ones above."""
@@ -269,6 +290,9 @@ def run(o):
             m = eval_pair(net, ev, heldout)
             print({"epoch": ep, **m, **base, "s": round(time.time() - t0)}, flush=True)
         result = {**m, **base}
+        for path, ws in ((o.ranks, ev), (o.ranks2, load(o.eval2) if o.eval2 else [])):
+            if path:
+                write_ranks(net, ws, path)
     elif o.arch == "tagger":
         net = Tagger(q, o.bits)
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
@@ -436,4 +460,7 @@ if __name__ == "__main__":
     a.add_argument("--lr", type=float, default=2e-3)
     a.add_argument("--held", default="train5,train6")
     a.add_argument("--out", default="")
+    a.add_argument("--ranks", default="", help="pair/notwin: write the eval's ranks (score.py's format) here")
+    a.add_argument("--eval2", default="", help="a second eval file to rank (M2's test split)")
+    a.add_argument("--ranks2", default="")
     run(a.parse_args())
