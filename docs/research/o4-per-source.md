@@ -61,17 +61,20 @@ pair's key), given back to the new limiter at the pair's next call. Ten minutes 
 hold (the breaker's and the lookup histogram's are 60 s, the planner calls' ten minutes), so a parked pair's new
 guards behave as its old ones would have: an idle breaker that is closed has an empty window, and an idle histogram
 is empty. A pair is kept when that is not so: a call in flight, a breaker open or half-open, a rate limit still
-pushed back. The work is done as calls come (the eight least recently used pairs are looked at each call), with no
-timer.
+pushed back. The work is done as calls come (up to 64 of the least recently used pairs are looked at each call,
+stopping at the first that is not idle), with no timer.
 
-`source-heap.ts 995 3 10` (`packages/sim/lab/o5/source-heap.txt`), MB of heap a user after ten requests, before →
-after: 13.61 → 12.70; the guards 1.00 → 0.00, with about 0.1 left as parked limits (in the profile's last line,
-5.16 → 5.27). After the backfill alone nothing is idle yet: 10.07 both.
+`source-heap.ts 995 3 10` on main @ 74204885 (`packages/sim/lab/o5/source-heap.txt`), MB of heap a user after ten
+requests, before → after: 12.73 → 11.90; the guards 0.94 → 0.01, with 0.17 kept as parked limits. After the
+backfill alone nothing is idle yet: 10.14 and 10.15. (On the branch's first base, before O1's earn rule cut the
+calls a request makes: 13.61 → 12.70. With fewer calls a scan of eight pairs a call left 0.24 MB of idle guards
+after ten requests, 12.13 MB; hence 64.)
 
 Meant to change no result: the funnel's clock moves an hour between requests, so every pair is parked and brought
-back between any two of a user's requests there. Checked: the default funnel reads 314 and 274 with all 768 task
-rows identical to the run without it (connector calls 2,064 both), and the 1,000-source funnel 192 of 192 rows
-(calls 6,045 both).
+back between any two of a user's requests there. Checked on main's tree: the default funnel reads 315 and 276 with
+all 768 task rows identical to the run without it (connector calls 2,066 both), and the 1,000-source funnel 192 of
+192 rows (77 and 77, calls 859 both). `packages/sim/lab/o5/mutate-park.py`: each of 10 mutations of `park` fails
+`park.test.ts`.
 
 ## 4. Not done
 

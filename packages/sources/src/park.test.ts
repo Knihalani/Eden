@@ -33,23 +33,22 @@ function fanout(extra: Record<string, unknown> = {}) {
 }
 
 describe("SourceFanout.park (D754)", () => {
-  test("idle pairs' guards are parked as later calls come, eight a call, and not before ten minutes", async () => {
+  test("idle pairs' guards are parked as later calls come, 64 a call, and not before ten minutes", async () => {
     const { f, clock, ask } = fanout();
-    const idle = Array.from({ length: 20 }, (_, i) => source(`s${i}`));
+    const idle = Array.from({ length: 100 }, (_, i) => source(`s${i}`));
     for (const s of idle) await ask(s, "a");
-    expect(f.guards()).toEqual({ live: 20, parked: 0 });
+    expect(f.guards()).toEqual({ live: 100, parked: 0 });
     const busy = source("busy");
     clock.now += IDLE_MS - 1;
     await ask(busy, "a");
-    expect(f.guards().live).toBe(21);
+    expect(f.guards().live).toBe(101);
     clock.now += 1;
     await ask(busy, "b");
-    expect(f.guards().live).toBe(13);
+    expect(f.guards().live).toBe(37);
     await ask(busy, "c");
-    await ask(busy, "d");
     // The pair that is in use stays.
     expect(f.guards().live).toBe(1);
-    expect(busy.calls).toBe(4);
+    expect(busy.calls).toBe(3);
   });
 
   test("idle is since the pair's last call, not its first", async () => {

@@ -198,8 +198,12 @@ const LIMIT_INITIAL = 2;
  * pair's guards hold nothing a new set would not, bar the concurrency limit it learned, which is what is kept.
  */
 const PARK_IDLE_MS = CALL_LATENCY_WINDOW_MS;
-/** Pairs `state` looks at for parking each time it is called: the least recently used. */
-const PARK_SCAN = 8;
+/**
+ * Pairs `state` looks at for parking each time it is called: the least recently used. The scan stops at the first
+ * pair that is not idle, so a call pays for it only while idle pairs are there to park. (At 8 a user whose requests
+ * make few calls kept a quarter of their idle guards after ten requests.)
+ */
+const PARK_SCAN = 64;
 
 /**
  * A results-cache key: the (user, source) pair, length-prefixed so the pair is read back exactly (`pairOf`) whatever
