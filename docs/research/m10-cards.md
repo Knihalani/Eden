@@ -131,6 +131,7 @@ selection measure). Haiku arm: 190 / 169 / 253 (hidden, decoys, neutral any pack
 | R2-A LightGBM + short features | 197 | 170 | 253 | 1.7 MB |
 | R2-B conv + flag gate + date keywords | 197 | 170 | 253 | 2.0 MB |
 | R2-C merged sparse (hidden layer, lexicons, gate) | 197 | 169 | 253 | 2.6 MB |
+| R2-D binarised, 384-bit code, flag gate (seeds 2 / 1) | 197 / 195 | 169 / 170 | 253 | 3.8 MB |
 | H1 + twin pairs, two seeds averaged (chosen) | 197 | 170 | 253 | 2.0 MB |
 | cards off (D963) | 194 | 174 | 239 | – |
 
