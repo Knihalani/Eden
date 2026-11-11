@@ -304,3 +304,30 @@ concern ($0.46). Readouts `c-days-hidden.txt`, `c-days.txt`, `c-mix.txt`.
   at the +2-point bar. A revival needs a different mechanism, not this line.
 - The review's findings on the pointer (titles in Eden's lead not quarantined, a pointer-only packet repeated after a
   behind poll, no citations for removal guards) are moot with the code gone; they would apply to any similar line.
+
+## 9. Results: (b2), and the pre-registration of (b3)
+
+(b2) ran on (b)'s tasks and users (`b2-short.txt`, `b2-days.txt`, `b2-mix.txt`); it replaces (b)'s `hits` figures.
+
+| | `hits` as (b) ran it | `hits` with its own prompt and Eden's compaction | `eden` − (b2) `hits` |
+| --- | --- | --- | --- |
+| Short, seeds 41–42 (384 hidden) | 40.1% | 40.4% (b2 − b: +0.3, −2.6..+3.4) | **+25.8 (+18.8..+32.8)** |
+| Days, w45–w60 (128 hidden), users resampled | 48.4% | 55.5% (b2 − b: **+7.0, +1.6..+12.5**) | **+5.5 (−3.9..+14.1)** |
+| Confirmed concerns (control, neutral): short; days | 0, 0; 0, 0 | 1, 0; 0, 1 | (`eden`: 0 everywhere) |
+| $ per 1,000 tasks against `eden` (short mix; days) | −$0.104; +$0.017 | −$0.096; +$0.014 (+0.007..+0.021) | |
+
+- **The review's confound mattered over days.** Told it had tools it did not have, the `hits` agent raised 7 points
+  fewer facts over days (it raised 51 of 70 facts handed at their request against 57 of 70 with the honest prompt).
+  One request a session nothing changed.
+- **Read by (b)'s pre-registered rule:** one request a session Eden's selection earns its keep (+25.8, lower bound far
+  above 0). **Over days it is not shown on 16 users** (+5.5, interval including 0): the rule's second clause fails,
+  and the plain baseline costs a little more there (five items every request stay in the day's transcript).
+
+### Pre-registration of (b3) (written before any call of it)
+
+- **Run:** 32 more fresh users, w105–w136, `--days 4 --day-size 16`, arms `eden` and `hits` (this tree, b2's prompt
+  and compaction), Haiku 5.5 agent, `--budget 0.3` a process, two at a time; Sonnet regrade. Cost [EST] about $3.
+- **Read:** `eden` − `hits` over days on the 48 users of (b2) and (b3) together, users resampled, Sonnet's grade.
+  "Eden's selection earns its keep over days" if the lower bound is above 0; if the interval includes 0, the report
+  says plain retrieval matches Eden over days within the interval found, and Eden's measured edge over days is its
+  cost and its look-alike handling, not facts raised. No engine change follows either way.
