@@ -17,7 +17,7 @@ forwarded as is.
 | File | Owns |
 |---|---|
 | `src/proxy.ts` | `createProxy` (identity: `x-eden-user-id` or the body's `user`; conversation: `x-eden-session-id` or a hash of its first non-system message; new messages by content hash, `Conversation.seen`; one deadline per request; `proxyKey`), `eventsOf` (messages to events), `textOf` |
-| `src/ask.ts` | `askTool` (D851, trial): `ask_context`'s definition per route, `withAskTool` (added to `tools`, every other byte kept; skipped when the caller has one), `readRound` (a JSON or buffered streamed answer read for its asks: chat `tool_calls`, Anthropic `tool_use` with thinking kept, Responses `function_call`; the round to append), `setKey`, `noToolChoice` |
+| `src/ask.ts` | `askTool` (D851, opt-in, D857): `ask_context`'s definition per route, `withAskTool` (added to `tools`, every other byte kept; skipped when the caller has one), `readRound` (a JSON or buffered streamed answer read for its asks: chat `tool_calls`, Anthropic `tool_use` with thinking kept, Responses `function_call`; the round to append), `setKey`, `noToolChoice` |
 | `src/with-messages.ts` | `withMessages`: one top-level key of a JSON body's text replaced, every other byte kept (audit A5) |
 | `src/proxy-ask.test.ts` | `askTool` on the three routes, streamed and not: the tool added, the round appended, the agent's answer the final round's bytes; the caller's own calls left out of a round; the round cap and `tool_choice` none; Eden down; an upstream error on round 2; not offered off, in shadow, without a user, or beside the caller's own `ask_context` |
 | `src/main.ts` | `bun run proxy` (`EDEN_PROXY_UPSTREAM`, `EDEN_URL`, `EDEN_API_KEY`, `PROXY_PORT`/`PROXY_HOST`, default 127.0.0.1:8791; `EDEN_PROXY_KEY` required off loopback; `EDEN_PROXY_SHADOW`; `EDEN_PROXY_MAX_BODY_BYTES`, default 64 MB, a chat body with images). At startup (D365): a warning for an upstream with no path, and one `/v1/whoami` probe saying whether Eden is reachable and takes the key |
@@ -76,7 +76,7 @@ forwarded as is.
   `previous_response_id` (else the `conversation`) the input follows, so "yes" after a different response is a new
   turn. The model's `function_call` items stay with the provider: no tool call is reported, and each output reaches
   Eden as the result of a tool named "tool" (replies are not read for calls).
-- **`ask_context` (trial `askTool`, D851; `EDEN_PROXY_ASK=1`; owner P5, ends 2026-12-10).** Off: no tool is added and
+- **`ask_context` (opt-in `askTool`, D851, D857; `EDEN_PROXY_ASK=1`; not measured through the proxy).** Off: no tool is added and
   an agent that wants it uses the MCP server. On, for a request whose user is named, not in shadow mode, and not a
   Responses request whose history the provider holds or does not store (`previous_response_id`, `conversation`,
   `store: false`): the tool is added (`withAskTool`); each upstream answer that calls it is read (`readRound`), up to

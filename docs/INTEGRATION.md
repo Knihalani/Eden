@@ -473,14 +473,14 @@ not as a line per request.
   lets it decide, but forwards each request unchanged and prints one JSON line (user, session, packet count, item ids;
   no text) per request Eden would have changed. Run it on real traffic for a week, then read `bun run trace-report`
   on the Eden server's `EDEN_TRACE=1` log and `/v1/explain` on the sessions that matter, before letting it inject.
-- **`ask_context` in the proxy (trial, `EDEN_PROXY_ASK=1`, D851).** The proxy adds Eden's `ask_context` to the
+- **`ask_context` in the proxy (opt-in, `EDEN_PROXY_ASK=1`, D851, D857).** The proxy adds Eden's `ask_context` to the
   request's tools, with Eden's own description, on all three routes, and answers the model's calls to it itself: it
   asks Eden, appends the call and the answer to a copy of the conversation and calls the model again, at most three
   rounds a request (the request after the third forbids tool calls). The agent sees one model answer, never the tool.
   Costs: each ask is one more model call on your bill, and a streamed answer that asks is buffered, so the agent's
   first token waits for the asking rounds to finish. A request that already has a tool called `ask_context` (Eden's
-  MCP server) is left alone. Off by default until a Pi run through the proxy is read (D70's −11.9 points were measured
-  on the SDK, not here).
+  MCP server) is left alone. Off unless you set it: D70's −11.9 points without the tool were measured on the SDK, and
+  nothing has measured it through the proxy.
 - **What it does not do.** Without `EDEN_PROXY_ASK=1` it adds no `ask_context` tool (give the agent the MCP server
   for that, D70 says keep it), it cannot report events that never reach the model (a webhook's new mail: forward those with `sourceChanged`, with
   their refs), and it cannot check a tool call before it runs (the agent runs it between two requests): wrap the

@@ -70,9 +70,9 @@ Four things that tripped first-time users (fresh-eyes walkthroughs, D856):
   else (both clients, the examples, the proxy and `bun run doctor` read it when no base URL is passed).
 - **Keys in dev mode:** with `EDEN_DEV=1` pass no API key at all (unset `apiKey`/`api_key`, no `EDEN_API_KEY`): a dev
   server accepts a missing key and refuses any made-up one with a 401.
-- **Staying at $0:** the startup line says `model roles on` when `OPENROUTER_API_KEY` is in the server's environment,
-  and Eden then makes paid model calls in the background. Start it with `env -u OPENROUTER_API_KEY …` to stay on the
-  no-model path.
+- **Staying at $0:** a dev server refuses to start when `OPENROUTER_API_KEY` is in its environment (it would make
+  paid model calls in the background, D858): start it with `env -u OPENROUTER_API_KEY …`, or set
+  `EDEN_ALLOW_MODEL_ROLES=1` if you want the model roles.
 - **One `sessionId` per conversation:** an item is handed out once per session, so a second script (or the curls
   above) reusing `"s"` gets `(shown above)` instead of the text. Use a fresh session id per run or conversation.
 

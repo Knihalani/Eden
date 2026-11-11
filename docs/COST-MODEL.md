@@ -633,7 +633,7 @@ own costs: `RareTerms`, at most 1 MB a user (+0.72 MB at 1,000 sources in the la
 in the frozen blob, so freezing a user does not shrink it until the sync drops the user after `syncDropMs`), and 3–5 µs a new word on the
 sync's store path (30–70 ms for a page of 100 items of 150 new words each).
 
-## `ask_context` through the proxy (D851, trial `askTool`, off)
+## `ask_context` through the proxy (D851, opt-in `askTool`, off unless set; D857)
 
 With `EDEN_PROXY_ASK=1` the proxy adds Eden's `ask_context` to the model's tools and answers the calls itself. Each
 round the model asks is one more upstream model call on the tenant's own bill (the conversation so far plus the

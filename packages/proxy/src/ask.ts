@@ -1,5 +1,5 @@
 /**
- * `ask_context` through the proxy (D851, trial `askTool`). D70 measured the SDK arm without the tool at −11.9
+ * `ask_context` through the proxy (D851; an opt-in flag, `askTool`, D857). D70 measured the SDK arm without the tool at −11.9
  * points of hidden facts raised, and the proxy offered none (weak point D3 of docs/research/weak-points-1111.md). With
  * the switch on, the proxy adds Eden's `ask_context` to the request's tools and answers the model's calls to it
  * itself: it asks Eden, appends the call and its answer to a copy of the conversation, and calls the model again,

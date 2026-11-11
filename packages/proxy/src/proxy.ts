@@ -77,9 +77,9 @@ export interface ProxyOptions {
    */
   maxKeptBytes?: number;
   /**
-   * Trial (D851; owner P5, ends 2026-12-10): add Eden's `ask_context` to each request's tools and answer the model's
-   * calls to it in the proxy (`ask.ts`), so a proxy user gets the tool D70 measured at +11.9 points on the SDK. Off by
-   * default until a Pi run through the proxy is read; `EDEN_PROXY_ASK=1`. Never in shadow mode.
+   * Opt-in (D851, D857; `EDEN_PROXY_ASK=1`): add Eden's `ask_context` to each request's tools and answer the model's
+   * calls to it in the proxy (`ask.ts`), so a proxy user gets the tool D70 measured at +11.9 points on the SDK. Not
+   * measured through the proxy. Never in shadow mode.
    */
   askTool?: boolean;
   /** In shadow mode, per request Eden would have changed: the user, session and the packets' item ids (no text). */
@@ -610,7 +610,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     let asking: string | null = null;
     // Not on a Responses request whose history the provider holds or does not store (`previous_response_id`,
     // `conversation`, `store: false`): a round would have to chain response ids, and re-sent items are refused there
-    // (the review of D851). Such a request goes as it would without the trial.
+    // (the review of D851). Such a request goes as it would without the option.
     const held =
       responses &&
       ["previous_response_id", "conversation"].some((k) => (body as Record<string, unknown> | null)?.[k] != null);
