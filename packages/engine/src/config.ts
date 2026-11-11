@@ -386,6 +386,14 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
+  /**
+   * Trial (D604, O1; off). With `syncUnusedSweepMs`: each unused source is swept at its own point in the period (a
+   * hash of the tenant, the user and the source), so the sources a user connected together are not all listed in
+   * one tick a week later (1,000 listings in a minute on the day bench). A source is due no later than a period
+   * after its own last sweep, as without the switch; one swept off its point (the backfill, an absence over the
+   * point) is swept up to a period early, half a sweep more on average.
+   */
+  syncSweepSpread: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -868,6 +876,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
+  syncSweepSpread: false,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,

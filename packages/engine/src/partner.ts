@@ -787,6 +787,7 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
+            sweepSpread: c.syncSweepSpread,
           },
         )
       : null;
