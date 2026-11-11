@@ -227,7 +227,7 @@ const NOT_ACTING = new Set(
 );
 /** Someday words: a lead-in followed by one is a resolution or a wish, not a request (P2 v4). */
 const VAGUE =
-  /\b(?:one day|some ?day|sometime|eventually|at some point|one of these (?:days|years)|more often|in (?:the )?future|in general|again sometime)\b/i;
+  /\b(?:one day|some ?day|sometime(?! (?:this|next|today|tomorrow|tonight|before|on|by))|eventually|at some point|one of these (?:days|years)|more often|in (?:the )?future|in general|again sometime)\b/i;
 /** Adverbs a lead-in may carry before its verb ("We should probably …"). */
 const ADVERBS = new Set("really probably maybe definitely just still also quickly actually perhaps finally".split(" "));
 

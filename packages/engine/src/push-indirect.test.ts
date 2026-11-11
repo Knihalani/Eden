@@ -177,3 +177,36 @@ describe("pushIndirect and plan alerts (review of D820)", () => {
     expect(acted(listed)).toBe(1);
   });
 });
+
+describe("pushIndirect v4 (P2): second clauses, hedges, passive needs, someday ideas", () => {
+  test("a request after a first clause of context starts the push from where it begins", () => {
+    const raw = "The boiler's making that noise again, can you book Ferguson's for Tuesday?";
+    expect(start(raw)?.request).toBe("can you book Ferguson's for Tuesday?");
+    expect(start("Mum's prescription runs out Sunday so please reorder it at Boots")?.request).toBe(
+      "please reorder it at Boots",
+    );
+    expect(start(raw, false)).toBeNull();
+  });
+
+  test("hedges and passive needs start it", () => {
+    for (const raw of [
+      "Might be worth chasing the Hendricks invoice before Friday",
+      "Would be handy if you could cancel the Peloton before the 15th",
+      "I'll need the Dublin hotel reservation changed to a king room",
+      "It's probably time we moved the Redis cluster off t3.medium",
+      "Should probably get the MOT booked at Kwik Fit Bolton",
+    ])
+      expect(start(raw)).not.toBeNull();
+  });
+
+  test("resolutions and someday ideas start nothing; a dated plan still does", () => {
+    for (const raw of [
+      "I need to stop eating biscuits at 11pm",
+      "We should go to Iceland one day, the lights look unreal",
+      "I want to get fitter by spring",
+      "I need to finally read Middlemarch",
+    ])
+      expect(start(raw)).toBeNull();
+    expect(start("Let's set up a postmortem with Łukasz sometime this week")).not.toBeNull();
+  });
+});
