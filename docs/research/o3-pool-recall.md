@@ -27,3 +27,36 @@ requests only for the items a card call reads, about 14% of a user's items (181 
   pre-registered next (its own section, before its first call) only if the facts pushed at their own request rise by
   **at least 10 of 113** with full coverage. Below that the bet stops and the note says so.
 - If the cap stops the calls early, the readout is run on the users whose items are all covered and says how many.
+
+## 2. Result (2026-11-11): full coverage moves 2 of 113; the bet stops
+
+The card calls finished under the cap: 1,179 calls, $0.506, requests for 11,541 of the 11,781 items.
+
+| w45–w52, 113 hidden requests, `days-calls.ts --pool-diag` ($0) | pushed at its own request | handed earlier that day | outside the pool | pooled, fails the constraint test | pooled, below the cut |
+|---|---|---|---|---|---|
+| shipped coverage (the run's own card calls) | 59 | 31 | 16 | 5 | 2 |
+| full coverage (requests for every item) | **61** | 27 | 12 | 4 | 9 |
+
+Control decoys the same way (113): pushed 57 against 62, earlier that day 25 against 28, outside the pool 20 against
+14, pooled and not handed 11 against 9. Handed items a request with a planted item: 4.18 against 4.22.
+
+- **+2 of 113 pushed, against the 10 the pre-registration asked for: no paid days run is made on this.** The fuller
+  index brings four more facts into the pool (16 to 12 outside) and seven more of the pooled ones fall below the cut:
+  with requests for every item, more other items rank too. It hands the decoy five more times.
+- **What it would have cost:** 147 card calls and $0.063 a user once (the backfill), against about 26 calls and
+  $0.016 a user as the paid days run made them: four times the background spend for two facts in 113.
+- **What D714's caveat is then worth:** on these eight users the fuller index is not the reason levels differ much;
+  the gap between the covered seeds and the rest (17% against 33% of facts not in the day's transcript,
+  o3-pointer.md §3.2) is not explained by coverage alone, and four users against 28 is a small comparison.
+- **What is left of the days gap on these users, with full coverage:** 27 facts handed earlier the same day (raised
+  about 60% of the time live), 12 outside the pool, 9 below the cut, 4 failing the constraint test. No single cause
+  holds ten of them.
+
+```bash
+bun packages/sim/src/lab/cards-enrich.ts --dir .local/o3/intent45 --days-users 45,46,47,48,49,50,51,52 --intent \
+  --model claude-haiku-5-5 --cap 2.0 --spend-ledger .local/o3/ledger.jsonl --spend-cap 33 --run-label intent45
+bun packages/sim/src/lab/days-calls.ts --seeds 45,46,47,48,49,50,51,52 --cards .local/o3/cards-45-52.jsonl \
+  --pool-diag A.jsonl                                       # shipped coverage
+bun packages/sim/src/lab/days-calls.ts --seeds 45,46,47,48,49,50,51,52 --cards .local/o3/cards-45-52.jsonl \
+  --intent .local/o3/intent45/intent-v2.jsonl --pool-diag B.jsonl   # full coverage
+```
