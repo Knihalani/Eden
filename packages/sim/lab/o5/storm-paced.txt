@@ -1,0 +1,8 @@
+Run before D755: "config {}" is the switch off (now --config={"syncKick":false}); --tick-ms=60000
+Taken before the second review's fix (a tick skips users waiting for a kick turn; only a kicked step is a pool). The reviewer's re-run on the final tree, switch on: 78.7 s, p99 49.3 ms back to back; 79.0 s, p99 50.9 ms with --tick-ms=60000.
+300 storm users x 1000 items (3 connectors, 20-80 ms a listing), 20 warm users sending an event every 10 ms; config {}; a tick every 60000 ms
+storm: 137.4 s wall, 98.8 s CPU, 2.2 users/s
+warm users' observe during the storm (13746 events): p50 2.84 ms, p99 45.6 ms, max 74.7 ms; loop lag p99 39.0 ms, max 323.7 ms
+300 storm users x 1000 items (3 connectors, 20-80 ms a listing), 20 warm users sending an event every 10 ms; config {"syncKick":true}; a tick every 60000 ms
+storm: 79.6 s wall, 87.2 s CPU, 3.8 users/s
+warm users' observe during the storm (7964 events): p50 14.61 ms, p99 49.3 ms, max 85.1 ms; loop lag p99 58.5 ms, max 343.7 ms

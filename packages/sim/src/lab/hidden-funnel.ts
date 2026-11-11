@@ -102,7 +102,7 @@ import { QueryPlanner } from "@eden/sources";
 import { sanitizeForStore } from "@eden/redact";
 import { draftOf, type DraftMode } from "../drafts";
 import { narrowQuestion } from "../narrow";
-import { REALISTIC, simSources } from "../sources";
+import { REALISTIC, simSources, type SimSource } from "../sources";
 import { applyNotifyShare, connectorOptions, parseNotifyShare, pushNotifier } from "./connector-options";
 import { noiseSources } from "./noise-sources";
 import { buildWorld } from "../world";
@@ -230,6 +230,10 @@ const cli = flags(
         "widen-hash",
         "widen-embed",
         "templates",
+        "connect-at",
+        "connect-tick-s",
+        "connect-stagger-s",
+        "cards-ms",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -391,6 +395,29 @@ const CARDS_CALLS = Number(opt("cards-calls", "-1"));
 const CARDS_REST = opt("cards-rest", "none");
 if (CARDS_REST !== "none" && CARDS_REST !== "cards") throw new Error("--cards-rest is none or cards");
 if (CARDS_REST === "cards" && CARDS_CALLS < 0) throw new Error("--cards-rest cards needs --cards-calls N");
+/**
+ * `--connect-at 0,15,45,…` (O4, docs/research/o4-new-user.md): a new user. Each world's user is tracked (as their
+ * first event tracks them) with nothing synced, and each task is asked at one of these many seconds after that, in
+ * real time: the sync ticks as the servers' timer does (first `--connect-tick-s` seconds after the connect, 30 by
+ * default: the mean wait for a 60-second timer; then every 60), and nothing waits for the backfill or the cards.
+ * A world runs once per task (a replica: a user of its own), and replica r asks task (r + j) mod T at checkpoint j:
+ * a user makes one request a checkpoint, and every task is asked at every checkpoint once. Rows carry `connectS` (the
+ * checkpoint), `sinceConnectMs` (when the request was sent) and `replica`. `--cards-ms L`: each card call takes L ms
+ * (default 2,700 here, Haiku's p50, docs/COST-MODEL.md; the replayed maker otherwise answers at once).
+ * `--connect-stagger-s S` (default 2): replicas start S seconds apart, so their backfills do not share the cores.
+ * Use with `--time 1` (the connectors' latency is the backfill's time).
+ */
+const CONNECT_AT = opt("connect-at", "")
+  .split(",")
+  .filter((x) => x !== "")
+  .map(Number);
+if (CONNECT_AT.some((x) => !(x >= 0))) throw new Error("--connect-at takes seconds, each at least 0");
+const CONNECT = CONNECT_AT.length > 0;
+// Without the sync a "new user" is every user: the checkpoints would measure nothing.
+if (CONNECT && !REAL_SYNC) throw new Error("--connect-at needs the real sync (the default's, or --config sync)");
+const CONNECT_TICK_S = Number(opt("connect-tick-s", "30"));
+const CONNECT_STAGGER_S = Number(opt("connect-stagger-s", "2"));
+const CARDS_MS = Number(opt("cards-ms", CONNECT ? "2700" : "0"));
 const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
@@ -719,10 +746,22 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
   return { rows, perTask, wall: (performance.now() - started) / 1000 };
 }
 
+/** `--connect-at`: the noise connectors of each world, shared by its replicas. */
+const sharedNoise = new Map<string, SimSource[]>();
+
 /** One suite and variant over every seed: one after the other with `--serial`, else at once. */
 async function runSeeds(suite: string, variant: "hidden" | "control" | "neutral"): Promise<TaskRow[][]> {
   const results: TaskRow[][] = [];
-  if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
+  if (CONNECT) {
+    // `--connect-at`: one replica (a user) a task, every seed's at once (each starts at its own stagger).
+    const runs = SEEDS.flatMap((seed) => {
+      const all = SUITES[suite]!(buildWorld({ seed: seed * 1_000 }), seed, variant);
+      const kept = all.filter((t) => !TEMPLATES || TEMPLATES.has(t.template)).length;
+      const users = LIMIT > 0 ? Math.min(LIMIT, kept) : kept;
+      return Array.from({ length: users }, (_, replica) => runSeed(suite, variant, seed, replica, users));
+    });
+    results.push(...(await Promise.all(runs)));
+  } else if (SERIAL) for (const seed of SEEDS) results.push(await runSeed(suite, variant, seed));
   else results.push(...(await Promise.all(SEEDS.map((seed) => runSeed(suite, variant, seed)))));
   return results;
 }
@@ -780,10 +819,23 @@ interface TaskRow {
   /** With a model reader (live or replayed): its calls in the task's window and their cost as made (H18). */
   readerCalls?: number;
   readerUsd?: number;
+  /** `--connect-at`: the task's checkpoint (s after the connect), when its request was sent, and its replica. */
+  connectS?: number;
+  sinceConnectMs?: number;
+  replica?: number;
+  /** `--connect-at`: whether every source had finished its backfill when the request was sent, and items held. */
+  warmAtRequest?: boolean;
+  syncedAtRequest?: number;
 }
 
 /** One suite's tasks in one seed's world, in order, as one user would bring them. */
-async function runSeed(suite: string, variant: "hidden" | "control" | "neutral", seed: number): Promise<TaskRow[]> {
+async function runSeed(
+  suite: string,
+  variant: "hidden" | "control" | "neutral",
+  seed: number,
+  replica = 0,
+  replicas = 1,
+): Promise<TaskRow[]> {
   const perTask: TaskRow[] = [];
   const world = buildWorld({ seed: seed * 1_000 });
   const before = world.items.length;
@@ -791,8 +843,15 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // Planted items line up with `all` (one a template, in order); `--templates` keeps the pairs together.
   const plantedAll = world.items.slice(before);
   const chosen = all.map((_, i) => i).filter((i) => !TEMPLATES || TEMPLATES.has(all[i]!.template));
-  const tasks = (LIMIT > 0 ? chosen.slice(0, LIMIT) : chosen).map((i) => all[i]!);
-  const planted = TEMPLATES && plantedAll.length === all.length ? chosen.map((i) => plantedAll[i]!) : plantedAll;
+  const tasksIn = (LIMIT > 0 ? chosen.slice(0, LIMIT) : chosen).map((i) => all[i]!);
+  const plantedIn = TEMPLATES && plantedAll.length === all.length ? chosen.map((i) => plantedAll[i]!) : plantedAll;
+  // `--connect-at`: this replica's user asks task (replica + j) mod T at checkpoint j, and no other task.
+  const order = CONNECT
+    ? CONNECT_AT.slice(0, tasksIn.length).map((_, j) => (replica + j) % tasksIn.length)
+    : tasksIn.map((_, i) => i);
+  const tasks = order.map((i) => tasksIn[i]!);
+  const planted = CONNECT ? order.map((i) => plantedIn[i]!) : plantedIn;
+  const checkpoints = CONNECT_AT;
   // The world is made whole whatever `--templates` keeps: every planted item aged and dressed, every slot cleared
   // (with `--limit`, as before, only the kept tasks' slots).
   if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
@@ -815,10 +874,19 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   const own = simSources(world, CONNECTORS.profiles, TIME, seed);
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
   if (!FETCH_GONE) for (const s of own) s.fetchReportsGone = false;
-  const sources = [
-    ...own,
-    ...(NOISE_SOURCES > 0 ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed, NOISE_VOCAB) : []),
-  ];
+  // `--connect-at`: a world's replicas share its noise connectors (995 of them hold 550 MB; their content depends
+  // on the world's seed alone), so their call counters and rate limits are shared too: calls a task mean nothing there.
+  const noiseKey = `${suite}/${variant}/${seed}`;
+  const noise =
+    NOISE_SOURCES === 0
+      ? []
+      : CONNECT
+        ? (sharedNoise.get(noiseKey) ??
+          sharedNoise
+            .set(noiseKey, noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed, NOISE_VOCAB))
+            .get(noiseKey)!)
+        : noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME, seed, NOISE_VOCAB);
+  const sources = [...own, ...noise];
   // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
   applyNotifyShare(sources, NOTIFY_SHARE, seed);
   const returned = new Set<string>();
@@ -917,8 +985,16 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
                 : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
         }
       : laneMaker;
-  const cards = cappedMaker
-    ? new CardEnricher({ maker: cappedMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
+  // `--cards-ms`: a card call takes this long, as a model's does (the replayed maker answers at once).
+  const timedMaker: CardMaker | null =
+    cappedMaker && CARDS_MS > 0
+      ? {
+          make: (items, today, signal, retry, intent) =>
+            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent)),
+        }
+      : cappedMaker;
+  const cards = timedMaker
+    ? new CardEnricher({ maker: timedMaker, budget: new Budget(UNCAPPED), now: () => clock }, CARD_LIMITS)
     : null;
   if (cards) cardLanes.push(cards);
   // The lane's asks run one at a time: the model's latency for this task's call (as made, when replayed) is kept so a
@@ -1098,7 +1174,31 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
   // The real sync: the backfill runs before the first task, from half an hour before it on the simulated clock (a
   // minute per tick), so the tasks see the same clock as without it.
   const sync = REAL_SYNC ? partner.sync! : null;
-  if (sync) {
+  // `--connect-at`: the user is tracked now, as their first event would, and the clock runs with the wall from here.
+  let connectedAt = 0;
+  const timers: ReturnType<typeof setInterval>[] = [];
+  if (sync && CONNECT) {
+    // A slot of its own for each replica of each variant and seed (the neutral variant runs in its own phase).
+    const slot = replica + (variant === "control" ? replicas : 0) + 2 * replicas * SEEDS.indexOf(seed);
+    await Bun.sleep(slot * CONNECT_STAGGER_S * 1_000);
+    connectedAt = performance.now();
+    // Their first event (as a tenant's "user connected" would be): it tracks them, and with `syncKick` starts the
+    // backfill.
+    await partner.observe({ ...scope, sessionId: "connect", at: clock, kind: "session_start" } as AgentEvent);
+    const tick = () => {
+      clock = world.now + (performance.now() - connectedAt);
+      // The calls are read from the sync's own count at the end: a kicked backfill's are in no tick's return.
+      void sync.tick();
+    };
+    timers.push(setInterval(() => (clock = world.now + (performance.now() - connectedAt)), 100));
+    timers.push(
+      setTimeout(() => {
+        tick();
+        timers.push(setInterval(tick, 60_000));
+      }, CONNECT_TICK_S * 1_000),
+    );
+    syncUse.users++;
+  } else if (sync) {
     clock = world.now - 30 * 60_000;
     sync.track(scope, clock);
     const t0 = performance.now();
@@ -1129,7 +1229,18 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     }
   }
   for (const [i, task] of tasks.entries()) {
-    if (sync) {
+    let sinceConnectMs = 0;
+    let warmAtRequest = false;
+    let syncedAtRequest = 0;
+    if (sync && CONNECT) {
+      // The task's checkpoint, on the wall; a task whose turn comes late (the ones before it ran long) goes at once.
+      const wait = connectedAt + checkpoints[i]! * 1_000 - performance.now();
+      if (wait > 0) await Bun.sleep(wait);
+      clock = world.now + (performance.now() - connectedAt);
+      sinceConnectMs = performance.now() - connectedAt;
+      warmAtRequest = sync.warm(scope);
+      syncedAtRequest = cache.syncedCount(scope);
+    } else if (sync) {
       // The hour between tasks, on the sync's timer: a tick every five simulated minutes.
       for (let m = 0; m < 12; m++) {
         clock += 5 * 60_000;
@@ -1223,7 +1334,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     }
     taskCpuUs += cpuNow() - c0;
     // Enrichment of what this request brought in finishes before the next request (it lands one request later).
-    if (cards) await cards.idle();
+    // `--connect-at`: nothing is waited for; the cards land when their calls return.
+    if (cards && !CONNECT) await cards.idle();
     const injections = [...(r.injection ? [r.injection] : [])];
     const got = arrived.flatMap((x) => x.ids);
     const question = ASK_Q === "narrow" ? narrowQuestion(task.text) : task.text;
@@ -1465,8 +1577,18 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
         ? { deliveryMs: Number(first.at.toFixed(2)), immediate: r.injection?.citations.some((c) => c.itemId === id) }
         : {}),
       ...(LEAD ? { leadCalls } : {}),
+      ...(CONNECT
+        ? {
+            connectS: checkpoints[i]!,
+            sinceConnectMs: Math.round(sinceConnectMs),
+            replica,
+            warmAtRequest,
+            syncedAtRequest,
+          }
+        : {}),
     });
   }
+  for (const t of timers) clearInterval(t);
   // The polls a lookup left running behind it finish before the count is read.
   if (sync) {
     for (let k = 0; k < 5_000 && [...table.values()].some((x) => x.inflight || x.behind); k++) await Bun.sleep(1);
@@ -1474,6 +1596,8 @@ async function runSeed(suite: string, variant: "hidden" | "control" | "neutral",
     syncUse.demandAll += sync.stats.demandCalls;
     syncUse.demandItems += sync.stats.demandItems;
     syncUse.backgroundItems += sync.stats.backgroundItems;
+    // `--connect-at`: everything the user's sync listed in the background is their backfill (ticks and kicks).
+    if (CONNECT) syncUse.backfill += sync.stats.backgroundCalls;
   }
   return perTask;
 }

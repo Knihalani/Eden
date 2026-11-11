@@ -256,6 +256,12 @@ user's connections as well as dropping what Eden holds; a user idle 15 minutes i
 (unless background sync keeps reading them), and each tenant holds at most 10,000 users' connections. Forget does not edit
 your configuration: to revoke a connection, remove it from the directory (and forget, to drop what was read).
 
+**Tell Eden when a user connects (D755).** Eden starts reading a user's sources at their first event, of any kind,
+and five sources are read in about ten seconds. Send one as soon as the user has connected their sources, before
+their first request: `observe({ kind: "session_start" })` is enough (no text, no request). A user whose first event
+is their first request gets that request answered from live searches alone: on the lab's new users Eden surfaced
+48% of hidden facts at second 0 and 78% ten seconds later (docs/research/o4-new-user.md).
+
 ### Connector presets (D294)
 
 For common servers you can name a preset instead of working out which tools read and how their arguments map:

@@ -178,6 +178,11 @@ export interface PartnerDeps {
   onUsage?: UsageSink;
   now?: () => number;
   /**
+   * A timer on `now`'s clock (`SyncDeps.after`), for `syncKick`'s waits. Absent: `setTimeout`, right when `now` is
+   * the wall clock; pass one with any other `now`.
+   */
+  after?: (ms: number, fn: () => void) => () => void;
+  /**
    * A worker pool (`WorkerPool` started on `GATE_MODULE`) that redacts lookup results off the event loop (D26). The
    * partner builds its source fan-out itself, so redaction before anything is held can never be swapped out.
    */
@@ -754,11 +759,14 @@ export class ContextPartner {
               this.queuePlanConflicts(scope, items);
             },
             tracer: spans,
+            after: deps.after,
           },
           {
             maxItems: c.syncMaxItems,
             pageSize: c.syncPageSize,
             backfillLanes: c.syncBackfillLanes,
+            kickLanes: c.syncKick ? c.syncKickLanes : 0,
+            kickRetryMs: c.syncKick ? c.syncKickRetryMs : 0,
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
@@ -819,6 +827,7 @@ export class ContextPartner {
     this.revisionsStopped = false;
     if (!this.sync || this.syncTimer) return;
     const sync = this.sync;
+    sync.startKicks();
     this.syncTimer = setInterval(() => void sync.tick(), everyMs);
     this.syncTimer.unref?.();
   }
@@ -826,6 +835,8 @@ export class ContextPartner {
   stopSync(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
     this.syncTimer = null;
+    // `syncKick`: a kicked backfill's resume timers would list sources after the stop, as the revision polls below.
+    this.sync?.stopKicks();
     // A revision poll held back by its gap would still list a source after the stop (wave-1 review). Its entry stays:
     // its `at` keeps the gap for a later notice, and the map is bounded (`MAX_REVISION_SOURCES`).
     // A poll still running starts no trailing one, and notices after the stop start none, until `startSync`.
@@ -933,7 +944,9 @@ export class ContextPartner {
     }
     const s = this.session(event);
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
-    this.sync?.track(s.scope, this.now());
+    const fresh = this.sync?.track(s.scope, this.now());
+    // `syncKick` (D751): a new user's backfill starts with their first event, not at the sync's next tick.
+    if (fresh && this.config.syncKick) this.sync!.kick(s.scope);
     s.turn++;
     if (event.kind === "user_message") {
       s.requests++;
