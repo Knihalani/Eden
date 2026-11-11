@@ -60,6 +60,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D908 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | stopped on its pre-registered rules; deleted with its code, weights and tests |
 | D982 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | stopped on its pre-registered rule, D981 |
 | D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
+| D914 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | stopped on its pre-registered hand-written gate, M3b |
 | D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
 | D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
 
@@ -107,6 +108,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D449 | What a distilled card model would need before production (M2, written, not built). |  |
 | D480 | Trial `intentPrune` (pruning an item's intent requests by a no-model score against the item) is rejected and deleted | Four rules (`share:x` of the request's terms in the item, `names` the item does not hold, the closest N, the… |
 | D523 | Rejected without a paid run: a card-only (distilled) model reading the rest of a new user's backfill | the bar was +10 (D361), written after the screen was read |
+| D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
 
 ## Check
 
@@ -166,6 +168,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D341 | Rejected and deleted: re-sending every item a session was sent an "updated:" packet for, in its current version, on a recap- or… |  |
 | D401 | Rejected at $0: moving the agent's cache mark off the first request's user turn so a one-call task pays 1x, not 1.25x, for the packet. |  |
 | D517 | Rejected: shortening earlier requests' packets in the transcript | hidden −16.0 points (−23.3..−8.1 by day) |
+| D920 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | stopped on its pre-registered rule, a3faa15a |
 
 ## Lab and eval
 

@@ -601,8 +601,14 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D981 | 2026-11-11 | Lab only: the micro checker's bar is pre-registered: better than Haiku, not within its noise | lab |
 | D982 | 2026-11-11 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | rejected |
 | D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
+| D914 | 2026-11-11 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | rejected |
+| D920 | 2026-11-11 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | rejected |
+| D921 | 2026-11-11 | Adopted (lab tooling, M6): `hidden-funnel --packet-parts` (each delivered item's parts as compaction reads them, re-rendered from the… | lab |
 | D930 | 2026-11-11 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | rejected |
 | D931 | 2026-11-11 | Finding: the push check does not repeat itself closely. | finding |
 | D932 | 2026-11-11 | Adopted (lab tooling, M7): the funnel's `--check-dump F` (`check-dump.ts`): one row a push-check call (the request head, day and pool… | lab |
 | D950 | 2026-11-11 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | rejected |
 | D951 | 2026-11-11 | Adopted (lab tooling, M9): `packages/sim/lab/m9/` (`links.py` per-user link state, `screen.py` fronting screen, `oracle.py` and… | lab |
+| D970 | 2026-11-11 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | rejected |
+| D971 | 2026-11-11 | Finding: Haiku's intent value is its bridge terms, and a $0 item-side model does not learn them for new families. | finding |
+| D972 | 2026-11-11 | Adopted (lab tooling, M11): `m11-export.ts` (items, worlds, tasks, twins and the checked-in Haiku requests by card key), `m11-enrich.ts`… | lab |
