@@ -1,6 +1,6 @@
 # B19: the final benchmark — raw Hermes, Eden before the wave, Eden final
 
-Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1046 (of D1040–D1049). **Lab only: no engine
+Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1047 (of D1040–D1049). **Lab only: no engine
 or server file changes.** Every paid call goes to Anthropic through the lab provider (D97); none goes to OpenRouter,
 so every figure here is a lab-provider figure. Sections 1–2 were written and committed before the final run;
 section 3 is filled in after it.
@@ -29,9 +29,9 @@ section 3 is filled in after it.
     `--resume-biased`, and the run completed with it.
 - **The amended pre-registration (D1045):** Hermes short and Hermes days are the headline; Pi short and Pi days are
   the secondary readout.
-- **The dry runs cost $3.35** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They
+- **The dry runs cost $3.86** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They
   covered small runs of all three arms (Hermes short in three connector settings, Hermes days, Pi short, Pi days), a
-  resume test and three rehearsals of `go.sh`.
+  resume test and five rehearsals of `go.sh`.
 - **The final run should cost about $7.5** (estimate, from the dry runs' cost a task). Its hard cap is $25.
 
 ## 1. How it works
@@ -179,6 +179,22 @@ A third rehearsal (`RECORD_COVERAGE=yes SEEDS=44 PREFIX=reh3`, train1) exercised
 - `cold-start` recorded 384 lines over seed 44's four worlds for $0.026, and the merged file held 11,408 lines;
 - every arm ran on it with `--coverage full`, with intent replayed for 137 of 1,545 items (Hermes short final);
 - all twelve processes finished with 0 ungraded.
+
+**Rehearsal on tonight's main plus H2's promoted `cardsRequestsFix` (D1047).** I merged into a scratch tree
+`origin/main` (#260–#267, the `pushGate` micro model among them) and `claude/h2-requests-fix` (01080744). The only
+conflicts were in DECISIONS.md and INDEX.md, both sides appending rows.
+
+- **What broke:** the before arm failed to load. H2's harness code names `CARD_FORM_REQUESTS`, which 5026ba512's
+  engine does not export. `go.sh` stopped at that step, as the review fix intended.
+- **The fix (`compat.py`):** it rewrites such a named import into a namespace read with the "off" value, 0.
+  `go.sh` now refuses to run while `compat.py` would still change something, and dry-starts every arm of both
+  harnesses before any spend.
+- **The rehearsal after the fix** (`reh5`, train1 seed 42, $0.45):
+  - all six dry starts passed;
+  - the f3 coverage was recorded automatically;
+  - all twelve processes finished with 0 ungraded;
+  - the intent diagnostic counts under each arm's own form: 142 items for the before arm (bare keys) and 145 for
+    the final arm (`:f3`), of 1,543.
 
 The resume test (`dry7-res`, Hermes days, final arm, train seed 42) was killed twice. The second time day 0 was in the
 journal. A `--resume` without `--resume-biased` exited 2 with its reason. With it, the run reused day 0 at $0 ($0.0274
