@@ -68,4 +68,16 @@ exit 0. The .dockerignore excludes only `*.db`, root `bench`/`docs`/`native` and
 
 ## Gates on the branch
 
-RESULTS
+On the branch's final tree (main 793a4c47 merged), with `OPENROUTER_API_KEY` unset:
+
+- `CHECK_COLD=1 bun run check`: passed in 62 s (2,339 tests in 241 files, then the tail's 463 in 25, 0 fail).
+- `bun run eval`: precision 0.65, recall 0.52, falseFireRate 0; counts and the `acting` block identical to main's
+  (packets on 19 of 28 neutral requests, 1.18 items each; facts handed 10 of 11; a look-alike on 3 of 10).
+- `bun run funnel`: hidden 295/384, decoys 268/384 at shipped coverage, as on main.
+- The `reviewer` subagent: REQUEST_CHANGES on the first diff. Fixed: a membership sent while a restarted child was
+  being told the last one now reaches it (the replay sends it too); a store write that starts after the fence is
+  skipped; a hung-node test pins the forward timeout; the node cap is 1,024 distinct nodes; a long line in
+  DEPLOY.md. Not pinned by a test (low): the 1.25x kill, `main.ts`'s `error` handler, the shutdown flush of the
+  persistence report and the turn-gate log line.
+
+Not done: `bun run eval --live` (no engine scoring, threshold or delivery change; no paid calls allowed tonight).
