@@ -231,3 +231,21 @@ its val split unless said; or fold A's groups as before.
 | H10 | supersession (my own 18 s check: M2 v1, 1/20 of train, 1 epoch) | AUC 0.911 against the Jaccard baseline's 0.785 on M2 val | above its bar already; full test runs (binary and float) running |
 | H10 | supersession, float twin (M2 v1, half of train, 4 epochs) | AUC replaces **0.968 / 0.977 / 0.983 / 0.988** against Jaccard's 0.785 on M2 val (2,996 pairs, 188 replacements); at threshold 0: precision 1.0, recall 0.44–0.49 | **keep** (bar 0.85 and baseline + 0.10); the threshold is to be set for recall; binary run pending |
 | H13 | multi-task item tagger, binary (M2 v1, half of train, 3 epochs) | AUC fact against **its own twin 0.938 / 0.933 / 0.935**, against neutral 0.995, against other 0.995; per-tag accuracy fact 0.91, neutral 0.83, other 0.84, the twin kinds 0.0–0.45 | **keep** (bar 0.75), on M2's held-out families; the twin's *kind* is hard, whether an item is a constraint is not. Transfer to the sim's held-out families (fold A) is being tested |
+| H1 | pair + prior bits + multi-task constraint head (`--aux`, weight 2) | fact@1 53 / 61 / 66, fact@5 98 / 100 / **107** (lexical 86), twin@5 70 / 70 / 73 (66), silent controls 110 / 108 / 132 of 148 but only 28 hidden requests speak | the best ranker: facts in the five **+21** (ratio 1.24 against twins' 1.11); twin rejection still not back and the NULL head too strong (silent on 119 hidden) |
+| H10 | supersession, binary | AUC 0.934 / 0.917 / 0.927 / **0.943** (float 0.988; Jaccard 0.785), precision 0.97–1.0 at threshold 0, recall 0.37–0.45 | **keep**: binarisation costs 0.045 AUC here |
+| H13 | the M2-trained tagger on the sim's held-out families (fold A, 157 facts and 148 twins) | AUC fact against twin 0.747 / 0.776 / 0.767 (the sim-trained H4: 0.73; on M2's own held-out families 0.935) | **keep**: transfers, short of its in-distribution level; train on M2 v2 + sim + generated families together |
+
+### 7d. Step 5: the winners (each against its own bar)
+
+| # | spot | round 1 | round 2 | keep or kill |
+|---|---|---|---|---|
+| H1 | top-5 ranking (fold A held out; lexical: fact@5 86, twin@5 66) | fact@5 82, twin@5 31 (no prior) | fact@5 **107**, twin@5 73, fact@1 66 (prior + multi-task) | **keep**: step 6 targets twin rejection with the prior on |
+| H7 | top-5 ranking, Bloom filters (cheapest per candidate) | fact@5 56, twin@5 30 | fact@5 100, twin@5 71 (prior) | **keep** as the cheap variant; ablate the prior bits alone |
+| H4 → H13 | ingest understanding (constraint or all-clear) | AUC fact vs others 0.865 | fact vs its twin **0.938** on M2's held-out families, 0.767 on the sim's (M2-trained), 0.73 (sim-trained) | **keep** |
+| H10 | supersession, change detection | (deferred) | AUC **0.943** binary, 0.988 float (Jaccard 0.785) | **keep** |
+| H14 | push or silence via H1's NULL head | — | silent controls 132 of 148 but 119 of 147 hidden silent too | **develop in step 6**: report silence at fixed fact recall from the margins |
+| H2 | binarisation's cost | float ≈ binary (pair) | float 0.988 against binary 0.943 (supersession) | measured: about 0.05 AUC |
+| H3 | the twin pathway | no gain at epoch 0 | — | dropped from step 6 (ablation only) |
+| H5 | silence as a set classifier | AUC 0.567 | — | **killed** |
+| H6 | discrete keys | 1 of 10 unreachable facts | — | **killed** here (no room); H6′ to test on M2's rare-source facts |
+| H8 | intent from the request | accuracy 0.19–0.20 (majority 0.094) | — | **killed** for now (2.1× majority, memorises families) |
