@@ -23,6 +23,7 @@
  * they describe (an item leaving the cache unlinks its card: `forgetItems`), with a revoked source's items, and after
  * `ttlMs` unseen.
  */
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import type { Budget, ChatMessage, Model } from "@eden/llm";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
@@ -751,6 +752,30 @@ class UserCards {
   readonly abort = new AbortController();
 }
 
+/**
+ * A user's card state while their cache is frozen (D998, `CardEnricher.freeze`): every map of `UserCards` and the
+ * intent index's docs as one zstd JSON blob. Card state was kept live for frozen users before: with a card and requests
+ * an item, about 3.7 MB of heap a heavy user (3,000 items, `users.bench.ts --cards`), more than the frozen cache.
+ * The first read or write thaws it into the same state (`thawCards`); a forget drops it.
+ */
+class FrozenCards {
+  constructor(
+    readonly tenantId: string,
+    readonly blob: Uint8Array,
+  ) {}
+}
+
+/** What `FrozenCards.blob` holds: each map's entries in its order. */
+interface FrozenCardsBody {
+  enlisted: number;
+  byHash: [string, Stored][];
+  byItem: [string, string][];
+  /** The holders of hashes with more than one, in the order they were linked; the rest follow from `byItem`. */
+  shared: [string, string[]][];
+  bySentence: [string, string][];
+  intent: ReturnType<IntentIndex["export"]> | null;
+}
+
 /** Counters for research and cost reporting. */
 export interface CardStats {
   enqueued: number;
@@ -790,7 +815,8 @@ export interface CardStats {
  * an exhausted budget leaves items uncovered).
  */
 export class CardEnricher {
-  private readonly users = new Map<string, UserCards>();
+  /** Per user, live or frozen with their cache (`freeze`); the order is least recently written first. */
+  private readonly users = new Map<string, UserCards | FrozenCards>();
   private readonly perTenant = new Map<string, number>();
   private limits: CardLimits;
   readonly stats: CardStats = {
@@ -883,7 +909,7 @@ export class CardEnricher {
 
   private user(scope: Scope): UserCards {
     const key = scopeKey(scope);
-    let u = this.users.get(key);
+    let u = this.live(key);
     if (u) {
       // Most recently written last: the tenant's oldest user is the first of its own in insertion order.
       this.users.delete(key);
@@ -908,7 +934,7 @@ export class CardEnricher {
   private drop(key: string, tenantId: string): void {
     const u = this.users.get(key);
     if (!u) return;
-    u.abort.abort();
+    if (u instanceof UserCards) u.abort.abort();
     this.users.delete(key);
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n > 0) this.perTenant.set(tenantId, n);
@@ -924,7 +950,7 @@ export class CardEnricher {
    * time to live starts again, since the content they describe is still held. Never makes a card.
    */
   touch(scope: Scope, ids: Iterable<string>): void {
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     if (!u) return;
     const now = this.deps.now();
     for (const id of ids) {
@@ -1297,7 +1323,8 @@ export class CardEnricher {
   /** Waits for every user's enrichment in flight (tests and the lab). */
   async idle(): Promise<void> {
     for (;;) {
-      const busy = [...this.users.values()].map((u) => u.draining).filter((d): d is Promise<void> => d !== null);
+      const busy: Promise<void>[] = [];
+      for (const u of this.users.values()) if (u instanceof UserCards && u.draining !== null) busy.push(u.draining);
       if (busy.length === 0) return;
       await Promise.all(busy);
     }
@@ -1309,7 +1336,7 @@ export class CardEnricher {
    */
   cardsOf(scope: Scope, ids: Iterable<string>, before: number): Map<string, Card> {
     const out = new Map<string, Card>();
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     if (!u) return out;
     const now = this.deps.now();
     for (const id of ids) {
@@ -1338,7 +1365,7 @@ export class CardEnricher {
     k: number,
     accept: (id: string) => boolean,
   ): { ids: string[]; hit: IntentHit; carded: boolean }[] {
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     if (!u?.intent || k <= 0) return [];
     const now = this.deps.now();
     const out: { ids: string[]; hit: IntentHit; carded: boolean }[] = [];
@@ -1361,7 +1388,7 @@ export class CardEnricher {
 
   /** The requests written for an item's content before `before` (ms); none when unread, unmade or past its TTL. */
   requestsOf(scope: Scope, id: string, before: number): readonly string[] {
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     const hash = u?.byItem.get(id);
     const s = hash ? u!.byHash.get(hash) : undefined;
     if (!s?.requests || !(s.at < before) || this.deps.now() - s.seenAt > this.limits.ttlMs) return [];
@@ -1370,7 +1397,7 @@ export class CardEnricher {
 
   /** Items holding requests in the user's intent index (tests and bounds). */
   intentSize(scope: Scope): number {
-    return this.users.get(scopeKey(scope))?.intent?.size ?? 0;
+    return this.live(scopeKey(scope))?.intent?.size ?? 0;
   }
 
   /**
@@ -1378,14 +1405,14 @@ export class CardEnricher {
    * go, and a card whose content no cached item still has goes with them. A card is never held longer than its item.
    */
   forgetItems(scope: Scope, ids: Iterable<string>): void {
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     if (!u) return;
     for (const id of ids) unlink(u, id);
   }
 
   /** The ids of the user's items with a constraint card, newest last (bounded by `maxCardsPerUser` twice). */
   carded(scope: Scope): string[] {
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     if (!u) return [];
     const out: string[] = [];
     for (const [id, hash] of u.byItem) if (u.byHash.get(hash)?.card) out.push(id);
@@ -1401,7 +1428,7 @@ export class CardEnricher {
       this.drop(scopeKey(scope), scope.tenantId);
       return;
     }
-    const u = this.users.get(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
     if (!u) return;
     const prefix = `${sourceId}:`;
     for (const id of [...u.byItem.keys()]) if (id.startsWith(prefix)) unlink(u, id);
@@ -1410,6 +1437,60 @@ export class CardEnricher {
 
   get userCount(): number {
     return this.users.size;
+  }
+
+  /** Users whose card state is frozen (tests and benches). */
+  get frozenCount(): number {
+    let n = 0;
+    for (const u of this.users.values()) if (u instanceof FrozenCards) n++;
+    return n;
+  }
+
+  /**
+   * Freezes a user's card state with their cache (D998; the partner calls it when the cache freezes the user): only
+   * when nothing of theirs is queued, draining or in flight, so no batch can land in it. True when frozen.
+   */
+  freeze(scope: Scope): boolean {
+    const key = scopeKey(scope);
+    const u = this.users.get(key);
+    if (!(u instanceof UserCards) || u.queue.length > 0 || u.draining !== null || u.flying.size > 0) return false;
+    if (u.spawn !== null) return false;
+    const shared: [string, string[]][] = [];
+    for (const [hash, ids] of u.holders) if (typeof ids !== "string") shared.push([hash, [...ids]]);
+    const body: FrozenCardsBody = {
+      enlisted: u.enlisted,
+      byHash: [...u.byHash],
+      byItem: [...u.byItem],
+      shared,
+      bySentence: [...u.bySentence],
+      intent: u.intent?.export() ?? null,
+    };
+    // Same key: the user keeps their place in the least-recently-written order.
+    this.users.set(key, new FrozenCards(u.tenantId, Bun.zstdCompressSync(Buffer.from(JSON.stringify(body)))));
+    return true;
+  }
+
+  /** The user's live card state, thawed first if frozen (`freeze`); undefined for a user with none. */
+  private live(key: string): UserCards | undefined {
+    const u = this.users.get(key);
+    return u instanceof FrozenCards ? this.thawCards(key, u) : u;
+  }
+
+  /** A frozen user's card state as it was: every map in its order, the intent index rebuilt from its docs. */
+  private thawCards(key: string, f: FrozenCards): UserCards {
+    const body = JSON.parse(Buffer.from(Bun.zstdDecompressSync(f.blob)).toString("utf8")) as FrozenCardsBody;
+    const u = new UserCards(f.tenantId);
+    u.enlisted = body.enlisted;
+    for (const [hash, s] of body.byHash) u.byHash.set(hash, s);
+    for (const [id, hash] of body.byItem) {
+      u.byItem.set(id, hash);
+      if (!u.holders.has(hash)) u.holders.set(hash, id);
+    }
+    for (const [hash, ids] of body.shared) u.holders.set(hash, new Set(ids));
+    for (const [k, hash] of body.bySentence) u.bySentence.set(k, hash);
+    if (body.intent) u.intent = IntentIndex.from(body.intent);
+    this.users.set(key, u); // the same place in the order: a read is not a write
+    return u;
   }
 }
 

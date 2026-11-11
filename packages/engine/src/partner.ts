@@ -769,6 +769,9 @@ export class ContextPartner {
     // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
     const sync = this.sync;
     if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
+    // D998: a user's card state freezes with their cache, and thaws at its first read or write.
+    const cards = deps.cards;
+    if (cards) deps.cache.onFreeze = (scope) => cards.freeze(scope);
     // D425 (opt-in): a user frozen to disk carries the sync's state for them; one read back by a later process takes
     // it again (so the restart polls, not backfills) and has its items carded again, as a re-sync would (cards are
     // not persisted). Set only when the embedder made the cache persist.

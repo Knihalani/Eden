@@ -166,6 +166,23 @@ export class IntentIndex {
     this.hashOf[doc] = hash;
   }
 
+  /**
+   * The index as data (D998: a user's card state frozen with them): each doc's hash, requests and place among equal
+   * scores, in the order `rebuild` adds them, and the next place. `IntentIndex.from` makes the same index again.
+   */
+  export(): { docs: [string, string, number][]; nextSeq: number } {
+    return { docs: [...this.docs].map(([hash, d]) => [hash, d.text, d.seq]), nextSeq: this.nextSeq };
+  }
+
+  /** The index `export` saved, built as `rebuild` builds one: the same docs in the same order, so the same finds. */
+  static from(saved: { docs: [string, string, number][]; nextSeq: number }): IntentIndex {
+    const x = new IntentIndex();
+    for (const [hash, text, seq] of saved.docs) x.add(hash, text, seq);
+    x.nextSeq = saved.nextSeq;
+    x.baseline = x.vocab.size;
+    return x;
+  }
+
   /** A fresh vocabulary and index from the live docs: terms only removed docs held are forgotten. */
   private rebuild(): void {
     this.vocab = new Vocab(256);

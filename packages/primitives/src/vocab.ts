@@ -98,7 +98,7 @@ export class Vocab {
    * The terms (D998): each Latin-1 term's characters as bytes in one arena (`start`, `blen` per id), a term past
    * Latin-1 as a string in `wide`. A string per term was about 35 bytes a term with its array slot (0.5 MB of a heavy
    * user's 18,000 terms, `live-heap.bench.ts`); bytes and offsets are about 6 plus its length. `term` decodes
-   * (`latin1Slice`, about 40 ns, behind the memo above); a released term's bytes are zeroed and their room taken back
+   * (a Latin-1 decode, about 40 ns, behind the memo above); a released term's bytes are zeroed and their room taken back
    * when the arena next needs to grow (`room`).
    */
   private bytes: Buffer = Buffer.alloc(256);
@@ -144,7 +144,7 @@ export class Vocab {
     const slot = memoSlot(this.serial, id);
     if (memoOwner[slot] === this.serial && memoId[slot] === id) return memoTerm[slot]!;
     const at = this.start[id]!;
-    const t = n === WIDE ? this.wide.get(id)! : this.bytes.latin1Slice(at, at + n);
+    const t = n === WIDE ? this.wide.get(id)! : this.bytes.toString("latin1", at, at + n);
     memoOwner[slot] = this.serial;
     memoId[slot] = id;
     memoTerm[slot] = t;
@@ -359,7 +359,7 @@ export class Vocab {
       return;
     }
     if (this.used + n > this.bytes.length) this.room(n);
-    this.bytes.latin1Write(term, this.used, n);
+    this.bytes.write(term, this.used, n, "latin1");
     this.start[id] = this.used;
     this.blen[id] = n;
     this.used += n;

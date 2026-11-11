@@ -202,7 +202,7 @@ test("a released term's bytes are zeroed in the arena (D998)", () => {
   v.intern("kept");
   v.release(id);
   const bytes = (v as unknown as { bytes: Buffer }).bytes;
-  expect(bytes.latin1Slice(0, bytes.length)).not.toContain("globexsecret");
+  expect(bytes.toString("latin1")).not.toContain("globexsecret");
   expect(v.term(v.lookup("kept"))).toBe("kept");
 });
 

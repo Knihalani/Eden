@@ -776,6 +776,11 @@ export class ItemCache {
    * The owner's part of a persisted user (D425; the partner: its sync's per-source state): what to save beside the
    * blob, and what to do once a user written by an earlier process is thawed here.
    */
+  /**
+   * Called with each user the cache freezes, warm or compact (D998: the partner freezes the user's card state with
+   * them, `CardEnricher.freeze`). Null when no owner listens.
+   */
+  onFreeze: ((scope: Scope) => void) | null = null;
   persistHooks: {
     save(scope: Scope): unknown;
     /** May return a promise: a `ready` that read the user back resolves only once it settles. */
@@ -1927,6 +1932,11 @@ export class ItemCache {
     this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
     clearTermMemo();
+    try {
+      this.onFreeze?.(f.scope);
+    } catch {
+      // The owner's freeze fails open: its state stays live.
+    }
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
     // D862: a warm user is not written. An active user pauses every few minutes, and each pause would write (and its
