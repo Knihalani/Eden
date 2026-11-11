@@ -75,6 +75,8 @@ export const INTENT_FILE = "intent-v2.jsonl.gz";
 export const INTENT_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", INTENT_FILE);
 export const INTENT_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+  // The reworded train suites (D871) plant into the same worlds: the same items, so the same coverage.
+  ...Object.fromEntries(parseSuites("reworded").map((s) => [s, ["41", "42", "43", "44"]])),
   heldout10: ["41", "42"],
   heldout11: ["41", "42"],
   heldout13: ["41", "42", "43", "44"],
@@ -89,6 +91,27 @@ export const INTENT_COVERS: Record<string, string[]> = {
   // M6's blind suite (docs/research/m6-heldout18.md): made on Haiku 5.5 on 2026-11-10, unrun.
   heldout18: ["41", "42", "43", "44"],
 };
+
+/**
+ * The shipped-coverage caches (P7, D872): the cards and intent requests the shipped enricher (`buildPartner`'s own
+ * `CardEnricher`, DEFAULT_CONFIG and DEFAULT_LIMITS) made for each world of these suite × seed shards, recorded by
+ * `cold-start.ts --cards-out` over the hidden, control and neutral worlds with the card role on Haiku 5.5 (Anthropic,
+ * lab transport, D97). Train's lines come last, so train's cards win where a longtail or heldout19 world carded the
+ * same base item. One file holds both: `bun run funnel --coverage shipped` replays it as `--cards` and `--intent`.
+ * Where several worlds of a seed carded the same item, the last line read wins.
+ */
+export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
+export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
+export const SHIPPED_COVERS: Record<string, string[]> = {
+  ...Object.fromEntries(parseSuites("train,reworded,longtail,heldout19").map((s) => [s, ["41", "42", "43", "44"]])),
+};
+
+/** The suite × seed shards SHIPPED_FILE was not made for. */
+export function shippedUncovered(suites: string[], seeds: (string | number)[]): string[] {
+  return suites.flatMap((s) =>
+    seeds.filter((seed) => !SHIPPED_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+  );
+}
 
 /** The suite × seed shards INTENT_FILE was not made for. */
 export function intentUncovered(suites: string[], seeds: (string | number)[]): string[] {
@@ -110,7 +133,8 @@ export function harnessIntent(
   if (arg !== "default") return { files: arg.split(",").filter(Boolean), note: arg };
   if (!run.wanted || !run.cardsReplayed) return { files: [], note: "" };
   const uncovered = intentUncovered(run.suites, run.seeds);
-  if (!uncovered.length) return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158` };
+  if (!uncovered.length)
+    return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158; coverage full: every item, D714` };
   const shown = uncovered.slice(0, 4).join(", ") + (uncovered.length > 4 ? `, … ${uncovered.length - 4} more` : "");
   return { files: [], note: `the checked-in requests do not cover ${shown}` };
 }
