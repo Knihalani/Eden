@@ -35,7 +35,7 @@ def main():
     for r in m2(f"{L}/data/test.jsonl.gz", "m2t"):
         out["m2t"].append(r)
     for path in [f"{L}/train/gen.jsonl", f"{L}/train/logs.jsonl", f"{L}/train/gen-work.jsonl",
-                 f"{L}/train/extra.jsonl"]:
+                 f"{L}/train/extra.jsonl", f"{L}/train/short.jsonl"]:
         if not os.path.exists(path):
             continue
         for line in open(path):
