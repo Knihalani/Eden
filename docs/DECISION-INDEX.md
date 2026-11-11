@@ -602,3 +602,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1043 | 2026-11-11 | Lab only: B19's final run is pre-registered | lab |
 | D1044 | 2026-11-11 | Adopted (lab tooling, B19): `hermes-ab --days`, pi-ab's user days on Hermes, with the D813 journal and `--resume`. | lab |
 | D1045 | 2026-11-11 | Lab only: B19's pre-registration amended before the go | lab |
+| D1046 | 2026-11-11 | Lab only: B19's coverage when the final default keys its cards apart | lab |

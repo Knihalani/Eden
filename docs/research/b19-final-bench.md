@@ -1,6 +1,6 @@
 # B19: the final benchmark — raw Hermes, Eden before the wave, Eden final
 
-Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1045 (of D1040–D1049). **Lab only: no engine
+Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1046 (of D1040–D1049). **Lab only: no engine
 or server file changes.** Every paid call goes to Anthropic through the lab provider (D97); none goes to OpenRouter,
 so every figure here is a lab-provider figure. Sections 1–2 were written and committed before the final run;
 section 3 is filled in after it.
@@ -29,9 +29,9 @@ section 3 is filled in after it.
     `--resume-biased`, and the run completed with it.
 - **The amended pre-registration (D1045):** Hermes short and Hermes days are the headline; Pi short and Pi days are
   the secondary readout.
-- **The dry runs cost $2.89** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They
-  covered 17 small runs of all three arms: Hermes short in three connector settings, Hermes days, Pi short, Pi days,
-  a resume test and two rehearsals of `go.sh`.
+- **The dry runs cost $3.35** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They
+  covered small runs of all three arms (Hermes short in three connector settings, Hermes days, Pi short, Pi days), a
+  resume test and three rehearsals of `go.sh`.
 - **The final run should cost about $7.5** (estimate, from the dry runs' cost a task). Its hard cap is $25.
 
 ## 1. How it works
@@ -120,6 +120,13 @@ had been made.
   3. **Pi, short (secondary):** one seed a process, `--budget 2`. For each seed, the three arms run side by side.
   4. **Pi, days (secondary):** one user a process, `--days 2 --day-size 20`, `--budget 2`. For each user, the three
      arms run side by side.
+- **Coverage if the final default keys its cards apart (D1046):** H2's `cardsRequestsFix` trial (D1060) may join
+  the default. It changes the card prompt, so its cards replay under `<hash>:f3` keys that `cards-shipped.jsonl.gz`
+  does not hold for heldout19. In that case `go.sh` (after the go, before any agent call) records them with the final
+  tree's own enricher: `cold-start.ts --cards-out` over heldout19 seeds 41–44, the hidden, control and neutral worlds
+  and the `--days` users, as P7 made the shipped file. Every arm then replays the same file, the shipped lines plus
+  those, with `--coverage full`. The before arm's keys are the shipped ones, so each arm finds what its own enricher
+  would have written. If the switch is off in the final default, coverage stays shipped. Estimated about $0.1.
 - **Caps:** the ledger's hard cap is what the dry runs spent plus $25, at most $40 (`go.sh` computes it). No Modal.
   If the cap stops a step, the steps already finished stand, and the Pi steps are the ones that give way.
 - **Before any call:** the parent's final commit is merged into this branch, and the harness is that tree.
@@ -167,6 +174,11 @@ It built both trees, the hashes matched, and all nine processes ran: Hermes shor
 40 tasks an arm, with 0 ungraded. It cost $0.23. `analyze.sh` (`PREFIX=reh SEEDS=42`) wrote the three reports.
 After D1044 it was rehearsed again with Hermes days (`SEEDS=43 PREFIX=reh2`). All twelve processes ran (Hermes days
 40 tasks an arm), with 0 ungraded, for $0.40, and `analyze.sh` wrote the four reports.
+
+A third rehearsal (`RECORD_COVERAGE=yes SEEDS=44 PREFIX=reh3`, train1) exercised D1046's path:
+- `cold-start` recorded 384 lines over seed 44's four worlds for $0.026, and the merged file held 11,408 lines;
+- every arm ran on it with `--coverage full`, with intent replayed for 137 of 1,545 items (Hermes short final);
+- all twelve processes finished with 0 ungraded.
 
 The resume test (`dry7-res`, Hermes days, final arm, train seed 42) was killed twice. The second time day 0 was in the
 journal. A `--resume` without `--resume-biased` exited 2 with its reason. With it, the run reused day 0 at $0 ($0.0274
