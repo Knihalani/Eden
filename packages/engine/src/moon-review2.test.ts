@@ -93,7 +93,15 @@ test("a synced item still held and unchanged after 8 days keeps its card", async
     model: null,
     now: () => clock,
     cards,
-    config: { sync: true, cards: true, syncPageSize: 10, syncCallsPerMin: 6000, syncSweepMs: DAY },
+    // `cardsRequestsFix` off: this maker writes no requests, and the re-ask of its batch is not what is counted here.
+    config: {
+      sync: true,
+      cards: true,
+      syncPageSize: 10,
+      syncCallsPerMin: 6000,
+      syncSweepMs: DAY,
+      cardsRequestsFix: false,
+    },
   });
   const sync = p.sync!;
   sync.track(scope);

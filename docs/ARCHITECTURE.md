@@ -497,7 +497,10 @@ weights `pushStart` decides alone (docs/research/m13-gate.md).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests
-the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card prefilter
+the item would change, in a user's words (validated, at most 120 characters each, redacted). Its prompt's first
+example reply shows the requests list, and a batch whose reply still leaves the list out is asked once more for its
+requests only, under the enricher's budget (`cardsRequestsFix`, D1060, D1062: before, about a quarter of replies
+dropped it, D1053); items the card prefilter
 rejects are read for their requests only, and with `cardsLean` (D125) only when a person wrote them recently: not
 automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
 (7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age, and first

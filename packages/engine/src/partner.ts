@@ -704,6 +704,8 @@ export class ContextPartner {
       if (this.config.cardsOrder) cards.order();
       // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
+      // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
+      if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
