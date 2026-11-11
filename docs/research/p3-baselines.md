@@ -366,3 +366,36 @@ five best hits 201.
 - **Read:** `eden` − `hits` one request a session at shipped coverage, templates resampled. If its lower bound is above
   0, Eden's selection earns its keep one request a session as shipped; the report then states the days result (§10)
   as a property of the days horizon. If not, the report says the +25.8 was the full index's.
+
+## 11. Results: (b4), and what (b) says in the end (D831)
+
+Fresh seeds 45–46, one request a session, shipped coverage (no replayed requests; cards and requests made in-run),
+Haiku 5.5 agent, Sonnet's grade (`b4-short.txt`, `b4-mix.txt`):
+
+| | `hits` | `eden` |
+| --- | --- | --- |
+| Hidden raised, 384 tasks | 43.0% | 56.5%: **`eden` − `hits` +13.5 (+7.3..+20.1)**, templates resampled |
+| Handed at its own request; raised of those | 206; 80.1% | 259; 83.4% |
+| Confirmed concerns, control; neutral | 0; 0 | 1; 0 |
+| $ per 1,000 tasks (1:1:8 mix); wall | **−$0.089** (−0.101..−0.078); −0.51 s | $0.260; 2.07 s |
+
+**What the `hits` baseline says (all with its own prompt and Eden's compaction):**
+
+| | Eden over the five best lexical hits | Eden's cost against them |
+| --- | --- | --- |
+| One request a session, full index (seeds 41–42) | +25.8 (+18.8..+32.8) | +$0.096 per 1,000, +0.67 s |
+| One request a session, shipped coverage (seeds 45–46) | **+13.5 (+7.3..+20.1)** | +$0.089 per 1,000, +0.51 s |
+| Over days, shipped coverage (48 users) | **+3.4 (−2.1..+8.3)**, not shown | −$0.018 per 1,000 (Eden cheaper) |
+
+- **Eden's ranking earns its keep where a request stands alone, and about half of that is the intent index's
+  coverage.** One request a session, as shipped, Eden raises 13.5 more hidden facts in 100 than the five best BM25
+  hits, for $0.09 more per 1,000 tasks and half a second (the agent's `ask_context` calls). With the full index the gap
+  doubles: the index the shipped pipeline builds is the lever (D714, D877).
+- **Over a user's days the plain baseline matches it within the interval.** `hits` hands the fact at its own request
+  more often (no not-twice ledger), Eden gets more of its earlier-day handings raised; they net out near +3. Eden is
+  cheaper there and sends 3.8 items to a neutral request against 5.0.
+- **Silence earns nothing measurable in either arm:** both put a packet on 97–100% of nothing-to-add requests, and
+  neither has more than one Sonnet-confirmed false concern in any run (weak point Q4: the push check is the lever
+  that would make Eden's silence real; owner decision).
+- Where both hand the fact, the agent raises it alike in every run (−2 to +1 points): the difference is always which
+  items reach the agent, never how it reads them.

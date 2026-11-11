@@ -527,7 +527,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D818 | 2026-11-11 | Lab scripts refuse to start while `OPENROUTER_API_KEY` is set, unless `EDEN_ALLOW_OPENROUTER=1` | adopted |
 | D819 | 2026-11-11 | The cold gate trusts the content-addressed Prettier set, and five heavy end-to-end tests share their work | adopted |
 | D830 | 2026-11-11 | Lab only: Sonnet 5.5 as the Pi agent on train, short and days, the default against tools, is pre-registered | lab |
-| D831 | 2026-11-11 | Lab only: a plain-retrieval arm, `hits`, for the Pi harness | lab |
+| D831 | 2026-11-11 | Finding (lab only): Eden's selection against plain retrieval | finding |
 | D832 | 2026-11-11 | `pushPointer` tried again on today's default and deleted for good | rejected |
 | D833 | 2026-11-11 | Rejected: a per-user alias table for the push's recall. | rejected |
 | D834 | 2026-11-11 | Finding: "a handed fact not raised" (weak point 6) is the agent model and the grade's every-clause rule, not Eden | finding |
