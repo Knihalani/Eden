@@ -607,6 +607,20 @@ python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus
   --pool .local/m5/pool.jsonl --only fit
 ```
 
+### 1i. Packet parts, part labels and trimmer screens (M6, D920–D921; docs/research/m6-trimmer.md)
+
+The trimmer was stopped (D920); the tooling stays. `--packet-parts` (with `--packets`) adds each delivered item's
+parts as compaction reads them; `m6/label.ts` names a planted item's key parts and tokens (Haiku, pay once, about
+$0.00005 an item); `../lab/m6/` turns dumps and labels into a part set and screens no-model budgets and learned
+trimmers on it, and `screen_funnel.py` reads real packets (an arm against the default). Synth dumps: 30 seeds a call.
+
+```bash
+bun run funnel --suite synth-val --seeds $(seq -s, 1 30) --jobs 3 -- --neutral --packets .local/m6/v.jsonl --packet-parts
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m6/label.ts .local/m6/v.jsonl --out .local/m6/l.jsonl --spend-cap 1
+python3 -I packages/sim/lab/m6/prep.py --labels .local/m6/l.jsonl --out .local/m6/set .local/m6/v.jsonl
+python3 -I packages/sim/lab/m6/baselines.py .local/m6/set/items.jsonl --sets val
+```
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

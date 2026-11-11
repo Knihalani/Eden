@@ -73,6 +73,12 @@ each check call with its pool, reply and task labels; `../../lab/m7/` holds M7's
 train run. `gate-negatives.ts` holds log lines, chatter, statements and questions for the push's request gate;
 `../../lab/p2/calls.py` reads a ledger's check calls (tokens, p50, time to first token).
 
+**Packet parts and part labels (M6, D920, D921):** `hidden-funnel --packets F --packet-parts` adds each delivered
+item's parts as compaction reads them (`renderPacket`'s lab-only `onParts`); `m6/label.ts` labels the planted fact's
+or look-alike's key parts and tokens with Haiku (pay once); `../../lab/m6/` builds the part set, screens baselines and
+nine trimmer architectures (`cands.py`) and reads real funnel packets (`screen_funnel.py`). The trimmer itself was
+deleted (D920: it did not transfer to the sim's hand-written families). Run synth dumps 30 seeds a call.
+
 **Offline retrieval screens over days (M3, M5; D911):** `days-calls.ts --corpus-dump F` (each user's items, redacted,
 1,200 characters), `--pool-diag F` rows with the planted id, request, template and pool ids, `--cards-live MODEL
 --cards-out F` (the shipped card coverage, carded live and recorded; needs the spend flags) and `--intent none`.
