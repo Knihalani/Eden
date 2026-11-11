@@ -29,6 +29,7 @@ import {
   type UserShape,
 } from "./pi-cost";
 import { dayOf } from "./pi-user";
+import { resumedNote } from "./run-journal";
 
 const argv = process.argv.slice(2);
 const flag = (name: string) => {
@@ -39,6 +40,8 @@ const files = argv.filter((a, i) => a.endsWith(".json") && !["--lifetime", "--js
 if (!files.length) throw new Error("usage: pi-cost-report.ts run.json [run2.json …] [--lifetime cold.json] [--json F]");
 
 interface RunFile {
+  /** `--resume` (D813): what an earlier attempt's journal supplied (`resumedNote`). */
+  resumed?: Parameters<typeof resumedNote>[1];
   seeds: number[];
   tasks: Task[];
   results: RunResult[];
@@ -63,6 +66,8 @@ const notes: string[] = [];
 const shapes: { file: string; shape?: UserShape }[] = [];
 for (const file of files) {
   const run = JSON.parse(readFileSync(file, "utf8")) as RunFile;
+  const resumed = resumedNote(file, run.resumed);
+  if (resumed) notes.push(resumed);
   shapes.push({
     file,
     ...(run.user

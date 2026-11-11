@@ -66,8 +66,11 @@ import {
   type Span,
   type TimelineEvent,
 } from "./pi-timeline";
+import { resumedNote } from "./run-journal";
 
 interface RunFile {
+  /** `--resume` (D813): what an earlier attempt's journal supplied (`resumedNote`). */
+  resumed?: Parameters<typeof resumedNote>[1];
   model: string;
   grader: string;
   spent: number;
@@ -188,6 +191,10 @@ console.log(
     `${ok.filter((r) => !r.facts && tasks.get(r.task)!.must.length).length}`,
 );
 console.log(`config ${join(runs.map((r) => JSON.stringify(r.config ?? {})))}`);
+for (const [i, r] of runs.entries()) {
+  const note = resumedNote(files[i]!, r.resumed);
+  if (note) console.log(note);
+}
 
 // ---- Eden's spend no task is charged for (cards, bridge), shared out over the task runs (ab-common.ts states how).
 const hasBackground = runs.every((r) => r.background !== undefined);

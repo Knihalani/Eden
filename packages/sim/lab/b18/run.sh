@@ -20,7 +20,7 @@ mkdir -p "$R"
 if [ -e "$R/$L.json" ]; then echo "run.sh: $L is finished; not run again" >&2; exit 0; fi
 echo "$(date -u +%FT%TZ) $L $ARM $(git -C "$DIR" rev-parse HEAD) $*" >> "$ROOT/.local/b18/starts.log"
 cd "$DIR"
-exec env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite "${B18_SUITE:-heldout18}" \
+exec env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite "${B18_SUITE:-heldout18}" \
   --conditions $COND --config default --tenant-prompt \
   --cards "$ROOT/.local/b18/cards-all.jsonl" --cards-out "$R/$L.cards.jsonl" \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

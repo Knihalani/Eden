@@ -199,6 +199,11 @@ describe("hidden-funnel --neutral", () => {
           "--no-record",
           "--json",
           json,
+          // The default with its sync capped at 100 items a user (D819), as funnel-flags.test.ts runs it: storing the
+          // default's 3,000 was most of each run's start-up, and nothing here needs them. Cut copies answer locally,
+          // so a task's finds do not depend on a live search's timing.
+          "--config",
+          JSON.stringify({ syncMaxItems: 100, syncLocalComplete: false }),
           ...extra,
         ],
         { stdout: "pipe", stderr: "pipe" },
