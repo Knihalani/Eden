@@ -248,7 +248,10 @@ export const UNRUN_BLIND = [
  * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802). Held-out 19 (P7, D870) is unread, for the end-of-wave
  * confirmation only. */
 export const UNREAD_BLIND: string[] = ["heldout19"];
-/** P7's suites (D871, D873) and P2's `train-rw` stay out of `all`, so `--suite all` measures what it measured before them. */
+/**
+ * P7's suites (D871, D873) and P2's `train-rw` stay out of `all`, so `--suite all` measures what it measured before
+ * them.
+ */
 const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n));
 
