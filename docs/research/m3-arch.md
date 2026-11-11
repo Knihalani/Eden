@@ -206,3 +206,17 @@ among the candidates, fact first 64, in the first five 86; of 148 control reques
 **Round 2 (developed):** H1 and H7 with prior bits (the candidate's lexical position and FrameRank's 48 comparators,
 bucketed: they re-rank rather than rank from nothing), one epoch over 150 worlds, held-out checks during training (the
 best kept); H4 with fact against its own twin reported apart.
+
+### 7b. Hypotheses added after the owner's second steer (written before their first results)
+
+Each spot gets its own metric, baseline and bar. Data: M2 v1 (1,455 / 174 / 181 worlds, split by family), held out on
+its val split unless said; or fold A's groups as before.
+
+| # | spot | network | metric and baseline | bar (keep if) |
+|---|---|---|---|---|
+| H10 | supersession, change detection | binary pair network over (older, newer) item texts → "newer replaces older"; positives M2's 1,536 `revisionOf` pairs, negatives the reversed pair, (fact, twin) and (fact, neutral) of the same task (same topic, no replacement) | AUC replaces against not on M2 val; baseline: the Jaccard similarity of the two texts as the score | AUC ≥ 0.85 and ≥ baseline + 0.10 |
+| H13 | ingest understanding (H4's successor) | binary multi-task item tagger: one item → fact / the twin's kind (superseded, other-entity, resolved, other-period, already-met) / neutral / other | AUC fact against its own twin on M2 val (H4 could not say); baseline 0.5 | AUC fact vs twin ≥ 0.75 |
+| H14 | push or silence (H5's successor) | H1's own NULL head (calibrated abstention), no separate net | silence on control requests at the margin where 95% of hidden requests with the fact in the candidates still speak | ≥ 50% of control requests silent |
+| H15 | request understanding (anchors, phrasing) | — | — | **not built**: no anchor labels (person, thing, date) in M2 v1 or the exports, and P7's reworded suites are not in this tree; intent (H8) stands for it |
+| H6′ | no-word-overlap recall where room exists | H6 on M2 v1 | first measure the room: M2 test facts outside BM25's top 50 | room ≥ 10% of facts, then H6's bar |
+| H1+ | top-5 ranking (the owner's targets: twin@5 near 0, fact@5 high 130s of 147, silence on nearly all controls) | H1 scaled: 256 bits, wider layers, M2 v1 + generated families + train, hard-twin curriculum, multi-task with H13 | fold A held out | step 6 |
