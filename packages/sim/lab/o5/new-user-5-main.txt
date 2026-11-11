@@ -1,0 +1,38 @@
+# On main @ 2f06d1ea (after #240), $0, stub reader, seed 41. default vs --set '{"syncKick":false}'.
+$ bun packages/sim/src/lab/funnel.ts --seeds "41" --jobs "2" --json "<out>/kick-5.json" -- --time "1" --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload --connect-at "0,10,25,35,45,60,90,180"
+
+== today (syncKick off): 3072 rows
+  at s (sent, mean) |  n | hidden surfaced | by push | warm at request | items held | decoys surfaced
+      0 (   0.0)    | 192 |  88  45.8%     |  76     |   0             |       0    |  85 of 192
+     10 (  10.0)    | 192 |  72  37.5%     |  56     |   0             |       0    |  59 of 192
+     25 (  25.0)    | 192 |  81  42.2%     |  66     |   0             |       0    |  73 of 192
+     35 (  35.0)    | 192 | 106  55.2%     |  97     |   0             |     397    | 106 of 192
+     45 (  45.0)    | 192 | 129  67.2%     | 118     |  70             |     776    | 125 of 192
+     60 (  60.0)    | 192 | 129  67.2%     | 114     |  78             |     779    | 122 of 192
+     90 (  90.0)    | 192 | 135  70.3%     | 121     |  78             |     779    | 128 of 192
+    180 ( 180.0)    | 192 | 154  80.2%     | 143     | 192             |    1510    | 141 of 192
+== default: 3072 rows
+  at s (sent, mean) |  n | hidden surfaced | by push | warm at request | items held | decoys surfaced
+      0 (   0.0)    | 192 |  90  46.9%     |  80     |   0             |       0    |  94 of 192
+     10 (  10.0)    | 192 | 149  77.6%     | 140     | 134             |    1443    | 137 of 192
+     25 (  25.0)    | 192 | 154  80.2%     | 144     | 192             |    1510    | 141 of 192
+     35 (  35.0)    | 192 | 154  80.2%     | 144     | 192             |    1510    | 141 of 192
+     45 (  45.0)    | 192 | 154  80.2%     | 144     | 192             |    1510    | 141 of 192
+     60 (  60.0)    | 192 | 154  80.2%     | 144     | 192             |    1510    | 141 of 192
+     90 (  90.0)    | 192 | 154  80.2%     | 144     | 192             |    1510    | 141 of 192
+    180 ( 180.0)    | 192 | 154  80.2%     | 144     | 192             |    1510    | 141 of 192
+
+# sync lines, a shard each: syncKick off
+sync: backfill 1194 calls (18.7/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 111 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 7.43/task; amortised total 9.55/task; local sources 2.25/lookup; demand items 0, background items 97088
+sync: backfill 1188 calls (18.6/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 144 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 7.58/task; amortised total 9.62/task; local sources 2.41/lookup; demand items 0, background items 96320
+sync: backfill 1188 calls (18.6/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 150 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 7.52/task; amortised total 9.55/task; local sources 2.43/lookup; demand items 0, background items 96704
+sync: backfill 1189 calls (18.6/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 131 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 7.41/task; amortised total 9.48/task; local sources 2.41/lookup; demand items 0, background items 97216
+sync: backfill 1193 calls (18.6/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 136 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 8.09/task; amortised total 10.16/task; local sources 2.37/lookup; demand items 0, background items 96896
+sync: backfill 1183 calls (18.5/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 121 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 7.34/task; amortised total 9.41/task; local sources 2.45/lookup; demand items 0, background items 95744
+# sync lines, a shard each: default
+sync: backfill 1152 calls (18.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 469 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 2.81/task; amortised total 4.14/task; local sources 4.51/lookup; demand items 0, background items 97088
+sync: backfill 1152 calls (18.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 476 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 2.78/task; amortised total 4.10/task; local sources 4.53/lookup; demand items 0, background items 96320
+sync: backfill 1152 calls (18.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 452 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 2.60/task; amortised total 3.97/task; local sources 4.55/lookup; demand items 0, background items 96704
+sync: backfill 1152 calls (18.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 494 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 3.04/task; amortised total 4.32/task; local sources 4.47/lookup; demand items 0, background items 97216
+sync: backfill 1152 calls (18.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 485 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 3.10/task; amortised total 4.40/task; local sources 4.50/lookup; demand items 0, background items 96896
+sync: backfill 1152 calls (18.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 455 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 2.68/task; amortised total 4.04/task; local sources 4.55/lookup; demand items 0, background items 95744
