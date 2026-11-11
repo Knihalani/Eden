@@ -154,10 +154,10 @@ weights a process as an upper bound).
 | **Heavy, peak hour** (all active, 1/6 live, 5/6 warm) | **5.29 MB** | **1,643** | **3,296** | **8,871** | **17,753** |
 
 Read the prose rows for real mail (the sim's templated text compresses better than mail will), and **size daily
-agents by the heavy peak row**: when a tenant's users all work the same hours, every one is active within 30 minutes
-and most are frozen warm (D862), whose blobs are about twice the compact ones; that, not the item count, is what
-costs 5.29 MB against 3.36 at a quarter active. (A shorter warm window would trade that memory for 200 ms compact
-thaws on users back after a few minutes; not measured as a trial, not changed.) Latency at a realistic rate on the 2-core budget (`bun run sim:perf steady --synced`: 300 synced users of the sim
+agents by the heavy peak row**: when a tenant's users all work the same hours, every one is active within 30 minutes,
+a sixth of them live at any moment (about 9-10 MB each at the cap) and the rest warm (3.3 MB): 5.29 MB a user against
+3.36 at a quarter active. Compacting warm users sooner was tried and rejected (D996): at most 11% less memory for
+200 ms more on every return after a pause. Latency at a realistic rate on the 2-core budget (`bun run sim:perf steady --synced`: 300 synced users of the sim
 world at real pacing and connector latency, 39 events and 87 requests a second, one server process, the reviewer's
 runs sharing the machine): observe p50 0.95 ms, p99 21.7 ms (a user's message 2.9 / 25.4 ms), `ask_context` 6.4 /
 32.3 ms, with the server at 17% of a core.
@@ -288,10 +288,18 @@ suite.
 Also validated: the cloud-init file rendered for each role (`render-cloud-init.py`) passes `cloud-init schema`
 (cloud-init 26.2 from Ubuntu's archive).
 
-Not validated: **the OpenTofu configs** (`deploy/tofu/hetzner`, `deploy/tofu/oci`; no OpenTofu binary could be run in
-the session: run `tofu init && tofu validate && tofu plan` before the first apply); cloud-init and
+Checked statically (D997), since neither OpenTofu, Terraform's official image nor Alloy's could be run in the
+session: `deploy/scripts/check-tf.py` (python-hcl2 from PyPI) parses every `.tf` file and checks that every
+variable, local, resource and data source referenced exists and that each `templatefile` call passes exactly the
+cloud-init template's variables (both configs pass; a misspelt variable and a renamed template variable are caught);
+`deploy/scripts/check-monitoring.py` checks `config.alloy`'s braces, quotes, component references and listed
+environment variables, and that every rule in `alerts.yaml` is complete and watches a metric Eden emits (passes; a
+misspelt metric and a dangling reference are caught).
+
+Not validated: **the OpenTofu configs against the providers' schemas** (run `tofu init && tofu validate && tofu
+plan` before the first apply); cloud-init and
 `bootstrap-dedicated.sh` on a real machine; Hetzner Object Storage's lifecycle rule
-(S3-compatible per its docs; unverified); Grafana Alloy's config (`alloy fmt` it first); a real network between
+(S3-compatible per its docs; unverified); Alloy's and PromQL's semantics (`alloy fmt` and `promtool check rules` first); a real network between
 machines; real Ampere hardware (the arm64 run was emulated, so no arm64 timings are quoted).
 
 ## 13. Runbook
