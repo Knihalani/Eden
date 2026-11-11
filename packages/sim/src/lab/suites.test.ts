@@ -220,8 +220,8 @@ describe("suite registry", () => {
       expect(anchored.every((t: { text: string }) => words(t) <= 12)).toBe(true);
     }
     expect(UNRUN_BLIND).toContain("heldout18");
-    // Unread (D465): the funnel calls a run naming it the blind read rather than "read before".
-    expect(UNREAD_BLIND).toEqual(["heldout18"]);
+    // Read by B18 (D802): the funnel now warns that a run naming it was read before. No suite is unread.
+    expect(UNREAD_BLIND).toEqual([]);
     expect(supportsNeutral("heldout18")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout18");
   });
