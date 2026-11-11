@@ -242,8 +242,10 @@ includes typed arrays' stores, so the `IdSet` rows are its whole cost; `external
 D752 (O4): a new set shares empty arrays until its first `add`, and a `delete` that leaves a quarter of the slots
 live, or none, moves what is left into arrays sized for it (never while an iterator is open). The sync's per-source
 sets grew to a page of ids and were then trimmed to a few: 1.34 → 0.83 MB a user with 1,000 sources
-(docs/research/o4-per-source.md). `bench/idset.bench.ts`, three alternating runs each on a 4-core VM (the
-reviewer's, 2026-11-11), main → D752: `has` present 98 / 103 / 109 → 100 / 102 / 107 ns, absent 89 / 95 / 97 → 101 /
-94 / 100 ns, `delete` + `add` 312 / 338 / 344 → 299 / 323 / 312 ns, iterating 3,000 176 / 244 / 231 → 203 / 266 /
-234 µs, heap per id at 3,000 37.2 → 37.1 B: no slower within the runs' spread. The bench's sets stay at 3,000 ids,
-so it does not time the shrink itself.
+(docs/research/o4-per-source.md). `bench/idset.bench.ts` on a 4-core VM, 2026-11-11, alternating runs, main → D752,
+as two review passes reported them (not re-run by the author). First pass, three runs each: `has` present 98 / 103
+/ 109 → 100 / 102 / 107 ns, absent 89 / 95 / 97 → 101 / 94 / 100 ns, `delete` + `add` 312 / 338 / 344 → 299 / 323 /
+312 ns, iterating 3,000 176 / 244 / 231 → 203 / 266 / 234 µs. Second pass, two runs each: present 99 / 107 → 103 /
+109 ns, absent 92 / 100 → 121 / 107 ns, `delete` + `add` 286 / 302 → 319 / 326 ns, iterating 267 / 237 → 247 / 216
+µs. Heap per id at 3,000: 37.2 → 37.1 B. No consistent slowdown within the runs' spread. The bench's sets stay at
+3,000 ids, so it does not time the shrink itself.

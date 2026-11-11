@@ -225,4 +225,40 @@ describe("SourceFanout.park (D754)", () => {
     expect(g.parked).toBeLessThanOrEqual(10);
     expect(g.parked).toBeGreaterThan(0);
   });
+
+  test("a rate-limit report for a pair that never had guards, or was forgotten, makes none", async () => {
+    const { f, clock, ask } = fanout();
+    f.rateLimited(scope, "never", "429 Too Many Requests, retry after 30");
+    expect(f.guards()).toEqual({ live: 0, parked: 0 });
+    await ask(source("s"), "a");
+    clock.now += IDLE_MS;
+    await ask(source("else"), "a", other);
+    f.forget(scope);
+    f.rateLimited(scope, "s", "429 Too Many Requests, retry after 30");
+    expect(f.guards()).toEqual({ live: 1, parked: 0 });
+  });
+
+  test("a pair that comes back leaves no parked limit behind", async () => {
+    const { f, clock, ask } = fanout();
+    const s = source("s");
+    await ask(s, "a");
+    clock.now += IDLE_MS;
+    await ask(source("else"), "a", other);
+    expect(f.guards()).toEqual({ live: 1, parked: 1 });
+    await ask(s, "b");
+    expect(f.guards()).toEqual({ live: 2, parked: 0 });
+  });
+
+  test("a push-back that has passed no longer keeps the pair", async () => {
+    const { f, clock, ask } = fanout({ breaker: { minCalls: 100 } });
+    await ask(
+      source("s", async () => {
+        throw new Error("429 Too Many Requests, retry after 30");
+      }),
+      "a",
+    );
+    clock.now += IDLE_MS;
+    await ask(source("else"), "a", other);
+    expect(f.guards()).toEqual({ live: 1, parked: 1 });
+  });
 });

@@ -744,7 +744,10 @@ export class SourceFanout {
    * when a new set of guards would behave as its own do: nothing in flight, the breaker closed with an empty window,
    * both latency histories empty, no rate-limit push-back still standing. Its learned concurrency limit is kept
    * (`parked`) and given back on its next call. What is not kept: the phase of the histograms' rolling windows (a
-   * new one's windows start when it is made), which moves by up to a window when a later sample runs out. A pair
+   * new one's windows start when it is made), which moves by up to a window when a later sample runs out; and a
+   * planner call that runs with no lookup holding the pair's permit and reports after the pair was parked is not
+   * recorded (`recordCall` writes only into guards that exist; in the shipped wiring such a call runs inside a
+   * lookup). A pair
    * that is idle but not so (an open breaker, a call that never returned its permit) is moved behind the others, so
    * it cannot hold up the scan; it is still dropped at `maxStates` as before, a little later than its last use
    * alone would have it.

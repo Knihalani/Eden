@@ -67,8 +67,10 @@ over its current and its previous ten-minute window). The first version parked a
 alone; the review showed four cases where that changed a result (a planner history 10-20 minutes old, a breaker
 configured with a longer window, a report written long after its call began, a rate-limit error reported for a
 parked pair), each now a test. A rate-limit error reported for a parked pair brings its guards back to note it.
-One thing is not kept: the phase of a histogram's rolling windows, so a later sample can run out up to a window
-sooner or later than it would have. The work is done as calls come (up to 64 of the least recently used pairs are
+Two things differ, both stated in D754: the phase of a histogram's rolling windows is not kept, so a planner
+latency sample recorded after a restore can last a different part of its 10-20 minutes; and at `maxStates`
+(100,000 pairs) a rate-limit report that brings a parked pair's guards back can push out the least recently used
+live pair, as any new pair's call does. The work is done as calls come (up to 64 of the least recently used pairs are
 looked at each call, stopping at the first that is not idle), with no timer.
 
 `source-heap.ts 995 3 10` on main @ 74204885 (`packages/sim/lab/o5/source-heap.txt`), MB of heap a user after ten
@@ -79,7 +81,7 @@ idle yet: 10.14 and 10.12.
 No result of the funnel changes: its clock moves an hour between requests, so every pair is parked and brought back
 between any two of a user's requests there. On main's tree the default funnel reads 315 and 276 with all 768 task
 rows identical to the run without it (connector calls 2,066 both), and the 1,000-source funnel 192 of 192 rows (77
-and 77, calls 859 both). `packages/sim/lab/o5/mutate-park.py`: each of 15 mutations of `park` fails `park.test.ts`.
+and 77, calls 859 both). `packages/sim/lab/o5/mutate-park.py`: each of 18 mutations of `park` fails `park.test.ts`.
 
 ## 4. Not done
 
