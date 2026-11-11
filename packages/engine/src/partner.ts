@@ -147,6 +147,7 @@ import {
 } from "./parties";
 import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
+import { rrfOrder } from "./retrieve";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -2093,8 +2094,21 @@ export class ContextPartner {
       if (this.config.planConflict && internal.again === undefined && !internal.open) this.noteActed(s, cue);
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
+      // `pushRetrieve` (M3, D901): a learned retriever's top k fused into the ranking before the pool's cut. Off, no
+      // await is added.
+      const retrieving = candidating && this.config.pushRetrieve > 0 && !!this.deps.widen;
+      const ranked = retrieving ? await this.retrieveFuse(s, cue, [...order, ...scored]) : [...order, ...scored];
+      // The session closed while the retriever answered: nothing is pushed for it.
+      if (retrieving && s.closed)
+        return {
+          answer: "",
+          citations: [],
+          usedModel: false,
+          costUsd: 0,
+          latencyMs: Math.round(performance.now() - t0),
+        };
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      const gate = candidating ? this.pushGate(s, cue, ranked) : null;
       // `pushCheck` (D500): one budgeted call over the pool, only when the gate would hand candidates. Off, no await
       // is added: the push's timing (which turn it lands in) stays the default's.
       // `pushWiden` (N2, D511): items no lexical rank reached join what the check reads, after the pool; only the
@@ -2814,6 +2828,37 @@ export class ContextPartner {
       add(deep, c.pushWidenDeep);
     }
     return out;
+  }
+
+  /**
+   * `pushRetrieve` (M3, D901): the ranking with the `widen` dependency's top `pushRetrieve` ids fused in by reciprocal
+   * rank (`rrfOrder`). Current cached copies only, bulk mail out; an id the ranking holds keeps its own entry. Bounded
+   * by `pushCheckWaitMs`; a dependency that throws, rejects or is late leaves the ranking as it was.
+   */
+  private async retrieveFuse(s: Session, cue: Cue, ranked: readonly Scored[]): Promise<Scored[]> {
+    const k = this.config.pushRetrieve;
+    const widen = this.deps.widen!;
+    const ids = await within(
+      Promise.resolve()
+        .then(() => widen(s.scope, sanitizeForStore(cue.raw), k))
+        .catch(() => [] as string[]),
+      this.config.pushCheckWaitMs,
+    );
+    if (!ids || ids.length === 0 || s.closed) return [...ranked];
+    const now = this.now();
+    const byId = new Map<string, Scored>();
+    for (const x of ranked) if (!byId.has(x.item.id)) byId.set(x.item.id, x);
+    const lexical = [...byId.keys()];
+    const found: string[] = [];
+    for (const id of ids.slice(0, k)) {
+      if (!byId.has(id)) {
+        const item = this.deps.cache.get(s.scope, id, now);
+        if (!item || bulkMail(item)) continue;
+        byId.set(id, { item, score: 0, matched: 0, sketch: null });
+      }
+      found.push(id);
+    }
+    return rrfOrder([lexical, found]).map((id) => byId.get(id)!);
   }
 
   /**

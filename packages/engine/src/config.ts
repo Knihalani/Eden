@@ -769,6 +769,14 @@ export interface EngineConfig {
    */
   pushOpen: boolean;
   pushWidenEmbed: number;
+  /**
+   * M3 (D901; a trial, off; docs/research/m3-retriever.md): with `pushCandidates`, the `widen` dependency's top k
+   * (a learned retriever: items encoded at ingest, the request read with no network) are fused into the push's
+   * lexical ranking by reciprocal rank (`retrieve.ts`) before the pool's cut, so the pool and the candidates can
+   * hold items no word of the request reaches. 0 is off (no await added). Bounded by `pushCheckWaitMs`; fails open
+   * to the lexical ranking.
+   */
+  pushRetrieve: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
   /**
@@ -940,6 +948,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckAnchored: false,
   pushOpen: true,
   pushWidenEmbed: 3,
+  pushRetrieve: 0,
   pushWidenIntent: 2,
   pushWidenDeep: 0,
   revisionDiff: true,

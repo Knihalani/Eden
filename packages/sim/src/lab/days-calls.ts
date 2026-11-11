@@ -10,14 +10,14 @@
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
  *     [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none]
- *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD]
+ *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD] [--widen-ranks FILE]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
@@ -81,6 +81,35 @@ export interface DaysCallsOptions {
    * line a user, for offline retrieval screens. Simulated items only.
    */
   onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
+  /** `--widen-ranks FILE` (M3, D901): per user, the `widen` dependency `pushRetrieve` reads (`widenRanks`). */
+  widen?: (seed: number) => (scope: unknown, request: string, k: number) => Promise<readonly string[]>;
+}
+
+/** Requests reach the engine redacted and may differ in spacing: matched on letters and digits. */
+const normRequest = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+/**
+ * M3 (D901): a retriever's ranks precomputed offline (`m3r/widen_table.py`: per seed and request, the user's item ids
+ * a model ranks first, from a fold that never trained on the request's template), served as the `widen` dependency.
+ * Lab only; the push makes no call.
+ */
+export function widenRanks(path: string): DaysCallsOptions["widen"] {
+  const table = new Map<number, Map<string, string[]>>();
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    const r = JSON.parse(line) as { seed: number; request: string; top: string[] };
+    let m = table.get(r.seed);
+    if (!m) table.set(r.seed, (m = new Map()));
+    m.set(normRequest(r.request), r.top);
+  }
+  return (seed) => {
+    const m = table.get(seed);
+    return async (_scope, request, k) => (m?.get(normRequest(request)) ?? []).slice(0, k);
+  };
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -210,6 +239,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     config: o.config ?? {},
     ...(cards ? { cards } : {}),
     ...(o.onPlanted ? { onPushPool: (r: PushPoolReport) => void (pooled = r) } : {}),
+    ...(o.widen ? { widen: o.widen(seed) } : {}),
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
   // The harness reads the engine's session table, as hidden-funnel does: whether a session's lookup is still running.
@@ -470,6 +500,8 @@ if (import.meta.main) {
     gapMs: Number(opt("gap-min", "10")) * 60_000,
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
+  const widenFile = opt("widen-ranks", "");
+  if (widenFile) o.widen = widenRanks(widenFile);
   const diag = opt("pool-diag", "");
   const corpus = opt("corpus-dump", "");
   if (corpus) {

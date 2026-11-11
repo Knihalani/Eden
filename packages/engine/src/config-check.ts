@@ -186,6 +186,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckSilent: [...PUSH, "pushCheck"],
   pushCheckAnchored: [...PUSH, "pushCheck"],
   pushWidenEmbed: [...PUSH, "pushCheck", "pushWiden"],
+  pushRetrieve: PUSH,
   pushWidenIntent: [...PUSH, "pushCheck", "pushWiden"],
   pushWidenDeep: [...PUSH, "pushCheck", "pushWiden"],
   revisionDiff: ["revisionNotice"],
@@ -258,6 +259,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
   pushWidenEmbed: { integer: true, max: 20 },
+  pushRetrieve: { integer: true, max: 20 },
   pushWidenIntent: { integer: true, max: 20 },
   pushWidenDeep: { integer: true, max: 20 },
 };
