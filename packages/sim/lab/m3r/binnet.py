@@ -314,7 +314,7 @@ class PairTag(nn.Module):
         return self.head(self.q.act(self.l1(torch.cat([a, b, a * b], -1)))).squeeze(-1)
 
 
-TAGS = ["fact", "superseded", "other-entity", "resolved", "other-period", "already-met", "neutral", "other"]
+TAGS = ["fact", "superseded", "other-entity", "resolved", "other-period", "already-met", "neutral", "other", "twin"]
 
 
 def m2_items(path, every=1):
@@ -741,6 +741,16 @@ def run(o):
             print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
     elif o.arch == "tags":
         I, _ = m2_items(o.train, o.every)
+        if o.train2:
+            # The sim's and the generated families' items too (export groups, the fold's training suites): each
+            # request's planted item is a fact (hidden) or its all-clear twin of no named kind ("twin").
+            for w in load(o.train2):
+                for r in w["reqs"]:
+                    if r["planted"] >= 0:
+                        I.append((w["texts"][r["planted"]], "fact" if r["kind"] == "hidden" else "twin"))
+                for k in random.sample(range(len(w["texts"])), min(8, len(w["texts"]))):
+                    I.append((w["texts"][k], "other"))
+            I = list({(t, g) for t, g in I})
         Ie, _ = m2_items(o.eval)
         net = Intent(q, o.bits, len(TAGS))
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
@@ -762,7 +772,7 @@ def run(o):
             net.train()
             pf = torch.softmax(lg, -1)[:, 0].tolist()
             tags = [x[1] for x in Ie]
-            twin = [t for t in TAGS[1:6]]
+            twin = [t for t in TAGS[1:6]] + ["twin"]
             f = [a for a, t in zip(pf, tags) if t == "fact"]
             tw = [a for a, t in zip(pf, tags) if t in twin]
             ne = [a for a, t in zip(pf, tags) if t == "neutral"]
@@ -860,5 +870,6 @@ if __name__ == "__main__":
     a.add_argument("--out", default="")
     a.add_argument("--ranks", default="", help="pair/notwin: write the eval's ranks (score.py's format) here")
     a.add_argument("--eval2", default="", help="a second eval file to rank (M2's test split)")
+    a.add_argument("--train2", default="", help="tags: export groups whose planted items are added to training")
     a.add_argument("--ranks2", default="")
     run(a.parse_args())
