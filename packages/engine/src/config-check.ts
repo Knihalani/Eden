@@ -172,16 +172,13 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
   pushIndirect: PUSH,
-<<<<<<< HEAD
   pushWide: PUSH,
   poolExpand: PUSH,
   poolExpandTerms: PUSH,
   poolScan: PUSH,
   poolScanItems: PUSH,
   poolScanKeep: PUSH,
-=======
   pushGate: PUSH,
->>>>>>> origin/main
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],

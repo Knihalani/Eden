@@ -733,7 +733,6 @@ export interface EngineConfig {
    */
   pushIndirect: boolean;
   /**
-<<<<<<< HEAD
    * M12 (D1000, trial, off at 0; docs/research/m12-pool.md): how many lexical hits the push's and the ask's lookup
    * reads before it builds the pool (12 when 0), so a re-ranker can bring a held fact ranked below the twelfth into
    * the pool's last seats.
@@ -756,7 +755,7 @@ export interface EngineConfig {
   poolScanItems: number;
   /** `poolScan`: a pooled item's score bonus against a new candidate (its place in the lexical order is evidence). */
   poolScanKeep: number;
-=======
+  /**
    * M13 (D1010, promoted by the owner's D1014, part `gate`; docs/research/m13-gate.md): the turn gate
    * (`turn-gate.ts`), a local model over hashed character n-grams that reads any language, decides the push's start
    * beside `pushStart`: a rule start stands unless the gate's score is under its veto, and the gate adds a start where
@@ -765,7 +764,6 @@ export interface EngineConfig {
    * (fail open).
    */
   pushGate: boolean;
->>>>>>> origin/main
   /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
@@ -928,15 +926,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushOpen: true,
   pushIndirect: true,
-<<<<<<< HEAD
   pushWide: 0,
   poolExpand: 0,
   poolExpandTerms: 8,
   poolScan: 0,
   poolScanItems: 30,
   poolScanKeep: 0,
-=======
   pushGate: true,
->>>>>>> origin/main
   revisionDiff: true,
 };
