@@ -313,6 +313,10 @@ export class DiskCardMaker implements CardMaker {
     const replayed = options.cardRequests === false ? [] : cardFiles;
     this.requests = options.shared?.requests ?? loadRequests(...replayed, ...(options.requests ?? []));
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
+    for (const h of [...this.cards.keys(), ...this.requests.keys()]) {
+      const m = /:f(\d+)$/.exec(h);
+      if (m) this.heldForms.add(Number(m[1]));
+    }
   }
 
   async make(
@@ -323,8 +327,8 @@ export class DiskCardMaker implements CardMaker {
     intent = false,
     options: CardMakeOptions = {},
   ): Promise<CardBatch> {
-    const form = options.form ?? 0;
-    if (options.requestsOnly) return this.makeRequests(items, today, signal, options);
+    const form = this.replayed(options.form ?? 0);
+    if (options.requestsOnly) return this.makeRequests(items, today, signal, { ...options, form });
     const got = await this.makeCards(items, today, signal, retry, intent, form);
     if (!intent) return got;
     const requests = items.map((it) => this.requests.get(formKey(it, form)) ?? null);
@@ -332,6 +336,22 @@ export class DiskCardMaker implements CardMaker {
     const cards = got.cards.map((c, i) => c ?? (requests[i] ? NONE : null));
     return { ...got, cards, requests };
   }
+
+  /**
+   * The form a call replays (D1060): its own when the files hold any line of it, else the shipped form's lines. A
+   * file recorded before the form existed (the full index `intent-v2`, `cards-v2`, every reader recipe's cards) is
+   * replayed as it was recorded, rather than going inert; a file that holds the form (`cards-shipped`) answers only
+   * from its lines, so within one file the forms never mix (an item it has no line of the form for is a miss).
+   */
+  private replayed(form: number): number {
+    return form && this.heldForms.has(form) ? form : 0;
+  }
+
+  /**
+   * The forms the files held when this maker was built (fixed then: a live miss appended under a form later must not
+   * switch a file recorded before it from replay as recorded to misses halfway through a run).
+   */
+  private readonly heldForms = new Set<number>();
 
   /**
    * `cardsRequestsFix`'s re-ask (D1060): each item's replayed requests under the form; the items with none go to the

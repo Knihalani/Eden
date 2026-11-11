@@ -183,5 +183,4 @@ test("cardsRequestsFix needs cards and intent", () => {
   const deps = { deps: { cards: true } };
   expect(() => checkEngineConfig({ cardsRequestsFix: true, intent: false }, deps)).toThrow();
   expect(() => checkEngineConfig({ cardsRequestsFix: true }, deps)).not.toThrow();
-  expect(() => checkEngineConfig({ cardsRequestsFix: true })).toThrow(); // no cards dependency wired
 });

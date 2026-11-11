@@ -85,9 +85,10 @@ export const PARTS = {
     cardsSourceAware: false,
     cardsOrder: false,
     cardsLanes: 1,
+    cardsRequestsFix: false,
   },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
-  intent: { intent: false, cardsLean: false, intentByKind: false },
+  intent: { intent: false, cardsLean: false, intentByKind: false, cardsRequestsFix: false },
   /** The ask-time reader and its push (D95, D96, D99). */
   reader: {
     askReader: false,

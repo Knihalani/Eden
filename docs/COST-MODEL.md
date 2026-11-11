@@ -540,6 +540,18 @@ Anthropic-direct lab figures, Haiku 5.5, thinking off.
   item sent. At 50 new items a day **[EST]** about +$0.04 a user-month after a one-time +$0.051. Not taken: the same
   requests on every item read no more facts than the lean selection's (funnel), see D1053 for the live pair.
 
+### The card prompt's requests fix (`cardsRequestsFix`, D1060, D1062; docs/research/h2-requests-fix.md)
+
+Anthropic-direct lab figures, Haiku 5.5, thinking off. The shipped enricher's card calls with the fix, over the 84
+worlds of train1–6 and longtail × seeds 41–44 × hidden, control and neutral (`cold-start.ts`): $0.63, $0.0075 a world
+against P7's $0.0070 with the old prompt (+8%), 581 calls of which 17 re-asks (2.9%), 97.7% of items sent given
+requests. A call writes more because more items get requests: on H2's 400 items $0.0000770 against $0.0000766 a item
+over the batches that list requests, and 379 against 260 items given requests (D1053). A re-ask is one
+requests-only call for a batch, reserved on the enricher's `Budget` like a card call (about $0.0008 for 20 items
+**[EST]**: R20's $0.0000419 an item). Per user-month **[EST]**: about +8% of the background card spend (COST-MODEL's
+$0.026 first month, about +$0.002). Pi (agent and Eden per task): −$0.001 per 1,000 tasks (−0.008..+0.006), wall
+−0.007 s.
+
 ## Budget defaults (`packages/llm/src/budget.ts`)
 
 20 calls and $0.02 per session; $0.25 per user per day; each call reserved before its real cost is known, at about its

@@ -424,7 +424,8 @@ if (CARD_LOG && cardMaker) {
   const make = cardMaker.make.bind(cardMaker);
   cardMaker.make = async (items, today, signal, retry, intent, options) => {
     const got = await make(items, today, signal, retry, intent, options);
-    if (!retry) {
+    // A requests-only re-ask (`cardsRequestsFix`, D1060) makes no card: its batch was logged by the card call.
+    if (!retry && !options?.requestsOnly) {
       const lines = items.map((it, k) => {
         const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
         return JSON.stringify({ h: cardKey(it), title: it.title, text: it.text.slice(0, 2_700), kind });

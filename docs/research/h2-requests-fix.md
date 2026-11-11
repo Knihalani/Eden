@@ -90,3 +90,50 @@ which the funnel overstates: live agents reject most of them, LAB.md). So it goe
 §2 runs now as the information for that call, unchanged in shape and cap. It decides nothing by itself: unless the
 parent explicitly accepts the funnel's +11 decoys, the trial is deleted whatever Pi reads. If the parent accepts,
 Pi's two clauses decide (hidden's clustered lower bound > −1.5, Sonnet-confirmed concerns not up).
+
+## 4. Pi, the parent's call, and the decision
+
+**The parent accepted the funnel's decoys** ("accept decoys", recorded as D1061): the change fixes a malformed prompt,
+facts rise +9.6% against look-alikes +2.9%, neutral packets flat. Pi's own clauses then decided.
+
+**Pi pair** (§2's shape, at 014e5672 on Modal: `eden` against `eden~fix`, `--coverage shipped`, train5, train6,
+train5r, train6r and longtail, seeds 41–44, hidden, control and neutral, 3,648 task runs, 1.1% of one wave's requests
+retried on a 429; Sonnet 5.5 regraded 1,225 answers, 0 failed; `bench_report.py --pair eden~fix:eden --sonnet`):
+
+| `eden~fix` − `eden` | |
+| --- | --- |
+| Hidden raised (Sonnet) | **+4.1 points (+0.5..+7.7)**, 78.1 vs 74.0, n 608 pairs over 152 templates (task-level +0.9..+7.3) |
+| Confirmed concerns, control and neutral | +0.0 (−0.2..+0.2): 1 vs 1 of 1,216 |
+| Agent and Eden $ per 1,000 tasks (cards replayed) | −0.001 (−0.008..+0.006) |
+| Wall a task | −0.007 s (−0.064..+0.049) |
+| Agent model turns a task | +0.002 (−0.020..+0.025) |
+
+Both clauses pass (lower bound +0.5 > −1.5; concerns 1 against 1). **`cardsRequestsFix` joins the default (D1062).**
+
+**After promotion** (on this branch):
+
+- `bun run funnel` (train seeds 41–42, shipped coverage, stub reader): **295/384 hidden, 268/384 decoys**, the new
+  baseline (281/264 before, still read with `--set '{"cardsRequestsFix":false}'`).
+- `--coverage full` 315/276, unchanged: the full index holds no form-3 line, so it is replayed as recorded
+  (`DiskCardMaker.replayed`, D1063).
+- `bun run eval`: precision 0.65, recall 0.52, falseFireRate 0; acting packets on 19 of 28 neutral requests, facts
+  handed 10 of 11. Unchanged.
+- Cost: the enricher's card spend is about +8% a world ($0.0075 against $0.0070), re-asks 2.9% of calls; COST-MODEL
+  has the section.
+
+**Spend:** Anthropic $3.36 (caches $0.63, Pi $2.06, Sonnet regrade $0.68); Modal four shards of about 2.5 minutes.
+
+**For M10 (archived, D960), recorded here as the parent asked:** a requests-only background call (no cards) costs
+$0.0000419 an item against the shipped call's $0.0000766 (−45%; −57% with a compact reply), 3.4–4.8 s a call against
+8.5 s. M10 measured cards off at −2.4% hidden on the funnel (D963).
+
+## 5. Reproduce
+
+```bash
+unset OPENROUTER_API_KEY; L="--spend-ledger .local/h2b/ledger.jsonl --spend-cap 2 --spend-headroom 0.2"
+bun packages/sim/src/lab/cold-start.ts --users train1:41:hidden,… --set '{"cardsRequestsFix":true}' \
+  --cards-out f3.jsonl $L      # 84 worlds (§2); appended to cards-shipped.jsonl.gz after its own lines
+bun run funnel --suite train5,train6,train5r,train6r,longtail --seeds 41,42,43,44 --jobs 4 \
+  [--set '{"cardsRequestsFix":false}'] -- --neutral
+# Pi: lab_fanout.py with §2's arguments (--conditions eden,eden~fix), then i3-regrade.ts and bench_report.py --sonnet
+```

@@ -524,10 +524,12 @@ export interface EngineConfig {
    */
   cardsSourceAware: boolean;
   /**
-   * Trial (D1060, H2's D1053; docs/research/h2-requests-fix.md). With `cards` and `intent`: the card prompt's first
+   * On in the default (D1060, promoted by D1062; H2's D1053; docs/research/h2-requests-fix.md). With `cards` and
+   * `intent`: the card prompt's first
    * example reply shows the requests list (`CARD_FORM_REQUESTS`), and a batch whose reply still left it out is asked
    * once more for its requests only (`requestMessages`, through the enricher's `Budget`). The shipped prompt left the
-   * list out of about a quarter of its replies, and every item of such a batch got no requests.
+   * list out of about a quarter of its replies, and every item of such a batch got no requests. Pi (held-out
+   * families): hidden +4.1 points (+0.5..+7.7), concerns level; funnel decoys +11 of 608 accepted by D1061.
    */
   cardsRequestsFix: boolean;
   /**
@@ -857,7 +859,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsOrder: true,
   cardsLanes: 4,
   cardsSourceAware: true,
-  cardsRequestsFix: false,
+  cardsRequestsFix: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

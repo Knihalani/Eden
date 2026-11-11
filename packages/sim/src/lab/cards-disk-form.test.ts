@@ -57,3 +57,23 @@ test("a requests-only re-ask replays the form's requests, and asks the live make
   );
   expect(loadRequests(f).has(cardKey(third))).toBe(false);
 });
+
+test("a file with no line of the form replays as recorded (the full index predates it); one with any does not mix", async () => {
+  const f = join(mkdtempSync(join(tmpdir(), "eden-form-")), "old.jsonl");
+  writeFileSync(f, `${JSON.stringify({ h: cardKey(it1), c: null, r: ["old request"] })}\n`);
+  const old = await new DiskCardMaker(f).make([it1, it2], "2026-10-27", signal, false, true, F);
+  expect(old.requests).toEqual([["old request"], null]);
+  // `file()` holds form-3 lines: an item with only a shipped-form line is a miss under the form.
+  const both = join(mkdtempSync(join(tmpdir(), "eden-form-")), "both.jsonl");
+  writeFileSync(
+    both,
+    [
+      { h: cardKey(it1), c: null, r: ["old request"] },
+      { h: formKey(it2, CARD_FORM_REQUESTS), r: ["new only"] },
+    ]
+      .map((l) => JSON.stringify(l))
+      .join("\n") + "\n",
+  );
+  const got = await new DiskCardMaker(both).make([it1, it2], "2026-10-27", signal, false, true, F);
+  expect(got.requests).toEqual([null, ["new only"]]);
+});
