@@ -9,7 +9,8 @@
  * read, so a run cannot change its own input halfway (the oneturn track's replay file was mutated during a run), and
  * the next run that names both files replays both.
  */
-import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { cardKey, ItemCache, worthCarding, type Card, type CardMaker } from "@eden/engine";
@@ -75,6 +76,8 @@ export const INTENT_FILE = "intent-v2.jsonl.gz";
 export const INTENT_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", INTENT_FILE);
 export const INTENT_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+  // The reworded train suites (D871) plant into the same worlds: the same items, so the same coverage.
+  ...Object.fromEntries(parseSuites("reworded").map((s) => [s, ["41", "42", "43", "44"]])),
   heldout10: ["41", "42"],
   heldout11: ["41", "42"],
   heldout13: ["41", "42", "43", "44"],
@@ -89,6 +92,67 @@ export const INTENT_COVERS: Record<string, string[]> = {
   // M6's blind suite (docs/research/m6-heldout18.md): made on Haiku 5.5 on 2026-11-10, unrun.
   heldout18: ["41", "42", "43", "44"],
 };
+
+/**
+ * The shipped-coverage caches (P7, D872): the cards and intent requests the shipped enricher (`buildPartner`'s own
+ * `CardEnricher`, DEFAULT_CONFIG and DEFAULT_LIMITS) made for each world of these suite × seed shards, recorded by
+ * `cold-start.ts --cards-out` over the hidden, control and neutral worlds with the card role on Haiku 5.5 (Anthropic,
+ * lab transport, D97). Train's lines come last, so train's cards win where a longtail or heldout19 world carded the
+ * same base item. One file holds both: `bun run funnel --coverage shipped` replays it as `--cards` and `--intent`.
+ * Where several worlds of a seed carded the same item, the last line read wins.
+ */
+export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
+export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
+export const SHIPPED_COVERS: Record<string, string[]> = {
+  ...Object.fromEntries(parseSuites("train,reworded,longtail,heldout19").map((s) => [s, ["41", "42", "43", "44"]])),
+};
+
+/** The suite × seed shards SHIPPED_FILE was not made for. */
+export function shippedUncovered(suites: string[], seeds: (string | number)[]): string[] {
+  return suites.flatMap((s) =>
+    seeds.filter((seed) => !SHIPPED_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+  );
+}
+
+/**
+ * `--coverage` for the live harnesses (pi-ab, hermes-ab; P7, D878), as the funnel resolves it (D877). `shipped`, the
+ * default wherever SHIPPED_COVERS covers the run, replays SHIPPED_PATH (unpacked to a temp file) as both the cards
+ * and the intent requests: what the shipped enricher wrote for those worlds; a card the in-run enricher asks for
+ * beyond it is made live as before. A run it does not cover keeps `cards`/`intent` as given (`full`, the replay
+ * before D878). With the default, an explicit `--cards` or `--intent` throws: a run that replays its own files
+ * (every run pre-registered before D878) pins `--coverage full`. `--days` users are covered when their suites and
+ * seeds are, an approximation: the file was made per suite world, not for the combined user world.
+ */
+export function harnessCoverage(o: {
+  coverage: string;
+  cards: string;
+  intent: string;
+  suites: string[];
+  seeds: (string | number)[];
+}): { coverage: "shipped" | "full"; cards: string; intent: string; note: string } {
+  if (o.coverage !== "" && o.coverage !== "full" && o.coverage !== "shipped") {
+    throw new Error(`--coverage takes shipped or full, not ${o.coverage}`);
+  }
+  const own = o.cards !== "" || o.intent !== "default";
+  const uncovered = shippedUncovered(o.suites, o.seeds);
+  if (o.coverage === "full" || (o.coverage === "" && uncovered.length > 0)) {
+    const why = o.coverage === "full" ? "--coverage full" : `${SHIPPED_FILE} does not cover ${uncovered[0]}`;
+    return { coverage: "full", cards: o.cards, intent: o.intent, note: `coverage full (${why}, D878)` };
+  }
+  if (own) {
+    throw new Error(
+      "--cards or --intent with shipped coverage (the default where it covers the run, D878): pass --coverage full " +
+        "to replay your own files (as every run registered before D878 does), or drop them",
+    );
+  }
+  if (uncovered.length) throw new Error(`--coverage shipped: ${SHIPPED_FILE} does not cover ${uncovered.join(", ")}`);
+  const dir = mkdtempSync(join(tmpdir(), "eden-shipped-"));
+  // Removed when the harness exits: one ~10 MB copy a run otherwise piles up in the temp directory.
+  process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, "shipped.jsonl");
+  writeFileSync(file, gunzipSync(readFileSync(SHIPPED_PATH)));
+  return { coverage: "shipped", cards: file, intent: file, note: `coverage shipped (${SHIPPED_FILE}, D878)` };
+}
 
 /** The suite × seed shards INTENT_FILE was not made for. */
 export function intentUncovered(suites: string[], seeds: (string | number)[]): string[] {
@@ -110,7 +174,8 @@ export function harnessIntent(
   if (arg !== "default") return { files: arg.split(",").filter(Boolean), note: arg };
   if (!run.wanted || !run.cardsReplayed) return { files: [], note: "" };
   const uncovered = intentUncovered(run.suites, run.seeds);
-  if (!uncovered.length) return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158` };
+  if (!uncovered.length)
+    return { files: [INTENT_PATH], note: `${INTENT_FILE} by default, D158; coverage full: every item, D714` };
   const shown = uncovered.slice(0, 4).join(", ") + (uncovered.length > 4 ? `, … ${uncovered.length - 4} more` : "");
   return { files: [], note: `the checked-in requests do not cover ${shown}` };
 }

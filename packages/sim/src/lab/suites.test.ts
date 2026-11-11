@@ -1,19 +1,32 @@
 import { describe, expect, test } from "bun:test";
+import { RARE_SOURCE_IDS } from "../rare-sources";
 import { buildWorld } from "../world";
 import { HELDOUT17_LATE } from "./hidden-heldout17";
 import { HELDOUT18_ANCHORED, HELDOUT18_LATE } from "./hidden-heldout18";
+import {
+  heldout19Before,
+  HELDOUT19_ANCHORED,
+  HELDOUT19_INDIRECT,
+  HELDOUT19_NON_ENGLISH,
+  HELDOUT19_RARE,
+  HELDOUT19_SILENT,
+} from "./hidden-heldout19";
 import { supportsNeutral } from "./neutral";
-import { parseSuites, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
+import { REWORDED } from "./reworded";
+import { parseSuites, preparedWorld, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
 describe("suite registry", () => {
   test("task ids are unique across a suite's hidden and control variants (runners key results by id)", () => {
-    for (const [name, plant] of Object.entries(SUITES)) {
+    // SUITE_NAMES, not SUITES: a generated split registered by another test file's parseSuites needs local data.
+    for (const name of SUITE_NAMES) {
+      const plant = SUITES[name]!;
       const ids = (["hidden", "control"] as const).flatMap((v) =>
-        plant(buildWorld({ seed: 41_000 }), 41, v).map((t) => t.id),
+        plant(preparedWorld(name, 41), 41, v).map((t) => t.id),
       );
       expect({ name, dupes: ids.length - new Set(ids).size }).toEqual({ name, dupes: 0 });
     }
-  });
+    // Two prepared worlds for each of about 45 suites: under a second alone, past bun's 5 s under parallel load.
+  }, 30_000);
 
   test("every blind suite is registered, so the blind run can name it (heldout5-9)", () => {
     for (const n of [5, 6, 7, 8, 9]) expect(SUITE_NAMES).toContain(`heldout${n}`);
@@ -220,8 +233,8 @@ describe("suite registry", () => {
       expect(anchored.every((t: { text: string }) => words(t) <= 12)).toBe(true);
     }
     expect(UNRUN_BLIND).toContain("heldout18");
-    // Read by B18 (D802): the funnel now warns that a run naming it was read before. No suite is unread.
-    expect(UNREAD_BLIND).toEqual([]);
+    // Read by B18 (D802): the funnel now warns that a run naming it was read before.
+    expect(UNREAD_BLIND).not.toContain("heldout18");
     expect(supportsNeutral("heldout18")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout18");
   });
@@ -232,4 +245,142 @@ describe("suite registry", () => {
     expect(UNRUN_BLIND.every((n) => SUITE_NAMES.includes(n))).toBe(true);
     expect(UNREAD_BLIND.every((n) => UNRUN_BLIND.includes(n))).toBe(true);
   });
+});
+
+describe("heldout19 (P7, D870): format only, its templates' text is not read here", () => {
+  test("40 tasks per variant over the eight areas, neutral plants nothing, rare connectors in every variant", () => {
+    for (const seed of [41, 44]) {
+      const by = Object.fromEntries(
+        (["hidden", "control", "neutral"] as const).map((v) => {
+          const world = preparedWorld("heldout19", seed);
+          const before = world.items.length;
+          const tasks = SUITES.heldout19!(world, seed, v);
+          return [v, { tasks, items: world.items.slice(before), sources: Object.keys(world.sources) }];
+        }),
+      );
+      expect([by.hidden!.items.length, by.control!.items.length, by.neutral!.items.length]).toEqual([40, 40, 0]);
+      for (const v of ["hidden", "control", "neutral"]) {
+        expect(by[v]!.tasks.length).toBe(40);
+        expect(RARE_SOURCE_IDS.every((id) => by[v]!.sources.includes(id))).toBe(true);
+      }
+      const same = (t: { text: string; detail: string; template: string }) => [t.text, t.detail, t.template];
+      for (const v of ["control", "neutral"]) {
+        expect(by[v]!.tasks.map(same)).toEqual(by.hidden!.tasks.map(same));
+        expect(by[v]!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout19-${v}:`))).toBe(true);
+      }
+      expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout19:`))).toBe(true);
+      const names: string[] = by.hidden!.tasks.map((t: { template: string }) => t.template);
+      expect(new Set(names).size).toBe(names.length);
+      // Refs of the base world's shape, equal in hidden and control, and no marker an agent could read.
+      const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
+      expect(refs("control")).toEqual(refs("hidden"));
+      for (const v of ["hidden", "control"]) {
+        for (const it of by[v]!.items as { ref: string; id: string; title: string; meta?: Record<string, string> }[]) {
+          expect(it.ref).toMatch(/^[a-z]+-\d+$/);
+          const seen = `${it.ref} ${it.id} ${it.title} ${Object.values(it.meta ?? {}).join(" ")}`.toLowerCase();
+          expect(names.filter((n) => seen.includes(n))).toEqual([]);
+          expect(/heldout|h19|planted|decoy/.test(seen)).toBe(false);
+        }
+      }
+      // The brief's categories (counts only): every list names templates of the suite, at the minimum it asked for.
+      const lists: [readonly string[], number][] = [
+        [HELDOUT19_ANCHORED, 12],
+        [HELDOUT19_RARE, 10],
+        [HELDOUT19_SILENT, 8],
+        [HELDOUT19_NON_ENGLISH, 6],
+        [HELDOUT19_INDIRECT, 16],
+      ];
+      for (const [list, min] of lists) {
+        expect(list.length).toBeGreaterThanOrEqual(min);
+        expect(list.every((n) => names.includes(n))).toBe(true);
+      }
+      const words = (t: { text: string }) => t.text.split(/\s+/).filter(Boolean).length;
+      const anchored = by.hidden!.tasks.filter((t: { template: string }) => HELDOUT19_ANCHORED.includes(t.template));
+      expect(anchored.every((t: { text: string }) => words(t) <= 12)).toBe(true);
+      // Rare-source templates plant in a rare connector in both variants, covering all eight.
+      const rareOf = (v: string) =>
+        (by[v]!.items as { sourceId: string }[]).filter((_, i) => HELDOUT19_RARE.includes(names[i]!));
+      for (const v of ["hidden", "control"])
+        expect(rareOf(v).every((it) => RARE_SOURCE_IDS.includes(it.sourceId))).toBe(true);
+      expect(new Set(rareOf("hidden").map((it) => it.sourceId)).size).toBe(RARE_SOURCE_IDS.length);
+      // Silent edits: one `before` per listed template, the same item (source, kind, title) as the planted one, older.
+      const befores = heldout19Before(preparedWorld("heldout19", seed), seed);
+      expect(befores.map((b) => b.template).sort()).toEqual([...HELDOUT19_SILENT].sort());
+      for (const b of befores) {
+        const it = by.hidden!.items[names.indexOf(b.template)] as {
+          sourceId: string;
+          kind: string;
+          title: string;
+          updatedAt: number;
+        };
+        expect([b.before.sourceId, b.before.kind, b.before.title]).toEqual([it.sourceId, it.kind, it.title]);
+        expect(b.before.updatedAt).toBeLessThan(it.updatedAt);
+      }
+    }
+    expect(UNRUN_BLIND).toContain("heldout19");
+    expect(UNREAD_BLIND).toEqual(["heldout19"]);
+    expect(supportsNeutral("heldout19")).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout19");
+  });
+
+  test("a harness that skips prepareWorld fails loudly instead of misaligning planted items", () => {
+    expect(() => SUITES.heldout19!(buildWorld({ seed: 41_000 }), 41, "hidden")).toThrow(/prepareWorld/);
+  });
+});
+
+describe("longtail (P7, D873)", () => {
+  test("24 tasks, three per area, every planted item in a rare connector, neutral adds nothing", () => {
+    for (const seed of [41, 44]) {
+      const built = (["hidden", "control", "neutral"] as const).map((v) => {
+        const world = preparedWorld("longtail", seed);
+        const before = world.items.length;
+        return { v, tasks: SUITES.longtail!(world, seed, v), items: world.items.slice(before) };
+      });
+      const [hidden, control, neutral] = built;
+      expect([hidden!.items.length, control!.items.length, neutral!.items.length]).toEqual([24, 24, 0]);
+      for (const b of [hidden!, control!]) {
+        expect(b.items.every((it) => RARE_SOURCE_IDS.includes(it.sourceId))).toBe(true);
+        expect(b.tasks.every((t) => t.id.startsWith(`w${seed}:longtail${b.v === "hidden" ? "" : `-${b.v}`}:`))).toBe(
+          true,
+        );
+      }
+      // The same connector in hidden and control, per template; all eight connectors used.
+      expect(control!.items.map((it) => it.sourceId)).toEqual(hidden!.items.map((it) => it.sourceId));
+      expect(new Set(hidden!.items.map((it) => it.sourceId)).size).toBe(RARE_SOURCE_IDS.length);
+      expect(new Set(hidden!.tasks.map((t) => t.template)).size).toBe(24);
+      for (const b of [control!, neutral!])
+        expect(b.tasks.map((t) => t.text)).toEqual(hidden!.tasks.map((t) => t.text));
+    }
+    expect(supportsNeutral("longtail")).toBe(true);
+    expect(parseSuites("all")).not.toContain("longtail");
+    expect(parseSuites("train")).not.toContain("longtail");
+  });
+});
+
+describe("reworded train (P7, D871)", () => {
+  test("train1r-6r: train's worlds and tasks, every request reworded, six non-English a suite, ids `<suite>r`", () => {
+    expect(parseSuites("reworded")).toEqual(["train1r", "train2r", "train3r", "train4r", "train5r", "train6r"]);
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      const base = `train${n}`;
+      expect(Object.values(REWORDED[base]!).filter((w) => w.lang).length).toBe(6);
+      for (let seed = 41; seed <= 52; seed++) {
+        for (const v of ["hidden", "control", "neutral"] as const) {
+          const a = preparedWorld(base, seed);
+          const b = preparedWorld(`${base}r`, seed);
+          const orig = SUITES[base]!(a, seed, v);
+          const re = SUITES[`${base}r`]!(b, seed, v);
+          // The same items planted, and the slot cleared from the original request.
+          expect(b.items.map((i) => i.id)).toEqual(a.items.map((i) => i.id));
+          expect(re.map((t) => [t.template, t.detail, t.slotText])).toEqual(
+            orig.map((t) => [t.template, t.detail, t.text]),
+          );
+          // No capture left unfilled: a `$` digit only where the original has one ("$40k").
+          const left = (t: { text: string }) => t.text.match(/\$\d/g)?.length ?? 0;
+          expect(re.every((t, i) => t.text !== orig[i]!.text && left(t) <= left(orig[i]!))).toBe(true);
+          expect(re.map((t) => t.id)).toEqual(orig.map((t) => t.id.replace(`:${base}`, `:${base}r`)));
+        }
+      }
+    }
+    expect(parseSuites("all")).not.toContain("train1r");
+  }, 60_000);
 });

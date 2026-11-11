@@ -64,6 +64,21 @@ EDEN_USER=u EDEN_TENANT=t EDEN_SOURCES_FILE=examples/personal-agent/sources.json
 bun run trace-report server.log    # the server's output, saved by `tee` above
 ```
 
+Four things that tripped first-time users (fresh-eyes walkthroughs, D856):
+
+- **Another port:** `PORT=8711 bun run dev` moves the server; set `EDEN_URL=http://127.0.0.1:8711` for everything
+  else (both clients, the examples, the proxy and `bun run doctor` read it when no base URL is passed).
+- **Keys in dev mode:** with `EDEN_DEV=1` pass no API key at all (unset `apiKey`/`api_key`, no `EDEN_API_KEY`): a dev
+  server accepts a missing key and refuses any made-up one with a 401.
+- **Staying at $0:** a dev server refuses to start when `OPENROUTER_API_KEY` is in its environment (it would make
+  paid model calls in the background, D858): start it with `env -u OPENROUTER_API_KEY …`, or set
+  `EDEN_ALLOW_MODEL_ROLES=1` if you want the model roles.
+- **One `sessionId` per conversation:** an item is handed out once per session, so a second script (or the curls
+  above) reusing `"s"` gets `(shown above)` instead of the text. Use a fresh session id per run or conversation.
+
+Then `bun run doctor` checks your integration against each obligation (D852): what it saw, what a missing one
+costs, and the fix.
+
 What you see: the first request gets a packet (`injection.text`, the `<context …>` envelope your agent puts before
 its model call) and `pending: true` (slower work may queue more for `/v1/pending`). An item is delivered once per
 session, so the later `/v1/ask` cites the same items as `(shown above)` rather than repeating them; ask in a new
@@ -137,9 +152,9 @@ $6.25 a day, 50 rps and a burst of 100. Raise the caps or set `EDEN_PROCESSES=1`
 with a CPU quota set `EDEN_PROCESSES` to the quota (see [docs/INTEGRATION.md](docs/INTEGRATION.md), "Processes"). To change a setting, or take a part out (`PARTS` in `packages/engine/src/parts.ts`),
 point `EDEN_ENGINE_CONFIG` at a JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong
 type, a number out of its range or a setting that would do nothing stops startup with a message naming it (D103).
-Trial switches (such as the action firewall, `actionCheck`) stay off until measured;
+Trial switches stay off until measured;
 [docs/profiles/](docs/profiles/README.md) holds "default minus a part" files, and docs/DECISIONS.md lists the trials
-with their owners and end dates.
+still being measured (each decided in the session that opened it, D814).
 `EDEN_SOURCES_FILE` holds static documents only, since that file's sources are shared by every user. Each user's MCP
 connectors, with their own credentials, go in `EDEN_USER_SOURCES_FILE` or an embedding's `SourceDirectory` (D108,
 docs/INTEGRATION.md).
@@ -168,4 +183,5 @@ docs/INTEGRATION.md).
 M0 (scaffold) done; M1, an eval worth tuning against, in progress, with every measured result in
 [docs/research/INDEX.md](docs/research/INDEX.md). See [docs/ROADMAP.md](docs/ROADMAP.md). Nothing is published to
 npm, PyPI or an image registry yet: install from a checkout as above (`bun run pack:client`, `pip install
-./packages/client-python`, `docker build`).
+./packages/client-python`, `docker build`). `bun run publish:check` builds all three and runs each registry's dry
+run (D853).

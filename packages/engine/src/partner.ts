@@ -80,16 +80,6 @@ import {
   type ReaderVerdict,
 } from "./reader";
 import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
-import {
-  accounts,
-  actionKey,
-  actionText,
-  FIREWALL_GROUNDS,
-  domainsOf,
-  MAX_CHECKED,
-  setsTime,
-  structuralTie,
-} from "./firewall";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -138,6 +128,7 @@ import {
 } from "./render";
 import {
   callParties,
+  MAX_CHECKED,
   MAX_PACKET_PARTIES,
   namesParty,
   partiesIn,
@@ -145,7 +136,6 @@ import {
   partyKey,
   type Party,
 } from "./parties";
-import { quarantineTitle } from "./shield";
 import { safeLine } from "./line";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
@@ -357,8 +347,8 @@ interface Session {
   /** Work lookups left running behind their answers: a poll and its follow-up (`afterPoll`), a judge (`judgeLater`). */
   behind?: Promise<void> | null;
   /**
-   * With `actionCheck`: the keys of the calls the firewall answered with a finding (`actionKey`, bounded by
-   * `MAX_CHECKED`, oldest first). The same call made again is the agent's informed choice, and proceeds.
+   * With `partyCheck`: the tools and parties a finding named (`partyFinding`, bounded by `MAX_CHECKED`, oldest
+   * first). The same parties added again to the same tool are the agent's informed choice, and proceed.
    */
   checked?: Set<string>;
   /**
@@ -477,16 +467,10 @@ type ProbeSend = (
   keep?: boolean,
   onAnswer?: (sourceId: string, page: ContextItem[]) => void,
 ) => Promise<ContextItem[]>;
-/** How a probe run differs from a lookup's own (`Partner.probe`); the action firewall's reads offline. */
+/** How a probe run differs from a lookup's own (`Partner.probe`). */
 interface ProbeOpts {
   /** Source calls it may make (default `probeCalls`). */
   budget?: number;
-  /** No call at all: what the memo and the economy hold for each query. */
-  offline?: boolean;
-  /** The action class to read or ask (default: `consequenceProbe`'s own). */
-  cls?: ActionClass | null;
-  /** The class is read from what is cached, with no call. */
-  classOffline?: boolean;
   /** Synced sources whose copy is current (`sync`, D57): they answer from the local index, at no call. */
   local?: ReadonlySet<string> | null;
   /** The lookup's deadline (`performance.now()` time, D140); absent: `sourceTimeoutMs` from when the probes start. */
@@ -498,8 +482,6 @@ interface ProbeOpts {
 const ASK_FUSE_K = 2;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
-/** The action firewall: a party named on more than this share of a user's items is the user's own organisation. */
-const SELF_DOMAIN_SHARE = 0.1;
 
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
@@ -787,7 +769,6 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            sweepSpread: c.syncSweepSpread,
           },
         )
       : null;
@@ -813,9 +794,6 @@ export class ContextPartner {
             }
           });
         },
-        // D652: the file of a user held on disk only did not open. Their sync starts over on the next event, as a new
-        // user's does.
-        lost: (scope) => sync?.forget(scope),
       };
     }
   }
@@ -1475,17 +1453,13 @@ export class ContextPartner {
    * handing out an older packet queued before it cannot leave the ledger at the older version.
    */
   private buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
-    // The quarantine (D307) reads the item's own title, before Eden's tag and note go round it: a title it replaces
-    // whole must not take "updated:" and "this version replaces it" with it.
-    const own = (t: string) => (this.config.quarantineInstructions ? quarantineTitle(t) : t);
-    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${own(it.title)}${this.updatedNote(s, it)}` }));
-    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes, ...this.shield() });
+    const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${this.updatedNote(s, it)}` }));
+    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
     let n = renderedCount(items, text);
     if (n === 0) {
       // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
       text = renderPacket(tagged.slice(0, 1), {
         maxBytes: Math.max(this.config.maxInjectionBytes, 512),
-        ...this.shield(),
       });
       n = 1;
     }
@@ -1653,14 +1627,13 @@ export class ContextPartner {
   }
 
   /**
-   * The action firewall (`actionCheck`; docs/research/econ-firewall.md): an agent's tool call, before it runs, checked
-   * against what is held, with no model and no source call. The session's request and the call's arguments read as
-   * words (`actionText`: its days written out, its amounts, names and references) make one cue; what the request's
-   * structure grounds against it (`grounded`: a clash at the time it books, a conflict the conflict test reads, a
-   * card's, someone away that day; `FIREWALL_GROUNDS`) is the finding, delivered already or not: the agent
-   * is about to act as if it were not there. Anything else proceeds, as does a call made again unchanged after a
+   * The party check (`partyCheck`, D375, D376; docs/research/a25-action-guard.md): an agent's tool call, before it
+   * runs, checked with no model and no source call for a party (an address, an account) it adds that this session's
+   * packets showed, the user's own request does not name and no correspondent of the user's vouches for
+   * (`partyFinding`). Anything else proceeds, as does a call to the same tool adding the same parties again after a
    * finding (the agent's informed choice). A finding is data in the usual envelope; what the integration does with it
-   * is its own. With the flag off, every call proceeds and no state is touched. Never throws: a failure proceeds.
+   * is its own. With the check off, every call proceeds and no state is touched. Never throws: a failure proceeds.
+   * (The action firewall that also read the call's grounds, `actionCheck`, D69, was deleted by D815.)
    */
   async checkAction(event: AgentEvent): Promise<ActionCheck> {
     const t0 = performance.now();
@@ -1672,154 +1645,30 @@ export class ContextPartner {
       reason,
       latencyMs: Math.round(performance.now() - t0),
     });
-    if ((!this.config.actionCheck && !this.config.partyCheck) || event.kind !== "tool_call") return proceed("off");
-    // The party check alone (the default, D376): a session Eden handed no identifier has nothing to hold, and none is
-    // opened for a call in a session Eden never saw.
-    if (!this.config.actionCheck && !this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
+    if (!this.config.partyCheck || event.kind !== "tool_call") return proceed("off");
+    // A session Eden handed no identifier has nothing to hold, and none is opened for a call in a session Eden never
+    // saw.
+    if (!this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
     try {
       const s = this.session(event);
-      const key = actionKey(event.tool, event.input);
-      if (s.checked?.has(key)) return proceed("repeat");
-      // The request the call serves: the session's latest user message or arriving message, as remembered.
-      const asked = [...s.window].reverse().find((w) => w.startsWith("user_message: ") || w.startsWith("external: "));
-      const request = asked ? asked.slice(asked.indexOf(": ") + 2) : "";
-      if (this.config.partyCheck) {
-        // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.
-        const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
-        const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
-        if (found) {
-          const latencyMs = Math.round(performance.now() - t0);
-          this.trace(s, {
-            sessionId: s.id,
-            turn: s.turn,
-            event: "tool_call",
-            decision: "fast",
-            reason: "action-party",
-            latencyMs,
-            sourceCalls: 0,
-            modelCalls: 0,
-            costUsd: 0,
-            itemIds: found.citations.map((c) => c.itemId),
-          });
-          return { verdict: "finding", finding: found, reason: "party", latencyMs };
-        }
-        if (!this.config.actionCheck) return proceed("clear");
-      }
-      // What the call commits to (its days, amounts, names, references), without what the agent wrote in it.
-      const call = sanitizeForStore(actionText(event.tool, event.input, { prose: false }));
-      // The call first: its time is the one the clash test reads (`requestedSpan` reads the first).
-      const text = sanitizeForStore(head(`${call}\n${request}`, this.config.maxEventChars));
-      if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
-      const terms = distinctTermIds(text, s.vocab);
-      const offset = this.deps.cache.offsetOf(s.scope);
-      const cue = buildCue(text, terms, s.vocab, event.at, offset, this.config.probes);
-      // The days the call acts on are its own when it names any: an agent that moved the dinner to another evening
-      // acts on that evening, not the one the request asked for.
-      const own = timeWindow(call, event.at, offset);
-      if (own && own.days.size > 0) cue.time = own;
-      cue.arrived = this.now();
-      // The probes' last answers and the class's cached finds, with no call.
-      const out: ProbeOut = { calls: 0, kept: [] };
-      if (this.config.probes) {
-        const all = await within(this.deps.sources(s.scope), CHECK_SOURCES_MS);
-        if (all && all.length > 0 && !s.closed) {
-          await this.probe(s, cue, all, all, false, out, Promise.resolve(), undefined, {
-            offline: true,
-            cls: actionClass(cue.raw, true),
-            classOffline: true,
-            local: this.localOf(s, all),
-          });
-        }
-      }
-      if (s.closed) return proceed("closed");
-      const carded = this.cardFinds(s, cue);
-      const extra = [...out.kept, ...(out.consequence?.ids ?? []), ...carded.keys()];
-      // Delivered already or not: what the agent is about to do is checked, not whether it was told.
-      const scored = this.rank(s, cue, { ignoreLedger: true, probed: extra });
-      const bridged = this.bridgedOf(scored, cue, out.consequence);
-      const g = this.grounded(
-        s,
-        cue,
-        this.eligible(scored, cue, new Set(out.kept), bridged, carded),
-        "action",
-        bridged,
-        out.consequence?.cls,
-        carded,
-      );
-      if (g.items.length === 0) return proceed("clear");
-      if (!FIREWALL_GROUNDS.has(g.how)) return proceed(`quiet-${g.how}`);
-      // Only a call that commits the user at a time clashes with the calendar: one with a start, or one serving a
-      // request to schedule ("accept the invite … at 10:00" as a generic action).
-      if (g.how === "clash" && !setsTime(event.input) && !isScheduling(request)) return proceed("untimed");
-      // And only at a time the user asked for: a reminder or a task the agent placed at a slot of its own choosing
-      // overlaps a meeting without clashing with anything the user asked (it would be held at every slot it tries).
-      if (g.how === "clash" && requestedSpan(request) === null) return proceed("agent-timed");
-      // Read from shared words, a conflict (the conflict test's, a card's) holds the action only on a tie
-      // the words cannot fake (`structuralTie`: a span over its day, an expiry before it, a limit on its amount, a
-      // statement binding a party it names), an identifier or qualified reference the call names, or the action
-      // class's find about a party it names.
-      const frame = this.frame(cue);
-      // Identifiers the CALL names: in a request of several steps ("pay INV-4821, then email Jamie"), an identifier
-      // only the request names ties the payment, not the email.
-      const callFrame = frameOf(call, null, localNow(cue));
-      const named = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
-      // The parties: names of two words or more and the user's people the call and request name ("Team" and "Open" in
-      // a call's title are not parties), and the organisations of the addresses the call writes to. Never the user,
-      // whose name is on everything they hold, nor anything on more than a tenth of their items (their organisation).
-      const self = this.deps.cache.selfOf(s.scope)?.toLowerCase().split(/\s+/) ?? [];
-      const rare = (n: string) => n.split(/\s+/).some((w) => this.deps.cache.isRare(s.scope, w, SELF_DOMAIN_SHARE));
-      const parties = named.filter((e) => e.trim().includes(" ") || this.deps.cache.isPerson(s.scope, e));
-      const full = parties.map((e) => e.toLowerCase());
-      // A first name alone is a party only when no fuller name has it: "Sam" beside "Sam Ortiz" is Sam Ortiz, and Sam
-      // Patel's diet is not his.
-      const whole = full.filter((n) => n.includes(" ") || !full.some((m) => m !== n && m.split(/\s+/).includes(n)));
-      const names = [...whole, ...domainsOf(call)].filter(
-        (n) => rare(n) && !self.some((w) => w.length > 2 && n.split(/\s+/).includes(w)),
-      );
-      // The call's topic words, without the user's own name (on every item they hold).
-      const topical = { ...frame, wordTies: new Set([...frame.wordTies].filter((w) => !self.includes(w))) };
-      // The action class's find binds the call when it names a party the call names: "a payment to Cyberdyne was sent"
-      // does not bind a payment to the gym, nor a client's no-gifts policy flowers for a sister.
-      const tied = (x: Scored) =>
-        g.how === "clash" ||
-        g.how === "away" ||
-        namesRef(callFrame, x.item, true) ||
-        (bridged.has(x.item.id) && whole.some((n) => names.includes(n) && mentions(n, x.item))) ||
-        structuralTie(`${x.item.title}. ${x.item.text}`, topical, names, localNow(cue), call);
-      const held = g.items.filter(tied);
-      if (held.length === 0) return proceed("untied");
-      // What the call already takes into account (its notes name the allergy, its email the absence) is not repeated.
-      const written = sanitizeForStore(actionText(event.tool, event.input));
-      const items = held.filter((x) => !accounts(x.item.text, written, request));
-      if (items.length === 0) return proceed("accounted");
-      const checked = (s.checked ??= new Set());
-      // The same tool held for the same items before: the agent has been told and acts anyway (its new attempt may
-      // differ only in a fresh request id or timestamp, so the exact-arguments key alone would hold it every time).
-      const informed = `${event.tool}\u0000${items
-        .map((x) => x.item.id)
-        .sort()
-        .join(",")}`;
-      if (checked.has(informed)) return proceed("repeat");
-      checked.add(key);
-      checked.add(informed);
-      while (checked.size > MAX_CHECKED) checked.delete(checked.values().next().value as string);
-      const finding = await this.deliverChecked(s, items, "proactive", `action-${g.how}:${cue.id}`, cue);
-      // Every item the finding rested on is gone at its source (`verifyDelivery`): nothing stands in the way.
-      if (!finding) return proceed("gone");
-      this.handOut(s, finding);
+      // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.
+      const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
+      const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
+      if (!found) return proceed("clear");
+      const latencyMs = Math.round(performance.now() - t0);
       this.trace(s, {
         sessionId: s.id,
         turn: s.turn,
         event: "tool_call",
         decision: "fast",
-        reason: `action-${g.how}`,
-        latencyMs: Math.round(performance.now() - t0),
+        reason: "action-party",
+        latencyMs,
         sourceCalls: 0,
         modelCalls: 0,
         costUsd: 0,
-        itemIds: items.map((x) => x.item.id),
+        itemIds: found.citations.map((c) => c.itemId),
       });
-      return { verdict: "finding", finding, reason: g.how, latencyMs: Math.round(performance.now() - t0) };
+      return { verdict: "finding", finding: found, reason: "party", latencyMs };
     } catch {
       return proceed("error");
     }
@@ -1847,8 +1696,7 @@ export class ContextPartner {
     }
     if (flagged.length === 0) return null;
     // The agent was told about these parties for this tool: a call adding them again proceeds, whatever else changed
-    // in it (a fresh request id, a reworded body after the user said yes). A key of its own, so a repeat after a party
-    // finding still meets the firewall (`actionCheck`), which the exact-arguments key would skip.
+    // in it (a fresh request id, a reworded body after the user said yes).
     const informed = `party\u0000${event.tool}\u0000${flagged
       .map((p) => partyKey(p.norm))
       .sort()
@@ -3716,17 +3564,10 @@ export class ContextPartner {
   }
 
   /**
-   * Whether a request acts on someone (scheduling, writing to them, a task), arrives from outside, or is a tool call
-   * the action firewall checks (`checkAction`, "action").
+   * Whether a request acts on someone (scheduling, writing to them, a task) or arrives from outside.
    */
   private acts(s: Session, cue: Cue, eventKind: string): boolean {
-    return (
-      eventKind === "external" ||
-      eventKind === "ask" ||
-      eventKind === "action" ||
-      ACTING.has(s.situation) ||
-      ACTS_ON.test(cue.raw)
-    );
+    return eventKind === "external" || eventKind === "ask" || ACTING.has(s.situation) || ACTS_ON.test(cue.raw);
   }
 
   /**
@@ -4621,13 +4462,12 @@ export class ContextPartner {
       window?: SearchQuery["window"],
       keep = true,
       onAnswer?: (sourceId: string, page: ContextItem[]) => void,
-      offline = opts.offline === true,
     ): Promise<ContextItem[]> => {
-      if (!spans) return sendOne(kind, sources, text, window, keep, onAnswer, offline, 0);
-      const sp = spans.open(`probe.${kind}`, probesSpan!.id, { async: true, sources: sources.length, offline });
+      if (!spans) return sendOne(kind, sources, text, window, keep, onAnswer, 0);
+      const sp = spans.open(`probe.${kind}`, probesSpan!.id, { async: true, sources: sources.length });
       const callsBefore = out.calls;
       try {
-        return await sendOne(kind, sources, text, window, keep, onAnswer, offline, sp.id);
+        return await sendOne(kind, sources, text, window, keep, onAnswer, sp.id);
       } finally {
         spans.close(sp, { calls: out.calls - callsBefore });
       }
@@ -4639,7 +4479,6 @@ export class ContextPartner {
       window: SearchQuery["window"] | undefined,
       keep: boolean,
       onAnswer: ((sourceId: string, page: ContextItem[]) => void) | undefined,
-      offline: boolean,
       parent: number,
     ): Promise<ContextItem[]> => {
       // Synced sources whose copy is current answer from the local index (D57), at no call and outside `probeCalls`.
@@ -4665,17 +4504,6 @@ export class ContextPartner {
       // kind of probe has not been yielding, is not called; its last answer, while still cached, stands in.
       const asked = `${text}|${window ? `${window.start}/${window.end}` : ""}`;
       const reused: ContextItem[] = [];
-      // Offline (the action firewall's read, and its class read): what each source last answered to this query,
-      // while still cached, and no call.
-      if (offline) {
-        const now = this.now();
-        for (const source of sources) {
-          const last = this.economy.lastIds(s.scope, source.id, asked);
-          if (last) for (const h of this.deps.cache.hits(s.scope, last, now)) reused.push(h.item);
-        }
-        if (keep) for (const i of reused) if (!kept.includes(i.id)) kept.push(i.id);
-        return [...here, ...reused];
-      }
       let live = sources;
       if (this.config.probeFresh || this.config.probeYield) {
         live = [];
@@ -4828,19 +4656,17 @@ export class ContextPartner {
     const byId = sourcesById(all);
     const allIds = all.map((x) => x.id);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
-      opts.offline
-        ? all
-        : this.deps.sourceMap
-            .route({
-              scope: s.scope,
-              entities: [name],
-              situation: s.situation,
-              sourceIds: allIds,
-              limit,
-              ...(opts.boost ? { boost: opts.boost } : {}),
-            })
-            .map((r) => byId.get(r.sourceId)!)
-            .filter(Boolean);
+      this.deps.sourceMap
+        .route({
+          scope: s.scope,
+          entities: [name],
+          situation: s.situation,
+          sourceIds: allIds,
+          limit,
+          ...(opts.boost ? { boost: opts.boost } : {}),
+        })
+        .map((r) => byId.get(r.sourceId)!)
+        .filter(Boolean);
     const people = off.has("people") ? [] : cue.entities.slice(0, 2);
     // `probeTopicAlone`: the topic only for a request that names no one (with people, their probes find what the topic
     // would: held-out funnels returned as many planted items without it, at fewer calls).
@@ -4872,14 +4698,7 @@ export class ContextPartner {
     // An imperative or an arriving message, not `isAction` or `ACTS_ON` (which match "tell", "ping" anywhere): a
     // question that mentions a release ("did Sam tell you whether the release went out?") is no release.
     const acts = isImperative(cue.raw) || cue.external === true;
-    const cls =
-      opts.cls !== undefined
-        ? opts.cls
-        : c.consequenceProbe && !off.has("consequence")
-          ? actionClass(cue.raw, acts)
-          : null;
-    // The class read with no call (the action firewall's): the class's queries earlier lookups sent, as cached.
-    const offlineSend: ProbeSend = (k, src, t, w, keep, on) => send(k, src, t, w, keep, on, true);
+    const cls = c.consequenceProbe && !off.has("consequence") ? actionClass(cue.raw, acts) : null;
     await Promise.all([
       ...windows.map((w) => send("day", listers, "", w)),
       byPeople,
@@ -4887,7 +4706,7 @@ export class ContextPartner {
       // The topic's finds share the request's words, and rank on them; the others get seats of their own.
       ...(topic ? [send("topic", found.slice(0, this.config.probeTopicSources), topic, undefined, false)] : []),
       // Last: a source's probe calls go one at a time, and the request's own probes go first.
-      ...(cls ? [this.consequence(s, cls, all, found, opts.classOffline ? offlineSend : send, out)] : []),
+      ...(cls ? [this.consequence(s, cls, all, found, send, out)] : []),
     ]);
     if (probesSpan) spans!.close(probesSpan, { calls: out.calls });
   }
@@ -5619,27 +5438,6 @@ export class ContextPartner {
   }
 
   /**
-   * The consequence finds that conflict with the request (`consequenceProbe`, or the action firewall's class read): a
-   * freeze over the day a release is asked for, not one last month; and not a limit on an amount the request does not
-   * state ("travel over £500 needs pre-approval" for printer paper).
-   */
-  private bridgedOf(scored: Scored[], cue: Cue, consequence?: { cls: ActionClass; ids: string[] }): Set<string> {
-    if (!consequence || consequence.ids.length === 0) return new Set();
-    const ids = new Set(consequence.ids);
-    const ties = classTies(consequence.cls);
-    return new Set(
-      scored
-        .filter(
-          (x) =>
-            ids.has(x.item.id) &&
-            !unmeasuredLimit(this.frame(cue), x.item) &&
-            this.verdict(x.item, cue, ties) === "conflict",
-        )
-        .map((x) => x.item.id),
-    );
-  }
-
-  /**
    * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
    * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
    */
@@ -6131,23 +5929,9 @@ export class ContextPartner {
     this.deps.budget.settle(r, actualUsd);
   }
 
-  /**
-   * The citations of what was rendered. With `quarantineInstructions` (D307) their titles are quarantined as the
-   * packet's are: the MCP route prints each citation's title under the answer (`Sources:`), so a subject written for
-   * an AI would otherwise reach the agent beside the packet that removed it (A10's review).
-   */
+  /** The citations of what was rendered. */
   private cited(items: readonly ContextItem[]): Citation[] {
-    const cites = citationsOf([...items]);
-    if (!this.config.quarantineInstructions) return cites;
-    return cites.map((c) => ({ ...c, title: quarantineTitle(c.title) }));
-  }
-
-  /** The A10 trials' render options (D306, D307): Eden's guard line and the instruction quarantine, when on. */
-  private shield(): { guard?: true; quarantine?: true } {
-    return {
-      ...(this.config.guardLine ? { guard: true as const } : {}),
-      ...(this.config.quarantineInstructions ? { quarantine: true as const } : {}),
-    };
+    return citationsOf([...items]);
   }
 
   /**
@@ -6161,7 +5945,6 @@ export class ContextPartner {
     const dense = compact && this.config.densePacket;
     return {
       maxBytes: 4_000,
-      ...this.shield(),
       ...(compact
         ? {
             focus: focusOf(cue),
@@ -6266,7 +6049,6 @@ export class ContextPartner {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       ...(frame ? { lead: frame.lead } : {}),
-      ...this.shield(),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -6662,9 +6444,6 @@ interface IntentFind {
   coverage: number;
   matched: number;
 }
-
-/** How long the action firewall waits for the source resolver (ms): an answer held, or none at once. */
-const CHECK_SOURCES_MS = 5;
 
 /**
  * `p`'s value if it settles within `ms`, else null (it runs on; a rejection after the bound is swallowed). Not an

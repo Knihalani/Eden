@@ -51,7 +51,7 @@ import { isCapError, keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { variantsFor } from "./neutral";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
-import { parseSuites, SUITES } from "./suites";
+import { parseSuites, prepareWorld, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -95,12 +95,13 @@ if (FUNNEL) {
       for (const seed of SEEDS) {
         // As hidden-funnel.ts builds each world.
         const world = buildWorld({ seed: seed * 1_000 });
+        prepareWorld(suite, world, seed);
         const before = world.items.length;
         const tasks = SUITES[suite]!(world, seed, variant);
         const planted = world.items.slice(before);
         for (const it of planted) dress(world, it);
         const keep = new Set(planted.map((it) => it.id));
-        for (const task of tasks) clearSlot(world, task.text, keep);
+        for (const task of tasks) clearSlot(world, task.slotText ?? task.text, keep);
         take(simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll()));
       }
     }

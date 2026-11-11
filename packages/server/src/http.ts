@@ -3,7 +3,7 @@
  *
  *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
  *   POST /v1/ask       an AskRequest              → AskResponse
- *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376; the firewall, `actionCheck`)
+ *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/whoami    {tenantId,userId,sessionId?} → {ok}  (checks the key, tenant and ids; changes nothing)
  *   POST /v1/explain   {tenantId,userId,sessionId} → {decisions}: the session's last decisions and why, no content
@@ -20,7 +20,9 @@
  *                            added, read by Eden in the background (`syncPush`, D347)
  *   POST /v1/usage     {tenantId}                  → the tenant's usage today (D326): modelUsd, modelCalls, capUsd,
  *                                                    requests by route, users (frozenUsers, syncedUsers), items; the
- *                                                    router sums its children's
+ *                                                    router sums its children's; `integration`: how the tenant's
+ *                                                    integration calls Eden since the process started (D852,
+ *                                                    `eden doctor`), counts only
  *   GET  /healthz
  *
  * Auth: `Authorization: Bearer <key>`; the key fixes the tenant, and a body naming another tenant is refused.
@@ -46,6 +48,7 @@ import {
 import type { TenantSpend } from "@eden/llm";
 import { DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, type ServerConfig } from "./config";
 import { keyOf } from "./auth";
+import { IntegrationStats } from "./integration-stats";
 import type { UserSources } from "./user-sources";
 
 type Json = Record<string, unknown>;
@@ -79,6 +82,8 @@ export function createHandler(
   userSources?: UserSources,
   /** The tenant spend cap the partner's model roles share, for `/v1/usage` (D326); omitted, spend reads 0. */
   spend?: TenantSpend,
+  /** How the tenant's integration calls Eden (D852), for `eden doctor`; returned by `/v1/usage` as `integration`. */
+  stats: IntegrationStats = new IntegrationStats(),
 ) {
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
@@ -151,152 +156,170 @@ export function createHandler(
     // Known routes only (a bounded record), and not a router's fan-out copy (counted once, by the owning child).
     if (ROUTES.has(url.pathname) && !copy) count(tenant, url.pathname.slice(4));
     try {
-      switch (url.pathname) {
-        case "/v1/events": {
-          const checked = checkEvent(body);
-          if (!checked.ok) return fail(400, checked.error);
-          const waitMs = Math.max(0, Math.min(5_000, Number(url.searchParams.get("waitMs") ?? 0) || 0));
-          // `?shadow=1`: an integration trying Eden without injecting (the proxy's shadow mode): nothing is learned.
-          const shadow = url.searchParams.get("shadow") === "1";
-          return json(await partner.observe(checked.value, { waitMs, ...(shadow ? { shadow } : {}) }));
-        }
-        case "/v1/check": {
-          // The action firewall: a tool call the agent is about to make, checked against what is held (no model).
-          const checked = checkEvent(body);
-          if (!checked.ok) return fail(400, checked.error);
-          if (checked.value.kind !== "tool_call") return fail(400, "check takes a tool_call event");
-          return json(await partner.checkAction(checked.value));
-        }
-        case "/v1/ask": {
-          const checked = checkAsk(body);
-          if (!checked.ok) return fail(400, checked.error);
-          return json(await partner.ask(checked.value));
-        }
-        case "/v1/pending": {
-          const bad = badId(body, ["userId", "sessionId"]);
-          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
-          const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
-          const shadow = url.searchParams.get("shadow") === "1";
-          // D325: the take checks new items against the session's plans (`checkPlans`), which reads the user's items.
-          await partner.ready(who);
-          return json({ injections: partner.takePending(who, shadow ? { shadow } : {}) });
-        }
-        case "/v1/whoami": {
-          // The client's `health()`: the key, the tenant and the ids are checked as any route checks them, and nothing
-          // is read or changed (unlike `/v1/pending`, which drains the queue).
-          const bad = badId(body, ["userId"]);
-          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
-          if (body.sessionId !== undefined && !isId(body.sessionId)) {
-            return fail(400, "sessionId must be 1-128 characters of [A-Za-z0-9._:@-]");
-          }
-          return json({ ok: true });
-        }
-        case "/v1/explain": {
-          // Why Eden spoke or stayed silent in this session (D277): its traces, content-free (D56), a sentence each.
-          const bad = badId(body, ["userId", "sessionId"]);
-          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
-          const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
-          const decisions = partner.explain(who).map((t) => ({
-            turn: t.turn,
-            event: t.event,
-            decision: t.decision,
-            reason: t.reason,
-            why: explainTrace(t),
-            latencyMs: t.latencyMs,
-            sourceCalls: t.sourceCalls,
-            modelCalls: t.modelCalls,
-            costUsd: t.costUsd,
-            itemIds: t.itemIds,
-          }));
-          return json({ decisions });
-        }
-        case "/v1/feedback": {
-          const bad = badId(body, ["userId", "sessionId", "injectionId"]);
-          if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
-          if (typeof body.used !== "boolean") return fail(400, "used must be true or false");
-          const applied = partner.feedback({
-            tenantId: tenant,
-            userId: body.userId as string,
-            sessionId: body.sessionId as string,
-            injectionId: body.injectionId as string,
-            used: body.used,
-            how: "explicit",
-          });
-          return json({ ok: true, applied });
-        }
-        case "/v1/usage": {
-          // The tenant's own usage today in this process (D326): model spend and calls against the cap this process
-          // holds, requests by route, users held. The router sums its children's (router.ts); counts only.
-          const day = new Date().toISOString().slice(0, 10);
-          return json({
-            tenantId: tenant,
-            day,
-            processes: 1,
-            modelUsd: spend?.spent(tenant) ?? 0,
-            modelCalls: spend?.calls(tenant) ?? 0,
-            capUsd: spend?.capOf(tenant) ?? 0,
-            requests: day === countedDay ? { ...counted.get(tenant) } : {},
-            ...partner.tenantUsage(tenant),
-          });
-        }
-        case "/v1/forget": {
-          if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
-          if (body.sourceId !== undefined && !isId(body.sourceId)) return fail(400, "sourceId is malformed");
-          const scope = { tenantId: tenant, userId: body.userId as string };
-          // D325: one source's forget drops its items from the user's cache, a read; the whole user's forget reads
-          // nothing (a frozen user's record is simply dropped).
-          if (body.sourceId !== undefined) await partner.ready(scope);
-          partner.forget(scope, body.sourceId as string | undefined);
-          userSources?.forget(scope, body.sourceId as string | undefined);
-          return json({ ok: true });
-        }
-        case "/v1/sources/changed": {
-          // A webhook or watch the integrator receives, forwarded: the source's synced copy is polled at its next use.
-          const checked = checkSourceChanged(body);
-          if (!checked.ok) return fail(400, checked.error);
-          const { userId, sourceId } = checked.value;
-          // 200 either way (a no-op notification is not a caller error); `reason` says why nothing was synced.
-          return json({ ok: true, ...partner.sourceNotice({ tenantId: tenant, userId }, sourceId) });
-        }
-        case "/v1/sources/items": {
-          // The changed items themselves (a Slack event, a trigger's payload): held as synced, with no source call.
-          const checked = checkSourceItems(body);
-          if (!checked.ok) return fail(400, checked.error);
-          const { userId, sourceId, items } = checked.value;
-          return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
-        }
-        case "/v1/sources/refs": {
-          // What changed, named but not carried (a Gmail history's ids, a webhook's resource id): Eden reads those
-          // refs itself in the background (D347). 200 at once; `reason` when it acts as a plain signal could not.
-          const checked = checkSourceRefs(body);
-          if (!checked.ok) return fail(400, checked.error);
-          const { userId, sourceId, refs } = checked.value;
-          const { settled, ...result } = partner.sourceRefs({ tenantId: tenant, userId }, sourceId, refs);
-          void settled.catch(() => 0);
-          return json({ ok: true, ...result });
-        }
-        case "/v1/sources/removed": {
-          // A deletion the integrator was told of (a recalled message, a deleted doc or event): dropped at once.
-          const checked = checkSourceRemoved(body);
-          if (!checked.ok) return fail(400, checked.error);
-          const { userId, sourceId, refs } = checked.value;
-          await partner.ready({ tenantId: tenant, userId }); // D325, as above.
-          return json({ ok: true, removed: partner.sourceRemoved({ tenantId: tenant, userId }, sourceId, refs) });
-        }
-        case "/v1/sources": {
-          if (!userSources) return fail(404, "per-user sources are not configured (EDEN_USER_SOURCES_FILE)");
-          if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
-          const status = await userSources.status({ tenantId: tenant, userId: body.userId as string });
-          // The caller's (the integrator's) configuration for this user, not an internal failure: 422, not 5xx.
-          if (status.error !== null) return fail(422, `source configuration: ${status.error}`);
-          return json({ sources: status.sources });
-        }
-        default:
-          return fail(404, "no such route");
-      }
+      const answer = await route(url, body, tenant);
+      if (answer.status === 400) stats.refused(tenant);
+      return answer;
     } catch (e) {
       console.error("eden: request failed", url.pathname, e instanceof Error ? e.message : e);
       return fail(503, "temporarily unable to serve context"); // An integration treats this as silence.
     }
   };
+
+  async function route(url: URL, body: Json, tenant: string): Promise<Response> {
+    switch (url.pathname) {
+      case "/v1/events": {
+        const checked = checkEvent(body);
+        if (!checked.ok) return fail(400, checked.error);
+        const waitMs = Math.max(0, Math.min(5_000, Number(url.searchParams.get("waitMs") ?? 0) || 0));
+        // `?shadow=1`: an integration trying Eden without injecting (the proxy's shadow mode): nothing is learned.
+        const shadow = url.searchParams.get("shadow") === "1";
+        const observed = await partner.observe(checked.value, { waitMs, ...(shadow ? { shadow } : {}) });
+        stats.event(tenant, checked.value, waitMs, observed.pending === true, shadow);
+        return json(observed);
+      }
+      case "/v1/check": {
+        // The party check (D376): a tool call the agent is about to make, checked before it runs (no model).
+        const checked = checkEvent(body);
+        if (!checked.ok) return fail(400, checked.error);
+        if (checked.value.kind !== "tool_call") return fail(400, "check takes a tool_call event");
+        stats.check(tenant, checked.value.tool);
+        return json(await partner.checkAction(checked.value));
+      }
+      case "/v1/ask": {
+        const checked = checkAsk(body);
+        if (!checked.ok) return fail(400, checked.error);
+        stats.ask(tenant, checked.value.userId, checked.value.sessionId);
+        return json(await partner.ask(checked.value));
+      }
+      case "/v1/pending": {
+        const bad = badId(body, ["userId", "sessionId"]);
+        if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+        const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
+        const shadow = url.searchParams.get("shadow") === "1";
+        stats.pending(tenant, who.userId, who.sessionId, shadow);
+        // D325: the take checks new items against the session's plans (`checkPlans`), which reads the user's items.
+        await partner.ready(who);
+        return json({ injections: partner.takePending(who, shadow ? { shadow } : {}) });
+      }
+      case "/v1/whoami": {
+        // The client's `health()`: the key, the tenant and the ids are checked as any route checks them, and nothing
+        // is read or changed (unlike `/v1/pending`, which drains the queue).
+        const bad = badId(body, ["userId"]);
+        if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+        if (body.sessionId !== undefined && !isId(body.sessionId)) {
+          return fail(400, "sessionId must be 1-128 characters of [A-Za-z0-9._:@-]");
+        }
+        return json({ ok: true });
+      }
+      case "/v1/explain": {
+        // Why Eden spoke or stayed silent in this session (D277): its traces, content-free (D56), a sentence each.
+        const bad = badId(body, ["userId", "sessionId"]);
+        if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+        const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
+        const decisions = partner.explain(who).map((t) => ({
+          turn: t.turn,
+          event: t.event,
+          decision: t.decision,
+          reason: t.reason,
+          why: explainTrace(t),
+          latencyMs: t.latencyMs,
+          sourceCalls: t.sourceCalls,
+          modelCalls: t.modelCalls,
+          costUsd: t.costUsd,
+          itemIds: t.itemIds,
+        }));
+        return json({ decisions });
+      }
+      case "/v1/feedback": {
+        const bad = badId(body, ["userId", "sessionId", "injectionId"]);
+        if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
+        if (typeof body.used !== "boolean") return fail(400, "used must be true or false");
+        stats.feedback(tenant);
+        const applied = partner.feedback({
+          tenantId: tenant,
+          userId: body.userId as string,
+          sessionId: body.sessionId as string,
+          injectionId: body.injectionId as string,
+          used: body.used,
+          how: "explicit",
+        });
+        return json({ ok: true, applied });
+      }
+      case "/v1/usage": {
+        // The tenant's own usage today in this process (D326): model spend and calls against the cap this process
+        // holds, requests by route, users held. The router sums its children's (router.ts); counts only.
+        const day = new Date().toISOString().slice(0, 10);
+        return json({
+          tenantId: tenant,
+          day,
+          processes: 1,
+          modelUsd: spend?.spent(tenant) ?? 0,
+          modelCalls: spend?.calls(tenant) ?? 0,
+          capUsd: spend?.capOf(tenant) ?? 0,
+          requests: day === countedDay ? { ...counted.get(tenant) } : {},
+          ...partner.tenantUsage(tenant),
+          // Since the process started, not today (D852): what `eden doctor` reads.
+          integration: stats.of(tenant),
+        });
+      }
+      case "/v1/forget": {
+        if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
+        if (body.sourceId !== undefined && !isId(body.sourceId)) return fail(400, "sourceId is malformed");
+        const scope = { tenantId: tenant, userId: body.userId as string };
+        // D325: one source's forget drops its items from the user's cache, a read; the whole user's forget reads
+        // nothing (a frozen user's record is simply dropped).
+        if (body.sourceId !== undefined) await partner.ready(scope);
+        partner.forget(scope, body.sourceId as string | undefined);
+        userSources?.forget(scope, body.sourceId as string | undefined);
+        return json({ ok: true });
+      }
+      case "/v1/sources/changed": {
+        // A webhook or watch the integrator receives, forwarded: the source's synced copy is polled at its next use.
+        const checked = checkSourceChanged(body);
+        if (!checked.ok) return fail(400, checked.error);
+        const { userId, sourceId } = checked.value;
+        stats.notice(tenant, "signals");
+        // 200 either way (a no-op notification is not a caller error); `reason` says why nothing was synced.
+        return json({ ok: true, ...partner.sourceNotice({ tenantId: tenant, userId }, sourceId) });
+      }
+      case "/v1/sources/items": {
+        // The changed items themselves (a Slack event, a trigger's payload): held as synced, with no source call.
+        const checked = checkSourceItems(body);
+        if (!checked.ok) return fail(400, checked.error);
+        const { userId, sourceId, items } = checked.value;
+        stats.notice(tenant, "items");
+        return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
+      }
+      case "/v1/sources/refs": {
+        // What changed, named but not carried (a Gmail history's ids, a webhook's resource id): Eden reads those
+        // refs itself in the background (D347). 200 at once; `reason` when it acts as a plain signal could not.
+        const checked = checkSourceRefs(body);
+        if (!checked.ok) return fail(400, checked.error);
+        const { userId, sourceId, refs } = checked.value;
+        stats.notice(tenant, "refs");
+        const { settled, ...result } = partner.sourceRefs({ tenantId: tenant, userId }, sourceId, refs);
+        void settled.catch(() => 0);
+        return json({ ok: true, ...result });
+      }
+      case "/v1/sources/removed": {
+        // A deletion the integrator was told of (a recalled message, a deleted doc or event): dropped at once.
+        const checked = checkSourceRemoved(body);
+        if (!checked.ok) return fail(400, checked.error);
+        const { userId, sourceId, refs } = checked.value;
+        stats.notice(tenant, "removed");
+        await partner.ready({ tenantId: tenant, userId }); // D325, as above.
+        return json({ ok: true, removed: partner.sourceRemoved({ tenantId: tenant, userId }, sourceId, refs) });
+      }
+      case "/v1/sources": {
+        if (!userSources) return fail(404, "per-user sources are not configured (EDEN_USER_SOURCES_FILE)");
+        if (badId(body, ["userId"])) return fail(400, "userId must be 1-128 characters of [A-Za-z0-9._:@-]");
+        const status = await userSources.status({ tenantId: tenant, userId: body.userId as string });
+        // The caller's (the integrator's) configuration for this user, not an internal failure: 422, not 5xx.
+        if (status.error !== null) return fail(422, `source configuration: ${status.error}`);
+        return json({ sources: status.sources });
+      }
+      default:
+        return fail(404, "no such route");
+    }
+  }
 }

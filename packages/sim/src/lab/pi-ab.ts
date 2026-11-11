@@ -23,10 +23,8 @@
  * `--variant-config '{"ALL2":{"syncPollBehind":true}}' --conditions eden,eden~ALL2` gives each name the settings it
  * adds over `--config`, and `eden+askDedup` is shorthand for one flag on. `--act` is a mode of its own: every
  * condition gets stub action tools (`act.ts`) and a system prompt that lets the agent act, and each task records its
- * action calls (`act-report.ts` reads them). `-act-firewall` conditions (`tools-act-firewall`, `eden-act-firewall`)
- * also turn on the engine's `actionCheck` (D69) and send each action call to `checkAction` before it runs (Pi's
- * `beforeToolCall`): a finding holds the call and is the tool's result (`heldResult`), and the same call made again
- * runs. Beside tools, Eden runs only as that check: it observes the request but injects nothing and gives no tool.
+ * action calls (`act-report.ts` reads them). (The `-act-firewall` conditions went with the action firewall, D815;
+ * A25's party check on actions is measured with `injection-ab.ts`.)
  *
  * `--cards FILE` (alias `--cards-disk`) replays implication cards from a disk cache (`cards-disk.ts`, as the funnel
  * does) and makes only the missing ones live, so the conditions of a run, and later runs, do not each pay for the same
@@ -56,11 +54,15 @@
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
  *     [--variant-config '{"name":{...}}'] [--act] [--dress] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
- *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json]
+ *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json] [--resume]
  *     [--recap-notice push|signal] [--noise-sources N [--noise-items 20]]
  *
  * `--replay DIR` replays the reader's and the grader's calls from DIR and appends new ones; `--reuse-arms F` copies the
  * `none` and `tools` arms from a matching earlier run instead of running them (both at their definitions below).
+ *
+ * `--resume` (R4, D813): each finished task (a whole day under `--day`/`--days`) is appended to
+ * `<out>.partial.jsonl` as it lands; after a kill the same command with `--resume` reuses those at $0 (`JOURNAL`
+ * below, `run-journal.ts`).
  *
  * `--day K --late` (A9, pi-late.ts): each request's planted item arrives right after its answer; the agent's later
  * replies that day are graded against that request (`lateFacts`).
@@ -99,7 +101,6 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
-import { heldResult } from "@eden/client";
 import {
   CardEnricher,
   ContextPartner,
@@ -154,7 +155,7 @@ import {
 } from "./ab-common";
 import { variantsFor } from "./neutral";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
-import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
+import { DiskCardMaker, harnessCoverage, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import {
   anthropicThinkingOff,
   isAnthropic,
@@ -191,6 +192,16 @@ import { sanitizeForStore } from "@eden/redact";
 import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor, widenKey, type WidenUse } from "./n2-widen";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
+import {
+  argvFields,
+  argvFiles,
+  codeVersion,
+  envFields,
+  hashOf,
+  JournalRefused,
+  partialPath,
+  RunJournal,
+} from "./run-journal";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -249,7 +260,7 @@ const DRESS = args.includes("--dress");
 if (DRESS && (USER_DAYS > 0 || args.includes("--reuse-arms"))) {
   throw new Error("--dress dresses the per-suite worlds only: not with --days or --reuse-arms");
 }
-const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
+const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
@@ -313,6 +324,33 @@ const DAYS: (DaySummary & {
   recapUsd?: number;
   recapEdenUsd?: number;
 })[] = [];
+/** One journal line's data (`--resume`, D813): a unit's results, timeline records, day summaries and spend. */
+interface JournalUnit {
+  results: RunResult[];
+  records: TaskRecord[];
+  days: (typeof DAYS)[number][];
+  spend: { agent: number; eden: number; grader: number };
+}
+/** A unit being run: complete once its task (or its day's recap) ends; `ok` false when a grading failed. */
+interface OpenUnit {
+  id: string;
+  complete: boolean;
+  ok: boolean;
+  grades: Promise<void>[];
+  data: JournalUnit;
+}
+/** What `--resume` took from the journal instead of running it. */
+const resumed = {
+  units: 0,
+  tasks: 0,
+  /** What the reused units' tasks cost when they ran. */
+  unitsUsd: 0,
+  /** What every earlier attempt spent (the journal's last spend note): at least `unitsUsd`, more when an attempt paid
+   * for units it never finished. It starts this run's `spent`, so `--budget` stays the whole run's cap. */
+  spentBeforeUsd: 0,
+  /** `--resume-biased`: Eden arms under `--day`/`--days` resumed against an Eden that never saw the reused days. */
+  biased: false,
+};
 // `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
@@ -382,7 +420,16 @@ if (OPENROUTER_ROLES.length && !KEY && !DRY)
 const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
-const CARDS_FILE = opt("cards", opt("cards-disk", ""));
+// `--coverage` (D878): shipped coverage by default where it covers the run, replayed as cards and intent; a run that
+// names its own `--cards`/`--intent` pins `--coverage full`.
+const COVERAGE = harnessCoverage({
+  coverage: opt("coverage", ""),
+  cards: opt("cards", opt("cards-disk", "")),
+  intent: opt("intent", "default"),
+  suites: SUITE_LIST,
+  seeds: SEEDS,
+});
+const CARDS_FILE = COVERAGE.cards;
 /**
  * `--cards-calls N` (F2): each stream's enrichment gets N card calls; items past them stay uncovered. With
  * `cardsLanes` K (N4) a stream gets N × K: the calls K lanes have made when one lane has made N.
@@ -405,7 +452,7 @@ if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE
 const INTENT_WANTED = CONDITIONS.some(
   (c) => c.withPartner && !c.noKey && effective(c.config).intent && effective(c.config).cards,
 );
-const INTENT = harnessIntent(opt("intent", "default"), {
+const INTENT = harnessIntent(COVERAGE.intent, {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
   suites: SUITE_LIST,
@@ -743,6 +790,8 @@ async function runWorld(
   daySizes?: readonly number[],
   /** `--connect-at`: which of the world's users this stream is, of how many, and when they connect (`now()`'s ms). */
   connect?: { replica: number; replicas: number; startAt: number },
+  /** The world's index in `worlds`: part of each journal unit's id (`--resume`). */
+  wi = 0,
 ): Promise<RunResult[]> {
   if (connect) await Bun.sleep(Math.max(0, connect.startAt - performance.now()));
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
@@ -770,7 +819,6 @@ async function runWorld(
     askTool,
     judge,
     act,
-    firewall,
     config,
     noKey,
     packets: layout,
@@ -1022,7 +1070,6 @@ async function runWorld(
   const closePrevious = async () => {
     if (!partner || !previous) return;
     const who = { ...scope, sessionId: previous.sessionId };
-    // Late items reach the agent only where Eden delivers; beside tools-act-firewall they are drained, not counted.
     const late = partner.takePending(who).reduce((n, i) => n + i.citations.length, 0);
     previous.r.lateItems = useEden ? late : 0;
     await partner.observe({ ...who, at: clock, kind: "session_end" });
@@ -1034,39 +1081,103 @@ async function runWorld(
   let dayNo = -1;
   let newDay = true;
   let daySession = "";
-  /** Grades `answer` against `task`'s facts beside the next task, on `tl` (after its end); `set` gets the verdicts. */
-  const gradeInto = (task: Task, answer: string, tl: Timeline, set: (facts: Record<string, boolean>) => void) => {
+  /**
+   * `--resume` (D813): the open journal unit (a task, or with `--day`/`--days` a whole day through its recap) and its
+   * id. It is written once complete, graded and error-free (`flush`); a unit found in the journal is not run: its
+   * results are taken as they were (`adopt`), and only what changes the world or Eden's clock is replayed.
+   */
+  let unit: OpenUnit | null = null;
+  const unitId = (task: Task, day: number) => `${wi}|${condition}|${DAYS_ON ? `day${day}` : task.id}`;
+  const flush = () => {
+    const u = unit;
+    unit = null;
+    if (!u || !JOURNAL || !u.complete) return;
     grading.push(
-      (async () => {
-        const g = tl.begin("grading", "grading", "bg");
-        const est = worstCase(GRADER, 4_000 + answer.length + task.text.length, 2_000);
-        let reserved = false;
-        let cost = 0;
-        let failure = "";
+      Promise.all(u.grades).then(() => {
+        if (!u.ok || u.data.results.some((x) => x.error)) return;
         try {
-          if (task.must.length > 0 && answer.trim()) {
-            reserve(est);
-            reserved = true;
-          }
-          const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
-          const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
-          // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
-          const model = graderReplay ?? GRADER_MODEL;
-          set(
-            model
-              ? await gradeWith(model, task, answer, (c) => (cost = c))
-              : (await grade(KEY!, meter, GRADER, task, answer, via)).facts,
-          );
+          JOURNAL.write(u.id, u.data);
+          JOURNAL.noteSpent(spent);
         } catch (e) {
-          // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
-          // only: an error body can quote the request.
-          failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
-        } finally {
-          if (reserved) settle(est, cost, "grader");
-          tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
+          console.error(`pi-ab: ${e instanceof Error ? e.message : e}`);
         }
-      })(),
+      }),
     );
+  };
+  const adopt = (u: JournalUnit) => {
+    out.push(...u.results);
+    records.push(...u.records);
+    DAYS.push(...u.days);
+    bg.tasks.push(...u.results.map((x) => x.task));
+    // `spent` already holds every earlier attempt's spend (`spentBefore`); the buckets get what these tasks cost.
+    for (const k of ["agent", "eden", "grader"] as const) spend[k] += u.spend[k];
+    resumed.units++;
+    resumed.tasks += u.results.length;
+    resumed.unitsUsd += u.spend.agent + u.spend.eden + u.spend.grader;
+  };
+  /**
+   * Grades `answer` against `task`'s facts beside the next task, on `tl` (after its end); `set` gets the verdicts. The
+   * open journal unit (`unit`) waits for it, books its cost and is not written if it fails.
+   */
+  const gradeInto = (task: Task, answer: string, tl: Timeline, set: (facts: Record<string, boolean>) => void) => {
+    const u = unit;
+    const graded = (async () => {
+      const g = tl.begin("grading", "grading", "bg");
+      const est = worstCase(GRADER, 4_000 + answer.length + task.text.length, 2_000);
+      let reserved = false;
+      let cost = 0;
+      let failure = "";
+      try {
+        if (task.must.length > 0 && answer.trim()) {
+          reserve(est);
+          reserved = true;
+        }
+        const meter: Meter = { before: () => {}, after: (c) => (cost = c) };
+        const via = { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging };
+        // `--replay`: the same prompt through the replay cache (a replayed grade costs nothing).
+        const model = graderReplay ?? GRADER_MODEL;
+        set(
+          model
+            ? await gradeWith(model, task, answer, (c) => (cost = c))
+            : (await grade(KEY!, meter, GRADER, task, answer, via)).facts,
+        );
+      } catch (e) {
+        // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
+        // only: an error body can quote the request.
+        failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
+      } finally {
+        if (reserved) settle(est, cost, "grader");
+        tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
+        if (u) {
+          u.data.spend.grader += cost;
+          if (failure) u.ok = false;
+        }
+      }
+    })();
+    grading.push(graded);
+    u?.grades.push(graded);
+  };
+  /** `--late`: `task`'s planted item arrives after its answer, new at its source; the notice carries it. */
+  const arrive = async (task: Task): Promise<boolean> => {
+    const arrived = lateHeld && task.planted ? release(world, lateHeld, task.planted, clock) : null;
+    if (!arrived) return false;
+    const src = sources.find((x) => x.id === arrived.sourceId);
+    src?.reindex();
+    if (partner && src && CONNECTORS.push === "payload") {
+      await partner.sourceItems(
+        scope,
+        src.id,
+        src.listAll().filter((i) => i.id === arrived.id),
+      );
+    } else if (partner && src && CONNECTORS.push === "signals") partner.sourceChanged(scope, src.id);
+    // The next request comes ten minutes later: the item's card (made as it was stored) is in by then. Bounded, so a
+    // hung enrichment cannot stall the stream.
+    if (cards) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([cards.idle(), new Promise((r) => (timer = setTimeout(r, 10_000)))]);
+      clearTimeout(timer);
+    }
+    return true;
   };
   // A set: two requests planting one item must not move it twice.
   const dayPlanted = new Set<string>();
@@ -1076,8 +1187,10 @@ async function runWorld(
   let asked = -1;
   for (const task of tasks) {
     asked++;
-    if (exhausted()) break;
-    if (PACER.remaining < TASK_REQUESTS) {
+    if (unit?.complete) flush();
+    const fromJournal = JOURNAL?.done.get(unitId(task, DAYS_ON && newDay ? dayNo + 1 : dayNo));
+    if (!fromJournal && exhausted()) break;
+    if (!fromJournal && PACER.remaining < TASK_REQUESTS) {
       capStopped++;
       break;
     }
@@ -1146,6 +1259,29 @@ async function runWorld(
         clearTimeout(timer);
       }
     }
+    if (fromJournal) {
+      // A unit an earlier attempt finished: no agent, no grader, no observe. What the run's later units depend on
+      // still happens: the clock and the sync's tick (above), the recap's moves (above) and `--late`'s arrivals.
+      if (startsDay) await closePrevious();
+      if (DAYS_ON) {
+        if (!isRecap(task) && task.planted && !LATE) dayPlanted.add(task.planted);
+        if (!isRecap(task)) await arrive(task);
+        if (isRecap(task)) {
+          day = null;
+          adopt(fromJournal);
+        }
+      } else adopt(fromJournal);
+      continue;
+    }
+    if (JOURNAL && !unit) {
+      unit = {
+        id: unitId(task, dayNo),
+        complete: false,
+        ok: true,
+        grades: [],
+        data: { results: [], records: [], days: [], spend: { agent: 0, eden: 0, grader: 0 } },
+      };
+    }
     const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
     const r: RunResult = emptyResult(task.id, condition);
     if (connect) {
@@ -1180,7 +1316,6 @@ async function runWorld(
     const uptake = new UptakeLog();
     const packets = uptake.packets;
     const takeEden = () => {
-      // `tools-act-firewall`: Eden only checks actions; what it would have delivered never reaches the agent.
       if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
         r.injectedItems += i.citations.length;
@@ -1286,10 +1421,8 @@ async function runWorld(
           },
         });
       }
-      // `--act`: the stub action tools; each call is recorded and runs. With the firewall, Eden checks each call
-      // first (`beforeToolCall` below) and the check's record waits here for the call to run; without it, `off`.
+      // `--act`: the stub action tools; each call is recorded (verdict `off`: no check runs here) and runs.
       const actions: ActionRecord[] = [];
-      const checkedCalls = new Map<string, ActionRecord>();
       if (act) {
         r.actions = actions;
         for (const spec of ACTIONS) {
@@ -1299,18 +1432,9 @@ async function runWorld(
             label: spec.name,
             parameters: actionParams(spec),
             prepareArguments: (a) => coerceArgs(spec, a),
-            execute: async (id, raw) => {
+            execute: async (_id, raw) => {
               const args = raw as Record<string, string | string[]>;
-              const rec = checkedCalls.get(id) ?? {
-                tool: spec.name,
-                args,
-                verdict: "off",
-                executed: false,
-                checkMs: 0,
-              };
-              checkedCalls.delete(id);
-              rec.executed = true;
-              actions.push(rec);
+              actions.push({ tool: spec.name, args, verdict: "off", executed: true, checkMs: 0 });
               return { content: [{ type: "text", text: executed(spec.name, actions.length) }], details: {} };
             },
           });
@@ -1451,37 +1575,6 @@ async function runWorld(
             },
           });
         },
-        // The firewall: an action call goes to Eden before it runs; a finding holds it and is the tool's result.
-        ...(firewall && partner
-          ? {
-              beforeToolCall: async (ctx: { toolCall: { id: string; name: string }; args: unknown }) => {
-                if (!ACTIONS.some((a) => a.name === ctx.toolCall.name)) return undefined;
-                const o = tl.begin("eden.check", "eden", "path", { tool: ctx.toolCall.name });
-                const check = await partner.checkAction(
-                  ev({ kind: "tool_call", tool: ctx.toolCall.name, input: ctx.args }),
-                );
-                tl.end(o, { verdict: check.verdict, reason: check.reason });
-                const rec: ActionRecord = {
-                  tool: ctx.toolCall.name,
-                  args: ctx.args as ActionRecord["args"],
-                  verdict: check.verdict,
-                  executed: false,
-                  checkMs: check.latencyMs,
-                  reason: check.reason,
-                  ...(check.finding ? { cited: check.finding.citations.map((c) => c.itemId) } : {}),
-                };
-                if (check.verdict === "proceed" || !check.finding) {
-                  checkedCalls.set(ctx.toolCall.id, rec);
-                  return undefined;
-                }
-                actions.push(rec);
-                r.injectedItems += check.finding.citations.length;
-                r.injectedChars += check.finding.text.length;
-                uptake.finding(check.finding);
-                return { block: true, reason: heldResult(ctx.toolCall.name, check.finding) };
-              },
-            }
-          : {}),
         finishTurn: async () => {
           turns++;
           // agent-ab's cap: six model calls, the last one's text the answer even if it asked for more tools.
@@ -1601,7 +1694,16 @@ async function runWorld(
       if (isRecap(task)) {
         // The recap is measured, never graded or reported as a task; its cost is kept with the day.
         day.recap(r.error ? "" : r.answer);
-        DAYS.push({ ...day.summary(), seed, kind: task.kind, recapUsd: r.costUsd, recapEdenUsd: r.edenCostUsd });
+        const summary = { ...day.summary(), seed, kind: task.kind, recapUsd: r.costUsd, recapEdenUsd: r.edenCostUsd };
+        DAYS.push(summary);
+        if (unit) {
+          unit.data.days.push(summary);
+          unit.data.spend.agent += r.costUsd;
+          unit.data.spend.eden += r.edenCostUsd;
+          // A recap that failed is part of the day: the day runs again.
+          if (r.error) unit.ok = false;
+          unit.complete = true;
+        }
         day = null;
         previous = { sessionId, r };
         continue;
@@ -1610,34 +1712,24 @@ async function runWorld(
     out.push(r);
     bg.tasks.push(r.task);
     records.push(record);
+    if (unit) {
+      unit.data.results.push(r);
+      unit.data.records.push(record);
+      unit.data.spend.agent += r.costUsd;
+      unit.data.spend.eden += r.edenCostUsd;
+      if (!DAYS_ON) unit.complete = true;
+    }
     // Grading runs beside the next task, on this task's timeline (after its end): the agent never waits for it.
     if (!r.error) gradeInto(task, r.answer, tl, (f) => (r.facts = f));
     // `--late`: the planted item arrives now, after the answer, and is new at its source; the notice carries it.
-    const arrived = lateHeld && task.planted ? release(world, lateHeld, task.planted, clock) : null;
-    if (arrived) {
-      const src = sources.find((x) => x.id === arrived.sourceId);
-      src?.reindex();
-      if (partner && src && CONNECTORS.push === "payload") {
-        await partner.sourceItems(
-          scope,
-          src.id,
-          src.listAll().filter((i) => i.id === arrived.id),
-        );
-      } else if (partner && src && CONNECTORS.push === "signals") partner.sourceChanged(scope, src.id);
-      // The next request comes ten minutes later: the item's card (made as it was stored) is in by then. Bounded, so a
-      // hung enrichment cannot stall the stream.
-      if (cards) {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        await Promise.race([cards.idle(), new Promise((r) => (timer = setTimeout(r, 10_000)))]);
-        clearTimeout(timer);
-      }
-      dayLate.push({ entry: { task, after: [] }, r });
-    }
+    if (await arrive(task)) dayLate.push({ entry: { task, after: [] }, r });
     previous = { sessionId, r };
   }
   // A day cut short (budget, request cap) is still reported, marked partial.
   if (day) DAYS.push({ ...day.summary(), seed, kind: dayKind, partial: true });
   await closePrevious();
+  // A day cut short is not complete, so it is not written: it runs again on `--resume`.
+  flush();
   current = null;
   if (connect) {
     // The user is kept until their backfill is complete (bounded), so an arm that reads it later is not counted
@@ -1717,6 +1809,7 @@ console.error(
     (REPLAY_DIR ? `, replay ${REPLAY_DIR}${REPLAY_ONLY ? " (only)" : ""}${REPLAY_TIMING ? " (timed)" : ""}` : ""),
 );
 console.error(`pi-ab: ${INTENT_LINE}`);
+console.error(`pi-ab: ${COVERAGE.note}`);
 if (USER_DAYS > 0) {
   for (const w of worlds) {
     const kinds = ["hidden", "control", "neutral"].map((k) => w.tasks.filter((t) => t.kind === k).length);
@@ -1768,6 +1861,85 @@ if (REUSE_FILE) {
 }
 if (DRY) process.exit(0);
 
+/**
+ * `--resume` (R4, D813): every finished unit goes to `<out>.partial.jsonl` as it lands, and a restart with `--resume`
+ * reuses the units found there instead of paying for them again. The key is everything that decides a unit: the
+ * command's flags (less those that only name outputs or caps), the contents of the files it names, the tasks, the
+ * harness and its prompts hash, and the code (`run-journal.ts`). `--connect-at` runs users in real time, so it is not
+ * journalled.
+ */
+const JOURNAL = CONNECT
+  ? null
+  : (() => {
+      const drop = [
+        ...["--out", "--timeline", "--cards-out", "--resume", "--budget", "--spend-ledger", "--spend-cap"],
+        ...["--spend-headroom", "--run-label", "--max-requests", "--rpm", "--resume-biased"],
+      ];
+      try {
+        return RunJournal.open<JournalUnit>(
+          partialPath(OUT),
+          {
+            harness: "pi-ab",
+            harnessVersion: HARNESS_VERSION,
+            promptsHash: PROMPTS_HASH,
+            argv: argvFields(args, drop),
+            files: argvFiles(args, drop),
+            tasks: hashOf(worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes, tasks: w.tasks }))),
+            env: envFields(),
+            code: codeVersion(),
+          },
+          args.includes("--resume"),
+        );
+      } catch (e) {
+        if (!(e instanceof JournalRefused)) throw e;
+        console.error(`pi-ab: ${e.message}`);
+        process.exit(2);
+      }
+    })();
+if (args.includes("--resume") && CONNECT) throw new Error("--connect-at runs users in real time: it cannot --resume");
+// Under `--day`/`--days` a reused day's requests never reached Eden: the days after it run against an Eden that did not
+// see it (its reads, sessions, update notices). The Eden-free arms resume exactly; an Eden arm only when asked to,
+// and its results say so.
+const edenArms = CONDITIONS.filter((c) => c.withPartner && !reused.conditions.includes(c.name)).map((c) => c.name);
+if (JOURNAL?.done.size && DAYS_ON && edenArms.length) {
+  if (!args.includes("--resume-biased")) {
+    console.error(
+      `pi-ab: --resume under --day/--days would run ${edenArms.join(",")} against an Eden that never saw the reused ` +
+        "days; pass --resume-biased to accept that (the results file and reports then say so), or start over",
+    );
+    process.exit(2);
+  }
+  resumed.biased = true;
+}
+if (JOURNAL) {
+  // The earlier attempts' spend: their last note, or at least what their finished units cost.
+  const unitsUsd = [...JOURNAL.done.values()].reduce((n, u) => n + u.spend.agent + u.spend.eden + u.spend.grader, 0);
+  resumed.spentBeforeUsd = Math.max(JOURNAL.spentBefore, unitsUsd);
+  spent += resumed.spentBeforeUsd;
+}
+if (JOURNAL?.done.size || JOURNAL?.torn) {
+  console.error(
+    `pi-ab: resuming from ${JOURNAL.path}: ${JOURNAL.done.size} finished units reused at $0, ` +
+      `$${resumed.spentBeforeUsd.toFixed(4)} spent by earlier attempts counted against --budget` +
+      (JOURNAL.torn ? `, ${JOURNAL.torn} torn lines run again` : "") +
+      (resumed.biased ? " (BIASED: --resume-biased)" : ""),
+  );
+}
+// What has been spent, noted in the journal as it moves (and with each unit), so a kill loses at most a second's.
+let noted = spent;
+const noteTimer = JOURNAL
+  ? setInterval(() => {
+      if (spent === noted) return;
+      noted = spent;
+      try {
+        JOURNAL.noteSpent(spent);
+      } catch {
+        // Gone: the unit writes say so.
+      }
+    }, 1_000)
+  : null;
+noteTimer?.unref();
+
 mkdirSync(TIMELINE, { recursive: true });
 writeFileSync(`${TIMELINE}/tasks.jsonl`, "");
 writeFileSync(`${TIMELINE}/samples.jsonl`, "");
@@ -1792,7 +1964,7 @@ async function connected<T>(run: () => Promise<T>): Promise<T> {
 }
 let connectSlot = 0;
 const live = CONDITIONS.filter((c) => !reused.conditions.includes(c.name));
-const streams = worlds.flatMap((w) =>
+const streams = worlds.flatMap((w, wi) =>
   CONNECT
     ? // One user a task and arm, each in a slot of their own, a task's arms side by side.
       w.tasks.flatMap((_, replica) =>
@@ -1802,7 +1974,7 @@ const streams = worlds.flatMap((w) =>
           return connected(() => runWorld(w.world, w.seed, w.tasks, c, records, grading, undefined, who));
         }),
       )
-    : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes)),
+    : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes, undefined, wi)),
 );
 for (const settled of await Promise.allSettled(streams)) {
   if (settled.status === "fulfilled") results.push(...settled.value);
@@ -1830,6 +2002,7 @@ writeFileSync(
       ...(DRESS ? { dress: true } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
+      coverage: COVERAGE.coverage,
       timeScale: TIME_SCALE,
       ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
@@ -1842,6 +2015,7 @@ writeFileSync(
       background,
       ...(REPLAY_DIR ? { replay: replaySummary() } : {}),
       ...(REUSE_FILE ? { reusedArms: { from: REUSE_FILE, conditions: reused.conditions } } : {}),
+      ...(resumed.units ? { resumed: { journal: JOURNAL!.path, ...resumed } } : {}),
       ...(LATE ? { late: true } : {}),
       ...(CONNECT
         ? {
@@ -1882,6 +2056,27 @@ writeFileSync(
   ),
 );
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
+if (JOURNAL) {
+  // Every stream's units, journalled now or by an earlier attempt: then the results file holds them all.
+  const units = worlds.reduce(
+    (n, w) =>
+      n +
+      live.length *
+        (w.daySizes
+          ? w.daySizes.filter((k) => k > 0).length
+          : DAY > 0
+            ? Math.ceil(w.tasks.length / DAY)
+            : w.tasks.length),
+    0,
+  );
+  const have = JOURNAL.done.size + JOURNAL.written;
+  if (noteTimer) clearInterval(noteTimer);
+  if (have < units) JOURNAL.noteSpent(spent);
+  JOURNAL.finish(have >= units);
+  if (have < units) {
+    console.error(`pi-ab: ${have} of ${units} units finished; ${JOURNAL.path} kept: rerun with --resume to finish`);
+  }
+}
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
     `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +
@@ -1889,6 +2084,10 @@ console.error(
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
     (REPLAY_DIR ? `; ${replayLine()}` : "") +
     (REUSE_FILE ? `; reused ${reused.results.length} runs (${reused.conditions.join(",")}) at $0` : "") +
+    (resumed.units
+      ? `; resumed ${resumed.tasks} runs at $0 ($${resumed.spentBeforeUsd.toFixed(4)} spent by earlier attempts, ` +
+        `included above${resumed.biased ? "; BIASED: --resume-biased" : ""})`
+      : "") +
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));

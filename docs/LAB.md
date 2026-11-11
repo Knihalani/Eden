@@ -34,6 +34,10 @@ per suite for train1–6 and held-out 10–12.
 | `heldout16`                                | Blind, the CL wave's (cl-cl5.md); 32 new templates over the same 8 areas, with `neutral`              | **Read** (RealUse-3 Pi, 2026-11-07, realuse-3/pi-heldout16.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout17` | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`) | **Read** (A29 Pi, 2026-11-07, a29-heldout17.md): no longer blind; cards and intent cached for seeds 41–44 |
 | `heldout18` | Blind, M6's (m6-heldout18.md, D465); 32 new templates over the same 8 areas, with `neutral`; 8 late arrivals (`HELDOUT18_LATE`); 13 short anchored requests (`HELDOUT18_ANCHORED`, D466) | Run once and read by B18, 2026-11-11 (b18-heldout18.md, D802); cards and intent cached, 41–44     |
+| `heldout19` | Blind, P7's for the end-of-wave confirmation (p7-benchmarks.md, D870); 40 templates over the 8 areas, with `neutral`; indirect, question and non-English requests (`HELDOUT19_INDIRECT`, `HELDOUT19_NON_ENGLISH`), anchored requests, facts in rarely used connectors (`HELDOUT19_RARE`) and silent edits (`HELDOUT19_SILENT`, with `heldout19Before`) | **Unread** (`UNREAD_BLIND`): nobody runs it before the parent's end-of-wave call; cards and intent only at shipped coverage |
+| `train1r`–`train6r` (`--suite reworded`) | Train with every request reworded as a need, a plan or a question, 6 of 32 a suite in another language (reworded.ts, D871); same worlds, so train's caches replay | Tuning set (Q6); out of `all` |
+| `longtail` | 24 templates, every fact and decoy in one of eight rarely used connectors (rare-sources.ts, D873); with `neutral` | Tuning and measurement, not blind; out of `all`; pair with `days-calls.ts --arrive-days` |
+| `synth-sample`, `synth-train`, `synth-val`, `synth-test`, `synth:<file>`, `synth` (= train + val), `@K` | M2's generated worlds (m2-synth.md, D884): seed `s` plants world `s mod N` into the base world, one task a family; `@K` plants K worlds a seed (for `--days`); `synth-test` is M1's and M3's test split | Data on the Modal Volume `eden-synth` (packages/sim/lab/synth/README.md); not in `all`; no cached cards or intent |
 
 **The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
@@ -49,9 +53,30 @@ a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and 
   written by an author who saw no engine code.
 - `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five
   have been read (D72, D80, D85, D98, D112), 14 by RealUse-1 and 15 by RealUse-2: treat the list as "not in `all`",
-  not as "fresh". Held-out 18 (M6, D465) was spent by B18 (D802): no suite is unread (`UNREAD_BLIND` is
-  empty), and the next blind check needs a new one.
+  not as "fresh". Held-out 18 (M6, D465) was spent by B18 (D802). Held-out 19 (P7, D870) is the one unread suite:
+  its single use is the end-of-wave confirmation the parent calls; `bun run funnel` says so when a run names it.
+- **Worlds with rare connectors** (heldout19, longtail; rare-sources.ts): eight more connectors (notes, whatsapp,
+  bank, health, school, trips, residents, tasks) with 6–8 old filler items each, added by `prepareWorld(suite, …)`
+  before the planted items in every variant; every harness calls it, and planting without it throws.
 - Seeds: 41–44 for funnel work (41–42 on train), 41–48 for the Haiku benchmark. Same seed, same world, same tasks.
+
+## The benchmark map: which question each benchmark answers, and its known biases
+
+P7 (D876; docs/research/p7-benchmarks.md, B1–B13 of docs/research/weak-points-1111.md). Read a figure with its row:
+a benchmark answers its question and no other, and each has a bias that moves its level.
+
+| Benchmark | Question it answers | Known biases (what it cannot see) |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `bun run eval` | Did an engine change move behaviour on the hand-written scenarios? (precision 0.65, recall 0.52, falseFireRate 0 on main) | Its `falseFireRate` does not count candidates on nothing-to-add requests, and cards and intent are inert in it (B1). A merge gate, not a level |
+| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (281/264 on seeds 41–42; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
+| Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
+| Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
+| `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks plans repeat neutral requests (only on templates never planted for the user, D874); recaps move each day's planted times |
+| Held-out suites (`--blind`) | Does the default generalise to an author who never saw the engine? | Levels differ by suite (Q10: 73% on heldout17, 47–49% on heldout18 with one default), so compare arms within a suite; each is blind once. heldout19 is unread (D870) |
+| Pi short (`pi-ab.ts`) | Does a live agent raise the fact with Eden, against the agent alone? | One agent model (Haiku) for most decisions, graders that disagree by 7 points (B9); the baseline has search tools, with no "top five search hits" arm (B10); single runs (B11) |
+| Pi days (`pi-ab --days`) | The same over a user's mixed days, with cost and wall time | 2–8 compressed days, four to eight users in most runs (B7; `days-calls.ts` is the $0 weeks view); sessions reset daily, never compacted (A3) |
+| Connector lab, the pilot | Real MCP servers; one consenting account's data | The pilot is built, not run (B2): no figure here comes from real data |
+| Prices (COST-MODEL.md, pi-cost) | What a task, a user-day and a backfill cost | List prices assumed; Anthropic-direct lab transport, not the shipped OpenRouter route (B12) |
 
 ## Configurations (`presets.ts`)
 
@@ -107,6 +132,7 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Intent requests (D87)                                                             | `cards-enrich.ts --intent --dir D`                | `--intent D/intent-v2.jsonl` (needs `--cards`)                                                                                              | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, plus held-out 13 and 14 (seeds 41–44; 14 topped up on Haiku 5.5 for RealUse-1), yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
 | Bridge queries (D89)                                                              | `bridge-enrich.ts --out F`                        | `--bridge F`                                                                                                                                | no                                                                                                                                                                                                                                                                                                                                                                                    |
 | Reader calls (D95)                                                                | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no                                                 |
+| Cards and intent at shipped coverage (D872) | `cold-start.ts --users suite:seed:variant,… --cards-out F` (the enricher `buildPartner` builds, recorded) | `bun run funnel --coverage shipped` (as `--cards` and `--intent`; SHIPPED_COVERS in cards-disk.ts) | yes: `packages/sim/lab/distilled/cards-shipped.jsonl.gz` (train1–6 and reworded, longtail, heldout19, seeds 41–44, every variant; Haiku 5.5, lab transport); `cards-shipped-weeks.jsonl.gz` (the 24 weeks users of recipe 1h) |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -137,9 +163,9 @@ never be read back as a recorded one) and leaves its approximated calls out of t
 are the default's 15), recorded once live (recipe 2) into `W/rc-wide.jsonl`:
 
 ```bash
-bun run funnel --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
+bun run funnel --coverage full --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
   --reader-cache W/rc-wide.jsonl --reader-log W/log-wide.jsonl          # $0: the wide run's verdicts, logged
-bun run funnel --jobs 4 --allow-misses -- --reader replay --reader-model claude-haiku-5-5 \
+bun run funnel --jobs 4 --allow-misses --coverage full -- --reader replay --reader-model claude-haiku-5-5 \
   --reader-cache W/rc-wide.jsonl --reader-subset W/log-wide.jsonl         # the default's pool, approximated
 ```
 
@@ -365,7 +391,8 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 281/264 at
+shipped coverage, the funnel's default since D877)
 (314/274 before, when it read 307/281 on the second draw, which was not re-run after D710; 314/273 before D483's
 tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
@@ -542,6 +569,41 @@ eden --arms eden~V OUT.json…` (`--days` for a days run) and days' hidden facts
 Modal, `--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a
 time is `--max-streams 4`.
 
+### 1h. Weeks, many users and the long tail at $0 (P7, D874, D875)
+
+```bash
+gunzip -c packages/sim/lab/distilled/cards-shipped-weeks.jsonl.gz > .local/weeks.cards.jsonl   # the users' shipped cards
+bun packages/sim/src/lab/days-calls.ts --seeds 41-64 --days 28 --night-h 20 --suite train,longtail \
+  --arrive-days 0-10 --cards .local/weeks.cards.jsonl --intent .local/weeks.cards.jsonl   # 24 users, four weeks, $0
+```
+
+The cards file is what the shipped enricher wrote for those 24 users (`cold-start.ts --users user:41,…,user:64
+--suite train,longtail --days 28 --cards-out F`, $0.26, D872); another seed, suite or day count needs its own.
+One process, 127 s on the shared 4-core box (measured 2026-11-11, with the train card file).
+
+`--arrive-days LO-HI` holds each planted item until LO–HI days before its request and releases it with no notice, so
+only a poll, a sweep or the request's own reads can find it; the surfaced lines split by connector class (`rare`,
+`common`) and arrival lag (`0d`, `1-6d`, `7d+`, `backfill`), and a line prices the rare connectors' listings. Add
+`--set '{"syncUnusedSweepMs":0}'` for every source swept daily, `--push none` for sources that never notify, and
+`--noise-sources N --noise-vocab 1000` for the unused connectors a weekly sweep or dormancy rule is about (with 13
+connectors the sweep setting moved nothing, D875). Past about 12 days a plan is a weeks plan
+(D874): planted templates are drawn first and neutral requests repeat only templates never planted for the user.
+
+### 1h. A standing-constraint ledger over days users (M5, D910–D911; docs/research/m5-ledger.md)
+
+Stopped (D910); the recipe stays for a later variant. The shipped-coverage days baseline (M3's recipe), each user's
+corpus, the ledger (Haiku, about $0.000035 an item, pay once) and the $0 matcher:
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --cards-live claude-haiku-5-5 \
+  --intent none --cards-out .local/m5/cards.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 3 \
+  --pool-diag .local/m5/pool.jsonl --corpus-dump .local/m5/corpus.jsonl
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus .local/m5/corpus.jsonl \
+  --out .local/m5/led.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 5 --concurrency 6
+python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus .local/m5/corpus.jsonl \
+  --pool .local/m5/pool.jsonl --only fit
+```
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
@@ -588,7 +650,8 @@ The cache is plain JSONL that a live reader appends to, so it is unpacked under 
 
 ```bash
 gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
-bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/haiku-default.json -- --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --coverage full --json .local/haiku-default.json \
+  -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 
@@ -630,7 +693,8 @@ main file it replays `-- --neutral` with 0 misses (without it, 608 neutral reade
 ```bash
 (gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz; \
  gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz) > .local/reader-train.jsonl
-bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/h18.json -- --neutral --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --coverage full --json .local/h18.json -- --neutral \
+  --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-train.jsonl
 ```
 
@@ -740,8 +804,14 @@ the result whatever it says, and do not tune afterwards on what you read.
 
 One seed per process (a single process for four seeds over nine suites was killed at 14 GB; pi-full-benchmark.md).
 
+**Coverage (D878).** pi-ab and hermes-ab default to shipped coverage wherever it covers the run (train, reworded,
+longtail and heldout19, seeds 41–44): they replay `cards-shipped.jsonl.gz` as cards and intent, as the funnel does
+(D877), and print `coverage shipped` in the header and `coverage` in the results. A run that replays its own
+`--cards`/`--intent` pins `--coverage full`, as the recipes below and every script under `packages/sim/lab/` do; with
+the default, an explicit `--cards` is refused. Drop `--cards` and `--coverage full` for the deployment's coverage.
+
 ```bash
-bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 41 --variants hidden,control \
+bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --seeds 41 --variants hidden,control \
   --conditions tools,eden,eden~X --config default --variant-config '{"X":{"myFlag":true}}' \
   --cards packages/sim/lab/cards/cards-train.jsonl --grader deepseek/deepseek-v4.1-flash --budget 1 \
   --timeline .local/pi-41 --out .local/pi-41.json
@@ -754,6 +824,42 @@ Expectations from past runs: on glm-5.3-flash, one seed over dev and held-out 1�
 an agent task plus Eden NEW is $0.79 per 1,000 hidden tasks in Pi, ALL3 $0.36 (haiku-benchmark.md); wall p50 about
 4 s a task. Free models: a 4-task smoke took 16 requests and 20.8 s (edge-freelab.md); add `--allow-logging
 --max-requests N` and free model ids.
+
+**A killed run resumes without paying twice (`--resume`, R4, D813).** pi-ab appends each finished unit to
+`<out>.partial.jsonl` (beside `--out`, `pi-ab.json` → `pi-ab.partial.jsonl`) as it lands, one fsynced line each: a
+task, or under `--day`/`--days` a whole day through its recap (a day shares one transcript and its recap moves the
+world). A unit is written once its grades are in and nothing in it failed (an error, a failed grading, a recap that
+failed): those run again. Start the same command again with `--resume` after a kill, a restart or a cap: the units in
+the journal call no model and add no line to the spend ledger; their results, timeline lines and day summaries are
+merged in, and the results file says `resumed: {journal, units, tasks, unitsUsd, spentBeforeUsd, biased}`, which
+`pi-ab-report.ts` and `pi-cost-report.ts` print as a RESUMED line. A torn last line is dropped and its unit runs again.
+
+- **Spend.** The journal also notes what has been spent so far (each second it moves, and with each unit), and a
+  resumed run starts `spent` (and so `--budget`) from the last note: money the killed attempt paid for a unit it never
+  finished (the unit running at the kill, an errored or ungraded one, cards made live, an Eden call charged after its
+  task ended) is counted, except what was spent in the last second before the kill. The Anthropic spend ledger is the
+  real cap across attempts either way (it is append-only and every attempt reads it).
+- **Not the same as an unbroken run for Eden arms.** A reused unit's requests never reach Eden: no observe, no ask, no
+  session. The stream's clock, the sync's ticks, a recap's moves and `--late`'s arrivals are replayed, so later units
+  see the same world and clock, but not an Eden that saw the reused units (their reads, sessions, update notices). One
+  request a session, each task has its own session, so only what crosses sessions differs (the cache's reads, source
+  yield counts, the last session's close). Under `--day`/`--days` later days build on earlier ones, so `--resume` is
+  refused there while an Eden arm runs, unless `--resume-biased` accepts it (`resumed.biased`, BIASED in the reports).
+  Eden-free arms (`none`, `tools`) resume exactly.
+- **The key** is the command's flags less those that only name outputs or caps (`--out`, `--timeline`,
+  `--cards-out`, `--budget`, `--spend-*`, `--run-label`, `--max-requests`, `--rpm`, `--resume-biased`), the contents
+  of every file a flag names (a replay directory's contents are not: a replay cache only grows), the env the model
+  code reads (`EDEN_MODEL`, `EDEN_MODEL_PRICE`, `EDEN_MODEL_ZDR`, `OPENROUTER_BASE_URL`), the tasks, the harness
+  version and prompts hash, and the code: the `packages/` tree and `bun.lock` at HEAD, uncommitted changes to them and
+  untracked files under `packages/`, read from the repository's top wherever the command runs (`EDEN_COMMIT_SHA` in a
+  Modal shard; with neither, `--resume` is refused). Any difference is refused, naming what changed.
+- **One attempt at a time.** `<journal>.lock` holds the running process's pid; a second attempt is refused while it
+  lives, and a dead holder's lock (a kill) is taken over. A journal deleted under a running attempt is not appended
+  to. An existing journal without `--resume` is refused (exit 2); a run that finished every unit deletes it.
+- `--connect-at` runs users in real time and is not journalled. Each resumed stream backfills again: with `--cards`
+  the cards the killed attempt made live are replayed from its `--cards-out` (read back as `--cards` runs always do);
+  without `--cards` they are made, and paid, again. Tests: `pi-ab-resume.test.ts` ($0, a stand-in OpenRouter
+  preloaded, `fake-openrouter.ts`), `run-journal.test.ts`.
 
 **Dressed worlds (`--dress`, D287).** Many requests name a person or firm no item of their generated world names, so
 the agent's first lookups cannot succeed (`bun packages/sim/lab/a6/census.ts [--dress]` counts absent names broadly).
@@ -780,7 +886,7 @@ above)` marks, asks citing an item a packet already gave, stale deliveries after
   changed item's old time (`staleRecap`) or its new one (`freshRecap`). Each request is still graded as a task.
 
 ```bash
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite heldout14 --seeds 41 \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite heldout14 --seeds 41 \
   --variants hidden,control,neutral --conditions tools,eden,both+ask --day 4 --config default \
   --cards packages/sim/lab/cards/cards-v2.jsonl --model claude-haiku-5-5 --grader claude-haiku-5-5 \
   --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --push signals \
@@ -828,9 +934,9 @@ reply as passing them on (not warning about them). About $0.0005 a task an arm (
 ```bash
 # $0: how often the push hands the agent the attack, and what reaches it, per kind (Eden only, no agent)
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/injection-ab.ts --dry --suites train --seeds 41 --arms eden
-# live: tools (no Eden), the no-key default, the reader shape and a trial over the default
+# live: tools (no Eden), the no-key default, the reader shape and the default without the party check
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/injection-ab.ts --suites train --seeds 41 \
-  --variants hidden,control --arms tools,eden,reader,eden~G --variant-config '{"G":{"guardLine":true}}' \
+  --variants hidden,control --arms tools,eden,reader,eden~X --variant-config '{"X":{"partyCheck":false}}' \
   --spend-ledger .local/a10/ledger.jsonl --spend-cap 1.5 --spend-headroom 0.06 --run-label a10 --out .local/a10/run.json
 bun test ./packages/sim/src/lab/injection-suite.test.ts   # the standing $0 test, about 2 s
 ```
@@ -838,7 +944,7 @@ bun test ./packages/sim/src/lab/injection-suite.test.ts   # the standing $0 test
 The `eden` arm is a server with no model key (no cards; `+nokey`, D291); the `reader` arm has no cards either. The
 attack's opening quotes the request, so delivery is the suite's best case for the attacker (71 of 72 on train seed 41).
 
-Since A25 (D375, D376) the action tools of any Eden arm with `partyCheck` or `actionCheck` on consult `checkAction`
+Since A25 (D375, D376) the action tools of any Eden arm with `partyCheck` on consult `checkAction`
 first, as an integrator would, and the default has `partyCheck` on: the `eden` arm runs the party check, and A10's
 plain arm is `eden~X` with `{"X":{"partyCheck":false}}`. A finding holds the call and is its result; the report's
 `held-attack`/`held-other` columns count runs with a held call that did or did not match the attack. `--dry` with a
@@ -875,7 +981,7 @@ header counts slot clashes (a planted item in another request's calendar slot; 0
   `--reuse-arms` are refused with `--days`. One seed per process.
 
 ```bash
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --seeds 41 --days 8 \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --seeds 41 --days 8 \
   --conditions tools,eden --config default --cards .local/cards-all.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push signals --budget 0.35 \
@@ -977,7 +1083,7 @@ RUN.json …` attributes each concern's decoy to push-flagged, rule-path, ask-fl
 ### 5. Live A/B on Hermes
 
 ```bash
-bun packages/sim/src/lab/hermes-ab.ts --hermes-src $HERMES --concurrency 6 --suite train --seeds 41 \
+bun packages/sim/src/lab/hermes-ab.ts --coverage full --hermes-src $HERMES --concurrency 6 --suite train --seeds 41 \
   --variants hidden,control --conditions hermes,hermes+eden,hermes+eden~X --config default \
   --variant-config '{"X":{"myFlag":true}}' --cards packages/sim/lab/cards/cards-train.jsonl \
   --grader deepseek/deepseek-v4.1-flash --budget 1 --timeline .local/h-41 --out .local/h-41.json
@@ -1016,10 +1122,16 @@ compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `
   tick, the one-time backfill): `bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --days 8 --push payload --ask
 --cards .local/a8/cards-all.jsonl [--night-h 20] [--recap-notice signal|none] [--set JSON]`, about 10 s. pi-ab's 2 h
   nights put eight days in about 36 hours of Eden's clock (the daily sweep runs about once a user); `--night-h 20`
-  gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md).
+  gives 24-hour days for per-user-day figures (docs/research/a8-connector-calls.md). With `--json F` each user is
+  appended to `F.partial.jsonl` as it finishes, with its `--pool-diag` rows whether asked for or not, and `--resume`
+  reuses them (D813: keyed on the flags but `--seeds`, `--json`, `--pool-diag`, the cards and intent files' contents,
+  the model env and the code, so another seed list can reuse the users it shares).
   `--recap-notice none` (O1, D605) moves the day's items with no notice at all, so only a poll or a sweep finds the
   change: the screen that prices fewer polls (update packets, old copies held undoubted). The line `moved items at
   their recap` says what became of each (unhanded, updated, unpolled, unseen, undelivered; D606).
+  `--move-after N` (P4, D841) moves a handed item N requests later in the same session instead (one whose turn falls
+  past the recap moves there): `moved mid-session` gives each one's fate at the session's end and how many requests
+  its update took, and `owed updates arrived by source` covers both kinds of move (docs/research/p4-reread.md).
   `--pool-diag FILE` (O3, D712) writes one row a hidden or control request: whether the candidates' pass ran, the
   planted item's place in the push's pool, the constraint test on it, and whether it was handed then or earlier that
   day (docs/research/o3-pointer.md §3.2).
@@ -1090,7 +1202,13 @@ estimated cost of each run): `lab_fanout.py` fans pi-ab seeds or funnel shards o
 shard, 16 GiB, 24 GiB at `--noise-sources` ≥ 100; a hard `--cap` split across shard ledgers) and runs pi-ab-report /
 pi-cost-report or the funnel score locally on `.local/modal/<run>/`; `cards_distill.py` trains, evaluates and serves
 a small open model on Haiku's cards; `embed_screen.py` ranks planted items by embedding against the push's lexical
-pool. Without a token:
+pool. `lab_fanout.py` saves each shard under `.local/modal/<run>/<shard>/` the moment it returns (a
+`returned.json` marker last); after the local collector dies, the same command with `--run <run> --resume` reads the
+shards that exited 0 back and re-launches only the rest (D813; a plan or commit that differs is refused). A re-run
+shard's earlier attempt moves to `.earlier/` and its spend is the manifest's `earlierAttemptsUsd` (counted against
+the cap). Shards cut off with the collector are paid again, and their spend is not on disk: a shard's ledger and pi-ab
+journal live in its container and die with it. Without
+a token:
 
 ```bash
 bun packages/sim/src/lab/cards-distill.ts export --out .local/modal/cards/data      # the training set, ~60 s, $0

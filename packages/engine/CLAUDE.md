@@ -1,7 +1,7 @@
 # @eden/engine
 
 `ContextPartner`: the context partner itself. `observe` sees each session event and, rarely, injects context unasked;
-`ask` answers the agent's question; `checkAction` reads a tool call before it runs (D69). Two speeds: a fast path
+`ask` answers the agent's question; `checkAction` reads a tool call before it runs (the party check, D376). Two speeds: a fast path
 with no network and no model call, a background slow path (route, live search, cache, score, maybe one budgeted
 model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every path and flag; read it first.
 
@@ -11,7 +11,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 
 | File                                                                       | Owns                                                                                                                                                                                                                          |
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `partner.ts` (about 5,130 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
+| `partner.ts` (about 7,000 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
 | `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188)                                                                  |
 | `persist.ts`                                                               | `EncryptedFrozenDisk` (D425, opt-in): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
@@ -19,7 +19,6 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
-| `shield.ts`                                                                | A10's trial packet defences (D306, D307): `GUARD_LINE` (`guardLine`), `quarantine`/`quarantineItem` (`quarantineInstructions`: instruction-shaped text in delivered items replaced by `QUARANTINED`, no model). `shield.test.ts` holds its precision cases |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
@@ -27,8 +26,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
 | `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); `push-check.test.ts`                |
-| `firewall.ts`                                                              | The action firewall's cue and grounds (D69)                                                                                                                                                                                   |
-| `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default): identifiers a call adds and its packets showed; `ItemCache.isCorrespondent` reads the user's header addresses |
+| `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default; `checkAction`'s only check since D815 deleted the action firewall and A10's text filters): identifiers a call adds and its packets showed; `orgLabel`, which `ItemCache.isCorrespondent` reads with the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
 | `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
 | `spans.ts`, `trace.ts`                                                     | Span tracing (off by default, content-free, D56); decision traces, `explainTrace` (a sentence per trace, D277); `UsageRecord` for the optional `onUsage` sink (whether the agent used each injection, content-free, D293); `ContextPartner.explain` keeps a session's last `EXPLAIN_TRACES` (32) |
@@ -58,10 +56,11 @@ and `source-days` (the same over whole days with changing sources: listing and c
 - **Item content stays in memory (D8):** only content-free metadata goes to the source map. The one exception is
   opt-in (D425): `ItemCache.persist(disk)` writes frozen users' blobs encrypted (`persist.ts`); nothing else may write
   item content to disk.
-- **One product (D112).** `DEFAULT_CONFIG` is the best measured configuration and what ships. A new behaviour lands
-  as a trial switch in `config.ts` (off), with an owner and an end date in DECISIONS.md's trials table; at the end it
-  joins the default (and a part in `parts.ts`) or is deleted with its code and tests. A part whose model role is not
-  wired (no `cards`, no `reader` dep) is inert: the default runs its no-model path (`default.test.ts`).
+- **One product (D112, D814).** `DEFAULT_CONFIG` is the best measured configuration and what ships. A new behaviour
+  lands as a trial switch in `config.ts` (off), with a row in DECISIONS.md's trials table, and the session that
+  opened it decides it as soon as its evidence is in (no end dates weeks out): it joins the default (and a part in
+  `parts.ts`) or is deleted with its code and tests. A part whose model role is not wired (no `cards`, no `reader`
+  dep) is inert: the default runs its no-model path (`default.test.ts`).
 - **Unit tests start from the core.** A test of one mechanism builds its partner on `{ ...CORE_CONFIG, ...what it
 tests }`, so the other parts do not move its result; the default as a whole is `default.test.ts`, the eval and the
   funnel.
@@ -69,7 +68,7 @@ tests }`, so the other parts do not move its result; the default as a whole is `
 ## Test
 
 ```bash
-bun run test:pkg engine          # 49 files, 8-10 s wall (two runs, shared 4-core box, 2026-11-05); partner and reader lead
+bun run test:pkg engine          # 91 files, 15.6-15.8 s cold (4 cores, 2026-11-11); source-refs and fuzz lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
 bun run funnel --jobs 4          # the lab's $0 screen of the default on train (reader stub; docs/LAB.md)
@@ -137,7 +136,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lane with the batches they had. One lane (`cardsLanes: 1`, part `cards`) is `drain` itself with no wrapper: keep it
   so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
   sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
-  sentence. Re-run the default funnel after touching it (315 / 276, card calls 382–392 by load).
+  sentence. Re-run the default funnel after touching it (`--coverage full`: 315 / 276, card calls 382–392 by load;
+  the default, shipped coverage since D877: 281 / 264).
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool
@@ -190,8 +190,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   result (`why: "error-result"`) may pass, so holding it would pin a changed item's old copy. `forget` drops it; a
   failed, flaked or skipped re-read is never held.
 - **Shown means handed out.** With `askDedup`, what an injection showed is noted (`noteShown`) in `handOut`, which
-  every path that gives the agent an injection calls (observe's reply, `takePending`, the firewall's finding, the
-  ask's own answer), not when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
+  every path that gives the agent an injection calls (observe's reply, `takePending`, the ask's own answer), not
+  when `deliver` builds it: a queued packet the agent has not taken was shown nothing, so an
   ask before `takePending` says its items in full. The ask then drops from `s.pending` a packet whose every item it
   cited; one cited in part stays queued (`review-regressions.test.ts`).
 - The reader's request gate (the push in `observe`, `readAsk`'s "acts") is `isImperative(raw, MORE_VERBS)`. D168's
@@ -451,7 +451,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   session's fifth request on (`askReinvite`) was ignored (16 asks against 12 of 568 requests). Plan alerts were
   re-measured on eight users and stand (D516: +26.9 points of late facts raised, 60% still not raised).
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
-  `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
+  `freezeIdleMs` (30 min; warm from 2 min, D862, below) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`
   read a frozen user as is. A new per-user field of `UserCache` must be carried by `freezeSteps`/`thawSteps` (or be
   derived and rebuilt), and `cache-freeze.test.ts`'s twin snapshot extended to read it. A new entry point that serves
@@ -459,10 +459,22 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
-- **Frozen users on disk only (D652, a trial, off; `persist-disk-only.test.ts`).** With `persist(disk, { diskOnly:
-  true })` a frozen user's `blob` is null once its file is written, and the file is the only copy: any new path that
-  deletes a file without dropping the user loses the user (`thawSteps` then yields an empty one and `persistHooks.lost`
-  restarts the sync). A user whose items all expired is dropped without a read (`allExpired`).
+- **Warm freezing (D860, D862, in the default; `CacheLimits.warmIdleMs`; docs/research/p6-scale.md).** A user idle
+  `warmIdleMs` (2 min; the expiry tick is a minute, `expireEveryMs`) is frozen warm (`fastFreezeSteps`): the "EDF2" blob holds each item's deflated text bytes as they are
+  (`packedOf`/`packedFrom`), the vocabulary's terms and the compacted index as arrays (`Vocab.snapshot`,
+  `SparseIndex.snapshot`, postings and forward arena as varint gaps), so `fastThawSteps` copies instead of
+  tokenizing, indexing and deflating (10-20 ms at 3,000 items against 150-300). Doc numbers and term ids are the
+  frozen user's own, so `Entry.doc` carries over: a change to how the index numbers docs must keep `snapshot` exact
+  (`sparse-index-snapshot.test.ts`). A warm user still idle at `freezeIdleMs` is thawed and frozen again compact
+  (`coldDue`, `laterJob`; a warm thaw for that is counted in `freezes.recompacted`, not `thawed`); `thawSteps` reads
+  either form by its magic. A warm freeze writes nothing to disk (D425): `flush` writes warm users at a shutdown. No
+  warm freeze without `releaseTerms` (the blob carries the vocabulary) or with `freezeIdleMs` 0. A new per-user
+  field of `UserCache` must be carried by both forms, and a test that counts thaws or freezes with the default limits
+  now sees warm ones.
+- **Idle compaction (D861, in the default; `idleCompact`).** At an expiry tick a live user not used through a whole
+  interval, with at least `COMPACT_MIN_DELTA` (32) delta docs or removals waiting, has `index.compact()` (a full
+  merge, 2.6-6 ms at 3,000 items, the delta's spare room let go) as a sliced background job, looked at again when it
+  runs. Its purge can release terms, as a write's purge can.
 - **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
   `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
   `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk
@@ -512,11 +524,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
-  Trial `syncSweepSpread` (D604, off; ends 2026-11-18): each such source is swept at its own point in the week (a
-  hash of tenant, user and source, `Sync.sweepTurn`), so a user's unused sources are not all listed in one tick. The
-  points are a week apart, so it is due no later than a week after its own last sweep, as without the switch. A
-  source swept off its point is swept up to a week early (half a sweep more on average). Its turn is part of the
-  tick's `due` test, so a frozen user is thawed through `ready` first.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

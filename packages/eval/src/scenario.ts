@@ -6,6 +6,12 @@
  *   (the slow path may deliver one event late);
  * - `"silent"`: nothing should be delivered at this turn;
  * - absent: the turn is not scored.
+ *
+ * Two labels belong to the acting suite (`scenarios/acting/`, D810), which scores the default's push of candidates on
+ * requests that act and reports it apart from the three headline numbers:
+ * - `"neutral"`: a request that acts but that no stored fact bears on: any packet for it is a false fire;
+ * - `decoys` beside `items`: look-alikes of the owed fact (another year's terms, another person's dates) whose being
+ *   handed is counted on its own (`ActingMetrics.decoyHandedRate`).
  */
 import type { AgentEvent } from "@eden/protocol";
 import type { StaticDoc } from "@eden/sources";
@@ -18,7 +24,7 @@ export type TurnEvent = AgentEvent extends infer E
 
 export interface Turn {
   event: TurnEvent;
-  expect?: { items: string[] } | "silent";
+  expect?: { items: string[]; decoys?: string[] } | "silent" | "neutral";
 }
 
 export interface Scenario {

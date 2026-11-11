@@ -139,6 +139,8 @@ describe("the distillation set (cards-distill export)", () => {
     expect(guarded).toContain("heldout13");
     expect(guarded).toContain("heldout17");
     expect(guarded).toContain("heldout18");
+    expect(guarded).toContain("heldout19");
+    expect(guarded).toContain("longtail");
     expect(guarded.some((s) => s.startsWith("train"))).toBe(false);
   });
 });

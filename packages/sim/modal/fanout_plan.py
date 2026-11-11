@@ -7,6 +7,7 @@ merging what the shards return. `lab_fanout.py` runs these on Modal; `tests/test
 
 prints the shards and their commands without starting anything (no token needed).
 """
+import hashlib
 import json
 import math
 import os
@@ -132,6 +133,10 @@ def plan_funnel(suites, seeds, run, args=(), shards=0):
     if "live" in args:
         raise PlanError("funnel shards are $0: a live reader or judge (`live`) runs on pi-ab or locally with a ledger")
     check_suites(suites, args)
+    # One coverage for the whole grid (D877): funnel.ts picks shipped per run where it covers that run, so shards of a
+    # partly covered grid would mix two indexes into one level. The planner keeps the full index unless told.
+    if "--coverage" not in flag_names(args):
+        args = ["--coverage", "full", *args]
     # shard_command adds --blind to each shard that holds a held-out suite.
     args = [a for a in args if a != "--blind"]
     cells = [(s, d) for d in seeds for s in suites]
@@ -216,6 +221,8 @@ def shard_command(shard):
                 ",".join(shard.seeds), "--out", p["out"], "--timeline", p["timeline"], "--cards-out", p["cards"],
                 "--spend-ledger", p["ledger"], "--spend-cap", f"{shard.cap_usd:.3f}", "--spend-headroom",
                 f"{shard.headroom_usd:.4f}", "--run-label", shard.run_label, "--budget", f"{shard.cap_usd:.3f}",
+                # D878: the presets replay their own --cards, so they keep the full index unless a run names one.
+                *([] if "--coverage" in flag_names(shard.args) else ["--coverage", "full"]),
                 *with_cards_file(shard.args, p["cards_in"])]
     if shard.kind == "funnel":
         blind = ["--blind"] if any(s.startswith("heldout") for s in shard.suites) else []
@@ -489,6 +496,131 @@ def write_shard(run_dir, result):
     return written
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Resuming a run (R4, D813): each shard's files are written under run_dir/<name>/ the moment it returns, with a
+# `returned.json` marker written last, so a collector that dies (a restarted machine) loses no finished shard. The
+# same command again with `--resume` reads the finished shards back and re-launches only the rest.
+
+RETURNED = "returned.json"
+
+
+def shard_fingerprint(shard, commit=""):
+    """Everything that decides what a shard computes: its plan (suites, seeds, args, cap, label) and the commit."""
+    blob = json.dumps({**asdict(shard), "commit": commit}, sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+EARLIER = ".earlier"
+
+
+def retire_shard(run_dir, name):
+    """Moves an earlier attempt's directory of shard `name` aside to run_dir/.earlier/<name>.<n>, so its files are not
+    mixed with the new attempt's (`load_shard` reads every file there) and its ledger still counts (`merge`)."""
+    base = os.path.join(run_dir, safe_rel(name))
+    if not os.path.isdir(base):
+        return None
+    os.makedirs(os.path.join(run_dir, EARLIER), exist_ok=True)
+    n = 0
+    while os.path.exists(os.path.join(run_dir, EARLIER, f"{name}.{n}")):
+        n += 1
+    dest = os.path.join(run_dir, EARLIER, f"{name}.{n}")
+    os.replace(base, dest)
+    return dest
+
+
+def earlier_usd(run_dir):
+    """What retired attempts spent: the ledgers under run_dir/.earlier/."""
+    root = os.path.join(run_dir, EARLIER)
+    total = 0.0
+    for d in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        path = os.path.join(root, d, "ledger.jsonl")
+        if os.path.exists(path):
+            with open(path) as f:
+                total += ledger_usd(f.read())
+    return total
+
+
+def save_shard(run_dir, result, fingerprint):
+    """Writes one returned shard at once (`write_shard`), then its marker, atomically: a marker means whole files. An
+    earlier attempt's directory of the same shard is retired first."""
+    retire_shard(run_dir, result["name"])
+    write_shard(run_dir, result)
+    base = os.path.join(run_dir, safe_rel(result["name"]))
+    marker = {"fingerprint": fingerprint, **{k: result.get(k) for k in ("code", "seconds", "command", "commit")}}
+    tmp = os.path.join(base, RETURNED + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(marker, f, indent=2)
+    os.replace(tmp, os.path.join(base, RETURNED))
+
+
+def load_shard(run_dir, shard):
+    """A returned shard as `_run` returned it (its files unpacked), read back from run_dir/<name>/."""
+    base = os.path.join(run_dir, safe_rel(shard.name))
+    with open(os.path.join(base, RETURNED)) as f:
+        marker = json.load(f)
+    files = {}
+    for root, _, names in os.walk(base):
+        for n in names:
+            rel = os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
+            if rel in (RETURNED, "status.json") or rel.endswith(".tmp"):
+                continue
+            with open(os.path.join(root, n), "rb") as f:
+                files[rel] = f.read()
+    return {"name": shard.name, "kind": shard.kind, "code": marker.get("code"), "seconds": marker.get("seconds"),
+            "command": marker.get("command"), "capUsd": shard.cap_usd, "commit": marker.get("commit"),
+            "files": files}
+
+
+def resume_plan(run_dir, planned, commit, resume=False):
+    """The shards an earlier attempt finished (read back, to merge) and those still to run. Only a shard that exited 0
+    under the same fingerprint is reused; a failed one runs again. Refused: finished shards without `resume` (they
+    would be overwritten), and a run directory written by another plan or commit (its results are not this run's)."""
+    if not os.path.isdir(run_dir):
+        return [], list(planned)
+    returned = sorted(d for d in os.listdir(run_dir) if os.path.exists(os.path.join(run_dir, d, RETURNED)))
+    if returned and not resume:
+        raise PlanError(f"{run_dir} already holds {len(returned)} returned shards: pass --resume to reuse the finished "
+                        "ones (nothing is paid twice), or name a new --run")
+    by_name = {s.name: s for s in planned}
+    stray = [d for d in returned if d not in by_name]
+    if stray:
+        raise PlanError(f"{run_dir} holds shards this plan does not ({', '.join(stray[:3])}): another plan wrote it; "
+                        "name a new --run")
+    finished, left = [], []
+    for s in planned:
+        if s.name not in returned:
+            left.append(s)
+            continue
+        with open(os.path.join(run_dir, s.name, RETURNED)) as f:
+            marker = json.load(f)
+        if marker.get("fingerprint") != shard_fingerprint(s, commit):
+            raise PlanError(f"{s.name} in {run_dir} ran another plan or commit: its results cannot stand for this "
+                            "one; run the earlier command, or name a new --run")
+        if marker.get("code") == 0:
+            finished.append(load_shard(run_dir, s))
+        else:
+            left.append(s)
+    return finished, left
+
+
+def collect_wave(run_dir, wave, outputs, commit, kind, unpack=lambda r: r, log=print):
+    """One wave's results as they come back (`outputs`: Modal's map in completion order, exceptions included): each
+    shard saved the moment it returns; one Modal lost (an exception carries no name) is reported failed at the end."""
+    by_name = {s.name: s for s in wave}
+    done = []
+    for r in outputs:
+        if isinstance(r, BaseException):
+            log(f"  a shard failed in Modal: {r!r}")
+            continue
+        r = unpack(r)
+        save_shard(run_dir, r, shard_fingerprint(by_name[r["name"]], commit))
+        log(f"  {r['name']}: exit {r['code']} in {r.get('seconds')} s (saved)")
+        done.append(r)
+    got = {r["name"] for r in done}
+    return done + [{"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}}
+                   for s in wave if s.name not in got]
+
+
 def merge(run_dir, results, cap_usd=None):
     """The run's summary (manifest.json, ledger.jsonl and, for funnel shards, funnel.json) from every shard result."""
     shards, ledger, per_task, failed = [], [], [], []
@@ -506,9 +638,12 @@ def merge(run_dir, results, cap_usd=None):
         shards.append({"name": r["name"], "kind": r.get("kind"), "code": r.get("code"), "spentUsd": round(spent, 6),
                        "capUsd": r.get("capUsd"), "seconds": r.get("seconds")})
     total = round(sum(s["spentUsd"] for s in shards), 6)
+    # A shard re-run on --resume paid for its failed attempt too (D813): counted beside, and against the cap.
+    earlier = round(earlier_usd(run_dir), 6)
     over = [s["name"] for s in shards if s["capUsd"] and s["spentUsd"] > s["capUsd"] + 1e-9]
-    manifest = {"shards": shards, "spentUsd": total, "capUsd": cap_usd, "failed": failed, "overCap": over,
-                "withinCap": cap_usd is None or total <= float(cap_usd) + 1e-9}
+    manifest = {"shards": shards, "spentUsd": total, "earlierAttemptsUsd": earlier, "capUsd": cap_usd,
+                "failed": failed, "overCap": over,
+                "withinCap": cap_usd is None or total + earlier <= float(cap_usd) + 1e-9}
     with open(os.path.join(run_dir, "ledger.jsonl"), "w") as f:
         f.write("".join(l + "\n" for l in ledger))
     if per_task:

@@ -3,7 +3,7 @@
 # direct (lab transport, D97), one shared spend ledger. PUSH=payload for item-carrying notices (default signals).
 # usage: run.sh LABEL SUITES SEED CONDITIONS VARIANTCFG CARDS [extra pi-ab args, e.g. --day 4]
 L=$1; S=$2; SEED=$3; C=$4; V=$5; CARDS=$6; shift 6
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite "$S" --seeds "$SEED" \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite "$S" --seeds "$SEED" \
   --variants hidden,control --conditions "$C" --config default --variant-config "$V" \
   --cards "$CARDS" --cards-out ".local/cl3/pi/$L.cards.jsonl" \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

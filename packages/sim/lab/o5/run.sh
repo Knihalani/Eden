@@ -9,7 +9,7 @@ SEED=$1; L=$2; LIMIT=$3; SUITE=$4; shift 4
 mkdir -p .local/o5/runs
 [ -f .local/o5/cards-all.jsonl ] || cat packages/sim/lab/cards/cards-v2.jsonl packages/sim/lab/cards/cards-train.jsonl \
   packages/sim/lab/cards/cards-train-4344.jsonl > .local/o5/cards-all.jsonl
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite $SUITE --seeds $SEED --limit $LIMIT \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite $SUITE --seeds $SEED --limit $LIMIT \
   --variants hidden,control,neutral --conditions eden,eden~K --variant-config '{"K":{"syncKick":true}}' \
   --config default --connect-at 10,45 --tenant-prompt \
   --cards .local/o5/cards-all.jsonl --cards-out .local/o5/runs/$L.cards.jsonl \
