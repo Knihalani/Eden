@@ -42,6 +42,12 @@ def load(d, label=None):
         for line in open(tlp):
             x = json.loads(line)
             tl[(x["task"], x["condition"])] = x
+    # Short runs made before the hits arm's packets were recorded (`hits-screen.ts --cited`).
+    hp = os.path.join(d, "hits-cited.jsonl")
+    if os.path.exists(hp):
+        for line in open(hp):
+            x = json.loads(line)
+            tl.setdefault((x["task"], x["condition"]), {}).setdefault("cited", x["cited"])
     rows = []
     for r in run["results"]:
         t = byid.get(r["task"])

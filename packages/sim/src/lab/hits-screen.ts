@@ -6,9 +6,9 @@
  *   bun packages/sim/src/lab/hits-screen.ts [--seeds 41,42] [--k 5]
  *   bun packages/sim/src/lab/hits-screen.ts --cited RESULTS.json OUT.jsonl
  *
- * `--cited` writes, for a short pi-ab run made before the `hits` arm's packets were recorded in its timeline (b-short-41
- * and -42), the ids each `hits` task's packet cited, as timeline lines (`task`, `condition`, `cited`): a short run's
- * worlds do not change, so the hits are recomputed exactly.
+ * `--cited` writes, for a short pi-ab run made before the `hits` arm's packets were recorded in its timeline
+ * (b-short-41 and -42), the ids each `hits` task's packet cited, as timeline lines (`task`, `condition`, `cited`): a
+ * short run's worlds do not change, so the hits are recomputed exactly.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { worldOf } from "./ab-common";
