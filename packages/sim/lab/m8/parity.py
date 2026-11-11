@@ -27,9 +27,7 @@ def main():
         k = [keys.get(r["id"], np.zeros(0, np.uint64)) for r in rows]
         X = np.asarray([r["x"] for r in rows], dtype=np.float64)
         X[:, 0] = T.conj_scores(Wq, f, k)
-        summ = np.asarray(
-            [X[:, 0].max(), X[:, 1].max(), float(X[:, 3].max() > 0), float(X[:, 4].max() > 0), np.log1p((len(f) + 1) / 2)]
-        )
+        summ = T.summary(X, (len(f) + 1) // 2)
         e = {"X": X, "lw": np.zeros(len(rows)), "s": summ, "w": np.ones(len(rows))}
         p, p0 = net.probs(e)
         cases.append(
@@ -37,7 +35,7 @@ def main():
                 "features": [int(x) for x in f],
                 "keys": [[int(x) for x in kk] for kk in k],
                 "x": [[float(v) for v in r["x"][1:]] for r in rows],
-                "terms": int(len(f)),
+                "terms": int((len(f) + 1) // 2),
                 "p": [float(v) for v in p],
                 "pNull": float(p0),
                 "gate": [bool(v >= net.floor) for v in p],

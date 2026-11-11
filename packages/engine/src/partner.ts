@@ -89,6 +89,7 @@ import {
   routeProbabilities,
   ROUTER_NF,
   ROUTER_NULL_NF,
+  routerSummary,
   routerTerms,
   sourceKeys,
   type RouterWeights,
@@ -4295,8 +4296,6 @@ export class ContextPartner {
       // Sources of one kind and description share their keys, so their conjunction score (a tenant's many Jira
       // projects): `routerSourceKeys` hands them one array.
       const conjMemo = new Map<Uint32Array, number>();
-      let maxConj = -Infinity;
-      let maxLocal = 0;
       const yields = this.yields.view(s.scope, now);
       const copies = this.sync.routeView(s.scope, now);
       for (let i = 0; i < n; i++) {
@@ -4323,15 +4322,9 @@ export class ContextPartner {
         x[o + 9] = Math.log1p(st?.size ?? 0);
         x[o + 10] = Math.log1p(100 * (st?.rate ?? 0));
         x[o + 11] = localTop?.get(src.id) ?? 0;
-        if (c > maxConj) maxConj = c;
-        if (local > maxLocal) maxLocal = local;
       }
       const summary = new Float64Array(ROUTER_NULL_NF);
-      summary[0] = n > 0 ? maxConj : 0;
-      summary[1] = maxLocal;
-      summary[2] = named.size > 0 ? 1 : 0;
-      summary[3] = rare.size > 0 ? 1 : 0;
-      summary[4] = Math.log1p(terms.length);
+      routerSummary(x, n, terms.length, summary);
       const p = new Float64Array(n);
       const pNull = routeProbabilities(w, x, n, summary, p);
       const floor = this.config.routerFloor > 0 ? this.config.routerFloor : w.floor;

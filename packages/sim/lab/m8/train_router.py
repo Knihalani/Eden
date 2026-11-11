@@ -26,7 +26,7 @@ import numpy as np
 M32 = np.uint64(0xFFFFFFFF)
 PHI = np.uint64(0x9E3779B1)
 NF = 12
-NULL_NF = 5
+NULL_NF = 9
 
 
 def mix32(h: np.ndarray) -> np.ndarray:
@@ -198,9 +198,7 @@ def examples(pattern: str, W: np.ndarray):
         spent = np.asarray([bool(r.get("spent")) for r in rows])
         ids = [r["id"] for r in rows]
         y = ids.index(d["planted"]) if d["kind"] == "hidden" and d["planted"] in ids else -1
-        summ = np.asarray(
-            [X[:, 0].max(), X[:, 1].max(), float(X[:, 3].max() > 0), float(X[:, 4].max() > 0), math.log1p((len(f) + 1) / 2)]
-        )
+        summ = summary(X, (len(f) + 1) // 2)
         out.append(
             {
                 "X": X,
@@ -216,6 +214,24 @@ def examples(pattern: str, W: np.ndarray):
             }
         )
     return out
+
+
+def summary(X: np.ndarray, terms: int) -> np.ndarray:
+    """The "nothing needed" score's inputs, as `routerSummary` computes them in the engine."""
+    local = X[:, 1]
+    return np.asarray(
+        [
+            X[:, 0].max() if len(X) else 0.0,
+            local.max(initial=0.0),
+            float(X[:, 3].max(initial=0.0) > 0),
+            float(X[:, 4].max(initial=0.0) > 0),
+            math.log1p(terms),
+            X[:, 11].max(initial=0.0),
+            math.log1p(local.sum()),
+            math.log1p(float((local > 0).sum())),
+            X[:, 2].max(initial=0.0),
+        ]
+    )
 
 
 class Net:
@@ -250,10 +266,10 @@ class Net:
         return p[1:] / e["w"], p[0]
 
 
-def fit_mlp(net: Net, train, epochs: int, lr: float, l2: float = 1e-4):
+def fit_mlp(net: Net, train, epochs: int, lr: float, l2: float = 1e-4, seed: int = 0):
     A = np.concatenate([e["X"] for e in train[:3000]])
     net.mu, net.sd = A.mean(0), A.std(0) + 1e-6
-    rng = np.random.default_rng(1)
+    rng = np.random.default_rng(1 + seed)
     # Adam
     params = ["W1", "b1", "w2", "nw"]
     m = {k: np.zeros_like(getattr(net, k)) for k in params}
@@ -406,6 +422,7 @@ def main():
     ap.add_argument("--recall", type=float, default=0.98)
     ap.add_argument("--int8", action="store_true", help="score with the int8 table, as the engine does")
     ap.add_argument("--drop", default="", help="input names to leave out, e.g. size,rate,hours")
+    ap.add_argument("--seed", type=int, default=0, help="the network's initialisation and example order")
     a = ap.parse_args()
     names = ["conj", "local", "sketch", "named", "rare", "used", "run", "whole", "hours", "size", "rate", "top"]
     DROP[:] = [names.index(x) for x in a.drop.split(",") if x]
@@ -427,8 +444,29 @@ def main():
         train = examples(tr, W)
         val = examples(va, W)
         print(f"mlp: {len(train)} train requests, {len(val)} validation", file=sys.stderr)
-        net = Net(a.hidden)
-        fit_mlp(net, train, a.epochs, 3e-3)
+        net = Net(a.hidden, a.seed)
+        fit_mlp(net, train, a.epochs, 3e-3, seed=a.seed)
+        fit_temperature(net, val)
+        net.floor = fit_floor(net, val, a.recall)
+        print(json.dumps({"temperature": net.t, **gate(net, val, net.floor)}))
+        save(net, W, out)
+    elif a.cmd == "ensemble":
+        # K networks as one: their hidden units side by side, their logits (and "nothing" logits) averaged. The same
+        # inputs and normalisation (each was fit on the same data); the table is the first's.
+        out, va, *parts = a.args
+        nets = [load(p_)[0] for p_ in parts]
+        _, W = load(parts[0])
+        k = len(nets)
+        net = Net(sum(n.h for n in nets))
+        net.mu, net.sd = nets[0].mu, nets[0].sd
+        net.W1 = np.hstack([n.W1 * (n.sd[:, None] / net.sd[:, None]) for n in nets])
+        net.b1 = np.concatenate([n.b1 + ((net.mu - n.mu) / n.sd) @ n.W1 for n in nets])
+        net.w2 = np.concatenate([n.w2 / k for n in nets])
+        net.b2 = sum(n.b2 for n in nets) / k
+        net.nb = sum(n.nb for n in nets) / k
+        net.nw = sum(n.nw for n in nets) / k
+        q, sc = quantise(W)
+        val = examples(va, q.astype(np.float64) * sc)
         fit_temperature(net, val)
         net.floor = fit_floor(net, val, a.recall)
         print(json.dumps({"temperature": net.t, **gate(net, val, net.floor)}))

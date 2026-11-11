@@ -140,8 +140,45 @@ export const ROUTER_FEATURES = [
   "top", // 1 / (1 + the place of its best item among the request's 40 best local matches), 0 for none
 ] as const;
 export const ROUTER_NF = ROUTER_FEATURES.length;
-/** Request-level inputs of the "nothing needed" score: the best conj, best local, any name, any rare word, terms. */
-export const ROUTER_NULL_NF = 5;
+/**
+ * Request-level inputs of the "nothing needed" score: the best conj, the best local, any name, any rare word, log1p of
+ * the request's terms, the best `top`, log1p of the local counts summed, log1p of the sources with local matches, and
+ * the best sketch match (`routerSummary`).
+ */
+export const ROUTER_NULL_NF = 9;
+
+/** Fills the "nothing needed" score's inputs from each source's `ROUTER_NF` inputs (`x`, row by row). */
+export function routerSummary(x: Float64Array, n: number, terms: number, out: Float64Array): void {
+  let maxConj = n > 0 ? -Infinity : 0;
+  let maxLocal = 0;
+  let named = 0;
+  let rare = 0;
+  let maxTop = 0;
+  let sumLocal = 0;
+  let withLocal = 0;
+  let maxSketch = 0;
+  for (let i = 0; i < n; i++) {
+    const o = i * ROUTER_NF;
+    if (x[o]! > maxConj) maxConj = x[o]!;
+    const local = x[o + 1]!;
+    if (local > maxLocal) maxLocal = local;
+    if (local > 0) withLocal++;
+    sumLocal += local;
+    if (x[o + 2]! > maxSketch) maxSketch = x[o + 2]!;
+    if (x[o + 3]! > 0) named = 1;
+    if (x[o + 4]! > 0) rare = 1;
+    if (x[o + 11]! > maxTop) maxTop = x[o + 11]!;
+  }
+  out[0] = maxConj;
+  out[1] = maxLocal;
+  out[2] = named;
+  out[3] = rare;
+  out[4] = Math.log1p(terms);
+  out[5] = maxTop;
+  out[6] = Math.log1p(sumLocal);
+  out[7] = Math.log1p(withLocal);
+  out[8] = maxSketch;
+}
 
 export interface RouterWeights {
   /** Conjunction table size (a power of two) and its int8 weights with their scale. */

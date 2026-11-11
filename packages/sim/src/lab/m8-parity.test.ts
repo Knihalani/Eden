@@ -10,6 +10,7 @@ import {
   conjScore,
   defaultRouterWeights,
   routeProbabilities,
+  routerSummary,
   ROUTER_NF,
   ROUTER_NULL_NF,
 } from "@eden/engine";
@@ -24,9 +25,10 @@ interface Case {
   gate: boolean[];
 }
 
-const fixture = JSON.parse(
-  readFileSync(new URL("../../lab/m8/parity.json", import.meta.url).pathname, "utf8"),
-) as { floor: number; cases: Case[] };
+const fixture = JSON.parse(readFileSync(new URL("../../lab/m8/parity.json", import.meta.url).pathname, "utf8")) as {
+  floor: number;
+  cases: Case[];
+};
 
 describe("router parity (M8, D944)", () => {
   test("the shipped weights load, and the fixture was made with them", () => {
@@ -47,18 +49,8 @@ describe("router parity (M8, D944)", () => {
         x[i * ROUTER_NF] = conjScore(w, feats, Uint32Array.from(c.keys[i]!));
         for (let f = 1; f < ROUTER_NF; f++) x[i * ROUTER_NF + f] = c.x[i]![f - 1]!;
       }
-      let maxConj = -Infinity;
-      let maxLocal = 0;
-      let named = 0;
-      let rare = 0;
-      for (let i = 0; i < n; i++) {
-        maxConj = Math.max(maxConj, x[i * ROUTER_NF]!);
-        maxLocal = Math.max(maxLocal, x[i * ROUTER_NF + 1]!);
-        if (x[i * ROUTER_NF + 3]! > 0) named = 1;
-        if (x[i * ROUTER_NF + 4]! > 0) rare = 1;
-      }
       const summary = new Float64Array(ROUTER_NULL_NF);
-      summary.set([maxConj, maxLocal, named, rare, Math.log1p((c.terms + 1) / 2)]);
+      routerSummary(x, n, c.terms, summary);
       const p = new Float64Array(n);
       const pNull = routeProbabilities(w, x, n, summary, p);
       const close = c.p.every((v, i) => Math.abs(v - p[i]!) < 1e-6) && Math.abs(pNull - c.pNull) < 1e-6;
