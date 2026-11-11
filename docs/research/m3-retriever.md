@@ -98,6 +98,16 @@ train1–4 tasks (38,400 examples, 4 hard negatives each), one epoch unless said
 | asym-a1 | dense items, token-table query (lr 5e-5) | hybrid k 15 | 123 | 90 | 108 | fail |
 | rerank-a1 | cross-encoder MiniLM-L2 over lexical 50 ∪ dense-a1's 15 | hybrid k 10 / 15 | 138 / 138 | 99 / 98 | 113 / 107 | **pass** (k 5: 134, 97: fail; fragile) |
 
+| dense-a4 | dense, bge-base-en-v1.5 | hybrid k 5 / 10 / 15 | 137 / 137 / 137 | 106 / 109 / 108 | 128 / 126 / 124 | fail |
+| asym-a2 | dense items, token-table query (table lr 2e-3, 2 epochs) | hybrid k 10 / 15 | 137 / 138 | 100 / 100 | 125 / 124 | **pass** (k 5: 127, 98: fail; fragile) |
+
+**Fold B** (trained on train3–6, held out train1–2: 118 hidden, 146 control; a lower lexical start, facts @15 76, decoys 107):
+
+| run | variant | facts @15 | decoys @15 | facts @5 (lexical 68) | bar |
+|---|---|---|---|---|---|
+| dense-b1 (bge-small) | model alone / hybrid k 15 | 104 / 110 | 127 / 132 | 100 / 100 | pass (every variant) |
+| sparse-b1 (inference-free) | model alone / hybrid k 15 | 101 / 104 | 109 / 117 | 89 / 88 | pass (every variant; decoys nearly flat alone) |
+
 On the trained-on templates every trained model reaches 276 of 276 facts: they learn the templates, and only the
 held-out rows say anything.
 
