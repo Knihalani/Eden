@@ -241,6 +241,24 @@ The train-suite-only 8B scored 0.950 (0.931..0.966) on M2's v0 val families it n
 **Stopped (owner's decision, through the parent, D899):** round 2 (§2d) was cancelled before any shard ran; the
 endpoint was stopped. The track moves to a micro CPU checker (§5), with the 8B's scores over M2 v2 as its teacher.
 
+## 5. The micro CPU checker (owner's request; D980–D989)
+
+The owner's goal after the stop: replace Haiku's two pool judgements (the push check S and the ask-time reader) with
+one micro CPU model, at most 4 MB and 1 ms a 15-item pool, no model call, distilled from the 8B. The plan (sent to the
+parent before any training): shared hashed n-gram and cross features; three candidates (a learned int8 pair table,
+M3's binary pair codes, and a pool-set model with one attention layer); a check head and a reader head whose bearing
+is the item's own most binding sentence in a template; gates G0 (the teacher against Haiku), G1 (the 52 + 16 short
+constraint fixtures, ≥ 97%), G2 (length and format probes), G3/G4 (held-out quality, then agreement), G5 (a Pi pair).
+
+**Teacher scores.** The 8B over M2 v2's train and val pair groups, a scale-to-zero batch job (16 H100 shards, about
+17 minutes each, 93,600 items a shard): `eden-synth:v2/pairgroups/{train,val}.t8b.jsonl.gz`.
+
+**G0 (D980).** On M7's recorded calls the 8B agrees with Haiku on 64.7–67.0% of exact item sets and 74.2–77.9% of
+speak/silent decisions, against Haiku's own 75.4–78.8% and 90.0–92.5%. Against the sim's truth on the 679 calls of
+the 8B's held-out templates, the 8B names the fact about as often (162–174 of 230 against Haiku's 171) and the
+look-alike and neutral pools far less (16 of 234 and 2 of 215 at −3.0, against 40 and 40). The gap to Haiku is mostly
+Haiku's extra yeses. A quality bar in place of the agreement bar is with the parent.
+
 ## Reproduce
 
 ```bash
