@@ -134,11 +134,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(73);
+    expect(differ.length).toBe(74);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(73);
+    expect(partKeys.size).toBe(74);
   });
 });
 
