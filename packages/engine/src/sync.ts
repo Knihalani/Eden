@@ -347,7 +347,7 @@ export class SyncManager {
       cutAt: fin(u.cutAt),
       people: [...u.people],
       used: [...u.used],
-      // Only with the trial on, so the default's snapshot is what it always was.
+      // Only with the earn rule's rare words on (`rareTerms`); a snapshot without the table restores as before.
       ...(u.rare ? { rare: u.rare.dump() } : {}),
       sources: [...u.sources.values()].map((s) => ({
         id: s.id,
@@ -404,7 +404,8 @@ export class SyncManager {
       cutAt: num(snap.cutAt, -Infinity),
       people: new Set(snap.people.slice(-MAX_PEOPLE)),
       used: new Set(snap.used.slice(-MAX_USED)),
-      // Saved only by a process with the trial on; absent or unreadable, the table fills again as sources are listed.
+      // Saved only by a process with the earn rule's rare words on; absent or unreadable, the table fills again
+      // as sources are listed.
       rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
     };
     for (const x of snap.sources) {

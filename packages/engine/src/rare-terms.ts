@@ -27,9 +27,13 @@ export const MAX_SEGMENTS = 67;
 const slotsOf = (segment: number) => Math.min(FIRST_SLOTS << Math.min(segment, 8), SEGMENT_SLOTS);
 /** Slots looked at from a word's first slot in a segment. */
 const REACH = 24;
-/** Sources a user's table can name (12 bits; one value is kept for "common"). */
-const MAX_SOURCES = (1 << 12) - 1;
-const COMMON = MAX_SOURCES;
+/**
+ * Sources a user's table can name at once (12 bits; one value is kept for "common" and one for a word slot whose
+ * source is gone, `renumber`).
+ */
+const MAX_SOURCES = (1 << 12) - 2;
+const GONE = MAX_SOURCES;
+const COMMON = MAX_SOURCES + 1;
 
 export class RareTerms {
   private readonly segments: Uint32Array[] = [];
@@ -39,6 +43,8 @@ export class RareTerms {
   private readonly numbers = new Map<string, number>();
   /** Words not added because the table was full or the user has too many sources. */
   dropped = 0;
+  /** Times the sources were renumbered to take back dropped sources' numbers. */
+  renumbered = 0;
 
   /** Bytes held by the table (the sources' ids apart). */
   get bytes(): number {
@@ -55,6 +61,9 @@ export class RareTerms {
   /** The source holds the word (by `termHashes`' two hashes). */
   add(sourceId: string, h1: number, h2: number): void {
     let n = this.numbers.get(sourceId);
+    // Out of numbers with dropped sources among them: take theirs back, so a user whose sources come and go keeps
+    // the rule (the review: a thousand sources re-listed five times used every number for good).
+    if (n === undefined && this.ids.length >= MAX_SOURCES && this.numbers.size < this.ids.length) this.renumber();
     if (n === undefined && this.ids.length < MAX_SOURCES) {
       n = this.ids.length;
       this.ids.push(sourceId);
@@ -121,6 +130,37 @@ export class RareTerms {
     if (n === undefined) return;
     this.numbers.delete(sourceId);
     this.ids[n] = undefined;
+  }
+
+  /**
+   * The sources still held get the numbers 0.. in their order, and a slot of a dropped source is marked `GONE` (it
+   * stays a hole `add` takes over; it cannot be emptied, an empty slot ends a word's reach). One pass over the
+   * table, about a quarter of a million slots at its cap, and only when the numbers run out.
+   */
+  private renumber(): void {
+    const to = new Uint16Array(this.ids.length).fill(GONE);
+    const kept: string[] = [];
+    for (let n = 0; n < this.ids.length; n++) {
+      const id = this.ids[n];
+      if (id === undefined) continue;
+      to[n] = kept.length;
+      kept.push(id);
+    }
+    for (const seg of this.segments) {
+      for (let i = 0; i < seg.length; i++) {
+        const slot = seg[i]!;
+        const who = slot & 0xfff;
+        if (slot === 0 || who === COMMON || who === GONE) continue;
+        seg[i] = ((slot & ~0xfff) | to[who]!) >>> 0;
+      }
+    }
+    this.ids.length = 0;
+    this.numbers.clear();
+    for (const id of kept) {
+      this.numbers.set(id, this.ids.length);
+      this.ids.push(id);
+    }
+    this.renumbered++;
   }
 
   private put(h1: number, value: number): boolean {

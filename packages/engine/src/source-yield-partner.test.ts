@@ -314,7 +314,7 @@ describe("sourceYieldEarn (D600, D603)", () => {
     expect(sum((await p.request(u2, BLIND)).searched)).toBe(0);
   });
 
-  test("the table of rare words is per user, saved only with the trial on, and survives a restore", async () => {
+  test("the table of rare words is per user, saved only with the rule on, and survives a restore", async () => {
     const word = sketchTerms("globex").map(termHashes);
     const p = await partnerOf(EARN, [u1, u2]);
     const sync = p.partner.sync!;

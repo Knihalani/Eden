@@ -13,6 +13,8 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(() => checkEngineConfig({ probes: "yes" })).toThrow(/"probes" must be a boolean/);
     expect(() => checkEngineConfig({ askItemBytes: -1 })).toThrow(/"askItemBytes" must be a number ≥ 0/);
     expect(() => checkEngineConfig({ syncStaleChance: 2, sync: true })).toThrow(/"syncStaleChance" must be at most 1/);
+    expect(() => checkEngineConfig({ sourceYieldRare: 3 })).toThrow(/"sourceYieldRare" must be at most 2/);
+    expect(() => checkEngineConfig({ sourceYieldNames: 2.5 })).toThrow(/"sourceYieldNames" must be a whole number/);
     expect(() => checkEngineConfig({ maxItemsPerInjection: 1.5 })).toThrow(/whole number/);
     expect(() =>
       checkEngineConfig(

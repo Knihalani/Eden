@@ -136,4 +136,27 @@ describe("RareTerms", () => {
     expect(RareTerms.load({ ids: ["a"], segments: ["AAAA"] })).toBeNull();
     expect(RareTerms.load({ ids: [1], segments: [] })).toBeNull();
   });
+
+  test("sources that come and go take dropped sources' numbers back, across a save as well", () => {
+    let t = new RareTerms();
+    const ids = Array.from({ length: 1_000 }, (_, k) => `s-${k}`);
+    // Each listing: every source is dropped and listed again with a word of its own.
+    for (let round = 0; round < 7; round++) {
+      for (const id of ids) t.forgetSource(id);
+      for (const id of ids) t.add(id, ...h(`own${id}`));
+      if (round === 3) t = RareTerms.load(JSON.parse(JSON.stringify(t.dump())))!;
+    }
+    expect(t.renumbered).toBeGreaterThan(0);
+    let named = 0;
+    for (const id of ids) if (t.holders(...h(`own${id}`), 1)[0] === id) named++;
+    expect(named).toBe(1_000);
+    // A source added after the churn is named too, and a dropped source's word names no one.
+    t.add("late", ...h("vitalis"));
+    expect(t.holders(...h("vitalis"), 2)).toEqual(["late"]);
+    t.forgetSource("s-7");
+    for (let k = 0; k < 3_000; k++) t.add(`fill-${k}`, ...h(`fill${k}`));
+    expect(t.holders(...h("owns-7"), 2)).toEqual([]);
+    expect(t.holders(...h("owns-8"), 2)).toEqual(["s-8"]);
+    expect(t.holders(...h("fill2999"), 2)).toEqual(["fill-2999"]);
+  });
 });

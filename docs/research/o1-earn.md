@@ -6,7 +6,7 @@ merged in again at 6af844fe). Decisions D600–D603. Paid calls: Anthropic API o
 **Anthropic-direct lab figures**, not the OpenRouter route the servers ship. Train suites only; `heldout18` is not
 run or read. Every rule below was committed and pushed before the paid calls it decides. **Spent: $18.13
 Anthropic** of the $25 cap by the session's ledger (three runs $11.61, the days check $2.83, a first attempt at it
-lost with the container, about $2.50 estimated, smokes $0.04, Sonnet regrades $1.16). **Result: the three switches
+lost with the container, about $2.50 estimated, smokes $0.04, Sonnet regrades $1.16; parts rounded). **Result: the three switches
 are in `DEFAULT_CONFIG` and the pooled rule they replace is deleted (D603).**
 
 ## The result in plain words
@@ -414,8 +414,14 @@ short and 0.386 → 0.296 over days; Eden's background calls a task 2.03 → 1.3
 $175 and $213 → $77; Composio $8.08 → $2.37 and $2.86 → $1.19. The backfill is unchanged: about 1,005 listings a
 new user, once.
 
+After the review of the promoted tree (APPROVE, 10f140e9): a dropped source's number was never given out again, so
+a user whose 1,000 sources were dropped and listed five times had no numbers left and the rare-word rule went quiet
+for good (the reviewer's probe: 95 of 1,000 sources named on the fifth listing, none on the sixth). The table now
+takes dropped sources' numbers back in one pass when they run out (`renumber`; 4,094 sources at once), tested over
+seven such listings and a save; `sourceYieldRare` and `sourceYieldNames` have ranges in `config-check.ts`.
+
 **The rule, applied.** Clause 1: the pooled lower bound is −1.7, above −2.0. Clause 2: calls fall on both
-horizons, both intervals below zero. Clause 3: concerns' upper bound +0.3, under +1.0. Clause 4: the dollar
+horizons, both intervals below zero. Clause 3: concerns' upper bound +0.2, under +1.0. Clause 4: the dollar
 interval holds zero. **Run 3 passes.** The seeds-41–44 reading (−3.9) is four seeds on which run 2 read +0.5; it
 is reported, and by D544 it is not evidence. The days reading, +4.0, is the third of the same 101 tasks (−4.0,
 −6.9 before).
