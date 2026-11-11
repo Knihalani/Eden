@@ -520,3 +520,13 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | rejected |
 | D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | lab |
 | D842 | 2026-11-11 | The `caldav` preset names a fetch tool, `caldav_get_event_by_uid`; the sim's calendar never changes in the future; mcpvault keeps no fetch… | adopted |
+| D850 | 2026-11-11 | Both clients have a default `onError`: misuse is printed with its fix in development and once per kind in production; calls still fail open | adopted |
+| D856 | 2026-11-11 | First-run fixes from four fresh-eyes walkthroughs: both clients read `EDEN_URL` and `EDEN_API_KEY` when no base URL or key is passed, and… | adopted |
+| D852 | 2026-11-11 | `eden doctor` checks an integration against its obligations, from content-free counters the server now keeps per tenant | adopted |
+| D851 | 2026-11-11 | Trial `askTool` in the proxy: the proxy offers Eden's `ask_context` to the model and answers its calls itself | adopted |
+| D854 | 2026-11-11 | The framework adapter is for the Vercel AI SDK: `examples/ai-sdk/eden-ai-sdk.ts` does every in-loop obligation with three calls, with a… | adopted |
+| D853 | 2026-11-11 | Every artifact Eden would publish builds and passes its registry's dry run: `bun run publish:check`; nothing is published | adopted |
+| D855 | 2026-11-11 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | superseded (deleted by D859) |
+| D857 | 2026-11-11 | `askTool` (D851) is a documented opt-in proxy flag, not a trial: `EDEN_PROXY_ASK=1`, off unless set, labelled "not measured through the… | adopted |
+| D858 | 2026-11-11 | A dev-mode server refuses to start with `OPENROUTER_API_KEY` in its environment unless `EDEN_ALLOW_MODEL_ROLES=1` | adopted |
+| D859 | 2026-11-11 | `leadShort` (D855) failed its pre-registered rule and is deleted with its code and tests | rejected |

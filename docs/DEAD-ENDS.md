@@ -52,6 +52,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D700 | Trial `pushCheckBehind`: the push check runs behind the default's packet | killed by D704: With one more agent turn after the answer for what was queued (`+amend`): hidden +3.9 (+1.4..+6.5), but… |
 | D703 | Trial `candidatesSpecifics`: the candidates' lead asks for the item's specifics once it applies | killed by D705: The line raised hidden facts +2.0 points (+0.2..+3.7) on eight seeds (bar: +4.0) for +$0.013 per 1,000… |
 | D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D711: Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
+| D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
 
 ## Reader
 

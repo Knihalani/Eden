@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { edenId } from "@eden/client";
+import { edenId, fixFor } from "@eden/client";
 import { buildPartner, createHandler } from "@eden/server";
 import { StaticSource } from "@eden/sources";
 
@@ -43,7 +43,7 @@ import json, sys
 from eden_client import EdenClient, with_context
 errors = []
 eden = EdenClient(api_key=sys.argv[2], user_id="u1", session_id="s1", base_url=sys.argv[1], on_error=errors.append)
-bad = EdenClient(api_key="k_wrong_0123456789ab", user_id="u1", session_id="s1", base_url=sys.argv[1])
+bad = EdenClient(api_key="k_wrong_0123456789ab", user_id="u1", session_id="s1", base_url=sys.argv[1], on_error=None)
 r = eden.observe({"kind": "user_message", "text": "Globex renewal with Dana Lee"}, wait_ms=1000)
 msgs = with_context([{"role": "user", "content": "hi"}], eden.collect(r["injection"]))
 print(json.dumps({
@@ -102,5 +102,30 @@ print(json.dumps({
     ]);
     expect(code).toBe(0);
     expect(JSON.parse(out)).toEqual(raws.map(edenId));
+  }, 30_000);
+
+  test("fix_for gives the TypeScript fixFor's advice for every client error (D850)", async () => {
+    const messages = [
+      "eden: userId must be 1-128 characters of [A-Za-z0-9._:@-] (map ids with edenId)",
+      "eden /v1/events: cannot reach http://127.0.0.1:9 (refused)",
+      "eden /v1/events: 401 missing or unknown API key",
+      "eden /v1/events: 403 tenant",
+      "eden /v1/ask: 404",
+      "eden /v1/events: 413 too large",
+      "eden /v1/events: 429 cap",
+      "eden /v1/events: 400 kind",
+      "eden /v1/events: 503 busy",
+      "eden /v1/pending: not a pending answer",
+      "eden /v1/ask: an unreadable answer (JSONDecodeError)",
+      "anything else",
+    ];
+    const { out, code } = await run([
+      "-c",
+      "import json,sys\nfrom eden_client import fix_for\n" +
+        "print(json.dumps([fix_for(m) for m in json.loads(sys.argv[1])]))",
+      JSON.stringify(messages),
+    ]);
+    expect(code).toBe(0);
+    expect(JSON.parse(out)).toEqual(messages.map(fixFor));
   }, 30_000);
 });
