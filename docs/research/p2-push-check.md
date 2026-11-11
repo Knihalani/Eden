@@ -257,3 +257,58 @@ this is measured directly once.
 - **Reading:** "S costs no more in total than the default with a Sonnet agent" holds if the total's paired
   difference has its interval's upper bound at or below zero; "S costs less" if the whole interval is below zero.
   Otherwise the [EST] above is wrong and is reported so.
+
+### 3.5 B: the two check arms on Pi (short and days)
+
+Pi on Modal at 1927cc19, the bench-tools harness, Haiku 5.5 as agent, grader, cards and check. Short: seeds 41–48,
+all 192 templates, hidden, control and neutral, 4,608 task runs an arm (3.4% of the first wave's requests retried on
+a 429, later waves 0). Days: `--days 8`, users w41–w48, 989 task runs an arm (101 hidden), no 429. Sonnet 5.5
+regraded 4,673 short and 324 days answers (0 failed). Quality: template-clustered bootstrap (`bench_report.py
+--sonnet`), days also by user (`days_hidden.py`); cost and wall paired, short on the 1:1:8 mix by template, days by
+user (`n5/mix.py`). **Anthropic-direct lab figures.**
+
+| Arm − `eden` | N (anchored gate, never silent) | S (every gated push, silent) |
+| --- | --- | --- |
+| Hidden raised, short (Sonnet) | **+3.6 points (+1.6..+5.8)**, 63.6 vs 60.0 | **+4.7 (+2.3..+7.0)**, 64.6 vs 59.9 |
+| Hidden raised, days (Sonnet) | +1.0 (−3.8..+6.5 by user), 63.4 vs 62.4 | +2.0 (−5.0..+8.1), 64.4 vs 62.4 |
+| Confirmed concerns, short; days | 2 vs 1 of 3,070; 0 vs 2 of 888 | 1 vs 1; 1 vs 2 |
+| Total $ per 1,000 tasks, short (1:1:8); days | +0.050 (+0.035..+0.065); **+0.103 (+0.099..+0.106)** | +0.213 (+0.202..+0.224); +0.178 (+0.168..+0.186) |
+| of it the agent, short; days | −0.033; −0.010 | +0.000; **−0.043** |
+| Wall a task, short; days | **+0.32 s (+0.20..+0.45); +0.57 s (+0.55..+0.60)** | +1.09 s (+0.92..+1.26); +1.15 s |
+| Check calls a task, short; days | 0.35; 0.48 | 0.96; 0.99 |
+| `ask_context` calls a task, short | −0.02 | +0.21 (+0.16..+0.25) |
+
+S against N, short: hidden +1.0 (−0.8..+2.9), $ +0.124, wall +0.57 s.
+
+**Against B's bounds (+$0.10 over days, +0.3 s a task on both shapes): neither arm passes.** N raises hidden facts
+(the interval above zero, better than N5's N: +3.6 against +2.7, from the opened pushes `pushCheckOpen` now checks)
+but misses the wait on both shapes and the cost over days by $0.003; checking the opened pushes raised its call rate
+over days from N5's 0.40 to 0.48, and the 1.5 s wait cut nothing (the check's p50 is about 1 s). S raises the most
+and restores silence, at four times N's price and a second a task, most of it the agent asking where the push went
+silent.
+
+### 3.6 Weak point 5 (C1): the packet tokens the agent re-reads over a day
+
+B's days run, D336's kept layout (the shipped one: a day's packets stay in the transcript and every later model request
+reads them again). `p2/packet_reread.py` (packet characters handed, and handed-earlier-that-day plus own times the
+task's model requests) and `n4/tokens.py` (the agent's tokens by class from the timelines):
+
+| Per task over days | `eden` | N | S |
+| --- | --- | --- | --- |
+| Packet characters handed | 1,070 | 1,002 | 450 |
+| Packet characters re-read (earlier that day + own, × model requests) | 9,797 | 9,119 | 4,246 |
+| the same in tokens **[EST: 4 characters a token]** | 2,449 | 2,280 | 1,061 |
+| Agent prompt tokens, measured | 7,265 | 6,922 (−343, −413..−277) | 5,534 (−1,731, −2,127..−1,435) |
+| cache writes / cache reads, measured | 663 / 6,600 | 610 / 6,310 | 433 / 5,098 |
+| Agent $ per 1,000 tasks, Haiku 5.5 | 0.242 | 0.232 | 0.198 |
+| the same tokens at Sonnet 5.5's prices **[EST]** | 4.17 | 4.01 | 3.46 |
+| the same tokens at Opus 5.5's prices **[EST]** | 8.34 | 8.02 | 6.91 |
+
+- **About a third of what the agent reads on a day is Eden's packets** (2,449 of 7,265 prompt tokens [EST]): a
+  packet of about 1,070 characters on 98% of requests, carried to the day's end. N4's +ephemeral layout (D336's
+  measurement: dropping old packets costs more, +$0.057 per 1,000 tasks, because the history after them is written
+  to the cache again) is why the saving has to come from fewer packets, not shorter transcripts.
+- **The silent check halves it** (−57% re-read), the never-silent one barely moves it (−7%): N keeps the default's
+  packet wherever it does not call, which is most neutral requests.
+- **For a dear agent the silent check may pay for itself:** the Haiku agent's tokens priced at Sonnet's rates fall
+  $0.71 per 1,000 tasks against the check's +$0.22 **[EST]**. Measured with a Sonnet agent in §3.7.
