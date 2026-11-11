@@ -256,3 +256,13 @@ python3 -I packages/sim/modal/bench_report.py --pair eden~every:eden --group eve
 Read: hidden raised (Sonnet) with its template-clustered interval; Sonnet-confirmed concerns on control and neutral;
 Eden's per-task $ and wall. Reported to the owner as a decision input; nothing is promoted (the brief), whatever it
 reads. The whole pair, regrade included, stops at $8.
+
+### 1e. Addendum (the parent's ask, before its first call): a requests-only call
+
+If cards go micro or off (M10), the background call could write intent requests only. Arms on §1b's 400 items,
+interleaved by batch, in a run of their own: **B20** (the shipped call again, the reference), **R20** (requests only:
+the shipped prompt's opening and data rule, the day, and its intent instructions word for word less the card clause
+and the cards in the example reply; about 250 system tokens, under Haiku's 512-token cache minimum) and **RK20** (R20
+with the compact `r`, the item number first). `--arms B20,R20,RK20`. Reported: $ a item, tokens, items given requests,
+requests a item and request words against B20's (Jaccard), beside §2b's B20 and B20b. A measurement for the parent
+and M10; no rule decides anything here (no cards would be M10's decision).
