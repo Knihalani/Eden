@@ -142,6 +142,10 @@ ones such as "Will" or "Pat" never read back), derived from the item's own text 
 - One request a session (`bun run funnel`): hidden surfaced 317 against 315, decoys 276 against 276; candidates hand
   290 facts against 289 and 250 decoys against 247.
 
+On 16 fresh users with the shipped intent pipeline (w45–w60, `--days 4`, the cards and intent requests (b)'s paid
+run made, `--intent` those files): **nothing moved** (hidden pushed 41 of 113 in both arms, decoys 42 in both).
+**Rejected and deleted (D833; the code is in commit f39b431f).**
+
 **Size of the bet: about +3 facts in 433 (0.7%) for names alone, under 1 point of hidden raised over days [EST], and
 dates trade one fact for two decoys.** A paid run that could see 1 point needs several hundred users. The organisation
 part (a domain label split by the user's own words) would reach 2 tasks. Lexical levers are exhausted here as well:
