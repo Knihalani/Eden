@@ -35,6 +35,7 @@ import { plantTrain3 } from "./hidden-train3";
 import { plantTrain4 } from "./hidden-train4";
 import { plantTrain5 } from "./hidden-train5";
 import { plantTrain6 } from "./hidden-train6";
+import { formOf, rewordOf } from "./reword";
 import { plantSynth, readWorlds, SAMPLE_PATH, synthPath } from "./synth/suite";
 
 export type { HiddenTask };
@@ -125,6 +126,19 @@ const reworded =
     });
   };
 
+/**
+ * P2 (Q6, `reword.ts`): a train suite with its requests reworded into indirect forms ("I need to pay …", "Should I
+ * book …?"). The world and every draw are the original's; ids read `<suite>rw` so a run keeps them apart.
+ */
+const rewordedForms =
+  (name: string, plant: Plant): Plant =>
+  (world, seed, variant) =>
+    plant(world, seed, variant).map((t) => ({
+      ...t,
+      id: t.id.replace(`:${name}`, `:${name}rw`),
+      text: rewordOf(t.text, formOf(t.template)) ?? t.text,
+    }));
+
 export const SUITES: Record<string, Plant> = {
   hidden: twoVariant("hidden", plantHidden),
   heldout: twoVariant("heldout", plantHeldout),
@@ -195,6 +209,13 @@ export const SUITES: Record<string, Plant> = {
   // The long-tail suite (P7, D873): every fact in a rarely used connector (rare-sources.ts), for pricing sweeps and
   // dormancy over days (`days-calls.ts --arrive-days`). Written by P7, not blind: tune on it.
   longtail: needsPrepared("longtail", plantLongtail),
+  // P2's reworded train (Q6): the same tasks, indirect wording. Tune on them as on train; not in `all`.
+  ...Object.fromEntries(
+    [plantTrain1, plantTrain2, plantTrain3, plantTrain4, plantTrain5, plantTrain6].map((p, i) => {
+      const name = `train${i + 1}`;
+      return [`${name}rw`, rewordedForms(name, withNeutral(name, p))];
+    }),
+  ),
   // M2's generated worlds (D884): a committed sample of the validation split, one synth world a seed. The full
   // splits (`synth-train`, `synth-val`, `synth-test`) and any `synth:<file>` register when a command names them,
   // since their data lives on the Modal volume, not in git (parseSuites).
@@ -206,6 +227,8 @@ const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /** The train suites reworded (D871): `--suite reworded`. */
 const REWORDED_TRAIN = TRAIN.map((n) => `${n}r`);
+/** P2's reworded train (`train-rw`, `reword.ts`). */
+const TRAIN_RW = TRAIN.map((n) => `${n}rw`);
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
@@ -230,8 +253,11 @@ export const UNRUN_BLIND = [
  * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802). Held-out 19 (P7, D870) is unread, for the end-of-wave
  * confirmation only. */
 export const UNREAD_BLIND: string[] = ["heldout19"];
-/** P7's suites (D871, D873) stay out of `all`, so `--suite all` measures what it measured before them. */
-const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN];
+/**
+ * P7's suites (D871, D873) and P2's `train-rw` stay out of `all`, so `--suite all` measures what it measured before
+ * them.
+ */
+const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
 // Generated suites (D884) stay out of `all` too: their splits are not in git, and `all` means the hand-written suites.
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n) && !n.startsWith("synth"));
 const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
@@ -260,8 +286,8 @@ function registerSynth(name: string): boolean {
 
 /**
  * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
- * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train) or `synth` (the generated
- * train and validation splits);
+ * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's,
+ * `reword.ts`) or `synth` (the generated train and validation splits);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {
@@ -280,11 +306,13 @@ export function parseSuites(arg: string): string[] {
               ? REWORDED_TRAIN
               : name === "synth"
                 ? ["synth-train", "synth-val"]
-                : [name];
+                : name === "train-rw"
+                  ? TRAIN_RW
+                  : [name];
     for (const n of names) {
       if (!registerSynth(n) && !(n in SUITES))
         throw new Error(
-          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, synth, ` +
+          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, synth, ` +
             "synth-train, synth-val, synth-test, synth:<file>)",
         );
       if (!out.includes(n)) out.push(n);

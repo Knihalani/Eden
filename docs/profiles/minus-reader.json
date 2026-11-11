@@ -13,5 +13,7 @@
   "pushCandidates": 0,
   "askNudge": false,
   "askNudgeDeep": false,
-  "pushCandidatesSettled": 0
+  "pushCandidatesSettled": 0,
+  "pushCheck": false,
+  "pushIndirect": false
 }

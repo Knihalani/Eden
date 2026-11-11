@@ -88,7 +88,7 @@ const config = { ...extra } as Partial<EngineConfig>;
 // labelled in the output and on stderr. An override that names askReader itself without a reader is refused (its run
 // would read as the reader's).
 const run = { ...DEFAULT_CONFIG, ...config };
-const unwired = unwiredFlags(run, { reader: reader !== undefined || shipped });
+const unwired = unwiredFlags(run, { reader: reader !== undefined || shipped, checker: shipped });
 if (config.askReader && reader === undefined && !shipped) {
   console.error(`this configuration has askReader: pass --reader stub (or oracle). Unwired: ${unwired.join("; ")}`);
   process.exit(2);

@@ -686,12 +686,15 @@ export interface EngineConfig {
    */
   pushCandidatesSettled: number;
   /**
-   * I3 (D500; a trial, off; docs/research/i3-push-check.md): with `pushCandidates` and a `checker` dependency (a
-   * budgeted model call, `push-check.ts`), a push whose pool passes the candidates' constraint-like gate asks the
-   * model once, over the whole pool, which items change what the assistant should do for the request (I2's question,
-   * D490); the candidates are the pool's items it names, in the pool's order (bulk mail out), the first
-   * `pushCandidates` of them, and a pool it names none of sends no packet. A refusal, an error, an unreadable reply or
-   * a reply later than `pushCheckWaitMs` leaves the default's candidates; a late reply still serves a second pass.
+   * The push check (I3, D500; compare-first reply, D527; opened pushes checked, D823; promoted by D828, part `check`;
+   * docs/research/p2-push-check.md): with `pushCandidates` and a `checker` dependency (a budgeted model call on the
+   * reader's model, `push-check.ts`; none without a model key, and the part is inert), a push whose pool passes the
+   * candidates' constraint-like gate asks the model once, over the pool's head, which items change what the assistant
+   * should do for the request; the candidates are the pool's items it names, in the pool's order (bulk mail out), the
+   * first `pushCandidates` of them, and a pool it names none of sends no packet (the default's silence). A refusal,
+   * an error, an unreadable reply or a reply later than `pushCheckWaitMs` leaves the unchecked candidates; a late
+   * reply still serves a second pass. Pi (Haiku agent): hidden +4.7 points, +$0.18–0.21 per 1,000 tasks, +1.1 s a
+   * task; with a Sonnet agent the total bill falls $0.86 per 1,000 tasks (D825, D826).
    */
   pushCheck: boolean;
   /** How long the push waits for its check before it hands the default's candidates (ms). */
@@ -704,45 +707,22 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * N2 (D511; H1; a trial, off): with `pushCheck`, the check reads items past the lexical pool too (`widenPool`): the
-   * `widen` dependency's nearest items (`pushWidenEmbed`), the request's raw intent hits (`pushWidenIntent`) and the
-   * ranking's next items (`pushWidenDeep`), after the pool's head and within the check's 20 items. Only the check can
-   * hand them, and only where the check runs (the constraint-like gate passed). The widening and the check share one
-   * `pushCheckWaitMs`. With `pushCheckItems` 20 the pool fills the check and nothing widened is read.
-   */
-  pushWiden: boolean;
-  /**
-   * N5 (D527; a trial; 1 = I3's reply): 2 asks the check for a compare-first reply (`CHECK_SYSTEM_COMPARE`): per
-   * listed item, what its point applies to, what of the request's own that point lands on (or "none"), then the
-   * verdict. No thinking; a longer reply (no stop sequence).
-   */
-  pushCheckForm: number;
-  /**
-   * N5 (D533; a trial; true = I3's rule; docs/research/n5-widen-check.md): with `pushCheck`, whether a check that
-   * names no item sends no candidates packet. Off, the default's candidates go instead: the check then only ever
-   * replaces the default's packet with the items it named, and a request it finds nothing for is handled as today.
-   */
-  pushCheckSilent: boolean;
-  /**
-   * N5 (D534; a trial, off): with `pushCheck`, the check's call is made only when some item of the lexical pool's
-   * head (never a widened item) is constraint-like (`readerGate`'s test, cards included) and names one of the
-   * request's anchors (`settle.ts`: an entity or a day); otherwise no call and no widening are made and the
-   * default's candidates go. Fewer calls (about a third as many on train's 1:1:8 mix) with no stored answer and no
-   * dependency beyond the checker.
-   */
-  pushCheckAnchored: boolean;
-  /**
-   * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates` and without
-   * `pushCheck`, the push also runs for a message whose verb is on no list but which does not open as a question, a
+   * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
+   * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
    * kept for the reader's paid push and the check's) guard nothing there; the candidates' own gate (a
    * constraint-like item in the pool) still decides whether a packet goes. An opened message is not kept as an
    * acting request for plan alerts (D301).
    */
   pushOpen: boolean;
-  pushWidenEmbed: number;
-  pushWidenIntent: number;
-  pushWidenDeep: number;
+  /**
+   * P2 (D820, promoted by D828, part `indirect`; docs/research/p2-push-check.md): the push also starts for a request
+   * phrased as a need, a plan, a wish or a question about acting ("I need to pay …", "We should move …", "I want you
+   * to book …", "Should I book …?", a request after a first clause of context), read as the imperative after its
+   * lead-in (`indirectRest`, `pushStart`), and the open shape refuses pasted log lines and chatter openers
+   * (`isOpenRequest`'s strict form). The push's lookup reads the message from where the request starts.
+   */
+  pushIndirect: boolean;
   /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
@@ -898,17 +878,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudge: true,
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
-  pushCheck: false,
-  pushCheckWaitMs: 2_500,
+  pushCheck: true,
+  pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushWiden: false,
-  pushCheckForm: 1,
-  pushCheckSilent: true,
-  pushCheckAnchored: false,
   pushOpen: true,
-  pushWidenEmbed: 3,
-  pushWidenIntent: 2,
-  pushWidenDeep: 0,
+  pushIndirect: true,
   revisionDiff: true,
 };

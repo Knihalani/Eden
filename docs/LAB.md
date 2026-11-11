@@ -545,29 +545,27 @@ noise items are not in the replay; price them at $0.000181 a call, A1). Compare 
 without the arm (the JSON's `perTask`). The "hidden returned" count falls when sources answer from the index instead
 of a live search: read "hidden surfaced" (`TOTAL hidden`), not it. Figures for the shipped default: a13-scale.md.
 
-### 1f. A wider pool behind the push check (N2, D511; docs/research/n2-recall.md)
+### 1f. The push check in the lab (D500, D527, D828; docs/research/n5-widen-check.md, p2-push-check.md)
 
-`bun run funnel … -- --widen-table F` wires an embedding table (`packages/sim/modal/n2_embed.py` on Modal, about
-$0.07 for train seeds 41–48; the checked-in `packages/sim/lab/n2/widen-train-41-48.jsonl.gz`) as the engine's `widen`
-dependency for an arm with `pushWiden` (and `pushCheck`, `--check live|replay`); pi-ab takes the same flag (short
-worlds only). `-- --templates a,b` runs only those templates' tasks in a whole world (the confirmation's 40 held-out
-templates). `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed, neutral
-packets and N2's pre-registered bars. Read a check's quality from replayed labels: a live check slower than the
-funnel's 3 s observe wait misses the push (D510).
-
-### 1g. The compare-first check, its gate, and a days user's widening (N5, D527–D536; docs/research/n5-widen-check.md)
-
-`--set '{"pushCheck":true,"pushCheckForm":2}'` asks the push check for the compare-first reply; add `"pushWiden":true`
-with `-- --widen-hash packages/sim/lab/n5/widen-hash-41-48.jsonl.gz` (the embedding table keyed by item content, so
-pi-ab `--days` worlds are covered; `--widen-embed 5` is the cut N5's funnel screens ran with), `"pushCheckAnchored":
-true` to call only where a constraint-like pool item names a request anchor, `"pushCheckSilent":false` to leave the
-default's packet when the check names nothing. A live check keeps the funnel to one process: run one seed a
+The default has the check on; the funnel wires a checker only with `-- --check live|replay --check-cache F` (without it
+the part is inert and the funnel is the no-model screen). A live check keeps the funnel to one process: run one seed a
 process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
-call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant. For a live pair read quality
-from `bench_report.py --sonnet`, cost and wall on the 1:1:8 mix from `python3 -I packages/sim/lab/n5/mix.py --base
-eden --arms eden~V OUT.json…` (`--days` for a days run) and days' hidden facts by user from `days_hidden.py`. On
-Modal, `--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a
-time is `--max-streams 4`.
+call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant;
+`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token).
+`python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed and neutral packets. For a
+live pair read quality from `bench_report.py --sonnet`, cost and wall on the 1:1:8 mix from `python3 -I
+packages/sim/lab/n5/mix.py --base eden --arms eden~V OUT.json…` (`--days` for a days run), days' hidden facts by user
+from `days_hidden.py`, and the packet characters the agent re-reads over a day from `p2/packet_reread.py`. On Modal,
+`--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a time is
+`--max-streams 4`. `default minus check` is `eden~minus-check`.
+
+### 1g. Indirect requests (D820, D828; docs/research/p2-push-check.md)
+
+`--suite train-rw` is train with each request reworded into one of ten indirect forms (`reword.ts`; P7's hand-written
+`reworded` suites are another readout); `python3 -I packages/sim/lab/p2/compare_rw.py --base train --arm train=T.json
+--arm rw=R.json` pairs it with a train run. `bun packages/sim/src/lab/gate-score.ts SET.json [--misses]` scores the
+push's request gate on a set of messages (`packages/sim/lab/p2/blind-gate-{1,2,3}.json`, all read now: a change needs
+a fresh blind set). `default minus indirect` is `eden~minus-indirect`.
 
 ### 1h. Weeks, many users and the long tail at $0 (P7, D874, D875)
 

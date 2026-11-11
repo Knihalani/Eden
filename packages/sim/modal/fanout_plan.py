@@ -263,6 +263,8 @@ PART_VARIANTS = {
     "minus-plans": {"planConflict": False},
     "minus-fewer": {"pushCandidatesSettled": 0},
     "minus-open": {"pushOpen": False},
+    "minus-check": {"pushCheck": False},
+    "minus-indirect": {"pushIndirect": False},
     "minus-freshness": {"verifyDelivery": False, "readerVerifyAfter": False, "revisionNotice": False,
                         "revisionDiff": False},
 }
@@ -367,7 +369,7 @@ SAFE_STREAMS = 60
 # A wave whose requests were retried on a 429 more often than this halves the next wave.
 RETRY_SHARE = 0.02
 # Suite names that stand for several suites (suites.ts `parseSuites`).
-SUITE_GROUPS = {"train": 6}
+SUITE_GROUPS = {"train": 6, "train-rw": 6}
 # Names whose size the planner does not know (suites.ts owns the lists): a stream count would be a guess.
 UNCOUNTED_GROUPS = ("all", "heldout-all")
 
