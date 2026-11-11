@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readerMessages } from "@eden/engine";
+import { CHECK_SYSTEM, readerMessages } from "@eden/engine";
 import { OpenRouterModel, type ChatRequest, type ChatResponse, type Model, type OpenRouterOptions } from "@eden/llm";
 import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "@eden/server";
 import { EVAL_TENANT, fromEnvVia, liveWiring, ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
@@ -161,6 +161,9 @@ describe("eval harness: the reader family (--reader stub|oracle)", () => {
 
   test("flags whose dependency the eval does not wire are named", () => {
     expect(unwiredFlags({}, { reader: false })).toEqual([]);
+    // The push check (D828) is wired only under `--live`.
+    expect(unwiredFlags({ pushCheck: true }, { reader: false })[0]).toMatch(/^pushCheck/);
+    expect(unwiredFlags({ pushCheck: true }, { reader: true, checker: true })).toEqual([]);
     expect(unwiredFlags({ askReader: true }, { reader: true })).toEqual([]);
     const named = unwiredFlags({ askReader: true, cards: true, intent: true }, { reader: false }).map(
       (s) => s.split(" ")[0],
@@ -222,9 +225,11 @@ describe("eval harness: --live wires what ships (D128)", () => {
       readerModel: live.readerModel,
       spend: live.spend,
     });
-    expect(made[0]!.calls.length).toBe(0);
-    // The push ran and read nothing: its traces are there, with no model call.
+    // The shipped default (D828) makes no reader call; its only calls are the push check's, on the same role model,
+    // as `buildPartner` wires it (this fake's reply is not a check's, so each push fails open to its candidates).
+    for (const c of made[0]!.calls) expect(c.messages[0]!.content).toBe(CHECK_SYSTEM);
     expect(shipped.decisions["reader-push"]).toBeGreaterThan(0);
+    const checks = made[0]!.calls.length;
     const m = await runScenarios([freeze], {
       model: live.model,
       waitMs: 1_000,
@@ -232,7 +237,7 @@ describe("eval harness: --live wires what ships (D128)", () => {
       spend: live.spend,
       config: READS,
     });
-    const calls = made[0]!.calls;
+    const calls = made[0]!.calls.slice(checks).filter((c) => c.messages[0]!.content !== CHECK_SYSTEM);
     expect(calls.length).toBeGreaterThan(0);
     // Every call is the reader's, made as ModelReaderMaker makes it: its prompt, JSON, no reasoning (D144); no judge.
     for (const c of calls) {

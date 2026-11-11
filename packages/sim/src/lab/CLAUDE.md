@@ -73,7 +73,8 @@ train run. `gate-negatives.ts` holds log lines, chatter, statements and question
 --cards-out F` (the shipped card coverage, carded live and recorded; needs the spend flags) and `--intent none`.
 `m5-ledger.ts extract` writes typed constraint records per item content (Haiku, pay once, `--prompt v2` the
 rejected variant); `../../lab/m5/m5_match.py` scores the no-model matcher at @5 against a pool dump (D910: stopped).
-`--widen-ranks` feeds only `pushWiden` under `pushCheck` on main (M3's `pushRetrieve` is on its unmerged branch).
+`--widen-ranks` is refused since D828 deleted the widened pool (an empty string stays in the replay key, so recorded
+runs still replay).
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run

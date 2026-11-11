@@ -119,6 +119,8 @@ export const PARTS = {
     pushCandidatesSettled: 0,
     pushOpen: false,
     pushCheck: false,
+    // The reader's own push then starts only where the old default's did: no paid read of indirect starts (D828).
+    pushIndirect: false,
   },
   /**
    * An item stored after a request the push acted on, that would have been among its candidates, is sent at the next

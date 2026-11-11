@@ -11,7 +11,7 @@ import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
-// I3 (D500): the `pushCheck` trial. One model call over the push's pool names the items that change what the agent
+// The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that change what the agent
 // should do; the candidates are those, in pool order; none named sends no packet; any failure leaves the default's.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");

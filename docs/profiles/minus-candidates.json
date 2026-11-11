@@ -4,5 +4,6 @@
   "askNudgeDeep": false,
   "pushCandidatesSettled": 0,
   "pushOpen": false,
-  "pushCheck": false
+  "pushCheck": false,
+  "pushIndirect": false
 }

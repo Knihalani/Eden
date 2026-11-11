@@ -480,15 +480,15 @@ ask's wait leaves the ask answered without the reader.
 Its packet is queued only if the session is still open and no newer user message has arrived; the agent's own events in
 between (tool calls, its replies) do not make it stale.
 
-**The push for any request (`pushOpen`, O3, D702, D706; in the default since D710).** `observe` starts the push only
-for a request whose verb `isImperative` lists, a gate from the reader's paid push. With `pushCandidates` and no
-`pushCheck`, a message that does not open as a question, a remark or a statement (`isOpenRequest`) starts it too: no
-model call, the candidates' own gate unchanged, and no acting request recorded for plan alerts
-(docs/research/o3-push-open.md). With `pushCheck` on, an opened message starts no push unless `pushCheckOpen` (D823).
-Trial `pushIndirect` (P2, D820, off): a request phrased as a need, a plan, a wish or a question about acting ("I need
-to pay …", "Should I book …?", "We should move …") is read as the imperative after its lead-in (`pushStart`,
-`indirectRest`), and the push's lookup is given the message from where the lead-in ends; the open shape then refuses
-pasted log lines and chatter openers (docs/research/p2-push-check.md §1).
+**The push for any request (`pushOpen`, O3, D702, D706; in the default since D710).** `observe` starts the push for
+a request whose verb `isImperative` lists, a gate from the reader's paid push, and, with `pushCandidates`, for a message
+that does not open as a question, a remark or a statement (`isOpenRequest`): no acting request is recorded for plan
+alerts (docs/research/o3-push-open.md). **Indirect requests (`pushIndirect`, D820; in the default since D828, part
+`indirect`):** a request phrased as a need, a plan, a wish or a question about acting ("I need to pay …", "Should I book
+…?", "We should move …"), or one after a first clause of context, is read as the imperative after its lead-in
+(`pushStart`, `indirectRest`, `secondClause`), the push's lookup is given the message from where the request starts, and
+the open shape refuses pasted log lines and chatter openers (docs/research/p2-push-check.md §1, §7, §8). Listed, opened
+and indirect pushes are all checked when the push check is wired (D823, D828), so each may make the check's paid call.
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests

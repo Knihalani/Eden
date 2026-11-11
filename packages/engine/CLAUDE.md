@@ -303,10 +303,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (D828): I3's reply, the anchored gate (arm N), the never-silent rule and the widened pool; code in 572d1569.
 - **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
   `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
-  requests are on none. With `pushCandidates` (and `pushCheck` off: an opened push never makes the check's paid
-  call), `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark
+  requests are on none. With `pushCandidates`, `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark
   only on a polite ask; bounded input) also starts it. An opened message is not `noteActed`: a plan alert (D301)
-  quotes only a listed-verb request. Live: hidden +4.1 points one request a session (D706) and +2.1 (−1.6..+5.6) over
+  quotes only a listed-verb request. With the push check wired (D823, D828) an opened push is checked and pays its
+  call like a listed one. Live: hidden +4.1 points one request a session (D706) and +2.1 (−1.6..+5.6) over
   users' days (D710), confirmed concerns not up, the decoy handed more often too (docs/research/o3-push-open.md,
   o3-pointer.md §3). The funnel always asks, so its "surfaced" barely sees this (315 / 276 against 314 / 274); read
   `pushHanded` (`n2/compare.py`) and measure live. Deleted beside it: the push check run behind the packet

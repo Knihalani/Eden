@@ -576,8 +576,7 @@ A trial is decided in the branch or session that opened it, as soon as its evide
 `DEFAULT_CONFIG` (measured better or neutral at no extra paid cost) or deleted with its code and tests. No end date
 weeks out and no "owner's call later"; where a cost trade-off remains, the session recommends and the parent decides
 that day. A row here is a trial whose evidence is still being gathered by the session that opened it. The push-check
-rows below predate D814 and keep their recorded end and rule until P2's branch decides them (the same day, by the
-owner's call).
+trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|

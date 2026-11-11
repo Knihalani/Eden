@@ -245,3 +245,16 @@ describe("pushIndirect v4, review: what a second clause or a participle must not
     expect(start("We should go to Iceland one day, maybe in 2028")).toBeNull();
   });
 });
+
+describe("pushIndirect, the promotion's review", () => {
+  test("scheduling and finishing needs start the push; a clock time keeps a plan a request", () => {
+    for (const raw of [
+      "I need the meeting rescheduled to Friday",
+      "I need the meeting scheduled for Tuesday at 3",
+      "We need the report finished by Monday",
+      "We need the boiler looked at before Friday",
+      "We should eventually move the standup to 3pm",
+    ])
+      expect(start(raw)).not.toBeNull();
+  });
+});

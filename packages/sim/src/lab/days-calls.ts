@@ -10,7 +10,7 @@
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
  *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none] [--resume]
- *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD] [--widen-ranks FILE]
+ *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD]
  *
  * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
  * (D813, `main` below).
@@ -30,7 +30,7 @@
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
  */
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
@@ -116,39 +116,6 @@ export interface DaysCallsOptions {
    * cache holds it (redacted), one line a user, for offline retrieval screens. Simulated items only.
    */
   onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
-  /**
-   * `--widen-ranks FILE` (M3; D901 is on the unmerged claude/m3-retriever branch): per user, the `widen` dependency.
-   * On main only `pushWiden` under `pushCheck` reads it (`--set`), so with the default config it does nothing.
-   */
-  widen?: (seed: number) => (scope: unknown, request: string, k: number) => Promise<readonly string[]>;
-}
-
-/** Requests reach the engine redacted and may differ in spacing: matched on letters and digits. */
-const normRequest = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-
-/**
- * M3 (D901, unmerged branch): a retriever's ranks precomputed offline (M3's `m3r/widen_table.py`, not on main: per
- * seed and request, the user's item ids a model ranks first, from a fold that never trained on the request's
- * template), served as the `widen` dependency.
- * Lab only; the push makes no call.
- */
-export function widenRanks(path: string): DaysCallsOptions["widen"] {
-  const table = new Map<number, Map<string, string[]>>();
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    const r = JSON.parse(line) as { seed: number; request: string; top: string[] };
-    let m = table.get(r.seed);
-    if (!m) table.set(r.seed, (m = new Map()));
-    m.set(normRequest(r.request), r.top);
-  }
-  return (seed) => {
-    const m = table.get(seed);
-    return async (_scope, request, k) => (m?.get(normRequest(request)) ?? []).slice(0, k);
-  };
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -290,7 +257,6 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     config: o.config ?? {},
     ...(cards ? { cards } : {}),
     ...(o.onPlanted ? { onPushPool: (r: PushPoolReport) => void (pooled = r) } : {}),
-    ...(o.widen ? { widen: o.widen(seed) } : {}),
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
   // The harness reads the engine's session table, as hidden-funnel does: whether a session's lookup is still running.
@@ -708,8 +674,12 @@ export async function main(
     mix: parseMix(opt("mix", "1:1:8")),
     arriveDays: opt("arrive-days", "") ? parseRange(opt("arrive-days", ""), "--arrive-days") : null,
   };
-  const widenFile = opt("widen-ranks", "");
-  if (widenFile) o.widen = widenRanks(widenFile);
+  // `--widen-ranks` fed the widened pool behind the push check, deleted by D828: refused rather than ignored.
+  if (opt("widen-ranks", "")) {
+    console.error("days-calls: --widen-ranks fed pushWiden, deleted by D828 (the engine has no widen dependency)");
+    process.exit(2);
+  }
+  const widenFile = "";
   const diag = opt("pool-diag", "");
   const corpus = opt("corpus-dump", "");
   const out = opt("json", "");
@@ -723,7 +693,7 @@ export async function main(
   }
   // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, and `--cards-out`, which a live run
   // also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags; `--cards-live` (the
-  // model) stays in the argv key, and `--widen-ranks` is an input, keyed by its contents with the cards and intent.
+  // model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so recorded runs replay.
   const journal = out
     ? RunJournal.open<UserUnit>(
         partialPath(out),
