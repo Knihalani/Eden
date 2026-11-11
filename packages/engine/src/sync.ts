@@ -92,7 +92,7 @@ export interface SyncOptions {
    * which `sketchScores` reads for routing.
    */
   sketch?: boolean;
-  /** `sourceYieldEarn` (D600): the user keeps a table of which few sources hold each word (`RareTerms`). */
+  /** `sourceYieldEarn` (D600, D603): the user keeps a table of which few sources hold each word (`RareTerms`). */
   rareTerms?: boolean;
   /**
    * `syncUnusedSweepMs` (D356, on in the default at a week; 0 or absent: off): a source the user does not use
@@ -1576,7 +1576,7 @@ export interface SyncSnapshot {
   cutAt: number | null;
   people: string[];
   used: string[];
-  /** `rareTerms` (D600, a trial): `RareTerms.dump`, present only when the trial is on. */
+  /** `rareTerms` (D600, D603): `RareTerms.dump`; absent when the earn rule is off or nothing was listed yet. */
   rare?: unknown;
   sources: {
     id: string;

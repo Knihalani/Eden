@@ -204,17 +204,17 @@ behind as the push's does, it waits `askBehindWaitMs` (0) for that work, answers
 sources still being read (status "searching", never an all-clear), and what they then store that it would cite goes
 out as a packet at the next take. Which cut copies are read live at all is learned (`sourceYield`, D505, D509;
 `source-yield.ts`; docs/research/n1-calls.md): each source keeps a run of the live reads it answered since one of its
-items last reached the agent, and the user's reads on no evidence, and on the request's words alone, are pooled over
-the sources with nothing used yet. A copy whose run has reached `sourceYieldRun` (4), or a never-used one while its
-kind of read is clearly not paying (`sourceYieldFloor`), gets no search behind, no probe and no on-demand poll for a
-request that names nothing the source mentioned: it answers from what is held, and an ask gives it the status
-"unsearched" and says so, never an all-clear. Runs and pools halve every week, so sources are tried again. With
-1,000 sources this took Eden's connector calls from ~36 to ~11 a task over a user's days. Three trials, all off (O1,
-D600, D601; docs/research/o1-earn.md), turn the rule around: with `sourceYieldEarn` a copy with nothing used is read
-live only on a name its items mentioned or a word of the request that at most `sourceYieldRare` (2) of the user's
-sources hold (`RareTerms`: one table a user of which few sources hold each listed word, at most 1 MB), and
-the pools are not consulted; `sourceYieldNames` makes a name many sources mention weak for such a copy;
-`sourceYieldEngage` does not mark a source used by a request that reads nothing live of it. A lookup polls at most its
+items last reached the agent. A copy whose run has reached `sourceYieldRun` (4) gets no search behind, no probe and
+no on-demand poll for a request that has no strong evidence for it: it answers from what is held, and an ask gives
+it the status "unsearched" and says so, never an all-clear. Runs halve every week, so sources are tried again. And
+a source earns its reads (`sourceYieldEarn`, D600, D603; docs/research/o1-earn.md): a copy none of whose items has
+ever reached the agent is read live only on strong evidence, a name its items mentioned or a word of the request
+that at most `sourceYieldRare` (2) of the user's sources hold (`RareTerms`: one table a user of which few sources
+hold each listed word, at most 1 MB); a name more than `sourceYieldNames` (4) sources mention is strong only for a
+source with an item used; and a source a request reads nothing live of is not marked used by it
+(`sourceYieldEngage`: no deep copy, daily sweep or card call on its account). With about 1,000 sources this took
+Eden's connector calls from 23 to 5.5 a task one request a session and from 7.3 to 2.4 over a user's days, hidden
+facts level (D603); the pooled rates it replaced (D505) are deleted. A lookup polls at most its
 `syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)

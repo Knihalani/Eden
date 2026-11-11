@@ -475,9 +475,12 @@ calls by day, so a rule that learns over days can be screened at $0 (about 15 s 
 pi-ab, days-calls). Without it the 995 share 45 sketchable words, so their vocabulary sketches set the same bits and
 any rule that reads sketches across sources looks better than it is: a review found about 27 false holders a
 word that the shared words hid (`sourceYieldEarn` now reads `RareTerms`). `packages/sim/src/lab/o1-rare-bytes.ts`
-prints the sketches' and the table's bytes and false holders a word; live: `lab_fanout.py --preset bench-earn2` through
-`EXTRA='--noise-vocab 1000' packages/sim/lab/o1/run.sh earn2 …` (two shards at once), reports by
-`packages/sim/lab/o1/report.sh`.
+prints the sketches' and the table's bytes and false holders a word. Live: `lab_fanout.py --preset bench-earn` (the
+default against the default with the earn rule off, `eden~off-earn`; it passes `--noise-vocab 1000` itself) through
+`packages/sim/lab/o1/run.sh earn …` (two shards at once), reports by `packages/sim/lab/o1/report.sh earn
+'eden~off-earn'` (the pair is the arm minus the default, so the sign is the reverse of O1's runs). `bench-earn2` is
+O1's runs as they were paid: it compares anything only at a commit before D603 (`EDEN_COMMIT`). A fan-out writes
+its results when it ends, so a session that may restart runs a long one in batches (O1 lost 22 finished shards).
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
@@ -1077,7 +1080,7 @@ python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minu
   --group cached=.local/modal/bench-a --group inrun=.local/modal/bench-b --target 1.5
 ```
 
-- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`, `bench-yield` (N1b, D543); `--args` after a
+- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`, `bench-yield` (N1b, D543), `bench-earn` (O1, D603); `--args` after a
   preset add or replace flags. `python3 -I packages/sim/modal/fanout_plan.py plan --preset … --seeds … --cap …`
   prints the plan, the streams a shard and the shards at once, with no token.
 - **Concurrency is automatic.** Shards run in waves that keep the agent streams on the key at or under

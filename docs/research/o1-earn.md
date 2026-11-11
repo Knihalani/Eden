@@ -1,12 +1,39 @@
 # O1: a source earns its live reads (`sourceYieldEarn`, connector calls at 1,000 sources)
 
-Status: pre-registered 2026-11-10 on branch `claude/o1-calls` (from `claude/lucid-hypatia-v9wqk5` at 3ee07ac6).
-Decisions D600–D602. Paid calls: Anthropic API only, the Modal Secret `HAIKU_API_KEY`, `claude-haiku-5-5` in every
-role, `claude-sonnet-5-5` for the concern regrade, lab provider (D97): **Anthropic-direct lab figures**, not the
-OpenRouter route the servers ship. Train suites only; `heldout18` is not run or read. Sections 0 and 1 were written
-and pushed before any paid call.
+Status: finished 2026-11-11 on branch `claude/o1-calls` (from `claude/lucid-hypatia-v9wqk5` at 3ee07ac6; the base
+merged in again at 6af844fe). Decisions D600–D603. Paid calls: Anthropic API only, the Modal Secret
+`HAIKU_API_KEY`, `claude-haiku-5-5` in every role, `claude-sonnet-5-5` for regrades, lab provider (D97):
+**Anthropic-direct lab figures**, not the OpenRouter route the servers ship. Train suites only; `heldout18` is not
+run or read. Every rule below was committed and pushed before the paid calls it decides. **Spent: $18.13
+Anthropic** of the $25 cap by the session's ledger (three runs $11.61, the days check $2.83, a first attempt at it
+lost with the container, about $2.50 estimated, smokes $0.04, Sonnet regrades $1.16). **Result: the three switches
+are in `DEFAULT_CONFIG` and the pooled rule they replace is deleted (D603).**
 
-## In plain words (before the paid run)
+## The result in plain words
+
+- **What changed.** A source the user has never had anything used from is read live only when the request gives
+  strong evidence for it: a name it mentioned, or a word that at most two of the user's sources hold. A name most
+  sources mention does not count for such a source, and a source a request reads nothing of is not treated as "in
+  use". Before, every new user's requests read dozens of unrelated connectors until a learned rate shut them off.
+- **Connector calls a task at about 1,000 sources, live (run 3, paired):** **23.3 → 5.5** one request a session
+  (−17.9, −18.8..−17.0) and **7.3 → 2.4** over a user's eight days (−4.8, −5.4..−4.3); on 24 more users over days
+  **8.3 → 1.9** (−6.3, −6.7..−6.0).
+- **Hidden facts raised: level.** Run 3, 2,405 pairs: −0.1 points (−1.7..+1.6), 56.1% against 56.2%; the bar was a
+  lower bound above −2.0. Over days, 24 new users, every answer graded by Sonnet: +3.0 points (−0.9..+6.7 with
+  users as clusters, 332 pairs); the bar was above −4.0.
+- **False concerns level** (0.1% against 0.0%, +0.1 points, +0.0..+0.2), **wall time level** (−0.014 s), **dollars
+  for the agent and Eden a task level** (+$0.002 per 1,000 tasks, −0.002..+0.006). With Eden's background cards the
+  steady first-party bill falls ($0.58 → $0.33 per 1,000 tasks one request a session): unrelated connectors' items
+  no longer go to the card model.
+- **On a per-call connector plan** (list prices, assumed; steady): Zapier MCP $645 → $175 per 1,000 tasks one
+  request a session and $213 → $77 over days.
+- **What it costs.** One table a user of which few sources hold each word: 4 bytes a word, +0.72 MB for the lab's
+  1,000-source user (about +6% of the 11.4 MB heap O4 measured for such a user), at most 1 MB. An ask's "not
+  searched" line now names nearly every source for a new user.
+- **Where the floor is now.** What is left one request a session is the user's own sources: about 2.4 on-demand
+  listings and 2 searches a task. When those five send change notices the same rule makes 2.2 calls a task at $0.
+
+## In plain words, as written before the first paid run
 
 - **The problem.** A user with about 1,000 connected sources costs Eden 27 connector calls a task one request a
   session and 12 over their days (N1b, D542). On a per-call connector plan that is the whole bill: Zapier MCP about
@@ -362,6 +389,76 @@ Otherwise the switches are not promoted whatever run 3 reads, and stay off trial
 from the first step's, 20e36961, by this note alone.) The
 check is run whatever run 3's days arm reads; run 3's own days pairs are reported beside it and not pooled into
 the rule.
+
+## 2e. Run 3, the days check and the decision (D603)
+
+**Run 3** (`packages/sim/lab/o1/earn2t/`; the table build, `--noise-vocab 1000`; image 20e36961 for its first step
+and f69b260d, the same code, for the rest; 0 ungraded, the 16 answers Haiku flagged regraded by Sonnet). `eden~earn2 − eden`:
+
+| | Effect | Levels (trial / default) |
+| --- | --- | --- |
+| Hidden raised, pooled | **−0.1 points (−1.7..+1.6)**, n 2,405, 139 templates; by seed −1.5..+1.2; MDE 2.4 | 56.1 / 56.2 |
+| short, seeds 41–44 | −3.9 (−8.1..+0.0), n 384 | 58.9 / 62.8 |
+| short, seeds 45–64 | +0.4 (−1.4..+2.2), n 1,920 | 55.3 / 54.8 |
+| days, 8 users | +4.0 (−2.1..+11.0), n 101 | 61.4 / 57.4 |
+| Eden's calls a task, short (paired) | **−17.9 (−18.8..−17.0)** | 5.45 / 23.32 |
+| Eden's calls a task, days (1:1:8) | **−4.8 (−5.4..−4.3)** | 2.44 / 7.27 |
+| False concerns, Sonnet-regraded | +0.1 points (+0.0..+0.2), n 1,272; 1 against 0 | 0.1 / 0.0 |
+| the same, Haiku's verdicts | −0.3 points (−1.1..+0.3); 6 against 10 | 0.5 / 0.8 |
+| $ per 1,000 tasks, agent + Eden per task | +0.002 (−0.002..+0.006) | 0.426 / 0.424 |
+| Wall mean | −0.014 s (−0.040..+0.011) | 1.963 / 1.977 |
+| `ask_context` calls a task | +0.015 (−0.007..+0.037) | 0.369 / 0.354 |
+
+Cost report, each arm's own tasks (list prices, assumed; steady): first-party with background cards 0.581 → 0.331
+short and 0.386 → 0.296 over days; Eden's background calls a task 2.03 → 1.33 and 0.98 → 0.54; Zapier MCP $645 →
+$175 and $213 → $77; Composio $8.08 → $2.37 and $2.86 → $1.19. The backfill is unchanged: about 1,005 listings a
+new user, once.
+
+**The rule, applied.** Clause 1: the pooled lower bound is −1.7, above −2.0. Clause 2: calls fall on both
+horizons, both intervals below zero. Clause 3: concerns' upper bound +0.3, under +1.0. Clause 4: the dollar
+interval holds zero. **Run 3 passes.** The seeds-41–44 reading (−3.9) is four seeds on which run 2 read +0.5; it
+is reported, and by D544 it is not evidence. The days reading, +4.0, is the third of the same 101 tasks (−4.0,
+−6.9 before).
+
+**The days check** (`packages/sim/lab/o1/earn2d/`; section 2d's registration; image f69b260d). 24 users, seeds
+49–72, `--days 8`, 3,114 task runs an arm, 0 ungraded; all 664 hidden answers regraded by Sonnet:
+
+| | Effect | Levels (trial / default) |
+| --- | --- | --- |
+| Hidden raised, Sonnet-graded | **+3.0 points; users as clusters −0.9..+6.7**; by template −0.9..+7.0; n 332 | 51.5 / 48.5 |
+| the same, Haiku-graded | +3.0 (by seed −1.2..+7.2) | 53.6 / 50.6 |
+| Eden's calls a task (1:1:8) | **−6.3 (−6.7..−6.0)** | 1.91 / 8.25 |
+| False concerns (Haiku's verdicts) | −0.1 points (−0.6..+0.4), n 2,782 | 0.8 / 0.9 |
+| $ per 1,000 tasks, agent + Eden per task | −0.006 (−0.008..−0.004) | 0.366 / 0.372 |
+| Wall mean | −0.068 s (−0.118..−0.022) | 1.553 / 1.621 |
+
+Steady first-party $ per 1,000 tasks 0.415 → 0.324; Zapier MCP $241 → $62. **The rule, applied:** the
+user-clustered lower bound is −0.9, above −4.0: the days horizon is accepted. McNemar on the pairs: the trial
+alone raised the fact in 27 tasks, the default alone in 17 (p 0.17). The earlier days gap was the eight users.
+
+**Deviations.** The days check's first attempt (one fan-out of 24 shards) was lost when the session's container
+restarted with 22 shards finished: the fan-out writes results only when it ends. Nothing of it was read; its
+spend, about $2.50, is estimated from run 3's cost a user and is in the ledger as an estimate. It was run again in
+four fan-outs of six users, the same seeds, image and rule. Run 3's later steps and the days check ran on f69b260d
+where section 2c said "the commit that holds this section" (the commits between differ by docs, review fixes to
+`RareTerms` and report scripts; the engine and lab code of both arms is that of 20e36961 except `RareTerms`'
+fail-towards-common and `forgetSource`, which were committed before run 3). Run 2's smoke ($0.018) ran one
+commit before its amendment. The concern regrade of the days check was not run (its hidden regrade was the
+registered one); its concern figures are Haiku's.
+
+**Decision (D603).** `sourceYieldEarn`, `sourceYieldNames` 4 and `sourceYieldEngage` are in `DEFAULT_CONFIG` (part
+`sync`), with `RareTerms`. The pooled rule (`poolSpent`, the pools, `sourceYieldFloor`, `sourceYieldWords`) is
+deleted; `PERSIST_FORMAT` is 3. Changed with the promotion and not in any paid arm: the ask's line for a source
+it did not search now reads "nothing in the request points there" (it said "nothing found there has been used
+lately", untrue of a source never read); the table is filled with `routeSketch` off too; `sourceYieldEngage` acts
+only with `sourceYieldEarn`. On the promoted tree: `CHECK_COLD=1 bun run check` green, eval 0.65 / 0.52 / 0, the
+five-source funnel 314 / 274, the 995-source screen (seed 41, `--noise-vocab 1000`) 4.8 calls a task with no task
+different from the default before it (30.5).
+
+**What this leaves.** The user's own sources' on-demand listings (2.4 a task) are the floor without notices. The
+weekly sweep of unused sources is now the largest standing cost (section 3). A new user's backfill is about 1,005
+listings. Memory for the table and its 3–5 µs a new word on the store path are now the default's (section 2c);
+`users.bench.ts`'s figures predate it.
 
 ## 3. Dormant sources: built, screened at $0, removed after review (D602; a proposal, not a trial)
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # O1: the reports over a preset's fan-out shards (.local/modal/o1-PRESET-*). `report.sh PRESET ARM regrade` first
 # (Sonnet on the answers Haiku called concerns, $ capped; needs HAIKU_API_KEY), then `report.sh PRESET ARM` writes
-# the files into packages/sim/lab/o1/PRESET/. ARM is the trial's arm (eden~earn); the pair is ARM − eden.
+# the files into packages/sim/lab/o1/PRESET/. ARM is the other arm (eden~earn2 in O1's runs, eden~off-earn since D603); the pair is ARM − eden.
 # SHORT_INRUN and LONG_RUNS name the runs (comma lists); TAG as in run.sh (reports go to o1/PRESET+TAG/).
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
@@ -10,7 +10,11 @@ T=$P${TAG:-}; M=.local/modal; O=packages/sim/lab/o1/$T; mkdir -p "$O" .local/o1
 SHORT41=o1-$T-short-41; SHORT_INRUN=${SHORT_INRUN:?comma list of in-run short runs}; LONG_RUNS=${LONG_RUNS:-o1-$T-long}
 dirs() { local IFS=,; local out=(); for r in $1; do out+=("$M/$r"); done; echo "${out[*]}"; }
 if [ "${3:-}" = regrade ]; then
-  for s in $M/$SHORT41/s0* $(for r in ${LONG_RUNS//,/ }; do echo $M/$r/s0*; done); do
+  # Shard directories only (the report below leaves `-stem` links beside them). REGRADE_CAP is checked against the
+  # whole ledger, so a session that has regraded before passes a cap above what the ledger already holds.
+  for s in $M/$SHORT41/s0*/ $(for r in ${LONG_RUNS//,/ }; do echo $M/$r/s0*/; done); do
+    s=${s%/}
+    case $s in *-stem*) continue ;; esac
     env -u OPENROUTER_API_KEY bun packages/sim/src/lab/regrade.ts --results "$s/out.json" \
       --graders claude-sonnet-5-5 --only-concerns --spend-ledger .local/o1/ledger.jsonl \
       --spend-cap "${REGRADE_CAP:-0.15}" --spend-headroom 0.02 --run-label "o1-$T-regrade" --out "$s/regrade.json"
