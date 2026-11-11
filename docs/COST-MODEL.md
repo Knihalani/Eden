@@ -604,7 +604,7 @@ hour) that is $0.00013 a check fully used, $0.00027 at 50% and $0.0013 at 10% ut
 $0.00021–0.00026; 0.99 checks a task (opened pushes are checked too). It is cheaper than Haiku only above about 60%
 utilisation, and it failed its first live rule (D897).
 
-## The compare-first push check and its gate (N5, `pushCheckForm` 2, `pushCheckAnchored`; trials, off; D527–D536)
+## The push check (in the default since D828; N5 and P2 measurements, D527–D536, D825, D826)
 
 The per-push call of I3's check with another reply (docs/research/n5-widen-check.md): the same fixed instructions
 plus a compare-first format (about 1,185 tokens, read from the cache on Anthropic direct), the request and at most 20
@@ -618,6 +618,18 @@ p90 1.44–1.52 s.
 | every gated push, with `pushWiden` (K) | 0.81–0.83 | 0.21–0.22 | +0.214; +0.173 | +1.06 s; +0.85 s |
 | every gated push (Kp) | 0.81–0.83 | 0.18–0.19 | +0.183; +0.156 | +1.04 s; +0.88 s |
 | `pushCheckAnchored`, `pushCheckSilent` off (N) | 0.30; 0.40 | 0.07; 0.09 | +0.043; +0.083 | +0.31 s; +0.41 s |
+| N with `pushCheckOpen`, wait 1,500 ms (P2's N) | 0.35; 0.48 | 0.08; 0.11 | +0.050; +0.103 | +0.32 s; +0.57 s |
+| Kp with `pushCheckOpen`, wait 1,500 ms (P2's S) | 0.96; 0.99 | 0.21; 0.22 | +0.213; +0.178 | +1.09 s; +1.15 s |
+
+**In the default (D828) is P2's S row:** with a Haiku 5.5 agent +$0.21 per 1,000 tasks one request a session (1:1:8)
+and +$0.18 over days, +1.1 s a task; **with a Sonnet 5.5 agent the total bill falls $0.86 per 1,000 tasks
+(−1.24..−0.59) over days**, wall +0.57 s (D826): the agent carries 67% fewer packet characters all day. The other rows
+are measured arms whose switches were deleted (D828). A server with no model key makes no check call.
+
+P2 (docs/research/p2-push-check.md, D823): checking the open shape's pushes too, so the call rate rises
+by about a sixth (funnel, seeds 42–43: 470 → 565 calls a seed). Over days the silent arm (S) cuts the packet
+characters the agent carries all day by 57% and its prompt tokens by 1,731 a task: the Haiku agent's own bill falls
+$0.242 → $0.198 per 1,000 tasks; the same tokens priced at Sonnet's rates **[EST]** fall $4.17 → $3.46.
 
 The agent's own spend is flat to lower with the check (−$0.01 to −$0.05 per 1,000 tasks over days: smaller packets
 in the day's transcript); a silent push adds agent turns one request a session (`ask_context` +0.30 a task, D532).

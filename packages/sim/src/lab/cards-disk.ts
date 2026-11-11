@@ -78,6 +78,8 @@ export const INTENT_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
   // The reworded train suites (D871) plant into the same worlds: the same items, so the same coverage.
   ...Object.fromEntries(parseSuites("reworded").map((s) => [s, ["41", "42", "43", "44"]])),
+  // P2's reworded train: the same worlds (only the request's words differ), so the same file covers it.
+  ...Object.fromEntries(parseSuites("train-rw").map((s) => [s, ["41", "42", "43", "44"]])),
   heldout10: ["41", "42"],
   heldout11: ["41", "42"],
   heldout13: ["41", "42", "43", "44"],

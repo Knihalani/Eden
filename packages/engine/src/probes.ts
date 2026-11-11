@@ -104,11 +104,14 @@ const OPEN_HEAD_CHARS = 400;
  * bonds cover it" too: a polite opener not followed by "you"), a statement's ("I think …", "The boiler …") or a
  * request to be told ("let me know …"). A question mark is allowed only on a polite ask ("Could you …?"). It errs
  * towards yes for anything else (a pasted log line passes): the candidates' own gate still decides the packet.
- * Bounded: it reads the first `OPEN_HEAD_CHARS` characters and the last few.
+ * Bounded: it reads the first `OPEN_HEAD_CHARS` characters and the last few. `strict` (`pushIndirect`, D820) also
+ * refuses log lines (`looksLogged`) and chatter openers (`CHATTER`); `minWords` is 2 for the request after an
+ * indirect lead-in (`pushStart`).
  */
-export function isOpenRequest(raw: string): boolean {
+export function isOpenRequest(raw: string, strict = false, minWords = 4): boolean {
   const words = raw.slice(0, OPEN_HEAD_CHARS).trim().split(/\s+/, 12);
-  if (words.length < 4) return false;
+  if (words.length < minWords) return false;
+  if (strict && looksLogged(raw)) return false;
   const clean = (w: string | undefined) => (w ?? "").toLowerCase().replace(/[^\p{L}-]/gu, "");
   let i = 0;
   let polite = false;
@@ -122,10 +125,238 @@ export function isOpenRequest(raw: string): boolean {
   }
   const first = clean(words[i]);
   if (!first || REMARKS.has(first) || ASKING.has(first) || STATING.has(first)) return false;
+  if (strict && STATING_STRICT.has(first)) return false;
+  // A chatter opener ("Morning! Book the …", "haha ok …") makes a request only when a listed verb follows it.
+  if (strict && (CHATTER.has(first) || LAUGH.test(first)))
+    return isImperative(words.slice(i + 1).join(" "), MORE_VERBS);
   const next = clean(words[i + 1]);
   if (TELL_ME.has(first) && (next === "me" || next === "us")) return false;
   if (/\?\s*$/.test(raw.slice(-32))) return polite;
   return true;
+}
+
+/**
+ * `pushIndirect` (P2, D820; in the default since D828): chatter openers a remark starts with beyond `REMARKS`
+ * ("haha, …", "ugh …", "morning! …"), and contractions `isOpenRequest` reads as words once their apostrophe is
+ * stripped ("I'd", "Let's", "we'd": statements or the indirect lead-ins `indirectRest` reads). Only with the switch.
+ */
+const CHATTER = new Set(
+  (
+    "anyway anyways ugh argh oh ah aw aww wow omg yay meh hmm hm morning evening afternoon night hello hiya brb " +
+    "fyi btw fun good welcome congrats whew phew bro dude mate honestly seriously literally nothing ciao hola " +
+    "bonjour salut hallo ola olá mamma qué que quoi comment wie warum cómo como dove perché happy"
+  ).split(" "),
+);
+const STATING_STRICT = new Set("id lets wed youd theyd youre theyre youve theyve hes shes thats".split(" "));
+/** Laughter and its spellings in a few languages ("hahaha", "lmaooo", "jajaja", "kkkk", "mdr"). */
+const LAUGH =
+  /^(?:(?:ha|he|ja|je|hi){2,}h?|ha|lo+l|lma+o+|ro+fl|k{3,}|mdr|xd+|ye+s+|he+y+|a+h+|o+h+|o+o+h+|ya+y+|wo+o+|wo+w+)$/;
+
+/**
+ * `pushIndirect` (D820): a pasted log line, not a request (`isOpenRequest`'s strict form). A level word in capitals,
+ * a timestamp, an address, an HTTP request line, a traceback or exit code, or a message whose words are mostly
+ * symbols and numbers (a third or more of them, amounts aside; the train requests reach 0.18).
+ */
+const LOG_LEVEL = /\b(?:ERROR|ERR!?|WARN(?:ING)?|INFO|DEBUG|FATAL|TRACE|CRITICAL|FAIL|PASS)\b/;
+const LOG_MARK =
+  /^\s*[\w.-]+:\s+(?:error|fatal|warning|panic)\b|^\s*(?:warning|error):\s|^\s*[\w.-]+:\s+\(\d+\)|^\s*(?:panic|fatal|error|e|w):\s|\b\w+\.(?:js|ts|py|go|rs|java|rb|c|cpp):\d+|\b\d+ failed, \d+ passed|\b[a-z]*error:\s|traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}(?:t\d{2}:\d{2}|[ ]\d{2}:\d{2}:\d{2})|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
+function looksLogged(raw: string): boolean {
+  const head = raw.slice(0, OPEN_HEAD_CHARS);
+  if (LOG_LEVEL.test(head) || LOG_MARK.test(head)) return true;
+  const words = head.trim().split(/\s+/);
+  const symbolic = words.filter((w) => {
+    const t = w.replace(/[,.;!?]+$/, "");
+    // Amounts, clock times and dates are a request's own symbols ("£180", "09:00", "4pm", "12/05", "2026-05-14").
+    if (/^[£$€]?[\d,]+(?:\.\d+)?[kKmM]?$|^\d{1,2}(?::\d{2})?(?:am|pm)?$|^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?$/i.test(t))
+      return false;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return false;
+    return /[\d:/=[\]_#{}()<>|\\]/.test(t);
+  }).length;
+  return words.length >= 4 && symbolic / words.length >= 0.3;
+}
+
+/**
+ * `pushIndirect` (D820): lead-ins that turn an imperative into a need, a plan, a wish or a question about acting
+ * ("I need to pay …", "We should move …", "I want you to book …", "Should I book …?", "Can I cancel …?", "Is it OK to
+ * renew …?"). `isOpenRequest` reads them as statements or questions, so the push never started for them.
+ */
+const A = "(?:'|’)?";
+const INDIRECT = new RegExp(
+  "^(?:" +
+    [
+      // Needs, obligations and plans: "I need to …", "we've got to …", "I'm supposed to …", "gotta …".
+      `(?:i|we)\\s+(?:really\\s+|probably\\s+|just\\s+)?(?:need|have|want|got|ought)\\s+to`,
+      `(?:i|we)\\s+(?:really\\s+|probably\\s+)?(?:must|should)`,
+      `(?:i|we)${A}(?:ve|\\s+have)\\s+(?:got|been\\s+meaning|decided)\\s+to`,
+      `(?:i${A}m|i\\s+am|we${A}re|we\\s+are)\\s+(?:supposed|meant|going|due)\\s+to`,
+      `(?:need|have|got)\\s+to|gotta|time\\s+to`,
+      // Wishes: "I'd like to …", "would like to …", "would be good to …".
+      `(?:(?:i|we)${A}d|(?:i|we)\\s+would|would)\\s+(?:like|love|prefer)\\s+to`,
+      `(?:it${A}d|(?:it\\s+)?(?:would|might))\\s+be\\s+(?:good|great|nice|best|handy|helpful|useful|wise|worth)\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
+      // Hedges (P2 v4): "might be worth chasing …", "it'd help to …", "I'm planning to …", "should probably …".
+      `(?:it\\s+)?might\\s+be\\s+(?:worth|a\\s+good\\s+idea\\s+to)|(?:we|you|i)?\\s*might\\s+want\\s+to`,
+      `it(?:${A}d|\\s+would|\\s+might|\\s+could)\\s+help\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
+      `(?:i|we)(?:${A}ll|\\s+will)\\s+(?:probably\\s+)?(?:need|have)\\s+to`,
+      `(?:i${A}m|i\\s+am|we${A}re|we\\s+are)\\s+(?:planning|hoping|thinking\\s+of)(?:\\s+to)?`,
+      `i\\s+was\\s+thinking\\s+(?:of|(?:i|we)\\s+should)`,
+      `(?:(?:i|we)\\s+)?should\\s+probably`,
+      `someone\\s+should(?:\\s+probably)?|maybe\\s+(?:i|we)\\s+should|it${A}?s\\s+(?:probably\\s+)?time\\s+(?:we|i|to)`,
+      `i${A}m\\s+wondering\\s+(?:whether|if)\\s+(?:i|we)\\s+should|would\\s+it\\s+make\\s+sense\\s+to`,
+      `(?:do|would)\\s+you\\s+(?:think|reckon)\\s+(?:i|we)\\s+should|any\\s+idea\\s+if\\s+(?:i|we)\\s+could`,
+      `let${A}s|let\\s+us`,
+      // Questions about acting: "Should I …?", "Shall we …?", "Is it OK to …?", "Would it be fine to …?".
+      `(?:should|shall|can|could|may)\\s+(?:i|we)`,
+      `would\\s+it\\s+be\\s+(?:ok(?:ay)?|fine|possible|alright|all\\s+right|sensible|wise|better|worth)(?:\\s+to)?`,
+      `is\\s+it\\s+(?:ok(?:ay)?|fine|alright|all\\s+right)\\s+to`,
+      `(?:do\\s+you\\s+think|i\\s+think|i${A}m\\s+thinking|i\\s+reckon|maybe)\\s+(?:i|we)\\s+should`,
+      // Asking the assistant: "I want you to …", "I'd love it if you could …", "I was wondering if you could …".
+      `(?:i|we)(?:${A}d|\\s+would)\\s+(?:like|love|prefer)\\s+(?:it\\s+if\\s+)?you\\s+(?:to|could)`,
+      `(?:i|we)\\s+(?:want|need)\\s+you\\s+to`,
+      `i(?:${A}d|\\s+would)\\s+be\\s+grateful\\s+if\\s+you\\s+could`,
+      `i\\s+was\\s+wondering\\s+if\\s+you\\s+could|any\\s+chance\\s+you\\s+could`,
+    ].join("|") +
+    ")\\s+",
+  "i",
+);
+/** Verbs after a lead-in that think, say or wait rather than act ("I need to think …", "Let's see how …"). */
+const NOT_ACTING = new Set(
+  (
+    "know think see say admit wonder believe feel understand remember hear learn be have look figure decide wait " +
+    "sleep talk mention point note consider worry rest relax celebrate chat stay eat retire drink imagine bother " +
+    "ignore disregard"
+  ).split(" "),
+);
+/** Someday words: a lead-in followed by one is a resolution or a wish, not a request (P2 v4). */
+const VAGUE =
+  /\b(?:one day|some ?day|sometime(?! (?:this|next|today|tomorrow|tonight|before|on|by))|eventually|at some point|one of these (?:days|years)|more often|in (?:the )?future|in general|again sometime)\b/i;
+/** Adverbs a lead-in may carry before its verb ("We should probably …"). */
+const ADVERBS = new Set(
+  "really probably maybe definitely just still also quickly actually perhaps finally even".split(" "),
+);
+/** A clause that holds an action back or tells the assistant something rather than asking it to act (review of v4). */
+const HOLD_BACK = /^(?:not|n['’]t|never|don['’]?t|do not|hold off|wait)\b|^(?:tell|show|ask) (?:you|me)\b/i;
+/** A date, a clock time, a weekday or an amount: a plan with one is a request, not a someday idea. */
+const DATED =
+  /[£$€]\s?\d|\b\d{1,2}(?::\d{2}|\/\d{1,2})\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b\d{1,2}\s?(?:am|pm)\b|\b(?:today|tomorrow|tonight|next week)\b/i;
+
+/**
+ * `pushIndirect` (P2, D820; in the default since D828): the request inside an indirect lead-in, verb first, with no
+ * closing question mark ("Should I book the 7am flight to Leeds?" is "book the 7am flight to Leeds"), or null when the
+ * message has no lead-in (after `OPENERS`), when what follows is under two words, or when its verb thinks or waits
+ * (`NOT_ACTING`). The push then reads the request as its imperative: listed or opened as any other.
+ */
+export function indirectRest(raw: string): string | null {
+  // The head decides; the text handed on is the message itself from where the lead-in ends, whole (review of D820:
+  // a cut or rejoined copy would hide later lines from the lookup and split a secret before redaction).
+  const head = raw.slice(0, OPEN_HEAD_CHARS);
+  let at = head.length - head.trimStart().length;
+  // Openers before the lead-in ("ok so I need to …", "hey, should we …"); a polite "can you" is not one here.
+  for (let i = 0; i < 4; i++) {
+    const m = /^([\p{L}]+)[,!]?\s+/u.exec(head.slice(at));
+    if (!m || !OPENERS.has(m[1]!.toLowerCase()) || POLITE.has(m[1]!.toLowerCase())) break;
+    at += m[0].length;
+  }
+  const lead = INDIRECT.exec(head.slice(at));
+  if (!lead) return null;
+  at += lead[0].length;
+  // Adverbs a lead-in may carry before its verb ("We should probably …").
+  for (let m = /^([\p{L}]+)\s+/u.exec(head.slice(at)); m && ADVERBS.has(m[1]!.toLowerCase());) {
+    at += m[0].length;
+    m = /^([\p{L}]+)\s+/u.exec(head.slice(at));
+  }
+  const words = head.slice(at).trim().split(/\s+/);
+  if (words.length < 2) return null;
+  if (NOT_ACTING.has(words[0]!.toLowerCase().replace(/[^\p{L}]/gu, ""))) return null;
+  // A resolution or a someday idea is not a request (P2 v4): "I need to stop eating biscuits", "we should go to
+  // Iceland one day", "I want to get fitter by spring". A date or an amount keeps it a request.
+  const tail = head.slice(at);
+  if (HOLD_BACK.test(tail.trimStart())) return null;
+  // A habit to stop is a resolution ("I need to stop eating biscuits"); "stop paying for Netflix" is a request.
+  if (
+    /^(?:stop|quit)\s+(?:eating|drinking|smoking|snacking|biting|worrying|procrastinating|overthinking|scrolling)\b/i.test(
+      tail,
+    )
+  )
+    return null;
+  if (!DATED.test(tail) && (VAGUE.test(tail) || /^(?:get|be|become|feel)\s+\p{L}+er\b/iu.test(tail))) return null;
+  return raw.slice(at).replace(/\s*\?\s*$/, "");
+}
+
+/**
+ * `pushIndirect` (P2 v4): where a request follows a first clause of context ("The boiler's making that noise again,
+ * can you book Ferguson's for Tuesday?", "Mum's prescription runs out Sunday so please reorder it"): the offset of
+ * the polite ask or lead-in after a clause break in the head, or -1.
+ */
+const CLAUSE_BREAK = /[,;:.!?\u2013\u2014]\s+(?:(?:so|and|but|then)\s+)?|\s-\s+/g;
+const POLITE_ASK = /^(?:please|pls|can you|could you|would you|will you)\s/i;
+function secondClause(raw: string): number {
+  const head = raw.slice(0, OPEN_HEAD_CHARS);
+  for (const m of head.matchAll(CLAUSE_BREAK)) {
+    const at = m.index! + m[0].length;
+    const tail = head.slice(at);
+    // The polite ask's verb gets the lead-in's tests: "can you believe it?", "please ignore my last message" and
+    // "can you hold off on booking" ask for nothing (review of v4).
+    const ask = POLITE_ASK.exec(tail);
+    if (ask) {
+      const rest = tail.slice(ask[0].length).replace(/^please\s+/i, "");
+      const verb = rest
+        .split(/\s+/, 1)[0]!
+        .toLowerCase()
+        .replace(/[^\p{L}]/gu, "");
+      if (verb && !NOT_ACTING.has(verb) && !HOLD_BACK.test(rest) && verb !== "be") return at;
+    } else if (INDIRECT.test(tail) && indirectRest(tail) !== null) return at;
+  }
+  return -1;
+}
+
+/**
+ * How a user message starts the push: "listed" (its verb is on a list: an acting request), "opened" (`pushOpen`'s
+ * shape) or null. With `indirect` (`pushIndirect`, D820) an indirect lead-in is read as its imperative
+ * (`indirectRest`, whose text is returned as `request`), a request after a first clause of context is read from where
+ * it starts (`secondClause`), and `isOpenRequest` runs strict (no log lines, no chatter).
+ */
+export function pushStart(
+  raw: string,
+  opts: { open: boolean; indirect: boolean },
+): { how: "listed" | "opened"; request: string } | null {
+  const first = pushStartOne(raw, opts);
+  if (first || !opts.indirect) return first;
+  const at = secondClause(raw);
+  return at < 0 ? null : pushStartOne(raw.slice(at), opts);
+}
+
+/**
+ * `pushIndirect` (P2 v4): a need for something to be done, with no verb first ("I'll need the Dublin hotel changed to a
+ * king room", "We need the drawings signed off by Carl", "We could really use the delivery sorted"): read whole.
+ */
+/** Participles of a job done for the user (a list: "bed", "oven", "garden" end the same way, review of v4). */
+const DONE =
+  "(?:changed|signed|booked|sorted|sent|fixed|done|cancelled|canceled|moved|paid|renewed|updated|filed|forwarded|" +
+  "scanned|checked|resubmitted|submitted|approved|arranged|ordered|reordered|replaced|repaired|serviced|cleaned|" +
+  "rebooked|transferred|refunded|returned|posted|printed|delivered|collected|confirmed|reviewed|merged|deployed|" +
+  "scheduled|rescheduled|finished|completed|organised|organized|handled|written|shipped|looked\\s+at|set\\s+up)";
+const PASSIVE_NEED = new RegExp(
+  `^(?:i|we)(?:${A}ll|\\s+will|${A}d|\\s+would)?\\s+(?:really\\s+)?(?:need|want|like|could\\s+(?:really\\s+)?(?:use|do\\s+with))` +
+    `\\s+(?:the|my|our|his|her|their|a|an)\\s+[^,.;!?]{2,80}?\\s+${DONE}\\b`,
+  "iu",
+);
+
+function pushStartOne(
+  raw: string,
+  opts: { open: boolean; indirect: boolean },
+): { how: "listed" | "opened"; request: string } | null {
+  if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
+  if (opts.indirect && opts.open && PASSIVE_NEED.test(raw.slice(0, OPEN_HEAD_CHARS)))
+    return { how: "opened", request: raw };
+  const rest = opts.indirect ? indirectRest(raw) : null;
+  if (rest !== null) {
+    if (isImperative(rest, MORE_VERBS)) return { how: "listed", request: rest };
+    // The lead-in is the request's frame; what follows is read as the open shape reads a message's head.
+    // Two words are enough here: the lead-in already made it a request ("Let's cash in the bonds").
+    if (opts.open && isOpenRequest(rest, true, 2)) return { how: "opened", request: rest };
+    return null;
+  }
+  return opts.open && isOpenRequest(raw, opts.indirect) ? { how: "opened", request: raw } : null;
 }
 
 /**

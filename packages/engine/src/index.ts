@@ -43,7 +43,7 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink
 export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
-export { requestedRange } from "./probes";
+export { isImperative, isOpenRequest, MORE_VERBS, pushStart, requestedRange } from "./probes";
 export {
   ACTIONS,
   CARD_KINDS,
@@ -107,15 +107,12 @@ export {
 } from "./reader";
 export {
   CHECK_MAX_ITEMS,
-  CHECK_STOP,
   CHECK_SYSTEM,
-  CHECK_SYSTEM_COMPARE,
   parseCompare,
   CHECK_VERSION,
   checkKey,
   checkMessages,
   DEFAULT_CHECK_LIMITS,
-  parseCheck,
   PushChecker,
   LocalPushChecker,
   localCheckText,

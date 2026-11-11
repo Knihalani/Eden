@@ -143,8 +143,8 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(partner.takePending(other)).toEqual([]);
   });
 
-  test("with pushCheck on, an opened message starts no push: the check's paid call stays on listed verbs", async () => {
-    const model = new FakeModel(() => '{"items":[]}');
+  test("with the check (D823, D828), an opened message is pushed and checked like a listed one", async () => {
+    const model = new FakeModel(() => '{"items":[{"i":1,"on":"Premium Bonds hold","hits":"its bonds","act":true}]}');
     const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
     const partner = new ContextPartner({
       sources: async () => [source],
@@ -166,8 +166,10 @@ describe("pushOpen (D702, promoted by D710)", () => {
       },
       checker: new PushChecker({ model, budget: new Budget() }),
     });
-    expect((await packets(partner, REQUEST)).length).toBe(0);
-    expect(model.calls.length).toBe(0);
+    const got = await packets(partner, REQUEST);
+    expect(model.calls.length).toBe(1);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.citations.map((c) => c.itemId)).toEqual([ITEMS[0]!.id]);
   });
 
   test("an opened message is not kept as an acting request for plan alerts (D301)", async () => {

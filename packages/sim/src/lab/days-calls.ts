@@ -9,7 +9,8 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
- *     [--json FILE] [--pool-diag FILE] [--intent FILE[,FILE]] [--resume]
+ *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none] [--resume]
+ *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD]
  *
  * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
  * (D813, `main` below).
@@ -29,11 +30,19 @@
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
  */
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { CardEnricher, ContextPartner, ItemCache, type EngineConfig, type PushPoolReport } from "@eden/engine";
+import {
+  CardEnricher,
+  ContextPartner,
+  ItemCache,
+  ModelCardMaker,
+  sanitizeItem,
+  type EngineConfig,
+  type PushPoolReport,
+} from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { RARE_SOURCE_IDS } from "../rare-sources";
 import { Rng } from "../rng";
@@ -42,6 +51,7 @@ import type { World, WorldItem } from "../world";
 import type { Task } from "./ab-common";
 import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
+import { keyFor, labAccess, labModel } from "./free";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
@@ -98,9 +108,14 @@ export interface DaysCallsOptions {
   arriveDays?: [number, number] | null;
   /**
    * `--pool-diag FILE` (O3, D712): one row per hidden or control request saying where its planted item was in the
-   * push's pool (`onPushPool`): ids and flags only.
+   * push's pool (`onPushPool`): ids and flags, and since M3 the request's text and template and the pool's ids.
    */
   onPlanted?: (row: PlantedRow) => void;
+  /**
+   * `--corpus-dump FILE` (M3, D900 on the unmerged M3 branch; D911): the user's world as its sources list it and the
+   * cache holds it (redacted), one line a user, for offline retrieval screens. Simulated items only.
+   */
+  onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -123,6 +138,11 @@ export interface PlantedRow {
   pushed: boolean;
   got: boolean;
   today: boolean;
+  /** M3 (D900, unmerged branch; D911): the planted item's id, the request's text and template, the pool's ids. */
+  planted?: string;
+  request?: string;
+  template?: string;
+  pool?: string[];
 }
 
 export interface DaysCallsUser {
@@ -201,6 +221,16 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
+  if (o.onCorpus) {
+    const rows = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
+    o.onCorpus(
+      seed,
+      rows.map((raw) => {
+        const it = sanitizeItem(raw);
+        return { id: raw.id, title: it.title, text: it.text.slice(0, 1_200) };
+      }),
+    );
+  }
   if (o.push !== "none") for (const s of own) s.notifies = true;
   const sources = [
     ...own,
@@ -426,6 +456,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
             pushed,
             got: handed.has(task.planted),
             today: handedToday.has(task.planted),
+            planted: task.planted,
+            request: task.text,
+            template: `${task.suite}/${task.type}`,
+            pool: report?.pool ?? [],
           });
         }
       }
@@ -599,8 +633,22 @@ export async function main(
   const recap = opt("recap-notice", "push");
   if (!["push", "signal", "none"].includes(recap)) throw new Error("--recap-notice must be push, signal or none");
   const cardsFile = opt("cards", "");
-  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
-  const intentFiles = opt("intent", INTENT_PATH).split(",");
+  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one; `none`
+  // replays no requests file (M3: only the requests the run's own card calls wrote, the shipped coverage).
+  const intentArg = opt("intent", INTENT_PATH);
+  const intentFiles = intentArg === "none" ? [] : intentArg.split(",");
+  // `--cards-live MODEL --cards-out FILE` (M3, D900 on the unmerged M3 branch; D911): items the cards file does not
+  // hold are carded live, as the shipped enricher asks for them (its coverage, its requests), and recorded to FILE for
+  // later replay. A `claude-*` model needs `--spend-ledger` and `--spend-cap` (D97). Without `--cards`, FILE is also
+  // read first, so a re-run replays the earlier run's cards instead of carding afresh.
+  const cardsLive = opt("cards-live", "");
+  const cardsOut = opt("cards-out", "");
+  if (cardsLive && !cardsOut) throw new Error("--cards-live needs --cards-out FILE");
+  const liveMaker = cardsLive
+    ? new ModelCardMaker(
+        labModel(labAccess(argv, [cardsLive]), { apiKey: keyFor(cardsLive), model: cardsLive }, "eden.cards"),
+      )
+    : undefined;
   const o: DaysCallsOptions = {
     days: Number(opt("days", "8")),
     push,
@@ -608,7 +656,13 @@ export async function main(
     recapSignal: recap === "signal",
     recapSilent: recap === "none",
     moveAfter: Number(opt("move-after", "0")),
-    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
+    cards:
+      cardsFile || liveMaker
+        ? new DiskCardMaker(cardsFile || cardsOut, liveMaker, {
+            ...(cardsOut ? { out: cardsOut } : {}),
+            requests: intentFiles,
+          })
+        : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
@@ -620,16 +674,45 @@ export async function main(
     mix: parseMix(opt("mix", "1:1:8")),
     arriveDays: opt("arrive-days", "") ? parseRange(opt("arrive-days", ""), "--arrive-days") : null,
   };
+  // `--widen-ranks` fed the widened pool behind the push check, deleted by D828: refused rather than ignored.
+  if (opt("widen-ranks", "")) {
+    console.error("days-calls: --widen-ranks fed pushWiden, deleted by D828 (the engine has no widen dependency)");
+    process.exit(2);
+  }
+  const widenFile = "";
   const diag = opt("pool-diag", "");
+  const corpus = opt("corpus-dump", "");
   const out = opt("json", "");
   if (argv.includes("--resume") && !out) throw new JournalRefused("--resume reads the journal beside --json FILE");
+  // A resumed user is not run again, so its corpus line would be missing: the dump is made in one run, never resumed.
+  if (argv.includes("--resume") && corpus)
+    throw new JournalRefused("--corpus-dump is written whole: run it without --resume");
+  if (corpus) {
+    writeFileSync(corpus, "");
+    o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
+  }
+  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, and `--cards-out`, which a live run
+  // also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags; `--cards-live` (the
+  // model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so recorded runs replay.
   const journal = out
     ? RunJournal.open<UserUnit>(
         partialPath(out),
         {
           harness: "days-calls",
-          argv: argvFields(argv, ["--seeds", "--json", "--pool-diag", "--resume"]),
-          inputs: argvFiles(["--cards", cardsFile, "--intent", cardsFile ? intentFiles.join(",") : ""], []),
+          argv: argvFields(argv, [
+            "--seeds",
+            "--json",
+            "--pool-diag",
+            "--resume",
+            "--corpus-dump",
+            "--cards-out",
+            "--spend-ledger",
+            "--spend-cap",
+          ]),
+          inputs: argvFiles(
+            ["--cards", cardsFile, "--intent", cardsFile ? intentFiles.join(",") : "", "--widen-ranks", widenFile],
+            [],
+          ),
           env: envFields(),
           code: codeVersion(),
         },
@@ -667,7 +750,7 @@ export async function main(
   const set = Object.keys(o.config!).length ? `, set ${JSON.stringify(o.config)}` : "";
   const label =
     `push ${push}${o.recapSignal ? " (recap: bare signal)" : ""}${o.ask ? ", one ask a request" : ""}` +
-    `${cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
+    `${cardsLive ? `, cards live (${cardsLive}, recorded)` : cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
   log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
   log("phase     source    op       calls   per request  per user-day");
   // With noise connectors, one row for all of them a phase and operation: a thousand rows say nothing more.

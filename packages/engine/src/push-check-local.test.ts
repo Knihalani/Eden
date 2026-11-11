@@ -160,7 +160,7 @@ describe("pushCheckLocal (M1, D894): a student's scores pick the push's candidat
       pushCheckLocalPass: 0.2,
     });
     expect(() => checkEngineConfig({ ...ON, pushCheckLocalPass: 1.5 }, { deps: { checker: true } })).toThrow();
-    expect(() => checkEngineConfig({ pushCheckLocal: true }, { deps: { checker: true } })).toThrow();
+    expect(() => checkEngineConfig({ pushCheck: false, pushCheckLocal: true }, { deps: { checker: true } })).toThrow();
     expect(() => checkEngineConfig(ON, { deps: {} })).toThrow();
   });
 
@@ -249,38 +249,32 @@ describe("pushCheckLocal with pushOpen (M1, D896)", () => {
 });
 
 describe("pushCheckLocal with the paid checker wired (D894, the review's case)", () => {
-  test("the switch is inert: no opened push is checked and the paid call gets I3's item text", async () => {
+  test("the switch is inert: the paid call gets the shipped item text, never the student's", async () => {
     const model = new FakeModel(() => '{"items":[]}');
-    const run = async (config: Record<string, unknown>, text: string) => {
-      const checker = new PushChecker({ model, budget: new Budget() });
-      const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
-      const partner = new ContextPartner({
-        sources: async () => [source],
-        sourceMap: new SourceMap(),
-        cache: new ItemCache(),
-        budget: new Budget(),
-        model: null,
-        now: () => NOW,
-        config: {
-          ...CORE_CONFIG,
-          askReader: true,
-          readerPush: true,
-          readerGate: true,
-          confidentScore: 99,
-          fallbackMatchedTerms: 99,
-          pushCandidates: 2,
-          pushOpen: true,
-          ...config,
-        },
-        checker,
-      });
-      await partner.observe({ ...ref, at: NOW, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
-    };
-    await run(ON, "Settle the Harlow venue deposit invoice today");
-    expect(model.calls.length).toBe(0);
-    await run(ON, REQUEST);
+    const checker = new PushChecker({ model, budget: new Budget() });
+    const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
+    const partner = new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: {
+        ...CORE_CONFIG,
+        askReader: true,
+        readerPush: true,
+        readerGate: true,
+        confidentScore: 99,
+        fallbackMatchedTerms: 99,
+        pushCandidates: 2,
+        ...ON,
+      },
+      checker,
+    });
+    await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 2_000 });
     expect(model.calls.length).toBe(1);
-    // The paid call reads the reader's 200-character excerpts, never the student's 700 characters.
+    // The paid call reads the reader's excerpts, never the student's 700 characters.
     expect(JSON.stringify(model.calls[0]!.messages)).not.toContain(LONG.slice(0, 300));
   });
 });

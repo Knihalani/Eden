@@ -33,6 +33,13 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "train4r",
   "train5r",
   "train6r",
+  // P2's reworded train (reword.ts): the same neutral tasks, reworded.
+  "train1rw",
+  "train2rw",
+  "train3rw",
+  "train4rw",
+  "train5rw",
+  "train6rw",
 ];
 
 /** Generated suites (`synth-*`, `synth:<file>`, D884) build `neutral` too: their planting function plants nothing. */

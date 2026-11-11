@@ -150,7 +150,6 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
-import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor } from "./n2-widen";
 import { HttpScorer } from "./m1-scorer";
 import {
   coverageLines,
@@ -232,9 +231,6 @@ const cli = flags(
         "checker-url",
         "checker-cache",
         "checker-log",
-        "widen-table",
-        "widen-hash",
-        "widen-embed",
         "templates",
         "connect-at",
         "connect-tick-s",
@@ -535,19 +531,6 @@ if (TEMPLATES) {
     process.exit(2);
   }
 }
-/**
- * `--widen-table FILE` (N2, D511): per (suite, seed, variant, request) the item ids an embedding ranks first for the
- * request (`packages/sim/modal/n2_embed.py`), wired as the `widen` dependency the `pushWiden` trial reads.
- */
-const WIDEN_TABLE = opt("widen-table", "") ? loadWidenTable(opt("widen-table", "")) : null;
-/** `--widen-hash FILE` (N5, D530): the same table keyed by item content (`widenByHash`), as pi-ab's days need it. */
-const WIDEN_HASH = opt("widen-hash", "") ? loadWidenHashTable(opt("widen-hash", "")) : null;
-if (WIDEN_TABLE && WIDEN_HASH) throw new Error("--widen-table and --widen-hash are two forms of one table: pass one");
-/**
- * `--widen-embed N` (N5): the table's first N ids at most reach the engine (0: no cut). N5's funnel screens ran with
- * 5 (the engine asks for `pushWidenEmbed` × 2 = 6 and keeps the first 3 not in the pool); the Pi runs had no cut.
- */
-const WIDEN_EMBED = Number(opt("widen-embed", "0"));
 /** `--reader-log out.jsonl`: each reader call's prompt (the items as the model read them) and reply, sim data only. */
 const READER_LOG = opt("reader-log", "");
 // An approximated verdict logged beside recorded ones would be read back later as a real reading (checked before the
@@ -1091,23 +1074,6 @@ async function runSeed(
       : null;
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
-  // `--widen-table`, `--widen-hash` (N2, N5): the embedding table's ids for this world's requests.
-  let byHash: Map<string, string> | null = null;
-  const idOf = (hash: string) =>
-    (byHash ??= new Map(
-      simSources(world, REALISTIC, 0, seed)
-        .flatMap((src) => src.listAll())
-        .map((raw) => [cardKey(sanitizeItem(raw)).slice(0, 20), raw.id] as const),
-    )).get(hash);
-  const embedded = WIDEN_TABLE
-    ? widenFor(WIDEN_TABLE, suite, seed, variant)
-    : WIDEN_HASH
-      ? widenByHash(WIDEN_HASH, seed, idOf, () => variant)
-      : null;
-  const widen =
-    embedded && WIDEN_EMBED > 0
-      ? async (sc: unknown, request: string, k: number) => (await embedded(sc, request, k)).slice(0, WIDEN_EMBED)
-      : embedded;
   const partner = new ContextPartner({
     sources: async () => sources,
     sourceMap: new SourceMap(":memory:", { seed }),
@@ -1121,7 +1087,6 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(widen ? { widen } : {}),
     ...(reader
       ? {
           reader,
