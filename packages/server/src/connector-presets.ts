@@ -124,11 +124,19 @@ export function expandPreset(spec: Record<string, unknown>): Record<string, unkn
     throw new UnknownPreset(`unknown preset ${JSON.stringify(name)} (presets: ${Object.keys(PRESETS).join(", ")})`);
   }
   const { preset: _, ...own } = spec;
+  // A preset's fetch tool the server leaves unannotated joins only an entry that trusts it by name: otherwise the
+  // read-only check would refuse it, and a refused fetch tool fails the connect (D35), search and all. So an entry
+  // written before the preset named one keeps connecting as it did (D842's review).
+  const trusted = Array.isArray(own.trustedReadTools) ? own.trustedReadTools : [];
+  const fetch =
+    p.fetchTool && (!p.unannotated?.tools.includes(p.fetchTool.name) || trusted.includes(p.fetchTool.name))
+      ? p.fetchTool
+      : undefined;
   return {
     kind: "mcp",
     description: p.description,
     searchTool: p.searchTool,
-    ...(p.fetchTool ? { fetchTool: p.fetchTool } : {}),
+    ...(fetch ? { fetchTool: fetch } : {}),
     ...(p.listTool ? { listTool: p.listTool } : {}),
     ...own,
   };

@@ -103,6 +103,19 @@ describe("connector presets (D294)", () => {
     for (const t of tools) expect(t!.name).not.toMatch(/send|create|delete|update|trash|draft|label|respond|forward/);
     // The operator still lists an unannotated tool by hand; the preset only says which.
     expect(expandPreset({ preset: "caldav", id: "c", url: "https://x" }).trustedReadTools).toBeUndefined();
+    // caldav's fetch tool (D842) joins only an entry that trusts it: one written before trusts the search tool alone,
+    // and with the fetch tool added the read-only check would refuse the connect, search and all.
+    const before = expandPreset({
+      preset: "caldav",
+      id: "c",
+      url: "https://x",
+      trustedReadTools: ["caldav_search_events"],
+    });
+    expect("fetchTool" in before).toBe(false);
+    const both = ["caldav_search_events", "caldav_get_event_by_uid"];
+    expect(expandPreset({ preset: "caldav", id: "c", url: "https://x", trustedReadTools: both }).fetchTool).toEqual({
+      name: "caldav_get_event_by_uid",
+    });
   });
 
   test("an unknown preset, or one on a static entry, is a config error naming the entry", () => {

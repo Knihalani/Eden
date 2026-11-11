@@ -21,8 +21,10 @@ most. So the switch is deleted (D840).
 A second finding changes how big the problem is. The 67% figure is the hardest case: the lab moves an item just
 before the last request of the session. With the change landing three requests after the item was handed and the
 session going on, today's default delivers 90% of those updates before the session ends, most at the very next
-request (D841's new `--move-after`). What stays lost is the calendar: 0 of 15 updates in every form, because a quiet
-calendar is never polled within a session. Notices fix it completely (279 of 279, D606).
+request (D841's new `--move-after`; 93% after the fix below). Calendars looked worst, 0 of 15 updates in every form,
+but tracing them found a bug in the simulation, not the engine: its calendar events were last changed in the future,
+so a poll never saw an edit (§6, D842). Fixed, calendars get 6–7 of 15; the rest are lost because a quiet calendar
+is seldom polled within a session. Notices fix it completely (279 of 279, D606).
 
 ## 1. The baseline, re-run on today's main
 
@@ -39,7 +41,7 @@ times then moved at its source (`MovedFate` other than `unhanded`).
 
 Over 16 users: 176 of 260 (68%) in the hardest case, 196 of 260 (75%) with mid-session moves. The items moved
 mid-session alone: 63 of 69 and 53 of 60 updated by the session's end (116 of 129, 90%), a median of 0 requests
-after the move and a 90th percentile of 1. With `--move-after 3`, items handed in the last three requests still move
+after the move and a 90th percentile of 1 (before §6's fix; after it 120 of 129, 93%, p90 1–2). With `--move-after 3`, items handed in the last three requests still move
 at the recap, so the rows mix both cases. D606 read 188 of 279 on an older main; the owed set differs because the
 engine has moved since (pushOpen and the earn rules change what is handed).
 

@@ -35,7 +35,7 @@ const noKey = { ...process.env, OPENROUTER_API_KEY: "" };
 // The reader's push (`pushCandidates` 0): these runs check the reader's outputs and its replay, which the default's
 // candidates push (D237) does not call.
 // A small sync keeps the runs quick. At a cap of 100 every world source's copy is cut, and `syncLocalComplete` (D264)
-// would search them live: at `--time 0.05` a lookup's deadline is 75 ms, which a loaded machine's searches race, so a
+// would search them live: at `--time 0.2` a lookup's deadline is 300 ms, which a loaded machine's searches race, so a
 // task's finds would depend on timing. These tests check the sharding, not that, so cut copies answer locally here.
 const smallSync = { syncMaxItems: 100, pushCandidates: 0, syncLocalComplete: false };
 
@@ -72,8 +72,10 @@ const funnelTimed = (jobs: string) => {
       join(lab, "funnel.ts"),
       ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync), "--json", out],
       // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
-      // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs).
-      ...["--", "--time", "0.05", "--limit", "1"],
+      // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs). At 0.05
+      // too once the sim's calendar stopped changing in the future (D842): its on-demand poll came due and raced the
+      // lookup's 75 ms deadline (2 of 3 pairs differed on one task); at 0.2 none of 5 did, for about 0.4 s a run.
+      ...["--", "--time", "0.2", "--limit", "1"],
     ],
     out,
   );

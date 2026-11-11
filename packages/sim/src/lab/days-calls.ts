@@ -418,9 +418,12 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       }
       midMoved = [];
     }
-    if (!isRecap(task) && task.planted) planted.add(task.planted);
+    // An item already moved mid-session today is not planted again: the recap would move it a second time (the
+    // review) and owe it twice.
+    const movedToday = !!task.planted && midMoved.some((m) => m.id === task.planted);
+    if (!isRecap(task) && task.planted && !movedToday) planted.add(task.planted);
     if (o.moveAfter && !isRecap(task) && task.planted && handed.has(task.planted) && !dueToMove.has(task.planted)) {
-      if (!midMoved.some((m) => m.id === task.planted)) dueToMove.set(task.planted, reqInDay + o.moveAfter);
+      if (!movedToday) dueToMove.set(task.planted, reqInDay + o.moveAfter);
     }
     if (!isRecap(task)) reqInDay++;
     // After each request, whether the cache holds a moved item in an old version (its old time without the new one)
