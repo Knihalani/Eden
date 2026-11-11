@@ -24,7 +24,10 @@ RSS = {
     "heavy (20 connectors, prose), 1/4 active": 3.36,
     "heavy (20 connectors, prose), 1/2 active": 4.29,
     # Every user active within 30 minutes, a sixth live and the rest warm: daily agents all working the same hours.
-    "heavy (20 connectors, prose), peak hour": 5.29,
+    # The other rows were measured before D998, which lowers them too: read them as upper bounds.
+    # 4.71 since D998 (5.20 on main the same day; 5.29 when first measured). With a model key, card state adds about
+    # 3.7 MB: 8.43 MB at this peak (docs/research/d1-livemem.md).
+    "heavy (20 connectors, prose), peak hour": 4.71,
 }
 
 BOXES = [

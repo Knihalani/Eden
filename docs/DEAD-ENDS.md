@@ -67,6 +67,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1031 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | Failed its rule (pre-registered in b3cc3f12, extended once in 9ba0cc2d before the call): hidden raised… |
 | D1050 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | stopped on its pre-registered screen |
 | D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
+| D1000 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | deleted with its code |
 
 ## Reader
 
@@ -115,6 +116,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D960 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | micro 205 / 167 / 250 (hidden −1.4%): fails |
 | D963 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). |  |
 | D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
+| D998 | part of: card state frozen with its user rejected | Merged with main (b99f0171), RSS a user after a thaw 8.61 / 8.60 → 7.31 / 7.46 MB (−13% to −15%; −20% to… |
 | D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
 
 ## Check
@@ -147,6 +149,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D604 | Trial `syncSweepSpread`: an unused source is swept at its own point in the week | killed by D817 |
 | D606 | part of: no fix holds polls level, and `syncOwedPollMs` (built to test it) is deleted | because the item's source was not polled |
 | D910 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | stopped on its pre-registered rule |
+| D940 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | killed by D948: the clause asked for a lower bound above −1.5, so it fails (half-width 1.3, minimum detectable effect 1.8… |
+| D943 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | killed by D949: The re-test (rule in acacab82: fresh seeds 89–112, held-out families) read steady calls 11.50 → 3.46 a… |
 
 ## Ask
 
@@ -212,4 +216,6 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
 | D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
 | D996 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | stopped on its pre-registered rule, 327c9fb2 |
+| D1001 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | deleted with its code |
+| D1002 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… |  |
 | D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |

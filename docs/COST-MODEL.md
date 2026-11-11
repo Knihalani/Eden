@@ -709,10 +709,11 @@ cost and 11.9 points fewer hidden facts raised; the proxy's figure is not measur
 
 A **heavy user**: a daily agent (Hermes, say) making about 50 requests a day (1,500 a month), 20 connectors, at the
 3,000-item cap. Sized for the **peak hour**, when every heavy user of a tenant is active within 30 minutes, a sixth
-live and the rest warm: **5.29 MB of RSS a user, measured** (`users.bench.ts 200 3000 --prose --sources=20 --waves=6
---warm-waves=5`, the 2-core 12 GB budget; docs/research/d1-scale-out.md §1). Users per box by
-`deploy/scripts/sizing.py` (75% of RAM, 70 MB a process, 60 MB of micro-model weights a process): 1,643 on 2 OCPU /
-12 GB, 3,296 on 4 / 24, 8,871 on 64 GB (8 processes), 17,753 on 128 GB (16). Prices read 2026-11-11
+live and the rest warm: **4.71 MB of RSS a user, measured** (`users.bench.ts 200 3000 --prose --sources=20 --waves=6
+--warm-waves=5`, the 2-core 12 GB budget; 5.20 before D998, docs/research/d1-livemem.md; 8.43 with a card model's
+state). Users per box by `deploy/scripts/sizing.py` (75% of RAM, 70 MB a process, 60 MB of micro-model weights a
+process): 1,845 on 2 OCPU / 12 GB, 3,702 on 4 / 24, 9,964 on 64 GB (8 processes), 19,939 on 128 GB (16); the
+machine counts below were sized at 5.29 MB and still hold. Prices read 2026-11-11
 (docs/research/d1-providers.md; EUR at 1.1127; **check at signup**).
 
 **(a) Our cost per heavy user-month** (no model key: the shipped no-model path, $0 a call):
@@ -728,8 +729,8 @@ live and the rest warm: **5.29 MB of RSS a user, measured** (`users.bench.ts 200
 | Cluster router | none | on two of the nodes (no state, little CPU) | on two of the nodes |
 | **Total a month** | **$73** | **$213** | **$1,254** |
 | **Per heavy user-month** | **$0.073** | **$0.021** | **$0.0125** |
-| Free start instead | Oracle Always Free A1 2 / 12 GB: $0 for up to about 1,600 heavy users (reclamation, capacity and suspension risks: docs/DEPLOY.md §2.1) | | |
-| Fallback host | Oracle paid A1 4 / 24 GB $55.48 (3,296 users) | 4 x A1 4/24 ($222) | about 31 x A1 4/24 or 8 x A1 16 OCPU / 128 GB ($257 each: $2,056) **[EST]** |
+| Free start instead | Oracle Always Free A1 2 / 12 GB: $0 for up to about 1,800 heavy users (reclamation, capacity and suspension risks: docs/DEPLOY.md §2.1) | | |
+| Fallback host | Oracle paid A1 4 / 24 GB $55.48 (3,702 users) | 4 x A1 4/24 ($222) | about 31 x A1 4/24 or 8 x A1 16 OCPU / 128 GB ($257 each: $2,056) **[EST]** |
 
 Per box, **[EST]** for everything but the RSS: CPU is not the bound (100,000 heavy users at 50 requests a day is 58
 requests a second over 7 machines; an event costs about 10-12 ms at p50 on the fast path); the store's writes are

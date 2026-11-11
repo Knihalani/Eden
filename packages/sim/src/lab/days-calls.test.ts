@@ -72,6 +72,8 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
         ["day", "got", "handed", "kind", "like", "likeAhead", "poolSize", "pushRan", "pushed", "rank", "seed", "task"]
           // M3's offline-screen fields (D900, D911): the planted id, the request and template, the pool's ids.
           .concat("today", "planted", "pool", "request", "template", "poolPlanted", "handedPlanted")
+          // M8's stage fields (D946): the planted item's source, arrival lag and whether it was held after the request.
+          .concat("source", "lag", "held")
           .sort(),
       );
     }
