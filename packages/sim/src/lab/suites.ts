@@ -262,6 +262,9 @@ const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n) && !n.startsWith("synth"));
 const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
 
+/** The generated test split (D884), with any `+stale` or `@K`: held out, named only on its own and only blind. */
+export const isSynthTest = (name: string) => /^synth-test(\+stale)?(@\d+)?$/.test(name);
+
 /**
  * Registers a generated suite on first use (D884): `synth-train|val|test` read `synthPath(<split>)`, `synth:<file>`
  * reads that worlds file, and `@K` after any of them (or `synth-sample`) plants K worlds a seed. `synth` names the
@@ -276,11 +279,14 @@ function registerSynth(name: string): boolean {
     at > 0 && /^\d+$/.test(name.slice(at + 1)) ? [name.slice(0, at), name.slice(at + 1)] : [name, undefined];
   const perSeed = k === undefined ? 1 : Number(k);
   if (!Number.isInteger(perSeed) || perSeed < 1) return false;
-  const split = SYNTH_SPLITS.includes(base) ? base.slice("synth-".length) : undefined;
-  const file = base.startsWith("synth:") ? base.slice("synth:".length) : undefined;
-  if (!split && !file && base !== "synth-sample") return false;
+  // `+stale` (M3, D908's rule 1): a silent change's earlier revision also stays, beside the fact (hidden variant only).
+  const stale = base.endsWith("+stale");
+  const bare = stale ? base.slice(0, -"+stale".length) : base;
+  const split = SYNTH_SPLITS.includes(bare) ? bare.slice("synth-".length) : undefined;
+  const file = bare.startsWith("synth:") ? bare.slice("synth:".length) : undefined;
+  if (!split && !file && bare !== "synth-sample") return false;
   const load = () => readWorlds(file ?? (split ? synthPath(split) : SAMPLE_PATH));
-  SUITES[name] = plantSynth(name, load, perSeed);
+  SUITES[name] = plantSynth(name, load, perSeed, stale);
   return true;
 }
 
@@ -319,7 +325,7 @@ export function parseSuites(arg: string): string[] {
     }
   }
   if (!out.length) throw new Error("no suite given");
-  if (out.length > 1 && out.some((n) => /^synth-test(@\d+)?$/.test(n)))
+  if (out.length > 1 && out.some(isSynthTest))
     throw new Error("synth-test is the generated test split (D884): name it on its own");
   return out;
 }

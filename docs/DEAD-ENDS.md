@@ -51,10 +51,16 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D529 | Trial `pushCheckGate`, opened and closed 2026-11-10: measured live, not kept, deleted | because the stored answers cost an ingest call for every item (about +$0.06–0.12 per 1,000 tasks at 36 new… |
 | D700 | Trial `pushCheckBehind`: the push check runs behind the default's packet | killed by D704: With one more agent turn after the answer for what was queued (`+amend`): hidden +3.9 (+1.4..+6.5), but… |
 | D703 | Trial `candidatesSpecifics`: the candidates' lead asks for the item's specifics once it applies | killed by D705: The line raised hidden facts +2.0 points (+0.2..+3.7) on eight seeds (bar: +4.0) for +$0.013 per 1,000… |
-| D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D711: Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
+| D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D832: the rule asked for +2.0 with the lower bound above 0 |
+| D711 | `pushPointer` (D708) failed its rule and is deleted with its code and tests | Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
 | D821 | Rejected: narrowing the default's packet with no model (`pushNarrow`, P2; deleted). | Funnel, train 41–44: neutral given a packet 738 → 216 of 768, but planted handed 582 → 348 (−234) and 334… |
 | D822 | Rejected: the push check's short compare-first reply. | Fails the decoy clause: without the separate verdict and the longer comparison the check lets look-alikes… |
+| D833 | Rejected: a per-user alias table for the push's recall. |  |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
+| D908 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | stopped on its pre-registered rules; deleted with its code, weights and tests |
+| D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
+| D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
+| D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
 
 ## Reader
 
@@ -191,4 +197,5 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D507 | Rejected at $0 and deleted: reusing a search's answer across a user's day | A user's searches do not repeat: about one search a task matches an earlier (source, text) of the same user… |
 | D515 | Trial `takeSettleMs`, opened and closed 2026-11-10: not promoted, deleted. | measured hidden +1.4 points (−4.2..+6.9); killed for another reason (read the row) |
 | D824 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items |  |
+| D909 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | the owner's decision |
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |

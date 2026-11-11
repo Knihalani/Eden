@@ -175,6 +175,7 @@ import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Bu
 import { parseSuites } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
+import { hitsPacket } from "./lexical-hits";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
@@ -831,6 +832,7 @@ async function runWorld(
     config,
     noKey,
     packets: layout,
+    hits,
   } = cond;
   const scope = { tenantId: "ab", userId: connect ? `w${seed}r${connect.replica}` : `w${seed}` };
   let clock = world.now;
@@ -1362,6 +1364,20 @@ async function runWorld(
           tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
         }
       }
+      // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
+      if (hits) {
+        const h = hitsPacket(world, task.text);
+        if (h) {
+          r.injectedItems += h.citations.length;
+          r.injectedChars += h.text.length;
+          uptake.packet(h);
+          day?.packet(
+            h.citations.map((c) => c.itemId),
+            h.text,
+          );
+          tl.point("eden.inject", { items: h.citations.length, chars: h.text.length, mode: "hits" });
+        }
+      }
       const tools: AgentTool<any>[] = [];
       if (useTools) {
         for (const source of sources) {
@@ -1458,6 +1474,8 @@ async function runWorld(
           systemPrompt: systemPrompt(world, {
             lookups: LOOKUPS,
             data: useTools || useEden,
+            // `hits` (P3): its items come only in the packet; the prompt names no tool it does not have.
+            pushed: hits,
             act,
             tenant: TENANT_PROMPT,
           }),
@@ -1670,7 +1688,8 @@ async function runWorld(
     record.wallMs = Math.round(r.wallMs);
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
-    if (partner) Object.assign(record, uptake.fields());
+    // `hits` (P3) has no partner, but its packets are cited the same way.
+    if (partner || hits) Object.assign(record, uptake.fields());
     // `--late`: every answer after a planted item arrived is one of its later replies; the recap closes the day and
     // grades them against the planted request.
     for (const l of dayLate) l.entry.after.push(r.error ? "" : r.answer);

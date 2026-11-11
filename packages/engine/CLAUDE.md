@@ -312,7 +312,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `pushHanded` (`n2/compare.py`) and measure live. Deleted beside it: the push check run behind the packet
   (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
   asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
-  earlier request (`pushPointer`, D711: −1.2 over days).
+  earlier request (`pushPointer`, D711: −1.2 over days; again on the new default, D832: +2.4, −0.5..+5.5).
 - **Indirect requests (`pushIndirect`, P2, D820; in the default since D828, part `indirect`; p2-push-check.md §1, §7).** `pushStart`
   decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
   ("I need to …", "Should I …?", "We should …", "I want you to …"), or a request after a first clause of context
