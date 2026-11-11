@@ -10,7 +10,8 @@
  * Same semantics as `Set<string>` for `add`, `has`, `delete`, `size`, `clear` and iteration in insertion order
  * (re-adding a present id does not move it). Deleting while iterating is allowed (the iterator skips what was
  * deleted, as `Set`'s does); an id added while iterating is visited, as with `Set`. Deleted slots are reclaimed by
- * the next `add` that needs room once they are half the slots, never while an iterator is open: an iterator stepped
+ * the next `add` that needs room once they are half the slots, and by a `delete` that leaves a quarter of the slots
+ * live or none (D752: the arrays are then sized for what is left), never while an iterator is open: an iterator stepped
  * by hand must be finished or `return()`ed (a `for…of` does both), or the set stops compacting. Iteration makes a
  * string per id: use `has` on hot paths.
  */
@@ -25,23 +26,39 @@ const WIDE = 0xfffe;
 const CHUNK = 4_096;
 /** The lookup scratch's resting size (bytes): ids up to 1,365 code units of any kind encode in it. */
 const SCRATCH = 4_096;
+/**
+ * What a set that holds nothing points at, shared by every such set and never written: a user with 1,000 connected
+ * sources has a set per source and most hold a handful of ids or none, and five arrays of the old starting sizes
+ * (436 bytes and their headers) were 1.3 KB a source (docs/research/o4-per-source.md). The first `add` allocates.
+ */
+const NO_BYTES = new Uint8Array(0);
+const NO_STARTS = new Uint32Array(1);
+const NO_HASHES = new Uint32Array(0);
+const NO_LIVE = new Uint8Array(0);
+const NO_TABLE = new Uint16Array(MIN_TABLE);
+/** Slots a set starts with at its first `add`, and bytes: enough for a few short ids; both double from there. */
+const FIRST_SLOTS = 4;
+const FIRST_BYTES = 64;
 
 export class IdSet implements Iterable<string> {
   /** Encoded ids, back to back in insertion order. */
-  private bytes = new Uint8Array(256);
-  /** `bytes` as a Buffer, for its native Latin-1 decode (`latin1Slice`). */
-  private view = Buffer.from(this.bytes.buffer);
+  private bytes = NO_BYTES;
+  /**
+   * `bytes` as a Buffer, for its native Latin-1 decode (`latin1Slice`); made at the first decode after `bytes` is
+   * replaced (a set that is never iterated needs none, and a Buffer over an array gives the array a buffer object).
+   */
+  private view: Buffer | null = null;
   private used = 0;
   /** Per slot (insertion order): start in `bytes` (the end is the next slot's start), hash, live (1) or deleted (0). */
-  private starts = new Uint32Array(17);
-  private hashes = new Uint32Array(16);
-  private live = new Uint8Array(16);
+  private starts = NO_STARTS;
+  private hashes = NO_HASHES;
+  private live = NO_LIVE;
   private slots = 0;
   /**
    * Open-addressed table: slot + 1, `EMPTY`, or `tomb`. Power-of-two size, at most three quarters full (live and
    * tombs), linear probing; 16-bit entries until the slots outgrow them (`WIDE`).
    */
-  private table: Uint16Array | Uint32Array = new Uint16Array(MIN_TABLE);
+  private table: Uint16Array | Uint32Array = NO_TABLE;
   private tomb = 0xffff;
   private filled = 0;
   private count = 0;
@@ -71,8 +88,10 @@ export class IdSet implements Iterable<string> {
     this.hashes[slot] = h;
     this.live[slot] = 1;
     this.count++;
-    // A rehash places every live slot, this one included.
-    if ((this.filled + 1) * 4 > this.table.length * 3) this.rehash(this.table.length * 2);
+    // A rehash places every live slot, this one included. The shared empty table is never written: the first id
+    // gets the set its own.
+    if (this.table === NO_TABLE) this.rehash(MIN_TABLE);
+    else if ((this.filled + 1) * 4 > this.table.length * 3) this.rehash(this.table.length * 2);
     else this.place(slot, h);
     return this;
   }
@@ -84,18 +103,24 @@ export class IdSet implements Iterable<string> {
     this.table[at] = this.tomb;
     this.live[slot] = 0;
     this.count--;
+    // A set that has lost three quarters of its slots gives their room back (never while an iterator is open): a
+    // source whose page was stored and then trimmed to the user's cap kept arrays sized for the page (786 bytes a
+    // source for three ids, o4-per-source.md), and nothing was added later to compact them.
+    // An emptied set goes back to the shared empty arrays, however small it was.
+    if (this.count === 0 && this.open === 0) this.clear();
+    else if (this.open === 0 && this.slots >= 2 * FIRST_SLOTS && this.count * 4 <= this.slots) this.shrink();
     return true;
   }
 
   clear(): void {
-    this.bytes = new Uint8Array(256);
-    this.view = Buffer.from(this.bytes.buffer);
+    this.bytes = NO_BYTES;
+    this.view = null;
     this.used = 0;
-    this.starts = new Uint32Array(17);
-    this.hashes = new Uint32Array(16);
-    this.live = new Uint8Array(16);
+    this.starts = NO_STARTS;
+    this.hashes = NO_HASHES;
+    this.live = NO_LIVE;
     this.slots = 0;
-    this.table = new Uint16Array(MIN_TABLE);
+    this.table = NO_TABLE;
     this.tomb = 0xffff;
     this.filled = 0;
     this.count = 0;
@@ -210,7 +235,7 @@ export class IdSet implements Iterable<string> {
       if (this.slots < this.hashes.length && this.used + n <= this.bytes.length) return;
     }
     if (this.slots === this.hashes.length) {
-      const cap = this.hashes.length * 2;
+      const cap = Math.max(FIRST_SLOTS, this.hashes.length * 2);
       const starts = new Uint32Array(cap + 1);
       starts.set(this.starts.subarray(0, this.slots + 1));
       this.starts = starts;
@@ -223,10 +248,10 @@ export class IdSet implements Iterable<string> {
       if (cap >= WIDE && this.tomb === 0xffff) this.rehash(this.table.length);
     }
     if (this.used + n > this.bytes.length) {
-      const bytes = new Uint8Array(Math.max(this.bytes.length * 2, this.used + n));
+      const bytes = new Uint8Array(Math.max(FIRST_BYTES, this.bytes.length * 2, this.used + n));
       bytes.set(this.bytes.subarray(0, this.used));
       this.bytes = bytes;
-      this.view = Buffer.from(bytes.buffer);
+      this.view = null;
     }
   }
 
@@ -245,6 +270,11 @@ export class IdSet implements Iterable<string> {
       this.live[w] = 1;
       w++;
     }
+    if (w === 0) {
+      // Nothing is left: back to holding nothing (the shared arrays are never written).
+      this.clear();
+      return;
+    }
     this.starts[w] = at;
     this.live.fill(0, w, this.slots);
     this.slots = w;
@@ -255,13 +285,35 @@ export class IdSet implements Iterable<string> {
     this.rehash(size);
   }
 
+  /** Compacts, then moves what is left into arrays sized for it (twice its slots and bytes, as a doubling leaves). */
+  private shrink(): void {
+    this.compact();
+    if (this.slots === 0) return; // `compact` let everything go.
+    let cap = FIRST_SLOTS;
+    while (cap < this.slots) cap *= 2;
+    if (cap < this.hashes.length) {
+      const starts = new Uint32Array(cap + 1);
+      starts.set(this.starts.subarray(0, this.slots + 1));
+      this.starts = starts;
+      this.hashes = this.hashes.slice(0, cap);
+      this.live = this.live.slice(0, cap);
+    }
+    let room = FIRST_BYTES;
+    while (room < this.used) room *= 2;
+    if (room < this.bytes.length) {
+      this.bytes = this.bytes.slice(0, room);
+      this.view = null;
+    }
+  }
+
   private decode(slot: number): string {
     const a = this.starts[slot]!;
     const b = this.starts[slot + 1]!;
     const bytes = this.bytes;
     let plain = true;
     for (let i = a; i < b && plain; i++) if (bytes[i] === ESC) plain = false;
-    if (plain) return this.view.toString("latin1", a, b);
+    if (plain)
+      return (this.view ??= Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)).toString("latin1", a, b);
     const units: number[] = [];
     for (let i = a; i < b; i++) {
       const c = bytes[i]!;

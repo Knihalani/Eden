@@ -37,6 +37,11 @@ export class AimdLimiter {
     return Math.floor(this.value);
   }
 
+  /** The limit as learned, unrounded: a limiter made with it as `initial` goes on where this one is. */
+  get learned(): number {
+    return this.value;
+  }
+
   get inFlight(): number {
     return this.active;
   }

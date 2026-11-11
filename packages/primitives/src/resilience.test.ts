@@ -227,3 +227,26 @@ describe("Histogram", () => {
     expect(r.count).toBe(0);
   });
 });
+
+test("CircuitBreaker.idle: closed with nothing counted in its window (D754)", () => {
+  let now = 1_000_000;
+  const b = new CircuitBreaker({ windowMs: 60_000, minCalls: 5, failureRate: 0.5, openMs: 30_000, now: () => now });
+  expect(b.idle).toBe(true);
+  b.failure();
+  expect(b.idle).toBe(false);
+  now += 50_000;
+  expect(b.idle).toBe(false);
+  // The window has run out (it is counted in buckets of a tenth, as `failure` reads it): a new breaker would count
+  // what this one does.
+  now += 12_000;
+  expect(b.idle).toBe(true);
+  for (let i = 0; i < 5; i++) b.failure();
+  expect(b.state).toBe("open");
+  now += 10 * 60_000;
+  // Half-open, not closed: its next call is a probe, which a new breaker's would not be.
+  expect(b.idle).toBe(false);
+  expect(b.allow()).toBe(true);
+  b.success();
+  expect(b.state).toBe("closed");
+  expect(b.idle).toBe(true);
+});
