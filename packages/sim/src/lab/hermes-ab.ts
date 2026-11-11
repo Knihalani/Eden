@@ -41,6 +41,18 @@
  *
  * `--hermes-src` is a hermes-agent checkout with its dependencies in `<src>/.venv` (`uv sync --frozen
  * --no-install-project`); the run records its commit.
+ *
+ * `--days D` (B19, D1044): pi-ab's user days on Hermes. One user per seed over D days of `--day-size` requests mixing
+ * hidden, control and neutral in `--mix` proportion (pi-user.ts), each day closed by an ungraded recap turn
+ * (pi-day.ts). A day's requests share one Hermes transcript (the runner holds it and sends it with each request, so a
+ * worker restart loses nothing) and one Eden session; Eden persists across days. Before each recap the day's planted
+ * items' clock times move and the change is announced as `--push` says (`--recap-notice`). Eden's clock moves
+ * `--gap-min` minutes a request and `--night-h` hours a night. The results carry `days`, `daysPooled` and `user`, as
+ * pi-ab's do, so the same reports read them.
+ *
+ * `--resume` (D813, D1044): each finished unit (a task; a whole day under `--days`) is appended to
+ * `<out>.partial.jsonl` as pi-ab does (run-journal.ts), and a restart with `--resume` reuses those units at $0. Under
+ * `--days` an Eden arm resumes only with `--resume-biased` (its Eden never saw the reused days), and says so.
  */
 import { spawnSync } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -64,9 +76,10 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
-import { connectorHeader, connectorOptions, pushNotifier, sourceFields } from "./connector-options";
+import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFields } from "./connector-options";
 import type { World } from "../world";
 import {
+  armPromptsHash,
   emptyResult,
   grade,
   gradeWith,
@@ -84,6 +97,18 @@ import {
   type Task,
 } from "./ab-common";
 import { variantsFor } from "./neutral";
+import { DayLog, isRecap, poolDays, recapOf, shiftClocks, shiftMeta, type DaySummary } from "./pi-day";
+import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
+import {
+  argvFields,
+  argvFiles,
+  codeVersion,
+  envFields,
+  hashOf,
+  JournalRefused,
+  partialPath,
+  RunJournal,
+} from "./run-journal";
 import { DiskCardMaker, harnessCoverage, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
@@ -118,7 +143,9 @@ const GRADER = opt("grader", "anthropic/claude-haiku-5.5");
 const BUDGET = Number(opt("budget", "0.6"));
 const SUITE_LIST = parseSuites(opt("suite", "heldout"));
 // `neutral` (neutral.ts) runs only on the suites that build it; the others run their hidden and control variants.
-const VARIANTS = opt("variants", "hidden,control").split(",") as ("hidden" | "control" | "neutral")[];
+const VARIANTS = (args.includes("--days") ? "hidden,control,neutral" : opt("variants", "hidden,control")).split(
+  ",",
+) as ("hidden" | "control" | "neutral")[];
 const CONDITION_NAMES = opt("conditions", "hermes,hermes+eden").split(",");
 const OUT = opt("out", "hermes-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
@@ -130,6 +157,23 @@ const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("
 const LIMIT = Number(opt("limit", "0"));
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 const CONCURRENCY = Math.max(1, Number(opt("concurrency", "4")));
+// `--days D` (D1044): see the header. 0 (the default) keeps one world per suite and variant, one request a session.
+const USER_DAYS = Number(opt("days", "0"));
+if (!Number.isInteger(USER_DAYS) || USER_DAYS < 0) throw new Error(`--days must be a whole number, not ${USER_DAYS}`);
+const DAYS_ON = USER_DAYS > 0;
+const DAY_SIZE = parseDaySize(opt("day-size", "12-20"));
+const MIX = parseMix(opt("mix", "1:1:8"));
+const GAP_MS = Number(opt("gap-min", "10")) * 60_000;
+const NIGHT_MS = Number(opt("night-h", "2")) * 3_600_000;
+// `--recap-notice push|signal` (A8), as pi-ab: how the recap announces its moved items.
+const RECAP_NOTICE = opt("recap-notice", "push");
+if (RECAP_NOTICE !== "push" && RECAP_NOTICE !== "signal") throw new Error("--recap-notice must be push or signal");
+if (DAYS_ON) {
+  for (const f of ["variants", "templates"]) {
+    if (args.includes(`--${f}`)) throw new Error(`--days plans the user's requests itself: it cannot take --${f}`);
+  }
+  if (!(GAP_MS > 0) || !(NIGHT_MS >= 0)) throw new Error("--gap-min must be > 0 and --night-h ≥ 0");
+}
 // pi-ab's cap is MAX_STEPS model calls a task; Hermes counts tool-calling iterations, the same unit.
 const MAX_ITERATIONS = Number(opt("max-iterations", String(MAX_STEPS)));
 const AGENT_MAX_TOKENS = 2_000;
@@ -209,6 +253,27 @@ let held = 0;
 const spend = { agent: 0, eden: 0, grader: 0 };
 /** Every lane's reader and cards, for the calls their `Budget()` refused (the summary's `overBudget:` line). */
 const budgeted: Budgeted = { reader: [], cards: [] };
+/** Each day's summary under `--days`, with the recap turn's own cost (a probe: no task's cost includes it). */
+const DAYS: (DaySummary & { seed: number; kind: string; partial?: boolean; recapUsd?: number })[] = [];
+/** One journal line's data (`--resume`, D813): a unit's results, timeline records, day summaries and spend. */
+interface JournalUnit {
+  results: RunResult[];
+  records: TaskRecord[];
+  days: typeof DAYS;
+  spend: { agent: number; eden: number; grader: number };
+}
+/** A unit being run: complete once its task (or its day's recap) ends; `ok` false when a grading failed. */
+interface OpenUnit {
+  id: string;
+  complete: boolean;
+  ok: boolean;
+  grades: Promise<void>[];
+  data: JournalUnit;
+}
+/** What `--resume` took from the journal instead of running it (pi-ab's fields). */
+const resumed = { units: 0, tasks: 0, unitsUsd: 0, spentBeforeUsd: 0, biased: false };
+/** Opened once the worlds are known (below); null without a journal. */
+let JOURNAL: RunJournal<JournalUnit> | null = null;
 /** Every stream's push checker, for the run's CHECK line. */
 const checkers: PushChecker[] = [];
 /** Each stream's background spend (cards), for the report's all-in cost columns (ab-common.ts). */
@@ -391,13 +456,23 @@ function hermesConfig(id: string, eden: boolean): string {
 /** One world under one condition: a fresh Eden (if any) and a fresh Hermes worker see the world's tasks in order. */
 async function runWorld(
   id: string,
-  world: World,
+  shared: World,
   seed: number,
-  tasks: Task[],
+  baseTasks: Task[],
   cond: HermesCondition,
   records: TaskRecord[],
   grading: Promise<void>[],
+  /** `--days`: the user's requests per day, in order. */
+  daySizes: readonly number[] | undefined,
+  /** The world's index in `worlds`: part of each journal unit's id (`--resume`). */
+  wi: number,
 ): Promise<RunResult[]> {
+  // `--days` changes items before each recap: each stream gets its own copy, since every arm reads the same world.
+  const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  const userPrefix = `w${seed}:user`;
+  const tasks = daySizes
+    ? withDayRecaps(baseTasks, daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`))
+    : baseTasks;
   const sources = simSources(world, CONNECTORS.profiles, TIME_SCALE, seed);
   const notify = pushNotifier(sources, CONNECTORS, seed, world.now);
   const { name: condition, waitMs, withPartner, config, eden, useTools } = cond;
@@ -596,6 +671,10 @@ async function runWorld(
           answered(a, q, startedAt) {
             const question = sanitizeForStore(q);
             t.uptake.answer(a, question);
+            day?.answer(
+              a.citations.map((c) => c.itemId),
+              a.answer,
+            );
             t.tl.span("tool.ask_context", "eden", "path", startedAt, performance.now(), { items: a.citations.length });
             t.tl.point("eden.ask", { question: question.slice(0, QUESTION_CHARS), items: a.citations.length });
           },
@@ -623,30 +702,144 @@ async function runWorld(
     await partner.observe({ ...who, at: clock, kind: "session_end" });
     previous = null;
   };
+  /**
+   * `--resume` (D813): the open journal unit (a task, or with `--days` a whole day through its recap). It is written
+   * once complete, graded and error-free (`flush`); a unit found in the journal is not run: its results are taken as
+   * they were (`adopt`), and only what changes the world or Eden's clock is replayed.
+   */
+  let unit: OpenUnit | null = null;
+  const unitId = (t: Task, d: number) => `${wi}|${condition}|${DAYS_ON ? `day${d}` : t.id}`;
+  const flush = () => {
+    const u = unit;
+    unit = null;
+    if (!u || !JOURNAL || !u.complete) return;
+    const journal = JOURNAL;
+    grading.push(
+      Promise.all(u.grades).then(() => {
+        if (!u.ok || u.data.results.some((x) => x.error)) return;
+        try {
+          journal.write(u.id, u.data);
+          journal.noteSpent(spent);
+        } catch (e) {
+          console.error(`hermes-ab: ${e instanceof Error ? e.message : e}`);
+        }
+      }),
+    );
+  };
+  const adopt = (u: JournalUnit) => {
+    out.push(...u.results);
+    records.push(...u.records);
+    DAYS.push(...u.days);
+    bg.tasks.push(...u.results.map((x) => x.task));
+    // `spent` already holds every earlier attempt's spend (`spentBeforeUsd`); the buckets get what these tasks cost.
+    for (const k of ["agent", "eden", "grader"] as const) spend[k] += u.spend[k];
+    resumed.units++;
+    resumed.tasks += u.results.length;
+    resumed.unitsUsd += u.spend.agent + u.spend.eden + u.spend.grader;
+  };
+  // `--days`: the day's log, Eden session, Hermes transcript (held here, sent with each request) and planted items.
+  let day: DayLog | null = null;
+  let dayNo = -1;
+  let newDay = true;
+  let daySession = "";
+  let dayStartMs = 0;
+  let dayKind = "";
+  let dayMessages: unknown[] = [];
+  const dayPlanted = new Set<string>();
   let worker: Worker | null = null;
   let respawns = 0;
+  const respawn = async (why: string) => {
+    if (respawns++ >= RESPAWNS) throw new Error(`the Hermes worker died ${respawns} times`);
+    console.error(`stream ${id} (${condition}): ${why}; starting it again`);
+    worker?.close();
+    worker = await readyWorker(id, home, eden);
+  };
   try {
     worker = await readyWorker(id, home, eden);
-    const queue = [...tasks];
-    while (queue.length > 0) {
-      const t = queue.shift()!;
-      if (exhausted()) break;
-      if (PACER.remaining < TASK_REQUESTS) {
+    for (const t of tasks) {
+      if (unit?.complete) flush();
+      const fromJournal = JOURNAL?.done.get(unitId(t, DAYS_ON && newDay ? dayNo + 1 : dayNo));
+      if (!fromJournal && exhausted()) break;
+      if (!fromJournal && PACER.remaining < TASK_REQUESTS) {
         capStopped++;
         break;
       }
-      // A worker that died (a crash, or a timeout that killed it) is started again before the next task is bound.
-      if (!worker.alive) {
-        if (respawns++ >= RESPAWNS) throw new Error(`the Hermes worker died ${respawns} times`);
-        console.error(`stream ${id} (${condition}): the Hermes worker died; starting it again`);
-        worker.close();
-        worker = await readyWorker(id, home, eden);
-      }
-      clock += 3_600_000;
+      // An hour between tasks: Eden's clock, for its caches and planner. `--days`: `--gap-min` between requests and
+      // `--night-h` before each day after the first (the recap closed the day before).
+      clock += daySizes ? (newDay && dayNo >= 0 ? NIGHT_MS : GAP_MS) : 3_600_000;
+      // Between tasks no task's timeline is current: the sync's tick and the notices are background.
+      current = null;
       if (sync) await sync.tick();
       notify(partner, scope);
-      await closePrevious();
-      const sessionId = t.id;
+      if (DAYS_ON && newDay) {
+        dayNo++;
+        daySession = `${userPrefix}:day${dayNo}`;
+        day = new DayLog(daySession, condition);
+        dayMessages = [];
+        dayPlanted.clear();
+        dayKind = t.kind;
+        dayStartMs = clock;
+      }
+      const startsDay = !DAYS_ON || newDay;
+      newDay = DAYS_ON && isRecap(t);
+      day?.turn();
+      if (DAYS_ON && day && isRecap(t)) {
+        // pi-ab's recap: the day's planted items' clock times move, the sources serve the new text, and the change is
+        // announced as `--push` says; only before the recap, which is never graded.
+        const touched = new Set<string>();
+        const movedIds = new Set<string>();
+        for (const pid of dayPlanted) {
+          const it = world.items.find((x) => x.id === pid);
+          if (!it) continue;
+          const moved = shiftClocks(it.text);
+          if (!moved.moves.length) continue;
+          it.text = moved.text;
+          if (it.meta) it.meta = shiftMeta(it.meta, moved.moves);
+          it.updatedAt = clock;
+          touched.add(it.sourceId);
+          movedIds.add(it.id);
+          day.changed(it.id, moved.moves);
+        }
+        for (const src of sources) if (touched.has(src.id)) src.reindex();
+        if (partner && CONNECTORS.push !== "none") {
+          if (touched.size > 0 && movedIds.size === 0) throw new Error("recap moved items but named none");
+          if (RECAP_NOTICE === "signal") for (const sid of touched) partner.sourceChanged(scope, sid);
+          else await recapNotice(partner, scope, sources, movedIds, CONNECTORS.push);
+          // The change lands two hours before the recap: what the notice started has settled by then (bounded).
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([
+            partner.revisionsSettled(scope),
+            new Promise((res) => (timer = setTimeout(res, 10_000))),
+          ]);
+          clearTimeout(timer);
+        }
+      }
+      if (fromJournal) {
+        // A unit an earlier attempt finished: no agent, no grader, no observe. The clock, the sync's tick and the
+        // recap's moves (above) still happen, so the later units see the world they saw.
+        if (startsDay) await closePrevious();
+        if (DAYS_ON) {
+          if (!isRecap(t) && t.planted) dayPlanted.add(t.planted);
+          if (isRecap(t)) {
+            day = null;
+            adopt(fromJournal);
+          }
+        } else adopt(fromJournal);
+        continue;
+      }
+      if (JOURNAL && !unit) {
+        unit = {
+          id: unitId(t, dayNo),
+          complete: false,
+          ok: true,
+          grades: [],
+          data: { results: [], records: [], days: [], spend: { agent: 0, eden: 0, grader: 0 } },
+        };
+      }
+      // A worker that died (a crash, or a timeout that killed it) is started again before the next task is bound.
+      if (!worker.alive) await respawn("the Hermes worker died");
+      if (startsDay) await closePrevious();
+      const sessionId = DAYS_ON ? daySession : t.id;
       const r = emptyResult(t.id, condition);
       const tl = new Timeline();
       current = tl;
@@ -667,11 +860,15 @@ async function runWorld(
       };
       const uptake = new UptakeLog();
       const ev = (e: Record<string, unknown>) => ({ ...scope, sessionId, at: clock, ...e }) as AgentEvent;
-      const deliver = (items: { text: string; citations: unknown[]; mode?: string }[]) => {
+      const deliver = (items: { text: string; citations: { itemId: string }[]; mode?: string }[]) => {
         for (const i of items) {
           r.injectedItems += i.citations.length;
           r.injectedChars += i.text.length;
-          uptake.packet(i as Parameters<UptakeLog["packet"]>[0]);
+          uptake.packet(i as unknown as Parameters<UptakeLog["packet"]>[0]);
+          day?.packet(
+            i.citations.map((c) => c.itemId),
+            i.text,
+          );
           tl.point("eden.inject", { items: i.citations.length, chars: i.text.length });
         }
         return items.map((i) => i.text).join("\n\n");
@@ -683,9 +880,12 @@ async function runWorld(
           if (!partner) return "";
           if (observed) return deliver(partner.takePending({ ...scope, sessionId }));
           observed = true;
-          const o = tl.begin("eden.observe", "eden", "path", { event: "session_start" });
-          await partner.observe(ev({ kind: "session_start", agent: "hermes" }));
-          tl.end(o);
+          // One Eden session a day under `--days`: it starts with the day's first request.
+          if (startsDay) {
+            const o = tl.begin("eden.observe", "eden", "path", { event: "session_start" });
+            await partner.observe(ev({ kind: "session_start", agent: "hermes" }));
+            tl.end(o);
+          }
           const arriving = t.event === "external" ? { source: "gmail" } : {};
           const o2 = tl.begin("eden.observe", "eden", "path", { event: t.event });
           const first = await partner.observe(ev({ kind: t.event, text: t.text, ...arriving }), { waitMs });
@@ -707,43 +907,38 @@ async function runWorld(
       };
       task = { binding, tl, record, r, sessionId, uptake };
       tl.point("task.start", { condition, kind: t.kind });
-      const sent = await worker.run(
-        {
-          op: "run",
-          task: t.id,
-          token: binding.token,
-          system: systemPrompt(world, { lookups: false, data: true }),
-          prompt: userPrompt(t),
-          nowMs: clock,
-          model: MODEL,
-          maxIterations: MAX_ITERATIONS,
-          maxTokens: AGENT_MAX_TOKENS,
-          toolsets,
-        },
-        TASK_TIMEOUT_MS,
-      );
-      task = null;
-      // Never sent (the worker died between its last task and this one): not a task, not an error. Its timeline is
-      // dropped and the loop tries again on a fresh worker.
-      if (!sent.ran) {
-        if (respawns++ >= RESPAWNS) throw new Error(`the Hermes worker died ${respawns} times`);
-        console.error(`stream ${id} (${condition}): ${t.id} was not sent (worker dead); starting it again`);
-        worker.close();
-        worker = await readyWorker(id, home, eden);
-        bySession.delete(sessionId);
-        clock -= 3_600_000; // its hour is given back: the retry takes it
-        queue.unshift(t);
-        continue;
+      const request = {
+        op: "run",
+        task: t.id,
+        token: binding.token,
+        system: systemPrompt(world, { lookups: false, data: true }),
+        prompt: userPrompt(t),
+        nowMs: clock,
+        model: MODEL,
+        maxIterations: MAX_ITERATIONS,
+        maxTokens: AGENT_MAX_TOKENS,
+        toolsets,
+        // `--days`: the day's transcript so far, one session id a day, and the transcript back for the next request.
+        ...(DAYS_ON ? { history: dayMessages, sessionMs: dayStartMs, session: daySession, keep: true } : {}),
+      };
+      let sent = await worker.run(request, TASK_TIMEOUT_MS);
+      // Never sent (the worker died between its last task and this one): not a task, not an error; the same request
+      // goes to a fresh worker (under `--days` with the same transcript, which this process holds).
+      while (!sent.ran) {
+        await respawn(`${t.id} was not sent (worker dead)`);
+        sent = await worker.run(request, TASK_TIMEOUT_MS);
       }
+      task = null;
       const reply = sent.msg;
       const error = typeof reply.error === "string" && reply.error ? reply.error : undefined;
       if (error) r.error = PACER.exhausted ? `request cap reached: ${error.slice(0, 120)}` : error;
       r.answer = typeof reply.answer === "string" ? reply.answer : "";
       if (!r.error && !r.answer.trim()) r.error = "empty answer";
+      if (DAYS_ON && Array.isArray(reply.messages)) dayMessages = reply.messages;
       const toolCalls = Array.isArray(reply.toolCalls) ? reply.toolCalls : [];
       r.toolCalls = toolCalls.length;
       r.wallMs = performance.now() - tl.origin;
-      r.leaked = t.secrets.some((s) => r.answer.includes(s));
+      r.leaked = t.secrets.some((x) => r.answer.includes(x));
       tl.point("task.end", { error: !!r.error });
       record.wallMs = Math.round(r.wallMs);
       record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
@@ -752,13 +947,47 @@ async function runWorld(
       if (typeof reply.apiCalls === "number") record.apiCalls = reply.apiCalls;
       if (r.error) record.error = r.error.slice(0, 200);
       if (partner) Object.assign(record, uptake.fields());
+      if (DAYS_ON && day) {
+        if (!isRecap(t) && t.planted) dayPlanted.add(t.planted);
+        if (isRecap(t)) {
+          // The recap is measured, never graded or reported as a task; its cost is kept with the day.
+          day.recap(r.error ? "" : r.answer);
+          const summary = { ...day.summary(), seed, kind: t.kind, recapUsd: r.costUsd, recapEdenUsd: r.edenCostUsd };
+          DAYS.push(summary);
+          if (unit) {
+            unit.data.days.push(summary);
+            unit.data.spend.agent += r.costUsd;
+            unit.data.spend.eden += r.edenCostUsd;
+            // A recap that failed is part of the day: the day runs again.
+            if (r.error) unit.ok = false;
+            unit.complete = true;
+          }
+          day = null;
+          previous = { sessionId, r };
+          continue;
+        }
+      }
       out.push(r);
       bg.tasks.push(r.task);
       records.push(record);
-      if (!r.error) grading.push(gradeTask(t, r, tl));
+      if (unit) {
+        unit.data.results.push(r);
+        unit.data.records.push(record);
+        unit.data.spend.agent += r.costUsd;
+        unit.data.spend.eden += r.edenCostUsd;
+        if (!DAYS_ON) unit.complete = true;
+      }
+      if (!r.error) {
+        const graded = gradeTask(t, r, tl, unit);
+        grading.push(graded);
+        unit?.grades.push(graded);
+      }
       previous = { sessionId, r };
     }
+    // A day cut short (budget, request cap) is still reported, marked partial; it is not complete, so not journalled.
+    if (day) DAYS.push({ ...day.summary(), seed, kind: dayKind, partial: true });
     await closePrevious();
+    flush();
   } catch (e) {
     // A stopped stream keeps what it ran: its results stand, the run is marked partial and says why.
     stoppedStreams++;
@@ -775,7 +1004,7 @@ async function runWorld(
 }
 
 /** Grading runs beside the next task, on this task's timeline: the agent never waits for it (as pi-ab). */
-async function gradeTask(t: Task, r: RunResult, tl: Timeline): Promise<void> {
+async function gradeTask(t: Task, r: RunResult, tl: Timeline, unit: OpenUnit | null): Promise<void> {
   const g = tl.begin("grading", "grading", "bg");
   const est = worstCase(GRADER, 4_000 + r.answer.length + t.text.length, 2_000);
   let reserved = false;
@@ -796,6 +1025,11 @@ async function gradeTask(t: Task, r: RunResult, tl: Timeline): Promise<void> {
   } finally {
     if (reserved) settle(est, cost, "grader");
     tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
+    // The open journal unit books the grade's cost and is not written if it failed.
+    if (unit) {
+      unit.data.spend.grader += cost;
+      if (failure) unit.ok = false;
+    }
   }
 }
 
@@ -828,15 +1062,33 @@ const proxy = modelProxy({
     : {}),
 });
 
-const worlds = SEEDS.flatMap((seed) =>
-  SUITE_LIST.flatMap((suite) =>
-    variantsFor(suite, VARIANTS).map((variant) => {
-      const w = worldOf(seed, suite, variant, LIMITS);
-      const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
-      return { ...(LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked), suite, variant };
-    }),
-  ),
-);
+/** `--limit` on a user: the first N requests, the day sizes cut to match (pi-ab's). */
+const cutDays = (sizes: number[], n: number) =>
+  sizes.map((k, d) => Math.max(0, Math.min(k, n - sizes.slice(0, d).reduce((a, b) => a + b, 0)))).filter((k) => k > 0);
+const worlds: {
+  seed: number;
+  world: World;
+  tasks: Task[];
+  suite: string;
+  variant: string;
+  daySizes?: number[];
+  clashes?: number;
+}[] = DAYS_ON
+  ? SEEDS.map((seed) => {
+      const plan = planUser(seed, suiteTemplates(seed, SUITE_LIST), { days: USER_DAYS, size: DAY_SIZE, mix: MIX });
+      const u = userWorldOf(seed, plan);
+      const cut = LIMIT > 0 ? { ...u, tasks: u.tasks.slice(0, LIMIT), daySizes: cutDays(u.daySizes, LIMIT) } : u;
+      return { ...cut, suite: "user", variant: "days" };
+    })
+  : SEEDS.flatMap((seed) =>
+      SUITE_LIST.flatMap((suite) =>
+        variantsFor(suite, VARIANTS).map((variant) => {
+          const w = worldOf(seed, suite, variant, LIMITS);
+          const picked = TEMPLATES ? { ...w, tasks: w.tasks.filter((t) => TEMPLATES.has(t.type)) } : w;
+          return { ...(LIMIT > 0 ? { ...picked, tasks: picked.tasks.slice(0, LIMIT) } : picked), suite, variant };
+        }),
+      ),
+    );
 // The requests replayed for the items the run's sources hold, counted before anything is spent (`--dry` shows it).
 const intentCount =
   INTENT_WANTED && diskCards
@@ -859,7 +1111,86 @@ console.error(
 );
 console.error(`hermes-ab: ${INTENT_LINE}`);
 console.error(`hermes-ab: ${COVERAGE.note}`);
+if (DAYS_ON) {
+  for (const w of worlds) {
+    const kinds = ["hidden", "control", "neutral"].map((k) => w.tasks.filter((t) => t.kind === k).length);
+    console.error(
+      `hermes-ab: user w${w.seed}: ${w.daySizes!.length} days (${w.daySizes!.join(",")} requests), ` +
+        `hidden/control/neutral ${kinds.join("/")}, ${w.clashes} slot clashes; Hermes transcript reset per day, Eden ` +
+        `kept; clock +${GAP_MS / 60_000} min a request, +${NIGHT_MS / 3_600_000} h a night`,
+    );
+  }
+}
 if (DRY) process.exit(0);
+
+/**
+ * `--resume` (D813, D1044): pi-ab's journal. The key is everything that decides a unit: the flags (less those that
+ * only name outputs or caps), the files they name, the tasks, the harness (Hermes' commit) and the prompts' hash, the
+ * env that changes results, and the code (`run-journal.ts`).
+ */
+{
+  const drop = [
+    ...["--out", "--timeline", "--cards-out", "--resume", "--budget", "--spend-ledger", "--spend-cap"],
+    ...["--spend-headroom", "--run-label", "--max-requests", "--rpm", "--resume-biased", "--concurrency", "--dump"],
+  ];
+  try {
+    JOURNAL = RunJournal.open<JournalUnit>(
+      partialPath(OUT),
+      {
+        harness: "hermes-ab",
+        harnessVersion: `hermes-agent@${HERMES_COMMIT}`,
+        promptsHash: armPromptsHash(null, VARIANTS.includes("neutral")),
+        argv: argvFields(args, drop),
+        files: argvFiles(args, drop),
+        tasks: hashOf(worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes, tasks: w.tasks }))),
+        env: envFields(),
+        code: codeVersion(),
+      },
+      args.includes("--resume"),
+    );
+  } catch (e) {
+    if (!(e instanceof JournalRefused)) throw e;
+    console.error(`hermes-ab: ${e.message}`);
+    process.exit(2);
+  }
+}
+// Under `--days` a reused day never reached Eden: the days after it run against an Eden that did not see it. The
+// Eden-free arm resumes exactly; an Eden arm only when asked to, and its results say so.
+const edenArms = CONDITIONS.filter((c) => c.withPartner).map((c) => c.name);
+if (JOURNAL!.done.size && DAYS_ON && edenArms.length) {
+  if (!args.includes("--resume-biased")) {
+    console.error(
+      `hermes-ab: --resume under --days would run ${edenArms.join(",")} against an Eden that never saw the reused ` +
+        "days; pass --resume-biased to accept that (the results file and reports then say so), or start over",
+    );
+    process.exit(2);
+  }
+  resumed.biased = true;
+}
+{
+  const unitsUsd = [...JOURNAL!.done.values()].reduce((n, u) => n + u.spend.agent + u.spend.eden + u.spend.grader, 0);
+  resumed.spentBeforeUsd = Math.max(JOURNAL!.spentBefore, unitsUsd);
+  spent += resumed.spentBeforeUsd;
+  if (JOURNAL!.done.size || JOURNAL!.torn) {
+    console.error(
+      `hermes-ab: resuming from ${JOURNAL!.path}: ${JOURNAL!.done.size} finished units reused at $0, ` +
+        `$${resumed.spentBeforeUsd.toFixed(4)} spent by earlier attempts counted against --budget` +
+        (JOURNAL!.torn ? `, ${JOURNAL!.torn} torn lines run again` : "") +
+        (resumed.biased ? " (BIASED: --resume-biased)" : ""),
+    );
+  }
+}
+// What has been spent, noted in the journal as it moves, so a kill loses at most a second's.
+let noted = spent;
+const noteTimer = setInterval(() => {
+  if (spent === noted) return;
+  noted = spent;
+  try {
+    JOURNAL!.noteSpent(spent);
+  } catch {
+    // A note that fails is retried at the next tick; the units themselves are written on their own.
+  }
+}, 1_000);
 
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: labRouter(streams), idleTimeout: 255 });
 port = server.port!;
@@ -870,13 +1201,27 @@ const grading: Promise<void>[] = [];
 const results: RunResult[] = [];
 const t0 = performance.now();
 // Streams, `--concurrency` at a time: one Hermes worker each.
-const jobs = worlds.flatMap((w) => CONDITIONS.map((c, k) => ({ id: `${w.seed}-${w.suite}-${w.variant}-${k}`, w, c })));
+const jobs = worlds.flatMap((w, wi) =>
+  CONDITIONS.map((c, k) => ({ id: `${w.seed}-${w.suite}-${w.variant}-${k}`, w, wi, c })),
+);
 let next = 0;
 const lanes = Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, async () => {
   while (next < jobs.length) {
     const job = jobs[next++]!;
     try {
-      results.push(...(await runWorld(job.id, job.w.world, job.w.seed, job.w.tasks, job.c, records, grading)));
+      results.push(
+        ...(await runWorld(
+          job.id,
+          job.w.world,
+          job.w.seed,
+          job.w.tasks,
+          job.c,
+          records,
+          grading,
+          job.w.daySizes,
+          job.wi,
+        )),
+      );
     } catch (e) {
       // Before its first task (its Eden could not be set up): stopped with nothing run.
       stoppedStreams++;
@@ -914,6 +1259,23 @@ writeFileSync(
       stoppedStreams,
       maxIterations: MAX_ITERATIONS,
       spend,
+      ...(resumed.units ? { resumed: { journal: JOURNAL!.path, ...resumed } } : {}),
+      ...(DAYS_ON
+        ? {
+            days: DAYS,
+            daysPooled: poolDays(DAYS),
+            recapNotice: RECAP_NOTICE,
+            user: {
+              days: USER_DAYS,
+              daySize: DAY_SIZE,
+              mix: MIX,
+              gapMin: GAP_MS / 60_000,
+              nightH: NIGHT_MS / 3_600_000,
+              transcript: "reset per day (Hermes' own handling within the day)",
+              worlds: worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes, clashes: w.clashes })),
+            },
+          }
+        : {}),
       // Eden's spend no task is charged for, per stream: the report's backfill and all-in columns (ab-common.ts).
       background,
       overBudget: overBudget(budgeted),
@@ -927,6 +1289,22 @@ writeFileSync(
   ),
 );
 const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) => t.id === r.task)!.must.length).length;
+{
+  // Every stream's units, journalled now or by an earlier attempt: then the results file holds them all.
+  const units = worlds.reduce(
+    (n, w) => n + CONDITIONS.length * (w.daySizes ? w.daySizes.filter((k) => k > 0).length : w.tasks.length),
+    0,
+  );
+  const have = JOURNAL!.done.size + JOURNAL!.written;
+  clearInterval(noteTimer);
+  if (have < units) JOURNAL!.noteSpent(spent);
+  JOURNAL!.finish(have >= units);
+  if (have < units) {
+    console.error(
+      `hermes-ab: ${have} of ${units} units finished; ${JOURNAL!.path} kept: rerun with --resume to finish`,
+    );
+  }
+}
 console.error(
   `spent $${spent.toFixed(4)} (agent $${spend.agent.toFixed(4)}, eden $${spend.eden.toFixed(4)}, grader ` +
     `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +

@@ -8,9 +8,15 @@ tools are only the MCP toolsets: no terminal, files, web, browser, code, memory,
 model endpoint is the runner's proxy (``base_url``), which holds the API key and meters every request.
 
 Request:  {"op": "run", "task", "token", "system", "prompt", "nowMs", "model", "maxIterations", "maxTokens",
-           "toolsets": [...]}
+           "toolsets": [...], "history"?: [...], "sessionMs"?, "keep"?}
 Reply:    {"task", "answer", "error", "apiCalls", "completed", "toolCalls": [{"name", "ms", "error"}],
-           "systemChars", "toolNames": [...]}
+           "systemChars", "toolNames": [...], "messages"?: [...]}
+
+``hermes-ab --days`` (B19, D1044): a day's requests share one transcript, as pi-ab's do. The runner holds it, so a
+worker that dies mid-day loses nothing: ``history`` is the day's messages so far (passed to ``run_conversation`` as
+``conversation_history``), ``sessionMs`` the day's first clock (one session id a day), and ``keep`` asks for the
+transcript back (``messages``). Hermes keeps a ``pre_llm_call`` packet on its user message (the ``api_content``
+sidecar) and replays it on later turns, so the day's earlier packets stay where the agent saw them.
 Hermes' own console output goes to stderr; the protocol has stdout to itself.
 """
 
@@ -33,6 +39,12 @@ from run_agent import AIAgent  # noqa: E402
 # The sim world's clock: Hermes stamps its system prompt with "Conversation started: <date>" from hermes_time.now().
 _NOW_MS = [time.time() * 1000]
 hermes_time.now = lambda: datetime.fromtimestamp(_NOW_MS[0] / 1000, tz=timezone.utc)
+
+
+def _session_time(req):
+    """The session's clock: the day's first request under ``--days`` (one session a day), else the request's own."""
+    ms = req.get("sessionMs")
+    return datetime.fromtimestamp(float(ms) / 1000, tz=timezone.utc) if ms is not None else hermes_time.now()
 
 
 def reply(obj):
@@ -70,12 +82,13 @@ def run(req):
         skip_background_review=True,
         ephemeral_system_prompt=req["system"],
         # Hermes dates "Conversation started:" from the stamp in the session id before any clock: the sim's.
-        session_id=f"{hermes_time.now():%Y%m%d_%H%M%S}_lab{req['token'][:8]}",
+        session_id=f"{_session_time(req):%Y%m%d_%H%M%S}_lab{req.get('session', req['token'])[:8]}",
         tool_start_callback=on_start,
         tool_complete_callback=on_complete,
     )
     tool_names = [t["function"]["name"] for t in (agent.tools or [])]
-    result = agent.run_conversation(req["prompt"])
+    history = req.get("history")
+    result = agent.run_conversation(req["prompt"], conversation_history=list(history) if history else None)
     # Hermes' built prompt once it has one; before (a turn that failed early), the part the lab gives it.
     system = getattr(agent, "_cached_system_prompt", None) or ""
     messages = result.get("messages") or []
@@ -97,6 +110,8 @@ def run(req):
             len(system) + (0 if req["system"] in system else len(req["system"])) if system else len(req["system"])
         ),
         "toolNames": tool_names,
+        # The day's transcript, for the next request of the day; anything JSON cannot hold goes as its text.
+        **({"messages": json.loads(json.dumps(messages, default=str))} if req.get("keep") else {}),
     }
 
 
