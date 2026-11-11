@@ -36,7 +36,10 @@ export interface DateMention {
   to: number;
   /** The day it names, YYYY-MM-DD. */
   day: string;
-  /** How it was written: 0 a full date, 1 day and month, 2 a weekday or relative word, 3 a month alone (its last day). */
+  /**
+   * How it was written: 0 a full date, 1 day and month, 2 a weekday or relative word, 3 a month alone (its first or
+   * last day), 4 the item's own date.
+   */
   form: number;
   /** The end of a range ("4-9 Nov": the 9th), 1; its start 2; a lone date 0. */
   range: number;
