@@ -64,7 +64,8 @@ def main():
         sets["s3"] = [dict(r, src="s3:" + {"act": "indirect", "ask": "question", "intent": "statement"}.get(r["src"][3:], r["src"][3:]))
                       for r in s5 if r["lang"] == "en" and r["src"][3:] != "qact"]
         sets["s4"] = s5
-    fx = [dict(r, lang="en", src="fix", kind="") for r in json.load(open("packages/sim/lab/m13/fixtures.json"))]
+    fx = [dict(r, lang="en", src="fix", kind="") for f in ("fixtures.json", "fixtures-2.json")
+          for r in json.load(open(f"packages/sim/lab/m13/{f}"))]
     fx = rule_reading(fx)
     for name, rows in list(sets.items()) + [("fix", fx)]:
         g, _ = decide(m, a, thr, skel, rows, veto)

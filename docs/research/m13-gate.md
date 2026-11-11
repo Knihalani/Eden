@@ -152,3 +152,7 @@ rounds only if nothing clearly beats the rules). S3 and S4 are read: they are re
   S3 lines), with M2T and SIM56 as before, and fixtures.json unchanged (bar item 7). Freeze rule as §0.2 on the
   round-3 runs (R2i's and R2f's configurations).
 - If this candidate fails the bar, the trial is deleted with its engine code and tests; the lab kit stays.
+- **Fixtures, addendum B2** (written after the parent's approval, before any round-3 result was read; no round-3 data
+  was made from it): `fixtures-2.json`, 57 new hard-gate turns (short commands, indirect and non-English requests,
+  bare replies, retractions, general and personal questions, wants, logs). Bar item 7 now needs every row of both
+  files right.
