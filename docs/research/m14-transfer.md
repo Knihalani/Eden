@@ -120,7 +120,7 @@ its own cluster split.
 - `relevance`: AUC of "bears on the request", own items against unrelated ones.
 
 **A model** plugs in as `make(cfg) → fit(rows), score(rows)`. A model trained elsewhere (Modal) uses `folds` (fold
-files) and `grade` (its scores back). docs/LAB.md 1j has the commands.
+files) and `grade` (its scores back). docs/LAB.md 1k has the commands.
 
 ## 3. M2's twin separation is mostly length (D1022)
 
