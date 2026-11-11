@@ -52,6 +52,70 @@ BINDING = ["on hold", "until", "do not", "don't", "cannot", "can't", "must", "on
 ALLCLEAR = ["approved", "lifted", "resolved", "no longer", "fine to", "go ahead", "cleared", "reopened", "back on",
             "confirmed", "restored", "renewed", "settled", "unfrozen", "available again", "all clear"]
 N_CROSS = 8
+N_ROUND2 = 10
+MONTHS = {m: i + 1 for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split())}
+DATE_DMY = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+(\d{4}))?",
+                      re.I)
+DATE_MDY = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?",
+                      re.I)
+DATE_ISO = re.compile(r"\b(20\d\d)-(\d\d)-(\d\d)")
+DATE_NUM = re.compile(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b")
+PERIOD = re.compile(r"\b(20\d\d)\s*/\s*(\d\d)\b")
+SENT = re.compile(r"(?<=[.!?])\s+|\n+")
+ROUND2 = os.environ.get("MICRO_ROUND2", "0") == "1"
+NX = N_CROSS + (N_ROUND2 if ROUND2 else 0)
+
+
+def days(y, m, d):
+    try:
+        import datetime
+        return datetime.date(int(y), int(m), int(d)).toordinal()
+    except Exception:
+        return None
+
+
+def dates_in(text, year):
+    out = []
+    for d, mo, y in DATE_DMY.findall(text):
+        out.append(days(y or year, MONTHS[mo[:3].lower()], d))
+    for mo, d, y in DATE_MDY.findall(text):
+        out.append(days(y or year, MONTHS[mo[:3].lower()], d))
+    for y, m, d in DATE_ISO.findall(text):
+        out.append(days(y, m, d))
+    for d, m, y in DATE_NUM.findall(text):
+        if 1 <= int(m) <= 12:
+            yy = int(y) + 2000 if y and len(y) == 2 else (int(y) if y else year)
+            out.append(days(yy, m, d))
+    return [x for x in out if x]
+
+
+def round2(request, item, today):
+    """Date relations and cues near the request's own words (round 2)."""
+    year = int(today[:4]) if today[:4].isdigit() else 2026
+    t = days(today[:4], today[5:7], today[8:10]) if len(today) >= 10 else None
+    rd, idt = dates_in(request, year), dates_in(item, year)
+    near = lambda a, b, k: any(abs(x - y) <= k for x in a for y in b)  # noqa: E731
+    rc = {w for w in words(request) if w not in STOP and len(w) > 2} | {n.lower() for n in NAME.findall(request)}
+    bind_near = clear_near = 0
+    for sent in SENT.split(item):
+        low = sent.lower()
+        if any(w in low for w in rc):
+            bind_near += sum(c in low for c in BINDING)
+            clear_near += sum(c in low for c in ALLCLEAR)
+    periods = PERIOD.findall(item)
+    in_period = any(t and days(int(a), 4, 6) <= t < days(int(a) + 1, 4, 6) for a, _ in periods)
+    return [
+        1.0 if near(rd, idt, 0) else 0.0,
+        1.0 if near(rd, idt, 3) else 0.0,
+        1.0 if t and any(x >= t for x in idt) else 0.0,
+        1.0 if t and idt and max(idt) < t - 60 else 0.0,
+        1.0 if t and any(t - 7 <= x <= t for x in idt) else 0.0,
+        1.0 if periods and in_period else 0.0,
+        1.0 if periods and not in_period else 0.0,
+        min(bind_near, 4) / 4,
+        min(clear_near, 3) / 3,
+        1.0 if bind_near and not clear_near else 0.0,
+    ]
 
 
 def h(s, n):
@@ -68,7 +132,7 @@ def grams(ws, cap=160):
     return out or [0]
 
 
-def features(request, title, text):
+def features(request, title, text, today=""):
     """The pair's ids and cross features (shared by every candidate)."""
     item = f"{title}\n{text[:ITEM_CHARS]}"
     iw, rw = words(item), words(request[:400])
@@ -87,7 +151,7 @@ def features(request, title, text):
         sum(c in low for c in ALLCLEAR) / 2,
         min(len(item), 700) / 700,
         1.0 if len(item) < 160 else 0.0,
-    ]
+    ] + (round2(request, item, today) if ROUND2 else [])
     rcs = sorted(rc)[:24]
     ics = sorted(ic)[:48]
     pairs = [h(a + "|" + b, PAIR_BUCKETS) for a in rcs for b in ics] or [0]
@@ -100,7 +164,7 @@ class PairHash(nn.Module):
         self.item = nn.EmbeddingBag(BUCKETS, dim, mode="mean")
         self.req = nn.EmbeddingBag(BUCKETS, dim, mode="mean")
         self.pair = nn.EmbeddingBag(PAIR_BUCKETS, 1, mode="sum")
-        self.mlp = nn.Sequential(nn.Linear(3 * dim + N_CROSS + 1, hidden), nn.ReLU(), nn.Linear(hidden, 1))
+        self.mlp = nn.Sequential(nn.Linear(3 * dim + NX + 1, hidden), nn.ReLU(), nn.Linear(hidden, 1))
         self.dim = dim
 
     def vec(self, b):
@@ -131,7 +195,7 @@ class BinPair(nn.Module):
         super().__init__()
         self.item = nn.EmbeddingBag(BUCKETS, bits, mode="mean")
         self.req = nn.EmbeddingBag(BUCKETS, bits, mode="mean")
-        self.l1 = nn.Linear(3 * bits + N_CROSS, hidden)
+        self.l1 = nn.Linear(3 * bits + NX, hidden)
         self.out = nn.Linear(hidden, 1)
 
     def forward(self, b, pools=None):
@@ -147,7 +211,7 @@ class PoolSet(nn.Module):
     def __init__(self, dim=16, hidden=64):
         super().__init__()
         self.base = PairHash(dim, hidden)
-        width = 3 * dim + N_CROSS + 1
+        width = 3 * dim + NX + 1
         self.proj = nn.Linear(width, hidden)
         self.att = nn.MultiheadAttention(hidden, 4, batch_first=True)
         self.head = nn.Sequential(nn.Linear(2 * hidden, hidden), nn.ReLU(), nn.Linear(hidden, 1))
@@ -184,7 +248,7 @@ def pools_of(groups):
     for g in groups:
         lo = len(feats)
         for it in g["items"]:
-            feats.append(features(g["request"], it["title"], it["text"]))
+            feats.append(features(g["request"], it["title"], it["text"], g.get("today", "")))
             rows.append(it)
         spans.append((lo, len(feats)))
     return batch(feats), spans, rows
@@ -271,7 +335,8 @@ def evaluate(model, sel, m7, fixtures, teacher_mark):
     m = fit_mark(fit, score_groups(model, fit))
     out["mark"] = m
     out["quality_dev"] = quality(dev, score_groups(model, dev), m)
-    fx = score_groups(model, [{"request": f["request"], "items": [{"title": f["title"], "text": f["text"]}]}
+    fx = score_groups(model, [{"request": f["request"], "today": f.get("today", ""),
+                               "items": [{"title": f["title"], "text": f["text"]}]}
                               for f in fixtures])
     passed = [(f, s[0] >= m) for f, s in zip(fixtures, fx)]
     out["g1_m7"] = f"{sum(p for f, p in passed if f['src'].startswith('m7/'))}/16"
@@ -317,12 +382,21 @@ def main():
     ap.add_argument("--temp", type=float, default=2.0)
     ap.add_argument("--truth-weight", type=float, default=0.5)
     ap.add_argument("--batch-groups", type=int, default=16)
+    ap.add_argument("--contrast", type=float, default=0.0, help="round 2: fact-above-look-alike margin weight")
+    ap.add_argument("--sim-weight", type=float, default=1.0, help="round 2: weight of the sim's own training rows")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--out", default="")
     a = ap.parse_args()
     random.seed(a.seed)
     torch.manual_seed(a.seed)
-    groups = [json.loads(l) for p in a.train.split(",") for l in open(p)]
+    groups = []
+    for p in a.train.split(","):
+        for l in open(p):
+            g = json.loads(l)
+            if g.get("family", "").startswith("sim/"):
+                for it in g["items"]:
+                    it["_sim"] = True
+            groups.append(g)
     random.shuffle(groups)
     groups = groups[: a.groups] if a.groups else groups
     for g in groups:
@@ -353,8 +427,20 @@ def main():
             s = model(b, spans)
             soft = torch.sigmoid(torch.tensor([it["t8b"] / a.temp for it in rows]))
             truth = torch.tensor([1.0 if it["truth"] == "planted" else 0.0 for it in rows])
-            loss = F.binary_cross_entropy_with_logits(s / a.temp, soft) + a.truth_weight * \
-                F.binary_cross_entropy_with_logits(s, truth)
+            w = torch.tensor([a.sim_weight if it.get("_sim") else 1.0 for it in rows])
+            loss = (F.binary_cross_entropy_with_logits(s / a.temp, soft, weight=w) + a.truth_weight *
+                    F.binary_cross_entropy_with_logits(s, truth, weight=w))
+            if a.contrast > 0:
+                # Round 2: each fact above the look-alikes of its own pool (a pairwise margin).
+                terms = []
+                for lo, hi in spans:
+                    pl = [k for k in range(lo, hi) if rows[k]["truth"] == "planted"]
+                    dc = [k for k in range(lo, hi) if rows[k]["truth"] == "decoy"]
+                    for i in pl:
+                        for j in dc:
+                            terms.append(F.softplus(1.0 - (s[i] - s[j])))
+                if terms:
+                    loss = loss + a.contrast * torch.stack(terms).mean()
             opt.zero_grad()
             loss.backward()
             opt.step()
