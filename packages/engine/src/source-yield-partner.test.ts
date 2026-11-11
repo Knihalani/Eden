@@ -273,7 +273,7 @@ describe("sourceYieldEarn (D600, D603)", () => {
     expect(sum(asked.searched)).toBe(0);
     expect(asked.answer.answer).toContain("Not searched past what is held of");
     // The reason given is true of a user nothing was ever read for (not "used lately": the review of D603).
-    expect(asked.answer.answer).toContain("nothing in the request points there");
+    expect(asked.answer.answer).toContain("nothing in the request names it");
     expect(asked.answer.answer).toContain("not an all-clear");
   });
 

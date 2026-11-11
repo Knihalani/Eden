@@ -214,7 +214,7 @@ hold each listed word, at most 1 MB); a name more than `sourceYieldNames` (4) so
 source with an item used; and a source a request reads nothing live of is not marked used by it
 (`sourceYieldEngage`: no deep copy, daily sweep or card call on its account). With about 1,000 sources this took
 Eden's connector calls from 23 to 5.5 a task one request a session and from 7.3 to 2.4 over a user's days, hidden
-facts level (D603); the pooled rates it replaced (D505) are deleted. A lookup polls at most its
+facts level (D603; measured before `pushOpen`, and the merged default's $0 screen reads 29.4 → 3.8); the pooled rates it replaced (D505) are deleted. A lookup polls at most its
 `syncPollWidth` (8) best-routed
 stale sources (D263); a warm source past them answers from its copy as it stands, as under `syncPollBehind`. Routing
 (`SourceMap.route`) adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index)

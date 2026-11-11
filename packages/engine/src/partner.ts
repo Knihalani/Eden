@@ -6604,8 +6604,9 @@ function reachAnswer(
     notes.push(`Still reading ${some(reading)}: anything there that fits follows as a later packet`);
   if (skipped.length > 0) {
     // True of both rules that skip a read (the source's run, and a source with nothing used yet, D603): neither
-    // skips a source the request has a name or a rare word for.
-    notes.push(`Not searched past what is held of ${some(skipped)}: nothing in the request points there`);
+    // skips a source the request names. The run rule can skip one the request's common words touch, so the line
+    // says "names", not "points there" (review of the D603 merge).
+    notes.push(`Not searched past what is held of ${some(skipped)}: nothing in the request names it`);
   }
   if (told === "Nothing in the connected sources.") {
     const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";

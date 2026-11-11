@@ -418,7 +418,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   evidence out of the held copy (past the cut), as `source-yield-partner.test.ts` does; a test of an ask whose cut
   copies are searched on its words sets `sourceYieldEarn: false` (`ask-behind.test.ts`). Screen with the 995-source
   funnel and `days-calls.ts`, both with `--noise-vocab 1000`: the lab's noise connectors otherwise share 45 words
-  and their sketches collide, which hid the false holders. The five-source funnel sees none of this (314 / 274).
+  and their sketches collide, which hid the false holders. The five-source funnel sees none of this (no task differs).
   Dormant sources (`syncDormantMs`, D602) were built and removed: nothing in the lab can price a dropped copy.
 - **A budget for live searches of cut copies was measured and deleted (D390, D391, docs/research/a28-scale.md).**
   Searching live only the 4 cut copies with the most routing evidence halved Eden's calls at 1,000 sources live, but
