@@ -222,6 +222,9 @@ function analyse(it: WorldItem): ItemAnalysis {
   return a;
 }
 
+/** The id a `SimIndex` built over every source's items takes (`lexical-hits.ts`). */
+export const ALL_SOURCES = "*";
+
 /**
  * One source's items in one world, indexed once and shared by every simulated user given that world: the term
  * sets and BM25 statistics are the expensive part, and per-user state (quota, errors, stats) lives in `SimSource`.
@@ -244,7 +247,8 @@ export class SimIndex {
     readonly id: string,
     readonly world: World,
   ) {
-    this.items = world.items.filter((i) => i.sourceId === id);
+    // `ALL_SOURCES` (P3's `hits` arm): one index over every source's items, for a cross-source BM25 ranking.
+    this.items = id === ALL_SOURCES ? world.items.slice() : world.items.filter((i) => i.sourceId === id);
     // Each item's analysis comes from the memo (`analyse`): a reindex after an update re-reads only the changed
     // items and rebuilds df and the postings. Re-reading every item was about half a freshness run's wall time.
     for (const it of this.items) {
