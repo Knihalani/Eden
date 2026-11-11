@@ -206,3 +206,68 @@ if os.environ.get("EDEN_M1_RUN"):
                 return {"scores": [round(x, 4) for x in s], "ms": round((time.perf_counter() - t) * 1000, 1)}
 
             return api
+
+
+# The teacher's soft scores over M2's pair groups (owner's request through the parent, D899): a scale-to-zero batch
+# job, sharded by line number, each group scored as one pool with the shared prompt head. Reads and writes the Volume
+# `eden-synth` (M2's); a group's line in `<name>.t8b.jsonl.gz` is {"group", "keys", "s"} in the group's item order.
+synth_vol = modal.Volume.from_name("eden-synth")
+
+
+@app.function(gpu="H100", volumes={"/vol": vol, "/synth": synth_vol}, timeout=6 * 3600)
+def teacher_shard(run: str, path: str, shard: int, shards: int, limit: int = 0) -> dict:
+    import gzip
+
+    t0 = time.time()
+    st = Student(run)
+    out = f"/synth/{path}.t8b.part-{shard:03d}-of-{shards:03d}.jsonl.gz"
+    n = items = 0
+    with open(f"/synth/{path}") as f, gzip.open(out, "wt") as w:
+        for i, line in enumerate(f):
+            if i % shards != shard:
+                continue
+            if limit and n >= limit:
+                break
+            g = json.loads(line)
+            rows = [{"request": g["request"], "today": g.get("today", ""), "title": it.get("title", ""),
+                     "text": it.get("text", ""), "group": g["group"]} for it in g["items"]]
+            s = []
+            for k in range(0, len(rows), 20):
+                s += st.score_prefix(rows[k : k + 20])
+            w.write(json.dumps({"line": i, "group": g["group"], "keys": [it["key"] for it in g["items"]],
+                                "s": [round(x, 4) for x in s]}) + "\n")
+            n += 1
+            items += len(rows)
+    synth_vol.commit()
+    return {"shard": shard, "groups": n, "items": items, "seconds": round(time.time() - t0)}
+
+
+@app.function(volumes={"/synth": synth_vol}, timeout=3600)
+def teacher_merge(path: str, shards: int) -> dict:
+    """The shards' parts into `<name>.t8b.jsonl.gz` in the pair groups' own line order; the parts are removed."""
+    import gzip
+
+    synth_vol.reload()
+    rows = []
+    for k in range(shards):
+        p = f"/synth/{path}.t8b.part-{k:03d}-of-{shards:03d}.jsonl.gz"
+        with gzip.open(p, "rt") as f:
+            rows += [json.loads(x) for x in f]
+    rows.sort(key=lambda r: r["line"])
+    out = f"/synth/{path.removesuffix('.jsonl')}.t8b.jsonl.gz"
+    with gzip.open(out, "wt") as w:
+        for r in rows:
+            w.write(json.dumps({"group": r["group"], "keys": r["keys"], "s": r["s"]}) + "\n")
+    for k in range(shards):
+        os.remove(f"/synth/{path}.t8b.part-{k:03d}-of-{shards:03d}.jsonl.gz")
+    synth_vol.commit()
+    return {"path": out, "groups": len(rows)}
+
+
+@app.local_entrypoint()
+def teacher(path: str, run: str = "t8b-truth-a", shards: int = 8, limit: int = 0, merge: bool = True):
+    """`--limit N` scores N groups a shard (a timing probe; nothing merged)."""
+    res = list(teacher_shard.starmap([(run, path, k, shards, limit) for k in range(shards)]))
+    print(json.dumps(res))
+    if merge and not limit:
+        print(json.dumps(teacher_merge.remote(path, shards)))
