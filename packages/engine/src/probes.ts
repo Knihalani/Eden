@@ -144,21 +144,22 @@ const CHATTER = new Set(
   (
     "anyway anyways ugh argh oh ah aw aww wow omg yay meh hmm hm morning evening afternoon night hello hiya brb " +
     "fyi btw fun good welcome congrats whew phew bro dude mate honestly seriously literally nothing ciao hola " +
-    "bonjour salut hallo ola olá mamma qué que quoi comment wie warum cómo como dove perché"
+    "bonjour salut hallo ola olá mamma qué que quoi comment wie warum cómo como dove perché happy"
   ).split(" "),
 );
 const STATING_STRICT = new Set("id lets wed youd theyd youre theyre youve theyve hes shes thats".split(" "));
 /** Laughter and its spellings in a few languages ("hahaha", "lmaooo", "jajaja", "kkkk", "mdr"). */
-const LAUGH = /^(?:(?:ha|he|ja|je|hi){2,}h?|lo+l|lma+o+|ro+fl|k{3,}|mdr|xd+)$/;
+const LAUGH =
+  /^(?:(?:ha|he|ja|je|hi){2,}h?|ha|lo+l|lma+o+|ro+fl|k{3,}|mdr|xd+|ye+s+|he+y+|a+h+|o+h+|o+o+h+|ya+y+|wo+o+|wo+w+)$/;
 
 /**
  * `pushIndirect` (D820): a pasted log line, not a request (`isOpenRequest`'s strict form). A level word in capitals,
  * a timestamp, an address, an HTTP request line, a traceback or exit code, or a message whose words are mostly
  * symbols and numbers (a third or more of them, amounts aside; the train requests reach 0.18).
  */
-const LOG_LEVEL = /\b(?:ERROR|ERR!?|WARN(?:ING)?|INFO|DEBUG|FATAL|TRACE|CRITICAL)\b/;
+const LOG_LEVEL = /\b(?:ERROR|ERR!?|WARN(?:ING)?|INFO|DEBUG|FATAL|TRACE|CRITICAL|FAIL|PASS)\b/;
 const LOG_MARK =
-  /^\s*[\w.-]+:\s+(?:error|fatal|warning|panic)\b|^\s*(?:panic|fatal|error|e|w):\s|\b\w+\.(?:js|ts|py|go|rs|java|rb|c|cpp):\d+|\b\d+ failed, \d+ passed|\b[a-z]*error:\s|traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}(?:t\d{2}:\d{2}|[ ]\d{2}:\d{2}:\d{2})|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
+  /^\s*[\w.-]+:\s+(?:error|fatal|warning|panic)\b|^\s*(?:warning|error):\s|^\s*[\w.-]+:\s+\(\d+\)|^\s*(?:panic|fatal|error|e|w):\s|\b\w+\.(?:js|ts|py|go|rs|java|rb|c|cpp):\d+|\b\d+ failed, \d+ passed|\b[a-z]*error:\s|traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}(?:t\d{2}:\d{2}|[ ]\d{2}:\d{2}:\d{2})|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
 function looksLogged(raw: string): boolean {
   const head = raw.slice(0, OPEN_HEAD_CHARS);
   if (LOG_LEVEL.test(head) || LOG_MARK.test(head)) return true;
@@ -191,11 +192,21 @@ const INDIRECT = new RegExp(
       `(?:need|have|got)\\s+to|gotta|time\\s+to`,
       // Wishes: "I'd like to …", "would like to …", "would be good to …".
       `(?:(?:i|we)${A}d|(?:i|we)\\s+would|would)\\s+(?:like|love|prefer)\\s+to`,
-      `(?:it\\s+)?would\\s+be\\s+(?:good|great|nice|best)\\s+to`,
+      `(?:it\\s+)?(?:would|${A}d|might)\\s+be\\s+(?:good|great|nice|best|handy|helpful|useful|wise|worth)\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
+      // Hedges (P2 v4): "might be worth chasing …", "it'd help to …", "I'm planning to …", "should probably …".
+      `(?:it\\s+)?might\\s+be\\s+(?:worth|a\\s+good\\s+idea\\s+to)|(?:we|you|i)?\\s*might\\s+want\\s+to`,
+      `it(?:${A}d|\\s+would|\\s+might|\\s+could)\\s+help\\s+(?:to|if\\s+(?:you|we)\\s+could)`,
+      `(?:i|we)(?:${A}ll|\\s+will)\\s+(?:probably\\s+)?(?:need|have)\\s+to`,
+      `(?:i${A}m|i\\s+am|we${A}re|we\\s+are)\\s+(?:planning|hoping|thinking\\s+of)(?:\\s+to)?`,
+      `i\\s+was\\s+thinking\\s+(?:of|(?:i|we)\\s+should)`,
+      `(?:(?:i|we)\\s+)?should\\s+probably`,
+      `someone\\s+should(?:\\s+probably)?|maybe\\s+(?:i|we)\\s+should|it${A}?s\\s+(?:probably\\s+)?time\\s+(?:we|i|to)`,
+      `i${A}m\\s+wondering\\s+(?:whether|if)\\s+(?:i|we)\\s+should|would\\s+it\\s+make\\s+sense\\s+to`,
+      `(?:do|would)\\s+you\\s+(?:think|reckon)\\s+(?:i|we)\\s+should|any\\s+idea\\s+if\\s+(?:i|we)\\s+could`,
       `let${A}s|let\\s+us`,
       // Questions about acting: "Should I …?", "Shall we …?", "Is it OK to …?", "Would it be fine to …?".
       `(?:should|shall|can|could|may)\\s+(?:i|we)`,
-      `would\\s+it\\s+be\\s+(?:ok(?:ay)?|fine|possible|alright|all\\s+right)\\s+to`,
+      `would\\s+it\\s+be\\s+(?:ok(?:ay)?|fine|possible|alright|all\\s+right|sensible|wise|better|worth)(?:\\s+to)?`,
       `is\\s+it\\s+(?:ok(?:ay)?|fine|alright|all\\s+right)\\s+to`,
       `(?:do\\s+you\\s+think|i\\s+think|i${A}m\\s+thinking|i\\s+reckon|maybe)\\s+(?:i|we)\\s+should`,
       // Asking the assistant: "I want you to …", "I'd love it if you could …", "I was wondering if you could …".
@@ -211,11 +222,14 @@ const INDIRECT = new RegExp(
 const NOT_ACTING = new Set(
   (
     "know think see say admit wonder believe feel understand remember hear learn be have look figure decide wait " +
-    "sleep talk mention point note consider worry rest relax celebrate chat stay eat"
+    "sleep talk mention point note consider worry rest relax celebrate chat stay eat learn retire exercise drink read"
   ).split(" "),
 );
+/** Someday words: a lead-in followed by one is a resolution or a wish, not a request (P2 v4). */
+const VAGUE =
+  /\b(?:one day|some ?day|sometime|eventually|at some point|one of these (?:days|years)|more often|in (?:the )?future|in general|again sometime)\b/i;
 /** Adverbs a lead-in may carry before its verb ("We should probably …"). */
-const ADVERBS = new Set("really probably maybe definitely just still also quickly actually perhaps".split(" "));
+const ADVERBS = new Set("really probably maybe definitely just still also quickly actually perhaps finally".split(" "));
 
 /**
  * `pushIndirect` (P2, D820; a trial, off): the request inside an indirect lead-in, verb first, with no closing
@@ -245,6 +259,11 @@ export function indirectRest(raw: string): string | null {
   const words = head.slice(at).trim().split(/\s+/);
   if (words.length < 2) return null;
   if (NOT_ACTING.has(words[0]!.toLowerCase().replace(/[^\p{L}]/gu, ""))) return null;
+  // A resolution or a someday idea is not a request (P2 v4): "I need to stop eating biscuits", "we should go to
+  // Iceland one day", "I want to get fitter by spring". A date or an amount keeps it a request.
+  const tail = head.slice(at);
+  if (/^(?:stop|quit)\s+\p{L}+ing\b/iu.test(tail)) return null;
+  if (!/\d/.test(tail) && (VAGUE.test(tail) || /^(?:get|be|become|feel)\s+\p{L}+er\b/iu.test(tail))) return null;
   return raw.slice(at).replace(/\s*\?\s*$/, "");
 }
 
@@ -253,11 +272,50 @@ export function indirectRest(raw: string): string | null {
  * shape) or null. With `indirect` (`pushIndirect`, D820) an indirect lead-in is read as its imperative
  * (`indirectRest`, whose text is returned as `request`), and `isOpenRequest` runs strict (no log lines, no chatter).
  */
+/**
+ * `pushIndirect` (P2 v4): where a request follows a first clause of context ("The boiler's making that noise again,
+ * can you book Ferguson's for Tuesday?", "Mum's prescription runs out Sunday so please reorder it"): the offset of
+ * the polite ask or lead-in after a clause break in the head, or -1.
+ */
+const CLAUSE_BREAK = /[,;:.!?\u2013\u2014]\s+(?:(?:so|and|but|then)\s+)?|\s-\s+/g;
+const POLITE_ASK = /^(?:please|pls|can you|could you|would you|will you)\s/i;
+function secondClause(raw: string): number {
+  const head = raw.slice(0, OPEN_HEAD_CHARS);
+  for (const m of head.matchAll(CLAUSE_BREAK)) {
+    const at = m.index! + m[0].length;
+    const tail = head.slice(at);
+    if (POLITE_ASK.test(tail) || INDIRECT.test(tail)) return at;
+  }
+  return -1;
+}
+
 export function pushStart(
   raw: string,
   opts: { open: boolean; indirect: boolean },
 ): { how: "listed" | "opened"; request: string } | null {
+  const first = pushStartOne(raw, opts);
+  if (first || !opts.indirect) return first;
+  const at = secondClause(raw);
+  return at < 0 ? null : pushStartOne(raw.slice(at), opts);
+}
+
+/**
+ * `pushIndirect` (P2 v4): a need for something to be done, with no verb first ("I'll need the Dublin hotel changed to a
+ * king room", "We need the drawings signed off by Carl", "We could really use the delivery sorted"): read whole.
+ */
+const PASSIVE_NEED = new RegExp(
+  `^(?:i|we)(?:${A}ll|\\s+will|${A}d|\\s+would)?\\s+(?:really\\s+)?(?:need|want|like|could\\s+(?:really\\s+)?(?:use|do\\s+with))` +
+    `\\s+(?:the|my|our|his|her|their|a|an)\\s+[^,.;!?]{2,80}?\\s+\\p{L}+(?:ed|en)\\b`,
+  "iu",
+);
+
+function pushStartOne(
+  raw: string,
+  opts: { open: boolean; indirect: boolean },
+): { how: "listed" | "opened"; request: string } | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
+  if (opts.indirect && opts.open && PASSIVE_NEED.test(raw.slice(0, OPEN_HEAD_CHARS)))
+    return { how: "opened", request: raw };
   const rest = opts.indirect ? indirectRest(raw) : null;
   if (rest !== null) {
     if (isImperative(rest, MORE_VERBS)) return { how: "listed", request: rest };
