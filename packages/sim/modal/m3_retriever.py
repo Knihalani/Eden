@@ -369,12 +369,50 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
     return {"meta": meta, "ranks": ranks}
 
 
+@app.function(gpu=["L4", "A10G"], volumes={"/vol": vol}, timeout=2 * 3600)
+def rank_remote(family: str, run: str, eval_name: str, max_len: int = 256) -> list:
+    """A trained run's model (`/vol/models/<run>`) ranking another eval file's worlds: no training."""
+    import torch
+
+    d = f"/vol/models/{run}"
+    if family == "asym":
+        tok, model, enc = dense_encoder(d)
+        table, qweight, squery = static_query(tok, model)
+        saved = torch.load(f"{d}/query_table.pt")
+        table.weight.data.copy_(saved["table"].cuda())
+        qweight.data.copy_(saved["weight"].cuda())
+        query = lambda qs: squery(qs, grad=False)  # noqa: E731
+        docs = lambda ts: enc(ts, max_len)  # noqa: E731
+    elif family == "sparse":
+        tok, model, doc, squery, qw = sparse_encoder(d)
+        qw.data.copy_(torch.load(f"{d}/query_weights.pt").cuda())
+        query = squery
+        docs = lambda ts: doc(ts, max_len)  # noqa: E731
+    else:
+        raise ValueError(family)
+    model.eval()
+    ranks = []
+    with torch.no_grad():
+        for w in worlds(f"/vol/data/{eval_name}"):
+            texts = [i["text"] for i in w["items"]]
+            ids = [i["id"] for i in w["items"]]
+            reqs = [r["request"] for r in w["requests"]]
+            if not reqs:
+                continue
+            D = torch.cat([docs(texts[i : i + 128]) for i in range(0, len(texts), 128)])
+            S = torch.cat([query(reqs[i : i + 256]) @ D.T for i in range(0, len(reqs), 256)])
+            top = torch.topk(S, min(TOP, S.shape[1]), dim=1)
+            for r, ix in zip(w["requests"], top.indices.tolist()):
+                ranks.append({"rid": r["rid"], "top": [ids[i] for i in ix]})
+    return ranks
+
+
 @app.local_entrypoint()
 def main(upload: str = "", family: str = "dense", base: str = "BAAI/bge-small-en-v1.5",
          suites: str = "train1,train2,train3,train4", run: str = "", epochs: float = 1.0, lr: float = 3e-5,
          batch: int = 32, n_neg: int = 4, max_len: int = 256, flops: float = 0.0, max_seeds: int = 0,
          temp: float = 0.05, first: str = "", first_k: int = 15, data: str = "train-worlds.jsonl.gz",
-         table_lr: float = 1e-3):
+         table_lr: float = 1e-3, rank_only: str = "", eval_name: str = "eval-m2.jsonl.gz"):
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     if upload:
         with vol.batch_upload(force=True) as b:
@@ -383,7 +421,16 @@ def main(upload: str = "", family: str = "dense", base: str = "BAAI/bge-small-en
                     b.put_file(os.path.join(upload, name), f"/data/{name}")
         print("uploaded")
         return
-    if any(not (s.startswith("train") or s == "synth") for s in suites.split(",")):
+    if rank_only:
+        ranks = rank_remote.remote(family, rank_only, eval_name)
+        out = os.path.join(root, ".local", "m3", "runs", f"{rank_only}@{eval_name.split('.')[0]}")
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "ranks.jsonl"), "w") as f:
+            for r in ranks:
+                f.write(json.dumps(r) + "\n")
+        print(out)
+        return
+    if any(not (s.startswith("train") or s in ("synth", "m2")) for s in suites.split(",")):
         raise SystemExit("train suites only")
     run = run or f"{family}-{time.strftime('%Y%m%d-%H%M%S')}"
     if family == "rerank":
