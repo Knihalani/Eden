@@ -33,7 +33,8 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
   identical inputs is skipped (D650, D657); the gate before a merge is `CHECK_COLD=1 bun run check`, which runs
   every file and trusts no cache.
 - `bun run funnel`: the no-model screen on train (the shipped default with its cards and intent requests replayed,
-  D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`).
+  D158; it asks by default, giving the funnel score, and `--no-ask` opts out; `--baseline F` diffs task by task;
+  held-out suites need `--blind`).
 - `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
   (`.claude/skills/deep-audit/`).
 

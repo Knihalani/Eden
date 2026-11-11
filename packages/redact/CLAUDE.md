@@ -30,7 +30,7 @@ first (D10). See [README.md](README.md).
 ## Test
 
 ```bash
-bun run test:pkg redact          # 10 files, ~5 s wall in parallel; linear.test.ts (~4 s) leads, redos* ~1.7 s each
+bun run test:pkg redact          # 12 files, ~5 s wall in parallel; linear.test.ts (~4 s) leads, redos* ~1.7 s each
 ```
 
 ## Pitfalls
