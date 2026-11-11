@@ -23,6 +23,11 @@ export interface HiddenTask {
    * request (D871), so its world is the original suite's whatever language the request is in.
    */
   slotText?: string;
+  /**
+   * M3 (D908's rule 1): the id of a stale version planted beside this task's fact, when the suite plants one (a synth
+   * suite's `+stale` option); harnesses report whether it was handed.
+   */
+  stale?: string;
 }
 
 interface Planted {

@@ -1,0 +1,11 @@
+== 2 runs, arms eden, hits; clusters: template
+  eden             hidden raised 217/384 =  56.5% (50.3..62.8); handed at its request 259 (67%), raised 216 = 83.4% (77.7..88.8); in hand not raised 16.6%
+                   control: 384; concerns 6, confirmed 1; packet on 383 (100%), items a packet 4.4
+                   neutral: 384; concerns 1, confirmed 0; packet on 377 (98%), items a packet 4.7
+                   cost per 1,000 task runs $0.266 (agent + Eden per task), wall 2.08 s
+  hits             hidden raised 165/384 =  43.0% (36.5..49.7); handed at its request 206 (54%), raised 165 = 80.1% (73.0..86.8); in hand not raised 19.9%
+                   control: 384; concerns 4, confirmed 0; packet on 384 (100%), items a packet 5.0
+                   neutral: 384; concerns 2, confirmed 0; packet on 384 (100%), items a packet 5.0
+                   cost per 1,000 task runs $0.183 (agent + Eden per task), wall 1.61 s
+  [eden - hits] hidden raised +13.5 points (+7.3..+20.1), 384 pairs, 192 clusters; only eden 84, only hits 32
+             handed at its request in both: 180; raised 149 against 151 (-1.1 points)
