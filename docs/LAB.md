@@ -629,7 +629,7 @@ Lab tooling only: both tracks stopped (D899, D982) and the engine trial was dele
 `packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
 screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
 
-### 1j. A day's packet bytes at $0 (E1, D1030; docs/research/e1-lean.md)
+### 1k. A day's packet bytes at $0 (E1, D1030; docs/research/e1-lean.md)
 
 `days-calls.ts --packets F` writes, one line a request, every packet and ask answer the `--days` user was handed
 (`how`: push, pending or ask; the text; the cited ids in line order), for a byte breakdown by fixed text and items or a
