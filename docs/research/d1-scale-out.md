@@ -42,7 +42,12 @@ a user (per-source sync state, sketches, rare-term tables). Thaws are the compac
 minutes); a warm user (back within 30 minutes) thaws in 8-17 ms (p6). Every row backfilled its users at 285-377 µs
 of CPU an item.
 
-**At real-box scale:** HEAVY_1000.
+**At real-box scale:** 1,000 heavy users in one process (20 connectors, prose, 1/4 active; `users.bench.ts 1000 3000
+--prose --sources=20 --waves=16 --warm-waves=3`, one core, outside the cgroup, 15 GB machine): **2.89 MB of RSS a
+user**, against 3.36 MB at 200 users: the per-user figure falls with more users a process (fixed costs spread), so
+the 200-user rows behind the sizing tables are conservative. Frozen 2.18 MB; a compact thaw p50 238 ms, p99 742 ms
+(one core, 1,000 users); the first event a user p50 12.1 ms, p99 32.5 ms. Backfilling all 1,000 at once took 1,294 s
+of CPU (431 µs an item): what a restart without persistence would cost this process.
 
 Users per box (`deploy/scripts/sizing.py`): (0.75 x RAM - 55 MB router - N x (70 MB a process + 60 MB of micro-model
 weights, an upper bound)) / 1.024 / RSS. On 2 OCPU / 12 GB: 2,840 prose users at 1/4 active, 3,476 at 1/8, 4,346 at
