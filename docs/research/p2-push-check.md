@@ -132,3 +132,41 @@ its p50 a call at least 0.15 s lower. Otherwise form 2 goes live. Budget about $
 form 2).
 
 ### 2.3 Pre-registration B (live, Pi): written after A is read, committed before its first call
+
+Committed while A's form 2 runs were under way and before any form 3 call; the arms' form F is fixed by A's rule.
+
+**Arms** (Pi on Modal, `lab_fanout.py --preset bench-tools`, the F3/I3/N5 harness: `--tenant-prompt`, payload
+notices, direct profile, Haiku 5.5 as agent, grader, cards and check, cards and intent replayed where covered,
+the Modal Secret `HAIKU_API_KEY`), from the commit that holds this addendum or a later one with no engine change:
+
+- `eden`: the default.
+- `eden~N*` (**the cheap N**): `pushCheck`, `pushCheckForm` F, `pushCheckAnchored`, `pushCheckSilent` false,
+  `pushCheckWaitMs` 1500. N5's arm N with the short reply (if F is 3) and a tighter wait (2,500 → 1,500 ms: a call
+  past it leaves the default's packet, as before).
+- `eden~S*` (**the silent check**): `pushCheck`, `pushCheckForm` F, `pushCheckSilent` true, no gate, no widening,
+  `pushCheckWaitMs` 1500. N5's Kp with the short reply and the tighter wait: the arm that restores silence on most
+  neutral requests (N5 at $0: neutral packets 461 → 135 of 576) and so cuts the agent's packet tokens most.
+
+**Shapes.** Short: seeds 41–48, train, all templates, `--variants hidden,control,neutral`, two shards at a time
+(`--max-streams 108`). Days: `--days 8`, users w41–w48, `--timeline`, two shards at a time (`--max-streams 6`).
+Short first, then days.
+
+**Measures.** Every hidden answer and every control or neutral concern regraded by Sonnet 5.5 (`i3-regrade.ts`).
+Hidden raised: template-clustered bootstrap (`bench_report.py --sonnet`), days also by user (`days_hidden.py`).
+Cost and wall, paired by task, 1:1:8 mix (short) or the days users (`n5/mix.py`). **Weak point 5:** the agent's
+tokens per task by class (plain input, cache write, cache read, output; `n4/tokens.py` on the days timelines), packet
+characters handed per task (`injectedChars`), and the paired difference of each against `eden`.
+
+**What I will recommend (the parent decides; D112: promotion needs better or neutral at no extra paid cost, and
+every arm here costs more):**
+
+- (a) promote an arm if its hidden raised short is better (clustered interval above zero), Sonnet-confirmed
+  concerns are not up on either shape, total $ per 1,000 tasks rises by at most $0.10 over days (steady state) and
+  wall by at most 0.3 s a task on both shapes (N5's bounds). Between two that pass, the one with more hidden raised.
+- else, if an arm's hidden short is better but a bound fails, keep the switches to their end date (2026-12-10) and
+  report the trade (facts per dollar and per second) for the parent; recommend (c) if no arm's hidden short interval
+  is above zero.
+
+**Budget.** About $10 **[EST]**: short three arms about $5.5, days about $1.3, Sonnet regrades about $3 (N5: two
+arms short $3.35, days $0.77, regrades $1.9). No arm, seed, bound or rule changes after the first call; anything later
+is an addendum written before its own run.
