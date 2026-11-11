@@ -7,7 +7,7 @@ recall at precision 0.95 and 0.90), the teacher's soft scores and codes, and the
 
 The students (route A, a better binary; route B, a compressed float; a hybrid) live in `train`, one `--variant` each.
 """
-import argparse, json, os, random, sys, time
+import argparse, gzip, json, os, random, sys, time
 
 import torch
 import torch.nn as nn
@@ -63,7 +63,8 @@ def pairs_of(path, every=1):
 
 
 def read_pairs(path):
-    return [(x["a"], x["b"], x["y"]) for x in map(json.loads, open(path))]
+    f = gzip.open(path, "rt") if path.endswith(".gz") else open(path)
+    return [(x["a"], x["b"], x["y"]) for x in map(json.loads, f)]
 
 
 def load_teacher(path):
