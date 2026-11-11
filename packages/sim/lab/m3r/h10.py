@@ -244,6 +244,7 @@ def train(o):
     corpus = Corpus()
     tr = corpus.pairs(pairs_of(o.train))
     weight = torch.ones(len(tr))
+    n_extra = 0
     if o.extra_pairs:
         # Engine-drawn pairs (h10_pool_pairs.py): the push pool's (handed, newer) pairs, which the M2 pairs alone
         # under-represent (many same-topic negatives a request).
@@ -253,6 +254,7 @@ def train(o):
             # say nothing about direction; their reverses, as negatives, keep the order M2's reversed pairs teach.
             rows += [(b, a, 0) for a, b, y in rows if y]
         ex = corpus.pairs(rows)
+        n_extra = len(ex)
         tr = torch.cat([tr, ex])
         weight = torch.cat([weight, torch.full((len(ex),), o.extra_weight)])
     dev = corpus.pairs(pairs_of(o.dev))
@@ -272,6 +274,12 @@ def train(o):
         teacher, _ = load_teacher(o.teacher)
         tcodes = teacher_codes(teacher, corpus, torch.arange(len(corpus.texts)))
         tlog = teacher_logits(teacher, tcodes, tr)
+        if o.pool_teacher:
+            # Each half from its specialist: the pool-trained teacher's soft scores on the engine-drawn pairs, the
+            # M2-trained one's on M2's pairs (it holds M2's calibration; the pool-trained one moves it).
+            pt, _ = load_teacher(o.pool_teacher)
+            n_m2 = len(tr) - n_extra
+            tlog[n_m2:] = teacher_logits(pt, teacher_codes(pt, corpus, torch.arange(len(corpus.texts))), tr[n_m2:])
         print(json.dumps({"teacher_dev": metrics(teacher_logits(teacher, tcodes, dev).tolist(), dev[:, 2].tolist())}),
               flush=True)
     net = Student(buckets=1 << o.log_buckets, d=o.d, r=o.r, table=o.table, code=o.code, h=o.h, head=o.head,
@@ -482,6 +490,7 @@ if __name__ == "__main__":
     a.add_argument("--extra-pairs", default="", help="engine-drawn pairs to train on (h10_pool_pairs.py's jsonl)")
     a.add_argument("--extra-weight", type=float, default=1.0)
     a.add_argument("--extra-reverse", action="store_true", help="add each engine-drawn positive reversed, as a negative")
+    a.add_argument("--pool-teacher", default="", help="a second teacher for the engine-drawn pairs' soft scores")
     a.add_argument("--extra-dev", default="", help="engine-drawn pairs held out for selection")
     a.add_argument("--save", default="")
     a.add_argument("--n", type=int, default=64, help="export: held-out pairs checked against PyTorch")
