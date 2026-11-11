@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { containsSecret, redactString } from "./redact";
 import { sanitizeForStore } from "./secrets";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 describe("redact regressions", () => {
   test("a pasted PEM private key loses its whole body, not just its banner", () => {
     const pem = [
@@ -85,10 +92,10 @@ describe("sk- keys with dashes and short GitHub tokens", () => {
 
   test("a long run of sk- without a digit stays linear", () => {
     const run = "sk-".repeat(400_000);
-    const t0 = performance.now();
+    const t0 = cpuMs();
     expect(redactString(run)).toBe(run);
     expect(containsSecret(run)).toBe(false);
-    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(cpuMs() - t0).toBeLessThan(1000);
   });
 });
 

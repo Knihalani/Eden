@@ -14,7 +14,7 @@ import type { SimSource } from "../sources";
 import { buildWorld, type World } from "../world";
 import { dressEntities } from "./dress-entities";
 import { clearSlot, dress } from "./hidden-context";
-import { SUITES } from "./suites";
+import { prepareWorld, SUITES } from "./suites";
 
 export const MAX_STEPS = 6;
 export const TOOL_ITEMS = 5;
@@ -131,7 +131,7 @@ export interface Task {
   secrets: string[];
   /**
    * A hidden-context task's planted item (the hidden fact; on a control task, its decoy): its id in the user's
-   * sources, so a report can tell whether what Eden cited, or what a firewall finding cited, was the planted item.
+   * sources, so a report can tell whether what Eden cited, or what a check's finding cited, was the planted item.
    */
   planted?: string;
 }
@@ -187,6 +187,7 @@ export function worldOf(
   opts: { dress?: boolean } = {},
 ): { seed: number; world: World; tasks: Task[] } {
   const world = buildWorld({ seed: seed * 1_000 });
+  prepareWorld(suite, world, seed);
   if (suite === "lookups") return { seed, world, tasks: tasksOf(world, seed, limits.maxTasks, limits.maxOffworld) };
   const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
   const before = world.items.length;
@@ -197,7 +198,7 @@ export function worldOf(
   for (const it of plantedItems) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(plantedItems.map((it) => it.id));
-  for (const h of planted) clearSlot(world, h.text, keep);
+  for (const h of planted) clearSlot(world, h.slotText ?? h.text, keep);
   // After the planted items are read off the end of `world.items`: dressing appends its own after them.
   if (opts.dress)
     dressEntities(
@@ -442,7 +443,7 @@ export interface RunResult {
   error?: string;
   facts?: Record<string, boolean>;
   leaked?: boolean;
-  /** `--act` (act.ts): each action tool call, its firewall verdict and whether it executed, in order. */
+  /** `--act` (act.ts): each action tool call, its check's verdict and whether it executed, in order. */
   actions?: ActionRecord[];
   /**
    * `pi-ab --connect-at` (O5): the request's checkpoint (s after the user's first event), when it was sent, which of

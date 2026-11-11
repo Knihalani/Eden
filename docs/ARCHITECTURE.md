@@ -10,12 +10,12 @@
  │ tool:   ask_context(q)      │ ◀─answer─── │   observe ─▶ cue ─▶ FAST: item cache (BM25) ─▶ confident? │
  └─────────────────────────────┘             │                     │ no                       │ yes → inject│
                                              │                     ▼                                     │
-                                             │              SLOW (background): route (graph) ─▶ sources  │
+                                             │          SLOW (background): route (source map) ─▶ sources  │
                                              │                ─▶ cache ─▶ score ─▶ confident? inject      │
                                              │                ─▶ borderline? judge if wired ─▶ inject      │
                                              │                ─▶ acts? model reader (budget) ─▶ push       │
                                              │                ─▶ queue; delivered at the next event       │
-                                             │   usage inference ─▶ graph.recordOutcome (learning)       │
+                                             │   usage inference ─▶ sourceMap.recordOutcome (learning)   │
                                              └──────────────────────────────────────────────────────────┘
                                                   │ read-only            │ ZDR routing
                                                   ▼                      ▼
@@ -31,13 +31,13 @@
 | `packages/primitives` | Benchmarked building blocks: hashing, tokenizer + interner, multi-pattern matcher, top-k, BM25F sparse index, S3-FIFO cache, deadline, singleflight, GCRA, circuit breaker, AIMD limiter, histogram, reply stripping and near-duplicate sketches, calibration and certification statistics, Thompson sampling, budgeted packing, worker pool (D25, D26) ([research/primitives.md](research/primitives.md)). |
 | `packages/redact` | The secret gate (salvaged): gitleaks rules plus extras, prefiltered by one Aho–Corasick pass; the rules that backtrack in JavaScript and every allowlist run on RE2 (re2js, D24). Runs on everything stored, indexed or sent to a model. |
 | `packages/sources` | `Source` interface; `McpSource` (any MCP server's read tools, read-only enforced; arguments from the tool's schema when no mapping is given; an optional fetch tool that reads one record by id, D35, not called by the engine since D121 deleted the fetch refresh; reconnects after a dropped connection, re-checking read-only, and waits 30 s after one that closes within 5 s of connecting; reads every page of `tools/list`); `StaticSource`; `QueryPlanner` (what each lookup sends to each connector, learned per user; D28, on by default in the server since D33); `SourceFanout`: per-source deadlines, coalescing, a result cache that serves stale on failure, rate limits, circuit breakers and adaptive concurrency, redacting before anything is held. A call is admitted only when every guard allows it, so a skip spends no rate token and no half-open probe; a failure of our own redaction says nothing against the source; a breaker ignores reports from calls allowed before it last opened. A search or re-read returns at its deadline even when the source ignores its signal (the call is abandoned, its permit settled); a lookup waits for its on-demand listing only until its deadline. |
-| `packages/graph` | The source map (knowledge graph layer 1): which sources mention which entities, and learned usefulness per situation. SQLite. |
+| `packages/graph` | The source map (what is left of the knowledge graph after D225): which sources mention which entities, and learned usefulness per situation. SQLite. |
 | `packages/llm` | `Model` interface, OpenRouter client (ZDR, no data collection), pricing, `Budget` (per session and per user-day) and `TenantSpend` (one cap per tenant per UTC day across roles), `FakeModel`. |
 | `packages/engine` | `ContextPartner`: cues, a per-user BM25F item cache (title, body), near-duplicate suppression, ledger, two-speed pipeline, the default's parts (`DEFAULT_CONFIG`, `PARTS` in `parts.ts`, D112), an optional model judge, usage inference, traces; span tracing of every phase in wall and CPU time, off by default (`spans.ts`, `onSpan`, `config.spans`; content-free; an observability toggle, not a product switch, D121; [research/moon-telemetry.md](research/moon-telemetry.md)). Each event is tokenized once, into a per-session vocabulary. |
 | `packages/server` | HTTP API (tenant API keys, per-tenant rate limit: `EDEN_TENANT_RPS`, `EDEN_TENANT_BURST`), the multi-process router (`EDEN_PROCESSES`, default the core count, D163, D178), `?shadow=1` on events and pending for a trial that injects nothing (nothing learned from it, D282), MCP server
 exposing `ask_context` (it moves to a new session after 2 h with no ask or at UTC midnight, ending the old one once its asks in flight return, D281), config, wiring; an optional worker pool that redacts lookup results (`EDEN_GATE_WORKERS`, D26). Runs `DEFAULT_CONFIG` (D112; `EDEN_ENGINE_CONFIG` overrides keys, D103). Model roles (`models.ts`): with `OPENROUTER_API_KEY`, cards and intent (background, price-routed) and the ask-time reader (request path) run on `EDEN_MODEL` (default `anthropic/claude-haiku-5.5`, D12's ZDR routing), each with its own `Budget`, all of a tenant's roles under one cap per UTC day (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25); no judge is wired. Without a key no role is built and the same default runs its no-model path. |
 | `packages/client` | SDK for agent builders: `EdenClient` (fail-open) and `withContext` for message lists. |
-| `packages/eval` | Scenario harness over 26 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
+| `packages/eval` | Scenario harness over 31 hand-written scenarios (docs/research/eval-suite.md): precision, recall, false-fire rate, overall and per category; a privacy check (planted secrets, inert framing); direct asks; model calls and cost per turn, latency. |
 | `packages/sim` | Simulation: generated worlds and sessions with fact-level ground truth, connectors that behave like real ones, an oracle judge, and the real server under simulated agents over HTTP ([research/simulation.md](research/simulation.md)); the connector lab, open-source MCP servers over seeded backends in isolated containers ([research/connector-lab.md](research/connector-lab.md)). Not product code. |
 | `examples/personal-agent` | A minimal agent loop wired to Eden. |
 
@@ -91,10 +91,7 @@ process also held about 490 MB of sim worlds that a real server does not). Size 
 
 `POST /v1/usage` (D326) reports a tenant's day: model spend and calls against the cap, requests by route, users held
 (frozen ones apart) and items; the router sends it to every child and sums the answers. Per-tenant spend caps are
-divided by N in each child (D163) unless the trial `EDEN_SPEND_LEASES=1` is on (D327, `spend-lease.ts`): the router
-then keeps one ledger per tenant and UTC day and grants each child its spend in chunks of cap/(4N), so a tenant's
-children together never pass the cap and one busy child can reach at least three quarters of it. The rate limit is
-still divided by N.
+divided by N in each child (D163), as is the rate limit (the spend leases of D327 were deleted by D817).
 
 ## The two speeds
 
@@ -268,8 +265,8 @@ Such a source is otherwise polled only by the daily sweep and after `syncPushMax
 the bound on a lost one. Sources that do not notify are polled as before.
 
 **Freshness at delivery** (D126, `verifyDelivery`, in the default, with `verifyTimeoutMs` 1.5 s; `partner.ts`
-`verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader,
-firewall and `ask` delivery goes through `deliverChecked`: an item whose read began before its source last signalled a
+`verifyItems`, `checkAhead`, `deliverChecked`; `SourceFanout.fetchChecked`). Every slow-path, reader
+and `ask` delivery goes through `deliverChecked`: an item whose read began before its source last signalled a
 change (`Sync.signalledSince`, a `syncPush` signal that does not say which item changed) is fetched again by its ref
 first, in parallel. A read's start is a mark, not a time (D133): every lookup, probe, re-read and sync page takes
 `Sync.mark()` (a count of signals) before its call and stores it with its copies (`ItemCache.readMark`), so a signal
@@ -516,27 +513,16 @@ up to `intentCardHits` (4) such hits the `intentHits` cut left out (read 3x as d
 and the ALL5 preset (D92) with every other named preset; the lab's presets are only `default`,
 `minus-<part>` and `minus-all`.
 
-**The action firewall** (`actionCheck`, a trial switch, off; D69, DECISIONS "Trial switches", `firewall.ts`,
-[research/econ-firewall.md](research/econ-firewall.md)): `checkAction` (HTTP `POST /v1/check`, client `check`) takes
-the agent's tool call before it runs. The session's request and the call's structured arguments (dates written out,
-amounts, names, references; free-text fields such as an email's body left out) make one cue, decided from what is held
-with no model and no source call: the probes' memo and the class's cached finds offline, the cards and the cache, through `grounded` (whose conflicts come from the conflict ground's `conflicts()` helper). The
-arguments pass the secret gate before they make the cue, each first as `"key": value` so a secret known only by its
-key's name (a password, an api_key) is caught before the call becomes words, and a session keeps only a digest of each
-call it answered with a finding, taken after the gate. Only its action grounds count (a calendar clash for a call with a
-start, a conflict, a card's, someone away), and a conflict read from shared words must also be tied by
-structure (a span over the call's day, an expiry before it, a limit on its amount, a standing constraint on someone it
-names, an identifier it names, or the action class's find). A finding the call's own words already account for ("one
-guest has coeliac disease" in the notes) is dropped. The answer is `proceed` or a `finding` in the usual data envelope;
-the same call made again after a finding proceeds (the agent's informed choice). What the integration does with a
-finding is its own: `heldResult` in the client is one choice (hold the call and return the finding as the tool's
-result). The client's `check` fails open (an error, a timeout, a 4xx or 503, or an answer of another shape is
-`proceed`); the route answers 400 for a malformed call and 503 when the engine fails. The default leaves the switch
-off: a trial turns it on through `EDEN_ENGINE_CONFIG` or an embedding's `buildPartner` `engine` settings.
+**Checking an action** (`checkAction`, HTTP `POST /v1/check`, client `check`) takes the agent's tool call before it
+runs and answers `proceed` or a `finding` in the usual data envelope; the same call made again after a finding proceeds
+(the agent's informed choice). What the integration does with a finding is its own: `heldResult` in the client is one
+choice (hold the call and return the finding as the tool's result). The client's `check` fails open (an error, a
+timeout, a 4xx or 503, or an answer of another shape is `proceed`); the route answers 400 for a malformed call and 503
+when the engine fails. Its one check is the party check below; the action firewall that also read the call's grounds
+(`actionCheck`, D69) was deleted by D815 (code in commit b4848545).
 
 **The party check** (`partyCheck`, on in the default, part `parties`; D375, D376, `parties.ts`,
-[research/a25-action-guard.md](research/a25-action-guard.md)) runs in the same `checkAction`, first, whether or not
-`actionCheck` is on. Every injection handed to the agent (`handOut`) and every ask answer has its email addresses and
+[research/a25-action-guard.md](research/a25-action-guard.md)) is what `checkAction` runs. Every injection handed to the agent (`handOut`) and every ask answer has its email addresses and
 bank account details noted as digests in the session (`Session.packetParties`, ≤ 256, each with the cited item that
 held it; in packets, account digits count only after their label). A call whose arguments (all but `NOT_PARTY`'s
 fields: amounts, dates, titles, subjects, descriptions) add such an identifier that the session's latest user message
@@ -560,7 +546,7 @@ more, no benefit under D3. With `askDedup` (D77, on in the default) each session
 packets and answers showed the agent, per item id and version (at most 64 items, never shared across sessions or
 users), so a later answer says an unchanged item by its new parts only, or "(shown above)"; an item whose words
 changed at its source counts as not shown. Shown is recorded when an injection is handed out (`handOut`: observe's
-reply, `takePending`, the firewall's finding, the ask's own answer), not when a packet is built (audit 2026-11-05
+reply, `takePending`, the ask's own answer), not when a packet is built (audit 2026-11-05
 `ask-shown-before-handed-out`): a packet still queued in `s.pending` was shown nothing, so an ask before `takePending`
 says its items in full, and drops the queued packet only when it cited every one of its items. A new delivery path
 hands out through `handOut`; noting shown at build brings back an ask's "(shown above)" for items the agent never got.
@@ -610,6 +596,15 @@ scheduler (`ItemCache.pump`: a few milliseconds of work per event-loop turn, one
 same scheduler, so a burst of returning users queues instead of stalling every other request. Figures:
 docs/research/a14-scale-users.md.
 
+Two frozen forms (D860-D862, docs/research/p6-scale.md). A user idle two minutes (two one-minute expiry ticks) is
+frozen *warm*: the blob keeps each item's deflated text bytes as they are and the user's vocabulary and index as
+arrays (`Vocab.snapshot`, `SparseIndex.snapshot` after `compact`, postings as varint gaps), so a thaw copies instead
+of tokenizing, indexing and deflating every item (10-20 ms at 3,000 items against 150-300). Per-item deflate shares
+no words across items, so a warm blob is about twice a compact one on prose; a user still idle at `freezeIdleMs` (30
+minutes) is thawed and frozen again *compact*, the one zstd stream above. A live user idle through a whole tick
+interval has its index compacted first (D861: the delta tier merged and its spare room let go, 0.5-1 MB at the
+cap).
+
 An operator may opt in to persisting frozen users (D425-D427, `persist.ts`; `EDEN_PERSIST_FROZEN_DIR` and
 `EDEN_PERSIST_KEY`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
 AES-256-GCM to one file per user under a keyed-hash name, and a thaw deletes it. A restarted process reads a user
@@ -643,5 +638,4 @@ runs the same logic on the conversation read as chat messages; a packet goes bac
 Per-user MCP connections with OAuth and a token vault; persistent session state;
 streaming delivery; a richer graph (entity resolution, relations, freshness);
 learned situation classification; per-agent (not just per-user) learning; multi-machine deployment (the router,
-D163, spreads users over processes on one machine; its rate caps are split per process, and model spend is shared
-only under the D327 trial's leases).
+D163, spreads users over processes on one machine; its rate and model-spend caps are split per process).

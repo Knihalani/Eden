@@ -126,7 +126,7 @@ import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -525,7 +525,7 @@ const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")
 if (TEMPLATES) {
   // A typo would run no tasks and print totals of zero: every name must be a template of a suite in the run.
   const known = new Set(
-    SUITE_LIST.flatMap((suite) => SUITES[suite]!(buildWorld({ seed: SEEDS[0]! * 1_000 }), SEEDS[0]!, "hidden")).map(
+    SUITE_LIST.flatMap((suite) => SUITES[suite]!(preparedWorld(suite, SEEDS[0]!), SEEDS[0]!, "hidden")).map(
       (t) => t.template,
     ),
   );
@@ -779,7 +779,7 @@ async function runSeeds(suite: string, variant: "hidden" | "control" | "neutral"
   if (CONNECT) {
     // `--connect-at`: one replica (a user) a task, every seed's at once (each starts at its own stagger).
     const runs = SEEDS.flatMap((seed) => {
-      const all = SUITES[suite]!(buildWorld({ seed: seed * 1_000 }), seed, variant);
+      const all = SUITES[suite]!(preparedWorld(suite, seed), seed, variant);
       const kept = all.filter((t) => !TEMPLATES || TEMPLATES.has(t.template)).length;
       const users = LIMIT > 0 ? Math.min(LIMIT, kept) : kept;
       return Array.from({ length: users }, (_, replica) => runSeed(suite, variant, seed, replica, users));
@@ -862,6 +862,7 @@ async function runSeed(
 ): Promise<TaskRow[]> {
   const perTask: TaskRow[] = [];
   const world = buildWorld({ seed: seed * 1_000 });
+  prepareWorld(suite, world, seed);
   const before = world.items.length;
   const all: HiddenTask[] = SUITES[suite]!(world, seed, variant);
   // Planted items line up with `all` (one a template, in order); `--templates` keeps the pairs together.
@@ -882,7 +883,7 @@ async function runSeed(
   for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
   const keep = new Set(plantedAll.map((it) => it.id));
-  for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.text, keep);
+  for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.slotText ?? task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
     // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the

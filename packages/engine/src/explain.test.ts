@@ -116,8 +116,8 @@ describe("explain (D277)", () => {
     expect(explainTrace({ ...base, decision: "sources", reason: "updated:inj_1", itemIds: ["a"] })).toContain(
       "newer version",
     );
-    expect(explainTrace({ ...base, decision: "fast", reason: "action-conflict", itemIds: ["a"] })).toContain(
-      "action firewall",
+    expect(explainTrace({ ...base, decision: "fast", reason: "action-party", itemIds: ["a"] })).toContain(
+      "party check",
     );
     expect(explainTrace({ ...base, decision: "reader-push", readerCalls: 1 })).toContain("reader read it");
   });

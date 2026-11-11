@@ -8,6 +8,13 @@ import { ContextPartner } from "./partner";
 import { isImperative } from "./probes";
 import { CORE_CONFIG } from "./parts";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const mail = (from: string, body: string) =>
@@ -129,9 +136,9 @@ describe("isImperative", () => {
 
   test("linear on hostile input", () => {
     for (const text of [" ".repeat(1_000_000), "please ".repeat(200_000), `${"a".repeat(1_000_000)} book`]) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       isImperative(text);
-      expect(performance.now() - t0).toBeLessThan(300);
+      expect(cpuMs() - t0).toBeLessThan(300);
     }
   });
 });

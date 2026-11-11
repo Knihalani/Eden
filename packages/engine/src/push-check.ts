@@ -381,7 +381,7 @@ export interface LocalCheckInput {
 
 /** The characters of an item's text the student reads (`m1_data.ITEM_CHARS`). */
 export const LOCAL_CHECK_ITEM_CHARS = 700;
-/** The characters of the request and of an item's title the student is sent (`m1_data.REQUEST_CHARS`, the endpoint's). */
+/** The request's and a title's characters the student is sent (`m1_data.REQUEST_CHARS`, the endpoint's cut). */
 export const LOCAL_CHECK_REQUEST_CHARS = 400;
 export const LOCAL_CHECK_TITLE_CHARS = 300;
 

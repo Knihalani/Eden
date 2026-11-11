@@ -10,6 +10,9 @@ and reported locally. The arithmetic (shards, cap split, merging) is fanout_plan
 The Anthropic key reaches Modal only as a Modal Secret (default name `HAIKU_API_KEY`, holding HAIKU_API_KEY;
 EDEN_HAIKU_SECRET names another) and only pi-ab shards get it; funnel shards run with no key at all. This app has
 no GPU function (one GPU function blocks a whole app until the workspace can use GPUs). `--dry` prints the plan and starts nothing.
+
+Each shard is saved under .local/modal/<run>/ as it returns; after the collector dies, the same command with the same
+`--run` and `--resume` re-launches only the shards that did not return with exit 0 (D813, README "Resuming a run").
 """
 import os
 import shlex
@@ -155,7 +158,7 @@ def _unpack(result):
 @app.local_entrypoint()
 def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: float = -1.0, run: str = "",
          args: str = "", suites_per_shard: int = 0, shards: int = 0, max_streams: int = plan.SAFE_STREAMS,
-         dry: bool = False, report: bool = True):
+         dry: bool = False, report: bool = True, resume: bool = False):
     extra = shlex.split(args)
     try:
         if preset:
@@ -192,30 +195,30 @@ def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: fl
         print(f"note: the working tree has uncommitted changes; the shards run {COMMIT[:12]} as committed")
     for s in planned:
         print(f"  {s.name}: {shlex.join(plan.shard_command(s))}")
+    run_dir = os.path.join(ROOT, ".local", "modal", run)
+    # `--resume` (R4, D813): the shards an earlier attempt of this run finished are read back, not launched again.
+    try:
+        results, todo = plan.resume_plan(run_dir, planned, COMMIT, resume)
+    except plan.PlanError as e:
+        sys.exit(f"refused: {e}")
+    if results:
+        print(f"resuming {run}: {len(results)} finished shards reused at $0, {len(todo)} to run")
     if dry:
         return
     fn = {("pi-ab", False): pi_ab_shard, ("pi-ab", True): pi_ab_scale_shard, ("funnel", False): funnel_shard,
           ("funnel", True): funnel_scale_shard}[(kind, plan.is_scale(extra))]
-    run_dir = os.path.join(ROOT, ".local", "modal", run)
     os.makedirs(run_dir, exist_ok=True)
-    results = []
     # Waves (D487): only as many shards at once as keep the agent streams on one key under --max-streams, and half
     # as many after a wave that met the rate limit.
-    width, left = first_width, list(planned)
+    width, left = first_width, list(todo)
     lock = _key_lock() if kind == "pi-ab" else None
     try:
         while left:
             wave, left = plan.waves(left, width)
-            done = []
-            # (list: the map is read to its end before the wave is reported.)
-            for s, r in zip(wave, list(fn.map([plan.asdict(s) for s in wave], return_exceptions=True))):
-                if isinstance(r, BaseException):
-                    print(f"  {s.name}: failed in Modal: {r!r}")
-                    done.append({"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}})
-                    continue
-                r = _unpack(r)
-                print(f"  {s.name}: exit {r['code']} in {r['seconds']} s")
-                done.append(r)
+            # Each shard is saved the moment it returns (in whatever order they finish), so a collector that dies
+            # mid-wave keeps every shard that came back; one Modal lost has no result and is reported failed.
+            outputs = fn.map([plan.asdict(s) for s in wave], order_outputs=False, return_exceptions=True)
+            done = plan.collect_wave(run_dir, wave, outputs, COMMIT, kind, unpack=_unpack)
             results += done
             share, sent, limited = plan.retry_share(done)
             narrower = plan.next_width(width, done)

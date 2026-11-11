@@ -10,6 +10,7 @@ performance claims cite this package alongside `bun run eval`.
 | File | Owns |
 |---|---|
 | `world.ts`, `names.ts`, `text.ts`, `rng.ts` | `buildWorld({seed})`: a user's people, organisations and ~1,500 items over mail, calendar, docs, CRM and chat, deterministic per seed; realistic item text |
+| `rare-sources.ts` | Eight rarely used connectors (notes, whatsapp, bank, health, school, trips, residents, tasks) with filler, each on a world source's profile (`profileFor`); added by suites.ts's `prepareWorld` (D873) |
 | `sessions.ts`, `updates.ts` | Sessions with ground-truth labels per turn; items changed at the source after caching |
 | `sources.ts` | `SimSource` and profile sets (`IDEAL`, `REALISTIC`, `REALISTIC_ENTITIES`, `ZOO_*`): AND vs relevance search, snippets, latency, errors, 429s, outages (assumed figures, labelled so) |
 | `quality.ts`, `quality-cli.ts` | `runQuality`: sessions through a real `ContextPartner`, scored (`bun run sim`) |
@@ -43,7 +44,7 @@ fan-out, card distillation, embedding screen; Python, `modal==1.6.3`, README the
 ## Test
 
 ```bash
-bun run test:pkg sim             # 33 files, 12-14 s wall (two runs, shared 4-core box, 2026-11-05); reader-stub and sim.test lead
+bun run test:pkg sim             # 58 files, 22.9-23.6 s cold (4 cores, 2026-11-11); cards-disk and sim.test lead
 bun run sim --users 2 --sessions 5         # a small quality run (JSON), no model, ~1 s
 ```
 

@@ -44,9 +44,7 @@ import { fnv1a, Gcra, mix32 } from "@eden/primitives";
 import { bodyShapeUnder, keylessOriginAllowed } from "@eden/protocol";
 import { keyOf } from "./auth";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, MAX_PROCESSES, type ServerConfig } from "./config";
-import { usdPerTenantDayFromEnv } from "./models";
 import { prunePersistDirs } from "./persist";
-import { isLeaseRequest, SpendLedger } from "./spend-lease";
 
 /** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
 export function childFor(tenant: string, userId: string, children: number): number {
@@ -182,7 +180,7 @@ const MAX_RESTART_MS = 30_000;
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev" | "sourceMapPath" | "processes"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "spendLeases" | "persist">>;
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "persist">>;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
   env?: Record<string, string | undefined>;
   /** The child entry (default `main.ts` beside this file). */
@@ -237,9 +235,6 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
   let stopping = false;
 
-  // Trial (D327, EDEN_SPEND_LEASES=1): one spend ledger per tenant and day, leased to the children.
-  const ledger = config.spendLeases === true ? new SpendLedger(usdPerTenantDayFromEnv(env), n) : null;
-
   const children: Child[] = Array.from({ length: n }, (_, index) => ({
     index,
     pid: 0,
@@ -262,8 +257,6 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         HOST: "127.0.0.1",
         EDEN_ROUTER_CHILD: `${c.index}/${n}`,
         EDEN_SOURCE_MAP: childSourceMapPath(config.sourceMapPath, c.index),
-        // The children lease their spend from this router's ledger exactly when it keeps one (D327).
-        EDEN_SPEND_LEASES: ledger ? "1" : "0",
       });
       let ready = false;
       let timedOut = false;
@@ -275,15 +268,6 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         stdout: options.onOutput ? "pipe" : "inherit",
         stderr: "inherit",
         ipc(message) {
-          if (ledger && isLeaseRequest(message)) {
-            // A child's spend lease (D327): granted from the tenant's one ledger, answered on the same channel.
-            try {
-              proc.send(ledger.lease(message.edenLease));
-            } catch {
-              // The child is exiting: it asks again after its restart.
-            }
-            return;
-          }
           const port = (message as { edenListening?: unknown } | null)?.edenListening;
           if (ready || typeof port !== "number") return;
           ready = true;

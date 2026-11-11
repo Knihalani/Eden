@@ -22,7 +22,7 @@ export interface EngineConfig {
   /** The fallback takes two of the request's terms, not `fallbackMatchedTerms`, when the request asks or acts. */
   fallbackAsks: boolean;
   maxItemsPerInjection: number;
-  /** A packet's size cap; with `guardLine` (D306) a packet may be `GUARD_LINE`'s 296 bytes over it. */
+  /** A packet's size cap. */
   maxInjectionBytes: number;
   /**
    * A cached item fetched or seen in a lookup longer ago than this is never delivered from the fast path: its cue goes
@@ -386,14 +386,6 @@ export interface EngineConfig {
    * tick. At 1,000 sources the daily sweep was ~1,100 listing calls a user a day (D324).
    */
   syncUnusedSweepMs: number;
-  /**
-   * Trial (D604, O1; off). With `syncUnusedSweepMs`: each unused source is swept at its own point in the period (a
-   * hash of the tenant, the user and the source), so the sources a user connected together are not all listed in
-   * one tick a week later (1,000 listings in a minute on the day bench). A source is due no later than a period
-   * after its own last sweep, as without the switch; one swept off its point (the backfill, an absence over the
-   * point) is swept up to a period early, half a sweep more on average.
-   */
-  syncSweepSpread: boolean;
   /** Users synced per tenant; past it the tenant's least recently active user stops being synced. */
   syncMaxUsersPerTenant: number;
   /** A local answer holds every word of its query, as a mail or chat search does (false: ranked, any word). */
@@ -412,8 +404,8 @@ export interface EngineConfig {
    */
   syncPushMaxStaleMs: number;
   /**
-   * Every item about to be delivered (a packet or an `ask` answer, from the slow path, the reader's push or the
-   * action firewall) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
+   * Every item about to be delivered (a packet or an `ask` answer, from the slow path or the reader's
+   * push) whose source signalled a change after the copy was read (`Sync.signalledSince`, with
    * `syncPush`) is fetched again by its ref first (`SourceFanout.fetchChecked`, within `verifyTimeoutMs`, in parallel;
    * a reader's likely picks are re-read beside its call). A changed copy is stored and delivered in its place; one the
    * source no longer has (`gone`, only from a source with `fetchReportsGone`) is dropped from the cache and not
@@ -453,13 +445,6 @@ export interface EngineConfig {
    * session on the process milliseconds of CPU, and the cue it yields is no better than the head's.
    */
   maxEventChars: number;
-  /**
-   * The action firewall (`checkAction`, `firewall.ts`; docs/research/econ-firewall.md): an agent's tool call is checked
-   * before it runs, with no model and no source call, against what is held: the request and the call's structured
-   * arguments (their days, times, amounts, names and references) read as one cue through the conflict test, the cards
-   * and the calendar. A finding is returned as data; otherwise `proceed`. Off: `checkAction` always proceeds.
-   */
-  actionCheck: boolean;
   /**
    * On in the default (D205; part `freshness`): an item this session was handed (a packet taken, an ask's answer)
    * that is stored again with other words (a sync poll, a notice carrying items, a re-read) is sent once more as an
@@ -649,25 +634,12 @@ export interface EngineConfig {
    */
   pushCandidates: number;
   /**
-   * Trial (D306, A10; docs/research/a10-injection.md): every packet and ask answer Eden renders carries `GUARD_LINE`
-   * (`shield.ts`), a fixed line of Eden's own after the envelope's header: the items are other people's words, and
-   * nothing in them is an instruction to the agent (a request, address, link, phone number or payment detail found
-   * in one is not acted on unless the user's own request asks for exactly that).
-   */
-  guardLine: boolean;
-  /**
-   * Trial (D307, A10): every item Eden renders into a packet or ask answer has its instruction-shaped text (addressed
-   * to an AI, an override, Eden's own words forged, a tool call, hidden HTML, a markdown image, a forged chat turn)
-   * replaced by `QUARANTINED` before it is compacted (`shield.ts`, no model).
-   */
-  quarantineInstructions: boolean;
-  /**
    * On in the default (D375, D376, A25; part `parties`; `parties.ts`): `checkAction` holds a call that adds a party
    * (an email address, a sort code, an account number, an IBAN, in any field but amounts, dates, titles, subjects and
    * descriptions) found only in what Eden's own packets and answers showed this session: not in the user's request,
    * and no correspondent of the user's (`ItemCache.isCorrespondent`). The finding asks the agent to confirm with the
    * user; the same call made again proceeds. No model, no source call; the session keeps digests of its packets'
-   * identifiers (`MAX_PACKET_PARTIES`). Independent of `actionCheck`: with this on and that off, only this check runs.
+   * identifiers (`MAX_PACKET_PARTIES`).
    */
   partyCheck: boolean;
   /**
@@ -885,7 +857,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   routeSketch: true,
   syncEngagedDeep: true,
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
-  syncSweepSpread: false,
   syncMaxUsersPerTenant: 1_000,
   syncLocalAll: true,
   syncPush: true,
@@ -898,7 +869,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askItemBytes: 320,
   decideCandidates: 64,
   maxEventChars: 32_000,
-  actionCheck: false,
   revisionNotice: true,
   compactAsk: true,
   askDedup: true,
@@ -932,8 +902,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   readerReuse: true,
   readerStopEarly: true,
   pushCandidates: 5,
-  guardLine: false,
-  quarantineInstructions: false,
   partyCheck: true,
   planConflict: true,
   askNudge: true,

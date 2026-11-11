@@ -24,7 +24,7 @@ import { buildWorld, type World, type WorldItem } from "../world";
 import type { Task } from "./ab-common";
 import { clearSlot, dress } from "./hidden-context";
 import { supportsNeutral } from "./neutral";
-import { SUITES, type Variant } from "./suites";
+import { preparedWorld, prepareWorld, SUITES, type Variant } from "./suites";
 
 export interface UserPlanEntry {
   suite: string;
@@ -85,8 +85,11 @@ export function dayKinds(n: number, mix: UserOptions["mix"]): { hidden: number; 
 
 /**
  * A user's D days: per day a size in the range, its kinds by `dayKinds`, its requests drawn from the suites' templates
- * without replacement (a template appears once per user) and put in a random order. Deterministic per seed.
- * Throws when the suites hold too few templates for the days, or a neutral request falls on a suite without it.
+ * without replacement (a template appears once per user) and put in a random order. Deterministic per seed. Throws
+ * when a neutral request falls on a suite without it.
+ *
+ * Weeks (P7, D874): when the templates run out before the last day, the plan is made by `planWeeks` instead, so every
+ * plan that fits is exactly what it was before weeks existed.
  */
 export function planUser(
   seed: number,
@@ -94,27 +97,79 @@ export function planUser(
   options: UserOptions,
 ): UserPlanEntry[][] {
   const rng = new Rng(seed * 7_919 + 16_016);
-  const pool = rng.sample(
-    Object.entries(templates).flatMap(([suite, names]) => names.map((template) => ({ suite, template }))),
-    Number.MAX_SAFE_INTEGER,
-  );
+  const all = Object.entries(templates).flatMap(([suite, names]) => names.map((template) => ({ suite, template })));
+  const pool = rng.sample(all, Number.MAX_SAFE_INTEGER);
   const days: UserPlanEntry[][] = [];
   for (let d = 0; d < options.days; d++) {
     const n = rng.int(options.size[0], options.size[1]);
-    if (pool.length < n) {
-      throw new Error(`--days ${options.days}: the suites hold too few templates (${pool.length} left for day ${d})`);
-    }
+    if (pool.length < n) return planWeeks(seed, all, options);
     const k = dayKinds(n, options.mix);
     const drawn = pool.splice(0, n);
     const day: UserPlanEntry[] = drawn.map((t, i) => ({
       ...t,
       variant: i < k.hidden ? "hidden" : i < k.hidden + k.control ? "control" : "neutral",
     }));
-    for (const e of day) {
-      if (e.variant === "neutral" && !supportsNeutral(e.suite)) {
-        throw new Error(`${e.suite} builds no neutral variant (neutral.ts): a long horizon needs suites that do`);
-      }
+    checkNeutral(day);
+    days.push(rng.sample(day, day.length));
+  }
+  return days;
+}
+
+const checkNeutral = (day: readonly UserPlanEntry[]) => {
+  for (const e of day) {
+    if (e.variant === "neutral" && !supportsNeutral(e.suite)) {
+      throw new Error(`${e.suite} builds no neutral variant (neutral.ts): a long horizon needs suites that do`);
     }
+  }
+};
+
+/**
+ * A plan longer than the templates (D874). A user's world holds every planted item from the start, so a template
+ * planted for the user must never also be asked as a neutral request (its fact or decoy would be in that request's
+ * world, and a grader would count raising it as a false concern). So the planted slots of all days are drawn first,
+ * without replacement, and the neutral requests cycle through the templates never planted for this user (reshuffled
+ * each time round, never twice in one day). Throws when the planted slots need more templates than there are, or
+ * none is left for the neutral requests. Its own random stream: a weeks plan shares nothing with the short one.
+ */
+export function planWeeks(
+  seed: number,
+  all: readonly { suite: string; template: string }[],
+  options: UserOptions,
+): UserPlanEntry[][] {
+  const rng = new Rng(seed * 7_919 + 874);
+  const sizes = Array.from({ length: options.days }, () => rng.int(options.size[0], options.size[1]));
+  const kinds = sizes.map((n) => dayKinds(n, options.mix));
+  const plantedSlots = kinds.reduce((x, k) => x + k.hidden + k.control, 0);
+  const shuffled = rng.sample(all, Number.MAX_SAFE_INTEGER);
+  if (plantedSlots > shuffled.length) {
+    throw new Error(`--days ${options.days}: ${plantedSlots} planted requests need more templates than ${all.length}`);
+  }
+  const planted = shuffled.slice(0, plantedSlots);
+  const neutralSet = shuffled.slice(plantedSlots);
+  if (!neutralSet.length && kinds.some((k) => k.neutral > 0)) {
+    throw new Error(`--days ${options.days}: no template is left for the neutral requests`);
+  }
+  let queue: { suite: string; template: string }[] = [];
+  const days: UserPlanEntry[][] = [];
+  for (const [d, k] of kinds.entries()) {
+    const day: UserPlanEntry[] = [];
+    for (let i = 0; i < k.hidden + k.control; i++) {
+      day.push({ ...planted.shift()!, variant: i < k.hidden ? "hidden" : "control" });
+    }
+    const today = new Set<string>();
+    for (let i = 0; i < k.neutral; i++) {
+      if (today.size >= neutralSet.length) throw new Error(`--days: day ${d} has more neutral requests than templates`);
+      // Next in the cycle not yet asked today; a new round reshuffles the never-planted templates.
+      let at = queue.findIndex((t) => !today.has(`${t.suite}|${t.template}`));
+      while (at < 0) {
+        queue = [...queue, ...rng.sample(neutralSet, Number.MAX_SAFE_INTEGER)];
+        at = queue.findIndex((t) => !today.has(`${t.suite}|${t.template}`));
+      }
+      const [t] = queue.splice(at, 1);
+      today.add(`${t!.suite}|${t!.template}`);
+      day.push({ ...t!, variant: "neutral" });
+    }
+    checkNeutral(day);
     days.push(rng.sample(day, day.length));
   }
   return days;
@@ -123,7 +178,7 @@ export function planUser(
 /** Each suite's template names, in order (from a scratch world of the seed). */
 export function suiteTemplates(seed: number, suites: readonly string[]): Record<string, string[]> {
   return Object.fromEntries(
-    suites.map((s) => [s, SUITES[s]!(buildWorld({ seed: seed * 1_000 }), seed, "hidden").map((t) => t.template)]),
+    suites.map((s) => [s, SUITES[s]!(preparedWorld(s, seed), seed, "hidden").map((t) => t.template)]),
   );
 }
 
@@ -148,8 +203,10 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
   const world = buildWorld({ seed: seed * 1_000 });
   const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
   const suites = [...new Set(plan.flat().map((e) => e.suite))];
+  // The suites' own connectors and filler (rare-sources.ts) are part of the user's base world, in every variant.
+  for (const suite of suites) prepareWorld(suite, world, seed);
   // Each suite planted once per variant in a scratch copy of the base world: a task and its item by template.
-  type Planted = { task: { id: string; text: string; detail: string }; item?: WorldItem };
+  type Planted = { task: { id: string; text: string; detail: string; slotText?: string }; item?: WorldItem };
   const made = new Map<string, Planted>();
   for (const suite of suites) {
     for (const variant of ["hidden", "control", "neutral"] as const) {
@@ -157,12 +214,20 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
       const scratch: World = { ...world, items: [...world.items] };
       const before = scratch.items.length;
       const tasks = SUITES[suite]!(scratch, seed, variant);
+      // A synth suite also writes its background and neutral items over base noise items in place (D884): carry
+      // those into the user's world (the same items for every variant of a seed). Other suites only append.
+      if (suite.startsWith("synth"))
+        for (let k = 0; k < before; k++) if (scratch.items[k] !== world.items[k]) world.items[k] = scratch.items[k]!;
       const items = scratch.items.slice(before);
       tasks.forEach((t, i) => made.set(`${suite}|${t.template}|${variant}`, { task: t, item: items[i] }));
     }
   }
   const keep = new Set<string>();
   const tasks: Task[] = [];
+  /** Ids seen: a template that returns as a request in a weeks-long plan (D874) gets `#2`, `#3`, … on its id. */
+  const seen = new Map<string, number>();
+  /** A reworded request's original text, whose slot is cleared (D871). */
+  const slotOf = new Map<string, string>();
   for (const entry of plan.flat()) {
     const p = made.get(`${entry.suite}|${entry.template}|${entry.variant}`);
     if (!p) throw new Error(`${entry.suite} has no ${entry.variant} task ${entry.template}`);
@@ -177,8 +242,12 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
       keep.add(item.id);
       planted = item.id;
     }
+    const times = (seen.get(p.task.id) ?? 0) + 1;
+    seen.set(p.task.id, times);
+    const id = times === 1 ? p.task.id : `${p.task.id}#${times}`;
+    if (p.task.slotText) slotOf.set(id, p.task.slotText);
     tasks.push({
-      id: p.task.id,
+      id,
       suite: entry.suite,
       kind: entry.variant,
       type: entry.template,
@@ -193,11 +262,11 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
   let clashes = 0;
   for (const t of tasks) {
     const probe: World = { ...world, items: [...world.items] };
-    clearSlot(probe, t.text, new Set(t.planted ? [t.planted] : []));
+    clearSlot(probe, slotOf.get(t.id) ?? t.text, new Set(t.planted ? [t.planted] : []));
     const left = new Set(probe.items.map((i) => i.id));
     for (const id of keep) if (id !== t.planted && !left.has(id)) clashes++;
   }
-  for (const t of tasks) clearSlot(world, t.text, keep);
+  for (const t of tasks) clearSlot(world, slotOf.get(t.id) ?? t.text, keep);
   return { seed, world, tasks, daySizes: plan.map((d) => d.length), clashes };
 }
 

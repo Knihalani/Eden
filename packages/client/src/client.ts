@@ -23,6 +23,7 @@ import {
   type SourceChangedReason,
   type SourceChangedResult,
 } from "@eden/protocol";
+import { defaultOnError } from "./on-error";
 
 /**
  * A failure before any answer (refused connection, DNS, timeout) as an error that says where the client was sending
@@ -45,6 +46,16 @@ function transportError(path: string, baseUrl: string, timeoutMs: number, e: unk
  */
 export function redactUrls(text: string): string {
   return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/]*@)?([^\s?#)]*)(?:[?#][^\s)]*)?/gi, "$1$2");
+}
+
+/** An environment variable, or undefined when unset, empty, or the runtime has no `process` (a browser bundle). */
+function envOf(name: string): string | undefined {
+  try {
+    const v = typeof process === "undefined" ? undefined : process.env[name];
+    return v ? v : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The reasons `/v1/sources/changed` gives (`SourceChangedReason`); anything else from a server is dropped. */
@@ -135,19 +146,25 @@ async function serverError(res: Response): Promise<string> {
 }
 
 export interface EdenClientOptions {
-  /** The tenant's API key. Omit it against a dev server (`EDEN_DEV=1`), which refuses any key. */
+  /**
+   * The tenant's API key; unset, the environment's `EDEN_API_KEY` (D856). Omit both against a dev server
+   * (`EDEN_DEV=1`), which refuses any key. An explicit "" sends none even when `EDEN_API_KEY` is set.
+   */
   apiKey?: string;
   tenantId?: string;
   userId: string;
   sessionId: string;
+  /** Eden's server; unset, the environment's `EDEN_URL`, else `http://127.0.0.1:8790` (D856). */
   baseUrl?: string;
   timeoutMs?: number;
   fetch?: typeof fetch;
   /**
-   * Called on a swallowed error, for the integrator's logs. Set it: without it a misconfiguration (a refused key or
-   * id, a wrong port) looks exactly like Eden's normal silence. A 4xx's message carries the server's reason.
+   * Called on a swallowed error, for the integrator's logs. A 4xx's message carries the server's reason. Unset, the
+   * client uses `defaultOnError` (D850): each distinct problem printed once with its fix in development, the first of
+   * each kind in production (`EDEN_ENV`/`NODE_ENV=production`), so a refused key or id, or a wrong port, no longer
+   * looks like Eden's normal silence. `null` silences it.
    */
-  onError?: (error: unknown) => void;
+  onError?: ((error: unknown) => void) | null;
   /**
    * Shadow mode: what Eden returns is not given to the agent (a trial that only logs it). The server then learns
    * nothing from it as if the agent had been shown it (`?shadow=1` on events and pending).
@@ -202,9 +219,15 @@ type EventInput = AgentEvent extends infer E
 
 export class EdenClient {
   private readonly baseUrl: string;
+  private readonly onError: ((error: unknown) => void) | null;
+  private readonly apiKey: string | undefined;
 
   constructor(private readonly options: EdenClientOptions) {
-    this.baseUrl = (options.baseUrl ?? "http://127.0.0.1:8790").replace(/\/$/, "");
+    // Unset, the environment's EDEN_URL, as the proxy, the examples and `eden doctor` read it (D856): a server on
+    // another port is then one variable for every tool, not a code change the walkthroughs kept missing.
+    this.baseUrl = (options.baseUrl ?? envOf("EDEN_URL") ?? "http://127.0.0.1:8790").replace(/\/$/, "");
+    this.onError = options.onError === undefined ? defaultOnError() : options.onError;
+    this.apiKey = options.apiKey ?? envOf("EDEN_API_KEY");
     const bad = this.badIds();
     // Every call with a bad id would be refused (400); say so once, up front. The ids themselves stay out of the
     // message (they may be personal data, such as an email). No throw (D14): the calls still fail open.
@@ -239,7 +262,7 @@ export class EdenClient {
       const res = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
         method: "POST",
         headers: {
-          ...(this.options.apiKey ? { authorization: `Bearer ${this.options.apiKey}` } : {}),
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
           "content-type": "application/json",
         },
         body: JSON.stringify(body),
@@ -271,7 +294,7 @@ export class EdenClient {
 
   private report(e: unknown): void {
     try {
-      this.options.onError?.(e);
+      this.onError?.(e);
     } catch {
       // The integrator's logger failing is no reason to throw into the agent's loop.
     }
@@ -324,10 +347,10 @@ export class EdenClient {
   }
 
   /**
-   * The action firewall (`actionCheck` on the server): a tool call the agent is about to make, checked against what
-   * Eden holds before it runs. `finding` carries held context that bears on it, as data; what to do with it is the
-   * integration's choice (`heldResult` is one: hold the call and show the agent the finding). Fails open: any error,
-   * timeout or a server without the flag is `proceed`.
+   * The party check (`partyCheck` on the server, D376): a tool call the agent is about to make, checked before it
+   * runs for a party it adds that only Eden's packets showed. `finding` carries the held context that bears on it, as
+   * data; what to do with it is the integration's choice (`heldResult` is one: hold the call and show the agent the
+   * finding). Fails open: any error, timeout or a server with the check off is `proceed`.
    */
   async check(tool: string, input: unknown, options: { timeoutMs?: number } = {}): Promise<ActionCheck> {
     const body = { ...this.who, at: Date.now(), kind: "tool_call", tool, input };

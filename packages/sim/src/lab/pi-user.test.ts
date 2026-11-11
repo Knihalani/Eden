@@ -52,7 +52,38 @@ describe("pi-user (H16)", () => {
     expect(new Set(keys).size).toBe(keys.length);
     expect(planUser(41, templates, { days: 8, size: [12, 20], mix: MIX })).toEqual(plan);
     expect(planUser(42, suiteTemplates(42, suites), { days: 8, size: [12, 20], mix: MIX })).not.toEqual(plan);
-    expect(() => planUser(41, templates, { days: 20, size: [12, 20], mix: MIX })).toThrow(/too few templates/);
+    // Weeks (D874): a plan longer than the templates. Over 30 users of four weeks: no template planted twice, none
+    // both planted and asked as a neutral request (its item would sit in that request's world), none twice in a day,
+    // and every day's kinds as dayKinds says.
+    for (let seed = 41; seed <= 70; seed++) {
+      const long = planUser(seed, suiteTemplates(seed, suites), { days: 28, size: [12, 20], mix: MIX });
+      expect(long.length).toBe(28);
+      const key = (e: { suite: string; template: string }) => `${e.suite}|${e.template}`;
+      const planted = long
+        .flat()
+        .filter((e) => e.variant !== "neutral")
+        .map(key);
+      expect(new Set(planted).size).toBe(planted.length);
+      const neutral = new Set(
+        long
+          .flat()
+          .filter((e) => e.variant === "neutral")
+          .map(key),
+      );
+      expect(planted.filter((k) => neutral.has(k))).toEqual([]);
+      for (const d of long) {
+        expect(new Set(d.map(key)).size).toBe(d.length);
+        const k = dayKinds(d.length, MIX);
+        expect([
+          d.filter((e) => e.variant === "hidden").length,
+          d.filter((e) => e.variant === "control").length,
+        ]).toEqual([k.hidden, k.control]);
+      }
+    }
+    // Too many planted requests for the templates throws.
+    expect(() =>
+      planUser(41, { train1: ["a", "b", "c"] }, { days: 4, size: [3, 3], mix: { hidden: 1, control: 0, neutral: 0 } }),
+    ).toThrow(/need more templates/);
     expect(() => planUser(41, { heldout13: ["a", "b", "c", "d"] }, { days: 1, size: [4, 4], mix: MIX })).toThrow(
       /no neutral/,
     );

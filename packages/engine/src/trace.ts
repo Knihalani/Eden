@@ -158,7 +158,7 @@ export function explainTrace(t: Trace): string {
       return "Not looked up again: the same cue was looked up a few turns ago (cueCooldownTurns).";
     case "fast":
       if (t.reason.startsWith("action-")) {
-        return `The action firewall found ${items} bearing on the tool call about to run (no model call).`;
+        return `The party check found ${items} bearing on the tool call about to run (no model call).`;
       }
       return `Spoke from the user's cached items with no source call: ${items} matched surely enough.`;
     case "sources":
