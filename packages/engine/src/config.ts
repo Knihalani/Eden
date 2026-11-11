@@ -716,6 +716,13 @@ export interface EngineConfig {
    */
   pushOpen: boolean;
   /**
+   * M3 (D908; a trial, 0 = off; docs/research/m3-arch.md §7f): with a `constraintTag` dependency (a small item tagger:
+   * the probability an item states a constraint rather than an all-clear), a pooled item counts as constraint-like
+   * only when it passes the existing test (`constraintLike`) **and** its tag probability is at least this threshold:
+   * a veto, so fewer look-alike packets go. Unwired, or a tagger that throws, vetoes nothing.
+   */
+  constraintTag: number;
+  /**
    * P2 (D820, promoted by D828, part `indirect`; docs/research/p2-push-check.md): the push also starts for a request
    * phrased as a need, a plan, a wish or a question about acting ("I need to pay …", "We should move …", "I want you
    * to book …", "Should I book …?", a request after a first clause of context), read as the imperative after its
@@ -883,6 +890,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushOpen: true,
+  constraintTag: 0,
   pushIndirect: true,
   revisionDiff: true,
 };

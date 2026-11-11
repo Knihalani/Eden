@@ -218,6 +218,11 @@ export interface PartnerDeps {
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
+  /**
+   * M3 (D908, trial `constraintTag`): an item's probability of stating a constraint (not an all-clear), from a small
+   * tagger the embedder wires (the lab wires a binarised one). Read only when `constraintTag` is above 0.
+   */
+  constraintTag?: (scope: Scope, item: ContextItem) => number | null;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -2406,7 +2411,23 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    const th = this.config.constraintTag;
+    const tag = this.deps.constraintTag;
+    if (th > 0 && tag) {
+      // The tag's veto: an item the tagger reads as an all-clear is not constraint-like, whatever its wording or card.
+      for (let i = 0; i < pool.length; i++) {
+        if (!like[i]) continue;
+        let p: number | null = null;
+        try {
+          p = tag(s.scope, pool[i]!.item);
+        } catch {
+          p = null; // fail open: no veto
+        }
+        if (p !== null && p < th) like[i] = false;
+      }
+    }
+    return { pool, like };
   }
 
   /**
