@@ -15,6 +15,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 | `src/reader-stub.ts` | No-model readers behind the real `AskReader`: `StubReader` (nothing binds), `OracleReader` (flags the expected items; a proxy). The eval's own copy of the lab's semantics: eval never imports `packages/sim` |
 | `src/cli.ts` | `bun run eval [--live --usd-cap usd [--judge]] [--wait ms] [--no-planner] [--config '{…}'] [--reader stub\|oracle] [dir]` → one JSON object |
 | `scenarios/*.json` | The scenarios; [docs/research/eval-suite.md](../../docs/research/eval-suite.md) says what each covers |
+| `scenarios/acting/*.json` | The acting suite (D810): five worlds, one request a session; 28 neutral requests (they act, no fact is owed) and 10 owed ones, each with a labelled look-alike. Run apart and reported as `acting` |
 
 ## Rules that apply here
 
@@ -47,6 +48,18 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   Precision fell to 0.889 with the `large-*` scenarios (24 of 27 delivered items expected under the old default): the
   rule paths deliver lookalikes there (`large-flight-lookalikes` 3 items for 1 expected, `large-people-lookalikes` 2 for
   1). That is the gap the reader closes, so it is kept in the baseline, not fixed by editing the scenarios.
+- **The acting suite (D810) sees the default's main delivery path.** The headline scenarios' silent turns are
+  remarks, questions and tool results, where no push starts, so `pushOpen` and the candidates' packets on requests
+  that owe nothing were invisible: `--config '{"pushOpen":false}'` read the same. `scenarios/acting/` holds requests
+  that act, labelled `"neutral"` (no stored fact bears on it: a packet is a false fire) or with `items` and `decoys`
+  (the owed fact and its look-alike). `cli.ts` runs it apart, so precision, recall and falseFireRate stay those of the
+  31 scenarios and comparable with every earlier run, and prints an `acting` block: `packetsOnNeutral` (and its
+  rate), `itemsPerNeutralTurn`, `factsHanded` (of `factsOwed`, recall's window) and `decoyHanded` (owed requests
+  where a look-alike was handed). On main: 18 of 28 neutral requests get a packet (0.64, 95% Wilson 0.46–0.79), 1.14
+  items each; 9 of 10 facts handed; a look-alike on 3 of 10. `pushOpen` off: 15 of 28, 9 of 10, 2 of 10;
+  `minus-candidates`: 7 of 28, 4 of 10, 0 of 10. Every labelled request starts the push (`run.test.ts` pins it), so
+  the suite measures what the push hands, not its gate. Labels follow the same rule as the rest: what the agent truly
+  needs, never what the engine delivers.
 - **The reader (`--reader stub|oracle`).** `bun run eval` runs the default with no model: its reader, cards and
   intent are inert (listed under `inert`), which is the shipped default's no-model path. An override that names
   `askReader` itself is refused without `--reader`. `--reader stub` wires the real
@@ -70,7 +83,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 ## Test
 
 ```bash
-bun run test:pkg eval            # ~3 s (run.test.ts: harness, reader wiring, scenario integrity, clock; no model)
+bun run test:pkg eval            # ~5 s (run.test.ts: harness, reader wiring, scenario integrity, acting suite, clock)
 bun run eval                     # a few seconds, no model, deterministic: the metrics JSON
 bun run eval --config '{"probes":true}'   # the same scenarios under engine flags
 bun run eval --reader stub                # the default with the stub reader wired

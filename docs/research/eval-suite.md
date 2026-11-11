@@ -100,3 +100,24 @@ Per category, with the planner:
 - **A first version had label errors,** found in review: items a good partner should deliver (a meeting's calendar
   entry, the overdue invoice email, a clashing train) were labelled wrong, and two labels asked for repeats. Its
   baseline (precision 0.875) measured the labels, not the engine; the numbers above are from the corrected suite.
+
+## The acting suite (D810, 2026-11-11)
+
+The weak-point analysis of 2026-11-11 (weak-points-1111.md, B1, R2) found that `bun run eval` read the same with
+`pushOpen` on or off, and that `falseFireRate` could not see candidate packets on requests that owe nothing: every
+silent turn above is a remark, a question or a tool result, where no push starts. `scenarios/acting/` adds five worlds
+(money and admin, work operations, family, travel, social), one request a session, each request one that acts: 28
+neutral (no stored fact bears on it, though it shares words with stored constraint-worded items) and 10 that owe a
+fact, each beside a labelled look-alike (another year's terms, another team's cap, another person's dates). It runs
+apart from the 31 scenarios, so the three headline numbers are unchanged, and reports an `acting` block.
+
+| Configuration | Packets on neutral requests | Items per neutral request | Facts handed | Look-alike handed |
+| --- | --- | --- | --- | --- |
+| default | 18 / 28 (0.46–0.79) | 1.14 | 9 / 10 (0.60–0.98) | 3 / 10 (0.11–0.60) |
+| `pushOpen` off | 15 / 28 (0.36–0.70) | 0.75 | 9 / 10 | 2 / 10 (0.06–0.51) |
+| `minus-candidates` | 7 / 28 (0.13–0.43) | 0.25 | 4 / 10 (0.17–0.69) | 0 / 10 (0–0.28) |
+
+Intervals are 95% Wilson on the counts; the suite is small and hand-written, so read differences of a few requests
+as direction, not size. The fact missed by the default is the visa's limit on an extended trip ("Extend my Delhi
+trip …"). In the lab the default speaks on 92–98% of neutral requests; here on 64%: these worlds hold 6–9 items each,
+so fewer requests share a word with a constraint-worded one.

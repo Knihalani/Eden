@@ -342,7 +342,7 @@ describe("scenarios", () => {
     for (const s of all) {
       const ids = new Set(s.sources.flatMap((src) => src.docs.map((d) => `${src.id}:${d.ref}`)));
       const wanted = [
-        ...s.sessions.flatMap((x) => x.turns.flatMap((t) => (t.expect && t.expect !== "silent" ? t.expect.items : []))),
+        ...s.sessions.flatMap((x) => x.turns.flatMap((t) => (typeof t.expect === "object" ? t.expect.items : []))),
         ...(s.asks ?? []).flatMap((a) => a.expect),
       ];
       for (const id of wanted) expect(`${s.id}: ${id} ${ids.has(id)}`).toBe(`${s.id}: ${id} true`);
@@ -353,6 +353,63 @@ describe("scenarios", () => {
     const large = all.filter((s) => s.id.startsWith("large-"));
     expect(large.length).toBeGreaterThanOrEqual(3);
     for (const s of large) expect(s.sources.reduce((n, src) => n + src.docs.length, 0)).toBeGreaterThanOrEqual(50);
+  });
+});
+
+describe("the acting suite (D810)", () => {
+  const dir = join(import.meta.dir, "..", "scenarios", "acting");
+  const acting = readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Scenario);
+  const labelled = acting.flatMap((s) => s.sessions.flatMap((x) => x.turns.filter((t) => t.expect)));
+  const run = (config = {}) => runScenarios(acting, { model: null, waitMs: 2_000, planner: true, config });
+
+  test("every label is a request, and every owed fact and look-alike exists in its scenario's sources", () => {
+    expect(acting.length).toBeGreaterThanOrEqual(5);
+    for (const t of labelled) {
+      expect(t.event.kind).toBe("user_message");
+      expect(t.expect === "neutral" || (typeof t.expect === "object" && (t.expect.decoys?.length ?? 0) > 0)).toBe(true);
+    }
+    for (const s of acting) {
+      const ids = new Set(s.sources.flatMap((src) => src.docs.map((d) => `${src.id}:${d.ref}`)));
+      for (const t of s.sessions.flatMap((x) => x.turns)) {
+        if (typeof t.expect !== "object") continue;
+        for (const id of [...t.expect.items, ...(t.expect.decoys ?? [])])
+          expect(`${s.id}: ${id} ${ids.has(id)}`).toBe(`${s.id}: ${id} true`);
+        // A look-alike is never also the owed fact.
+        for (const id of t.expect.decoys ?? []) expect(t.expect.items).not.toContain(id);
+      }
+    }
+  });
+
+  test("the default starts its push on every labelled request, and the block counts what it hands", async () => {
+    const m = await run();
+    // Every neutral and owed request acts (a listed verb or an opened one): the suite measures the push, not its gate.
+    expect(m.decisions["reader-push"]).toBe(labelled.length);
+    const a = m.acting!;
+    expect(a.neutralTurns).toBe(labelled.filter((t) => t.expect === "neutral").length);
+    expect(a.owedTurns + a.neutralTurns).toBe(labelled.length);
+    expect(a.decoyTurns).toBe(a.owedTurns);
+    expect(a.packetsOnNeutral).toBeGreaterThan(0);
+    expect(a.factsHanded).toBeGreaterThan(0);
+    // Neutral and look-alike labels never enter the three headline numbers: no silent turn in the suite.
+    expect(m.counts.silentTurns).toBe(0);
+    expect(m.counts.expected).toBe(a.factsOwed);
+  });
+
+  test("it sees the push's parts: pushOpen and the candidates move it, where the headline numbers do not", async () => {
+    const on = (await run()).acting!;
+    const open = (await run({ pushOpen: false })).acting!;
+    const none = (await run({ pushCandidates: 0 })).acting!;
+    expect(open.packetsOnNeutral).toBeLessThan(on.packetsOnNeutral);
+    expect(none.packetsOnNeutral).toBeLessThan(open.packetsOnNeutral);
+    expect(none.factsHanded).toBeLessThan(on.factsHanded);
+  });
+
+  test("a scenario without its labels reports no acting block", async () => {
+    const m = await runScenarios([scenario], { model: null, waitMs: 0 });
+    expect(m.acting).toBeUndefined();
   });
 });
 

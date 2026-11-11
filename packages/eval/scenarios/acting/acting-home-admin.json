@@ -1,0 +1,217 @@
+{
+  "id": "acting-home-admin",
+  "category": "money",
+  "description": "Household money and admin. Two requests owe a stored limit (a Premium Bonds cash-in's lead time, the gym's notice period), each beside a look-alike from another year or club; the rest act on things no stored item changes, though they share its words.",
+  "clock": "2026-11-09T09:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-bonds-terms",
+          "title": "Premium Bonds: how cash-ins work",
+          "text": "Cash-ins of 3,000 GBP or more take 8 working days to reach your bank and are limited to one a week."
+        },
+        {
+          "ref": "msg-bonds-2024",
+          "title": "Premium Bonds update, March 2024",
+          "text": "From April 2024 cash-ins must be made online; the minimum holding is 25 GBP."
+        },
+        {
+          "ref": "msg-gym-terms",
+          "title": "FitLab membership: your terms",
+          "text": "Cancellations need 30 days notice period; the last payment is taken after it ends."
+        },
+        {
+          "ref": "msg-swim-club",
+          "title": "Riverside Swim Club renewal",
+          "text": "Club renewals must be paid by 1 December or the place is released to the waiting list."
+        },
+        {
+          "ref": "msg-council",
+          "title": "Council tax instalment",
+          "text": "Your next council tax instalment of 142 GBP must reach us by 1 December."
+        },
+        {
+          "ref": "msg-office-lease",
+          "title": "Shared office: house rules",
+          "text": "Desks must be cleared by 7pm on Fridays; the printer is restricted to members."
+        },
+        {
+          "ref": "msg-isa",
+          "title": "Your ISA this tax year",
+          "text": "You have paid 18,500 GBP of the 20,000 GBP annual limit into ISAs this tax year."
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The user's calendar",
+      "docs": [
+        {
+          "ref": "evt-dentist",
+          "title": "Dentist",
+          "text": "Thursday 12 November, 15:00, Smile Studio, Hackney."
+        },
+        {
+          "ref": "evt-boiler",
+          "title": "Boiler service",
+          "text": "Tuesday 17 November 08:00-12:00, HeatRight engineer, someone must be in."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "acting-home-admin-1",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Cash in 3,000 GBP of my Premium Bonds so the money is here for the deposit on the 16th"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-bonds-terms"
+            ],
+            "decoys": [
+              "mail:msg-bonds-2024"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-2",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Cancel my FitLab gym membership from the end of this month"
+          },
+          "expect": {
+            "items": [
+              "mail:msg-gym-terms"
+            ],
+            "decoys": [
+              "mail:msg-swim-club"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-3",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Note down a reminder to water the office plants on Friday"
+          },
+          "expect": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-4",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Draft a short birthday message for my swim club friend Ana"
+          },
+          "expect": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-5",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Tidy up the printer settings guide for the shared office wiki"
+          },
+          "expect": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-6",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Buy a birthday card for the dentist receptionist who retires next week"
+          },
+          "expect": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-7",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Write a two line thank-you to the council's bin crew for the Christmas collection"
+          },
+          "expect": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "acting-home-admin-8",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Order a new filter for the boiler room dehumidifier, the cheap one is fine"
+          },
+          "expect": "neutral"
+        }
+      ]
+    }
+  ]
+}
