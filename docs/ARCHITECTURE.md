@@ -610,6 +610,15 @@ scheduler (`ItemCache.pump`: a few milliseconds of work per event-loop turn, one
 same scheduler, so a burst of returning users queues instead of stalling every other request. Figures:
 docs/research/a14-scale-users.md.
 
+Two frozen forms (D860-D862, docs/research/p6-scale.md). A user idle two minutes (two one-minute expiry ticks) is
+frozen *warm*: the blob keeps each item's deflated text bytes as they are and the user's vocabulary and index as
+arrays (`Vocab.snapshot`, `SparseIndex.snapshot` after `compact`, postings as varint gaps), so a thaw copies instead
+of tokenizing, indexing and deflating every item (10-20 ms at 3,000 items against 150-300). Per-item deflate shares
+no words across items, so a warm blob is about twice a compact one on prose; a user still idle at `freezeIdleMs` (30
+minutes) is thawed and frozen again *compact*, the one zstd stream above. A live user idle through a whole tick
+interval has its index compacted first (D861: the delta tier merged and its spare room let go, 0.5-1 MB at the
+cap).
+
 An operator may opt in to persisting frozen users (D425-D427, `persist.ts`; `EDEN_PERSIST_FROZEN_DIR` and
 `EDEN_PERSIST_KEY`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
 AES-256-GCM to one file per user under a keyed-hash name, and a thaw deletes it. A restarted process reads a user

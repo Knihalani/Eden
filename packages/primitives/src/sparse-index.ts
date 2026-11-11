@@ -64,6 +64,35 @@ export interface SparseIndexOptions {
   onTermFreed?: (term: number) => void;
 }
 
+/**
+ * A compacted index as arrays (`SparseIndex.snapshot`, D860): a frozen user's blob carries it so a thaw does not
+ * tokenize and index every item again. `fDocs` and `fFwd` keep their width (Uint16 while numbers fit).
+ */
+export interface IndexSnapshot {
+  fields: number;
+  docs: number;
+  live: number;
+  keys: number;
+  totalPostings: number;
+  liveTerms: number;
+  deltaCap: number;
+  chained: boolean;
+  totalLens: Float64Array;
+  df: Uint32Array;
+  lens: Float32Array;
+  where: Uint8Array;
+  fwdStart: Uint32Array;
+  fwdLen: Uint32Array;
+  nPost: Uint32Array;
+  keyStart: Uint32Array;
+  fDocs: Uint16Array | Uint32Array;
+  fTfs: Uint8Array;
+  fFwd: Uint16Array | Uint32Array;
+  /** `bigTf` as (key, frequency) pairs. */
+  bigTf: Float64Array;
+  freeDocs: Int32Array;
+}
+
 export interface SearchResults {
   count: number;
   docs: Int32Array;
@@ -285,6 +314,11 @@ export class SparseIndex {
     return this.live;
   }
 
+  /** What `compact` would merge: delta docs and removed docs not yet purged (0 once compacted, until a change). */
+  get compactWork(): number {
+    return this.deltaN + this.pendingFree.length;
+  }
+
   /** Distinct term ids that some live doc holds. */
   get termCount(): number {
     return this.liveTerms;
@@ -439,6 +473,132 @@ export class SparseIndex {
    */
   settle(): void {
     if (this.merge !== null) this.mergeStep(Infinity);
+  }
+
+  /**
+   * Merges everything into the frozen tier now and lets go of the delta's spare room (D860): the removed docs are
+   * purged, the merge under way finished, the whole delta (however few docs) sealed and merged, and the delta's
+   * arrays cut to their minimum. For an index that has gone idle (the engine's idle tick, and before a `snapshot`):
+   * a heavy index's delta holds up to an eighth of its docs at about three times a frozen doc's bytes, plus room
+   * to grow. Results are unchanged (frozen postings keep insertion order, frozen before delta).
+   */
+  compact(): void {
+    const done = this.deltaN === 0 && this.dFwd.length === 0 && this.merge === null;
+    if (done && this.pendingFree.length === 0 && this.staleDocs.length === 0) return;
+    if (this.pendingFree.length > 0) this.purge();
+    this.settle();
+    if (this.deltaN > 0 || this.staleDocs.length > 0) {
+      this.seal();
+      this.mergeStep(Infinity);
+    }
+    // The delta is empty: its arrays at their floor (`rebuildDelta` left at least 64 slots, and a chain head per
+    // term id; `link` grows the head again as terms arrive).
+    this.dFwd = new Uint32Array(0);
+    this.dTf = new Uint8Array(0);
+    this.dUsed = 0;
+    this.deltaDocs = new Int32Array(16);
+    if (this.dHead !== null) {
+      this.dHead = new Int32Array(16).fill(-1);
+      this.dNext = new Int32Array(0);
+      this.dDoc = new Int32Array(0);
+    }
+    this.staleTerms = null;
+  }
+
+  /**
+   * The index as typed arrays and numbers (a frozen user's blob, D860), after `compact`: `SparseIndex.restore`
+   * rebuilds it, doc numbers and all, with no tokenizing and no merge. The arrays are copies cut to their used length.
+   */
+  snapshot(): IndexSnapshot {
+    this.compact();
+    const F = this.fields;
+    const n = this.docs;
+    const keys = this.fKeys;
+    const total = keys > 0 ? this.keyStart[keys]! : 0;
+    let fwdTotal = 0;
+    for (let d = 0; d < n; d++) {
+      const end = this.fwdStart[d]! + this.fwdLen[d]!;
+      if (end > fwdTotal && (this.where[d] === FROZEN || this.where[d] === FROZEN_DEAD)) fwdTotal = end;
+    }
+    let maxTerm = 0;
+    for (let t = this.df.length - 1; t >= 0; t--) {
+      if (this.df[t] !== 0) {
+        maxTerm = t + 1;
+        break;
+      }
+    }
+    const big = new Float64Array(this.bigTf.size * 2);
+    let i = 0;
+    for (const [k, v] of this.bigTf) {
+      big[i++] = k;
+      big[i++] = v;
+    }
+    return {
+      fields: F,
+      docs: n,
+      live: this.live,
+      keys,
+      totalPostings: this.totalPostings,
+      liveTerms: this.liveTerms,
+      deltaCap: this.deltaCap,
+      chained: this.dHead !== null,
+      totalLens: this.totalLens.slice(),
+      df: this.df.slice(0, maxTerm),
+      lens: this.lens.slice(0, n * F),
+      where: this.where.slice(0, n),
+      fwdStart: this.fwdStart.slice(0, n),
+      fwdLen: this.fwdLen.slice(0, n),
+      nPost: this.nPost.slice(0, n),
+      keyStart: keys > 0 ? this.keyStart.slice(0, keys + 1) : new Uint32Array(0),
+      fDocs: this.fDocs.slice(0, total),
+      fTfs: this.fTfs.slice(0, total),
+      fFwd: this.fFwd.slice(0, fwdTotal),
+      bigTf: big,
+      freeDocs: Int32Array.from(this.freeDocs),
+    };
+  }
+
+  /**
+   * The index `snapshot` saved (D860), with `options` as the index was built with (they are not saved: the caller's
+   * own). Searches, adds and removes behave as on the index the snapshot was taken of.
+   */
+  static restore(s: IndexSnapshot, options: SparseIndexOptions = {}): SparseIndex {
+    const x = new SparseIndex(options);
+    if (s.fields !== x.fields) throw new RangeError("snapshot has another field count");
+    const F = x.fields;
+    const cap = Math.max(16, s.docs);
+    x.docs = s.docs;
+    x.live = s.live;
+    x.fKeys = s.keys;
+    x.totalPostings = s.totalPostings;
+    x.liveTerms = s.liveTerms;
+    x.deltaCap = s.deltaCap;
+    x.totalLens.set(s.totalLens);
+    x.df = new Uint32Array(Math.max(16, s.df.length));
+    x.df.set(s.df);
+    x.lens = new Float32Array(cap * F);
+    x.lens.set(s.lens);
+    x.where = new Uint8Array(cap);
+    x.where.set(s.where);
+    x.fwdStart = new Uint32Array(cap);
+    x.fwdStart.set(s.fwdStart);
+    x.fwdLen = new Uint32Array(cap);
+    x.fwdLen.set(s.fwdLen);
+    x.nPost = new Uint32Array(cap);
+    x.nPost.set(s.nPost);
+    x.keyStart = s.keys > 0 ? s.keyStart : EMPTY;
+    x.fDocs = s.fDocs;
+    x.fTfs = s.fTfs;
+    x.fFwd = s.fFwd;
+    for (let i = 0; i < s.bigTf.length; i += 2) x.bigTf.set(s.bigTf[i]!, s.bigTf[i + 1]!);
+    x.freeDocs = Array.from(s.freeDocs);
+    x.dFwd = new Uint32Array(0);
+    x.dTf = new Uint8Array(0);
+    if (s.chained) x.dHead = new Int32Array(16).fill(-1);
+    // The shared scratch must reach past every term id the index holds (`purge` marks terms seen in it), as `add`
+    // keeps it for terms it meets; a fresh process has seen none of these.
+    if (s.df.length > 0 && s.df.length > tfCount.length) growScratch(s.df.length - 1);
+    return x;
   }
 
   /** The doc's sorted unique term ids (all fields). A view or a copy: callers must not write to it. */
