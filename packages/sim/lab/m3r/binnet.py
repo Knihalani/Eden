@@ -101,21 +101,54 @@ class BinLin(nn.Module):
         return self.norm(x @ W.T)
 
 
+RANK_CUTS = (1, 3, 5, 10, 20, 40)
+PRIOR = {"cuts": None}
+
+
+def fit_prior(worlds):
+    """Quantile cut points (4 a feature) of the export's 48 pair features, from training rows."""
+    import numpy as np
+
+    rows = [f for w in worlds[:60] for r in w["reqs"] for f in r["feats"]]
+    a = np.array(rows, dtype=np.float64)
+    PRIOR["cuts"] = [np.quantile(a[:, j], [0.2, 0.4, 0.6, 0.8]).tolist() for j in range(a.shape[1])]
+
+
+def prior_bits(r, K):
+    """(K, P) ±1 bits a candidate: its lexical position (rank buckets) and each pair feature against its 4 cuts."""
+    cuts = PRIOR["cuts"]
+    P = len(RANK_CUTS) + 4 * len(cuts)
+    out = -torch.ones(K, P)
+    for k, f in enumerate(r["feats"][:K]):
+        for b, c in enumerate(RANK_CUTS):
+            if k < c:
+                out[k, b] = 1.0
+        for j, v in enumerate(f):
+            for q_, c in enumerate(cuts[j]):
+                if v > c:
+                    out[k, len(RANK_CUTS) + 4 * j + q_] = 1.0
+    return out
+
+
+def prior_size():
+    return len(RANK_CUTS) + 4 * len(PRIOR["cuts"]) if PRIOR["cuts"] else 0
+
+
 class Pair(nn.Module):
-    def __init__(self, q, bits, twin=True):
+    def __init__(self, q, bits, twin=True, prior=0):
         super().__init__()
-        self.q, self.twin = q, twin
+        self.q, self.twin, self.prior = q, twin, prior
         self.ienc, self.qenc = Enc(q, bits), Enc(q, bits)
-        self.l1 = BinLin(q, (5 if twin else 3) * bits, 128)
+        self.l1 = BinLin(q, (5 if twin else 3) * bits + prior, 128)
         self.l2 = BinLin(q, 128, 32)
         self.head = nn.Linear(32, 1)
         self.n1 = BinLin(q, bits, 32)
         self.nhead = nn.Linear(32, 1)
 
-    def forward(self, qc, ic, tc):
+    def forward(self, qc, ic, tc, pb=None):
         R, K, B = ic.shape
         qq = qc.unsqueeze(1).expand(R, K, B)
-        parts = [qq * ic, qq, ic] + ([ic * tc, tc] if self.twin else [])
+        parts = [qq * ic, qq, ic] + ([ic * tc, tc] if self.twin else []) + ([pb] if self.prior else [])
         h = self.q.act(self.l1(torch.cat(parts, -1).reshape(R * K, -1)))
         h = self.q.act(self.l2(h))
         return self.head(h).view(R, K), self.nhead(self.q.act(self.n1(qc))).squeeze(-1)
@@ -173,6 +206,87 @@ class Keys(nn.Module):
         return torch.einsum("rkc,nkc->rn", qk, ik), qk, ik  # number of shared keys (same slot, same code)
 
 
+BLOOM = 2048
+MBUCKETS = 256
+
+
+def bloom_of(text):
+    """An item's 2,048-bit Bloom filter of its hashed n-grams (two hash positions a gram), as a set of bit indices."""
+    out = set()
+    for g in grams(text):
+        out.add(g % BLOOM)
+        out.add((g * 2_654_435_761 >> 7) % BLOOM)
+    return out
+
+
+def match_bits(qgrams, bloom):
+    """(request, item) -> 256 match bits: bucket b is on when a request gram hashed to b is in the item's filter."""
+    m = torch.zeros(MBUCKETS)
+    for g in qgrams:
+        if g % BLOOM in bloom and (g * 2_654_435_761 >> 7) % BLOOM in bloom:
+            m[g % MBUCKETS] = 1.0
+    return m
+
+
+class Bloom(nn.Module):
+    """BloomMatch (H7): only bit tests per candidate. Inputs (±1): the item's match bits, the request's own bucket
+    bits, and the match bits XOR its twin's; two binary layers and a head; a NULL head on the request bits."""
+
+    def __init__(self, q, twin=True, prior=0):
+        super().__init__()
+        self.q, self.twin, self.prior = q, twin, prior
+        self.l1 = BinLin(q, (3 if twin else 2) * MBUCKETS + prior, 128)
+        self.l2 = BinLin(q, 128, 32)
+        self.head = nn.Linear(32, 1)
+        self.n1 = BinLin(q, MBUCKETS, 32)
+        self.nhead = nn.Linear(32, 1)
+
+    def forward(self, qbits, mbits, tbits, pb=None):
+        R, K, M = mbits.shape
+        qq = qbits.unsqueeze(1).expand(R, K, M)
+        parts = [mbits * 2 - 1, qq * 2 - 1] + ([(mbits != tbits).float() * 2 - 1] if self.twin else [])
+        parts += [pb] if self.prior else []
+        h = self.q.act(self.l1(torch.cat(parts, -1).reshape(R * K, -1)))
+        h = self.q.act(self.l2(h))
+        return self.head(h).view(R, K), self.nhead(self.q.act(self.n1(qbits * 2 - 1))).squeeze(-1)
+
+
+def bloom_batch(w, rs, cache):
+    """Match bits for each request's candidates and their twins (item filters cached per world)."""
+    if "blooms" not in cache:
+        cache["blooms"] = [bloom_of(t) for t in w["texts"]]
+    bl = cache["blooms"]
+    K = max(len(r["cands"]) for r in rs)
+    M = torch.zeros(len(rs), K, MBUCKETS)
+    T = torch.zeros(len(rs), K, MBUCKETS)
+    Qb = torch.zeros(len(rs), MBUCKETS)
+    mask = torch.ones(len(rs), K, dtype=torch.bool)
+    for a, r in enumerate(rs):
+        qg = grams(r["request"])
+        for g in qg:
+            Qb[a, g % MBUCKETS] = 1.0
+        for k, c in enumerate(r["cands"]):
+            M[a, k] = match_bits(qg, bl[c])
+            tw = w["twin"][c]
+            T[a, k] = match_bits(qg, bl[tw]) if tw >= 0 else M[a, k]
+            mask[a, k] = False
+    return Qb, M, T, mask
+
+
+class Intent(nn.Module):
+    """H8: a request alone -> one of M2's 16 archetypes (binary char-n-gram encoder and one binary layer)."""
+
+    def __init__(self, q, bits, n):
+        super().__init__()
+        self.q = q
+        self.enc = Enc(q, bits)
+        self.l1 = BinLin(q, bits, 64)
+        self.head = nn.Linear(64, n)
+
+    def forward(self, texts):
+        return self.head(self.q.act(self.l1(self.enc(texts))))
+
+
 def load(path, n=None, every=1):
     out = []
     with gzip.open(path, "rt") as f:
@@ -201,7 +315,8 @@ def write_ranks(net, worlds, path):
             for r in rs:
                 c = torch.tensor(r["cands"])
                 t = torch.tensor([w["twin"][k] if w["twin"][k] >= 0 else k for k in r["cands"]])
-                s, nl = net(net.qenc([r["request"]]), codes[c].unsqueeze(0), codes[t].unsqueeze(0))
+                pb = prior_bits(r, len(r["cands"])).unsqueeze(0) if net.prior else None
+                s, nl = net(net.qenc([r["request"]]), codes[c].unsqueeze(0), codes[t].unsqueeze(0), pb)
                 order = torch.argsort(-s[0]).tolist()
                 ids = [w["ids"][r["cands"][k]] for k in order]
                 f.write(json.dumps({"rid": r["rid"], "all": ids,
@@ -223,7 +338,8 @@ def eval_pair(net, worlds, heldout):
             for r in rs:
                 c = torch.tensor(r["cands"])
                 t = torch.tensor([w["twin"][k] if w["twin"][k] >= 0 else k for k in r["cands"]])
-                s, nl = net(net.qenc([r["request"]]), codes[c].unsqueeze(0), codes[t].unsqueeze(0))
+                pb = prior_bits(r, len(r["cands"])).unsqueeze(0) if net.prior else None
+                s, nl = net(net.qenc([r["request"]]), codes[c].unsqueeze(0), codes[t].unsqueeze(0), pb)
                 order = torch.argsort(-s[0]).tolist()
                 ranked = [r["cands"][k] for k in order]
                 top = float(s[0].max())
@@ -251,13 +367,15 @@ def run(o):
     random.seed(7)
     torch.manual_seed(7)
     heldout = set(o.held.split(","))
-    train = load(o.train, o.worlds, o.every)
-    ev = load(o.eval)
+    train = load(o.train, o.worlds, o.every) if o.train.endswith(".gz") else []
+    ev = load(o.eval) if o.eval.endswith(".gz") else []
     q = Q(o.float)
     t0 = time.time()
     curve = []
+    if o.prior:
+        fit_prior(train)
     if o.arch in ("pair", "notwin"):
-        net = Pair(q, o.bits, twin=o.arch == "pair")
+        net = Pair(q, o.bits, twin=o.arch == "pair", prior=prior_size() if o.prior else 0)
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
         base = {"fact@5_lexical": sum(1 for w in ev for r in w["reqs"] if held(r, heldout) and r["kind"] == "hidden"
                                       and r["target"] >= 0 and r["target"] < 5)}
@@ -276,7 +394,8 @@ def run(o):
                     mask[a, : len(r["cands"])] = False
                 tw = torch.tensor(w["twin"])
                 t = torch.where(tw[c] >= 0, tw[c], c)
-                s, nl = net(net.qenc([r["request"] for r in rs]), codes[c], codes[t])
+                pb = torch.stack([prior_bits(r, K) for r in rs]) if net.prior else None
+                s, nl = net(net.qenc([r["request"] for r in rs]), codes[c], codes[t], pb)
                 logits = torch.cat([nl.unsqueeze(1), s.masked_fill(mask, -1e4)], 1)
                 y = torch.tensor([r["target"] + 1 if r["target"] >= 0 else 0 for r in rs])
                 loss = nn.functional.cross_entropy(logits, y)
@@ -297,6 +416,8 @@ def run(o):
         net = Tagger(q, o.bits)
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
 
+        kinds = []
+
         def rows(ws, only_held=None):
             xs, ys = [], []
             for w in ws:
@@ -307,14 +428,18 @@ def run(o):
                         continue
                     xs.append(w["texts"][r["planted"]])
                     ys.append(1.0 if r["kind"] == "hidden" else 0.0)
+                    kinds.append("fact" if r["kind"] == "hidden" else "twin")
                     other = random.randrange(len(w["texts"]))
                     if other != r["planted"]:
                         xs.append(w["texts"][other])
                         ys.append(0.0)
+                        kinds.append("other")
             return xs, ys
 
         X, Y = rows(train)
+        kinds.clear()
         Xe, Ye = rows(ev, True)
+        Ke = list(kinds)
         step = 0
         for ep in range(o.epochs):
             idx = list(range(len(X)))
@@ -333,7 +458,12 @@ def run(o):
             with torch.no_grad():
                 p = torch.cat([net(Xe[a : a + 256]) for a in range(0, len(Xe), 256)]).tolist()
             net.train()
-            result = auc_split(p, Ye, Xe, ev, heldout)
+            pf = [a for a, k in zip(p, Ke) if k == "fact"]
+            pt = [a for a, k in zip(p, Ke) if k == "twin"]
+            po = [a for a, k in zip(p, Ke) if k == "other"]
+            result = {"auc_fact_vs_twin": round(auc(pf + pt, [1] * len(pf) + [0] * len(pt)), 3),
+                      "auc_fact_vs_other": round(auc(pf + po, [1] * len(pf) + [0] * len(po)), 3),
+                      "facts": len(pf), "twins": len(pt)}
             print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
     elif o.arch == "silence":
         net = Silence(q, o.bits)
@@ -397,6 +527,102 @@ def run(o):
                 step += 1
             result = eval_keys(net, ev, heldout)
             print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
+    elif o.arch in ("bloom", "bloom-notwin"):
+        net = Bloom(q, twin=o.arch == "bloom", prior=prior_size() if o.prior else 0)
+        opt = torch.optim.Adam(net.parameters(), lr=o.lr)
+        caches = {}
+        step = 0
+        for ep in range(o.epochs):
+            for wi in random.sample(range(len(train)), len(train)):
+                w = train[wi]
+                rs = [r for r in w["reqs"] if r["cands"] and not (r["kind"] == "hidden" and r["target"] < 0)][:32]
+                if not rs:
+                    continue
+                Qb, M, T, mask = bloom_batch(w, rs, caches.setdefault(wi, {}))
+                pb = torch.stack([prior_bits(r, M.shape[1]) for r in rs]) if net.prior else None
+                s_, nl = net(Qb, M, T, pb)
+                logits = torch.cat([nl.unsqueeze(1), s_.masked_fill(mask, -1e4)], 1)
+                y = torch.tensor([r["target"] + 1 if r["target"] >= 0 else 0 for r in rs])
+                loss = nn.functional.cross_entropy(logits, y)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                if step % 20 == 0:
+                    curve.append({"step": step, "loss": round(float(loss), 3)})
+                    print(curve[-1], flush=True)
+                step += 1
+            net.eval()
+            m = {"hidden": 0, "fact@5": 0, "fact@5_lexical": 0, "control": 0, "twin@5": 0, "silent_ctl": 0, "spoke_hid": 0}
+            with torch.no_grad():
+                for w in ev:
+                    rs = [r for r in w["reqs"] if r["cands"] and held(r, heldout)]
+                    if not rs:
+                        continue
+                    cache = {}
+                    for a in range(0, len(rs), 32):
+                        rb = rs[a : a + 32]
+                        Qb, M, T, mask = bloom_batch(w, rb, cache)
+                        pb = torch.stack([prior_bits(r, M.shape[1]) for r in rb]) if net.prior else None
+                        s_, nl = net(Qb, M, T, pb)
+                        s_ = s_.masked_fill(mask, -1e4)
+                        for r, row, n_ in zip(rb, s_.tolist(), nl.tolist()):
+                            order = sorted(range(len(r["cands"])), key=lambda k: -row[k])
+                            ranked = [r["cands"][k] for k in order]
+                            if r["kind"] == "hidden":
+                                if r["target"] < 0:
+                                    continue
+                                m["hidden"] += 1
+                                m["fact@5"] += r["cands"][r["target"]] in ranked[:5]
+                                m["fact@5_lexical"] += r["target"] < 5
+                                m["spoke_hid"] += max(row[: len(r["cands"])]) > n_
+                            else:
+                                m["control"] += 1
+                                m["twin@5"] += r["planted"] in ranked[:5]
+                                m["silent_ctl"] += max(row[: len(r["cands"])]) <= n_
+            net.train()
+            result = m
+            print({"epoch": ep, **m, "s": round(time.time() - t0)}, flush=True)
+    elif o.arch == "intent":
+        # M2's raw worlds: each request -> its task's archetype; held out: M2's val split (families never in train).
+        def reqs(path):
+            xs, ys = [], []
+            for line in open(path):
+                w = json.loads(line)
+                for t in w["tasks"]:
+                    for r in t["requests"]:
+                        xs.append(r["text"])
+                        ys.append(t["archetype"])
+            return xs, ys
+
+        X, Yn = reqs(o.train)
+        Xe, Yen = reqs(o.eval)
+        labels = sorted(set(Yn))
+        Y = [labels.index(y) for y in Yn]
+        Ye = [labels.index(y) if y in labels else -1 for y in Yen]
+        net = Intent(q, o.bits, len(labels))
+        opt = torch.optim.Adam(net.parameters(), lr=o.lr)
+        step = 0
+        majority = max(Ye.count(k) for k in set(Ye)) / len(Ye)
+        for ep in range(o.epochs):
+            idx = list(range(len(X)))
+            random.shuffle(idx)
+            for a in range(0, len(idx), 128):
+                b = idx[a : a + 128]
+                loss = nn.functional.cross_entropy(net([X[k] for k in b]), torch.tensor([Y[k] for k in b]))
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                if step % 20 == 0:
+                    curve.append({"step": step, "loss": round(float(loss), 3)})
+                    print(curve[-1], flush=True)
+                step += 1
+            net.eval()
+            with torch.no_grad():
+                pred = torch.cat([net(Xe[a : a + 512]).argmax(-1) for a in range(0, len(Xe), 512)]).tolist()
+            net.train()
+            result = {"acc": round(sum(p == y for p, y in zip(pred, Ye)) / len(Ye), 3), "majority": round(majority, 3),
+                      "n": len(Ye), "classes": len(labels)}
+            print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
     else:
         raise SystemExit(f"unknown arch {o.arch}")
     out = {"arch": o.arch, "float": o.float, "bits": o.bits, "worlds": len(train), "epochs": o.epochs,
@@ -453,6 +679,7 @@ if __name__ == "__main__":
     a.add_argument("--train", required=True)
     a.add_argument("--eval", required=True)
     a.add_argument("--float", action="store_true")
+    a.add_argument("--prior", action="store_true", help="pair/bloom: lexical-rank and pair-feature bits as inputs")
     a.add_argument("--worlds", type=int, default=40)
     a.add_argument("--every", type=int, default=10)
     a.add_argument("--epochs", type=int, default=3)
