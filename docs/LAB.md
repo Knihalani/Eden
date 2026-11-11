@@ -131,7 +131,7 @@ Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too),
 | Intent requests (D87)                                                             | `cards-enrich.ts --intent --dir D`                | `--intent D/intent-v2.jsonl` (needs `--cards`)                                                                                              | the Haiku campaign's no (`.local/haiku/intent/`); the train worlds (seeds 41–44) and held-out 10–11 (seeds 41–42), made for D110, plus held-out 13 and 14 (seeds 41–44; 14 topped up on Haiku 5.5 for RealUse-1), yes: `packages/sim/lab/distilled/intent-v2.jsonl.gz`, which `bun run funnel` unpacks and replays by default when it covers the run (D158; `--intent none` opts out) |
 | Bridge queries (D89)                                                              | `bridge-enrich.ts --out F`                        | `--bridge F`                                                                                                                                | no                                                                                                                                                                                                                                                                                                                                                                                    |
 | Reader calls (D95)                                                                | `--reader live --reader-model m --reader-cache F` | `--reader replay --reader-model m --reader-cache F` (the same `m`: the key hashes it; a prompt not cached fails open; misses exit 3, below) | the default on train, seeds 41–42, Haiku 5.5, cards and intent replayed (D158), yes: `packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz` (gunzip it; recipe 2a); D141's intent-inert `reader-haiku-train-4142.jsonl.gz` is history, replayed with `--intent none` (with intent on it misses most prompts); others no                                                 |
-| Cards and intent at shipped coverage (D872) | `cold-start.ts --users suite:seed:variant,… --cards-out F` (the enricher `buildPartner` builds, recorded) | `bun run funnel --coverage shipped` (as `--cards` and `--intent`; SHIPPED_COVERS in cards-disk.ts) | yes: `packages/sim/lab/distilled/cards-shipped.jsonl.gz` (train1–6 and reworded, longtail, heldout19, seeds 41–44, every variant; Haiku 5.5, lab transport) |
+| Cards and intent at shipped coverage (D872) | `cold-start.ts --users suite:seed:variant,… --cards-out F` (the enricher `buildPartner` builds, recorded) | `bun run funnel --coverage shipped` (as `--cards` and `--intent`; SHIPPED_COVERS in cards-disk.ts) | yes: `packages/sim/lab/distilled/cards-shipped.jsonl.gz` (train1–6 and reworded, longtail, heldout19, seeds 41–44, every variant; Haiku 5.5, lab transport); `cards-shipped-weeks.jsonl.gz` (the 24 weeks users of recipe 1h) |
 
 `pi-ab.ts`/`hermes-ab.ts` read `--cards FILE` and write cards they had to make live to `--cards-out` (default
 `<out>.cards.jsonl`); name that file in later runs. Keep run outputs under `.local/` (git ignores it).
@@ -570,9 +570,14 @@ time is `--max-streams 4`.
 ### 1h. Weeks, many users and the long tail at $0 (P7, D874, D875)
 
 ```bash
+gunzip -c packages/sim/lab/distilled/cards-shipped-weeks.jsonl.gz > .local/weeks.cards.jsonl   # the users' shipped cards
 bun packages/sim/src/lab/days-calls.ts --seeds 41-64 --days 28 --night-h 20 --suite train,longtail \
-  --arrive-days 0-10 --cards packages/sim/lab/cards/cards-train.jsonl     # 24 users, four weeks, about 2.5 min
+  --arrive-days 0-10 --cards .local/weeks.cards.jsonl --intent .local/weeks.cards.jsonl   # 24 users, four weeks, $0
 ```
+
+The cards file is what the shipped enricher wrote for those 24 users (`cold-start.ts --users user:41,…,user:64
+--suite train,longtail --days 28 --cards-out F`, $0.26, D872); another seed, suite or day count needs its own.
+One process, 127 s on the shared 4-core box (measured 2026-11-11, with the train card file).
 
 `--arrive-days LO-HI` holds each planted item until LO–HI days before its request and releases it with no notice, so
 only a poll, a sweep or the request's own reads can find it; the surfaced lines split by connector class (`rare`,

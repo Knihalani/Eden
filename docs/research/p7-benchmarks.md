@@ -80,31 +80,53 @@ recovers most of the gap, so a live agent that asks less would lose more. This s
 
 ### 2.2 The long tail over four weeks ($0)
 
-`days-calls.ts --seeds 41-64 --days 28 --night-h 20 --suite train,longtail --arrive-days 0-10` with
-`--cards cards-train.jsonl` and the checked-in requests. The run has 24 users and 10,668 requests. Each planted item
-appears at its connector with no notice 0–10 days before its request.
+```bash
+bun packages/sim/src/lab/days-calls.ts --seeds 41-64 --days 28 --night-h 20 --suite train,longtail \
+  --arrive-days 0-10 --cards F --intent F     # F: the 24 users' shipped cards (cold-start.ts --cards-out, $0.26)
+```
 
-| Arm                                               | Hidden handed, all | Rare connectors | Common sources | Background listings a user-day | Request-time calls a request |
-| ------------------------------------------------- | ------------------ | --------------- | -------------- | ------------------------------ | ---------------------------- |
-| default (push payload)                            | 437/1106           | 33/134          | 404/972        | 17.96                          | 0.163                        |
-| `syncUnusedSweepMs: 0` (every source swept daily) | 437/1106           | 33/134          | 404/972        | 17.98                          | 0.161                        |
-| `--push none` (no source notifies)                | 454/1106           | 35/134          | 419/972        | 17.90                          | 1.186                        |
+The run has 24 users and 10,734 requests. Each planted item appears at its connector with no notice 0–10 days before
+its request. The cards are the shipped enricher's for each weeks user (`cold-start.ts --users user:41,…,user:64
+--suite train,longtail --days 28 --cards-out F`), so rare-connector items are carded as a deployment would card them.
+
+**Hidden facts handed (a packet or the ask's citations), and calls:**
+
+| Arm | All | Rare connectors | Common sources | Background lists a user-day | Request-time calls a request |
+| --- | --- | --- | --- | --- | --- |
+| default (push payload) | 496/1129 | 31/105 | 465/1024 | 18.01 | 0.159 |
+| `syncUnusedSweepMs: 0` (daily sweep) | 496/1129 | 31/105 | 465/1024 | 18.03 | 0.156 |
+| `--push none` (no source notifies) | 511/1129 | 32/105 | 479/1024 | 18.00 | 1.183 |
+
+**By when the fact arrived, in the default arm:**
+
+| Arrived | Rare connectors | Common sources |
+| --- | --- | --- |
+| At the backfill | 9/23 | 91/208 |
+| 7 days or more before its request | 7/28 | 132/260 |
+| 1–6 days before | 13/43 | 226/471 |
+| The same day | 2/11 | 16/85 |
+
+Decoys handed: 9/102 from rare connectors and 441/1027 from common sources.
 
 Three readings:
 
-1. **Weekly against daily sweeps changed nothing in these worlds.** Each rare connector was listed about 0.69 times
-   a user-day in the background in every arm. That is the daily sweep. The likely reason (not verified) is that no
-   connector here sits on the weekly sweep. Either a lookup engages it on evidence, or with 13 connectors the long
-   sweep never applies. Pricing D356, and any dormancy rule, needs many connectors (`--noise-sources`) beside the
-   long tail, and that is the next run.
-2. **Facts in rare connectors reach the agent less often: 25% (33/134) against 42% (404/972).** This holds even when
-   the fact was there from the backfill: 8/27 against 98/222.
-   - Part of the gap is the lab's own: the replayed card file has no cards for longtail items, while train's are
-     carded.
-   - The shipped-coverage caches for the 24 weeks users (§3) remove that confound.
-3. **Quiet sources cost about 7x the request-time calls** (1.186 against 0.163 a request): every request polls every
-   connector. They handed 17 more hidden facts, mostly same-day arrivals (`0d`: 33/80 against 17/80 on common
-   sources).
+1. **Weekly against daily sweeps changed nothing in these worlds.**
+   - Each rare connector was listed about 0.69 times a user-day in the background in every arm, which is the daily
+     sweep.
+   - The likely reason (not verified): no connector here sits on the weekly sweep. Either a lookup engages it on
+     evidence, or with 13 connectors the long sweep never applies.
+   - Pricing D356, and any dormancy rule, needs many unused connectors (`--noise-sources`) beside the long tail.
+     That is the next run.
+2. **Facts in rare connectors reach the agent less often: 30% (31/105) against 45% (465/1024).**
+   - The gap is small for facts there from the backfill (9/23 against 91/208).
+   - It is large for facts that arrived later: 20/71 against 358/731 for 1–10 days ahead.
+   - A fact that lands quietly in a rarely used connector is the case the lab could not see before. These are
+     counts over 24 users; no interval was computed.
+3. **Quiet sources cost about 7x the request-time calls** (1.183 against 0.159 a request): every request polls every
+   connector. They handed 15 more hidden facts, nearly all same-day arrivals on common sources (34/85 against 16/85).
+
+A first version of this run used the superseded weeks planner (D874) and the train-only card file. It read 437/1106,
+with 33/134 from rare connectors against 404/972. Its numbers are not kept.
 
 ### 2.3 The long tail one request a session
 
@@ -160,8 +182,9 @@ Anthropic, all on the card role (Haiku 5.5, lab transport), from the spend ledge
 | Smoke runs | 2 | 0.018 |
 | train1–6 × 41–44 × three variants | 72 | 0.501 |
 | longtail and heldout19 × 41–44 × three variants | 24 | 0.171 |
-| The 24 weeks users | 24 | WEEKS_USD |
-| **Ledger total** | | LEDGER_USD |
+| The 24 weeks users (first planner, superseded) | 24 | 0.263 |
+| The 24 weeks users (`planWeeks`) | 24 | 0.265 |
+| **Ledger total** | | **1.218** |
 
 Modal: $0. Every days-calls and funnel run is $0.
 
