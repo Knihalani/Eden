@@ -194,7 +194,16 @@ import { sanitizeForStore } from "@eden/redact";
 import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor, widenKey, type WidenUse } from "./n2-widen";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
-import { argvFields, argvFiles, codeVersion, hashOf, JournalRefused, partialPath, RunJournal } from "./run-journal";
+import {
+  argvFields,
+  argvFiles,
+  codeVersion,
+  envFields,
+  hashOf,
+  JournalRefused,
+  partialPath,
+  RunJournal,
+} from "./run-journal";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -333,7 +342,17 @@ interface OpenUnit {
   data: JournalUnit;
 }
 /** What `--resume` took from the journal instead of running it. */
-const resumed = { units: 0, tasks: 0, spentUsd: 0 };
+const resumed = {
+  units: 0,
+  tasks: 0,
+  /** What the reused units' tasks cost when they ran. */
+  unitsUsd: 0,
+  /** What every earlier attempt spent (the journal's last spend note): at least `unitsUsd`, more when an attempt paid
+   * for units it never finished. It starts this run's `spent`, so `--budget` stays the whole run's cap. */
+  spentBeforeUsd: 0,
+  /** `--resume-biased`: Eden arms under `--day`/`--days` resumed against an Eden that never saw the reused days. */
+  biased: false,
+};
 // `--templates a,b`: only the hidden-context tasks of these templates (both variants), for a small targeted smoke.
 const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")) : null;
 
@@ -1069,7 +1088,13 @@ async function runWorld(
     if (!u || !JOURNAL || !u.complete) return;
     grading.push(
       Promise.all(u.grades).then(() => {
-        if (u.ok && u.data.results.every((x) => !x.error)) JOURNAL.write(u.id, u.data);
+        if (!u.ok || u.data.results.some((x) => x.error)) return;
+        try {
+          JOURNAL.write(u.id, u.data);
+          JOURNAL.noteSpent(spent);
+        } catch (e) {
+          console.error(`pi-ab: ${e instanceof Error ? e.message : e}`);
+        }
       }),
     );
   };
@@ -1078,11 +1103,11 @@ async function runWorld(
     records.push(...u.records);
     DAYS.push(...u.days);
     bg.tasks.push(...u.results.map((x) => x.task));
-    spent += u.spend.agent + u.spend.eden + u.spend.grader;
+    // `spent` already holds every earlier attempt's spend (`spentBefore`); the buckets get what these tasks cost.
     for (const k of ["agent", "eden", "grader"] as const) spend[k] += u.spend[k];
     resumed.units++;
     resumed.tasks += u.results.length;
-    resumed.spentUsd += u.spend.agent + u.spend.eden + u.spend.grader;
+    resumed.unitsUsd += u.spend.agent + u.spend.eden + u.spend.grader;
   };
   /**
    * Grades `answer` against `task`'s facts beside the next task, on `tl` (after its end); `set` gets the verdicts. The
@@ -1867,7 +1892,7 @@ const JOURNAL = CONNECT
   : (() => {
       const drop = [
         ...["--out", "--timeline", "--cards-out", "--resume", "--budget", "--spend-ledger", "--spend-cap"],
-        ...["--spend-headroom", "--run-label", "--max-requests", "--rpm", "--replay-timing"],
+        ...["--spend-headroom", "--run-label", "--max-requests", "--rpm", "--resume-biased"],
       ];
       try {
         return RunJournal.open<JournalUnit>(
@@ -1879,6 +1904,7 @@ const JOURNAL = CONNECT
             argv: argvFields(args, drop),
             files: argvFiles(args, drop),
             tasks: hashOf(worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes, tasks: w.tasks }))),
+            env: envFields(),
             code: codeVersion(),
           },
           args.includes("--resume"),
@@ -1890,12 +1916,48 @@ const JOURNAL = CONNECT
       }
     })();
 if (args.includes("--resume") && CONNECT) throw new Error("--connect-at runs users in real time: it cannot --resume");
+// Under `--day`/`--days` a reused day's requests never reached Eden: the days after it run against an Eden that did not
+// see it (its reads, sessions, update notices). The Eden-free arms resume exactly; an Eden arm only when asked to,
+// and its results say so.
+const edenArms = CONDITIONS.filter((c) => c.withPartner && !reused.conditions.includes(c.name)).map((c) => c.name);
+if (JOURNAL?.done.size && DAYS_ON && edenArms.length) {
+  if (!args.includes("--resume-biased")) {
+    console.error(
+      `pi-ab: --resume under --day/--days would run ${edenArms.join(",")} against an Eden that never saw the reused ` +
+        "days; pass --resume-biased to accept that (the results file and reports then say so), or start over",
+    );
+    process.exit(2);
+  }
+  resumed.biased = true;
+}
+if (JOURNAL) {
+  // The earlier attempts' spend: their last note, or at least what their finished units cost.
+  const unitsUsd = [...JOURNAL.done.values()].reduce((n, u) => n + u.spend.agent + u.spend.eden + u.spend.grader, 0);
+  resumed.spentBeforeUsd = Math.max(JOURNAL.spentBefore, unitsUsd);
+  spent += resumed.spentBeforeUsd;
+}
 if (JOURNAL?.done.size || JOURNAL?.torn) {
   console.error(
-    `pi-ab: resuming from ${JOURNAL.path}: ${JOURNAL.done.size} finished units reused at $0` +
-      (JOURNAL.torn ? `, ${JOURNAL.torn} torn lines run again` : ""),
+    `pi-ab: resuming from ${JOURNAL.path}: ${JOURNAL.done.size} finished units reused at $0, ` +
+      `$${resumed.spentBeforeUsd.toFixed(4)} spent by earlier attempts counted against --budget` +
+      (JOURNAL.torn ? `, ${JOURNAL.torn} torn lines run again` : "") +
+      (resumed.biased ? " (BIASED: --resume-biased)" : ""),
   );
 }
+// What has been spent, noted in the journal as it moves (and with each unit), so a kill loses at most a second's.
+let noted = spent;
+const noteTimer = JOURNAL
+  ? setInterval(() => {
+      if (spent === noted) return;
+      noted = spent;
+      try {
+        JOURNAL.noteSpent(spent);
+      } catch {
+        // Gone: the unit writes say so.
+      }
+    }, 1_000)
+  : null;
+noteTimer?.unref();
 
 mkdirSync(TIMELINE, { recursive: true });
 writeFileSync(`${TIMELINE}/tasks.jsonl`, "");
@@ -2026,6 +2088,8 @@ if (JOURNAL) {
     0,
   );
   const have = JOURNAL.done.size + JOURNAL.written;
+  if (noteTimer) clearInterval(noteTimer);
+  if (have < units) JOURNAL.noteSpent(spent);
   JOURNAL.finish(have >= units);
   if (have < units) {
     console.error(`pi-ab: ${have} of ${units} units finished; ${JOURNAL.path} kept: rerun with --resume to finish`);
@@ -2038,7 +2102,10 @@ console.error(
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
     (REPLAY_DIR ? `; ${replayLine()}` : "") +
     (REUSE_FILE ? `; reused ${reused.results.length} runs (${reused.conditions.join(",")}) at $0` : "") +
-    (resumed.units ? `; resumed ${resumed.tasks} runs ($${resumed.spentUsd.toFixed(4)} spent before) at $0` : "") +
+    (resumed.units
+      ? `; resumed ${resumed.tasks} runs at $0 ($${resumed.spentBeforeUsd.toFixed(4)} spent by earlier attempts, ` +
+        `included above${resumed.biased ? "; BIASED: --resume-biased" : ""})`
+      : "") +
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );
 console.error(overBudgetLine(budgeted));

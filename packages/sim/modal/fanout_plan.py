@@ -504,8 +504,40 @@ def shard_fingerprint(shard, commit=""):
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
+EARLIER = ".earlier"
+
+
+def retire_shard(run_dir, name):
+    """Moves an earlier attempt's directory of shard `name` aside to run_dir/.earlier/<name>.<n>, so its files are not
+    mixed with the new attempt's (`load_shard` reads every file there) and its ledger still counts (`merge`)."""
+    base = os.path.join(run_dir, safe_rel(name))
+    if not os.path.isdir(base):
+        return None
+    os.makedirs(os.path.join(run_dir, EARLIER), exist_ok=True)
+    n = 0
+    while os.path.exists(os.path.join(run_dir, EARLIER, f"{name}.{n}")):
+        n += 1
+    dest = os.path.join(run_dir, EARLIER, f"{name}.{n}")
+    os.replace(base, dest)
+    return dest
+
+
+def earlier_usd(run_dir):
+    """What retired attempts spent: the ledgers under run_dir/.earlier/."""
+    root = os.path.join(run_dir, EARLIER)
+    total = 0.0
+    for d in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        path = os.path.join(root, d, "ledger.jsonl")
+        if os.path.exists(path):
+            with open(path) as f:
+                total += ledger_usd(f.read())
+    return total
+
+
 def save_shard(run_dir, result, fingerprint):
-    """Writes one returned shard at once (`write_shard`), then its marker, atomically: a marker means whole files."""
+    """Writes one returned shard at once (`write_shard`), then its marker, atomically: a marker means whole files. An
+    earlier attempt's directory of the same shard is retired first."""
+    retire_shard(run_dir, result["name"])
     write_shard(run_dir, result)
     base = os.path.join(run_dir, safe_rel(result["name"]))
     marker = {"fingerprint": fingerprint, **{k: result.get(k) for k in ("code", "seconds", "command", "commit")}}
@@ -565,6 +597,24 @@ def resume_plan(run_dir, planned, commit, resume=False):
     return finished, left
 
 
+def collect_wave(run_dir, wave, outputs, commit, kind, unpack=lambda r: r, log=print):
+    """One wave's results as they come back (`outputs`: Modal's map in completion order, exceptions included): each
+    shard saved the moment it returns; one Modal lost (an exception carries no name) is reported failed at the end."""
+    by_name = {s.name: s for s in wave}
+    done = []
+    for r in outputs:
+        if isinstance(r, BaseException):
+            log(f"  a shard failed in Modal: {r!r}")
+            continue
+        r = unpack(r)
+        save_shard(run_dir, r, shard_fingerprint(by_name[r["name"]], commit))
+        log(f"  {r['name']}: exit {r['code']} in {r.get('seconds')} s (saved)")
+        done.append(r)
+    got = {r["name"] for r in done}
+    return done + [{"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}}
+                   for s in wave if s.name not in got]
+
+
 def merge(run_dir, results, cap_usd=None):
     """The run's summary (manifest.json, ledger.jsonl and, for funnel shards, funnel.json) from every shard result."""
     shards, ledger, per_task, failed = [], [], [], []
@@ -582,9 +632,12 @@ def merge(run_dir, results, cap_usd=None):
         shards.append({"name": r["name"], "kind": r.get("kind"), "code": r.get("code"), "spentUsd": round(spent, 6),
                        "capUsd": r.get("capUsd"), "seconds": r.get("seconds")})
     total = round(sum(s["spentUsd"] for s in shards), 6)
+    # A shard re-run on --resume paid for its failed attempt too (D813): counted beside, and against the cap.
+    earlier = round(earlier_usd(run_dir), 6)
     over = [s["name"] for s in shards if s["capUsd"] and s["spentUsd"] > s["capUsd"] + 1e-9]
-    manifest = {"shards": shards, "spentUsd": total, "capUsd": cap_usd, "failed": failed, "overCap": over,
-                "withinCap": cap_usd is None or total <= float(cap_usd) + 1e-9}
+    manifest = {"shards": shards, "spentUsd": total, "earlierAttemptsUsd": earlier, "capUsd": cap_usd,
+                "failed": failed, "overCap": over,
+                "withinCap": cap_usd is None or total + earlier <= float(cap_usd) + 1e-9}
     with open(os.path.join(run_dir, "ledger.jsonl"), "w") as f:
         f.write("".join(l + "\n" for l in ledger))
     if per_task:

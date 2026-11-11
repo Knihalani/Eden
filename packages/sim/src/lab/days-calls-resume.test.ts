@@ -85,4 +85,15 @@ describe("days-calls --resume (D813)", () => {
     );
     expect(calls).toEqual([42]);
   });
+
+  test("--pool-diag on the resume only still has every user's rows: they are journalled either way", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "days-resume-"));
+    const whole = join(dir, "whole.json");
+    await main(argv(whole), fake([]), quiet);
+    const cut = join(dir, "cut.json");
+    const plain = ["--seeds", "41,42,43,44", "--days", "2", "--json", cut];
+    await expect(main(plain, fake([], 43), quiet)).rejects.toThrow("killed");
+    await main([...plain, "--pool-diag", `${cut}.diag`, "--resume"], fake([]), quiet);
+    expect(readFileSync(`${cut}.diag`, "utf8")).toBe(readFileSync(`${whole}.diag`, "utf8"));
+  });
 });

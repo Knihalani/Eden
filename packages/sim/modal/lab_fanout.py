@@ -211,21 +211,10 @@ def main(seeds: str, kind: str = "", suites: str = "", preset: str = "", cap: fl
     try:
         while left:
             wave, left = plan.waves(left, width)
-            by_name = {s.name: s for s in wave}
-            done = []
             # Each shard is saved the moment it returns (in whatever order they finish), so a collector that dies
-            # mid-wave keeps every shard that came back; one Modal lost has no result and is reported failed below.
-            for r in fn.map([plan.asdict(s) for s in wave], order_outputs=False, return_exceptions=True):
-                if isinstance(r, BaseException):
-                    print(f"  a shard failed in Modal: {r!r}")
-                    continue
-                r = _unpack(r)
-                plan.save_shard(run_dir, r, plan.shard_fingerprint(by_name[r["name"]], COMMIT))
-                print(f"  {r['name']}: exit {r['code']} in {r['seconds']} s (saved)")
-                done.append(r)
-            got = {r["name"] for r in done}
-            done += [{"name": s.name, "kind": kind, "code": -1, "capUsd": s.cap_usd, "files": {}}
-                     for s in wave if s.name not in got]
+            # mid-wave keeps every shard that came back; one Modal lost has no result and is reported failed.
+            outputs = fn.map([plan.asdict(s) for s in wave], order_outputs=False, return_exceptions=True)
+            done = plan.collect_wave(run_dir, wave, outputs, COMMIT, kind, unpack=_unpack)
             results += done
             share, sent, limited = plan.retry_share(done)
             narrower = plan.next_width(width, done)

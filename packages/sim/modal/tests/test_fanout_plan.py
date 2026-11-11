@@ -232,6 +232,31 @@ class Resume(unittest.TestCase):
         with self.assertRaises(plan.PlanError):
             plan.resume_plan(self.dir, other, "c1", resume=True)
 
+    def test_a_rerun_shard_starts_clean_and_its_failed_attempt_still_counts(self):
+        a = self.planned[0]
+        failed = result(a.name, "pi-ab", code=1, ledger=json.dumps({"costUsd": 0.3}), cap=a.cap_usd)
+        failed["files"]["stale.txt"] = b"from the failed attempt"
+        plan.save_shard(self.dir, failed, plan.shard_fingerprint(a, "c1"))
+        again = self.returned(a)
+        self.assertNotIn("stale.txt", plan.load_shard(self.dir, a)["files"])
+        m = plan.merge(self.dir, [again], 3.0)
+        self.assertAlmostEqual(m["spentUsd"], 0.4)
+        self.assertAlmostEqual(m["earlierAttemptsUsd"], 0.3)
+
+    def test_the_wave_loop_saves_shards_in_completion_order_and_names_the_lost_one(self):
+        a, b, c = self.planned
+        r_c = result(c.name, "pi-ab", ledger="", cap=c.cap_usd)
+        r_a = result(a.name, "pi-ab", ledger="", cap=a.cap_usd)
+        lines = []
+        # c finishes first, then Modal loses one shard (an exception, no name), then a.
+        done = plan.collect_wave(self.dir, [a, b, c], iter([r_c, RuntimeError("lost"), r_a]), "c1", "pi-ab",
+                                 log=lines.append)
+        self.assertEqual([(r["name"], r["code"]) for r in done], [(c.name, 0), (a.name, 0), (b.name, -1)])
+        self.assertTrue(any("failed in Modal" in line for line in lines))
+        finished, left = plan.resume_plan(self.dir, self.planned, "c1", resume=True)
+        self.assertEqual(sorted(r["name"] for r in finished), sorted([a.name, c.name]))
+        self.assertEqual([s.name for s in left], [b.name])
+
     def test_a_new_run_directory_runs_everything(self):
         finished, left = plan.resume_plan(os.path.join(self.dir, "new"), self.planned, "c1")
         self.assertEqual((finished, len(left)), ([], 3))

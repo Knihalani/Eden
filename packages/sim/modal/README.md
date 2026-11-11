@@ -141,10 +141,13 @@ Modal stop with it (`modal run` is an ephemeral app), but every shard that came 
 command with the same `--run` and `--resume`: `resume_plan` (fanout_plan.py) reads back each shard that exited 0
 under the same fingerprint, re-launches the rest (failed ones included) in waves as before, and merges both as one
 run (the cap split is unchanged, so the same `--cap` and seeds are needed). A run directory with returned shards is
-refused without `--resume`, and one written by another plan or commit is refused with it. Not resumable inside a
-shard: pi-ab's own journal (`--resume`, docs/LAB.md section 4) lives in the shard's container and is lost with it,
-so a shard cut off mid-run is paid again from its start. Tested without Modal: `tests/test_fanout_plan.py`
-(`Resume`).
+refused without `--resume`, and one written by another plan or commit is refused with it. A re-run shard's earlier
+attempt is moved to `.earlier/<shard>.<n>/` before the new one is written (no stale files are read back), and its
+ledger is the manifest's `earlierAttemptsUsd`, counted against the cap with `spentUsd`. Not resumable inside a shard:
+pi-ab's own journal (`--resume`, docs/LAB.md section 4) lives in the shard's container and is lost with it, so a shard
+cut off mid-run is paid again from its start, and what it spent before the cut is in no file here (each shard's cap
+still bounds each attempt; the Anthropic console shows the total). Tested without Modal: `tests/test_fanout_plan.py`
+(`Resume`, including the wave loop, `collect_wave`, with shards returning out of order and one lost).
 
 **Cost (estimate, Modal 2025 list prices: ~$0.047 a physical core-hour, ~$0.008 a GiB-hour; check
 modal.com/pricing).** A pi-ab shard (4 cores, 16 GiB) is about $0.32 an hour, $0.38 at 24 GiB; a funnel shard
@@ -278,7 +281,7 @@ serves a teacher's labels as the checker (the upper-bound arm).
 ## Tests
 
 ```bash
-cd packages/sim/modal && python3 -I -m unittest     # 65 tests, no Modal, no token
+cd packages/sim/modal && python3 -I -m unittest     # 67 tests, no Modal, no token
 bun test ./packages/sim/src/lab/cards-distill.test.ts ./packages/sim/src/lab/cards-endpoint.test.ts \
   ./packages/sim/src/lab/modal-python.test.ts       # export, scorer, endpoint transport against a stub server
 ```

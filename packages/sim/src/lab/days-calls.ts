@@ -31,7 +31,7 @@ import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
-import { argvFields, argvFiles, codeVersion, JournalRefused, partialPath, RunJournal } from "./run-journal";
+import { argvFields, argvFiles, codeVersion, envFields, JournalRefused, partialPath, RunJournal } from "./run-journal";
 import { parseSuites } from "./suites";
 
 export type Phase = "backfill" | "tick" | "notice" | "request";
@@ -474,7 +474,7 @@ export const callsWhere = (counts: Counts, pred: (phase: Phase, source: string, 
     return pred(p, s, op) ? n + v : n;
   }, 0);
 
-/** One user's line in the `--json` journal (D813): the user and, with `--pool-diag`, their planted rows. */
+/** One user's line in the `--json` journal (D813): the user and their planted rows (kept with `--pool-diag` or not). */
 interface UserUnit {
   user: DaysCallsUser;
   planted: PlantedRow[];
@@ -527,6 +527,7 @@ export async function main(
           harness: "days-calls",
           argv: argvFields(argv, ["--seeds", "--json", "--pool-diag", "--resume"]),
           inputs: argvFiles(["--cards", cardsFile, "--intent", cardsFile ? intentFiles.join(",") : ""], []),
+          env: envFields(),
           code: codeVersion(),
         },
         argv.includes("--resume"),
@@ -535,19 +536,25 @@ export async function main(
   const planted: PlantedRow[] = [];
   const users: DaysCallsUser[] = [];
   let reused = 0;
-  for (const seed of seeds) {
-    const done = journal?.done.get(`w${seed}`);
-    if (done) {
-      reused++;
-      users.push(done.user);
-      planted.push(...done.planted);
-      continue;
+  try {
+    for (const seed of seeds) {
+      const done = journal?.done.get(`w${seed}`);
+      if (done) {
+        reused++;
+        users.push(done.user);
+        planted.push(...done.planted);
+        continue;
+      }
+      // The planted rows are always collected, `--pool-diag` or not: a resume that asks for them then has them.
+      const mine: PlantedRow[] = [];
+      const user = await run(seed, diag || journal ? { ...o, onPlanted: (row) => void mine.push(row) } : o);
+      journal?.write(`w${seed}`, { user, planted: mine });
+      users.push(user);
+      planted.push(...mine);
     }
-    const mine: PlantedRow[] = [];
-    const user = await run(seed, diag ? { ...o, onPlanted: (row) => void mine.push(row) } : o);
-    journal?.write(`w${seed}`, { user, planted: mine });
-    users.push(user);
-    planted.push(...mine);
+  } catch (e) {
+    journal?.close();
+    throw e;
   }
   if (diag) writeFileSync(diag, planted.map((r) => `${JSON.stringify(r)}\n`).join(""));
   const requests = users.reduce((n, u) => n + u.requests, 0);

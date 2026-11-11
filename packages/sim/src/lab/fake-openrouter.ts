@@ -10,7 +10,9 @@
  */
 import { appendFileSync } from "node:fs";
 
+// Only a test that asked for it gets the stand-in: preloaded by mistake into a real run, it refuses to install.
 const log = process.env.FAKE_LOG ?? "";
+if (!log) throw new Error("fake-openrouter: FAKE_LOG is not set; this stand-in is for tests only");
 const killAfter = Number(process.env.FAKE_KILL_AFTER ?? "-1");
 let agentCalls = 0;
 
@@ -36,7 +38,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     agentCalls++;
     if (killAfter >= 0 && agentCalls > killAfter) process.kill(process.pid, "SIGKILL");
     const asked = lastUser(body).replace(/\s+/g, " ").trim().slice(0, 60);
-    if (log) appendFileSync(log, `agent ${asked}\n`);
+    appendFileSync(log, `agent ${asked}\n`);
     const text = `I will do that: ${asked}`;
     return sse([
       {
@@ -53,7 +55,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       },
     ]);
   }
-  if (log) appendFileSync(log, "grader\n");
+  appendFileSync(log, "grader\n");
   // Fact 1 holds when the request (quoted back in the answer) is an even number of characters long: deterministic, and
   // both verdicts occur.
   const request = /<request>([\s\S]*?)<\/request>/.exec(lastUser(body))?.[1] ?? "";

@@ -42,7 +42,12 @@ async function piAb(dir: string, name: string, out: string, extra: string[], kil
   };
 }
 
-type Report = { results: RunResult[]; spent: number; days?: { seed: number; kind: string; recapUsd?: number }[] };
+type Report = {
+  results: RunResult[];
+  spent: number;
+  days?: { seed: number; kind: string; recapUsd?: number }[];
+  resumed?: { units: number; unitsUsd: number; spentBeforeUsd: number; biased: boolean };
+};
 const read = (dir: string, out: string) => JSON.parse(readFileSync(join(dir, out), "utf8")) as Report;
 /** What a run decides, task by task (wall times and timelines differ between any two runs). */
 const decided = (r: Report) =>
@@ -64,7 +69,8 @@ function journalled(path: string) {
     .split("\n")
     .slice(1)
     .filter((l) => l.endsWith("}"))
-    .map((l) => JSON.parse(l) as { data: { results: RunResult[]; days: unknown[] } });
+    .map((l) => JSON.parse(l) as { data?: { results: RunResult[]; days: unknown[] } })
+    .filter((l): l is { data: { results: RunResult[]; days: unknown[] } } => !!l.data);
   const tasks = units.reduce((n, u) => n + u.data.results.length, 0);
   return { units: units.length, agent: tasks + units.reduce((n, u) => n + u.data.days.length, 0), grader: tasks };
 }
@@ -102,16 +108,37 @@ describe("pi-ab --resume (D813)", () => {
         expect(changed.stderr).toContain("changed: argv");
         expect(refused.agent + changed.agent).toBe(0);
 
-        const resumed = await piAb(dir, "resumed", "cut.json", [...shape.extra, "--resume"]);
+        // Under --day an Eden arm resumed against an Eden that never saw the reused days: refused unless accepted.
+        const days = shape.extra.includes("--day");
+        if (days) {
+          const biased = await piAb(dir, "biased", "cut.json", [...shape.extra, "--resume"]);
+          expect(biased.status).toBe(2);
+          expect(biased.stderr).toContain("--resume-biased");
+          expect(biased.agent).toBe(0);
+        }
+        const again = [...shape.extra, "--resume", ...(days ? ["--resume-biased"] : [])];
+        const resumed = await piAb(dir, "resumed", "cut.json", again);
         expect(resumed.status).toBe(0);
-        expect(resumed.stderr).toContain(`${done.units} finished units reused at $0, 1 torn lines run again`);
+        expect(resumed.stderr).toContain(`${done.units} finished units reused at $0`);
+        // (Under --day the refused attempt above already accepted the journal and cut the torn line off.)
+        if (!days) expect(resumed.stderr).toContain("1 torn lines run again");
         // Only the units the journal lacked called the agent and the grader again.
         expect(resumed.agent).toBe(whole.agent - done.agent);
         expect(resumed.grader).toBe(whole.grader - done.grader);
         const a = read(dir, "whole.json");
         const b = read(dir, "cut.json");
         expect(decided(b)).toEqual(decided(a));
-        expect(b.spent).toBeCloseTo(a.spent, 10);
+        // The tasks cost what they cost unbroken; `spent` also carries what the killed attempt paid for units it
+        // never finished (its last spend note), so it is at least the unbroken run's.
+        const cost = (r: Report) => r.results.reduce((n, x) => n + x.costUsd, 0);
+        expect(cost(b)).toBeCloseTo(cost(a), 10);
+        expect(b.spent).toBeGreaterThanOrEqual(a.spent - 1e-9);
+        expect(b.resumed!.units).toBe(done.units);
+        expect(b.resumed!.spentBeforeUsd).toBeGreaterThanOrEqual(b.resumed!.unitsUsd - 1e-9);
+        expect(b.resumed!.biased).toBe(days);
+        const report = Bun.spawnSync(["bun", join(LAB, "pi-ab-report.ts"), join(dir, "cut.json")]);
+        expect(report.stdout.toString()).toContain("RESUMED (D813)");
+        expect(report.stdout.toString().includes("BIASED")).toBe(days);
         expect((b.days ?? []).map((d) => [d.seed, d.kind, d.recapUsd]).sort()).toEqual(
           (a.days ?? []).map((d) => [d.seed, d.kind, d.recapUsd]).sort(),
         );
