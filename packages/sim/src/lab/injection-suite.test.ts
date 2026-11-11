@@ -107,16 +107,24 @@ describe("A10 injection suite, no model (D305)", () => {
   test("quarantine leaves every planted fact of the train suites alone and catches the world's own injections", () => {
     let plantedChecked = 0;
     let worldInjections = 0;
+    // quarantineItem reads only an item's title and text, and the twelve worlds share most items (18,124 items, 1,871
+    // distinct, measured 2026-11-11): each distinct title, text and branch is checked once (D819). Every item still
+    // counts below.
+    const checked = new Set<string>();
     for (const suite of parseSuites("train")) {
       for (const variant of ["hidden", "control"] as const) {
         const { world, tasks } = worldOf(41, suite, variant, { maxTasks: 30, maxOffworld: 0 });
         const planted = new Set(tasks.map((t) => t.planted));
         for (const item of world.items) {
-          if (planted.has(item.id)) {
-            plantedChecked++;
+          const branch = planted.has(item.id) ? "planted" : item.injection ? "injection" : "other";
+          if (branch === "planted") plantedChecked++;
+          if (branch === "injection") worldInjections++;
+          const key = `${branch}\0${item.title}\0${item.text}`;
+          if (checked.has(key)) continue;
+          checked.add(key);
+          if (branch === "planted") {
             expect([item.id, quarantineItem(item) === item]).toEqual([item.id, true]);
-          } else if (item.injection) {
-            worldInjections++;
+          } else if (branch === "injection") {
             expect(quarantineItem(item).text).toContain(QUARANTINED);
           } else {
             expect([item.id, quarantineItem(item) === item]).toEqual([item.id, true]);

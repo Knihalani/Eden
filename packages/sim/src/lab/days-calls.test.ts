@@ -6,10 +6,16 @@ import { callsWhere, daysCalls, type PlantedRow } from "./days-calls";
 describe("days-calls: connector calls over a user's days (A8)", () => {
   const fetchesAtRequest = (counts: Record<string, number>) =>
     callsWhere(counts, (phase, _source, op) => phase === "request" && op === "fetch");
+  // One payload run serves the first two tests (D819): `onPlanted` only observes (its run's report is the same as one
+  // without it, checked 2026-11-11), so the run with it is the run without it, at one run's CPU, not two.
+  const planted: PlantedRow[] = [];
+  let payload: ReturnType<typeof daysCalls> | undefined;
+  const payloadRun = () =>
+    (payload ??= daysCalls(41, { days: 2, push: "payload", onPlanted: (row) => void planted.push(row) }));
 
   test("payload notices that carry the changed items re-read nothing, and still announce and hold the change", async () => {
     const before = await daysCalls(41, { days: 2, push: "payload", recapSignal: true });
-    const after = await daysCalls(41, { days: 2, push: "payload" });
+    const after = await payloadRun();
     expect(before.changed).toBeGreaterThan(0);
     expect(after.changed).toBe(before.changed);
     // The bare signal doubted every gmail copy read before it: the next day's deliveries re-read them.
@@ -27,8 +33,8 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
 
   // O3 (D712): `--pool-diag`. One row a hidden or control request, ids and flags only, consistent with `surfaced`.
   test("onPlanted reports where each planted item was in the push's pool", async () => {
-    const rows: PlantedRow[] = [];
-    const run = await daysCalls(41, { days: 2, push: "payload", onPlanted: (row) => void rows.push(row) });
+    const run = await payloadRun();
+    const rows = planted;
     const n = Object.values(run.surfaced).reduce((sum, k) => sum + k.n, 0);
     expect(n).toBeGreaterThan(0);
     expect(rows.length).toBe(n);
