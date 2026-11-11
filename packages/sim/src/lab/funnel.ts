@@ -33,6 +33,14 @@
  *   as `-- --intent`, when the configuration has intent and cards and the run's suites and seeds are all covered, so
  *   the screen runs the shipped default. `none` leaves intent inert (the pre-D158 screens); a file, or
  *   `-- --intent F`, replays that file.
+ * - `--coverage shipped|full` (P7, D872, D877): which card and intent index the run replays. `shipped`, the default
+ *   wherever it covers the run (SHIPPED_COVERS in cards-disk.ts: train, reworded, longtail and heldout19, seeds
+ *   41-44), replays `cards-shipped.jsonl.gz` as both `--cards` and `--intent`: the cards and requests the shipped
+ *   enricher (`buildPartner`'s own `CardEnricher`) made for each world (`cold-start.ts --cards-out`). `full` is the
+ *   older default: the checked-in cards and `cards-enrich.ts --intent`'s every-item requests, about seven times the
+ *   items a deployment's enricher writes requests for (D714); a run shipped coverage does not cover, or one naming
+ *   `--cards`, `--intent` or an endpoint, gets it. An explicit `--coverage shipped` refuses those. Every run prints
+ *   its coverage beside the score and TOTAL line and writes it to the JSON (`coverage`): compare like with like.
  * - With intent on and nothing replayed (`--intent none`, an uncovered run, or a file for other items), every TOTAL
  *   and pool line and the JSON label say `[intent inert: no replay]`; `--reader stub|oracle` refuse a `--baseline`
  *   whose intent differs.
@@ -61,7 +69,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { flags, labConfig, parseJson } from "./flags";
-import { INTENT_FILE, INTENT_PATH, intentUncovered } from "./cards-disk";
+import { INTENT_FILE, INTENT_PATH, intentUncovered, SHIPPED_FILE, SHIPPED_PATH, shippedUncovered } from "./cards-disk";
 import {
   coverageLines,
   plantedCoverageLine,
@@ -102,7 +110,8 @@ import { parseSuites, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
 
 const USAGE = `
 bun run funnel [--suite train] [--seeds 41,42] [--preset default] [--set '{"flag":true}'] [--cards default|none|F]
-  [--cards-endpoint URL [--cards-endpoint-model NAME]] [--intent default|none|F] [--no-ask] [--json out.json] [--baseline earlier.json] [--record] [--blind] [--jobs N] [--allow-misses]
+  [--cards-endpoint URL [--cards-endpoint-model NAME]] [--intent default|none|F] [--coverage full|shipped] [--no-ask] [--json out.json] [--baseline earlier.json]
+  [--record] [--blind] [--jobs N] [--allow-misses]
   [-- more hidden-funnel flags]
 Presets: ${Object.keys(PRESETS).join(", ")}. docs/LAB.md has the recipes; funnel.ts's header every flag.`;
 // Strict (flags.ts): a misspelled flag exits 2 before anything runs; what follows `--` is hidden-funnel.ts's to check.
@@ -117,6 +126,7 @@ const cli = flags(
     "cards-endpoint": "value",
     "cards-endpoint-model": "value",
     intent: "value",
+    coverage: "value",
     json: "value",
     baseline: "value",
     jobs: "value",
@@ -228,9 +238,31 @@ const seedList = seeds.split(",");
 // The intent requests (D158): replayed by default whenever the checked-in file covers the run, as the cards are, so
 // the $0 screen runs what ships (`intent` is on in DEFAULT_CONFIG). Resolved before the baseline check below.
 const endpoint = opt("cards-endpoint", "");
+// `--coverage shipped` (D872): the shipped enricher's own cards and requests, as both files; checked before any use.
+// The default (D877): shipped coverage wherever the file covers the run and no card or intent source is named; a run
+// it does not cover, or one that names its own, keeps the full index's default and says so.
+const ownCards = !!endpoint || cli.has("cards") || cli.has("intent") || has("--intent") || has("--cards");
+const coverage = opt("coverage", !ownCards && !shippedUncovered(suites, seedList).length ? "shipped" : "full");
+if (coverage !== "full" && coverage !== "shipped") fail(`--coverage takes full or shipped, not ${coverage}`);
+let shippedFile = "";
+if (coverage === "shipped") {
+  if (ownCards)
+    fail("--coverage shipped replays its own cards and requests: drop --cards, --intent and --cards-endpoint");
+  const uncovered = shippedUncovered(suites, seedList);
+  if (uncovered.length) fail(`--coverage shipped: ${SHIPPED_FILE} does not cover ${uncovered.join(", ")}`);
+  shippedFile = join(scratch, "shipped.jsonl");
+  writeFileSync(shippedFile, gunzipSync(readFileSync(SHIPPED_PATH)));
+}
+// The checked-in reader caches were recorded with the full index (D877): their prompts differ under shipped coverage.
+if (coverage === "shipped" && !cli.has("coverage") && passValue("reader") === "replay") {
+  console.error(
+    "funnel: coverage is shipped by default (D877); the checked-in reader caches were recorded at --coverage full, " +
+      "so pass it to replay them",
+  );
+}
 if (endpoint && opt("cards", "default") === "none") fail("--cards-endpoint makes cards: drop --cards none");
 // With an endpoint the requests are the endpoint's own (its calls ask for them), so none are replayed by default.
-const intentArg = opt("intent", endpoint ? "none" : "default");
+const intentArg = shippedFile || opt("intent", endpoint ? "none" : "default");
 if (cli.has("intent") && has("--intent")) fail("--intent given twice (before and after `--`): pass one");
 const intentWanted = run.intent === true && run.cards === true && opt("cards", "default") !== "none";
 let intentNote = "";
@@ -268,17 +300,26 @@ const noModelReader = readerKind === "stub" || readerKind.startsWith("oracle");
 const baseline = opt("baseline", "");
 const checkBaseline = (current: IntentState) => {
   if (!noModelReader || !baseline) return;
-  const why = intentMismatch(current, intentOfRun(JSON.parse(readFileSync(baseline, "utf8"))));
+  const base = JSON.parse(readFileSync(baseline, "utf8")) as Parameters<typeof intentOfRun>[0] & { coverage?: string };
+  const why = intentMismatch(current, intentOfRun(base));
   if (why) fail(`--baseline ${baseline} refused: ${why}`);
+  // D877: a baseline that recorded another coverage measured another index (a run before D872 recorded none).
+  const now = shippedFile ? "shipped" : intentByDefault ? "full" : "";
+  const then = base.coverage?.split(" ")[0] ?? "";
+  if (now && then && (then === "shipped" || then === "full") && now !== then) {
+    fail(`--baseline ${baseline} refused: its coverage is ${then} and this run's is ${now} (pass --coverage ${then})`);
+  }
 };
 if (!run.intent || !run.cards) checkBaseline("off");
 // The endpoint writes requests for what it cards: live unless it wrote none (checked again after the run).
 else if (endpoint) checkBaseline("live");
+// Shipped coverage covers the run by construction (SHIPPED_COVERS), so it is live (checked again after).
+else if (shippedFile) checkBaseline("live");
 else if (!has("--intent")) checkBaseline("inert");
 // The checked-in requests cover this run, so it is live unless the replay matches nothing (checked again after).
 else if (intentByDefault) checkBaseline("live");
 
-let cards = opt("cards", "default");
+let cards = shippedFile || opt("cards", "default");
 if (endpoint) {
   // The endpoint's cards go to `--cards F` (created when missing, replayed by a rerun) or a temp file.
   if (cards === "default") cards = join(scratch, "cards-endpoint.jsonl");
@@ -297,7 +338,8 @@ const out = opt("json", join(scratch, "funnel.json"));
 
 // A repeated seed would run twice in one process but once per block when grouped, so the merge refuses it up front.
 if (new Set(seedList.map(Number)).size !== seedList.length) fail(`--seeds ${seeds} repeats a seed`);
-const label = presetName + (cli.has("set") ? "+set" : "");
+// The ledger's label names the coverage too (D877), so a recorded level says which index it was measured with.
+const label = presetName + (cli.has("set") ? "+set" : "") + (shippedFile ? "@shipped" : "");
 
 /** hidden-funnel.ts's arguments for some suites and seeds, writing its rows to `json`; `pass`: the flags after `--`. */
 const funnelArgsFor = (suiteList: string, seedList: string, json: string, pass = passthrough) => [
@@ -475,6 +517,24 @@ async function runGroups() {
   );
   writeFileSync(out, JSON.stringify(merged(parts), null, 2));
 }
+/**
+ * The run's card and intent coverage (D714, D872), printed with the score and kept in the JSON: `shipped` (the shipped
+ * enricher's cards and requests), `full` (the checked-in every-item requests), `none` (intent replays nothing) or
+ * the file a run named.
+ */
+const coverageLabel = !intentWanted
+  ? "none (intent or cards off)"
+  : shippedFile
+    ? "shipped (cards-shipped, D872)"
+    : intentByDefault
+      ? "full (intent-v2: every item, about 7x a deployment's, D714)"
+      : intentArg === "none" || intentNote.startsWith("the checked-in")
+        ? "none (intent inert)"
+        : `custom (${intentNote})`;
+{
+  const json = JSON.parse(readFileSync(out, "utf8")) as Record<string, unknown>;
+  writeFileSync(out, JSON.stringify({ ...json, coverage: coverageLabel }, null, 2));
+}
 
 /**
  * The processes' JSON in hidden-funnel.ts's own shape for the same suites and seeds (`mergeParts`). Prints the merged
@@ -577,6 +637,7 @@ console.log(
     tag,
 );
 if (intentWanted) console.log(`  intent: ${intentNow}${intentNote ? ` (${intentNote})` : ""}`);
+console.log(`  coverage: ${coverageLabel}`);
 if (readerKind === "stub") console.log(`  ${STUB_BANNER}`);
 const bySuite = new Map<string, number[]>();
 for (const t of rows) {
@@ -591,7 +652,10 @@ for (const [suite, a] of [...bySuite].sort()) {
   console.log(`  ${suite.padEnd(10)} hidden ${a[0]}/${a[1]}  decoys ${a[2]}/${a[3]}${tag}`);
   a.forEach((v, i) => (total[i]! += v));
 }
-console.log(`  ${"TOTAL".padEnd(10)} hidden ${total[0]}/${total[1]}  decoys ${total[2]}/${total[3]}${tag}${inert}`);
+console.log(
+  `  ${"TOTAL".padEnd(10)} hidden ${total[0]}/${total[1]}  decoys ${total[2]}/${total[3]}${tag}${inert}` +
+    `  [coverage: ${coverageLabel.split(" ")[0]}]`,
+);
 console.log(`  ${beforeModelLine(rows, passValue("wait-ms") || "default")}`);
 // D173 (reporting only; the O7 gates stay decoys in pool and total surfaced, D165): how the surfaced items were
 // surfaced, and the planted items' intent replay coverage, over the merged rows (each process prints only its block).

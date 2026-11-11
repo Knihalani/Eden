@@ -327,12 +327,23 @@ describe("funnel.ts flags", () => {
     writeFileSync(base, JSON.stringify({ config: { intent: false }, perTask: [] }));
     const r = spawnSync(
       "bun",
-      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      [
+        join(lab, "funnel.ts"),
+        "--preset",
+        "default",
+        "--coverage",
+        "full",
+        "--baseline",
+        base,
+        "--",
+        "--reader",
+        "stub",
+      ],
       { encoding: "utf8", env: noKey },
     );
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("refused");
-    // The default replays the checked-in intent requests on train 41-42 (D158), so this run is live.
+    // At full coverage the funnel replays the checked-in intent requests on train 41-42 (D158), so this run is live.
     expect(r.stderr).toContain("baseline's intent is off and this run's is live");
     // `--intent none` keeps the pre-D158 inert screen, refused against the same baseline.
     const none = spawnSync(
@@ -349,12 +360,44 @@ describe("funnel.ts flags", () => {
     writeFileSync(base, JSON.stringify({ config: {}, intent: { state: "inert" }, perTask: [] }));
     const r = spawnSync(
       "bun",
-      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      [
+        join(lab, "funnel.ts"),
+        "--preset",
+        "default",
+        "--coverage",
+        "full",
+        "--baseline",
+        base,
+        "--",
+        "--reader",
+        "stub",
+      ],
       { encoding: "utf8", env: noKey },
     );
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("intent-v2.jsonl.gz by default");
     expect(r.stderr).toContain("baseline's intent is inert and this run's is live");
+    // The default (shipped coverage, D877) is live too, and refused against it before running.
+    const shipped = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(shipped.status).toBe(2);
+    expect(shipped.stderr).toContain("baseline's intent is inert and this run's is live");
+  });
+
+  test("a baseline recorded at the other coverage is refused before running (D877)", () => {
+    const base = join(scratch(), "full.json");
+    const at = { config: {}, intent: { state: "live" }, coverage: "full (intent-v2)", perTask: [] };
+    writeFileSync(base, JSON.stringify(at));
+    const r = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("its coverage is full and this run's is shipped (pass --coverage full)");
   });
 
   test("a run the checked-in intent requests do not cover stays inert and says why", () => {
