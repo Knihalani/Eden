@@ -216,47 +216,70 @@ def score_groups(model, groups, chunk=64):
     return out
 
 
-def evaluate(model, evalrows, fixtures):
-    """Against the sim's truth and Haiku on M7's calls (the 8B's 40 held-out templates), and the G1 fixtures."""
-    held = [r for r in evalrows if r["heldout8b"] and r["haiku"] is not None]
-    fit = [r for r in evalrows if r["suite"] in ("train1", "train2", "train3", "train4") and r["haiku"] is not None
-           and not r["heldout8b"]]
-    sh, sf = score_groups(model, held), score_groups(model, fit)
-    planted = [v for r, s in zip(held, sh) if r["variant"] == "hidden" for it, v in zip(r["items"], s)
-               if it["id"] == r["planted"]]
-    decoy = [v for r, s in zip(held, sh) if r["variant"] == "control" for it, v in zip(r["items"], s)
-             if it["id"] == r["planted"]]
+def fit_mark(rows, scores):
+    """D981's one mark: the lowest at which the model names no more look-alikes than Haiku and speaks on at most half as
+    many neutral pools, on the fitting calls (M7's recorded calls of train1-4's train-split templates)."""
+    hk_dec = sum(r["planted"] in r["haiku"] for r in rows if r["variant"] == "control")
+    hk_neu = sum(bool(r["haiku"]) for r in rows if r["variant"] == "neutral")
+    cands = sorted({round(v, 2) for s in scores for v in s})
+    for m in cands:
+        vs = [{it["id"] for it, v in zip(r["items"], s) if v >= m} for r, s in zip(rows, scores)]
+        dec = sum(r["planted"] in v for r, v in zip(rows, vs) if r["variant"] == "control")
+        neu = sum(bool(v) for r, v in zip(rows, vs) if r["variant"] == "neutral")
+        if dec <= hk_dec and neu <= 0.5 * hk_neu:
+            return m
+    return cands[-1] + 1 if cands else 0.0
 
-    def verdict(rows, scores, m):
-        return [{it["id"] for it, v in zip(r["items"], s) if v >= m} for r, s in zip(rows, scores)]
 
-    def agree(rows, scores, m):
-        vs = verdict(rows, scores, m)
-        ex = sum(v == set(r["haiku"]) for r, v in zip(rows, vs)) / len(rows)
-        sp = sum((not v) == (not r["haiku"]) for r, v in zip(rows, vs)) / len(rows)
-        return ex, sp
-
-    marks = sorted({round(x, 2) for s in sf for x in s})
-    marks = marks[:: max(1, len(marks) // 200)]
-    best = max(marks, key=lambda m: agree(fit, sf, m)[0]) if marks else 0.0
-
-    def quality(rows, scores, m):
-        vs = verdict(rows, scores, m)
+def quality(rows, scores, m):
+    """Facts named (hidden), look-alikes named (control), neutral pools spoken on, for the model at `m` and Haiku."""
+    def tally(verdicts):
         c = {"hidden": [0, 0], "control": [0, 0], "neutral": [0, 0]}
-        for r, v in zip(rows, vs):
+        for r, v in zip(rows, verdicts):
             c[r["variant"]][1] += 1
             c[r["variant"]][0] += (r["planted"] in v) if r["variant"] != "neutral" else bool(v)
-        return {k: f"{a}/{n}" for k, (a, n) in c.items()}
+        return {k: f"{x}/{n}" for k, (x, n) in c.items()}
+    mine = [{it["id"] for it, v in zip(r["items"], s) if v >= m} for r, s in zip(rows, scores)]
+    return {"model": tally(mine), "haiku": tally([set(r["haiku"]) for r in rows])}
 
+
+def pair_auc(groups, scores, key="model"):
+    """Planted against its look-alike (role decoy, or the sim's decoy) and against same-subject neutral items."""
+    pl, dc, ne = [], [], []
+    for g, s in zip(groups, scores):
+        for it, v in zip(g["items"], s):
+            if it["truth"] == "planted":
+                pl.append(v)
+            elif it["truth"] == "decoy" and it.get("role", "decoy") == "decoy":
+                dc.append(v)
+            elif it.get("role") == "neutral":
+                ne.append(v)
+    return {"vs_decoy": auc(pl, dc), "vs_neutral": auc(pl, ne)}
+
+
+def evaluate(model, sel, m7, fixtures, teacher_mark):
+    """The selection read (D981): M2 val and the sim dev templates apart, the mark fitted on train calls, quality
+    against Haiku on the dev templates' recorded calls, and G1. No held-out row is read here."""
+    out = {}
+    for name, groups in sel.items():
+        sc = score_groups(model, groups)
+        out[f"auc_{name}"] = pair_auc(groups, sc)
+        out[f"auc_{name}_teacher"] = pair_auc(groups, [[it["t8b"] for it in g["items"]] for g in groups])
+    fit = [r for r in m7 if r["split"] == "train" and r["suite"] in ("train1", "train2", "train3", "train4")
+           and r["haiku"] is not None]
+    dev = [r for r in m7 if r["split"] == "dev" and r["haiku"] is not None]
+    m = fit_mark(fit, score_groups(model, fit))
+    out["mark"] = m
+    out["quality_dev"] = quality(dev, score_groups(model, dev), m)
     fx = score_groups(model, [{"request": f["request"], "items": [{"title": f["title"], "text": f["text"]}]}
                               for f in fixtures])
-    m7 = [s[0] >= best for f, s in zip(fixtures, fx) if f["src"].startswith("m7/")]
-    m3 = [s[0] >= best for f, s in zip(fixtures, fx) if f["src"].startswith("m3r/")]
-    ex, sp = agree(held, sh, best)
-    return {"heldout_calls": len(held), "planted_vs_decoy": auc(planted, decoy), "mark": best,
-            "agree_exact": round(ex, 3), "agree_speak": round(sp, 3), "quality": quality(held, sh, best),
-            "haiku_quality": {k: f"{sum((r['planted'] in r['haiku']) if k != 'neutral' else bool(r['haiku']) for r in held if r['variant'] == k)}/{sum(r['variant'] == k for r in held)}" for k in ("hidden", "control", "neutral")},
-            "fixtures_m7": f"{sum(m7)}/{len(m7)}", "fixtures_m3r": f"{sum(m3)}/{len(m3)}"}
+    passed = [(f, s[0] >= m) for f, s in zip(fixtures, fx)]
+    out["g1_m7"] = f"{sum(p for f, p in passed if f['src'].startswith('m7/'))}/16"
+    out["g1_m3r_audited"] = f"{sum(p for f, p in passed if f['src'].startswith('m3r/') and f['audited'])}/43"
+    out["g1_m3r_all"] = f"{sum(p for f, p in passed if f['src'].startswith('m3r/'))}/52"
+    tf = [f["t8b"] >= teacher_mark for f in fixtures if f["src"].startswith("m3r/") and f["audited"]]
+    out["g1_teacher_m3r_audited"] = f"{sum(tf)}/43"
+    return out
 
 
 def size_and_latency(model, groups):
@@ -284,8 +307,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arch", choices=sorted(ARCHS), required=True)
     ap.add_argument("--train", required=True)
-    ap.add_argument("--eval", required=True)
-    ap.add_argument("--fixtures", required=True)
+    ap.add_argument("--sel-synth", required=True)
+    ap.add_argument("--sel-sim", required=True)
+    ap.add_argument("--m7", required=True, help="M7's recorded calls with M1's split (m7-split.jsonl)")
+    ap.add_argument("--fixtures", required=True, help="fixtures-g1.jsonl with the teacher's score as t8b")
     ap.add_argument("--groups", type=int, default=4000)
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--lr", type=float, default=3e-3)
@@ -297,14 +322,23 @@ def main():
     a = ap.parse_args()
     random.seed(a.seed)
     torch.manual_seed(a.seed)
-    groups = [json.loads(l) for l in open(a.train)]
+    groups = [json.loads(l) for p in a.train.split(",") for l in open(p)]
     random.shuffle(groups)
-    groups = groups[: a.groups]
+    groups = groups[: a.groups] if a.groups else groups
     for g in groups:
         g["items"] = [it for it in g["items"] if it.get("visible", True)][:15]
     groups = [g for g in groups if g["items"]]
-    evalrows = [json.loads(l) for l in open(a.eval)]
+    def load(p):
+        gs = [json.loads(l) for l in open(p)]
+        for g in gs:
+            g["items"] = [it for it in g["items"] if it.get("visible", True)][:15]
+        return [g for g in gs if g["items"]]
+    sel = {"synth": load(a.sel_synth), "sim": load(a.sel_sim)}
+    m7 = [r for r in (json.loads(l) for l in open(a.m7)) if r["split"] != "eval"]
     fixtures = [json.loads(l) for l in open(a.fixtures)]
+    tfit = [r for r in m7 if r["split"] == "train" and r["suite"] in ("train1", "train2", "train3", "train4")
+            and r["haiku"] is not None]
+    teacher_mark = fit_mark(tfit, [r["t8b"] for r in tfit])
     model = ARCHS[a.arch]()
     opt = torch.optim.Adam(model.parameters(), lr=a.lr)
     t0 = time.time()
@@ -325,10 +359,10 @@ def main():
             loss.backward()
             opt.step()
             losses.append(loss.item())
-        ev = evaluate(model, evalrows, fixtures)
+        ev = evaluate(model, sel, m7, fixtures, teacher_mark)
         curve.append({"epoch": ep, "loss": round(sum(losses) / len(losses), 4), **ev})
         print(json.dumps(curve[-1]), flush=True)
-    res = {"arch": a.arch, "groups": len(groups), "epochs": a.epochs, "seconds": round(time.time() - t0),
+    res = {"arch": a.arch, "teacher_mark": teacher_mark, "groups": len(groups), "epochs": a.epochs, "seconds": round(time.time() - t0),
            "final": curve[-1], "curve": curve, **size_and_latency(model, groups)}
     print(json.dumps({k: v for k, v in res.items() if k != "curve"}))
     if a.out:
