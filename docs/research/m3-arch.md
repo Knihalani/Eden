@@ -267,3 +267,13 @@ M2-only tagger: 0.767). The sim's train5–6 twins differ from their facts in wa
 **H10, supersession** (M2 v2, float, 6 epochs): AUC 0.990 / 0.986 / 0.980 / 0.979 / 0.981 / 0.979 against Jaccard's
 0.791 (4,662 val pairs, 297 replacements); at threshold 0 precision 0.99–1.0, recall 0.39–0.52. Rerun with recall at
 fixed precision (0.95, 0.90), binary and float.
+
+**H10 rerun with recall at fixed precision** (M2 v2, 2 epochs, 256 bits; 4,662 val pairs, 297 replacements):
+
+| version | epoch | AUC | recall @ precision 0.95 | recall @ precision 0.90 | recall at threshold 0 |
+|---|---|---|---|---|---|
+| float | 0 / 1 | 0.990 / 0.986 | 0.737 / **0.815** | 0.822 / 0.842 | 0.471 / 0.465 |
+| binary | 0 / 1 | 0.952 / 0.965 | 0.609 / **0.710** | 0.667 / 0.737 | 0.434 / 0.515 |
+
+The parent's recall push: the low recall was the threshold, not the model. Set for 95% precision, the float net catches
+82% of silent replacements and the binary one 71%; binarisation costs 0.10 of recall here (the tagger lost 0.01 AUC).
