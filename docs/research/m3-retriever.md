@@ -163,3 +163,27 @@ asym-b2 (asym-a2's recipe trained on train3–6, held out train1–2; no generat
 on fold B (asym-b2), and fails at k 5 on both: a **go on the @15 bar, flagged fragile** (one of three k fails on each
 fold). No variant passes §1b's @5 bar against the shipped default on either fold. A go on @15 is a go against the
 no-intent lexical path only: per §1b, promotion needs a Pi gain over the shipped default.
+
+### 3c. The owner's redirect (2026-11-11, relayed by the parent): no dense embeddings
+
+The dense bi-encoder track is dropped: not wired, no more GPU on it (its fold-B run with generated families,
+dense-sb1, was stopped). Its rows above stay as a reference. The remaining candidates are the ones with no network at
+request time: **asym** (items encoded at ingest, the request read through a learned token table) and **learned sparse
+expansion** (items expanded at ingest, the request's own tokens weighted), plus model-free structure. No OpenRouter
+call was made by any M3 run (the ledger holds only `claude-haiku-5-5` lines: 341 `m3.synth`, 818 `eden.cards`); every
+command now runs with `OPENROUTER_API_KEY` unset.
+
+**Query-side expansion learned as a lookup table (no model anywhere; `m3r/qexpand.py`, $0).** From 1,604 training
+templates (train1–4 and the generated families, each counted once), 833 request words get up to five item words each
+(the fact's words far commoner in its facts than in items at large: share ≥ 0.2, lift ≥ 5, at least 3 templates).
+A BM25 search of each days world with the request's words plus their expansions (weight 0.5), against BM25 of the
+request alone, on the held-out families' days requests:
+
+| list | facts @15 | decoys @15 | §1 bar (lexical 113 / 85) | facts @5 against shipped (123) | decoys @5 (83) |
+|---|---|---|---|---|---|
+| BM25 of the request | 105 | 82 | — | — | — |
+| BM25 with the expansions | 119 | 104 | — | — | — |
+| fused with Eden's pool, k 5 | 125 (+7.6) | 103 | fail | 125 (+1.3) | 94 |
+
+The table finds facts (+14 over plain BM25) and look-alikes faster (+22): **stop** for this lever. Entity links and
+day anchors are D330's and D331's screens (a span window, aliases), already spent.
