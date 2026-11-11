@@ -382,7 +382,7 @@ export interface LocalCheckInput {
 export const LOCAL_CHECK_ITEM_CHARS = 700;
 
 /**
- * A student's scores for a push's pool: one log-odds a item ("does this item change what the assistant should do for
+ * A student's scores for a push's pool: one log-odds an item ("does this item change what the assistant should do for
  * this request?"), in the pool's order. An embedder wires one (a lab endpoint today); it may throw or reject, and the
  * checker fails open. It is told nothing but the request, the day and the items.
  */
@@ -390,7 +390,9 @@ export interface PushCheckScorer {
   score(input: LocalCheckInput, signal: AbortSignal): Promise<number[]>;
 }
 
-/** What the partner needs of a push check: I3's model call (`PushChecker`) or a student's scores (`LocalPushChecker`). */
+/**
+ * What the partner needs of a push check: I3's model call (`PushChecker`) or a student's scores (`LocalPushChecker`).
+ */
 export interface PushCheck {
   check(scope: Scope, session: string, input: PushCheckInput, signal: AbortSignal): Promise<PushCheckRead>;
   endSession(session: string): void;

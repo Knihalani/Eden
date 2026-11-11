@@ -26,7 +26,9 @@ export class HttpScorer implements PushCheckScorer {
   /** Each live call's round trip, ms (the client's view: network and the endpoint's queue included). */
   readonly ms: number[] = [];
 
-  constructor(private readonly opts: { url?: string; key?: string; cacheFile?: string; timeoutMs?: number }) {
+  constructor(
+    private readonly opts: { url?: string; key?: string; cacheFile?: string; timeoutMs?: number; logFile?: string },
+  ) {
     if (opts.cacheFile && existsSync(opts.cacheFile)) {
       for (const line of readFileSync(opts.cacheFile, "utf8").split("\n")) {
         if (!line.trim()) continue;
