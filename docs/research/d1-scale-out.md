@@ -179,3 +179,16 @@ bun packages/sim/src/perf-cli.ts steady --synced
 bun packages/server/bench/cluster.bench.ts 300 100 1000
 python3 -I deploy/scripts/sizing.py
 ```
+
+## 7. The warm tier for daily agents (D996, pre-registered before any run)
+
+At the peak hour a daily agent's user is active every ~12 minutes, so with D862's 30-minute window nearly every
+user is held warm: 5.29 MB a user against 3.36 MB at a quarter active (§1). The lever: compact sooner. Arms, all
+`users.bench.ts 200 3000 --prose --sources=20 --waves=6` in the 2-core 12 GB cgroup (waves 2 minutes apart, so a user
+idles 0-12 minutes): `--warm-waves=5` (compact at 11 minutes: today's behaviour for this cadence), `--warm-waves=4`
+(9 minutes), `--warm-waves=2` (5 minutes). A warm cap (compact the oldest warm users past a byte budget) moves the
+same users from warm to compact, so it is priced by the same arms.
+
+**Rule, fixed before the runs:** a shorter window is promoted only if (a) RSS a user at the peak mix falls by 20% or
+more against `--warm-waves=5`, and (b) the first event of a user returning at the daily-agent cadence (12 minutes,
+past the window) waits no more than 50 ms longer at p50 than a warm return. Either fails: rejected, the window stays.
