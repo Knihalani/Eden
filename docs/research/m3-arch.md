@@ -197,3 +197,12 @@ among the candidates, fact first 64, in the first five 86; of 148 control reques
 | H2 | pair, float | fact@5 74 / 45 / 49, twin@5 24 / 11 / 23 | the same shape, no better than binary at this size |
 | H3 | pair without the twin pathway | fact@5 84 / 45 / 31, twin@5 30 / 31 / 25 | epoch 0 like H1 (82, 31): no evidence yet that the twin pathway earns its place |
 | H4 | tagger, binary | AUC fact against others 0.863 / 0.866 / 0.865 | signal; fact against its own twin not yet separated (round 2 reports it) |
+| H5 | silence, set classifier | AUC hidden against control 0.567 / 0.532 / 0.534 | **kill** (bar 0.6): the first five lexical candidates as a set do not say whether to push; the pair scorer's NULL head carries the decision instead |
+| H6 | discrete keys | facts keyed 5 / 2 / 9 of 157 at about 22–27 keyed items a request; of the 10 facts outside the symbolic candidates, 0 / 0 / 1 | **kill** (bar > 10%): and the spot has little room here (the channels hold all but 10 held-out facts) |
+| H7 | BloomMatch, binary | fact@5 56 / 34 / 50, twin@5 30 / 21 / 31; loss still falling (2.2) | weak signal on twins, short of facts; develop with prior bits |
+| H8 | intent → 16 archetypes (M2 v0) | accuracy 0.197 / 0.198 / 0.199 / 0.195 / 0.193 against majority 0.094; train loss → 0.02 | **marginal** (bar 2× majority = 0.188): memorises families; once more on M2 v1 (3,505 families) in round 2, else kill |
+| H9 | supersession pairs | not run (no revision pairs in the slices) | deferred |
+
+**Round 2 (developed):** H1 and H7 with prior bits (the candidate's lexical position and FrameRank's 48 comparators,
+bucketed: they re-rank rather than rank from nothing), one epoch over 150 worlds, held-out checks during training (the
+best kept); H4 with fact against its own twin reported apart.
