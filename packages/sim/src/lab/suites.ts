@@ -262,6 +262,9 @@ const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n) && !n.startsWith("synth"));
 const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
 
+/** The generated test split (D884), with any `+stale` or `@K`: held out, named only on its own and only blind. */
+export const isSynthTest = (name: string) => /^synth-test(\+stale)?(@\d+)?$/.test(name);
+
 /**
  * Registers a generated suite on first use (D884): `synth-train|val|test` read `synthPath(<split>)`, `synth:<file>`
  * reads that worlds file, and `@K` after any of them (or `synth-sample`) plants K worlds a seed. `synth` names the
@@ -322,7 +325,7 @@ export function parseSuites(arg: string): string[] {
     }
   }
   if (!out.length) throw new Error("no suite given");
-  if (out.length > 1 && out.some((n) => /^synth-test(\+stale)?(@\d+)?$/.test(n)))
+  if (out.length > 1 && out.some(isSynthTest))
     throw new Error("synth-test is the generated test split (D884): name it on its own");
   return out;
 }

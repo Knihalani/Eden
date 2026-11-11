@@ -1069,7 +1069,7 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(tagger ? { constraintTag: tagger.tag } : {}),
+    ...(tagger ? { constraintTag: { read: tagger.tag } } : {}),
     ...(reader
       ? {
           reader,

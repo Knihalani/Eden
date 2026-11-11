@@ -371,7 +371,7 @@ on this branch, switch off (= main e4f3649a's behaviour; no checker wired, reade
 | **control + neutral packets** | **949 → 493 (−48.1%)** | 631 → 311 (−50.7%) | **318 → 182 (−42.8%)** |
 
 The rule's bar is −20% packets with hidden surfaced not down more than 1%: met overall and on the held-out suites
-alone. The tagger encoded 492 distinct items in 377 ms (0.77 ms an item, cached per item version). Not yet measured:
+alone. The lab tagger encoded 492 distinct items in 377 ms in that run (0.77 ms an item with the funnel's lanes contending for 4 cores); the engine's own bench reads 266–307 µs an item alone (`bench/tagger.bench.ts`, D908). Not yet measured:
 the pair with the push check S live in front (the shipped path with a key; pre-registered in commit after e6aef109,
 running), and Pi.
 

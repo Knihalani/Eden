@@ -5,6 +5,7 @@
  * reading is cached by its id and content, so the tagger is paid once per item version, as an ingest tag would be.
  */
 import type { ContextItem } from "@eden/protocol";
+import { ALL_CLEAR } from "@eden/engine";
 import { network } from "../../lab/m3r/twin-forward";
 
 export interface Tagger {
@@ -27,9 +28,11 @@ export function loadTagger(dir: string): Tagger {
       const t0 = performance.now();
       const logits = net.tags(net.encode(`${item.title ?? ""}\n${item.text}`));
       ms += performance.now() - t0;
+      // The engine's reading (`ItemTagger.constraintProbability`): one minus the all-clear tags' mass.
       const top = Math.max(...logits);
       const exps = logits.map((l) => Math.exp(l - top));
-      const p = exps[0]! / exps.reduce((a, b) => a + b, 0);
+      const clear = exps.reduce((a, e, k) => a + (ALL_CLEAR.has(net.meta.tags![k]!) ? e : 0), 0);
+      const p = 1 - clear / exps.reduce((a, b) => a + b, 0);
       memo.set(key, p);
       return p;
     },

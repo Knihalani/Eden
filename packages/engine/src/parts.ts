@@ -154,6 +154,11 @@ export const PARTS = {
    */
   indirect: { pushIndirect: false },
   /**
+   * A small binarised tagger, trained end to end on generated worlds and shipped with the engine, vetoes the push's
+   * constraint test for items it reads as all-clears (D908, M3): fewer look-alike packets, no model call.
+   */
+  tag: { constraintTag: 0 },
+  /**
    * `checkAction` holds a call adding a recipient, guest or payee account only Eden's packets showed, not the user's
    * request or correspondence (D375, D376).
    */
