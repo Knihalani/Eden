@@ -214,6 +214,10 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
       const scratch: World = { ...world, items: [...world.items] };
       const before = scratch.items.length;
       const tasks = SUITES[suite]!(scratch, seed, variant);
+      // A synth suite also writes its background and neutral items over base noise items in place (D884): carry
+      // those into the user's world (the same items for every variant of a seed). Other suites only append.
+      if (suite.startsWith("synth"))
+        for (let k = 0; k < before; k++) if (scratch.items[k] !== world.items[k]) world.items[k] = scratch.items[k]!;
       const items = scratch.items.slice(before);
       tasks.forEach((t, i) => made.set(`${suite}|${t.template}|${variant}`, { task: t, item: items[i] }));
     }
