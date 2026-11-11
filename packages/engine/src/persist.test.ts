@@ -238,8 +238,8 @@ describe("frozen users on disk (D425)", () => {
     const a = new ItemCache({ warmIdleMs: 1, freezeIdleMs: 5, expireEveryMs: 1 });
     a.close();
     a.persist(disk(dir).d);
-    a.put(alice, items("alice", 30), T0);
-    a.put(bob, items("bob", 30), T0);
+    a.put(alice, items("alice", 30), T0, false, false, 5);
+    a.put(bob, items("bob", 30), T0, false, false, 5);
     const before = find(a, alice, "quarterly budget review Friday", T0).map((i) => i.id);
     for (let i = 0; i < 3; i++) a.expireIdle(T0);
     expect(a.warmCount).toBe(2);
@@ -256,6 +256,8 @@ describe("frozen users on disk (D425)", () => {
     b.persist(disk(dir).d);
     expect(find(b, alice, "quarterly budget review Friday", T0).map((i) => i.id)).toEqual(before);
     expect(find(b, bob, "budget", T0).every((i) => i.ref.startsWith("bob"))).toBe(true);
+    // Read back from a file: another process's read marks mean nothing here, warm or compact (D425).
+    for (const s of [alice, bob]) for (const it of items(s.userId, 30)) expect(b.readMark(s, it.id)).toBe(0);
     expect(b.freezes.loaded).toBe(2);
     expect(files(dir)).toEqual([]);
   });

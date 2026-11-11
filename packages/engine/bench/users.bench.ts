@@ -48,7 +48,7 @@ const DISK_ONLY = process.argv.includes("--disk-only");
 const CONFIG = JSON.parse(
   process.argv.find((a) => a.startsWith("--config="))?.slice(9) ?? "{}",
 ) as Partial<EngineConfig>;
-/** `--cache=<CacheLimits JSON>`: cache limits over the bench's own (e.g. `{"fastThaw":true}`, D860). */
+/** `--cache=<CacheLimits JSON>`: cache limits over the bench's own (e.g. `{"warmIdleMs":120000,"expireEveryMs":60000}`, D862). */
 const CACHE = JSON.parse(process.argv.find((a) => a.startsWith("--cache="))?.slice(8) ?? "{}") as Record<
   string,
   unknown

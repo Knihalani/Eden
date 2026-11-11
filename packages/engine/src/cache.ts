@@ -363,6 +363,9 @@ function isFast(blob: Uint8Array): boolean {
   return blob.byteLength >= 8 && blob[0] === 0x45 && blob[1] === 0x44 && blob[2] === 0x46 && blob[3] === 0x32;
 }
 
+/** Delta docs (and removals not purged) below which an idle index is left as it is (D861, `compactable`). */
+const COMPACT_MIN_DELTA = 32;
+
 /** Entries per step of a freeze or thaw (`freezeSteps`, `thawSteps`): a few milliseconds of work at most. */
 const STEP_ITEMS = 64;
 /** A sliced freeze or thaw gives the event loop back at least this often (ms, D325). */
@@ -544,13 +547,13 @@ export interface CacheLimits {
    * they are and the vocabulary and the compacted index as arrays (`fastFreezeSteps`), so the thaw is mostly copying
    * (about 10-20 ms at 3,000 items against 150-260). The warm blob is larger than the compact one (per-item deflate
    * shares no words across items), so a user still idle at `freezeIdleMs` is frozen again in the compact form. Set
-   * `expireEveryMs` to at most half of it, or the ticks are too coarse to freeze on time. Below `freezeIdleMs` only;
-   * a thaw reads either form.
+   * `expireEveryMs` to at most half of it, or the ticks are too coarse to freeze on time. Only when below
+   * `freezeIdleMs` (so never with users that never freeze) and with `releaseTerms`; a thaw reads either form.
    */
   warmIdleMs: number;
   /**
-   * D861 (on by default): at each expiry tick a live user not read or written since the last one has its index
-   * compacted (`SparseIndex.compact`): the delta tier merged and its spare room let go, about 0.5-1.0 MB of a
+   * D861 (on by default): at each expiry tick a live user not read or written through the last whole interval has
+   * its index compacted (`SparseIndex.compact`): the delta tier merged and its spare room let go, about 0.5-1.0 MB of a
    * 3,000-item user (167-317 B an item), answers unchanged. A no-op once done, until the user writes again.
    */
   idleCompact: boolean;
@@ -772,7 +775,17 @@ export class ItemCache {
    * from disk (D425), counted in `thawed` too once thawed; `loadMs` their reads. `released`: blobs let go of in memory
    * (D652), `releasedReadMs` their reads at the thaw, `lost`: such users whose file could not be read back.
    */
-  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0, loaded: 0, loadMs: 0, released: 0, releasedReadMs: 0, lost: 0 };
+  readonly freezes = {
+    frozen: 0,
+    thawed: 0,
+    thawMs: 0,
+    recompacted: 0,
+    loaded: 0,
+    loadMs: 0,
+    released: 0,
+    releasedReadMs: 0,
+    lost: 0,
+  };
   /** Users a thaw made empty because their blob, on disk only, could not be read (D652), until `thawed` reports. */
   private readonly lost = new WeakSet<UserCache>();
   /** The owner's restores still settling, per user read back from disk (D425): `ready` waits on them. */
@@ -1682,7 +1695,7 @@ export class ItemCache {
         if (!this.frozenExpired(x, now)) {
           if (!this.coldDue(x, freezeTicks)) continue;
           if (sliced) this.later.add(key);
-          else this.freeze(key, this.thaw(key, x), false);
+          else this.freeze(key, this.thaw(key, x, true), false);
           continue;
         }
         // D652: everything a user held on disk only has expired, and so has their file (D428). Dropped as an
@@ -1704,10 +1717,12 @@ export class ItemCache {
       }
       const form = this.freezeForm(u, freezeTicks);
       if (form === null) {
-        // D861: an idle user's index merged at the tick, its delta's spare room let go (a no-op when already done).
-        // D861. Its purge may release terms no live item holds, as any write's purge does (a lookup holding ids
-        // across an await already meets that); `releaseTerms` off releases none.
-        if (this.limits.idleCompact && this.epoch - u.seen >= 1) u.index.compact();
+        // D861: an idle user's index merged, its delta's spare room let go. A full merge (3-6 ms at 3,000 items), so
+        // on the timer it is a sliced background job, a user at a time, as a freeze is. Its purge may release terms
+        // no live item holds, as any write's purge does (a lookup holding ids across an await already meets that).
+        if (!this.compactable(u)) continue;
+        if (sliced) this.later.add(key);
+        else u.index.compact();
         continue;
       }
       if (sliced) this.later.add(key);
@@ -1727,9 +1742,11 @@ export class ItemCache {
   /** `warmIdleMs` in expiry ticks (at least two, as `freezeTicks`); 0 when off or not below `freezeTicks`. */
   private warmTicks(freezeTicks: number): number {
     const { warmIdleMs, expireEveryMs } = this.limits;
-    if (!(warmIdleMs > 0) || !(expireEveryMs > 0)) return 0;
+    // Only below a compact bound, and only with `releaseTerms`: a warm blob carries the vocabulary, which without it
+    // still holds the words of items gone (expired, evicted), and `flush` would write them to disk.
+    if (!(warmIdleMs > 0) || !(expireEveryMs > 0) || freezeTicks === 0 || !this.limits.releaseTerms) return 0;
     const t = Math.max(2, Math.ceil(warmIdleMs / expireEveryMs));
-    return freezeTicks > 0 && t >= freezeTicks ? 0 : t;
+    return t >= freezeTicks ? 0 : t;
   }
 
   /**
@@ -1767,10 +1784,11 @@ export class ItemCache {
     if (x instanceof FrozenUser) {
       if (!this.frozenExpired(x, now)) {
         if (!this.coldDue(x, this.freezeTicks())) return;
-        // D862: a warm user idle long enough, thawed (cheap, warm) and frozen again compact.
-        yield* this.thawJob(key, x);
+        // D862: a warm user idle long enough, thawed (cheap, warm) and frozen again compact; left live when a request
+        // started waiting on them meanwhile (`ready`).
+        yield* this.thawJob(key, x, true);
         x = this.users.get(key);
-        if (x instanceof UserCache && this.freezeForm(x, this.freezeTicks()) === "compact") {
+        if (x instanceof UserCache && !this.thawing.has(key) && this.freezeForm(x, this.freezeTicks()) === "compact") {
           yield* this.freezeJob(key, x, false);
         }
         return;
@@ -1783,8 +1801,20 @@ export class ItemCache {
       x = this.users.get(key);
       if (!(x instanceof UserCache) || this.expireUser(key, x, now)) return;
     }
-    const form = x instanceof UserCache ? this.freezeForm(x, this.freezeTicks()) : null;
-    if (form !== null) yield* this.freezeJob(key, x as UserCache, form === "warm");
+    if (!(x instanceof UserCache)) return;
+    const form = this.freezeForm(x, this.freezeTicks());
+    if (form !== null) yield* this.freezeJob(key, x, form === "warm");
+    else if (this.compactable(x)) x.index.compact(); // D861, looked at again: used since the tick, it is left.
+  }
+
+  /**
+   * Whether a live user's index is worth compacting now (D861): not read or written through a whole tick interval
+   * (seen two ticks back: a user seen one back may have been used a second before this tick), and a delta
+   * of at least `COMPACT_MIN_DELTA` docs or removals waiting (below that the merge costs more than it returns, and a
+   * user who writes about once a tick would merge their whole index each time, against D120's incremental merges).
+   */
+  private compactable(u: UserCache): boolean {
+    return this.limits.idleCompact && this.epoch - u.seen >= 2 && u.index.compactWork >= COMPACT_MIN_DELTA;
   }
 
   /**
@@ -1932,7 +1962,7 @@ export class ItemCache {
   }
 
   /**
-   * A freeze in the fast-thaw form (`CacheLimits.fastThaw`, D860), a step per `STEP_ITEMS` entries: the entries'
+   * A freeze in the fast-thaw form (`CacheLimits.warmIdleMs`, D860), a step per `STEP_ITEMS` entries: the entries'
    * fields as JSON with each packed text's bytes kept apart, and the vocabulary and the compacted index as arrays.
    * Nothing is inflated or deflated; the JSON and the arrays go through zstd, the text bytes (deflated already) do not.
    */
@@ -2177,13 +2207,13 @@ export class ItemCache {
   }
 
   /** A thaw as a sliced job: given up if the user is thawed (`peek`) or dropped meanwhile. */
-  private *thawJob(key: string, f: FrozenUser): Generator<undefined, void> {
+  private *thawJob(key: string, f: FrozenUser, recompact = false): Generator<undefined, void> {
     const t0 = performance.now();
     const steps = this.thawSteps(f);
     for (let r = steps.next(); ; r = steps.next()) {
       if (this.users.get(key) !== f) return;
       if (r.done) {
-        this.thawed(key, r.value, t0, f);
+        this.thawed(key, r.value, t0, f, recompact);
         return;
       }
       yield;
@@ -2196,18 +2226,22 @@ export class ItemCache {
    * (what is derived from the items stays valid), tallies, probes and sketches. Vocabulary ids and doc numbers are new,
    * as after `rebuild`: nothing outside holds them across calls. Does not mark the user seen (the caller does).
    */
-  private thaw(key: string, f: FrozenUser): UserCache {
+  private thaw(key: string, f: FrozenUser, recompact = false): UserCache {
     const t0 = performance.now();
     const steps = this.thawSteps(f);
     let r = steps.next();
     while (!r.done) r = steps.next();
-    return this.thawed(key, r.value, t0, f);
+    return this.thawed(key, r.value, t0, f, recompact);
   }
 
-  private thawed(key: string, u: UserCache, t0: number, f: FrozenUser): UserCache {
+  /** `recompact`: a warm user thawed only to be frozen compact (D862), counted apart from users' thaws. */
+  private thawed(key: string, u: UserCache, t0: number, f: FrozenUser, recompact = false): UserCache {
     this.users.set(key, u); // Same key: the user's place in the eviction order is unchanged.
-    this.freezes.thawed++;
-    this.freezes.thawMs += performance.now() - t0;
+    if (recompact) this.freezes.recompacted++;
+    else {
+      this.freezes.thawed++;
+      this.freezes.thawMs += performance.now() - t0;
+    }
     // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes.
     this.disk?.delete(u.scope);
     if (this.lost.delete(u)) {

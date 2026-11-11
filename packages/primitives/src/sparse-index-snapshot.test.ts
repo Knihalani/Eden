@@ -116,6 +116,26 @@ describe("SparseIndex compact and snapshot (D860)", () => {
   });
 });
 
+describe("SparseIndex snapshot past 16 bits of doc numbers (D860)", () => {
+  test("Uint32 postings and forward arena survive a restore", () => {
+    const x = new SparseIndex({ fields: 1 });
+    const rnd = new Xoshiro128(31);
+    for (let d = 0; d < 70_000; d++) {
+      const a = Uint32Array.of(d % 1_000, 70_000 + Math.floor(rnd.uniform() * 200_000), 7);
+      x.add(a, 3);
+    }
+    for (let d = 0; d < 70_000; d += 13) x.remove(d);
+    const s = x.snapshot();
+    expect(s.fDocs).toBeInstanceOf(Uint32Array);
+    expect(s.fFwd).toBeInstanceOf(Uint32Array);
+    const y = SparseIndex.restore(s, { fields: 1 });
+    for (const q of [Uint32Array.of(7), Uint32Array.of(999, 7), Uint32Array.of(70_123)]) {
+      expect(results(y, q, 30)).toEqual(results(x, q, 30));
+    }
+    expect([...y.termsOf(69_999)]).toEqual([...x.termsOf(69_999)]);
+  });
+});
+
 describe("Vocab snapshot (D860)", () => {
   for (const hashes of [true, false]) {
     test(`the same ids, the same free list, released ids stay released${hashes ? "" : " (fingerprints hashed again)"}`, () => {

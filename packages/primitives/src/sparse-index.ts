@@ -314,6 +314,11 @@ export class SparseIndex {
     return this.live;
   }
 
+  /** What `compact` would merge: delta docs and removed docs not yet purged (0 once compacted, until a change). */
+  get compactWork(): number {
+    return this.deltaN + this.pendingFree.length;
+  }
+
   /** Distinct term ids that some live doc holds. */
   get termCount(): number {
     return this.liveTerms;
@@ -590,6 +595,9 @@ export class SparseIndex {
     x.dFwd = new Uint32Array(0);
     x.dTf = new Uint8Array(0);
     if (s.chained) x.dHead = new Int32Array(16).fill(-1);
+    // The shared scratch must reach past every term id the index holds (`purge` marks terms seen in it), as `add`
+    // keeps it for terms it meets; a fresh process has seen none of these.
+    if (s.df.length > 0 && s.df.length > tfCount.length) growScratch(s.df.length - 1);
     return x;
   }
 

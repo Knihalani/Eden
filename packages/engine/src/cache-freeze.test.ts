@@ -149,6 +149,48 @@ describe("idle users frozen (D325)", () => {
     expect(snapshot(b, alice, T0 + MIN)).toEqual(snapshot(a, alice, T0 + MIN));
   });
 
+  test("no warm freeze for users that never freeze, nor without `releaseTerms` (D862)", () => {
+    for (const limits of [
+      { freezeIdleMs: 0, warmIdleMs: 1, expireEveryMs: 1 },
+      { freezeIdleMs: 1_000, warmIdleMs: 1, expireEveryMs: 1, releaseTerms: false },
+    ]) {
+      const b = manual(limits);
+      b.put(
+        alice,
+        Array.from({ length: 10 }, (_, n) => makeItem(rng(n), n, "alice")),
+        T0,
+      );
+      for (let t = 0; t < 4; t++) b.expireIdle(T0);
+      expect(b.frozenCount).toBe(0);
+    }
+  });
+
+  test("a warm thaw keeps probes, read marks and the rebuild baseline (D862)", () => {
+    const limits = { maxItemsPerUser: 60, maxSyncedPerUser: 90 };
+    const a = manual({ ...limits, freezeIdleMs: 0, expireEveryMs: 1 });
+    const b = manual({ ...limits, freezeIdleMs: 1_000, warmIdleMs: 1, expireEveryMs: 1 });
+    const r = rng(23);
+    const batch = Array.from({ length: 40 }, (_, n) => makeItem(r, n, "alice"));
+    for (const c of [a, b]) {
+      c.put(alice, batch.slice(0, 20), T0, false, true, 3);
+      c.put(alice, batch.slice(20), T0, false, true, 7);
+      c.rememberProbe(alice, "probe", [batch[1]!.id, batch[30]!.id], 8, T0);
+    }
+    const inner = (c: ItemCache) =>
+      (c as unknown as { users: Map<string, { baseline: number }> }).users.get("t/alice")!;
+    // Set by a rebuild (rare with `releaseTerms`); set here so carrying it is seen.
+    const baseline = (inner(b).baseline = 1_234);
+    for (let t = 0; t < 3; t++) b.expireIdle(T0);
+    expect(b.warmCount).toBe(1);
+    expect(b.probeHits(alice, "probe", 30 * MIN, T0)?.map((h) => h.item.id)).toEqual(
+      a.probeHits(alice, "probe", 30 * MIN, T0)?.map((h) => h.item.id),
+    );
+    for (const it of batch) expect(b.readMark(alice, it.id)).toBe(a.readMark(alice, it.id));
+    expect(b.readMark(alice, batch[0]!.id)).toBe(3);
+    expect(b.readMark(alice, batch[30]!.id)).toBe(7);
+    expect(inner(b).baseline).toBe(baseline);
+  });
+
   test("sliced: a warm user goes compact through the timer's sliced jobs (D862)", async () => {
     const b = manual({ freezeIdleMs: 4, warmIdleMs: 1, expireEveryMs: 1 });
     const r = rng(3);
@@ -186,15 +228,26 @@ describe("idle users frozen (D325)", () => {
     const delta = (c: ItemCache) =>
       (c as unknown as { users: Map<string, { index: { deltaN: number } }> }).users.get("t/alice")!.index.deltaN;
     expect(delta(b)).toBeGreaterThan(0);
-    // Not read or written since the last tick (here: since none): compacted at this one.
+    // Used before the first tick: not idle through a whole interval yet; at the second, compacted.
+    b.expireIdle(T0);
+    expect(delta(b)).toBeGreaterThan(0);
     b.expireIdle(T0);
     expect(delta(b)).toBe(0);
-    // Written again: its new docs wait in the delta until the user is idle through a tick.
-    const again = [makeItem(r, 400, "alice")];
-    for (const c of [a, b]) c.put(alice, again, T0, false, true, 1);
+    // Written again: its new docs wait in the delta while the user is used in every tick.
+    const again = Array.from({ length: 40 }, (_, n) => makeItem(r, 400 + n, "alice"));
+    for (const c of [a, b]) c.put(alice, again.slice(0, 20), T0, false, true, 1);
+    b.expireIdle(T0);
+    for (const c of [a, b]) c.put(alice, again.slice(20), T0, false, true, 1);
+    expect(delta(b)).toBe(40);
+    b.expireIdle(T0); // used since the last tick: left as it is
+    expect(delta(b)).toBe(40);
+    b.expireIdle(T0); // idle through a whole interval: compacted
+    expect(delta(b)).toBe(0);
+    // A small delta is left: below the floor the merge costs more than it frees.
+    const one = makeItem(r, 600, "alice");
+    for (const c of [a, b]) c.put(alice, [one], T0, false, true, 1);
+    for (let t = 0; t < 3; t++) b.expireIdle(T0);
     expect(delta(b)).toBe(1);
-    b.expireIdle(T0);
-    expect(delta(b)).toBe(0);
     expect(snapshot(b, alice, T0)).toEqual(snapshot(a, alice, T0));
     // Writes after it answer as the twin's.
     const more = Array.from({ length: 40 }, (_, n) => makeItem(r, 500 + n, "alice"));
@@ -202,8 +255,30 @@ describe("idle users frozen (D325)", () => {
     expect(snapshot(b, alice, T0 + MIN)).toEqual(snapshot(a, alice, T0 + MIN));
   });
 
+  test("on the timer, idle compaction runs through the sliced jobs, for idle users only (D861)", async () => {
+    const b = manual({ maxItemsPerUser: 400, maxSyncedPerUser: 400, freezeIdleMs: 0, expireEveryMs: 1 });
+    const r = rng(19);
+    for (const s of [alice, bob])
+      b.put(
+        s,
+        Array.from({ length: 100 }, (_, n) => makeItem(r, n, s.userId)),
+        T0,
+      );
+    const delta = (s: Scope) =>
+      (b as unknown as { users: Map<string, { index: { deltaN: number } }> }).users.get(`t/${s.userId}`)!.index.deltaN;
+    expect(delta(alice)).toBeGreaterThan(32);
+    b.expireIdle(T0, true);
+    while (b.slicedPending > 0) await Bun.sleep(1);
+    expect(delta(alice)).toBeGreaterThan(32); // not idle through an interval yet
+    b.peekVocab(bob); // bob is used in this interval
+    b.expireIdle(T0, true);
+    while (b.slicedPending > 0) await Bun.sleep(1);
+    expect(delta(alice)).toBe(0);
+    expect(delta(bob)).toBeGreaterThan(32);
+  });
+
   test("a warm blob keeps item text as its deflated bytes, and the thawed items are packed (D860)", () => {
-    const b = manual({ freezeIdleMs: 0, warmIdleMs: 1, expireEveryMs: 1 });
+    const b = manual({ freezeIdleMs: 1_000, warmIdleMs: 1, expireEveryMs: 1 });
     const r = rng(5);
     const batch = Array.from({ length: 40 }, (_, n) => makeItem(r, n, "alice"));
     b.put(alice, batch, T0, false, true, 1);
