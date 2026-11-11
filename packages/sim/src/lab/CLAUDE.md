@@ -61,7 +61,9 @@ check's model in the funnel (`--check-log F` writes each prompt and reply; a row
 task made the call); without `--check` the funnel wires no checker and the part is inert. pi-ab wires it for any arm
 with `pushCheck` (the default). `../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix;
 `days_hidden.py` resamples whole users; `../../lab/p2/packet_reread.py` reads the packet characters an agent re-reads
-over a day. The widening's table and flags were deleted (D828). `--check-dump F` (M7, D932, `check-dump.ts`) records each check call with its pool, reply and task labels; `../../lab/m7/` holds M7's rejected pre-screen trainers (D930) and `self-agree.ts`, Haiku's repeat agreement on recorded calls (D931).
+over a day. The widening's table and flags were deleted (D828). `--check-dump F` (M7, D932, `check-dump.ts`) records
+each check call with its pool, reply and task labels; `../../lab/m7/` holds M7's rejected pre-screen trainers (D930) and
+`self-agree.ts`, Haiku's repeat agreement on recorded calls (D931).
 
 **Reworded requests (P2, D820):** `--suite train-rw` runs train with each request reworded into an indirect form
 (`reword.ts`; ids `<suite>rw`, same worlds, cards and intent replayed); `../../lab/p2/compare_rw.py` pairs it with a
