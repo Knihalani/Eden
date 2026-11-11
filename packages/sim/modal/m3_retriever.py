@@ -383,7 +383,7 @@ def main(upload: str = "", family: str = "dense", base: str = "BAAI/bge-small-en
                     b.put_file(os.path.join(upload, name), f"/data/{name}")
         print("uploaded")
         return
-    if any(not s.startswith("train") for s in suites.split(",")):
+    if any(not (s.startswith("train") or s == "synth") for s in suites.split(",")):
         raise SystemExit("train suites only")
     run = run or f"{family}-{time.strftime('%Y%m%d-%H%M%S')}"
     if family == "rerank":
