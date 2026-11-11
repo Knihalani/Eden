@@ -555,7 +555,10 @@ const ANSWERED = new Set(["ok", "cached", "stale", "local"]);
 const ASK_BEHIND = "ask-behind:";
 /** `askBehind` (D430): a source whose poll or live search was still running when the ask answered. */
 const SEARCHING = "searching";
-/** `sourceYield` (D505): a cut copy an ask did not search, its source's run of unused live reads being spent. */
+/**
+ * `sourceYield` (D505, D603): a cut copy an ask did not search: its source's run of unused live reads is spent, or
+ * nothing of the source has ever been used, and the request has no name or rare word for it.
+ */
 const UNSEARCHED = "unsearched";
 
 /** How the answer names a status that did not answer (`unreached`). */
@@ -4227,7 +4230,7 @@ export class ContextPartner {
         .filter((r) => r.entityHits > 0 || (localHits?.get(r.sourceId) ?? 0) > 0)
         // `sourceYieldEngage` (D601): a source this request reads nothing live of has not earned a deep copy, a
         // daily sweep or the card model either.
-        .filter((r) => !(this.config.sourceYieldEngage && spent?.has(r.sourceId)))
+        .filter((r) => !(this.config.sourceYieldEarn && this.config.sourceYieldEngage && spent?.has(r.sourceId)))
         .map((r) => r.sourceId),
     );
     // Only the sources not answered locally are searched live; the local ones answer the same query below.
@@ -6600,7 +6603,9 @@ function reachAnswer(
   if (reading.length > 0)
     notes.push(`Still reading ${some(reading)}: anything there that fits follows as a later packet`);
   if (skipped.length > 0) {
-    notes.push(`Not searched past what is held of ${some(skipped)}: nothing found there has been used lately`);
+    // True of both rules that skip a read (the source's run, and a source with nothing used yet, D603): neither
+    // skips a source the request has a name or a rare word for.
+    notes.push(`Not searched past what is held of ${some(skipped)}: nothing in the request points there`);
   }
   if (told === "Nothing in the connected sources.") {
     const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";

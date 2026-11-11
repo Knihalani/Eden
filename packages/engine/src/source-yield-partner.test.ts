@@ -1,6 +1,8 @@
 /**
  * `sourceYield` at the partner (D505, N1; docs/research/n1-calls.md): a source whose live reads go unused is not
- * read live, an ask names it "unsearched", and a request with evidence for it reads it again.
+ * read live, an ask names it "unsearched", and a request with evidence for it reads it again. And the earn rule
+ * with its companions (D600, D601, D603; docs/research/o1-earn.md): a source with nothing used is read live only on
+ * a name or a rare word.
  */
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
@@ -270,6 +272,8 @@ describe("sourceYieldEarn (D600, D603)", () => {
     const asked = await p.ask(first.ref, "Is the offsite catering arranged?");
     expect(sum(asked.searched)).toBe(0);
     expect(asked.answer.answer).toContain("Not searched past what is held of");
+    // The reason given is true of a user nothing was ever read for (not "used lately": the review of D603).
+    expect(asked.answer.answer).toContain("nothing in the request points there");
     expect(asked.answer.answer).toContain("not an all-clear");
   });
 
@@ -292,6 +296,9 @@ describe("sourceYieldEarn (D600, D603)", () => {
     expect((await on.request(u1, RARE)).searched).toEqual([1, 0, 0, 0]);
     const off = await partnerOf({ ...EARN, sourceYieldRare: 0 });
     expect(sum((await off.request(u1, RARE)).searched)).toBe(0);
+    // The table does not need the routing sketch ("default minus routing" keeps the rare word, the review of D603).
+    const unsketched = await partnerOf({ ...EARN, routeSketch: false });
+    expect((await unsketched.request(u1, RARE)).searched).toEqual([1, 0, 0, 0]);
   });
 
   test("a word most sources hold is weak evidence: nothing is read for it", async () => {
@@ -382,6 +389,10 @@ describe("sourceYieldNames, sourceYieldEngage (D601, D603)", () => {
     // A source it does read is used as before.
     await on.request(u1, "Pay Zed Quinn for the Globex renewal today");
     expect(on.partner.sync!.engaged(u1, "src0")).toBe(true);
+    // It is part of the earn rule: with that off, the switch alone changes nothing.
+    const alone = await partnerOf({ sourceYield: true, sourceYieldEngage: true }, [u1], [10, 10, 10, 10], dana);
+    await alone.request(u1, NAMED);
+    expect(alone.partner.sync!.engaged(u1, "src1")).toBe(true);
     expect(on.partner.sync!.engaged(u1, "src1")).toBe(false);
   });
 });

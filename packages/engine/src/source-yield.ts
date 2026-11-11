@@ -19,7 +19,11 @@
  */
 import { scopeKey, type Scope } from "@eden/protocol";
 
-/** Sources kept per user, least recently read dropped first (a dropped source starts again: read live). */
+/**
+ * Sources kept per user, least recently read dropped first. A dropped source starts again with nothing used, as
+ * every source does after a restart (this state is in memory only): read live on strong evidence until an item of
+ * it reaches the agent, the state every new user starts in.
+ */
 const MAX_SOURCES = 4_096;
 /** Users kept per tenant and in all, least recently used dropped first (as `ProbeEconomy`). */
 const MAX_USERS_PER_TENANT = 1_000;

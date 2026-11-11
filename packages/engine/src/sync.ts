@@ -1395,16 +1395,17 @@ export class SyncManager {
     if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
     const now = this.deps.now();
     // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
-    if (this.o.sketch) {
-      const sketch = (s.sketch ??= new TermSketch());
-      // `rareTerms` (D600): the same terms, in the user's one table of which few sources hold a word.
+    // `rareTerms` (D600): the same terms, in the user's one table of which few sources hold a word. Filled with or
+    // without the sketch: with `routeSketch` off the earn rule would otherwise read on names alone (the review).
+    if (this.o.sketch || this.o.rareTerms) {
+      const sketch = this.o.sketch ? (s.sketch ??= new TermSketch()) : null;
       const rare = this.o.rareTerms ? (u.rare ??= new RareTerms()) : null;
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
         for (const t of sketchTerms(`${it.title} ${it.text}`)) {
           const [h1, h2] = termHashes(t);
-          sketch.add(h1, h2);
+          sketch?.add(h1, h2);
           rare?.add(s.id, h1, h2);
         }
       }
