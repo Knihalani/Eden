@@ -10,6 +10,13 @@ import { ProbeEconomy } from "./economy";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 /** Friday 30 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-30T09:00:00Z");
 const doc = (id: string, title: string, text: string, sourceId = "chat"): ContextItem => ({
@@ -72,12 +79,12 @@ describe("action classes (consequence.ts)", () => {
     ];
     const travel = CLASSES.find((c) => c.id === "travel")!;
     for (const text of shapes) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       actionClass(text);
       for (const c of CLASSES) matchesClass(c, text);
       hasWord(text, "hold");
       matchesClass(travel, text);
-      expect(performance.now() - t0).toBeLessThan(200);
+      expect(cpuMs() - t0).toBeLessThan(200);
     }
   });
 });

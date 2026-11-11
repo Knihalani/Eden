@@ -69,23 +69,32 @@ const funnel = (config: Record<string, unknown>, extra: string[], limit = 2) => 
   );
 };
 
-/** funnel.ts on train1 seeds 41 and 42: two seeds make two shards, so `--jobs 2` really runs two at a time. */
-const funnelTimed = (jobs: string) => {
-  const out = join(scratch(), "f.json");
-  return spawn(
+/** The per-task output files a funnel.ts run writes (they shard with `--jobs`, audit 2026-11-06). */
+const OUTPUT_FLAGS = ["ask-diag", "packets", "card-log", "reader-log", "candidates"];
+/**
+ * funnel.ts on train1 seeds 41 and 42 (two seeds make two shards, so `--jobs 2` really runs two at a time), with every
+ * per-task output file, into its own directory. One pair of runs serves both the `--time` shard check and the output
+ * files' (D819): the files used to come from a second pair at `--time 0`, about 6.5 s of CPU for the same merge code
+ * (`partFiles`, `partArgs` and `mergeOutputs` do not read `--time`). The `--time 0` grouping (`groupShards`) still runs
+ * end to end in the SIGTERM run below, and its blocks are unit-tested in funnel-merge.test.ts.
+ */
+const funnelTimed = async (jobs: string) => {
+  const dir = scratch();
+  const run = await spawn(
     [
       join(lab, "funnel.ts"),
-      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(timedSync), "--json", out],
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(timedSync)],
+      ...["--json", join(dir, "f.json")],
       // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
       // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs).
       ...["--", "--time", "0.05", "--limit", "1"],
+      ...OUTPUT_FLAGS.flatMap((f) => [`--${f}`, join(dir, `${f}.jsonl`)]),
     ],
-    out,
+    join(dir, "f.json"),
   );
+  return { ...run, dir };
 };
 
-/** The per-task output files a funnel.ts run writes (they shard with `--jobs`, audit 2026-11-06). */
-const OUTPUT_FLAGS = ["ask-diag", "packets", "card-log", "reader-log", "candidates"];
 /**
  * funnel.ts sharding `--ask-diag` over 2 processes, sent `signal` once a part file exists. Returns its exit status,
  * how many parts were seen, and the part files left a second after it exited (a late child write would show there).
@@ -110,32 +119,15 @@ const funnelSignalled = async (signal: "SIGTERM" | "SIGINT") => {
   await Bun.sleep(1000);
   return { status, partsSeen, partsLeft: parts() };
 };
-/** funnel.ts at `--time 0` on train1 seeds 41 and 42 with every per-task output file, into its own directory. */
-const funnelOutputs = async (jobs: string) => {
-  const dir = scratch();
-  const run = await spawn(
-    [
-      join(lab, "funnel.ts"),
-      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync)],
-      ...["--json", join(dir, "f.json"), "--", "--limit", "1"],
-      ...OUTPUT_FLAGS.flatMap((f) => [`--${f}`, join(dir, `${f}.jsonl`)]),
-    ],
-    join(dir, "f.json"),
-  );
-  return { ...run, dir };
-};
-
 // The end-to-end runs are single-threaded child processes (mostly sleeps, for the shards). They start together
 // here, before any test, and each test awaits its own: one after another they cost the sum of their wall times.
 // The default's stub run assertions are in reader-stub.test.ts, on the stub run that file makes anyway.
 let runs: {
   overlap: Promise<Run>;
-  solo: Promise<Run>;
-  sharded: Promise<Run>;
+  solo: Promise<Run & { dir: string }>;
+  sharded: Promise<Run & { dir: string }>;
   missNoModel: Promise<Run>;
   missModel: Promise<Run>;
-  outputsSolo: Promise<Run & { dir: string }>;
-  outputsSharded: Promise<Run & { dir: string }>;
   soloWhy: Promise<Run>;
   signalled: Promise<{ status: number | null; partsSeen: number; partsLeft: string[] }>;
 };
@@ -153,8 +145,6 @@ beforeAll(() => {
     sharded: funnelTimed("2"),
     missNoModel: replay([]),
     missModel: replay(["--reader-model", "claude-haiku-5-5"]),
-    outputsSolo: funnelOutputs("1"),
-    outputsSharded: funnelOutputs("2"),
     signalled: funnelSignalled("SIGTERM"),
     // `--record` and `--reader live` keep one process and say why. The flag after them is unknown, so hidden-funnel.ts
     // exits 2 before anything runs: nothing is recorded or read, and no key is in the env either way.
@@ -432,7 +422,8 @@ describe("funnel.ts flags", () => {
   }, 120_000);
 
   test("--ask-diag and the other output files shard: same files as one process, no part left", async () => {
-    const [solo, sharded] = await Promise.all([runs.outputsSolo, runs.outputsSharded]);
+    // The `--time` pair wrote them (one pair of runs for both checks, D819).
+    const [solo, sharded] = await Promise.all([runs.solo, runs.sharded]);
     expect(solo.status).toBe(0);
     expect(sharded.status).toBe(0);
     expect(sharded.stderr).not.toContain("running one job");

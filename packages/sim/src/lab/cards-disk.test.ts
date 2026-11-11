@@ -6,7 +6,7 @@ import { gzipSync } from "node:zlib";
 import { cardKey, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
 import { REALISTIC, simSources } from "../sources";
-import { buildWorld } from "../world";
+import { buildWorld, type World } from "../world";
 import {
   DiskCardMaker,
   harnessIntent,
@@ -352,14 +352,29 @@ describe("the harnesses' intent replay (D158)", () => {
   // 5 s (one of three timed checks failed on it, 5,410 ms; RealUse-1 part E).
   test("the checked-in file covers held-out 13 to 18 items (the shards INTENT_COVERS claims)", () => {
     const requests = loadRequests(INTENT_PATH);
+    // One base world per seed, shared by its twelve suite-variant worlds (D819): each gets its own lists and maps
+    // over the same item objects, so the sources' per-item analysis (memoised on the object) is done once a seed, not
+    // twelve times. The worlds are the ones a fresh build gives: a suite plants new items and `clearSlot` filters the
+    // list, and neither may change a base item, which the fingerprint check after each seed's worlds asserts.
+    const fingerprint = (w: World) => JSON.stringify([w.items, [...w.facts], w.arcs, w.people, w.user, w.sources]);
+    const bases = new Map([41, 44].map((s) => [s, buildWorld({ seed: s * 1_000 })] as const));
+    const printed = new Map([...bases].map(([s, w]) => [s, fingerprint(w)] as const));
     for (const [suite, seed] of [41, 44].flatMap((s) =>
       (["heldout13", "heldout14", "heldout15", "heldout16", "heldout17", "heldout18"] as const).map(
         (x) => [x, s] as const,
       ),
     )) {
       for (const variant of ["hidden", "control"] as const) {
-        // As hidden-funnel.ts and ab-common's worldOf build each world.
-        const world = buildWorld({ seed: seed * 1_000 });
+        // As hidden-funnel.ts and ab-common's worldOf build each world, over the seed's shared base items.
+        const base = bases.get(seed)!;
+        const world: World = {
+          ...base,
+          people: [...base.people],
+          arcs: [...base.arcs],
+          facts: new Map(base.facts),
+          items: [...base.items],
+          sources: { ...base.sources },
+        };
         const before = world.items.length;
         const tasks = SUITES[suite]!(world, seed, variant);
         const planted = world.items.slice(before);
@@ -376,6 +391,7 @@ describe("the harnesses' intent replay (D158)", () => {
         expect(mine.found).toBe(mine.of);
       }
     }
+    for (const [seed, base] of bases) expect(fingerprint(base)).toBe(printed.get(seed)!);
   }, 180_000); // Twenty-four worlds now (held-out 13 to 18), six times the earlier four.
 });
 

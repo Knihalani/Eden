@@ -124,6 +124,9 @@ narrow and more seeds do not help; a part's effect (`fewer`: 1.3) is where seeds
   BIASED in the results and reports. days-calls does the same per user beside
   `--json`; `lab_fanout.py --resume` re-launches only the shards that have not returned (docs/LAB.md 4 and 7).
   A harness that gains a unit of work journals it the same way, and a new input that decides a unit joins the key.
+- **No OpenRouter from the lab (D818).** Every script under packages/sim/ refuses to start while `OPENROUTER_API_KEY`
+  is set (bunfig.toml's preload, `scripts/lab-guard.ts`), unless `EDEN_ALLOW_OPENROUTER=1` for a run the owner
+  approved: run the lab with `env -u OPENROUTER_API_KEY` or after `unset OPENROUTER_API_KEY`.
 - **Keys** are read by `keyFor`, never printed or put in results.
 - **Budgets:** every live run passes `--budget` (a hard cap per process on everything it spends).
 - **Strict CLIs (audit 2026-11-03b).** funnel.ts, hidden-funnel.ts and quality-cli.ts parse through `flags()`; a new

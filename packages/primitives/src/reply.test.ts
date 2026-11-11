@@ -13,6 +13,13 @@ import {
   stripReply,
 } from "./reply";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 /** [kind, line] for each line, for readable assertions. */
 function parts(text: string, boilerplate = true): [number, string][] {
   const lines = new ReplyLines(4);
@@ -356,10 +363,10 @@ describe("splitReply: invariants on random input", () => {
       " ".repeat(100_000) + ":",
     ];
     for (const text of inputs) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       stripReply(text);
       dedupText(text, 6);
-      expect(performance.now() - t0).toBeLessThan(2_000);
+      expect(cpuMs() - t0).toBeLessThan(2_000);
     }
   });
 });
