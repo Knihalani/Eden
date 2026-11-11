@@ -517,6 +517,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D801 | 2026-11-11 | Finding: tonight's wave (#235–#243) did not lower quality on blind `heldout18`, and on Sonnet's grade raised it; `pushOpen` stays in the… | finding |
 | D802 | 2026-11-11 | Lab only: `heldout18` has been run once and is read; `UNREAD_BLIND` is empty | lab |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
+| D810 | 2026-11-11 | The no-model eval gains an acting suite, so the merge gate sees the default's push of candidates | adopted |
+| D813 | 2026-11-11 | Lab only: paid lab runs write each finished unit as it lands and resume without paying for it again | lab |
+| D811 | 2026-11-11 | The merge gate runs its three steps at once, runs the tests that wait on real time in a tail after the rest, bounds work in CPU time, and… | adopted |
+| D818 | 2026-11-11 | Lab scripts refuse to start while `OPENROUTER_API_KEY` is set, unless `EDEN_ALLOW_OPENROUTER=1` | adopted |
+| D819 | 2026-11-11 | The cold gate trusts the content-addressed Prettier set, and five heavy end-to-end tests share their work | adopted |
 | D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | rejected |
 | D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | lab |
 | D842 | 2026-11-11 | The `caldav` preset names a fetch tool, `caldav_get_event_by_uid`; the sim's calendar never changes in the future; mcpvault keeps no fetch… | adopted |
@@ -538,3 +543,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D875 | 2026-11-11 | Lab only: `days-calls.ts` for weeks, more users and the long tail | lab |
 | D876 | 2026-11-11 | Lab only: the benchmark map in docs/LAB.md: each benchmark's question and known biases | lab |
 | D877 | 2026-11-11 | Lab only: the funnel's default coverage is shipped | lab |
+| D880 | 2026-11-11 | Lab only: a synthetic-world factory turns the train suites' format into thousands of labelled worlds | lab |
+| D881 | 2026-11-11 | Synth labels come from construction, never from a model. | adopted |
+| D882 | 2026-11-11 | Synth splits are by family cluster, and families are deduped against each other and the train suites. | adopted |
+| D883 | 2026-11-11 | Synth quality: a revision pass by the writer, a blind critic, a hand audit. | adopted |
+| D884 | 2026-11-11 | Lab only: the `synth` suite family runs the generated worlds as hidden-context suites. | lab |
+| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
+| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
