@@ -117,3 +117,19 @@ names against a record's category through a small hand-built gazetteer of the si
 least +8 points over the shipped pool with decoys @5 rising by no larger ratio. Anthropic cap for this version $5.
 **Caveat, written before the read:** train1–2 were in v1's fit split and v1's miss examples from them were read
 while building v1, so this fold is not blind to the author; the read is a second fold, not a clean held-out set.
+
+## 4. Version 3, the typed mapping (pre-registered at the parent's request)
+
+v1's records and prompt are unchanged ($0 extraction). The matcher adds three typed comparisons, with no model:
+
+- an amount the request names, against a record's limit or threshold;
+- a role word the request uses ("babysitter", "Mum", "approver"), against a record's person, through the record's
+  own sentence;
+- a destination the request names, against a record's category, through a small hand-built gazetteer of the sim's
+  places.
+
+**Fit** on train3–6; **read once** on train1–2. Same bar: facts @5 at least +8 points over the shipped pool, with
+decoys @5 rising by no larger ratio. Anthropic cap for this version: $5.
+
+**Caveat, written before the read:** train1–2 were in v1's fit split, and v1's miss examples from them were read
+while v1 was built, so this fold is not blind to the author. The read is a second fold, not a clean held-out set.
