@@ -855,7 +855,8 @@ async function runSeed(
   if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(plantedAll.map((it) => it.id));
+  // A `+revision` or `+stale` task's stale version is kept from the slot clearing too (D914).
+  const keep = new Set([...plantedAll.map((it) => it.id), ...all.flatMap((t) => (t.stale ? [t.stale] : []))]);
   for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.slotText ?? task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
@@ -1541,9 +1542,19 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
-      // `+stale` synth suites (D908 rule 1): the stale version's place in that pool, and whether it was handed.
+      // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
+      // it was handed.
       ...(push && task.stale
-        ? { stalePoolAt: push.pool.indexOf(task.stale), staleHanded: push.handed.includes(task.stale) }
+        ? {
+            stalePoolAt: push.pool.indexOf(task.stale),
+            staleHanded: push.handed.includes(task.stale),
+            // M3b (D914): the ids, to label engine-drawn pairs (h10_pool_pairs.py) and read where a stale version went.
+            staleId: task.stale,
+            factId: id,
+            user: scope.userId,
+            pool: push.pool,
+            handed: push.handed,
+          }
         : {}),
       ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
