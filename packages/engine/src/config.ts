@@ -716,11 +716,10 @@ export interface EngineConfig {
    */
   pushOpen: boolean;
   /**
-  /**
-   * M3 (D908 rule 1; a trial, 0 = off; docs/research/m3-arch.md §7f): with a `supersede` dependency (a small pair model:
-   * the probability that one item replaces another), a handed candidate that a newer, not bulk item of the push pool
+   * M3 (D908 rule 1; a trial, 0 = off; docs/research/m3-arch.md §7f, §7i): with a `supersede` dependency (a small pair
+   * model: the probability that one item replaces another), a handed candidate that a newer, not bulk item of the pool
    * replaces, with probability at least this, is handed as that newer item instead (D914: no anchor gate on the newer
-   * item; the threshold is the model's own, set on engine-drawn calibration pairs, docs/research/m3-arch.md §7i).
+   * item; the threshold is the model's own, set on engine-drawn calibration pairs).
    */
   pushSupersede: number;
   /**
