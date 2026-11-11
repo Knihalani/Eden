@@ -451,7 +451,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   session's fifth request on (`askReinvite`) was ignored (16 asks against 12 of 568 requests). Plan alerts were
   re-measured on eight users and stand (D516: +26.9 points of late facts raised, 60% still not raised).
 - **Idle users are frozen (D325, docs/research/a14-scale-users.md).** `ItemCache` holds a user idle for
-  `freezeIdleMs` (30 min) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
+  `freezeIdleMs` (30 min; warm from 2 min, D862, below) as one zstd blob (`FrozenUser`) and thaws them exactly on next use. Every reader of a
   user's state goes through `peek`/`touch` (which thaw and mark the user seen); only `revision` and `syncedCount`
   read a frozen user as is. A new per-user field of `UserCache` must be carried by `freezeSteps`/`thawSteps` (or be
   derived and rebuilt), and `cache-freeze.test.ts`'s twin snapshot extended to read it. A new entry point that serves
@@ -459,6 +459,22 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   synchronously (~110-190 ms at 3,000 items) with every other request waiting. Bench: `bench/users.bench.ts`;
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
+- **Warm freezing (D860, D862, in the default; `CacheLimits.warmIdleMs`; docs/research/p6-scale.md).** A user idle
+  `warmIdleMs` (2 min; the expiry tick is a minute, `expireEveryMs`) is frozen warm (`fastFreezeSteps`): the "EDF2" blob holds each item's deflated text bytes as they are
+  (`packedOf`/`packedFrom`), the vocabulary's terms and the compacted index as arrays (`Vocab.snapshot`,
+  `SparseIndex.snapshot`, postings and forward arena as varint gaps), so `fastThawSteps` copies instead of
+  tokenizing, indexing and deflating (10-20 ms at 3,000 items against 150-300). Doc numbers and term ids are the
+  frozen user's own, so `Entry.doc` carries over: a change to how the index numbers docs must keep `snapshot` exact
+  (`sparse-index-snapshot.test.ts`). A warm user still idle at `freezeIdleMs` is thawed and frozen again compact
+  (`coldDue`, `laterJob`; a warm thaw for that is counted in `freezes.recompacted`, not `thawed`); `thawSteps` reads
+  either form by its magic. A warm freeze writes nothing to disk (D425): `flush` writes warm users at a shutdown. No
+  warm freeze without `releaseTerms` (the blob carries the vocabulary) or with `freezeIdleMs` 0. A new per-user
+  field of `UserCache` must be carried by both forms, and a test that counts thaws or freezes with the default limits
+  now sees warm ones.
+- **Idle compaction (D861, in the default; `idleCompact`).** At an expiry tick a live user not used through a whole
+  interval, with at least `COMPACT_MIN_DELTA` (32) delta docs or removals waiting, has `index.compact()` (a full
+  merge, 2.6-6 ms at 3,000 items, the delta's spare room let go) as a sliced background job, looked at again when it
+  runs. Its purge can release terms, as a write's purge can.
 - **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
   `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
   `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk

@@ -17,13 +17,15 @@
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
  * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
- * [--persist] [--config=<EngineConfig JSON>]`.
+ * [--persist] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
  * `--persist`: frozen users are also written, encrypted, to a temp directory (D425).
+ * Before D862 (no warm freeze, a 10-minute tick): `--cache='{"warmIdleMs":0,"expireEveryMs":600000}'`.
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
  * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
- * `--world` takes item text from the sim world (as `ingest.bench.ts --world`). No model, no network.
+ * `--world` takes item text from the sim world (as `ingest.bench.ts --world`); `--prose` the world's items with the
+ * text of docs/ (`prosePieces`). No model, no network.
  */
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
@@ -37,13 +39,36 @@ import { EncryptedFrozenDisk } from "../src/persist";
 import { termIds } from "../src/text";
 import { buildWorkload } from "./workload";
 
-const WORLD = process.argv.includes("--world");
+const PROSE = process.argv.includes("--prose");
+const WORLD = PROSE || process.argv.includes("--world");
 const NO_FREEZE = process.argv.includes("--no-freeze");
 const PERSIST = process.argv.includes("--persist");
 /** `--config=<EngineConfig JSON>`: settings over the default (as `storm.bench.ts`), e.g. a switch's off arm. */
 const CONFIG = JSON.parse(
   process.argv.find((a) => a.startsWith("--config="))?.slice(9) ?? "{}",
 ) as Partial<EngineConfig>;
+/**
+ * `--cache=<CacheLimits JSON>`: cache limits over the bench's own, e.g. `{"warmIdleMs":0,"expireEveryMs":600000}` (the
+ * cache before D862).
+ */
+const CACHE = JSON.parse(process.argv.find((a) => a.startsWith("--cache="))?.slice(8) ?? "{}") as Record<
+  string,
+  unknown
+>;
+/**
+ * `--warm-waves=J` (D862): users freeze warm after two idle ticks of a minute (`warmIdleMs` 2 min, `expireEveryMs` 1
+ * min, the defaults) and compact once idle 2J+1 ticks: with `--waves=K` the steady state then holds the last wave
+ * live, the J before it warm and the rest compact (each earlier wave idles two ticks per later wave).
+ */
+const WARM_WAVES = Number(process.argv.find((a) => a.startsWith("--warm-waves="))?.slice(13) ?? -1);
+if (WARM_WAVES >= 0) {
+  Object.assign(CACHE, {
+    warmIdleMs: 120_000,
+    expireEveryMs: 60_000,
+    freezeIdleMs: (2 * WARM_WAVES + 1) * 60_000,
+    ...CACHE,
+  });
+}
 const WAVES = Number(process.argv.find((a) => a.startsWith("--waves="))?.slice(8) ?? 1);
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const USERS = Number(args[0] ?? 1_000);
@@ -92,13 +117,29 @@ const mem = async () => {
   return { heap: m.heapUsed, ext: m.external, rss: Math.min(rss, m.rss) };
 };
 
+/**
+ * `--prose`: every Markdown file under docs/ (sorted by path), cut into 1,100-character pieces, about the sim's
+ * length an item (as `segment-screen.bench.ts text --prose`, over more files so 3,000 items do not repeat). One
+ * author's prose and tables, not users' mail; but unlike the sim's templated text, items do not repeat each other,
+ * which is what decides how much one zstd stream over a user gains over each item's own deflate (D860). The corpus
+ * grows with the docs, so compare runs of one tree.
+ */
+function prosePieces(): string[] {
+  const dir = new URL("../../../docs/", import.meta.url).pathname;
+  const files = [...new Bun.Glob("**/*.md").scanSync(dir)].sort();
+  const joined = files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
+  return Array.from({ length: Math.floor(joined.length / 1_100) }, (_, i) => joined.slice(i * 1_100, (i + 1) * 1_100));
+}
+
 async function pool(): Promise<ContextItem[]> {
   if (WORLD) {
     const { buildWorld } = await import("../../sim/src/world");
     const all = buildWorld({ seed: 1, noiseScale: 5 }).items;
+    const prose = PROSE ? prosePieces() : [];
     return Array.from({ length: PER_USER }, (_, i) => {
       const it = all[Math.floor((i * all.length) / PER_USER) % all.length]!;
-      const item: ContextItem = { id: it.id, sourceId: it.sourceId, ref: it.ref, title: it.title, text: it.text };
+      const text = PROSE ? prose[i % prose.length]! : it.text;
+      const item: ContextItem = { id: it.id, sourceId: it.sourceId, ref: it.ref, title: it.title, text };
       return it.meta ? { ...item, meta: it.meta } : item;
     });
   }
@@ -145,7 +186,7 @@ for (let u = 0; u < USERS; u++) {
 }
 const byUser = new Map(users.map((x) => [x.scope.userId, x.sources]));
 
-const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Math.max(5_000, PER_USER) });
+const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Math.max(5_000, PER_USER), ...CACHE });
 cache.close(); // The bench runs the expiry ticks itself.
 // `--persist`: frozen users are also written to a temp directory, encrypted (D425).
 if (PERSIST) {
@@ -196,6 +237,7 @@ const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
 for (const { sources } of users) for (const s of sources) s.items = [];
 const frozenAtSteady = cache.frozenCount;
+const warmAtSteady = cache.warmCount;
 const m2 = await mem();
 type Mem = { heap: number; ext: number; rss: number };
 const perUser = (a: Mem, b: Mem) => ({
@@ -287,7 +329,7 @@ for (const { scope } of users) {
 
 const f = (x: number, d = 2) => x.toFixed(d);
 console.log(
-  `${USERS} users x ${PER_USER} synced items over ${SOURCES.length} sources (${WORLD ? "sim world" : "workload"} text, ` +
+  `${USERS} users x ${PER_USER} synced items over ${SOURCES.length} sources (${PROSE ? "docs prose" : WORLD ? "sim world" : "workload"} text, ` +
     `avg ${avgChars} chars), shipped wiring, no model`,
 );
 console.log(
@@ -295,7 +337,7 @@ console.log(
     `${f((cpu.user + cpu.system) / n, 1)} µs CPU/item, ${f(USERS / (stormMs / 1000), 1)} users/s`,
 );
 console.log(
-  `${WAVES > 1 ? `after ${WAVES} waves (${NO_FREEZE ? "none frozen" : `${frozenAtSteady} of ${USERS} users frozen`})` : "synced, live"}: ` +
+  `${WAVES > 1 ? `after ${WAVES} waves (${NO_FREEZE ? "none frozen" : `${frozenAtSteady} of ${USERS} users frozen, ${warmAtSteady} warm`})` : "synced, live"}: ` +
     `${f(live.heapMB)} MB heapUsed/user (${f((live.heapMB * MB) / PER_USER, 0)} B/item), ` +
     `${f(live.extMB)} MB external/user (counted in heapUsed too), ${f(live.rssMB)} MB RSS/user`,
 );
@@ -325,6 +367,10 @@ console.log(
     waves: WAVES,
     perUser: PER_USER,
     world: WORLD,
+    prose: PROSE,
+    warmWaves: WARM_WAVES,
+    frozenAtSteady,
+    warmAtSteady,
     stormS: stormMs / 1000,
     cpuUsPerItem: (cpu.user + cpu.system) / n,
     live,

@@ -1,6 +1,7 @@
 export { fnv1a, hashString, mix32, murmur3 } from "./hash";
 export { CLASS, FOLD, FOLD_DROP, FOLD_EXPAND, WORD_PART, WORD_START, classOf, foldOf, foldString } from "./charclass";
 export { Vocab, termHash } from "./vocab";
+export type { VocabSnapshot } from "./vocab";
 export { tokenize, tokenizeInto } from "./tokenize";
 export { MultiMatcher, type MatcherOptions, type OnMatch } from "./matcher";
 export { TopK } from "./topk";
@@ -11,7 +12,7 @@ export { Gcra, type GcraOptions } from "./gcra";
 export { CircuitBreaker, type BreakerOptions, type BreakerState } from "./breaker";
 export { AimdLimiter, type LimiterOptions, type Outcome } from "./limiter";
 export { Histogram, RollingHistogram } from "./histogram";
-export { SparseIndex, type SearchResults, type SparseIndexOptions } from "./sparse-index";
+export { SparseIndex, type IndexSnapshot, type SearchResults, type SparseIndexOptions } from "./sparse-index";
 export { truncateUtf8, utf8Length } from "./utf8";
 export {
   betaInc,

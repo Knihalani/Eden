@@ -711,12 +711,14 @@ EDEN_PERSIST_KEY=$(openssl rand -hex 32)      # 32 bytes, hex or base64; keep it
 EDEN_PERSIST_MAX_MB=4096                      # optional; the directory's cap across processes (default 4,096)
 ```
 
-A user idle 20-30 minutes is then also written to that directory, encrypted (AES-256-GCM, a file per user under a
+A user idle 30 minutes (frozen compact; the two-minute warm freeze, D862, writes nothing) is then also written to
+that directory, encrypted (AES-256-GCM, a file per user under a
 keyed-hash name, bound to its tenant and user), with the sync's position for them. After a restart each user is read
 back the first time they are used and their sources are polled for what is new. Measured (200 users, the bench in
 docs/research/c3-persist-frozen.md): synced again in 14.1-14.2 s instead of 42.9-44.0 s at 1,000 items a user,
 and 32.4 s instead of 121.8 s at the 3,000-item cap; listing calls 2,400 → 600 and 6,000 → 600. Live users are
-written at SIGTERM (within 1.5 s); a crash loses only what was live.
+written at SIGTERM (within 1.5 s), warm users with them; a crash loses users used within the last 30 minutes (they
+re-sync), as before D862.
 
 What you take on: redacted item content of idle users is on disk until the user returns, is forgotten (`/v1/forget`
 deletes the file too) or the file is 7 days old; the key in the environment opens every file, so put the directory

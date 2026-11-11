@@ -179,7 +179,8 @@ const fail = (message: string): never => {
 
 const suiteArg = opt("suite", "train");
 const suites = parseSuites(suiteArg);
-const heldout = suites.filter((s) => s.startsWith("heldout"));
+// The generated test split (D884) is M1's and M3's measurement set: held out like a held-out suite.
+const heldout = suites.filter((s) => s.startsWith("heldout") || /^synth-test(@\d+)?$/.test(s));
 if (heldout.length && !cli.has("blind")) {
   fail(
     `${heldout.join(", ")} are held out: measurement only, never for tuning. Screen on train (or dev6a,dev6b); ` +
