@@ -197,7 +197,8 @@ export function worldOf(
   const plantedItems = world.items.slice(before);
   for (const it of plantedItems) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(plantedItems.map((it) => it.id));
+  // A `+revision` or `+stale` task's stale version is kept from the slot clearing too (D914).
+  const keep = new Set([...plantedItems.map((it) => it.id), ...planted.flatMap((h) => (h.stale ? [h.stale] : []))]);
   for (const h of planted) clearSlot(world, h.slotText ?? h.text, keep);
   // After the planted items are read off the end of `world.items`: dressing appends its own after them.
   if (opts.dress)
