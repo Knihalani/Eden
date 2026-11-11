@@ -329,3 +329,11 @@ Baseline: main e4f3649a (the push check S and `pushIndirect` in the default). Tr
    nothing in the sim, whose twins are planted alone (no clearing item exists in the world); reported either way.
 
 Float or binary: whichever wins held out at under 1 ms a request in TypeScript; both timings reported.
+
+### 7g. H1's own bar (the owner's, pre-registered before any variant below is screened)
+
+Against the shipped pool on held-out families never trained on (fold A, and fold B or M2 v2's test split, not tuned
+on), all of: **facts @5 ≥ 135 of 157** (shipped 123), **decoys @5 ≤ 42** (shipped 83), **≤ 1 ms a request** in the
+TypeScript forward, **≤ 4 MB of shared model**, no embeddings, and its silence head **loses at most 5** of the hidden
+requests on which the shipped pool speaks. A variant that clears it on the screen goes straight to wiring and a Pi pair
+against main e4f3649a.
