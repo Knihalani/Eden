@@ -118,6 +118,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--buckets", type=int, default=18)
     ap.add_argument("--epochs", type=int, default=12)
+    ap.add_argument("--predict", default="", help="rows to write raw outputs for (predict.jsonl in --out)")
     a = ap.parse_args()
     B = 1 << a.buckets
     rows = load(a.set)
@@ -196,6 +197,10 @@ def main():
         fx = load(a.fixtures)
         fc = {f["h"]: decode(f, outs(f)) for f in fx}
         hf = [{d["h"]: d["c"] for d in load(p)} for p in a.haiku_fixtures.split(",") if p]
+    if a.predict:
+        with open(f"{a.out}/predict.jsonl", "w") as f:
+            for r in load(a.predict):
+                f.write(json.dumps({"h": r["h"], "out": outs(r)}) + "\n")
     m = report(rows, cards, fx, fc, hf)
     m["nonzero_weights"] = int(sum((p.abs() > 1e-4).sum() for p in heads.parameters()))
     json.dump(m, open(f"{a.out}/metrics.json", "w"), indent=1)

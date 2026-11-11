@@ -39,8 +39,14 @@ def family(row):
 
 
 def split_of(row, frac=0.2):
+    # Generated families are train only: the held-out families stay the sim's.
+    if row.get("suite") == "gen":
+        return "train"
     if row.get("planted") and row.get("suite") in ("train5", "train6"):
         return "heldout"
+    # The dev fold (model selection on the funnel): train3 and train4's planted items, never trained on.
+    if row.get("planted") and row.get("suite") in ("train3", "train4"):
+        return "dev"
     v = int(hashlib.sha256(("m10:" + family(row)).encode()).hexdigest()[:8], 16) / 2**32
     return "heldout" if v < frac else "train"
 
