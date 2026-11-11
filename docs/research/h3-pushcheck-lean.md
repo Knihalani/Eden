@@ -8,7 +8,7 @@ or judgement; every other number comes from a command in this note.
 Goal (the parent's brief): cut the push check's paid cost per 1,000 tasks, or its added latency, by at least 20%,
 with quality held.
 
-**Verdict: rejected (D1071).** Reading the pool less its same-titled copies, ten items at most
+**Verdict: rejected (D1073).** Reading the pool less its same-titled copies, ten items at most
 (`pushCheckDedupe` 10), cut the push check's cost per 1,000 tasks by 27% on Pi with the same call rate, and facts were
 level at the point estimate, but the Sonnet-graded interval's lower bound (−2.3 points) missed the pre-registered
 −1.5. The switch, its code and its tests are deleted (the code is in commit 7e528b60); the lab kit and the findings
@@ -141,8 +141,8 @@ above +0.4 [EST]. No seed was added after the result was read.
 
 ## 4. Decisions and what is left
 
-- **D1070 (finding):** the check's wait is mostly fixed; split calls and a line reply do not cut it (§3a).
-- **D1071 (rejected):** `pushCheckDedupe` stopped on its Pi clause; deleted with its code and tests (commit
+- **D1072 (finding):** the check's wait is mostly fixed; split calls and a line reply do not cut it (§3a).
+- **D1073 (rejected):** `pushCheckDedupe` stopped on its Pi clause; deleted with its code and tests (commit
   7e528b60 holds them). The trial was opened and closed in this session, so the trials table keeps no row.
 - **For the parent:** the cost cut is real and large (−$0.056 per 1,000 tasks on the mix, −27% of the check), facts
   are level at the estimate and concerns did not rise, but this run cannot rule out a 2-point loss. A re-test powered
@@ -164,3 +164,26 @@ python3 -I packages/sim/lab/p3/report.py --pair eden~D:eden --cluster template .
 python3 -I packages/sim/lab/h3/checks.py .local/h3/pi/h3-*
 python3 -I packages/sim/lab/n5/mix.py --base eden --arms 'eden~D' .local/h3/pi/*/out.json
 ```
+
+## 6. The powered re-test (the parent's call after D1073; pre-registered here, before any of its paid calls)
+
+The parent asked for one more clean read of `pushCheckDedupe` 10 on fresh seeds at about 3× the hidden pairs, cap
+$16 more ($24 in all on `.local/h3/ledger.jsonl`). The trial is restored from 7e528b60 onto main b3d8edc4 (off at 0,
+a row in the trials table).
+
+**Runs** (`packages/sim/lab/h3/pi.sh LABEL 10 --suite S --seeds N --variants V`, two processes at a time, in this
+order): seeds 45, 46, 47, 48 on `train` and `reworded` with `--variants hidden,control,neutral` (8 runs: 1,536
+hidden, 1,536 control and 1,536 neutral pairs); then seeds 49–56 on `train` and `reworded` with `--variants hidden`
+(16 runs: 3,072 more hidden pairs). In all 4,608 hidden pairs, 3× the first pair's 1,536 within the cap (hidden-only
+runs cost about a third of a full one). **The 41–44 pairs are not pooled in.**
+
+**Grading:** `i3-regrade.ts` (Sonnet 5.5, Message Batches) on every hidden answer and every concern the Haiku grader
+flagged, of both arms, in batches small enough for the ledger's worst-case reservation.
+
+**Rule:** `report.py --pair eden~D:eden --cluster template` over the 24 run dirs. **Pass** if the Sonnet-graded hidden
+raised difference has its template-clustered 95% lower bound above −1.5 points **and** Sonnet-confirmed concerns
+(control and neutral, seeds 45–48) are not up (`eden~D` ≤ `eden`). Pass: `pushCheckDedupe` 10 joins `DEFAULT_CONFIG`
+(D814; default switches 74 → 75; full gates; the reviewer once on the engine diff). Fail: the switch is deleted again.
+The check's $ per 1,000 tasks and its p50 and p90 are reported from the full runs (`checks.py`, `n5/mix.py`). If the
+deadline would cut the runs, the pair is read on the runs finished by 03:15 UTC (whole seeds, both suites), the rest
+unrun; no seed is added after a result is read.

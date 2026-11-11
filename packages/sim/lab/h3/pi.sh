@@ -3,7 +3,7 @@
 # `pushCheckDedupe` arm). M13's recipe (packages/sim/lab/m13/pi.sh): Haiku 5.5 as agent, grader, card, reader and
 # check model; cards replayed; house rules cached in every arm; payload notices; the market `direct` profile. One
 # ledger, hard cap $15 across the session. A finished run is never run again.   LABEL DEDUPE then pi-ab flags.
-# `pushCheckDedupe` was deleted by D1071: run this on a tree with commit 7e528b60's packages/engine.
+# The re-test (§6, the parent's call after D1073) runs on the restored trial; one ledger, cap $24 in all.
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 L=$1; K=$2; shift 2
@@ -15,5 +15,5 @@ exec env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --config defaul
   --variant-config "{\"D\":{\"pushCheckDedupe\":$K}}" --conditions eden,eden~D \
   --model $H --grader $H --card-model $H --reader-model $H \
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload \
-  --spend-ledger .local/h3/ledger.jsonl --spend-cap 15 --spend-headroom 0.3 --run-label $L \
+  --spend-ledger .local/h3/ledger.jsonl --spend-cap 24 --spend-headroom 0.3 --run-label $L \
   --budget 1.2 --timeline $R/out.tl --out $R/out.json "$@"

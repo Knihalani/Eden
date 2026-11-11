@@ -1,5 +1,5 @@
 /**
- * H3 (docs/research/h3-pushcheck-lean.md, D1070, D1071): what the push check reads and how it is called, screened on
+ * H3 (docs/research/h3-pushcheck-lean.md, D1072, D1073): what the push check reads and how it is called, screened on
  * recorded pools. Re-asks each `--check-dump` row live under every arm, the arms interleaved row by row in the same
  * lanes so load is shared: W (the shipped check), Wk (its first k items), Sk (the pool in k concurrent calls), D (the
  * pool less items whose source and title an earlier one has) and Dk (D's first k). Per arm: calls, $ a check, wall a
