@@ -492,7 +492,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
   Trial `syncSweepSpread` (D604, off; ends 2026-11-18): each such source is swept at its own point in the week (a
   hash of tenant, user and source, `Sync.sweepTurn`), never later than a week after its last sweep, so a user's
-  unused sources are not all listed in one tick.
+  unused sources are not all listed in one tick. Its turn is part of the tick's `due` test, so a frozen user is thawed
+  through `ready` first.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

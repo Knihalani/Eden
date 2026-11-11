@@ -104,7 +104,9 @@ export interface SyncOptions {
   /**
    * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
    * user and the source) and is swept at the first tick past it, so a user's unused sources are not all listed in
-   * the tick a week after the backfill. Never later than `unusedSweepMs` after its last sweep; the first comes early.
+   * the tick a week after the backfill. Never later than `unusedSweepMs` after its last sweep; an early sweep
+   * follows each time its last sweep was off its point (the first, a return after a week idle, `sweepSoon`, a source
+   * no longer used).
    */
   sweepSpread?: boolean;
   /**
@@ -960,7 +962,12 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
-    const due = (s: SourceSync) => s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs);
+    // A sweep reads the cache: a frozen user is thawed first (`ready`, D325), for a spread sweep's turn too (it can
+    // come inside a day of the last sweep; the review).
+    const long = (s: SourceSync) => (this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : 0);
+    const turn = (s: SourceSync) => this.o.sweepSpread === true && long(s) > 0 && this.sweepTurn(u, s, now, long(s));
+    const due = (s: SourceSync) =>
+      s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || turn(s));
     thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
     if (thawing) await thawing;
     if (u.gone) return;
@@ -968,10 +975,8 @@ export class SyncManager {
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
         if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-        const long = this.onLongSweep(s);
-        const every = long ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : this.o.sweepMs;
-        const turn = long && this.o.sweepSpread === true && this.sweepTurn(u, s, now, every);
-        if (s.sweep !== null || now - s.sweptAt >= every || turn) await this.run(s, () => this.sweep(u, s, source));
+        const every = long(s) || this.o.sweepMs;
+        if (s.sweep !== null || now - s.sweptAt >= every || turn(s)) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),
     );

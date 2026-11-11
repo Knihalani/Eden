@@ -350,4 +350,30 @@ describe("syncUnusedSweepMs (D356)", () => {
     // Another user's sources of the same ids have points of their own.
     expect(on.alice.filter((d, k) => d[0] === on.bob[k]![0]).length).toBeLessThan(20);
   });
+
+  test("syncSweepSpread: a sweep inside a day of the last one waits for the user's cache first (D325)", async () => {
+    const all = Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
+    const t = setup(new Map([["alice", all]]), { ...ON, syncSweepSpread: true });
+    let ready = 0;
+    const real = t.cache.ready.bind(t.cache);
+    t.cache.ready = (scope) => {
+      ready++;
+      return real(scope);
+    };
+    await warm(t.partner, alice);
+    let swept = 0;
+    // The first 23 hours: no daily sweep is due, so every listing is a source's turn.
+    for (let k = 0; k < 23 * 6; k++) {
+      const lists = all.reduce((n, x) => n + x.lists, 0);
+      const before = ready;
+      t.advance(10 * MIN);
+      t.partner.sync!.track(alice, t.now());
+      await t.partner.sync!.tick();
+      if (all.reduce((n, x) => n + x.lists, 0) > lists) {
+        swept++;
+        expect(ready).toBeGreaterThan(before);
+      }
+    }
+    expect(swept).toBeGreaterThan(0);
+  });
 });
