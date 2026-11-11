@@ -1,0 +1,68 @@
+.local/b18/m/days/s41/out.json: user w41, 2 days (16,16), 0 clashes
+.local/b18/m/days/s42/out.json: user w42, 2 days (16,16), 0 clashes
+.local/b18/m/days/s43/out.json: user w43, 2 days (16,16), 0 clashes
+.local/b18/m/days/s44/out.json: user w44, 2 days (16,16), 0 clashes
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           128     4   0.201   0.000   0.018   0.219   0.414   0.219    0.413           0.0062 (cold-start)      0.00         0.00           0.07      1.18  1.33    0.0041
+eden~pre       128     4   0.183   0.000   0.017   0.199   0.394   0.199    0.394           0.0062 (cold-start)      0.00         0.00           0.05      1.18  1.27    0.0033
+tools          128     4   0.195   0.000   0.000   0.195   0.195   0.195    0.195           0.0000 (none)      0.00         0.00           1.25      2.42  2.19    0.0025
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden           agent 0.00  Eden 0.00  background 0.00  mix 0.00  backfill 18/user (4 users)
+eden~pre       agent 0.00  Eden 0.00  background 0.00  mix 0.00  backfill 18/user (4 users)
+tools          agent 1.25  Eden 0.00  background 0.00  mix 1.25  backfill 0/user (0 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden           first-party (quota only)     steady   0.219  all-in   0.414  mix st   0.219  mix all   0.413
+eden           Composio (overage)           steady   0.219  all-in   0.582  mix st   0.219  mix all   0.582
+eden           Unified.to (Pro)             steady   0.219  all-in   0.835  mix st   0.219  mix all   0.835
+eden           Arcade.dev (Team)            steady   0.219  all-in   6.039  mix st   0.219  mix all   6.038
+eden           Pipedream Connect (overage)  steady   0.219  all-in   7.164  mix st   0.219  mix all   7.163
+eden           Zapier MCP (10k tasks)       steady   0.219  all-in  14.926  mix st   0.219  mix all  14.926
+eden~pre       first-party (quota only)     steady   0.199  all-in   0.394  mix st   0.199  mix all   0.394
+eden~pre       Composio (overage)           steady   0.199  all-in   0.562  mix st   0.199  mix all   0.562
+eden~pre       Unified.to (Pro)             steady   0.199  all-in   0.816  mix st   0.199  mix all   0.816
+eden~pre       Arcade.dev (Team)            steady   0.199  all-in   6.019  mix st   0.199  mix all   6.019
+eden~pre       Pipedream Connect (overage)  steady   0.199  all-in   7.144  mix st   0.199  mix all   7.144
+eden~pre       Zapier MCP (10k tasks)       steady   0.199  all-in  14.906  mix st   0.199  mix all  14.906
+tools          first-party (quota only)     steady   0.195  all-in   0.195  mix st   0.195  mix all   0.195
+tools          Composio (overage)           steady   0.570  all-in   0.570  mix st   0.569  mix all   0.569
+tools          Unified.to (Pro)             steady   1.133  all-in   1.133  mix st   1.129  mix all   1.129
+tools          Arcade.dev (Team)            steady  12.695  all-in  12.695  mix st  12.653  mix all  12.653
+tools          Pipedream Connect (overage)  steady  15.195  all-in  15.195  mix st  15.145  mix all  15.145
+tools          Zapier MCP (10k tasks)       steady  32.445  all-in  32.445  mix st  32.337  mix all  32.337
+
+eden − tools per plan, $ per 1,000 tasks (each condition against `tools`)
+eden           first-party (quota only)     steady   0.024  all-in   0.218  mix st   0.024  mix all   0.219
+eden           Composio (overage)           steady  -0.351  all-in   0.012  mix st  -0.350  mix all   0.014
+eden           Unified.to (Pro)             steady  -0.914  all-in  -0.297  mix st  -0.910  mix all  -0.294
+eden           Arcade.dev (Team)            steady -12.476  all-in  -6.657  mix st -12.434  mix all  -6.615
+eden           Pipedream Connect (overage)  steady -14.976  all-in  -8.032  mix st -14.926  mix all  -7.981
+eden           Zapier MCP (10k tasks)       steady -32.226  all-in -17.519  mix st -32.118  mix all -17.411
+eden~pre       first-party (quota only)     steady   0.004  all-in   0.198  mix st   0.004  mix all   0.199
+eden~pre       Composio (overage)           steady  -0.371  all-in  -0.008  mix st  -0.369  mix all  -0.006
+eden~pre       Unified.to (Pro)             steady  -0.934  all-in  -0.317  mix st  -0.930  mix all  -0.314
+eden~pre       Arcade.dev (Team)            steady -12.496  all-in  -6.677  mix st -12.454  mix all  -6.634
+eden~pre       Pipedream Connect (overage)  steady -14.996  all-in  -8.052  mix st -14.946  mix all  -8.001
+eden~pre       Zapier MCP (10k tasks)       steady -32.246  all-in -17.539  mix st -32.138  mix all -17.431
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden     16  raised 9/16 (56.3%)  $0.194/1k  p50 1.33
+eden           control    16  raised 0/16 (0.0%)  $0.213/1k  p50 1.31
+eden           neutral    96  raised 1/96 (1.0%)  $0.200/1k  p50 1.16
+eden~pre       hidden     16  raised 7/16 (43.8%)  $0.171/1k  p50 1.22
+eden~pre       control    16  raised 0/16 (0.0%)  $0.192/1k  p50 1.43
+eden~pre       neutral    96  raised 0/96 (0.0%)  $0.183/1k  p50 1.13
+tools          hidden     16  raised 0/16 (0.0%)  $0.196/1k  p50 2.00
+tools          control    16  raised 0/16 (0.0%)  $0.213/1k  p50 2.42
+tools          neutral    96  raised 0/96 (0.0%)  $0.192/1k  p50 2.51
+
+per day (long horizon): n, agent and Eden $ per 1k tasks, wall p50 s
+eden           day 0   64  agent   0.191  Eden  0.000  p50 1.13
+eden           day 1   64  agent   0.211  Eden  0.000  p50 1.29
+eden~pre       day 0   64  agent   0.165  Eden  0.000  p50 1.09
+eden~pre       day 1   64  agent   0.200  Eden  0.000  p50 1.35
+tools          day 0   64  agent   0.152  Eden  0.000  p50 1.06
+tools          day 1   64  agent   0.239  Eden  0.000  p50 2.80
