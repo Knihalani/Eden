@@ -5,8 +5,9 @@
  * (Latin-1 bytes when every character fits, else UTF-8) and decodes it on read: `text` is an own, enumerable getter,
  * so reads, spreads, `JSON` and `structuredClone` see the same item as before.
  *
- * A small process-wide memo of recently decoded texts, keyed by the packed bytes (one item's own; never shared between
- * items, users or tenants), keeps the repeated reads of one candidate on the ask path from inflating each time.
+ * A small process-wide memo of recently decoded texts, keyed by the packed bytes (as the held string, so two keys are
+ * equal only when the deflated bytes, and so the texts, are: a hit is always the reading item's own text, whoever
+ * else holds the same words), keeps the repeated reads of one candidate on the ask path from inflating each time.
  */
 // Imported, not the global: under `bun test --parallel` a reused worker was seen with a global `Buffer` whose `from`
 // was TypedArray.from (A23's review; no code here assigns it), so `Buffer.from(text, "latin1")` threw in 1 run of 3.
@@ -19,26 +20,31 @@ export const MIN_PACK_CHARS = 256;
 const MEMO_ITEMS = 256;
 
 const PACKED = Symbol("eden.packedText");
-type Bytes = Uint8Array<ArrayBuffer>;
 
-type Packed = ContextItem & { readonly [PACKED]: Bytes };
+/**
+ * The deflated bytes, held as a one-byte string of them (each byte one Latin-1 character; D998), not a Uint8Array: a
+ * typed array is two cells (the view and its ArrayBuffer) and a malloc'd store beside the bytes, about 200 bytes of
+ * heap an item more than the string (`live-heap.bench.ts`). Inflating copies them into a Buffer first, a few hundred
+ * bytes, once per decode the memo misses.
+ */
+type Packed = ContextItem & { readonly [PACKED]: string };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const decoded = new Map<Bytes, string>();
+const decoded = new Map<string, string>();
 
-function unpack(bytes: Bytes, latin1: boolean): string {
-  const hit = decoded.get(bytes);
+function unpack(held: string, latin1: boolean): string {
+  const hit = decoded.get(held);
   if (hit !== undefined) return hit;
-  const raw = Bun.inflateSync(bytes);
+  const raw = Bun.inflateSync(Buffer.from(held, "latin1"));
   // Latin-1 text comes back through `latin1`, which makes a one-byte string; a UTF-8 decode of the same bytes gives a
   // two-byte one for any accented letter, and every regex and hash over it ran slower (pipeline.bench, 1.17x).
   const text = latin1
     ? Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("latin1")
     : decoder.decode(raw);
   // First in, first out: a hit is not moved up, which keeps the memo's own cost off the many hits.
-  if (decoded.size >= MEMO_ITEMS) decoded.delete(decoded.keys().next().value as Bytes);
-  decoded.set(bytes, text);
+  if (decoded.size >= MEMO_ITEMS) decoded.delete(decoded.keys().next().value as string);
+  decoded.set(held, text);
   return text;
 }
 
@@ -82,9 +88,14 @@ export function packItem(item: ContextItem): ContextItem {
   const bytes = Bun.deflateSync(plain);
   if (bytes.byteLength > (latin1 ? text.length : text.length * 2) * 0.8) return item;
   const { text: _, ...rest } = item;
-  Object.defineProperty(rest, PACKED, { value: bytes, enumerable: false });
+  Object.defineProperty(rest, PACKED, { value: heldOf(bytes), enumerable: false });
   Object.defineProperty(rest, "text", latin1 ? LATIN1_TEXT : UTF8_TEXT);
   return rest as ContextItem;
+}
+
+/** Bytes as the one-byte string a packed item holds (`Packed`). */
+function heldOf(bytes: Uint8Array): string {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1");
 }
 
 /**
@@ -124,7 +135,7 @@ export function isPacked(item: ContextItem): boolean {
 export function packedOf(item: ContextItem): { bytes: Uint8Array; latin1: boolean } | undefined {
   if (!isPacked(item)) return undefined;
   const desc = Object.getOwnPropertyDescriptor(item, "text")!;
-  return { bytes: (item as Packed)[PACKED], latin1: desc.get === LATIN1_TEXT.get };
+  return { bytes: Buffer.from((item as Packed)[PACKED], "latin1"), latin1: desc.get === LATIN1_TEXT.get };
 }
 
 /** Every own field of `item` but `text`, without reading `text` (a packed item's getter would inflate it). */
@@ -137,7 +148,7 @@ export function withoutText(item: ContextItem): Omit<ContextItem, "text"> {
 /** A packed item from `rest` and bytes `packedOf` gave (D860): the inverse of `withoutText` plus `packedOf`. */
 export function packedFrom(rest: Omit<ContextItem, "text">, bytes: Uint8Array, latin1: boolean): ContextItem {
   const item = { ...rest };
-  Object.defineProperty(item, PACKED, { value: bytes, enumerable: false });
+  Object.defineProperty(item, PACKED, { value: heldOf(bytes), enumerable: false });
   Object.defineProperty(item, "text", latin1 ? LATIN1_TEXT : UTF8_TEXT);
   return item as ContextItem;
 }
