@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache } from "./cache";
 import { termIds } from "./text";
-import { decodedCount, isPacked, MIN_PACK_CHARS, packItem } from "./packed-text";
+import { decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
 
 const scope = { tenantId: "t", userId: "u" };
 const NOW = Date.UTC(2026, 10, 6, 9);
@@ -114,4 +114,17 @@ describe("ItemCache with packText", () => {
       expect(cache.get(other, "a", NOW)!.text).toBe(longText("theirs"));
     }
   });
+});
+
+test("the decode memo keeps encodings apart: Latin-1 and UTF-8 texts with the same bytes read as themselves (D998)", () => {
+  // "é" in UTF-8 is the bytes C3 A9, which read as Latin-1 are "Ã©"; the arrow's UTF-8 bytes E2 86 92 likewise. The two
+  // texts deflate to the same bytes, and each item must still read its own text whichever was decoded first.
+  const utf8 = "é".repeat(MIN_PACK_CHARS) + "→";
+  const latin1 = "Ã©".repeat(MIN_PACK_CHARS) + "â\u0086\u0092";
+  const a = packItem(item("a", latin1));
+  const b = packItem(item("b", utf8));
+  expect(Buffer.from(packedOf(a)!.bytes).equals(Buffer.from(packedOf(b)!.bytes))).toBe(true);
+  expect(a.text).toBe(latin1);
+  expect(b.text).toBe(utf8);
+  expect(a.text).toBe(latin1);
 });

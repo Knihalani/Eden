@@ -24,6 +24,7 @@
  */
 import { createHash } from "node:crypto";
 import {
+  clearTermMemo,
   dedupText,
   hamming64,
   SparseIndex,
@@ -884,6 +885,7 @@ export class ItemCache {
     this.restoring.delete(key);
     this.thawing.delete(key);
     clearDecoded();
+    clearTermMemo();
     // The user's gone-holds go too, as on a forget: the new owner holds its own.
     const held = this.holds.get(scope.tenantId);
     if (held) {
@@ -1033,6 +1035,7 @@ export class ItemCache {
     this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
+    clearTermMemo(); // Nor its terms in the vocabulary's decode memo (D998).
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
     else this.perTenant.set(tenantId, n);
@@ -1923,6 +1926,7 @@ export class ItemCache {
   private install(key: string, f: FrozenUser): void {
     this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
+    clearTermMemo();
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
     // D862: a warm user is not written. An active user pauses every few minutes, and each pause would write (and its
@@ -2130,8 +2134,8 @@ export class ItemCache {
       const r = entries[j]!;
       let item: ContextItem;
       if (r.p) {
-        // `slice` copies: each item owns its bytes, as `packItem` would have made them.
-        item = packedFrom(r.i, blob.slice(t, t + r.p[0]), r.p[1] === 1);
+        // A view, not a copy: `packedFrom` copies the bytes into the item's own string (D998).
+        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1] === 1);
         t += r.p[0];
       } else item = r.i as ContextItem;
       const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
@@ -2395,6 +2399,7 @@ export class ItemCache {
 
   forget(scope: Scope, sourceId?: string): void {
     clearDecoded(); // The decode memo may hold their text (`packed-text.ts`).
+    clearTermMemo(); // ... and the vocabulary's decoded terms (D998).
     if (!sourceId) {
       this.dropUser(scopeKey(scope), scope.tenantId);
       this.disk?.delete(scope); // A blob of a user this process never read back (D425).
