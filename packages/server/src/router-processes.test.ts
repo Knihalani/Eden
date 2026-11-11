@@ -312,6 +312,76 @@ describe("changing N never strands a user's source-map rows (D163)", () => {
   );
 });
 
+describe("changing N keeps every persisted user (D992)", () => {
+  test.concurrent(
+    "N 2 -> 3 -> 2 with persistence on: each user's file is read by its new child; a third of users change child",
+    async () => {
+      const dir = tempDir("eden-router-resize-");
+      const frozen = join(dir, "frozen");
+      const sources = join(dir, "sources.json");
+      const doc = { ref: "d1", title: "Globex renewal", text: "Dana Lee wants 12% off the Globex renewal" };
+      writeFileSync(sources, JSON.stringify({ sources: [{ id: "crm", description: "deals", docs: [doc] }] }));
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_SOURCES_FILE: sources,
+        EDEN_API_KEYS: keys,
+        EDEN_PERSIST_KEY: "0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0",
+        EDEN_PERSIST_FROZEN_DIR: frozen,
+        EDEN_SHUTDOWN_GRACE_MS: "5000",
+        EDEN_TENANT_RPS: "1000",
+        EDEN_TENANT_BURST: "1000",
+      };
+      const start = (processes: number) =>
+        startRouter({ config: { ...loadConfig(env), port: 0, processes }, env, log: () => {}, onOutput: () => {} });
+      const event = async (router: Router, userId: string) => {
+        const res = await fetch(`http://127.0.0.1:${router.port}/v1/events?waitMs=2000`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+          body: JSON.stringify({ userId, sessionId: "s1", kind: "user_message", text: "Globex renewal with Dana Lee" }),
+        });
+        expect(res.status).toBe(200);
+        await res.arrayBuffer();
+      };
+      const held = async (router: Router) => {
+        const text = await (await fetch(`http://127.0.0.1:${router.port}/metrics`)).text();
+        return Number(/^eden_users_held (\d+)$/m.exec(text)?.[1]);
+      };
+      const blobs = () => readdirSync(frozen).filter((f) => f.endsWith(".blob")).length;
+      const users = Array.from({ length: 12 }, (_, i) => `user-${i}`);
+      const moved = users.filter((u) => childFor("acme", u, 2) !== childFor("acme", u, 3));
+      expect(moved.length).toBeGreaterThan(0);
+      expect(moved.length).toBeLessThan(users.length);
+      // Jump hashing: every user that changes child goes to the new one.
+      for (const u of moved) expect(childFor("acme", u, 3)).toBe(2);
+
+      let router = await start(2);
+      for (const u of users) await event(router, u);
+      expect(await held(router)).toBe(users.length);
+      await router.stop();
+      // Every live user written at SIGTERM, into the one shared directory (no per-process subdirectory).
+      expect(blobs()).toBe(users.length);
+      expect(readdirSync(frozen).some((f) => /-of-/.test(f))).toBe(false);
+
+      for (const n of [3, 2]) {
+        router = await start(n);
+        try {
+          // Nothing was pruned: each child indexed its own buckets' files.
+          expect(blobs()).toBe(users.length);
+          for (const u of users) await event(router, u);
+          // Each user was read back (its file deleted at the thaw) by the child that now serves it: none re-synced.
+          expect(blobs()).toBe(0);
+          expect(await held(router)).toBe(users.length);
+        } finally {
+          await router.stop();
+        }
+        expect(blobs()).toBe(users.length);
+      }
+    },
+    90_000,
+  );
+});
+
 describe("every start has a deadline (D172)", () => {
   /**
    * A stand-in child: the first start listens and reports its port, then exits after 200 ms; every later start

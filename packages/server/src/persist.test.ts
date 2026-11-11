@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
 import { defaultPersistMb, loadConfig, machineMemory } from "./config";
-import { childPersistDir, prunePersistDirs } from "./persist";
+import { childOwns, prunePersistDirs } from "./persist";
 
 const root = mkdtempSync(join(tmpdir(), "eden-persist-server-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -85,13 +85,14 @@ describe("EDEN_PERSIST_* (D425, on by default since D991)", () => {
     expect(loadConfig({ ...env, EDEN_ROUTER_CHILD: "1/4" }).persist!.maxBytes).toBe(25 * 1_048_576);
   });
 
-  test("each process has its own directory; another N's are deleted, anything else is left", () => {
+  test("one directory per machine (D992): the old per-process directories are deleted, anything else is left", () => {
     const base = join(root, "prune");
-    for (const d of ["0-of-2", "1-of-2", "0-of-3", "2-of-3", "5-of-2", "notes"])
-      mkdirSync(join(base, d), { recursive: true });
-    expect(childPersistDir(base, 1, 2)).toBe(join(base, "1-of-2"));
-    expect(prunePersistDirs(base, 2)).toBe(3);
-    expect(readdirSync(base).sort()).toEqual(["0-of-2", "1-of-2", "notes"]);
+    for (const d of ["0-of-2", "1-of-2", "0-of-3", "notes"]) mkdirSync(join(base, d), { recursive: true });
+    expect(prunePersistDirs(base)).toBe(3);
+    expect(readdirSync(base).sort()).toEqual(["notes"]);
+    // Children own disjoint bucket sets covering every bucket.
+    const owners = [childOwns(0, 3), childOwns(1, 3), childOwns(2, 3)];
+    for (const b of [0, 1, 77, 4_096, 65_535]) expect(owners.filter((o) => o(b)).length).toBe(1);
   });
 });
 
@@ -143,7 +144,7 @@ test("a server writes live users at SIGTERM, reads them back after a restart, an
     }),
   );
   const env = { EDEN_HOME: home, EDEN_SOURCES_FILE: sources, EDEN_PERSIST_FROZEN_DIR: dir, EDEN_PERSIST_KEY: HEX };
-  const blobs = () => readdirSync(join(dir, "0-of-1")).filter((f) => f.endsWith(".blob"));
+  const blobs = () => readdirSync(dir).filter((f) => f.endsWith(".blob"));
 
   const a = await start(env);
   expect(a.out).toContain("frozen users persisted, encrypted (0 on disk");

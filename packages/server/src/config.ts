@@ -47,6 +47,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { availableParallelism, totalmem } from "node:os";
 import { join } from "node:path";
 import { edenHome, isId, scopeKey } from "@eden/protocol";
+import { type StoreConfig, storeConfig } from "./blob-store";
 
 export interface ServerConfig {
   port: number;
@@ -75,10 +76,23 @@ export interface ServerConfig {
    */
   child: { index: number; count: number } | null;
   /**
-   * D425 (opt-in, EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY): where frozen users are written, encrypted; null (the
-   * default) writes no content to disk (D8). `maxBytes` is the whole directory's; a router child gets 1/N of it.
+   * D425, on by default since D991 (EDEN_PERSIST_KEY): where frozen users are written, encrypted; null with
+   * EDEN_PERSIST=off (or dev mode with nothing set). `maxBytes` is the whole directory's; a router child gets 1/N of
+   * it. `store` (D992, EDEN_PERSIST_STORE): an S3-compatible store every machine of a cluster reaches.
    */
-  persist?: { dir: string; key: PersistKey; maxBytes: number } | null;
+  persist?: { dir: string; key: PersistKey; maxBytes: number; store?: StoreConfig | null } | null;
+  /**
+   * D992: this machine in a cluster. `key` (EDEN_CLUSTER_KEY, 24+ characters) authenticates the cluster router's
+   * membership messages (`/internal/cluster`); `size` (EDEN_CLUSTER_SIZE, the machines) divides the tenant's model
+   * spend cap with the child count, as D163 divides it by N. Both unset on a single machine.
+   */
+  cluster?: { key: string | null; size: number };
+  /**
+   * A shutdown's whole budget (EDEN_SHUTDOWN_GRACE_MS, default 10 s, D992): in-flight requests finish, live users are
+   * written, store writes settle, then the process exits; the router kills a child still running after it. Give the
+   * container more (`docker stop -t 30`, compose `stop_grace_period: 30s`).
+   */
+  shutdownGraceMs?: number;
 }
 
 /**
@@ -171,6 +185,8 @@ export function loadConfig(env = process.env, cores = machineCores(), memoryByte
     processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
     persist: persistConfig(env, share, dev, memoryBytes),
+    cluster: clusterConfig(env),
+    shutdownGraceMs: Math.max(2_000, positive(env.EDEN_SHUTDOWN_GRACE_MS, 10_000, "EDEN_SHUTDOWN_GRACE_MS")),
   };
 }
 
@@ -200,12 +216,15 @@ const NO_KEY =
  * A child's cap is its 1/N share (`share`) of EDEN_PERSIST_MAX_MB.
  */
 function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memoryBytes: number) {
+  // The cluster router (D992, EDEN_NODES) holds no user: nothing of its own to persist.
+  if (env.EDEN_NODES || env.EDEN_NODES_FILE) return null;
   const mode = env.EDEN_PERSIST ?? "";
   if (!["", "on", "off"].includes(mode)) throw new Error(`EDEN_PERSIST must be "on" or "off", got ${mode}`);
   const dir = env.EDEN_PERSIST_FROZEN_DIR ?? "";
   const raw = env.EDEN_PERSIST_KEY ?? "";
   const max = env.EDEN_PERSIST_MAX_MB ?? "";
   if (mode === "off") {
+    if (env.EDEN_PERSIST_STORE) throw new Error("EDEN_PERSIST_STORE needs persistence: remove EDEN_PERSIST=off");
     if (dir !== "" || raw !== "" || max !== "") {
       throw new Error("EDEN_PERSIST=off with EDEN_PERSIST_FROZEN_DIR, _KEY or _MAX_MB set: remove them, or the =off");
     }
@@ -224,7 +243,17 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memo
     dir: dir === "" ? join(edenHome(), "frozen") : dir,
     key: new PersistKey(key),
     maxBytes: Math.floor((mb * 1_048_576) / share),
+    store: storeConfig(env),
   };
+}
+
+/** EDEN_CLUSTER_KEY and EDEN_CLUSTER_SIZE (D992); the key's value is never in a message. */
+function clusterConfig(env: NodeJS.ProcessEnv): { key: string | null; size: number } {
+  const key = env.EDEN_CLUSTER_KEY ?? "";
+  if (key !== "" && key.length < 24) throw new Error("EDEN_CLUSTER_KEY must be 24+ characters (openssl rand -hex 24)");
+  const size = positive(env.EDEN_CLUSTER_SIZE, 1, "EDEN_CLUSTER_SIZE");
+  if (!Number.isInteger(size) || size > 1_000) throw new Error("EDEN_CLUSTER_SIZE must be a whole number, 1-1000");
+  return { key: key === "" ? null : key, size };
 }
 
 /** 64 hex digits or base64 of exactly 32 bytes; null otherwise (a key of all one byte too: a placeholder). */

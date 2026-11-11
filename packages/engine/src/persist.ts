@@ -35,7 +35,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { Scope } from "@eden/protocol";
+import { bucketOf, type Scope } from "@eden/protocol";
 
 /**
  * The on-disk format. Bump it whenever what a blob holds changes shape (`FrozenEntry`, `FrozenBody`, `PersistedUser`,
@@ -45,15 +45,18 @@ import type { Scope } from "@eden/protocol";
 // (`RareTerms`, D603): a user saved without it would wait for each source's next listing to fill the table.
 // 4: a blob may be a warm one (D860, D862: "EDF2", its text bytes deflated and its index as arrays); a build before
 // it would not read one, and discards it as another version. Files of 3 are still read (`READABLE_FORMATS`).
-export const PERSIST_FORMAT = 4;
+// 5 (D992): the owner's extra carries the user's source-map rows (learning that moves with them between processes and
+// machines), and file names start with the user's bucket; files of 3 and 4 had other names and are not met again.
+export const PERSIST_FORMAT = 5;
 /** Formats a file may have and still be read: 3's blobs are compact ones, which this build still reads (D862). */
-const READABLE_FORMATS = new Set([3, PERSIST_FORMAT]);
+const READABLE_FORMATS = new Set([3, 4, PERSIST_FORMAT]);
 
 const MAGIC = Buffer.from("EDNF", "latin1");
 const HEADER = 44;
 const NONCE = 12;
 const TAG = 16;
-const NAME = /^[0-9a-f]{40}\.blob$/;
+/** `<bucket, 4 hex>-<keyed hash, 40 hex>.blob` (D992): the bucket in the clear, so ownership needs no key. */
+const NAME = /^([0-9a-f]{4})-[0-9a-f]{40}\.blob$/;
 const TMP = ".tmp";
 
 /** What a frozen user carries besides its blob (the cache's `FrozenUser` fields that outlive a process). */
@@ -95,6 +98,17 @@ export interface FrozenDisk {
   delete(scope: Scope): void;
   /** Deletes blobs past their expiry or age that nothing has read, without decrypting them; returns how many. */
   sweep(now: number): number;
+  /**
+   * A store shared with other processes (D992) may hold a user this one has not seen: this makes their blob readable
+   * by `has`/`read` (an async fetch), and returns null when there is nothing to wait for. `ItemCache.ready` awaits it
+   * before its synchronous read, so a moved user's first request waits for the fetch, never the event loop.
+   */
+  fetch?(scope: Scope): Promise<void> | null;
+  /**
+   * Called instead of `delete` when a user is thawed (D425: a live user's state changes, so the local file goes). A
+   * shared store keeps its copy (D992): it is what another machine fails over from, the user's last compact freeze.
+   */
+  thawed?(scope: Scope): void;
 }
 
 export interface DiskOptions {
@@ -106,6 +120,18 @@ export interface DiskOptions {
   /** A blob written longer ago than this is discarded: every item in it would have expired (the longest TTL). */
   maxAgeMs: number;
   report?: (e: PersistEvent) => void;
+  /**
+   * Whether this process owns a bucket (D992): only owned files are indexed, swept or cleaned up at open, so processes
+   * sharing one directory (a machine's children) each see their own users'. Default: every bucket.
+   */
+  owns?: (bucket: number) => boolean;
+  /** Called with each file's name and bytes once written (D992: a shared store mirrors them). */
+  onWrite?: (name: string, bytes: Uint8Array) => void;
+  /**
+   * Deletes the owned files found at open instead of reading them (D992: in a cluster the store is the copy of
+   * record, and a local file left from before a restart may be older than what another machine wrote since).
+   */
+  startEmpty?: boolean;
 }
 
 /** The AES-256-GCM store (D425). Opening it reads every file's header once and deletes what it cannot use. */
@@ -226,8 +252,10 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       const path = join(this.o.dir, name);
       const tmp = `${path}${TMP}`;
       // A whole file or none: a crash mid-write leaves a temporary file, deleted at the next open.
-      writeFileSync(tmp, Buffer.concat([header, ...body]), { mode: 0o600 });
+      const file = Buffer.concat([header, ...body]);
+      writeFileSync(tmp, file, { mode: 0o600 });
       renameSync(tmp, path);
+      this.o.onWrite?.(name, file);
       this.bytes += size - old;
       this.files.set(name, { bytes: size, at: now, life: lifetime(now, until, this.o.maxAgeMs) });
       this.stats.written++;
@@ -262,21 +290,66 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     return n;
   }
 
-  /** The user's file name: a keyed hash, so the directory names no tenant or user (ids hold no NUL: `isId`). */
+  /**
+   * The user's file name: the bucket (D992), then a keyed hash, so the directory names no tenant or user (ids hold no
+   * NUL: `isId`).
+   */
   nameOf(scope: Scope): string {
     const h = createHmac("sha256", this.names).update(`${scope.tenantId}\0${scope.userId}`, "utf8").digest("hex");
-    return `${h.slice(0, 40)}.blob`;
+    return `${bucketOf(scope.tenantId, scope.userId).toString(16).padStart(4, "0")}-${h.slice(0, 40)}.blob`;
+  }
+
+  /**
+   * Takes a file another process wrote (D992: fetched from a shared store) as this store's own: checked like a file
+   * found at open (name, header, key id, expiry), written whole or not at all. False when refused (reported).
+   */
+  adopt(name: string, bytes: Uint8Array, now: number): boolean {
+    const m = NAME.exec(name);
+    if (!m || !this.ownsBucket(parseInt(m[1]!, 16))) return false;
+    const file = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const bad = file.length < HEADER + 4 + TAG ? "corrupt" : this.headerProblem(file, now);
+    if (bad) {
+      this.stats.discarded++;
+      this.o.report?.({ kind: "discarded", reason: bad });
+      return false;
+    }
+    const old = this.files.get(name)?.bytes ?? 0;
+    if (this.bytes - old + file.length > this.o.maxBytes) {
+      this.stats.writeFailed++;
+      this.o.report?.({ kind: "write-failed", reason: "full" });
+      return false;
+    }
+    try {
+      const path = join(this.o.dir, name);
+      writeFileSync(`${path}${TMP}`, file, { mode: 0o600 });
+      renameSync(`${path}${TMP}`, path);
+    } catch {
+      this.stats.writeFailed++;
+      this.o.report?.({ kind: "write-failed", reason: "io" });
+      return false;
+    }
+    const at = file.readDoubleLE(16);
+    this.bytes += file.length - old;
+    this.files.set(name, { bytes: file.length, at, life: lifetime(at, file.readDoubleLE(24), this.o.maxAgeMs) });
+    return true;
+  }
+
+  private ownsBucket(bucket: number): boolean {
+    return this.o.owns ? this.o.owns(bucket) : true;
   }
 
   /** Reads every blob's header: temporary files, other versions, other keys and expired blobs are deleted. */
   private open(now: number): void {
     for (const name of readdirSync(this.o.dir)) {
       const path = join(this.o.dir, name);
-      if (name.endsWith(TMP)) {
+      // Another process's files in a shared directory (D992) are left alone, a half-written one included.
+      const m = NAME.exec(name.endsWith(TMP) ? name.slice(0, -TMP.length) : name);
+      if (!m) continue; // Not ours: left alone.
+      if (!this.ownsBucket(parseInt(m[1]!, 16))) continue;
+      if (name.endsWith(TMP) || this.o.startEmpty) {
         rmSync(path, { force: true });
         continue;
       }
-      if (!NAME.test(name)) continue; // Not ours: left alone.
       let head: Buffer;
       let bytes: number;
       try {

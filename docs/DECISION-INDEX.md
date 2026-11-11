@@ -595,3 +595,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D951 | 2026-11-11 | Adopted (lab tooling, M9): `packages/sim/lab/m9/` (`links.py` per-user link state, `screen.py` fronting screen, `oracle.py` and… | lab |
 | D990 | 2026-11-11 | Fix: the server image started nothing. | adopted |
 | D991 | 2026-11-11 | Persistence on by default. | adopted |
+| D992 | 2026-11-11 | More than one machine, built (D864's design, refreshed). | adopted |
+| D993 | 2026-11-11 | Per-tenant caps across machines: held whole at the cluster router, divided below it. | adopted |
+| D994 | 2026-11-11 | Readiness, metrics and a draining shutdown. | adopted |

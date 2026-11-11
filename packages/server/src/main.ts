@@ -4,7 +4,7 @@
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent } from "@eden/engine";
+import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent, SharedFrozenDisk } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
@@ -13,7 +13,10 @@ import { buildPartner, startGatePool, tenantSpendFor } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
-import { childPersistDir, prunePersistDirs } from "./persist";
+import { S3BlobStore } from "./blob-store";
+import { nodesFromEnv, runCluster } from "./cluster";
+import { Ops } from "./ops";
+import { childOwns, prunePersistDirs } from "./persist";
 import { rehomeSourceMaps, runRouter } from "./router";
 
 const started = performance.now();
@@ -33,7 +36,11 @@ if (config.dev && !config.child && process.env.OPENROUTER_API_KEY && process.env
   process.exit(2);
 }
 try {
-  if (config.processes > 1) {
+  // D992: with EDEN_NODES (or EDEN_NODES_FILE) this process is the cluster router over machines, and holds no users.
+  const cluster = config.child ? null : nodesFromEnv(process.env);
+  if (cluster) {
+    await runCluster(config, cluster);
+  } else if (config.processes > 1) {
     await runRouter(config);
   } else {
     await serve(config);
@@ -89,7 +96,8 @@ async function serve(config: ServerConfig): Promise<void> {
     }
   }
   const engine = engineConfig();
-  // D425 (opt-in): frozen users written encrypted to this process's own directory, read back on first use.
+  // D425, on by default since D991: frozen users written encrypted to the machine's directory (this child's buckets,
+  // D992), read back on first use; with EDEN_PERSIST_STORE also mirrored to the store every machine reaches.
   const persist = persistStore(config);
   // Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate
   // pool, so a bad sources file exits 2 with its message before any worker starts.
@@ -99,8 +107,9 @@ async function serve(config: ServerConfig): Promise<void> {
   // Held here so a shutdown can write its last outcome batch (`SourceMap.close` flushes).
   const sourceMap = new SourceMap(config.sourceMapPath);
   const child = config.child;
-  // The cap every model role shares (D163): divided by N in a router child.
-  const tenants = tenantSpendFor(models.usdPerTenantDay, child?.count ?? 1);
+  // The cap every model role shares (D163): divided by N in a router child, and by the machines in a cluster (D992).
+  const share = (child?.count ?? 1) * (config.cluster?.size ?? 1);
+  const tenants = tenantSpendFor(models.usdPerTenantDay, share);
   const partner = buildPartner({
     tenants,
     gatePool,
@@ -110,8 +119,8 @@ async function serve(config: ServerConfig): Promise<void> {
     engine,
     // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112); without a key, the default's no-model path.
     models,
-    // A router child holds 1/N of each tenant's daily model spend (D163).
-    processes: config.child?.count ?? 1,
+    // A router child holds 1/N of each tenant's daily model spend (D163), 1/(N x machines) in a cluster (D992).
+    processes: share,
     onShadow: process.env.EDEN_TRACE === "1" ? (r) => console.log(JSON.stringify({ shadow: r })) : undefined,
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
     // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
@@ -128,29 +137,49 @@ async function serve(config: ServerConfig): Promise<void> {
   }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
+  const grace = config.shutdownGraceMs ?? 10_000;
+  // D992: readiness, metrics and the cluster router's membership messages, around the API.
+  const ops = new Ops(partner, persist, {
+    clusterKey: config.cluster?.key ?? undefined,
+    child: child ?? { index: 0, count: 1 },
+    releaseMs: Math.max(5_000, grace),
+  });
+  if (persist instanceof SharedFrozenDisk) {
+    // Store copies past the 7-day bound, in buckets this machine and child own (the bucket's lifecycle rule is the
+    // backstop): every six hours, a listing of the store's keys.
+    setInterval(() => void persist.sweepStore(Date.now(), ops.ownsInStore), 6 * 3_600_000).unref();
+  }
   const server = Bun.serve({
     port: config.port,
     hostname: config.host,
     // D100: Bun's default is 128 MB; the handler's content-length check cannot see chunked bodies, this cap can.
     maxRequestBodySize: config.maxBodyBytes,
-    fetch: createHandler(partner, config, sources.userSources, tenants),
+    fetch: ops.wrap(createHandler(partner, config, sources.userSources, tenants)),
   });
   // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
   // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
   // Installed before the listening line: whoever waits for that line may signal at once.
+  // D992: a drain, in the grace's budget (`EDEN_SHUTDOWN_GRACE_MS`, the router kills a child past it): /readyz turns
+  // 503, in-flight requests finish (40%), live users are written (30%), store writes settle (the rest).
   let stopping = false;
-  const shutdown = () => {
+  const shutdown = async () => {
     if (stopping) return;
     stopping = true;
-    void server.stop(true);
+    ops.draining = true;
     partner.stopSync();
-    // D425: users still live are written as frozen ones, within the router's 2 s grace (the rest re-sync).
+    await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
+    void server.stop(true);
+    // D425: users still live are written as frozen ones (the rest re-sync).
     if (persist) {
       const t0 = performance.now();
-      const n = partner.persistLive(PERSIST_FLUSH_MS);
+      const n = partner.persistLive(grace * 0.3);
       // Only when it wrote something: a router's failed start stops its children, whose lines would bury the cause.
       if (n > 0)
         console.error(`eden: persisted ${n} live users at shutdown in ${Math.round(performance.now() - t0)} ms`);
+      if (persist instanceof SharedFrozenDisk) {
+        const left = await persist.settle(Math.max(250, grace * 0.3 - 250));
+        if (left > 0) console.error(`eden: ${left} store writes unfinished at shutdown: those users re-sync`);
+      }
     }
     try {
       sourceMap.close();
@@ -169,7 +198,8 @@ async function serve(config: ServerConfig): Promise<void> {
       `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
       (persist
-        ? `; frozen users persisted, encrypted (${persist.count} on disk, cap ${mb(config.persist!.maxBytes)} MB, D991)`
+        ? `; frozen users persisted, encrypted (${persist.count} on disk, cap ${mb(config.persist!.maxBytes)} MB` +
+          `${persist instanceof SharedFrozenDisk ? `, mirrored to s3://${config.persist!.store!.bucket}` : ""}, D991)`
         : "; frozen users NOT persisted (EDEN_PERSIST=off or dev mode): a restart re-reads every user's sources") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
@@ -186,19 +216,17 @@ async function serve(config: ServerConfig): Promise<void> {
   }
 }
 
-/** Shutdown's budget for writing live users (D425): under the router's 2 s before it kills a child. */
-const PERSIST_FLUSH_MS = 1_500;
-
 /**
  * The encrypted store of frozen users (D425), or null when not configured. One process with no router deletes the
  * directories a router's children wrote first (their users re-sync). Problems are reported by reason and count only,
  * a line a minute at most, never a name, id or the key.
  */
-function persistStore(config: ServerConfig): EncryptedFrozenDisk | null {
+function persistStore(config: ServerConfig): EncryptedFrozenDisk | SharedFrozenDisk | null {
   const p = config.persist;
   if (!p) return null;
   const child = config.child ?? { index: 0, count: 1 };
-  if (!config.child) prunePersistDirs(p.dir, 1);
+  // The layout before D992 (a directory per process); a router does this before starting its children.
+  if (!config.child) prunePersistDirs(p.dir);
   const counts = new Map<string, number>();
   const report = (e: PersistEvent) => {
     const k = `${e.kind} (${e.reason})`;
@@ -210,14 +238,26 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | null {
     counts.clear();
     console.error(`eden: frozen users on disk: ${parts.join(", ")}; those users re-sync (D425)`);
   };
-  const store = new EncryptedFrozenDisk({
-    dir: childPersistDir(p.dir, child.index, child.count),
+  const options = {
+    dir: p.dir,
     key: p.key.bytes(),
     maxBytes: p.maxBytes,
     // The cap on a file's own expiry (its newest item's, D428): the cache's longest time to live (synced, 7 days).
     maxAgeMs: DEFAULT_CACHE_LIMITS.syncTtlMs,
     report,
-  });
+    // D992: one directory per machine; this child reads only the buckets it serves.
+    owns: childOwns(child.index, child.count),
+  };
+  const store = p.store
+    ? // In a cluster the store is the copy of record: local files left from before this start may be older than what
+      // another machine wrote since, so this child's are deleted first (D992).
+      new SharedFrozenDisk({
+        ...options,
+        startEmpty: true,
+        store: new S3BlobStore(p.store),
+        prefix: p.store.prefix,
+      })
+    : new EncryptedFrozenDisk(options);
   flush();
   setInterval(flush, 60_000).unref();
   return store;

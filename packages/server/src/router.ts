@@ -40,17 +40,26 @@ import { Database } from "bun:sqlite";
 import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
-import { fnv1a, Gcra, mix32 } from "@eden/primitives";
-import { bodyShapeUnder, keylessOriginAllowed } from "@eden/protocol";
+import { childTable, Gcra } from "@eden/primitives";
+import { bodyShapeUnder, bucketOf, keylessOriginAllowed } from "@eden/protocol";
 import { keyOf } from "./auth";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, MAX_PROCESSES, type ServerConfig } from "./config";
+import { clusterKeyMatches, sumMetrics } from "./ops";
 import { prunePersistDirs } from "./persist";
 
-/** The child a tenant/user is served by: stable across restarts and router instances, spread by a mixed FNV-1a. */
+const tables = new Map<number, Uint8Array>();
+
+/**
+ * The child a tenant/user is served by: stable across restarts and router instances. Since D992 by the user's bucket
+ * (`bucketOf`) through a jump-hash table (`childTable`): going from N to N+1 children moves 1/(N+1) of users, all to
+ * the new child, where `mod N` moved N/(N+1) of them; and a child owns whole buckets, which is what lets every child
+ * share one persistence directory (each reads only its buckets' files).
+ */
 export function childFor(tenant: string, userId: string, children: number): number {
   if (children <= 1) return 0;
-  const key = `${tenant}/${userId}`;
-  return mix32(fnv1a(key, 0, key.length)) % children;
+  let t = tables.get(children);
+  if (!t) tables.set(children, (t = childTable(children)));
+  return t[bucketOf(tenant, userId)]!;
 }
 
 /**
@@ -180,7 +189,12 @@ const MAX_RESTART_MS = 30_000;
 export interface RouterOptions {
   /** The router's own configuration (`loadConfig`): port, host, keys, dev, body cap, source-map base, processes. */
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev" | "sourceMapPath" | "processes"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "persist">>;
+    Partial<
+      Pick<
+        ServerConfig,
+        "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "persist" | "cluster" | "shutdownGraceMs"
+      >
+    >;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
   env?: Record<string, string | undefined>;
   /** The child entry (default `main.ts` beside this file). */
@@ -212,7 +226,10 @@ export interface Router {
   readonly port: number;
   readonly hostname: string;
   readonly children: readonly ChildState[];
-  /** Stops routing and every child (SIGTERM, then SIGKILL after 2 s). */
+  /**
+   * Drains and stops (D992): `/readyz` turns 503, in-flight requests finish (up to 40% of the shutdown grace), then
+   * every child gets SIGTERM, and SIGKILL if still running after the grace (`EDEN_SHUTDOWN_GRACE_MS`, default 10 s).
+   */
   stop(): Promise<void>;
 }
 
@@ -234,6 +251,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
   let stopping = false;
+  let draining = false;
+  const grace = config.shutdownGraceMs ?? 10_000;
 
   const children: Child[] = Array.from({ length: n }, (_, index) => ({
     index,
@@ -325,7 +344,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         const proc = c.proc;
         if (!proc) return;
         proc.kill("SIGTERM");
-        const killer = setTimeout(() => proc.kill("SIGKILL"), 2_000);
+        // A child drains, writes its live users and settles its store writes within the grace (main.ts).
+        const killer = setTimeout(() => proc.kill("SIGKILL"), grace);
         await proc.exited;
         clearTimeout(killer);
       }),
@@ -334,8 +354,9 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
 
   // Before any child opens its file: no row may sit in a file no child of this N reaches (forget would miss it).
   rehomeSourceMaps(config.sourceMapPath, n, log);
-  // D425: blobs another N wrote are in directories no child of this N reads; their users re-sync (as D163 has it).
-  if (config.persist) prunePersistDirs(config.persist.dir, n);
+  // D992: every child shares the directory and reads only its own buckets, so a new N needs nothing moved; the
+  // per-process directories of the layout before it are deleted (their users re-sync once).
+  if (config.persist) prunePersistDirs(config.persist.dir);
 
   // Each spawn carries its own deadline, so this settles within `startTimeoutMs` (plus the kill) either way. On a
   // failure the exit handler has already scheduled a restart; stopChildren sets `stopping` and clears that timer
@@ -423,6 +444,56 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     return Response.json({ ...sumUsage(parts), processesDown: n - parts.length });
   };
 
+  // D992: every child's metrics summed, with the router's own children-up gauge.
+  const metricsEverywhere = async (): Promise<Response> => {
+    const texts = await Promise.all(
+      children.map((c) =>
+        c.up
+          ? fetch(`http://127.0.0.1:${c.port}/metrics`).then(
+              (r) => (r.ok ? r.text() : ""),
+              () => "",
+            )
+          : Promise.resolve(""),
+      ),
+    );
+    const up = children.filter((c) => c.up).length;
+    const own = `# HELP eden_router_children_up Child processes up\n# TYPE eden_router_children_up gauge\neden_router_children_up ${up}\n`;
+    return new Response(sumMetrics([own, ...texts]), { headers: { "content-type": "text/plain; version=0.0.4" } });
+  };
+
+  // D992: the cluster router's membership, checked here and sent to every child; their answers summed. A child that
+  // is down is skipped: a restarted child holds no users (its memory started over), so it has nothing to release.
+  const clusterEverywhere = async (req: Request): Promise<Response> => {
+    if (req.method !== "POST") return fail(405, "POST only");
+    if (!clusterKeyMatches(config.cluster?.key ?? undefined, req)) return fail(401, "missing or wrong cluster key");
+    const body = new Uint8Array(await req.arrayBuffer());
+    const answers = await Promise.all(
+      children.map(async (c) => {
+        if (!c.up) return null;
+        try {
+          const r = await fetch(`http://127.0.0.1:${c.port}/internal/cluster`, {
+            method: "POST",
+            headers: { authorization: req.headers.get("authorization") ?? "", "content-type": "application/json" },
+            body,
+          });
+          return r.ok ? ((await r.json()) as Record<string, number>) : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const got = answers.filter((a): a is Record<string, number> => a !== null);
+    if (got.length === 0) return fail(503, UNAVAILABLE);
+    const sum = { released: 0, written: 0, pending: 0, ms: 0, processesDown: n - got.length };
+    for (const a of got) {
+      sum.released += a.released ?? 0;
+      sum.written += a.written ?? 0;
+      sum.pending += a.pending ?? 0;
+      sum.ms = Math.max(sum.ms, a.ms ?? 0);
+    }
+    return Response.json(sum);
+  };
+
   // The router's own port can be taken (EADDRINUSE) after every child started: stop them before failing, as for a
   // child that could not start, so a failed start leaves no process behind.
   let server: ReturnType<typeof Bun.serve>;
@@ -438,6 +509,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     hostname: server.hostname ?? config.host,
     children,
     async stop() {
+      draining = true;
+      await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
       void server.stop(true);
       await stopChildren();
     },
@@ -451,6 +524,16 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       maxRequestBodySize: maxBodyBytes,
       async fetch(req) {
         const url = new URL(req.url);
+        if (req.method === "GET" && url.pathname === "/readyz") {
+          // Ready only with every child up: a cluster router moves a machine's users elsewhere when it is not (D992),
+          // and a child that keeps failing to start is better served there than at 503 here.
+          const up = children.filter((c) => c.up).length;
+          if (!draining && up === n) return Response.json({ ready: true, processes: n, up });
+          const error = draining ? "draining" : `${n - up} of ${n} processes down`;
+          return Response.json({ ready: false, processes: n, up, error }, { status: 503 });
+        }
+        if (req.method === "GET" && url.pathname === "/metrics") return metricsEverywhere();
+        if (url.pathname === "/internal/cluster") return clusterEverywhere(req);
         if (req.method === "GET" && url.pathname === "/healthz") {
           const up = children.filter((c) => c.up).length;
           if (up === n) return Response.json({ ok: true, processes: n, up });

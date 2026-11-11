@@ -1,0 +1,446 @@
+/**
+ * The cluster router (D992): the tier above the machines, as router.ts is the tier above a machine's processes. It
+ * holds no user state. Each request goes to the machine that owns its user's bucket (`bucketOf`) under rendezvous
+ * hashing over the live nodes (`OwnerTable`), so:
+ *
+ * - **Adding a node** moves about 1/(n+1) of users, all to it. Before routing them there, the router sends the new
+ *   membership to every live node (`POST /internal/cluster`); each releases the users it no longer owns (written with
+ *   their sync state and source-map rows, D992, and in the store before it answers), and only then does the router
+ *   switch. Requests for a moving user meanwhile get 503 with Retry-After (what an integration treats as silence).
+ * - **Removing a node** (it leaves the list) is the same in reverse: it releases everything, its users spread over the
+ *   others, each to their second choice.
+ * - **A node that stops answering** (`/readyz` failed `failAfter` times in a row) is dropped at once: nothing can be
+ *   released, so its users' new owners fetch their last stored blob (the compact freeze at 30 minutes idle, or the
+ *   last shutdown or release) and poll their sources for what changed since. When it answers again (`recoverAfter`
+ *   times), its users move back to it the planned way.
+ *
+ * Every per-tenant cap is held whole here: the tenant's rate and burst are enforced before a body is read, as the
+ * machine router does; each machine's children keep their 1/N share as a backstop (D163), and the model spend cap is
+ * divided by children and machines (`EDEN_CLUSTER_SIZE`, D992). `/v1/forget` goes to every node (503 unless all
+ * answered: the caller retries until every copy is gone); `/v1/usage` is summed over nodes.
+ *
+ *   EDEN_NODES        "a=http://10.0.0.11:8790,b=http://10.0.0.12:8790" (id=url, ids stable: re-addressing a machine
+ *                     moves nobody), or EDEN_NODES_FILE, a file of the same text (one per line or comma-separated),
+ *                     re-read on SIGHUP and when it changes.
+ *   EDEN_CLUSTER_KEY  the shared secret of the membership messages (24+ characters), the same on every node.
+ */
+import { readFileSync, watch } from "node:fs";
+import { Gcra, OwnerTable, BUCKETS } from "@eden/primitives";
+import { bucketOf, keylessOriginAllowed } from "@eden/protocol";
+import { keyOf } from "./auth";
+import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
+import { sumMetrics } from "./ops";
+import { sumUsage, userOf } from "./router";
+
+export interface NodeSpec {
+  id: string;
+  url: string;
+}
+
+/** Parses "id=url" entries, comma- or newline-separated; blank lines and # comments are skipped. */
+export function parseNodes(text: string): NodeSpec[] {
+  const out: NodeSpec[] = [];
+  const ids = new Set<string>();
+  for (const raw of text.split(/[,\n]/)) {
+    const entry = raw.replace(/#.*/, "").trim();
+    if (entry === "") continue;
+    const eq = entry.indexOf("=");
+    const id = eq < 0 ? "" : entry.slice(0, eq).trim();
+    const url =
+      eq < 0
+        ? ""
+        : entry
+            .slice(eq + 1)
+            .trim()
+            .replace(/\/+$/, "");
+    if (!/^[A-Za-z0-9._-]{1,64}$/.test(id)) throw new Error(`EDEN_NODES: "${entry}" must be id=url, id [A-Za-z0-9._-]`);
+    if (!/^https?:\/\/[^\s/]+$/.test(url)) throw new Error(`EDEN_NODES: node ${id}'s url must be http(s)://host:port`);
+    if (ids.has(id)) throw new Error(`EDEN_NODES: node ${id} is listed twice`);
+    ids.add(id);
+    out.push({ id, url });
+  }
+  return out;
+}
+
+/** The nodes from EDEN_NODES or EDEN_NODES_FILE, or null when neither is set (not a cluster router). */
+export function nodesFromEnv(env: NodeJS.ProcessEnv): { nodes: NodeSpec[]; file: string | null } | null {
+  const file = env.EDEN_NODES_FILE ?? "";
+  const text = env.EDEN_NODES ?? "";
+  if (file === "" && text === "") return null;
+  if (file !== "" && text !== "") throw new Error("set EDEN_NODES or EDEN_NODES_FILE, not both");
+  const nodes = parseNodes(file !== "" ? readFileSync(file, "utf8") : text);
+  if (nodes.length === 0) throw new Error("EDEN_NODES lists no node");
+  return { nodes, file: file === "" ? null : file };
+}
+
+interface NodeState extends NodeSpec {
+  up: boolean;
+  fails: number;
+  oks: number;
+  /** Listed in the current membership (a node removed from the list is still released before it is left). */
+  member: boolean;
+}
+
+export interface Rebalance {
+  reason: string;
+  /** Buckets that changed owner, and their share of all buckets. */
+  moved: number;
+  share: number;
+  /** Users the nodes released (written and handed to the store), summed. */
+  released: number;
+  ms: number;
+  /** Nodes that did not answer the membership message. */
+  unanswered: string[];
+}
+
+export interface ClusterRouter {
+  readonly port: number;
+  readonly nodes: readonly NodeState[];
+  /** The owner of a bucket now (tests, the bench). */
+  owner(bucket: number): string | null;
+  /** Replaces the node list (a resize): a planned rebalance. Resolves once routing has switched. */
+  setNodes(nodes: NodeSpec[]): Promise<Rebalance | null>;
+  /** Runs one health round now (tests); resolves with any rebalance it caused. */
+  checkHealth(): Promise<Rebalance | null>;
+  readonly rebalances: Rebalance[];
+  stop(): Promise<void>;
+}
+
+export interface ClusterOptions {
+  config: Pick<ServerConfig, "port" | "host" | "keys" | "dev"> &
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "cluster" | "shutdownGraceMs">>;
+  nodes: NodeSpec[];
+  /** Health probe interval; default 2 s (0: no timer, tests call `checkHealth`). */
+  healthEveryMs?: number;
+  /** Failed probes in a row before a node is dropped (default 3) and good ones before it is back (default 2). */
+  failAfter?: number;
+  recoverAfter?: number;
+  /** How long nodes may take to release moved users before the router switches anyway; default 60 s. */
+  rebalanceMs?: number;
+  log?: (line: string) => void;
+}
+
+const UNAVAILABLE = "temporarily unable to serve context";
+
+export async function startCluster(options: ClusterOptions): Promise<ClusterRouter> {
+  const { config } = options;
+  const log = options.log ?? console.error;
+  const failAfter = options.failAfter ?? 3;
+  const recoverAfter = options.recoverAfter ?? 2;
+  const rebalanceMs = options.rebalanceMs ?? 60_000;
+  const grace = config.shutdownGraceMs ?? 10_000;
+  const clusterKey = config.cluster?.key ?? "";
+  if (clusterKey === "") throw new Error("a cluster router needs EDEN_CLUSTER_KEY (the same on every node)");
+  const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
+  const fail = (status: number, error: string, headers: Record<string, string> = {}) =>
+    Response.json({ error }, { status, headers });
+
+  let nodes: NodeState[] = options.nodes.map((n) => ({ ...n, up: false, fails: 0, oks: 0, member: true }));
+  let table = new OwnerTable([]);
+  const moving = new Uint8Array(BUCKETS);
+  const rebalances: Rebalance[] = [];
+  const counts = new Map<string, number>();
+  const count = (k: string) => counts.set(k, (counts.get(k) ?? 0) + 1);
+  let draining = false;
+  // Rebalances run one at a time, in order.
+  let chain: Promise<unknown> = Promise.resolve();
+
+  const probe = async (n: NodeState): Promise<boolean> => {
+    try {
+      const r = await fetch(`${n.url}/readyz`, { signal: AbortSignal.timeout(1_500) });
+      void r.arrayBuffer().catch(() => {});
+      return r.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  /** The membership message to one node; its answer, or null. */
+  const tell = async (n: NodeState, ids: string[]): Promise<{ released: number } | null> => {
+    try {
+      const r = await fetch(`${n.url}/internal/cluster`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${clusterKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ self: n.id, nodes: ids }),
+        signal: AbortSignal.timeout(rebalanceMs),
+      });
+      if (!r.ok) {
+        void r.arrayBuffer().catch(() => {});
+        return null;
+      }
+      return (await r.json()) as { released: number };
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Moves routing to the owners the live members give. Every live node (members and nodes leaving) is told the new
+   * membership first and releases what it no longer owns; buckets that change owner answer 503 until it is done.
+   */
+  const rebalance = (reason: string): Promise<Rebalance | null> => {
+    const run = async (): Promise<Rebalance | null> => {
+      const ids = nodes.filter((n) => n.member && n.up).map((n) => n.id);
+      const next = new OwnerTable(ids);
+      const movedBuckets = table.moved(next);
+      // Nodes no longer listed and already released are forgotten.
+      const told = nodes.filter((n) => n.up);
+      if (movedBuckets.length === 0 && told.every((n) => n.member)) {
+        table = next;
+        return null;
+      }
+      const t0 = performance.now();
+      for (const b of movedBuckets) moving[b] = 1;
+      const answers = await Promise.all(told.map((n) => tell(n, ids)));
+      table = next;
+      for (const b of movedBuckets) moving[b] = 0;
+      nodes = nodes.filter((n) => n.member);
+      const r: Rebalance = {
+        reason,
+        moved: movedBuckets.length,
+        share: movedBuckets.length / BUCKETS,
+        released: answers.reduce((s, a) => s + (a?.released ?? 0), 0),
+        ms: Math.round(performance.now() - t0),
+        unanswered: told.filter((_, i) => answers[i] === null).map((n) => n.id),
+      };
+      rebalances.push(r);
+      log(
+        `eden cluster: ${reason}: ${r.moved} of ${BUCKETS} buckets moved (${(r.share * 100).toFixed(1)}%), ` +
+          `${r.released} users released in ${r.ms} ms; nodes ${ids.join(", ") || "none"}` +
+          (r.unanswered.length > 0 ? `; no answer from ${r.unanswered.join(", ")}` : ""),
+      );
+      return r;
+    };
+    const p = chain.then(run, run);
+    chain = p.catch(() => {});
+    return p;
+  };
+
+  const checkHealth = async (): Promise<Rebalance | null> => {
+    const results = await Promise.all(nodes.map(probe));
+    let changed = "";
+    nodes.forEach((n, i) => {
+      if (results[i]) {
+        n.fails = 0;
+        n.oks++;
+        if (!n.up && n.oks >= recoverAfter) {
+          n.up = true;
+          changed ||= `node ${n.id} is back`;
+        }
+      } else {
+        n.oks = 0;
+        n.fails++;
+        if (n.up && n.fails >= failAfter) {
+          n.up = false;
+          changed ||= `node ${n.id} stopped answering`;
+        }
+      }
+    });
+    return changed ? rebalance(changed) : null;
+  };
+
+  // First membership: every node that answers now (one probe each, no waiting for `recoverAfter`).
+  const first = await Promise.all(nodes.map(probe));
+  nodes.forEach((n, i) => (n.up = first[i]!));
+  if (!nodes.some((n) => n.up)) log("eden cluster: no node answers /readyz yet; serving 503 until one does");
+  await rebalance("start");
+
+  const timer =
+    (options.healthEveryMs ?? 2_000) > 0 ? setInterval(() => void checkHealth(), options.healthEveryMs ?? 2_000) : null;
+
+  const tenantOf = (req: Request): string | null => {
+    const key = keyOf(req);
+    if (key && config.keys.has(key)) return config.keys.get(key)!;
+    return config.dev && !key ? "dev" : null;
+  };
+
+  const forward = async (n: NodeState | undefined, req: Request, url: URL, body?: Uint8Array) => {
+    if (!n || !n.up) return fail(503, UNAVAILABLE);
+    const headers: Record<string, string> = {};
+    const auth = req.headers.get("authorization");
+    if (auth !== null) headers.authorization = auth;
+    const type = req.headers.get("content-type");
+    if (type !== null) headers["content-type"] = type;
+    try {
+      return await fetch(`${n.url}${url.pathname}${url.search}`, {
+        method: req.method,
+        headers,
+        body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
+      });
+    } catch {
+      return fail(503, UNAVAILABLE);
+    }
+  };
+  const nodeOf = (id: string | null) => nodes.find((n) => n.id === id);
+  const live = () => nodes.filter((n) => n.up);
+
+  const server = Bun.serve({
+    port: config.port,
+    hostname: config.host,
+    maxRequestBodySize: maxBodyBytes,
+    async fetch(req) {
+      const url = new URL(req.url);
+      if (req.method === "GET" && url.pathname === "/healthz") {
+        const up = live().length;
+        return Response.json({ ok: up > 0, nodes: nodes.length, up }, { status: up > 0 ? 200 : 503 });
+      }
+      if (req.method === "GET" && url.pathname === "/readyz") {
+        const up = live().length;
+        if (!draining && up > 0) return Response.json({ ready: true, nodes: nodes.length, up });
+        return Response.json({ ready: false, error: draining ? "draining" : "no node up" }, { status: 503 });
+      }
+      if (req.method === "GET" && url.pathname === "/metrics") return metrics();
+      if (url.pathname.startsWith("/internal/")) return fail(404, "not found");
+      const tenant = tenantOf(req);
+      if (req.method !== "POST" || tenant === null) return forward(live()[0], req, url);
+      if (tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin")))
+        return fail(403, "dev mode serves no key-less request from another site's page");
+      const waitMs = limiter.take(tenant);
+      if (waitMs > 0) {
+        count("rate_limited");
+        return fail(429, "rate limited", { "retry-after": String(Math.ceil(waitMs / 1_000)) });
+      }
+      if (Number(req.headers.get("content-length") ?? NaN) > maxBodyBytes) {
+        return fail(413, `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`);
+      }
+      let body: Uint8Array;
+      try {
+        body = new Uint8Array(await req.arrayBuffer());
+      } catch {
+        return fail(400, "body could not be read");
+      }
+      const bucket = bucketOf(tenant, userOf(body));
+      if (url.pathname === "/v1/forget") return everywhere(req, url, body, table.owner(bucket), "forget");
+      if (url.pathname === "/v1/usage") return everywhere(req, url, body, table.owner(bucket), "usage");
+      if (moving[bucket]) {
+        count("rebalancing");
+        return fail(503, "rebalancing: retry shortly", { "retry-after": "1" });
+      }
+      count("forwarded");
+      return forward(nodeOf(table.owner(bucket)), req, url, body);
+    },
+    error: () => fail(503, UNAVAILABLE),
+  });
+
+  /** Forget (every node must answer 2xx) and usage (summed) go to every node; the owner's 4xx is the caller's. */
+  async function everywhere(req: Request, url: URL, body: Uint8Array, owner: string | null, kind: "forget" | "usage") {
+    const all = nodes.filter((n) => n.member);
+    const answers = await Promise.all(all.map((n) => forward(n, req, url, body)));
+    const mineAt = all.findIndex((n) => n.id === owner);
+    const mine = answers[mineAt] ?? answers[0];
+    if (mine && mine.status >= 400 && mine.status < 500) {
+      for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {});
+      return mine;
+    }
+    if (kind === "forget") {
+      for (const r of answers) if (r !== mine) void r.arrayBuffer().catch(() => {});
+      if (!mine || answers.some((r) => r.status < 200 || r.status >= 300)) return fail(503, UNAVAILABLE);
+      return mine;
+    }
+    const parts: Record<string, unknown>[] = [];
+    for (const r of answers) {
+      if (r.status < 200 || r.status >= 300) {
+        void r.arrayBuffer().catch(() => {});
+        continue;
+      }
+      try {
+        parts.push((await r.json()) as Record<string, unknown>);
+      } catch {
+        // Left out, as a node that did not answer.
+      }
+    }
+    if (parts.length === 0) return fail(503, UNAVAILABLE);
+    return Response.json({ ...sumUsage(parts), nodesDown: all.length - parts.length });
+  }
+
+  async function metrics(): Promise<Response> {
+    const texts = await Promise.all(
+      live().map((n) =>
+        fetch(`${n.url}/metrics`, { signal: AbortSignal.timeout(2_000) }).then(
+          (r) => (r.ok ? r.text() : ""),
+          () => "",
+        ),
+      ),
+    );
+    const own = [
+      "# HELP eden_cluster_nodes_up Nodes answering /readyz",
+      "# TYPE eden_cluster_nodes_up gauge",
+      `eden_cluster_nodes_up ${live().length}`,
+      "# HELP eden_cluster_nodes Nodes listed",
+      "# TYPE eden_cluster_nodes gauge",
+      `eden_cluster_nodes ${nodes.length}`,
+      "# TYPE eden_cluster_requests_total counter",
+      ...[...counts].map(([k, v]) => `eden_cluster_requests_total{outcome="${k}"} ${v}`),
+      "# TYPE eden_cluster_rebalances_total counter",
+      `eden_cluster_rebalances_total ${rebalances.length}`,
+      "",
+    ].join("\n");
+    return new Response(sumMetrics([own, ...texts]), { headers: { "content-type": "text/plain; version=0.0.4" } });
+  }
+
+  return {
+    port: server.port ?? 0,
+    get nodes() {
+      return nodes;
+    },
+    owner: (b) => table.owner(b),
+    rebalances,
+    checkHealth,
+    setNodes(specs: NodeSpec[]) {
+      const ids = new Set(specs.map((s) => s.id));
+      for (const n of nodes) n.member = ids.has(n.id);
+      for (const s of specs) {
+        const known = nodes.find((n) => n.id === s.id);
+        if (known) known.url = s.url;
+        else nodes.push({ ...s, up: false, fails: 0, oks: 0, member: true });
+      }
+      // A new node joins once it answers: probe the new ones now rather than waiting for the timer's rounds.
+      return Promise.all(
+        nodes.map(async (n) => {
+          if (n.member && !n.up && (await probe(n))) {
+            n.up = true;
+            n.oks = recoverAfter;
+          }
+        }),
+      ).then(() => rebalance("membership changed"));
+    },
+    async stop() {
+      draining = true;
+      if (timer) clearInterval(timer);
+      await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
+      void server.stop(true);
+    },
+  };
+}
+
+/** `main.ts` with EDEN_NODES or EDEN_NODES_FILE: the cluster router, re-reading the file on SIGHUP or change. */
+export async function runCluster(
+  config: ServerConfig,
+  spec: { nodes: NodeSpec[]; file: string | null },
+): Promise<void> {
+  const router = await startCluster({ config, nodes: spec.nodes });
+  const reload = () => {
+    if (!spec.file) return;
+    try {
+      void router.setNodes(parseNodes(readFileSync(spec.file, "utf8")));
+    } catch (e) {
+      console.error(`eden cluster: ${spec.file} not applied: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  process.on("SIGHUP", reload);
+  if (spec.file) {
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    watch(spec.file, () => {
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(reload, 500);
+    });
+  }
+  const stop = () => void router.stop().then(() => process.exit(0));
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+  console.log(
+    `eden cluster router listening on http://${config.host}:${router.port} (${spec.nodes.length} nodes: ` +
+      `${spec.nodes.map((n) => n.id).join(", ")}; users placed by rendezvous hashing of their bucket, D992)`,
+  );
+}

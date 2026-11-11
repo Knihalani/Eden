@@ -1,0 +1,233 @@
+/**
+ * What an operator and a router need from one server process beyond the API (D992):
+ *
+ * - `GET /readyz`: 200 while the process takes traffic, 503 once it drains (SIGTERM), so a load balancer or the
+ *   cluster router stops sending before it stops. `/healthz` (liveness) stays as it was.
+ * - `GET /metrics`: Prometheus text: requests and their latency by route, users held (live, warm, frozen), the
+ *   persistence store's counters, memory. Counts only, no tenant or user (D56's rule for traces applies).
+ * - `POST /internal/cluster` (`EDEN_CLUSTER_KEY` as the bearer): the cluster router's membership. The process
+ *   releases every user the new membership gives another machine (written with their sync state and source-map rows,
+ *   then dropped here), waits for their blobs to reach the store, and forgets which users the store lacked.
+ *
+ * The router (router.ts) answers the same three for the whole machine: readiness of every child, the children's
+ * metrics summed, and the cluster message sent to every child, their answers summed.
+ */
+import { timingSafeEqual } from "node:crypto";
+import type { ContextPartner, SharedFrozenDisk } from "@eden/engine";
+import { childTable, OwnerTable } from "@eden/primitives";
+import { bucketOf, type Scope } from "@eden/protocol";
+
+/** Routes timed by name; anything else is "other", so a scanner cannot grow the label set. */
+const ROUTES = new Set([
+  "/v1/events",
+  "/v1/ask",
+  "/v1/check",
+  "/v1/pending",
+  "/v1/feedback",
+  "/v1/forget",
+  "/v1/sources",
+  "/v1/sources/changed",
+  "/v1/sources/items",
+  "/v1/sources/refs",
+  "/v1/sources/removed",
+  "/v1/usage",
+  "/v1/whoami",
+  "/v1/explain",
+]);
+/** Latency buckets (seconds): the fast path is milliseconds, a waited event up to `waitMs` (5 s). */
+const LE = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+
+export interface ClusterMessage {
+  /** This machine's node id. */
+  self: string;
+  /** Every node of the new membership (ids). */
+  nodes: string[];
+}
+
+export interface ClusterAnswer {
+  released: number;
+  written: number;
+  pending: number;
+  ms: number;
+}
+
+/** Whether `got` is the cluster key, in constant time. */
+export function clusterKeyMatches(key: string | undefined, req: Request): boolean {
+  if (!key) return false;
+  const got = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const a = Buffer.from(got);
+  const b = Buffer.from(key);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export class Ops {
+  draining = false;
+  private readonly started = Date.now();
+  private readonly counts = new Map<string, number>();
+  private readonly hist = new Map<string, Float64Array>();
+  /** The machine-level owner of each bucket, once a cluster router said (null: not in a cluster yet). */
+  private table: OwnerTable | null = null;
+  private self = "";
+  private readonly kids: Uint8Array;
+
+  constructor(
+    private readonly partner: ContextPartner,
+    private readonly disk: SharedFrozenDisk | { count: number } | null,
+    private readonly opts: {
+      clusterKey?: string;
+      child: { index: number; count: number };
+      releaseMs: number;
+    },
+  ) {
+    this.kids = childTable(opts.child.count);
+  }
+
+  /** Whether this process owns a bucket in the store's sweep: this machine's (as last told) and this child's. */
+  ownsInStore = (bucket: number): boolean =>
+    this.table !== null && this.table.owner(bucket) === this.self && this.kids[bucket] === this.opts.child.index;
+
+  /** Wraps the API handler: answers the ops routes itself and times every other request. */
+  wrap(handler: (req: Request) => Promise<Response> | Response): (req: Request) => Promise<Response> {
+    return async (req) => {
+      const path = new URL(req.url).pathname;
+      if (req.method === "GET" && path === "/readyz") {
+        return this.draining
+          ? Response.json({ ready: false, error: "draining" }, { status: 503 })
+          : Response.json({ ready: true });
+      }
+      if (req.method === "GET" && path === "/metrics") {
+        return new Response(this.metrics(), { headers: { "content-type": "text/plain; version=0.0.4" } });
+      }
+      if (path === "/internal/cluster") {
+        if (req.method !== "POST") return Response.json({ error: "POST only" }, { status: 405 });
+        if (!clusterKeyMatches(this.opts.clusterKey, req)) {
+          return Response.json({ error: "missing or wrong cluster key" }, { status: 401 });
+        }
+        let msg: ClusterMessage;
+        try {
+          msg = (await req.json()) as ClusterMessage;
+        } catch {
+          return Response.json({ error: "body must be JSON" }, { status: 400 });
+        }
+        if (
+          typeof msg?.self !== "string" ||
+          !Array.isArray(msg.nodes) ||
+          !msg.nodes.every((n) => typeof n === "string")
+        ) {
+          return Response.json({ error: "body must be {self, nodes[]}" }, { status: 400 });
+        }
+        return Response.json(await this.cluster(msg));
+      }
+      const t0 = performance.now();
+      const res = await handler(req);
+      this.observe(ROUTES.has(path) ? path : "other", res.status, (performance.now() - t0) / 1_000);
+      return res;
+    };
+  }
+
+  /** Applies a membership (`/internal/cluster`): releases the users another machine now owns. */
+  async cluster(msg: ClusterMessage): Promise<ClusterAnswer> {
+    const t0 = performance.now();
+    const table = new OwnerTable(msg.nodes);
+    this.table = table;
+    this.self = msg.self;
+    const moved = (s: Scope) => table.owner(bucketOf(s.tenantId, s.userId)) !== msg.self;
+    const { released, written } = this.partner.releaseMoved(moved, this.opts.releaseMs);
+    const shared = this.disk && "handOff" in this.disk ? this.disk : null;
+    let pending = 0;
+    if (shared) {
+      // Each released user's blob must be in the store before the router sends them to their new owner.
+      const deadline = Promise.race([
+        Promise.all(released.map((s) => shared.handOff(s))).then(() => 0),
+        Bun.sleep(this.opts.releaseMs).then(() => 1),
+      ]);
+      if ((await deadline) === 1) pending = shared.backlog;
+      shared.forgetAbsent();
+    }
+    this.add("eden_cluster_released_users_total", released.length);
+    return { released: released.length, written, pending, ms: Math.round(performance.now() - t0) };
+  }
+
+  observe(route: string, status: number, seconds: number): void {
+    this.add(`eden_requests_total{route="${route}",status="${status}"}`, 1);
+    let h = this.hist.get(route);
+    if (!h) this.hist.set(route, (h = new Float64Array(LE.length + 2)));
+    for (let i = 0; i < LE.length; i++) if (seconds <= LE[i]!) h[i]!++;
+    h[LE.length]! += seconds; // sum
+    h[LE.length + 1]!++; // count
+  }
+
+  add(name: string, n: number): void {
+    this.counts.set(name, (this.counts.get(name) ?? 0) + n);
+  }
+
+  metrics(): string {
+    const lines: string[] = [];
+    const held = this.partner.held();
+    const mem = process.memoryUsage();
+    const gauge = (name: string, help: string, value: number) =>
+      lines.push(`# HELP ${name} ${help}`, `# TYPE ${name} gauge`, `${name} ${value}`);
+    gauge("eden_users_held", "Users held in memory, live or frozen", held.users);
+    gauge("eden_users_frozen", "Users held frozen (warm and compact)", held.frozen);
+    gauge("eden_users_warm", "Users held frozen warm (D862)", held.warm);
+    gauge("eden_frozen_bytes", "Bytes of frozen users' blobs in memory", held.frozenBytes);
+    gauge("eden_sessions", "Open agent sessions", held.sessions);
+    gauge("eden_process_resident_bytes", "Resident memory of the server processes", mem.rss);
+    gauge("eden_process_heap_bytes", "JavaScript heap in use", mem.heapUsed);
+    gauge("eden_processes_ready", "Processes taking traffic (not draining)", this.draining ? 0 : 1);
+    gauge("eden_uptime_seconds_max", "Seconds since the oldest process started", (Date.now() - this.started) / 1_000);
+    if (this.disk) {
+      gauge("eden_persisted_users", "Users with a blob in the local persistence directory", this.disk.count);
+      if ("remote" in this.disk) {
+        const r = this.disk.remote;
+        gauge("eden_store_backlog", "Persistence store writes waiting or running", this.disk.backlog);
+        for (const [k, v] of Object.entries(r)) this.counts.set(`eden_store_${k}_total`, v);
+      }
+    }
+    let family = "";
+    for (const [k, v] of [...this.counts].sort()) {
+      const base = k.split("{")[0]!;
+      if (base !== family) lines.push(`# TYPE ${(family = base)} counter`);
+      lines.push(`${k} ${v}`);
+    }
+    lines.push("# TYPE eden_request_seconds histogram");
+    for (const [route, h] of [...this.hist].sort()) {
+      for (let i = 0; i < LE.length; i++)
+        lines.push(`eden_request_seconds_bucket{route="${route}",le="${LE[i]}"} ${h[i]}`);
+      lines.push(`eden_request_seconds_bucket{route="${route}",le="+Inf"} ${h[LE.length + 1]}`);
+      lines.push(`eden_request_seconds_sum{route="${route}"} ${h[LE.length]}`);
+      lines.push(`eden_request_seconds_count{route="${route}"} ${h[LE.length + 1]}`);
+    }
+    return `${lines.join("\n")}\n`;
+  }
+}
+
+/**
+ * Prometheus texts of several processes summed into one (the router's `/metrics`): every sample with the same name
+ * and labels is added (counts, gauges of users and bytes, histogram buckets alike), except `_max` gauges, which take
+ * the largest. Comment lines are kept once, in first-seen order.
+ */
+export function sumMetrics(texts: string[]): string {
+  const order: string[] = [];
+  const values = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const t of texts) {
+    for (const line of t.split("\n")) {
+      if (line === "") continue;
+      if (line.startsWith("#")) {
+        if (!seen.has(line)) {
+          seen.add(line);
+          order.push(line);
+        }
+        continue;
+      }
+      const i = line.lastIndexOf(" ");
+      const name = line.slice(0, i);
+      const v = Number(line.slice(i + 1));
+      if (!values.has(name)) order.push(name);
+      const old = values.get(name);
+      values.set(name, old === undefined ? v : /_max(\{|$)/.test(name) ? Math.max(old, v) : old + v);
+    }
+  }
+  return `${order.map((k) => (k.startsWith("#") ? k : `${k} ${values.get(k)}`)).join("\n")}\n`;
+}

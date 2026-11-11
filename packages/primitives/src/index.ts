@@ -70,3 +70,4 @@ export {
 export { ExpiringSet } from "./sketch";
 export { PoolClosedError, PoolFullError, PoolTimeoutError, WorkerPool, type PoolOptions, type PoolStats } from "./pool";
 export { IdSet } from "./idset";
+export { BUCKETS, childTable, jumpHash, OwnerTable } from "./placement";
