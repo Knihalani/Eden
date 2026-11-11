@@ -54,6 +54,9 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D832: the rule asked for +2.0 with the lower bound above 0 |
 | D711 | `pushPointer` (D708) failed its rule and is deleted with its code and tests | Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
 | D833 | Rejected: a per-user alias table for the push's recall. |  |
+| D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D711: Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
+| D821 | Rejected: narrowing the default's packet with no model (`pushNarrow`, P2; deleted). | Funnel, train 41–44: neutral given a packet 738 → 216 of 768, but planted handed 582 → 348 (−234) and 334… |
+| D822 | Rejected: the push check's short compare-first reply. | Fails the decoy clause: without the separate verdict and the longer comparison the check lets look-alikes… |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
 
 ## Reader
@@ -190,4 +193,5 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D335 | Rejected and deleted: a search-like `ask_context` question. | measured hidden +5.6 points (n.s.); killed for another reason (read the row) |
 | D507 | Rejected at $0 and deleted: reusing a search's answer across a user's day | A user's searches do not repeat: about one search a task matches an earlier (source, text) of the same user… |
 | D515 | Trial `takeSettleMs`, opened and closed 2026-11-10: not promoted, deleted. | measured hidden +1.4 points (−4.2..+6.9); killed for another reason (read the row) |
+| D824 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items |  |
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |

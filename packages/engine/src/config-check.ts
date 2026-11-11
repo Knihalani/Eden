@@ -67,13 +67,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckWaitMs: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
-  pushWiden: "checker",
-  pushCheckForm: "checker",
-  pushCheckSilent: "checker",
-  pushCheckAnchored: "checker",
-  pushWidenEmbed: "checker",
-  pushWidenIntent: "checker",
-  pushWidenDeep: "checker",
 };
 
 /**
@@ -176,17 +169,11 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   askNudgeDeep: [...PUSH, "askNudge"],
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
+  pushIndirect: PUSH,
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
-  pushWiden: [...PUSH, "pushCheck"],
-  pushCheckForm: [...PUSH, "pushCheck"],
-  pushCheckSilent: [...PUSH, "pushCheck"],
-  pushCheckAnchored: [...PUSH, "pushCheck"],
-  pushWidenEmbed: [...PUSH, "pushCheck", "pushWiden"],
-  pushWidenIntent: [...PUSH, "pushCheck", "pushWiden"],
-  pushWidenDeep: [...PUSH, "pushCheck", "pushWiden"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -253,12 +240,8 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
-  pushCheckForm: { integer: true, min: 1, max: 2 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
-  pushWidenEmbed: { integer: true, max: 20 },
-  pushWidenIntent: { integer: true, max: 20 },
-  pushWidenDeep: { integer: true, max: 20 },
 };
 
 /** String-list keys whose entries must come from a known list. */

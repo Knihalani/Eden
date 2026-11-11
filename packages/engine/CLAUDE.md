@@ -25,7 +25,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
-| `push-check.ts`                                                            | The push check (`pushCheck`, D500–D504, a trial, off): one budgeted call a push names the pool's items that change the action (`CHECK_SYSTEM`, `parseCheck`, `PushChecker`); form 2, the compare-first reply (`CHECK_SYSTEM_COMPARE`, `parseCompare`, D527); `push-check.test.ts`                |
+| `push-check.ts`                                                            | The push check (`pushCheck`, D500, in the default since D828, part `check`): one budgeted call a push names the pool's items that change the action, compare-first (`CHECK_SYSTEM`, `parseCompare`, `PushChecker`, D527); `push-check.test.ts`                |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default; `checkAction`'s only check since D815 deleted the action firewall and A10's text filters): identifiers a call adds and its packets showed; `orgLabel`, which `ItemCache.isCorrespondent` reads with the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
 | `ledger.ts`, `usage.ts`                                                    | Not-twice ledger; usage inference for learning (D13, D18)                                                                                                                                                                     |
@@ -290,38 +290,38 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   better (docs/research/a26-reshow.md). Measure any revival on `pi-ab --days`, never the funnel (one request a session).
   N2's re-show gated by the push check (`pushCheckReshow`, D512) was measured on `pi-ab --days` and deleted too
   (hidden −10.9 points against the check alone; code in commit 69ce1942 and, on I3's check, 00e20972).
-- **`pushWiden` (N2, D511, a trial, off; docs/research/n2-recall.md).** With `pushCheck`, `widenPool` adds items past
-  the lexical pool (the `widen` dependency's, raw intent hits, deeper ranks) to what the check reads, within its 20
-  items, only where the check runs. They are handed only when the check names them; the nudge's deeper look,
-  `anchoredPast` and the returned pool stay the lexical pool's, so an unnamed widened item never reaches an ask. Every
-  route fails open to no widening.
-- **The push check's reply, gate and silence (N5, D527–D536, trials, off; docs/research/n5-widen-check.md).**
-  `pushCheckForm` 2 sends `CHECK_SYSTEM_COMPARE` and reads `parseCompare`: an entry is a yes only with `act` true and
-  a `hits` that is not "none"; there is no stop sequence (the entries with no link are the comparison), so the output
-  cap is `COMPARE_MAX_TOKENS`. The two forms' kept answers never mix (`checkKey` holds the form). Do not reword the
-  compare step without a funnel screen: "is it the same person, thing and day" rejected facts that bear on a request
-  without sharing its names (an all-hands on the request's evening), and thinking at effort low on form 1 handed
-  fewer facts than the default. `pushCheckAnchored` (`anchoredPool`) is decided before the widening and the call: when no item of the pool's
-  head is constraint-like and anchored (`gate.like`, `anchored`; a widened item never opens it), neither runs and the
-  default's candidates go, untouched. A second pass decides again on its own pool, so a gate that closes then
-  replaces a checked first packet with the default's. `pushCheckSilent`
-  off turns a check that names nothing into the default's candidates (`candidatesOf`). A silent push makes the agent
-  ask more (+0.30 `ask_context` a task on Pi): measure any change to when the push is silent live, with wall, not on
-  the funnel. A check answered from labels made at ingest (`pushCheckStored`, `pushCheckGate`) was measured and
-  deleted (D526, D529): with no request in hand a model cannot tell a fact from a look-alike that is a real
-  constraint about another venue, person or day.
+- **The push check (`pushCheck`, D500, D527, D823; in the default since D828, part `check`;
+  docs/research/p2-push-check.md).** With a checker (the reader's model; none without a key, and the part is inert)
+  a push whose pool passes the constraint-like gate asks once, over the pool's head, which items change the action;
+  the reply is compare-first (`CHECK_SYSTEM`, `parseCompare`: an entry is a yes only with `act` true and a `hits` that
+  is not "none"; no stop sequence), a check that names nothing sends no packet (the default's silence on requests
+  with nothing to add), and opened and indirect pushes are checked like listed ones. Do not reword the compare step
+  without a live screen: a shorter reply let look-alikes in (D822), "is it the same person, thing and day" rejected
+  facts that bear on a request without sharing its names, and thinking at effort low handed fewer facts. A silent
+  push makes the agent ask more: measure any change to when the push is silent live, with wall, not on the funnel
+  (the funnel wires no checker unless `--check`). `checkKey` keeps the "c" its replies were recorded under. Deleted
+  (D828): I3's reply, the anchored gate (arm N), the never-silent rule and the widened pool; code in 572d1569.
 - **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
   `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
-  requests are on none. With `pushCandidates` (and `pushCheck` off: an opened push never makes the check's paid
-  call), `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark
+  requests are on none. With `pushCandidates`, `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark
   only on a polite ask; bounded input) also starts it. An opened message is not `noteActed`: a plan alert (D301)
-  quotes only a listed-verb request. Live: hidden +4.1 points one request a session (D706) and +2.1 (−1.6..+5.6) over
+  quotes only a listed-verb request. With the push check wired (D823, D828) an opened push is checked and pays its
+  call like a listed one. Live: hidden +4.1 points one request a session (D706) and +2.1 (−1.6..+5.6) over
   users' days (D710), confirmed concerns not up, the decoy handed more often too (docs/research/o3-push-open.md,
   o3-pointer.md §3). The funnel always asks, so its "surfaced" barely sees this (315 / 276 against 314 / 274); read
   `pushHanded` (`n2/compare.py`) and measure live. Deleted beside it: the push check run behind the packet
   (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
   asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
   earlier request (`pushPointer`, D711: −1.2 over days; again on the new default, D832: +2.4, −0.5..+5.5).
+- **Indirect requests (`pushIndirect`, P2, D820; in the default since D828, part `indirect`; p2-push-check.md §1, §7).** `pushStart`
+  decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
+  ("I need to …", "Should I …?", "We should …", "I want you to …"), or a request after a first clause of context
+  (`secondClause`), read as the imperative after it (`indirectRest`),
+  which the push's lookup is then given as its question; the open shape runs strict (`looksLogged`, `CHATTER`). With
+  the switch off `pushStart` is the old gate exactly. Screen a change on `train-rw` (the reworded train) and on the
+  blind gate sets (`gate-score.ts`; sets 1–3 have all been read now, so a change needs a fresh one), never on
+  `gate-negatives.ts` alone: the rule was fitted there. One more confirmed concern was accepted for it (D829). A no-model narrowing
+  of the packet (`pushNarrow`, D821) lost 40% of the push's facts and was deleted.
 - **Updates name the times they drop (D342, `revisionDiff`).** `buildUpdate`'s title reads `Ledger.seenTimes`; times
   are noted only when a copy is handed out (`watchCopies`, from `copiesOf`'s `times`), never when an update is queued
   (one superseded in the queue was never shown). `timesOf` compares one written form ("HH:MM", "<day> <mon>"), so a

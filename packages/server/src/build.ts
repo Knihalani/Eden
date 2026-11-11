@@ -140,7 +140,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
           onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
         })
       : undefined;
-  // `pushCheck` (D500, a trial, off): the push check runs on the reader's model, with a budget of its own.
+  // `pushCheck` (D500, in the default since D828): the push check runs on the reader's model, with a budget of its own.
   const checker =
     models.reader && config.pushCheck
       ? new PushChecker({

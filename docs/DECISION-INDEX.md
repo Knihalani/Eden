@@ -434,7 +434,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D493 | 2026-11-10 | Finding: a teacher-quality check in the push would cut look-alikes from the packet without losing facts | finding |
 | D494 | 2026-11-10 | Adopted (lab tooling): the "changes the action" labeller and the teacher-as-checker sidecar. | lab |
 | D495 | 2026-11-10 | Deleted at the repo owner's decision: `syncCold` and `syncDelta`, F1's two off trials | rejected |
-| D500 | 2026-11-10 | Trial `pushCheck`: one budgeted model call a push asks, over the whole push pool at once, whether each item changes what the assistant… | trial |
+| D500 | 2026-11-10 | Trial `pushCheck`: one budgeted model call a push asks, over the whole push pool at once, whether each item changes what the assistant… | adopted |
 | D501 | 2026-11-10 | The push check's operating point: 200 characters × 15 items | adopted |
 | D502 | 2026-11-10 | Pre-registered: the live Pi measurement of `pushCheck` and its promotion rule | lab |
 | D503 | 2026-11-10 | Finding: the push check raises more hidden facts live, leaves concerns where they were, and costs +$0.11 per 1,000 tasks and +0.8 s a task | finding |
@@ -445,7 +445,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D508 | 2026-11-10 | Rejected at $0 and deleted: one search of a source a lookup | rejected |
 | D509 | 2026-11-10 | `sourceYield` is in `DEFAULT_CONFIG` | adopted |
 | D510 | 2026-11-10 | Finding: a "changes the action" check without thinking is lenient on look-alikes; with thinking at effort low it is not. | finding |
-| D511 | 2026-11-10 | Trial `pushWiden`: the check reads items past the lexical pool. | trial |
+| D511 | 2026-11-10 | Trial `pushWiden`: the check reads items past the lexical pool. | adopted |
 | D512 | 2026-11-10 | Rejected and deleted: `pushCheckReshow`, a re-show gated by the check. | rejected |
 | D513 | 2026-11-10 | Finding: silence when the check names nothing loses no planted fact from the packet | finding |
 | D514 | 2026-11-10 | Finding: the careful check's price. | finding |
@@ -461,14 +461,14 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D524 | 2026-11-10 | Adopted (lab tooling): stronger models as the Pi agent, priced per token class. | lab |
 | D525 | 2026-11-10 | Pre-registered: N2's widened pool behind a check the owner can ship, target at most +$0.10 per 1,000 tasks and +0.3 s a task | lab |
 | D526 | 2026-11-10 | Rejected and deleted: the check's question answered when the item is stored, read by a no-model push | rejected |
-| D527 | 2026-11-10 | Trial `pushCheckForm`: 2 is a compare-first reply for the push check, with no thinking. | trial |
+| D527 | 2026-11-10 | Trial `pushCheckForm`: 2 is a compare-first reply for the push check, with no thinking. | adopted |
 | D528 | 2026-11-10 | Rejected and deleted: thinking on I3's short reply, and a check that reads only stored-`act` items | rejected |
 | D529 | 2026-11-10 | Trial `pushCheckGate`, opened and closed 2026-11-10: measured live, not kept, deleted | rejected |
 | D530 | 2026-11-10 | Adopted (lab tooling, N5). | lab |
 | D531 | 2026-11-10 | Finding (N5, round 1; Pi on Modal at acf6f34f, train seeds 41–48, all 192 templates, hidden, control and neutral, 4,608 task runs an arm… | finding |
 | D532 | 2026-11-10 | Finding: a silent push makes the agent ask, and that is part of the gain and most of the extra wait. | finding |
-| D533 | 2026-11-10 | Trial `pushCheckSilent`. | trial |
-| D534 | 2026-11-10 | Trial `pushCheckAnchored`: the check is called only when a constraint-like item in the pool names one of the request's anchors. | trial |
+| D533 | 2026-11-10 | Trial `pushCheckSilent`. | adopted |
+| D534 | 2026-11-10 | Trial `pushCheckAnchored`: the check is called only when a constraint-like item in the pool names one of the request's anchors. | adopted |
 | D535 | 2026-11-10 | Finding: arm N (`pushCheck`, `pushCheckForm` 2, `pushCheckAnchored`, `pushCheckSilent` off; no widening) raises hidden facts +2.7 points… | finding |
 | D536 | 2026-11-10 | Nothing from N5 is promoted; `pushCheckForm` 2, `pushCheckAnchored` and `pushCheckSilent` stay off trials with `pushCheck` and… | adopted |
 | D540 | 2026-11-10 | `sourceYield` is re-tested on the powered bench, with the rule written first | adopted |
@@ -516,6 +516,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D800 | 2026-11-11 | Lab only: the blind confirmation of tonight's wave on `heldout18` is pre-registered | lab |
 | D801 | 2026-11-11 | Finding: tonight's wave (#235–#243) did not lower quality on blind `heldout18`, and on Sonnet's grade raised it; `pushOpen` stays in the… | finding |
 | D802 | 2026-11-11 | Lab only: `heldout18` has been run once and is read; `UNREAD_BLIND` is empty | lab |
+| D820 | 2026-11-11 | Trial `pushIndirect` (P2; promoted by D828): a request phrased as a need, a plan, a wish or a question about acting starts the push, read… | adopted (by D829) |
+| D821 | 2026-11-11 | Rejected: narrowing the default's packet with no model (`pushNarrow`, P2; deleted). | rejected |
+| D822 | 2026-11-11 | Rejected: the push check's short compare-first reply. | rejected |
+| D823 | 2026-11-11 | Trial `pushCheckOpen` (P2; folded into the default's check by D828, the switch deleted): with `pushCheck`, the open shape's pushes… | adopted |
+| D824 | 2026-11-11 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items | rejected |
 | D810 | 2026-11-11 | The no-model eval gains an acting suite, so the merge gate sees the default's push of candidates | adopted |
 | D811 | 2026-11-11 | The merge gate runs its three steps at once, runs the tests that wait on real time in a tail after the rest, bounds work in CPU time, and… | adopted |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
@@ -544,6 +549,9 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D857 | 2026-11-11 | `askTool` (D851) is a documented opt-in proxy flag, not a trial: `EDEN_PROXY_ASK=1`, off unless set, labelled "not measured through the… | adopted |
 | D858 | 2026-11-11 | A dev-mode server refuses to start with `OPENROUTER_API_KEY` in its environment unless `EDEN_ALLOW_MODEL_ROLES=1` | adopted |
 | D859 | 2026-11-11 | `leadShort` (D855) failed its pre-registered rule and is deleted with its code and tests | rejected |
+| D825 | 2026-11-11 | Finding (P2, pre-registered B; Pi on Modal at 1927cc19, Haiku 5.5 in every role, train seeds 41–48 short and users w41–w48 over 8 days… | finding |
+| D826 | 2026-11-11 | Finding (P2, pre-registered E): with a Sonnet 5.5 agent the silent check lowers the whole bill. | finding |
+| D827 | 2026-11-11 | P2's recommendation to the parent (nothing promoted by this session): promote the silent check (S: `pushCheck`, form 2, `pushCheckOpen`… | adopted |
 | D860 | 2026-11-11 | A second frozen form, "warm", that thaws without rebuilding | adopted |
 | D861 | 2026-11-11 | Idle compaction, in the default (`idleCompact`) | adopted |
 | D862 | 2026-11-11 | Two frozen tiers, in the default | adopted |
@@ -564,6 +572,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D882 | 2026-11-11 | Synth splits are by family cluster, and families are deduped against each other and the train suites. | adopted |
 | D883 | 2026-11-11 | Synth quality: a revision pass by the writer, a blind critic, a hand audit. | adopted |
 | D884 | 2026-11-11 | Lab only: the `synth` suite family runs the generated worlds as hidden-context suites. | lab |
+| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
+| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
+| D828 | 2026-11-11 | The push check and indirect requests join the default. | adopted |
+| D829 | 2026-11-11 | Precision over recall, an explicit exception: `pushIndirect` is in the default with one more Sonnet-confirmed false concern | adopted |
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
