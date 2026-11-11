@@ -154,10 +154,10 @@ weights a process as an upper bound).
 | **Heavy, peak hour** (all active, 1/6 live, 5/6 warm) | **5.29 MB** | **1,643** | **3,296** | **8,871** | **17,753** |
 
 Read the prose rows for real mail (the sim's templated text compresses better than mail will), and **size daily
-agents by the heavy peak row**: when a tenant's users all work the same hours, every one is active within 30 minutes
-and most are frozen warm (D862), whose blobs are about twice the compact ones; that, not the item count, is what
-costs 5.29 MB against 3.36 at a quarter active. (A shorter warm window would trade that memory for 200 ms compact
-thaws on users back after a few minutes; not measured as a trial, not changed.) Latency at a realistic rate on the 2-core budget (`bun run sim:perf steady --synced`: 300 synced users of the sim
+agents by the heavy peak row**: when a tenant's users all work the same hours, every one is active within 30 minutes,
+a sixth of them live at any moment (about 9-10 MB each at the cap) and the rest warm (3.3 MB): 5.29 MB a user against
+3.36 at a quarter active. Compacting warm users sooner was tried and rejected (D996): at most 11% less memory for
+200 ms more on every return after a pause. Latency at a realistic rate on the 2-core budget (`bun run sim:perf steady --synced`: 300 synced users of the sim
 world at real pacing and connector latency, 39 events and 87 requests a second, one server process, the reviewer's
 runs sharing the machine): observe p50 0.95 ms, p99 21.7 ms (a user's message 2.9 / 25.4 ms), `ask_context` 6.4 /
 32.3 ms, with the server at 17% of a core.

@@ -192,3 +192,19 @@ same users from warm to compact, so it is priced by the same arms.
 **Rule, fixed before the runs:** a shorter window is promoted only if (a) RSS a user at the peak mix falls by 20% or
 more against `--warm-waves=5`, and (b) the first event of a user returning at the daily-agent cadence (12 minutes,
 past the window) waits no more than 50 ms longer at p50 than a warm return. Either fails: rejected, the window stays.
+
+**Result (one run an arm, the cgroup, 2026-11-11): rejected on both bounds.**
+
+| Compact after | Warm / frozen users at the steady state | RSS a user | Against 11 min | Frozen RSS a user | First read after freeze, p50 / p99 |
+| --- | --- | --- | --- | --- | --- |
+| 11 min (today, for this cadence) | 166 / 166 | 5.16 MB | | 3.32 MB | 23.8 / 305 ms |
+| 9 min | 133 / 166 | 4.97 MB | -3.7% | 3.14 MB | 30.2 / 340 ms |
+| 5 min | 66 / 166 | 4.60 MB | -10.9% | 2.71 MB | 221.7 / 312 ms |
+
+(a) The largest saving is 10.9%, under the 20% bound. (b) A user returning past the window finds a compact blob:
+222 ms at p50 against 24 ms warm, +198 ms against the 50 ms bound. The window stays (D862's 30 minutes). What the
+run also shows, and the earlier reading of §1 had wrong: the peak hour's cost is mostly the sixth of users who are
+live (about 9-10 MB of RSS each after a thaw at this size), not the warm tier: a warm user costs 3.3 MB and a compact
+one 2.7, so compacting every warm user would save about 0.6 MB a user. A warm cap would move the same users to the
+same compact cost. The lever for daily agents' peak memory is a live user's footprint, not the frozen tiers.
+
