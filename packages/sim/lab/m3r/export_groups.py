@@ -28,25 +28,26 @@ def world_groups(args):
         hid = {k: rng.random() < 0.5 for k in keyed}
         drop = {(ts[0]["decoy"] if hid[k] else ts[0]["pos"]) for k, ts in keyed.items()}
         items = [i for i in w["items"] if i["id"] not in away and i["id"] not in drop]
-        reqs = [(t["request"], t["pos"] if hid[k] else None, "hidden" if hid[k] else "control", t["template"], "")
-                for k, ts in keyed.items() for t in ts]
+        reqs = [(t["request"], t["pos"] if hid[k] else None, "hidden" if hid[k] else "control", t["template"], "",
+                 t["pos"] if hid[k] else t["decoy"]) for k, ts in keyed.items() for t in ts]
         rng.shuffle(reqs)
         reqs = reqs[:80]
         key = f"train/{w.get('seed', '')}"
     else:
         items = w["items"]
-        reqs = [(r["request"], r["planted"] if r["kind"] == "hidden" else None, r["kind"], r["template"], r["rid"])
-                for r in w["requests"]]
+        reqs = [(r["request"], r["planted"] if r["kind"] == "hidden" else None, r["kind"], r["template"], r["rid"],
+                 r["planted"]) for r in w["requests"]]
         key = w["key"]
     W = F.World(R.frames_of(items))
     idx = {f["id"]: k for k, f in enumerate(W.items)}
     nbr = W.neighbours()
     out = []
-    for text, pos, kind, tpl, rid in reqs:
+    for text, pos, kind, tpl, rid, plant in reqs:
         ids, rows = R.pair_rows(W, text, table)
         target = ids.index(idx[pos]) if pos is not None and idx.get(pos) in ids else -1
-        planted = idx.get(pos) if pos is not None else None
+        # `planted`: the fact (hidden) or its all-clear twin (control) as an index into the world's items, -1 if absent.
         out.append({"rid": rid, "request": text, "kind": kind, "template": tpl, "cands": ids, "target": target,
+                    "planted": idx.get(plant, -1),
                     "fact_lost": int(pos is not None and target < 0), "feats": rows})
     texts = []
     for i in items:

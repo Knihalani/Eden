@@ -139,3 +139,29 @@ sparse tracks and every Modal job with them; their numbers stay in m3-retriever.
   trees, shared by all users).
 - **Ablations:** each feature group out (`--ablate lex,date,amount,people,status,twin,supersede,graph,kind`) and
   the learned channel out.
+
+## 6. The neural, binarised track (D907): TwinXor and a family of on/off networks
+
+The owner's final form: a learned network, trained end to end, with discrete internals; explore many architectures,
+each for one spot in Eden, test each cheaply on CPU (a small slice, a Haiku subagent running it) before any full
+training; push the binarised (on/off) concept across several spots.
+
+**Spots in Eden's pipeline and the network tried for each** (`m3r/binnet.py`, each with a float twin, `--float`):
+
+| spot | where in Eden | network |
+|---|---|---|
+| ranking the handed five, twin rejection, silence | the push's candidates (`candidatesOf`) | `pair`: request × candidate × its corpus twin, binary layers, a NULL head |
+| twin pathway's worth | the same | `notwin`: `pair` without the twin inputs |
+| item understanding at ingest | the card's constraint test (`constraintLike`) | `tagger`: item alone → constraint or not, one stored bit |
+| the push or silence decision | whether a candidates packet goes | `silence`: request + its first five candidates as a set (majority-vote pooling) |
+| recall without shared words | the pool's reach | `keys`: K learned discrete keys an item and a request (argmax, straight-through), exact lookup |
+
+Common to all: text as hashed word and character n-grams (2^16 buckets locally, 2^18 on Modal), no tokenizer and
+no pretrained weights; a ternary first layer (weights −a/0/+a) into a sign code; binary later layers (±1, scale
+folded); straight-through estimators.
+
+**The CPU kernel, measured** (`m3r/xnor-bench.ts`, plain TypeScript, random weights of the trained shapes, this
+container while three cores ran the data export, so an upper bound): an item's 128-bit code from 300 n-gram ids
+through a ternary table held as two bit-planes **60 µs**; a candidate's score (640 input bits through 128 and 32
+binary neurons by XNOR-popcount, an int8 head) **6.1 µs**; a request with 95 candidates **0.59 ms**. Memory: **48 KB a
+user** at 3,000 items (16 bytes a code), 2.1 MB of shared model (the ternary table's two planes dominate).
