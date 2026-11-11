@@ -130,3 +130,18 @@ hybrid's lexical list is the shipped pool here):
 | sparse-a1 | hybrid k 15 | 132 (+5.7) | 91 | fail |
 | asym-a2 | hybrid k 10 | 137 (+8.9) | 81 | fail (decoys down 2) |
 | rerank-a1 | hybrid k 5 | 131 (+5.1) | 89 | fail |
+
+**With generated families (fold A).** `m3-synth.ts` wrote 1,550 templates over 46 domains with train5's and train6's
+themes left out (Haiku 5.5, $0.363 on the ledger); `synth_worlds.py` dropped 1 as close to a held-out template
+(request and fact TF-IDF similarity to train5–6 at the median 0.10 and 0.07) and built 150 worlds of 96 templates
+each beside the export worlds' base items. dense-s1 is dense-a1's recipe on train1–4 plus those worlds:
+
+| run | variant | facts @15 | decoys @15 | facts @5 | §1 bar | facts @5 against shipped (123) | decoys @5 (83) | §1b @5 bar |
+|---|---|---|---|---|---|---|---|---|
+| dense-s1 | model alone | **142** (+18.5) | 105 (ratio 1.235 against 1.257) | 135 | **pass** | 135 | 79 | fail (+7.6) |
+| dense-s1 | hybrid k 5 | 144 | 107 | 134 | **pass** | 143 (+12.7) | 100 | fail (decoy ratio 1.205 against 1.163) |
+| dense-s1 | hybrid k 10 / 15 | 145 | 111 | 132 / 128 | fail | 143 / 142 | 100 / 98 | fail |
+
+Generated families move the model alone from 127 to 142 held-out facts: D491's reading (more families, not more
+pairs) holds for retrieval. A fold-B confirmation needs generated families with train1–2's themes left out
+(`domains-b.txt`), being written.
