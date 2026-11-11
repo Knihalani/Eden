@@ -277,6 +277,9 @@ for (const { scope } of users) {
   const vocab = cache.peekVocab(scope)!;
   const q = termIds("budget review", vocab, false);
   cache.search(scope, q.ids, q.n, 10, clock);
+  // With `--cards`, the user's card state is read too, as a lookup's `cardsOf` does: card state frozen with the user
+  // (D998) is then live again, so the line below counts a live user's cards.
+  enricher?.cardsOf(scope, [], clock);
   thaws.push(performance.now() - a);
 }
 const m4 = await mem();
