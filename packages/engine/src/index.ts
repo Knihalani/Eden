@@ -44,7 +44,7 @@ export type { ShadowRecord, ShadowSink, Trace, TraceSink, UsageRecord, UsageSink
 export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
-export { pushStart, requestedRange } from "./probes";
+export { isImperative, isOpenRequest, MORE_VERBS, pushStart, requestedRange } from "./probes";
 export {
   ACTIONS,
   CARD_KINDS,

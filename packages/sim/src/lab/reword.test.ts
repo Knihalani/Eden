@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { isImperative, isOpenRequest, MORE_VERBS, pushStart } from "@eden/engine";
 import { buildWorld } from "../world";
 import { formOf, REWORD_FORMS, rewordOf } from "./reword";
 import { parseSuites, SUITES } from "./suites";
@@ -45,5 +46,17 @@ describe("reword.ts and train-rw", () => {
   test("train-rw is its own group and not in all", () => {
     expect(parseSuites("train-rw")).toEqual(parseSuites("train").map((s) => `${s}rw`));
     expect(parseSuites("all").some((s) => s.endsWith("rw"))).toBe(false);
+  });
+
+  test("pushStart (D820): off is the old gate on every train request; on, train's requests start as before", () => {
+    for (const seed of [41, 42, 43, 44])
+      for (const s of parseSuites("train"))
+        for (const t of SUITES[s]!(buildWorld({ seed: seed * 1_000 }), seed, "hidden")) {
+          const old = isImperative(t.text, MORE_VERBS) ? "listed" : isOpenRequest(t.text) ? "opened" : null;
+          const off = pushStart(t.text, { open: true, indirect: false });
+          expect(off?.how ?? null).toBe(old);
+          if (off) expect(off.request).toBe(t.text);
+          expect(pushStart(t.text, { open: true, indirect: true })?.how ?? null).toBe(old);
+        }
   });
 });

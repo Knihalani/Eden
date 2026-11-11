@@ -70,7 +70,8 @@ export const DISTILL_TODAY = "2026-10-27";
 export const DEFAULT_CARD_FILES = ["cards-v2.jsonl", "cards-train.jsonl"].map((f) =>
   join(import.meta.dir, "..", "..", "lab", "cards", f),
 );
-const TRAIN = new Set(parseSuites("train"));
+// P2's reworded train (`train-rw`) plants train's own items in train's worlds: train, not held out.
+const TRAIN = new Set([...parseSuites("train"), ...parseSuites("train-rw")]);
 
 /** The cards in requests files (`{h, r, c}` lines; `.gz` read as is): `c` null is none, a line without `c` skipped. */
 export function loadIntentCards(...files: string[]): Map<string, Card | null> {

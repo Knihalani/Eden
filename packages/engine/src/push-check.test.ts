@@ -12,7 +12,6 @@ import { CORE_CONFIG } from "./parts";
 import {
   CHECK_STOP,
   CHECK_SYSTEM,
-  CHECK_SYSTEM_COMPACT,
   CHECK_SYSTEM_COMPARE,
   checkKey,
   checkMessages,
@@ -559,14 +558,13 @@ describe("pushCheckForm 2 (N5, D527): the reply compares before it decides", () 
     expect(parseCompare(`{"items":[${many}]}`, 10)).toEqual([0, 1, 2, 3, 4]);
   });
 
-  test("the form's settings are checked: whole, 1 to 3 (form 3: P2, D822), under pushCheck", () => {
+  test("the form's settings are checked: whole, 1 or 2, under pushCheck", () => {
     const deps = { deps: { cards: true, reader: true, checker: true } };
     expect(checkEngineConfig({ pushCheck: true, pushCheckForm: 2 }, deps)).toEqual({
       pushCheck: true,
       pushCheckForm: 2,
     });
-    expect(() => checkEngineConfig({ pushCheck: true, pushCheckForm: 4 }, deps)).toThrow();
-    expect(() => checkEngineConfig({ pushCheck: true, pushCheckForm: 2.5 }, deps)).toThrow();
+    expect(() => checkEngineConfig({ pushCheck: true, pushCheckForm: 3 }, deps)).toThrow();
     expect(() => checkEngineConfig({ pushCheckForm: 2 }, deps)).toThrow(/pushCheck/);
   });
 });
@@ -614,29 +612,5 @@ describe("pushCheckSilent off and pushCheckAnchored (N5, D533, D534)", () => {
     expect(checkEngineConfig(on, deps)).toEqual(on);
     expect(() => checkEngineConfig({ pushCheckAnchored: true }, deps)).toThrow(/pushCheck/);
     expect(() => checkEngineConfig(on, { deps: { cards: true, reader: true } })).toThrow(/checker/);
-  });
-});
-
-// P2 (D822): form 3, the compare-first reply made short: no verdict field, the link is the verdict.
-describe("pushCheckForm 3 (P2, D822): the short compare-first reply", () => {
-  test("a link that lands is a yes, none is a no, an explicit false stays a no", () => {
-    const reply =
-      '{"items":[{"i":2,"on":"lake house 10-14 May","hits":"its 12 May date"},' +
-      '{"i":1,"on":"repairs finished","hits":"none"},{"i":3,"on":"offsite budget","hits":"its spend","act":false}]}';
-    expect(parseCompare(reply, 3, true)).toEqual([1]);
-    // Form 2's reader needs the verdict field: the same reply names nothing there.
-    expect(parseCompare(reply, 3)).toEqual([]);
-  });
-
-  test("a yes naming no item fails open; an empty list is the usual answer", () => {
-    expect(parseCompare('{"items":[{"i":9,"on":"x","hits":"its day"}]}', 3, true)).toBeNull();
-    expect(parseCompare('{"items":[]}', 3, true)).toEqual([]);
-  });
-
-  test("the prompt keeps the question word for word and caches its own key", () => {
-    expect(CHECK_SYSTEM_COMPACT.startsWith(CHECK_SYSTEM_COMPARE.split("Reply with one JSON")[0]!)).toBe(true);
-    const input = { request: "Book the lake house", items: [], today: "2026-05-01" };
-    expect(checkKey({ ...input, form: 3 })).not.toBe(checkKey({ ...input, form: 2 }));
-    expect(checkMessages({ ...input, form: 3 })[0]!.content).toBe(CHECK_SYSTEM_COMPACT);
   });
 });

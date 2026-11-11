@@ -256,7 +256,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
-  pushCheckForm: { integer: true, min: 1, max: 3 },
+  pushCheckForm: { integer: true, min: 1, max: 2 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
   pushWidenEmbed: { integer: true, max: 20 },

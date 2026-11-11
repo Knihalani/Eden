@@ -6,6 +6,7 @@ import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
+import { checkEngineConfig } from "./config-check";
 import { CORE_CONFIG } from "./parts";
 import { isImperative, isOpenRequest, MORE_VERBS } from "./probes";
 import { PushChecker } from "./push-check";
@@ -192,6 +193,14 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(model.calls.length).toBe(1);
     expect(got).toHaveLength(1);
     expect(got[0]!.citations.map((c) => c.itemId)).toEqual([ITEMS[0]!.id]);
+  });
+
+  test("pushCheckOpen needs pushCheck and pushOpen (D823)", () => {
+    const deps = { deps: { cards: true, reader: true, checker: true } };
+    expect(() => checkEngineConfig({ pushCheck: true, pushOpen: false, pushCheckOpen: true }, deps)).toThrow(
+      /pushOpen/,
+    );
+    expect(() => checkEngineConfig({ pushCheckOpen: true }, deps)).toThrow(/pushCheck/);
   });
 
   test("an opened message is not kept as an acting request for plan alerts (D301)", async () => {

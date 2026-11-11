@@ -2608,9 +2608,7 @@ export class ContextPartner {
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
-      ...(this.config.pushCheckForm === 2 || this.config.pushCheckForm === 3
-        ? { form: this.config.pushCheckForm as 2 | 3 }
-        : {}),
+      ...(this.config.pushCheckForm === 2 ? { form: 2 as const } : {}),
     };
     const key = checkKey(input);
     const asked = `${input.today}\n${request}`;

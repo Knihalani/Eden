@@ -125,7 +125,10 @@ export function isOpenRequest(raw: string, strict = false, minWords = 4): boolea
   }
   const first = clean(words[i]);
   if (!first || REMARKS.has(first) || ASKING.has(first) || STATING.has(first)) return false;
-  if (strict && (CHATTER.has(first) || STATING_STRICT.has(first) || LAUGH.test(first))) return false;
+  if (strict && STATING_STRICT.has(first)) return false;
+  // A chatter opener ("Morning! Book the …", "haha ok …") makes a request only when a listed verb follows it.
+  if (strict && (CHATTER.has(first) || LAUGH.test(first)))
+    return isImperative(words.slice(i + 1).join(" "), MORE_VERBS);
   const next = clean(words[i + 1]);
   if (TELL_ME.has(first) && (next === "me" || next === "us")) return false;
   if (/\?\s*$/.test(raw.slice(-32))) return polite;
@@ -155,14 +158,18 @@ const LAUGH = /^(?:(?:ha|he|ja|je|hi){2,}h?|lo+l|lma+o+|ro+fl|k{3,}|mdr|xd+)$/;
  */
 const LOG_LEVEL = /\b(?:ERROR|ERR!?|WARN(?:ING)?|INFO|DEBUG|FATAL|TRACE|CRITICAL)\b/;
 const LOG_MARK =
-  /^\s*[\w.-]+:\s+(?:error|fatal|warning|panic)\b|^\s*(?:panic|fatal|error|e|w):\s|\b\w+\.(?:js|ts|py|go|rs|java|rb|c|cpp):\d+|\b\d+ failed, \d+ passed|\b[a-z]*error:\s|traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
+  /^\s*[\w.-]+:\s+(?:error|fatal|warning|panic)\b|^\s*(?:panic|fatal|error|e|w):\s|\b\w+\.(?:js|ts|py|go|rs|java|rb|c|cpp):\d+|\b\d+ failed, \d+ passed|\b[a-z]*error:\s|traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}(?:t\d{2}:\d{2}|[ ]\d{2}:\d{2}:\d{2})|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
 function looksLogged(raw: string): boolean {
   const head = raw.slice(0, OPEN_HEAD_CHARS);
   if (LOG_LEVEL.test(head) || LOG_MARK.test(head)) return true;
   const words = head.trim().split(/\s+/);
   const symbolic = words.filter((w) => {
     const t = w.replace(/[,.;!?]+$/, "");
-    return /[\d:/=[\]_#{}()<>|\\]/.test(t) && !/^[£$€]?[\d,]+(?:\.\d+)?[kKmM]?$/.test(t);
+    // Amounts, clock times and dates are a request's own symbols ("£180", "09:00", "4pm", "12/05", "2026-05-14").
+    if (/^[£$€]?[\d,]+(?:\.\d+)?[kKmM]?$|^\d{1,2}(?::\d{2})?(?:am|pm)?$|^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?$/i.test(t))
+      return false;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return false;
+    return /[\d:/=[\]_#{}()<>|\\]/.test(t);
   }).length;
   return words.length >= 4 && symbolic / words.length >= 0.3;
 }
@@ -204,7 +211,7 @@ const INDIRECT = new RegExp(
 const NOT_ACTING = new Set(
   (
     "know think see say admit wonder believe feel understand remember hear learn be have look figure decide wait " +
-    "sleep talk mention point note consider worry rest relax celebrate"
+    "sleep talk mention point note consider worry rest relax celebrate chat stay eat"
   ).split(" "),
 );
 /** Adverbs a lead-in may carry before its verb ("We should probably …"). */
@@ -217,20 +224,28 @@ const ADVERBS = new Set("really probably maybe definitely just still also quickl
  * (`NOT_ACTING`). The push then reads the request as its imperative: listed or opened as any other.
  */
 export function indirectRest(raw: string): string | null {
-  let head = raw.slice(0, OPEN_HEAD_CHARS).trim();
+  // The head decides; the text handed on is the message itself from where the lead-in ends, whole (review of D820:
+  // a cut or rejoined copy would hide later lines from the lookup and split a secret before redaction).
+  const head = raw.slice(0, OPEN_HEAD_CHARS);
+  let at = head.length - head.trimStart().length;
   // Openers before the lead-in ("ok so I need to …", "hey, should we …"); a polite "can you" is not one here.
   for (let i = 0; i < 4; i++) {
-    const m = /^([\p{L}]+)[,!]?\s+/u.exec(head);
+    const m = /^([\p{L}]+)[,!]?\s+/u.exec(head.slice(at));
     if (!m || !OPENERS.has(m[1]!.toLowerCase()) || POLITE.has(m[1]!.toLowerCase())) break;
-    head = head.slice(m[0].length);
+    at += m[0].length;
   }
-  const lead = INDIRECT.exec(head);
+  const lead = INDIRECT.exec(head.slice(at));
   if (!lead) return null;
-  let words = head.slice(lead[0].length).trim().split(/\s+/);
-  while (words.length > 0 && ADVERBS.has(words[0]!.toLowerCase())) words = words.slice(1);
+  at += lead[0].length;
+  // Adverbs a lead-in may carry before its verb ("We should probably …").
+  for (let m = /^([\p{L}]+)\s+/u.exec(head.slice(at)); m && ADVERBS.has(m[1]!.toLowerCase());) {
+    at += m[0].length;
+    m = /^([\p{L}]+)\s+/u.exec(head.slice(at));
+  }
+  const words = head.slice(at).trim().split(/\s+/);
   if (words.length < 2) return null;
   if (NOT_ACTING.has(words[0]!.toLowerCase().replace(/[^\p{L}]/gu, ""))) return null;
-  return words.join(" ").replace(/\s*\?\s*$/, "");
+  return raw.slice(at).replace(/\s*\?\s*$/, "");
 }
 
 /**

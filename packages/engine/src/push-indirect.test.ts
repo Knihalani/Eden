@@ -82,6 +82,26 @@ describe("indirectRest and pushStart (D820)", () => {
     expect(isOpenRequest("ok so anyway the weather is nice today")).toBe(true);
   });
 
+  test("review of D820: times, dates and a greeting before a listed verb are a request's own", () => {
+    for (const raw of [
+      "Bump Thursday's 09:00 call to 10:30",
+      "Shift the 14:00 dentist slot to 16:30 on 12/05",
+      "Move the review to 2026-05-14 10:00 with Priya",
+    ])
+      expect(start(raw)).not.toBeNull();
+    expect(start("Morning! Book a table at Rosa's for 8 tonight")?.how).toBe("opened");
+    expect(start("Morning! Long weekend coming up finally")).toBeNull();
+    for (const raw of ["Is it OK to eat the leftover pasta?", "We should stay home tonight and rest"])
+      expect(start(raw)).toBeNull();
+  });
+
+  test("review of D820: the request handed on is the message itself after the lead-in, whole", () => {
+    const lines = Array.from({ length: 60 }, (_, i) => `- invoice INV-${1000 + i} for £${100 + i}`).join("\n");
+    const raw = `I need to pay these invoices today:\n${lines}`;
+    expect(start(raw)?.request).toBe(raw.slice("I need to ".length));
+    expect(start(raw)!.request.length).toBeGreaterThan(1_000);
+  });
+
   test("imperatives and other languages are unchanged", () => {
     for (const raw of [
       "Book the Golf in for its MOT at Kwik Lane Garage, Saturday morning.",
