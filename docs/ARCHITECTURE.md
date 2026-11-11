@@ -460,7 +460,8 @@ for a compare-first reply (per listed item, what its point applies to, what of t
 "none", then the verdict), which keeps look-alikes out with no thinking at the same price and wait a call;
 `pushCheckAnchored` makes the call only when a constraint-like pool item names one of the request's anchors (about
 three pushes in ten, else the default's candidates with no call); `pushCheckSilent` off leaves the default's
-candidates when the check names nothing.
+candidates when the check names nothing. `pushCheckOpen` (P2, D823, off) lets the open shape's pushes (below) start
+with the check on and checks them as listed ones; without it a check arm loses every opened push the default makes.
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
@@ -493,7 +494,11 @@ between (tool calls, its replies) do not make it stale.
 for a request whose verb `isImperative` lists, a gate from the reader's paid push. With `pushCandidates` and no
 `pushCheck`, a message that does not open as a question, a remark or a statement (`isOpenRequest`) starts it too: no
 model call, the candidates' own gate unchanged, and no acting request recorded for plan alerts
-(docs/research/o3-push-open.md).
+(docs/research/o3-push-open.md). With `pushCheck` on, an opened message starts no push unless `pushCheckOpen` (D823).
+Trial `pushIndirect` (P2, D820, off): a request phrased as a need, a plan, a wish or a question about acting ("I need
+to pay …", "Should I book …?", "We should move …") is read as the imperative after its lead-in (`pushStart`,
+`indirectRest`), and the push's lookup is given the message from where the lead-in ends; the open shape then refuses
+pasted log lines and chatter openers (docs/research/p2-push-check.md §1).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests

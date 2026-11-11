@@ -611,6 +611,13 @@ p90 1.44–1.52 s.
 | every gated push, with `pushWiden` (K) | 0.81–0.83 | 0.21–0.22 | +0.214; +0.173 | +1.06 s; +0.85 s |
 | every gated push (Kp) | 0.81–0.83 | 0.18–0.19 | +0.183; +0.156 | +1.04 s; +0.88 s |
 | `pushCheckAnchored`, `pushCheckSilent` off (N) | 0.30; 0.40 | 0.07; 0.09 | +0.043; +0.083 | +0.31 s; +0.41 s |
+| N with `pushCheckOpen`, wait 1,500 ms (P2's N) | 0.35; 0.48 | 0.08; 0.11 | +0.050; +0.103 | +0.32 s; +0.57 s |
+| Kp with `pushCheckOpen`, wait 1,500 ms (P2's S) | 0.96; 0.99 | 0.21; 0.22 | +0.213; +0.178 | +1.09 s; +1.15 s |
+
+P2 (docs/research/p2-push-check.md, D823): `pushCheckOpen` checks the open shape's pushes too, so the call rate rises
+by about a sixth (funnel, seeds 42–43: 470 → 565 calls a seed). Over days the silent arm (S) cuts the packet
+characters the agent carries all day by 57% and its prompt tokens by 1,731 a task: the Haiku agent's own bill falls
+$0.242 → $0.198 per 1,000 tasks; the same tokens priced at Sonnet's rates **[EST]** fall $4.17 → $3.46.
 
 The agent's own spend is flat to lower with the check (−$0.01 to −$0.05 per 1,000 tasks over days: smaller packets
 in the day's transcript); a silent push adds agent turns one request a session (`ask_context` +0.30 a task, D532).
