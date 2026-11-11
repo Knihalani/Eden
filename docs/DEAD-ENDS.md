@@ -34,7 +34,7 @@ the page for its switch name.
 | D258 | Smaller candidate packets by excerpt size (`pushCandidateBytes`), by not repeating an item within a request (`pushCandidateDedup`) or by a… | hidden facts: −12.8 points |
 | D259 | part of: `pushCandidates` stays 5: three candidates, and three on a session's later requests only (`pushCandidatesLater`), are rejected | hidden −1.6 |
 | D266 | Rejected and deleted: re-ranking the push's candidates with no model. |  |
-| D267 | part of: Rejected and deleted: asks that go past the candidates the agent holds (trial `askPastShown`; A2; code in commit `d096b7ba`) | hidden −0.7 (−6.9..+6.2) |
+| D267 | Rejected and deleted: asks that go past the candidates the agent holds. | hidden −0.7 (−6.9..+6.2) |
 | D268 | Rejected and deleted: candidate excerpts that keep the constraint sentence first. | hidden −2.7 (−8.2..+2.7) |
 | D273 | Four ways to send fewer packet or ask bytes are rejected at $0; the trial switch `pushCandidatesAnchor` is deleted with its code |  |
 | D274 | Rejected: telling the agent the candidates are what an ask would return. | hidden −2.8 points (−9.7..+4.2) |
@@ -84,7 +84,7 @@ the page for its switch name.
 | D241 | A per-user cached item prefix for the reader is not built |  |
 | D345 | A complete poll after a change signal does not stand in for re-reading the doubted copies (`verifyByPoll`, A18): built as a trial… |  |
 | D346 | An ask does not re-read its likely citations beside its poll and live search (`askVerifyEarly`, A18): built as a trial, measured, deleted. |  |
-| D840 | part of: Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0… |  |
+| D840 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. |  |
 
 ## Cards and intent
 

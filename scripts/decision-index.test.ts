@@ -111,10 +111,11 @@ describe("statuses", () => {
         "| D2 | d | **Lab only: a harness flag.** | |",
         "| D3 | d | **Pre-registered: the run.** | |",
         "| D4 | d | **Trial `x` (owner o, ends e): x.** | |",
+        "| D5 | d | **Lab: `days-calls.ts --move-after N`.** | |",
       ],
       ["| X (D4) | `x` | o | e | rule |"],
     );
-    expect([1, 2, 3, 4].map((n) => status(v, `D${n}`))).toEqual(["finding", "lab", "lab", "trial"]);
+    expect([1, 2, 3, 4, 5].map((n) => status(v, `D${n}`))).toEqual(["finding", "lab", "lab", "trial", "lab"]);
   });
 
   test("a row's own lead rejects; the first clause decides", () => {
@@ -127,7 +128,10 @@ describe("statuses", () => {
       "| D6 | d | **Trial `t` (N3), opened and closed: not promoted, deleted.** | |",
       "| D7 | d | **Deleted: `r` with its code.** | |",
       "| D8 | d | **A plain adoption.** | Measured and deleted. |",
+      // D840's shape: the lead says it, though a later word ("holds") reads like a keep.
+      "| D9 | d | **Not kept: re-reading the items the agent holds (`heldReread`), built and screened.** | |",
     ]);
+    expect(status(v, "D9")).toBe("rejected");
     expect(["D1", "D2", "D3"].map((l) => status(v, l))).toEqual(["rejected", "rejected", "rejected"]);
     expect(v.get("D4")).toEqual({ status: "adopted", killedPart: "deleting the graph's code is rejected" });
     expect(status(v, "D5")).toBe("adopted");

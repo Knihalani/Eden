@@ -14,7 +14,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 - **finding**: a measurement recorded as a finding; it decides nothing by itself.
 - **lab**: lab tooling, a pre-registration or a lab-only change; nothing ships.
 
-503 decisions: adopted 306, rejected 96, superseded 25, trial 15, finding 38, lab 23.
+503 decisions: adopted 301, rejected 98, superseded 25, trial 15, finding 38, lab 26.
 
 | # | Date | Decision | Status |
 |---|---|---|---|
@@ -266,7 +266,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D264 | 2026-11-07 | A synced copy the user's cap cut does not answer for its source; the source is searched live (`syncLocalComplete`, in the default; A1) | adopted |
 | D265 | 2026-11-07 | Routing adds, per source, log2(1 + its items among the request's 40 best matches in the user's own index) (`routeLocalHits`, in the… | adopted |
 | D266 | 2026-11-07 | Rejected and deleted: re-ranking the push's candidates with no model. | rejected |
-| D267 | 2026-11-07 | Rejected and deleted: asks that go past the candidates the agent holds. | adopted |
+| D267 | 2026-11-07 | Rejected and deleted: asks that go past the candidates the agent holds. | rejected |
 | D268 | 2026-11-07 | Rejected and deleted: candidate excerpts that keep the constraint sentence first. | rejected |
 | D269 | 2026-11-07 | Where hidden facts are lost under the candidates default, and how the lab measures it (A2; no engine behaviour change). | adopted |
 | D270 | 2026-11-07 | A stronger agent judges the candidates as well (A2, one small check; no engine change). | adopted |
@@ -340,7 +340,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D351 | 2026-11-07 | A key-less request from another site's browser page is refused (A20; amends D280, the dev mode of D9). | adopted |
 | D352 | 2026-11-07 | The keyword rule takes a single- or typographically-quoted value whole (A20; extends D13 and A5's fix). | adopted |
 | D356 | 2026-11-07 | Sources the user does not use are swept weekly, and their unswept copies are re-read before delivery. | adopted |
-| D357 | 2026-11-07 | Lab: `pi-ab --noise-sources N [--noise-items 20]`, `quality-cli --never-used`, and fetch counts in `source-days.bench.ts`. | adopted |
+| D357 | 2026-11-07 | Lab: `pi-ab --noise-sources N [--noise-items 20]`, `quality-cli --never-used`, and fetch counts in `source-days.bench.ts`. | lab |
 | D358 | 2026-11-07 | The 1,000-source default checked live on Pi; the request path's live searches of cut noise copies are the next cost. | adopted |
 | D360 | 2026-11-07 | Rejected and deleted: trial `linkLine`, a no-model line on each push candidate saying what it shares with the request | rejected |
 | D361 | 2026-11-07 | The intent requests' sampling noise, measured with the shipped prompt; D332 is no longer provisional; a second sample is kept | adopted |
@@ -417,7 +417,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D475 | 2026-11-10 | Trial (off): a cold tier for the synced copy (`syncCold`, `syncColdMaxItems` 30,000, `syncColdVerify`). | adopted |
 | D476 | 2026-11-10 | Trial (off): change feeds (`syncDelta`; `Source.changes`, `ChangePage`, `SourceFanout.changes`). | adopted |
 | D477 | 2026-11-10 | Not built: a timer that polls every source by its change rate. | rejected |
-| D478 | 2026-11-10 | Lab: connector kinds and event-trigger prices. | adopted |
+| D478 | 2026-11-10 | Lab: connector kinds and event-trigger prices. | lab |
 | D479 | 2026-11-10 | `syncCold` and `syncDelta` are not promoted; they stay trial switches, off. | rejected |
 | D480 | 2026-11-10 | Trial `intentPrune` (pruning an item's intent requests by a no-model score against the item) is rejected and deleted | rejected |
 | D481 | 2026-11-10 | Finding: the intent requests that share least with their item are the ones that reach hidden facts; the intent index cannot be shrunk by… | finding |
@@ -518,6 +518,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D801 | 2026-11-11 | Finding: tonight's wave (#235–#243) did not lower quality on blind `heldout18`, and on Sonnet's grade raised it; `pushOpen` stays in the… | finding |
 | D802 | 2026-11-11 | Lab only: `heldout18` has been run once and is read; `UNREAD_BLIND` is empty | lab |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
-| D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | adopted |
-| D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | adopted |
+| D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | rejected |
+| D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | lab |
 | D842 | 2026-11-11 | The `caldav` preset names a fetch tool, `caldav_get_event_by_uid`; the sim's calendar never changes in the future; mcpvault keeps no fetch… | adopted |

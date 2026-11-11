@@ -169,7 +169,9 @@ function headOf(row: Row): string {
 }
 
 const FINDING = /^(?:\([^)]*\)\s*)?\**\s*(?:Finding|Findings)\b/i;
-const LAB = /^(?:\([^)]*\)\s*)?\**\s*(?:Lab only|Pre-registered|A measurement is pre-registered|Adopted \(lab)/i;
+const LAB = /^(?:\([^)]*\)\s*)?\**\s*(?:Lab only|Lab:|Pre-registered|A measurement is pre-registered|Adopted \(lab)/i;
+/** A lead that states the verdict outright ("Not kept: …"): the words after it cannot make it a keep. */
+const KILLED_LEAD = /^\W*(?:Not kept|Not taken|Not adopted|Rejected|Killed)\b/i;
 /** A clause that records an idea measured or weighed and not kept. */
 const KILLED =
   /\b(rejected|not built|not taken|not kept|not promoted|killed|ends without promotion|opened and deleted|deleted with (?:its|their) code|is withdrawn|is reverted|not adopted|not reopened|no measurable effect)\b|[,:] deleted\b|^\W*deleted:/i;
@@ -366,6 +368,7 @@ export function classify(rows: Row[], trials: Trial[]): Map<string, Verdict> {
     else if (/^(Measured and deleted|Deleted|No measurable effect)/i.test(r.why)) v = { status: "rejected" };
     // The first clause decides: "X is rejected; Y comes back as a trial" is a rejection, "X stays; removing it is
     // rejected" an adoption whose rejected part still belongs on the dead-ends page.
+    else if (KILLED_LEAD.test(parts[0] ?? "")) v = { status: "rejected" };
     else if (killed.length > 0 && killed[0] === parts[0] && !KEEPS.test(parts[0]!)) v = { status: "rejected" };
     else if (killed.length > 0) v = { status: "adopted", killedPart: killed.join("; ") };
     else v = { status: "adopted" };
