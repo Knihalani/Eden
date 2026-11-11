@@ -16,6 +16,8 @@ import {
   loadCards,
   loadRequests,
   samePath,
+  SHIPPED_PATH,
+  shippedUncovered,
 } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
 import { INTENT_INERT } from "./reader-stub";
@@ -315,7 +317,7 @@ describe("the harnesses' intent replay (D158)", () => {
   test("default replays the checked-in file only where it covers every suite and seed", () => {
     expect(harnessIntent("default", run)).toEqual({
       files: [INTENT_PATH],
-      note: "intent-v2.jsonl.gz by default, D158",
+      note: "intent-v2.jsonl.gz by default, D158; coverage full: every item, D714",
     });
     expect(harnessIntent("default", { ...run, suites: ["train1", "heldout10"], seeds: ["41", "42"] }).files).toEqual([
       INTENT_PATH,
@@ -375,4 +377,15 @@ describe("the harnesses' intent replay (D158)", () => {
       }
     }
   }, 180_000); // Twenty-four worlds now (held-out 13 to 18), six times the earlier four.
+});
+
+// P7 (D872): the shipped-coverage file covers every suite its decisions name, so `--coverage shipped` never refuses
+// the end-of-wave heldout19 read, and the checked-in file is there.
+describe("shipped coverage (D872)", () => {
+  test("covers train, reworded, longtail and heldout19 on seeds 41-44, and nothing else", () => {
+    expect(shippedUncovered(["train1", "train6r", "longtail", "heldout19"], [41, 42, 43, 44])).toEqual([]);
+    expect(shippedUncovered(["heldout18"], [41])).toEqual(["heldout18 seed 41"]);
+    expect(shippedUncovered(["train1"], [45])).toEqual(["train1 seed 45"]);
+    expect(existsSync(SHIPPED_PATH)).toBe(true);
+  });
 });

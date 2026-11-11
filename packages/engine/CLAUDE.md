@@ -137,7 +137,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lane with the batches they had. One lane (`cardsLanes: 1`, part `cards`) is `drain` itself with no wrapper: keep it
   so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
   sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
-  sentence. Re-run the default funnel after touching it (315 / 276, card calls 382–392 by load).
+  sentence. Re-run the default funnel after touching it (`--coverage full`: 315 / 276, card calls 382–392 by load;
+  the default, shipped coverage since D877: 281 / 264).
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool

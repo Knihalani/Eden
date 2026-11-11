@@ -112,6 +112,17 @@ class FunnelPlan(unittest.TestCase):
         self.assertLess(cmd.index("--jobs"), cmd.index("--"))
         self.assertGreater(cmd.index("--noise-sources"), cmd.index("--"))
 
+    def test_funnel_shards_share_one_coverage(self):
+        # D877: funnel.ts picks shipped coverage per run where it covers it; a grid's shards must not mix indexes.
+        shards = plan.plan_funnel("train1,heldout13", "41-44", "f", ["--blind"])
+        for s in shards:
+            cmd = plan.shard_command(s)
+            self.assertEqual(cmd[cmd.index("--coverage") + 1], "full")
+        named = plan.plan_funnel("train1", "41", "f", ["--coverage", "shipped"])[0]
+        cmd = plan.shard_command(named)
+        self.assertEqual(cmd.count("--coverage"), 1)
+        self.assertEqual(cmd[cmd.index("--coverage") + 1], "shipped")
+
     def test_funnel_refuses_live_calls_and_owned_flags(self):
         with self.assertRaises(plan.PlanError):
             plan.plan_funnel("train1", "41", "f", ["--", "--reader", "live"])
