@@ -64,6 +64,15 @@ def pairs_of(path, every=1):
 
 def load_teacher(path):
     ck = torch.load(path, map_location="cpu", weights_only=False)
+    if "cfg" in ck:
+        # A full-width float Student (this file's own teacher run): the same network as binnet's PairTag, renamed.
+        st = ck["state"]
+        m = {"w": "enc.w", "l1": "l1.w", "out.weight": "head.weight", "out.bias": "head.bias"}
+        ren = {}
+        for k, v in st.items():
+            k2 = m.get(k) or k.replace("norm.", "enc.norm.", 1).replace("n1.", "l1.norm.", 1)
+            ren[k2 if not k.startswith(("norm.", "n1.")) else k2] = v
+        ck = {"state": ren, "float": True, "bits": ck["cfg"]["d"]}
     net = B.PairTag(B.Q(ck["float"]), ck["bits"])
     net.load_state_dict(ck["state"])
     net.eval()
@@ -76,13 +85,298 @@ def score_net(net, P, bs=512):
                       for a in range(0, len(P), bs)]).tolist()
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Training: texts hashed once (binnet.grams, 2^16 buckets; a smaller table takes the id modulo its size, the same as
+# hashing into it), pairs as text indices, the teacher's codes and logits precomputed.
+
+
+class Corpus:
+    def __init__(self):
+        self.index, self.texts, self.ids = {}, [], []
+
+    def add(self, t):
+        if t not in self.index:
+            self.index[t] = len(self.texts)
+            self.texts.append(t)
+            self.ids.append(B.grams(t) or [0])
+        return self.index[t]
+
+    def pairs(self, P):
+        return torch.tensor([[self.add(a), self.add(b), y] for a, b, y in P], dtype=torch.long)
+
+    def bag(self, idx):
+        """embedding_bag's (ids, offsets) for these texts."""
+        ids, offs = [], []
+        for i in idx.tolist():
+            offs.append(len(ids))
+            ids += self.ids[i]
+        return torch.tensor(ids), torch.tensor(offs)
+
+
+def fake_q(w, mode, dim=1):
+    """Quantise-and-dequantise with a straight-through gradient: int8 / int4 with one scale a row, or ternary."""
+    if mode == "float":
+        return w
+    if mode == "ternary":
+        return B.ternary(w)
+    lv = {"int8": 127, "int4": 7}[mode]
+    s = w.detach().abs().amax(dim=dim, keepdim=True).clamp_min(1e-8) / lv
+    return w + ((w / s).round().clamp(-lv, lv) * s - w).detach()
+
+
+class StraightRound(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        return x.round()
+
+    @staticmethod
+    def backward(ctx, g):
+        return g
+
+
+class Student(nn.Module):
+    """The family of H10 networks.
+
+    Encoder (runs once an item, at ingest): a hashed n-gram table of `buckets` rows, either `d` wide or `r` wide then
+    a dense r->d projection (low rank); table weights float, int8 or int4 (a scale a row) or ternary; batch norm; tanh
+    (code stored as int8, `code` "int8") or sign (code stored as bits, `code` "bits").
+    Head (runs a pair): [a, b, a*b] -> `h` units (float or binary weights) -> tanh or sign -> one logit."""
+
+    def __init__(self, buckets=1 << 16, d=256, r=0, table="float", code="float", h=64, head="float", hact="tanh"):
+        super().__init__()
+        self.cfg = dict(buckets=buckets, d=d, r=r, table=table, code=code, h=h, head=head, hact=hact)
+        self.buckets = buckets
+        self.table = table
+        self.code = code
+        self.w = nn.Parameter(torch.randn(buckets, r or d) * 0.01)
+        self.proj = nn.Linear(r, d, bias=False) if r else None
+        self.norm = nn.BatchNorm1d(d)
+        self.head_mode, self.hact = head, hact
+        self.l1 = nn.Parameter(torch.randn(h, 3 * d) * (1 / (3 * d)) ** 0.5)
+        self.n1 = nn.BatchNorm1d(h)
+        self.out = nn.Linear(h, 1)
+
+    def pre(self, ids, offs):
+        W = fake_q(self.w, self.table)
+        x = nn.functional.embedding_bag(ids % self.buckets, W, offs, mode="sum")
+        if self.proj is not None:
+            x = self.proj(x)
+        return self.norm(x)
+
+    def act(self, x):
+        if self.code == "bits":
+            return B.Sign.apply(x)
+        t = torch.tanh(x)
+        if self.code == "int8":
+            t = StraightRound.apply(t * 127) / 127
+        return t
+
+    def pair(self, a, b):
+        W = self.l1
+        if self.head_mode == "binary":
+            W = B.binary(W)
+        elif self.head_mode == "int8":
+            W = fake_q(W, "int8")
+        z = self.n1(torch.cat([a, b, a * b], -1) @ W.T)
+        z = B.Sign.apply(z) if self.hact == "sign" else torch.tanh(z)
+        return self.out(z).squeeze(-1)
+
+    def size_bytes(self):
+        """The shared model as shipped: the table at its storage width (+ fp16 row scales), the rest float32 except
+        a binary head's signs (bits) or an int8 head (a byte each)."""
+        rows, cols = self.w.shape
+        width = {"float": 4, "int8": 1, "int4": 0.5, "ternary": 0.25}[self.table]
+        n = rows * cols * width + (2 * rows if self.table in ("int8", "int4") else 0)
+        if self.proj is not None:
+            n += self.proj.weight.numel() * 4
+        n += 2 * 4 * self.norm.num_features
+        lw = {"float": 4, "int8": 1, "binary": 1 / 8}[self.head_mode]
+        n += self.l1.numel() * lw + 4 * self.l1.shape[0] * 3 + 4 * (self.out.weight.numel() + 1)
+        return int(n)
+
+    def code_bytes(self):
+        d = self.norm.num_features
+        return {"bits": d // 8, "int8": d, "float": 4 * d}[self.code]
+
+
+def teacher_codes(teacher, corpus, idx, bs=1024):
+    """The float teacher's pre-activation (after its batch norm) for texts, for code distillation."""
+    out = []
+    with torch.no_grad():
+        for a in range(0, len(idx), bs):
+            ids, offs = corpus.bag(idx[a : a + bs])
+            h = nn.functional.embedding_bag(ids, teacher.enc.w, offs, mode="sum")
+            out.append(teacher.enc.norm(h))
+    return torch.cat(out)
+
+
+def teacher_logits(teacher, codes, P):
+    with torch.no_grad():
+        a, b = torch.tanh(codes[P[:, 0]]), torch.tanh(codes[P[:, 1]])
+        z = teacher.l1(torch.cat([a, b, a * b], -1))
+        return teacher.head(torch.tanh(z)).squeeze(-1)
+
+
+@torch.no_grad()
+def eval_student(net, corpus, P, bs=2048):
+    net.eval()
+    texts = torch.unique(P[:, :2])
+    pos = torch.full((len(corpus.texts),), -1, dtype=torch.long)
+    pos[texts] = torch.arange(len(texts))
+    codes = []
+    for a in range(0, len(texts), bs):
+        codes.append(net.act(net.pre(*corpus.bag(texts[a : a + bs]))))
+    codes = torch.cat(codes)
+    p = net.pair(codes[pos[P[:, 0]]], codes[pos[P[:, 1]]]).tolist()
+    net.train()
+    return metrics(p, P[:, 2].tolist()), p
+
+
+def train(o):
+    random.seed(o.seed)
+    torch.manual_seed(o.seed)
+    t0 = time.time()
+    corpus = Corpus()
+    tr = corpus.pairs(pairs_of(o.train))
+    dev = corpus.pairs(pairs_of(o.dev))
+    evs = {os.path.basename(p): corpus.pairs(pairs_of(p)) for p in o.eval}
+    extra = torch.empty(0, dtype=torch.long)
+    if o.extra_texts:
+        # Unlabelled items of the training worlds, for code distillation only.
+        for line in open(o.train):
+            for i in json.loads(line)["items"]:
+                corpus.add(f"{i['title']}\n{i['text']}")
+        extra = torch.arange(len(corpus.texts))
+    print(json.dumps({"texts": len(corpus.texts), "train_pairs": len(tr), "dev_pairs": len(dev), "s": round(time.time() - t0)}),
+          flush=True)
+    teacher = None
+    if o.teacher:
+        teacher, _ = load_teacher(o.teacher)
+        tcodes = teacher_codes(teacher, corpus, torch.arange(len(corpus.texts)))
+        tlog = teacher_logits(teacher, tcodes, tr)
+        print(json.dumps({"teacher_dev": metrics(teacher_logits(teacher, tcodes, dev).tolist(), dev[:, 2].tolist())}),
+              flush=True)
+    net = Student(buckets=1 << o.log_buckets, d=o.d, r=o.r, table=o.table, code=o.code, h=o.h, head=o.head,
+                  hact=o.hact)
+    if o.init and teacher is not None:
+        init_from_teacher(net, teacher, o)
+    opt = torch.optim.Adam(net.parameters(), lr=o.lr)
+    steps_per_epoch = (len(tr) + o.bs - 1) // o.bs
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=o.lr, total_steps=o.epochs * steps_per_epoch, pct_start=0.1)
+    best, best_state, log = None, None, []
+    for ep in range(o.epochs):
+        perm = torch.randperm(len(tr))
+        if o.hard and teacher is not None:
+            # Hard negatives: negatives the teacher scores high are drawn again (up to `hard` extra copies).
+            w = torch.where(tr[:, 2] == 0, torch.sigmoid(tlog) * o.hard, torch.zeros(len(tr)))
+            extra_draw = torch.nonzero(torch.rand(len(tr)) < w).squeeze(-1)
+            perm = torch.cat([perm, extra_draw])[torch.randperm(len(perm) + len(extra_draw))]
+        for s in range(0, len(perm), o.bs):
+            bi = perm[s : s + o.bs]
+            P = tr[bi]
+            u, inv = torch.unique(P[:, :2], return_inverse=True)
+            if o.code_kd and len(extra):
+                ex = extra[torch.randint(len(extra), (o.bs,))]
+                u2 = torch.cat([u, ex])
+            else:
+                u2 = u
+            pre = net.pre(*corpus.bag(u2))
+            c = net.act(pre[: len(u)])
+            logit = net.pair(c[inv[:, 0]], c[inv[:, 1]])
+            y = P[:, 2].float()
+            loss = nn.functional.binary_cross_entropy_with_logits(logit, y)
+            if teacher is not None and o.kd > 0:
+                T = o.temp
+                soft = torch.sigmoid(tlog[bi] / T)
+                loss = loss + o.kd * nn.functional.binary_cross_entropy_with_logits(logit / T, soft) * T * T
+            if teacher is not None and o.code_kd > 0:
+                loss = loss + o.code_kd * nn.functional.mse_loss(pre, tcodes[u2])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            if sched.last_epoch < sched.total_steps - 1:
+                sched.step()
+        m, _ = eval_student(net, corpus, dev)
+        key = m["recall@p0.95"] + m["auc"]
+        row = {"epoch": ep, "dev": m, "loss": round(float(loss.detach()), 4), "s": round(time.time() - t0)}
+        if best is None or key > best:
+            best = key
+            best_state = {k: v.clone() for k, v in net.state_dict().items()}
+            row["best"] = True
+        log.append(row)
+        print(json.dumps(row), flush=True)
+    net.load_state_dict(best_state)
+    res = {"variant": o.name, "cfg": net.cfg, "size_bytes": net.size_bytes(), "code_bytes": net.code_bytes(),
+           "dev": max(log, key=lambda r: r["dev"]["recall@p0.95"] + r["dev"]["auc"])["dev"]}
+    for name, P in evs.items():
+        res[name] = eval_student(net, corpus, P)[0]
+    res["seconds"] = round(time.time() - t0)
+    print("RESULT", json.dumps(res), flush=True)
+    if o.save:
+        torch.save({"state": net.state_dict(), "cfg": net.cfg, "args": vars(o), "result": res}, o.save)
+    if o.out:
+        json.dump({"result": res, "log": log}, open(o.out, "w"), indent=1)
+    return res
+
+
+def init_from_teacher(net, teacher, o):
+    """Start a student from the teacher: the table by truncated SVD (low rank) or modulo-folding (fewer buckets), the
+    batch norm and the head copied when shapes match."""
+    W = teacher.enc.w.detach()
+    nb = net.buckets
+    if nb < W.shape[0]:
+        W = W.view(-1, nb, W.shape[1]).sum(0)  # rows that share an id modulo nb add, as their sums would
+    with torch.no_grad():
+        if net.proj is not None:
+            U, S, V = torch.linalg.svd(W, full_matrices=False)
+            r = net.w.shape[1]
+            net.w.copy_(U[:, :r] * S[:r])
+            net.proj.weight.copy_(V[:r].T)
+        elif net.w.shape == W.shape:
+            net.w.copy_(W)
+        if net.norm.num_features == teacher.enc.norm.num_features:
+            net.norm.load_state_dict(teacher.enc.norm.state_dict())
+            if net.l1.shape == teacher.l1.w.shape:
+                net.l1.copy_(teacher.l1.w)
+                net.n1.load_state_dict(teacher.l1.norm.state_dict())
+                net.out.load_state_dict(teacher.head.state_dict())
+
+
 if __name__ == "__main__":
     a = argparse.ArgumentParser()
-    a.add_argument("cmd", choices=["score", "teach"])
-    a.add_argument("--model", required=True)
-    a.add_argument("--pairs", nargs="+", required=True)
+    a.add_argument("cmd", choices=["score", "teach", "train"])
+    a.add_argument("--model", default="")
+    a.add_argument("--pairs", nargs="+", default=[])
     a.add_argument("--out", default="")
+    # train
+    a.add_argument("--name", default="run")
+    a.add_argument("--train", default="")
+    a.add_argument("--dev", default="")
+    a.add_argument("--eval", nargs="*", default=[])
+    a.add_argument("--teacher", default="")
+    a.add_argument("--init", action="store_true", help="start from the teacher (SVD / folding / copied head)")
+    a.add_argument("--log-buckets", type=int, default=16)
+    a.add_argument("--d", type=int, default=256)
+    a.add_argument("--r", type=int, default=0)
+    a.add_argument("--table", default="float", choices=["float", "int8", "int4", "ternary"])
+    a.add_argument("--code", default="float", choices=["float", "int8", "bits"])
+    a.add_argument("--h", type=int, default=64)
+    a.add_argument("--head", default="float", choices=["float", "int8", "binary"])
+    a.add_argument("--hact", default="tanh", choices=["tanh", "sign"])
+    a.add_argument("--kd", type=float, default=0.0, help="weight of the teacher's soft scores")
+    a.add_argument("--temp", type=float, default=2.0)
+    a.add_argument("--code-kd", type=float, default=0.0, help="weight of matching the teacher's pre-activation codes")
+    a.add_argument("--extra-texts", action="store_true", help="all training-world items for code distillation")
+    a.add_argument("--hard", type=float, default=0.0, help="extra draws of teacher-hard negatives (expected copies)")
+    a.add_argument("--epochs", type=int, default=4)
+    a.add_argument("--bs", type=int, default=128)
+    a.add_argument("--lr", type=float, default=2e-3)
+    a.add_argument("--seed", type=int, default=7)
+    a.add_argument("--save", default="")
     o = a.parse_args()
+    if o.cmd == "train":
+        train(o)
+        sys.exit(0)
     net, ck = load_teacher(o.model)
     t0 = time.time()
     if o.cmd == "score":
