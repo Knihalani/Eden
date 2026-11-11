@@ -22,6 +22,9 @@ import { WorldSchema, type SynthItem, type SynthWorld } from "./schema";
 
 type Variant = "hidden" | "control" | "neutral";
 
+/** Base-world slots a synth suite wrote: a later synth suite planted into the same world leaves them alone. */
+const WRITTEN = new WeakSet<WorldItem>();
+
 /** Reads a worlds file (JSON lines), each parsed by the schema: a malformed world is an error, not a skip. */
 export function readWorlds(path: string): SynthWorld[] {
   if (!existsSync(path))
@@ -82,7 +85,10 @@ export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) 
     const renames = ws.map((w) => renamer(w, world.user));
     // Background and neutral items take the place of base noise items, spread evenly over them.
     // Items carrying a planted secret stay: the harnesses' secret checks are built from the base world.
-    const noise = world.items.map((it, i) => (it.noise && !it.secret ? i : -1)).filter((i) => i >= 0);
+    // Nor are slots another synth suite already wrote (two synth suites in one `--days` user).
+    const noise = world.items
+      .map((it, i) => (it.noise && !it.secret && !WRITTEN.has(it) ? i : -1))
+      .filter((i) => i >= 0);
     const extra = ws.flatMap((w, k) => {
       const planted = new Set(w.tasks.flatMap((t) => [t.fact, t.decoy]));
       return w.items.filter((i) => !planted.has(i.id)).map((it) => ({ it, rename: renames[k]! }));
@@ -92,7 +98,9 @@ export function plantSynth(name: string, load: () => SynthWorld[], perSeed = 1) 
     extra.forEach(({ it, rename }, k) => {
       const at = noise[k * step]!;
       const ref = world.items[at]!.ref;
-      world.items[at] = { ...toWorldItem(it, ref, world.now, rename), noise: true };
+      const written = { ...toWorldItem(it, ref, world.now, rename), noise: true };
+      WRITTEN.add(written);
+      world.items[at] = written;
     });
     for (const w of ws) for (const [id, description] of Object.entries(w.sources)) world.sources[id] ??= description;
     const suite = variant === "hidden" ? name : `${name}-${variant}`;
