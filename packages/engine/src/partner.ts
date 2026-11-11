@@ -109,7 +109,7 @@ import {
   daysNamed,
   isAction,
   isImperative,
-  isOpenRequest,
+  pushStart,
   MORE_VERBS,
   LEADING,
   isScheduling,
@@ -869,14 +869,17 @@ export class ContextPartner {
     const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
     // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list. Not with
     // `pushCheck`: an opened push would add the check's paid call, which D702 did not measure or cost.
-    const listed = event.kind === "user_message" && isImperative(event.text, MORE_VERBS);
-    const opened =
-      !listed &&
-      event.kind === "user_message" &&
-      this.config.pushOpen &&
-      this.config.pushCandidates > 0 &&
-      !this.config.pushCheck &&
-      isOpenRequest(event.text);
+    // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
+    // and the push's lookup is given that imperative; the open shape then refuses log lines and chatter.
+    const start =
+      event.kind === "user_message"
+        ? pushStart(event.text, {
+            open: this.config.pushOpen && this.config.pushCandidates > 0 && !this.config.pushCheck,
+            indirect: this.config.pushIndirect,
+          })
+        : null;
+    const listed = start?.how === "listed";
+    const opened = start?.how === "opened";
     if (opened) internal.open = true;
     const push =
       this.config.readerPush &&
@@ -889,7 +892,7 @@ export class ContextPartner {
       (listed || opened)
         ? // The question as an ask may carry it (`checkAsk`'s cap): the event's own cap is 100 times that, and the
           // ask redacts and tokenizes it before its first await, on the observe's critical path.
-          this.ask({ ...event, question: head(event.text, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
+          this.ask({ ...event, question: head(start!.request, MAX_QUESTION_CHARS), maxItems: 5 }, internal).catch(
             () => null,
           )
         : null;

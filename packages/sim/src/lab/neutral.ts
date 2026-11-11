@@ -25,6 +25,13 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "train4",
   "train5",
   "train6",
+  // P2's reworded train (reword.ts): the same neutral tasks, reworded.
+  "train1rw",
+  "train2rw",
+  "train3rw",
+  "train4rw",
+  "train5rw",
+  "train6rw",
 ];
 
 export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);

@@ -768,6 +768,13 @@ export interface EngineConfig {
    * acting request for plan alerts (D301).
    */
   pushOpen: boolean;
+  /**
+   * P2 (D820; a trial, off; docs/research/p2-push-check.md): the push also starts for a request phrased as a need, a
+   * plan, a wish or a question about acting ("I need to pay …", "We should move …", "I want you to book …", "Should I
+   * book …?"), read as the imperative after its lead-in (`indirectRest`, `pushStart`), and the open shape refuses
+   * pasted log lines and chatter openers (`isOpenRequest`'s strict form). The push's lookup reads the imperative.
+   */
+  pushIndirect: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -939,6 +946,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSilent: true,
   pushCheckAnchored: false,
   pushOpen: true,
+  pushIndirect: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

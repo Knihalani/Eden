@@ -31,6 +31,7 @@ import { plantTrain3 } from "./hidden-train3";
 import { plantTrain4 } from "./hidden-train4";
 import { plantTrain5 } from "./hidden-train5";
 import { plantTrain6 } from "./hidden-train6";
+import { formOf, rewordOf } from "./reword";
 
 export type { HiddenTask };
 /** `neutral` (RealUse-1): the same requests, nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
@@ -65,6 +66,19 @@ const withNeutral =
       return { ...t, id: t.id.replace(from, `:${name}-neutral:`) };
     });
   };
+
+/**
+ * P2 (Q6, `reword.ts`): a train suite with its requests reworded into indirect forms ("I need to pay …", "Should I
+ * book …?"). The world and every draw are the original's; ids read `<suite>rw` so a run keeps them apart.
+ */
+const reworded =
+  (name: string, plant: Plant): Plant =>
+  (world, seed, variant) =>
+    plant(world, seed, variant).map((t) => ({
+      ...t,
+      id: t.id.replace(`:${name}`, `:${name}rw`),
+      text: rewordOf(t.text, formOf(t.template)) ?? t.text,
+    }));
 
 export const SUITES: Record<string, Plant> = {
   hidden: twoVariant("hidden", plantHidden),
@@ -126,10 +140,19 @@ export const SUITES: Record<string, Plant> = {
   train4: withNeutral("train4", plantTrain4),
   train5: withNeutral("train5", plantTrain5),
   train6: withNeutral("train6", plantTrain6),
+  // P2's reworded train (Q6): the same tasks, indirect wording. Tune on them as on train; not in `all`.
+  ...Object.fromEntries(
+    [plantTrain1, plantTrain2, plantTrain3, plantTrain4, plantTrain5, plantTrain6].map((p, i) => {
+      const name = `train${i + 1}`;
+      return [`${name}rw`, reworded(name, withNeutral(name, p))];
+    }),
+  ),
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
+/** P2's reworded train (`train-rw`, `reword.ts`). */
+const TRAIN_RW = TRAIN.map((n) => `${n}rw`);
 /**
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
@@ -152,11 +175,11 @@ export const UNRUN_BLIND = [
 /** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
  * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802): none is unread now; a blind round needs a new suite. */
 export const UNREAD_BLIND: string[] = [];
-const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
+const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !TRAIN_RW.includes(n));
 
 /**
  * A `--suite` value: a comma list of suite names, `all` (every suite but those in UNRUN_BLIND), `heldout-all`, or
- * `train` (the six broad tuning suites);
+ * `train` (the six broad tuning suites), `train-rw` (the same, reworded: P2, `reword.ts`);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {
@@ -164,10 +187,19 @@ export function parseSuites(arg: string): string[] {
   for (const raw of arg.split(",")) {
     const name = raw.trim();
     if (!name) continue;
-    const names = name === "all" ? ALL : name === "heldout-all" ? HELDOUT_ALL : name === "train" ? TRAIN : [name];
+    const names =
+      name === "all"
+        ? ALL
+        : name === "heldout-all"
+          ? HELDOUT_ALL
+          : name === "train"
+            ? TRAIN
+            : name === "train-rw"
+              ? TRAIN_RW
+              : [name];
     for (const n of names) {
       if (!(n in SUITES))
-        throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train)`);
+        throw new Error(`unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, train-rw)`);
       if (!out.includes(n)) out.push(n);
     }
   }

@@ -75,6 +75,8 @@ export const INTENT_FILE = "intent-v2.jsonl.gz";
 export const INTENT_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", INTENT_FILE);
 export const INTENT_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+  // P2's reworded train: the same worlds (only the request's words differ), so the same file covers it.
+  ...Object.fromEntries(parseSuites("train-rw").map((s) => [s, ["41", "42", "43", "44"]])),
   heldout10: ["41", "42"],
   heldout11: ["41", "42"],
   heldout13: ["41", "42", "43", "44"],

@@ -104,11 +104,14 @@ const OPEN_HEAD_CHARS = 400;
  * bonds cover it" too: a polite opener not followed by "you"), a statement's ("I think …", "The boiler …") or a
  * request to be told ("let me know …"). A question mark is allowed only on a polite ask ("Could you …?"). It errs
  * towards yes for anything else (a pasted log line passes): the candidates' own gate still decides the packet.
- * Bounded: it reads the first `OPEN_HEAD_CHARS` characters and the last few.
+ * Bounded: it reads the first `OPEN_HEAD_CHARS` characters and the last few. `strict` (`pushIndirect`, D820) also
+ * refuses log lines (`looksLogged`) and chatter openers (`CHATTER`); `minWords` is 2 for the request after an
+ * indirect lead-in (`pushStart`).
  */
-export function isOpenRequest(raw: string): boolean {
+export function isOpenRequest(raw: string, strict = false, minWords = 4): boolean {
   const words = raw.slice(0, OPEN_HEAD_CHARS).trim().split(/\s+/, 12);
-  if (words.length < 4) return false;
+  if (words.length < minWords) return false;
+  if (strict && looksLogged(raw)) return false;
   const clean = (w: string | undefined) => (w ?? "").toLowerCase().replace(/[^\p{L}-]/gu, "");
   let i = 0;
   let polite = false;
@@ -122,10 +125,104 @@ export function isOpenRequest(raw: string): boolean {
   }
   const first = clean(words[i]);
   if (!first || REMARKS.has(first) || ASKING.has(first) || STATING.has(first)) return false;
+  if (strict && (CHATTER.has(first) || STATING_STRICT.has(first))) return false;
   const next = clean(words[i + 1]);
   if (TELL_ME.has(first) && (next === "me" || next === "us")) return false;
   if (/\?\s*$/.test(raw.slice(-32))) return polite;
   return true;
+}
+
+/**
+ * `pushIndirect` (P2, D820; a trial, off): chatter openers a remark starts with beyond `REMARKS` ("haha, …", "ugh …",
+ * "morning! …"), and contractions `isOpenRequest` reads as words once their apostrophe is stripped ("I'd", "Let's",
+ * "we'd": statements or the indirect lead-ins `indirectRest` reads). Only with the switch.
+ */
+const CHATTER = new Set(
+  (
+    "anyway anyways haha hahaha lol lmao ugh argh oh ah aw aww wow omg yay meh hmm hm morning evening afternoon " +
+    "night hello hiya brb fyi btw fun good welcome congrats whew phew"
+  ).split(" "),
+);
+const STATING_STRICT = new Set("id lets wed youd theyd youre theyre youve theyve hes shes".split(" "));
+
+/**
+ * `pushIndirect` (D820): a pasted log line, not a request (`isOpenRequest`'s strict form). A level word in capitals,
+ * a timestamp, an address, an HTTP request line, a traceback or exit code, or a message whose words are mostly
+ * symbols and numbers (a third or more of them, amounts aside; the train requests reach 0.18).
+ */
+const LOG_LEVEL = /\b(?:ERROR|ERR!?|WARN(?:ING)?|INFO|DEBUG|FATAL|TRACE|CRITICAL)\b/;
+const LOG_MARK =
+  /traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
+function looksLogged(raw: string): boolean {
+  const head = raw.slice(0, OPEN_HEAD_CHARS);
+  if (LOG_LEVEL.test(head) || LOG_MARK.test(head)) return true;
+  const words = head.trim().split(/\s+/);
+  const symbolic = words.filter((w) => {
+    const t = w.replace(/[,.;!?]+$/, "");
+    return /[\d:/=[\]_#{}()<>|\\]/.test(t) && !/^[£$€]?[\d,]+(?:\.\d+)?[kKmM]?$/.test(t);
+  }).length;
+  return words.length >= 4 && symbolic / words.length >= 0.3;
+}
+
+/**
+ * `pushIndirect` (D820): lead-ins that turn an imperative into a need, a plan, a wish or a question about acting
+ * ("I need to pay …", "We should move …", "I want you to book …", "Should I book …?", "Can I cancel …?", "Is it OK to
+ * renew …?"). `isOpenRequest` reads them as statements or questions, so the push never started for them.
+ */
+const INDIRECT =
+  /^(?:i\s+(?:really\s+)?(?:need|have|want|got)\s+to|i\s+(?:must|should)|i(?:'|’)?ve\s+got\s+to|i(?:'|’)d\s+like\s+to|i\s+would\s+like\s+to|we\s+(?:really\s+)?(?:need|have|want|got)\s+to|we\s+(?:must|should)|we(?:'|’)d\s+(?:like\s+to|better)|let(?:'|’)?s|let\s+us|should\s+(?:i|we)|(?:can|could|may)\s+(?:i|we)|is\s+it\s+ok(?:ay)?\s+to|(?:i|we)(?:'|’)?d\s+like\s+you\s+to|(?:i|we)\s+(?:want|need|would\s+like)\s+you\s+to|time\s+to)\s+/i;
+/** Verbs after a lead-in that think, say or wait rather than act ("I need to think …", "Let's see how …"). */
+const NOT_ACTING = new Set(
+  (
+    "know think see say admit wonder believe feel understand remember hear learn be have look figure decide wait " +
+    "sleep talk mention point note consider worry rest relax celebrate"
+  ).split(" "),
+);
+/** Adverbs a lead-in may carry before its verb ("We should probably …"). */
+const ADVERBS = new Set("really probably maybe definitely just still also quickly actually perhaps".split(" "));
+
+/**
+ * `pushIndirect` (P2, D820; a trial, off): the request inside an indirect lead-in, verb first, with no closing
+ * question mark ("Should I book the 7am flight to Leeds?" is "book the 7am flight to Leeds"), or null when the
+ * message has no lead-in (after `OPENERS`), when what follows is under two words, or when its verb thinks or waits
+ * (`NOT_ACTING`). The push then reads the request as its imperative: listed or opened as any other.
+ */
+export function indirectRest(raw: string): string | null {
+  let head = raw.slice(0, OPEN_HEAD_CHARS).trim();
+  // Openers before the lead-in ("ok so I need to …", "hey, should we …"); a polite "can you" is not one here.
+  for (let i = 0; i < 4; i++) {
+    const m = /^([\p{L}]+)[,!]?\s+/u.exec(head);
+    if (!m || !OPENERS.has(m[1]!.toLowerCase()) || POLITE.has(m[1]!.toLowerCase())) break;
+    head = head.slice(m[0].length);
+  }
+  const lead = INDIRECT.exec(head);
+  if (!lead) return null;
+  let words = head.slice(lead[0].length).trim().split(/\s+/);
+  while (words.length > 0 && ADVERBS.has(words[0]!.toLowerCase())) words = words.slice(1);
+  if (words.length < 2) return null;
+  if (NOT_ACTING.has(words[0]!.toLowerCase().replace(/[^\p{L}]/gu, ""))) return null;
+  return words.join(" ").replace(/\s*\?\s*$/, "");
+}
+
+/**
+ * How a user message starts the push: "listed" (its verb is on a list: an acting request), "opened" (`pushOpen`'s
+ * shape) or null. With `indirect` (`pushIndirect`, D820) an indirect lead-in is read as its imperative
+ * (`indirectRest`, whose text is returned as `request`), and `isOpenRequest` runs strict (no log lines, no chatter).
+ */
+export function pushStart(
+  raw: string,
+  opts: { open: boolean; indirect: boolean },
+): { how: "listed" | "opened"; request: string } | null {
+  if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
+  const rest = opts.indirect ? indirectRest(raw) : null;
+  if (rest !== null) {
+    if (isImperative(rest, MORE_VERBS)) return { how: "listed", request: rest };
+    // The lead-in is the request's frame; what follows is read as the open shape reads a message's head.
+    // Two words are enough here: the lead-in already made it a request ("Let's cash in the bonds").
+    if (opts.open && isOpenRequest(rest, true, 2)) return { how: "opened", request: rest };
+    return null;
+  }
+  return opts.open && isOpenRequest(raw, opts.indirect) ? { how: "opened", request: raw } : null;
 }
 
 /**
