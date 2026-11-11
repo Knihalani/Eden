@@ -63,3 +63,28 @@ days) behind a trial switch.
 Zero-shot (no training), held-out days hidden @15: lexical 113; bge-small-en-v1.5 alone 78, hybrid 117–118;
 opensearch-neural-sparse-encoding-doc-v2-mini (inference-free) alone 103, hybrid 115–116. Decoys @15 (control):
 lexical 85; dense hybrid 87, sparse hybrid 93–95.
+
+## 3. Results on fold A (train on train1–4, held out train5–6), as they land
+
+Held-out days requests: 157 hidden, 148 control. Lexical pool: facts @15 113, @5 102; decoys @15 85. The bar: facts
+@15 ≥ 137 and decoys' ratio ≤ facts' ratio (`m3r/score.py --brief`, "BAR" lines). Each run: 300 export worlds,
+train1–4 tasks (38,400 examples, 4 hard negatives each), one epoch unless said, on a Modal A10.
+
+| run | family, base | variant | facts @15 | decoys @15 | facts @5 | bar |
+|---|---|---|---|---|---|---|
+| dense-zs | dense, bge-small-en-v1.5, untrained | hybrid k 15 | 118 | 87 | 104 | fail |
+| sparse-zs | sparse, opensearch doc-v2-mini, untrained | model alone | 103 | 87 | 95 | fail |
+| dense-a1 | dense, bge-small-en-v1.5 | hybrid k 10 / 15 | 137 / 138 | 104 / 104 | 123 / 124 | fail (decoy ratio 1.224 against 1.212 / 1.221) |
+| dense-a2 | the same, 0.3 epoch | hybrid k 15 | 136 | 104 | 121 | fail |
+| dense-a3 | dense, all-MiniLM-L6-v2 | hybrid k 15 | 132 | 112 | 118 | fail |
+| sparse-a1 | sparse (inference-free), FLOPS 0.001 | model alone | 129 | 97 | 103 | fail (+10.2 points; decoy ratio 1.141 against 1.142) |
+| asym-a1 | dense items, token-table query (lr 5e-5) | hybrid k 15 | 123 | 90 | 108 | fail |
+| rerank-a1 | cross-encoder MiniLM-L2 over lexical 50 ∪ dense-a1's 15 | hybrid k 10 / 15 | 138 / 138 | 99 / 98 | 113 / 107 | **pass** (k 5: 134, 97: fail; fragile) |
+
+On the trained-on templates every trained model reaches 276 of 276 facts: they learn the templates, and only the
+held-out rows say anything.
+
+**CPU, one thread, ONNX dynamic int8** (`m3r/cpu_bench.py`, this container's 4-core CPU): dense-a1 (bge-small)
+query 7.1 ms, scoring 3,000 int8 vectors 1.1 ms (numpy), item encoding at ingest 23 ms (256 tokens), 1.15 MB a
+user at 3,000 items; fp32 19 ms and 58 ms. rerank-a1 (MiniLM-L2): **652 ms a request** for 60 pairs (fp32 1.19 s):
+two orders of magnitude over the request path's few milliseconds.

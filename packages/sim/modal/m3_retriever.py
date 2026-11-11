@@ -42,7 +42,7 @@ def item_text(it):
     return f"{it['title']}\n{it['text']}"
 
 
-def build_examples(suites, n_neg, seed=7, max_seeds=0):
+def build_examples(suites, n_neg, seed=7, max_seeds=0, files=("train-worlds.jsonl.gz",)):
     """Per world, one example a task of the named suites: (request, positive, negatives, template). Negatives: the
     decoy twin first, then a draw from the world's other facts and decoys and from its base items, both by TF-IDF
     likeness to the request (the look-alikes over a user's days, D712)."""
@@ -51,10 +51,11 @@ def build_examples(suites, n_neg, seed=7, max_seeds=0):
 
     rng = np.random.default_rng(seed)
     out = []
-    for wi, w in enumerate(worlds("/vol/data/train-worlds.jsonl.gz")):
-        if max_seeds and wi >= max_seeds:
-            break
-        items = w["items"]
+    stream = (w for name in files for wi, w in enumerate(worlds(f"/vol/data/{name}")) if not max_seeds or wi < max_seeds)
+    for w in stream:
+        # Facts and decoys of suites not trained on (the held-out families) leave the world: no held-out text is seen.
+        away = {x for t in w["tasks"] if t["suite"] not in suites for x in (t["pos"], t["decoy"])}
+        items = [i for i in w["items"] if i["id"] not in away]
         texts = [item_text(i) for i in items]
         idx = {i["id"]: k for k, i in enumerate(items)}
         planted = {t["pos"] for t in w["tasks"]} | {t["decoy"] for t in w["tasks"]}
@@ -76,6 +77,12 @@ def build_examples(suites, n_neg, seed=7, max_seeds=0):
             pick = list(rng.permutation(look))[: max(0, (n_neg - len(negs)) // 2)]
             pick += list(rng.permutation(base))[: n_neg - len(negs) - len(pick)]
             negs += pick
+            # Every example gets exactly n_neg negatives (the loss's groups are fixed-size): random items fill a gap.
+            while len(negs) < n_neg:
+                k = int(rng.integers(len(items)))
+                if k not in own and k not in negs:
+                    negs.append(k)
+            negs = negs[:n_neg]
             group.append({"q": t["request"], "pos": texts[idx[t["pos"]]], "neg": [texts[k] for k in negs],
                           "tpl": f"{t['suite']}/{t['template']}"})
         rng.shuffle(group)
@@ -107,6 +114,29 @@ def dense_encoder(base):
         return torch.nn.functional.normalize(v, dim=-1)
 
     return tok, model, enc
+
+
+def static_query(tok, model):
+    """`asym`'s query side: a learned vector a WordPiece token (initialised from the model's input embeddings), the
+    request's tokens averaged with a learned weight each: a table lookup at request time, no network."""
+    import torch
+
+    emb = model.get_input_embeddings().weight.detach().clone().float()
+    table = torch.nn.EmbeddingBag.from_pretrained(emb, freeze=False, mode="sum").cuda()
+    weight = torch.nn.Parameter(torch.ones(emb.shape[0], device="cuda"))
+    special = set(tok.all_special_ids)
+
+    def query(texts, grad=True):
+        ids, offs = [], []
+        for t in tok(texts, truncation=True, max_length=64, add_special_tokens=False)["input_ids"]:
+            offs.append(len(ids))
+            ids += [i for i in t if i not in special] or [tok.unk_token_id]
+        ids_t = torch.tensor(ids, device="cuda")
+        with torch.set_grad_enabled(grad):
+            v = table(ids_t, torch.tensor(offs, device="cuda"), per_sample_weights=torch.relu(weight[ids_t]))
+            return torch.nn.functional.normalize(v, dim=-1)
+
+    return table, weight, query
 
 
 # --------------------------------------------------------------------------------------------------------------- sparse
@@ -154,15 +184,87 @@ def sparse_encoder(base):
 
 
 @app.function(gpu=["L4", "A10G"], volumes={"/vol": vol}, timeout=4 * 3600)
+def rerank_remote(base: str, suites: list, run: str, epochs: float, lr: float, batch: int, n_neg: int, max_len: int,
+                  cands: dict, max_seeds: int, files: list) -> dict:
+    """`rerank`: a cross-encoder trained listwise (each request's positive against its hard negatives, cross-entropy
+    over the group), then each eval request's candidates (`cands`: rid -> ids) re-ordered by its score."""
+    import numpy as np
+    import torch
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    t0 = time.time()
+    torch.manual_seed(7)
+    rng = np.random.default_rng(7)
+    groups = build_examples(set(suites), n_neg, max_seeds=max_seeds, files=files) if epochs > 0 else []
+    tok = AutoTokenizer.from_pretrained(base)
+    model = AutoModelForSequenceClassification.from_pretrained(base, num_labels=1).cuda()
+
+    def score(qs, ds, grad=False):
+        b = tok(qs, ds, truncation="only_second", max_length=max_len, padding=True, return_tensors="pt").to("cuda")
+        with torch.set_grad_enabled(grad), torch.autocast("cuda", dtype=torch.bfloat16):
+            return model(**b).logits.squeeze(-1).float()
+
+    log = []
+    if epochs > 0:
+        opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+        total = int(sum((len(g) + batch - 1) // batch for g in groups) * epochs)
+        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, s / max(1, total // 20)) * max(0.0, 1 - s / total))
+        model.train()
+        step = 0
+        while step < total:
+            for b in batches(groups, batch, rng):
+                if step >= total:
+                    break
+                qs, ds = [], []
+                for e in b:
+                    for d in [e["pos"]] + e["neg"]:
+                        qs.append(e["q"]); ds.append(d)
+                s = score(qs, ds, grad=True).view(len(b), 1 + n_neg)
+                loss = torch.nn.functional.cross_entropy(s, torch.zeros(len(b), dtype=torch.long, device="cuda"))
+                opt.zero_grad(); loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step(); sched.step()
+                if step % 100 == 0:
+                    log.append({"step": step, "loss": round(float(loss), 4), "s": round(time.time() - t0)})
+                    print(log[-1], flush=True)
+                step += 1
+    t_train = time.time() - t0
+    model.eval()
+    out_dir = f"/vol/models/{run}"
+    os.makedirs(out_dir, exist_ok=True)
+    model.save_pretrained(out_dir); tok.save_pretrained(out_dir)
+    ranks = []
+    for w in worlds("/vol/data/eval.jsonl.gz"):
+        text = {i["id"]: i["text"] for i in w["items"]}
+        for r in w["requests"]:
+            ids = [x for x in cands.get(r["rid"], []) if x in text]
+            if not ids:
+                continue
+            sc = []
+            for i in range(0, len(ids), 64):
+                sc += score([r["request"]] * len(ids[i : i + 64]), [text[x] for x in ids[i : i + 64]]).tolist()
+            order = sorted(range(len(ids)), key=lambda k: -sc[k])
+            ranks.append({"rid": r["rid"], "top": [ids[k] for k in order], "score": [round(sc[k], 4) for k in order]})
+    meta = {"family": "rerank", "base": base, "suites": suites, "run": run, "epochs": epochs, "lr": lr,
+            "batch": batch, "n_neg": n_neg, "max_len": max_len, "examples": sum(len(g) for g in groups),
+            "train_s": round(t_train), "total_s": round(time.time() - t0), "gpu": torch.cuda.get_device_name(0),
+            "log": log}
+    json.dump(meta, open(f"{out_dir}/meta.json", "w"), indent=1)
+    vol.commit()
+    return {"meta": meta, "ranks": ranks}
+
+
+@app.function(gpu=["L4", "A10G"], volumes={"/vol": vol}, timeout=4 * 3600)
 def train_remote(family: str, base: str, suites: list, run: str, epochs: float, lr: float, batch: int, n_neg: int,
-                 max_len: int, flops: float, max_seeds: int, temp: float) -> dict:
+                 max_len: int, flops: float, max_seeds: int, temp: float, files: list,
+                 table_lr: float = 1e-3) -> dict:
     import numpy as np
     import torch
 
     t0 = time.time()
     torch.manual_seed(7)
     rng = np.random.default_rng(7)
-    groups = build_examples(set(suites), n_neg, max_seeds=max_seeds) if epochs > 0 else []
+    groups = build_examples(set(suites), n_neg, max_seeds=max_seeds, files=files) if epochs > 0 else []
     n_ex = sum(len(g) for g in groups)
     t_data = time.time() - t0
     log = []
@@ -170,6 +272,14 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
         tok, model, enc = dense_encoder(base)
         params = list(model.parameters())
         score_q = lambda qs: enc(qs, 64, grad=True)  # noqa: E731
+        score_d = lambda ds: enc(ds, max_len, grad=True)  # noqa: E731
+    elif family == "asym":
+        tok, model, enc = dense_encoder(base)
+        table, qweight, squery = static_query(tok, model)
+        params = list(model.parameters()) + list(table.parameters()) + [qweight]
+        groups_lr = [{"params": list(model.parameters())},
+                     {"params": list(table.parameters()) + [qweight], "lr": table_lr}]
+        score_q = squery
         score_d = lambda ds: enc(ds, max_len, grad=True)  # noqa: E731
     elif family == "sparse":
         tok, model, doc, query, qw = sparse_encoder(base)
@@ -179,7 +289,7 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
     else:
         raise ValueError(family)
     if epochs > 0:
-        opt = torch.optim.AdamW(params, lr=lr, weight_decay=0.01)
+        opt = torch.optim.AdamW(groups_lr if family == "asym" else params, lr=lr, weight_decay=0.01)
         steps_per = sum((len(g) + batch - 1) // batch for g in groups)
         total = int(steps_per * epochs)
         sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, s / max(1, total // 20)) * max(0.0, 1 - s / total))
@@ -194,7 +304,7 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
                     docs += [e["pos"]] + e["neg"]
                 q = score_q([e["q"] for e in b])
                 d = score_d(docs)
-                s = (q @ d.T) / (temp if family == "dense" else 1.0)
+                s = (q @ d.T) / (temp if family in ("dense", "asym") else 1.0)
                 k = 1 + n_neg
                 target = torch.arange(len(b), device=s.device) * k
                 loss = torch.nn.functional.cross_entropy(s, target)
@@ -218,6 +328,8 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
     tok.save_pretrained(out_dir)
     if family == "sparse":
         torch.save(qw.detach().cpu(), f"{out_dir}/query_weights.pt")
+    if family == "asym":
+        torch.save({"table": table.weight.detach().cpu(), "weight": qweight.detach().cpu()}, f"{out_dir}/query_table.pt")
     # Eval: every eval world's items ranked for each of its requests; the top TOP ids come back.
     ranks, nnz, ws = [], [], 0
     with torch.no_grad():
@@ -228,9 +340,9 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
             reqs = [r["request"] for r in w["requests"]]
             if not reqs:
                 continue
-            if family == "dense":
+            if family in ("dense", "asym"):
                 D = torch.cat([enc(texts[i : i + 256], max_len) for i in range(0, len(texts), 256)])
-                Q = enc(reqs, 64)
+                Q = enc(reqs, 64) if family == "dense" else squery(reqs, grad=False)
                 S = Q @ D.T
             else:
                 rows = []
@@ -247,7 +359,7 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
     with open(f"{out_dir}/ranks.jsonl", "w") as f:
         for r in ranks:
             f.write(json.dumps(r) + "\n")
-    meta = {"family": family, "base": base, "suites": suites, "run": run, "epochs": epochs, "lr": lr, "batch": batch,
+    meta = {"family": family, "base": base, "suites": suites, "files": files, "run": run, "epochs": epochs, "lr": lr, "batch": batch,
             "n_neg": n_neg, "max_len": max_len, "flops": flops, "temp": temp, "examples": n_ex,
             "data_s": round(t_data), "train_s": round(t_train), "total_s": round(time.time() - t0), "eval_worlds": ws,
             "doc_nnz_mean": round(sum(nnz) / len(nnz), 1) if nnz else None, "gpu": torch.cuda.get_device_name(0),
@@ -261,19 +373,37 @@ def train_remote(family: str, base: str, suites: list, run: str, epochs: float, 
 def main(upload: str = "", family: str = "dense", base: str = "BAAI/bge-small-en-v1.5",
          suites: str = "train1,train2,train3,train4", run: str = "", epochs: float = 1.0, lr: float = 3e-5,
          batch: int = 32, n_neg: int = 4, max_len: int = 256, flops: float = 0.0, max_seeds: int = 0,
-         temp: float = 0.05):
+         temp: float = 0.05, first: str = "", first_k: int = 15, data: str = "train-worlds.jsonl.gz",
+         table_lr: float = 1e-3):
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     if upload:
         with vol.batch_upload(force=True) as b:
-            for name in ("train-worlds.jsonl.gz", "eval.jsonl.gz"):
-                b.put_file(os.path.join(upload, name), f"/data/{name}")
+            for name in os.listdir(upload):
+                if name.endswith(".jsonl.gz"):
+                    b.put_file(os.path.join(upload, name), f"/data/{name}")
         print("uploaded")
         return
     if any(not s.startswith("train") for s in suites.split(",")):
         raise SystemExit("train suites only")
     run = run or f"{family}-{time.strftime('%Y%m%d-%H%M%S')}"
-    got = train_remote.remote(family, base, suites.split(","), run, epochs, lr, batch, n_neg, max_len, flops,
-                              max_seeds, temp)
+    if family == "rerank":
+        # Candidates: each eval request's lexical top 50 joined with a first stage's top `first_k` (a run's ranks).
+        import gzip
+        firsts = {}
+        if first:
+            for line in open(os.path.join(root, ".local", "m3", "runs", first, "ranks.jsonl")):
+                r = json.loads(line)
+                firsts[r["rid"]] = r["top"][:first_k]
+        cands = {}
+        with gzip.open(os.path.join(root, ".local", "m3", "d", "eval.jsonl.gz"), "rt") as f:
+            for line in f:
+                for r in json.loads(line)["requests"]:
+                    cands[r["rid"]] = list(dict.fromkeys(r["pool50"] + firsts.get(r["rid"], [])))
+        got = rerank_remote.remote(base, suites.split(","), run, epochs, lr, batch, n_neg, max_len, cands, max_seeds,
+                                   data.split(","))
+    else:
+        got = train_remote.remote(family, base, suites.split(","), run, epochs, lr, batch, n_neg, max_len, flops,
+                                  max_seeds, temp, data.split(","), table_lr)
     out = os.path.join(root, ".local", "m3", "runs", run)
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "ranks.jsonl"), "w") as f:

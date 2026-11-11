@@ -58,13 +58,31 @@ def show(agg, label):
         cells = "  ".join(f"{k} {v:4d}" for k, v in g.items() if k != "n")
         print(f"  {'/'.join(key):22s} n {n:4d}  {cells}")
 
+def bar(agg, run, horizon="days"):
+    """The pre-registered bar (m3-retriever.md §1) on the held-out days requests, one line a variant."""
+    h, c = agg.get((horizon, "held", "hidden")), agg.get((horizon, "held", "control"))
+    if not h or not c:
+        return
+    h0, c0 = h["lex@15"], c["lex@15"]
+    for v in ["mod"] + [k[:-3] for k in h if k.startswith("hyb") and k.endswith("@15")]:
+        h1, c1 = h[f"{v}@15"], c[f"{v}@15"]
+        pts = 100 * (h1 - h0) / h["n"]
+        ok = pts >= 15 and c1 / max(1, c0) <= h1 / max(1, h0)
+        print(f"  BAR {run.rstrip('/').split('/')[-1]:14s} {v:6s} facts@15 {h0}->{h1} ({pts:+.1f} pts)  "
+              f"decoys@15 {c0}->{c1}  ratio {h1 / h0:.3f} vs {c1 / c0:.3f}  @5 {h['lex@5']}->{h[f'{v}@5']}  "
+              f"{'PASS' if ok else 'fail'}")
+
 if __name__ == "__main__":
     a = argparse.ArgumentParser()
     a.add_argument("eval")
     a.add_argument("runs", nargs="+")
     a.add_argument("--heldout", default="train5,train6")
     a.add_argument("--ks", default="5,10,15")
+    a.add_argument("--brief", action="store_true")
     o = a.parse_args()
     reqs = load_eval(o.eval)
     for run in o.runs:
-        show(table(reqs, load_ranks(run), set(o.heldout.split(",")), [int(k) for k in o.ks.split(",")]), run)
+        agg = table(reqs, load_ranks(run), set(o.heldout.split(",")), [int(k) for k in o.ks.split(",")])
+        if not o.brief:
+            show(agg, run)
+        bar(agg, run)
