@@ -1,0 +1,5 @@
+# id=url, one per line. Ids are stable names (re-addressing a machine moves nobody); urls are private addresses.
+# Adding or removing a line is a planned rebalance (about 1/(n+1) of users move); docs/DEPLOY.md §10.
+n1=http://10.0.1.11:8790
+n2=http://10.0.1.12:8790
+n3=http://10.0.1.13:8790

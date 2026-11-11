@@ -1,0 +1,9 @@
+{
+  "sources": [
+    {
+      "id": "crm",
+      "description": "deals",
+      "docs": [{ "ref": "d1", "title": "Globex renewal", "text": "Dana Lee wants 12% off the Globex renewal, decision by Friday" }]
+    }
+  ]
+}

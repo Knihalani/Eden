@@ -1,0 +1,314 @@
+[
+{
+"text": "cancel it",
+"needs": true
+},
+{
+"text": "book it",
+"needs": true
+},
+{
+"text": "send it",
+"needs": true
+},
+{
+"text": "pay it",
+"needs": true
+},
+{
+"text": "do it",
+"needs": true
+},
+{
+"text": "ok book it",
+"needs": true
+},
+{
+"text": "yes, cancel it",
+"needs": true
+},
+{
+"text": "send it to her",
+"needs": true
+},
+{
+"text": "move it to 3pm",
+"needs": true
+},
+{
+"text": "reschedule to friday",
+"needs": true
+},
+{
+"text": "remind me tomorrow at 9",
+"needs": true
+},
+{
+"text": "renew it",
+"needs": true
+},
+{
+"text": "forward it to Tom",
+"needs": true
+},
+{
+"text": "reply yes",
+"needs": true
+},
+{
+"text": "order more",
+"needs": true
+},
+{
+"text": "call the plumber",
+"needs": true
+},
+{
+"text": "book the dentist for tuesday",
+"needs": true
+},
+{
+"text": "pay the gas bill",
+"needs": true
+},
+{
+"text": "I need to pay Dean's invoice today",
+"needs": true
+},
+{
+"text": "Should I book the 7am flight to Leeds?",
+"needs": true
+},
+{
+"text": "We should move the offsite to Friday",
+"needs": true
+},
+{
+"text": "Is it OK to cancel the Vitalis membership now?",
+"needs": true
+},
+{
+"text": "The boiler's making that noise again, can you book Ferguson's for Tuesday?",
+"needs": true
+},
+{
+"text": "Might be worth chasing the Hendricks invoice before Friday",
+"needs": true
+},
+{
+"text": "Would be handy if you could cancel the Peloton before the 15th",
+"needs": true
+},
+{
+"text": "I'll need the Dublin hotel reservation changed to a king room",
+"needs": true
+},
+{
+"text": "I need to read the contract and sign it by Friday",
+"needs": true
+},
+{
+"text": "I need to stop paying for Netflix",
+"needs": true
+},
+{
+"text": "I need the meeting rescheduled to Friday",
+"needs": true
+},
+{
+"text": "Let's cash in £3,000 of my Premium Bonds",
+"needs": true
+},
+{
+"text": "Book the Golf in for its MOT at Kwik Lane Garage, Saturday morning.",
+"needs": true
+},
+{
+"text": "Morning! Book a table at Rosa's for 8 tonight",
+"needs": true
+},
+{
+"text": "annule-le",
+"needs": true
+},
+{
+"text": "buch es",
+"needs": true
+},
+{
+"text": "cancélalo",
+"needs": true
+},
+{
+"text": "Kannst du den Zahnarzttermin auf Freitag verschieben?",
+"needs": true
+},
+{
+"text": "Pode confirmar a reserva da sala de degustação de sábado?",
+"needs": true
+},
+{
+"text": "Je dois payer le loyer avant le 5 du mois.",
+"needs": true
+},
+{
+"text": "thanks!",
+"needs": false
+},
+{
+"text": "ok sounds good",
+"needs": false
+},
+{
+"text": "Lol",
+"needs": false
+},
+{
+"text": "Yes",
+"needs": false
+},
+{
+"text": "Done",
+"needs": false
+},
+{
+"text": "Got it",
+"needs": false
+},
+{
+"text": "Sam says hi",
+"needs": false
+},
+{
+"text": "Good news: the offsite is on",
+"needs": false
+},
+{
+"text": "What time is my dentist appointment on Thursday?",
+"needs": false
+},
+{
+"text": "When's the gas bill due?",
+"needs": false
+},
+{
+"text": "Did Tom reply about the tickets?",
+"needs": false
+},
+{
+"text": "How much did we spend on travel last quarter?",
+"needs": false
+},
+{
+"text": "Who is covering support this weekend?",
+"needs": false
+},
+{
+"text": "I need a new bed",
+"needs": false
+},
+{
+"text": "We need a bigger kitchen",
+"needs": false
+},
+{
+"text": "We need the big oven",
+"needs": false
+},
+{
+"text": "I need a holiday",
+"needs": false
+},
+{
+"text": "I need to stop eating biscuits at 11pm",
+"needs": false
+},
+{
+"text": "We should go to Iceland one day, the lights look unreal",
+"needs": false
+},
+{
+"text": "We should go to Iceland one day, maybe in 2028",
+"needs": false
+},
+{
+"text": "I want to get fitter by spring",
+"needs": false
+},
+{
+"text": "I need to think about the kitchen quote a bit longer",
+"needs": false
+},
+{
+"text": "Let's see how the week goes before deciding anything",
+"needs": false
+},
+{
+"text": "I have to admit the new dashboard is growing on me",
+"needs": false
+},
+{
+"text": "Wow, can you believe the price of eggs?",
+"needs": false
+},
+{
+"text": "Thanks so much, please ignore my last message",
+"needs": false
+},
+{
+"text": "Sorry, please disregard, wrong chat",
+"needs": false
+},
+{
+"text": "Great news, I need to tell you something",
+"needs": false
+},
+{
+"text": "Long day, will you be home for dinner?",
+"needs": false
+},
+{
+"text": "I could really do with a hot bath and an early bed",
+"needs": false
+},
+{
+"text": "We'd like a quiet weekend in Sweden",
+"needs": false
+},
+{
+"text": "ok so anyway the weather is nice today",
+"needs": false
+},
+{
+"text": "haha that meeting went on forever didn't it",
+"needs": false
+},
+{
+"text": "Traceback (most recent call last): File app.py, line 42, in handler KeyError: 'user_id'",
+"needs": false
+},
+{
+"text": "connection refused 10.0.4.17:5432 pg pool exhausted, 20 of 20 in use",
+"needs": false
+},
+{
+"text": "merci beaucoup !",
+"needs": false
+},
+{
+"text": "danke dir",
+"needs": false
+},
+{
+"text": "jajaja qué bueno",
+"needs": false
+},
+{
+"text": "Ich brauche ein neues Bett",
+"needs": false
+},
+{
+"text": "On devrait aller en Islande un jour",
+"needs": false
+}
+]

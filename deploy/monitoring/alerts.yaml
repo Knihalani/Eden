@@ -1,0 +1,83 @@
+# Prometheus alerting rules for Eden (docs/DEPLOY.md §8, §10). Import into Grafana Cloud (Alerting, data source
+# rules) or any Prometheus. The scale-up triggers are warnings: they mean "plan the next box this week", not "page".
+groups:
+  - name: eden
+    rules:
+      - alert: EdenDown
+        expr: up{job="eden"} == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "Eden on {{ $labels.instance }} is not answering /metrics"
+          runbook: "docs/DEPLOY.md §13, Incident: Eden is down"
+
+      - alert: EdenProcessesDown
+        # A machine router with a child down: 1/N of its users get 503 (silence) until it restarts.
+        expr: eden_router_children_up < eden_router_children
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.instance }}: a server process keeps failing to start"
+
+      - alert: EdenClusterNodeDown
+        expr: eden_cluster_nodes_up < eden_cluster_nodes
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "A cluster node stopped answering; its users were moved to the others (served from their last stored state)"
+          runbook: "docs/DEPLOY.md §13, Incident: a node is down"
+
+      - alert: EdenErrors
+        expr: |
+          sum by (instance) (rate(eden_requests_total{status=~"5.."}[10m]))
+            / sum by (instance) (rate(eden_requests_total[10m])) > 0.01
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.instance }}: over 1% of requests answered 5xx (503 is silence to the agent)"
+
+      - alert: EdenSlowEvents
+        expr: |
+          histogram_quantile(0.99, sum by (instance, le) (rate(eden_request_seconds_bucket{route="/v1/events"}[10m])))
+            > 0.5
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: /v1/events p99 above 500 ms (scale trigger: latency, docs/DEPLOY.md §10)"
+
+      - alert: EdenMemoryFull
+        # The scale trigger that matters: users are memory-bound. Above 75% plan the next box; above 85% act.
+        expr: |
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.75
+        for: 30m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: memory above 75% for 30 min (scale trigger, docs/DEPLOY.md §10)"
+
+      - alert: EdenMemoryCritical
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.9
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.instance }}: memory above 90%: the kernel may kill Eden; add a box or move users now"
+
+      - alert: EdenStoreFailing
+        expr: increase(eden_store_failed_total[15m]) > 5
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: writes or reads to the shared store failing (moved users would re-sync)"
+
+      - alert: EdenStoreBacklog
+        expr: eden_store_backlog > 200
+        for: 10m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: store writes queueing; a failover now would serve older state"
+
+      - alert: EdenDiskFull
+        expr: |
+          1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} > 0.8
+        for: 30m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: disk above 80% (persisted users, backups, Docker images)"

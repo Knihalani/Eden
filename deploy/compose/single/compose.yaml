@@ -1,0 +1,70 @@
+# One box: Eden behind Caddy (TLS from Let's Encrypt), docs/DEPLOY.md §2.
+#
+#   cp .env.example .env && chmod 600 .env    # then fill it in (never commit it)
+#   docker compose up -d --build
+#
+# Eden listens only on the compose network; Caddy is the only thing on 80/443. /metrics and /internal/* are not
+# served to the internet (Caddyfile); scrape /metrics from the box itself (docs/DEPLOY.md §8).
+name: eden
+
+services:
+  eden:
+    build:
+      context: ../../..
+    image: eden:${EDEN_VERSION:-local}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8790"
+      # One process per core the box may use (D163, D178); a quota the container cannot see is not detected.
+      EDEN_PROCESSES: ${EDEN_PROCESSES:-2}
+      # The drain's budget (D994): in-flight requests, live users written. Below stop_grace_period.
+      EDEN_SHUTDOWN_GRACE_MS: "15000"
+      # Keep serving 5 s after /readyz turns 503, while Caddy (health_interval 2s) or the router stops sending (D994).
+      EDEN_DRAIN_DELAY_MS: "5000"
+    volumes:
+      - eden-data:/data
+    stop_grace_period: 40s
+    # Published on loopback only, for /metrics and local checks; Caddy reaches it over the compose network.
+    ports:
+      - "127.0.0.1:8790:8790"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "fetch('http://127.0.0.1:8790/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    depends_on:
+      eden:
+        condition: service_healthy
+    environment:
+      EDEN_DOMAIN: ${EDEN_DOMAIN:?set EDEN_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+volumes:
+  eden-data:
+  caddy-data:
+  caddy-config:

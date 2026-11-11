@@ -88,6 +88,8 @@ async function main() {
     // The rate limit is not what is measured.
     EDEN_TENANT_RPS: "1000000",
     EDEN_TENANT_BURST: "1000000",
+    // Not what is measured, and these runs hold no real users: no key needed (D991).
+    EDEN_PERSIST: "off",
     PORT: "0",
     // The single arm is one process: unset, main.ts would start the router over the core count (D178). The router
     // arms set their own N (`--serve-router`), and their children ignore it (EDEN_ROUTER_CHILD).
