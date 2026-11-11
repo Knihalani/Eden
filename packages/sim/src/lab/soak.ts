@@ -21,7 +21,7 @@
  * their items on demand, so the item text a connector would hold elsewhere is not in this process's memory.
  * No model, no network.
  */
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EncryptedFrozenDisk, type ContextPartner, type ItemCache } from "@eden/engine";
@@ -300,6 +300,16 @@ function cgroupMB(): number | null {
   }
   return null;
 }
+/** The cgroup's resident (rss) and page-cache shares from memory.stat (cgroup v1), MB; null outside it. */
+function cgroupStat(): { rss: number; cache: number } | null {
+  try {
+    const t = readFileSync("/sys/fs/cgroup/memory/r1soak/memory.stat", "utf8");
+    const get = (k: string) => Number(new RegExp(`^${k} (\\d+)$`, "m").exec(t)?.[1] ?? 0) / 1_048_576;
+    return { rss: Math.round(get("total_rss")), cache: Math.round(get("total_cache")) };
+  } catch {
+    return null;
+  }
+}
 function rssMB(pid: number): number {
   try {
     const m = /VmRSS:\s+(\d+) kB/.exec(readFileSync(`/proc/${pid}/status`, "utf8"));
@@ -315,7 +325,7 @@ async function orchestrate(): Promise<void> {
   for (const d of dirs) mkdirSync(d, { recursive: true });
   const t0 = Date.now();
   const log = (line: string) => console.error(`[${((Date.now() - t0) / 60_000).toFixed(1)} min] ${line}`);
-  const samples: { min: number; phase: string; rssMB: number[]; cgroupMB: number | null }[] = [];
+  const samples: Record<string, unknown>[] = [];
   const windows: Record<string, unknown>[] = [];
   const events: Record<string, unknown>[] = [];
   let phase = "backfill";
@@ -343,7 +353,9 @@ async function orchestrate(): Promise<void> {
             stdout: "inherit",
             stderr: "inherit",
             ipc(m: Record<string, unknown>) {
-              if (m.kind === "window") {
+              // Every message on disk as it lands (with the raw latencies): a run cut short keeps what it measured.
+              appendFileSync(journal, `${JSON.stringify({ ...m, phase, min: (Date.now() - t0) / 60_000 })}\n`);
+              if (m.kind === "window" || m.kind === "persisted") {
                 const { raw: _raw, ...rest } = m.window as Record<string, unknown>;
                 windows.push({ ...m, window: rest, phase, min: (Date.now() - t0) / 60_000 });
                 const r = m.window as { raw: { event: number[]; message: number[]; ask: number[] } };
@@ -355,8 +367,9 @@ async function orchestrate(): Promise<void> {
                   totals.status4xx += s.status4xx;
                   totals.requests += s.requests;
                 }
-              } else {
-                events.push({ ...m, min: (Date.now() - t0) / 60_000 });
+              }
+              if (m.kind !== "window") {
+                events.push({ ...m, window: undefined, min: (Date.now() - t0) / 60_000 });
                 if (m.kind !== "window") log(JSON.stringify(m).slice(0, 300));
                 if (m.kind === "loaded" && ++loaded === PROCS) resolve();
               }
@@ -366,14 +379,18 @@ async function orchestrate(): Promise<void> {
       );
     });
   const all = { event: [] as number[], message: [] as number[], ask: [] as number[] };
+  const journal = `${arg("out", join(root, "report.json"))}.jsonl`;
   const totals = { errors: 0, status4xx: 0, requests: 0 };
   const sampler = setInterval(() => {
-    samples.push({
+    const sample = {
       min: (Date.now() - t0) / 60_000,
       phase,
       rssMB: procs.map((p) => Math.round(rssMB(p.pid))),
       cgroupMB: cgroupMB() === null ? null : Math.round(cgroupMB()!),
-    });
+      cgroup: cgroupStat(),
+    };
+    samples.push(sample);
+    appendFileSync(journal, `${JSON.stringify({ kind: "sample", ...sample })}\n`);
   }, 10_000);
 
   await start(false);
