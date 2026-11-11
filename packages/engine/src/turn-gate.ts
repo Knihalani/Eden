@@ -136,6 +136,8 @@ interface Header {
   rule: boolean;
   rule2: boolean;
   logit: number;
+  /** The union (D1011): a turn the rule starts passes unless the gate's logit is under this (null: no union). */
+  veto: number | null;
   kinds: TurnVerdict["kind"][];
   skel: string[];
   arrays: { name: string; dtype: "int8" | "float32"; shape: number[]; offset: number }[];
@@ -254,7 +256,8 @@ export class TurnGate {
         const vc = this.encode(c);
         logit = Math.max(logit, this.dot("needsW", 0, vc) + this.arr.get("needsB")![0]!);
       }
-    return { needs: logit >= this.h.logit, kind: this.h.kinds[best]!, logit };
+    const ruled = rule !== undefined && rule.how !== "none" && this.h.veto !== null && logit >= this.h.veto;
+    return { needs: logit >= this.h.logit || ruled, kind: this.h.kinds[best]!, logit };
   }
 }
 

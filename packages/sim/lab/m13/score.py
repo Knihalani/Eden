@@ -24,27 +24,43 @@ def model_of(path):
     a = argparse.Namespace(**ck["args"])
     m = {"bag": G.Bag, "mil": G.Mil, "cnn": G.Cnn, "sign": G.Sign, "gru": G.Gru}[a.arch](a)
     m.load_state_dict(ck["state"])
-    return m, a, ck["threshold"], ck.get("skel")
+    return m, a, ck["threshold"], ck.get("skel"), ck.get("veto")
 
 
-def decide(m, a, thr, skel, rows):
+def decide(m, a, thr, skel, rows, veto=None):
+    """The gate's start: its score at the threshold, or (the union, D1011) the rule's start unless the gate's score is
+    under the veto."""
     G.prep(rows, a, skel)
     p, k = G.predict(m, rows, a)
-    return [x >= thr for x in p], k
+    return [x >= thr or (veto is not None and r["rule"] != "none" and x >= veto) for r, x in zip(rows, p)], k
+
+
+def rule_reading(rows):
+    """The shipped rule's reading of each row (rules.ts), as the engine would give the gate."""
+    import subprocess, tempfile
+    with tempfile.TemporaryDirectory() as d:
+        with open(f"{d}/in.jsonl", "w") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        subprocess.run(["bun", "packages/sim/lab/m13/rules.ts", f"{d}/in.jsonl", f"{d}/out.jsonl"], check=True)
+        return [json.loads(l) for l in open(f"{d}/out.jsonl")]
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("model")
     ap.add_argument("--json")
+    ap.add_argument("--no-veto", action="store_true", help="the gate alone, without the rule union")
     o = ap.parse_args()
-    m, a, thr, skel = model_of(o.model)
+    m, a, thr, skel, veto = model_of(o.model)
+    if o.no_veto:
+        veto = None
     res, ok = {}, {}
     sets = {s: G.load(s) for s in ("s3", "s4", "m2t", "sim56")}
-    fx = [dict(r, rule="none", rest=False, lang="en", src="fix", kind="") for r in
-          json.load(open("packages/sim/lab/m13/fixtures.json"))]
+    fx = [dict(r, lang="en", src="fix", kind="") for r in json.load(open("packages/sim/lab/m13/fixtures.json"))]
+    fx = rule_reading(fx)
     for name, rows in list(sets.items()) + [("fix", fx)]:
-        g, _ = decide(m, a, thr, skel, rows)
+        g, _ = decide(m, a, thr, skel, rows, veto)
         for r, x in zip(rows, g):
             r["gate"] = x
             r["ruled"] = r["rule"] != "none"
@@ -99,7 +115,7 @@ def main():
         st[r["src"] if r["lang"] == "en" else "m2:foreign"].append(r)
     for k, rs in sorted(st.items()):
         res["by style M2T"][k] = (round(rate([r["gate"] for r in rs]), 3), round(rate([r["ruled"] for r in rs]), 3), len(rs))
-    out = {"model": o.model, "threshold": thr, "results (gate, rule, n)": res, "languages (gate, rule, n)": lang,
+    out = {"model": o.model, "threshold": thr, "veto": veto, "results (gate, rule, n)": res, "languages (gate, rule, n)": lang,
            "bar": ok, "offline bar holds": all(ok.values())}
     print(json.dumps(out, indent=1, ensure_ascii=False))
     if o.json:

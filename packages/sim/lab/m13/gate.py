@@ -299,6 +299,24 @@ def pick(rows, p):
     return max((macro(rows, [x >= t for x in p]), t) for t in [i / 100 for i in range(5, 96)])[1]
 
 
+def fam_rate(rows, dec, fam):
+    g = grouped(rows, dec)
+    return g[fam]["gate"] if fam in g else float("nan")
+
+
+def pick_veto(rows, p, thr):
+    """The union's veto (start when the gate passes, or when the rule starts and the gate's score is at least the
+    veto), fixed before any held-out read: the highest veto in 0.01..0.50 that keeps dev's sim families within half a
+    point of the rule's own rate there (SIM56's bar is the rule − 1 point); none if even 0.01 cannot."""
+    rule_sim = grouped(rows, [r["rule"] != "none" for r in rows])["sim:act"]["gate"]
+    best = None
+    for v in [i / 100 for i in range(1, 51)]:
+        dec = [x >= thr or (r["rule"] != "none" and x >= v) for r, x in zip(rows, p)]
+        if fam_rate(rows, dec, "sim:act") >= rule_sim - 0.005:
+            best = v
+    return best
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arch", default="bag", choices=["bag", "mil", "cnn", "sign", "gru"])
@@ -352,14 +370,18 @@ def main():
     kacc = [kp[i] == kind_of(r) for i, r in enumerate(dev) if kind_of(r) >= 0]
     params = sum(x.numel() for x in model.parameters())
     union = [x >= thr or (r["rule"] != "none" and x >= 0.05) for r, x in zip(dev, p)]
+    veto = pick_veto(dev, p, thr)
+    uv = [x >= thr or (veto is not None and r["rule"] != "none" and x >= veto) for r, x in zip(dev, p)]
     res = {"args": vars(a), "threshold": thr, "macro": round(macro(dev, [x >= thr for x in p]), 4),
            "macro_union_veto05": round(macro(dev, union), 4), "dev": summary(dev, p, thr),
-           "families": grouped(dev, [x >= thr for x in p]), "families_union_veto05": grouped(dev, union), "dev_kind_acc": round(sum(kacc) / len(kacc), 4),
+           "families": grouped(dev, [x >= thr for x in p]), "families_union_veto05": grouped(dev, union),
+           "veto": veto, "macro_union_veto": round(macro(dev, uv), 4), "families_union_veto": grouped(dev, uv), "dev_kind_acc": round(sum(kacc) / len(kacc), 4),
            "by": report(dev, p, thr), "params": params, "train_s": round(time.time() - t0, 1)}
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
-    torch.save({"args": vars(a), "state": model.state_dict(), "threshold": thr, "skel": skel}, a.out + ".pt")
+    torch.save({"args": vars(a), "state": model.state_dict(), "threshold": thr, "veto": veto, "skel": skel},
+               a.out + ".pt")
     json.dump(res, open(a.out + ".json", "w"), indent=1)
-    print(json.dumps({k: res[k] for k in ("threshold", "macro", "macro_union_veto05", "dev", "dev_kind_acc", "params", "train_s")}))
+    print(json.dumps({k: res[k] for k in ("threshold", "macro", "macro_union_veto05", "veto", "macro_union_veto", "dev", "dev_kind_acc", "params", "train_s")}))
     print(json.dumps({"families": {k: (v["gate"], v["rule"], v["n"]) for k, v in res["families"].items()}}))
 
 

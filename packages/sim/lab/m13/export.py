@@ -31,7 +31,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("parity")
     o = ap.parse_args()
-    m, a, thr, skel = S.model_of(o.model)
+    m, a, thr, skel, veto = S.model_of(o.model)
     assert a.arch in ("bag", "mil"), "export covers the bag and mil gates"
     st = {k: v.detach().numpy() for k, v in m.state_dict().items()}
     arrays = []
@@ -48,7 +48,8 @@ def main():
                ("kindW", st["kind.weight"]), ("kindB", st["kind.bias"])]
     head = {"v": 1, "arch": a.arch, "bits": a.bits, "dim": a.dim, "hidden": a.hidden, "quant": a.quant,
             "groups": a.groups, "rule": bool(a.rule), "rule2": bool(getattr(a, "rule2", False)), "threshold": thr,
-            "logit": float(np.log(thr / (1 - thr))), "kinds": G.KINDS, "skel": skel or [], "arrays": []}
+            "logit": float(np.log(thr / (1 - thr))),
+            "veto": None if veto is None else float(np.log(veto / (1 - veto))), "kinds": G.KINDS, "skel": skel or [], "arrays": []}
     off = 0
     blobs = []
     for name, arr in arrays:
