@@ -247,8 +247,8 @@ def train(o):
             for i in json.loads(line)["items"]:
                 corpus.add(f"{i['title']}\n{i['text']}")
         extra = torch.arange(len(corpus.texts))
-    print(json.dumps({"texts": len(corpus.texts), "train_pairs": len(tr), "dev_pairs": len(dev), "s": round(time.time() - t0)}),
-          flush=True)
+    sizes = {"texts": len(corpus.texts), "train_pairs": len(tr), "dev_pairs": len(dev), "s": round(time.time() - t0)}
+    print(json.dumps(sizes), flush=True)
     teacher = None
     if o.teacher:
         teacher, _ = load_teacher(o.teacher)
