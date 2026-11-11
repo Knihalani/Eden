@@ -57,8 +57,44 @@ objects' shape (112 bytes whatever the optional fields).
 
 ## 3. Results
 
-TODO
+`users.bench.ts 100 3000 --prose --sources=20` in the 2-core 12 GB cgroup, two runs an arm back to back, each arm
+the tree with the levers above it applied (MB a user; "frozen" is the bench's frozen line, before the re-thaw):
+
+| Arm | Live after backfill RSS | Heap after thaw | **RSS after thaw** | Frozen RSS | First event p99 |
+| --- | --- | --- | --- | --- | --- |
+| main | 11.31 / 11.22 | 7.23 / 7.23 | **8.57 / 8.57** | 4.13 / 4.17 | 30.9 / 29.5 ms |
+| L1 | 11.33 / 11.08 | 6.83 / 6.67 | 8.17 / 8.00 | 4.13 / 3.99 | 27.7 / 50.3 ms |
+| L1, L3 (C1: no effect without cards) | 9.54 / 9.70 | 6.07 / 6.23 | 7.53 / 7.70 | 3.83 / 3.95 | 71.1 / 31.4 ms |
+| All (final tree) | 8.77 / 9.05 | 5.81 / 5.96 | **7.28 / 7.46** | 3.70 / 3.85 | 25.3 / 49.2 ms |
+
+The same with `--cards` (a card and two requests an item; each user's cards read at the thaw from d5e338b1 on):
+
+| Arm | Live after backfill RSS | Heap after thaw | **RSS after thaw** | Frozen RSS | First event p99 |
+| --- | --- | --- | --- | --- | --- |
+| main | 16.28 / 16.24 | 10.98 / 10.98 | **14.75 / 14.72** | 11.01 / 10.95 | 34.5 / 30.5 ms |
+| L1, L3 | 14.87 / 14.77 | 9.97 / 9.97 | 13.66 / 13.64 | 10.55 / 10.59 | 32.4 / 31.7 ms |
+| + C1 | 13.85 / 13.97 | 9.24 / 9.40 | 12.81 / 12.95 | 9.70 / 9.82 | 43.9 / 30.9 ms |
+| + L2, C4, C5 (C6's "before") | 12.81 / 12.71 | 8.79 / 8.63 | **11.95 / 11.78** | 8.76 / 8.58 | 61.2 / 30.8 ms |
+| + C6, first version | 12.68 / 12.61 | 9.13 / 9.13 | 12.80 / 12.77 | 6.99 / 6.94 | 30.8 / 29.1 ms |
+| + C6 (final) | C6V2 |
+
+The first event's p99 is 100 events an arm and swings by 2x on one tree (25-49 ms on the final tree, 28-50 on L1), so
+latency was judged on the end-to-end anchor as well: `pipeline.bench.ts`, three alternating runs each on the two
+free cores, observe p99 on main 4,593 / 4,452 / 4,056 µs against the final tree's 5,010 / 4,285 / 3,564 µs
+(medians 4,452 and 4,285; p50 114-120 against 111-119 µs). Backfill CPU per item did not move (294-334 µs against
+319-324 without cards). `bun run eval`: identical but for its latency fields; the funnel against main: hidden +0
+−0, decoys +0 −0 (281 / 384 surfaced, 264 decoys).
+
+The first version of C6 rebuilt the intent index at a thaw (about 20 ms at 3,000 items) inside the first lookup
+that read the cards: the first event's p99 went 34 → 80 ms. The final version keeps the index live beside the blob
+and thaws in the cache's own thaw (`ItemCache.onThaw`); a returning user's first read still pays the rest
+(decompress and parse: the "first read after freeze" p50 21-22 → 27-29 ms with cards, unchanged without).
+
+The D996 peak-hour shape (`users.bench.ts 200 3000 --prose --sources=20 --waves=6 --warm-waves=5`, one run each,
+RSS a user at the steady state, a sixth live):
+
+PEAKS
 
 ## 4. Decision
 
-TODO
+DECISION
