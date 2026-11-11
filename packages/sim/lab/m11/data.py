@@ -18,6 +18,9 @@ import json, os, re, zlib
 from collections import Counter
 
 HELD_SUITES = {"train5", "train6", "train5r", "train6r", "longtail"}
+# Validation families (amendment 1, before any held-out read for selection): planted items of these suites are kept
+# out of training too, and every model is selected on them, never on HELD_SUITES.
+VAL_SUITES = {"train3", "train4", "train3r", "train4r"}
 SCREEN_SEEDS = {41, 42}
 WORD = re.compile(r"[a-z0-9£$€]+")
 
@@ -55,15 +58,18 @@ def load(root=".local/m11"):
         for it in read_jsonl(os.path.join(root, d, "items.jsonl")):
             items.setdefault(it["h"], it)
         worlds += read_jsonl(os.path.join(root, d, "worlds.jsonl"))
-    held_family, screen_base, seen_train = set(), set(), set()
+    held_family, screen_base, val_family = set(), set(), set()
     for w in worlds:
         if w["suite"] in HELD_SUITES:
             held_family.update(w["planted"])
+        if w["suite"] in VAL_SUITES:
+            val_family.update(w["planted"])
         if w["seed"] in SCREEN_SEEDS:
             screen_base.update(w["hashes"])
     for h, it in items.items():
         it["target"] = it.get("fullTerms") or it.get("shippedTerms")
-        it["split"] = "held" if (h in held_family or h in screen_base) else "train"
+        it["split"] = "held" if (h in held_family or h in screen_base or h in val_family) else "train"
+        it["val"] = h in val_family
     return items, worlds
 
 

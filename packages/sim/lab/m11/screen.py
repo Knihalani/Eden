@@ -149,13 +149,13 @@ def growth(items, exp, hs):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp", default=None)
-    ap.add_argument("--suites", default="held")
+    ap.add_argument("--suites", default="val", help="val (selection), held (the bar, read once), train, or a list")
     ap.add_argument("--arms", default="lexical,haiku-full,haiku-shipped,micro,micro+shipped")
     ap.add_argument("--json", default=None)
     a = ap.parse_args()
     items, worlds = D.load()
     exp = json.load(open(a.exp)) if a.exp else {}
-    suites = D.HELD_SUITES if a.suites == "held" else (
+    suites = D.HELD_SUITES if a.suites == "held" else D.VAL_SUITES if a.suites == "val" else (
         {"train1", "train2", "train3", "train4"} if a.suites == "train" else set(a.suites.split(",")))
     arms = [x for x in a.arms.split(",") if x.startswith("micro") is False or exp]
     res = screen(items, worlds, exp, arms, suites)

@@ -372,12 +372,12 @@ def decode(copied, pg, own, a, vocab, prior):
 def report(items, worlds, exp, a):
     import screen as S
 
-    res = S.screen(items, worlds, exp, ["micro", "micro+shipped"], D.HELD_SUITES)
+    res = S.screen(items, worlds, exp, ["micro", "micro+shipped"], D.VAL_SUITES)
     for arm, r in res.items():
         print(f"{a.name} {arm:14s} fact@5 {r['fact@5']:4d} @15 {r['fact@15']:4d} pool {r['fact_pool']:4d} "
               f"intent12 {r['fact_intent12']:4d} | decoy@5 {r['decoy@5']:4d} @15 {r['decoy@15']:4d} "
               f"pool {r['decoy_pool']:4d} intent12 {r['decoy_intent12']:4d}")
-    bad, n = S.twin_gate(items, worlds, exp, D.HELD_SUITES)
+    bad, n = S.twin_gate(items, worlds, exp, D.VAL_SUITES)
     held = [h for h, it in items.items() if it["split"] == "held"]
     g = S.growth(items, exp, held)
     print(f"{a.name} twin gate {bad}/{n}; growth {g[0]:.2f}x mean, {g[2]:.1f} terms/item")

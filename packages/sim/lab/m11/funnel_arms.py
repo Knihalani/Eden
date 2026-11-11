@@ -8,22 +8,29 @@ def read(p):
     c = Counter()
     for r in j["perTask"]:
         k = "h" if r["variant"] == "hidden" else "d"
-        for s in (r["suite"], "ALL", "HELD" if r["suite"][:6] in ("train5", "train6") or r["suite"] == "longtail" else "TRN"):
+        grp = "HELD" if r["suite"][:6] in ("train5", "train6") or r["suite"] == "longtail" else (
+            "VAL" if r["suite"][:6] in ("train3", "train4") else "TRN")
+        # ALL leaves the held-out families out (the bar reads HELD, once): selection never sees them.
+        for s in (r["suite"], grp) + (("ALL",) if grp != "HELD" else ()):
             c[(s, k)] += r.get("surfacedBy") is not None
             c[(s, k + "push")] += bool(r.get("pushHanded"))
             c[(s, k + "n")] += 1
     for s, v in j.get("neutral", {}).get("suites", {}).items():
         c[(s, "np")] += v["packets"]
         c[(s, "ni")] += v["items"]
-        held = s[:6] in ("train5", "train6") or s == "longtail"
-        c[("HELD" if held else "TRN", "np")] += v["packets"]
-        c[("ALL", "np")] += v["packets"]
-        c[("ALL", "ni")] += v["items"]
+        grp = "HELD" if s[:6] in ("train5", "train6") or s == "longtail" else ("VAL" if s[:6] in ("train3", "train4") else "TRN")
+        c[(grp, "np")] += v["packets"]
+        if grp != "HELD":
+            c[("ALL", "np")] += v["packets"]
+            c[("ALL", "ni")] += v["items"]
     return c
 
 
-runs = [(p.split("/")[-1].replace(".json", ""), read(p)) for p in sys.argv[1:]]
-suites = sorted({s for _, c in runs for (s, _) in c}, key=lambda s: (s in ("ALL", "HELD", "TRN"), s))
+runs = [(p.split("/")[-1].replace(".json", ""), read(p)) for p in sys.argv[1:] if p != "--held"]
+# HELD_SUITES (the bar) are printed only with --held: selection reads VAL (train3-4, 3r-4r) and TRN.
+show_held = "--held" in sys.argv
+suites = sorted({s for _, c in runs for (s, _) in c if show_held or not (s == "HELD" or s[:6] in ("train5", "train6") or s == "longtail")},
+                key=lambda s: (s in ("ALL", "HELD", "VAL", "TRN"), s))
 print(f"{'suite':9s} " + " | ".join(f"{n[:22]:>22s}" for n, _ in runs))
 for s in suites:
     cells = []
