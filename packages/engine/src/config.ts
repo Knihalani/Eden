@@ -775,6 +775,13 @@ export interface EngineConfig {
    * pasted log lines and chatter openers (`isOpenRequest`'s strict form). The push's lookup reads the imperative.
    */
   pushIndirect: boolean;
+  /**
+   * P2 (D821; a trial, 0 = off; docs/research/p2-push-check.md): with no push check answer, the candidates' packet
+   * goes only when an item of the pool's head is constraint-like and names one of the request's anchors (the
+   * `pushCheckAnchored` test, no model); 2 also keeps only the constraint-like or anchored items of those handed.
+   * Silence restored for most neutral requests, at a measured cost in facts handed.
+   */
+  pushNarrow: number;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -947,6 +954,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckAnchored: false,
   pushOpen: true,
   pushIndirect: false,
+  pushNarrow: 0,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

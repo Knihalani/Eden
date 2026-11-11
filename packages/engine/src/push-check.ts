@@ -99,6 +99,26 @@ export const CHECK_SYSTEM_COMPARE = [
     'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
 ].join("\n\n");
 
+/**
+ * P2 (D822, `pushCheckForm` 3): the compare-first reply made short, for the wait. Form 2's reply is about 140 tokens
+ * (1 s a call at p50, most of it output); here each entry is two fields of at most four words, the verdict folded
+ * into the link ("none" for a look-alike and for a go-ahead alike), at most four entries. The question, its yes and
+ * no and the data rule are form 2's, word for word.
+ */
+export const CHECK_SYSTEM_COMPACT = [
+  ...CHECK_PARTS.slice(0, 5),
+  "Reply with one JSON object only, no prose and no code fence: " +
+    '{"items":[{"i":<item number>,"on":"<at most 4 words>","hits":"<at most 4 words, or none>"}, ...]}. ' +
+    "List only the items that touch the request's own subject, the most decisive first, at most 4; leave every other " +
+    "item out. \"on\": the specific person, place, account, thing or day the item's point applies to, in the item's " +
+    "own names. \"hits\": what of the request's own that point lands on, in the request's words, when the item gives " +
+    "a reason to stop, to check first or to do it another way. A point can land without sharing a name: an event on " +
+    "the request's evening, a limit the request's amount counts against, the same job already done or arranged, a " +
+    "helper it depends on. Write none when the point is about another one of the same kind (another venue, invoice, " +
+    "person, document or day), and when the item is a go-ahead (approved, lifted, back to normal) or background. " +
+    'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
+].join("\n\n");
+
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
   request: string;
@@ -106,8 +126,11 @@ export interface PushCheckInput {
   today: string;
   /** The user's opaque sticky-routing key (`userCacheKey`): routing only, never prompt text, not in `checkKey`. */
   cacheKey?: string;
-  /** `pushCheckForm`: 1 (absent) is I3's reply, 2 the compare-first reply (`CHECK_SYSTEM_COMPARE`, D527). */
-  form?: 1 | 2;
+  /**
+   * `pushCheckForm`: 1 (absent) is I3's reply, 2 the compare-first reply (`CHECK_SYSTEM_COMPARE`, D527), 3 its short
+   * form (`CHECK_SYSTEM_COMPACT`, D822).
+   */
+  form?: 1 | 2 | 3;
 }
 
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
@@ -129,7 +152,7 @@ const head = (text: string) =>
 
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
-  const form = input.form === 2 ? "c" : "";
+  const form = input.form === 2 ? "c" : input.form === 3 ? "s" : "";
   const h = createHash("sha256").update(
     `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
@@ -152,7 +175,10 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     );
   });
   return [
-    { role: "system", content: input.form === 2 ? CHECK_SYSTEM_COMPARE : CHECK_SYSTEM },
+    {
+      role: "system",
+      content: input.form === 2 ? CHECK_SYSTEM_COMPARE : input.form === 3 ? CHECK_SYSTEM_COMPACT : CHECK_SYSTEM,
+    },
     {
       role: "user",
       content:
@@ -220,13 +246,15 @@ const NO_HIT = /^\s*(?:(?:none|n\/a)(?![\p{L}\p{N}]).*|(?:nothing|no)?\s*\.?\s*)
 /** The most entries a compare-first reply may hold, and its output cap (about 35 tokens an entry). */
 export const COMPARE_MAX_ENTRIES = 6;
 export const COMPARE_MAX_TOKENS = 500;
+/** Form 3's output cap (D822): four entries of about 20 tokens, with room. */
+export const COMPACT_MAX_TOKENS = 240;
 
 /**
  * `pushCheckForm` 2: the 0-based indexes a compare-first reply says change the action (`hits` not none and `act`
  * true), at most 5; null when the reply is unreadable (the push keeps the default's candidates). An entry that says
  * yes about an item it does not name readably fails the whole reply open, as `parseCheck` does.
  */
-export function parseCompare(text: string, count: number): number[] | null {
+export function parseCompare(text: string, count: number, compact = false): number[] | null {
   if (!OPENING.test(text)) return null;
   let entries: unknown;
   try {
@@ -239,7 +267,8 @@ export function parseCompare(text: string, count: number): number[] | null {
   for (const e of entries.slice(0, COMPARE_MAX_ENTRIES * 2)) {
     if (!e || typeof e !== "object") return null;
     const { i, hits, act } = e as { i?: unknown; hits?: unknown; act?: unknown };
-    if (act !== true && act !== "true") continue;
+    // Form 3 (D822) has no verdict field: the link is the verdict. An explicit false still reads as a no.
+    if (compact ? act === false || act === "false" : act !== true && act !== "true") continue;
     // A yes whose link is not text (an array, null, another format's entry) is a format error: fail open, never
     // closed (a yes read as nothing would silence the push). A missing link is the entry contradicting itself.
     if (hits !== undefined && typeof hits !== "string") return null;
@@ -318,10 +347,10 @@ export class PushChecker {
     try {
       const res = await this.deps.model.chat({
         messages: checkMessages({ ...input, items }),
-        maxTokens: input.form === 2 ? COMPARE_MAX_TOKENS : CHECK_MAX_TOKENS,
+        maxTokens: input.form === 2 ? COMPARE_MAX_TOKENS : input.form === 3 ? COMPACT_MAX_TOKENS : CHECK_MAX_TOKENS,
         json: true,
-        // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop.
-        ...(input.form === 2 ? {} : { stop: [CHECK_STOP] }),
+        // The compare-first replies list their rejections on purpose (a "hits": "none" entry), so they have no stop.
+        ...(input.form === 2 || input.form === 3 ? {} : { stop: [CHECK_STOP] }),
         ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
         signal,
       });
@@ -329,8 +358,8 @@ export class PushChecker {
       this.count(res.costUsd, res.usage);
       const at = res.truncated
         ? null
-        : input.form === 2
-          ? parseCompare(res.text, items.length)
+        : input.form === 2 || input.form === 3
+          ? parseCompare(res.text, items.length, input.form === 3)
           : parseCheck(res.text, items.length, res.stopped);
       if (!at) {
         this.stats.failures++;
