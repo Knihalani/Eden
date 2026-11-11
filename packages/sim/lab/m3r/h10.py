@@ -182,11 +182,11 @@ class Student(nn.Module):
         return self.out(z).squeeze(-1)
 
     def size_bytes(self):
-        """The shared model as shipped: the table at its storage width (+ fp16 row scales), the rest float32 except
+        """The shared model as shipped: the table at its storage width (+ float32 row scales), the rest float32 except
         a binary head's signs (bits) or an int8 head (a byte each)."""
         rows, cols = self.w.shape
         width = {"float": 4, "int8": 1, "int4": 0.5, "ternary": 0.25}[self.table]
-        n = rows * cols * width + (2 * rows if self.table in ("int8", "int4") else 0)
+        n = rows * cols * width + (4 * rows if self.table in ("int8", "int4") else 0)
         if self.proj is not None:
             n += self.proj.weight.numel() * 4
         n += 2 * 4 * self.norm.num_features
@@ -342,9 +342,91 @@ def init_from_teacher(net, teacher, o):
                 net.out.load_state_dict(teacher.head.state_dict())
 
 
+def export(o):
+    """A trained Student to flat files for the TypeScript forward (m3r/h10-forward.ts): the table as int8 with a float32
+    scale a row (or float32), the encoder's batch norm folded into the projection, the head's batch norm folded to a
+    scale and shift; plus PyTorch's logits on held-out pairs (half replacements) and the dev threshold at precision
+    0.95, for an exactness check of decisions."""
+    import numpy as np
+
+    ck = torch.load(o.model, map_location="cpu", weights_only=False)
+    net = Student(**ck["cfg"])
+    net.load_state_dict(ck["state"])
+    net.eval()
+    cfg = ck["cfg"]
+    os.makedirs(o.out, exist_ok=True)
+    f32 = lambda t: t.detach().numpy().astype(np.float32)  # noqa: E731
+    W = net.w.detach()
+    arrays = {}
+    if cfg["table"] in ("int8", "int4"):
+        lv = {"int8": 127, "int4": 7}[cfg["table"]]
+        sc = W.abs().amax(1, keepdim=True).clamp_min(1e-8) / lv
+        arrays["table"] = (W / sc).round().clamp(-lv, lv).to(torch.int8).numpy()
+        arrays["row_scale"] = f32(sc.squeeze(1))
+    elif cfg["table"] == "ternary":
+        a = W.abs().mean()
+        arrays["table"] = torch.where(W > 0.7 * a, 1, torch.where(W < -0.7 * a, -1, 0)).to(torch.int8).numpy()
+        arrays["row_scale"] = np.full(W.shape[0], float(a), dtype=np.float32)
+    else:
+        arrays["table"] = f32(W)
+    bs = net.norm.weight / torch.sqrt(net.norm.running_var + net.norm.eps)
+    bh = net.norm.bias - net.norm.running_mean * bs
+    # Encoder: pre = bs * (P x) + bh, with P the projection (identity when the table is d wide).
+    if net.proj is not None:
+        arrays["proj"] = f32(net.proj.weight * bs[:, None])  # d x r
+    else:
+        arrays["enc_s"] = f32(bs)
+    arrays["enc_h"] = f32(bh)
+    L = net.l1.detach()
+    if cfg["head"] == "binary":
+        L = L.abs().mean(1, keepdim=True) * torch.sign(L)
+    elif cfg["head"] == "int8":
+        L = fake_q(L, "int8")
+    s1 = net.n1.weight / torch.sqrt(net.n1.running_var + net.n1.eps)
+    arrays["l1"] = f32(L)  # h x 3d, float32 (an int8 or binary head is stored at its width; see size_bytes)
+    arrays["n1_s"] = f32(s1)
+    arrays["n1_h"] = f32(net.n1.bias - net.n1.running_mean * s1)
+    arrays["out_w"] = f32(net.out.weight.squeeze(0))
+    arrays["out_b"] = f32(net.out.bias)
+    meta = {"cfg": cfg, "size_bytes": net.size_bytes(), "code_bytes": net.code_bytes(), "arrays": {},
+            "result": ck.get("result")}
+    for name, arr in arrays.items():
+        arr.tofile(os.path.join(o.out, f"{name}.bin"))
+        meta["arrays"][name] = {"dtype": str(arr.dtype), "shape": list(arr.shape)}
+    corpus = Corpus()
+    dev = corpus.pairs(pairs_of(o.dev))
+    _, pd = eval_student(net, corpus, dev)
+    th = threshold_at(pd, dev[:, 2].tolist(), 0.95)
+    P = pairs_of(o.pairs[0])
+    pos = [x for x in P if x[2] == 1][: o.n // 2]
+    neg = sorted([x for x in P if x[2] == 0], key=lambda x: B.jaccard(x[0], x[1]))[-(o.n - len(pos)) :]
+    chk = pos + neg
+    T = corpus.pairs(chk)
+    _, pc = eval_student(net, corpus, T)
+    meta["threshold_p95_dev"] = th
+    meta["checks"] = [{"a": x[0], "b": x[1], "logit": round(v, 5), "label": x[2]} for x, v in zip(chk, pc)]
+    json.dump(meta, open(os.path.join(o.out, "meta.json"), "w"))
+    size = sum(os.path.getsize(os.path.join(o.out, f"{n}.bin")) for n in arrays)
+    print(json.dumps({"out": o.out, "cfg": cfg, "file_bytes": size, "size_bytes": net.size_bytes(), "threshold": th,
+                      "checks": len(chk)}))
+
+
+def threshold_at(p, y, prec):
+    """The lowest score threshold whose precision on (p, y) is at least `prec` (the operating point for recall)."""
+    order = sorted(range(len(p)), key=lambda i: -p[i])
+    tp = fp = 0
+    best = float(max(p))
+    for i in order:
+        tp += y[i]
+        fp += 1 - y[i]
+        if tp / (tp + fp) >= prec:
+            best = float(p[i])
+    return best
+
+
 if __name__ == "__main__":
     a = argparse.ArgumentParser()
-    a.add_argument("cmd", choices=["score", "teach", "train"])
+    a.add_argument("cmd", choices=["score", "teach", "train", "export"])
     a.add_argument("--model", default="")
     a.add_argument("--pairs", nargs="+", default=[])
     a.add_argument("--out", default="")
@@ -373,7 +455,11 @@ if __name__ == "__main__":
     a.add_argument("--lr", type=float, default=2e-3)
     a.add_argument("--seed", type=int, default=7)
     a.add_argument("--save", default="")
+    a.add_argument("--n", type=int, default=64, help="export: held-out pairs checked against PyTorch")
     o = a.parse_args()
+    if o.cmd == "export":
+        export(o)
+        sys.exit(0)
     if o.cmd == "train":
         train(o)
         sys.exit(0)
