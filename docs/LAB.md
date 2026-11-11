@@ -621,6 +621,14 @@ python3 -I packages/sim/lab/m6/prep.py --labels .local/m6/l.jsonl --out .local/m
 python3 -I packages/sim/lab/m6/baselines.py .local/m6/set/items.jsonl --sets val
 ```
 
+### 1j. Distilled students of the push check (M1, D890–D899, D980–D982; docs/research/m1-student.md)
+
+Lab tooling only: both tracks stopped (D899, D982) and the engine trial was deleted with them (D983).
+`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
+`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and scores the teacher over pair groups.
+`packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
+screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

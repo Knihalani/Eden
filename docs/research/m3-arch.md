@@ -437,3 +437,154 @@ measurement and the `+stale` suite; a better H10 re-enters as a new trial agains
 requests (`score.py --at5 --key all`, eval-ship) its own ranking hands facts@5 33 of 56 against the shipped pool's
 47, and every fusion with the shipped pool is below the shipped pool (hyb10: 45 facts at 27 decoys against 47 at 26).
 Far from D909's bar; not taken to Modal.
+
+### 7i. H10 made small and fast (M3b; the bar pre-registered in commit 3715f552 before any run below)
+
+**The bar**, on M2 v2 val and test (never tuned on; selection only on `dev`, 264 of train's 2,128 worlds split by world
+id, its families shared with the rest of train, so dev reads optimistic and serves only to compare variants):
+recall @ precision 0.95 ≥ 0.80, AUC ≥ 0.985, shared model ≤ 4 MB, ≤ 40 µs a pair and ≤ 0.4 ms an item's encode in
+the TypeScript forward, ≤ 256 bytes stored an item, no pretrained tables.
+
+**Where the size and time are.** The float net (binnet `PairTag`, 256 bits) is a 2^16 × 256 float32 hashed n-gram
+table (67.1 MB, 99.7% of the model) into a batch norm and tanh, then a pair head [a, b, a·b] → 64 → 1 (49,152
+multiply-adds a pair, 0.2 MB). So the size is the table and the pair time is the head's first layer; the item's
+encode is the hashing plus 300 table rows of 256.
+
+**The starting point, re-measured** (`h10.py score`): the saved float checkpoint (`w-supersede-float.pt`, 3 epochs)
+reads val AUC 0.979, recall@p0.95 0.785 and test 0.981, 0.801: **itself short of the bar** (the 0.815 in §7e was an
+earlier epoch of another run, not saved). The saved binary: val 0.963 / 0.623, test 0.966 / 0.593. So the work
+includes a better float teacher (early-stopped on dev).
+
+**Hypotheses** (step 1, written before any student's result):
+
+| # | route | change | why it could work | size, pair cost |
+|---|---|---|---|---|
+| B1 | compressed float | low-rank table: 2^16 × r (int8, a scale a row) then r → 256, started from the teacher's SVD, distilled (soft scores + matching the teacher's pre-activation codes on all training items) | a sum of rows is linear, so the factorisation is exact up to the rank; the table's useful rank is probably far below 256 | r 32: 2.4 MB; r 48: 3.5 MB; encode 300·r + r·256 |
+| B2 | compressed float | fewer buckets (2^13–2^14), int8, retrained with distillation | collisions cost little when the head reads 256 summed dims | 2^13 × 256: 2.1 MB |
+| B3 | compressed float | int4 table with row scales plus pruning rare buckets | — | 2^16 × 256 int4 is 8.4 MB: needs > 55% of rows pruned; expected to lose to B1 |
+| B4 | compressed float | product quantisation of rows (32 subspaces of 8, 256 centroids) | rows cluster | 2.1 MB codes + 0.26 MB codebooks |
+| H | hybrid | B1's encoder at ingest, the item stored as an int8 code (128 or 256 bytes), a slimmer pair head (d·3 → 32–64) on int8 codes | the pair needs only the codes; halving d or h halves the head | 128-d code, h 64: 24,576 MACs a pair |
+| A1 | better binary | the binary net distilled from the float teacher's soft scores, hard negatives (teacher-scored) drawn again | the binary net's loss is recall at the top: the hard labels say nothing about which negatives are close | 256 bits = 32 B an item |
+| A2 | better binary | wider sign codes (512 bits) and a float/int8 head over [a, b, a XNOR b] | binarising the head cost more than the codes in H13 | 64 B an item |
+| A3 | better binary | a 2–3 net ensemble of A1/A2 | variance at the top of the ranking | ×2–3 pair cost |
+
+B4 (product quantisation) and A3 (ensembles) were not run: B1 reached the size and offline quality first, and the
+end-to-end diagnosis below changed the target.
+
+**Round 1** (Haiku helpers, local CPU, 2 epochs, M2 v2 pairs only, distilled from the new float teacher `teacher-s7`:
+val AUC 0.995, recall@p0.95 0.828; test 0.996, 0.866). Val read for every row, chosen on dev:
+
+| variant | shared model | code an item | val AUC | val recall@p0.95 |
+|---|---|---|---|---|
+| B1 rank 16, int8 table | 1.40 MB | 256 B | 0.996 | 0.822 |
+| B1 rank 32 | 2.46 MB | 256 B | 0.996 | 0.838 |
+| B1 rank 48 | 3.53 MB | 256 B | 0.996 | 0.808 |
+| H rank 32, d 128 | 2.34 MB | 128 B | 0.996 | 0.805 |
+| H rank 32, h 32 | 2.36 MB | 256 B | 0.988 | 0.727 |
+| B2 2^13 buckets, int8 | 2.31 MB | 256 B | 0.995 | 0.758 |
+| B3 int4, full table | 8.7 MB | 256 B | 0.995 | 0.825 |
+| B1 rank 32, no distillation | 2.46 MB | 256 B | 0.996 | 0.832 |
+| A0 binary (ternary table, sign codes, binary head), this schedule | 4.2 MB | 32 B | 0.993 | 0.771 |
+| A1 + distillation + hard negatives | 4.2 MB | 32 B | 0.992 | 0.788 |
+| A2 512 bits, int8 head | 8.5 MB | 64 B | 0.993 | 0.795 |
+| A2 rank-32 table into 256 bits, float head | 2.46 MB | 32 B | 0.993 | 0.781 |
+
+The low-rank table carries the compression (a sum of rows is linear, so rank 16–32 keeps the float's quality); the
+one-cycle schedule, not distillation, is most of the binary nets' gain over the saved binary (0.963 → 0.993 AUC), and
+no binary variant reached recall 0.80. The TypeScript forward (`h10-forward.ts`, from `h10.py export`) matches
+PyTorch on 64 of 64 decisions (max logit error 1e-5); a byte-level CRC n-gram hasher (`fastGrams`, the same ids as
+`binnet.grams` on all 14,317 val items) halves the encode.
+
+**Why H10 failed end to end (D913), diagnosed.** On `synth:<M2 v2 val>+stale@4`, seeds 1–25 (with M3's tag veto on:
+off 62 of 98 stale versions handed), of the 62 stale hand-outs under the float H10 at θ 0.5: in **34 the stale→fact
+pair was never scored** (the trial asked only about a newer pool item that itself named one of the request's anchors,
+and the fact usually does not), 14 scored under θ, 12 swapped, 1 fact not in the pool. And **θ 0.5 is logit 0, where
+the float net's val recall is 0.374** (precision 1.0); its precision-0.95 point is logit −5.69 (p 0.0034). The
+funnel's renamed texts score as offline for most pairs (persona renaming moved a few by 3–9 logits).
+
+| arm (float H10, tag on) | stale handed | facts handed | control decoys handed |
+|---|---|---|---|
+| off | 62 | 442 | 278 |
+| θ 0.5 | 50 (−19%) | 443 | 277 |
+| θ 0.0034 (dev p0.95) | 40 (−35%) | 444 | 252 |
+| θ 0.0034, no anchor gate | 9 (−85%) | 428 (−3.2%) | 195 |
+
+Without the gate the swaps are there but the precision is not: 5,048 of 30,197 pool pairs read "replaces" at an
+M2-calibrated threshold. M2's offline pairs (reversed, fact against twin, fact against neutral) are not the pairs the
+push pool presents (many same-topic items, always older then newer).
+
+**The fix.** (1) `pushSupersede` drops the anchor gate on the newer item (`push-supersede.test.ts`). (2) H10 is
+trained on engine-drawn pairs as well: the funnel on synth *train* +stale (M2 v2 train in ten parts of ~213 worlds,
+seeds 1–52 each, `pushSupersede` 1 so nothing swaps, the lab superseder's trace with texts) records every (handed,
+newer pool item) pair; a pair is positive when it is a task's (stale version, fact) (in M2 v2 every `revisionOf` pair
+is a silent-change task's), every other is negative (`h10_pool_pairs.py`). Parts 00–08: 458,943 distinct pairs, 1,342
+positives (training); part 09: 51,314, 117 (calibration). M2-trained nets read those calibration pairs at AUC 0.92
+with no precision (the old float at logit 0: 58 true swaps, 1,223 false); trained on both, 0.995. (3) θ is the
+model's precision-0.80 point on the calibration pairs, confirmed on part 09's funnel before any held-out read
+(pre-registered). With the tag veto rejected on main (#256), every read below is tag off, as main ships.
+
+| funnel, tag off | stale handed | facts handed | control decoys |
+|---|---|---|---|
+| part 09 (train, calibration), off | 93 / 156 | 893 / 1,558 | 732 |
+| part 09, pool-float θ 0.97 / 0.91 / 0.53 (pool p0.95 / p0.90 / p0.80) | 44 / 17 / 6 | 894 / 895 / 895 | 732 |
+| part 09, rank 32 d 128 θ 0.926 (pool weight 1) | 20 | 896 | 732 |
+| part 09, rank 32 d 128 θ 0.941 (pool weight 0.3, reversed positives) | 40 | 895 | 732 |
+| part 09 (merged tree), rank 16 d 128 θ 0.5867 (Modal, 4 epochs, reversed positives) | 15 | 895 | 731 |
+| part 09 (merged tree), rank 32 d 128 θ 0.75 (local, reversed positives) | 20 | 895 | 732 |
+| **val** (read once), off | 64 / 98 | 457 / 738 | 356 |
+| **val**, pool-float θ 0.53 | **15 (−77%)** | 460 | 354 |
+| **test** (`synth-test+stale@4 --blind`, read once), off | 57 / 95 | 451 / 759 | 355 |
+| **test**, pool-float θ 0.53 | **22 (−61%)** | 450 (−0.2%) | 354 |
+| **test**, rank 16 d 128 θ 0.5867 | **36 (−37%)** | 450 (−0.2%) | 355 |
+
+Pool training moves M2's offline calibration: pool-float reads M2 val AUC 0.993 but recall@p0.95 0.741 (the M2-only
+float: 0.828), the reversed and fact-against-twin pairs the pool never draws rising above its 80%-recall score; the
+reversed pool positives as negatives (`--extra-reverse`) did not win it back (rank-32 students 0.71–0.76). The parent
+retired the offline M2 recall as the arbiter for this reason; the student's bar became pool-float's end-to-end result
+within the size and speed limits.
+
+**Result: the float passes end to end, the compressed student does not.** pool-float (67 MB) cuts stale versions
+handed on test by 61% with facts level; the rank-16 student (1.42 MB shared, 128 B an item, TypeScript encode 120–154
+µs an item and 19–23 µs a pair, 64/64 decisions against PyTorch; in the funnel 24 µs a pair, 0.18 ms an item) cuts
+37%, under the −50% bar; on part 09 it read −84%, so the train-side screen overstated it. Its calibration pairs show
+why: at p0.80 it catches 93 of 117 against the float's 104, and the gap widens on unseen families. Weights: Modal
+Volume `eden-retriever`, `models/m3b-teacher-s7.pt` (M2-only float teacher), `models/m3b-pool-float.pt`,
+`models/m3b-final-r16-d128-rev.pt`, `models/m3b-final-r32-d128-rev.pt`, round 2's `models/m3b-r2-*.pt`; data
+`data/g/m3b-{core,dev}.jsonl`, `data/g/m3b-pool-{train,calib}.jsonl.gz`.
+
+**Option (c), the float quantised (parent's decision: size limit raised to ≤ 10 MB; pre-registered e8b59386).**
+pool-float exactly, its table int4 with a float32 scale a row (packed two a byte), its item code int8, head float, θ
+0.53 unchanged, no retraining: 8.85 MB shipped (7.6× under 67.3 MB), 256 B an item, 64 of 64 decisions against
+PyTorch (max logit error 1e-5). On the same test read it hands stale 22 of 95 (off 57, −61%) and facts 450 of 759 (off
+451): the float's result exactly. The trial now asks about a push pass's pairs in one call, so each item's half of the
+head's first layer is computed once a pass (outputs identical): a pass is about 180 µs plus 17 µs a pair. Pass times
+(p50 / p90 / p99): funnel on M2 val 0.55 / 0.78 / 1.21 ms; days-calls 0.59 / 0.99–1.06 / 1.5–1.7 ms; train worlds
+0.63–0.70 / 1.10–1.18 / 2.4–2.5 ms (the parent set this part's bar at p90 ≤ 1.5 ms, p99 ≤ 3 ms: the push already waits
+for its check). Encode 0.22–0.25 ms an item.
+
+**The sim reads.** `days-calls --recap-notice none`, fresh seeds 301–320: identical to off for every user (hidden
+104/270, decoys 118/270, owed updates 0/333 in both): its 483 silent changes edit the same item in place, so there is
+never a second item to pair. On the funnel's train1–6 (seeds 41–42) the model changes 2 of 768 tasks, one a false swap
+that loses a hidden fact (an MSA's pricing terms "replaced" by an unrelated customer DPA register, logit 0.36 against
+θ's 0.12).
+
+**The hand-written gate (pre-registered 989ce68c before any model run): fails.** `train5|6|5r|6r+revision`
+(`revision.ts`): each hidden fact stays as the current version and a stale earlier copy goes beside it in place of a
+noise item of its source, three days older, one detail of its body changed by a fixed rule (seed 41: 74 dates, 12
+times, 8 amounts, 12 counts, 22 "Draft:" marks of 128). Funnel seeds 41–44, $0:
+
+| arm | stale handed | facts handed | control decoys handed |
+|---|---|---|---|
+| off | 226 / 483 | 236 / 512 | 249 / 512 |
+| int4, θ 0.53 | 226 (0%) | 236 | 249 |
+
+Of the 226 stale hand-outs, 193 had their (stale, fact) pair scored (33 had no fact in the pool): logits −7.19 to
+−0.44, median −4.31, against θ's 0.12; no swap. H10 recognises M2's model-written revisions and the push pool's pairs
+of them, not a hand-written fact as the correction of a copy one detail apart: the transfer failure M6 met (D920).
+
+**Decision (D914): rejected; the trial is deleted, the lab kit kept.** `pushSupersede` (engine, the funnel's and
+days-calls' `--supersede`, the lab superseder) is removed; its last code is in commit 94dbb31c. Kept: `h10.py` (the
+students, distillation, pool pairs, export, int4 quantisation), `h10-forward.ts` (the TypeScript forward with a
+byte-level n-gram hasher giving binnet's ids, the batched pair scorer, int4 read in place), `h10_pool_pairs.py`,
+`packages/sim/modal/m3b_h10.py`, the `+revision` suites (`revision.ts`) and the funnel's stale ids. Spend: Modal about
+$1, Anthropic $0 from this session; four Haiku helper sessions about $0.21.
