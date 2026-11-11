@@ -67,7 +67,7 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
-import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
+import { intentCut, intentReach, intentTerms, keepIntents, stemWord, type IntentExpander } from "./intent";
 import {
   READER_MAX_ITEMS,
   readerFocus,
@@ -194,6 +194,11 @@ export interface PartnerDeps {
    * request time with no model. Absent, or the flag off: no card is made or read.
    */
   cards?: CardEnricher;
+  /**
+   * `intentMicro` (M11, D970, a trial): the expansion model, loaded once per process by the embedder; read only with
+   * `cards` and `intent` on and `intentMicro` above 0.
+   */
+  intentExpander?: IntentExpander;
   /**
    * The ask-time model reader (`reader.ts`, `config.askReader`): its own model, budget and per-user, per-session cache
    * of verdicts. Absent, or the flag off: no call is made.
@@ -687,9 +692,13 @@ export class ContextPartner {
       cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
       if (this.config.cardsEconomy) cards.economize();
       // `intent`: the same calls write each item's requests, and what the prefilter rejects is read for them.
-      if (this.config.intent) cards.intend();
+      // `intentMicro` (M11, D970, a trial): mode 1 indexes the expansion for every item and the calls write no
+      // requests (so the prefilter's rejects are not read for them); mode 2 keeps the calls' requests where made.
+      const micro = this.config.intent && deps.intentExpander ? this.config.intentMicro : 0;
+      if (micro > 0) cards.micro(micro, deps.intentExpander!);
+      if (this.config.intent && micro !== 1) cards.intend();
       // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
-      if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
+      if (this.config.intent && micro !== 1 && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
       // `cardsOrder` (D482, D483): a user's waiting items are read best first (worded, ahead, correspondents, recent).
       if (this.config.cardsOrder) cards.order();
       // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.

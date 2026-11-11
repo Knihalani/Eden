@@ -79,6 +79,7 @@ export {
 export {
   cleanRequests,
   IntentIndex,
+  type IntentExpander,
   intentCut,
   intentReach,
   intentTerms,

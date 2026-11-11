@@ -72,6 +72,7 @@
  * rows go to the JSON's `neutral` block, never to `rows`, `total` or `perTask`.
  */
 import { appendFileSync, writeFileSync } from "node:fs";
+import { replayExpander } from "./micro-replay";
 import {
   AskReader,
   CardEnricher,
@@ -85,6 +86,7 @@ import {
   ItemCache,
   type CandidateDump,
   type CardMaker,
+  type IntentExpander,
   automated,
   type PushPoolReport,
   PushChecker,
@@ -185,6 +187,7 @@ const cli = flags(
         "cards-endpoint",
         "cards-endpoint-model",
         "intent",
+        "micro",
         "card-log",
         "card-limits",
         "planted-age-days",
@@ -377,6 +380,13 @@ const cardMaker = CARDS
   ? new DiskCardMaker(CARDS, cardLive, { requests: INTENT_FILES, cardRequests: INTENT_FILES.length > 0 })
   : null;
 if (INTENT_FILES.length && !cardMaker) throw new Error("--intent needs --cards");
+/**
+ * `--micro FILE` (M11, D970; with `intentMicro` in `--config`): the intent micro-expansion replayed from a lab file of
+ * `{card key: {term: weight}}` (`packages/sim/lab/m11/`), standing in for the model's own forward while it is
+ * screened; an item the file does not hold gets no terms. A lookup, so no model runs.
+ */
+const MICRO = opt("micro", "");
+const microExpander: IntentExpander | undefined = MICRO ? replayExpander(MICRO) : undefined;
 if (CARDS_ENDPOINT) console.log(`cards: ${ENDPOINT_LABEL}, misses made live and appended to ${CARDS}`);
 /**
  * `--card-log out.jsonl`: every item the enrichment sent for a card (its content hash, title, the head of its text
@@ -1076,6 +1086,7 @@ async function runSeed(
     onTrace: timeline ? timeline.traceSink(lane, countCalls) : countCalls,
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
+    ...(microExpander ? { intentExpander: microExpander } : {}),
     ...(checker ? { checker } : {}),
     ...(reader
       ? {

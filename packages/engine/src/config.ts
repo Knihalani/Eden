@@ -552,6 +552,14 @@ export interface EngineConfig {
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
   /**
+   * Trial (M11, D970; off): the intent micro-expansion. A small learned model (no text generation, no model call:
+   * `IntentExpander`, wired as `PartnerDeps.intentExpander`) reads each item at ingest and gives weighted
+   * request-vocabulary terms, indexed in the user's intent index as the model-written requests are. 0: off. 1: every
+   * item gets the expansion in place of the card call's requests, and the card calls no longer write requests. 2: the
+   * expansion only for items the card calls gave no requests (they keep theirs).
+   */
+  intentMicro: number;
+  /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
    * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
@@ -858,6 +866,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
+  intentMicro: 0,
   askReader: true,
   askReaderPool: 15,
   askReaderWaitMs: 2_500,
