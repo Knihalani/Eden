@@ -29,10 +29,11 @@
   sevenths come on days 8–11, later than the default's day 8.
   - Bench wall time on its worst day: 11.9 s → 2.3 s; over the steady week 14.9 s → 13.4 s (one run, this box).
   - **Card calls rise, carded items fall.** Steady week: 176 → 253 calls (+44%) for 1,422 → 871 items. Items that
-    arrive a few at a time make smaller batches. By the sizes in run 3's ledgers (o1-earn.md; 461 card calls: about
-    2,700 input tokens fixed a call, about 400 input and 100 output tokens an item) that is roughly 16% fewer
-    tokens, not more: **an estimate, not a measurement**, and I did not find why fewer items are carded, so I do
-    not claim it as a saving.
+    arrive a few at a time make smaller batches. A call's fixed cost is small: in run 3's ledgers (3,142 card calls)
+    the fixed prefix is 1,319 tokens and was read from the prompt cache in all but 2 calls, 2% of the card bill
+    at list prices; uncached input (the items' text) is 37% and output 59%. So the bill follows the items carded,
+    not the calls, and would be lower with the spread: **an estimate, not a measurement**, and I did not find why
+    fewer items are carded, so I do not claim it as a saving.
   - Stale and deleted deliveries with every source unused (`quality-cli --never-used`, 16 users × 20 sessions):
     stale 11 of 122 → 11 of 137 updates, deleted items delivered 2 of 4 → 2 of 8, re-reads 2,461 → 2,294. Level;
     no interval.
@@ -117,3 +118,18 @@ beside the answer: the earlier "free" readings (moon-sync.md's 0.3 and 0.5 on th
 and at the default, a change with no notice already reaches the agent as an update in only 28 of 79 cases on this
 screen, which is the larger problem and a quality one (one run, simulated; the screen's moves happen at the day's
 recap, so it is a hard case).
+
+## The card calls' prompt cache: checked, nothing to fix
+
+I had read run 3's card calls as "about 2,700 fixed input tokens a call, 29% cache-read" and told the parent that
+better caching looked like the cheapest cut left in Eden's own model spend. That reading was wrong, and the ledgers
+say so (`.local/modal/o1-earn2t-*/s*/ledger.jsonl`, role `eden.cards`, 3,142 calls; `inputTokens` there is the whole
+prompt, cached part included):
+
+- the fixed prefix is 1,319 tokens, and 3,140 of 3,142 calls read it from the cache (the two misses are first calls);
+- a call averages 1,594 uncached input tokens (the items), 1,319 cache-read and 505 output tokens;
+- at Haiku's list ratios (cache read 0.1, output 5 against input 1) the bill is 59% output, 37% uncached input,
+  2% cache reads.
+
+The cache already works. What a card call costs is its items' text going in and the cards and requests coming out;
+a cut there changes what a card says, which is a quality change, not a caching fix. Nothing built.
