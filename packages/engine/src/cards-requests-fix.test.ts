@@ -179,6 +179,56 @@ describe("the enricher", () => {
   });
 });
 
+describe("the review's cases (D1062)", () => {
+  /** A maker scripted call by call; it records how each call was asked. */
+  class Scripted implements CardMaker {
+    asked: CardMakeOptions[] = [];
+    constructor(private readonly replies: ((n: number) => CardBatch)[]) {}
+    async make(
+      items: ContextItem[],
+      _t: string,
+      _s: AbortSignal,
+      retry?: boolean,
+      _i?: boolean,
+      o: CardMakeOptions = {},
+    ) {
+      this.asked.push(retry ? ({ ...o, retry: true } as CardMakeOptions) : o);
+      return this.replies[this.asked.length - 1]!(items.length);
+    }
+  }
+  const nulls = (n: number) => Array.from({ length: n }, () => null);
+
+  test("a batch cut at the cap twice is not asked a third time", async () => {
+    const cut = (n: number): CardBatch => ({ cards: nulls(n), requests: nulls(n), costUsd: 0.001, truncated: true });
+    const maker = new Scripted([cut, cut]);
+    const e = enricher(maker, true);
+    e.enqueue(scope, [item(1), item(2)]);
+    await e.idle();
+    expect(maker.asked).toHaveLength(2);
+    expect(e.stats.reasked).toBe(0);
+  });
+
+  test("an unreadable reply (no card read, no item read for requests only) is not asked again", async () => {
+    // Items the prefilter passes (constraint-worded), so none is read for its requests only.
+    const worded = (n: number): ContextItem => ({ ...item(n), text: `You must not book the fitters before ${n} May.` });
+    const maker = new Scripted([(n) => ({ cards: nulls(n), requests: nulls(n), costUsd: 0.001 })]);
+    const e = enricher(maker, true);
+    e.enqueue(scope, [worded(1), worded(2)]);
+    await e.idle();
+    expect(maker.asked).toHaveLength(1);
+    expect(e.stats.reasked).toBe(0);
+  });
+
+  test("a re-ask the budget refuses is counted over budget", async () => {
+    const maker = new DroppingMaker();
+    const budget = new Budget({ callsPerSession: 20, usdPerSession: 1, usdPerUserDay: 0.002 }, () => NOW);
+    const e = enricher(maker, true, budget);
+    e.enqueue(scope, [item(1), item(2)]);
+    await e.idle();
+    expect(e.stats.overBudget).toBe(2);
+  });
+});
+
 test("cardsRequestsFix needs cards and intent", () => {
   const deps = { deps: { cards: true } };
   expect(() => checkEngineConfig({ cardsRequestsFix: true, intent: false }, deps)).toThrow();

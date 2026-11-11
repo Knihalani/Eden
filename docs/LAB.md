@@ -570,7 +570,9 @@ Since D1062 the default asks the card model in form 3 (`cardsRequestsFix`: the r
 example, a dropped list re-asked for requests only). A replay line made by form 3 is keyed `<hash>:f3` (`formKey`),
 so a file can hold both forms and neither answers the other. `cards-shipped.jsonl.gz` holds the shipped form's lines
 and, after them, form 3's for train, reworded and longtail seeds 41–44 (`cold-start.ts --set
-'{"cardsRequestsFix":true}' --cards-out`, $0.63 for 84 worlds); heldout19 has none (B19 records its own). A file with no
+'{"cardsRequestsFix":true}' --cards-out`, $0.63 for 84 worlds); heldout19 has none, so shipped coverage refuses a
+run asking in form 3 there (`shippedUncovered(…, form)`): such a run passes `--coverage full` with lines it recorded
+(B19's harness does). A file with no
 form-3 line at all (`intent-v2`, `cards-v2`, the reader recipes' cards) is replayed as recorded under form 3, and its
 live misses are made in the shipped form: label such a run's cards as the shipped form's. `--set
 '{"cardsRequestsFix":false}'` replays the shipped form's lines (the pre-D1062 default: 281/264 on train 41–42).

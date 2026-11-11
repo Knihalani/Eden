@@ -1235,7 +1235,11 @@ export class CardEnricher {
           if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         }
         // `cardsRequestsFix` (D1060): a reply with no requests list leaves every item of the batch without requests.
-        if (intent && this.limits.requestsFix && !made.truncated && !made.requests?.some((r) => r !== null)) {
+        // Only a readable reply is asked again (some card read, or an item read for its requests only, which keeps
+        // what the re-ask gives it): an unreadable one keeps no item, so its re-ask would be paid for nothing.
+        const readable = made.cards.some((c) => c !== null) || batch.some((b) => b.only);
+        const dropped = !made.requests?.some((r) => r !== null);
+        if (intent && this.limits.requestsFix && !made.truncated && readable && dropped) {
           made = await this.reask(key, session, items, today, u, made);
           if (u.abort.signal.aborted || this.users.get(key) !== u) return;
         }
@@ -1367,6 +1371,8 @@ export class CardEnricher {
         cards: cut.cards.map((c, i) => c ?? again.cards[i] ?? null),
         ...(requests ? { requests } : {}),
         costUsd: cut.costUsd + again.costUsd,
+        // Cut again: `cardsRequestsFix` asks such a batch nothing more (its re-ask would be cut at a cap too).
+        ...(again.truncated ? { truncated: true } : {}),
       };
     } catch {
       this.deps.budget.settle(reservation, 0);
@@ -1395,7 +1401,11 @@ export class CardEnricher {
   ): Promise<CardBatch> {
     const reservation = this.deps.budget.reserve(key, session, this.limits.estimatedCallUsd);
     this.deps.budget.endSession(session);
-    if (!reservation) return made;
+    if (!reservation) {
+      // Over the user's enrichment budget: the batch's items keep no requests (counted as `retry` counts them).
+      this.stats.overBudget += items.length;
+      return made;
+    }
     try {
       const options = { ...this.form(), requestsOnly: true };
       const again = await this.deps.maker.make(items, today, u.abort.signal, false, true, options);

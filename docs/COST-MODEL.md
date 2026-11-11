@@ -530,7 +530,7 @@ Anthropic-direct lab figures, Haiku 5.5, thinking off.
   are about two thirds of its price, the output about a quarter. A pool of 10 items of 140 characters cut $ a call
   26.5% ($0.000171) and handed 20 fewer facts of 384 (D1050). The push reaches the call about 9 ms after the request,
   so the wait is the call itself.
-- **Card-and-intent call** (400 items, batches of 20): $0.000073 a item, 201 input tokens a item (66 cached) and 118
+- **Card-and-intent call** (400 items, batches of 20): $0.000073 an item, 201 input tokens an item (66 cached) and 118
   output: **output is about 80% of its price.** On batches whose reply lists requests, batches of 40 cost the same a
   item; a compact reply (no key names) 27% less (D1052). Neither is taken. The shipped prompt leaves the requests
   list out of about a quarter of its replies (D1053), so its price per item given requests is about a third higher
@@ -543,9 +543,10 @@ Anthropic-direct lab figures, Haiku 5.5, thinking off.
 ### The card prompt's requests fix (`cardsRequestsFix`, D1060, D1062; docs/research/h2-requests-fix.md)
 
 Anthropic-direct lab figures, Haiku 5.5, thinking off. The shipped enricher's card calls with the fix, over the 84
-worlds of train1–6 and longtail × seeds 41–44 × hidden, control and neutral (`cold-start.ts`): $0.63, $0.0075 a world
-against P7's $0.0070 with the old prompt (+8%), 581 calls of which 17 re-asks (2.9%), 97.7% of items sent given
-requests. A call writes more because more items get requests: on H2's 400 items $0.0000770 against $0.0000766 a item
+worlds of train1–6 and longtail × seeds 41–44 × hidden, control and neutral (`cold-start.ts`): $0.63, 581 calls of
+which 17 re-asks (2.9%), 97.7% of items sent given requests. On train's 72 worlds alone $0.0075 a world against P7's
+$0.0070 with the old prompt on the same 72 (+8% **[EST]**: two runs months apart, not interleaved). A call writes
+more because more items get requests: on H2's 400 items $0.0000770 against $0.0000766 an item
 over the batches that list requests, and 379 against 260 items given requests (D1053). A re-ask is one
 requests-only call for a batch, reserved on the enricher's `Budget` like a card call (about $0.0008 for 20 items
 **[EST]**: R20's $0.0000419 an item). Per user-month **[EST]**: about +8% of the background card spend (COST-MODEL's

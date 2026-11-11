@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CARD_FORM_REQUESTS, cardKey, type CardBatch, type CardMakeOptions, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
-import { DiskCardMaker, formKey, loadCards, loadRequests } from "./cards-disk";
+import { DiskCardMaker, formKey, harnessCoverage, loadCards, loadRequests, shippedUncovered } from "./cards-disk";
 
 // D1060: a replay file may hold the shipped prompt's lines (keyed by `cardKey`) and `cardsRequestsFix`'s (keyed
 // `<hash>:f3`), and each form must replay only its own: a card or request made by one prompt never answers the other.
@@ -76,4 +76,27 @@ test("a file with no line of the form replays as recorded (the full index predat
   );
   const got = await new DiskCardMaker(both).make([it1, it2], "2026-10-27", signal, false, true, F);
   expect(got.requests).toEqual([null, ["new only"]]);
+});
+
+test("shipped coverage under form 3 covers only the shards holding form-3 lines (not heldout19)", () => {
+  expect(shippedUncovered(["train1", "train1r", "longtail"], [41, 44], CARD_FORM_REQUESTS)).toEqual([]);
+  // The shipped form still covers heldout19; form 3 does not (D1063), so a run asking in it is not covered there.
+  expect(shippedUncovered(["heldout19"], [41], 0)).toEqual([]);
+  expect(shippedUncovered(["heldout19"], [41], CARD_FORM_REQUESTS)).toEqual(["heldout19 seed 41"]);
+  expect(() =>
+    harnessCoverage({ coverage: "shipped", cards: "", intent: "default", suites: ["heldout19"], seeds: [41], form: 3 }),
+  ).toThrow(/does not cover heldout19 seed 41/);
+});
+
+test("the cards and the requests choose their replay form apart (a form-3 cards file beside a shipped-form intent file)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "eden-form-"));
+  const cards = join(dir, "cards.jsonl");
+  const intent = join(dir, "intent.jsonl");
+  writeFileSync(cards, `${JSON.stringify({ h: formKey(it1, CARD_FORM_REQUESTS), c: null })}\n`);
+  writeFileSync(intent, `${JSON.stringify({ h: cardKey(it1), r: ["shipped-form request"] })}\n`);
+  const disk = new DiskCardMaker(cards, undefined, { requests: [intent] });
+  const got = await disk.make([it1], "2026-10-27", signal, false, true, F);
+  expect(got.requests).toEqual([["shipped-form request"]]);
+  expect(disk.requestKey(it1, CARD_FORM_REQUESTS)).toBe(cardKey(it1));
+  expect(disk.cardKeyFor(it1, CARD_FORM_REQUESTS)).toBe(formKey(it1, CARD_FORM_REQUESTS));
 });

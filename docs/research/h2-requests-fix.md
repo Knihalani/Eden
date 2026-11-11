@@ -1,7 +1,7 @@
 # H2b: the card call's dropped requests lists, fixed as a trial (`cardsRequestsFix`)
 
 Status: 2026-11-11, branch `claude/h2-requests-fix` (from main 684ec7d0, after #264), session H2. Decisions
-D1060–D1064. Train suites, reworded train and longtail only; heldout19 is never read or run. Paid calls go to
+D1060–D1063. Train suites, reworded train and longtail only; heldout19 is never read or run. Paid calls go to
 Anthropic directly with `HAIKU_API_KEY` through the lab's spend ledger (`.local/h2b/ledger.jsonl`, D97):
 **Anthropic-direct lab figures**. Numbers marked **[EST]** are arithmetic or judgement; every other number comes
 from a command in this note.
@@ -137,3 +137,18 @@ bun run funnel --suite train5,train6,train5r,train6r,longtail --seeds 41,42,43,4
   [--set '{"cardsRequestsFix":false}'] -- --neutral
 # Pi: lab_fanout.py with §2's arguments (--conditions eden,eden~fix), then i3-regrade.ts and bench_report.py --sonnet
 ```
+
+## 6. The review (once, before the merge)
+
+The `reviewer` subagent reproduced every figure above (check, eval, the three funnels, the Pi report, the caches)
+and asked for changes, all fixed in the commit after e39bbe9f:
+
+- **A batch cut at the cap twice was re-asked a third time:** `retry` now carries `truncated` through, and a cut batch
+  is not re-asked (test).
+- **An unreadable reply was re-asked and the answer thrown away** (no item of it is kept): only a reply with a card
+  read, or with an item read for its requests only, is re-asked (test).
+- **heldout19 at shipped coverage would have replayed nothing under form 3:** `shippedUncovered` takes the form
+  (`SHIPPED_FORM_COVERS`), so the funnel and pi-ab/hermes refuse it or fall back to `--coverage full` (test).
+- The cards and the requests choose their replay form apart (test); `intentCoverage`, the funnel's replay line and
+  `--card-log` read the run's form; a re-ask is not counted against `--cards-calls`; a refused re-ask counts
+  `overBudget`; the docs' D1046 and D1064 references, INDEX, ARCHITECTURE and COST-MODEL's world sets are fixed.

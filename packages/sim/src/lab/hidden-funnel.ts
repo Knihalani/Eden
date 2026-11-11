@@ -75,6 +75,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
+  CARD_FORM_REQUESTS,
   cardKey,
   intentCut,
   intentReach,
@@ -427,7 +428,8 @@ if (CARD_LOG && cardMaker) {
     // A requests-only re-ask (`cardsRequestsFix`, D1060) makes no card: its batch was logged by the card call.
     if (!retry && !options?.requestsOnly) {
       const lines = items.map((it, k) => {
-        const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
+        const kind =
+          got.cards[k]?.kind ?? (cardMaker.cards.has(cardMaker.cardKeyFor(it, options?.form)) ? "none" : "uncovered");
         return JSON.stringify({ h: cardKey(it), title: it.title, text: it.text.slice(0, 2_700), kind });
       });
       appendFileSync(CARD_LOG, lines.map((l) => `${l}\n`).join(""));
@@ -459,8 +461,9 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
+const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
-  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardKey(item)) : null;
+  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
 const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
@@ -978,8 +981,10 @@ async function runSeed(
   const cappedMaker: CardMaker | null =
     laneMaker && CARDS_CALLS >= 0
       ? {
+          // A requests-only re-ask (`cardsRequestsFix`, D1060) belongs to the card call before it: not counted, and
+          // answered only while the cap's calls are (past it, `--cards-rest cards` strips requests as before).
           make: (items, today, signal, retry, intent, options) =>
-            cardCalls++ < CARDS_CALLS
+            (options?.requestsOnly ? cardCalls <= CARDS_CALLS : cardCalls++ < CARDS_CALLS)
               ? laneMaker.make(items, today, signal, retry, intent, options)
               : CARDS_REST === "cards"
                 ? laneMaker.make(items, today, signal, retry, intent, options).then((b) => cardsOnly(b, items.length))

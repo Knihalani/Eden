@@ -117,10 +117,27 @@ export const SHIPPED_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train,reworded,longtail,heldout19").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
-/** The suite × seed shards SHIPPED_FILE was not made for. */
-export function shippedUncovered(suites: string[], seeds: (string | number)[]): string[] {
+/**
+ * The shards SHIPPED_FILE holds a prompt form's lines for (D1060, D1063): form 3 (`cardsRequestsFix`, in the default
+ * since D1062) was recorded for train, reworded and longtail seeds 41-44 only. heldout19 has none: a run that must
+ * not read it cannot record them, and its harness records its own (B19).
+ */
+export const SHIPPED_FORM_COVERS: Record<number, Record<string, string[]>> = {
+  3: Object.fromEntries(parseSuites("train,reworded,longtail").map((s) => [s, ["41", "42", "43", "44"]])),
+};
+
+/**
+ * The suite × seed shards SHIPPED_FILE was not made for; with a prompt form (`form`), also those it holds no line of
+ * that form for (replayed under the form they would have no card and no requests: a silent hole, so not covered).
+ */
+export function shippedUncovered(suites: string[], seeds: (string | number)[], form = 0): string[] {
+  const covers = (map: Record<string, string[]>, s: string, seed: string | number) =>
+    map[s]?.includes(String(Number(seed))) === true;
+  const formCovers = form ? (SHIPPED_FORM_COVERS[form] ?? {}) : null;
   return suites.flatMap((s) =>
-    seeds.filter((seed) => !SHIPPED_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+    seeds
+      .filter((seed) => !covers(SHIPPED_COVERS, s, seed) || (formCovers && !covers(formCovers, s, seed)))
+      .map((seed) => `${s} seed ${seed}`),
   );
 }
 
@@ -139,12 +156,14 @@ export function harnessCoverage(o: {
   intent: string;
   suites: string[];
   seeds: (string | number)[];
+  /** The card prompt's form the run's Eden arms ask in (`CARD_FORM_REQUESTS` with `cardsRequestsFix`, D1063). */
+  form?: number;
 }): { coverage: "shipped" | "full"; cards: string; intent: string; note: string } {
   if (o.coverage !== "" && o.coverage !== "full" && o.coverage !== "shipped") {
     throw new Error(`--coverage takes shipped or full, not ${o.coverage}`);
   }
   const own = o.cards !== "" || o.intent !== "default";
-  const uncovered = shippedUncovered(o.suites, o.seeds);
+  const uncovered = shippedUncovered(o.suites, o.seeds, o.form ?? 0);
   if (o.coverage === "full" || (o.coverage === "" && uncovered.length > 0)) {
     const why = o.coverage === "full" ? "--coverage full" : `${SHIPPED_FILE} does not cover ${uncovered[0]}`;
     return { coverage: "full", cards: o.cards, intent: o.intent, note: `coverage full (${why}, D878)` };
@@ -197,11 +216,13 @@ export function harnessIntent(
 export function intentCoverage(
   sourceItems: ContextItem[][],
   requests: Map<string, string[]>,
+  /** The replay key under the run's card prompt form (`DiskCardMaker.requestKey`, D1063); the content hash alone. */
+  keyOf: (item: ContextItem) => string = cardKey,
 ): { found: number; of: number } {
   const keys = new Set<string>();
   for (const raw of sourceItems) {
     const cache = new ItemCache({ maxItemsPerUser: 100_000 });
-    for (const it of cache.put({ tenantId: "t", userId: "u" }, raw, 0)) keys.add(cardKey(it));
+    for (const it of cache.put({ tenantId: "t", userId: "u" }, raw, 0)) keys.add(keyOf(it));
   }
   let found = 0;
   for (const h of keys) if (requests.get(h)?.length) found++;
@@ -313,9 +334,15 @@ export class DiskCardMaker implements CardMaker {
     const replayed = options.cardRequests === false ? [] : cardFiles;
     this.requests = options.shared?.requests ?? loadRequests(...replayed, ...(options.requests ?? []));
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
-    for (const h of [...this.cards.keys(), ...this.requests.keys()]) {
-      const m = /:f(\d+)$/.exec(h);
-      if (m) this.heldForms.add(Number(m[1]));
+    // The cards and the requests may come from different files (`--cards` and `--intent`): each decides apart.
+    for (const [keys, held] of [
+      [this.cards.keys(), this.heldCardForms],
+      [this.requests.keys(), this.heldRequestForms],
+    ] as const) {
+      for (const h of keys) {
+        const m = /:f(\d+)$/.exec(h);
+        if (m) held.add(Number(m[1]));
+      }
     }
   }
 
@@ -327,11 +354,13 @@ export class DiskCardMaker implements CardMaker {
     intent = false,
     options: CardMakeOptions = {},
   ): Promise<CardBatch> {
-    const form = this.replayed(options.form ?? 0);
-    if (options.requestsOnly) return this.makeRequests(items, today, signal, { ...options, form });
-    const got = await this.makeCards(items, today, signal, retry, intent, form);
+    const asked = options.form ?? 0;
+    const cardForm = this.replayed(asked, this.heldCardForms);
+    const requestForm = this.replayed(asked, this.heldRequestForms);
+    if (options.requestsOnly) return this.makeRequests(items, today, signal, { ...options, form: requestForm });
+    const got = await this.makeCards(items, today, signal, retry, intent, cardForm, requestForm);
     if (!intent) return got;
-    const requests = items.map((it) => this.requests.get(formKey(it, form)) ?? null);
+    const requests = items.map((it) => this.requests.get(formKey(it, requestForm)) ?? null);
     // Requests with no card: the item is covered, with no constraint (as a card file's uncovered item matches none).
     const cards = got.cards.map((c, i) => c ?? (requests[i] ? NONE : null));
     return { ...got, cards, requests };
@@ -343,15 +372,26 @@ export class DiskCardMaker implements CardMaker {
    * replayed as it was recorded, rather than going inert; a file that holds the form (`cards-shipped`) answers only
    * from its lines, so within one file the forms never mix (an item it has no line of the form for is a miss).
    */
-  private replayed(form: number): number {
-    return form && this.heldForms.has(form) ? form : 0;
+  /** The key an item's replayed requests are read under when a call asks in `form` (diagnostics read it too). */
+  requestKey(item: ContextItem, form = 0): string {
+    return formKey(item, this.replayed(form, this.heldRequestForms));
+  }
+
+  /** The key an item's replayed card is read under when a call asks in `form`. */
+  cardKeyFor(item: ContextItem, form = 0): string {
+    return formKey(item, this.replayed(form, this.heldCardForms));
+  }
+
+  private replayed(form: number, held: ReadonlySet<number>): number {
+    return form && held.has(form) ? form : 0;
   }
 
   /**
    * The forms the files held when this maker was built (fixed then: a live miss appended under a form later must not
    * switch a file recorded before it from replay as recorded to misses halfway through a run).
    */
-  private readonly heldForms = new Set<number>();
+  private readonly heldCardForms = new Set<number>();
+  private readonly heldRequestForms = new Set<number>();
 
   /**
    * `cardsRequestsFix`'s re-ask (D1060): each item's replayed requests under the form; the items with none go to the
@@ -391,6 +431,7 @@ export class DiskCardMaker implements CardMaker {
     retry: boolean,
     intent: boolean,
     form: number,
+    requestForm: number,
   ) {
     const out: (Card | null)[] = [];
     const missing: number[] = [];
@@ -409,7 +450,7 @@ export class DiskCardMaker implements CardMaker {
       } else if (pending) {
         if (!retry) this.hits++;
         waiting.push([i, pending]);
-      } else if (intent && this.requests.has(h) && !worthCarding(it)) {
+      } else if (intent && this.requests.has(formKey(it, requestForm)) && !worthCarding(it)) {
         if (!retry) this.skipped++;
         // Covered by its replayed requests: a none card, as `make` gives an item with requests and no card.
         out[i] = NONE;
@@ -440,7 +481,8 @@ export class DiskCardMaker implements CardMaker {
         missing.forEach((i, k) => {
           const h = formKey(items[i]!, form);
           const r = got.requests?.[k] ?? undefined;
-          if (r) this.requests.set(h, r);
+          // Read back in this run under the requests' replay form; kept in the file under the form that made it.
+          if (r) this.requests.set(formKey(items[i]!, requestForm), r);
           const c = got.cards[k];
           if (c === undefined || c === null) {
             // Requests with no card: kept for the next run, the card left uncovered (asked again then).
