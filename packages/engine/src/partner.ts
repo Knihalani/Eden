@@ -129,9 +129,7 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
-  ASK_NUDGE_SHORT,
   CANDIDATES_LEAD,
-  CANDIDATES_LEAD_SHORT,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -2957,13 +2955,7 @@ export class ContextPartner {
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: this.config.leadShort
-        ? nudge
-          ? `${CANDIDATES_LEAD_SHORT} ${ASK_NUDGE_SHORT}`
-          : CANDIDATES_LEAD_SHORT
-        : nudge
-          ? `${CANDIDATES_LEAD} ${ASK_NUDGE}`
-          : CANDIDATES_LEAD,
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
