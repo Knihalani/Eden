@@ -109,7 +109,7 @@ class HashNet:
         got = self._cache.get(text)
         if got is None:
             got = feats(normalise(text) if "norm" in self.recipe else text)
-            if len(self._cache) < 400_000:
+            if len(self._cache) < 120_000:  # an OOM kill at 4.4 GB with four folds side by side
                 self._cache[text] = got
         return got
 

@@ -157,6 +157,32 @@ def compare(args: argparse.Namespace) -> None:
             print(json.dumps({"held": ra["held"], "mode": ra["mode"], **cluster_diff(avg(ra), avg(rb), m)}))
 
 
+def summary(args: argparse.Namespace) -> None:
+    """One markdown table over result files: a row per (recipe, mode), a column per held-out source and metric, and
+    the mean over the held-out sources every row shares."""
+    rows, helds = [], []
+    for f in args.files:
+        o = json.load(open(f, encoding="utf8"))
+        for r in o["results"]:
+            if r["held"] not in helds:
+                helds.append(r["held"])
+            rows.append((o["recipe"] or "plain", r))
+    metrics = args.metrics.split(",")
+    keys = sorted({(rc, r["mode"]) for rc, r in rows}, key=lambda k: (k[1] != "in", k[1], k[0]))
+    shared = [h for h in helds if all(any(r["held"] == h and (rc, r["mode"]) == k for rc, r in rows) for k in keys)]
+    head = "| recipe | mode | " + " | ".join(f"{h} {m}" for m in metrics for h in helds) + " | " + " | ".join(
+        f"mean {m}" for m in metrics) + " |"
+    print(head)
+    print("|" + " --- |" * (2 + len(metrics) * (len(helds) + 1)))
+    for k in keys:
+        got = {r["held"]: r for rc, r in rows if (rc, r["mode"]) == k}
+        cells = [f"{got[h][m]:.3f}" if h in got else "" for m in metrics for h in helds]
+        means = [f"{sum(got[h][m] for h in shared) / len(shared):.3f}" if shared and all(h in got for h in shared)
+                 else "" for m in metrics]
+        print(f"| {k[0]} | {k[1]} | " + " | ".join(cells) + " | " + " | ".join(means) + " |")
+    print(f"\nmean over: {', '.join(shared)}")
+
+
 def grade_cmd(args: argparse.Namespace) -> None:
     rows = read_rows(args.rows)
     sc = read_rows(args.scores)
@@ -193,12 +219,16 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("a")
     c.add_argument("b")
     c.add_argument("--metrics", default="twin,twin_hard,at1")
+    sm = sub.add_parser("summary")
+    sm.add_argument("files", nargs="+")
+    sm.add_argument("--metrics", default="twin_hard,fact_at1")
     t = sub.add_parser("para-texts")
     t.add_argument("--source", action="append", required=True)
     t.add_argument("--rows", type=int, default=700)
     t.add_argument("--out", required=True)
     a = p.parse_args(argv)
-    {"run": run, "folds": folds, "grade": grade_cmd, "para-texts": para_texts, "compare": compare}[a.cmd](a)
+    {"run": run, "folds": folds, "grade": grade_cmd, "para-texts": para_texts, "compare": compare,
+     "summary": summary}[a.cmd](a)
 
 
 if __name__ == "__main__":
