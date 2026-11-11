@@ -153,7 +153,7 @@ def bench(data: str, run: str, gpu: str = "L4", pools: int = 40):
     res = bench_remote.with_options(gpu=gpu).remote(run, rows[: (pools + 3) * 40], pools)
     out = os.path.join(".local", "m1", "bench")
     os.makedirs(out, exist_ok=True)
-    with open(os.path.join(out, f"{run}-{gpu}.json"), "w") as f:
+    with open(os.path.join(out, f"{run}-{gpu.replace(':', '_')}.json"), "w") as f:
         json.dump(res, f, indent=1)
     print(json.dumps(res, indent=1))
 
