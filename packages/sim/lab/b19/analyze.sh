@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# B19: the final run's three reports (Hermes short, Pi short, Pi days) from go.sh's results, one JSON each beside the
-# text. PREFIX as go.sh (default h19), SEEDS (comma list, default 41,42,43,44).
+# B19: the final run's four reports (Hermes short and days, Pi short and days) from go.sh's results, one JSON each
+# beside the text. PREFIX as go.sh (default h19), SEEDS (comma list, default 41,42,43,44).
 #
 #   [PREFIX=h19] [SEEDS=41,42,43,44] bash packages/sim/lab/b19/analyze.sh
 set -euo pipefail
@@ -17,6 +17,7 @@ report() {
     --arm final="$final" --json $OUT/$P-$name.json | tee $OUT/$P-$name.txt
 }
 report hermes-short $R/$P-h-raw $R/$P-h-before $R/$P-h-final
+report hermes-days $R/$P-hd-raw $R/$P-hd-before $R/$P-hd-final
 for k in ps pd; do
   arms=()
   for a in raw before final; do arms+=("$(stems "${SEEDS[@]/#/$P-$k-$a-}")"); done

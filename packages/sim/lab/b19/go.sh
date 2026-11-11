@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# B19's final run (pre-registered in docs/research/b19-final-bench.md §2, D1043): heldout19, read once, three arms on
-# Hermes (short) and Pi (short and days). Run only on the parent's go, from this branch after merging the final main:
+# B19's final run (pre-registered in docs/research/b19-final-bench.md §2, D1043, amended by D1045): heldout19, read
+# once, three arms on Hermes (short and days: the headline) and Pi (short and days: the secondary readout). Run only on
+# the parent's go, from this branch after merging the final main:
 #
 #   FINAL=<final main commit> bash packages/sim/lab/b19/go.sh
 #
@@ -53,7 +54,14 @@ for a in raw before final; do
     --variants hidden,control,neutral --budget 6 "${MARKET[@]}" ${EXTRA[@]+"${EXTRA[@]}"} >$L/$P-h-$a.log 2>&1 &
 done
 wait
-# 2. Pi, one request a session: one seed a process (memory), the three arms of a seed side by side.
+# 2. Hermes over a user's days: all four users in one process an arm (one stream a user), two days of 20 requests
+# (heldout19's 40 templates bound a user), the day's transcript kept (D1044).
+for a in raw before final; do
+  KIND=hermes HC=4 bash packages/sim/lab/b19/run.sh $a $P-hd-$a --suite "$SUITE" --seeds "$SEEDLIST" --days 2 \
+    --day-size 20 --budget 4 "${MARKET[@]}" >$L/$P-hd-$a.log 2>&1 &
+done
+wait
+# 3. Pi, one request a session: one seed a process (memory), the three arms of a seed side by side.
 for s in "${SEEDS[@]}"; do
   for a in raw before final; do
     KIND=pi bash packages/sim/lab/b19/run.sh $a $P-ps-$a-$s --suite "$SUITE" --seeds $s \
@@ -62,7 +70,7 @@ for s in "${SEEDS[@]}"; do
   done
   wait
 done
-# 3. Pi over a user's days: one user a process, two days of 20 requests (heldout19's 40 templates bound a user).
+# 4. Pi over a user's days: one user a process, two days of 20 requests (heldout19's 40 templates bound a user).
 for s in "${SEEDS[@]}"; do
   for a in raw before final; do
     KIND=pi bash packages/sim/lab/b19/run.sh $a $P-pd-$a-$s --suite "$SUITE" --seeds $s --days 2 --day-size 20 \

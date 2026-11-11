@@ -85,7 +85,8 @@ def read_arm(stem, ledger_rows):
     # The first task of each stream (Hermes: a world under one condition; Pi: a seed's suite and variant) pays start-up.
     seen, first = set(), set()
     for t in tl:
-        stream = (t["condition"], t["seed"], t["suite"])
+        # Under `--days` a user is one stream whatever suite each request came from.
+        stream = (t["condition"], t["seed"]) if days else (t["condition"], t["seed"], t["suite"])
         if stream not in seen:
             seen.add(stream)
             first.add(t["task"])
