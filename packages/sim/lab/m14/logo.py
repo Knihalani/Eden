@@ -152,11 +152,13 @@ def compare(args: argparse.Namespace) -> None:
                 **{k: [sum(t[k][i] for t in ts) / len(ts) for i in range(len(ts[0][k]))] for k in ("twin", "at1")}}
 
     for ra in a["results"]:
-        rb = next((x for x in b["results"] if x["held"] == ra["held"] and x["mode"] == ra["mode"]), None)
+        # --any-mode pairs runs of different modes (M2-only `from:m2` against a `logo` recipe) on the same source.
+        rb = next((x for x in b["results"] if x["held"] == ra["held"] and (args.any_mode or x["mode"] == ra["mode"])),
+                  None)
         if not rb or "per_task" not in ra["seeds"][0] or "per_task" not in rb["seeds"][0]:
             continue
         for m in args.metrics.split(","):
-            print(json.dumps({"held": ra["held"], "mode": ra["mode"], **cluster_diff(avg(ra), avg(rb), m)}))
+            print(json.dumps({"held": ra["held"], "mode": f'{ra["mode"]}→{rb["mode"]}', **cluster_diff(avg(ra), avg(rb), m)}))
 
 
 def summary(args: argparse.Namespace) -> None:
@@ -222,6 +224,7 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("a")
     c.add_argument("b")
     c.add_argument("--metrics", default="twin,twin_hard,at1")
+    c.add_argument("--any-mode", action="store_true", help="pair runs on the same held-out source whatever their mode")
     sm = sub.add_parser("summary")
     sm.add_argument("files", nargs="+")
     sm.add_argument("--metrics", default="twin_hard,fact_at1")
