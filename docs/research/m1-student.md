@@ -2,7 +2,7 @@
 
 (This M1 is the 2026-11-11 student session; docs/research/m1-lab-scale.md is an earlier, unrelated M1.)
 
-Status: 2026-11-11, branch `claude/m1-local-check` (from `main` at 533cc7f8), session M1. Decisions D890–D898. Train
+Status: 2026-11-11, branch `claude/m1-local-check` (from `main` at 533cc7f8), session M1. Decisions D890–D899. Train
 suites only (train1–6); heldout17, heldout18 and heldout19 are not dumped, labelled, run or read. Numbers marked
 **[EST]** are arithmetic or judgement; every other number comes from a command in this note. Caps: Anthropic $80
 (ledger `.local/m1/ledger.jsonl`), Modal $400. Sections 1–2 were written and committed before any student was
@@ -222,6 +222,24 @@ The student keeps the look-alikes out and silences neutral requests (packets on 
 but on these worlds it lets fewer facts in than Haiku: 102 hidden pushes it found nothing in, and 64 fewer facts in
 the packet. Its endpoint round trip (p50 274 ms, p90 835 ms from the Modal shards, 0.99 calls a task, 0 failures)
 and the asks a silent push prompts (+0.30 a task) make the extra wait.
+
+### 4e. After round 1: the small rungs on M2's data, and the stop (D899)
+
+Ladder B (train suites plus M2's synthetic families; v0 = M2's first 227 worlds, v2 = its corrected final set, 8
+groups a family, at most 2 other items a group in training; dev and eval as §4a):
+
+| Run | Data | Dev planted vs decoy | M2 val | Eval (read once) |
+| --- | --- | --- | --- | --- |
+| s06-a (0.6B) | train + v0 | 0.884 (0.740..0.981) | 0.989 | — |
+| v2-0.6b-a (0.6B) | train + v2 | **0.921** (0.806..0.997) | 0.995 | **0.878** (0.792..0.953) |
+| v2-1.7b-a (1.7B) | train + v2 | **0.942** (0.870..0.991) | 0.997 | — |
+
+The train-suite-only 8B scored 0.950 (0.931..0.966) on M2's v0 val families it never saw. Small rungs on cheap GPUs
+(15-item pool, shared head): 0.6B L4 162 ms, A10G 138 ms; 1.7B L4 262 ms, H100 80 ms. The v0 runs at 1.7B, 4B and
+8B and the v2 4B were stopped unfinished (superseded or stopped by the owner).
+
+**Stopped (owner's decision, through the parent, D899):** round 2 (§2d) was cancelled before any shard ran; the
+endpoint was stopped. The track moves to a micro CPU checker (§5), with the 8B's scores over M2 v2 as its teacher.
 
 ## Reproduce
 

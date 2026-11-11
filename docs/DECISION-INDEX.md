@@ -596,6 +596,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D896 | 2026-11-11 | With `pushCheckLocal`, `pushOpen` (D702) opens the push and the check reads it. | adopted |
 | D897 | 2026-11-11 | Finding (M1, Pi round 1, pre-registered §2c): the student's check fails live. | finding |
 | D898 | 2026-11-11 | Lab only: Pi round 2 is pre-registered | lab |
+| D899 | 2026-11-11 | Stopped by the owner's decision (through the parent): the LLM-sized local checker; Pi round 2 (D898) is cancelled before any shard ran. | adopted |
 | D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
 | D930 | 2026-11-11 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | rejected |
 | D931 | 2026-11-11 | Finding: the push check does not repeat itself closely. | finding |
