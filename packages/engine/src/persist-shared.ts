@@ -162,7 +162,10 @@ export class SharedFrozenDisk implements FrozenDisk {
     this.absent.delete(name);
   }
 
-  /** Forgets which users the store did not hold (D992): after a membership change another machine may have written them. */
+  /**
+   * Forgets which users the store did not hold (D992): after a membership change another machine may have written
+   * them.
+   */
   forgetAbsent(): void {
     this.absent.clear();
   }

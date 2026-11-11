@@ -6,10 +6,10 @@
  *   places buckets, never keys, so a table of 65,536 entries answers every lookup.
  * - `jumpHash`: Lamping and Veach's jump consistent hash. Going from n to n+1 slots moves 1/(n+1) of keys, all to the
  *   new slot; it is used for a machine's child processes, which only ever grow or shrink at the end.
- * - `OwnerTable`: rendezvous (highest random weight) hashing of the 65,536 buckets over named nodes. Adding a node moves
- *   about 1/(n+1) of buckets, all to it; removing any node (not only the last, as jump requires) moves only that
- *   node's buckets, each to its second choice. That is what failover needs: a dead machine's users spread over the
- *   others, and come back to it when it returns.
+ * - `OwnerTable`: rendezvous (highest random weight) hashing of the 65,536 buckets over named nodes. Adding a node
+ *   moves about 1/(n+1) of buckets, all to it; removing any node (not only the last, as jump requires) moves only
+ *   that node's buckets, each to its second choice. That is what failover needs: a dead machine's users spread over
+ *   the others, and come back to it when it returns.
  *
  * Not on any hot path: a router builds a table once per membership change and reads one entry per request.
  */

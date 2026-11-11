@@ -22,6 +22,7 @@ RSS = {
     "sim text, 1/8 active": 1.56,
     "sim text, 1/20 active": 1.05,
     "heavy (20 connectors, prose), 1/4 active": 3.36,
+    "heavy (20 connectors, prose), 1/2 active": 4.29,
     # Every user active within 30 minutes, a sixth live and the rest warm: daily agents all working the same hours.
     "heavy (20 connectors, prose), peak hour": 5.29,
 }

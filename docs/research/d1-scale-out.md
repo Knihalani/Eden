@@ -35,7 +35,7 @@ quarter of the active users are live (p6-scale.md's split; p6's "`--waves=4K`" m
 | Sim text | 1/20 | 1.05 MB | 0.78 MB | 153 / 277 ms | 10.5 / 20.0 ms |
 | Prose, 20 connectors (heavy) | 1/4 | 3.36 MB | 2.35 MB | 235 / 373 ms | 11.8 / 29.6 ms |
 | Prose, 20 connectors, peak hour | all active, 1/6 live, 5/6 warm | 5.29 MB | 3.41 MB | 21.9 / 279 ms (most warm) | 12.4 / 25.3 ms |
-| Prose, 20 connectors | 1/2 | HEAVY_K2 | | | |
+| Prose, 20 connectors | 1/2 | 4.29 MB | 2.73 MB | 222 / 321 ms | 13.2 / 26.9 ms |
 
 The prose 1/4 row reproduces p6's 4-core figure (3.00 MB; here 3.06). Twenty connectors instead of three add 0.30 MB
 a user (per-source sync state, sketches, rare-term tables). Thaws are the compact form's (a user back after 30
