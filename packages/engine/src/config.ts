@@ -171,13 +171,6 @@ export interface EngineConfig {
    */
   leadOnce: boolean;
   /**
-   * Trial (E1, D1032): with `densePacket`, compaction also drops boilerplate the sim's mail and real mail carry
-   * (`messageParts`): a sign-off name standing alone, a disclaimer or regulatory footer run into a line, the
-   * "happy to jump on a call" kind of courtesy, and says a mail's sender and date as one header ("From: Ana, Mon 2
-   * Nov 09:00"). Deterministic rules, no model; a part with a fact's words is never cut by them.
-   */
-  leanItems: boolean;
-  /**
    * With no model's say, the event a request names the way people do is grounded: by its occasion and who it is with
    * ("dinner with Elena"), its occasion and day ("lunch on Monday"), or, for a message from someone about meeting, the
    * next event whose title names them (`Partner.occasion`).
@@ -801,7 +794,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   quietClear: true,
   densePacket: true,
   leadOnce: false,
-  leanItems: false,
   groundOccasion: true,
   quietNameOnly: true,
   conflictVocab: true,

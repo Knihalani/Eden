@@ -5866,7 +5866,6 @@ export class ContextPartner {
             // No `year`: an answer's dates stay as the source wrote them, as they did whole ("9 Oct 2026").
             self: this.deps.cache.selfOf(s.scope),
             dense,
-            ...(dense && this.config.leanItems ? { lean: true } : {}),
           }
         : {}),
       ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
@@ -5971,7 +5970,6 @@ export class ContextPartner {
             year: new Date(this.now()).getUTCFullYear(),
             self,
             dense,
-            ...(dense && this.config.leanItems ? { lean: true } : {}),
           }
         : {}),
       ...(this.config.compactParts ? { split: true } : {}),

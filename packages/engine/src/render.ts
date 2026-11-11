@@ -25,8 +25,6 @@ export function renderPacket(
     self?: string | null;
     /** `densePacket`: compaction drops the title's echo, run-in footers and known attendees (`messageParts`). */
     dense?: boolean;
-    /** `leanItems` (with `dense`): compaction drops lone sign-off names, run-in disclaimers, more courtesies. */
-    lean?: boolean;
     /**
      * `askDedup`: the words this session already showed the agent for an item (`Session.shown`), or undefined for
      * one not shown. Such an item says only its parts with a word not shown, or `SHOWN` when it has none.
@@ -80,14 +78,11 @@ export function renderPacket(
         // comparing it with the request's dates where "2 Nov 2026" is not.
         options.year,
         options.self,
-        options.dense ? { title: item.title, ...(options.lean ? { lean: true } : {}) } : undefined,
+        options.dense ? { title: item.title } : undefined,
         options.split,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const picked = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
-      // `leanItems`: a sender and date kept side by side are said as one header ("From: Ana, Mon 2 Nov 09:00"). After
-      // the pick, so what is kept does not change, only how its header reads.
-      const text = options.lean ? picked.replace(SENDER_DATE, "$1, ") : picked;
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
@@ -277,37 +272,6 @@ const TIME_OF_DAY_GREETING =
 const COURTESY =
   /^(sorry for (the|my) (slow|late|delayed) (reply|response)|quick one from me|thanks (again )?for (your time|getting back|the quick reply)|hope (you're|you are|all is) (well|keeping well))\b.{0,40}$/i;
 
-// With `leanItems`: a disclaimer or regulatory footer, at a part's start or run into it (a connector's one-line
-// snippet), and the courtesies the sim's and real mail close on. A part is cut where one starts; what is left before
-// it is kept, so a fact's sentence before a run-in disclaimer stays.
-const DISCLAIMER = new RegExp(
-  "(^|\\s)(" +
-    [
-      "confidentiality notice",
-      "this (e-?mail|message|communication) and any (attachments|files)",
-      "if you (are not|have received this) (the intended|in error|by mistake)",
-      "any unauthori[sz]ed (use|review|disclosure|copying)",
-      "[\\p{L}&]+ (plc|ltd|limited|llp) is (authori[sz]ed|registered) (and|by|in)",
-      "registered in england( and wales)? (no\\.?|number|under)",
-      "registered office: ",
-      "please consider the environment before",
-      "reply to this email directly",
-      "to change which emails you receive",
-      "(manage|update) your (notification|email) (preferences|settings)",
-      "this week's sponsor",
-      "view (it|this|issue) (in|on) (github|gitlab|jira|linear|notion|asana|trello|confluence|the web|your browser)\\b",
-      "read more( →|:|$)",
-    ].join("|") +
-    ")",
-  "iu",
-);
-const LEAN_COURTESY =
-  /^(happy to (jump|hop|get) on a (quick )?call|feel free to (reach out|get in touch)|hope (this|that) helps|have a (lovely|great|good) (day|weekend|week|evening))\b.{0,40}$/i;
-// A sender (and the user's own mail's addressee) just before the date header: "From: Ana Date: Mon 2 Nov".
-const SENDER_DATE = /\b(From: [^:\n]{1,80}?(?: To: [^:\n]{1,80}?)?) Date: /;
-// A sign-off name alone on its part ("Dana", "— Dana", "Dana W.").
-const LONE_NAME = /^[—–-]?\s*([\p{Lu}][\p{L}'-]*)(\s[\p{Lu}][\p{L}'-]*\.?)?$/u;
-
 /**
  * An attendee line without the user (`self`, whole or first name: on their own calendar they attend) and without the
  * people the title names ("Lunch with Nadia Petrova"). Empty when no one else is listed.
@@ -414,11 +378,9 @@ export function messageParts(
   known: (word: string) => boolean = () => false,
   year?: number,
   self?: string | null,
-  dense?: { title: string; lean?: boolean },
+  dense?: { title: string },
   split = false,
 ): Part[] {
-  const lean = dense?.lean === true;
-  let sender = ""; // `lean`: the first name of the message's own sender, whose name alone closes it
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
   const selfFirst = self?.split(" ")[0] ?? "";
@@ -461,7 +423,6 @@ export function messageParts(
     if (/^(from|to):/i.test(line)) line = line.replace(/ ?<[^<>\n]*>/g, "");
     if (split && !quoted && /^from:/i.test(line))
       sentBySelf = !!self && line.toLowerCase().includes(self.toLowerCase());
-    if (lean && !quoted && /^from:/i.test(line)) sender = (line.slice(5).trim().match(WORDS) ?? [""])[0]!.toLowerCase();
     if (dense && !quoted && ATTENDEES.test(line)) {
       line = attendeesBeyond(line, self, titleWords);
       if (!line) continue;
@@ -481,34 +442,12 @@ export function messageParts(
       part = part.replace(first && !quoted && !header ? SALUTED : GREETED, "");
       if (!quoted && !header) first = false;
       part = part.replace(URL, "").trim();
-      // A header a connector ran a disclaimer into ("From: Ana CONFIDENTIALITY NOTICE: …") keeps its header.
-      if (lean && header && DISCLAIMER.test(part)) part = part.slice(0, part.search(DISCLAIMER)).trim();
       if (dense && !header) {
         part = part.replace(TIME_OF_DAY_GREETING, "");
         const footer = part.search(FOOTER);
         if (footer >= 0) part = part.slice(0, footer).trim();
         if (titleWords.length >= ECHO_RUN) part = withoutEcho(part, titleWords);
         if (COURTESY.test(part)) continue;
-        if (lean) {
-          const cut = part.search(DISCLAIMER);
-          if (cut >= 0) {
-            part = part.slice(0, cut).trim();
-            // A signature before the disclaimer ("— Łukasz Nowak CONFIDENTIALITY NOTICE: …") closes the message.
-            if (SIGNED.test(part) || (part && LONE_NAME.test(part) && /^[—–-]/.test(part))) {
-              if (quoted) signed = true;
-              else own = false;
-              break;
-            }
-          }
-          if (LEAN_COURTESY.test(part)) continue;
-          // The sender's own name alone ("Don't share it outside the team. Dana"): their sign-off.
-          const lone = LONE_NAME.exec(part);
-          const said = parts.some((p) => !p.quoted && !p.header);
-          if (lone && !quoted && said && sender && lone[1]!.toLowerCase() === sender) {
-            own = false;
-            break;
-          }
-        }
       }
       if (part.length < 3 || PLEASANTRY.test(part) || BOILERPLATE.test(part)) continue;
       const key = part.toLowerCase();
