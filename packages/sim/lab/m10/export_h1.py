@@ -1,7 +1,7 @@
-"""M10: export a trained sparse tagger (h1_sparse.py's `model.pt`) to the engine's weights file, and its parity rows.
+"""M10: export a trained sparse tagger (h1_sparse.py's `model.pt`) to the tagger's weights file (lab only; the trial was rejected, D960), and its parity rows.
 
-    python3 packages/sim/lab/m10/export_h1.py --model DIR/model.pt --out packages/engine/models/micro-cards-v1.bin \
-        --parity-rows predict-v1.jsonl.gz --parity-out packages/engine/src/micro-cards.parity.jsonl [--n 64]
+    python3 packages/sim/lab/m10/export_h1.py --model DIR/model.pt --out .local/m10/micro-cards-v1.bin \
+        --parity-rows predict-v1.jsonl.gz --parity-out .local/m10/micro-cards-v1.parity.jsonl [--n 64]
 
 File: "MCV1", u32 LE header length, a JSON header ({version, buckets, heads: [{name, out}]}), then per head in the
 header's order: f32 scales [out], f32 bias [out], int8 weights [buckets x out] row-major (bucket-major). A weight is
@@ -19,18 +19,23 @@ from h1_sparse import item_feats, mention_feats, sent_feats, tok_feats
 HEADS = ["kind", "act", "bio", "date", "amt", "stmt"]
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--model", required=True)
+ap.add_argument("--model", required=True, help="model.pt, or several comma-separated: their weights averaged")
 ap.add_argument("--out", required=True)
 ap.add_argument("--parity-rows")
 ap.add_argument("--parity-out")
 ap.add_argument("--n", type=int, default=64)
 ap.add_argument("--t-flag", type=float, default=0.5)
+ap.add_argument("--predict-rows")
+ap.add_argument("--predict-out")
 ap.add_argument("--t-act", type=float, default=0.5)
+ap.add_argument("--t-ent", type=float, default=None)
 a = ap.parse_args()
-m = torch.load(a.model)
+# Several seeds' models averaged: for linear heads, the mean of their logits is the model of their mean weights.
+ms = [torch.load(p) for p in a.model.split(",")]
+m = ms[0]
 B = 1 << m["buckets"]
-st = m["state"]
-q, header = {}, {"version": 1, "buckets": B, "heads": [], "tFlag": a.t_flag, "tAct": a.t_act}
+st = {k: sum(x["state"][k].float() for x in ms) / len(ms) for k in m["state"]}
+q, header = {}, {"version": 1, "buckets": B, "heads": [], "tFlag": a.t_flag, "tAct": a.t_act, **({"tEnt": a.t_ent} if a.t_ent is not None else {})}
 blob = b""
 for h in HEADS:
     w = st[f"{h}.e.weight"].float()  # [B, out]
@@ -75,5 +80,13 @@ if a.parity_rows and a.parity_out:
     with open(a.parity_out, "w") as f:
         for r in rows:
             keep = {k: r[k] for k in ("h", "title", "own", "dated", "now", "source", "toks", "dates", "amounts")}
-            f.write(json.dumps({"row": keep, "card": decode(r, outs(r), a.t_flag, a.t_act)}) + "\n")
+            f.write(json.dumps({"row": keep, "card": decode(r, outs(r), a.t_flag, a.t_act, 0.5, 0.5, a.t_ent)}) + "\n")
     print(a.parity_out, len(rows), "rows")
+
+# `--predict-rows F --predict-out G`: the exported (quantised, averaged) model's raw outputs for every row of F, as
+# `{h, out}` lines (to_cards.py reads them): the replay arm then measures exactly what the engine would run.
+if getattr(a, "predict_rows", None) and a.predict_out:
+    with open(a.predict_out, "w") as f:
+        for r in load(a.predict_rows):
+            f.write(json.dumps({"h": r["h"], "out": outs(r)}) + "\n")
+    print(a.predict_out)

@@ -133,4 +133,6 @@ await Promise.all(
   }),
 );
 const spent = usd.toFixed(4);
-console.log(`m10 label: ${made} cards, ${failed} failed calls, USD ${spent}; ledger USD ${ledger.committedUsd.toFixed(4)}`);
+console.log(
+  `m10 label: ${made} cards, ${failed} failed calls, USD ${spent}; ledger USD ${ledger.committedUsd.toFixed(4)}`,
+);

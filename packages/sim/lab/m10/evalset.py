@@ -29,7 +29,7 @@ def join_tokens(ws):
     return out
 
 
-def decode(row, out, t_flag=0.5, t_act=0.5, t_role=0.5, t_amt=0.5):
+def decode(row, out, t_flag=0.5, t_act=0.5, t_role=0.5, t_amt=0.5, t_ent=None):
     probs = out["kind"]
     k = max(range(len(KINDS)), key=lambda i: probs[i])
     if 1 - probs[0] < t_flag:
@@ -48,6 +48,9 @@ def decode(row, out, t_flag=0.5, t_act=0.5, t_role=0.5, t_amt=0.5):
     ents, cur = [], []
     for i, p in enumerate(out.get("bio", [])):
         tag = max(range(3), key=lambda j: p[j])
+        if t_ent is not None:
+            # An entity token when P(outside) is under t_ent: B or I, whichever is likelier.
+            tag = 0 if p[0] >= t_ent else (1 if p[1] >= p[2] else 2)
         if tag == 1 or (tag == 2 and not cur):
             if cur:
                 ents.append(cur)

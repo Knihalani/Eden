@@ -118,16 +118,19 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--buckets", type=int, default=18)
     ap.add_argument("--epochs", type=int, default=12)
+    ap.add_argument("--lr", type=float, default=0.05)
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--wd", type=float, default=0.0, help="L2 on the rows a batch touches (calibration)")
     ap.add_argument("--predict", default="", help="rows to write raw outputs for (predict.jsonl in --out)")
     a = ap.parse_args()
     B = 1 << a.buckets
     rows = load(a.set)
     train = [r for r in rows if r["split"] == "train"]
-    random.seed(1)
-    torch.manual_seed(1)
+    random.seed(a.seed)
+    torch.manual_seed(a.seed)
     heads = nn.ModuleDict({"kind": Bag(B, len(KINDS)), "act": Bag(B, len(ACTIONS)), "bio": Bag(B, 3),
                            "date": Bag(B, 2), "amt": Bag(B, 1), "stmt": Bag(B, 1)})
-    opt = torch.optim.Adam(heads.parameters(), lr=0.05)
+    opt = torch.optim.Adam(heads.parameters(), lr=a.lr)
     cache = {}
 
     def feats(r):
@@ -172,6 +175,8 @@ def main():
                         loss = loss + bce(o["amt"], torch.tensor([float(x) for x in t["amt"]]))
                     if t["stmt"] >= 0 and t["stmt"] < len(o["stmt"]):
                         loss = loss + 0.3 * nn.functional.cross_entropy(o["stmt"][None], torch.tensor([t["stmt"]]))
+            if a.wd > 0:
+                loss = loss + a.wd * sum((p * p).sum() for p in heads.parameters())
             opt.zero_grad()
             loss.backward()
             opt.step()

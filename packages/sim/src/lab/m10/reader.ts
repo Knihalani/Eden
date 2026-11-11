@@ -1,15 +1,15 @@
 /**
- * Micro cards (`cardsMicro`, trial, M10; docs/research/m10-cards.md): an item's card read by a small tagger at ingest,
- * with no model call and no generated text. This file holds the reading both the lab's trainer and the engine share:
- * the item's tokens, its sentences, and the dates and amounts it mentions resolved to values (`readItem`). A learned
- * network (`MicroCardNet`, below) then only classifies: the card's kind and actions, which tokens are its entities,
- * which date mentions are its start and end, which amount is its limit, and which sentence is its statement. Every
- * field it writes is a span or a value of the item's own text.
+ * M10's micro card tagger (lab only; docs/research/m10-cards.md, D960–D963). The trial `cardsMicro` that ran it in
+ * the engine was rejected and deleted (D960): this file keeps its reader and network so the lab's export, gates and
+ * parity can be re-run. The reader is what the trainers and the network share: an item's tokens, its sentences, and
+ * the dates and amounts it mentions resolved to values (`readText`). The network (`MicroCardNet`) only classifies:
+ * the card's kind and actions, which tokens are its entities, which date mentions are its start and end, which amount
+ * is its limit, and which sentence is its statement. Every field it writes is a span or a value of the item's text.
  */
 import { readFileSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
-import { ACTIONS, CARD_KINDS, datedOf, ownText, type Card } from "./cards";
+import { ACTIONS, CARD_KINDS, datedOf, ownText, type Card } from "../../../../engine/src/cards";
 
 const CARD_KIND_LIST = CARD_KINDS;
 const ACTION_LIST = Object.keys(ACTIONS) as (keyof typeof ACTIONS)[];
@@ -106,19 +106,19 @@ const dayNum = (w: string | undefined) => {
 export function readText(title: string, own: string, anchor: number): ReadItem {
   const text = `${title.slice(0, 200)}\n${own}`.slice(0, MICRO_READ_CHARS);
   const toks: Tok[] = [];
-  let s = 0;
-  let last = 0;
   for (const m of text.matchAll(TOKEN)) {
     if (toks.length >= MICRO_MAX_TOKENS) break;
     const at = m.index!;
-    // A line break or a sentence end between tokens starts a new sentence.
-    const gap = text.slice(last, at);
-    if (toks.length > 0 && (gap.includes("\n") || /[.!?;]\s*$/.test(gap))) s++;
     const w = m[0];
-    toks.push({ w, l: w.toLowerCase(), at, s });
-    last = at + w.length;
-    if (/^[.!?;]$/.test(w)) last = at; // the end mark itself ends the sentence: the gap after it starts the next
+    // A day range written with a hyphen ("4-9", "2-6") is three tokens, as with a dash, so its days are read.
+    const range = /^(\d{1,2})-(\d{1,2})$/.exec(w);
+    if (range) {
+      const d2 = at + range[1]!.length + 1;
+      toks.push({ w: range[1]!, l: range[1]!, at, s: 0 }, { w: "-", l: "-", at: d2 - 1, s: 0 });
+      toks.push({ w: range[2]!, l: range[2]!, at: d2, s: 0 });
+    } else toks.push({ w, l: w.toLowerCase(), at, s: 0 });
   }
+  if (toks.length > MICRO_MAX_TOKENS) toks.length = MICRO_MAX_TOKENS;
   // Recount sentences from end marks: a "." token closes its sentence.
   let sent = 0;
   for (let i = 0; i < toks.length; i++) {
@@ -315,8 +315,8 @@ function amountsIn(toks: Tok[]): AmountMention[] {
 // Every feature is a string hashed (CRC-32 of its UTF-8) into `buckets`; a field's logits are the sum of its rows. The
 // feature strings below are the trainer's exactly: a change to one is a new weights file.
 
-/** The shipped weights: read once per process on first use (`microCardNet`), shared by every user. */
-export const MICRO_CARDS_PATH = new URL("../models/micro-cards-v1.bin", import.meta.url).pathname;
+/** Where `export_h1.py` writes the weights in the lab (not committed: the model was rejected, D960). */
+export const MICRO_CARDS_PATH = ".local/m10/micro-cards-v1.bin";
 
 const KIND_NAMES = CARD_KIND_LIST;
 const ACTION_NAMES_ORDER = ACTION_LIST;
@@ -359,6 +359,8 @@ export class MicroCardNet {
   /** Decision thresholds the trainer chose (in the file's header): P(constraint) to flag, P(action) to keep it. */
   readonly tFlag: number;
   readonly tAct: number;
+  /** A token is part of an entity when P(outside) is under this (B or I, the likelier); null: the likeliest tag. */
+  readonly tEnt: number | null;
 
   constructor(buf: Uint8Array) {
     const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -369,10 +371,12 @@ export class MicroCardNet {
       heads: { name: string; out: number }[];
       tFlag?: number;
       tAct?: number;
+      tEnt?: number;
     };
     this.buckets = header.buckets;
     this.tFlag = header.tFlag ?? 0.5;
     this.tAct = header.tAct ?? 0.5;
+    this.tEnt = header.tEnt ?? null;
     let at = 8 + hl;
     // Copied out so each table is aligned for its typed array, whatever the file's offsets.
     const f32 = (n: number) => {
@@ -502,7 +506,18 @@ export class MicroCardNet {
     for (let i = 0; i < toks.length; i++) {
       const f = this.tokFeats(read, i);
       const p = softmax(this.logits("bio", f));
-      const tag = p[1]! > p[0]! && p[1]! >= p[2]! ? 1 : p[2]! > p[0]! && p[2]! > p[1]! ? 2 : 0;
+      const tag =
+        this.tEnt !== null
+          ? p[0]! >= this.tEnt
+            ? 0
+            : p[1]! >= p[2]!
+              ? 1
+              : 2
+          : p[1]! > p[0]! && p[1]! >= p[2]!
+            ? 1
+            : p[2]! > p[0]! && p[2]! > p[1]!
+              ? 2
+              : 0;
       if (tag === 1 || (tag === 2 && cur.length === 0)) {
         if (cur.length) spans.push(cur);
         cur = [toks[i]!.w];
@@ -619,8 +634,8 @@ export function microCardNet(path = MICRO_CARDS_PATH): MicroCardNet | null {
 }
 
 /**
- * `cardsMicro`'s reader for the enricher: the item as the card prompt reads it (`ownText`, its date), resolved against
- * its own date or `today`, through the network. Null when no network is loaded.
+ * The micro card of an item: the item as the card prompt reads it (`ownText`, its date), resolved against
+ * its own date or `today`, through the network.
  */
 export function microCardOf(net: MicroCardNet, item: ContextItem, today: string): Card {
   const dated = datedOf(item) || today;

@@ -14,7 +14,7 @@ import { writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { ItemCache } from "@eden/engine";
-import { readText } from "../../../../engine/src/micro-cards";
+import { readText } from "./reader";
 import { cardKey, datedOf, ownText, worthCarding, worthCardingStrict, type Card } from "../../../../engine/src/cards";
 import { REALISTIC, simSources } from "../../sources";
 import { worldOf } from "../ab-common";

@@ -14,6 +14,7 @@ ap.add_argument("--outs", required=True)
 ap.add_argument("--out", required=True)
 for k in ("flag", "act", "role", "amt"):
     ap.add_argument(f"--t-{k}", type=float, default=0.5)
+ap.add_argument("--t-ent", type=float, default=None)
 a = ap.parse_args()
 rows = {r["h"]: r for r in load(a.rows)}
 n = f = 0
@@ -22,7 +23,7 @@ with open(a.out, "w") as w:
         r = rows.get(p["h"])
         if r is None:
             continue
-        c = decode(r, p["out"], a.t_flag, a.t_act, a.t_role, a.t_amt)
+        c = decode(r, p["out"], a.t_flag, a.t_act, a.t_role, a.t_amt, a.t_ent)
         w.write(json.dumps({"h": p["h"], "c": c}) + "\n")
         n += 1
         f += c["kind"] != "none"

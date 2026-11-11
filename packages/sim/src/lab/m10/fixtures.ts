@@ -8,10 +8,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cardKey, datedOf, ownText, worthCarding, worthCardingStrict } from "../../../../engine/src/cards";
-import { readText } from "../../../../engine/src/micro-cards";
+import { readText } from "./reader";
 import type { ContextItem } from "@eden/protocol";
 
-const out = process.argv.includes("--out") ? process.argv[process.argv.indexOf("--out") + 1]! : ".local/m10/fixtures.jsonl";
+const out = process.argv.includes("--out")
+  ? process.argv[process.argv.indexOf("--out") + 1]!
+  : ".local/m10/fixtures.jsonl";
 const LAB = join(import.meta.dir, "..", "..", "..", "lab");
 const NOW = "2026-10-26";
 // `--in FILE --set NAME`: any `{title, text, dated?, source?}` lines (M10's generated families) read the same way.
@@ -28,7 +30,14 @@ for (const [set, path] of files) {
   let n = 0;
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
-    const f = JSON.parse(line) as { title: string; text: string; dated?: string; source?: string; expect?: unknown; family?: string };
+    const f = JSON.parse(line) as {
+      title: string;
+      text: string;
+      dated?: string;
+      source?: string;
+      expect?: unknown;
+      family?: string;
+    };
     const dated = f.dated ?? NOW;
     const it: ContextItem = {
       id: `${set}-${n++}`,

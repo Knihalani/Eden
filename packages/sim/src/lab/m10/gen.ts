@@ -23,8 +23,24 @@ const out = opt("out");
 const calls = Number(opt("calls", "100"));
 const per = Number(opt("per", "16"));
 
-const AREAS = ["work engineering", "work sales", "work finance", "work HR", "family", "health", "money", "travel",
-  "home", "admin and government", "social", "school", "legal", "procurement", "events", "property"];
+const AREAS = [
+  "work engineering",
+  "work sales",
+  "work finance",
+  "work HR",
+  "family",
+  "health",
+  "money",
+  "travel",
+  "home",
+  "admin and government",
+  "social",
+  "school",
+  "legal",
+  "procurement",
+  "events",
+  "property",
+];
 const KINDS = [
   "freeze (a hold, closure, outage or blackout over a period)",
   "deadline (something due or expiring by a date)",
@@ -36,9 +52,22 @@ const KINDS = [
   "preference (a diet, allergy, access need, or a standing rule like no gifts or no calls after 6pm)",
   "already-done (the action was already done or happens automatically)",
 ];
-const ACTS = ["deploy or migrate systems", "delete data", "pay or transfer money", "share or forward documents",
-  "buy, order or renew", "travel", "book food or a restaurant", "book a venue or tickets", "hire or make an offer",
-  "schedule or move a meeting", "contact someone", "send a gift or parcel", "attend in person", "sign a contract"];
+const ACTS = [
+  "deploy or migrate systems",
+  "delete data",
+  "pay or transfer money",
+  "share or forward documents",
+  "buy, order or renew",
+  "travel",
+  "book food or a restaurant",
+  "book a venue or tickets",
+  "hire or make an offer",
+  "schedule or move a meeting",
+  "contact someone",
+  "send a gift or parcel",
+  "attend in person",
+  "sign a contract",
+];
 const FORMATS = [
   "one short line of a dozen words or fewer, like a sticky note or a text message",
   "a chat channel excerpt: lines like '[09:14] Name Surname: message', two to six lines",
@@ -49,8 +78,20 @@ const FORMATS = [
   "a forwarded email whose own note is one line above the forwarded text",
   "a long email of eight to twelve sentences where the constraint is one sentence in the middle",
 ];
-const DATES = ["'4-9 Nov'", "'Nov 4'", "'04/11/2026'", "'next Tuesday'", "'the 12th'", "'end of the month'",
-  "'4 November 2026'", "'Thursday'", "'until January'", "'from 1 Dec'", "'within 7 days'", "'2026-11-04'"];
+const DATES = [
+  "'4-9 Nov'",
+  "'Nov 4'",
+  "'04/11/2026'",
+  "'next Tuesday'",
+  "'the 12th'",
+  "'end of the month'",
+  "'4 November 2026'",
+  "'Thursday'",
+  "'until January'",
+  "'from 1 Dec'",
+  "'within 7 days'",
+  "'2026-11-04'",
+];
 
 const ledger = new SpendLedger(opt("spend-ledger"), cap, opt("run-label", "m10-gen"), 0.1);
 const model = opt("model", "claude-haiku-5-5");
@@ -69,14 +110,31 @@ const one = async (k: number) => {
     "You write realistic but entirely fictional items from one person's mail, chat, calendar, documents and " +
     "notifications, as training data for a classifier. Invent names, companies, places, amounts and references; " +
     "vary them widely (many cultures and countries, currencies £ $ €, percentages). Never copy real people or brands.";
-  const user =
-    `Write ${per} different items for the area "${area}". Each is ${format}. Items are dated ${dated}.\n` +
-    `- ${Math.round(per * 0.6)} of them state a constraint of kind ${kind} that bears on the action "${act}"; ` +
-    `vary what is constrained, who and which dates or amounts (write dates in forms like ${date} and others).\n` +
-    `- The other ${per - Math.round(per * 0.6)} are look-alikes about the same subjects that state NO constraint: ` +
-    "a hold that was lifted or cleared, an approval already given, a routine confirmation, a newsletter, small talk, " +
-    "a question, or a constraint about something else entirely that was resolved.\n" +
-    'Reply with JSON only: {"items":[{"title":"...","text":"...","source":"mail|chat|calendar|docs|notification"}]}';
+  const twins = argv.includes("--pairs");
+  const TWIN = [
+    "resolved or lifted (the hold, ban or block is over, cancelled or approved)",
+    "superseded (a later notice moves or extends the date so the old constraint no longer applies)",
+    "other entity (the same constraint but about a different person, company, system or place)",
+    "other period (the same constraint but over dates that do not overlap the obvious ones)",
+    "already met (the requirement was satisfied: the approval was given, the payment made, the form filed)",
+  ];
+  const twin = pick(TWIN);
+  const pairs =
+    `Write ${per / 2} PAIRS of items for the area "${area}"; each item is ${format}; items are dated ${dated}.\n` +
+    `In each pair, item A states a constraint of kind ${kind} that bears on the action "${act}" (dates in forms like ` +
+    `${date}); item B is its look-alike twin of type ${twin}: it reuses most of A's words, names, dates and amounts ` +
+    "but states NO live constraint on that action for the obvious request. Vary subjects across pairs.\n" +
+    'Reply with JSON only: {"items":[{"title":"...","text":"...","source":"mail|chat|calendar|docs|notification"}]} ' +
+    "with A then B for each pair.";
+  const user = twins
+    ? pairs
+    : `Write ${per} different items for the area "${area}". Each is ${format}. Items are dated ${dated}.\n` +
+      `- ${Math.round(per * 0.6)} of them state a constraint of kind ${kind} that bears on the action "${act}"; ` +
+      `vary what is constrained, who and which dates or amounts (write dates in forms like ${date} and others).\n` +
+      `- The other ${per - Math.round(per * 0.6)} are look-alikes about the same subjects that state NO constraint: ` +
+      "a hold that was lifted or cleared, an approval already given, a routine confirmation, a newsletter, small talk, " +
+      "a question, or a constraint about something else entirely that was resolved.\n" +
+      'Reply with JSON only: {"items":[{"title":"...","text":"...","source":"mail|chat|calendar|docs|notification"}]}';
   const res = await chat.chat({
     messages: [
       { role: "system", content: sys },
@@ -118,4 +176,6 @@ await Promise.all(
       });
   }),
 );
-console.log(`m10 gen: ${made} items from ${calls} calls, ${failed} failed; ledger USD ${ledger.committedUsd.toFixed(4)}`);
+console.log(
+  `m10 gen: ${made} items from ${calls} calls, ${failed} failed; ledger USD ${ledger.committedUsd.toFixed(4)}`,
+);

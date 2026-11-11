@@ -524,13 +524,6 @@ export interface EngineConfig {
    */
   cardsSourceAware: boolean;
   /**
-   * Trial (M10, D960; docs/research/m10-cards.md), off. With `cards`: an item the card prefilter passes gets its card
-   * from the micro card tagger at ingest (`micro-cards.ts`: spans, values and classes of the item's own text, no model
-   * call, no generated text), at once, in place of the card model's; the card call still writes its requests
-   * (`intent`). Fails open: with no weights loaded the card model's cards stand.
-   */
-  cardsMicro: boolean;
-  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -857,7 +850,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsOrder: true,
   cardsLanes: 4,
   cardsSourceAware: true,
-  cardsMicro: false,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

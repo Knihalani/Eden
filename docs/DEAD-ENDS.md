@@ -106,6 +106,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D449 | What a distilled card model would need before production (M2, written, not built). |  |
 | D480 | Trial `intentPrune` (pruning an item's intent requests by a no-model score against the item) is rejected and deleted | Four rules (`share:x` of the request's terms in the item, `names` the item does not hold, the closest N, the… |
 | D523 | Rejected without a paid run: a card-only (distilled) model reading the rest of a new user's backfill | the bar was +10 (D361), written after the screen was read |
+| D960 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | micro 205 / 167 / 250 (hidden −1.4%): fails |
+| D963 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). |  |
 
 ## Check
 

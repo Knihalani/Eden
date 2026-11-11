@@ -659,8 +659,6 @@ interface Queued {
   only?: true;
   /** The item's place in the order the user's items were queued (`UserCards.enlisted`). */
   seq?: number;
-  /** `cardsMicro`: its card came from the micro tagger at enqueue; it waits for its requests only, card kept. */
-  micro?: true;
 }
 
 /** An address on a mail's From line, and on its To and Cc lines (header block only; bounded). */
@@ -683,10 +681,7 @@ const ORDER_WORDED = 4;
  * days (an event ahead is dated by its start, so it counts for that too). More counts first, then the newer date,
  * then the order the items came in. No model; reads each item's first 600 characters once.
  */
-export function orderQueue<Q extends { item: ContextItem; only?: true; micro?: true }>(
-  queue: readonly Q[],
-  now: number,
-): Q[] {
+export function orderQueue<Q extends { item: ContextItem; only?: true }>(queue: readonly Q[], now: number): Q[] {
   const heads = queue.map((q) => {
     // Read once per item object: the queue is sorted before every batch, and an item waits through many.
     const known = ORDER_HEADS.get(q.item);
@@ -713,8 +708,7 @@ export function orderQueue<Q extends { item: ContextItem; only?: true; micro?: t
     const dated = Math.max(q.item.updatedAt ?? -Infinity, Number.isFinite(start) ? start : -Infinity);
     const from = heads[i]!.from;
     const tier =
-      // A micro-carded item waits for its requests only, but it is as constraint-worded as one the model cards.
-      (q.only && !q.micro ? 0 : ORDER_WORDED) +
+      (q.only ? 0 : ORDER_WORDED) +
       (Number.isFinite(start) && start > now ? 1 : 0) +
       (from !== undefined && from !== user && writesTo.has(from) ? 1 : 0) +
       (dated >= now - ORDER_RECENT_MS ? 1 : 0);
@@ -783,8 +777,6 @@ export interface CardStats {
    * they name none of the user's people (read once a lookup uses the source: `enqueue` again).
    */
   deferred: number;
-  /** `cardsMicro`: items given the micro tagger's card at enqueue (a constraint or none). */
-  micro: number;
 }
 
 /**
@@ -814,7 +806,6 @@ export class CardEnricher {
     requestOnly: 0,
     requested: 0,
     deferred: 0,
-    micro: 0,
   };
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
@@ -833,12 +824,6 @@ export class CardEnricher {
    * follow the items, not the timing of the stores.
    */
   gather: (() => Promise<void> | null) | null = null;
-  /**
-   * `cardsMicro` (M10, D960): the micro card tagger, set by the partner. An item the prefilter passes gets its card
-   * from it at enqueue, at once and with no call, and waits only for its requests (`intent`); null: the model's cards.
-   * It returns null when it cannot read (no weights), and the item is queued as before.
-   */
-  micro: ((item: ContextItem, today: string) => Card | null) | null = null;
 
   constructor(
     private readonly deps: { maker: CardMaker; budget: Budget; now: () => number },
@@ -997,7 +982,6 @@ export class CardEnricher {
         }
         continue;
       }
-      if (this.micro && this.microCard(scope, u, item, hash, now)) continue;
       this.queueItem(u, item, hash, now);
     }
     this.trim(u);
@@ -1005,27 +989,6 @@ export class CardEnricher {
     if (u.queue.length > 0 && !u.draining) {
       this.start(scope, u);
     }
-  }
-
-  /**
-   * `cardsMicro`: the item's card from the micro tagger, kept at once (bounded and checked as a model's card is), and
-   * with `intent` the item queued for its requests only. False when the tagger could not read it: queued as before.
-   */
-  private microCard(scope: Scope, u: UserCards, item: ContextItem, hash: string, now: number): boolean {
-    const today = new Date(now + (this.offsetOf?.(scope) ?? 0) * 60_000).toISOString().slice(0, 10);
-    let card: Card | null;
-    try {
-      card = this.micro!(item, today);
-    } catch {
-      card = null;
-    }
-    if (!card) return false;
-    if (card.kind !== "none" && (!anchored(card, item) || !plausible(card, today))) card = NONE_CARD;
-    this.stats.micro++;
-    this.stats.carded++;
-    this.keep(u, hash, { card: card.kind === "none" ? null : card, at: now, seenAt: now });
-    if (this.limits.intent) this.enlist(u, { item, hash, only: true, micro: true });
-    return true;
   }
 
   /** Queues an item for the model, or gives it the card of an item saying the same constraint (`sentenceReuse`). */
@@ -1194,17 +1157,7 @@ export class CardEnricher {
           const asked = intent ? (requests?.[i] ?? null) : null;
           // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
           // with its requests unread it is uncovered.
-          // `cardsMicro`: the micro card kept at enqueue stands, whatever the model wrote.
-          const kept = b.micro ? u.byHash.get(b.hash) : undefined;
-          const card = b.micro
-            ? asked
-              ? (kept?.card ?? NONE_CARD)
-              : null
-            : b.only
-              ? asked
-                ? NONE_CARD
-                : null
-              : cards[i];
+          const card = b.only ? (asked ? NONE_CARD : null) : cards[i];
           if (card === undefined || card === null) return; // Unreadable: uncovered, may be read again later.
           // A card that shares no word with its item was written for another one (a batch's indexes crossed):
           // uncovered rather than wrong, and so are the requests written beside it.
@@ -1224,7 +1177,7 @@ export class CardEnricher {
           if (asked?.length) this.stats.requested++;
           this.keep(u, b.hash, {
             card: card.kind === "none" ? null : card,
-            at: kept?.at ?? at,
+            at,
             seenAt: at,
             ...(asked?.length ? { requests: asked, seq: b.seq } : {}),
           });
