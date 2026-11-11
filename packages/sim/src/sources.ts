@@ -599,9 +599,14 @@ export function simIndexes(world: World): SimIndex[] {
   return Object.keys(world.sources).map((id) => new SimIndex(id, world));
 }
 
-/** A source's profile: its own, or for a rare source (rare-sources.ts) the world source it is like. */
+const SYNTH_RARE = new Set(["sms", "files", "tickets", "household"]);
+
+/**
+ * A source's profile: its own, or for a rare source (rare-sources.ts) the world source it is like. A synth world's
+ * rare source that rare-sources.ts does not list (sms, files, tickets, household; D884) gets drive's profile.
+ */
 export function profileFor(profiles: ProfileSet, id: string): SourceProfile {
-  const p = profiles[id] ?? profiles[RARE_SOURCES[id]?.like ?? ""];
+  const p = profiles[id] ?? profiles[RARE_SOURCES[id]?.like ?? ""] ?? (SYNTH_RARE.has(id) ? profiles.drive : undefined);
   if (!p) throw new Error(`no source profile for "${id}"`);
   return p;
 }

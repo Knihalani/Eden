@@ -35,7 +35,8 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "train6r",
 ];
 
-export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);
+/** Generated suites (`synth-*`, `synth:<file>`, D884) build `neutral` too: their planting function plants nothing. */
+export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite) || suite.startsWith("synth");
 
 /**
  * The variants a harness runs for a suite: those asked for, minus `neutral` where the suite does not build it.
