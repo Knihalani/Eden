@@ -11,6 +11,9 @@
 FROM oven/bun:1.4.4
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml tsconfig.json tsconfig.base.json ./
+# bunfig.toml preloads this into every `bun` started here, the server included: without it nothing starts
+# (scripts/dockerfile.test.ts checks every preload is copied).
+COPY scripts/lab-guard.ts ./scripts/lab-guard.ts
 COPY packages ./packages
 COPY examples ./examples
 # The "default minus a part" profiles, for EDEN_ENGINE_CONFIG=docs/profiles/minus-<part>.json.
