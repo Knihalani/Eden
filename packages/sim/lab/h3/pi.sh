@@ -3,6 +3,7 @@
 # `pushCheckDedupe` arm). M13's recipe (packages/sim/lab/m13/pi.sh): Haiku 5.5 as agent, grader, card, reader and
 # check model; cards replayed; house rules cached in every arm; payload notices; the market `direct` profile. One
 # ledger, hard cap $15 across the session. A finished run is never run again.   LABEL DEDUPE then pi-ab flags.
+# `pushCheckDedupe` was deleted by D1071: run this on a tree with commit 7e528b60's packages/engine.
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 L=$1; K=$2; shift 2

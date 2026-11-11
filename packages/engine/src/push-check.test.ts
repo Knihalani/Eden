@@ -52,13 +52,8 @@ function says(yes: string[], extra = "") {
   });
 }
 
-function setup(
-  config: Record<string, unknown>,
-  model: Model | null,
-  pools: PushPoolReport[] = [],
-  items: ContextItem[] = ITEMS,
-) {
-  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
+function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = []) {
+  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
     sources: async () => [source],
@@ -117,29 +112,6 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     expect(req.stop).toBeUndefined();
     expect(req.messages[1]!.content).toContain(`<request>${sanitizeForStore(REQUEST)}`);
     expect(JSON.stringify(req.messages)).not.toContain("AKIAIOSFODNN7EXAMPLE");
-  });
-
-  test("pushCheckDedupe (H3, trial): a same-titled later item is not read, nor named, and the read is capped", async () => {
-    expect(DEFAULT_CONFIG.pushCheckDedupe).toBe(0);
-    const twins = [
-      ...ITEMS.slice(0, 3),
-      item("hold2", "HARLOW VENUE ", "Payments to Harlow are on hold until the venue dispute ends (reminder).", 2.5),
-    ];
-    const read = (req: ChatRequest) => [...req.messages.at(-1)!.content.matchAll(/<item n="\d+"[^>]*>([^:]*):/g)];
-    // Off: every item is read, the twin among them.
-    const off = says(["HARLOW VENUE "]);
-    await handed(setup({ pushCheck: true }, off, [], twins).partner);
-    expect(read(off.calls[0]!).length).toBe(4);
-    // On: the twin is left out of the prompt, so it cannot be named or handed; the first copy still is.
-    const on = says(["Harlow venue", "HARLOW VENUE "]);
-    const ids = await handed(setup({ pushCheck: true, pushCheckDedupe: 15 }, on, [], twins).partner);
-    expect(read(on.calls[0]!).map((m) => m[1])).not.toContain("HARLOW VENUE ");
-    expect(read(on.calls[0]!).length).toBe(3);
-    expect(ids).toEqual(["mail:hold"]);
-    // Capped: at most that many of the distinct items are read.
-    const capped = says([]);
-    await handed(setup({ pushCheck: true, pushCheckDedupe: 2 }, capped, [], twins).partner);
-    expect(read(capped.calls[0]!).length).toBe(2);
   });
 
   test("on: none named sends no candidates packet", async () => {
@@ -297,8 +269,6 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     expect(checkEngineConfig(on, { deps: { cards: true, reader: true } })).toEqual(on);
     expect(() => checkEngineConfig({ pushCheckItems: 10 }, { deps: { cards: true, reader: true } })).toThrow(/checker/);
     expect(checkEngineConfig({ pushCheckItems: 10 }, { deps: { checker: true } })).toEqual({ pushCheckItems: 10 });
-    expect(() => checkEngineConfig({ pushCheckDedupe: 10 }, { deps: { cards: true, reader: true } })).toThrow(/checker/);
-    expect(() => checkEngineConfig({ pushCheckDedupe: 21 }, { deps: { checker: true } })).toThrow();
     expect(() => checkEngineConfig({ pushCheckItemChars: 4_000 }, { deps: { checker: true } })).toThrow();
   });
 });
