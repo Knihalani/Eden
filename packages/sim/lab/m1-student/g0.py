@@ -76,3 +76,32 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def quality(rows, m):
+    """Against the sim's truth on the same calls: the planted fact named (hidden), its look-alike named (control), any
+    item named on a neutral task; Haiku's recorded verdict beside the scorer's at mark `m`."""
+    out = {}
+    for who in ("haiku", "scorer"):
+        c = {"hidden": [0, 0], "control": [0, 0], "neutral": [0, 0]}
+        for r in rows:
+            ids = [it["id"] for it in r["items"]]
+            named = set(r["yes"]) if who == "haiku" else {i for i, v in zip(ids, r["s"]) if v >= m}
+            v = r["variant"]
+            c[v][1] += 1
+            c[v][0] += (r["planted"] in named) if v != "neutral" else bool(named)
+        out[who] = {k: f"{x}/{n}" for k, (x, n) in c.items()}
+    return out
+
+
+if __name__ == "__main__" and os.environ.get("G0_QUALITY"):
+    import sys
+
+    files = sorted(glob.glob(os.path.join(sys.argv[2], "train-4*.jsonl")))
+    rows = [json.loads(l) for f in files for l in open(f) if l.strip()]
+    for r, s in zip(rows, [json.loads(l) for l in open(sys.argv[4])]):
+        r["s"] = s
+    ok = [r for r in rows if r["yes"] is not None]
+    for name, keep in (("train1-4", ("train1", "train2", "train3", "train4")), ("train5-6", ("train5", "train6"))):
+        sel = [r for r in ok if r["suite"] in keep]
+        print(name, json.dumps(quality(sel, float(os.environ["G0_QUALITY"]))))
