@@ -18,6 +18,7 @@ The transfer recipes are switches on the same model (`recipe`, comma-separated):
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import zlib
@@ -29,6 +30,9 @@ import torch.nn.functional as F
 from logo_core import item_text, noise, normalise
 
 BUCKETS = 1 << 18
+# One thread a process when several folds run side by side (LOGO_THREADS=1); torch's default otherwise.
+if os.environ.get("LOGO_THREADS"):
+    torch.set_num_threads(int(os.environ["LOGO_THREADS"]))
 _WORD = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
 
