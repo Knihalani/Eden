@@ -87,6 +87,8 @@ interface Graded {
   ms?: number;
   reply?: string;
   usd?: number;
+  /** `pi-ab --connect-at`: the answer's checkpoint (a task is asked once at each). */
+  connectS?: number;
 }
 const graded: Graded[] = [];
 const anthropicModels = new Map<string, Model>();
@@ -100,6 +102,7 @@ for (const r of todo) {
   const task = byId.get(r.task)!;
   for (const grader of GRADERS) {
     const g: Graded = { task: r.task, condition: r.condition, grader };
+    if (r.connectS !== undefined) g.connectS = r.connectS;
     const t0 = performance.now();
     try {
       let content: string;

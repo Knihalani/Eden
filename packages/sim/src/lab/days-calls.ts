@@ -8,7 +8,7 @@
  * sync before each request), `backfill` (before the first request, once per user).
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
- *     [--cards FILE] [--recap-notice push|signal] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
+ *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
  *     [--pool-diag FILE] [--intent FILE[,FILE]]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
@@ -34,6 +34,14 @@ export type Phase = "backfill" | "tick" | "notice" | "request";
 /** `${phase} ${source} ${op}` → calls. */
 export type Counts = Record<string, number>;
 
+/**
+ * What became of an item its day's recap moved (O1, D606): `unhanded` (the agent was not handed it that day, so no
+ * update is owed), `updated` (an "updated:" packet cited it), `unpolled` (its source was not listed between the move
+ * and the end of the recap's request), `unseen` (listed, but the cache's copy is still the old one), `undelivered`
+ * (the cache holds the new copy and no update packet cited it).
+ */
+export type MovedFate = "unhanded" | "updated" | "unpolled" | "unseen" | "undelivered";
+
 export interface DaysCallsOptions {
   days: number;
   push: PushMode;
@@ -41,6 +49,8 @@ export interface DaysCallsOptions {
   ask?: boolean;
   /** pi-ab's recap before D272: a bare signal whatever `push` says. */
   recapSignal?: boolean;
+  /** `--recap-notice none` (O1): the moved items' sources say nothing, so only a poll or a sweep finds the change. */
+  recapSilent?: boolean;
   cards?: DiskCardMaker | null;
   config?: Partial<EngineConfig>;
   gapMs?: number;
@@ -95,6 +105,8 @@ export interface DaysCallsUser {
   /** Items moved at their source by a recap: how many, and how many of those the cache still held in an old version
    * at the next request (a changed copy delivered stale would need one). */
   changed: number;
+  /** Each moved item's fate at its recap (`MovedFate`). */
+  fates: Record<MovedFate, number>;
   staleHeld: number;
   /**
    * Requests with a planted item, and those whose item reached the agent (a packet or the ask's citations), by the
@@ -198,6 +210,11 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   let requests = 0;
   let updatePackets = 0;
   let staleHeld = 0;
+  /** Items an "updated:" packet cited, and what became of each moved item at its recap (`MovedFate`). */
+  const updatedIds = new Set<string>();
+  const fates: Record<MovedFate, number> = { unhanded: 0, updated: 0, unpolled: 0, unseen: 0, undelivered: 0 };
+  let recapMoved: { id: string; source: string; lists: number; to: string[] }[] = [];
+  const listsOf = (source: string) => callsWhere(counts, (_p, src, op) => src === source && op === "list");
   const f0 = { ...partner.freshness };
   const surfaced: DaysCallsUser["surfaced"] = {};
   const requestCallsByDay: number[] = [];
@@ -209,7 +226,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const requestCalls = () => callsWhere(counts, (p) => p === "request");
   const take = () => {
     for (const i of partner.takePending({ ...scope, sessionId: session })) {
-      if (i.text.includes(UPDATED_MARK)) updatePackets++;
+      if (i.text.includes(UPDATED_MARK)) {
+        updatePackets++;
+        for (const c of i.citations) updatedIds.add(c.itemId);
+      }
       for (const c of i.citations) handed.add(c.itemId);
     }
   };
@@ -239,11 +259,17 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
         it.updatedAt = clock;
         changed.add(it.id);
         moved.set(it.id, shift.moves);
+        recapMoved.push({
+          id: it.id,
+          source: it.sourceId,
+          lists: listsOf(it.sourceId),
+          to: shift.moves.map((m) => m.to),
+        });
       }
       const touched = new Set(world.items.filter((i) => changed.has(i.id)).map((i) => i.sourceId));
       for (const s of sources) if (touched.has(s.id)) s.reindex();
       phase = "notice";
-      if (o.push !== "none") {
+      if (o.push !== "none" && !o.recapSilent) {
         if (o.recapSignal) for (const id of touched) partner.sourceChanged(scope, id);
         else await recapNotice(partner, scope, sources, changed, o.push);
         await partner.revisionsSettled(scope);
@@ -259,7 +285,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     const r = await partner.observe({ ...ev, kind: task.event, text: task.text, ...arriving } as AgentEvent, {
       waitMs: 3_000,
     });
-    if (r.injection?.text.includes(UPDATED_MARK)) updatePackets++;
+    if (r.injection?.text.includes(UPDATED_MARK)) {
+      updatePackets++;
+      for (const c of r.injection.citations) updatedIds.add(c.itemId);
+    }
     for (const c of r.injection?.citations ?? []) handed.add(c.itemId);
     // The lookup's work left running (the push behind its poll, a second reading) settles before the next request.
     for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
@@ -302,6 +331,22 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       for (const id of handed) handedToday.add(id);
     }
     if (cards) await cards.idle();
+    // What became of each item this recap moved, once the recap's request has settled: the session ends with it, so
+    // an update not handed by now never is.
+    for (const m of recapMoved) {
+      const held = cache.get(scope, m.id, clock);
+      const fate: MovedFate = !handedToday.has(m.id)
+        ? "unhanded"
+        : updatedIds.has(m.id)
+          ? "updated"
+          : listsOf(m.source) === m.lists
+            ? "unpolled"
+            : !held || !m.to.every((t) => held.text.includes(t))
+              ? "unseen"
+              : "undelivered";
+      fates[fate]++;
+    }
+    recapMoved = [];
     if (!isRecap(task) && task.planted) planted.add(task.planted);
     // After each request, whether the cache holds a moved item in an old version (its old time without the new one)
     // with nothing doubting it: a delivery would then send it stale, which D126 and D211 forbid.
@@ -329,6 +374,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     refetched: [...fetched.values()].filter((n) => n > 1).length,
     updatePackets,
     changed: moved.size,
+    fates,
     staleHeld,
     surfaced,
     requestCallsByDay,
@@ -353,7 +399,7 @@ if (import.meta.main) {
   const push = opt("push", "payload") as PushMode;
   if (!["none", "signals", "payload"].includes(push)) throw new Error("--push must be none, signals or payload");
   const recap = opt("recap-notice", "push");
-  if (recap !== "push" && recap !== "signal") throw new Error("--recap-notice must be push or signal");
+  if (!["push", "signal", "none"].includes(recap)) throw new Error("--recap-notice must be push, signal or none");
   const cardsFile = opt("cards", "");
   // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
   const intentFiles = opt("intent", INTENT_PATH).split(",");
@@ -362,6 +408,7 @@ if (import.meta.main) {
     push,
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",
+    recapSilent: recap === "none",
     cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
@@ -428,6 +475,11 @@ if (import.meta.main) {
       `  w${u.seed}: verify ${JSON.stringify(u.freshness)}; items re-read ${u.fetchedItems}, more than once ` +
         `${u.refetched}; moved ${u.changed}, update packets ${u.updatePackets}, stale copies held ${u.staleHeld}`,
     );
+  const fates = users.reduce<Record<string, number>>((all, u) => {
+    for (const [k, v] of Object.entries(u.fates)) all[k] = (all[k] ?? 0) + v;
+    return all;
+  }, {});
+  console.log(`moved items at their recap: ${JSON.stringify(fates)}`);
   const out = opt("json", "");
   if (out) writeFileSync(out, JSON.stringify({ label, seeds, days: o.days, requests, userDays: days, total, users }));
 }
