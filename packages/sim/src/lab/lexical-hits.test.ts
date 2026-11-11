@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CANDIDATES_LEAD } from "@eden/engine";
-import { worldOf } from "./ab-common";
+import { systemPrompt, worldOf } from "./ab-common";
 import { hitsPacket, HITS_K, topHits } from "./lexical-hits";
 import { parseCondition } from "./pi-conditions";
 
@@ -35,5 +35,12 @@ describe("the hits arm (P3, D831)", () => {
     expect(parseCondition("eden", { config: {} }).hits).toBe(false);
     expect(() => parseCondition("hits+pushOpen", { config: {} })).toThrow();
     expect(() => parseCondition("hits@w0", { config: {} })).toThrow();
+  });
+
+  test("the arm's prompt says its context comes before the request and names no tool (review of D831)", () => {
+    const hits = systemPrompt(world, { lookups: false, data: false, pushed: true });
+    expect(hits).toContain("may be given to you as context before the request");
+    expect(hits).not.toContain("tool");
+    expect(systemPrompt(world, { lookups: false, data: true })).toContain("Use the tools");
   });
 });
