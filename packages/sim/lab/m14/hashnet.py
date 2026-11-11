@@ -101,7 +101,8 @@ class HashNet:
                 for line in f:
                     if line.strip():
                         r = json.loads(line)
-                        self.teacher[r["key"]] = float(r["p"])
+                        it = {"title": r["title"], "text": r["text"]}
+                        self.teacher[teacher_key(r["request"], it)] = float(r["p"])
         self._cache: dict[str, list[int]] = {}
 
     # Text to features, through the recipe's test-time transform (normalisation is the only one).
@@ -109,7 +110,7 @@ class HashNet:
         got = self._cache.get(text)
         if got is None:
             got = feats(normalise(text) if "norm" in self.recipe else text)
-            if len(self._cache) < 120_000:  # an OOM kill at 4.4 GB with four folds side by side
+            if len(self._cache) < 60_000:  # an OOM kill at 4.4 GB with four folds side by side
                 self._cache[text] = got
         return got
 
