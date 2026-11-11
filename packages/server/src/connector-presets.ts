@@ -79,11 +79,20 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     description: "The user's CalDAV calendar (iCloud, Fastmail, Nextcloud, Radicale)",
     area: "calendar",
     searchTool: { name: "caldav_search_events" },
-    verified: "madbonez/caldav-mcp at 6db4975 (connector lab, packages/sim/lab/servers.json)",
-    noFetch: "the lab captured only caldav_search_events' schema: no fetch-by-id tool of this server could be verified",
+    // P4 (D842): the lab ran it over Radicale; the ref a search row gives is the event's uid, which the fetch takes,
+    // and the fetched copy equals the searched one (both tools build one record from the iCal component). It looks
+    // only within a year either side of the server's clock: an event outside that is a null, which proves nothing
+    // for an MCP source (D35), so the copy is kept as held. No listing: caldav_get_events pages by start time over a
+    // week with no cursor (D57).
+    fetchTool: { name: "caldav_get_event_by_uid" },
+    verified:
+      "madbonez/caldav-mcp at 6db4975 (connector lab, packages/sim/lab/servers.json); search and get replies " +
+      "captured over Radicale, 2026-11-11 (packages/sources/src/fixtures/lab-preset-tools.json)",
     unannotated: {
-      tools: ["caldav_search_events"],
-      why: "fetches the window's events and filters them in memory (src/mcp_caldav/client.py:845-880 at 6db4975)",
+      tools: ["caldav_search_events", "caldav_get_event_by_uid"],
+      why:
+        "search fetches the window's events and filters them in memory (src/mcp_caldav/client.py:845-880 at " +
+        "6db4975); get_event_by_uid runs one date search and matches the uid (client.py:737-749)",
     },
   },
   obsidian: {
@@ -91,7 +100,9 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
     area: "notes",
     searchTool: { name: "search_notes", fixed: { limit: 20 } },
     verified: "bitbonsai/mcpvault at adda860 (connector lab, packages/sim/lab/servers.json)",
-    noFetch: "the lab captured only search_notes' schema: no read-note tool of this server could be verified",
+    noFetch:
+      "the lab ran it (P4, D842): a search_notes row's ref is its uri, which read_note does not find, and its text is " +
+      "the row's JSON with an excerpt, where read_note gives the note's body with no id; the batch tools take arrays",
     unannotated: {
       tools: ["search_notes"],
       why: "only reads files (src/search.ts at adda860); run the server with --read-only as well",
@@ -113,11 +124,19 @@ export function expandPreset(spec: Record<string, unknown>): Record<string, unkn
     throw new UnknownPreset(`unknown preset ${JSON.stringify(name)} (presets: ${Object.keys(PRESETS).join(", ")})`);
   }
   const { preset: _, ...own } = spec;
+  // A preset's fetch tool the server leaves unannotated joins only an entry that trusts it by name: otherwise the
+  // read-only check would refuse it, and a refused fetch tool fails the connect (D35), search and all. So an entry
+  // written before the preset named one keeps connecting as it did (D842's review).
+  const trusted = Array.isArray(own.trustedReadTools) ? own.trustedReadTools : [];
+  const fetch =
+    p.fetchTool && (!p.unannotated?.tools.includes(p.fetchTool.name) || trusted.includes(p.fetchTool.name))
+      ? p.fetchTool
+      : undefined;
   return {
     kind: "mcp",
     description: p.description,
     searchTool: p.searchTool,
-    ...(p.fetchTool ? { fetchTool: p.fetchTool } : {}),
+    ...(fetch ? { fetchTool: fetch } : {}),
     ...(p.listTool ? { listTool: p.listTool } : {}),
     ...own,
   };

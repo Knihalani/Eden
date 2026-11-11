@@ -9,7 +9,7 @@ deletion, or the rejected part of an adopted one (marked "part of"), with what w
 briefly, the measured reason. Topics come from a keyword map, so an idea can sit under a neighbouring topic: search
 the page for its switch name.
 
-133 dead ends.
+134 dead ends.
 
 ## Push and candidates
 
@@ -84,6 +84,7 @@ the page for its switch name.
 | D241 | A per-user cached item prefix for the reader is not built |  |
 | D345 | A complete poll after a change signal does not stand in for re-reading the doubted copies (`verifyByPoll`, A18): built as a trial… |  |
 | D346 | An ask does not re-read its likely citations beside its poll and live search (`askVerifyEarly`, A18): built as a trial, measured, deleted. |  |
+| D840 | part of: Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0… |  |
 
 ## Cards and intent
 

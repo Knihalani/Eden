@@ -14,7 +14,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 - **finding**: a measurement recorded as a finding; it decides nothing by itself.
 - **lab**: lab tooling, a pre-registration or a lab-only change; nothing ships.
 
-500 decisions: adopted 303, rejected 96, superseded 25, trial 15, finding 38, lab 23.
+503 decisions: adopted 306, rejected 96, superseded 25, trial 15, finding 38, lab 23.
 
 | # | Date | Decision | Status |
 |---|---|---|---|
@@ -518,3 +518,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D801 | 2026-11-11 | Finding: tonight's wave (#235–#243) did not lower quality on blind `heldout18`, and on Sonnet's grade raised it; `pushOpen` stays in the… | finding |
 | D802 | 2026-11-11 | Lab only: `heldout18` has been run once and is read; `UNREAD_BLIND` is empty | lab |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
+| D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | adopted |
+| D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | adopted |
+| D842 | 2026-11-11 | The `caldav` preset names a fetch tool, `caldav_get_event_by_uid`; the sim's calendar never changes in the future; mcpvault keeps no fetch… | adopted |
