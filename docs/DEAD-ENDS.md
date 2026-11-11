@@ -51,10 +51,22 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D529 | Trial `pushCheckGate`, opened and closed 2026-11-10: measured live, not kept, deleted | because the stored answers cost an ingest call for every item (about +$0.06–0.12 per 1,000 tasks at 36 new… |
 | D700 | Trial `pushCheckBehind`: the push check runs behind the default's packet | killed by D704: With one more agent turn after the answer for what was queued (`+amend`): hidden +3.9 (+1.4..+6.5), but… |
 | D703 | Trial `candidatesSpecifics`: the candidates' lead asks for the item's specifics once it applies | killed by D705: The line raised hidden facts +2.0 points (+0.2..+3.7) on eight seeds (bar: +4.0) for +$0.013 per 1,000… |
-| D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D711: Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
+| D708 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | killed by D832: the rule asked for +2.0 with the lower bound above 0 |
+| D711 | `pushPointer` (D708) failed its rule and is deleted with its code and tests | Against the default: hidden −1.2 points (52.4% against 53.6%; −4.8..+2.3) where the rule asked for +4.0 with… |
 | D821 | Rejected: narrowing the default's packet with no model (`pushNarrow`, P2; deleted). | Funnel, train 41–44: neutral given a packet 738 → 216 of 768, but planted handed 582 → 348 (−234) and 334… |
 | D822 | Rejected: the push check's short compare-first reply. | Fails the decoy clause: without the separate verdict and the longer comparison the check lets look-alikes… |
+| D833 | Rejected: a per-user alias table for the push's recall. |  |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
+| D908 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | stopped on its pre-registered rules; deleted with its code, weights and tests |
+| D894 | Trial `pushCheckLocal`: the push check's verdict from a distilled student's scores instead of a model call | killed by D983: Eval and funnel identical to main before and after (the switch was off by default). |
+| D982 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | stopped on its pre-registered rule, D981 |
+| D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
+| D914 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | stopped on its pre-registered hand-written gate, M3b |
+| D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
+| D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
+| D1031 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | Failed its rule (pre-registered in b3cc3f12, extended once in 9ba0cc2d before the call): hidden raised… |
+| D1050 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | stopped on its pre-registered screen |
+| D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
 
 ## Reader
 
@@ -100,6 +112,10 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D449 | What a distilled card model would need before production (M2, written, not built). |  |
 | D480 | Trial `intentPrune` (pruning an item's intent requests by a no-model score against the item) is rejected and deleted | Four rules (`share:x` of the request's terms in the item, `names` the item does not hold, the closest N, the… |
 | D523 | Rejected without a paid run: a card-only (distilled) model reading the rest of a new user's backfill | the bar was +10 (D361), written after the screen was read |
+| D960 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | micro 205 / 167 / 250 (hidden −1.4%): fails |
+| D963 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). |  |
+| D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
+| D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
 
 ## Check
 
@@ -159,6 +175,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D341 | Rejected and deleted: re-sending every item a session was sent an "updated:" packet for, in its current version, on a recap- or… |  |
 | D401 | Rejected at $0: moving the agent's cache mark off the first request's user turn so a one-call task pays 1x, not 1.25x, for the packet. |  |
 | D517 | Rejected: shortening earlier requests' packets in the transcript | hidden −16.0 points (−23.3..−8.1 by day) |
+| D920 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | stopped on its pre-registered rule, a3faa15a |
 
 ## Lab and eval
 
@@ -191,4 +208,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D507 | Rejected at $0 and deleted: reusing a search's answer across a user's day | A user's searches do not repeat: about one search a task matches an earlier (source, text) of the same user… |
 | D515 | Trial `takeSettleMs`, opened and closed 2026-11-10: not promoted, deleted. | measured hidden +1.4 points (−4.2..+6.9); killed for another reason (read the row) |
 | D824 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items |  |
+| D909 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | the owner's decision |
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
+| D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
+| D996 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | stopped on its pre-registered rule, 327c9fb2 |
+| D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |

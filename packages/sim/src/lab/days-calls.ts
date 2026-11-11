@@ -9,7 +9,7 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
- *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none] [--resume]
+ *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--packets FILE] [--intent FILE[,FILE]|none] [--resume]
  *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD]
  *
  * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
@@ -131,6 +131,16 @@ export interface DaysCallsOptions {
   /** The user's sources' router keys (`sourceKeys`), once a user before their rows, so a trainer can score any table. */
   onRouteKeys?: (seed: number, keys: Record<string, number[]>) => void;
   router?: RouterWeights | null;
+  /**
+   * `--packets FILE` (E1, D1030): every packet and ask answer the agent was handed, one line a request (the day, the
+   * request's kind, and each text with how it came: `push`, `pending`, `ask`), for the packet-bytes screen over days.
+   */
+  onPackets?: (row: {
+    seed: number;
+    day: number;
+    kind: string;
+    texts: { how: string; text: string; ids: string[] }[];
+  }) => void;
 }
 
 /** One request's routed lookup (`--route-log`): ids, numbers and the planted source, no content. */
@@ -169,6 +179,12 @@ export interface PlantedRow {
   /** Pool items before it that pass the constraint test. */
   likeAhead: number;
   handed: number;
+  /**
+   * P3 (weak point 2, the lab's density, weak-points-1111 B6): pool items that are other requests' planted items (a
+   * fact or a decoy planted for another request of this user), and of the handed ones.
+   */
+  poolPlanted: number;
+  handedPlanted: number;
   /** Handed by the push; handed at all (the ask included, with `--ask`); handed earlier the same day. */
   pushed: boolean;
   got: boolean;
@@ -339,6 +355,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   // `--arrive-days`: hold each planted item until its day (`arrivals`, by plan day), drawn before the sources exist.
   const { arrivals, lagOf } = scheduleArrivals(world, u.tasks, u.daySizes, seed, o.arriveDays ?? null);
   const userPrefix = `w${seed}:user`;
+  const allPlanted = new Set(u.tasks.flatMap((t) => (t.planted ? [t.planted] : [])));
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
@@ -475,8 +492,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   /** Planted items handed so far in the current day's session (`onPlanted`'s `today`). */
   const handedToday = new Set<string>();
   const requestCalls = () => callsWhere(counts, (p) => p === "request");
+  let texts: { how: string; text: string; ids: string[] }[] = [];
   const take = () => {
     for (const i of partner.takePending({ ...scope, sessionId: session })) {
+      texts.push({ how: "pending", text: i.text, ids: i.citations.map((c) => c.itemId) });
       if (i.text.includes(UPDATED_MARK)) {
         updatePackets++;
         noteUpdated(i.citations.map((c) => c.itemId));
@@ -536,6 +555,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     const ev = { ...scope, sessionId: session, at: clock };
     if (!isRecap(task)) requests++;
     handed.clear();
+    texts = [];
     pooled = null;
     routed = null;
     const callsBefore = requestCalls();
@@ -548,6 +568,9 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       noteUpdated(r.injection.citations.map((c) => c.itemId));
     }
     for (const c of r.injection?.citations ?? []) handed.add(c.itemId);
+    if (r.injection) {
+      texts.push({ how: "push", text: r.injection.text, ids: r.injection.citations.map((c) => c.itemId) });
+    }
     // The lookup's work left running (the push behind its poll, a second reading) settles before the next request.
     for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     take();
@@ -555,6 +578,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     if (o.ask && !isRecap(task)) {
       const a = await partner.ask({ ...scope, sessionId: session, question: task.text });
       for (const c of a.citations) handed.add(c.itemId);
+      if (a.answer) texts.push({ how: "ask", text: a.answer, ids: a.citations.map((c) => c.itemId) });
       // The ask's reads behind (D430) settle before the next request, as the push's do.
       for (let k = 0; k < 5_000 && busy(session); k++) await Bun.sleep(1);
     }
@@ -575,6 +599,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
         ),
       );
     }
+    o.onPackets?.({ seed, day: dayNo, kind: isRecap(task) ? "recap" : task.kind, texts });
     if (!isRecap(task)) {
       requestCallsByDay[dayNo] = (requestCallsByDay[dayNo] ?? 0) + requestCalls() - callsBefore;
       requestsByDay[dayNo] = (requestsByDay[dayNo] ?? 0) + 1;
@@ -590,6 +615,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
         if (o.onPlanted) {
           const report = pooled as PushPoolReport | null;
           const rank = report ? report.pool.indexOf(task.planted) : -1;
+          const other = (id: string) => id !== task.planted && allPlanted.has(id);
           o.onPlanted({
             seed,
             task: task.id,
@@ -601,6 +627,8 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
             like: rank >= 0 && report!.constraintLike[rank] === true,
             likeAhead: rank >= 0 ? report!.constraintLike.slice(0, rank).filter(Boolean).length : 0,
             handed: report?.handed.length ?? 0,
+            poolPlanted: report ? report.pool.filter(other).length : 0,
+            handedPlanted: report ? report.handed.filter(other).length : 0,
             pushed,
             got: handed.has(task.planted),
             today: handedToday.has(task.planted),
@@ -854,13 +882,20 @@ export async function main(
     throw new JournalRefused("--route-log is written whole: run it without --resume");
   if (argv.includes("--resume") && corpus)
     throw new JournalRefused("--corpus-dump is written whole: run it without --resume");
+  const packets = opt("packets", "");
+  if (packets) {
+    if (argv.includes("--resume")) throw new JournalRefused("--packets is written whole: run it without --resume");
+    writeFileSync(packets, "");
+    o.onPackets = (row) => appendFileSync(packets, `${JSON.stringify(row)}\n`);
+  }
   if (corpus) {
     writeFileSync(corpus, "");
     o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
   }
-  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, and `--cards-out`, which a live run
-  // also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags; `--cards-live` (the
-  // model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so recorded runs replay.
+  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, `--packets`, and `--cards-out`, which
+  // a live run also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags;
+  // `--cards-live` (the model) stays in the argv key; `--widen-ranks` (refused since D828) keeps its empty slot so
+  // recorded runs replay.
   const journal = out
     ? RunJournal.open<UserUnit>(
         partialPath(out),
@@ -873,6 +908,7 @@ export async function main(
             "--resume",
             "--corpus-dump",
             "--route-log",
+            "--packets",
             "--cards-out",
             "--spend-ledger",
             "--spend-cap",

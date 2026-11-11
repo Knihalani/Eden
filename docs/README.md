@@ -7,6 +7,8 @@
 | [DECISIONS.md](DECISIONS.md) | Every design decision, numbered. It wins conflicts |
 | [ROADMAP.md](ROADMAP.md) | Milestones M0–M6 |
 | [INTEGRATION.md](INTEGRATION.md) | Advice for a tenant's agent loop: packet placement, caching, `ask_context`, the party check on actions |
+| [DEPLOY-QUICKSTART.md](DEPLOY-QUICKSTART.md) | Zero to one box, then to three nodes: every command copy-pasteable |
+| [DEPLOY.md](DEPLOY.md) | Running Eden: one box (Caddy, Oracle A1), sizing, backups, monitoring, upgrades, more than one machine, the runbook; the kit is in `deploy/` |
 | [COST-MODEL.md](COST-MODEL.md) | Prices, per-call bounds, measured costs, levers |
 | [PRIVACY.md](PRIVACY.md) | Data flow, subprocessors, ZDR, controls, open items |
 | [RESEARCH.md](RESEARCH.md) | The Meta PMA paper and open questions |

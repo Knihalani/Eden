@@ -22,13 +22,22 @@ export {
   type PersistedUser,
   type PersistEvent,
 } from "./persist";
+export { SharedFrozenDisk, type BlobStore, type SharedDiskOptions } from "./persist-shared";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
-export { inert, oneLine, renderAnswer, renderPacket } from "./render";
+export { CANDIDATES_LEAD, inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
 export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";
-export { contentTerms, distinctTermIds, extractEntities, extractTypedEntities, isChatter, termIds } from "./text";
+export {
+  contentTerms,
+  distinctTermIds,
+  extractEntities,
+  extractTypedEntities,
+  isChatter,
+  isStopword,
+  termIds,
+} from "./text";
 export {
   cpuNow,
   SPAN_NAMES,
@@ -45,6 +54,7 @@ export { explainTrace, SILENT_REASONS, TRACE_DECISIONS } from "./trace";
 export { judgeMessages, parseJudge } from "./judge";
 export { timeWindow } from "./grounding";
 export { isImperative, isOpenRequest, MORE_VERBS, pushStart, requestedRange } from "./probes";
+export { gateFeatures, gateNorm, TurnGate, turnGate, type TurnVerdict } from "./turn-gate";
 export {
   ACTIONS,
   CARD_KINDS,
@@ -52,10 +62,14 @@ export {
   CardEnricher,
   cardKey,
   cardMessages,
+  CARD_FORM_REQUESTS,
+  type CardMakeOptions,
+  requestMessages,
   cardVerdict,
   ModelCardMaker,
   parseCards,
   parseRequests,
+  readForIntent,
   requestActions,
   worthCarding,
   worthCardingStrict,

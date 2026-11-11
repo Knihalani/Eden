@@ -14,7 +14,8 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `partner.ts` (about 7,000 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
 | `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188)                                                                  |
-| `persist.ts`                                                               | `EncryptedFrozenDisk` (D425, opt-in): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
+| `persist.ts`                                                               | `EncryptedFrozenDisk` (D425; the servers' default since D991): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
+| `persist-shared.ts`                                                        | `SharedFrozenDisk` (D992): the local files mirrored to a `BlobStore` (S3-compatible), a user fetched before their first read (`fetch`, awaited by `ItemCache.ready`), the store's copy kept at a thaw (failover) and deleted on forget; `handOff`, `settle`, `sweepStore`, `forgetAbsent` |
 | `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
 | `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
@@ -25,6 +26,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
+| `turn-gate.ts`, `turn-gate.bin`                                            | The turn gate (`pushGate`, M13, D1014; part `gate`): hashed character and word n-grams of one user turn (`gateFeatures`, the twin of `packages/sim/lab/m13/feats.py`), an int8 bag with one hidden layer and the rule's reading after pooling (`TurnGate.read`), 1.59 MB of weights read once a process (`turnGate()`; null on any failure, and the rule stands) |
 | `push-check.ts`                                                            | The push check (`pushCheck`, D500, in the default since D828, part `check`): one budgeted call a push names the pool's items that change the action, compare-first (`CHECK_SYSTEM`, `parseCompare`, `PushChecker`, D527); `push-check.test.ts`                |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default; `checkAction`'s only check since D815 deleted the action firewall and A10's text filters): identifiers a call adds and its packets showed; `orgLabel`, which `ItemCache.isCorrespondent` reads with the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -54,8 +56,8 @@ and `source-days` (the same over whole days with changing sources: listing and c
 - **Untrusted text (D11, D19).** Source and event text are data in every prompt (fenced, labelled), and everything
   delivered is inside the data envelope.
 - **Item content stays in memory (D8):** only content-free metadata goes to the source map. The one exception is
-  opt-in (D425): `ItemCache.persist(disk)` writes frozen users' blobs encrypted (`persist.ts`); nothing else may write
-  item content to disk.
+  D425 (the servers turn it on by default since D991, with the operator's key): `ItemCache.persist(disk)` writes
+  frozen users' blobs encrypted (`persist.ts`); nothing else may write item content to disk.
 - **One product (D112, D814).** `DEFAULT_CONFIG` is the best measured configuration and what ships. A new behaviour
   lands as a trial switch in `config.ts` (off), with a row in DECISIONS.md's trials table, and the session that
   opened it decides it as soon as its evidence is in (no end dates weeks out): it joins the default (and a part in
@@ -137,7 +139,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
   sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
   sentence. Re-run the default funnel after touching it (`--coverage full`: 315 / 276, card calls 382–392 by load;
-  the default, shipped coverage since D877: 281 / 264).
+  the default, shipped coverage since D877: 295 / 268 since D1062, 281 / 264 before).
+- **The card prompt shows the requests list in its first example (`cardsRequestsFix`, D1060, D1062, on in the
+  default, parts `cards` and `intent`; docs/research/h2-requests-fix.md).** Before it, Haiku left the whole list out
+  of about a quarter of its replies and every item of such a batch got no requests (D1053). A reply that still drops
+  it is asked once more for requests only (`reask`, `requestMessages`), under its own reservation. Every wrapper
+  around a `CardMaker` must pass `make`'s sixth argument (`CardMakeOptions`: the form and `requestsOnly`) through, or
+  the form is lost silently. The lab's replay files key the new form's lines `<hash>:f3` (`formKey`); a file with no
+  such line (the full index, `cards-v2`) is replayed as recorded (`DiskCardMaker.replayed`), so `--coverage full`
+  still reads 315 / 276, and its live misses are made with the shipped prompt.
 - `cardsLean` (D125; window `cardsLeanDays` 7 since D244, 30 before) only narrows what the intent index reads
   (`readForIntent`): constraint-worded items are carded whatever their sender or age. `automated` reads a `From:` line
   in the text or a `meta.from`/`meta.sender` field (connectors differ: `toItems` keeps whatever text the tool
@@ -312,7 +322,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `pushHanded` (`n2/compare.py`) and measure live. Deleted beside it: the push check run behind the packet
   (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
   asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
-  earlier request (`pushPointer`, D711: −1.2 over days).
+  earlier request (`pushPointer`, D711: −1.2 over days; again on the new default, D832: +2.4, −0.5..+5.5).
+- **The turn gate decides the push's start (`pushGate`, M13, D1010, D1014; part `gate`; docs/research/m13-gate.md).**
+  `pushStart` reads the turn first; the gate then keeps a rule start unless its score is under the veto, and adds a
+  start where the rule has none when its score clears the threshold (both in `turn-gate.bin`'s header). A start the
+  rule made keeps the rule's request text (a lead-in's imperative); one only the gate made pushes the whole message
+  as an opened start (no plan alert). No model call: local CPU, about 43 µs a turn, loaded once a process; a missing
+  or unreadable file leaves `pushStart` alone (fail open). The features are feats.py's to the bit: change both or
+  neither (`turn-gate.test.ts` pins sums and ids), then re-export the weights with `packages/sim/lab/m13/export.py`
+  and run its `parity.ts` (64/64). Retraining or a new veto is a new measurement (funnel facts at shipped coverage on
+  train, `reworded` and `train-rw`; the blind sets of m13-gate.md are read). It reads any language, but its known
+  weak spots are Hindi requests and Portuguese chatter (D1014). A start only the gate makes needs `pushOpen` with the
+  candidates (never a paid reader push) and, as a stopgap, a turn of at least `MIN_ADD_WORDS` (3) words (D1015: the
+  weights read "hello", "hi", "?" as terse commands; a retrain that fixed it raised false starts elsewhere).
 - **Indirect requests (`pushIndirect`, P2, D820; in the default since D828, part `indirect`; p2-push-check.md §1, §7).** `pushStart`
   decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
   ("I need to …", "Should I …?", "We should …", "I want you to …"), or a request after a first clause of context
@@ -475,14 +497,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   interval, with at least `COMPACT_MIN_DELTA` (32) delta docs or removals waiting, has `index.compact()` (a full
   merge, 2.6-6 ms at 3,000 items, the delta's spare room let go) as a sliced background job, looked at again when it
   runs. Its purge can release terms, as a write's purge can.
-- **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
-  `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
+- **Persisted frozen users (D425, D426; on in the servers by default since D991; `persist.ts`, `persist.test.ts`,
+  `bench/restart.bench.ts`).** With `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
   `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk
   (`FrozenUser.fromDisk`), calls `restored` (the sync's `restore`, cards enqueued again). `peek`, `touch` and `ready`
   read a user this process does not hold from disk (`load`): synchronous, ~1-3 ms a user. A loaded user gets a new
   revision, read marks 0 (another process's marks mean nothing here) and moves `seqs` past its own. Any new field a
   `FrozenEntry`, `FrozenBody`, `PersistedUser` or `SyncSnapshot` carries bumps `PERSIST_FORMAT`; a new path that drops
   or rewrites a user's items must go through `peek`/`touch`/`dropUser` (which delete the blob) or call `disk.delete`.
+  Since D992 a blob also carries the user's source-map rows (`persistHooks.save`/`restored`, `PERSIST_FORMAT` 5), file
+  names start with the user's bucket, and a store shared between machines (`FrozenDisk.fetch`, `thawed`) may hold a
+  user this process has not seen: `ready` awaits its fetch, so a new entry point that serves a user must await
+  `cache.ready(scope)` first or it reads past a moved user's blob. `ItemCache.release` / `ContextPartner.release`
+  hand a user to another process: written, then dropped without deleting the blob.
 - **A new user's backfill starts with their first event (`syncKick`, D751, D753, on in the default since D755, part
   `sync`; docs/research/o4-new-user.md).** Without it `track` only notes the user; their backfill starts at the next
   tick (60 s on the servers), and a backfill that stops (its call budget's burst spent, a page refused by our own

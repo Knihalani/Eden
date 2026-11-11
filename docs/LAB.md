@@ -37,7 +37,7 @@ per suite for train1–6 and held-out 10–12.
 | `heldout19` | Blind, P7's for the end-of-wave confirmation (p7-benchmarks.md, D870); 40 templates over the 8 areas, with `neutral`; indirect, question and non-English requests (`HELDOUT19_INDIRECT`, `HELDOUT19_NON_ENGLISH`), anchored requests, facts in rarely used connectors (`HELDOUT19_RARE`) and silent edits (`HELDOUT19_SILENT`, with `heldout19Before`) | **Unread** (`UNREAD_BLIND`): nobody runs it before the parent's end-of-wave call; cards and intent only at shipped coverage |
 | `train1r`–`train6r` (`--suite reworded`) | Train with every request reworded as a need, a plan or a question, 6 of 32 a suite in another language (reworded.ts, D871); same worlds, so train's caches replay | Tuning set (Q6); out of `all` |
 | `longtail` | 24 templates, every fact and decoy in one of eight rarely used connectors (rare-sources.ts, D873); with `neutral` | Tuning and measurement, not blind; out of `all`; pair with `days-calls.ts --arrive-days` |
-| `synth-sample`, `synth-train`, `synth-val`, `synth-test`, `synth:<file>`, `synth` (= train + val), `@K` | M2's generated worlds (m2-synth.md, D884): seed `s` plants world `s mod N` into the base world, one task a family; `@K` plants K worlds a seed (for `--days`); `synth-test` is M1's and M3's test split | Data on the Modal Volume `eden-synth` (packages/sim/lab/synth/README.md); not in `all`; no cached cards or intent |
+| `synth-sample`, `synth-train`, `synth-val`, `synth-test`, `synth:<file>`, `synth` (= train + val), `@K` | M2's generated worlds (m2-synth.md, D884): seed `s` plants world `s mod N` into the base world, one task a family; `@K` plants K worlds a seed (for `--days`); `synth-test` is M1's and M3's test split; `+stale` before `@K` (M3, D913: `synth-val+stale@4`, `synth:<file>+stale`) keeps a hidden silent-change task's earlier revision as a background item beside the fact, and the funnel reports `stalePoolAt`/`staleHanded` | Data on the Modal Volume `eden-synth` (packages/sim/lab/synth/README.md); not in `all`; no cached cards or intent |
 
 **The `neutral` variant** (held-out 14–17 and, since CL5, train1–6; `neutral.ts`, `NEUTRAL_SUITES`): the same request
 as `hidden` and `control` with nothing planted. The train suites get it from `withNeutral` in suites.ts (the control
@@ -68,7 +68,7 @@ a benchmark answers its question and no other, and each has a bias that moves it
 | Benchmark | Question it answers | Known biases (what it cannot see) |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `bun run eval` | Did an engine change move behaviour on the hand-written scenarios? (precision 0.65, recall 0.52, falseFireRate 0 on main) | Its `falseFireRate` does not count candidates on nothing-to-add requests, and cards and intent are inert in it (B1). A merge gate, not a level |
-| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (281/264 on seeds 41–42; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
+| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (295/268 on seeds 41–42 since D1062, 281/264 before; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
 | Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
 | Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
 | `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks plans repeat neutral requests (only on templates never planted for the user, D874); recaps move each day's planted times |
@@ -111,7 +111,7 @@ not strict yet.
 | Harness             | Command                                        | What it measures                                                                                                                                                                                                           |
 | ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No-model funnel     | `hidden-funnel.ts` (`bun run funnel` wraps it) | Per task: planted item returned, cached, delivered; with `--ask`, cited by an ask; decoy delivered on controls; source calls and ms per task. Deterministic at `--time 0`                                                  |
-| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]`, graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
+| Pi (standard agent) | `pi-ab.ts`                                     | A live agent (pi-agent-core 1.3.0) under conditions `none, tools, eden, both[-judge][~variant][+flag][+ask][+nokey][@w<ms>]` and `hits` (P3, D831: the five best BM25 hits on every request in Eden's packet, no Eden, `lexical-hits.ts`), graded by a second model; per-task timelines; `--day K`; `--days D` (a user's mixed days, recipe 4c) |
 | Hermes              | `hermes-ab.ts --hermes-src DIR`                | Hermes Agent alone (`hermes`) vs with Eden as MCP server + plugin (`hermes+eden[~variant]`), or Eden in place of its source tools (`hermes-eden`, A16: Pi's `eden` shape); same tasks, grader and results format as Pi                                                                                   |
 | Injection suite     | `injection-ab.ts`                              | A10 (D305): planted prompt-injection attempts against Pi with recorded-only action tools: attack success by arm and kind, hidden facts kept; `--dry` is its $0 screen (recipe 4d)                                                                                    |
 | In-house loop       | `agent-ab.ts`                                  | The pre-Pi loop; label any result from it as such (CLAUDE.md)                                                                                                                                                              |
@@ -391,8 +391,8 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 281/264 at
-shipped coverage, the funnel's default since D877)
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 295/268 at
+shipped coverage, the funnel's default since D877, 281/264 before D1062)
 (314/274 before, when it read 307/281 on the second draw, which was not re-run after D710; 314/273 before D483's
 tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
@@ -551,13 +551,31 @@ The default has the check on; the funnel wires a checker only with `-- --check l
 the part is inert and the funnel is the no-model screen). A live check keeps the funnel to one process: run one seed a
 process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
 call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant;
-`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token).
+`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token). `--
+--check-dump F` (D932) writes each call as a training row: the pool exactly as the check read it, each item's cached
+text, the verdict, the raw reply and the task's labels; one process and one file a seed.
+`packages/sim/lab/m7/self-agree.ts` re-asks a sample of those rows live and prints how often Haiku repeats its own
+verdict (D931: 75–79% of item sets, about 90% of silences); score any student of the check against that, not against one
+recorded answer (docs/research/m7-prescreen.md).
 `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed and neutral packets. For a
 live pair read quality from `bench_report.py --sonnet`, cost and wall on the 1:1:8 mix from `python3 -I
 packages/sim/lab/n5/mix.py --base eden --arms eden~V OUT.json…` (`--days` for a days run), days' hidden facts by user
 from `days_hidden.py`, and the packet characters the agent re-reads over a day from `p2/packet_reread.py`. On Modal,
 `--max-streams` counts streams, not shards: with two arms a days shard has two streams, so two shards at a time is
 `--max-streams 4`. `default minus check` is `eden~minus-check`.
+
+### 1f2. The card prompt's forms in replay (D1060, D1062; docs/research/h2-requests-fix.md)
+
+Since D1062 the default asks the card model in form 3 (`cardsRequestsFix`: the requests list shown in the first
+example, a dropped list re-asked for requests only). A replay line made by form 3 is keyed `<hash>:f3` (`formKey`),
+so a file can hold both forms and neither answers the other. `cards-shipped.jsonl.gz` holds the shipped form's lines
+and, after them, form 3's for train, reworded and longtail seeds 41–44 (`cold-start.ts --set
+'{"cardsRequestsFix":true}' --cards-out`, $0.63 for 84 worlds); heldout19 has none, so shipped coverage refuses a
+run asking in form 3 there (`shippedUncovered(…, form)`): such a run passes `--coverage full` with lines it recorded
+(B19's harness does). A file with no
+form-3 line at all (`intent-v2`, `cards-v2`, the reader recipes' cards) is replayed as recorded under form 3, and its
+live misses are made in the shipped form: label such a run's cards as the shipped form's. `--set
+'{"cardsRequestsFix":false}'` replays the shipped form's lines (the pre-D1062 default: 281/264 on train 41–42).
 
 ### 1g. Indirect requests (D820, D828; docs/research/p2-push-check.md)
 
@@ -602,6 +620,7 @@ python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus
   --pool .local/m5/pool.jsonl --only fit
 ```
 
+<<<<<<< HEAD
 ### 1i. The connector router: route logs, training, parity (M8, D940–D949; docs/research/m8-router.md)
 
 Route logs are the engine's own router inputs per request (`days-calls.ts --route-log F`, $0; with no `--router` a
@@ -628,6 +647,40 @@ modal run packages/sim/modal/m8_router.py --run NAME --tag v3   # the same train
 Volume `eden-m8` (`/logs/v3.tgz`). `packages/sim/lab/m8/routers.py` holds round 1's ten offline candidates on M2's
 exported worlds (`harness.py`). The e2e screen is P7's 1h recipe with `--router packages/engine/assets/router.bin`
 (or `--set '{"routerGate":true}'` on a tree where the asset ships); the Pi pair is `packages/sim/lab/m8/run.sh`.
+=======
+### 1i. Packet parts, part labels and trimmer screens (M6, D920–D921; docs/research/m6-trimmer.md)
+
+The trimmer was stopped (D920); the tooling stays. `--packet-parts` (with `--packets`) adds each delivered item's
+parts as compaction reads them; `m6/label.ts` names a planted item's key parts and tokens (Haiku, pay once, about
+$0.00005 an item); `../lab/m6/` turns dumps and labels into a part set and screens no-model budgets and learned
+trimmers on it, and `screen_funnel.py` reads real packets (an arm against the default). Synth dumps: 30 seeds a call.
+
+```bash
+bun run funnel --suite synth-val --seeds $(seq -s, 1 30) --jobs 3 -- --neutral --packets .local/m6/v.jsonl --packet-parts
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m6/label.ts .local/m6/v.jsonl --out .local/m6/l.jsonl --spend-cap 1
+python3 -I packages/sim/lab/m6/prep.py --labels .local/m6/l.jsonl --out .local/m6/set .local/m6/v.jsonl
+python3 -I packages/sim/lab/m6/baselines.py .local/m6/set/items.jsonl --sets val
+```
+
+### 1j. Distilled students of the push check (M1, D890–D899, D980–D982; docs/research/m1-student.md)
+
+Lab tooling only: both tracks stopped (D899, D982) and the engine trial was deleted with them (D983).
+`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
+`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and scores the teacher over pair groups.
+`packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
+screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
+
+### 1k. A day's packet bytes at $0 (E1, D1030; docs/research/e1-lean.md)
+
+`days-calls.ts --packets F` writes, one line a request, every packet and ask answer the `--days` user was handed
+(`how`: push, pending or ask; the text; the cited ids in line order), for a byte breakdown by fixed text and items or a
+repeat count by item id over a day. Not with `--resume`.
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42,43,44 --days 8 --ask \
+  --cards .local/cards-all.jsonl --packets .local/e1/days-base.jsonl          # ~7 s; --set '{…}' for an arm
+```
+>>>>>>> origin/main
 
 ### 2. The same with Eden's reader live (NEW)
 

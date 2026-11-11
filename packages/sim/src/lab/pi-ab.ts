@@ -104,6 +104,7 @@ import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import {
   CardEnricher,
   ContextPartner,
+  CARD_FORM_REQUESTS,
   DEFAULT_CONFIG,
   ItemCache,
   ModelCardMaker,
@@ -173,6 +174,7 @@ import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Bu
 import { parseSuites } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
+import { hitsPacket } from "./lexical-hits";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
@@ -416,6 +418,8 @@ const COVERAGE = harnessCoverage({
   intent: opt("intent", "default"),
   suites: SUITE_LIST,
   seeds: SEEDS,
+  // The default's card prompt form (D1062): shipped coverage covers only the shards that hold its lines (D1063).
+  form: DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0,
 });
 const CARDS_FILE = COVERAGE.cards;
 /**
@@ -810,6 +814,7 @@ async function runWorld(
     config,
     noKey,
     packets: layout,
+    hits,
   } = cond;
   const scope = { tenantId: "ab", userId: connect ? `w${seed}r${connect.replica}` : `w${seed}` };
   let clock = world.now;
@@ -873,9 +878,11 @@ async function runWorld(
     const cap = CARDS_CALLS * Math.max(1, effective(config).cardsLanes);
     let calls = 0;
     return {
-      make: (items, today, signal, retry, intent) =>
-        calls++ < cap
-          ? maker.make(items, today, signal, retry, intent)
+      // A requests-only re-ask (`cardsRequestsFix`, D1060) belongs to the card call before it: not counted, and
+      // answered only while the cap's calls are (a batch past the cap made no card and is not asked again).
+      make: (items, today, signal, retry, intent, options) =>
+        (options?.requestsOnly ? calls <= cap : calls++ < cap)
+          ? maker.make(items, today, signal, retry, intent, options)
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };
   };
@@ -885,8 +892,8 @@ async function runWorld(
     const maker = cappedMaker();
     if (CARDS_MS <= 0) return maker;
     return {
-      make: (items, today, signal, retry, intent) =>
-        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent)),
+      make: (items, today, signal, retry, intent, options) =>
+        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent, options)),
     };
   };
   const cards =
@@ -1325,6 +1332,20 @@ async function runWorld(
           tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
         }
       }
+      // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
+      if (hits) {
+        const h = hitsPacket(world, task.text);
+        if (h) {
+          r.injectedItems += h.citations.length;
+          r.injectedChars += h.text.length;
+          uptake.packet(h);
+          day?.packet(
+            h.citations.map((c) => c.itemId),
+            h.text,
+          );
+          tl.point("eden.inject", { items: h.citations.length, chars: h.text.length, mode: "hits" });
+        }
+      }
       const tools: AgentTool<any>[] = [];
       if (useTools) {
         for (const source of sources) {
@@ -1421,6 +1442,8 @@ async function runWorld(
           systemPrompt: systemPrompt(world, {
             lookups: LOOKUPS,
             data: useTools || useEden,
+            // `hits` (P3): its items come only in the packet; the prompt names no tool it does not have.
+            pushed: hits,
             act,
             tenant: TENANT_PROMPT,
           }),
@@ -1633,7 +1656,8 @@ async function runWorld(
     record.wallMs = Math.round(r.wallMs);
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
-    if (partner) Object.assign(record, uptake.fields());
+    // `hits` (P3) has no partner, but its packets are cited the same way.
+    if (partner || hits) Object.assign(record, uptake.fields());
     // `--late`: every answer after a planted item arrived is one of its later replies; the recap closes the day and
     // grades them against the planted request.
     for (const l of dayLate) l.entry.after.push(r.error ? "" : r.answer);
@@ -1752,6 +1776,8 @@ const intentCount =
     ? intentCoverage(
         worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
         diskCards.requests,
+        // Under the default's card prompt form (D1062, D1063), as the run's enrichment reads them.
+        (it) => diskCards.requestKey(it, DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0),
       )
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });

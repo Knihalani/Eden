@@ -197,7 +197,8 @@ export function worldOf(
   const plantedItems = world.items.slice(before);
   for (const it of plantedItems) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(plantedItems.map((it) => it.id));
+  // A `+revision` or `+stale` task's stale version is kept from the slot clearing too (D914).
+  const keep = new Set([...plantedItems.map((it) => it.id), ...planted.flatMap((h) => (h.stale ? [h.stale] : []))]);
   for (const h of planted) clearSlot(world, h.slotText ?? h.text, keep);
   // After the planted items are read off the end of `world.items`: dressing appends its own after them.
   if (opts.dress)
@@ -273,15 +274,19 @@ export const TENANT_GUIDE =
 /** The agent's system prompt: who it works for, when it is, and (with any tool) to look things up. */
 export function systemPrompt(
   world: World,
-  options: { lookups: boolean; data: boolean; act?: boolean; tenant?: boolean },
+  /** `pushed` (P3's `hits` arm): the user's data comes only in context before the request, with no tool to look. */
+  options: { lookups: boolean; data: boolean; act?: boolean; tenant?: boolean; pushed?: boolean },
 ): string {
   const today = new Date(world.now).toUTCString().replace(" GMT", " UTC");
   return (
     `You are the personal assistant of ${world.user.full} (${world.user.email}). Now: ${today}. ` +
-    (options.data
-      ? "Use the tools to look up the user's own mail, calendar, documents, CRM and chat when the request " +
-        "depends on them. "
-      : "") +
+    (options.pushed
+      ? "Items from the user's own mail, calendar, documents, CRM and chat may be given to you as context before " +
+        "the request; use them when the request depends on them. "
+      : options.data
+        ? "Use the tools to look up the user's own mail, calendar, documents, CRM and chat when the request " +
+          "depends on them. "
+        : "") +
     "Be concise, and state the specific details you rely on (names, times, places, amounts, references)." +
     // The hidden-context requests are actions: with no tool to act, the agent says what it would do; with the action
     // tools (`--act`, act.ts), it acts and reports what it did.

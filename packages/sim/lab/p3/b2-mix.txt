@@ -1,0 +1,18 @@
+# (b2) short, 1:1:8 mix, templates resampled: hits2 = the re-run hits arm, against (b)'s eden
+[hits2 - eden] 1152 pairs ({'hidden': 384, 'control': 384, 'neutral': 384}), 192 templates, short: weighted 1:1:8
+  agent $/1k   -0.096 (-0.108..-0.084)   base 0.264
+  Eden $/1k    +0.000 (+0.000..+0.000)   base 0.000
+  total $/1k   -0.096 (-0.109..-0.084)   base 0.264
+  wall s       -0.670 (-0.754..-0.585)   base 2.202
+  Eden calls   +0.000 (+0.000..+0.000)   base 0.000
+  agent turns  -0.495 (-0.553..-0.439)   base 1.495
+  agent tools  -0.640 (-0.718..-0.560)   base 0.640
+# (b2) days, users resampled
+[hits2 - eden] 1024 pairs ({'hidden': 128, 'control': 128, 'neutral': 768}), 16 users, days: plain mean
+  agent $/1k   +0.014 (+0.006..+0.021)   base 0.236
+  Eden $/1k    +0.000 (+0.000..+0.000)   base 0.000
+  total $/1k   +0.014 (+0.007..+0.021)   base 0.236
+  wall s       +0.014 (-0.047..+0.077)   base 1.474
+  Eden calls   +0.000 (+0.000..+0.000)   base 0.000
+  agent turns  -0.056 (-0.067..-0.045)   base 1.056
+  agent tools  -0.062 (-0.074..-0.051)   base 0.062

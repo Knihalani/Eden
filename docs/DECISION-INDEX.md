@@ -498,7 +498,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D705 | 2026-11-10 | `candidatesSpecifics` is rejected and deleted with its code and tests | rejected |
 | D706 | 2026-11-10 | Finding: `pushOpen` (D702) passes its pre-registered rule and goes to the owner; it stays an off trial | finding |
 | D707 | 2026-11-10 | Finding: over a user's days `pushOpen` (D702) fails its pre-registered hidden clause; it is not promoted | finding |
-| D708 | 2026-11-10 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | superseded (deleted by D711) |
+| D708 | 2026-11-10 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | superseded (deleted by D832) |
 | D709 | 2026-11-10 | `pushOpen` (D702) is kept off as a trial until its end date instead of being deleted on D707, and one powered days run decides it | adopted |
 | D710 | 2026-11-11 | `pushOpen` (D702) is promoted into the default as the part `open` | adopted |
 | D711 | 2026-11-11 | `pushPointer` (D708) failed its rule and is deleted with its code and tests | rejected |
@@ -531,6 +531,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D817 | 2026-11-11 | Deleted: `syncSweepSpread` (D604), `EDEN_SPEND_LEASES` (D327) and `EDEN_PERSIST_DISK_ONLY` (D652); `anthropicCache` (D145) is a… | rejected |
 | D818 | 2026-11-11 | Lab scripts refuse to start while `OPENROUTER_API_KEY` is set, unless `EDEN_ALLOW_OPENROUTER=1` | adopted |
 | D819 | 2026-11-11 | The cold gate trusts the content-addressed Prettier set, and five heavy end-to-end tests share their work | adopted |
+| D830 | 2026-11-11 | Lab only: Sonnet 5.5 as the Pi agent on train, short and days, the default against tools, is pre-registered | lab |
+| D831 | 2026-11-11 | Finding (lab only): Eden's selection against plain retrieval | finding |
+| D832 | 2026-11-11 | `pushPointer` tried again on today's default and deleted for good | rejected |
+| D833 | 2026-11-11 | Rejected: a per-user alias table for the push's recall. | rejected |
+| D834 | 2026-11-11 | Finding: "a handed fact not raised" (weak point 6) is the agent model and the grade's every-clause rule, not Eden | finding |
 | D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | rejected |
 | D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | lab |
 | D842 | 2026-11-11 | The `caldav` preset names a fetch tool, `caldav_get_event_by_uid`; the sim's calendar never changes in the future; mcpvault keeps no fetch… | adopted |
@@ -567,10 +572,75 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D882 | 2026-11-11 | Synth splits are by family cluster, and families are deduped against each other and the train suites. | adopted |
 | D883 | 2026-11-11 | Synth quality: a revision pass by the writer, a blind critic, a hand audit. | adopted |
 | D884 | 2026-11-11 | Lab only: the `synth` suite family runs the generated worlds as hidden-context suites. | lab |
-| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
-| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
 | D828 | 2026-11-11 | The push check and indirect requests join the default. | adopted |
 | D829 | 2026-11-11 | Precision over recall, an explicit exception: `pushIndirect` is in the default with one more Sonnet-confirmed false concern | adopted |
+| D900 | 2026-11-11 | Lab only: a retriever trained on Eden's own question, "which held item bears on this request?", with its tooling and pre-registered bars | lab |
+| D901 | 2026-11-11 | Finding, then withdrawn by the owner's scope: asymmetric dense retrieval with generated families passed both bars on two folds | finding |
+| D902 | 2026-11-11 | Stopped: query-side expansion learned as a lookup table | adopted |
+| D903 | 2026-11-11 | Stopped: setrank, an abstaining set-level ranker over asym's vectors | adopted |
+| D904 | 2026-11-11 | Finding: serving an ingest-side encoder in TypeScript | finding |
+| D905 | 2026-11-11 | Stopped: `bag`, a ranker with no transformer on either side | adopted |
+| D906 | 2026-11-11 | Stopped: FrameRank, frames, five symbolic candidate channels and LightGBM over 48 integer pair features | adopted |
+| D907 | 2026-11-11 | Lab only: the binarised track, end-to-end networks over hashed n-grams with ternary/binary internals | lab |
+| D908 | 2026-11-11 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | rejected |
+| D909 | 2026-11-11 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | rejected |
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
+| D890 | 2026-11-11 | Lab only: M1's distilled "changes the action" student and its stop rule are pre-registered | lab |
+| D891 | 2026-11-11 | Adopted (lab tooling, M1): the student pipeline. | lab |
+| D892 | 2026-11-11 | Finding: a 4B–8B decoder learns "changes the action" on templates it never saw; smaller ones do not | finding |
+| D893 | 2026-11-11 | Finding: the student needs a datacentre GPU; CPU is out. | finding |
+| D894 | 2026-11-11 | Trial `pushCheckLocal`: the push check's verdict from a distilled student's scores instead of a model call | superseded (deleted by D983) |
+| D895 | 2026-11-11 | Finding: in the funnel the student's check is as good as D493's Opus oracle. | finding |
+| D896 | 2026-11-11 | With `pushCheckLocal`, `pushOpen` (D702) opens the push and the check reads it. | adopted |
+| D897 | 2026-11-11 | Finding (M1, Pi round 1, pre-registered §2c): the student's check fails live. | finding |
+| D898 | 2026-11-11 | Lab only: Pi round 2 is pre-registered | lab |
+| D899 | 2026-11-11 | Stopped by the owner's decision (through the parent): the LLM-sized local checker; Pi round 2 (D898) is cancelled before any shard ran. | adopted |
+| D980 | 2026-11-11 | Finding (M1 micro track, gate G0): the 8B teacher does not agree with Haiku's push check as closely as Haiku agrees with itself, because… | finding |
+| D981 | 2026-11-11 | Lab only: the micro checker's bar is pre-registered: better than Haiku, not within its noise | lab |
+| D982 | 2026-11-11 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | rejected |
+| D983 | 2026-11-11 | Rejected and deleted: the `pushCheckLocal` trial (D894) with its code and tests. | rejected |
+| D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
+| D914 | 2026-11-11 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | rejected |
+| D920 | 2026-11-11 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | rejected |
+| D921 | 2026-11-11 | Adopted (lab tooling, M6): `hidden-funnel --packet-parts` (each delivered item's parts as compaction reads them, re-rendered from the… | lab |
+| D930 | 2026-11-11 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | rejected |
+| D931 | 2026-11-11 | Finding: the push check does not repeat itself closely. | finding |
+| D932 | 2026-11-11 | Adopted (lab tooling, M7): the funnel's `--check-dump F` (`check-dump.ts`): one row a push-check call (the request head, day and pool… | lab |
+| D950 | 2026-11-11 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | rejected |
+| D951 | 2026-11-11 | Adopted (lab tooling, M9): `packages/sim/lab/m9/` (`links.py` per-user link state, `screen.py` fronting screen, `oracle.py` and… | lab |
+| D960 | 2026-11-11 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | rejected |
+| D961 | 2026-11-11 | Finding: what the engine consumes of a card, at $0. | finding |
+| D962 | 2026-11-11 | Adopted (lab tooling, M10): `packages/sim/src/lab/m10/` (`export.ts` items with the tagger's candidates from the train and longtail… | lab |
+| D963 | 2026-11-11 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). | rejected |
+| D970 | 2026-11-11 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | rejected |
+| D971 | 2026-11-11 | Finding: Haiku's intent value is its bridge terms, and a $0 item-side model does not learn them for new families. | finding |
+| D972 | 2026-11-11 | Adopted (lab tooling, M11): `m11-export.ts` (items, worlds, tasks, twins and the checked-in Haiku requests by card key), `m11-enrich.ts`… | lab |
+| D990 | 2026-11-11 | Fix: the server image started nothing. | adopted |
+| D991 | 2026-11-11 | Persistence on by default. | adopted |
+| D992 | 2026-11-11 | More than one machine, built (D864's design, refreshed). | adopted |
+| D993 | 2026-11-11 | Per-tenant caps across machines: held whole at the cluster router, divided below it. | adopted |
+| D994 | 2026-11-11 | Readiness, metrics and a draining shutdown. | adopted |
+| D995 | 2026-11-11 | Fencing and forget across machines (the reviewer's findings on D992-D994). | adopted |
+| D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
+| D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
+| D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
+| D996 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | rejected |
+| D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
+| D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
+| D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
+| D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
+| D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
+| D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
+| D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D1010 | 2026-11-11 | Rejected: `pushGate`, a tiny learned turn gate in place of `pushStart`'s verb lists and lead-ins | superseded (replaced by D1014) |
+| D1011 | 2026-11-11 | Finding: a learned gate transfers to hand-written text only beside the rule, as a union with a veto. | finding |
+| D1012 | 2026-11-11 | Finding: what generated training text teaches a gate besides the task. | finding |
+| D1013 | 2026-11-11 | Adopted (lab tooling, M13): `packages/sim/lab/m13/`: contrastive data generators (`gen_train.py`, `gen_logs.py`, `gen_extra.py`)… | lab |
+| D1014 | 2026-11-11 | The owner's decision: `pushGate` (M13's turn gate, round 3's frozen model, the union with `pushStart` at veto 0.25) is in… | adopted |
+| D1015 | 2026-11-11 | Stopgap on D1014's gate: no start by the gate alone for a turn of fewer than three words (`MIN_ADD_WORDS`, `turn-gate.ts`); round 4's… | adopted |
+| D1060 | 2026-11-11 | Trial `cardsRequestsFix`: the card prompt's first example reply shows the requests list, and a batch whose reply still drops it is asked… | adopted (by D1062) |
+| D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
+| D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
+| D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |

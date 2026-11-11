@@ -75,6 +75,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
+  CARD_FORM_REQUESTS,
   cardKey,
   intentCut,
   intentReach,
@@ -94,6 +95,8 @@ import {
   type Trace,
   readerMessages,
   sanitizeItem,
+  renderPacket,
+  isStopword,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
@@ -137,6 +140,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
+import { DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -225,6 +229,7 @@ const cli = flags(
         "check-model",
         "check-cache",
         "check-log",
+        "check-dump",
         "templates",
         "connect-at",
         "connect-tick-s",
@@ -234,7 +239,7 @@ const cli = flags(
     ),
     ...Object.fromEntries(
       ["overlap", "sync", "ask", "serial", "allow-misses", "no-record", "cpu", "allow-logging", "neutral"]
-        .concat("call-split")
+        .concat("call-split", "packet-parts")
         .map((k) => [k, B]),
     ),
   },
@@ -418,11 +423,13 @@ const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry, intent) => {
-    const got = await make(items, today, signal, retry, intent);
-    if (!retry) {
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const got = await make(items, today, signal, retry, intent, options);
+    // A requests-only re-ask (`cardsRequestsFix`, D1060) makes no card: its batch was logged by the card call.
+    if (!retry && !options?.requestsOnly) {
       const lines = items.map((it, k) => {
-        const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
+        const kind =
+          got.cards[k]?.kind ?? (cardMaker.cards.has(cardMaker.cardKeyFor(it, options?.form)) ? "none" : "uncovered");
         return JSON.stringify({ h: cardKey(it), title: it.title, text: it.text.slice(0, 2_700), kind });
       });
       appendFileSync(CARD_LOG, lines.map((l) => `${l}\n`).join(""));
@@ -437,11 +444,12 @@ if (CARD_LOG && cardMaker) {
 const intentUse = { asked: 0, found: 0 };
 if (cardMaker && RUN.intent) {
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry, intent) => {
-    const got = await make(items, today, signal, retry, intent);
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const got = await make(items, today, signal, retry, intent, options);
     if (intent && !retry) {
-      const requests = "requests" in got ? got.requests : [];
-      intentUse.asked += items.length;
+      const requests = got.requests ?? [];
+      // A requests-only re-ask (`cardsRequestsFix`, D1060) reads the same items again: found, not asked again.
+      if (!options?.requestsOnly) intentUse.asked += items.length;
       intentUse.found += requests.filter((r) => r !== null && r.length > 0).length;
     }
     return got;
@@ -453,8 +461,9 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
+const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
-  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardKey(item)) : null;
+  INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
 const inertTag = () => (intentNow() === "inert" ? `  ${INTENT_INERT}` : "");
 /** Every lane's enrichment counters, summed (`CardStats`): items read by the model and calls, per simulated user. */
@@ -586,6 +595,10 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
       }
     : checkModel;
 const checkLanes: PushChecker[] = [];
+/** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
+const CHECK_DUMP = opt("check-dump", "");
+if (CHECK_DUMP && CHECK === "none") throw new Error("--check-dump needs --check");
+if (CHECK_DUMP) writeFileSync(CHECK_DUMP, "");
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -621,6 +634,12 @@ const TIMELINE = opt("timeline", "");
  */
 const PACKETS = opt("packets", "");
 if (PACKETS) writeFileSync(PACKETS, "");
+/**
+ * `--packet-parts` (with `--packets`; M6, docs/research/m6-trimmer.md): each packet item's parts as compaction reads
+ * them (`messageParts`) and the text it kept, re-rendered from the cache with the shipped packet options, so a part
+ * trimmer can be trained on items as the engine renders them. Sim and synth worlds only (no user data).
+ */
+const PACKET_PARTS = cli.has("packet-parts");
 /**
  * `--candidates out.jsonl`: every no-model decision's candidates with their facts (`decide.ts`), one line per task with
  * the planted item's id and variant, for the decision analysis (docs/research/econ-decide.md). Ids and numbers only.
@@ -841,7 +860,8 @@ async function runSeed(
   if (PLANTED_AGE_DAYS > 0) for (const it of plantedAll) it.updatedAt = world.now - PLANTED_AGE_DAYS * 86_400_000;
   for (const it of plantedAll) dress(world, it);
   // The slot each request asks for is otherwise free, so a clash is the planted one (clearSlot).
-  const keep = new Set(plantedAll.map((it) => it.id));
+  // A `+revision` or `+stale` task's stale version is kept from the slot clearing too (D914).
+  const keep = new Set([...plantedAll.map((it) => it.id), ...all.flatMap((t) => (t.stale ? [t.stale] : []))]);
   for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.slotText ?? task.text, keep);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
@@ -949,9 +969,9 @@ async function runSeed(
       ? {
           // Not `async`: the maker's own promise, so the drain batches as without `--ask-diag` (an async wrapper's
           // microtask hops cut the cards-use calls from 822 to 766 and moved when requests were held).
-          make: (items, today, signal, retry, intent) => {
+          make: (items, today, signal, retry, intent, options) => {
             for (const it of items) sentToCards.add(cardKey(it));
-            return cardMaker.make(items, today, signal, retry, intent);
+            return cardMaker.make(items, today, signal, retry, intent, options);
           },
         }
       : cardMaker;
@@ -961,11 +981,13 @@ async function runSeed(
   const cappedMaker: CardMaker | null =
     laneMaker && CARDS_CALLS >= 0
       ? {
-          make: (items, today, signal, retry, intent) =>
-            cardCalls++ < CARDS_CALLS
-              ? laneMaker.make(items, today, signal, retry, intent)
+          // A requests-only re-ask (`cardsRequestsFix`, D1060) belongs to the card call before it: not counted, and
+          // answered only while the cap's calls are (past it, `--cards-rest cards` strips requests as before).
+          make: (items, today, signal, retry, intent, options) =>
+            (options?.requestsOnly ? cardCalls <= CARDS_CALLS : cardCalls++ < CARDS_CALLS)
+              ? laneMaker.make(items, today, signal, retry, intent, options)
               : CARDS_REST === "cards"
-                ? laneMaker.make(items, today, signal, retry, intent).then((b) => cardsOnly(b, items.length))
+                ? laneMaker.make(items, today, signal, retry, intent, options).then((b) => cardsOnly(b, items.length))
                 : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
         }
       : laneMaker;
@@ -973,8 +995,8 @@ async function runSeed(
   const timedMaker: CardMaker | null =
     cappedMaker && CARDS_MS > 0
       ? {
-          make: (items, today, signal, retry, intent) =>
-            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent)),
+          make: (items, today, signal, retry, intent, options) =>
+            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent, options)),
         }
       : cappedMaker;
   const cards = timedMaker
@@ -1043,7 +1065,19 @@ async function runSeed(
   // Every report per session, in order: a request can be read twice (`readerPush`'s ask, then the funnel's own).
   const readerReports = new Map<string, ReaderReport[]>();
   const laneCheck = loggedCheck({ suite, seed, variant });
-  const checker = laneCheck ? new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }) : null;
+  const dumpTasks = new Map<string, DumpTask>();
+  const checker = !laneCheck
+    ? null
+    : CHECK_DUMP
+      ? ((kept) =>
+          new DumpingChecker(
+            { model: kept.model, budget: new Budget(UNCAPPED) },
+            kept.replies,
+            CHECK_DUMP,
+            (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
+            (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
+          ))(replyKeeping(laneCheck))
+      : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
@@ -1090,6 +1124,38 @@ async function runSeed(
     return !!(s?.inflight || s?.behind);
   };
   const scope = { tenantId: "funnel", userId: `w${seed}` };
+  /**
+   * `--packet-parts`: the packets' items re-rendered from the cache with the shipped options (focus, 320 bytes an item,
+   * year, the user's name, dense, split), each item's id, source, title, parts and kept text recorded; a reader checks
+   * the kept text against the packet's own line (404 of 406 on train1 seed 41, D921). The options are the shipped
+   * default's as of D921, written out here, not read from the config: re-check that match after a change to
+   * compaction. The fold and the lead are not re-run (the packet's own text has them).
+   */
+  const packetParts = (packets: readonly { citations: readonly { itemId: string }[] }[], request: string, at: number) =>
+    packets.map((p) => {
+      const items = p.citations.map((c) => cache.get(scope, c.itemId, at)).filter((x) => x !== null);
+      const words = request.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      const out: { id: string; source: string; title: string; parts: [string, number][]; kept: string }[] = [];
+      renderPacket(items, {
+        maxBytes: 100_000,
+        focus: new Set(words.filter((w) => w.length > 1 && !isStopword(w))),
+        itemBytes: 320,
+        year: new Date(at).getUTCFullYear(),
+        self: cache.selfOf(scope),
+        dense: true,
+        split: true,
+        onParts: (item, parts, kept) =>
+          out.push({
+            id: item.id,
+            source: item.sourceId,
+            title: item.title,
+            // Each part's text and flags: 1 quoted, 2 a header.
+            parts: parts.map((x) => [x.text, (x.quoted ? 1 : 0) | (x.header ? 2 : 0)]),
+            kept,
+          }),
+      });
+      return out;
+    });
   /**
    * `--ask-diag`: whether the intent index could reach a planted item at its ask (`ask-coverage.ts`). Read after the
    * ask, at no call: the replay's requests for its content, the requests the engine held, whether the card model was
@@ -1219,6 +1285,7 @@ async function runSeed(
     // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
+    dumpTasks.set(sessionId, { suite, seed, variant, template: task.template, planted: id });
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();
@@ -1388,6 +1455,7 @@ async function runSeed(
       // so a byte cut can be checked for the fact it keeps (docs/research/gen-tokens.md).
       const extra = {
         detail: task.detail,
+        ...(PACKET_PARTS ? { parts: packetParts([...injections, ...pendingSeen], task.text, askAt) } : {}),
         plantedText: planted[i] ? `${planted[i]!.title} ${planted[i]!.text}` : "",
         ...(answered ? { answer: answered.answer, answerIds: answered.citations.map((c) => c.itemId) } : {}),
       };
@@ -1481,6 +1549,20 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
+      // it was handed.
+      ...(push && task.stale
+        ? {
+            stalePoolAt: push.pool.indexOf(task.stale),
+            staleHanded: push.handed.includes(task.stale),
+            // M3b (D914): the ids, to label engine-drawn pairs (h10_pool_pairs.py) and read where a stale version went.
+            staleId: task.stale,
+            factId: id,
+            user: scope.userId,
+            pool: push.pool,
+            handed: push.handed,
+          }
+        : {}),
       ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),

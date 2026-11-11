@@ -101,7 +101,7 @@ describe("frozen users on disk (D425)", () => {
     const names = files(dir);
     expect(names.length).toBe(2);
     for (const n of names) {
-      expect(n).toMatch(/^[0-9a-f]{40}\.blob$/);
+      expect(n).toMatch(/^[0-9a-f]{4}-[0-9a-f]{40}\.blob$/); // the bucket in the clear, then a keyed hash (D992)
       const bytes = readFileSync(join(dir, n));
       const text = bytes.toString("latin1");
       // Neither the ids nor any word of the content is in the clear.
