@@ -171,10 +171,11 @@ function headOf(row: Row): string {
 const FINDING = /^(?:\([^)]*\)\s*)?\**\s*(?:Finding|Findings)\b/i;
 const LAB = /^(?:\([^)]*\)\s*)?\**\s*(?:Lab only|Lab:|Pre-registered|A measurement is pre-registered|Adopted \(lab)/i;
 /** A lead that states the verdict outright ("Not kept: …"): the words after it cannot make it a keep. */
-const KILLED_LEAD = /^\W*(?:Not kept|Not taken|Not adopted|Rejected|Killed)\b/i;
+const KILLED_LEAD =
+  /^\W*(?:Not kept|Not taken|Not adopted|Rejected|Killed)\b|^\W*(?:Deleted|Rejected|Removed)\b[^:]{0,60}:/i;
 /** A clause that records an idea measured or weighed and not kept. */
 const KILLED =
-  /\b(rejected|not built|not taken|not kept|not promoted|killed|ends without promotion|opened and deleted|deleted with (?:its|their) code|is withdrawn|is reverted|not adopted|not reopened|no measurable effect)\b|[,:] deleted\b|^\W*deleted:/i;
+  /\b(rejected|not built|not taken|not kept|not promoted|killed|ends without promotion|measured and deleted|and deleted|deleted with (?:its|their) code|is withdrawn|is reverted|not adopted|not reopened|no measurable effect)\b|[,:] deleted\b|^\W*deleted:/i;
 /**
  * Words that also describe behaviour ("a user's file is deleted when its newest item expires", "a test file that
  * passed is not run again"): a kill only when the clause names a switch, a trial or code.
@@ -245,7 +246,7 @@ export function verbOf(clause: string): { verb: "deleted" | "promoted"; subject:
   // The subject is what the verb acts on: the words before it ("`pushPointer` (D708) … is deleted"), or after a
   // heading-style verb up to the first bracket or comma ("Promoted: `partyCheck` is on …, part `parties` (A25;
   // D112)"), so numbers cited after the verb are not taken for its object.
-  const heading = /^\W*\w+(?: and \w+)?:/.exec(clause);
+  const heading = /^\W*(?:\w+(?: and \w+)?|(?:Deleted|Rejected|Removed)\b[^:]{0,60}):/.exec(clause);
   const subject =
     heading && m.index < heading[0].length
       ? clause.slice(heading[0].length).split(/ \(|,/)[0]!
@@ -269,6 +270,9 @@ export function introducedSwitches(row: Row): string[] {
   const out: string[] = [];
   const t = trialSwitch(row);
   if (t) out.push(t);
+  // "Trial (off): a cold tier for the synced copy (`syncCold`, …)": the first name the head gives.
+  const unnamed = t ? null : /^\W*Trial\b[^`]*`(\w+)`/.exec(headOf(row));
+  if (unnamed) out.push(unnamed[1]!);
   const start = row.decision.slice(0, 400);
   if (!/off by default|\btrial\b/i.test(start)) return out;
   for (const m of start.matchAll(/\bbehind ((?:`\w+`(?:,? (?:and )?)?)+)/g)) {
@@ -282,6 +286,9 @@ export function introducedSwitches(row: Row): string[] {
 }
 
 type Later = { by?: number; deleted: boolean; promoted: boolean };
+
+/** A row that sets the recommended configuration of its day ("The recommended experimental configuration is F …"). */
+const RECOMMENDS = /\brecommended (?:experimental )?configuration\b/i;
 
 /**
  * What later rows say about earlier ones, by number. Rows are in table order, which is number order; the last word
@@ -299,6 +306,25 @@ function laterWords(rows: Row[]): Map<number, Later> {
   for (const r of rows) {
     for (const s of introducedSwitches(r)) if (!switches.has(s)) switches.set(s, r.numbers[0]!);
   }
+  // Only near a head's start, where a row names what it is about, not what it lists.
+  const heads = rows.map((r) => ({ n: r.numbers[0]!, head: headOf(r).slice(0, 100) }));
+  const firstNamed = (name: string, before: number) =>
+    heads.find((h) => h.n < before && h.head.includes(`\`${name}\``))?.n;
+  // The recommended configurations by name (F, H, ALL3, NEW, NEWL…): each is replaced by the next row that sets
+  // one, and the last of them by the row that deletes the named presets (D112).
+  const configs = rows.filter(
+    (r) => RECOMMENDS.test(r.decision.slice(0, 300)) || /^(?:ALL|NEW)\w* = /.test(summaryText(r.decision)),
+  );
+  configs.forEach((r, i) => {
+    const next = configs[i + 1];
+    if (next) note(r.numbers[0]!, next.numbers[0]!, { deleted: false, promoted: false });
+  });
+  const presetsGone = rows.find((r) =>
+    /\bthe rest of the named family\b|\bnamed presets were deleted\b/.test(r.decision),
+  );
+  const lastConfig = configs.at(-1);
+  if (presetsGone && lastConfig)
+    note(lastConfig.numbers[0]!, presetsGone.numbers[0]!, { deleted: false, promoted: false });
   for (const r of rows) {
     const self = r.numbers[0]!;
     const text = `${r.decision} ${r.why}`;
@@ -307,6 +333,15 @@ function laterWords(rows: Row[]): Map<number, Later> {
       /\b(supersedes|reverses|replaces|deletes) (D\d+(?:\s*[–-]\s*D?\d+)?)(?!\d|['’]s)/gi,
     )) {
       for (const n of numbersIn(m[2]!)) note(n, self, { deleted: /deletes/i.test(m[1]!), promoted: false });
+    }
+    // "NEW (D96: …) replaces ALL3 (D80) as the recommended configuration": a name with its number in brackets.
+    for (const m of text.matchAll(/\breplaces ([\w-]{1,20}) \((D\d+)\)/g)) {
+      note(Number(m[2]!.slice(1)), self, { deleted: false, promoted: false });
+    }
+    // A bold outcome added to the row afterwards: "**Outcome: deleted by the pre-set rule**".
+    for (const m of r.decision.matchAll(/\*\*Outcome\b([^*]*)\*\*/g)) {
+      if (/\b(deleted|rejected|removed|not kept)\b/i.test(m[1]!))
+        note(self, undefined, { deleted: true, promoted: false });
     }
     // "(ends D142's trial early)": the trial is over and its code goes.
     for (const m of text.matchAll(/\bends D(\d+)['’]s trial\b/g))
@@ -331,10 +366,16 @@ function laterWords(rows: Row[]): Map<number, Later> {
     // The row's own lead: the numbers and the trial switches each clause names, with the clause's verb.
     // A bold "**Deleted**" or "**Rejected**" section further in ("**Deleted** (no measurement favoured them on): 44
     // settings, … `bridgeQuery` …") deletes every switch it names.
+    // A name no row opened as a switch ("`askWithModel` (`EDEN_ASK_MODEL=1`) restores …") is matched to the first
+    // earlier row whose head names it.
     for (const m of r.decision.matchAll(/\*\*(?:Deleted|Rejected)\*\*(.*?)(?=\*\*|$)/g)) {
-      for (const [s, opened] of switches) {
-        if (m[1]!.includes(`\`${s}\``) || m[1]!.includes(`\`${s}*\``))
+      for (const n of m[1]!.matchAll(/`([a-z]\w+)\*?`/g)) {
+        const opened = switches.get(n[1]!) ?? firstNamed(n[1]!, self);
+        // A guess by name never overrides what a row said outright about that decision.
+        const guessed = !switches.has(n[1]!);
+        if (opened !== undefined && !(guessed && later.has(opened))) {
           note(opened, self, { deleted: true, promoted: false });
+        }
       }
     }
     for (const clause of clauses(headOf(r))) {
@@ -351,7 +392,10 @@ function laterWords(rows: Row[]): Map<number, Later> {
 /** Each row's status (the vocabulary is documented at the top of the index page, `INDEX_HEAD`). */
 export function classify(rows: Row[], trials: Trial[]): Map<string, Verdict> {
   const out = new Map<string, Verdict>();
-  const openTrials = new Set(trials.flatMap((t) => t.numbers));
+  // A trial's cell names its own decision first and provenance after ("Action firewall (D69, D72)"); the first
+  // number is the trial only when that row's head opens one ("tsgo as the merge gate (D113)" points at a list of
+  // the owner's calls).
+  const openTrials = new Set(trials.map((t) => t.numbers[0]).filter((n) => n !== undefined));
   const later = laterWords(rows);
   for (const r of rows) {
     const head = headOf(r);
@@ -359,10 +403,14 @@ export function classify(rows: Row[], trials: Trial[]): Map<string, Verdict> {
     const parts = clauses(head);
     const killed = parts.filter(killedClause);
     let v: Verdict;
-    if (FINDING.test(r.decision)) v = { status: "finding" };
+    // A finding that also deletes code ("…; `syncOwedPollMs` is deleted") keeps that part for the dead-ends page.
+    const deletes = killed.filter((c) => /\b(?:deleted|removed)\b/i.test(c));
+    if (FINDING.test(r.decision) && deletes.length > 0) v = { status: "finding", killedPart: deletes.join("; ") };
+    else if (FINDING.test(r.decision)) v = { status: "finding" };
     // Lab tooling a later decision deleted is a dead end like any other; lab tooling still in use is "lab".
     else if (LAB.test(r.decision) && !(l && l.deleted)) v = { status: "lab" };
-    else if (r.numbers.some((n) => openTrials.has(n))) v = { status: "trial" };
+    else if (r.numbers.some((n) => openTrials.has(n)) && /\btrial\b|off by default/i.test(head))
+      v = { status: "trial" };
     else if (l && !l.promoted) v = { status: "superseded", by: l.by, deleted: l.deleted };
     else if (l) v = { status: "adopted", by: l.by };
     else if (/^(Measured and deleted|Deleted|No measurable effect)/i.test(r.why)) v = { status: "rejected" };
@@ -398,15 +446,44 @@ export function topicOf(text: string): string {
   return "Other";
 }
 
-/** A short measured reason: a hidden-facts delta when the text gives one, else a short first sentence of "why". */
-export function reasonOf(row: Row): string {
-  const text = `${row.decision} ${row.why}`.replace(/\*\*/g, "");
+/** A clause that says why an idea ended: a cause, a failed bar, a cost or a missing gain. */
+const BECAUSE =
+  /\b(?:because|failed|fails|fell short|missed|did not|does not (?:pay|help|hold|raise|lower|change)|not worth|no (?:gain|fall|measurable|significant|false-concern gain)|bar\b|rule (?:asked|set)|too (?:slow|costly|expensive)|costs? (?:more|too)|judged)/i;
+/** A clause that only lists sources: a doc, a section, a commit, a ledger. */
+const FIGURE = /(?<![A-Za-z§#\d.])\d/;
+const CITATION_ONLY = /^(?:[\w./-]+\.md|§|docs\/|`?packages\/|N\d|F\d|M\d|O\d|A\d+;|Pi on |Ledger)/;
+
+/**
+ * Why an idea ended, in a line: a clause that says so outright when the row has one; else a hidden-facts delta (a
+ * gain is flagged, since an idea with a gain died for some other reason); else a short first sentence of "why".
+ */
+export function reasonOf(row: Row, causeOnly = false): string {
+  const plain = (s: string) => s.replace(/\*\*/g, "");
+  const all = [...clauses(plain(row.decision)), ...clauses(plain(row.why))];
+  // First a clause that gives the cause ("Deleted because the stored answers cost an ingest call …"), then one that
+  // names a missed bar or a missing gain with a figure (a number not part of "D708" or a commit).
+  // A clause that restates the verdict ("… is rejected and deleted (W2b …)") is not a reason.
+  const noted = /\b(?:Deleted|Rejected|Removed) \(([^()]{5,80})\)/.exec(plain(row.decision));
+  if (noted) return oneLine(noted[1]!, 110);
+  const cause =
+    all.find((c) => /\bbecause\b|\bjudged\b/i.test(c)) ??
+    all.find((c) => BECAUSE.test(c) && FIGURE.test(c) && !killedClause(c));
+  if (cause) return oneLine(cause.replace(/^.*?\b(?=because\b)/i, ""), 110);
+  if (causeOnly) return "";
   // The number must follow the words directly: "hidden, −4" or "hidden for +48" is some other figure.
-  const m = /\bhidden(?: facts)?(?: raised)?:? [+−-]\d+(?:\.\d+)?(?: points?)?(?: \([^)]{1,24}\))?/.exec(text);
-  if (m) return oneLine(m[0], 80);
-  // Else the "why" cell's first sentence when it is short prose, not a list of sources.
-  const why = firstSentence(row.why.replace(/\*\*/g, ""));
-  if ([...why].length <= 110 && !/^(Accepted|The same runs?\b)|\.md\b|§|`/.test(why)) return oneLine(why, 110);
+  const text = plain(`${row.decision} ${row.why}`);
+  const m = /\bhidden(?: facts)?(?: raised)?:? ([+−-])(\d+(?:\.\d+)?)(?: points?)?(?: \([^)]{1,24}\))?/i.exec(text);
+  if (m) {
+    const gain = m[1] === "+" && Number(m[2]) > 0;
+    const figure = m[0].replace(/^H/, "h");
+    return gain ? `measured ${oneLine(figure, 60)}; killed for another reason (read the row)` : oneLine(figure, 80);
+  }
+  const why = firstSentence(plain(row.why));
+  // Not a cell that only echoes the status ("Measured and deleted (D704)", "Trial, off").
+  const echo = /^(Accepted|The same runs?\b|Measured and deleted|Deleted|Rejected|Trial\b)/;
+  if ([...why].length <= 140 && why !== "" && !echo.test(why) && !CITATION_ONLY.test(why)) {
+    return oneLine(why, 110);
+  }
   return "";
 }
 
@@ -422,7 +499,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 - **rejected**: the row records an idea measured or weighed and not kept (rejected, not built, deleted).
 - **superseded**: a later decision deleted, reversed or replaced it. "deleted by Dn" is a dead end; "replaced by
   Dn" is not.
-- **trial**: named in DECISIONS.md's "Trial switches" table, so still open.
+- **trial**: the decision a row of DECISIONS.md's "Trial switches" table names first, when it opens a trial; still
+  open.
 - **finding**: a measurement recorded as a finding; it decides nothing by itself.
 - **lab**: lab tooling, a pre-registration or a lab-only change; nothing ships.
 `;
@@ -433,10 +511,11 @@ Generated from [DECISIONS.md](DECISIONS.md) by \`bun run decisions:index\` (scri
 edit: change DECISIONS.md and regenerate. **Read this before proposing an idea**: it may have been tried, measured
 and killed already.
 
-Each line is a decision whose status in [DECISION-INDEX.md](DECISION-INDEX.md) is \`rejected\` or \`superseded\` by a
-deletion, or the rejected part of an adopted one (marked "part of"), with what was tried and, when the text gives it
-briefly, the measured reason. Topics come from a keyword map, so an idea can sit under a neighbouring topic: search
-the page for its switch name.
+Each line is one idea: a decision whose status in [DECISION-INDEX.md](DECISION-INDEX.md) is \`rejected\` or
+\`superseded\` by a deletion ("killed by Dn": the row that deleted it, which has no line of its own), or the rejected
+or deleted part of an adopted decision or a finding (marked "part of"). The last column says why it ended when the
+text says so briefly; a bare gain ("measured hidden +x") means it died for another reason, so read the row. Topics
+come from a keyword map, so an idea can sit under a neighbouring topic: search the page for its switch name.
 `;
 
 function statusCell(v: Verdict): string {
@@ -448,11 +527,15 @@ function statusCell(v: Verdict): string {
   return v.status;
 }
 
-export function renderIndex(rows: Row[], verdicts: Map<string, Verdict>): string {
+/** "503 decisions: adopted …": printed, never written to the pages, where it would conflict on every merge. */
+export function tally(rows: Row[], verdicts: Map<string, Verdict>): string {
   const counts = new Map<Status, number>();
   for (const v of verdicts.values()) counts.set(v.status, (counts.get(v.status) ?? 0) + 1);
-  const tally = STATUSES.map((s) => `${s} ${counts.get(s) ?? 0}`).join(", ");
-  const lines = [INDEX_HEAD, `${rows.length} decisions: ${tally}.`, "", "| # | Date | Decision | Status |"];
+  return `${rows.length} decisions: ${STATUSES.map((s) => `${s} ${counts.get(s) ?? 0}`).join(", ")}.`;
+}
+
+export function renderIndex(rows: Row[], verdicts: Map<string, Verdict>): string {
+  const lines = [INDEX_HEAD, "| # | Date | Decision | Status |"];
   lines.push("|---|---|---|---|");
   for (const r of rows) {
     lines.push(`| ${r.label} | ${r.date} | ${summarize(r.decision)} | ${statusCell(verdicts.get(r.label)!)} |`);
@@ -467,23 +550,39 @@ export function isDeadEnd(v: Verdict): boolean {
 export function renderDeadEnds(rows: Row[], verdicts: Map<string, Verdict>): string {
   const byNumber = new Map<number, Row>();
   for (const r of rows) for (const n of r.numbers) byNumber.set(n, r);
+  // One line per idea: a row that deleted ideas listed here ("`pushPointer` (D708) … is deleted") is folded into
+  // their lines as "killed by Dn" instead of a line of its own.
+  const killedBy = new Map<number, number[]>();
+  for (const r of rows) {
+    const v = verdicts.get(r.label)!;
+    if (isDeadEnd(v) && v.status === "superseded" && v.by !== undefined) {
+      killedBy.set(v.by, [...(killedBy.get(v.by) ?? []), r.numbers[0]!]);
+    }
+  }
   const groups = new Map<string, string[]>();
   for (const r of rows) {
     const v = verdicts.get(r.label)!;
-    if (!isDeadEnd(v)) continue;
+    if (!isDeadEnd(v) || killedBy.has(r.numbers[0]!)) continue;
     const killer = v.status === "superseded" && v.by !== undefined ? byNumber.get(v.by) : undefined;
-    const reason = (killer && reasonOf(killer)) || reasonOf(r);
+    // A killer that ended several ideas speaks for all of them, so the idea's own reason comes first then.
+    const shared = v.by !== undefined && (killedBy.get(v.by)?.length ?? 0) > 1;
+    // Shared, the killer's figures may be another idea's ("+0.0" was arm K's, not `+amend`'s): only its cause counts.
+    const reason = killer
+      ? shared
+        ? reasonOf(killer, true) || reasonOf(r)
+        : reasonOf(killer) || reasonOf(r)
+      : reasonOf(r);
     let how = reason;
-    if (v.status === "superseded")
-      how = `deleted${v.by === undefined ? " later" : ` by D${v.by}`}${reason ? `: ${reason}` : ""}`;
+    if (v.status === "superseded") {
+      how = `killed${v.by === undefined ? " later" : ` by D${v.by}`}${reason ? `: ${reason}` : ""}`;
+    }
     const tried = v.killedPart ? `part of: ${oneLine(v.killedPart, 130)}` : summarize(r.decision);
     const topic = topicOf(v.killedPart ?? summaryText(r.decision).replace(META, ""));
     const list = groups.get(topic) ?? [];
     list.push(`| ${r.label} | ${tried} | ${how} |`);
     groups.set(topic, list);
   }
-  const total = [...groups.values()].reduce((s, l) => s + l.length, 0);
-  const lines = [DEAD_HEAD, `${total} dead ends.`, ""];
+  const lines = [DEAD_HEAD];
   for (const topic of [...TOPICS.map(([name]) => name), "Other"]) {
     const list = groups.get(topic);
     if (list) lines.push(`## ${topic}`, "", "| # | What was tried | Why it ended |", "|---|---|---|", ...list, "");
@@ -492,10 +591,14 @@ export function renderDeadEnds(rows: Row[], verdicts: Map<string, Verdict>): str
 }
 
 /** Both pages for a DECISIONS.md text. */
-export function generate(md: string): { index: string; deadEnds: string } {
+export function generate(md: string): { index: string; deadEnds: string; summary: string } {
   const { rows, trials } = parseDecisions(md);
   const verdicts = classify(rows, trials);
-  return { index: renderIndex(rows, verdicts), deadEnds: renderDeadEnds(rows, verdicts) };
+  const deadEnds = renderDeadEnds(rows, verdicts);
+  const lines = deadEnds.split("\n").filter((l) => /^\| D\d/.test(l));
+  const reasoned = lines.filter((l) => !/\| (?:killed(?: later| by D\d+))? \|$/.test(l)).length;
+  const summary = `${tally(rows, verdicts)} ${lines.length} dead ends, ${reasoned} with a reason.`;
+  return { index: renderIndex(rows, verdicts), deadEnds, summary };
 }
 
 const DOCS = join(import.meta.dir, "..", "docs");
@@ -522,17 +625,18 @@ export function stale(): string[] {
 }
 
 if (import.meta.main) {
+  const { index, deadEnds, summary } = generate(readFileSync(PATHS.decisions, "utf8"));
   if (process.argv.includes("--check")) {
     const out = stale();
+    console.log(summary);
     if (out.length > 0) {
       console.error(`${out.join(" and ")} out of date with docs/DECISIONS.md: run \`bun run decisions:index\`.`);
       process.exit(1);
     }
     console.log("Decision index and dead ends are current.");
   } else {
-    const { index, deadEnds } = generate(readFileSync(PATHS.decisions, "utf8"));
     writeFileSync(PATHS.index, index);
     writeFileSync(PATHS.deadEnds, deadEnds);
-    console.log("Wrote docs/DECISION-INDEX.md and docs/DEAD-ENDS.md.");
+    console.log(`${summary}\nWrote docs/DECISION-INDEX.md and docs/DEAD-ENDS.md.`);
   }
 }

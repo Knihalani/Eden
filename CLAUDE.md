@@ -31,7 +31,8 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
 - [docs/DECISION-INDEX.md](docs/DECISION-INDEX.md): one line per decision with its status (adopted, rejected,
   superseded, trial, finding, lab); [docs/DEAD-ENDS.md](docs/DEAD-ENDS.md): every killed idea by topic, read it
   before proposing one. Both are generated from DECISIONS.md by `bun run decisions:index` (D812); a test fails while
-  they are stale.
+  they are stale. After a merge or rebase that touches DECISIONS.md, run `bun run decisions:index`; never
+  hand-resolve the generated pages.
 - Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
   `bun run check:fast` (format, types, changed tests). While developing, a test file that already passed on
   identical inputs is skipped (D650, D657); the gate before a merge is `CHECK_COLD=1 bun run check`, which runs

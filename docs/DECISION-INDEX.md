@@ -10,11 +10,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 - **rejected**: the row records an idea measured or weighed and not kept (rejected, not built, deleted).
 - **superseded**: a later decision deleted, reversed or replaced it. "deleted by Dn" is a dead end; "replaced by
   Dn" is not.
-- **trial**: named in DECISIONS.md's "Trial switches" table, so still open.
+- **trial**: the decision a row of DECISIONS.md's "Trial switches" table names first, when it opens a trial; still
+  open.
 - **finding**: a measurement recorded as a finding; it decides nothing by itself.
 - **lab**: lab tooling, a pre-registration or a lab-only change; nothing ships.
-
-503 decisions: adopted 301, rejected 98, superseded 25, trial 15, finding 38, lab 26.
 
 | # | Date | Decision | Status |
 |---|---|---|---|
@@ -60,7 +59,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D40 | 2026-10-29 | A cached item last fetched or seen in a lookup more than `refreshAfterMs` ago (2 hours) is never delivered from the fast path: its cue… | adopted |
 | D41 | 2026-10-29 | When the judge's model call fails (an error, a timeout, a provider refusing a key over its spend limit), the slow path applies D36's… | adopted |
 | D42 | 2026-10-29 | Engine fixes from the 2026-10-29 audit that change behaviour: (1) a cue still in its cooldown (D37's key) is not looked up again, but the… | adopted |
-| D43 | 2026-10-29 | `ask` returns the cited items with no model call by default; `askWithModel` (`EDEN_ASK_MODEL=1`) restores the model-composed prose answer. | adopted |
+| D43 | 2026-10-29 | `ask` returns the cited items with no model call by default; `askWithModel` (`EDEN_ASK_MODEL=1`) restores the model-composed prose answer. | superseded (deleted by D112) |
 | D44 | 2026-10-29 | With no model (none, over budget, or failing: D36, D41), the slow path and `ask` first ground the request in the candidates' structure… | adopted |
 | D45 | 2026-10-30 | The judge and the ask answer leave room for a reasoning model: they ask for low reasoning effort (`ChatRequest.reasoning`, sent to… | adopted |
 | D46 | 2026-10-30 | Probes, a proof of concept behind `config.probes`, off by default (`probes.ts`): besides the request itself a lookup sends, within… | adopted |
@@ -70,9 +69,9 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D50 | 2026-10-30 | A learned probe economy, per user and with no model, behind two flags, off by default. | adopted |
 | D51 | 2026-10-30 | A per-user standing-constraints register, behind `register`, off by default. | superseded (deleted) |
 | D52 | 2026-10-30 | Dense packets and the event a request names, behind flags, off by default. | adopted |
-| D53 | 2026-10-30 | The recommended experimental configuration is F (D48's best) plus `groundConflict`, `quietClear` (D49), `probeFresh`, `probeYield` (D50)… | adopted |
-| D54 | 2026-10-30 | Three flags, each off by default, and a new recommended configuration: D53's set plus all three. | adopted |
-| D55 | 2026-10-30 | After review, the recommended experimental configuration is H: D53's set plus `quietNameOnly` and `judgeTied` (D54); `consequenceProbe`… | adopted |
+| D53 | 2026-10-30 | The recommended experimental configuration is F (D48's best) plus `groundConflict`, `quietClear` (D49), `probeFresh`, `probeYield` (D50)… | superseded (replaced by D54) |
+| D54 | 2026-10-30 | Three flags, each off by default, and a new recommended configuration: D53's set plus all three. | superseded (replaced by D55) |
+| D55 | 2026-10-30 | After review, the recommended experimental configuration is H: D53's set plus `quietNameOnly` and `judgeTied` (D54); `consequenceProbe`… | superseded (replaced by D64) |
 | D56 | 2026-10-31 | Engine-wide span tracing, off by default: each phase of each event (observe, the fast path's rank and confident filter; the slow path's… | adopted |
 | D57 | 2026-10-31 | Background connector sync behind `sync`, off by default: `Source.list` (recent-first pages; `McpSource.listTool` passes D7's read-only… | adopted |
 | D58 | 2026-10-31 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | superseded (deleted by D225) |
@@ -81,7 +80,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D61 | 2026-10-31 | Live agent results come from the Pi harness: `pi-ab.ts` runs pi-agent-core's loop (`@earendil-works/pi-agent-core` and `pi-ai` 1.3.0… | adopted |
 | D62 | 2026-10-31 | D56–D61 are merged on one tree, every flag off by default, telemetry's spans the one span design (Pi's harness reads them; sync, graph… | adopted |
 | D63 | 2026-10-31 | Fixes from the review of `moon/combined`; where they depart from D57, D59, D60 or D8 this records it. | adopted |
-| D64 | 2026-10-31 | The first full live benchmark on the Pi harness over all nine suites, 4 seeds, 16,346 agent runs, $8.75, graded by deepseek-v4.1-flash… | adopted |
+| D64 | 2026-10-31 | The first full live benchmark on the Pi harness over all nine suites, 4 seeds, 16,346 agent runs, $8.75, graded by deepseek-v4.1-flash… | superseded (replaced by D79) |
 | D65 | 2026-10-31 | No model judge on the critical path, and Eden's lookup stops waiting for the sync's poll. | adopted |
 | D66 | 2026-10-31 | A cheaper background, behind flags, off by default. | adopted |
 | D67 | 2026-10-31 | A found conflict is delivered whatever path spoke first. | superseded (deleted by D112) |
@@ -89,33 +88,33 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D69 | 2026-10-31 | The action firewall behind `actionCheck`, off by default (`firewall.ts`, `ContextPartner.checkAction`, `POST /v1/check`… | trial |
 | D70 | 2026-10-31 | One-turn packets are rejected: the proactive packet does not carry the no-model gate's held-back candidates or a coverage line (the… | rejected |
 | D71 | 2026-10-31 | Agent cost in a live comparison is reported twice: as billed, and re-priced at fixed endpoint prices (Z.AI's list price and Wafer-us for… | adopted |
-| D72 | 2026-10-31 | The pre-registered blind evaluation of the econ work is recorded and its bars applied: ALL2 (ALL plus `syncPollBehind`, `decideConflict`… | trial |
+| D72 | 2026-10-31 | The pre-registered blind evaluation of the econ work is recorded and its bars applied: ALL2 (ALL plus `syncPollBehind`, `decideConflict`… | adopted |
 | D73 | 2026-11-01 | `askVerdicts`, off by default: an ask gathers what a lookup gathers (the consequence probe's finds, the graph walk, the card finds) and… | superseded (deleted by D226) |
 | D74 | 2026-11-01 | `askCompact` (with `askItemBytes` 320, `askFullItems`, `askLineBytes`, `askMaxBytes`), off by default: the answer is compacted as a packet… | superseded (deleted by D112) |
 | D75 | 2026-11-01 | `conflictVocab`, off by default: the conflict test (`conflict.ts`) reads a wider, general vocabulary of blocks, lifts and standing… | adopted |
 | D76 | 2026-11-01 | `compactAsk` (with `askItemBytes` 320), off by default: `ask` answers compacted as packets are, dates kept as written with their year… | adopted |
 | D77 | 2026-11-01 | `askDedup`, off by default: an `ask` answer says an item this session's packets and answers already showed by its new parts only, or… | adopted |
 | D78 | 2026-11-01 | `compactParts`, off by default: compaction (packets and compacted answers) reads a quoted thread past a quoted signature, cuts a table… | adopted |
-| D79 | 2026-11-01 | ALL3 = ALL (D64) + `askVerdicts` (D73) + `conflictVocab` (D75) + `compactAsk` (D76) + `askDedup` (D77) + `compactParts` (D78) +… | adopted |
-| D80 | 2026-11-01 | The pre-registered last measure is applied: ALL3 (ALL plus `askVerdicts`, `conflictVocab`, `compactAsk`, `askDedup`, `compactParts`… | adopted |
+| D79 | 2026-11-01 | ALL3 = ALL (D64) + `askVerdicts` (D73) + `conflictVocab` (D75) + `compactAsk` (D76) + `askDedup` (D77) + `compactParts` (D78) +… | superseded (replaced by D80) |
+| D80 | 2026-11-01 | The pre-registered last measure is applied: ALL3 (ALL plus `askVerdicts`, `conflictVocab`, `compactAsk`, `askDedup`, `compactParts`… | superseded (replaced by D98) |
 | D81 | 2026-11-01 | `supersede`, off by default: candidates are grouped by matter (subject without "Re:"/"Fwd:" per source, or a title identifier), ordered by… | superseded (deleted by D112) |
 | D82 | 2026-11-01 | `askRank` (with `askRankMargin` 5), off by default: an ask's pool (the verdict hits, the grounded items, the lexically likely) is ordered… | superseded (deleted by D112) |
 | D83 | 2026-11-01 | `askContext` ranks an `ask` for its question and for the session's latest user request (the lookup's own cue, kept on the session), fused… | superseded (deleted by D112) |
-| D84 | 2026-11-01 | ALL4 = ALL3 (D80) + `supersede` (D81) + `askRank` (D82) + `askContext` (D83), chosen on the development suites and the old in-sample… | adopted |
-| D85 | 2026-11-01 | The pre-registered live A/B on held-out 11 is applied: ALL4 (ALL3 plus `supersede`, `askRank`, `askContext`) does not replace ALL3; ALL3… | adopted |
+| D84 | 2026-11-01 | ALL4 = ALL3 (D80) + `supersede` (D81) + `askRank` (D82) + `askContext` (D83), chosen on the development suites and the old in-sample… | superseded (replaced by D85) |
+| D85 | 2026-11-01 | The pre-registered live A/B on held-out 11 is applied: ALL4 (ALL3 plus `supersede`, `askRank`, `askContext`) does not replace ALL3; ALL3… | superseded (replaced by D92) |
 | D86 | 2026-11-01 | The secret gate adds `eden-aws-secret`, always on: a maximal run of exactly 40 characters of `[A-Za-z0-9/+]`, not pure hex, mixing upper… | adopted |
 | D87 | 2026-11-01 | the intent index. | adopted |
 | D88 | 2026-11-01 | The guided `ask_context` description is Eden's own (`ASK_CONTEXT_GUIDED` in `@eden/protocol`, exported by the client SDK, read by the… | superseded (deleted by D112) |
 | D89 | 2026-11-01 | The request-time bridging query, `bridgeQuery` (`bridge.ts`, `PartnerDeps.bridge`: a `QueryBridge` with its own `BridgeMaker`, model and… | superseded (deleted by D112) |
 | D90 | 2026-11-01 | The active-constraints digest, `constraintDigest` (needs `cards`; `digest.ts`, `ContextPartner.digest`, `POST /v1/digest`, client… | superseded (deleted by D112) |
 | D91 | 2026-11-01 | LAB ONLY: Lab runs may use OpenRouter's free models, on sim data only: `--allow-logging` (`OpenRouterOptions.allowLogging`, which… | lab |
-| D92 | 2026-11-01 | ALL5 = ALL3 (D80) + `intent` (D87) + `bridgeQuery` with `bridgeQuestions` and `bridgeAskSeats` 2 (D89) + `askGuard` and `packetBearing`… | adopted |
+| D92 | 2026-11-01 | ALL5 = ALL3 (D80) + `intent` (D87) + `bridgeQuery` with `bridgeQuestions` and `bridgeAskSeats` 2 (D89) + `askGuard` and `packetBearing`… | superseded (replaced by D98) |
 | D93 | 2026-11-01 | Proposed with D92, review of `edge/combined`; amends D88, D89, D90 and D92. | adopted |
 | D95 | 2026-11-02 | The ask-time model reader, `askReader` (`reader.ts`, `PartnerDeps.reader`: an `AskReader` with its own `ReaderMaker`, model and `Budget`… | adopted |
 | D96 | 2026-11-02 | off by default; amends D95. | adopted |
 | D97 | 2026-11-02 | LAB ONLY. | lab |
-| D98 | 2026-11-02 | NEW (D96: ALL3 + `intent` + `askReader` + `askReaderDrop` + `readerPush`) replaces ALL3 (D80) as the recommended experimental configuration. | adopted |
-| D99 | 2026-11-02 | Haiku phase 3: NEW (D98) stays the recommended experimental configuration; NEWL (NEW + `readerGate` + `askReaderPool` 15 +… | adopted |
+| D98 | 2026-11-02 | NEW (D96: ALL3 + `intent` + `askReader` + `askReaderDrop` + `readerPush`) replaces ALL3 (D80) as the recommended experimental configuration. | superseded (replaced by D99) |
+| D99 | 2026-11-02 | Haiku phase 3: NEW (D98) stays the recommended experimental configuration; NEWL (NEW + `readerGate` + `askReaderPool` 15 +… | superseded (replaced by D112) |
 | D100 | 2026-11-03 | Two input tightenings on the HTTP API. | adopted |
 | D101 | 2026-11-03 | `syncPollPageSize` (0 = off): an incremental poll's first page is twice the changes the source's learned rate (`alpha/beta`) expects since… | adopted |
 | D102 | 2026-11-03 | `slowPathQueue`: a request that reaches the slow path while the session's slow path is busy is kept in a one-slot per-session queue (the… | superseded (deleted by D228) |
@@ -129,7 +128,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D110 | 2026-11-03 | Rejected, lab only: The ask-time reader (D95/D96) is not distilled into a local no-model scorer used as a cascade. | rejected |
 | D111 | 2026-11-03 | The per-user search index (`SparseIndex`, the engine's item cache) is packed, with identical results. | adopted |
 | D112 | 2026-11-03 | One product: the default is the best measured configuration | adopted |
-| D113 | 2026-11-03 | The owner's standing calls on the 2026-11-03b audit's open questions, recorded so later work follows them. | trial |
+| D113 | 2026-11-03 | The owner's standing calls on the 2026-11-03b audit's open questions, recorded so later work follows them. | adopted |
 | D114 | 2026-11-03 | Amends D93 and D96: With `askReaderDrop`, a reading that rejects by name every item of an ask's answer may now empty it, but only when the… | adopted |
 | D115 | 2026-11-03 | Rejected: The reader's pool is not widened with the user's constraint items. | rejected |
 | D116 | 2026-11-03 | Rejected: An explicit ask does not reuse the push's verdict. | rejected |
@@ -202,7 +201,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D183 | 2026-11-06 | `fallbackAsks` stays in `DEFAULT_CONFIG`; the `fallback` part is not removed | adopted |
 | D184 | 2026-11-06 | F10, request-side query expansion (`moonshot-ask-query-expansion-ceiling`), is closed and not built | rejected |
 | D185 | 2026-11-06 | F25's unordered subset replay (`devloop-retrieval-screen-set-subset-replay`) is not built; D117 stands | rejected |
-| D186 | 2026-11-06 | F6 enters as trial `readerVerbGate` (package `action-gate-verbs-trial`): the reader's request gate recognises verbs, as D168 asked | adopted |
+| D186 | 2026-11-06 | F6 enters as trial `readerVerbGate` (package `action-gate-verbs-trial`): the reader's request gate recognises verbs, as D168 asked | superseded (deleted) |
 | D187 | 2026-11-06 | The secret gate redacts a bare Discord webhook URL (`eden-discord-webhook`); the client checks the shape of every 2xx answer it hands the… | adopted |
 | D188 | 2026-11-06 | The item cache holds item text deflated (`CacheLimits.packText`, on by default; `packed-text.ts`); reopens D111's compressed text tier as… | adopted |
 | D189 | 2026-11-06 | Rejected: request-side query expansion with no model for the ask. | rejected |
@@ -358,7 +357,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D385 | 2026-11-07 | The Hermes plugin keeps its placement; INTEGRATION.md's Hermes advice is corrected. | adopted |
 | D386 | 2026-11-07 | Lab only: hermes-ab records Eden's connector calls and the backfill split as pi-ab does. | lab |
 | D387 | 2026-11-07 | The Hermes agent-cost gap with Eden (0.610 against 0.440 $/1k) stays open, now without the per-call-break explanation. | adopted |
-| D390 | 2026-11-07 | A per-lookup budget for live searches of cut copies at 1,000 sources (`syncCutLive`, trial, A28) was measured and deleted; D264 stands. | adopted |
+| D390 | 2026-11-07 | A per-lookup budget for live searches of cut copies at 1,000 sources (`syncCutLive`, trial, A28) was measured and deleted; D264 stands. | rejected |
 | D391 | 2026-11-07 | At 1,000 sources Eden's path time is not the count of live calls; lab: one 1,000-source Pi arm per process, a seed split by suite. | adopted |
 | D395 | 2026-11-07 | The default on heldout17, blind: it beats the agent alone on hidden facts and speed on both horizons, with no rise in false concerns, and… | adopted |
 | D396 | 2026-11-07 | askNudge (D316) holds up blind. | adopted |
@@ -414,8 +413,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D472 | 2026-11-10 | Rejected and deleted: `pushCheck`, the checker choosing the push's candidates | rejected |
 | D473 | 2026-11-10 | Finding: the checker is a strong silence switch, but silences facts with the noise. | finding |
 | D474 | 2026-11-10 | Adopted (lab tooling): the pair labeller and the checker's training and CPU evaluation. | lab |
-| D475 | 2026-11-10 | Trial (off): a cold tier for the synced copy (`syncCold`, `syncColdMaxItems` 30,000, `syncColdVerify`). | adopted |
-| D476 | 2026-11-10 | Trial (off): change feeds (`syncDelta`; `Source.changes`, `ChangePage`, `SourceFanout.changes`). | adopted |
+| D475 | 2026-11-10 | Trial (off): a cold tier for the synced copy (`syncCold`, `syncColdMaxItems` 30,000, `syncColdVerify`). | superseded (deleted by D495) |
+| D476 | 2026-11-10 | Trial (off): change feeds (`syncDelta`; `Source.changes`, `ChangePage`, `SourceFanout.changes`). | superseded (deleted by D495) |
 | D477 | 2026-11-10 | Not built: a timer that polls every source by its change rate. | rejected |
 | D478 | 2026-11-10 | Lab: connector kinds and event-trigger prices. | lab |
 | D479 | 2026-11-10 | `syncCold` and `syncDelta` are not promoted; they stay trial switches, off. | rejected |
@@ -434,9 +433,9 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D492 | 2026-11-10 | Rejected: the distilled checker in the push | rejected |
 | D493 | 2026-11-10 | Finding: a teacher-quality check in the push would cut look-alikes from the packet without losing facts | finding |
 | D494 | 2026-11-10 | Adopted (lab tooling): the "changes the action" labeller and the teacher-as-checker sidecar. | lab |
-| D495 | 2026-11-10 | Deleted at the repo owner's decision: `syncCold` and `syncDelta`, F1's two off trials | adopted |
+| D495 | 2026-11-10 | Deleted at the repo owner's decision: `syncCold` and `syncDelta`, F1's two off trials | rejected |
 | D500 | 2026-11-10 | Trial `pushCheck`: one budgeted model call a push asks, over the whole push pool at once, whether each item changes what the assistant… | trial |
-| D501 | 2026-11-10 | The push check's operating point: 200 characters × 15 items | trial |
+| D501 | 2026-11-10 | The push check's operating point: 200 characters × 15 items | adopted |
 | D502 | 2026-11-10 | Pre-registered: the live Pi measurement of `pushCheck` and its promotion rule | lab |
 | D503 | 2026-11-10 | Finding: the push check raises more hidden facts live, leaves concerns where they were, and costs +$0.11 per 1,000 tasks and +0.8 s a task | finding |
 | D504 | 2026-11-10 | `pushCheck` stays an off trial; the trade goes to the owner | adopted |
