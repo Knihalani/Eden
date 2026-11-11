@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { compactText, renderPacket } from "./render";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 const item = (id: string, title: string, text: string): ContextItem => ({
   id,
   sourceId: "gmail",
@@ -80,17 +87,17 @@ describe("compactText", () => {
       `From: ${"<".repeat(8_000)}`,
       `x${" ".repeat(8_000)}y`,
     ]) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       compactText(hostile, new Set(["x"]), 320);
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(cpuMs() - t0).toBeLessThan(50);
     }
   });
 
   test("hostile text stays linear: 100 KB of near-markers compacts quickly", () => {
     const hostile = "On ".repeat(20_000) + "> ".repeat(10_000) + "Best regards, ".repeat(2_000);
-    const t0 = performance.now();
+    const t0 = cpuMs();
     compactText(hostile, new Set(["x"]), 320);
-    expect(performance.now() - t0).toBeLessThan(500);
+    expect(cpuMs() - t0).toBeLessThan(500);
   });
 });
 

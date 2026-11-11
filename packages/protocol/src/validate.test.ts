@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { itemId } from "./ids";
 import { MAX_QUESTION_CHARS, bodyShapeUnder, checkAsk, checkEvent, checkSourceItems } from "./validate";
 
+// A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
+// fail it the way wall time did (weak-points-1111.md R1).
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 const scope = { tenantId: "acme", userId: "u_1", sessionId: "s_1" };
 
 describe("checkEvent", () => {
@@ -57,9 +64,9 @@ describe("tool_call.input depth and size (D100)", () => {
 
   test("a 60,000-deep input is refused before any stringify, in well under a second", () => {
     const deep = nest(60_000, (v) => [v]);
-    const t0 = performance.now();
+    const t0 = cpuMs();
     const r = call(deep);
-    const ms = performance.now() - t0;
+    const ms = cpuMs() - t0;
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/1,000 deep/);
     // Stringifying until the stack overflowed took ~1.5 s here; the walk stops at the cap. Loose bound for slow CI.

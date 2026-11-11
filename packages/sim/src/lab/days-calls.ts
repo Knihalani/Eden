@@ -9,8 +9,11 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
- *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none]
+ *     [--json FILE] [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none] [--resume]
  *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD] [--widen-ranks FILE]
+ *
+ * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
+ * (D813, `main` below).
  *
  * Weeks and more users (P7, D874, D875): `--days 28 --night-h 20` is four weeks of Eden's clock, long enough for the
  * weekly sweep of unused sources (D356) to run three times; past about 12 days the plan is a weeks plan
@@ -52,6 +55,7 @@ import { keyFor, labAccess, labModel } from "./free";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
+import { argvFields, argvFiles, codeVersion, envFields, JournalRefused, partialPath, RunJournal } from "./run-journal";
 import { parseSuites } from "./suites";
 
 export type Phase = "backfill" | "tick" | "notice" | "request";
@@ -637,8 +641,22 @@ export const callsWhere = (counts: Counts, pred: (phase: Phase, source: string, 
     return pred(p, s, op) ? n + v : n;
   }, 0);
 
-if (import.meta.main) {
-  const argv = process.argv.slice(2);
+/** One user's line in the `--json` journal (D813): the user and their planted rows (kept with `--pool-diag` or not). */
+interface UserUnit {
+  user: DaysCallsUser;
+  planted: PlantedRow[];
+}
+
+/**
+ * The CLI (above), with the user run injectable for tests. With `--json F` each user is appended to
+ * `F.partial.jsonl` as it finishes, and `--resume` reuses the users found there (keyed on the flags but `--seeds`,
+ * `--json`, `--pool-diag` and `--resume`, the cards and intent files' contents and the code: `run-journal.ts`).
+ */
+export async function main(
+  argv: string[],
+  run: (seed: number, o: DaysCallsOptions) => Promise<DaysCallsUser> = daysCalls,
+  log: (line: string) => void = console.log,
+): Promise<void> {
   const opt = (name: string, fallback: string) => {
     const i = argv.indexOf(`--${name}`);
     return i >= 0 ? (argv[i + 1] ?? fallback) : fallback;
@@ -694,14 +712,66 @@ if (import.meta.main) {
   if (widenFile) o.widen = widenRanks(widenFile);
   const diag = opt("pool-diag", "");
   const corpus = opt("corpus-dump", "");
+  const out = opt("json", "");
+  if (argv.includes("--resume") && !out) throw new JournalRefused("--resume reads the journal beside --json FILE");
+  // A resumed user is not run again, so its corpus line would be missing: the dump is made in one run, never resumed.
+  if (argv.includes("--resume") && corpus)
+    throw new JournalRefused("--corpus-dump is written whole: run it without --resume");
   if (corpus) {
     writeFileSync(corpus, "");
     o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
   }
+  // The journal's key (D813): outputs are left out on purpose (`--corpus-dump`, and `--cards-out`, which a live run
+  // also appends to, so its contents cannot key a resume), as are the spend bookkeeping flags; `--cards-live` (the
+  // model) stays in the argv key, and `--widen-ranks` is an input, keyed by its contents with the cards and intent.
+  const journal = out
+    ? RunJournal.open<UserUnit>(
+        partialPath(out),
+        {
+          harness: "days-calls",
+          argv: argvFields(argv, [
+            "--seeds",
+            "--json",
+            "--pool-diag",
+            "--resume",
+            "--corpus-dump",
+            "--cards-out",
+            "--spend-ledger",
+            "--spend-cap",
+          ]),
+          inputs: argvFiles(
+            ["--cards", cardsFile, "--intent", cardsFile ? intentFiles.join(",") : "", "--widen-ranks", widenFile],
+            [],
+          ),
+          env: envFields(),
+          code: codeVersion(),
+        },
+        argv.includes("--resume"),
+      )
+    : null;
   const planted: PlantedRow[] = [];
-  if (diag) o.onPlanted = (row) => void planted.push(row);
   const users: DaysCallsUser[] = [];
-  for (const seed of seeds) users.push(await daysCalls(seed, o));
+  let reused = 0;
+  try {
+    for (const seed of seeds) {
+      const done = journal?.done.get(`w${seed}`);
+      if (done) {
+        reused++;
+        users.push(done.user);
+        planted.push(...done.planted);
+        continue;
+      }
+      // The planted rows are always collected, `--pool-diag` or not: a resume that asks for them then has them.
+      const mine: PlantedRow[] = [];
+      const user = await run(seed, diag || journal ? { ...o, onPlanted: (row) => void mine.push(row) } : o);
+      journal?.write(`w${seed}`, { user, planted: mine });
+      users.push(user);
+      planted.push(...mine);
+    }
+  } catch (e) {
+    journal?.close();
+    throw e;
+  }
   if (diag) writeFileSync(diag, planted.map((r) => `${JSON.stringify(r)}\n`).join(""));
   const requests = users.reduce((n, u) => n + u.requests, 0);
   const days = users.reduce((n, u) => n + u.days, 0);
@@ -711,8 +781,8 @@ if (import.meta.main) {
   const label =
     `push ${push}${o.recapSignal ? " (recap: bare signal)" : ""}${o.ask ? ", one ask a request" : ""}` +
     `${cardsLive ? `, cards live (${cardsLive}, recorded)` : cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
-  console.log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
-  console.log("phase     source    op       calls   per request  per user-day");
+  log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
+  log("phase     source    op       calls   per request  per user-day");
   // With noise connectors, one row for all of them a phase and operation: a thousand rows say nothing more.
   const world5 = new Set(["gmail", "calendar", "drive", "slack", "crm"]);
   const rows: Counts = {};
@@ -725,12 +795,12 @@ if (import.meta.main) {
     const v = rows[k]!;
     const per = p === "backfill" ? "" : (v / requests).toFixed(3);
     const perDay = p === "backfill" ? `${(v / users.length).toFixed(1)} a user` : (v / days).toFixed(2);
-    console.log(
+    log(
       `${p.padEnd(9)} ${s.padEnd(9)} ${op.padEnd(7)} ${String(v).padStart(6)}   ${per.padStart(10)}  ${perDay.padStart(12)}`,
     );
   }
   const at = (ps: Phase[]) => callsWhere(total, (p) => ps.includes(p));
-  console.log(
+  log(
     `request-time ${(at(["request"]) / requests).toFixed(3)} a request; background (tick + notice) ` +
       `${(at(["tick", "notice"]) / days).toFixed(2)} a user-day, ${(at(["tick", "notice"]) / requests).toFixed(3)} ` +
       `a request; steady ${(at(["request", "tick", "notice"]) / requests).toFixed(3)} a request; backfill ` +
@@ -741,20 +811,18 @@ if (import.meta.main) {
     const got = users.reduce((x, u) => x + (u.surfaced[kind]?.got ?? 0), 0);
     return `${got}/${n}`;
   };
-  console.log(
-    `surfaced (a packet or the ask's citations): hidden facts ${surf("hidden")}, control decoys ${surf("control")}`,
-  );
+  log(`surfaced (a packet or the ask's citations): hidden facts ${surf("hidden")}, control decoys ${surf("control")}`);
   // D875: by connector class and arrival lag, and what the rare connectors cost in listings.
   const byKeys = [...new Set(users.flatMap((u) => Object.keys(u.surfacedBy)))].sort();
   for (const k of byKeys) {
     const n = users.reduce((x, u) => x + (u.surfacedBy[k]?.n ?? 0), 0);
     const got = users.reduce((x, u) => x + (u.surfacedBy[k]?.got ?? 0), 0);
-    console.log(`  surfaced ${k.padEnd(24)} ${got}/${n}`);
+    log(`  surfaced ${k.padEnd(24)} ${got}/${n}`);
   }
   if (o.suites!.includes("longtail") || o.arriveDays) {
     const rareLists = (ps: Phase[]) =>
       callsWhere(total, (p, src, op) => ps.includes(p) && op === "list" && RARE_SOURCE_IDS.includes(src));
-    console.log(
+    log(
       `rare connectors (${RARE_SOURCE_IDS.length}): listings ${(rareLists(["tick", "notice"]) / days).toFixed(2)} a ` +
         `user-day in the background, ${(rareLists(["request"]) / requests).toFixed(3)} a request, ` +
         `${(rareLists(["backfill"]) / users.length).toFixed(1)} at backfill a user`,
@@ -765,9 +833,9 @@ if (import.meta.main) {
     const r = users.reduce((x, u) => x + (u.requestsByDay[d] ?? 0), 0);
     return (c / Math.max(1, r)).toFixed(1);
   });
-  console.log(`request-time calls a request, by day: ${byDay.join(" ")}`);
+  log(`request-time calls a request, by day: ${byDay.join(" ")}`);
   for (const u of users)
-    console.log(
+    log(
       `  w${u.seed}: verify ${JSON.stringify(u.freshness)}; items re-read ${u.fetchedItems}, more than once ` +
         `${u.refetched}; moved ${u.changed}, update packets ${u.updatePackets}, stale copies held ${u.staleHeld}`,
     );
@@ -775,14 +843,14 @@ if (import.meta.main) {
     for (const [k, v] of Object.entries(u.fates)) all[k] = (all[k] ?? 0) + v;
     return all;
   }, {});
-  console.log(`moved items at their recap: ${JSON.stringify(fates)}`);
+  log(`moved items at their recap: ${JSON.stringify(fates)}`);
   const bySrc: Record<string, string> = {};
   for (const u of users)
     for (const [k, v] of Object.entries(u.bySource)) {
       const [upd, owed] = (bySrc[k] ?? "0/0").split("/").map(Number) as [number, number];
       bySrc[k] = `${upd + v.updated}/${owed + v.owed}`;
     }
-  console.log(`owed updates arrived by source (updated/owed): ${JSON.stringify(bySrc)}`);
+  log(`owed updates arrived by source (updated/owed): ${JSON.stringify(bySrc)}`);
   if (o.moveAfter) {
     const mid = users.reduce<Record<string, number>>((all, u) => {
       for (const [k, v] of Object.entries(u.midFates)) all[k] = (all[k] ?? 0) + v;
@@ -790,11 +858,26 @@ if (import.meta.main) {
     }, {});
     const delays = users.flatMap((u) => u.midDelays).sort((a, b) => a - b);
     const q = (p: number) => (delays.length ? delays[Math.min(delays.length - 1, Math.floor(p * delays.length))] : NaN);
-    console.log(
+    log(
       `moved mid-session (${o.moveAfter} requests after handed), at session end: ${JSON.stringify(mid)}; ` +
         `requests to the update: p50 ${q(0.5)}, p90 ${q(0.9)}, max ${delays.at(-1) ?? NaN}`,
     );
   }
-  const out = opt("json", "");
   if (out) writeFileSync(out, JSON.stringify({ label, seeds, days: o.days, requests, userDays: days, total, users }));
+  if (journal) {
+    if (reused || journal.torn) {
+      log(`resumed: ${reused} of ${seeds.length} users from ${journal.path} (${journal.torn} torn lines run again)`);
+    }
+    journal.finish(true);
+  }
+}
+
+if (import.meta.main) {
+  try {
+    await main(process.argv.slice(2));
+  } catch (e) {
+    if (!(e instanceof JournalRefused)) throw e;
+    console.error(`days-calls: ${e.message}`);
+    process.exit(2);
+  }
 }

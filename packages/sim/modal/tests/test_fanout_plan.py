@@ -1,6 +1,7 @@
 """fanout_plan.py: shards, the cap split, commands and merging (python3 -I -m unittest discover -s packages/sim/modal)."""
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -112,6 +113,14 @@ class FunnelPlan(unittest.TestCase):
         self.assertLess(cmd.index("--jobs"), cmd.index("--"))
         self.assertGreater(cmd.index("--noise-sources"), cmd.index("--"))
 
+    def test_pi_ab_shards_pin_full_coverage_unless_named(self):
+        # D878: pi-ab defaults to shipped coverage; the presets replay their own --cards, so shards keep the full index.
+        s = plan.plan_pi_ab("train1", "41", 1.0, "p", ["--cards", "x.jsonl"])[0]
+        cmd = plan.shard_command(s)
+        self.assertEqual(cmd[cmd.index("--coverage") + 1], "full")
+        named = plan.shard_command(plan.plan_pi_ab("train1", "41", 1.0, "p", ["--coverage", "shipped"])[0])
+        self.assertEqual(named.count("--coverage"), 1)
+
     def test_funnel_shards_share_one_coverage(self):
         # D877: funnel.ts picks shipped coverage per run where it covers it; a grid's shards must not mix indexes.
         shards = plan.plan_funnel("train1,heldout13", "41-44", "f", ["--blind"])
@@ -190,6 +199,86 @@ class Merge(unittest.TestCase):
     def test_compressed_files_round_trip(self):
         # lab_fanout.py returns zlib-compressed bytes and unpacks them before merge.
         self.assertEqual(zlib.decompress(zlib.compress(b"abc")), b"abc")
+
+
+class Resume(unittest.TestCase):
+    """R4 (D813): each shard is saved as it returns, and a restarted collector re-launches only the unfinished ones."""
+
+    def setUp(self):
+        self.planned = plan.plan_pi_ab("train1", "41,42,43", 3.0, "r", PI)
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def returned(self, shard, code=0, commit="c1"):
+        r = result(shard.name, "pi-ab", code=code, ledger=json.dumps({"costUsd": 0.4}),
+                   out={"timeline": "/tmp/shard/x.timeline", "results": [shard.seeds[0]]},
+                   timeline={"tasks.jsonl": "{}\n"}, cap=shard.cap_usd)
+        plan.save_shard(self.dir, r, plan.shard_fingerprint(shard, commit))
+        return r
+
+    def test_a_restart_runs_only_the_unfinished_shards_and_merges_as_one_run(self):
+        a, b, c = self.planned
+        self.returned(a)
+        self.returned(b, code=1)  # failed: it runs again
+        # Killed before c returned. Without --resume the finished shard is not overwritten.
+        with self.assertRaises(plan.PlanError):
+            plan.resume_plan(self.dir, self.planned, "c1")
+        finished, left = plan.resume_plan(self.dir, self.planned, "c1", resume=True)
+        self.assertEqual([r["name"] for r in finished], [a.name])
+        self.assertEqual([s.name for s in left], [b.name, c.name])
+        # What was read back merges as the shard returned it: its ledger, results and local timeline.
+        rest = [self.returned(b), self.returned(c)]
+        m = plan.merge(self.dir, finished + rest, 3.0)
+        self.assertAlmostEqual(m["spentUsd"], 1.2)
+        self.assertEqual(m["failed"], [])
+        with open(os.path.join(self.dir, a.name, "out.json")) as f:
+            doc = json.load(f)
+        self.assertEqual(doc["results"], [a.seeds[0]])
+        self.assertEqual(doc["timeline"], os.path.join(self.dir, a.name, "out.timeline"))
+        self.assertIn("out.timeline/tasks.jsonl", finished[0]["files"])
+        self.assertNotIn(plan.RETURNED, finished[0]["files"])
+        # Everything finished: a second restart re-launches nothing.
+        self.assertEqual(len(plan.resume_plan(self.dir, self.planned, "c1", resume=True)[1]), 0)
+
+    def test_another_plan_or_commit_cannot_reuse_the_run(self):
+        self.returned(self.planned[0])
+        with self.assertRaises(plan.PlanError):
+            plan.resume_plan(self.dir, self.planned, "c2", resume=True)
+        cheaper = plan.plan_pi_ab("train1", "41,42,43", 1.5, "r", PI)
+        with self.assertRaises(plan.PlanError):
+            plan.resume_plan(self.dir, cheaper, "c1", resume=True)
+        other = plan.plan_pi_ab("train2", "44", 1.0, "r", PI)
+        with self.assertRaises(plan.PlanError):
+            plan.resume_plan(self.dir, other, "c1", resume=True)
+
+    def test_a_rerun_shard_starts_clean_and_its_failed_attempt_still_counts(self):
+        a = self.planned[0]
+        failed = result(a.name, "pi-ab", code=1, ledger=json.dumps({"costUsd": 0.3}), cap=a.cap_usd)
+        failed["files"]["stale.txt"] = b"from the failed attempt"
+        plan.save_shard(self.dir, failed, plan.shard_fingerprint(a, "c1"))
+        again = self.returned(a)
+        self.assertNotIn("stale.txt", plan.load_shard(self.dir, a)["files"])
+        m = plan.merge(self.dir, [again], 3.0)
+        self.assertAlmostEqual(m["spentUsd"], 0.4)
+        self.assertAlmostEqual(m["earlierAttemptsUsd"], 0.3)
+
+    def test_the_wave_loop_saves_shards_in_completion_order_and_names_the_lost_one(self):
+        a, b, c = self.planned
+        r_c = result(c.name, "pi-ab", ledger="", cap=c.cap_usd)
+        r_a = result(a.name, "pi-ab", ledger="", cap=a.cap_usd)
+        lines = []
+        # c finishes first, then Modal loses one shard (an exception, no name), then a.
+        done = plan.collect_wave(self.dir, [a, b, c], iter([r_c, RuntimeError("lost"), r_a]), "c1", "pi-ab",
+                                 log=lines.append)
+        self.assertEqual([(r["name"], r["code"]) for r in done], [(c.name, 0), (a.name, 0), (b.name, -1)])
+        self.assertTrue(any("failed in Modal" in line for line in lines))
+        finished, left = plan.resume_plan(self.dir, self.planned, "c1", resume=True)
+        self.assertEqual(sorted(r["name"] for r in finished), sorted([a.name, c.name]))
+        self.assertEqual([s.name for s in left], [b.name])
+
+    def test_a_new_run_directory_runs_everything(self):
+        finished, left = plan.resume_plan(os.path.join(self.dir, "new"), self.planned, "c1")
+        self.assertEqual((finished, len(left)), ([], 3))
 
 
 def with_requests(name, sent, limited):

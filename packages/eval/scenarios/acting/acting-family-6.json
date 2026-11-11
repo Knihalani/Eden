@@ -1,0 +1,79 @@
+{
+  "id": "acting-family-6",
+  "category": "family",
+  "description": "Family logistics. Two requests owe a stored fact (Maya's nut allergy for the party order, the school's pick-up change) beside a look-alike (a cousin's allergy note, another school's notice); the rest are errands that share names and words with stored items without depending on them.",
+  "clock": "2026-11-12T08:00:00Z",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's family email",
+      "docs": [
+        {
+          "ref": "msg-maya-allergy",
+          "title": "Maya's allergy plan",
+          "text": "Maya is allergic to peanuts and tree nuts; she must not have anything made in a nut kitchen."
+        },
+        {
+          "ref": "msg-cousin-allergy",
+          "title": "Re: Sam's visit",
+          "text": "Sam (your cousin's boy) can't have dairy, but nuts are fine for him."
+        },
+        {
+          "ref": "msg-school-pickup",
+          "title": "Oakfield Primary: early finish",
+          "text": "School finishes at 13:30 on Friday 13 November; pick-up must be from the side gate."
+        },
+        {
+          "ref": "msg-other-school",
+          "title": "St Mary's newsletter",
+          "text": "St Mary's will close at 12:00 on Friday 4 December for staff training."
+        },
+        {
+          "ref": "msg-swimming",
+          "title": "Maya's swimming lessons",
+          "text": "Lessons are on Saturdays at 10:00; parents must wait in the gallery."
+        },
+        {
+          "ref": "msg-piano",
+          "title": "Piano exam entry",
+          "text": "The entry deadline for the Grade 2 exam is 30 November; fees are 48 GBP."
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "description": "The family calendar",
+      "docs": [
+        {
+          "ref": "evt-party",
+          "title": "Maya's 7th birthday party",
+          "text": "Saturday 21 November 14:00, Jump Zone, 12 children."
+        },
+        {
+          "ref": "evt-grandma",
+          "title": "Grandma visits",
+          "text": "Sunday 15 November lunch."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "acting-family-6",
+      "turns": [
+        {
+          "event": {
+            "kind": "session_start"
+          }
+        },
+        {
+          "event": {
+            "kind": "user_message",
+            "text": "Find a good beginner piano book for adults, I want to learn too"
+          },
+          "expect": "neutral"
+        }
+      ]
+    }
+  ]
+}

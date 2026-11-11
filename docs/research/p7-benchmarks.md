@@ -128,6 +128,30 @@ Three readings:
 A first version of this run used the superseded weeks planner (D874) and the train-only card file. It read 437/1106,
 with 33/134 from rare connectors against 404/972. Its numbers are not kept.
 
+### 2.2b Many unused connectors: weekly against daily sweeps (D879)
+
+The same 24 users × 28 days, with 995 noise connectors beside them (`--noise-sources 995 --noise-vocab 1000
+--notify-share 0.05`). Only 5% of connectors notify, and the noise connectors hold no fact. Each arm ran once, $0
+(`.local/p7/many-*.txt`):
+
+| Arm | Hidden handed | Decoys | Rare-connector facts | Background calls a user-day | Noise listings a user-day | Request-time calls a request |
+| --- | --- | --- | --- | --- | --- | --- |
+| weekly sweep of unused sources (default, D356) | 499/1129 | 442/1129 | 30/105 | 128.1 | 115.6 | 5.53 |
+| daily sweep (`syncUnusedSweepMs: 0`) | 498/1129 | 451/1129 | 25/105 | 710.5 | 697.9 | 4.71 |
+| `syncSweepSpread` (trial, D604) | 505/1129 | 459/1129 | 27/105 | 152.0 | 139.3 | 4.41 |
+
+1. **The weekly sweep costs no fact.** It hands 499 facts against the daily sweep's 498, for 18% of the background
+   calls (128 against 711 a user-day), so D356 stands priced. The daily sweep's lower request-time calls (4.71
+   against 5.53) do not make up the difference.
+2. **`syncSweepSpread`:** +6 facts and +17 decoys against the weekly default, for +24 background calls a user-day and
+   −1.1 request-time calls a request. One run each; the fact difference is within what a single run moves.
+3. **Dormancy (D602) is priced from above, not measured.**
+   - A dormant noise connector would be listed once in 28 days instead of weekly. That saves at most about 80 of the
+     116 noise listings a user-day (995/28 ≈ 36 left).
+   - The rare connectors that hold facts are not on the weekly sweep here: they are listed about 5.3 times a
+     user-day in every arm. So the facts a dormancy rule could lose are not in reach of this suite.
+   - Measuring it needs facts planted in connectors the user's lookups never engage.
+
 ### 2.3 The long tail one request a session
 
 `bun run funnel --suite longtail --seeds 41,42,43,44` (stub reader):

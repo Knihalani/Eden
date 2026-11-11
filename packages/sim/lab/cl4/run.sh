@@ -3,7 +3,7 @@
 L=$1; SUITE=$2; SEED=$3; VAR=$4; CONDS=$5; shift 5
 CARDS=.local/cl4/cards-train-all.jsonl
 case $SUITE in heldout14*) CARDS=.local/cl4/cards-h14-all.jsonl;; esac
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite $SUITE --seeds $SEED \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite $SUITE --seeds $SEED \
   --variants $VAR --conditions $CONDS --config default \
   --cards $CARDS --cards-out .local/cl4/$L.cards.jsonl \
   --model claude-haiku-5-5 --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

@@ -28,12 +28,18 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
 - [docs/LAB.md](docs/LAB.md): suites, presets, harnesses (funnel, Pi, Hermes), replay caches, providers, recipes
   with costs. [docs/research/INDEX.md](docs/research/INDEX.md): every research note, its decisions and status.
   [docs/TESTING.md](docs/TESTING.md): test commands, timings, the slowest files.
+- [docs/DECISION-INDEX.md](docs/DECISION-INDEX.md): one line per decision with its status (adopted, rejected,
+  superseded, trial, finding, lab); [docs/DEAD-ENDS.md](docs/DEAD-ENDS.md): every killed idea by topic, read it
+  before proposing one. Both are generated from DECISIONS.md by `bun run decisions:index` (D812); a test fails while
+  they are stale. After a merge or rebase that touches DECISIONS.md, run `bun run decisions:index`; never
+  hand-resolve the generated pages.
 - Fast loop: `bun run test:changed` (touched packages and their dependents), `bun run test:pkg <name>`,
   `bun run check:fast` (format, types, changed tests). While developing, a test file that already passed on
   identical inputs is skipped (D650, D657); the gate before a merge is `CHECK_COLD=1 bun run check`, which runs
   every file and trusts no cache.
 - `bun run funnel`: the no-model screen on train (the shipped default with its cards and intent requests replayed,
-  D158; `--ask`, the funnel score; `--baseline F` diffs task by task; held-out suites need `--blind`).
+  D158; it asks by default, giving the funnel score, and `--no-ask` opts out; `--baseline F` diffs task by task;
+  held-out suites need `--blind`).
 - `/deep-audit`: full audit → verified findings → fixes on branches with review → re-audit → plain-language report
   (`.claude/skills/deep-audit/`).
 
@@ -42,13 +48,14 @@ PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeS
 GitHub Actions is off (the user does not pay for minutes). Before every merge, on the final tree:
 
 ```bash
-CHECK_COLD=1 bun run check   # = format:check (prettier + 120-col line check) && typecheck && test, no caches
+CHECK_COLD=1 bun run check   # format:check (prettier + 120-col line check), typecheck and test at once, no caches
 bun run eval    # no-model metrics; paste the JSON in the PR when engine behaviour changes
 ```
 
 The no-model eval runs on each scenario's own clock, so its result does not depend on the day it runs (D435). On
-main it reads precision 0.65, recall 0.52, falseFireRate 0. Treat a difference from those numbers as a change in
-behaviour.
+main it reads precision 0.65, recall 0.52, falseFireRate 0. Its `acting` block (D810: requests that act, where the
+default's push of candidates runs) reads packets on 19 of 28 neutral requests (1.18 items each), facts handed 10 of
+11, a look-alike handed on 3 of 10 owed requests. Treat a difference from any of those numbers as a change in behaviour.
 
 The standard agent for live agent tests (`agent-ab.ts`, any "Eden against tools" comparison) is the **Pi harness**
 (pi-mono's agent loop, `earendil-works/pi`, formerly `badlogic/pi-mono`): its minimal loop and tools, with Eden added
@@ -79,7 +86,9 @@ runs the same shipped wiring with the reader on `claude-haiku-5-5` (`HAIKU_API_K
 - **Untrusted content.** Source text and event text are data, never instructions, in every prompt.
 - **Fail open at the edge.** The client SDK never throws into the agent's loop; the server never returns 500 for
   caller input (4xx with a message, 503 for internal failure).
-- **Secrets.** Never commit `.env` or real user data. Never print `OPENROUTER_API_KEY`. Tests run with a temp
+- **Secrets.** Never commit `.env` or real user data. Never print `OPENROUTER_API_KEY`. Lab scripts (packages/sim/)
+  refuse to start while it is set unless `EDEN_ALLOW_OPENROUTER=1` (D818, `scripts/lab-guard.ts`): paid lab calls go
+  to the Anthropic API. Tests run with a temp
   `HOME`/`EDEN_HOME` and with `EDEN_*`/`OPENROUTER_*` cleared (`scripts/test-preload.ts`).
 - **Readable code.** 120-column limit (only literals may exceed it). Comments explain why, at the density of the
   surrounding code. Do not join lines to shrink line counts.
