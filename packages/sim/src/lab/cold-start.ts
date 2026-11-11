@@ -28,11 +28,12 @@
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
  */
 import { appendFileSync, writeFileSync } from "node:fs";
-import { cardKey, checkEngineConfig, type CardEnricher, type CardMaker } from "@eden/engine";
+import { checkEngineConfig, type CardEnricher, type CardMaker } from "@eden/engine";
 import type { Model } from "@eden/llm";
 import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
 import { worldOf } from "./ab-common";
+import { formKey } from "./cards-disk";
 import { parseJson } from "./flags";
 import type { UserShape } from "./pi-cost";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
@@ -90,14 +91,15 @@ function record(enricher: CardEnricher, file: string): void {
   const deps = (enricher as unknown as { deps: { maker: CardMaker } }).deps;
   const inner = deps.maker;
   deps.maker = {
-    make: async (items, today, signal, retry, intent) => {
-      const got = await inner.make(items, today, signal, retry, intent);
+    make: async (items, today, signal, retry, intent, options) => {
+      const got = await inner.make(items, today, signal, retry, intent, options);
       // A card the call could not read (null) stays uncovered: no `c`, as a requests-only line (cards-disk.ts).
       const lines = items.flatMap((it, i) => {
         const c = got.cards[i];
         const r = got.requests?.[i];
         if (!c && !r) return [];
-        return [JSON.stringify({ h: cardKey(it), ...(c ? { c } : {}), ...(r ? { r } : {}) })];
+        // A line made by another prompt form is keyed apart (`formKey`, D1060), so the forms never answer each other.
+        return [JSON.stringify({ h: formKey(it, options?.form), ...(c ? { c } : {}), ...(r ? { r } : {}) })];
       });
       // A call cut off at the output cap is sent again (`retry`): the later lines win when the file is read.
       if (lines.length) appendFileSync(file, `${lines.join("\n")}\n`);

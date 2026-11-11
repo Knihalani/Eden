@@ -13,7 +13,15 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rm
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { cardKey, ItemCache, worthCarding, type Card, type CardMaker } from "@eden/engine";
+import {
+  cardKey,
+  ItemCache,
+  worthCarding,
+  type Card,
+  type CardBatch,
+  type CardMakeOptions,
+  type CardMaker,
+} from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
 import { INTENT_INERT } from "./reader-stub";
 import { parseSuites } from "./suites";
@@ -242,6 +250,15 @@ const NONE: Card = { kind: "none", actions: [], entities: [], statement: "" };
 /** Cards a live call is making now, by hash (undefined when the call failed or the model gave none back). */
 type Inflight = Map<string, Promise<Card | undefined>>;
 
+/**
+ * The replay key of an item's card and requests under a prompt form (`CardMakeOptions.form`, D1060): the content hash
+ * alone for the shipped form, `<hash>:f<form>` for another, so one file can hold both and a line made by one form
+ * never answers the other (every reader that keys by `cardKey` alone sees only the shipped form's lines).
+ */
+export function formKey(item: ContextItem, form = 0): string {
+  return form ? `${cardKey(item)}:f${form}` : cardKey(item);
+}
+
 export class DiskCardMaker implements CardMaker {
   readonly cards: Map<string, Card | null>;
   /**
@@ -298,23 +315,70 @@ export class DiskCardMaker implements CardMaker {
     if (!options.shared && options.out) for (const [h, c] of loadCards(options.out)) this.cards.set(h, c);
   }
 
-  async make(items: ContextItem[], today: string, signal: AbortSignal, retry = false, intent = false) {
-    const got = await this.makeCards(items, today, signal, retry, intent);
+  async make(
+    items: ContextItem[],
+    today: string,
+    signal: AbortSignal,
+    retry = false,
+    intent = false,
+    options: CardMakeOptions = {},
+  ): Promise<CardBatch> {
+    const form = options.form ?? 0;
+    if (options.requestsOnly) return this.makeRequests(items, today, signal, options);
+    const got = await this.makeCards(items, today, signal, retry, intent, form);
     if (!intent) return got;
-    const requests = items.map((it) => this.requests.get(cardKey(it)) ?? null);
+    const requests = items.map((it) => this.requests.get(formKey(it, form)) ?? null);
     // Requests with no card: the item is covered, with no constraint (as a card file's uncovered item matches none).
     const cards = got.cards.map((c, i) => c ?? (requests[i] ? NONE : null));
     return { ...got, cards, requests };
   }
 
-  private async makeCards(items: ContextItem[], today: string, signal: AbortSignal, retry: boolean, intent: boolean) {
+  /**
+   * `cardsRequestsFix`'s re-ask (D1060): each item's replayed requests under the form; the items with none go to the
+   * live maker when there is one, and its answers are kept and appended (`{h, r}` with the form's key).
+   */
+  private async makeRequests(items: ContextItem[], today: string, signal: AbortSignal, options: CardMakeOptions) {
+    const form = options.form ?? 0;
+    const requests = items.map((it) => this.requests.get(formKey(it, form)) ?? null);
+    const missing = items.flatMap((_, i) => (requests[i] === null ? [i] : []));
+    let costUsd = 0;
+    if (this.live && missing.length > 0) {
+      const got = await this.live.make(
+        missing.map((i) => items[i]!),
+        today,
+        signal,
+        false,
+        true,
+        options,
+      );
+      costUsd = got.costUsd;
+      missing.forEach((i, k) => {
+        const r = got.requests?.[k] ?? null;
+        if (!r) return;
+        const h = formKey(items[i]!, form);
+        this.requests.set(h, r);
+        this.append({ h, r });
+        requests[i] = r;
+      });
+    }
+    return { cards: items.map(() => null), requests, costUsd };
+  }
+
+  private async makeCards(
+    items: ContextItem[],
+    today: string,
+    signal: AbortSignal,
+    retry: boolean,
+    intent: boolean,
+    form: number,
+  ) {
     const out: (Card | null)[] = [];
     const missing: number[] = [];
     // Items whose card a call (this one's, or another stream's) is making: filled in when it settles.
     const waiting: [number, Promise<Card | undefined>][] = [];
     const settle = new Map<string, (c: Card | undefined) => void>();
     items.forEach((it, i) => {
-      const h = cardKey(it);
+      const h = formKey(it, form);
       out[i] = null;
       const pending = this.inflight.get(h);
       if (this.cards.has(h)) {
@@ -349,11 +413,12 @@ export class DiskCardMaker implements CardMaker {
           signal,
           retry,
           intent,
+          form ? { form } : {},
         );
         costUsd = got.costUsd;
         truncated = got.truncated === true;
         missing.forEach((i, k) => {
-          const h = cardKey(items[i]!);
+          const h = formKey(items[i]!, form);
           const r = got.requests?.[k] ?? undefined;
           if (r) this.requests.set(h, r);
           const c = got.cards[k];

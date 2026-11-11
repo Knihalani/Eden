@@ -422,8 +422,8 @@ const CARD_LOG = opt("card-log", "");
 if (CARD_LOG && cardMaker) {
   writeFileSync(CARD_LOG, "");
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry, intent) => {
-    const got = await make(items, today, signal, retry, intent);
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const got = await make(items, today, signal, retry, intent, options);
     if (!retry) {
       const lines = items.map((it, k) => {
         const kind = got.cards[k]?.kind ?? (cardMaker.cards.has(cardKey(it)) ? "none" : "uncovered");
@@ -441,11 +441,12 @@ if (CARD_LOG && cardMaker) {
 const intentUse = { asked: 0, found: 0 };
 if (cardMaker && RUN.intent) {
   const make = cardMaker.make.bind(cardMaker);
-  cardMaker.make = async (items, today, signal, retry, intent) => {
-    const got = await make(items, today, signal, retry, intent);
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const got = await make(items, today, signal, retry, intent, options);
     if (intent && !retry) {
-      const requests = "requests" in got ? got.requests : [];
-      intentUse.asked += items.length;
+      const requests = got.requests ?? [];
+      // A requests-only re-ask (`cardsRequestsFix`, D1060) reads the same items again: found, not asked again.
+      if (!options?.requestsOnly) intentUse.asked += items.length;
       intentUse.found += requests.filter((r) => r !== null && r.length > 0).length;
     }
     return got;
@@ -964,9 +965,9 @@ async function runSeed(
       ? {
           // Not `async`: the maker's own promise, so the drain batches as without `--ask-diag` (an async wrapper's
           // microtask hops cut the cards-use calls from 822 to 766 and moved when requests were held).
-          make: (items, today, signal, retry, intent) => {
+          make: (items, today, signal, retry, intent, options) => {
             for (const it of items) sentToCards.add(cardKey(it));
-            return cardMaker.make(items, today, signal, retry, intent);
+            return cardMaker.make(items, today, signal, retry, intent, options);
           },
         }
       : cardMaker;
@@ -976,11 +977,11 @@ async function runSeed(
   const cappedMaker: CardMaker | null =
     laneMaker && CARDS_CALLS >= 0
       ? {
-          make: (items, today, signal, retry, intent) =>
+          make: (items, today, signal, retry, intent, options) =>
             cardCalls++ < CARDS_CALLS
-              ? laneMaker.make(items, today, signal, retry, intent)
+              ? laneMaker.make(items, today, signal, retry, intent, options)
               : CARDS_REST === "cards"
-                ? laneMaker.make(items, today, signal, retry, intent).then((b) => cardsOnly(b, items.length))
+                ? laneMaker.make(items, today, signal, retry, intent, options).then((b) => cardsOnly(b, items.length))
                 : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
         }
       : laneMaker;
@@ -988,8 +989,8 @@ async function runSeed(
   const timedMaker: CardMaker | null =
     cappedMaker && CARDS_MS > 0
       ? {
-          make: (items, today, signal, retry, intent) =>
-            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent)),
+          make: (items, today, signal, retry, intent, options) =>
+            Bun.sleep(CARDS_MS).then(() => cappedMaker.make(items, today, signal, retry, intent, options)),
         }
       : cappedMaker;
   const cards = timedMaker

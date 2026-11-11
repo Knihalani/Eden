@@ -524,6 +524,13 @@ export interface EngineConfig {
    */
   cardsSourceAware: boolean;
   /**
+   * Trial (D1060, H2's D1053; docs/research/h2-requests-fix.md). With `cards` and `intent`: the card prompt's first
+   * example reply shows the requests list (`CARD_FORM_REQUESTS`), and a batch whose reply still left it out is asked
+   * once more for its requests only (`requestMessages`, through the enricher's `Budget`). The shipped prompt left the
+   * list out of about a quarter of its replies, and every item of such a batch got no requests.
+   */
+  cardsRequestsFix: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -850,6 +857,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsOrder: true,
   cardsLanes: 4,
   cardsSourceAware: true,
+  cardsRequestsFix: false,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

@@ -875,9 +875,9 @@ async function runWorld(
     const cap = CARDS_CALLS * Math.max(1, effective(config).cardsLanes);
     let calls = 0;
     return {
-      make: (items, today, signal, retry, intent) =>
+      make: (items, today, signal, retry, intent, options) =>
         calls++ < cap
-          ? maker.make(items, today, signal, retry, intent)
+          ? maker.make(items, today, signal, retry, intent, options)
           : Promise.resolve({ cards: items.map(() => null), costUsd: 0 }),
     };
   };
@@ -887,8 +887,8 @@ async function runWorld(
     const maker = cappedMaker();
     if (CARDS_MS <= 0) return maker;
     return {
-      make: (items, today, signal, retry, intent) =>
-        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent)),
+      make: (items, today, signal, retry, intent, options) =>
+        Bun.sleep(CARDS_MS).then(() => maker.make(items, today, signal, retry, intent, options)),
     };
   };
   const cards =

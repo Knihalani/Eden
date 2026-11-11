@@ -628,3 +628,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
 | D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
 | D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D1060 | 2026-11-11 | Trial `cardsRequestsFix`: the card prompt's first example reply shows the requests list, and a batch whose reply still drops it is asked… | trial |
