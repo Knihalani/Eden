@@ -15,5 +15,8 @@
   "syncKeepCut": false,
   "syncEngagedDeep": false,
   "syncUnusedSweepMs": 0,
-  "sourceYield": false
+  "sourceYield": false,
+  "sourceYieldEarn": false,
+  "sourceYieldNames": 0,
+  "sourceYieldEngage": false
 }

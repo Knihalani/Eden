@@ -257,6 +257,8 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
 // `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
 const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+// `--noise-vocab N` (O1): each noise connector gets N words of its own, as the funnel's flag.
+const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
   throw new Error("--noise-sources and --noise-items take whole numbers (--noise-items at least 1)");
 /** Either day mode: `--day K` (fixed days per suite and variant) or `--days D` (a user's mixed days). */
@@ -739,7 +741,9 @@ async function runWorld(
   // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
   let edenCalls = 0;
   const noise =
-    NOISE_SOURCES > 0 && cond.withPartner ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed) : [];
+    NOISE_SOURCES > 0 && cond.withPartner
+      ? noiseSources(world, NOISE_SOURCES, NOISE_ITEMS, TIME_SCALE, seed, NOISE_VOCAB)
+      : [];
   // `--notify-share P` (N1): only that share of the connectors notify; the rest are polled and swept.
   applyNotifyShare([...sources, ...noise], NOTIFY_SHARE, seed);
   const edenSources = [...sources, ...noise].map((s) =>

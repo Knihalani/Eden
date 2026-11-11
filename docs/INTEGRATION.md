@@ -634,6 +634,10 @@ router over 4 children served 3.26x the events per second of one process (D178, 
 
 ### Restarts without a full re-sync (`EDEN_PERSIST_FROZEN_DIR`, opt-in, D425-D427)
 
+**Upgrading across D603** (persist format 3): files written by an earlier version are discarded at startup or first
+read, so each persisted user syncs from the start once. An `EDEN_ENGINE_CONFIG` file that still sets
+`sourceYieldFloor` or `sourceYieldWords` stops the server at startup with "unknown key" (D103): remove the two keys.
+
 By default no item content touches the disk (D8), so a restart re-reads every active user's sources from the start:
 on a full 4-core box about 3.6 minutes of all four cores (A14), and every connector lists everything again. Set
 both of these to keep idle users across a restart instead:

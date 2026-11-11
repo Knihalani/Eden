@@ -97,7 +97,8 @@ or replace the preset's (`--variants hidden`, `--days 8`, `--conditions …`). `
 | `bench-tools` | `tools`, `eden` |
 | `bench-fewer` | `tools`, `eden`, `eden~minus-fewer` (D404) |
 | `bench-parts` | `eden` and `eden~minus-<part>` for nudge, plans, fewer, freshness (M1's arms; `PART_VARIANTS` are checked against `PARTS` by `modal-python.test.ts`) |
-| `bench-yield` | `eden`, `eden~off-yield` (`sourceYield` off) at `--noise-sources 995 --notify-share 0.05` (N1b, D543) |
+| `bench-yield` | `eden`, `eden~off-yield` (`sourceYield` off) at `--noise-sources 995 --notify-share 0.05` (N1b, D543; since D603 the default it compares against includes the earn rule, so it no longer reproduces N1b) |
+| `bench-earn` | `eden`, `eden~off-earn` (`sourceYieldEarn`, `sourceYieldNames`, `sourceYieldEngage` off) at the same scale with `--noise-vocab 1000` (O1, D603) |
 
 Anthropic shards run in **waves**: the planner counts a shard's agent streams (arms × worlds: six train suites ×
 variants, or one for a `--days` user) and starts only as many shards at once as keep the streams on the key at or

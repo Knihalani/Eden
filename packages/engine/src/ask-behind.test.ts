@@ -126,6 +126,9 @@ async function partnerFor(
       ...CORE_CONFIG,
       // The core plus the default's `sync` part, which this trial belongs to (with the core's sync, copies come whole).
       ...SYNC_PART,
+      // These tests are about an ask whose cut copies ARE searched; the earn rule (D603) reads none of a new
+      // user's copies on the question's words alone (`source-yield-partner.test.ts` has that side).
+      sourceYieldEarn: false,
       syncPageSize: 10,
       syncMaxItems: 20,
       syncCallsPerMin: 6_000,

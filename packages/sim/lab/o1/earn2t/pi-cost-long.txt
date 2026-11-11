@@ -1,0 +1,57 @@
+.local/modal/o1-earn2t-long/s000-train-41/out.json: user w41, 8 days (14,13,16,16,12,12,15,16), 0 clashes
+.local/modal/o1-earn2t-long/s001-train-42/out.json: user w42, 8 days (13,13,13,17,19,13,13,17), 0 clashes
+.local/modal/o1-earn2t-long/s002-train-43/out.json: user w43, 8 days (13,12,20,19,14,18,12,14), 0 clashes
+.local/modal/o1-earn2t-long/s003-train-44/out.json: user w44, 8 days (14,20,20,18,15,13,12,14), 0 clashes
+.local/modal/o1-earn2t-long/s004-train-45/out.json: user w45, 8 days (12,18,12,15,17,19,20,19), 2 clashes
+.local/modal/o1-earn2t-long/s005-train-46/out.json: user w46, 8 days (18,17,12,15,18,16,12,15), 0 clashes
+.local/modal/o1-earn2t-long/s006-train-47/out.json: user w47, 8 days (15,12,13,15,16,13,12,14), 0 clashes
+.local/modal/o1-earn2t-long/s007-train-48/out.json: user w48, 8 days (20,19,19,17,15,16,20,18), 0 clashes
+
+$ per 1,000 tasks (agent and Eden per task; bg run = Eden's cards and intent while the user worked, per task; one-time = backfill per user; steady = agent + Eden + bg run; all-in = steady + one-time spread over the user's tasks in this run). Recap turns are probes: not tasks, their $ apart.
+condition        n users   agent    Eden  bg run  steady  all-in  mix st  mix all   one-time $/user (from)  reader/t  Eden conn/t  agent tools/t  wall p50  mean  recaps $
+eden           989     8   0.235   0.000   0.152   0.386   0.386   0.386    0.386           0.0000 (in-run)      0.00         7.27           0.06      1.42  1.52    0.0296
+eden~earn2     989     8   0.232   0.000   0.065   0.296   0.296   0.296    0.296           0.0000 (in-run)      0.00         2.44           0.08      1.35  1.45    0.0292
+
+connector calls per task (agent's source tools; Eden's in the task's window; Eden's background while the user worked) and Eden's one-time backfill calls per user; streams recorded before A3 lack the background and backfill
+eden           agent 0.00  Eden 7.27  background 0.98  mix 8.25  backfill 1005/user (8 users)
+eden~earn2     agent 0.00  Eden 2.44  background 0.54  mix 2.98  backfill 1005/user (8 users)
+
+$ per 1,000 tasks with the connectors priced per plan ($ per 1,000 calls; market.py, list prices, assumed): steady, all-in, and on the 1:1:8 mix
+eden           first-party (quota only)     steady   0.386  all-in   0.386  mix st   0.386  mix all   0.386
+eden           Composio (overage)           steady   2.861  all-in   5.300  mix st   2.861  mix all   5.299
+eden           Unified.to (Pro)             steady   6.572  all-in  12.669  mix st   6.572  mix all  12.669
+eden           Arcade.dev (Team)            steady  82.864  all-in 164.158  mix st  82.861  mix all 164.155
+eden           Pipedream Connect (overage)  steady  99.359  all-in 196.912  mix st  99.356  mix all 196.909
+eden           Zapier MCP (10k tasks)       steady 213.178  all-in 422.917  mix st 213.172  mix all 422.911
+eden~earn2     first-party (quota only)     steady   0.296  all-in   0.296  mix st   0.296  mix all   0.296
+eden~earn2     Composio (overage)           steady   1.189  all-in   3.628  mix st   1.189  mix all   3.628
+eden~earn2     Unified.to (Pro)             steady   2.529  all-in   8.626  mix st   2.529  mix all   8.626
+eden~earn2     Arcade.dev (Team)            steady  30.064  all-in 111.358  mix st  30.063  mix all 111.357
+eden~earn2     Pipedream Connect (overage)  steady  36.017  all-in 133.570  mix st  36.016  mix all 133.569
+eden~earn2     Zapier MCP (10k tasks)       steady  77.096  all-in 286.836  mix st  77.094  mix all 286.833
+
+per kind: n, raised (graded), agent + Eden $ per 1k tasks, wall p50 s
+eden           hidden    101  raised 58/101 (57.4%)  $0.246/1k  p50 1.50
+eden           control   101  raised 1/101 (1.0%)  $0.246/1k  p50 1.53
+eden           neutral   787  raised 9/787 (1.1%)  $0.232/1k  p50 1.40
+eden~earn2     hidden    101  raised 62/101 (61.4%)  $0.244/1k  p50 1.42
+eden~earn2     control   101  raised 0/101 (0.0%)  $0.235/1k  p50 1.42
+eden~earn2     neutral   787  raised 4/787 (0.5%)  $0.230/1k  p50 1.33
+
+per day (long horizon): n, agent and Eden $ per 1k tasks, wall p50 s
+eden           day 0  119  agent   0.249  Eden  0.000  p50 1.44
+eden           day 1  124  agent   0.247  Eden  0.000  p50 1.44
+eden           day 2  125  agent   0.228  Eden  0.000  p50 1.42
+eden           day 3  132  agent   0.224  Eden  0.000  p50 1.42
+eden           day 4  126  agent   0.229  Eden  0.000  p50 1.37
+eden           day 5  120  agent   0.251  Eden  0.000  p50 1.47
+eden           day 6  116  agent   0.212  Eden  0.000  p50 1.31
+eden           day 7  127  agent   0.239  Eden  0.000  p50 1.46
+eden~earn2     day 0  119  agent   0.237  Eden  0.000  p50 1.35
+eden~earn2     day 1  124  agent   0.245  Eden  0.000  p50 1.42
+eden~earn2     day 2  125  agent   0.219  Eden  0.000  p50 1.32
+eden~earn2     day 3  132  agent   0.232  Eden  0.000  p50 1.37
+eden~earn2     day 4  126  agent   0.223  Eden  0.000  p50 1.32
+eden~earn2     day 5  120  agent   0.230  Eden  0.000  p50 1.39
+eden~earn2     day 6  116  agent   0.223  Eden  0.000  p50 1.31
+eden~earn2     day 7  127  agent   0.243  Eden  0.000  p50 1.38

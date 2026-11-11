@@ -346,6 +346,13 @@ Measured on train1–6, seeds 41–42, 4 cores, no key set:
 
 Limits: the rows of the table above ran before D158, intent inert (the intent index finds nothing without a replay
 file), so their pools lack the intent hits that the paid screens had; the prompt sizes are of the stub's reads only.
+**Which intent coverage a run measured (D714).** The checked-in `intent-v2.jsonl.gz` has requests for about 99% of a
+covered seed's items (`cards-enrich.ts --intent` sends every item). The shipped pipeline writes requests only for the
+items a card call reads: about 14% of a user's items when cards are made in-run (181 to 238 of about 1,490 on days
+users w45–w52). So a run that replays the file (the funnel, pi-ab on train seeds 41–44) measures the **full**
+coverage and a run on uncovered seeds with cards made in-run measures the **shipped** coverage; say which beside
+any level you quote, and do not compare levels across the two. Paired differences within one run stand.
+
 Since D158 `bun run funnel` replays the checked-in `intent-v2.jsonl.gz` by default when it covers the run's suites and
 seeds (train seeds 41–44, held-out 10–11 seeds 41–42), and prints `intent: live|inert (why)` under the score header;
 `--intent none` gives the old inert shape. A run says when it is inert: with `intent` on and no replayed request
@@ -471,6 +478,17 @@ days-calls) lets only a share P of the connectors send change notices, the rest 
 estimate is that ~90% of connectors send none: `--notify-share 0.05`). `days-calls.ts --noise-sources 995` runs the
 `--days` user with the noise connectors and prints the planted items that reached the agent and the request-time
 calls by day, so a rule that learns over days can be screened at $0 (about 15 s a user).
+
+**Give the noise connectors words of their own: `--noise-vocab 1000`** (O1, docs/research/o1-earn.md §2b; funnel,
+pi-ab, days-calls). Without it the 995 share 45 sketchable words, so their vocabulary sketches set the same bits and
+any rule that reads sketches across sources looks better than it is: a review found about 27 false holders a
+word that the shared words hid (`sourceYieldEarn` now reads `RareTerms`). `packages/sim/src/lab/o1-rare-bytes.ts`
+prints the sketches' and the table's bytes and false holders a word. Live: `lab_fanout.py --preset bench-earn` (the
+default against the default with the earn rule off, `eden~off-earn`; it passes `--noise-vocab 1000` itself) through
+`packages/sim/lab/o1/run.sh earn …` (two shards at once), reports by `packages/sim/lab/o1/report.sh earn
+'eden~off-earn'` (the pair is the arm minus the default, so the sign is the reverse of O1's runs). `bench-earn2` is
+O1's runs as they were paid: it compares anything only at a commit before D603 (`EDEN_COMMIT`). A fan-out writes
+its results when it ends, so a session that may restart runs a long one in batches (O1 lost 22 finished shards).
 
 Read hidden/decoys, `calls/task`, and the `merged cards use` line's `calls` and `sent` (card calls are stub-counted:
 noise items are not in the replay; price them at $0.000181 a call, A1). Compare task by task against the same seed
@@ -1073,7 +1091,7 @@ python3 -I packages/sim/modal/bench_report.py --pair eden:tools --pair eden~minu
   --group cached=.local/modal/bench-a --group inrun=.local/modal/bench-b --target 1.5
 ```
 
-- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`, `bench-yield` (N1b, D543); `--args` after a
+- **Presets** (`fanout_plan.PRESETS`): `bench-tools`, `bench-fewer`, `bench-parts`, `bench-yield` (N1b, D543), `bench-earn` (O1, D603); `--args` after a
   preset add or replace flags. `python3 -I packages/sim/modal/fanout_plan.py plan --preset … --seeds … --cap …`
   prints the plan, the streams a shard and the shards at once, with no token.
 - **Concurrency is automatic.** Shards run in waves that keep the agent streams on the key at or under
