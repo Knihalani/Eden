@@ -177,6 +177,33 @@ In every dry run with the check wired, the `final` arm hands a packet on fewer n
 18/30 vs 29/30 (dry3-h), 16/30 vs 28/30 (dry4-ps), 8/24 vs 21/24 (dry4-pd) and 5/12 vs 12/12 (dry5-h), and the
 check's calls (`eden.check`, $0.21–0.26 per 1,000 tasks) are the new Eden cost line.
 
+### Review before the go
+
+An independent reviewer read the harness diff and ran typecheck, format and `bun run test:pkg sim` (69 files pass),
+with no paid calls and nothing on heldout19. It confirmed the push check is booked once in both Eden arms
+(5026ba512's traces already carry `checkCalls`), and that `--days` and the journal follow pi-ab point by point. Its
+fixes, made before the go:
+
+- **Tool calls counted for the whole day.** Under `--days`, `worker.py` counted every tool call since the start of
+  the day. The cause is that Hermes returns the history plus the new turn. It now counts the request's own turn:
+  `dry8-hd-raw`, 12 requests, every count equals the timeline's spans. `report.py` already read the spans, so the
+  B19 figures were never affected.
+- **A failed arm did not stop the run.** `go.sh`'s bare `wait` let a failed arm pass, so the next step would spend
+  anyway. It now waits on each arm and stops before the next step (checked at $0).
+- **Partial arms were not flagged.** `report.py` now prints a NOTE for an arm that is partial, has stopped streams,
+  errored tasks or reused units, BIASED included.
+- **`arm-tree.sh` and renames.** It now diffs with `--no-renames` and stages its deletions, so `productHash` is the
+  tree's own (its index has no diff against 5026ba512).
+
+Left as they are:
+
+- **hermes-ab's `--days` and `--resume` have no unit test.** The suite cannot run Hermes; the evidence is the train
+  runs above.
+- **The tasks-hash gate shows less than it might seem.** Both trees share `packages/sim`, so it only shows that
+  Eden's packages do not change how the tasks and worlds are built.
+- **Eden's $/1k:** the numerator includes recap turns and errored tasks, and the denominator counts only the tasks
+  that finished. The same rule applies to every arm.
+
 ## 3. Results
 
 To be filled in after the parent's go.
