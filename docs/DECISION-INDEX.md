@@ -539,6 +539,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D857 | 2026-11-11 | `askTool` (D851) is a documented opt-in proxy flag, not a trial: `EDEN_PROXY_ASK=1`, off unless set, labelled "not measured through the… | adopted |
 | D858 | 2026-11-11 | A dev-mode server refuses to start with `OPENROUTER_API_KEY` in its environment unless `EDEN_ALLOW_MODEL_ROLES=1` | adopted |
 | D859 | 2026-11-11 | `leadShort` (D855) failed its pre-registered rule and is deleted with its code and tests | rejected |
+| D860 | 2026-11-11 | A second frozen form, "warm", that thaws without rebuilding | adopted |
+| D861 | 2026-11-11 | Idle compaction, in the default (`idleCompact`) | adopted |
+| D862 | 2026-11-11 | Two frozen tiers, in the default | adopted |
+| D863 | 2026-11-11 | Finding and recommendation, not a change: persistence (D425) as the documented production default | finding |
+| D864 | 2026-11-11 | Finding: what a second machine needs, nothing built. | finding |
 | D870 | 2026-11-11 | Lab only: `heldout19` is the end-of-wave blind suite, registered unread | lab |
 | D871 | 2026-11-11 | Lab only: `train1r`–`train6r` (`--suite reworded`), train with every request reworded | lab |
 | D872 | 2026-11-11 | Lab only: shipped-coverage card and intent caches, and every funnel run labelled with its coverage | lab |
@@ -547,10 +552,13 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D875 | 2026-11-11 | Lab only: `days-calls.ts` for weeks, more users and the long tail | lab |
 | D876 | 2026-11-11 | Lab only: the benchmark map in docs/LAB.md: each benchmark's question and known biases | lab |
 | D877 | 2026-11-11 | Lab only: the funnel's default coverage is shipped | lab |
+| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
+| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
 | D880 | 2026-11-11 | Lab only: a synthetic-world factory turns the train suites' format into thousands of labelled worlds | lab |
 | D881 | 2026-11-11 | Synth labels come from construction, never from a model. | adopted |
 | D882 | 2026-11-11 | Synth splits are by family cluster, and families are deduped against each other and the train suites. | adopted |
 | D883 | 2026-11-11 | Synth quality: a revision pass by the writer, a blind critic, a hand audit. | adopted |
 | D884 | 2026-11-11 | Lab only: the `synth` suite family runs the generated worlds as hidden-context suites. | lab |
-| D878 | 2026-11-11 | Lab only: pi-ab and hermes-ab default to shipped coverage too (amends D877's "keep replaying the full index") | lab |
-| D879 | 2026-11-11 | Finding: at 1,000 connectors over four weeks, the weekly sweep of unused sources (D356) costs no fact against a daily sweep, at 18% of its… | finding |
+| D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
+| D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
+| D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |

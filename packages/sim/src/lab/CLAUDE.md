@@ -63,6 +63,13 @@ content, any world of the same seed; `n2-widen.ts`) is the `widen` dependency of
 `../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix; `days_hidden.py` resamples
 whole users. Recipes: docs/LAB.md 1f, 1g.
 
+**Offline retrieval screens over days (M3, M5; D911):** `days-calls.ts --corpus-dump F` (each user's items, redacted,
+1,200 characters), `--pool-diag F` rows with the planted id, request, template and pool ids, `--cards-live MODEL
+--cards-out F` (the shipped card coverage, carded live and recorded; needs the spend flags) and `--intent none`.
+`m5-ledger.ts extract` writes typed constraint records per item content (Haiku, pay once, `--prompt v2` the
+rejected variant); `../../lab/m5/m5_match.py` scores the no-model matcher at @5 against a pool dump (D910: stopped).
+`--widen-ranks` feeds only `pushWiden` under `pushCheck` on main (M3's `pushRetrieve` is on its unmerged branch).
+
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run
 inside `bun run check` through `modal-python.test.ts`. **The powered bench (F3, D487):** `lab_fanout.py --preset

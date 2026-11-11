@@ -49,9 +49,31 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
       if (r.pushed) expect(r.got).toBe(true);
       expect(Object.keys(r).sort()).toEqual(
         ["day", "got", "handed", "kind", "like", "likeAhead", "poolSize", "pushRan", "pushed", "rank", "seed", "task"]
-          .concat("today")
+          // M3's offline-screen fields (D900, D911): the planted id, the request and template, the pool's ids.
+          .concat("today", "planted", "pool", "request", "template")
           .sort(),
       );
+    }
+  });
+
+  // M3's corpus dump (D911): the user's items redacted and cut, and the planted rows' ids among them.
+  test("onCorpus dumps the user's items; planted rows carry ids the corpus holds and the pool's ids", async () => {
+    let items: { id: string; title: string; text: string }[] = [];
+    const rows: PlantedRow[] = [];
+    await daysCalls(41, {
+      days: 1,
+      push: "payload",
+      onCorpus: (_seed, xs) => void (items = xs),
+      onPlanted: (row) => void rows.push(row),
+    });
+    expect(items.length).toBeGreaterThan(500);
+    for (const it of items) expect(it.text.length).toBeLessThanOrEqual(1_200);
+    const ids = new Set(items.map((it) => it.id));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(ids.has(r.planted!)).toBe(true);
+      expect(r.template).toMatch(/^train\d\//);
+      expect(r.pool!.length).toBe(r.poolSize);
     }
   });
 

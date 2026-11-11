@@ -589,6 +589,21 @@ only a poll, a sweep or the request's own reads can find it; the surfaced lines 
 connectors the sweep setting moved nothing, D875). Past about 12 days a plan is a weeks plan
 (D874): planted templates are drawn first and neutral requests repeat only templates never planted for the user.
 
+### 1h. A standing-constraint ledger over days users (M5, D910–D911; docs/research/m5-ledger.md)
+
+Stopped (D910); the recipe stays for a later variant. The shipped-coverage days baseline (M3's recipe), each user's
+corpus, the ledger (Haiku, about $0.000035 an item, pay once) and the $0 matcher:
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --cards-live claude-haiku-5-5 \
+  --intent none --cards-out .local/m5/cards.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 3 \
+  --pool-diag .local/m5/pool.jsonl --corpus-dump .local/m5/corpus.jsonl
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus .local/m5/corpus.jsonl \
+  --out .local/m5/led.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 5 --concurrency 6
+python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus .local/m5/corpus.jsonl \
+  --pool .local/m5/pool.jsonl --only fit
+```
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
