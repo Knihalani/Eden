@@ -10,7 +10,10 @@ const [bin, set] = process.argv.slice(2);
 const t0 = performance.now();
 const gate = new TurnGate(new Uint8Array(readFileSync(bin!)));
 const load = performance.now() - t0;
-const texts: string[] = readFileSync(set!, "utf8").trim().split("\n").map((l) => JSON.parse(l).text);
+const texts: string[] = readFileSync(set!, "utf8")
+  .trim()
+  .split("\n")
+  .map((l) => JSON.parse(l).text);
 for (const t of texts.slice(0, 500)) gate.read(t, { how: "none", rest: false });
 const times: number[] = [];
 let n = 0;

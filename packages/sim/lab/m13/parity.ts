@@ -21,4 +21,6 @@ for (const r of rows) {
   if (d < 1e-4 && v.kind === KINDS[r.kind]) same++;
   else console.log("DIFF", d.toExponential(2), v.kind, KINDS[r.kind], JSON.stringify(r.text.slice(0, 80)));
 }
-console.log(`parity ${same}/${rows.length}, worst logit difference ${worst.toExponential(2)}, weights ${gate.bytes} bytes`);
+console.log(
+  `parity ${same}/${rows.length}, worst logit difference ${worst.toExponential(2)}, weights ${gate.bytes} bytes`,
+);

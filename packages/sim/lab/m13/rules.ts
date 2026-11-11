@@ -9,7 +9,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { pushStart } from "@eden/engine";
 
 const [inp, out] = process.argv.slice(2);
-const rows = readFileSync(inp!, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const rows = readFileSync(inp!, "utf8")
+  .trim()
+  .split("\n")
+  .map((l) => JSON.parse(l));
 const lines = rows.map((r) => {
   const s = pushStart(r.text, { open: true, indirect: true });
   return JSON.stringify({ ...r, rule: s?.how ?? "none", rest: s ? s.request !== r.text : false });
