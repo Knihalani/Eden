@@ -59,6 +59,22 @@ if ! cmp -s "$L/tasks-hash-$B9.txt" "$L/tasks-hash-$F9.txt"; then
   exit 2
 fi
 
+# 0a. Every arm's harness loads against its own Eden (D1047): compat.py has nothing left to rewrite, and each arm of
+# each step passes a `--dry` start (modules, worlds, coverage; no call, no spend). A failure stops here.
+if [ -n "$(python3 -I packages/sim/lab/b19/compat.py)" ]; then
+  echo "go.sh: compat.py rewrote imports: review and commit them, then start again" >&2
+  exit 2
+fi
+for k in hermes pi; do
+  for a in raw before final; do
+    KIND=$k bash packages/sim/lab/b19/run.sh $a $P-dry-$k-$a --suite "$SUITE" --seeds "${SEEDS[0]}" --dry \
+      >"$L/$P-dry-$k-$a.log" 2>&1 || {
+      echo "go.sh: the $k $a arm does not start (see $L/$P-dry-$k-$a.log); nothing was spent" >&2
+      exit 2
+    }
+  done
+done
+
 # 0b. Shipped coverage for the final default (D1046). A card prompt the final main changed keys its cards apart (H2's
 # `cardsRequestsFix`, D1060: `<hash>:f3`), and the shipped file holds no such lines for this suite. Then the final
 # tree's own enricher records them over the suite's worlds and users (`cold-start.ts --cards-out`, as P7 made the
