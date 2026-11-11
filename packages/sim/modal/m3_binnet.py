@@ -20,6 +20,7 @@ BINNET = os.path.join(HERE, "..", "lab", "m3r", "binnet.py")
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("torch==2.8.0", index_url="https://download.pytorch.org/whl/cpu")
+    .pip_install("numpy==2.3.3")
     .add_local_file(BINNET, "/app/binnet.py")
 )
 vol = modal.Volume.from_name("eden-retriever", create_if_missing=True)
