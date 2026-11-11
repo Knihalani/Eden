@@ -144,3 +144,36 @@ paired rows above; Opus graded all of them.
   core-stated). No Eden lever is built for it, and four failed wording fixes (D705 and earlier) are consistent with
   this. The headline grade stays as it is (it is what every earlier figure used); a report quoting "raised" should say
   it requires every clause.
+
+## 6. Results: (b) the five best lexical hits on every request
+
+Haiku 5.5 as the agent, Sonnet's grade (`b-short.txt`, `b-days.txt`, `b-mix.txt`). No run stopped on its budget.
+
+| | `tools` | `hits` | `eden` | `eden` − `hits` |
+| --- | --- | --- | --- | --- |
+| Short, seeds 41–42 (384 hidden), templates resampled | 9.6% | 40.1% | 66.1% | **+26.0 (+19.3..+33.1)** |
+| Short: handed at its own request; raised of handed | | 201 (52%); 76.6% | 316 (82%); 80.4% | |
+| Days, w45–w60 (16 fresh users, 128 hidden), users resampled | not run | 48.4% | 60.9% | **+12.5 (+4.7..+20.3)** |
+| Days: at its own request; earlier that day only (raised); not that day | | 70; 41 (11); 17 | 66; 40 (23); 22 | |
+| Confirmed concerns, control and neutral (short; days) | 0; | 0; 0 | 0; 0 | |
+| Neutral requests given a packet (short; days) | | 100%; 100% | 97%; 97% | |
+| Agent + Eden $ per 1,000 tasks, 1:1:8 mix (short) | −$0.040 | **−$0.104** (−0.116..−0.091) | $0.264 | |
+| Same, days (users resampled) | | **+$0.017** (+0.011..+0.024) | $0.236 | |
+| Wall a task (short; days) | +1.05 s | −0.68 s; +0.04 s | 2.20 s; 1.47 s | |
+
+`hits` − `tools`, short: +30.5 points (+23.7..+37.2).
+
+- **Eden's selection earns its keep (the pre-registered reading holds on both horizons): +26.0 points one request a
+  session and +12.5 over users' days over pushing the five best lexical hits.** Pushing any retrieval is worth about
+  as much again over the agent with its own search tools (+30.5).
+- **The gain is which items are handed, not how the agent reads them.** Where both arms handed the fact at its
+  request the agent raised it alike (short 149 against 148 of 189; days 39 against 39 of 49). One request a session
+  Eden hands the fact in 82% of tasks against 52%: cards, intent requests and the ask (`ask_context` is part of the
+  `eden` arm; `hits` has none). Over days `hits` hands the fact at its own request slightly more often (70 against
+  66; it has no not-twice ledger), but the agent raises fewer of them (73% against 83%) and far fewer of those
+  handed earlier the same day (11 of 41 against 23 of 40): five look-alikes on every request bury the fact.
+- **Silence is not what separates them.** Eden puts a packet on 97% of nothing-to-add requests against `hits`' 100%,
+  with 3.8 items against 5.0 (weak point Q4 stands). No arm had a Sonnet-confirmed false concern.
+- **Cost.** One request a session `hits` is $0.10 per 1,000 tasks cheaper and 0.68 s faster than `eden`: Eden's
+  agent calls `ask_context` (0.64 tool calls a task) and takes half a model turn more. Over days `hits` is $0.017 per
+  1,000 dearer: five items on every request stay in the day's transcript.
