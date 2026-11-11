@@ -102,7 +102,14 @@ than live state would be worth building, but not this one.
 The D996 peak-hour shape (`users.bench.ts 200 3000 --prose --sources=20 --waves=6 --warm-waves=5`, one run each on
 the merged trees, RSS a user at the steady state, a sixth live):
 
-PEAKS
+| Tree | RSS a user, no model key | With `--cards` | First event p99 (no key / cards) |
+| --- | --- | --- | --- |
+| main (b99f0171) | 5.20 MB | 10.42 MB | 33.0 / 29.5 ms |
+| D998, merged | **4.71 MB (−9.4%)** | **8.43 MB (−19.1%)** | 26.0 / 40.1 ms |
+
+The peak's five-sixths warm users gain less than a live one (a warm user holds no sketcher or vocabulary strings
+until thawed); a keyed user's card state stays live while warm, so the card levers count there too. `sizing.py`'s
+peak row is now 4.71 MB.
 
 ## 4. Decision
 
