@@ -36,6 +36,7 @@ import { plantTrain4 } from "./hidden-train4";
 import { plantTrain5 } from "./hidden-train5";
 import { plantTrain6 } from "./hidden-train6";
 import { formOf, rewordOf } from "./reword";
+import { plantSynth, readWorlds, SAMPLE_PATH, synthPath } from "./synth/suite";
 
 export type { HiddenTask };
 /** `neutral` (RealUse-1): the same requests, nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
@@ -215,6 +216,10 @@ export const SUITES: Record<string, Plant> = {
       return [`${name}rw`, rewordedForms(name, withNeutral(name, p))];
     }),
   ),
+  // M2's generated worlds (D884): a committed sample of the validation split, one synth world a seed. The full
+  // splits (`synth-train`, `synth-val`, `synth-test`) and any `synth:<file>` register when a command names them,
+  // since their data lives on the Modal volume, not in git (parseSuites).
+  "synth-sample": plantSynth("synth-sample", () => readWorlds(SAMPLE_PATH)),
 };
 for (const n of [1, 2, 3, 4, 5, 6]) SUITES[`train${n}r`] = reworded(`train${n}r`, `train${n}`);
 export const SUITE_NAMES = Object.keys(SUITES);
@@ -253,11 +258,36 @@ export const UNREAD_BLIND: string[] = ["heldout19"];
  * them.
  */
 const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
-const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n));
+// Generated suites (D884) stay out of `all` too: their splits are not in git, and `all` means the hand-written suites.
+const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n) && !n.startsWith("synth"));
+const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
 
 /**
- * A `--suite` value: a comma list of suite names, `all` (every suite but those in UNRUN_BLIND), `heldout-all`, or
- * `train` (the six broad tuning suites), `train-rw` (the same, reworded: P2, `reword.ts`);
+ * Registers a generated suite on first use (D884): `synth-train|val|test` read `synthPath(<split>)`, `synth:<file>`
+ * reads that worlds file, and `@K` after any of them (or `synth-sample`) plants K worlds a seed. `synth` names the
+ * train and validation splits; `synth-test` is the generated test split M1 and M3 measure on, so it is only ever
+ * named on its own.
+ */
+function registerSynth(name: string): boolean {
+  if (name in SUITES) return true;
+  // `@K`: K synth worlds a seed (a `--days` user needs 12-20 requests a day; one world has 6-8).
+  const at = name.lastIndexOf("@");
+  const [base, k] =
+    at > 0 && /^\d+$/.test(name.slice(at + 1)) ? [name.slice(0, at), name.slice(at + 1)] : [name, undefined];
+  const perSeed = k === undefined ? 1 : Number(k);
+  if (!Number.isInteger(perSeed) || perSeed < 1) return false;
+  const split = SYNTH_SPLITS.includes(base) ? base.slice("synth-".length) : undefined;
+  const file = base.startsWith("synth:") ? base.slice("synth:".length) : undefined;
+  if (!split && !file && base !== "synth-sample") return false;
+  const load = () => readWorlds(file ?? (split ? synthPath(split) : SAMPLE_PATH));
+  SUITES[name] = plantSynth(name, load, perSeed);
+  return true;
+}
+
+/**
+ * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
+ * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's, `reword.ts`)
+ * or `synth` (the generated train and validation splits);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {
@@ -274,17 +304,22 @@ export function parseSuites(arg: string): string[] {
             ? TRAIN
             : name === "reworded"
               ? REWORDED_TRAIN
-              : name === "train-rw"
-                ? TRAIN_RW
-                : [name];
+              : name === "synth"
+                ? ["synth-train", "synth-val"]
+                : name === "train-rw"
+                  ? TRAIN_RW
+                  : [name];
     for (const n of names) {
-      if (!(n in SUITES))
+      if (!registerSynth(n) && !(n in SUITES))
         throw new Error(
-          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw)`,
+          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, synth, ` +
+            "synth-train, synth-val, synth-test, synth:<file>)",
         );
       if (!out.includes(n)) out.push(n);
     }
   }
   if (!out.length) throw new Error("no suite given");
+  if (out.length > 1 && out.some((n) => /^synth-test(@\d+)?$/.test(n)))
+    throw new Error("synth-test is the generated test split (D884): name it on its own");
   return out;
 }

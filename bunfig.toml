@@ -1,3 +1,7 @@
+# Every `bun` started here (not `bun test`, which reads [test] below): a lab script under packages/sim/ refuses to
+# start while OPENROUTER_API_KEY is set, unless EDEN_ALLOW_OPENROUTER=1 (scripts/lab-guard.ts).
+preload = ["./scripts/lab-guard.ts"]
+
 [test]
 # Throwaway HOME and EDEN_HOME, inherited EDEN_* cleared. Applies to `bun test` started from the
 # repo root only: Bun reads bunfig.toml from the working directory.

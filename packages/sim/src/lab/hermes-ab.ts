@@ -83,7 +83,7 @@ import {
   type Task,
 } from "./ab-common";
 import { variantsFor } from "./neutral";
-import { DiskCardMaker, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
+import { DiskCardMaker, harnessCoverage, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
 import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
@@ -155,14 +155,23 @@ const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests (one spare) and its grading. */
 const TASK_REQUESTS = MAX_ITERATIONS + 2;
 let capStopped = 0;
-const CARDS_FILE = opt("cards", "");
+// `--coverage` (D878): shipped coverage by default where it covers the run, replayed as cards and intent; a run that
+// names its own `--cards`/`--intent` pins `--coverage full`.
+const COVERAGE = harnessCoverage({
+  coverage: opt("coverage", ""),
+  cards: opt("cards", ""),
+  intent: opt("intent", "default"),
+  suites: SUITE_LIST,
+  seeds: SEEDS,
+});
+const CARDS_FILE = COVERAGE.cards;
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) throw new Error(`--cards-out ${CARDS_OUT} is the --cards file`);
 if (CARDS_FILE && !existsSync(CARDS_FILE)) throw new Error(`--cards ${CARDS_FILE}: no such file`);
 // The intent requests (D158), resolved as pi-ab does: the checked-in file by default where it covers the run, with
 // cards replayed and intent on; `--intent none` opts out; a run it does not cover is labelled intent inert.
 const INTENT_WANTED = CONDITIONS.some((c) => c.withPartner && effective(c.config).intent && effective(c.config).cards);
-const INTENT = harnessIntent(opt("intent", "default"), {
+const INTENT = harnessIntent(COVERAGE.intent, {
   wanted: INTENT_WANTED,
   cardsReplayed: !!CARDS_FILE,
   suites: SUITE_LIST,
@@ -817,6 +826,7 @@ console.error(
     `, concurrency ${CONCURRENCY}, requests ≤${PACER.remaining === Infinity ? "∞" : PACER.remaining}`,
 );
 console.error(`hermes-ab: ${INTENT_LINE}`);
+console.error(`hermes-ab: ${COVERAGE.note}`);
 if (DRY) process.exit(0);
 
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: labRouter(streams), idleTimeout: 255 });
@@ -862,6 +872,7 @@ writeFileSync(
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
       ...(CARDS_FILE ? { cards: { replay: CARDS_FILE, out: CARDS_OUT } } : {}),
       ...(INTENT_WANTED ? { intent: { line: INTENT_LINE, files: INTENT_FILES, ...intentCount } } : {}),
+      coverage: COVERAGE.coverage,
       timeScale: TIME_SCALE,
       ...connectorHeader(CONNECTORS),
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),

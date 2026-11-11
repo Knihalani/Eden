@@ -4,7 +4,7 @@ cd "$(dirname "$0")/../../../.."   # the repo root; jobs.txt lines: PHASE SUITE 
 P=$1; S=$2; N=$3; V=$4; C=$5; VC=${6:-'{}'}
 mkdir -p .local/w2b/$P
 L=w2b-$P-$S-$N
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite $S --seeds $N --variants $V \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite $S --seeds $N --variants $V \
   --conditions $C --config default --variant-config "$VC" \
   --cards .local/w2b/enrich/cards-merged.jsonl --cards-out .local/w2b/$P/$L.cards.jsonl \
   --intent .local/w2b/enrich/intent-v2.jsonl \

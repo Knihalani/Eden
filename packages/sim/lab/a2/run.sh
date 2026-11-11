@@ -5,7 +5,7 @@
 L=$1; PUSH=$2; CONDS=$3; shift 3
 VC='{"lift":{"pushCandidateLift":true},"past":{"askPastShown":true},"both":{"pushCandidateLift":true,"askPastShown":true},"ls":{"pushCandidateLift":true,"pushCandidateStress":true}}'  # the switches are in commit d096b7ba only
 MODEL=${A2_MODEL:-claude-haiku-5-5}
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --suite train --conditions $CONDS --config default \
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --coverage full --suite train --conditions $CONDS --config default \
   --variant-config "$VC" \
   --cards .local/a2/cards-all.jsonl --cards-out .local/a2/runs/$L.cards.jsonl \
   --model $MODEL --grader claude-haiku-5-5 --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 \

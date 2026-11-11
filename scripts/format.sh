@@ -16,12 +16,14 @@ prettier=node_modules/.bin/prettier
 # hands Prettier only the files whose content (or path, which picks the parser) it has not seen. Prettier's own
 # --cache cannot do this across checkouts: it keys absolute paths, so every new git worktree started cold (13 s).
 # The set lives under the git common dir, which every worktree of the repo shares, in a file named by a key over
-# everything else that decides the result: the Prettier version and every Prettier config, ignore, .editorconfig
-# and package.json file (package.json may hold a "prettier" key). Content is hashed from the working tree, raw
-# (--no-filters), so unstaged edits count. Writes go to a temp file renamed into place: worktrees that check at once
-# can lose each other's additions (a later run re-checks those), never corrupt the set. CHECK_COLD=1 neither reads
-# nor writes it, for a final run that trusts nothing from an earlier one. Any failure here falls back to checking
-# every file.
+# everything else that decides the result: the Prettier version, every Prettier config, ignore, .editorconfig and
+# package.json file (package.json may hold a "prettier" key or name a plugin), and bun.lock (any plugin's version). A
+# key that covers too much only re-checks more. Content is hashed from the working tree, raw (--no-filters), so
+# unstaged edits count. Writes go to a temp file renamed into place: worktrees that check at once can lose each
+# other's additions (a later run re-checks those), never corrupt the set. The cold gate (CHECK_COLD=1) reads it too
+# (D819): an entry is Prettier's own verdict on exactly that content under exactly that key, so it is not a result
+# that could go stale. FORMAT_COLD=1 checks every file without it. Any failure here falls back to checking every
+# file. `--key` prints the key (format-key.test.ts changes each input and expects a new one).
 #
 # What enters the set comes only from Prettier's exit status and bare paths, never from parsing its log: --check runs
 # Prettier as `--list-different --no-color`, which prints each unformatted path alone on a line. (Parsing `[warn]
@@ -39,6 +41,7 @@ shared_set() {
       grep -E '(^|/)(\.prettierrc[^/]*|prettier\.config\.[^/]*|\.prettierignore|\.editorconfig|package\.json)$' |
       grep -v -E '^archived/'
   ) || return 1
+  configs=$(printf '%s\n' "$configs" bun.lock | grep -v '^$' | sort -u)
   key=$(
     echo "prettier $version"
     paste -d' ' <(git hash-object --no-filters --stdin-paths <<<"$configs") <(echo "$configs")
@@ -59,7 +62,11 @@ entries() {
 set_file=
 known=
 unknown=
-if [ "${CHECK_COLD:-}" != "1" ]; then
+if [ "${1:-}" = "--key" ]; then
+  basename "$(shared_set)"
+  exit
+fi
+if [ "${FORMAT_COLD:-}" != "1" ]; then
   set_file=$(shared_set 2>/dev/null) || set_file=
 fi
 if [ -n "$set_file" ]; then
@@ -104,7 +111,7 @@ remember() {
 # all_known: true, saying so, when the set holds every file and Prettier has nothing to do (it fails on no files).
 all_known() {
   [ -z "$todo" ] || return 1
-  echo "Prettier: all $(wc -l <<<"$files" | tr -d ' ') files already known formatted (CHECK_COLD=1 rechecks)."
+  echo "Prettier: all $(wc -l <<<"$files" | tr -d ' ') files already known formatted (FORMAT_COLD=1 rechecks)."
 }
 
 # check: Prettier's --check over $todo, reported in its words but run as --list-different. Exit 0 remembers all of

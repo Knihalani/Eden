@@ -45,17 +45,22 @@ describe("RareTerms", () => {
     expect(wrong).toBeLessThanOrEqual(2);
   });
 
+  // The table fills at about 256,000 words (4 bytes a slot, 1 MB): 300,000 passes it by 38,000. A full table scans
+  // every segment on each add, so these two are CPU-bound (about 1 s each alone, several times that beside three
+  // other test files): they carry their own timeout rather than Bun's 5 s default, which one timed out on under
+  // parallel load (weak-points-1111.md R1).
   test("bounded: past its last segment a word is not added, and the table stays at 1 MB", () => {
     const t = new RareTerms();
-    for (let i = 0; i < 400_000; i++) t.add(`s${i % 50}`, ...h(`w${i}`));
+    const words = 300_000;
+    for (let i = 0; i < words; i++) t.add(`s${i % 50}`, ...h(`w${i}`));
     expect(t.bytes).toBeLessThanOrEqual(1 << 20);
     expect(t.dropped).toBeGreaterThan(0);
     // A handful of words meet another's tag in their reach and read as that word (a false holder at worst).
-    expect(t.size + t.dropped).toBeGreaterThan(399_900);
+    expect(t.size + t.dropped).toBeGreaterThan(words - 100);
     // What was added first is still read.
     expect(t.holders(...h("w7"), 2)).toEqual(["s7"]);
     expect(MAX_SEGMENTS).toBe(67);
-  });
+  }, 30_000);
 
   test("a full table fails towards common: a word a second source could not be kept under names no one", () => {
     const t = new RareTerms();
@@ -74,7 +79,7 @@ describe("RareTerms", () => {
       expect(t.holders(...h(`w${i}`), 2)).toEqual([]);
     }
     expect(refused).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   test("past the last source number a word another source holds is marked common, not left rare", () => {
     const t = new RareTerms();

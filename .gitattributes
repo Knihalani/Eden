@@ -1,0 +1,3 @@
+# Generated from docs/DECISIONS.md (D812): a merge keeps both sides, then `bun run decisions:index` rewrites them.
+docs/DECISION-INDEX.md merge=union linguist-generated=true
+docs/DEAD-ENDS.md merge=union linguist-generated=true
