@@ -35,7 +35,9 @@ a traceback, a file:line, "N failed, M passed", or a third of the words symbols 
 ("haha", "ugh", "morning!", "lmaooo", "jajaja").
 
 **Funnel** (`bun run funnel --suite S --seeds 41,42,43,44 --jobs 4 [--set '{"pushIndirect":true}'] -- --neutral`;
-`compare_rw.py`; 768 tasks a variant):
+`compare_rw.py`; 768 tasks a variant; run before main's merge at aecd952b. The final review re-ran it at HEAD:
+every "handed" figure the same, "surfaced" one lower in each row (634 / 553, 609 / 540, 629 / 555), D842's calendar
+change):
 
 | Arm | Hidden surfaced | Decoys surfaced | Planted handed in the push | Decoy handed | Neutral given a packet |
 | --- | --- | --- | --- | --- | --- |
@@ -53,6 +55,7 @@ no task.
 The rule was fitted on my own negatives (`gate-negatives.ts`: 36 log lines, chatter, statements and questions) and on
 train-rw, so it was scored on sets written blind. Each set was scored once, with the rule frozen in a commit first
 (v1 at 0a45a2b1, v2 at 2d438b62). Set 1 then served to revise the rule (v2), so only set 2 is a clean score of v2.
+The rule after review (1927cc19) reads set 2 as logs 4 of 30 and statements 13 of 40 (§3.3), post hoc.
 
 | Messages | Start a push today | v1 (set 1) | v2 (set 2, clean) |
 | --- | --- | --- | --- |

@@ -163,3 +163,17 @@ describe("pushIndirect in the partner (D820)", () => {
     expect(await packets(setup({ pushIndirect: true }), log)).toHaveLength(0);
   });
 });
+
+describe("pushIndirect and plan alerts (review of D820)", () => {
+  test("an indirect start is not kept as an acting request; a listed one still is", async () => {
+    const acted = (p: ContextPartner) =>
+      (p as unknown as { sessions: Map<string, { acted?: unknown[] }> }).sessions.values().next().value?.acted
+        ?.length ?? 0;
+    const indirect = setup({ pushIndirect: true, planConflict: true });
+    await packets(indirect, "I need to pay Dean's invoice DN-44 today");
+    expect(acted(indirect)).toBe(0);
+    const listed = setup({ pushIndirect: true, planConflict: true });
+    await packets(listed, "Pay Dean's invoice DN-44 today");
+    expect(acted(listed)).toBe(1);
+  });
+});

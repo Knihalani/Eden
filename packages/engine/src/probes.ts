@@ -195,7 +195,7 @@ const INDIRECT = new RegExp(
       `let${A}s|let\\s+us`,
       // Questions about acting: "Should I …?", "Shall we …?", "Is it OK to …?", "Would it be fine to …?".
       `(?:should|shall|can|could|may)\\s+(?:i|we)`,
-      `(?:is|would)\\s+it\\s+be\\s+(?:ok(?:ay)?|fine|possible|alright|all\\s+right)\\s+to`,
+      `would\\s+it\\s+be\\s+(?:ok(?:ay)?|fine|possible|alright|all\\s+right)\\s+to`,
       `is\\s+it\\s+(?:ok(?:ay)?|fine|alright|all\\s+right)\\s+to`,
       `(?:do\\s+you\\s+think|i\\s+think|i${A}m\\s+thinking|i\\s+reckon|maybe)\\s+(?:i|we)\\s+should`,
       // Asking the assistant: "I want you to …", "I'd love it if you could …", "I was wondering if you could …".

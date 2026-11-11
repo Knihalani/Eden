@@ -884,7 +884,9 @@ export class ContextPartner {
         : null;
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
-    if (opened) internal.open = true;
+    // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can
+    // read as listed, and D301 measured only listed-verb requests (the review of D820).
+    if (opened || (start && event.kind === "user_message" && start.request !== event.text)) internal.open = true;
     const push =
       this.config.readerPush &&
       this.config.askReader &&
