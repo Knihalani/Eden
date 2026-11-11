@@ -35,5 +35,5 @@ def load(corpus, pool):
         suite = tmpl.split("/")[0] if "/" in tmpl else p.get("suite", "days")
         reqs.append({"w": k, "request": p["request"], "planted": p.get("planted") or "", "pool": ids,
                      "handed": handed, "kind": p.get("kind") or p.get("variant"), "template": tmpl,
-                     "fold": "held" if suite in HELD else "fit", "detail": p.get("detail", "")})
+                     "fold": "held" if suite in HELD or suite.startswith("synth-test") else "fit", "detail": p.get("detail", "")})
     return worlds, reqs
