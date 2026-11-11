@@ -58,14 +58,18 @@ hashed again: they are 12 incompressible bytes a term) and the index (`SparseInd
 term ids, so entries keep their doc), and rebuilds each item around a copy of its bytes (`packedFrom`). Nothing is
 tokenized, indexed, inflated or deflated. `thawSteps` reads either form by its first four bytes.
 
-One user of 3,000 items (`thaw.ts` scratch script, 12 freeze/thaw rounds, median of the last 10; [T] = quiet machine):
+One user of 3,000 items, put in one call (a scratch script, 12 freeze/thaw rounds, median of the last 10; three runs
+on a quiet machine, load average 0.7; the freeze column includes two ticks that do nothing):
 
-| Text | Form | Freeze | Thaw | Blob, bytes an item |
-| --- | --- | --- | --- | --- |
-| Sim world | compact (today) | [T] | [T] | 101 |
-| | warm | [T] | [T] | [T] |
-| Prose | compact | [T] | [T] | 435 |
-| | warm | [T] | [T] | 914 |
+| Text | Form | Freeze | Thaw | Longest sliced step | Blob, bytes an item |
+| --- | --- | --- | --- | --- | --- |
+| Sim world | compact (before) | 38.6-47.6 ms | 118.4-131.8 ms | 9.8-13.6 ms | 84 |
+| | warm | 9.3-9.9 ms | 8.2-8.8 ms | 6.8-9.4 ms | 412 |
+| Prose | compact | 68.7-72.4 ms | 205.5-206.5 ms | 17.4-22.7 ms | 408 |
+| | warm | 18.3-21.1 ms | 15.7-16.9 ms | 9.9-14.1 ms | 890 |
+
+So a thaw is 13-15x faster and a freeze 3.5-4.5x; the warm blob is 2.2x the compact one on prose and 4.9x on the
+sim's text. (`users.bench.ts`'s blobs read 101 and 435 B an item compact: its items carry a per-user suffix.)
 
 Where the warm prose blob's bytes go (scratch breakdown, bytes an item): item text 607 (each item's own deflate, the
 live form since D188), postings 87 and forward arena 107 after varint and zstd, terms 30, the rest about 80. The
@@ -108,19 +112,69 @@ One run a cell. Prose users are heavier (more distinct words: 19,128 terms at 3,
 warm blobs are 2.1x the compact ones, so the gain is smaller there. The prose corpus is this repository's docs (one
 author), not mail; it is the honest side of the sim's templated text, not a stand-in for users.
 
-**CPU.** A pause longer than two minutes now costs a warm freeze and a warm thaw, about [T] ms of CPU on prose; a pause
-past 30 minutes adds a warm thaw before the compact freeze it always had. At the lab's rhythm (a pause after each
-request, six an hour) that is about [CPU] s an hour per active user; for the prose 1/4 box above (3,906 users, 977
-active) about [CORE] of a core of four. Returning users wake in 10-20 ms instead of 150-300 when back within 30 minutes.
-The sliced jobs bound a warm thaw's longest step at [T] ms (the decompress and parse of its head).
+**CPU.** A pause longer than two minutes now costs a warm freeze and a warm thaw, about 36 ms of CPU on prose (18 on
+the sim's text); a pause past 30 minutes adds a warm thaw (16 ms) before the compact freeze it always had. At the lab's
+rhythm (a pause after each request, six an hour) that is about 0.22 s an hour per active user; for the prose 1/4 box
+above (3,906 users, 977 active) about 0.06 of a core, 1.5% of four (arithmetic on the measured pieces). In return, a
+user back within 30 minutes wakes in 8-17 ms of CPU instead of 120-210, and the timer's tick walks the users every
+minute instead of every ten (a few comparisons a user). The sliced scheduler gives the loop back between steps; a warm
+thaw's longest step (the head's decompress and parse) is 7-14 ms, shorter than a compact thaw's (10-23 ms).
 
 ## 4. Persistence: the restart, the disk, the posture
 
-[R]
+**What changed in D425 with D862.** A warm freeze writes nothing: an active user pauses every few minutes, and each
+pause would have written (and its thaw deleted) a file of 1-3 MB, on the order of 10 MB/s on a full box. Files are
+written at the compact freeze (30 minutes idle) and at shutdown (`flush`: live and warm users, the warm ones in the
+warm form, so a restart wakes them fast). A crash loses the users used within the last 30 minutes (they re-sync), as
+before. Format 4 is written; format 3 (compact) files are still read.
+
+**The restart** (`restart.bench.ts 200 3000` and `--warm`: 200 users at the cap, three connectors answering in 20-80 ms,
+the bench workload's text, every user returning at once 5 minutes after the shutdown):
+
+| | Every user synced again | CPU | Listing calls | Items listed | Read and thaw a user |
+| --- | --- | --- | --- | --- | --- |
+| No persistence (today's default) | 121.4-123.2 s | 128.9-131.6 s | 6,000 | 600,000 | – |
+| Persisted, compact files | 33.6 s | 37.7 s | 600 | 3,000 | 2.6 ms + 158.6 ms |
+| Persisted, warm files (shutdown) | 6.0 s | 7.6 s | 600 | 3,000 | 4.2 ms + 25.8 ms |
+
+Without persistence a restart costs every returning user a full backfill (on per-call connector plans, 30 listings a
+user here and about 1,000 at 1,000 sources, o1-sweep) and their first minutes of answers; with it, a poll of what is
+new.
+
+**The disk.** Files at the cap: 262 B an item compact and 602 B warm on the workload's text (0.79 and 1.8 MB a user);
+408 and 890 B on prose (1.2 and 2.7 MB). A prose box of 3,906 users with a file each is about 4.7 GB compact, past
+today's default directory cap of 4,096 MB (`EDEN_PERSIST_MAX_MB`: a freeze past it is not written, so those users would
+re-sync after a restart). Writes: about 1.2-2.3 ms a user (encrypt, write, rename). The shutdown's 1.5 s covers few
+users: a live user's warm freeze is about 20 ms on prose (72 ms compact before D862), so about 70 live users, plus
+already-warm ones at 2.3 ms a write; the rest re-sync, as a crash's would.
+
+**The posture (THREAT-MODEL T12).** With persistence on by default, most users' redacted items would be on disk most of
+the time (any user idle more than 30 minutes), encrypted under a key that sits in the environment beside the files: a
+host compromise reads both. Deleting a file does not scrub its blocks (an encrypted volume is needed under it); there
+is no key rotation (a new key discards every file); file sizes and times show how much a user holds and when they were
+last active. What is on disk is what memory already holds (redacted, D10), bounded by item expiry and 7 days (D428).
+
+**Frozen-user memory.** D425 alone keeps each frozen user's blob in memory as well, so persistence changes nothing
+there. D652 (disk only, a trial) is what turns it into memory: O2 measured a compact frozen user 0.62 → 0.35 MB RSS,
+1.2x more users at a twentieth active and 1.06x at an eighth. With D862 most frozen users are compact, so the gain
+should be of that size; not re-measured here.
 
 ## 5. Recommendation on persistence by default
 
-[R]
+Recommended, as the documented production default, with three conditions; it is the owner's decision (D8, D425).
+
+1. **Not silently on.** It needs a key the operator provides; an auto-generated key stored beside the files would add
+   nothing. So "on by default" should mean: the production docs and the deploy template set
+   `EDEN_PERSIST_FROZEN_DIR`/`EDEN_PERSIST_KEY`, and a server started without them logs once that a restart will
+   re-read every user's sources.
+2. **Size the directory.** Raise the default cap from 4 GB to what a box's users need at the cap (about 5 GB of
+   compact files for a prose box of 3,900 users; more with 1,000-source users), or derive it from users per box.
+3. **With it, D652 (disk only).** Once the files are on, the memory's copy of a compact frozen user is a duplicate;
+   promoting D652 with persistence is about 1.1-1.2x more users at low active shares for a thaw 6-9 ms slower (O2).
+
+Against: content at rest on every server by default, which D8 has kept off since the start; what it buys is restarts
+(6-34 s instead of about 2 minutes for 200 users, a tenth of the connector calls), which matter most for operators on
+per-call connector plans and for deploys.
 
 ## 6. More than one machine (design, nothing built)
 
