@@ -287,3 +287,13 @@ epochs). Fold A, held-out days requests:
 Ingest becomes a lookup and two small products an item, so no dependency and no backfill CPU to speak of; it reaches
 about two thirds of asym's gain at @5 and misses both bars by a hair. The transformer at ingest is what buys asym's
 separation (alone 152 against 128 at @15).
+
+## 6. No-embeddings era (the owner's final scope, m3-arch.md §5–§6)
+
+**FrameRank (D906), fold A: stop.** Frames, five symbolic candidate channels and LightGBM over 48 integer pair
+features (347 training worlds: train1–4 40, generated families 80, M2 train 227). Held-out days requests: alone,
+facts @15 146 of 157 but decoys 85 → 122 (ratio 1.435 against facts' 1.292); fused with the shipped pool, @5 at best
+134 (+7.0) with decoys 83 → 104. M2's test split: facts @15 1,365 (BM25 1,276), decoys 1,181 (1,133). Python cost:
+ingest 309–334 µs an item, 5.5–10.4 ms a request. Hand-built comparators and trees reach facts but do not tell a
+fact from its twin; the owner also ruled a pipeline is not the model asked for. Its candidate generator (143 of 157
+held-out facts in about 95 candidates) is kept as the neural scorer's candidate set.
