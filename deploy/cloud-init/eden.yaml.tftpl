@@ -1,7 +1,7 @@
 #cloud-config
 # One Eden machine on Ubuntu 24.04 (docs/DEPLOY.md §2, §9): Docker from Ubuntu's archive, a firewall, unattended
 # security upgrades, log limits, and a systemd unit that runs the role's compose project. Rendered by OpenTofu
-# (deploy/tofu/hetzner) or by hand (replace the ${...} values) for a dedicated server or any other VM.
+# (deploy/tofu/hetzner) or by deploy/scripts/render-cloud-init.py for a dedicated server or any other VM.
 #
 # NO SECRETS HERE: user-data is readable by any process on the box through the metadata service and is kept by the
 # provider. The .env file (API keys, the persistence key, store credentials) is copied over SSH after boot

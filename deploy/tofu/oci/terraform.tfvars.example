@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (gitignored). OCI credentials come from ~/.oci/config, never from here.
+region         = "eu-frankfurt-1"
+compartment_id = "ocid1.tenancy.oc1..REPLACE"
+# Always Free in 2026: one A1 of 2 OCPU / 12 GB (4 / 24 where an account still has it).
+node_count      = 1
+node_ocpus      = 2
+node_memory_gb  = 12
+admin_cidr      = "203.0.113.4/32"
+ssh_public_keys = ["ssh-ed25519 AAAA... ops@example"]
+eden_git_url    = "https://github.com/KaiavN/Eden.git"
+eden_ref        = "main"

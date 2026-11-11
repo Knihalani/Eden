@@ -98,11 +98,21 @@ stand-in, 300 users of a static source, 1,000 events at 100 a second; one run):
 | The fourth node removed (planned) | the same buckets back, 97 users released, 56 ms |
 | A node killed (SIGKILL) | routed around 4,569 ms after the kill (probes 2 s apart, 3 failures); 33.4% of buckets moved |
 
-The users here hold a few items each, so a release is cheap. **For full-size users [EST]:** releasing a live user is
-a warm freeze (18-21 ms on prose at the cap, p6) and a write (2.3 ms); a frozen one a write; then a PUT of 1-3 MB.
-A 64 GB node of 4 processes holding 16,000 users that gives a fifth of them to a new node releases about 800 users a
-process, a sixth of them live at the peak: about 3 s of freezing and 2 s of writes a process, in parallel, plus
-about 4 s of PUTs at 8 at a time and 40 ms each: under 10 s a node, inside the router's 60 s bound.
+The users here hold a few items each, so a release is cheap. **At full size, measured** (`bench/release.bench.ts`
+in @eden/engine: users at the 3,000-item cap on prose in the peak-hour mix, a sixth live and the rest warm, one
+process, a store answering each call after 30 ms **[assumed latency]**, writes 8 at a time; core 2, shared with the
+reviewer's runs during the second):
+
+| Users | Release (all) | A live user | A warm user, p50 | In the store after | Blob | New owner: fetch and thaw all |
+| --- | --- | --- | --- | --- | --- | --- |
+| 60 | 422 ms (0.55 s CPU) | 28.8 ms | 3.0 ms | 669 ms | 1.72 MB | 1,440 ms |
+| 120 | 1,654 ms (1.18 s CPU) | 32.5 ms | 6.9 ms | 2,416 ms | 1.73 MB | 7,050 ms (contended) |
+
+So a process releases 7-14 ms a user on average, live ones about 30 ms. A 64 GB node of 4 processes holding 16,000
+users that gives a fifth to a new node releases about 800 a process: about 6-11 s, the processes in parallel, inside
+the router's 60 s bound **[arithmetic on the measured rates]**. The new owner pays its fetch and a warm thaw on each
+user's first request after the move (one 30 ms store call and about 20 ms of thaw at these sizes; the 120-user
+read-back thawed every user at once on one core, which a real rebalance spreads over users' next requests).
 
 **Against a real S3 server** (deploy/compose/local-cluster: three nodes of two processes in containers, the cluster
 router, SeaweedFS 3.97; MinIO's images could not be pulled without an account): 30 users through the router; a

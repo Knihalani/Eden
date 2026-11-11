@@ -37,13 +37,23 @@ Ports: Eden 8790 (loopback or the private network only), Caddy 80/443. Routes be
 
 ## 2. One box, step by step
 
-Any Ubuntu 24.04 machine with 2+ cores and 8+ GB (Hetzner, Oracle, any VPS). The OpenTofu config in
-`deploy/tofu/hetzner` creates one on Hetzner Cloud; for a dedicated server or another provider, boot it with
-`deploy/cloud-init/eden.yaml.tftpl` rendered by hand (role `single`), or run its steps over SSH.
+Any Ubuntu 24.04 machine with 2+ cores and 8+ GB. Every machine is set up by one cloud-init file
+(`deploy/cloud-init/eden.yaml.tftpl`), however it is created:
+
+| Host | Role in the plan | How the machine is made |
+| --- | --- | --- |
+| **Hetzner dedicated (AX41/AX42, AX102 class)** | **Primary**: the cheapest RAM measured ($1.0-1.4 per GB-month), unmetered traffic, Hetzner Object Storage with no request fees for the cluster's store | Order in the Robot console (setup fee, monthly, EU only), `installimage` Ubuntu 24.04, then `deploy/scripts/bootstrap-dedicated.sh root@<ip> <role> <ref> <git url> <admin cidr>`: it renders the cloud-init (`render-cloud-init.py`) and runs it with cloud-init's NoCloud source over SSH. No Terraform provider exists for dedicated servers |
+| **Oracle Cloud A1.Flex** | **Fallback**: the cheapest RAM rented by the hour ($1.10 per GB plus $7.30 a core), EU and US regions (Hetzner dedicated is EU only), ARM verified here (D990), a free tier for the pilot; E4 (x86) when A1 is short | `deploy/tofu/oci` (A1.Flex, the VCN, the security list, the same cloud-init as user data) |
+| OVHcloud | Second fallback if both fail on stock: $3.03 per GB on a 12-month plan, free object-storage requests | by hand, with the rendered cloud-init as user data |
+| Hetzner Cloud | Routers and the load balancer of a cluster (small, hourly), and Eden machines when its stock returns | `deploy/tofu/hetzner` |
+
+Why not OVH as the first fallback: Oracle's RAM is a third of OVH's price and hourly, and it adds US regions; OVH's
+advantage, free store requests, matters only at 100k users on a per-request store (docs/COST-MODEL.md, "Hosting").
 
 1. **DNS.** An A (and AAAA) record for your Eden name (say `eden.example.com`) pointing at the box.
-2. **Machine.** `cd deploy/tofu/hetzner && cp terraform.tfvars.example terraform.tfvars` (edit), `export
-   TF_VAR_hcloud_token=…`, `tofu init && tofu plan && tofu apply`. Cloud-init installs Docker (Ubuntu's archive),
+2. **Machine.** A dedicated server: `bootstrap-dedicated.sh` as above. A cloud one: `cd deploy/tofu/oci` (or
+   `hetzner`), `cp terraform.tfvars.example terraform.tfvars` (edit; credentials stay in your environment or
+   `~/.oci/config`), `tofu init && tofu plan && tofu apply`. Cloud-init installs Docker (Ubuntu's archive),
    opens 22 (your admin range), 80 and 443, enables unattended security upgrades, clones Eden at `eden_ref` into
    `/opt/eden`, and installs `eden.service` and the daily backup timer. It holds no secret.
 3. **Secrets** (§4). On your machine: `cp deploy/compose/single/.env.example secrets/single.env`, fill it in, then
@@ -204,10 +214,10 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   the router tells every node the new membership; each releases the users it no longer owns (written with their sync
   state and learning, into the store) and answers; then routing switches. Moving users get 503 with Retry-After for
   that time (silence to the agent). Measured (one host, 300 small users): a fourth node, 24.8% of buckets moved, 97
-  users released, 173 ms. Estimate for full-size users: a node releases each moved live user in about 20-25 ms of
-  CPU (a warm freeze and a write) and each frozen one in about 2-3 ms, spread over its processes, plus the store's
-  writes (8 at a time per process); a node of 4,000 users giving up a quarter is a few seconds to tens of seconds,
-  under the router's 60 s bound (d1-scale-out.md §3).
+  users released, 173 ms. At full size (3,000-item prose users, the peak-hour mix, a store at 30 ms a call):
+  a process released 60 users in 422 ms and 120 in 1.65 s (live ones about 30 ms each, warm ones 3-7 ms), all in
+  the store within 0.7-2.4 s; so a 64 GB node giving a fifth of 16,000 users to a new one takes about 6-11 s, its
+  processes in parallel, under the router's 60 s bound (d1-scale-out.md §3).
 - **A failure:** a node failing `/readyz` three probes in a row (2 s apart: 4.6 s measured) is dropped; its users go
   to their second-choice nodes, which read their last stored blob (the 30-minute compact freeze, the last release or
   shutdown) and poll their sources for what changed. Users that were live and never stored re-sync. When it answers
@@ -269,8 +279,12 @@ for `localhost`): restart with 0 errors; the backup script on a running box; the
 (MinIO's images could not be pulled without an account); the cluster router, the store and persistence in the test
 suite.
 
-Not validated: **the OpenTofu config** (no OpenTofu binary could be run in the session: run `tofu init && tofu
-validate && tofu plan` before the first apply); cloud-init on a real VM; Hetzner Object Storage's lifecycle rule
+Also validated: the cloud-init file rendered for each role (`render-cloud-init.py`) passes `cloud-init schema`
+(cloud-init 26.2 from Ubuntu's archive).
+
+Not validated: **the OpenTofu configs** (`deploy/tofu/hetzner`, `deploy/tofu/oci`; no OpenTofu binary could be run in
+the session: run `tofu init && tofu validate && tofu plan` before the first apply); cloud-init and
+`bootstrap-dedicated.sh` on a real machine; Hetzner Object Storage's lifecycle rule
 (S3-compatible per its docs; unverified); Grafana Alloy's config (`alloy fmt` it first); a real network between
 machines; real Ampere hardware (the arm64 run was emulated, so no arm64 timings are quoted).
 
