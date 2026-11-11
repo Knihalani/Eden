@@ -17,7 +17,7 @@
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
  * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
- * [--persist] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
+ * [--persist] [--sources=N] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
  * `--persist`: frozen users are also written, encrypted, to a temp directory (D425).
  * Before D862 (no warm freeze, a 10-minute tick): `--cache='{"warmIdleMs":0,"expireEveryMs":600000}'`.
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
@@ -73,7 +73,12 @@ const WAVES = Number(process.argv.find((a) => a.startsWith("--waves="))?.slice(8
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const USERS = Number(args[0] ?? 1_000);
 const PER_USER = Number(args[1] ?? 500);
-const SOURCES = ["mail", "calendar", "docs"] as const;
+/**
+ * `--sources=N`: the items split over N connectors instead of three (mail, calendar, docs, then `src3`...), for the
+ * per-(user, source) state of a user with many (a heavy user: 20, docs/DEPLOY.md).
+ */
+const SOURCE_COUNT = Number(process.argv.find((a) => a.startsWith("--sources="))?.slice(10) ?? 3);
+const SOURCES = Array.from({ length: SOURCE_COUNT }, (_, i) => ["mail", "calendar", "docs"][i] ?? `src${i}`);
 const MB = 1024 * 1024;
 
 /** A connector that lists a fixed set of items newest first, instantly. */

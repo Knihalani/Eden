@@ -489,10 +489,18 @@ alerts (docs/research/o3-push-open.md). **Indirect requests (`pushIndirect`, D82
 (`pushStart`, `indirectRest`, `secondClause`), the push's lookup is given the message from where the request starts, and
 the open shape refuses pasted log lines and chatter openers (docs/research/p2-push-check.md §1, §7, §8). Listed, opened
 and indirect pushes are all checked when the push check is wired (D823, D828), so each may make the check's paid call.
+**The turn gate (`pushGate`, M13, in the default since D1014, part `gate`; `turn-gate.ts`):** a local model over
+hashed character and word n-grams (1.59 MB, about 43 µs a turn, loaded once a process, no model call) reads the turn
+beside `pushStart`: a rule start stands unless the gate's score is under its veto, and the gate adds starts the rule
+misses (other languages, terse notes, follow-ups) and drops some it makes on chatter, wants and logs. With no readable
+weights `pushStart` decides alone (docs/research/m13-gate.md).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests
-the item would change, in a user's words (validated, at most 120 characters each, redacted); items the card prefilter
+the item would change, in a user's words (validated, at most 120 characters each, redacted). Its prompt's first
+example reply shows the requests list, and a batch whose reply still leaves the list out is asked once more for its
+requests only, under the enricher's budget (`cardsRequestsFix`, D1060, D1062: before, about a quarter of replies
+dropped it, D1053); items the card prefilter
 rejects are read for their requests only, and with `cardsLean` (D125) only when a person wrote them recently: not
 automated mail (`automated`: a no-reply or list sender, a bulk category or footer) and dated within `cardsLeanDays`
 (7 since D244; 30 before) or upcoming; constraint-worded items are read whatever their sender or age, and first
@@ -603,8 +611,9 @@ minutes) is thawed and frozen again *compact*, the one zstd stream above. A live
 interval has its index compacted first (D861: the delta tier merged and its spare room let go, 0.5-1 MB at the
 cap).
 
-An operator may opt in to persisting frozen users (D425-D427, `persist.ts`; `EDEN_PERSIST_FROZEN_DIR` and
-`EDEN_PERSIST_KEY`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
+Frozen users are persisted by default (D991; D425-D427 built it opt-in, `persist.ts`; the operator's
+`EDEN_PERSIST_KEY` is required unless `EDEN_PERSIST=off`, and the directory is `EDEN_PERSIST_FROZEN_DIR`, default
+`$EDEN_HOME/frozen`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
 AES-256-GCM to one file per user under a keyed-hash name, and a thaw deletes it. A restarted process reads a user
 back on first use (`ItemCache.load`, from `peek`, `touch` or `ready`), thaws them in slices, and restores their sync
 state (`SyncManager.restore`), so their sources are polled for what is new instead of backfilled; copies of notifying

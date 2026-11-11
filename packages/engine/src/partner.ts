@@ -16,7 +16,7 @@
  * queued for a session (or a user) that is gone.
  */
 import { createHash } from "node:crypto";
-import type { SourceMap } from "@eden/graph";
+import type { SourceMap, UserRows } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
 import {
   type Citation,
@@ -113,6 +113,7 @@ import {
   startMinutes,
   topicOf,
 } from "./probes";
+import { type TurnGate, turnGate } from "./turn-gate";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
@@ -163,6 +164,11 @@ export interface PartnerDeps {
   /** Null runs the engine with no model at all: fast and source paths only. */
   model: Model | null;
   config?: Partial<EngineConfig>;
+  /**
+   * The turn gate for `pushGate` (D1014): omitted, the shipped weights (`turnGate()`, read once a process); null, no
+   * gate, so `pushStart` decides alone (what a missing or unreadable weights file gives).
+   */
+  turnGate?: TurnGate | null;
   onTrace?: TraceSink;
   /** Whether the agent used each injection, once known (D293): content-free, for an integrator's digest. */
   onUsage?: UsageSink;
@@ -584,6 +590,8 @@ const MAX_OUTSTANDING = 64;
 
 export class ContextPartner {
   readonly config: EngineConfig;
+  /** The turn gate (`pushGate`, D1014), or null: the rule alone. */
+  private readonly gate: TurnGate | null;
   private readonly sessions = new Map<string, Session>();
   /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
   private readonly userSessions = new Map<string, Set<Session>>();
@@ -660,6 +668,8 @@ export class ContextPartner {
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
+    // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
+    this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
@@ -694,6 +704,8 @@ export class ContextPartner {
       if (this.config.cardsOrder) cards.order();
       // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
+      // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
+      if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -774,10 +786,20 @@ export class ContextPartner {
     // not persisted). Set only when the embedder made the cache persist.
     if (deps.cache.persisting) {
       deps.cache.persistHooks = {
-        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null }),
+        // D992: the user's source-map rows (routing and planner learning) go with them, so a user moved to another
+        // process or machine keeps what was learned; they are replaced, not merged, where they land.
+        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null, rows: this.deps.sourceMap.exportUser(scope) }),
         restored: (scope, items, extra) => {
-          const saved = (extra as { sync?: unknown } | null | undefined)?.sync;
+          const carried = extra as { sync?: unknown; rows?: UserRows } | null | undefined;
+          const saved = carried?.sync;
           if (sync && saved) sync.restore(scope, saved);
+          if (carried?.rows && typeof carried.rows === "object") {
+            try {
+              this.deps.sourceMap.importUser(scope, carried.rows);
+            } catch {
+              // Fails open: the user keeps whatever this process's file holds for them (or learns again).
+            }
+          }
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
           const checked = sync ? sync.reconcile(scope, this.config.sourceTimeoutMs) : Promise.resolve(0);
@@ -843,13 +865,31 @@ export class ContextPartner {
     // `pushCheck` its pool is checked as a listed request's (D823, D828).
     // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
     // and the push's lookup is given that imperative; the open shape then refuses log lines and chatter.
-    const start =
+    const ruled =
       event.kind === "user_message"
         ? pushStart(event.text, {
             open: this.config.pushOpen && this.config.pushCandidates > 0,
             indirect: this.config.pushIndirect,
           })
         : null;
+    // `pushGate` (M13, D1014): the turn gate keeps a rule start unless it vetoes it, and adds a start the rule has
+    // none for, as an opened one, only where the open shape could start one (`pushOpen` with the candidates: the
+    // reader's own push never pays for a gate-only start). The rule's request text (a lead-in's imperative) is kept.
+    // No gate, or one that fails, and the rule decides alone (fail open).
+    const said = event.kind === "user_message" ? event.text : "";
+    let verdict: { needs: boolean } | null = null;
+    if (this.gate && event.kind === "user_message")
+      try {
+        verdict = this.gate.read(said, { how: ruled?.how ?? "none", rest: ruled !== null && ruled.request !== said });
+      } catch {
+        verdict = null;
+      }
+    const adds = this.config.pushOpen && this.config.pushCandidates > 0;
+    const start = !verdict
+      ? ruled
+      : !verdict.needs
+        ? null
+        : (ruled ?? (adds ? { how: "opened" as const, request: said } : null));
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
     // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can
@@ -1613,6 +1653,53 @@ export class ContextPartner {
    */
   persistLive(deadlineMs: number): number {
     return this.deps.cache.flush(deadlineMs);
+  }
+
+  /**
+   * Hands a user to the process that now owns them (D992: a machine joined or left, or a machine's child count
+   * changed): their sessions end, their state is written with their sync state and source-map rows (`release`), and
+   * everything this process held for them goes as on `forget`, except the blob just written. The rows are deleted here
+   * only once they are in that blob. Returns whether the blob was written (false when not persisting: the new owner
+   * then starts the user over, as before D992).
+   */
+  release(scope: Scope, write = true): boolean {
+    const key = scopeKey(scope);
+    for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
+    this.recorded.get(scope.tenantId)?.delete(key);
+    const written = this.deps.cache.release(scope, write);
+    this.unverifiable.delete(key);
+    // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
+    if (written || !write) this.deps.sourceMap.forget(scope);
+    this.fanout.forget(scope);
+    this.deps.planner?.forget(scope);
+    this.economy.forget(scope);
+    this.yields?.forget(scope);
+    this.sync?.forget(scope);
+    this.deps.cards?.forget(scope);
+    this.deps.reader?.forget(scope);
+    return written;
+  }
+
+  /**
+   * Releases every held user `moved` says another process now owns (D992), within `deadlineMs`; returns the users
+   * released and how many of them were written. Users past the deadline stay here, unserved (the router no longer
+   * routes them here); their new owner fetches their last stored blob, or re-syncs them.
+   */
+  releaseMoved(
+    moved: (scope: Scope) => boolean,
+    deadlineMs: number,
+    write = true,
+  ): { released: Scope[]; written: number } {
+    const t0 = performance.now();
+    const released: Scope[] = [];
+    let written = 0;
+    for (const scope of this.deps.cache.heldScopes()) {
+      if (performance.now() - t0 > deadlineMs) break;
+      if (!moved(scope)) continue;
+      released.push(scope);
+      if (this.release(scope, write)) written++;
+    }
+    return { released, written };
   }
 
   /**
@@ -3036,6 +3123,18 @@ export class ContextPartner {
     this.deps.cards?.forget(scope, sourceId);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
+  }
+
+  /** Users held and their states, for an operator's metrics (D992's `/metrics`): counts only. */
+  held(): { users: number; frozen: number; warm: number; frozenBytes: number; sessions: number } {
+    const c = this.deps.cache;
+    return {
+      users: c.userCount,
+      frozen: c.frozenCount,
+      warm: c.warmCount,
+      frozenBytes: c.frozenBytes,
+      sessions: this.sessions.size,
+    };
   }
 
   get sessionCount(): number {

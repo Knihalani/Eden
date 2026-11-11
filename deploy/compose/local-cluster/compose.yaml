@@ -1,0 +1,91 @@
+# A whole cluster on one machine, for trying the kit and for the deploy check (docs/DEPLOY.md §12): three Eden
+# nodes, the cluster router, and SeaweedFS as the S3-compatible store (MinIO's images are no longer published for
+# pulling without an account). Test keys only; never expose it.
+#
+#   docker compose up -d --build && bun ../../scripts/cluster-smoke.ts http://127.0.0.1:18790
+#   docker compose down -v
+name: eden-local-cluster
+
+x-node: &node
+  build:
+    context: ../../..
+  image: eden:${EDEN_VERSION:-local}
+  restart: unless-stopped
+  depends_on: [s3]
+  environment:
+    HOST: 0.0.0.0
+    PORT: "8790"
+    EDEN_PROCESSES: "2"
+    EDEN_API_KEYS: acme:k_local_cluster_0123456789abcdef
+    EDEN_PERSIST_KEY: 0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0
+    EDEN_CLUSTER_KEY: local-cluster-key-0123456789abcdef
+    EDEN_CLUSTER_SIZE: "3"
+    EDEN_PERSIST_STORE: s3://eden-frozen/frozen/
+    EDEN_S3_ENDPOINT: http://s3:8333
+    EDEN_S3_REGION: us-east-1
+    EDEN_S3_ACCESS_KEY_ID: local-access
+    EDEN_S3_SECRET_ACCESS_KEY: local-secret-0123456789
+    EDEN_SOURCES_FILE: /sources/sources.json
+    EDEN_SHUTDOWN_GRACE_MS: "10000"
+  volumes:
+    - ./sources.json:/sources/sources.json:ro
+  stop_grace_period: 20s
+
+services:
+  seaweed:
+    image: chrislusf/seaweedfs:3.97
+    command: server -dir=/data -filer -volume.max=10
+    volumes:
+      - seaweed-data:/data
+
+  # The bucket first, then the S3 gateway: a gateway started before the bucket exists keeps answering NoSuchBucket
+  # for its objects (SeaweedFS 3.97, seen here) until it restarts.
+  bucket:
+    image: chrislusf/seaweedfs:3.97
+    depends_on: [seaweed]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        for i in $$(seq 1 60); do
+          echo "s3.bucket.create -name eden-frozen" | weed shell -master=seaweed:9333 -filer=seaweed:8888 >/dev/null 2>&1;
+          echo "s3.bucket.list" | weed shell -master=seaweed:9333 -filer=seaweed:8888 2>/dev/null | grep -q eden-frozen && exit 0;
+          sleep 1;
+        done; exit 1
+
+  s3:
+    image: chrislusf/seaweedfs:3.97
+    depends_on:
+      bucket:
+        condition: service_completed_successfully
+    command: s3 -filer=seaweed:8888 -port=8333 -ip.bind=0.0.0.0 -config=/etc/seaweed/s3.json
+    volumes:
+      - ./s3.json:/etc/seaweed/s3.json:ro
+    ports:
+      - "127.0.0.1:18333:8333"
+
+  n1:
+    <<: *node
+  n2:
+    <<: *node
+  n3:
+    <<: *node
+
+  router:
+    build:
+      context: ../../..
+    image: eden:${EDEN_VERSION:-local}
+    restart: unless-stopped
+    depends_on: [n1, n2, n3]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8790"
+      EDEN_API_KEYS: acme:k_local_cluster_0123456789abcdef
+      EDEN_CLUSTER_KEY: local-cluster-key-0123456789abcdef
+      EDEN_NODES_FILE: /etc/eden/nodes
+    volumes:
+      - ./nodes:/etc/eden/nodes:ro
+    ports:
+      - "127.0.0.1:18790:8790"
+
+volumes:
+  seaweed-data:

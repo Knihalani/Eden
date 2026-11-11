@@ -9,8 +9,8 @@
  *   the other (by a random margin), so the coin's item ends longer whichever role it has, and the amount of padding
  *   is the same in distribution for facts and twins.
  *
- * Each item's added characters go in `meta.pad`; `logo.py run --model padcue` measures what cue the padding leaves. Labels are
- * unchanged: the chunks carry no constraint and name no one in the task.
+ * Each item's added characters go in `meta.pad`; `logo.py run --model padcue` measures what cue the padding leaves.
+ * Labels are unchanged: the chunks carry no constraint and name no one in the task.
  *
  *   bun packages/sim/src/lab/m14/debias.ts IN.jsonl --out OUT.jsonl
  */

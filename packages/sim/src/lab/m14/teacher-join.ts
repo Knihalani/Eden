@@ -1,8 +1,8 @@
 /**
  * M1's 8B teacher scores over M2 v2's pair groups, joined to the texts M14's LOGO rows carry (M14, D1023: the
  * distillation recipe). LAB ONLY. A pair group is `family/world/task/request` with item ids and scores
- * (log P(yes) − log P(no)); the output has one line a scored pair, `{request, title, text, p}`, with the item's title and
- * text cleaned exactly as `logo-export.ts` cleans them, so `hashnet.py --teacher` finds them by text.
+ * (log P(yes) − log P(no)); the output has one line a scored pair, `{request, title, text, p}`, with the item's title
+ * and text cleaned exactly as `logo-export.ts` cleans them, so `hashnet.py --teacher` finds them by text.
  *
  *   bun packages/sim/src/lab/m14/teacher-join.ts WORLDS.jsonl GROUPS.t8b.jsonl [...] --out OUT
  */

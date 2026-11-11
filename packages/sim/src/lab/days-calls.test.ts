@@ -12,9 +12,27 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
   // One payload run serves the first two tests (D819): `onPlanted` only observes (its run's report is the same as one
   // without it, checked 2026-11-11), so the run with it is the run without it, at one run's CPU, not two.
   const planted: PlantedRow[] = [];
+  const packets: { day: number; kind: string; texts: { how: string; text: string; ids: string[] }[] }[] = [];
   let payload: ReturnType<typeof daysCalls> | undefined;
   const payloadRun = () =>
-    (payload ??= daysCalls(41, { days: 2, push: "payload", onPlanted: (row) => void planted.push(row) }));
+    (payload ??= daysCalls(41, {
+      days: 2,
+      push: "payload",
+      onPlanted: (row) => void planted.push(row),
+      onPackets: (row) => void packets.push(row),
+    }));
+
+  // E1 (D1030): `--packets` writes what the agent was handed per request, each text with the ids it cites in order.
+  test("onPackets: one row a request, each packet's item lines matching its cited ids", async () => {
+    const run = await payloadRun();
+    expect(packets.filter((r) => r.kind !== "recap").length).toBe(run.requests);
+    const texts = packets.flatMap((r) => r.texts);
+    expect(texts.some((t) => t.how === "push" || t.how === "pending")).toBe(true);
+    for (const t of texts) {
+      expect(t.text.startsWith("<context ")).toBe(true);
+      if (t.how !== "ask") expect(t.text.split("\n").filter((l) => l.startsWith("- [")).length).toBe(t.ids.length);
+    }
+  });
 
   test("payload notices that carry the changed items re-read nothing, and still announce and hold the change", async () => {
     const before = await daysCalls(41, { days: 2, push: "payload", recapSignal: true });

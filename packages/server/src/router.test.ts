@@ -86,7 +86,7 @@ describe("routing key", () => {
 
 describe("per-child caps and files (D163)", () => {
   test("a child divides the tenant rate and burst by N; burst stays at least 1", () => {
-    const base = { EDEN_API_KEYS: keys, EDEN_TENANT_RPS: "200", EDEN_TENANT_BURST: "6" };
+    const base = { EDEN_API_KEYS: keys, EDEN_PERSIST: "off", EDEN_TENANT_RPS: "200", EDEN_TENANT_BURST: "6" };
     const one = loadConfig({ ...base, EDEN_PROCESSES: "1" });
     expect([one.tenantRatePerSec, one.tenantBurst, one.processes, one.child]).toEqual([200, 6, 1, null]);
     const child = loadConfig({ ...base, EDEN_ROUTER_CHILD: "3/4", EDEN_PROCESSES: "4" });
@@ -98,7 +98,7 @@ describe("per-child caps and files (D163)", () => {
   });
 
   test("EDEN_PROCESSES defaults to the core count, capped at 64; 1 is no router; a child is always 1 (D178)", () => {
-    const base = { EDEN_API_KEYS: keys };
+    const base = { EDEN_API_KEYS: keys, EDEN_PERSIST: "off" };
     // Unset and empty both mean the machine's cores (the second argument pins them here).
     for (const cores of [4, 2, 64]) {
       expect(loadConfig(base, cores).processes).toBe(cores);
@@ -149,12 +149,16 @@ describe("per-child caps and files (D163)", () => {
   });
 
   test("EDEN_PROCESSES and EDEN_ROUTER_CHILD are validated", () => {
-    expect(loadConfig({ EDEN_API_KEYS: keys, EDEN_PROCESSES: "4" }).processes).toBe(4);
+    expect(loadConfig({ EDEN_API_KEYS: keys, EDEN_PERSIST: "off", EDEN_PROCESSES: "4" }).processes).toBe(4);
     for (const bad of ["0", "65", "1.5", "x", "-2"]) {
-      expect(() => loadConfig({ EDEN_API_KEYS: keys, EDEN_PROCESSES: bad })).toThrow(/EDEN_PROCESSES/);
+      expect(() => loadConfig({ EDEN_API_KEYS: keys, EDEN_PERSIST: "off", EDEN_PROCESSES: bad })).toThrow(
+        /EDEN_PROCESSES/,
+      );
     }
     for (const bad of ["4/4", "1", "a/b", "0/0", "-1/2", "0/65"]) {
-      expect(() => loadConfig({ EDEN_API_KEYS: keys, EDEN_ROUTER_CHILD: bad })).toThrow(/EDEN_ROUTER_CHILD/);
+      expect(() => loadConfig({ EDEN_API_KEYS: keys, EDEN_PERSIST: "off", EDEN_ROUTER_CHILD: bad })).toThrow(
+        /EDEN_ROUTER_CHILD/,
+      );
     }
   });
 
@@ -205,6 +209,7 @@ describe("router over real child processes", () => {
       EDEN_SOURCES_FILE: sources,
       EDEN_MAX_BODY_BYTES: "100000",
       EDEN_API_KEYS: keys,
+      EDEN_PERSIST: "off",
       EDEN_TENANT_RPS: "1000",
       EDEN_TENANT_BURST: "1000",
       EDEN_MODEL_USD_PER_TENANT_DAY: "10",

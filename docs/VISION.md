@@ -49,7 +49,7 @@ agents, but it is proof of concept for a selective proactive partner (notes: [RE
    The model (GLM 5.3 Flash via OpenRouter to start) judges only what the cheap path cannot, under a hard budget.
    Cost and latency both depend on it.
 3. **Read-only, always.** The partner never calls a tool that changes anything. It is enforced in code, not policy.
-4. **The user's data stays the user's.** Strict per-user partitioning, content held in memory and not at rest by
-   default, zero-data-retention model routing, and a subprocessor story a tenant can pass on to their users.
+4. **The user's data stays the user's.** Strict per-user partitioning, content in memory and at rest only redacted
+   and encrypted under the operator's own key (idle users, D991), zero-data-retention model routing, and a subprocessor story a tenant can pass on to their users.
 5. **Learn per user and per agent.** Which sources answer which situations, what this agent actually uses.
 6. **Measured, not asserted.** Every threshold is tuned on the eval harness; every claim cites a run.

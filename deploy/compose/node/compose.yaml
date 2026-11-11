@@ -1,0 +1,44 @@
+# One machine of a cluster (D992, docs/DEPLOY.md §9): Eden only, listening on the private network address, mirroring
+# frozen users to the shared S3-compatible store. The cluster router (../cluster-router) is the only caller.
+#
+#   cp .env.example .env && chmod 600 .env    # same EDEN_API_KEYS, EDEN_PERSIST_KEY and EDEN_CLUSTER_KEY on every node
+#   docker compose up -d --build
+name: eden-node
+
+services:
+  eden:
+    build:
+      context: ../../..
+    image: eden:${EDEN_VERSION:-local}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8790"
+      EDEN_PROCESSES: ${EDEN_PROCESSES:-4}
+      EDEN_SHUTDOWN_GRACE_MS: "20000"
+      # Keep serving 5 s after /readyz turns 503, while Caddy (health_interval 2s) or the router stops sending (D994).
+      EDEN_DRAIN_DELAY_MS: "5000"
+    volumes:
+      - eden-data:/data
+    stop_grace_period: 50s
+    # The private address only (PRIVATE_IP, e.g. 10.0.1.11): never on a public interface. /internal/cluster checks
+    # EDEN_CLUSTER_KEY, but the API key alone gates everything else.
+    ports:
+      - "${PRIVATE_IP:?set PRIVATE_IP in .env}:8790:8790"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "fetch('http://127.0.0.1:8790/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+volumes:
+  eden-data:

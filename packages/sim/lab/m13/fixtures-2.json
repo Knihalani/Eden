@@ -1,0 +1,230 @@
+[
+{
+"text": "pay it",
+"needs": true
+},
+{
+"text": "send it to Tom",
+"needs": true
+},
+{
+"text": "renew it",
+"needs": true
+},
+{
+"text": "ok go ahead and book",
+"needs": true
+},
+{
+"text": "yes please cancel it",
+"needs": true
+},
+{
+"text": "move it to Monday",
+"needs": true
+},
+{
+"text": "remind me at 6",
+"needs": true
+},
+{
+"text": "order two more",
+"needs": true
+},
+{
+"text": "call the vet",
+"needs": true
+},
+{
+"text": "book the MOT",
+"needs": true
+},
+{
+"text": "chase the plumber",
+"needs": true
+},
+{
+"text": "I need to renew my passport before March",
+"needs": true
+},
+{
+"text": "We have to cancel the cleaner this week",
+"needs": true
+},
+{
+"text": "Could you push my 3pm to Thursday?",
+"needs": true
+},
+{
+"text": "Should I pay the deposit today?",
+"needs": true
+},
+{
+"text": "Is it worth renewing the warranty?",
+"needs": true
+},
+{
+"text": "The fridge is leaking again, can you get someone out tomorrow?",
+"needs": true
+},
+{
+"text": "Might be worth chasing the council about the bins",
+"needs": true
+},
+{
+"text": "Peux-tu annuler mon rendez-vous de jeudi ?",
+"needs": true
+},
+{
+"text": "Annulla l'abbonamento alla palestra",
+"needs": true
+},
+{
+"text": "Bitte bezahl die Stromrechnung",
+"needs": true
+},
+{
+"text": "¿Puedes reservar mesa para cuatro el sábado?",
+"needs": true
+},
+{
+"text": "Zarezerwuj stolik na piątek na 19",
+"needs": true
+},
+{
+"text": "Kun je de huur overmaken?",
+"needs": true
+},
+{
+"text": "Marca consulta no dentista para segunda",
+"needs": true
+},
+{
+"text": "कल की मीटिंग कैंसल कर दो",
+"needs": true
+},
+{
+"text": "yes",
+"needs": false
+},
+{
+"text": "nope",
+"needs": false
+},
+{
+"text": "ok cool",
+"needs": false
+},
+{
+"text": "sounds great, thanks",
+"needs": false
+},
+{
+"text": "haha no way",
+"needs": false
+},
+{
+"text": "never mind",
+"needs": false
+},
+{
+"text": "ignore that, wrong chat",
+"needs": false
+},
+{
+"text": "scratch that",
+"needs": false
+},
+{
+"text": "morning! slept terribly",
+"needs": false
+},
+{
+"text": "ugh mondays",
+"needs": false
+},
+{
+"text": "how are you today?",
+"needs": false
+},
+{
+"text": "are you a robot?",
+"needs": false
+},
+{
+"text": "How long should I boil an egg?",
+"needs": false
+},
+{
+"text": "What's the capital of Peru?",
+"needs": false
+},
+{
+"text": "Who won the 2018 World Cup?",
+"needs": false
+},
+{
+"text": "When is my dentist appointment?",
+"needs": false
+},
+{
+"text": "Did Sarah reply about Saturday?",
+"needs": false
+},
+{
+"text": "I need a holiday",
+"needs": false
+},
+{
+"text": "I could do with a nap",
+"needs": false
+},
+{
+"text": "We should get a dog one day",
+"needs": false
+},
+{
+"text": "I really need to drink more water",
+"needs": false
+},
+{
+"text": "The train was late again",
+"needs": false
+},
+{
+"text": "Mum arrives on Friday",
+"needs": false
+},
+{
+"text": "Merci beaucoup !",
+"needs": false
+},
+{
+"text": "Danke, passt so",
+"needs": false
+},
+{
+"text": "Necesito unas vacaciones",
+"needs": false
+},
+{
+"text": "Ik moet echt meer slapen",
+"needs": false
+},
+{
+"text": "Che caldo oggi",
+"needs": false
+},
+{
+"text": "Tudo bem por aqui",
+"needs": false
+},
+{
+"text": "बहुत बढ़िया, धन्यवाद",
+"needs": false
+},
+{
+"text": "ERROR 502 Bad Gateway upstream timed out after 30000ms",
+"needs": false
+}
+]

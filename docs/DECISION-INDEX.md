@@ -610,6 +610,37 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D932 | 2026-11-11 | Adopted (lab tooling, M7): the funnel's `--check-dump F` (`check-dump.ts`): one row a push-check call (the request head, day and pool… | lab |
 | D950 | 2026-11-11 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | rejected |
 | D951 | 2026-11-11 | Adopted (lab tooling, M9): `packages/sim/lab/m9/` (`links.py` per-user link state, `screen.py` fronting screen, `oracle.py` and… | lab |
+| D960 | 2026-11-11 | Rejected: `cardsMicro`, a micro card tagger at ingest in place of the card model's cards | rejected |
+| D961 | 2026-11-11 | Finding: what the engine consumes of a card, at $0. | finding |
+| D962 | 2026-11-11 | Adopted (lab tooling, M10): `packages/sim/src/lab/m10/` (`export.ts` items with the tagger's candidates from the train and longtail… | lab |
+| D963 | 2026-11-11 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). | rejected |
 | D970 | 2026-11-11 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | rejected |
 | D971 | 2026-11-11 | Finding: Haiku's intent value is its bridge terms, and a $0 item-side model does not learn them for new families. | finding |
 | D972 | 2026-11-11 | Adopted (lab tooling, M11): `m11-export.ts` (items, worlds, tasks, twins and the checked-in Haiku requests by card key), `m11-enrich.ts`… | lab |
+| D990 | 2026-11-11 | Fix: the server image started nothing. | adopted |
+| D991 | 2026-11-11 | Persistence on by default. | adopted |
+| D992 | 2026-11-11 | More than one machine, built (D864's design, refreshed). | adopted |
+| D993 | 2026-11-11 | Per-tenant caps across machines: held whole at the cluster router, divided below it. | adopted |
+| D994 | 2026-11-11 | Readiness, metrics and a draining shutdown. | adopted |
+| D995 | 2026-11-11 | Fencing and forget across machines (the reviewer's findings on D992-D994). | adopted |
+| D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
+| D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
+| D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
+| D996 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | rejected |
+| D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
+| D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
+| D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
+| D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
+| D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
+| D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
+| D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D1010 | 2026-11-11 | Rejected: `pushGate`, a tiny learned turn gate in place of `pushStart`'s verb lists and lead-ins | superseded (replaced by D1014) |
+| D1011 | 2026-11-11 | Finding: a learned gate transfers to hand-written text only beside the rule, as a union with a veto. | finding |
+| D1012 | 2026-11-11 | Finding: what generated training text teaches a gate besides the task. | finding |
+| D1013 | 2026-11-11 | Adopted (lab tooling, M13): `packages/sim/lab/m13/`: contrastive data generators (`gen_train.py`, `gen_logs.py`, `gen_extra.py`)… | lab |
+| D1014 | 2026-11-11 | The owner's decision: `pushGate` (M13's turn gate, round 3's frozen model, the union with `pushStart` at veto 0.25) is in… | adopted |
+| D1015 | 2026-11-11 | Stopgap on D1014's gate: no start by the gate alone for a turn of fewer than three words (`MIN_ADD_WORDS`, `turn-gate.ts`); round 4's… | adopted |
+| D1060 | 2026-11-11 | Trial `cardsRequestsFix`: the card prompt's first example reply shows the requests list, and a batch whose reply still drops it is asked… | adopted (by D1062) |
+| D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
+| D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
+| D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
