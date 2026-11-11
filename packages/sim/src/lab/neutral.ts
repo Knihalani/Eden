@@ -19,12 +19,14 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "heldout16",
   "heldout17",
   "heldout18",
+  "heldout19",
   "train1",
   "train2",
   "train3",
   "train4",
   "train5",
   "train6",
+  "longtail",
 ];
 
 export const supportsNeutral = (suite: string) => NEUTRAL_SUITES.includes(suite);

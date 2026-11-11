@@ -90,6 +90,26 @@ export const INTENT_COVERS: Record<string, string[]> = {
   heldout18: ["41", "42", "43", "44"],
 };
 
+/**
+ * The shipped-coverage caches (P7, D872): the cards and intent requests the shipped enricher (`buildPartner`'s own
+ * `CardEnricher`, DEFAULT_CONFIG and DEFAULT_LIMITS) made for each world of these suite × seed shards, recorded by
+ * `cold-start.ts --cards-out` over the hidden, control and neutral worlds with the card role on Haiku 5.5 (Anthropic,
+ * lab transport, D97). One file holds both: `bun run funnel --coverage shipped` replays it as `--cards` and
+ * `--intent`. Where several worlds of a seed carded the same item, the last line read wins.
+ */
+export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
+export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
+export const SHIPPED_COVERS: Record<string, string[]> = {
+  ...Object.fromEntries(parseSuites("train").map((s) => [s, ["41", "42", "43", "44"]])),
+};
+
+/** The suite × seed shards SHIPPED_FILE was not made for. */
+export function shippedUncovered(suites: string[], seeds: (string | number)[]): string[] {
+  return suites.flatMap((s) =>
+    seeds.filter((seed) => !SHIPPED_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+  );
+}
+
 /** The suite × seed shards INTENT_FILE was not made for. */
 export function intentUncovered(suites: string[], seeds: (string | number)[]): string[] {
   return suites.flatMap((s) =>

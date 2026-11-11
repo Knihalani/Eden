@@ -124,7 +124,7 @@ import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -519,7 +519,7 @@ const TEMPLATES = opt("templates", "") ? new Set(opt("templates", "").split(",")
 if (TEMPLATES) {
   // A typo would run no tasks and print totals of zero: every name must be a template of a suite in the run.
   const known = new Set(
-    SUITE_LIST.flatMap((suite) => SUITES[suite]!(buildWorld({ seed: SEEDS[0]! * 1_000 }), SEEDS[0]!, "hidden")).map(
+    SUITE_LIST.flatMap((suite) => SUITES[suite]!(preparedWorld(suite, SEEDS[0]!), SEEDS[0]!, "hidden")).map(
       (t) => t.template,
     ),
   );
@@ -755,7 +755,7 @@ async function runSeeds(suite: string, variant: "hidden" | "control" | "neutral"
   if (CONNECT) {
     // `--connect-at`: one replica (a user) a task, every seed's at once (each starts at its own stagger).
     const runs = SEEDS.flatMap((seed) => {
-      const all = SUITES[suite]!(buildWorld({ seed: seed * 1_000 }), seed, variant);
+      const all = SUITES[suite]!(preparedWorld(suite, seed), seed, variant);
       const kept = all.filter((t) => !TEMPLATES || TEMPLATES.has(t.template)).length;
       const users = LIMIT > 0 ? Math.min(LIMIT, kept) : kept;
       return Array.from({ length: users }, (_, replica) => runSeed(suite, variant, seed, replica, users));
@@ -838,6 +838,7 @@ async function runSeed(
 ): Promise<TaskRow[]> {
   const perTask: TaskRow[] = [];
   const world = buildWorld({ seed: seed * 1_000 });
+  prepareWorld(suite, world, seed);
   const before = world.items.length;
   const all: HiddenTask[] = SUITES[suite]!(world, seed, variant);
   // Planted items line up with `all` (one a template, in order); `--templates` keeps the pairs together.

@@ -52,7 +52,22 @@ describe("pi-user (H16)", () => {
     expect(new Set(keys).size).toBe(keys.length);
     expect(planUser(41, templates, { days: 8, size: [12, 20], mix: MIX })).toEqual(plan);
     expect(planUser(42, suiteTemplates(42, suites), { days: 8, size: [12, 20], mix: MIX })).not.toEqual(plan);
-    expect(() => planUser(41, templates, { days: 20, size: [12, 20], mix: MIX })).toThrow(/too few templates/);
+    // Weeks (D874): past the templates the pool refills; the days before the refill are the short plan's, a template
+    // is never planted twice, and planted slots still follow dayKinds.
+    const long = planUser(41, templates, { days: 28, size: [12, 20], mix: MIX });
+    expect(long.length).toBe(28);
+    expect(long.slice(0, 8)).toEqual(plan);
+    const plantedKeys = long
+      .flat()
+      .filter((e) => e.variant !== "neutral")
+      .map((e) => `${e.suite}|${e.template}`);
+    expect(new Set(plantedKeys).size).toBe(plantedKeys.length);
+    expect(new Set(long.flat().map((e) => `${e.suite}|${e.template}`)).size).toBeLessThan(long.flat().length);
+    for (const d of long) expect(d.filter((e) => e.variant === "hidden").length).toBe(dayKinds(d.length, MIX).hidden);
+    // A plan whose planted slots outrun the unplanted templates still throws.
+    expect(() =>
+      planUser(41, { train1: ["a", "b", "c"] }, { days: 2, size: [3, 3], mix: { hidden: 1, control: 0, neutral: 0 } }),
+    ).toThrow(/unplanted templates/);
     expect(() => planUser(41, { heldout13: ["a", "b", "c", "d"] }, { days: 1, size: [4, 4], mix: MIX })).toThrow(
       /no neutral/,
     );

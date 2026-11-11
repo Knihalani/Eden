@@ -15,11 +15,20 @@
  * the long-horizon user `pi-ab --days` builds for that seed (pi-user.ts, over `--suite`, default train, with `--days`,
  * `--day-size` and `--mix` as pi-ab takes them): the one-time backfill `pi-cost-report.ts --lifetime` books for it.
  *
+ * `suite:seed:variant` takes the `control` or `neutral` world instead of the hidden one (the funnel's worlds, as
+ * `worldOf` builds them).
+ *
+ * `--cards-out FILE` (P7, D872): append every card and intent request the shipped enricher made, one `{h, c, r}` line
+ * per item it read (`h` the card key, `c` the card, `r` the requests; either left out where the call gave none), the format `--cards` and
+ * `--intent` replay. Run over a suite's worlds this gives the shipped-coverage caches (`cards-shipped.jsonl.gz`,
+ * cards-disk.ts): the cards and requests a deployment would hold for those users, not `cards-enrich.ts --intent`'s
+ * every-item index (D714).
+ *
  * `--set JSON`: engine settings over the default (e.g. `{"cardsLeanDays":30}`, CL3's comparison with D244). The
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
  */
-import { writeFileSync } from "node:fs";
-import { checkEngineConfig, type CardEnricher } from "@eden/engine";
+import { appendFileSync, writeFileSync } from "node:fs";
+import { cardKey, checkEngineConfig, type CardEnricher, type CardMaker } from "@eden/engine";
 import type { Model } from "@eden/llm";
 import { buildPartner } from "@eden/server";
 import { REALISTIC, simSources } from "../sources";
@@ -40,11 +49,14 @@ const MODEL = opt("model", "claude-haiku-5-5");
 const USERS = opt("users", "train1:41")
   .split(",")
   .map((u) => {
-    const [suite, seed] = u.split(":");
-    if (!suite || !Number.isInteger(Number(seed))) throw new Error(`--users takes suite:seed pairs, not ${u}`);
-    return { suite, seed: Number(seed) };
+    const [suite, seed, variant = "hidden"] = u.split(":");
+    if (!suite || !Number.isInteger(Number(seed))) throw new Error(`--users takes suite:seed[:variant], not ${u}`);
+    if (variant !== "hidden" && variant !== "control" && variant !== "neutral")
+      throw new Error(`--users: unknown variant "${variant}" in ${u}`);
+    return { suite, seed: Number(seed), variant: variant as "hidden" | "control" | "neutral" };
   });
 const OUT = opt("out", "");
+const CARDS_OUT = opt("cards-out", "");
 // Checked as the servers check EDEN_ENGINE_CONFIG: an unknown key (a deleted trial's), a wrong type or an out-of-range
 // value stops the run, rather than running the default under the setting's name. Cards are wired, the reader is not.
 const SET = checkEngineConfig(parseJson(opt("set", "{}"), "--set"), { where: "--set", deps: { cards: true } });
@@ -69,9 +81,33 @@ interface Row {
   [k: string]: unknown;
 }
 const rows: Row[] = [];
-for (const { suite, seed } of USERS) {
+
+/**
+ * `--cards-out`: wrap the enricher's own maker (a lab peek, as above) so each item a call read is appended with what
+ * the call gave it. Set before the first observe, so every call of the user's backfill is recorded.
+ */
+function record(enricher: CardEnricher, file: string): void {
+  const deps = (enricher as unknown as { deps: { maker: CardMaker } }).deps;
+  const inner = deps.maker;
+  deps.maker = {
+    make: async (items, today, signal, retry, intent) => {
+      const got = await inner.make(items, today, signal, retry, intent);
+      // A card the call could not read (null) stays uncovered: no `c`, as a requests-only line (cards-disk.ts).
+      const lines = items.flatMap((it, i) => {
+        const c = got.cards[i];
+        const r = got.requests?.[i];
+        if (!c && !r) return [];
+        return [JSON.stringify({ h: cardKey(it), ...(c ? { c } : {}), ...(r ? { r } : {}) })];
+      });
+      // A call cut off at the output cap is sent again (`retry`): the later lines win when the file is read.
+      if (lines.length) appendFileSync(file, `${lines.join("\n")}\n`);
+      return got;
+    },
+  };
+}
+for (const { suite, seed, variant } of USERS) {
   const world =
-    suite === "user" ? userWorld(seed) : worldOf(seed, suite, "hidden", { maxTasks: 30, maxOffworld: 5 }).world;
+    suite === "user" ? userWorld(seed) : worldOf(seed, suite, variant, { maxTasks: 30, maxOffworld: 5 }).world;
   const sources = simSources(world, REALISTIC, 0, seed);
   let calls = 0;
   let usd = 0;
@@ -107,19 +143,20 @@ for (const { suite, seed } of USERS) {
   });
   // The harness ticks the sync itself (until the user is warm), not the server's minute timer.
   partner.stopSync();
+  // A lab peek at the enricher the server built (buildPartner keeps it private).
+  const cards = (partner as unknown as { deps: { cards?: CardEnricher } }).deps.cards;
+  if (!cards) throw new Error("no card enricher: is cards off in the default?");
+  if (CARDS_OUT) record(cards, CARDS_OUT);
   const scope = { tenantId: "cold", userId: `${suite}-${seed}` };
   const t0 = performance.now();
   await partner.observe({ ...scope, sessionId: "s0", at: Date.now(), kind: "session_start", agent: "cold-start" });
   const warm = await warmAll(partner.sync!, [scope], 2_000);
   const syncMs = performance.now() - t0;
-  // A lab peek at the enricher the server built (buildPartner keeps it private).
-  const cards = (partner as unknown as { deps: { cards?: CardEnricher } }).deps.cards;
-  if (!cards) throw new Error("no card enricher: is cards off in the default?");
   await cards.idle();
   const ms = performance.now() - t0;
   const synced = sources.reduce((n, s) => n + s.listAll().length, 0);
   const row = {
-    user: `${suite}:${seed}`,
+    user: `${suite}:${seed}${variant === "hidden" ? "" : `:${variant}`}`,
     seed,
     itemsAtSources: synced,
     syncTicks: warm.ticks,

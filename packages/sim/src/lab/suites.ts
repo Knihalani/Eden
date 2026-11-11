@@ -3,7 +3,8 @@
  * and several at once. Each planting function adds one item per template to the world, in template order, and
  * returns the matching tasks; their ids carry the suite name (`w41:heldout2:<template>`).
  */
-import type { World } from "../world";
+import { addRareSources, RARE_SOURCE_IDS } from "../rare-sources";
+import { buildWorld, type World } from "../world";
 import { plantHidden, type HiddenTask } from "./hidden-context";
 import { plantDev6a } from "./hidden-dev6a";
 import { plantDev6b } from "./hidden-dev6b";
@@ -25,6 +26,8 @@ import { plantHeldout15 } from "./hidden-heldout15";
 import { plantHeldout16 } from "./hidden-heldout16";
 import { plantHeldout17 } from "./hidden-heldout17";
 import { plantHeldout18 } from "./hidden-heldout18";
+import { plantHeldout19 } from "./hidden-heldout19";
+import { plantLongtail } from "./hidden-longtail";
 import { plantTrain1 } from "./hidden-train1";
 import { plantTrain2 } from "./hidden-train2";
 import { plantTrain3 } from "./hidden-train3";
@@ -64,6 +67,37 @@ const withNeutral =
       if (!t.id.includes(from)) throw new Error(`${name}: control id ${t.id} lacks ${from}`);
       return { ...t, id: t.id.replace(from, `:${name}-neutral:`) };
     });
+  };
+
+/**
+ * Suites whose worlds need more than the base world before planting (P7): the rarely used connectors and their filler
+ * items (rare-sources.ts). Every harness calls `prepareWorld` right after `buildWorld` and before it notes where the
+ * planted items start (`world.items.slice(before)` lines planted items up with tasks), so the filler is part of the
+ * base world, in every variant. `needsPrepared` makes a harness that forgot fail loudly instead of misaligning.
+ */
+const PREPARE: Record<string, (world: World, seed: number) => void> = {
+  heldout19: (w, s) => void addRareSources(w, s),
+  longtail: (w, s) => void addRareSources(w, s),
+};
+
+/** Make `world` what `suite` plants into (a no-op for most suites). Call before taking `world.items.length`. */
+export function prepareWorld(suite: string, world: World, seed: number): void {
+  PREPARE[suite]?.(world, seed);
+}
+
+/** A seed's base world (`buildWorld({ seed: seed * 1_000 })`, as every harness builds it), prepared for `suite`. */
+export function preparedWorld(suite: string, seed: number): World {
+  const world = buildWorld({ seed: seed * 1_000 });
+  prepareWorld(suite, world, seed);
+  return world;
+}
+
+const needsPrepared =
+  (name: string, plant: Plant): Plant =>
+  (world, seed, variant) => {
+    if (!RARE_SOURCE_IDS.every((id) => id in world.sources))
+      throw new Error(`${name}: call prepareWorld("${name}", world, seed) before planting (suites.ts)`);
+    return plant(world, seed, variant);
   };
 
 export const SUITES: Record<string, Plant> = {
@@ -118,6 +152,12 @@ export const SUITES: Record<string, Plant> = {
   // person, thing or date the planted item words differently (`HELDOUT18_ANCHORED`, for the askNudge question,
   // D455-D457). Unread: do not run it (funnel or agent) except as the blind read it was made for; never tune on it.
   heldout18: plantHeldout18,
+  // P7's blind suite for the end-of-wave confirmation (docs/research/p7-benchmarks.md), written by an isolated author who
+  // saw only a format scaffold (helpers and planting function, one invented example), the HiddenTask interface, the sim
+  // world API and rare-sources.ts; with `neutral`; indirect, question and non-English requests, anchored requests,
+  // facts in rarely used connectors and silent edits (HELDOUT19_* lists). Its worlds hold the eight rare connectors
+  // (`prepareWorld`). Unread: nobody runs it (funnel or agent) before the parent's end-of-wave call; never tune on it.
+  heldout19: needsPrepared("heldout19", plantHeldout19),
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
   train1: withNeutral("train1", plantTrain1),
@@ -126,6 +166,9 @@ export const SUITES: Record<string, Plant> = {
   train4: withNeutral("train4", plantTrain4),
   train5: withNeutral("train5", plantTrain5),
   train6: withNeutral("train6", plantTrain6),
+  // The long-tail suite (P7, D873): every fact in a rarely used connector (rare-sources.ts), for pricing sweeps and
+  // dormancy over days (`days-calls.ts --arrive-days`). Written by P7, not blind: tune on it.
+  longtail: needsPrepared("longtail", plantLongtail),
 };
 export const SUITE_NAMES = Object.keys(SUITES);
 const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
@@ -134,8 +177,8 @@ const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
  * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 was the
- * end-of-day confirmation's (A29, run once). Held-out 18 is M6's, unread (D465). A run names them to measure on
- * them (with `--blind`).
+ * end-of-day confirmation's (A29, run once). Held-out 18 was M6's (read by B18, D802); held-out 19 is P7's, unread
+ * (D870). A run names them to measure on them (with `--blind`).
  */
 export const UNRUN_BLIND = [
   "heldout9",
@@ -148,10 +191,12 @@ export const UNRUN_BLIND = [
   "heldout16",
   "heldout17",
   "heldout18",
+  "heldout19",
 ];
 /** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
- * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802): none is unread now; a blind round needs a new suite. */
-export const UNREAD_BLIND: string[] = [];
+ * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802). Held-out 19 (P7, D870) is unread, for the end-of-wave
+ * confirmation only. */
+export const UNREAD_BLIND: string[] = ["heldout19"];
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n));
 
 /**

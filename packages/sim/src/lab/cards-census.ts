@@ -19,7 +19,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { loadCards } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
-import { parseSuites, SUITES } from "./suites";
+import { parseSuites, prepareWorld, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -70,6 +70,7 @@ for (const suite of SUITE_LIST) {
   for (const variant of ["hidden", "control"] as const) {
     for (const seed of SEEDS) {
       const world = buildWorld({ seed: seed * 1_000 });
+      prepareWorld(suite, world, seed);
       const before = world.items.length;
       const tasks = SUITES[suite]!(world, seed, variant);
       const planted = world.items.slice(before);

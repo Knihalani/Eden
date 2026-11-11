@@ -62,7 +62,7 @@ import { buildWorld } from "../world";
 import { INTENT_PATH, loadCards, loadRequests } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
 import { variantsFor } from "./neutral";
-import { parseSuites, SUITES } from "./suites";
+import { parseSuites, prepareWorld, SUITES } from "./suites";
 
 /** The day `cards-enrich.ts` made every checked-in card and request with: the prompt's "Today is", so its hash. */
 export const DISTILL_TODAY = "2026-10-27";
@@ -98,6 +98,7 @@ export function syncItems(
       for (const seed of seeds) {
         // As hidden-funnel.ts and cards-enrich.ts build each world.
         const world = buildWorld({ seed: seed * 1_000 });
+        prepareWorld(suite, world, seed);
         const before = world.items.length;
         const tasks = SUITES[suite]!(world, seed, variant);
         const plantedItems = world.items.slice(before);

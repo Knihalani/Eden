@@ -14,7 +14,7 @@ import type { SimSource } from "../sources";
 import { buildWorld, type World } from "../world";
 import { dressEntities } from "./dress-entities";
 import { clearSlot, dress } from "./hidden-context";
-import { SUITES } from "./suites";
+import { prepareWorld, SUITES } from "./suites";
 
 export const MAX_STEPS = 6;
 export const TOOL_ITEMS = 5;
@@ -187,6 +187,7 @@ export function worldOf(
   opts: { dress?: boolean } = {},
 ): { seed: number; world: World; tasks: Task[] } {
   const world = buildWorld({ seed: seed * 1_000 });
+  prepareWorld(suite, world, seed);
   if (suite === "lookups") return { seed, world, tasks: tasksOf(world, seed, limits.maxTasks, limits.maxOffworld) };
   const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
   const before = world.items.length;
