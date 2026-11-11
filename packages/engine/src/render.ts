@@ -90,7 +90,7 @@ export function renderPacket(
       // `compactText`, with what this session showed of the item before as known too.
       const trimmed = options.trim && !(prior && !saysNew(parts)) ? options.trim(item.title, parts) : null;
       const text =
-        prior && !saysNew(parts) ? SHOWN : trimmed ? keepScored(parts, trimmed, each) : pick(parts, focus, each);
+        prior && !saysNew(parts) ? SHOWN : trimmed ? keepScored(parts, focus, trimmed, each) : pick(parts, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
@@ -469,9 +469,19 @@ export function messageParts(
  * `packetTrim`: the parts scored at or above the threshold, the best-scored that fit `maxBytes`, in their own order,
  * gaps marked "…"; empty when none is kept (the line is then the item's title alone).
  */
-function keepScored(parts: Part[], t: { scores: ArrayLike<number>; threshold: number }, maxBytes: number): string {
-  const kept: number[] = [];
-  for (let k = 0; k < parts.length; k++) if (t.scores[k]! >= t.threshold) kept.push(k);
+function keepScored(
+  parts: Part[],
+  focus: ReadonlySet<string>,
+  t: { scores: ArrayLike<number>; threshold: number },
+  maxBytes: number,
+): string {
+  // Subtractive (D920): only the parts `pick` keeps can stay, so the trimmer never says what the shipped packet
+  // would not; when `pick` cuts a lone long text, every part it says whole is a candidate, fitted by score.
+  const picked = pickKept(parts, focus, maxBytes);
+  const pool = picked
+    ? picked.keep
+    : parts.map((_, k) => k).filter((k) => !parts[k]!.quoted || pickScore(parts[k]!, k, focus) > 0);
+  const kept = pool.filter((k) => t.scores[k]! >= t.threshold);
   let bytes = 0;
   for (const k of kept) bytes += utf8Length(parts[k]!.text) + 3;
   let keep = kept;
@@ -506,29 +516,43 @@ function joinParts(parts: Part[], keep: readonly number[]): string {
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
 function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
-  const score = (part: Part, k: number) => {
-    let n = k === 0 ? 0.5 : 0;
-    for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
-    n += DIGIT.test(part.text) ? 1 : 0;
-    return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
-  };
-  const ranked = parts.map((p, k) => ({ k, s: score(p, k), bytes: utf8Length(p.text) + 3 }));
-  const whole = parts.filter((p, k) => !p.quoted || ranked[k]!.s > 0).map((p) => p.text);
-  if (utf8Length(whole.join(" ")) <= maxBytes) return whole.join(" ");
-  const keep = new Set<number>();
+  const kept = pickKept(parts, focus, maxBytes);
+  if (kept === null) return truncateUtf8(wholeOf(parts, focus).join(" "), maxBytes - 3) + "…";
+  if (kept.whole) return kept.keep.map((k) => parts[k]!.text).join(" ");
+  return joinParts(parts, kept.keep);
+}
+
+function pickScore(part: Part, k: number, focus: ReadonlySet<string>): number {
+  let n = k === 0 ? 0.5 : 0;
+  for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
+  n += DIGIT.test(part.text) ? 1 : 0;
+  return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
+}
+
+/** The parts `pick` says whole (a quoted part only when it holds a request word, a number or a time). */
+function wholeOf(parts: Part[], focus: ReadonlySet<string>): string[] {
+  return parts.filter((p, k) => !p.quoted || pickScore(p, k, focus) > 0).map((p) => p.text);
+}
+
+/**
+ * The indexes of the parts `pick` keeps, in order (`whole`: every part it says whole, joined without gap marks), or
+ * null when none fits and it cuts the whole text instead.
+ */
+function pickKept(
+  parts: Part[],
+  focus: ReadonlySet<string>,
+  maxBytes: number,
+): { keep: number[]; whole: boolean } | null {
+  const ranked = parts.map((p, k) => ({ k, s: pickScore(p, k, focus), bytes: utf8Length(p.text) + 3 }));
+  const whole = ranked.filter((o) => !parts[o.k]!.quoted || o.s > 0).map((o) => o.k);
+  if (utf8Length(whole.map((k) => parts[k]!.text).join(" ")) <= maxBytes) return { keep: whole, whole: true };
+  const keep: number[] = [];
   let room = maxBytes;
   for (const o of ranked.filter((x) => x.s > -1).sort((a, b) => b.s - a.s)) {
     if (o.bytes > room) continue;
-    keep.add(o.k);
+    keep.push(o.k);
     room -= o.bytes;
   }
-  if (keep.size === 0) return truncateUtf8(whole.join(" "), maxBytes - 3) + "…";
-  let out = "";
-  let last = -1;
-  for (let k = 0; k < parts.length; k++) {
-    if (!keep.has(k)) continue;
-    out += out ? (k === last + 1 ? " " : " … ") + parts[k]!.text : parts[k]!.text;
-    last = k;
-  }
-  return out;
+  if (keep.length === 0) return null;
+  return { keep: keep.sort((a, b) => a - b), whole: false };
 }

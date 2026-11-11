@@ -25,17 +25,30 @@ app = modal.App("eden-m6-trim", image=image)
 
 
 @app.function(cpu=8, memory=32768, timeout=6 * 3600, volumes={"/vol": vol})
-def train(run: str, args: str, items: str = "data/items.jsonl") -> str:
+def train(run: str, args: str, items: str = "data/r2/items.jsonl.gz") -> str:
     out = f"/vol/runs/{run}"
     os.makedirs(out, exist_ok=True)
-    cmd = ["python", "/m6/cands.py", "--items", f"/vol/{items}", "--out", out, *shlex.split(args)]
+    src = f"/vol/{items}"
+    if src.endswith(".gz"):
+        import gzip
+        import shutil
+
+        with gzip.open(src, "rb") as a, open("/tmp/items.jsonl", "wb") as b:
+            shutil.copyfileobj(a, b)
+        src = "/tmp/items.jsonl"
+    cmd = ["python", "/m6/cands.py", "--items", src, "--out", out, *shlex.split(args)]
+    lines = []
     with open(f"{out}/log.txt", "w") as log:
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        log.write(p.stdout)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in p.stdout:
+            print(line, end="", flush=True)  # streamed to the app's logs
+            log.write(line)
+            lines.append(line)
+        p.wait()
     vol.commit()
-    return p.stdout[-6000:]
+    return "".join(lines)[-6000:]
 
 
 @app.local_entrypoint()
-def main(run: str, args: str = "--arch h1", items: str = "data/items.jsonl"):
+def main(run: str, args: str = "--arch h1", items: str = "data/r2/items.jsonl.gz"):
     print(train.remote(run, args, items))

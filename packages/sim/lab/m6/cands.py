@@ -41,6 +41,8 @@ ap.add_argument("--target", type=float, default=0.97)
 ap.add_argument("--out", default="")
 ap.add_argument("--listwise", type=float, default=0.0, help="weight of the within-item softmax loss toward key parts")
 ap.add_argument("--within-pick", action="store_true", help="only parts pick kept (the shipped line) can be kept")
+ap.add_argument("--align", action="store_true", help="a part with a key token no key part holds is positive")
+ap.add_argument("--train-within-pick", action="store_true", help="train only on the parts pick kept")
 ap.add_argument("--decode", default="", help="thr | mass | top1 (default: mass for h6, thr otherwise)")
 ap.add_argument("--dump-fail", default="", help="write val facts that lose their key tokens at --dump-tau")
 ap.add_argument("--dump-tau", type=float, default=0.1)
@@ -73,6 +75,13 @@ def units_of(row):
         else:
             out.append((t, f, k))
     key = set(row["key"] or [])
+    if A.align and row["words"]:
+        # The screen asks for every key token: a part holding one that no labelled key part (nor the title) holds
+        # is needed too.
+        have = set(L.toks(row["title"])) | {w for k in key for w in L.toks(row["parts"][k][0])}
+        for k, (t, _) in enumerate(row["parts"]):
+            if any(w in set(L.toks(t)) for w in row["words"] if w not in have):
+                key.add(k)
     return out, [1.0 if u[2] in key else 0.0 for u in out]
 
 
@@ -155,7 +164,7 @@ def sparse(u, focus, use_request, req_grams):
     return ids
 
 
-def featurize(rows, use_request=True):
+def featurize(rows, use_request=True, training=False):
     """Flat arrays over units: ids (concatenated), offsets, dense, label, unit -> (row, unit idx), request grams."""
     ids, offs, dn, ys, where, rq_ids, rq_offs = [], [], [], [], [], [], []
     for ri, r in enumerate(rows):
@@ -164,6 +173,8 @@ def featurize(rows, use_request=True):
         rg = L.grams(r["request"], B, "q")
         rel = item_stats(us, focus if use_request else set())
         for k, u in enumerate(us):
+            if training and A.train_within_pick and u[0] not in r["shipped"]:
+                continue
             offs.append(len(ids))
             ids.extend(sparse(u, focus, use_request, rg))
             dn.append(dense(u, k, len(us), focus if use_request else set(), r, rel))
@@ -453,6 +464,65 @@ def auc(y, s):
     return (ranks[: len(pos)].sum() - len(pos) * (len(pos) + 1) / 2) / (len(pos) * len(neg))
 
 
+def b64(a, dtype=np.float32):
+    import base64
+
+    return base64.b64encode(np.ascontiguousarray(a, dtype=dtype).tobytes()).decode()
+
+
+def parity_checks(model, rows, use_request, n=64):
+    """Parts from val (planted items first, then a sample) with the trainer's own eval-mode scores."""
+    rng = random.Random(7)
+    pool = [r for r in rows if r["role"] != "other"][:200] + rng.sample(rows, min(len(rows), 200))
+    rng.shuffle(pool)
+    checks = []
+    for r in pool:
+        if sum(len(c["parts"]) for c in checks) >= n:
+            break
+        d = featurize([r], use_request)
+        if not len(d["y"]):
+            continue
+        sc = scores_of(model, d)
+        checks.append({"request": r["request"], "title": r["title"], "parts": r["parts"], "scores": [float(x) for x in sc]})
+    return checks
+
+
+def export_thread(model, tau, rows, path):
+    """h3 for trim.ts: the ternary table packed 2 bits a weight (0, +a, -a), batch norm folded to a scale and shift
+    a bit, the GRU's weights, the head, and the linear side (float32)."""
+    w = model.ep.weight.detach().numpy()
+    a = float(np.abs(w).mean())
+    codes = np.where(w > 0.5 * a, 1, np.where(w < -0.5 * a, 2, 0)).astype(np.uint8).reshape(-1)
+    pad = (-len(codes)) % 4
+    codes = np.concatenate([codes, np.zeros(pad, np.uint8)]).reshape(-1, 4)
+    packed = (codes[:, 0] | (codes[:, 1] << 2) | (codes[:, 2] << 4) | (codes[:, 3] << 6)).astype(np.uint8)
+    bn = model.bn
+    sc = (bn.weight / torch.sqrt(bn.running_var + bn.eps)).detach().numpy()
+    sh = (bn.bias.detach().numpy() - bn.running_mean.numpy() * sc)
+    g = model.gru
+    gp = {k: v.detach().numpy() for k, v in g.named_parameters()}
+    out = {
+        "arch": "thread",
+        "request": True,
+        "buckets": B,
+        "bits": int(w.shape[1]),
+        "hidden": g.hidden_size,
+        "ternary": b64(packed, np.uint8),
+        "a": a,
+        "bn_scale": b64(sc),
+        "bn_shift": b64(sh),
+        **{k: b64(v) for k, v in gp.items()},
+        "head_w": b64(model.head.weight.detach().numpy()[0]),
+        "head_b": float(model.head.bias.detach().numpy()[0]),
+        "lr_w": b64(model.lr.emb.weight.detach().numpy()[:, 0]),
+        "lr_dense": [float(x) for x in model.lr.dense.weight.detach().numpy()[0]],
+        "lr_b": float(model.lr.dense.bias.detach().numpy()[0]),
+        "threshold": float(tau),
+        "checks": parity_checks(model, rows, True),
+    }
+    json.dump(out, open(path, "w"))
+
+
 def export_lr(model, tau, rows, path):
     """The linear model for trim.ts: int8 hashed weights (scale max|w|/127), the dense head, the threshold, and 64
     parity parts from val scored with the quantised weights (trim.ts must give the same keep decisions)."""
@@ -506,7 +576,7 @@ val = [r for r in all_rows if r["set"] == "val"]
 evals = {s: [r for r in all_rows if r["set"] == s] for s in A.eval_sets.split(",") if s != "none"}
 use_req = A.arch not in ("h5",)
 print(f"rows train {len(train)} val {len(val)} " + " ".join(f"{k} {len(v)}" for k, v in evals.items()), flush=True)
-dt = featurize(train, use_req)
+dt = featurize(train, use_req, training=True)
 dv = featurize(val, use_req)
 de = {k: featurize(v, use_req) for k, v in evals.items()}
 print(f"units train {len(dt['y'])} (pos {int(dt['y'].sum())}) val {len(dv['y'])}; {time.time()-t0:.0f}s", flush=True)
@@ -538,6 +608,7 @@ else:
     )()
     opt = torch.optim.Adam(model.parameters(), lr=A.lr)
     pos_w = torch.tensor(4.0)
+    best_ep = None
     for epoch in range(A.epochs):
         tl, nb = 0.0, 0
         for idx in item_batches(dt["where"], len(dt["y"])):
@@ -583,15 +654,24 @@ else:
         if best:
             ep["tau"] = float(best[0])
             ep["val"] = best[1]
-            for k, v in evals.items():
-                se = scores_of(model, de[k])
-                g = None
-                if A.arch == "h9":
-                    bp = {}
-                    for i, (ri, _) in enumerate(de[k]["where"]):
-                        bp[ri] = max(bp.get(ri, 0.0), se[i])
-                    g = {ri: bp.get(ri, 0.0) >= gcut for ri in range(len(v))}
-                ep[k] = run_screen(v, de[k], se, best[0], k, mode, g)
+            # Where the bytes are at that threshold: planted items (facts, look-alikes) against the rest.
+            mk = masks(val, dv, sv, best[0], mode, gate)
+            for role in ("planted", "other"):
+                bs = bt = 0
+                for ri, r in enumerate(val):
+                    if (r["role"] == "other") != (role == "other"):
+                        continue
+                    text = mk[ri] if isinstance(mk[ri], str) else L.trimmed_text(r, mk[ri])
+                    bs += len(L.line_of(r, r["shipped"]).encode())
+                    bt += len(L.line_of(r, text).encode())
+                ep[f"bytes_{role}"] = [bs, round(bt / max(bs, 1), 4)]
+            # The epoch kept is the one with the fewest val bytes at the 97% threshold (held-out sets are read once,
+            # after training, on that epoch only).
+            if best_ep is None or best[1]["bytes"] < best_ep["bytes"]:
+                import copy
+
+                best_ep = {"bytes": best[1]["bytes"], "epoch": epoch, "tau": float(best[0]), "mode": mode,
+                           "gcut": gcut if A.arch == "h9" else None, "state": copy.deepcopy(model.state_dict())}
         report["epochs"].append(ep)
         print(json.dumps(ep), flush=True)
         if A.dump_fail:
@@ -606,12 +686,28 @@ else:
                     text = mk[ri] if isinstance(mk[ri], str) else L.trimmed_text(r, mk[ri])
                     if not L.key_ok(r, text):
                         f.write(json.dumps({**r, "scores": per.get(ri, []), "trimmed": text}) + "\n")
+    tau = 0.5
+    if best_ep is not None:
+        model.load_state_dict(best_ep["state"])
+        tau = best_ep["tau"]
+        report["chosen"] = {"epoch": best_ep["epoch"], "tau": tau, "val_bytes": best_ep["bytes"]}
+        for k, v in evals.items():
+            se = scores_of(model, de[k])
+            g = None
+            if A.arch == "h9":
+                bp = {}
+                for i, (ri, _) in enumerate(de[k]["where"]):
+                    bp[ri] = max(bp.get(ri, 0.0), se[i])
+                g = {ri: bp.get(ri, 0.0) >= best_ep["gcut"] for ri in range(len(v))}
+            report["chosen"][k] = run_screen(v, de[k], se, tau, k, best_ep["mode"], g)
+        print(json.dumps({"chosen": {k: x for k, x in report["chosen"].items()}}), flush=True)
     if A.out:
         os.makedirs(A.out, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(A.out, "model.pt"))
         if isinstance(model, LR):
-            tau = report["epochs"][-1].get("tau", 0.5) if report["epochs"] else 0.5
             export_lr(model, tau, val, os.path.join(A.out, "trim-model.json"))
+        if isinstance(model, Thread):
+            export_thread(model, tau, val, os.path.join(A.out, "trim-model.json"))
 if A.out:
     os.makedirs(A.out, exist_ok=True)
     json.dump(report, open(os.path.join(A.out, "report.json"), "w"), indent=1)
