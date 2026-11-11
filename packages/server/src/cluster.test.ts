@@ -159,8 +159,11 @@ describe("the cluster router over three machines (D992)", () => {
     // b dies without a word: dropped after two failed probes; its users are served by the others.
     b.proc.kill("SIGKILL");
     await b.proc.exited;
-    await cluster.checkHealth();
-    const failover = (await cluster.checkHealth())!;
+    // Health rounds as the router's timer runs them, until b has failed twice in a row (a probe racing the exit may
+    // still have reached it once).
+    let failover = null;
+    for (let i = 0; i < 6 && !failover; i++) failover = await cluster.checkHealth();
+    if (!failover) throw new Error("b was never dropped");
     expect(failover.reason).toContain("b stopped answering");
     const fromB = users.filter((u) => four.owner(bucketOf("acme", u)) === "b");
     round++;

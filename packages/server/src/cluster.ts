@@ -108,7 +108,12 @@ export interface ClusterRouter {
 
 export interface ClusterOptions {
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "cluster" | "shutdownGraceMs">>;
+    Partial<
+      Pick<
+        ServerConfig,
+        "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "cluster" | "shutdownGraceMs" | "drainDelayMs"
+      >
+    >;
   nodes: NodeSpec[];
   /** Health probe interval; default 2 s (0: no timer, tests call `checkHealth`). */
   healthEveryMs?: number;
@@ -117,6 +122,8 @@ export interface ClusterOptions {
   recoverAfter?: number;
   /** How long nodes may take to release moved users before the router switches anyway; default 60 s. */
   rebalanceMs?: number;
+  /** How long a request is retried while its node refuses connections (a restart); default 5 s. */
+  retryRefusedMs?: number;
   log?: (line: string) => void;
 }
 
@@ -128,6 +135,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   const failAfter = options.failAfter ?? 3;
   const recoverAfter = options.recoverAfter ?? 2;
   const rebalanceMs = options.rebalanceMs ?? 60_000;
+  const retryRefusedMs = options.retryRefusedMs ?? 5_000;
   const grace = config.shutdownGraceMs ?? 10_000;
   const clusterKey = config.cluster?.key ?? "";
   if (clusterKey === "") throw new Error("a cluster router needs EDEN_CLUSTER_KEY (the same on every node)");
@@ -262,14 +270,25 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     if (auth !== null) headers.authorization = auth;
     const type = req.headers.get("content-type");
     if (type !== null) headers["content-type"] = type;
-    try {
-      return await fetch(`${n.url}${url.pathname}${url.search}`, {
-        method: req.method,
-        headers,
-        body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
-      });
-    } catch {
-      return fail(503, UNAVAILABLE);
+    // A refused connection is a node restarting (an upgrade: about a second) before the probes notice: the request
+    // never reached it, so it is retried for up to `retryRefusedMs`. Any other failure (a reset after the node took
+    // the request) is not retried: an event must not be observed twice.
+    const until = performance.now() + retryRefusedMs;
+    for (;;) {
+      try {
+        return await fetch(`${n.url}${url.pathname}${url.search}`, {
+          method: req.method,
+          headers,
+          body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
+        });
+      } catch (e) {
+        const code = (e as { code?: string } | null)?.code ?? "";
+        if (!/ECONNREFUSED|ConnectionRefused/i.test(code) || performance.now() > until || !n.up) {
+          return fail(503, UNAVAILABLE);
+        }
+        count("retried_refused");
+        await Bun.sleep(200);
+      }
     }
   };
   const nodeOf = (id: string | null) => nodes.find((n) => n.id === id);
@@ -408,6 +427,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     async stop() {
       draining = true;
       if (timer) clearInterval(timer);
+      if ((config.drainDelayMs ?? 0) > 0) await Bun.sleep(config.drainDelayMs!);
       await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
       void server.stop(true);
     },

@@ -166,6 +166,8 @@ async function serve(config: ServerConfig): Promise<void> {
     if (stopping) return;
     stopping = true;
     ops.draining = true;
+    // A router child's router drains for it; one process behind Caddy or a load balancer waits for them to look.
+    if (!config.child && (config.drainDelayMs ?? 0) > 0) await Bun.sleep(config.drainDelayMs!);
     partner.stopSync();
     await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
     void server.stop(true);

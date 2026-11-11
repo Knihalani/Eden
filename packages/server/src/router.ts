@@ -192,7 +192,7 @@ export interface RouterOptions {
     Partial<
       Pick<
         ServerConfig,
-        "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "persist" | "cluster" | "shutdownGraceMs"
+        "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "persist" | "cluster" | "shutdownGraceMs" | "drainDelayMs"
       >
     >;
   /** The environment each child starts from (default `process.env`); the router sets its own variables over it. */
@@ -457,7 +457,10 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       ),
     );
     const up = children.filter((c) => c.up).length;
-    const own = `# HELP eden_router_children_up Child processes up\n# TYPE eden_router_children_up gauge\neden_router_children_up ${up}\n`;
+    const own =
+      "# HELP eden_router_children_up Child processes up\n# TYPE eden_router_children_up gauge\n" +
+      `eden_router_children_up ${up}\n# HELP eden_router_children Child processes configured\n` +
+      `# TYPE eden_router_children gauge\neden_router_children ${n}\n`;
     return new Response(sumMetrics([own, ...texts]), { headers: { "content-type": "text/plain; version=0.0.4" } });
   };
 
@@ -510,6 +513,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     children,
     async stop() {
       draining = true;
+      // Still serving while whoever sends here sees /readyz turn 503 (EDEN_DRAIN_DELAY_MS, D994).
+      if ((config.drainDelayMs ?? 0) > 0) await Bun.sleep(config.drainDelayMs!);
       await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
       void server.stop(true);
       await stopChildren();

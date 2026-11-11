@@ -181,7 +181,9 @@ export class Ops {
       if ("remote" in this.disk) {
         const r = this.disk.remote;
         gauge("eden_store_backlog", "Persistence store writes waiting or running", this.disk.backlog);
-        for (const [k, v] of Object.entries(r)) this.counts.set(`eden_store_${k}_total`, v);
+        for (const [k, v] of Object.entries(r)) {
+          this.counts.set(`eden_store_${k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}_total`, v);
+        }
       }
     }
     let family = "";

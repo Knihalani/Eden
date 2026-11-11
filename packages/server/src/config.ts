@@ -93,6 +93,12 @@ export interface ServerConfig {
    * container more (`docker stop -t 30`, compose `stop_grace_period: 30s`).
    */
   shutdownGraceMs?: number;
+  /**
+   * How long a draining process keeps serving after /readyz turned 503 (EDEN_DRAIN_DELAY_MS, default 0, D994): the
+   * time a load balancer or Caddy takes to see it and stop sending. Without it a request on a kept-alive connection
+   * can meet the closing listener (a 502 at Caddy, which does not retry a POST). The grace counts from after it.
+   */
+  drainDelayMs?: number;
 }
 
 /**
@@ -187,6 +193,7 @@ export function loadConfig(env = process.env, cores = machineCores(), memoryByte
     persist: persistConfig(env, share, dev, memoryBytes),
     cluster: clusterConfig(env),
     shutdownGraceMs: Math.max(2_000, positive(env.EDEN_SHUTDOWN_GRACE_MS, 10_000, "EDEN_SHUTDOWN_GRACE_MS")),
+    drainDelayMs: drainDelay(env.EDEN_DRAIN_DELAY_MS),
   };
 }
 
@@ -245,6 +252,14 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memo
     maxBytes: Math.floor((mb * 1_048_576) / share),
     store: storeConfig(env),
   };
+}
+
+/** EDEN_DRAIN_DELAY_MS: 0-60,000 ms, default 0. */
+function drainDelay(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 0;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 60_000) throw new Error(`EDEN_DRAIN_DELAY_MS must be 0-60000, got ${raw}`);
+  return n;
 }
 
 /** EDEN_CLUSTER_KEY and EDEN_CLUSTER_SIZE (D992); the key's value is never in a message. */
