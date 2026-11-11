@@ -1,10 +1,24 @@
 # P2: the push check's cost, indirect requests, and the agent's packet bill
 
 Status: 2026-11-11, branch `claude/p2-push-check` (from `claude/lucid-hypatia-v9wqk5` at d5d504f0: main #244 plus
-docs/research/weak-points-1111.md). Session P2, weak points Q4/1, Q6/3 and C1/5 of that report. Decisions D820–D829.
+docs/research/weak-points-1111.md). Session P2, weak points Q4/1, Q6/3 and C1/5 of that report. Decisions D820–D827.
 Train suites only (there is no unread blind suite, D802). Every paid call goes to Anthropic directly with
 `HAIKU_API_KEY` through the lab (D97): **Anthropic-direct lab figures**. Caps: Anthropic $30, Modal $40. Numbers
 marked **[EST]** are arithmetic or judgement; every other number comes from a command in this note.
+
+**In plain words.**
+
+- **Indirect requests** ("I need to pay …", "Should I book …?") started no push. On a reworded train the push handed
+  the fact 97 times in 768 against 582 on the original wording. `pushIndirect` restores it. On Pi it raises hidden
+  facts +7.4 points, costs less and is faster; it adds one confirmed concern in 1,534 answers (§1, §3.8).
+- **The push check.** Check arms had been losing the default's open-shape pushes; `pushCheckOpen` fixes that. Every
+  cheaper version of the check failed: a short reply let look-alikes in, a tighter gate lost facts, and a no-model
+  rule lost 40% of them. The silent check (S) restores silence on most neutral requests and raises hidden facts +4.7
+  points. It costs +$0.2 per 1,000 tasks and +1.1 s a task with a Haiku agent. **With a Sonnet agent it lowers the
+  total bill by $0.86 per 1,000 tasks**, because the agent carries far fewer packet tokens all day (§3.5–3.7).
+- **The agent's bill.** About a third of what a Haiku agent reads over a day is Eden's packets (§3.6).
+- **Recommended:** promote S and `pushIndirect`; the wait (S) and one concern (`pushIndirect`) are the parent's to
+  accept (§4).
 
 ## 1. Weak point 3 (Q6): requests phrased indirectly start no push ($0)
 
@@ -340,3 +354,75 @@ Pi on Modal at d8544d2e, the bench-tools harness, `--suites train-rw`, seeds 41�
   `pushIndirect` is not promoted, and the trade goes to the parent: +7.4 points of hidden facts and −$0.026 per 1,000
   tasks for one more false concern in 1,534 neutral and control answers.
 - On train's own wording the switch changes no task (§1.2), so the default's measured figures stand there.
+
+### 3.7 E: with a Sonnet agent the silent check lowers the whole bill
+
+Pi on Modal at 385dcf90, B's harness with `--model claude-sonnet-5-5` (the agent only), `--days 8`, users w41–w44, 480
+task runs an arm, no 429; $7.98. Paired by task, users resampled (`n5/mix.py --days`):
+
+| `eden~S` − `eden`, Sonnet agent, days | |
+| --- | --- |
+| Agent $ per 1,000 tasks | **−1.079 (−1.464..−0.808)**, base 8.169 |
+| Eden's check $ | +0.222 (+0.220..+0.226) |
+| **Total $ per 1,000 tasks** | **−0.857 (−1.238..−0.587)** |
+| Wall a task | +0.57 s (+0.35..+0.78), base 4.84 s |
+| Agent model turns; tool calls | −0.21 (−0.31..−0.11); +0.08 |
+| Packet characters handed; re-read; agent prompt tokens a task | −582; −8,712 (−67%); −3,312 (−4,310..−2,421) of 17,994 |
+| Hidden raised (Sonnet regrade, descriptive) | 82.8 vs 86.2 on 29 paired hidden tasks (one task apart); concerns 1 vs 1 % |
+
+**E's reading holds in its strong form: S costs less** (the whole interval below zero). The [EST] of §3.6 ($0.71
+saved at Sonnet's rates on the Haiku agent's tokens) was conservative: a Sonnet agent carries 2.5 times the prompt
+tokens a task and takes fewer turns when the packet is smaller.
+
+## 4. Recommendations (the parent decides)
+
+**Weak point 1, the push check: (a), promote the silent check (S):** `pushCheck`, `pushCheckForm` 2,
+`pushCheckOpen`, `pushCheckSilent` true, `pushCheckWaitMs` 1500, no gate, no widening.
+
+- It is the only measured option that restores "silence by default": neutral requests given a packet 370 → 100 of
+  384 (funnel), the packet characters the agent carries all day −57% (Haiku) and −67% (Sonnet).
+- Hidden facts +4.7 points (+2.3..+7.0) one request a session, +2.0 (−5.0..+8.1) over days; confirmed concerns level.
+- Its price depends on the tenant's agent: **+$0.18–0.21 per 1,000 tasks with a Haiku agent, −$0.86 (−1.24..−0.59)
+  with a Sonnet agent**; and **+1.1 s a task with Haiku, +0.57 s with Sonnet**, most of it the check's own second
+  and the agent asking where the push went silent. It fails N5's bounds (+$0.10, +0.3 s) for a Haiku agent; by
+  D112's own test (better at no extra paid cost) it passes for a Sonnet agent and fails for Haiku.
+- The work to cut its cost found no cheaper reply (D822: half the output lets look-alikes in), no cheaper gate
+  (D824: fewer calls lose facts faster), no no-model substitute (D821: 40% of the facts), and no stop sequence. What
+  did cut the bill is the agent's side: fewer packets carried all day.
+- **If the parent will not take +1 s:** N (`pushCheckAnchored`, `pushCheckSilent` false, `pushCheckOpen`) is the
+  cheap second: +3.6 points (+1.6..+5.8) for +$0.05 short and +$0.10 over days, +0.32 s and +0.57 s. It does not
+  restore silence (neutral packets 370 of 384 unchanged).
+- Not (b): no no-model rule tells a fact from its look-alike (D821). Not (c): every check arm raises hidden facts
+  with its interval above zero.
+
+**Weak point 3, indirect requests: promote `pushIndirect`** on the parent's reading of one more confirmed concern in
+1,534 (its pre-registered rule fails on it): +7.4 points (+3.1..+11.8) on reworded requests, −$0.026 per 1,000 tasks,
+−0.39 s, no change on the original wording, log lines and chatter that start a push 48 → 23 of 140 (blind). Next:
+a request in a second clause, and a non-English suite before any language claim.
+
+**Weak point 5, the agent's bill:** under the shipped kept layout (D336) Eden's packets are about a third of what a
+Haiku agent reads over a day (2,449 of 7,265 prompt tokens [EST]) and a packet goes on 98% of requests; fewer packets,
+not shorter transcripts (D517, D336), is what cuts it, and the silent check is the measured way to send fewer.
+
+## 5. Spend and reproduce
+
+Anthropic **$20.91** of $30: funnel screens $0.45 (form 2 $0.22, form 3 $0.19, addendum C $0.04), Sonnet regrades
+$3.70 (short $2.59, days $0.17, train-rw $0.88, Sonnet-agent days $0.06), Pi shards $16.76 (B short $5.84, B days
+$1.34, D $1.60, E $7.98). Modal **$0.77** (the four apps' billing rows, 2026-11-11; may still settle). Ledgers:
+`.local/p2/ledger.jsonl`, `.local/modal/p2-{short,days,ind,sonnet}/`.
+
+```bash
+bun run funnel --suite train-rw --seeds 41,42,43,44 --jobs 4 --set '{"pushIndirect":true}' --json R.json -- --neutral
+python3 -I packages/sim/lab/p2/compare_rw.py --base train --arm train=T.json --arm rw=R.json
+bun packages/sim/src/lab/gate-score.ts packages/sim/lab/p2/blind-gate-2.json --misses
+L="--spend-ledger .local/p2/ledger.jsonl --spend-cap 2"
+bun run funnel --suite train --seeds 42 --json F2o.json --set '{"pushCheck":true,"pushCheckWaitMs":60000,
+  "pushCheckForm":2,"pushCheckOpen":true}' -- --neutral --check live --check-cache c.jsonl $L   # about $0.13
+bash .local/p2/run-short.sh; bash .local/p2/run-days.sh; bash .local/p2/run-ind.sh; bash .local/p2/run-sonnet.sh
+python3 -I packages/sim/modal/bench_report.py --pair eden~S:eden --group short=.local/modal/p2-short --sonnet
+python3 -I packages/sim/lab/n5/mix.py --days --base eden --arms eden~S .local/modal/p2-sonnet/s0*/out.json
+python3 -I packages/sim/lab/p2/packet_reread.py --base eden .local/modal/p2-days/s0*/out.json
+```
+
+The run scripts are this session's (`.local/p2/run-*.sh`, not kept): each is `lab_fanout.py` with the arms of §2.3,
+§1.5 and §3.4 as written there.
