@@ -287,6 +287,66 @@ class Intent(nn.Module):
         return self.head(self.q.act(self.l1(self.enc(texts))))
 
 
+class PairTag(nn.Module):
+    """H10: two item texts (older, newer) -> "the newer replaces the older". Both through one binary encoder; the
+    head reads a, b, a XNOR b and their difference bits through binary layers (order matters: a then b)."""
+
+    def __init__(self, q, bits):
+        super().__init__()
+        self.q = q
+        self.enc = Enc(q, bits)
+        self.l1 = BinLin(q, 3 * bits, 64)
+        self.head = nn.Linear(64, 1)
+
+    def forward(self, a_texts, b_texts):
+        a, b = self.enc(a_texts), self.enc(b_texts)
+        return self.head(self.q.act(self.l1(torch.cat([a, b, a * b], -1)))).squeeze(-1)
+
+
+TAGS = ["fact", "superseded", "other-entity", "resolved", "other-period", "already-met", "neutral", "other"]
+
+
+def m2_items(path, every=1):
+    """M2 raw worlds -> tagged items and supersession pairs. Items: (text, tag) for each task's fact, its twin (the
+    twin's kind), its neutrals and one other item; pairs: (older, newer, 1) for `revisionOf`, and as negatives the
+    reversed pair, (fact, twin) and (fact, neutral) of a task."""
+    items, pairs = [], []
+    for n, line in enumerate(open(path)):
+        if n % every:
+            continue
+        w = json.loads(line)
+        by = {i["id"]: i for i in w["items"]}
+        text = lambda i: f"{i['title']}\n{i['text']}"  # noqa: E731
+        for t in w["tasks"]:
+            if t["fact"] in by:
+                items.append((text(by[t["fact"]]), "fact"))
+            if t["decoy"] in by:
+                items.append((text(by[t["decoy"]]), t["decoyKind"]))
+            for x in t.get("neutrals", []):
+                if x in by:
+                    items.append((text(by[x]), "neutral"))
+            if t["fact"] in by and t["decoy"] in by:
+                pairs.append((text(by[t["fact"]]), text(by[t["decoy"]]), 0))
+            for x in t.get("neutrals", [])[:1]:
+                if t["fact"] in by and x in by:
+                    pairs.append((text(by[t["fact"]]), text(by[x]), 0))
+        planted = {x for t in w["tasks"] for x in [t["fact"], t["decoy"], *t.get("neutrals", [])]}
+        rest = [i for i in w["items"] if i["id"] not in planted]
+        for i in rest[:: max(1, len(rest) // 8)]:
+            items.append((text(i), "other"))
+        for i in w["items"]:
+            old = by.get(i.get("revisionOf") or "")
+            if old:
+                pairs.append((text(old), text(i), 1))
+                pairs.append((text(i), text(old), 0))
+    return items, pairs
+
+
+def jaccard(a, b):
+    x, y = set(re.findall(r"[a-z0-9]+", a.lower())), set(re.findall(r"[a-z0-9]+", b.lower()))
+    return len(x & y) / max(1, len(x | y))
+
+
 def load(path, n=None, every=1):
     out = []
     with gzip.open(path, "rt") as f:
@@ -630,6 +690,71 @@ def run(o):
             net.train()
             result = {"acc": round(sum(p == y for p, y in zip(pred, Ye)) / len(Ye), 3), "majority": round(majority, 3),
                       "n": len(Ye), "classes": len(labels)}
+            print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
+    elif o.arch == "supersede":
+        _, P = m2_items(o.train, o.every)
+        _, Pe = m2_items(o.eval)
+        net = PairTag(q, o.bits)
+        opt = torch.optim.Adam(net.parameters(), lr=o.lr)
+        base = round(auc([jaccard(a, b) for a, b, _ in Pe], [y for _, _, y in Pe]), 3)
+        step = 0
+        for ep in range(o.epochs):
+            random.shuffle(P)
+            for a in range(0, len(P), 64):
+                b = P[a : a + 64]
+                loss = nn.functional.binary_cross_entropy_with_logits(
+                    net([x[0] for x in b], [x[1] for x in b]), torch.tensor([float(x[2]) for x in b]))
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                if step % 20 == 0:
+                    curve.append({"step": step, "loss": round(float(loss), 3)})
+                step += 1
+            net.eval()
+            with torch.no_grad():
+                p = torch.cat([net([x[0] for x in Pe[a : a + 256]], [x[1] for x in Pe[a : a + 256]])
+                               for a in range(0, len(Pe), 256)]).tolist()
+            net.train()
+            y = [x[2] for x in Pe]
+            tp = sum(1 for a, b in zip(p, y) if a > 0 and b == 1)
+            fp = sum(1 for a, b in zip(p, y) if a > 0 and b == 0)
+            result = {"auc_replaces": round(auc(p, y), 3), "auc_jaccard_baseline": base, "precision@0": round(tp / max(1, tp + fp), 3),
+                      "recall@0": round(tp / max(1, sum(y)), 3), "pairs": len(Pe), "positives": sum(y), "train_pairs": len(P)}
+            print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
+    elif o.arch == "tags":
+        I, _ = m2_items(o.train, o.every)
+        Ie, _ = m2_items(o.eval)
+        net = Intent(q, o.bits, len(TAGS))
+        opt = torch.optim.Adam(net.parameters(), lr=o.lr)
+        step = 0
+        for ep in range(o.epochs):
+            random.shuffle(I)
+            for a in range(0, len(I), 128):
+                b = I[a : a + 128]
+                loss = nn.functional.cross_entropy(net([x[0] for x in b]), torch.tensor([TAGS.index(x[1]) for x in b]))
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                if step % 20 == 0:
+                    curve.append({"step": step, "loss": round(float(loss), 3)})
+                step += 1
+            net.eval()
+            with torch.no_grad():
+                lg = torch.cat([net([x[0] for x in Ie[a : a + 512]]) for a in range(0, len(Ie), 512)])
+            net.train()
+            pf = torch.softmax(lg, -1)[:, 0].tolist()
+            tags = [x[1] for x in Ie]
+            twin = [t for t in TAGS[1:6]]
+            f = [a for a, t in zip(pf, tags) if t == "fact"]
+            tw = [a for a, t in zip(pf, tags) if t in twin]
+            ne = [a for a, t in zip(pf, tags) if t == "neutral"]
+            ot = [a for a, t in zip(pf, tags) if t == "other"]
+            pred = lg.argmax(-1).tolist()
+            per = {t: round(sum(1 for p_, g in zip(pred, tags) if g == t and TAGS[p_] == t) / max(1, tags.count(t)), 3) for t in TAGS}
+            result = {"auc_fact_vs_twin": round(auc(f + tw, [1] * len(f) + [0] * len(tw)), 3),
+                      "auc_fact_vs_neutral": round(auc(f + ne, [1] * len(f) + [0] * len(ne)), 3),
+                      "auc_fact_vs_other": round(auc(f + ot, [1] * len(f) + [0] * len(ot)), 3),
+                      "acc_per_tag": per, "items": len(Ie)}
             print({"epoch": ep, **result, "s": round(time.time() - t0)}, flush=True)
     else:
         raise SystemExit(f"unknown arch {o.arch}")
