@@ -8,8 +8,8 @@
  * sync before each request), `backfill` (before the first request, once per user).
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
- *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE] [--intent FILE[,FILE]] [--resume]
+ *     [--cards FILE] [--recap-notice push|signal|none] [--move-after N] [--gap-min 10] [--night-h 2] [--set JSON]
+ *     [--json FILE] [--pool-diag FILE] [--intent FILE[,FILE]] [--resume]
  *
  * With `--json F` each user is appended to `F.partial.jsonl` as it finishes; after a kill, `--resume` reuses them
  * (D813, `main` below).
@@ -55,6 +55,13 @@ export interface DaysCallsOptions {
   recapSignal?: boolean;
   /** `--recap-notice none` (O1): the moved items' sources say nothing, so only a poll or a sweep finds the change. */
   recapSilent?: boolean;
+  /**
+   * `--move-after N` (P4, D841): a planted item handed at a request moves its clock times N requests later in the same
+   * session (with the recap's notice, or none), not just before the recap; one whose turn falls at or past the recap
+   * moves there as before. Its fate is read when the session ends (`midFates`), with how many requests the update
+   * took (`midDelays`). The recap's own fates (`fates`) then count only the items moved at the recap.
+   */
+  moveAfter?: number;
   cards?: DiskCardMaker | null;
   config?: Partial<EngineConfig>;
   gapMs?: number;
@@ -111,6 +118,11 @@ export interface DaysCallsUser {
   changed: number;
   /** Each moved item's fate at its recap (`MovedFate`). */
   fates: Record<MovedFate, number>;
+  /** `--move-after`: the fate of each item moved mid-session, read at the session's end, and each update's delay. */
+  midFates: Record<MovedFate, number>;
+  midDelays: number[];
+  /** Owed updates (moved items the agent was handed that day, recap and mid-session) by source: owed and updated. */
+  bySource: Record<string, { owed: number; updated: number }>;
   staleHeld: number;
   /**
    * Requests with a planted item, and those whose item reached the agent (a packet or the ask's citations), by the
@@ -218,6 +230,48 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const updatedIds = new Set<string>();
   const fates: Record<MovedFate, number> = { unhanded: 0, updated: 0, unpolled: 0, unseen: 0, undelivered: 0 };
   let recapMoved: { id: string; source: string; lists: number; to: string[] }[] = [];
+  /** `--move-after`: items handed and due to move (request of the day), and those moved mid-session today. */
+  const dueToMove = new Map<string, number>();
+  let midMoved: { id: string; source: string; lists: number; to: string[]; at: number; delay?: number }[] = [];
+  const midFates: Record<MovedFate, number> = { unhanded: 0, updated: 0, unpolled: 0, unseen: 0, undelivered: 0 };
+  const midDelays: number[] = [];
+  const bySource: DaysCallsUser["bySource"] = {};
+  const owe = (source: string, updated: boolean) => {
+    const row = (bySource[source] ??= { owed: 0, updated: 0 });
+    row.owed++;
+    if (updated) row.updated++;
+  };
+  let reqInDay = 0;
+  /** An "updated:" packet cited these: a mid-session move's delay is read from the first after it. */
+  const noteUpdated = (ids: Iterable<string>) => {
+    for (const id of ids) {
+      updatedIds.add(id);
+      for (const m of midMoved) if (m.id === id && m.delay === undefined) m.delay = reqInDay - m.at;
+    }
+  };
+  /** Moves an item's clock times at its source (the recap's change); the record, or null when it names no time. */
+  const moveItem = (id: string) => {
+    const it = world.items.find((x) => x.id === id);
+    if (!it) return null;
+    const shift = shiftClocks(it.text);
+    if (!shift.moves.length) return null;
+    it.text = shift.text;
+    if (it.meta) it.meta = shiftMeta(it.meta, shift.moves);
+    it.updatedAt = clock;
+    moved.set(it.id, shift.moves);
+    return { id: it.id, source: it.sourceId, lists: listsOf(it.sourceId), to: shift.moves.map((m) => m.to) };
+  };
+  /** The source's notice for moved items, as the recap gives it (`--recap-notice`). */
+  const announce = async (changed: Set<string>) => {
+    const touched = new Set(world.items.filter((i) => changed.has(i.id)).map((i) => i.sourceId));
+    for (const s of sources) if (touched.has(s.id)) s.reindex();
+    phase = "notice";
+    if (o.push !== "none" && !o.recapSilent) {
+      if (o.recapSignal) for (const id of touched) partner.sourceChanged(scope, id);
+      else await recapNotice(partner, scope, sources, changed, o.push);
+      await partner.revisionsSettled(scope);
+    }
+  };
   const listsOf = (source: string) => callsWhere(counts, (_p, src, op) => src === source && op === "list");
   const f0 = { ...partner.freshness };
   const surfaced: DaysCallsUser["surfaced"] = {};
@@ -232,7 +286,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     for (const i of partner.takePending({ ...scope, sessionId: session })) {
       if (i.text.includes(UPDATED_MARK)) {
         updatePackets++;
-        for (const c of i.citations) updatedIds.add(c.itemId);
+        noteUpdated(i.citations.map((c) => c.itemId));
       }
       for (const c of i.citations) handed.add(c.itemId);
     }
@@ -248,36 +302,34 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
       session = `${userPrefix}:day${dayNo}`;
       planted.clear();
       handedToday.clear();
+      dueToMove.clear();
+      midMoved = [];
+      reqInDay = 0;
     }
     newDay = isRecap(task);
     if (isRecap(task)) {
       // pi-ab's recap: the day's planted items move their clock times and their source says so.
       const changed = new Set<string>();
       for (const id of planted) {
-        const it = world.items.find((x) => x.id === id);
-        if (!it) continue;
-        const shift = shiftClocks(it.text);
-        if (!shift.moves.length) continue;
-        it.text = shift.text;
-        if (it.meta) it.meta = shiftMeta(it.meta, shift.moves);
-        it.updatedAt = clock;
-        changed.add(it.id);
-        moved.set(it.id, shift.moves);
-        recapMoved.push({
-          id: it.id,
-          source: it.sourceId,
-          lists: listsOf(it.sourceId),
-          to: shift.moves.map((m) => m.to),
-        });
+        const m = moveItem(id);
+        if (!m) continue;
+        changed.add(m.id);
+        recapMoved.push(m);
       }
-      const touched = new Set(world.items.filter((i) => changed.has(i.id)).map((i) => i.sourceId));
-      for (const s of sources) if (touched.has(s.id)) s.reindex();
-      phase = "notice";
-      if (o.push !== "none" && !o.recapSilent) {
-        if (o.recapSignal) for (const id of touched) partner.sourceChanged(scope, id);
-        else await recapNotice(partner, scope, sources, changed, o.push);
-        await partner.revisionsSettled(scope);
+      await announce(changed);
+    } else if (o.moveAfter) {
+      // `--move-after`: items handed N requests ago move now, mid-session.
+      const changed = new Set<string>();
+      for (const [id, at] of dueToMove) {
+        if (at > reqInDay) continue;
+        dueToMove.delete(id);
+        planted.delete(id);
+        const m = moveItem(id);
+        if (!m) continue;
+        changed.add(m.id);
+        midMoved.push({ ...m, at: reqInDay });
       }
+      if (changed.size) await announce(changed);
     }
     phase = "request";
     const ev = { ...scope, sessionId: session, at: clock };
@@ -291,7 +343,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     });
     if (r.injection?.text.includes(UPDATED_MARK)) {
       updatePackets++;
-      for (const c of r.injection.citations) updatedIds.add(c.itemId);
+      noteUpdated(r.injection.citations.map((c) => c.itemId));
     }
     for (const c of r.injection?.citations ?? []) handed.add(c.itemId);
     // The lookup's work left running (the push behind its poll, a second reading) settles before the next request.
@@ -349,9 +401,35 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
               ? "unseen"
               : "undelivered";
       fates[fate]++;
+      if (fate !== "unhanded") owe(m.source, fate === "updated");
     }
     recapMoved = [];
-    if (!isRecap(task) && task.planted) planted.add(task.planted);
+    // `--move-after`: the session ends with the recap's request, so each mid-session move's fate is read now.
+    if (isRecap(task)) {
+      for (const m of midMoved) {
+        const held = cache.get(scope, m.id, clock);
+        const fate: MovedFate =
+          m.delay !== undefined
+            ? "updated"
+            : listsOf(m.source) === m.lists
+              ? "unpolled"
+              : !held || !m.to.every((t) => held.text.includes(t))
+                ? "unseen"
+                : "undelivered";
+        midFates[fate]++;
+        owe(m.source, fate === "updated");
+        if (m.delay !== undefined) midDelays.push(m.delay);
+      }
+      midMoved = [];
+    }
+    // An item already moved mid-session today is not planted again: the recap would move it a second time (the
+    // review) and owe it twice.
+    const movedToday = !!task.planted && midMoved.some((m) => m.id === task.planted);
+    if (!isRecap(task) && task.planted && !movedToday) planted.add(task.planted);
+    if (o.moveAfter && !isRecap(task) && task.planted && handed.has(task.planted) && !dueToMove.has(task.planted)) {
+      if (!movedToday) dueToMove.set(task.planted, reqInDay + o.moveAfter);
+    }
+    if (!isRecap(task)) reqInDay++;
     // After each request, whether the cache holds a moved item in an old version (its old time without the new one)
     // with nothing doubting it: a delivery would then send it stale, which D126 and D211 forbid.
     for (const [id, moves] of moved) {
@@ -379,6 +457,9 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     updatePackets,
     changed: moved.size,
     fates,
+    midFates,
+    midDelays,
+    bySource,
     staleHeld,
     surfaced,
     requestCallsByDay,
@@ -427,6 +508,7 @@ export async function main(
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",
     recapSilent: recap === "none",
+    moveAfter: Number(opt("move-after", "0")),
     cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
@@ -523,6 +605,25 @@ export async function main(
     return all;
   }, {});
   log(`moved items at their recap: ${JSON.stringify(fates)}`);
+  const bySrc: Record<string, string> = {};
+  for (const u of users)
+    for (const [k, v] of Object.entries(u.bySource)) {
+      const [upd, owed] = (bySrc[k] ?? "0/0").split("/").map(Number) as [number, number];
+      bySrc[k] = `${upd + v.updated}/${owed + v.owed}`;
+    }
+  log(`owed updates arrived by source (updated/owed): ${JSON.stringify(bySrc)}`);
+  if (o.moveAfter) {
+    const mid = users.reduce<Record<string, number>>((all, u) => {
+      for (const [k, v] of Object.entries(u.midFates)) all[k] = (all[k] ?? 0) + v;
+      return all;
+    }, {});
+    const delays = users.flatMap((u) => u.midDelays).sort((a, b) => a - b);
+    const q = (p: number) => (delays.length ? delays[Math.min(delays.length - 1, Math.floor(p * delays.length))] : NaN);
+    log(
+      `moved mid-session (${o.moveAfter} requests after handed), at session end: ${JSON.stringify(mid)}; ` +
+        `requests to the update: p50 ${q(0.5)}, p90 ${q(0.9)}, max ${delays.at(-1) ?? NaN}`,
+    );
+  }
   if (out) writeFileSync(out, JSON.stringify({ label, seeds, days: o.days, requests, userDays: days, total, users }));
   if (journal) {
     if (reused || journal.torn) {
