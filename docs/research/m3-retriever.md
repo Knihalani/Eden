@@ -216,3 +216,7 @@ than the sim's do, so there is little room.
 | asym-a2 (train only) | 1,007 / 1,330 | 740 / 1,163 |
 | sparse-a1 (train only) | 1,328 / 1,366 | 1,164 / 1,222 |
 | sparse-s1 (with generated families) | 1,356 / 1,374 | 1,183 / 1,225 |
+| **asym-s1 (with generated families)** | 1,349 / 1,382 | **836** / 1,195 |
+
+asym-s1 alone holds 73 more of M2's held-out facts than BM25 and **297 fewer decoys** (−26%), on a generator it
+never trained on; fused (k 10), facts @5 1,211 → 1,329 of 1,435 (+8.2 points).
