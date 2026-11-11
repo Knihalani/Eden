@@ -666,12 +666,6 @@ export class SyncManager {
     return s !== undefined && this.isCurrent(s, now);
   }
 
-  /** When the source's last complete poll of the user's copy began (`heldReread`, D840); undefined if never. */
-  polledAt(scope: Scope, sourceId: string): number | undefined {
-    const at = this.users.get(scopeKey(scope))?.sources.get(sourceId)?.polledAt;
-    return at !== undefined && Number.isFinite(at) ? at : undefined;
-  }
-
   /**
    * A change notification for a user's source (`syncPush`): its synced copy is behind until a poll that begins after
    * now completes, which the next lookup that reads it makes (behind it with `syncPollBehind`). A burst of

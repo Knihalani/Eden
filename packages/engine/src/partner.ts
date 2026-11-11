@@ -372,8 +372,6 @@ interface Session {
    * and taken by the delivery that follows. Bounded (`MAX_CHECKS`); dropped with the session.
    */
   checks?: Map<string, { at: number; mark: number; outcome: Promise<CheckOutcome>; settled?: CheckOutcome }>;
-  /** `heldReread` (D840): the re-reads of held copies this session's latest request started, while they run. */
-  rereading?: Promise<void> | null;
   /**
    * With `askDedup`: the words each item's line showed the agent in this session's packets and answers (lowercase),
    * by item id and version (`shownKey`: an item changed at its source under the same id counts as not shown), at
@@ -955,8 +953,6 @@ export class ContextPartner {
       s.requests++;
       // `askBehind` (D430): a follow-up packet still queued answered the last request's ask, not this request.
       this.dropAskBehind(s);
-      // `heldReread` (D840): copies the agent holds from quiet sources, re-read behind the request.
-      if (this.config.heldReread > 0) this.rereadHeld(s);
     }
     const prep = spans?.open("observe.prep", root!.id);
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
@@ -1613,79 +1609,6 @@ export class ContextPartner {
       if (this.revisionPolls.get(user) === tracked) this.revisionPolls.delete(user);
     });
     this.revisionPolls.set(user, tracked);
-  }
-
-  /**
-   * `heldReread` (D840): up to `heldReread` items the agent was handed in this session, from sources that send no
-   * change notices and can find an item by ref, re-read by id behind the request (no caller waits on it), the oldest
-   * copy first. A changed copy is stored and announced through `recheck` (an "updated:" packet queued for the next
-   * take); a gone one dropped. A source that notifies is left to its notices (D125, D205), and one that cannot fetch
-   * by ref would answer null to every re-read (an MCP source with no get tool). The copy's read time is the cache's:
-   * a listing, search or re-read that held it since resets it, so a busy source's polls spend no re-reads. One
-   * request's re-reads at a time a session: a request while they run starts none. Never throws.
-   */
-  private rereadHeld(s: Session): void {
-    if (s.rereading || s.closed || !this.config.revisionNotice || !this.config.verifyDelivery) return;
-    if (s.ledger.shownCount === 0) return;
-    const t0 = performance.now();
-    const work = (async () => {
-      const all = await this.deps.sources(s.scope).catch((): Source[] => []);
-      if (s.closed) return;
-      // By source id, whether a poll of it vouches for its held copies (below).
-      const quiet = new Map(
-        all
-          .filter((x) => !x.notifies && typeof x.fetch === "function" && (x.fetchesById ?? x.fetchReportsGone === true))
-          .map((x) => [x.id, x.listsByTime !== true] as const),
-      );
-      if (quiet.size === 0) return;
-      const now = this.now();
-      const due: { id: string; at: number }[] = [];
-      for (const [id, c] of s.ledger.shownCopies()) {
-        const pollVouches = quiet.get(c.sourceId);
-        if (pollVouches === undefined) continue;
-        if (this.config.heldRereadDated && !(c.times?.length ?? 0)) continue;
-        const read = this.deps.cache.fetchedAt(s.scope, id);
-        if (read === undefined) continue;
-        // A listing that puts the most recently changed first (mail, chat, documents) shows an edit at its top, so a
-        // poll since the copy was read vouches for it and a busy source's copies cost no re-reads. A calendar lists
-        // by start time (`listsByTime`): an edited event stays where it was, and only the copy's own read counts.
-        const polled = pollVouches ? (this.sync?.polledAt(s.scope, c.sourceId) ?? -Infinity) : -Infinity;
-        const at = Math.max(read, polled);
-        if (now - at < this.config.heldRereadAgeMs) continue;
-        due.push({ id, at });
-      }
-      if (due.length === 0) return;
-      due.sort((a, b) => a.at - b.at);
-      const made = { calls: 0 };
-      const picked: string[] = [];
-      await Promise.all(
-        due.slice(0, this.config.heldReread).map(async ({ id }) => {
-          const item = this.deps.cache.get(s.scope, id, now);
-          if (!item || s.closed) return;
-          picked.push(id);
-          await this.check(s, item, made);
-        }),
-      );
-      if (picked.length === 0) return;
-      // Traced as made, so traces sum to what the connectors received.
-      this.trace(s, {
-        sessionId: s.id,
-        turn: s.turn,
-        event: "verify",
-        decision: "verify",
-        reason: "held reread",
-        latencyMs: Math.round(performance.now() - t0),
-        sourceCalls: made.calls,
-        modelCalls: 0,
-        costUsd: 0,
-        itemIds: picked,
-      });
-    })()
-      .catch(() => {})
-      .finally(() => {
-        s.rereading = null;
-      });
-    s.rereading = work;
   }
 
   /** Whether a live session of the user was handed a copy of an item from this source. */

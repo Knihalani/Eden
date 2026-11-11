@@ -470,19 +470,6 @@ export interface EngineConfig {
    */
   revisionNotice: boolean;
   /**
-   * Trial (D840, P4; off: 0). With `revisionNotice` and `verifyDelivery`: at each user request, up to this many items
-   * the session's agent was handed from a source that sends no change notices and can fetch an item by ref
-   * (`fetchesById`) are re-read by id in the background, oldest copy first, so an edit to one is announced as an
-   * "updated:" packet without waiting for the source's next poll (a quiet source is taken as current for up to
-   * `syncMaxStaleMs`, D606). Only copies read at least `heldRereadAgeMs` ago; with `heldRereadDated`, only items whose
-   * handed copy named a time or date. Each re-read is one connector call.
-   */
-  heldReread: number;
-  /** With `heldReread`: a held copy read (listed, searched or re-read) more recently than this is not re-read. */
-  heldRereadAgeMs: number;
-  /** With `heldReread`: only items whose handed copy named a time or a date (`timesOf`) are re-read. */
-  heldRereadDated: boolean;
-  /**
    * `ask` answers compacted as packets are (D76; docs/research/gen-tokens.md): each item cut to the parts that bear on
    * the question (`compactText`), at most `askItemBytes`, rather than said whole up to the answer's 4 KB. The items and
    * their order are unchanged; only how much of each the agent reads. Off: answers say each item whole.
@@ -904,9 +891,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   maxEventChars: 32_000,
   actionCheck: false,
   revisionNotice: true,
-  heldReread: 0,
-  heldRereadAgeMs: 20 * 60_000,
-  heldRereadDated: false,
   compactAsk: true,
   askDedup: true,
   compactParts: true,

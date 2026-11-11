@@ -195,12 +195,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   });
   const scope = { tenantId: "ab", userId: `w${seed}` };
   // The harness reads the engine's session table, as hidden-funnel does: whether a session's lookup is still running.
-  // `rereading` (D840): a request's re-reads of held copies, behind it like the push's poll.
-  type Live = { inflight: unknown; behind?: unknown; rereading?: unknown };
-  const table = (partner as unknown as { sessions: Map<string, Live> }).sessions;
+  const table = (partner as unknown as { sessions: Map<string, { inflight: unknown; behind?: unknown }> }).sessions;
   const busy = (id: string) => {
     const s = table.get(`${scope.tenantId}/${scope.userId}#${id}`);
-    return !!(s?.inflight || s?.behind || s?.rereading);
+    return !!(s?.inflight || s?.behind);
   };
   const sync = partner.sync;
   if (!sync) throw new Error("days-calls needs the sync (it is in the default)");

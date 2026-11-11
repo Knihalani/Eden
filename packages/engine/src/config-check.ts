@@ -189,9 +189,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushWidenIntent: [...PUSH, "pushCheck", "pushWiden"],
   pushWidenDeep: [...PUSH, "pushCheck", "pushWiden"],
   revisionDiff: ["revisionNotice"],
-  heldReread: ["revisionNotice", "verifyDelivery"],
-  heldRereadAgeMs: ["revisionNotice", "verifyDelivery"],
-  heldRereadDated: ["revisionNotice", "verifyDelivery"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -241,7 +238,6 @@ const RANGES: Partial<Record<Key, Range>> = {
   cardsLanes: { integer: true, min: 1, max: 8 },
   syncBackfillLanes: SIZE,
   syncKickLanes: COUNT,
-  heldReread: { integer: true, max: 16 },
   syncKickRetryMs: COUNT,
   syncMaxUsersPerTenant: SIZE,
   cardItems: COUNT,
