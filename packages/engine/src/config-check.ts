@@ -96,6 +96,7 @@ const READER: Key[] = ["askReader"];
 const PUSH: Key[] = ["askReader", "readerPush"];
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncMaxItems: SYNC,
+  packetTrim: ["compactInjection"],
   syncPageSize: SYNC,
   syncPollPageSize: SYNC,
   syncStaleChance: SYNC,

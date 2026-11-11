@@ -49,6 +49,12 @@ export function renderPacket(
      * compaction kept. Reads only; never set by the engine.
      */
     onParts?: (item: ContextItem, parts: readonly Part[], text: string) => void;
+    /**
+     * `packetTrim` (M6, D920; trim.ts): each part's keep score for the request, or null to fall back to `pick`. A
+     * compacted item keeps only the parts at or above the trimmer's threshold, the best that fit `itemBytes` in their
+     * own order; none kept says the item by its title alone.
+     */
+    trim?: (title: string, parts: readonly Part[]) => { scores: ArrayLike<number>; threshold: number } | null;
   },
 ): string {
   const before = options.shownBefore;
@@ -82,7 +88,9 @@ export function renderPacket(
         options.split,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
+      const trimmed = options.trim && !(prior && !saysNew(parts)) ? options.trim(item.title, parts) : null;
+      const text =
+        prior && !saysNew(parts) ? SHOWN : trimmed ? keepScored(parts, trimmed, each) : pick(parts, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
@@ -102,7 +110,8 @@ export function renderPacket(
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
     const named = safeLine(item.title);
-    const title = said + (named ? `${named}: ` : "");
+    // An item trimmed to nothing (`packetTrim`) is said by its title alone, with no colon after it.
+    const title = said + (named ? (item.text ? `${named}: ` : named) : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -454,6 +463,40 @@ export function messageParts(
     }
   }
   return parts;
+}
+
+/**
+ * `packetTrim`: the parts scored at or above the threshold, the best-scored that fit `maxBytes`, in their own order,
+ * gaps marked "…"; empty when none is kept (the line is then the item's title alone).
+ */
+function keepScored(parts: Part[], t: { scores: ArrayLike<number>; threshold: number }, maxBytes: number): string {
+  const kept: number[] = [];
+  for (let k = 0; k < parts.length; k++) if (t.scores[k]! >= t.threshold) kept.push(k);
+  let bytes = 0;
+  for (const k of kept) bytes += utf8Length(parts[k]!.text) + 3;
+  let keep = kept;
+  if (bytes > maxBytes) {
+    keep = [];
+    let room = maxBytes;
+    for (const k of [...kept].sort((a, b) => t.scores[b]! - t.scores[a]! || a - b)) {
+      const b = utf8Length(parts[k]!.text) + 3;
+      if (b > room) continue;
+      keep.push(k);
+      room -= b;
+    }
+    keep.sort((a, b) => a - b);
+  }
+  return joinParts(parts, keep);
+}
+
+function joinParts(parts: Part[], keep: readonly number[]): string {
+  let out = "";
+  let last = -1;
+  for (const k of keep) {
+    out += out ? (k === last + 1 ? " " : " … ") + parts[k]!.text : parts[k]!.text;
+    last = k;
+  }
+  return out;
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */

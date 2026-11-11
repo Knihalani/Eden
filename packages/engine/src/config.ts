@@ -473,6 +473,13 @@ export interface EngineConfig {
    */
   compactParts: boolean;
   /**
+   * M6 (D920, trial; docs/research/m6-trimmer.md): a compacted packet item keeps only the parts a small learned model
+   * (`trim.ts`, hashed n-grams, no model call, loaded once per process) scores as carrying the fact the request needs
+   * (for a look-alike, the parts that show it is not the fact), in place of `pick`'s ranking by the request's words;
+   * an item with none kept is said by its title. Needs `compactInjection`.
+   */
+  packetTrim: boolean;
+  /**
    * The intent index (D87, docs/research/edge-intent.md; needs `cards` and `PartnerDeps.cards`): the background card
    * call also writes, per item, up to four requests the item would change, in a user's words, and items the card
    * prefilter rejects are read for theirs. They are indexed per user apart from the item's text (`intent.ts`). At
@@ -844,6 +851,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   compactAsk: true,
   askDedup: true,
   compactParts: true,
+  packetTrim: false,
   intent: true,
   cardsLean: true,
   cardsLeanDays: 7,
