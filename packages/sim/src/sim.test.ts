@@ -18,6 +18,14 @@ const scope = { tenantId: "t", userId: "u" };
 const signal = new AbortController().signal;
 
 describe("simulated world", () => {
+  // D842: a calendar item last changed in the future sat above an event edited now in a newest-changed listing, so a
+  // poll never saw the edit (calendars got 0 of 15 owed updates in days-calls).
+  test("no calendar item was changed after the world's present", () => {
+    for (const seed of [41, 1000]) {
+      const w = buildWorld({ seed });
+      expect(w.items.filter((i) => i.sourceId === "calendar" && i.updatedAt > w.now).map((i) => i.id)).toEqual([]);
+    }
+  });
   test("is deterministic, and every fact is stated by at least one item", () => {
     const a = buildWorld({ seed: 7 });
     const b = buildWorld({ seed: 7 });
