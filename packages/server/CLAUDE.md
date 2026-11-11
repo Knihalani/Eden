@@ -133,9 +133,9 @@ its model roles.
   process in its own directory, logs problems as counts by reason once a minute at most, and writes live users at
   SIGTERM within 1.5 s (the router kills a child 2 s after its SIGTERM). The router (or one process with no router)
   deletes other N's directories first (`prunePersistDirs`), the treatment D163 asks of any per-user file.
-- **Warm freezing (D862, a trial, off; `EDEN_WARM_FREEZE=1`).** `buildPartner`'s `warmFreeze` builds the cache with
-  `WARM_FREEZE_LIMITS` (users idle 2 minutes frozen warm, a 1-minute expiry tick). With persistence on, warm users
-  are written only at SIGTERM's flush; the compact freeze at 20-30 minutes writes as before.
+- **Warm freezing (D862, in the default).** Users idle 2 minutes are frozen warm, compact at 30 (the cache's
+  defaults, docs/research/p6-scale.md). With persistence on, warm users are written only at SIGTERM's flush; the
+  compact freeze writes as before.
 
 ## Test
 

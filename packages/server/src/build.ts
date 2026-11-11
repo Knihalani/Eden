@@ -5,7 +5,6 @@ import {
   DEFAULT_CONFIG,
   GATE_MODULE,
   ItemCache,
-  WARM_FREEZE_LIMITS,
   ModelCardMaker,
   ModelReaderMaker,
   PushChecker,
@@ -81,8 +80,6 @@ export interface BuildOptions {
   persist?: FrozenDisk;
   /** Trial (D652, EDEN_PERSIST_DISK_ONLY=1; with `persist`): a frozen user on disk keeps no blob in memory. */
   persistDiskOnly?: boolean;
-  /** Trial (D862, EDEN_WARM_FREEZE=1): the cache's `WARM_FREEZE_LIMITS`. */
-  warmFreeze?: boolean;
 }
 
 /**
@@ -158,7 +155,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
           ),
         })
       : undefined;
-  const cache = new ItemCache(options.warmFreeze ? WARM_FREEZE_LIMITS : {});
+  const cache = new ItemCache();
   // Before the partner is built: it wires the sync's state into what a persisted user carries.
   if (options.persist) cache.persist(options.persist, { diskOnly: options.persistDiskOnly === true });
   const partner = new ContextPartner({

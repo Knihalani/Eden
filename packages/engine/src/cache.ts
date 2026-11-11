@@ -516,7 +516,8 @@ export interface CacheLimits {
   syncTtlMs: number;
   /**
    * How often expired items are swept from every user, and users left with none dropped (`expireIdle`), on an unref'd
-   * timer started by the first `put`. 0: never (expired items then go only when their user writes again).
+   * timer started by the first `put`. 0: never (expired items then go only when their user writes again). A minute
+   * since D862 (ten before), so a user idle two minutes freezes warm on time; a tick is one walk of the users.
    */
   expireEveryMs: number;
   /**
@@ -536,19 +537,19 @@ export interface CacheLimits {
   /**
    * A user neither read nor written for about this long (ms) is frozen at an expiry tick (`FrozenUser`, D325): held as
    * one compressed blob and thawed, exactly, on next use. Counted in expiry ticks (`expireEveryMs`), at least two: a
-   * user last seen in tick k freezes at tick k + ceil(freezeIdleMs / expireEveryMs), so 20-30 minutes after their last
+   * user last seen in tick k freezes at tick k + ceil(freezeIdleMs / expireEveryMs), so 29-30 minutes after their last
    * use at the defaults, and a lookup that read the user's vocabulary before an await never finds it rebuilt after.
    * 0: never.
    */
   freezeIdleMs: number;
   /**
-   * Trial (D860, D862; 0, off): a user idle this long (ms, counted in expiry ticks as `freezeIdleMs` is, at least two)
-   * is frozen "warm": in a blob that keeps what a thaw would otherwise rebuild, each item's deflated text bytes as
-   * they are and the vocabulary and the compacted index as arrays (`fastFreezeSteps`), so the thaw is mostly copying
-   * (about 10-20 ms at 3,000 items against 150-260). The warm blob is larger than the compact one (per-item deflate
-   * shares no words across items), so a user still idle at `freezeIdleMs` is frozen again in the compact form. Set
-   * `expireEveryMs` to at most half of it, or the ticks are too coarse to freeze on time. Only when below
-   * `freezeIdleMs` (so never with users that never freeze) and with `releaseTerms`; a thaw reads either form.
+   * D860, D862 (2 minutes by default; 0: off): a user idle this long (counted in expiry ticks as `freezeIdleMs` is,
+   * at least two) is frozen "warm": in a blob that keeps what a thaw would otherwise rebuild, each item's deflated
+   * text bytes as they are and the vocabulary and the compacted index as arrays (`fastFreezeSteps`), so the thaw is
+   * mostly copying (10-20 ms at 3,000 items against 150-300). The warm blob is larger than the compact one (per-item
+   * deflate shares no words across items), so a user still idle at `freezeIdleMs` is frozen again compact. Needs
+   * `expireEveryMs` at most half of it, or the ticks are too coarse to freeze on time. Only when below `freezeIdleMs`
+   * (so never with users that never freeze) and with `releaseTerms`; a thaw reads either form.
    */
   warmIdleMs: number;
   /**
@@ -566,19 +567,13 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxTextChars: 8_000,
   maxSyncedPerUser: 5_000,
   syncTtlMs: 7 * 24 * 3_600_000,
-  expireEveryMs: 10 * 60_000,
+  expireEveryMs: 60_000,
   releaseTerms: true,
   packText: true,
   freezeIdleMs: 30 * 60_000,
-  warmIdleMs: 0,
+  warmIdleMs: 2 * 60_000,
   idleCompact: true,
 };
-
-/**
- * The warm freeze's trial settings (D862; the servers' EDEN_WARM_FREEZE=1): users idle two minutes frozen warm, the
- * expiry tick every minute so they freeze on time, compact still at `freezeIdleMs` (30 minutes, so 30 ticks).
- */
-export const WARM_FREEZE_LIMITS: Partial<CacheLimits> = { warmIdleMs: 2 * 60_000, expireEveryMs: 60_000 };
 
 /**
  * A source item made safe to hold: every text field redacted, text clipped, and an id that never embeds a secret (a

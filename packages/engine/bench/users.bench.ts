@@ -20,6 +20,7 @@
  * [--persist] [--disk-only] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
  * `--persist`: frozen users are also written, encrypted, to a temp directory (D425); `--disk-only`: and held there only
  * (D652).
+ * Before D862 (no warm freeze, a 10-minute tick): `--cache='{"warmIdleMs":0,"expireEveryMs":600000}'`.
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
  * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
  * `--world` takes item text from the sim world (as `ingest.bench.ts --world`); `--prose` the world's items with the
@@ -55,7 +56,7 @@ const CACHE = JSON.parse(process.argv.find((a) => a.startsWith("--cache="))?.sli
 >;
 /**
  * `--warm-waves=J` (D862): users freeze warm after two idle ticks of a minute (`warmIdleMs` 2 min, `expireEveryMs` 1
- * min) and compact once idle 2J+1 ticks: with `--waves=K` the steady state then holds the last wave
+ * min, the defaults) and compact once idle 2J+1 ticks: with `--waves=K` the steady state then holds the last wave
  * live, the J before it warm and the rest compact (each earlier wave idles two ticks per later wave).
  */
 const WARM_WAVES = Number(process.argv.find((a) => a.startsWith("--warm-waves="))?.slice(13) ?? -1);
