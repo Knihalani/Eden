@@ -624,3 +624,9 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
 | D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
 | D996 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | rejected |
+| D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
+| D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
+| D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
+| D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
+| D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
+| D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |

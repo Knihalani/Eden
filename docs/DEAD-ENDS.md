@@ -65,6 +65,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
 | D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
 | D1031 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | Failed its rule (pre-registered in b3cc3f12, extended once in 9ba0cc2d before the call): hidden raised… |
+| D1050 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | stopped on its pre-registered screen |
+| D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
 
 ## Reader
 
@@ -111,6 +113,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D480 | Trial `intentPrune` (pruning an item's intent requests by a no-model score against the item) is rejected and deleted | Four rules (`share:x` of the request's terms in the item, `names` the item does not hold, the closest N, the… |
 | D523 | Rejected without a paid run: a card-only (distilled) model reading the rest of a new user's backfill | the bar was +10 (D361), written after the screen was read |
 | D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
+| D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
 
 ## Check
 
