@@ -622,8 +622,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
 | D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
 | D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
-| D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
 | D996 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | rejected |
+| D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
 | D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
 | D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
 | D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
