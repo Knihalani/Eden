@@ -781,6 +781,11 @@ export class ItemCache {
    * them, `CardEnricher.freeze`). Null when no owner listens.
    */
   onFreeze: ((scope: Scope) => void) | null = null;
+  /**
+   * Called with each user the cache thaws for use (not a warm user thawed only to be frozen compact): the partner
+   * thaws the user's card state here, in the cache's own thaw, not inside the first lookup that reads it (D998).
+   */
+  onThaw: ((scope: Scope) => void) | null = null;
   persistHooks: {
     save(scope: Scope): unknown;
     /** May return a promise: a `ready` that read the user back resolves only once it settles. */
@@ -2266,6 +2271,11 @@ export class ItemCache {
     else {
       this.freezes.thawed++;
       this.freezes.thawMs += performance.now() - t0;
+      try {
+        this.onThaw?.(u.scope);
+      } catch {
+        // The owner's thaw fails open: its state thaws at its own first read.
+      }
     }
     // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes. A
     // shared store keeps its copy (D992: the failover copy), so `thawed` when the store has one.

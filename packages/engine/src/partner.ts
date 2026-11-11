@@ -771,7 +771,10 @@ export class ContextPartner {
     if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
     // D998: a user's card state freezes with their cache, and thaws at its first read or write.
     const cards = deps.cards;
-    if (cards) deps.cache.onFreeze = (scope) => cards.freeze(scope);
+    if (cards) {
+      deps.cache.onFreeze = (scope) => cards.freeze(scope);
+      deps.cache.onThaw = (scope) => cards.wake(scope);
+    }
     // D425 (opt-in): a user frozen to disk carries the sync's state for them; one read back by a later process takes
     // it again (so the restart polls, not backfills) and has its items carded again, as a re-sync would (cards are
     // not persisted). Set only when the embedder made the cache persist.

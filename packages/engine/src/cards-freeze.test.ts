@@ -181,6 +181,14 @@ describe("card state frozen with its user (D998)", () => {
     for (let t = 0; t < 4 && cache.frozenCount === 0; t++) cache.expireIdle(NOW);
     expect(cache.frozenCount).toBe(1);
     expect(cards.frozenCount).toBe(1);
+    // The cache's thaw of the user (a returning user's `ready`) thaws their cards with it, before any lookup reads them.
+    await cache.ready(u1);
+    expect(cache.frozenCount).toBe(0);
+    expect(cards.frozenCount).toBe(0);
+    expect(cards.cardsOf(u1, ["mail:m2", "mail:m4"], NOW + 1)).toEqual(want);
+    // A read with the cache still frozen thaws them too.
+    for (let t = 0; t < 4 && cache.frozenCount === 0; t++) cache.expireIdle(NOW);
+    expect(cards.frozenCount).toBe(1);
     expect(cards.cardsOf(u1, ["mail:m2", "mail:m4"], NOW + 1)).toEqual(want);
     expect(cards.frozenCount).toBe(0);
   });

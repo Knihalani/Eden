@@ -753,15 +753,17 @@ class UserCards {
 }
 
 /**
- * A user's card state while their cache is frozen (D998, `CardEnricher.freeze`): every map of `UserCards` and the
- * intent index's docs as one zstd JSON blob. Card state was kept live for frozen users before: with a card and requests
- * an item, about 3.7 MB of heap a heavy user (3,000 items, `users.bench.ts --cards`), more than the frozen cache.
- * The first read or write thaws it into the same state (`thawCards`); a forget drops it.
+ * A user's card state while their cache is frozen (D998, `CardEnricher.freeze`): every map of `UserCards` as one zstd
+ * JSON blob, and the intent index as it is (rebuilding it was most of a thaw: about 20 ms at 3,000 items, on a
+ * returning user's first event). Card state was kept live for frozen users before: with a card and requests an item,
+ * about 3.7 MB of heap a heavy user (3,000 items, `users.bench.ts --cards`), more than the frozen cache. The cache's
+ * thaw of the user thaws it into the same state (`wake`), and so does any read or write first; a forget drops it.
  */
 class FrozenCards {
   constructor(
     readonly tenantId: string,
     readonly blob: Uint8Array,
+    readonly intent: IntentIndex | undefined,
   ) {}
 }
 
@@ -773,7 +775,6 @@ interface FrozenCardsBody {
   /** The holders of hashes with more than one, in the order they were linked; the rest follow from `byItem`. */
   shared: [string, string[]][];
   bySentence: [string, string][];
-  intent: ReturnType<IntentIndex["export"]> | null;
 }
 
 /** Counters for research and cost reporting. */
@@ -1463,11 +1464,16 @@ export class CardEnricher {
       byItem: [...u.byItem],
       shared,
       bySentence: [...u.bySentence],
-      intent: u.intent?.export() ?? null,
     };
     // Same key: the user keeps their place in the least-recently-written order.
-    this.users.set(key, new FrozenCards(u.tenantId, Bun.zstdCompressSync(Buffer.from(JSON.stringify(body)))));
+    const blob = Bun.zstdCompressSync(Buffer.from(JSON.stringify(body)));
+    this.users.set(key, new FrozenCards(u.tenantId, blob, u.intent));
     return true;
+  }
+
+  /** Thaws a user's card state if frozen (the partner calls it as the cache thaws the user). */
+  wake(scope: Scope): void {
+    this.live(scopeKey(scope));
   }
 
   /** The user's live card state, thawed first if frozen (`freeze`); undefined for a user with none. */
@@ -1488,7 +1494,7 @@ export class CardEnricher {
     }
     for (const [hash, ids] of body.shared) u.holders.set(hash, new Set(ids));
     for (const [k, hash] of body.bySentence) u.bySentence.set(k, hash);
-    if (body.intent) u.intent = IntentIndex.from(body.intent);
+    u.intent = f.intent;
     this.users.set(key, u); // the same place in the order: a read is not a write
     return u;
   }
