@@ -1,0 +1,34 @@
+# On main @ 2f06d1ea (after #240), $0, stub reader, seed 41. default vs --set '{"syncKick":false}'.
+$ bun packages/sim/src/lab/funnel.ts --suite "train1,train2,train3" --seeds "41" --jobs "2" --json "<out>/kick-1000.json" -- --time "1" --source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload --connect-at "0,10,25,45,60,90,120,180,300" --noise-sources "995" --limit "16" --connect-stagger-s "12"
+
+== today (syncKick off): 864 rows
+  at s (sent, mean) |  n | hidden surfaced | by push | warm at request | items held | decoys surfaced
+      0 (   0.0)    |  48 |   0   0.0%     |   0     |   0             |       0    |   0 of 48
+     10 (  10.0)    |  48 |   0   0.0%     |   0     |   0             |       0    |   0 of 48
+     25 (  25.0)    |  48 |   0   0.0%     |   0     |   0             |       0    |   0 of 48
+     45 (  45.0)    |  48 |  25  52.1%     |  21     |   0             |    2001    |  27 of 48
+     60 (  60.0)    |  48 |  26  54.2%     |  24     |   0             |    2065    |  26 of 48
+     90 (  90.0)    |  48 |  26  54.2%     |  20     |   0             |    2048    |  27 of 48
+    120 ( 120.0)    |  48 |  26  54.2%     |  24     |   0             |    2949    |  28 of 48
+    180 ( 180.0)    |  48 |  25  52.1%     |  23     |   0             |    3021    |  26 of 48
+    300 ( 300.0)    |  48 |  32  66.7%     |  28     |  14             |    3026    |  30 of 48
+== default: 864 rows
+  at s (sent, mean) |  n | hidden surfaced | by push | warm at request | items held | decoys surfaced
+      0 (   0.0)    |  48 |  25  52.1%     |  15     |   0             |       0    |  27 of 48
+     10 (  10.0)    |  48 |  22  45.8%     |  18     |   0             |    3000    |  23 of 48
+     25 (  25.0)    |  48 |  37  77.1%     |  32     |  44             |    3000    |  36 of 48
+     45 (  45.0)    |  48 |  38  79.2%     |  35     |  44             |    3000    |  38 of 48
+     60 (  60.0)    |  48 |  36  75.0%     |  33     |  48             |    3000    |  38 of 48
+     90 (  90.0)    |  48 |  39  81.2%     |  36     |  48             |    3000    |  38 of 48
+    120 ( 120.0)    |  48 |  41  85.4%     |  36     |  48             |    3000    |  37 of 48
+    180 ( 180.0)    |  48 |  40  83.3%     |  36     |  48             |    3001    |  38 of 48
+    300 ( 300.0)    |  48 |  39  81.2%     |  34     |  48             |    3028    |  40 of 48
+
+# sync lines, a shard each: syncKick off
+sync: backfill 25888 calls (809.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 15083 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 114.14/task; amortised total 151.66/task; local sources 215.99/lookup; demand items 0, background items 533708
+sync: backfill 25267 calls (789.6/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 12288 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 94.49/task; amortised total 139.56/task; local sources 207.78/lookup; demand items 0, background items 521436
+sync: backfill 24106 calls (753.3/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 12236 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 91.81/task; amortised total 133.02/task; local sources 202.09/lookup; demand items 0, background items 496927
+# sync lines, a shard each: default
+sync: backfill 32682 calls (1021.3/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 21443 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 88.67/task; amortised total 127.69/task; local sources 869.81/lookup; demand items 0, background items 693198
+sync: backfill 32671 calls (1021.0/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 20497 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 83.15/task; amortised total 125.42/task; local sources 868.95/lookup; demand items 0, background items 693181
+sync: backfill 32701 calls (1021.9/user, 0 ms/user), background 0 (0.00/task), on-demand 0 (0.00/task in lookups' traces; 18913 at the connectors in the tasks' windows, in calls/task; 0 by the sync's count); request 77.32/task; amortised total 125.19/task; local sources 869.18/lookup; demand items 0, background items 694219

@@ -1,0 +1,17 @@
+== n20: hidden surfaced 76/96: | decoys surfaced 76/96: | request 31.48/task; amortised total 95.72/task
+== n5: hidden surfaced 76/96: | decoys surfaced 77/96: | request 22.63/task; amortised total 87.23/task
+== n2: hidden surfaced 77/96: | decoys surfaced 77/96: | request 19.26/task; amortised total 83.81/task
+== cap-off: hidden surfaced 76/96: | decoys surfaced 76/96: | request 31.48/task; amortised total 95.72/task
+== cap-2: hidden surfaced 78/96: | decoys surfaced 79/96: | request 28.68/task; amortised total 92.98/task
+== cap-0: hidden surfaced 77/96: | decoys surfaced 79/96: | request 41.38/task; amortised total 105.33/task
+== o1-off: hidden surfaced 77/96: | decoys surfaced 76/96: | request 4.16/task; amortised total 68.00/task
+== o1-2: hidden surfaced 78/96: | decoys surfaced 77/96: | request 2.00/task; amortised total 65.82/task
+== o1-0: hidden surfaced 76/96: | decoys surfaced 79/96: | request 4.49/task; amortised total 68.21/task
+== days, O1's candidate, off
+tick      slack     list         8        0.034          0.50
+request-time 1.879 a request; background (tick + notice) 5.00 a user-day, 0.345 a request; steady 2.224 a request; backfill 1004.0 a user
+surfaced (a packet or the ask's citations): hidden facts 14/23, control decoys 16/23
+== days, O1's candidate, keep2
+tick      slack     list         8        0.034          0.50
+request-time 2.082 a request; background (tick + notice) 5.06 a user-day, 0.349 a request; steady 2.431 a request; backfill 1004.0 a user
+surfaced (a packet or the ask's citations): hidden facts 14/23, control decoys 16/23
