@@ -2,11 +2,21 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
+import { Vocab } from "@eden/primitives";
 import { QueryPlanner, StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner, type PartnerDeps } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import type { ShadowRecord, Trace } from "./trace";
+
+/**
+ * A partner's sessions as JSON, each session's vocabulary as its terms: since D998 a `Vocab` holds its terms as bytes,
+ * which `JSON.stringify` would show as numbers, and a test that a term was not kept would pass whatever was kept.
+ */
+function sessionsJson(p: unknown): string {
+  const sessions = (p as { sessions: Map<string, unknown> }).sessions;
+  return JSON.stringify([...sessions], (_k, v: unknown) => (v instanceof Vocab ? v.snapshot().terms : v));
+}
 
 const scope = { tenantId: "acme-assistant", userId: "u1", sessionId: "s1" };
 let clock = 1_700_000_000_000;
@@ -69,13 +79,13 @@ describe("observe", () => {
     const text = `note for Dana Lee: ${jwt} done`;
     const { p } = partner({ config: { maxEventChars: text.indexOf(".c2ln") } });
     await p.observe(ev({ kind: "user_message", text }));
-    const kept = JSON.stringify([...(p as unknown as { sessions: Map<string, { window: string[] }> }).sessions]);
+    const kept = sessionsJson(p);
     expect(kept).toContain("Dana Lee");
     expect(kept).not.toContain("eyJzdWIi");
   });
 
   test("a long token or a private key straddling maxEventChars is dropped whole (review finding 1)", async () => {
-    const sessionsOf = (p: unknown) => JSON.stringify([...(p as { sessions: Map<string, unknown> }).sessions]);
+    const sessionsOf = sessionsJson;
     const filler = "Dana Lee notes ".repeat(2_000); // 30,000 characters
     // A 600-character JWT: no whitespace for far more than 256 characters either side of the cut.
     const payload = "eyJzdWIiOiJkYW5h" + "QGdsb2JleC5jb20i".repeat(30);
@@ -99,7 +109,7 @@ describe("observe", () => {
     const output = `[${rows},{"token":"${jwt}"}]`;
     const { p } = partner({ config: { maxEventChars: rows.length + 40 } });
     await p.observe(ev({ kind: "tool_result", tool: "db.query", output }));
-    const kept = JSON.stringify([...(p as unknown as { sessions: Map<string, unknown> }).sessions]);
+    const kept = sessionsJson(p);
     expect(kept).toContain("ops-1499");
     expect(kept).not.toContain("qgdsb2jlec5jb20i");
   });

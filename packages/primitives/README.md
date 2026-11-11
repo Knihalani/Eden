@@ -250,3 +250,37 @@ as two review passes reported them (not re-run by the author). First pass, three
 109 ns, absent 92 / 100 → 121 / 107 ns, `delete` + `add` 286 / 302 → 319 / 326 ns, iterating 267 / 237 → 247 / 216
 µs. Heap per id at 3,000: 37.2 → 37.1 B. No consistent slowdown within the runs' spread. The bench's sets stay at
 3,000 ids, so it does not time the shrink itself.
+
+## A heavy user's live memory: the sketcher's memo and the vocabulary's strings (2026-11-11, D998)
+
+`TextSketcher` kept each vocabulary id's hash, digit flag and unsegmented units in arrays as long as the vocabulary
+(13 bytes an id): a heavy user's sketcher was 0.41 MB once any item had been sketched (32,768 ids at 3,000 prose
+items, `packages/engine/bench/live-heap.bench.ts`). It now holds nothing per term: a load hashes each term again,
+read from the vocabulary's arena (`Vocab.termFnv`, which notes the digit flag in the same pass). `dedup.reference.ts`
+keeps the old class as the oracle (`dedup.test.ts` compares every output through growth, release and reuse).
+
+`Vocab` held a JS string a term (about 35 bytes with its array slot). It now holds Latin-1 terms as bytes in one
+arena (`start`, `blen` an id; a term past Latin-1 or of 65,535 characters or more as a string in a Map), sized
+exactly at a `restore` and grown by half; a released term's bytes are zeroed. `term(id)` decodes behind a
+process-wide memo of 8,192 recent terms keyed by the vocabulary's serial number and the id (never an object
+reference), which a release evicts and `clearTermMemo` empties (the engine calls it where it clears the packed-text
+memo); without the memo the engine's `contentTerms` ran 2.2x slower.
+
+Back to back on a 4-core VM (two cores busy with other benches), main → D998, two alternating runs each, p50:
+
+| Benchmark | main | D998 |
+|---|---|---|
+| `vocab.bench.ts` heap per stored term, 20k → 120k terms of 9-22 characters | 42.1 B | 26.7 B |
+| `vocab.bench.ts` intern, two-lane fingerprint, 2 KB | 7.11 / 6.61 µs | 6.75 / 8.50 µs |
+| `vocab.bench.ts` `tokenizeInto`, cold `Vocab`, 2 KB +10% non-ASCII | 19.65 / 20.48 µs | 21.71 / 23.17 µs |
+| `vocab.bench.ts` intern a new term and release the oldest, 4,096 live | 367.5 / 371.4 ns | 479.9 / 502.5 ns |
+| `dedup.bench.ts` `TextSketcher` load, 2 KB / 16 KB | 16.47 / 19.13, 96.39 / 104.71 µs | 18.80 / 18.20, 120.17 / 126.93 µs |
+| `dedup.bench.ts` load + simhash, 2 KB / 16 KB | 31.93 / 58.24, 199.13 / 191.30 µs | 35.42 / 34.90, 216.14 / 211.89 µs |
+| `tokenize.bench.ts` engine `contentTerms`, 2 KB / 16 KB | 9.77 / 12.90, 137.83 / 133.38 µs | 11.03 / 12.12, 152.15 / 148.05 µs |
+| `dedup.bench.ts` pair quality (every F1 row) | | identical |
+
+The `contentTerms` row was run on the tree before the one-pass commit (5ace457e), which does not touch `term`.
+
+A cold term and a sketch cost about a tenth to a quarter more; both run once per new term or per item hit, not per
+event. The end-to-end anchor (`packages/engine/bench/pipeline.bench.ts`, six alternating pairs on main b99f0171 and
+the merged branch): observe p99 medians 4,144 and 4,381 µs (+5.7%), p50 118-134 against 115-125 µs.

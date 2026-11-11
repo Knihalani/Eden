@@ -100,17 +100,18 @@ const TIE_SLACK = 16;
 export class IntentIndex {
   private vocab = new Vocab(256);
   private index = new SparseIndex();
-  private readonly docOf = new Map<string, number>();
+  /**
+   * Per content hash: its doc, its requests (kept to rebuild from: the vocabulary never forgets a term otherwise) and
+   * its place among equal scores (the order its content reached the user, `set`'s `seq`, lower first). One Map of
+   * small records, not a Map a field (D998): an entry of a Map of thousands is 40-130 bytes in JSC, a record 48.
+   */
+  private readonly docs = new Map<string, { doc: number; text: string; seq: number }>();
   private hashOf: (string | undefined)[] = [];
-  /** Each doc's requests, kept to rebuild from (the vocabulary never forgets a term otherwise). */
-  private readonly texts = new Map<string, string>();
-  /** Each doc's place among equal scores: the order its content reached the user (`set`'s `seq`), lower first. */
-  private readonly seqOf = new Map<string, number>();
   private nextSeq = 0;
   private baseline = 0;
 
   get size(): number {
-    return this.docOf.size;
+    return this.docs.size;
   }
 
   /**
@@ -121,26 +122,23 @@ export class IntentIndex {
     this.delete(hash);
     if (requests.length === 0) return;
     const text = requests.join("\n");
-    this.seqOf.set(hash, seq ?? this.nextSeq);
+    const at = seq ?? this.nextSeq;
     this.nextSeq = Math.max(this.nextSeq, seq ?? 0) + 1;
-    this.texts.set(hash, text);
-    this.add(hash, text);
+    this.add(hash, text, at);
     if (this.vocab.size > Math.max(MIN_REBUILD, this.baseline * REBUILD_FACTOR)) this.rebuild();
   }
 
   delete(hash: string): void {
-    const doc = this.docOf.get(hash);
-    if (doc === undefined) return;
-    this.index.remove(doc);
-    this.docOf.delete(hash);
-    this.texts.delete(hash);
-    this.seqOf.delete(hash);
-    if (this.hashOf[doc] === hash) this.hashOf[doc] = undefined;
+    const d = this.docs.get(hash);
+    if (d === undefined) return;
+    this.index.remove(d.doc);
+    this.docs.delete(hash);
+    if (this.hashOf[d.doc] === hash) this.hashOf[d.doc] = undefined;
   }
 
   /** The best `k` items for a request's text, best first. No term the index has never seen is interned. */
   search(text: string, k: number): IntentHit[] {
-    if (this.docOf.size === 0 || k <= 0) return [];
+    if (this.docs.size === 0 || k <= 0) return [];
     const ids: number[] = [];
     for (const t of intentTerms(text)) {
       const id = this.vocab.lookup(t);
@@ -155,16 +153,16 @@ export class IntentIndex {
       if (hash === undefined) continue;
       out.push({ hash, score: res.scores[j]!, coverage: res.coverage[j]!, matched: res.matched[j]! });
     }
-    out.sort((a, b) => b.score - a.score || this.seqOf.get(a.hash)! - this.seqOf.get(b.hash)!);
+    out.sort((a, b) => b.score - a.score || this.docs.get(a.hash)!.seq - this.docs.get(b.hash)!.seq);
     return out.slice(0, k);
   }
 
-  private add(hash: string, text: string): void {
+  private add(hash: string, text: string, seq: number): void {
     const terms = intentTerms(text);
     const ids = new Uint32Array(terms.length);
     for (let i = 0; i < terms.length; i++) ids[i] = this.vocab.intern(terms[i]!);
     const doc = this.index.add(ids, ids.length);
-    this.docOf.set(hash, doc);
+    this.docs.set(hash, { doc, text, seq });
     this.hashOf[doc] = hash;
   }
 
@@ -172,9 +170,10 @@ export class IntentIndex {
   private rebuild(): void {
     this.vocab = new Vocab(256);
     this.index = new SparseIndex();
-    this.docOf.clear();
+    const live = [...this.docs];
+    this.docs.clear();
     this.hashOf = [];
-    for (const [hash, text] of this.texts) this.add(hash, text);
+    for (const [hash, d] of live) this.add(hash, d.text, d.seq);
     this.baseline = this.vocab.size;
   }
 }

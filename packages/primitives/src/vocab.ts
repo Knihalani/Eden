@@ -20,6 +20,7 @@
  * name another term after a release.
  */
 
+import { Buffer } from "node:buffer";
 import { FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString } from "./charclass";
 
 /**
@@ -54,6 +55,30 @@ function hashTerm(term: string, out: Uint32Array): string {
 const scratch = new Uint32Array(2);
 /** `lens` of a released id: no folded length is this, so `find` never matches it and `rehash` skips it. */
 const RELEASED = 0xffff_ffff;
+/** `blen` of a term held as a string in `wide` (a character past Latin-1, or a term of 65,535 characters or more). */
+const WIDE = 0xffff;
+
+/**
+ * Recently decoded terms, process-wide (D998): direct-mapped by (vocabulary, id), so the stopword and usage checks
+ * that read every term of an event (`contentTerms`) do not decode each again (about 40 ns a decode; `contentTerms`
+ * ran 2.2x slower without it, tokenize.bench). An entry is the reading vocabulary's own term: its key holds the
+ * vocabulary's serial number (never an object reference, so a dropped vocabulary is not kept alive), a release
+ * evicts the id's entry, and `clearTermMemo` empties it (the engine calls it when a user is forgotten).
+ */
+const MEMO_SLOTS = 8_192;
+/** Owners as doubles: a serial counts up to 2^53 and never comes back, so no two vocabularies ever share one. */
+const memoOwner = new Float64Array(MEMO_SLOTS);
+const memoId = new Int32Array(MEMO_SLOTS);
+const memoTerm: string[] = new Array<string>(MEMO_SLOTS).fill("");
+let serials = 0;
+
+const memoSlot = (serial: number, id: number) => (Math.imul(id, 0x9e3779b1) ^ Math.imul(serial | 0, 0x85ebca6b)) >>> 19;
+
+/** Empties the decoded-term memo (a forgotten user's terms must not stay resident). */
+export function clearTermMemo(): void {
+  memoOwner.fill(0);
+  memoTerm.fill("");
+}
 
 /** What `Vocab.snapshot` saves (D860). */
 export interface VocabSnapshot {
@@ -70,7 +95,23 @@ export class Vocab {
   private h1: Uint32Array;
   private h2: Uint32Array;
   private lens: Uint32Array;
-  private readonly strings: string[] = [];
+  /**
+   * The terms (D998): each Latin-1 term's characters as bytes in one arena (`start`, `blen` per id), a term past
+   * Latin-1 as a string in `wide`. A string per term was about 35 bytes a term with its array slot (0.5 MB of a heavy
+   * user's 18,000 terms, `live-heap.bench.ts`); bytes and offsets are about 6 plus its length. `term` decodes (a
+   * Latin-1 decode, about 40 ns, behind the memo above); a released term's bytes are zeroed and their room taken
+   * back when the arena next needs to grow (`room`).
+   */
+  private bytes: Buffer = Buffer.alloc(256);
+  private used = 0;
+  private dead = 0;
+  private start: Uint32Array;
+  private blen: Uint16Array;
+  private readonly wide = new Map<number, string>();
+  /** Ids handed out, live or released. */
+  private count = 0;
+  /** This vocabulary's key in the decoded-term memo (never 0: a cleared slot's owner). */
+  private readonly serial = ++serials;
   /** Released ids, reused last-released first. */
   private readonly free: number[] = [];
   private readonly listeners: ((id: number) => void)[] = [];
@@ -83,22 +124,56 @@ export class Vocab {
     this.h1 = new Uint32Array(ids);
     this.h2 = new Uint32Array(ids);
     this.lens = new Uint32Array(ids);
+    this.start = new Uint32Array(ids);
+    this.blen = new Uint16Array(ids);
   }
 
   /** The id capacity: every id, live or released, is below it. Size id-indexed arrays by it. */
   get size(): number {
-    return this.strings.length;
+    return this.count;
   }
 
   /** Terms held (`size` less the released ids awaiting reuse). */
   get live(): number {
-    return this.strings.length - this.free.length;
+    return this.count - this.free.length;
   }
 
   /** The (folded) term for an id; "" for a released id. */
   term(id: number): string {
-    return this.strings[id]!;
+    const n = this.blen[id]!;
+    if (n === 0) return "";
+    const slot = memoSlot(this.serial, id);
+    if (memoOwner[slot] === this.serial && memoId[slot] === id) return memoTerm[slot]!;
+    const at = this.start[id]!;
+    const t = n === WIDE ? this.wide.get(id)! : this.bytes.toString("latin1", at, at + n);
+    memoOwner[slot] = this.serial;
+    memoId[slot] = id;
+    memoTerm[slot] = t;
+    return t;
   }
+
+  /**
+   * FNV-1a over the term's characters (`hash.ts`'s `fnv1a` of `term(id)`), read from the arena without making the
+   * string; -1 for a term held in `wide` (the caller reads `term(id)`). The same pass notes whether the term holds an
+   * ASCII digit (`lastHadDigit`). For `TextSketcher`, which hashes each term of every text it loads.
+   */
+  termFnv(id: number): number {
+    const n = this.blen[id]!;
+    if (n === WIDE) return -1;
+    const b = this.bytes;
+    let h = 0x811c9dc5 | 0;
+    let digit = false;
+    for (let i = this.start[id]!, end = i + n; i < end; i++) {
+      const c = b[i]!;
+      if (c >= 48 && c <= 57) digit = true;
+      h = Math.imul(h ^ c, 0x01000193);
+    }
+    this.lastHadDigit = digit;
+    return h >>> 0;
+  }
+
+  /** Whether the term the last `termFnv` hashed holds an ASCII digit. */
+  lastHadDigit = false;
 
   /** Calls `fn(id)` whenever an id is released (`release`): per-id state kept outside must be dropped then. */
   onRelease(fn: (id: number) => void): void {
@@ -111,7 +186,7 @@ export class Vocab {
    * unknown id is ignored.
    */
   release(id: number): void {
-    if (id < 0 || id >= this.strings.length || this.lens[id] === RELEASED) return;
+    if (id < 0 || id >= this.count || this.lens[id] === RELEASED) return;
     const slots = this.slots;
     const mask = this.mask;
     let i = this.h1[id]! & mask;
@@ -129,7 +204,7 @@ export class Vocab {
       i = j;
     }
     slots[i] = 0;
-    this.strings[id] = "";
+    this.drop(id);
     this.h1[id] = 0;
     this.h2[id] = 0;
     this.lens[id] = RELEASED;
@@ -169,9 +244,11 @@ export class Vocab {
    * order, and the fingerprints, so `Vocab.restore` rebuilds it without hashing a term again.
    */
   snapshot(): VocabSnapshot {
-    const n = this.strings.length;
+    const n = this.count;
+    const terms: string[] = new Array(n);
+    for (let id = 0; id < n; id++) terms[id] = this.term(id);
     return {
-      terms: this.strings.slice(),
+      terms,
       free: this.free.slice(),
       h1: this.h1.slice(0, n),
       h2: this.h2.slice(0, n),
@@ -205,7 +282,12 @@ export class Vocab {
         v.lens[id] = foldedLength(t);
       }
     }
-    for (let id = 0; id < n; id++) v.strings.push(s.terms[id]!);
+    v.count = n; // first: an arena growth inside `put` copies the ids below `count`
+    // The arena sized once for every term, with an eighth to spare for the terms that follow (a thaw, D860).
+    let bytes = 0;
+    for (let id = 0; id < n; id++) bytes += s.terms[id]!.length;
+    v.bytes = Buffer.alloc(Math.max(256, Math.ceil(bytes * 1.125)));
+    for (let id = 0; id < n; id++) v.put(id, s.terms[id]!);
     for (const id of s.free) v.free.push(id);
     v.rehash(v.slots.length);
     return v;
@@ -225,21 +307,17 @@ export class Vocab {
   private add(term: string, h: number, g: number, len: number): number {
     const reused = this.free.pop();
     if (reused !== undefined) {
-      this.strings[reused] = term;
+      this.put(reused, term);
       this.h1[reused] = h;
       this.h2[reused] = g;
       this.lens[reused] = len;
       this.place(reused, h); // the table never holds more than `size` ids, which it was sized for
       return reused;
     }
-    const id = this.strings.length;
-    if (id >= this.h1.length) {
-      const n = this.h1.length * 2;
-      this.h1 = grow(this.h1, n);
-      this.h2 = grow(this.h2, n);
-      this.lens = grow(this.lens, n);
-    }
-    this.strings.push(term);
+    const id = this.count;
+    if (id >= this.h1.length) this.growIds(this.h1.length * 2);
+    this.put(id, term);
+    this.count = id + 1;
     this.h1[id] = h;
     this.h2[id] = g;
     this.lens[id] = len;
@@ -258,7 +336,81 @@ export class Vocab {
   private rehash(size: number): void {
     this.slots = new Int32Array(size);
     this.mask = size - 1;
-    for (let id = 0; id < this.strings.length; id++) if (this.lens[id] !== RELEASED) this.place(id, this.h1[id]!);
+    for (let id = 0; id < this.count; id++) if (this.lens[id] !== RELEASED) this.place(id, this.h1[id]!);
+  }
+
+  private growIds(n: number): void {
+    this.h1 = grow(this.h1, n);
+    this.h2 = grow(this.h2, n);
+    this.lens = grow(this.lens, n);
+    this.start = grow(this.start, n);
+    const blen = new Uint16Array(n);
+    blen.set(this.blen);
+    this.blen = blen;
+  }
+
+  /** Holds `term` as id's (the id's arrays already fit it). */
+  private put(id: number, term: string): void {
+    const n = term.length;
+    if (n < WIDE) {
+      if (this.used + n > this.bytes.length) this.room(n);
+      // Checked and copied in one pass (a native write per term cost a cold tokenize a quarter more, vocab.bench).
+      const b = this.bytes;
+      const at = this.used;
+      let i = 0;
+      for (; i < n; i++) {
+        const c = term.charCodeAt(i);
+        if (c > 0xff) break;
+        b[at + i] = c;
+      }
+      if (i === n) {
+        this.start[id] = at;
+        this.blen[id] = n;
+        this.used = at + n;
+        return;
+      }
+      b.fill(0, at, at + i); // a term past Latin-1: what was copied goes
+    }
+    this.wide.set(id, term);
+    this.blen[id] = WIDE;
+  }
+
+  /**
+   * Forgets id's term (a release): its bytes are zeroed (a released term is content no item holds any more; it must
+   * not stay readable in the arena) and dead until the arena is compacted.
+   */
+  private drop(id: number): void {
+    const n = this.blen[id]!;
+    if (n === WIDE) this.wide.delete(id);
+    else if (n > 0) {
+      this.bytes.fill(0, this.start[id]!, this.start[id]! + n);
+      this.dead += n;
+    }
+    const slot = memoSlot(this.serial, id);
+    if (memoOwner[slot] === this.serial && memoId[slot] === id) {
+      memoOwner[slot] = 0;
+      memoTerm[slot] = "";
+    }
+    this.blen[id] = 0;
+  }
+
+  /** Room for `n` more bytes: the live terms copied down when most of the arena is dead, else a doubled arena. */
+  private room(n: number): void {
+    // Half again what is live: a power of two would leave up to three quarters of a large vocabulary's arena empty.
+    const live = this.used - this.dead;
+    const size = Math.max(256, Math.ceil((live + n) * 1.5));
+    const bytes = Buffer.alloc(size);
+    let at = 0;
+    for (let id = 0; id < this.count; id++) {
+      const len = this.blen[id]!;
+      if (len === 0 || len === WIDE) continue;
+      this.bytes.copy(bytes, at, this.start[id]!, this.start[id]! + len);
+      this.start[id] = at;
+      at += len;
+    }
+    this.bytes = bytes;
+    this.used = at;
+    this.dead = 0;
   }
 }
 
