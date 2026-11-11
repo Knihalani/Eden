@@ -1,0 +1,15 @@
+4608 task runs; errors 0; ungraded 0
+hidden raised at 10 s:            n  384 | eden  134  34.9% | eden~K  250  65.1% | diff +30.2 points (+23.7..+36.7)
+hidden raised at 45 s:            n  384 | eden  228  59.4% | eden~K  245  63.8% | diff  +4.4 points (+0.5..+8.6)
+concerns (run's grader) at 10 s, control: n  384 | eden    3   0.8% | eden~K    2   0.5% | diff  -0.3 points (-1.3..+0.5)
+concerns (run's grader) at 10 s, neutral: n  384 | eden    2   0.5% | eden~K    1   0.3% | diff  -0.3 points (-1.0..+0.5)
+concerns (run's grader) at 45 s, control: n  384 | eden    3   0.8% | eden~K    6   1.6% | diff  +0.8 points (-0.8..+2.6)
+concerns (run's grader) at 45 s, neutral: n  384 | eden    3   0.8% | eden~K    4   1.0% | diff  +0.3 points (-0.8..+1.3)
+concerns, control and neutral, both checkpoints: n 1536 | diff +0.13 points (-0.52..+0.78)
+eden    : 1152 users, connector calls a user 42.34, backfill complete in 1152 of 1152 (median 42.1 s)
+eden~K  : 1152 users, connector calls a user 18.00, backfill complete in 1152 of 1152 (median 8.4 s)
+connector calls a user: -57.5%
+eden     at 10 s: backfill complete at the request 0 of 1152, items held 0, task wall 4.19 s, $0.249/1k
+eden     at 45 s: backfill complete at the request 824 of 1152, items held 1178, task wall 2.62 s, $0.233/1k
+eden~K   at 10 s: backfill complete at the request 1152 of 1152, items held 1504, task wall 2.09 s, $0.253/1k
+eden~K   at 45 s: backfill complete at the request 1152 of 1152, items held 1504, task wall 2.08 s, $0.211/1k

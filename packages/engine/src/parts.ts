@@ -53,6 +53,7 @@ export const PARTS = {
     syncPollWidth: 0,
     syncBackfillLanes: 1,
     syncIngestTurns: false,
+    syncKick: false,
     syncLocalComplete: false,
     pushCutBehind: false,
     askBehind: false,
