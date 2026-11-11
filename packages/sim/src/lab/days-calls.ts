@@ -178,6 +178,10 @@ export interface PlantedRow {
   request?: string;
   template?: string;
   pool?: string[];
+  /** M8: the planted item's source, its arrival lag, and whether the cache held it after the request. */
+  source?: string;
+  lag?: string;
+  held?: boolean;
 }
 
 export interface DaysCallsUser {
@@ -604,6 +608,9 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
             request: task.text,
             template: `${task.suite}/${task.type}`,
             pool: report?.pool ?? [],
+            source: src,
+            lag: lagOf.get(task.id) ?? "backfill",
+            held: cache.get(scope, task.planted, clock) !== null,
           });
         }
       }

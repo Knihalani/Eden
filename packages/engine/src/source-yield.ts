@@ -136,6 +136,20 @@ export class SourceYield {
     }
   }
 
+  /**
+   * `routerGate` (M8): one user's runs and uses read many times in one lookup with one user lookup (the router reads
+   * every source of a user with 1,000 connectors). Absent sources read as never read and never used.
+   */
+  view(scope: Scope, now: number): (sourceId: string) => { run: number; used: boolean } {
+    const held = this.user(scope, false)?.sources;
+    const none = { run: 0, used: false };
+    if (!held) return () => none;
+    return (id) => {
+      const r = held.get(id);
+      return r ? { run: this.fade(r.empty, r.at, now), used: r.used } : none;
+    };
+  }
+
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     if (sourceId === undefined) this.drop(key, scope.tenantId);

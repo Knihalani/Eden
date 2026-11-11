@@ -3899,7 +3899,9 @@ export class ContextPartner {
     // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
     // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
     const wide = all.length > Math.min(limit, this.config.lookupSources);
-    const localHits = this.config.routeLocalHits && wide ? this.localRouteHits(s, cue) : undefined;
+    // `routerGate` (M8): the place of each source's best local match, beside the counts.
+    const localTop = this.config.routerGate && wide ? new Map<string, number>() : undefined;
+    const localHits = this.config.routeLocalHits && wide ? this.localRouteHits(s, cue, localTop) : undefined;
     const boost = addBoosts(
       localHits,
       // `routeSketch` (D322): the sources whose sketches hold the request's rarer terms, read or trimmed.
@@ -3923,7 +3925,7 @@ export class ContextPartner {
     // cut copy with the rest (more reads, never fewer facts).
     let spent = this.spentSources(s, cue, all, boost);
     // `routerGate` (M8, D940): the router's unlikely warm copies join the spent ones.
-    if (this.config.routerGate && wide) spent = this.routerSpent(s, cue, all, localHits, boost, spent);
+    if (this.config.routerGate && wide) spent = this.routerSpent(s, cue, all, localHits, localTop, boost, spent);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -4264,6 +4266,7 @@ export class ContextPartner {
     cue: Cue,
     all: readonly Source[],
     localHits: ReadonlyMap<string, number> | undefined,
+    localTop: ReadonlyMap<string, number> | undefined,
     boost: ReadonlyMap<string, number> | undefined,
     spent: Set<string> | null,
   ): Set<string> | null {
@@ -4294,6 +4297,8 @@ export class ContextPartner {
       const conjMemo = new Map<Uint32Array, number>();
       let maxConj = -Infinity;
       let maxLocal = 0;
+      const yields = this.yields.view(s.scope, now);
+      const copies = this.sync.routeView(s.scope, now);
       for (let i = 0; i < n; i++) {
         const src = all[i]!;
         const keys = routerSourceKeys(src.id, src.description);
@@ -4303,19 +4308,21 @@ export class ContextPartner {
           conjMemo.set(keys, c);
         }
         const local = localHits?.get(src.id) ?? 0;
-        const st = this.sync.routeState(s.scope, src.id, now);
+        const st = copies(src.id);
+        const y = yields(src.id);
         const o = i * ROUTER_NF;
         x[o] = c;
         x[o + 1] = local;
         x[o + 2] = Math.max(0, (boost?.get(src.id) ?? 0) - local);
         x[o + 3] = named.has(src.id) ? 1 : 0;
         x[o + 4] = rare.has(src.id) ? 1 : 0;
-        x[o + 5] = this.yields.hasYielded(s.scope, src.id) ? 1 : 0;
-        x[o + 6] = this.yields.run(s.scope, src.id, now);
+        x[o + 5] = y.used ? 1 : 0;
+        x[o + 6] = y.run;
         x[o + 7] = st?.whole ? 1 : 0;
         x[o + 8] = Math.log1p(Math.min(st?.hours ?? 1e4, 1e4));
         x[o + 9] = Math.log1p(st?.size ?? 0);
         x[o + 10] = Math.log1p(100 * (st?.rate ?? 0));
+        x[o + 11] = localTop?.get(src.id) ?? 0;
         if (c > maxConj) maxConj = c;
         if (local > maxLocal) maxLocal = local;
       }
@@ -4337,9 +4344,12 @@ export class ContextPartner {
           all.filter((_, i) => p[i]! >= floor).map((a) => a.id),
           now,
         );
+      // A source a word of the request points to (at most `sourceYieldRare` of the user's sources hold it) is never
+      // skipped: the strongest evidence there is, and rare connectors' facts hang on it (D945: skipping these lost two
+      // of 105 rare-connector facts at $0; names stay the network's to weigh, or the user's mailbox is never skipped).
       for (let i = 0; i < n; i++) {
         const id = all[i]!.id;
-        if (p[i]! >= floor || spent?.has(id) || !this.sync.isWarm(s.scope, id)) continue;
+        if (p[i]! >= floor || spent?.has(id) || !copies(id)?.warm || rare.has(id)) continue;
         (spent ??= new Set()).add(id);
         skipped.push(id);
       }
@@ -5497,7 +5507,7 @@ export class ContextPartner {
    * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
    * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
    */
-  private localRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
+  private localRouteHits(s: Session, cue: Cue, top?: Map<string, number>): Map<string, number> | undefined {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return undefined;
@@ -5506,8 +5516,12 @@ export class ContextPartner {
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     if (query.length === 0) return undefined;
     const counts = new Map<string, number>();
+    let rank = 0;
     for (const h of cache.search(s.scope, query, query.length, LOCAL_ROUTE_HITS, this.now())) {
       counts.set(h.item.sourceId, (counts.get(h.item.sourceId) ?? 0) + 1);
+      // `top` (`routerGate`): 1 / (1 + the place of the source's best match among the request's best matches).
+      if (top && !top.has(h.item.sourceId)) top.set(h.item.sourceId, 1 / (1 + rank));
+      rank++;
     }
     if (counts.size === 0) return undefined;
     for (const [id, n] of counts) counts.set(id, Math.log2(1 + n));

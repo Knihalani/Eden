@@ -931,26 +931,28 @@ export class SyncManager {
   }
 
   /**
-   * `routerGate` (M8, D940): what the connector router reads of a user's synced copy of a source, content-free: warm,
-   * whole (`complete`), hours since its last complete poll, its learned change rate (items an hour) and how many ids it
-   * holds. Undefined for a source not synced. O(1), no I/O.
+   * `routerGate` (M8, D940): what the connector router reads of a user's synced copies, content-free, with one user
+   * lookup for the many reads of a lookup: per source, warm, whole (the cut flag alone, with no re-check against the
+   * cache, which reads every id of the copy: a feature, not a promise; `complete` decides what answers from the
+   * index), hours since its last complete poll, its learned change rate (items an hour) and how many ids it holds.
+   * Undefined for a source not synced. O(1) a source, no I/O.
    */
-  routeState(
+  routeView(
     scope: Scope,
-    sourceId: string,
     now = this.deps.now(),
-  ): { warm: boolean; whole: boolean; hours: number; rate: number; size: number } | undefined {
-    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
-    if (!s) return undefined;
-    const warm = s.phase === "warm";
-    return {
-      warm,
-      // The cut flag alone (no re-check against the cache, which reads every id of the copy): a feature, not a
-      // promise; `complete` decides what answers from the index.
-      whole: warm && !s.cut,
-      hours: Number.isFinite(s.polledAt) ? Math.max(0, now - s.polledAt) / HOUR : 1e4,
-      rate: s.alpha / s.beta,
-      size: s.ids.size,
+  ): (sourceId: string) => { warm: boolean; whole: boolean; hours: number; rate: number; size: number } | undefined {
+    const u = this.users.get(scopeKey(scope));
+    return (sourceId) => {
+      const s = u?.sources.get(sourceId);
+      if (!s) return undefined;
+      const warm = s.phase === "warm";
+      return {
+        warm,
+        whole: warm && !s.cut,
+        hours: Number.isFinite(s.polledAt) ? Math.max(0, now - s.polledAt) / HOUR : 1e4,
+        rate: s.alpha / s.beta,
+        size: s.ids.size,
+      };
     };
   }
 

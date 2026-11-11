@@ -137,6 +137,7 @@ export const ROUTER_FEATURES = [
   "hours", // log1p of hours since the copy's last complete poll
   "size", // log1p of the ids the copy holds
   "rate", // log1p of its learned change rate (items an hour), times 100
+  "top", // 1 / (1 + the place of its best item among the request's 40 best local matches), 0 for none
 ] as const;
 export const ROUTER_NF = ROUTER_FEATURES.length;
 /** Request-level inputs of the "nothing needed" score: the best conj, best local, any name, any rare word, terms. */
@@ -252,16 +253,18 @@ export function routeProbabilities(
 ): number {
   const h = w.hidden;
   const t = w.temperature > 0 ? w.temperature : 1;
+  const { a, c } = folded(w);
   let nul = w.nullBias;
   for (let j = 0; j < ROUTER_NULL_NF; j++) nul += w.nullW[j]! * summary[j]!;
   nul /= t;
   let max = nul;
   for (let s = 0; s < n; s++) {
+    const o = s * ROUTER_NF;
     let z = w.b2;
     for (let k = 0; k < h; k++) {
-      let a = w.b1[k]!;
-      for (let f = 0; f < ROUTER_NF; f++) a += ((x[s * ROUTER_NF + f]! - w.mu[f]!) / w.sd[f]!) * w.w1[f * h + k]!;
-      if (a > 0) z += a * w.w2[k]!;
+      let v = c[k]!;
+      for (let f = 0; f < ROUTER_NF; f++) v += x[o + f]! * a[k * ROUTER_NF + f]!;
+      if (v > 0) z += v * w.w2[k]!;
     }
     z /= t;
     out[s] = z;
@@ -271,6 +274,31 @@ export function routeProbabilities(
   for (let s = 0; s < n; s++) sum += out[s] = Math.exp(out[s]! - max);
   for (let s = 0; s < n; s++) out[s]! /= sum;
   return Math.exp(nul - max) / sum;
+}
+
+/**
+ * The first layer with the input normalisation folded in, unit by unit (`a[k * NF + f] = w1[f, k] / sd[f]`,
+ * `c[k] = b1[k] - Σ mu[f] · a`), made once per weights object.
+ */
+const foldedOf = new WeakMap<RouterWeights, { a: Float64Array; c: Float64Array }>();
+function folded(w: RouterWeights): { a: Float64Array; c: Float64Array } {
+  let held = foldedOf.get(w);
+  if (held) return held;
+  const h = w.hidden;
+  const a = new Float64Array(h * ROUTER_NF);
+  const c = new Float64Array(h);
+  for (let k = 0; k < h; k++) {
+    let bias = w.b1[k]!;
+    for (let f = 0; f < ROUTER_NF; f++) {
+      const v = w.w1[f * h + k]! / w.sd[f]!;
+      a[k * ROUTER_NF + f] = v;
+      bias -= w.mu[f]! * v;
+    }
+    c[k] = bias;
+  }
+  held = { a, c };
+  foldedOf.set(w, held);
+  return held;
 }
 
 /** The shipped weights, read once a process from `assets/router.bin` beside this package; null when absent. */

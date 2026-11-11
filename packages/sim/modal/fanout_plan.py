@@ -275,6 +275,8 @@ SWITCH_VARIANTS = {
     "off-earn": {"sourceYieldEarn": False, "sourceYieldNames": 0, "sourceYieldEngage": False},
     # The same three switched on by name, as O1's runs 2 and 3 and its days check passed them (a no-op since D603).
     "earn2": {"sourceYieldEarn": True, "sourceYieldNames": 4, "sourceYieldEngage": True},
+    # M8's connector router (D940): the trial switch on, with the shipped weights (packages/engine/assets/router.bin).
+    "router": {"routerGate": True},
 }
 # A user with about 1,000 connected sources, 5% of whose connectors send change notices (N1's shape, D509).
 SCALE = ["--noise-sources", "995", "--notify-share", "0.05"]
@@ -305,6 +307,10 @@ PRESETS = {
                    "about": "the default against the default with the earn rule off (sourceYieldEarn, "
                             "sourceYieldNames, sourceYieldEngage), at ~1,000 sources with words of their own "
                             "(O1, D603; before D603 the arms were eden and eden~earn2, runs o1-earn2*)"},
+    "bench-router": {"kind": "pi-ab", "suites": "train",
+                     "args": _bench(["eden", "eden~router"], ["router"], [*SCALE, "--noise-vocab", "1000"]),
+                     "about": "the default against the default with M8's connector router on, at ~1,000 sources "
+                              "with words of their own (D940, D945)"},
     "bench-earn2": {"kind": "pi-ab", "suites": "train",
                     "args": _bench(["eden", "eden~earn2"], ["earn2"], SCALE),
                     "about": "O1's runs 2 and 3 as they were paid (D601): the pre-D603 default against the three "

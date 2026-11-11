@@ -25,7 +25,7 @@ import numpy as np
 
 M32 = np.uint64(0xFFFFFFFF)
 PHI = np.uint64(0x9E3779B1)
-NF = 11
+NF = 12
 NULL_NF = 5
 
 
@@ -315,8 +315,11 @@ def gate(net: Net, data, floor: float):
     for e in data:
         p, _ = net.probs(e)
         live = ~e["spent"]
+        # A source a rare word of the request points to is never skipped (the engine's `routerSpent`).
+        strong = e["X"][:, 4] > 0
+        keep = (p >= floor) | strong
         before = float((e["w"] * live).sum())
-        after = float((e["w"] * (live & (p >= floor))).sum())
+        after = float((e["w"] * (live & keep)).sum())
         reads_before += before
         reads_after += after
         k = by_kind.setdefault(e["kind"], [0.0, 0.0, 0])
@@ -325,7 +328,7 @@ def gate(net: Net, data, floor: float):
         k[2] += 1
         if e["y"] >= 0:
             n_h += 1
-            ok = bool(p[e["y"]] >= floor) or bool(e["spent"][e["y"]])
+            ok = bool(keep[e["y"]]) or bool(e["spent"][e["y"]])
             hit += ok
             if e["planted"] not in ("gmail", "calendar", "drive", "slack", "crm"):
                 n_rare += 1
@@ -404,7 +407,7 @@ def main():
     ap.add_argument("--int8", action="store_true", help="score with the int8 table, as the engine does")
     ap.add_argument("--drop", default="", help="input names to leave out, e.g. size,rate,hours")
     a = ap.parse_args()
-    names = ["conj", "local", "sketch", "named", "rare", "used", "run", "whole", "hours", "size", "rate"]
+    names = ["conj", "local", "sketch", "named", "rare", "used", "run", "whole", "hours", "size", "rate", "top"]
     DROP[:] = [names.index(x) for x in a.drop.split(",") if x]
     if a.cmd == "conjlogs":
         model, logs = a.args
@@ -427,6 +430,14 @@ def main():
         net = Net(a.hidden)
         fit_mlp(net, train, a.epochs, 3e-3)
         fit_temperature(net, val)
+        net.floor = fit_floor(net, val, a.recall)
+        print(json.dumps({"temperature": net.t, **gate(net, val, net.floor)}))
+        save(net, W, out)
+    elif a.cmd == "refloor":
+        out, va = a.args
+        net, W = load(out)
+        q, sc = quantise(W)
+        val = examples(va, q.astype(np.float64) * sc)
         net.floor = fit_floor(net, val, a.recall)
         print(json.dumps({"temperature": net.t, **gate(net, val, net.floor)}))
         save(net, W, out)

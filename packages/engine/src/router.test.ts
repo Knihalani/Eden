@@ -137,7 +137,12 @@ class Counting implements Source {
   }
 }
 
-async function partnerOf(router: RouterWeights | null, gate = true, scopes: Scope[] = [u1]) {
+async function partnerOf(
+  router: RouterWeights | null,
+  gate = true,
+  scopes: Scope[] = [u1],
+  more: Record<string, unknown> = {},
+) {
   const sources = [0, 1, 2, 3].map(
     (k) =>
       new Counting(
@@ -180,6 +185,7 @@ async function partnerOf(router: RouterWeights | null, gate = true, scopes: Scop
       sourceYieldNames: 0,
       sourceYieldEngage: false,
       routerGate: gate,
+      ...more,
     },
   });
   for (const scope of scopes) {
@@ -226,6 +232,14 @@ describe("routerGate at the partner (D940)", () => {
     expect(r.searched[0]).toBeGreaterThan(0);
     expect(sum(r.searched.slice(1))).toBe(0);
     expect(r.handed).toContain(p.fact.id);
+  });
+
+  test("a source a rare word of the request points to is read live even when the router finds it unlikely", async () => {
+    // The network weighs only local matches; "Globex" is a word only source 0 holds (its fact).
+    const off = await partnerOf(onInputs(["local"], 10, { nullBias: 8 }), true, [u1], { sourceYieldEarn: true });
+    const r = await off.request(u1, "Globex");
+    expect(r.searched[0]).toBeGreaterThan(0);
+    expect(sum(r.searched.slice(1))).toBe(0);
   });
 
   test("it fails open: weights that throw leave the lookup as it was without the gate", async () => {
