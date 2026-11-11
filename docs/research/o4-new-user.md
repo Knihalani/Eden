@@ -96,6 +96,12 @@ listing calls are 18.48 a user today and 18.00 with the change, the items they l
 users, and the requests' own calls fall from 7.57 to 2.77 a request, since copies answer sooner (the funnel's own
 lines, a shard each, are under the table in `o5/new-user-5.txt`).
 
+On main after the merge (#240, tree 2f06d1ea; `o5/new-user-5-main.txt`; the default against the same tree with
+`syncKick` off, $0, stub reader, seed 41), off → default: 88 → 90, 72 → 149, 81 → 154, 106 → 154, 129 → 154,
+129 → 154, 135 → 154, 154 → 154 of 192; decoys end at 141 both. The backfill's listing calls are 18.58 a user off
+and 18.00 on (7,135 and 6,912 over 384 users), and the requests' own calls 7.56 and 2.84 a request (the means of the
+six shards' lines).
+
 ## 3. About 1,000 sources
 
 Hidden surfaced of 48 (`new-user-1000.txt`):
@@ -115,6 +121,13 @@ Hidden surfaced of 48 (`new-user-1000.txt`):
 A settled 1,000-source user reads 38 of 48 on the same tasks (o4-segment-screens.md §6). Today a new one is at 0
 until the first tick, about 55% from 45 s to 180 s and 67% at 300 s, with 8 of 48 users' copies complete. With the
 trial and the pool it is at 75% at 25 s and at full strength from 45 s.
+
+On main after the merge (`o5/new-user-1000-main.txt`, same settings as above, train1-3), off → default: 0 → 25,
+0 → 22, 0 → 37, 25 → 38, 26 → 36, 26 → 39, 26 → 41, 25 → 40, 32 → 39 of 48. Copies are warm at the request for 44
+of 48 users at 25 s and all 48 from 60 s; with the switch off, for none before 300 s (14 of 48 there). The default
+makes more listing calls inside the run, 1,021 a user against 784 (98,054 and 75,261 over 96 users), because it
+finishes the backfill the other leaves unfinished when the run ends (693,000 items listed a shard against 497,000
+to 534,000); the requests' own calls are 83.0 a request against 100.1 (the means of the three shards' lines).
 
 Where the two minutes went (one user traced alone, 995 noise sources, three users each, `new-user-trace.ts`,
 `o5/trace-1000.txt`): the backfill lists 1,000 first pages. In batches of 8 it made 6-9 calls a second (each batch
