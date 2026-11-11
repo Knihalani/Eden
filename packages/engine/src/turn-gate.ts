@@ -261,18 +261,19 @@ export class TurnGate {
   }
 }
 
+/** A gate read from a file, or null when it cannot be read or parsed (the caller keeps the rules: fail open). */
+export function loadTurnGate(file: URL | string): TurnGate | null {
+  try {
+    return new TurnGate(new Uint8Array(readFileSync(file)));
+  } catch {
+    return null;
+  }
+}
+
 let loaded: TurnGate | null | undefined;
 
-/**
- * The shipped gate (`turn-gate.bin` beside this file), read once a process; null when it cannot be read or parsed,
- * and the caller then keeps the rules (fail open, D1010).
- */
+/** The shipped gate (`turn-gate.bin` beside this file), read once a process (D1010). */
 export function turnGate(): TurnGate | null {
-  if (loaded !== undefined) return loaded;
-  try {
-    loaded = new TurnGate(new Uint8Array(readFileSync(new URL("./turn-gate.bin", import.meta.url))));
-  } catch {
-    loaded = null;
-  }
+  if (loaded === undefined) loaded = loadTurnGate(new URL("./turn-gate.bin", import.meta.url));
   return loaded;
 }
