@@ -255,24 +255,6 @@ re-reads it by id first (D126, D211). A copy no re-read confirms is not delivere
 the next tick. At 1,000 sources the sweep falls from ~1,114 to ~282 listing calls a user a day; a five-source user uses
 all their sources and keeps the daily sweep.
 
-**The connector router** (M8, D940–D949, `routerGate` and `routerDormantMs`, in the default since D948 and D949;
-`router.ts`; docs/research/m8-router.md). Over the lookup's own width, each lookup scores every source of the user:
-the request's hashed words and word pairs against the source's kind and description in an int8 table (256 KB, so a
-connector no training saw is scored by its description), and twelve inputs Eden already holds per (user, source)
-(its items among the request's 40 best local matches and the place of its best one, its sketch, a name or a rare
-word of the request it holds, whether its items were used and its run of unused reads, whether its copy is whole)
-through a 16-unit network with a "nothing needed" option. A warm copy whose probability is under the weights' floor
-joins `sourceYield`'s spent copies for that request (no search behind, no probe, no poll of a cut copy); a copy a
-rare word of the request points to is always read (D945: names are left to the network, or every request naming a
-person would read the user's mailbox). Nothing is called and no model runs: about 0.8 ms a lookup at 1,000 sources,
-the weights read once a process from `packages/engine/assets/router.bin`, no per-user state of its own; on any
-error the lookup reads as it would without it. With the router, a source on the weekly sweep of unused sources
-(D356) that it has not found likely for any request within `routerDormantMs` (28 days) is swept every 28 days
-(`Sync.routed`, the source's `routedAt`); what keeps that safe is D356's re-read of copies no sweep has vouched for,
-the synced items' 7-day life (a dormant copy lapses and is read live when the router finds it likely), and change
-notices, which still poll the source at once. At 1,000 sources over four weeks: request-time calls −31% (the
-pre-registered aim was −40%), steady calls −70 to −73% with the dormant sweep, facts and look-alikes level.
-
 **Change notifications** (D125, `syncPush`; `Source.notifies`, `ContextPartner.sourceChanged` and `sourceItems`,
 `POST /v1/sources/changed` and `/v1/sources/items`, the client's `sourceChanged`/`sourceItems`): a source whose
 integrator forwards the provider's change notifications is not polled on its learned change rate. A notification marks

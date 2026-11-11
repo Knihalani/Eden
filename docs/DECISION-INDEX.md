@@ -649,13 +649,13 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
 | D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
 | D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
-| D940 | 2026-11-11 | Trial `routerGate`: a learned connector router. | adopted (by D948) |
-| D941 | 2026-11-11 | Adopted (lab tooling, M8): `days-calls.ts --route-log F` (each request's first routed lookup: the engine's router inputs per source… | lab |
+| D940 | 2026-11-11 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | superseded (deleted by D948) |
+| D941 | 2026-11-11 | Adopted (lab tooling, M8), at commit d42d30b9 with the engine hooks it needs; the Python trainers stay in `packages/sim/lab/m8/`… | lab |
 | D942 | 2026-11-11 | Pre-registered rule for D940 | lab |
-| D943 | 2026-11-11 | Trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely for any request within 28 days is swept… | adopted (by D949) |
-| D944 | 2026-11-11 | The router's model and its parity (frozen at c2923a86). | adopted |
-| D945 | 2026-11-11 | Departs from D603's "a read on strong evidence is never skipped" for names only (the parent's approval): the router may skip a source a… | adopted |
+| D943 | 2026-11-11 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | superseded (deleted by D949) |
+| D944 | 2026-11-11 | Finding: the router's frozen model and its parity (c2923a86; deleted with the router, D948). | finding |
+| D945 | 2026-11-11 | Approved for the trial, then deleted with it (D948), so D603 stands unchanged: a departure from D603's "a read on strong evidence is never… | adopted |
 | D946 | 2026-11-11 | Finding: rare-connector facts are lost after fetching, not before. | finding |
 | D947 | 2026-11-11 | The parent's decisions on D942's rule (recorded with their reasons). | adopted |
-| D948 | 2026-11-11 | `routerGate` joins the default (closes D940's trial; part `router`). | adopted |
-| D949 | 2026-11-11 | `routerDormantMs` (28 days) joins the default (closes D943's trial; part `dormant`) on its powered re-test | adopted |
+| D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
+| D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |

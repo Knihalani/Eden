@@ -6,7 +6,6 @@ export {
   type ReaderReport,
   type PushPoolReport,
   type ReaderSink,
-  type RouteReport,
 } from "./partner";
 export { FACT_NAMES, vectorOf, type Facts } from "./decide";
 export { DEFAULT_CONFIG, type EngineConfig } from "./config";
@@ -135,22 +134,3 @@ export {
   type PushCheckStats,
 } from "./push-check";
 export { mayConstrain } from "./conflict";
-export {
-  conjBucket,
-  conjScore,
-  defaultRouterWeights,
-  encodeRouterWeights,
-  parseRouterWeights,
-  requestFeatures,
-  routeProbabilities,
-  ROUTER_FEATURES,
-  ROUTER_MAX_TERMS,
-  ROUTER_REQUEST_TERMS,
-  ROUTER_NF,
-  ROUTER_NULL_NF,
-  routerNames,
-  routerSummary,
-  routerTerms,
-  sourceKeys,
-  type RouterWeights,
-} from "./router";

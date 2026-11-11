@@ -621,66 +621,13 @@ python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus
 ```
 
 <<<<<<< HEAD
-### 1i. The connector router: route logs, training, parity (M8, D940–D949; docs/research/m8-router.md)
+### 1i. The connector router (M8, D940–D949; rejected; docs/research/m8-router.md)
 
-Route logs are the engine's own router inputs per request (`days-calls.ts --route-log F`, $0; with no `--router` a
-zero table logs the inputs and skips nothing). M2's worlds planted into days users train it; the e2e suites never do.
-
-```bash
-G=packages/sim/lab/m8/gen.sh   # one days-calls a seed, 10 days, 1:1:3, arrivals 0-6 days, 995 noise connectors
-$G synth-train@10 1 150 .local/m8/logs3/train
-$G synth-val@10 1 40 .local/m8/logs3/val
-$G synth-test@10 1 80 .local/m8/logs3/test
-bun packages/sim/src/lab/m8-export.ts .local/m2/synth/worlds/train.jsonl .local/m8/v2/x-train.jsonl  # M2 features
-T=packages/sim/lab/m8/train_router.py
-python3 -I $T conj .local/m8/v2 .local/m8/logs3/val W.npz --epochs 2          # the conjunction table on M2
-python3 -I $T mlp W.npz ".local/m8/logs3/train/*.jsonl" ".local/m8/logs3/val/*.jsonl" --drop size,rate,hours --int8
-python3 -I $T eval W.npz ".local/m8/logs3/test/*.jsonl"   # held-out families: recall, rare recall, reads cut
-python3 -I $T export W.npz packages/engine/assets/router.bin
-python3 -I packages/sim/lab/m8/parity.py W.npz ".local/m8/logs3/test/*.jsonl" packages/sim/lab/m8/parity.json
-bun test ./packages/sim/src/lab/m8-parity.test.ts          # 64 of 64 requests agree with the shipped asset
-bun packages/engine/bench/router.bench.ts 1000 2000         # scoring 1,000 sources, ms a request
-modal run packages/sim/modal/m8_router.py --run NAME --tag v3   # the same training on Modal (CPU, Volume eden-m8)
-```
-
-`gen.sh` is a loop over seeds (a seed whose worlds do not fit the base world's noise is dropped); the logs are on the
-Volume `eden-m8` (`/logs/v3.tgz`). `packages/sim/lab/m8/routers.py` holds round 1's ten offline candidates on M2's
-exported worlds (`harness.py`). The e2e screen is P7's 1h recipe with `--router packages/engine/assets/router.bin`
-(or `--set '{"routerGate":true}'` on a tree where the asset ships); the Pi pair is `packages/sim/lab/m8/run.sh`.
-=======
-### 1i. Packet parts, part labels and trimmer screens (M6, D920–D921; docs/research/m6-trimmer.md)
-
-The trimmer was stopped (D920); the tooling stays. `--packet-parts` (with `--packets`) adds each delivered item's
-parts as compaction reads them; `m6/label.ts` names a planted item's key parts and tokens (Haiku, pay once, about
-$0.00005 an item); `../lab/m6/` turns dumps and labels into a part set and screens no-model budgets and learned
-trimmers on it, and `screen_funnel.py` reads real packets (an arm against the default). Synth dumps: 30 seeds a call.
-
-```bash
-bun run funnel --suite synth-val --seeds $(seq -s, 1 30) --jobs 3 -- --neutral --packets .local/m6/v.jsonl --packet-parts
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m6/label.ts .local/m6/v.jsonl --out .local/m6/l.jsonl --spend-cap 1
-python3 -I packages/sim/lab/m6/prep.py --labels .local/m6/l.jsonl --out .local/m6/set .local/m6/v.jsonl
-python3 -I packages/sim/lab/m6/baselines.py .local/m6/set/items.jsonl --sets val
-```
-
-### 1j. Distilled students of the push check (M1, D890–D899, D980–D982; docs/research/m1-student.md)
-
-Lab tooling only: both tracks stopped (D899, D982) and the engine trial was deleted with them (D983).
-`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
-`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and scores the teacher over pair groups.
-`packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
-screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
-
-### 1k. A day's packet bytes at $0 (E1, D1030; docs/research/e1-lean.md)
-
-`days-calls.ts --packets F` writes, one line a request, every packet and ask answer the `--days` user was handed
-(`how`: push, pending or ask; the text; the cited ids in line order), for a byte breakdown by fixed text and items or a
-repeat count by item id over a day. Not with `--resume`.
-
-```bash
-env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42,43,44 --days 8 --ask \
-  --cards .local/cards-all.jsonl --packets .local/e1/days-base.jsonl          # ~7 s; --set '{…}' for an arm
-```
->>>>>>> origin/main
+The router and its dormant sweep were measured and deleted (D948, D949). Their recipes (route logs from
+`days-calls.ts --route-log`, `train_router.py`, the parity check, the e2e screens and the Pi pair's `run.sh`) run at
+commit d42d30b9; the Python trainers stay in `packages/sim/lab/m8/` (README there) and the data on the Volume
+`eden-m8`. Kept in the tree: `days-calls.ts --pool-diag` rows carry the planted item's `source`, arrival `lag` and
+whether it was `held` after its request (D946's stage table).
 
 ### 2. The same with Eden's reader live (NEW)
 

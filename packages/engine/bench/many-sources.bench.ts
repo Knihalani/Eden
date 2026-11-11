@@ -128,7 +128,6 @@ for (let k = sources.length; k < N; k++) {
 
 const sourceMap = new SourceMap();
 const traces: Trace[] = [];
-const routeMs: number[] = [];
 const partner = new ContextPartner({
   sources: async () => sources,
   sourceMap,
@@ -138,8 +137,6 @@ const partner = new ContextPartner({
   now,
   planner: new QueryPlanner({ seed: 1, store: sourceMap, mode: "serve" }),
   onTrace: (t) => traces.push(t),
-  // `routerGate` (M8): the router's own time a lookup, read from its lab hook.
-  onRoute: (x) => void routeMs.push(x.ms),
   config,
 });
 
@@ -259,9 +256,6 @@ const out = {
   events,
   asks,
   sourcesEverSearched: touched,
-  ...(routeMs.length
-    ? { router: { lookups: routeMs.length, p50Ms: pct(routeMs, 0.5), p99Ms: pct(routeMs, 0.99) } }
-    : {}),
   heapMb: { start: round(heap0), afterCold: round(heapCold), end: round(heapEnd) },
   decisions: traces.reduce<Record<string, number>>((m, t) => ((m[t.decision] = (m[t.decision] ?? 0) + 1), m), {}),
 };

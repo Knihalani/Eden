@@ -82,19 +82,6 @@ import {
 import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
-import {
-  conjScore,
-  defaultRouterWeights,
-  requestFeatures,
-  routeProbabilities,
-  ROUTER_NF,
-  ROUTER_NULL_NF,
-  ROUTER_REQUEST_TERMS,
-  routerSummary,
-  routerTerms,
-  sourceKeys,
-  type RouterWeights,
-} from "./router";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
@@ -237,36 +224,6 @@ export interface PartnerDeps {
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
-  /**
-   * `routerGate` (M8, D940): the connector router's weights. Absent: the shipped asset (`defaultRouterWeights`, read
-   * once a process); a router with no weights is inert.
-   */
-  router?: RouterWeights | null;
-  /**
-   * A lab hook (`days-calls.ts --route-log`, M8): each routed lookup's per-source inputs and probabilities, ids and
-   * numbers only (no content).
-   */
-  onRoute?: (r: RouteReport) => void;
-}
-
-/** One routed lookup (`PartnerDeps.onRoute`): ids and numbers only. */
-export interface RouteReport {
-  sessionId: string;
-  turn: number;
-  sources: string[];
-  /** The request's hashed features (`requestFeatures`): numbers, for the lab's trainer to score other tables. */
-  features: number[];
-  /** Per source, `ROUTER_NF` inputs, row by row. */
-  x: number[];
-  summary: number[];
-  p: number[];
-  pNull: number;
-  /** Sources the router added to the spent set (no live read). */
-  skipped: string[];
-  /** Per source, whether `sourceYield` had already spent it (no live read before the router). */
-  spentBefore: boolean[];
-  /** The router's own time for this lookup, ms (its inputs, the network and the gate). */
-  ms: number;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -818,7 +775,6 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            dormantMs: c.routerGate && c.verifyDelivery ? c.routerDormantMs : 0,
           },
         )
       : null;
@@ -4000,9 +3956,7 @@ export class ContextPartner {
     // `routeLocalHits` (D265): which sources hold the request's best local matches, for routing. Only past the
     // lookup's own width: with as few sources as it searches, every one is searched whatever the order.
     const wide = all.length > Math.min(limit, this.config.lookupSources);
-    // `routerGate` (M8): the place of each source's best local match, beside the counts.
-    const localTop = this.config.routerGate && wide ? new Map<string, number>() : undefined;
-    const localHits = this.config.routeLocalHits && wide ? this.localRouteHits(s, cue, localTop) : undefined;
+    const localHits = this.config.routeLocalHits && wide ? this.localRouteHits(s, cue) : undefined;
     const boost = addBoosts(
       localHits,
       // `routeSketch` (D322): the sources whose sketches hold the request's rarer terms, read or trimmed.
@@ -4024,9 +3978,7 @@ export class ContextPartner {
     // `sourceYield` (D505): the warm copies whose unused live reads are spent: no probe, no cut-copy poll, and on a
     // lookup that does not wait for its poll no search behind. A lookup that waits for its poll still searches a spent
     // cut copy with the rest (more reads, never fewer facts).
-    let spent = this.spentSources(s, cue, all, boost);
-    // `routerGate` (M8, D940): the router's unlikely warm copies join the spent ones.
-    if (this.config.routerGate && wide) spent = this.routerSpent(s, cue, all, localHits, localTop, boost, spent);
+    const spent = this.spentSources(s, cue, all, boost);
     if (this.sync) {
       // `syncPollWidth` (D263): over that many sources, only the best routed are polled. The lookup is routed once,
       // here, before its poll, and searches the head of the same ranking, so every source it searches was polled
@@ -4355,115 +4307,6 @@ export class ContextPartner {
       if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
     }
     return out;
-  }
-
-  /**
-   * `routerGate` (M8, D940; `router.ts`): scores each of the user's sources for the request and adds to `spent` every
-   * warm copy whose probability of holding what it needs is under the floor. Never throws: without weights, or on any
-   * error, `spent` is returned as it was (fail open: the lookup reads what it read before). No call, no model call.
-   */
-  private routerSpent(
-    s: Session,
-    cue: Cue,
-    all: readonly Source[],
-    localHits: ReadonlyMap<string, number> | undefined,
-    localTop: ReadonlyMap<string, number> | undefined,
-    boost: ReadonlyMap<string, number> | undefined,
-    spent: Set<string> | null,
-  ): Set<string> | null {
-    try {
-      const started = performance.now();
-      const w = this.deps.router === undefined ? defaultRouterWeights() : this.deps.router;
-      if (!w || !this.sync || !this.yields) return spent;
-      const now = this.now();
-      // The request's own words (the trainer reads requests as written; entities are in them).
-      const terms = routerTerms(cue.text).slice(0, ROUTER_REQUEST_TERMS);
-      const feats = requestFeatures(terms);
-      const named = new Set<string>();
-      for (const e of cue.entities) for (const m of this.deps.sourceMap.sourcesFor(s.scope, e)) named.add(m.sourceId);
-      const rare =
-        this.config.sourceYieldRare > 0
-          ? this.sync.rareHolders(
-              s.scope,
-              sketchTerms(`${cue.text} ${cue.entities.join(" ")}`)
-                .slice(0, MAX_SKETCH_TERMS)
-                .map(termHashes),
-              this.config.sourceYieldRare,
-            )
-          : new Set<string>();
-      const n = all.length;
-      const x = new Float64Array(n * ROUTER_NF);
-      // Sources of one kind and description share their keys, so their conjunction score (a tenant's many Jira
-      // projects): `routerSourceKeys` hands them one array.
-      const conjMemo = new Map<Uint32Array, number>();
-      const yields = this.yields.view(s.scope, now);
-      const copies = this.sync.routeView(s.scope, now);
-      const warm = new Uint8Array(n);
-      for (let i = 0; i < n; i++) {
-        const src = all[i]!;
-        const id = src.id;
-        const keys = routerSourceKeys(src);
-        let c = conjMemo.get(keys);
-        if (c === undefined) {
-          c = conjScore(w, feats, keys);
-          conjMemo.set(keys, c);
-        }
-        const local = localHits?.get(id) ?? 0;
-        const o = i * ROUTER_NF;
-        x[o] = c;
-        x[o + 1] = local;
-        x[o + 2] = boost ? Math.max(0, (boost.get(id) ?? 0) - local) : 0;
-        x[o + 3] = named.has(id) ? 1 : 0;
-        x[o + 4] = rare.has(id) ? 1 : 0;
-        // Both views write into `x` (no object a source): used and run, then whole, hours, size and rate.
-        yields(id, x, o + 5);
-        warm[i] = copies(id, x, o + 7) ? 1 : 0;
-        x[o + 11] = localTop?.get(id) ?? 0;
-      }
-      const summary = new Float64Array(ROUTER_NULL_NF);
-      routerSummary(x, n, terms.length, summary);
-      const p = new Float64Array(n);
-      const pNull = routeProbabilities(w, x, n, summary, p);
-      // Weights from an embedder may hold a value that cannot score: no skip then (fail open).
-      if (!Number.isFinite(pNull)) return spent;
-      const floor = this.config.routerFloor > 0 ? this.config.routerFloor : w.floor;
-      const skipped: string[] = [];
-      // `routerDormantMs` (D943): the sources found likely keep their weekly sweep.
-      if (this.config.routerDormantMs > 0) {
-        const likely: string[] = [];
-        for (let i = 0; i < n; i++) if (!(p[i]! < floor)) likely.push(all[i]!.id);
-        this.sync.routed(s.scope, likely, now);
-      }
-      const spentBefore = this.deps.onRoute ? all.map((a) => spent?.has(a.id) === true) : [];
-      // A source a word of the request points to (at most `sourceYieldRare` of the user's sources hold it) is never
-      // skipped: the strongest evidence there is, and rare connectors' facts hang on it (D945: skipping these lost two
-      // of 105 rare-connector facts at $0; names stay the network's to weigh, or the user's mailbox is never skipped).
-      for (let i = 0; i < n; i++) {
-        // Skipped only when it scores under the floor: a NaN probability reads as likely.
-        if (!(p[i]! < floor) || warm[i] === 0) continue;
-        const id = all[i]!.id;
-        if (spent?.has(id) || rare.has(id)) continue;
-        (spent ??= new Set()).add(id);
-        skipped.push(id);
-      }
-      const ms = performance.now() - started;
-      this.deps.onRoute?.({
-        sessionId: s.id,
-        turn: s.turn,
-        sources: all.map((a) => a.id),
-        features: [...feats],
-        x: [...x],
-        summary: [...summary],
-        p: [...p],
-        pNull,
-        skipped,
-        spentBefore,
-        ms,
-      });
-      return spent;
-    } catch {
-      return spent;
-    }
   }
 
   /**
@@ -5601,7 +5444,7 @@ export class ContextPartner {
    * `routeLocalHits` (D265): for each source, log2(1 + how many of the request's best matches in the user's own index
    * it holds), from one search of the cache (no call); undefined when the user has nothing cached or nothing matches.
    */
-  private localRouteHits(s: Session, cue: Cue, top?: Map<string, number>): Map<string, number> | undefined {
+  private localRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return undefined;
@@ -5610,12 +5453,8 @@ export class ContextPartner {
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     if (query.length === 0) return undefined;
     const counts = new Map<string, number>();
-    let rank = 0;
     for (const h of cache.search(s.scope, query, query.length, LOCAL_ROUTE_HITS, this.now())) {
       counts.set(h.item.sourceId, (counts.get(h.item.sourceId) ?? 0) + 1);
-      // `top` (`routerGate`): 1 / (1 + the place of the source's best match among the request's best matches).
-      if (top && !top.has(h.item.sourceId)) top.set(h.item.sourceId, 1 / (1 + rank));
-      rank++;
     }
     if (counts.size === 0) return undefined;
     for (const [id, n] of counts) counts.set(id, Math.log2(1 + n));
@@ -6566,7 +6405,7 @@ function reachAnswer(
     // True of both rules that skip a read (the source's run, and a source with nothing used yet, D603): neither
     // skips a source the request names. The run rule can skip one the request's common words touch, so the line
     // says "names", not "points there" (review of the D603 merge).
-    notes.push(`Not searched past what is held of ${some(skipped)}: it looked unlikely to hold what the request needs`);
+    notes.push(`Not searched past what is held of ${some(skipped)}: nothing in the request names it`);
   }
   if (told === "Nothing in the connected sources.") {
     const head = reading.length > 0 ? "Nothing found yet." : "Nothing found in what was searched.";
@@ -6928,27 +6767,6 @@ function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities
       .slice(0, 20)
       .map((e) => e.text),
   }));
-}
-
-/**
- * `routerGate`: a source's router keys (a pure function of its id and description, no user state), held per source
- * object for as long as the object lives; equal keys share one array, at most `ROUTER_KEYS_HELD` of those held.
- */
-const routerKeys = new WeakMap<Source, Uint32Array>();
-/** Key arrays by their content, so sources with equal keys share one array (and one conjunction score a lookup). */
-const routerKeysShared = new Map<string, Uint32Array>();
-const ROUTER_KEYS_HELD = 16_384;
-function routerSourceKeys(src: Source): Uint32Array {
-  let keys = routerKeys.get(src);
-  if (!keys) {
-    const made = sourceKeys(src.id, src.description);
-    const content = made.join(",");
-    keys = routerKeysShared.get(content) ?? made;
-    if (routerKeysShared.size >= ROUTER_KEYS_HELD) routerKeysShared.delete(routerKeysShared.keys().next().value!);
-    routerKeysShared.set(content, keys);
-    routerKeys.set(src, keys);
-  }
-  return keys;
 }
 
 /** `routeSketch`: a request's terms matched against the sources' sketches, at most (its first). */

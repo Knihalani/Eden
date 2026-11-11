@@ -240,8 +240,6 @@ describe("routeLocalHits (D265)", () => {
         // The routing order is what is tested: with the earn rule (D603) a new user's cut copy is not searched on
         // the request's common words at all.
         sourceYieldEarn: false,
-        // Nor the router (D948), which would weigh these test sources by its own learned prior.
-        routerGate: false,
         ...config,
       });
       await warm(partner);

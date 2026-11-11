@@ -129,8 +129,6 @@ async function partnerFor(
       // These tests are about an ask whose cut copies ARE searched; the earn rule (D603) reads none of a new
       // user's copies on the question's words alone (`source-yield-partner.test.ts` has that side).
       sourceYieldEarn: false,
-      // Nor the router (D948): it is the ask's own reads that are tested (`router.test.ts` has the gate).
-      routerGate: false,
       syncPageSize: 10,
       syncMaxItems: 20,
       syncCallsPerMin: 6_000,
