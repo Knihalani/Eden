@@ -199,3 +199,10 @@ would have taken the plan past $24. Stopping the queue also stopped `r-reworded-
 - Hidden-only seeds are **49–54** (not 56), the same way. Hidden pairs: 1,536 (45–48) + 2,304 = 3,840 (2.5×).
 - Both arms of a run always share its cards, so each pair stays matched; between runs the cards differ (live, or
   replayed), and pairs are never formed across runs. Everything else in the rule stands.
+
+**Second amendment, still before any re-test result was read (23:20 UTC).** The resume of `r-reworded-45` was refused
+(pi.sh had changed, so the journal's key did), and pi-ab records cards only when `--cards` names a file. So every
+`train` run now passes an empty cards file (`--cards .local/h3/empty.cards.jsonl`: nothing replayed, its cards
+recorded and shared by both arms), `r-reworded-45` reran from scratch the same way, and each later `reworded` run
+replays its seed's `train` cards. A full run is back to about $0.64 (`r-train-46`), so the hidden-only seeds are
+**49–56 again**, as first registered: 4,608 hidden pairs less `r-train-45`'s cut runs.
