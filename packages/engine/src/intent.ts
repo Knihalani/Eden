@@ -25,8 +25,6 @@ export const INTENT_VERSION = 2;
 /** Requests kept per item, and characters per request: model output is bounded like any input. */
 export const MAX_REQUESTS = 4;
 export const MAX_REQUEST_CHARS = 120;
-/** Terms an expansion may index for one item (`setTerms`): its weights are repeats, so this bounds the doc. */
-const MAX_TERMS = 64;
 /** Terms of a query read at most: a request's head says what it asks (and keeps every search bounded). */
 const MAX_QUERY_TERMS = 48;
 
@@ -76,18 +74,6 @@ export function intentTerms(text: string): string[] {
   return out;
 }
 
-/**
- * The intent micro-expansion (M11, D970; `intentMicro`, a trial): a small learned model that reads an item (redacted,
- * as cached) and gives the request terms it would be found by, already stemmed as `intentTerms` stems them, a term
- * repeated for its weight. No text is generated and no call is made; it runs once per item content at ingest.
- */
-export interface IntentExpander {
-  expand(title: string, text: string): readonly string[];
-}
-
-/** The marker of a doc whose text is pre-stemmed terms (`IntentIndex.setTerms`), not requests to stem. */
-const TERMS = "\u0000";
-
 /** One item's place in a search (by content hash). */
 export interface IntentHit {
   hash: string;
@@ -132,28 +118,14 @@ export class IntentIndex {
    * first); without one, the order of the calls.
    */
   set(hash: string, requests: readonly string[], seq?: number): void {
-    // A request can never pass for pre-stemmed terms (`setTerms`'s marker).
-    this.put(hash, requests.length === 0 ? "" : requests.join("\n").replaceAll(TERMS, ""), seq);
-  }
-
-  private put(hash: string, text: string, seq?: number): void {
     this.delete(hash);
-    if (text.length === 0) return;
+    if (requests.length === 0) return;
+    const text = requests.join("\n");
     this.seqOf.set(hash, seq ?? this.nextSeq);
     this.nextSeq = Math.max(this.nextSeq, seq ?? 0) + 1;
     this.texts.set(hash, text);
     this.add(hash, text);
     if (this.vocab.size > Math.max(MIN_REBUILD, this.baseline * REBUILD_FACTOR)) this.rebuild();
-  }
-
-  /**
-   * Sets (or replaces) a content hash's terms as given, already stemmed (an `IntentExpander`'s output, which
-   * `intentTerms` would stem again): bounded to `MAX_TERMS`, cleaned of anything that is not a term. None removes it.
-   */
-  setTerms(hash: string, terms: readonly string[], seq?: number): void {
-    const kept = terms.filter((t) => typeof t === "string" && /^[\p{L}\p{N}][\p{L}\p{N}'-]{0,39}$/u.test(t));
-    if (kept.length === 0) return this.delete(hash);
-    this.put(hash, `${TERMS}${kept.slice(0, MAX_TERMS).join(" ")}`, seq);
   }
 
   delete(hash: string): void {
@@ -188,7 +160,7 @@ export class IntentIndex {
   }
 
   private add(hash: string, text: string): void {
-    const terms = text.startsWith(TERMS) ? text.slice(1).split(" ") : intentTerms(text);
+    const terms = intentTerms(text);
     const ids = new Uint32Array(terms.length);
     for (let i = 0; i < terms.length; i++) ids[i] = this.vocab.intern(terms[i]!);
     const doc = this.index.add(ids, ids.length);

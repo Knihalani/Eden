@@ -30,7 +30,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
 import { parseWhen } from "./grounding";
-import { cleanRequests, IntentIndex, intentTerms, MAX_REQUESTS, type IntentExpander, type IntentHit } from "./intent";
+import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentHit } from "./intent";
 import { inert } from "./render";
 import { isStopword } from "./text";
 import type { Tracer } from "./spans";
@@ -734,13 +734,6 @@ class UserCards {
   enlisted = 0;
   /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
   intent: IntentIndex | undefined;
-  /**
-   * `intentMicro` (M11, D970): each held content's expansion terms, made once at ingest, and its place among equal
-   * scores. Held while an item links to the content (`unlink`), never past it.
-   */
-  readonly micro = new Map<string, { terms: readonly string[]; at: number; seq: number }>();
-  /** Contents expanded so far (each one's `seq` in the intent index). */
-  expanded = 0;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
   readonly bySentence = new Map<string, string>();
   /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
@@ -784,8 +777,6 @@ export interface CardStats {
    * they name none of the user's people (read once a lookup uses the source: `enqueue` again).
    */
   deferred: number;
-  /** `intentMicro` (M11, D970): contents given an expansion at ingest (no call). */
-  expanded: number;
 }
 
 /**
@@ -797,9 +788,6 @@ export class CardEnricher {
   private readonly users = new Map<string, UserCards>();
   private readonly perTenant = new Map<string, number>();
   private limits: CardLimits;
-  /** `intentMicro` (M11, D970; `micro()`): 0 off, 1 every item in place of requests, 2 where the calls gave none. */
-  private microMode = 0;
-  private expander: IntentExpander | null = null;
   readonly stats: CardStats = {
     enqueued: 0,
     prefiltered: 0,
@@ -818,7 +806,6 @@ export class CardEnricher {
     requestOnly: 0,
     requested: 0,
     deferred: 0,
-    expanded: 0,
   };
   /**
    * Span tracing (`spans.ts`): each enrichment call is a `cards.make` span (counts only, D19). The partner sets it
@@ -963,7 +950,6 @@ export class CardEnricher {
       }
       const known = u.byHash.get(hash);
       if (known) known.seenAt = now;
-      if (this.expander && !u.micro.has(hash)) this.expand(u, item, hash, now);
       const queued = u.queue.some((q) => q.hash === hash);
       if (!known && !queued && defer?.(item)) {
         this.stats.deferred++;
@@ -1005,33 +991,6 @@ export class CardEnricher {
     }
   }
 
-  /**
-   * `intentMicro` (M11, D970): turns on the expansion. `mode` 1: every item's expansion is indexed in place of the
-   * card calls' requests (so `intend()` is not called); 2: only where the card calls gave none.
-   */
-  micro(mode: number, expander: IntentExpander): void {
-    this.microMode = mode;
-    this.expander = expander;
-  }
-
-  /** One content's expansion, indexed unless the card call's requests stand (mode 2). Fails open: no terms. */
-  private expand(u: UserCards, item: ContextItem, hash: string, now: number): void {
-    let terms: readonly string[];
-    try {
-      // The item is redacted already (D10); its terms are passed through the gate again as the index's text.
-      terms = sanitizeForStore(this.expander!.expand(item.title, item.text).join(" ")).split(" ");
-    } catch {
-      return;
-    }
-    if (terms.length === 0 || terms[0] === "") return;
-    const m = { terms, at: now, seq: u.expanded++ };
-    u.micro.set(hash, m);
-    this.stats.expanded++;
-    if (this.microMode === 1 || !u.byHash.get(hash)?.requests?.length) {
-      (u.intent ??= new IntentIndex()).setTerms(hash, m.terms, m.seq);
-    }
-  }
-
   /** Queues an item for the model, or gives it the card of an item saying the same constraint (`sentenceReuse`). */
   private queueItem(u: UserCards, item: ContextItem, hash: string, now: number): void {
     const skey = this.limits.sentenceReuse ? sentenceKey(item) : undefined;
@@ -1067,11 +1026,8 @@ export class CardEnricher {
   private keep(u: UserCards, hash: string, s: Stored): void {
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
-    // The requests are indexed while their card is held, and go with it (`dropCard`). With `intentMicro` the
-    // expansion stands where the call gave none (mode 2) or always (mode 1).
-    const m = u.micro.get(hash);
-    if (s.requests?.length && this.microMode !== 1) (u.intent ??= new IntentIndex()).set(hash, s.requests, s.seq);
-    else if (m) (u.intent ??= new IntentIndex()).setTerms(hash, m.terms, m.seq);
+    // The requests are indexed while their card is held, and go with it (`dropCard`).
+    if (s.requests?.length) (u.intent ??= new IntentIndex()).set(hash, s.requests, s.seq);
     else u.intent?.delete(hash);
     while (u.byHash.size > this.limits.maxCardsPerUser) dropCard(u, u.byHash.keys().next().value as string);
   }
@@ -1380,15 +1336,6 @@ export class CardEnricher {
     // A few more than wanted: a hash made too late, past its time to live or with no cached item is skipped.
     for (const hit of u.intent.search(text, k * 2)) {
       const s = u.byHash.get(hit.hash);
-      // An expansion (`intentMicro`) is indexed with no card, or beside one whose call wrote no requests.
-      const m = !s?.requests?.length || this.microMode === 1 ? u.micro.get(hit.hash) : undefined;
-      if (m && !s) {
-        if (!(m.at < before)) continue;
-        const ids = [...(u.holders.get(hit.hash) ?? [])].filter(accept);
-        if (ids.length > 0) out.push({ ids, hit, carded: false });
-        if (out.length >= k) break;
-        continue;
-      }
       if (!s || !(s.at < before)) continue;
       if (now - s.seenAt > this.limits.ttlMs) {
         dropCard(u, hit.hash);
@@ -1410,20 +1357,6 @@ export class CardEnricher {
     const s = hash ? u!.byHash.get(hash) : undefined;
     if (!s?.requests || !(s.at < before) || this.deps.now() - s.seenAt > this.limits.ttlMs) return [];
     return s.requests;
-  }
-
-  /**
-   * The stemmed terms an item is indexed under in the intent index (made before `before`): its requests' terms, or
-   * its expansion's (`intentMicro`) where that stands in their place. What `anchoredIntents` reads for rare words.
-   */
-  intentTermsOf(scope: Scope, id: string, before: number): string[] {
-    const u = this.users.get(scopeKey(scope));
-    const hash = u?.byItem.get(id);
-    if (!u || !hash) return [];
-    const s = u.byHash.get(hash);
-    const m = u.micro.get(hash);
-    if (m && (this.microMode === 1 || !s?.requests?.length)) return m.at < before ? [...m.terms] : [];
-    return intentTerms(this.requestsOf(scope, id, before).join("\n"));
   }
 
   /** Items holding requests in the user's intent index (tests and bounds). */
@@ -1488,7 +1421,6 @@ function unlink(u: UserCards, id: string): void {
   ids?.delete(id);
   if (ids && ids.size > 0) return;
   u.holders.delete(hash);
-  u.micro.delete(hash);
   dropCard(u, hash);
 }
 
@@ -1507,9 +1439,6 @@ const NONE_CARD: Card = { kind: "none", actions: [], entities: [], statement: ""
 function dropCard(u: UserCards, hash: string): void {
   u.byHash.delete(hash);
   u.intent?.delete(hash);
-  // An expansion (`intentMicro`) is held with its items, not its card: a card evicted for room leaves it indexed.
-  const m = u.micro.get(hash);
-  if (m) (u.intent ??= new IntentIndex()).setTerms(hash, m.terms, m.seq);
   const k = u.sentenceOf.get(hash);
   if (k === undefined) return;
   u.sentenceOf.delete(hash);

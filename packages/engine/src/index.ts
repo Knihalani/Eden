@@ -76,11 +76,9 @@ export {
   type CardKind,
   type CardMaker,
 } from "./cards";
-export { intentMicroExpander, MicroExpander, MICRO_MODEL_PATH } from "./micro";
 export {
   cleanRequests,
   IntentIndex,
-  type IntentExpander,
   intentCut,
   intentReach,
   intentTerms,
