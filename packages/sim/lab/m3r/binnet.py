@@ -377,6 +377,7 @@ def run(o):
     if o.arch in ("pair", "notwin"):
         net = Pair(q, o.bits, twin=o.arch == "pair", prior=prior_size() if o.prior else 0)
         opt = torch.optim.Adam(net.parameters(), lr=o.lr)
+        best = None
         base = {"fact@5_lexical": sum(1 for w in ev for r in w["reqs"] if held(r, heldout) and r["kind"] == "hidden"
                                       and r["target"] >= 0 and r["target"] < 5)}
         step = 0
@@ -406,9 +407,16 @@ def run(o):
                     curve.append({"step": step, "loss": round(float(loss), 3)})
                     print(curve[-1], flush=True)
                 step += 1
+                if o.eval_steps and step % o.eval_steps == 0:
+                    m = eval_pair(net, ev, heldout)
+                    print({"step_eval": step, **m, **base, "s": round(time.time() - t0)}, flush=True)
+                    if best is None or m["fact@5"] - m["twin@5"] > best["fact@5"] - best["twin@5"]:
+                        best = {**m, "step": step}
             m = eval_pair(net, ev, heldout)
             print({"epoch": ep, **m, **base, "s": round(time.time() - t0)}, flush=True)
-        result = {**m, **base}
+            if best is None or m["fact@5"] - m["twin@5"] > best["fact@5"] - best["twin@5"]:
+                best = {**m, "step": step}
+        result = {**m, **base, "best": best}
         for path, ws in ((o.ranks, ev), (o.ranks2, load(o.eval2) if o.eval2 else [])):
             if path:
                 write_ranks(net, ws, path)
@@ -685,6 +693,7 @@ if __name__ == "__main__":
     a.add_argument("--epochs", type=int, default=3)
     a.add_argument("--bits", type=int, default=128)
     a.add_argument("--lr", type=float, default=2e-3)
+    a.add_argument("--eval-steps", type=int, default=0, help="pair: a held-out check every N steps (best kept)")
     a.add_argument("--held", default="train5,train6")
     a.add_argument("--out", default="")
     a.add_argument("--ranks", default="", help="pair/notwin: write the eval's ranks (score.py's format) here")

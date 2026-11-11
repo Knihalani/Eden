@@ -185,3 +185,15 @@ train), held out on train5–6's days requests (157 hidden, 148 control), unless
 | H7 | **BloomMatch**: which request n-grams occur in an item, as a bit pattern, is enough to score | top-5 ranking, twin rejection | each item a 2,048-bit Bloom filter of its n-grams (ingest); a request's n-grams probe it, bucketed into 256 match bits; the item's twin probed too; binary layers over [match, request, match XOR twin-match] (`bloom`) | explicit term matching in bits, with the twin's difference as a learned contrast; per candidate only bit tests | fact@5 not above the lexical order's |
 | H8 | request intent (which kind of constraint to look for) is predictable from the request alone, in any language and phrasing | request intent and phrasing | binary char-n-gram classifier → M2's 16 archetypes (`intent`; M2's train/val worlds, every style and language) | archetypes have phrasing tells ("book", "pay", "should I") | accuracy on M2's held-out split ≤ 2× the majority class |
 | H9 | supersession and change detection need item pairs with revisions | change detection, supersession | a binary pair tagger over (older, newer) items of a thread | M2 marks `revisionOf` | **not tested in round 1**: the exported slices carry no revision pairs (M2's raw worlds do; deferred to round 2 if a slice is built) |
+
+### 7a. Round 1 (Haiku subagents, local CPU, one thread each; fold A slice: 40 worlds, 3 epochs; held out train5–6)
+
+Reference on the same held-out requests, the candidates in their lexical order: of 147 hidden requests with the fact
+among the candidates, fact first 64, in the first five 86; of 148 control requests, the twin in the first five 66.
+
+| # | network | held-out signal (per epoch) | reading |
+|---|---|---|---|
+| H1 | pair, binary | fact@5 82 / 60 / 51, fact@1 27 / 23 / 12, twin@5 **31** / 18 / 27 | **signal on twins**: after one epoch, facts in the five 82 against 86 and twins 31 against 66; then it memorises the slice. Develop: lexical prior bits, held-out checks during training |
+| H2 | pair, float | fact@5 74 / 45 / 49, twin@5 24 / 11 / 23 | the same shape, no better than binary at this size |
+| H3 | pair without the twin pathway | fact@5 84 / 45 / 31, twin@5 30 / 31 / 25 | epoch 0 like H1 (82, 31): no evidence yet that the twin pathway earns its place |
+| H4 | tagger, binary | AUC fact against others 0.863 / 0.866 / 0.865 | signal; fact against its own twin not yet separated (round 2 reports it) |
