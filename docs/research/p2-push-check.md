@@ -312,3 +312,28 @@ task's model requests) and `n4/tokens.py` (the agent's tokens by class from the 
   packet wherever it does not call, which is most neutral requests.
 - **For a dear agent the silent check may pay for itself:** the Haiku agent's tokens priced at Sonnet's rates fall
   $0.71 per 1,000 tasks against the check's +$0.22 **[EST]**. Measured with a Sonnet agent in §3.7.
+
+### 3.8 D: `pushIndirect` on Pi (the reworded train)
+
+Pi on Modal at d8544d2e, the bench-tools harness, `--suites train-rw`, seeds 41–44, hidden, control and neutral,
+2,304 task runs an arm (8.4% of the first wave's requests retried on a 429, then 3.2%, then 0); Sonnet 5.5 regraded
+1,560 answers (0 failed).
+
+| `eden~I` − `eden` on train-rw | |
+| --- | --- |
+| Hidden raised (Sonnet) | **+7.4 points (+3.1..+11.8)**, 69.1 vs 61.7, n 768 (Haiku's grade: 69.3 vs 62.8) |
+| Confirmed concerns, control and neutral | **1 vs 0 of 1,534** (McNemar p 1.0) |
+| Total $ per 1,000 tasks, 1:1:8 mix | **−0.026 (−0.036..−0.017)**: the agent's own, Eden makes no call |
+| Wall a task | **−0.39 s (−0.60..−0.16)** |
+| Agent tool calls a task; model turns | −0.56 (−0.64..−0.50); −0.21 |
+
+- **When the push starts for an indirect request, the agent searches less and raises more.** Without it the agent
+  on train-rw finds facts by asking (its tool calls 1.36 a task against about 0.6 on train's own wording); with it
+  the packet arrives before the first model call.
+- **Against D's rule it fails by one concern.** Hidden is better (interval above zero) and cost is lower, but D's rule
+  asks that Sonnet-confirmed concerns are not up, and they read 1 against 0. The one (read by hand) is a real false
+  concern: on a control task ("Let's cash in £3,000 of my Premium Bonds to pay for a new boiler") the agent stated a
+  boiler claim accepted for another policyholder's address as covering the user's. So by the rule as written
+  `pushIndirect` is not promoted, and the trade goes to the parent: +7.4 points of hidden facts and −$0.026 per 1,000
+  tasks for one more false concern in 1,534 neutral and control answers.
+- On train's own wording the switch changes no task (§1.2), so the default's measured figures stand there.
