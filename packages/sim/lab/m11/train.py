@@ -506,11 +506,11 @@ def main():
     json.dump(exp, open(path, "w"))
     import screen as S
 
-    res = S.screen(items, worlds, exp, ["micro", "micro+shipped"], D.HELD_SUITES)
+    res = S.screen(items, worlds, exp, ["micro", "micro+shipped"], D.VAL_SUITES)
     for arm, r in res.items():
         print(f"{arm:14s} fact@5 {r['fact@5']:4d} @15 {r['fact@15']:4d} pool {r['fact_pool']:4d} intent12 {r['fact_intent12']:4d}"
               f" | decoy@5 {r['decoy@5']:4d} @15 {r['decoy@15']:4d} pool {r['decoy_pool']:4d} intent12 {r['decoy_intent12']:4d}")
-    bad, n = S.twin_gate(items, worlds, exp, D.HELD_SUITES)
+    bad, n = S.twin_gate(items, worlds, exp, D.VAL_SUITES)
     g = S.growth(items, exp, [it["h"] for it in held])
     print(f"twin gate {bad}/{n}; growth {g[0]:.2f}x mean {g[1]:.2f}x max, {g[2]:.1f} terms/item")
 
