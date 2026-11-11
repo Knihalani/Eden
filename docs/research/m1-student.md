@@ -1,6 +1,8 @@
 # M1: a distilled "changes the action" student for the push check
 
-Status: 2026-11-11, branch `claude/m1-local-check` (from `main` at 533cc7f8), session M1. Decisions D890–D899. Train
+(This M1 is the 2026-11-11 student session; docs/research/m1-lab-scale.md is an earlier, unrelated M1.)
+
+Status: 2026-11-11, branch `claude/m1-local-check` (from `main` at 533cc7f8), session M1. Decisions D890–D898. Train
 suites only (train1–6); heldout17, heldout18 and heldout19 are not dumped, labelled, run or read. Numbers marked
 **[EST]** are arithmetic or judgement; every other number comes from a command in this note. Caps: Anthropic $80
 (ledger `.local/m1/ledger.jsonl`), Modal $400. Sections 1–2 were written and committed before any student was

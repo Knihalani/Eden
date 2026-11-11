@@ -594,6 +594,16 @@ request, measured again before any promotion: **[EST]** I3's short-reply request
 300 output tokens, 2–3 s and $0.0004 a call (n2-recall.md §8). I3's no-thinking check (D500–D502) is the cheap end:
 $0.0002 a call, p50 0.9 s, which cannot gate a widened pool (D511).
 
+## A distilled student as the push check (M1, `pushCheckLocal`, a trial, off; D893, D894)
+
+No model call and no `Budget`: the push's pool (at most 20 items, each its title's first 300 and its text's first 700
+characters, the request's first 400) goes to an embedder's scorer. Its cost is that scorer's serving, measured in the
+lab (docs/research/m1-student.md §4b): a Qwen3-8B student needs an H100-class GPU, 121 ms a 15-item pool with the shared
+prompt head cached (L4: 1.0 s; 4B on an L4: 0.58 s; CPU int8 0.6B: 8.1 s). At list price **[EST]** (H100 about $3.95 an
+hour) that is $0.00013 a check fully used, $0.00027 at 50% and $0.0013 at 10% utilisation, against Haiku's measured
+$0.00021–0.00026; 0.99 checks a task (opened pushes are checked too). It is cheaper than Haiku only above about 60%
+utilisation, and it failed its first live rule (D897).
+
 ## The compare-first push check and its gate (N5, `pushCheckForm` 2, `pushCheckAnchored`; trials, off; D527–D536)
 
 The per-push call of I3's check with another reply (docs/research/n5-widen-check.md): the same fixed instructions

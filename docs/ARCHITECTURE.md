@@ -457,7 +457,12 @@ for a compare-first reply (per listed item, what its point applies to, what of t
 "none", then the verdict), which keeps look-alikes out with no thinking at the same price and wait a call;
 `pushCheckAnchored` makes the call only when a constraint-like pool item names one of the request's anchors (about
 three pushes in ten, else the default's candidates with no call); `pushCheckSilent` off leaves the default's
-candidates when the check names nothing.
+candidates when the check names nothing. `pushCheckLocal` (M1, D894, off; docs/research/m1-student.md) takes the
+verdict from a distilled student's scores instead of a model call: the embedder wires a `LocalPushChecker` (a
+`PushCheckScorer` that scores each pool item alone on its title and first 700 characters) behind the same `PushCheck`
+interface, items at or above `pushCheckLocalPass` change the action, and since that is no paid call an opened push
+(`pushOpen`) is checked too (D896). The partner reads the wired checker's `local` flag, not the switch alone: with the
+paid checker wired the switch is inert. No server wires a student; the lab serves one on a GPU (D893).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search

@@ -61,7 +61,8 @@ funnel (`--check-log F` writes each prompt and reply; a row's `pushCheckCalled` 
 pi-ab wires it for any arm with `pushCheck`. `--widen-table` (N2, ids, short worlds) or `--widen-hash` (N5, D530, item
 content, any world of the same seed; `n2-widen.ts`) is the `widen` dependency of an arm with `pushWiden`.
 `../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix; `days_hidden.py` resamples
-whole users. Recipes: docs/LAB.md 1f, 1g.
+whole users. **M1's student (D894):** an arm with `pushCheckLocal` takes `--checker-url URL` (live), `--checker-cache F`
+(kept answers, replayed at $0) and, in the funnel, `--checker-log F` (`m1-scorer.ts`; key from `EDEN_LAB_CHECKER_KEY`). Recipes: docs/LAB.md 1f, 1g.
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run

@@ -555,6 +555,15 @@ templates). `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints 
 packets and N2's pre-registered bars. Read a check's quality from replayed labels: a live check slower than the
 funnel's 3 s observe wait misses the push (D510).
 
+### 1h. A distilled student as the push check (M1, D890–D898; docs/research/m1-student.md)
+
+`packages/sim/modal/m1_student.py` trains and scores Qwen3 students on Modal (`m1_build.py` makes the rows from
+`i1-label.ts pairs` and M2's pair groups); `m1_serve.py` benches a run on a GPU and serves it (bearer key from
+`EDEN_LAB_CHECKER_KEY`, an ephemeral secret; stop it with `modal app stop -y eden-m1-checker`). The funnel and pi-ab
+wire it for an arm with `pushCheckLocal`: `--checker-url URL` (live), `--checker-cache F` (answers kept and replayed
+at $0), `--checker-log F` (funnel: each check's items and scores). `packages/sim/lab/m1-student/compare.py` reads a
+screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
+
 ### 1g. The compare-first check, its gate, and a days user's widening (N5, D527–D536; docs/research/n5-widen-check.md)
 
 `--set '{"pushCheck":true,"pushCheckForm":2}'` asks the push check for the compare-first reply; add `"pushWiden":true`
