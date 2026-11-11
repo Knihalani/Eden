@@ -259,7 +259,7 @@ for (const [, s] of syncUsers) {
 if (enricher) {
   const cardUsers = (enricher as unknown as { users: Map<string, Any> }).users;
   for (const u of cardUsers.values()) {
-    for (const k of ["byHash", "byItem", "holders", "bySentence", "sentenceOf", "intent", "queue"]) {
+    for (const k of ["byHash", "byItem", "holders", "bySentence", "intent", "queue"]) {
       add(`cards: ${k}`, walk(u[k]));
     }
   }

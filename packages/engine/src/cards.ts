@@ -649,6 +649,11 @@ interface Stored {
   seenAt: number;
   /** Kept with no card because `cardsLean` skipped it by its date, not by its words (`readForIntent`). */
   leanSkipped?: true;
+  /**
+   * `sentenceReuse`: its sentence key in `bySentence`, which goes when the card does (held no longer, D8). A field,
+   * not a Map from hash to key (D998: a Map entry is 40-130 bytes); `keep` carries it to a replacing record.
+   */
+  skey?: string;
 }
 
 /** An item waiting for the model. `only`: rejected by the prefilter, read for its requests only (`intent`). */
@@ -738,8 +743,6 @@ class UserCards {
   intent: IntentIndex | undefined;
   /** Sentence key → the content hash whose card says it (`sentenceReuse`). */
   readonly bySentence = new Map<string, string>();
-  /** Content hash → its sentence key in `bySentence`: the entry goes when the card does (held no longer, D8). */
-  readonly sentenceOf = new Map<string, string>();
   draining: Promise<void> | null = null;
   /** With `cardsLanes` > 1 while the user drains: starts another lane if one is free (`CardEnricher.drainLanes`). */
   spawn: (() => void) | null = null;
@@ -1026,6 +1029,8 @@ export class CardEnricher {
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
+    const old = u.byHash.get(hash);
+    if (old?.skey !== undefined && s.skey === undefined) s.skey = old.skey;
     u.byHash.delete(hash);
     u.byHash.set(hash, s);
     // The requests are indexed while their card is held, and go with it (`dropCard`).
@@ -1183,13 +1188,15 @@ export class CardEnricher {
             seenAt: at,
             ...(asked?.length ? { requests: asked, seq: b.seq } : {}),
           });
-          if (b.skey !== undefined) {
+          const kept = u.byHash.get(b.hash);
+          if (b.skey !== undefined && kept !== undefined) {
             u.bySentence.set(b.skey, b.hash);
-            u.sentenceOf.set(b.hash, b.skey);
+            kept.skey = b.skey;
             while (u.bySentence.size > this.limits.maxCardsPerUser) {
               const [k, h] = u.bySentence.entries().next().value as [string, string];
               u.bySentence.delete(k);
-              if (u.sentenceOf.get(h) === k) u.sentenceOf.delete(h);
+              const st = u.byHash.get(h);
+              if (st?.skey === k) delete st.skey;
             }
           }
         });
@@ -1450,11 +1457,10 @@ const NONE_CARD: Card = { kind: "none", actions: [], entities: [], statement: ""
  * outlives the others.
  */
 function dropCard(u: UserCards, hash: string): void {
+  const k = u.byHash.get(hash)?.skey;
   u.byHash.delete(hash);
   u.intent?.delete(hash);
-  const k = u.sentenceOf.get(hash);
   if (k === undefined) return;
-  u.sentenceOf.delete(hash);
   if (u.bySentence.get(k) === hash) u.bySentence.delete(k);
 }
 
