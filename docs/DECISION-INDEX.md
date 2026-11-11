@@ -574,3 +574,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
+| D920 | 2026-11-11 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | rejected |
+| D921 | 2026-11-11 | Adopted (lab tooling, M6): `hidden-funnel --packet-parts` (each delivered item's parts as compaction reads them, re-rendered from the… | lab |

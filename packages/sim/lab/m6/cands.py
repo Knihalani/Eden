@@ -12,6 +12,9 @@ val facts (fact keep, look-alike keep, item-line bytes against shipped); then th
 Archs: h1 PartLR, h2 PartXor (binarised), h3 ThreadTagger, h4 ClauseLR (parts split at clauses), h5 Ingest mask
 (h1 without the request), h6 mass decoding (h1's scores), h7 StumpForest (LightGBM on dense features), h8
 CharBilinear, h9 ItemGate (h1 + an item head).
+
+The TypeScript side these exports fed (`packages/engine/src/trim.ts`, the `packetTrim` switch) was deleted by D920;
+it is in commit d3a34348.
 """
 
 import argparse

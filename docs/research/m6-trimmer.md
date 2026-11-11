@@ -1,6 +1,8 @@
 # M6: a packet trimmer (each delivered item cut to the parts that carry the fact)
 
-Status: 2026-11-11, branch `claude/m6-trimmer` (from main e4f3649a), session M6, decisions D920–D929. Paid calls go
+Status: 2026-11-11, branch `claude/m6-trimmer` (from main e4f3649a), session M6, decisions D920–D921. **Stopped on
+its pre-registered rule (D920): the trimmer keeps 97.8% of facts on generated held-out families but 73.2% on the
+sim's train5–6; deleted, no Pi run.** The lab tooling stays (D921). Paid calls go
 to Anthropic directly through the lab (D97, `HAIKU_API_KEY`): **Anthropic-direct lab figures**. Caps: Anthropic $10
 ($8 of it for the Pi pair), Modal $40. Numbers marked **[EST]** are arithmetic or judgement; every other number comes
 from a command in this note.
@@ -75,3 +77,114 @@ the most request words or a digit.
 Round 1 runs each on a slice (local CPU, Haiku helper sessions); round 2 develops the survivors; the winners train
 fully on Modal (weights on the Volume `eden-m6`), export to TypeScript with a 64/64 parity check, and are wired as
 the trial switch `packetTrim`.
+
+## 4. Rounds (val only; test and train5–6 not read)
+
+**No-model baselines** (`baselines.py`, synth-val): `pick` at a smaller budget loses facts fast. At 240 bytes an
+item it keeps 56.9% of facts' key details at 85.4% of item bytes, at 120 bytes 23.1% at 53.3%; titles alone are
+16.0% of the bytes and keep 10.4%.
+
+**Round 1** (four Haiku helper sessions; 600 synth worlds and train1–4 with their P7 and `train-rw` versions; each
+candidate trained on the same slice): every candidate ranks key parts well (val AUC: h3 0.946, h2 0.934, h8 0.926,
+h1 0.919–0.924, h5 0.918, h7 0.914, h4 0.861), but none reaches 97% of facts at any threshold: with every part kept
+and the item fitted to its 320 bytes by score, h1 keeps 86.7%. Every miss was a key part dropped from a long item, other
+parts outranking it in the fit. A within-item softmax loss made it worse (85.4%). h4 (clauses) is killed.
+
+**The fix is architectural: subtractive trimming.** The trimmer only removes parts from `pick`'s own selection; at
+threshold 0 the line is the shipped one. h1 on round 1's slice then keeps 97.1% at 75.1% of item bytes, 94.3% at
+53.6%.
+
+**Round 2** (Haiku helpers; all 2,128 synth worlds; subtractive; the best epoch at the threshold that keeps 97% of
+val facts; every model overfits after its first or second epoch):
+
+| # | val AUC | facts kept | look-alikes kept | item bytes |
+| --- | --- | --- | --- | --- |
+| **h3 ThreadTagger** (60k rows, 1 epoch) | **0.959** | 97.3% | 96.0% | **49.1%** |
+| h2 PartXor | 0.944 | 97.1% | 94.4% | 55.7% |
+| h1 PartLR | 0.941 | 97.2% | 96.6% | 60.2% |
+| h8 CharBilinear | 0.947 | 97.1% | 97.0% | 60.4% |
+| h5 Ingest mask (no request) | 0.936 | 97.1% | 97.1% | 65.5% |
+| h1 with top-1 decoding (H6's successor) | 0.941 | 97.2% | 96.9% | 67.8% |
+| h7 StumpForest | 0.919 | 97.3% | 96.4% | 69.5% |
+| h9 ItemGate | 0.941 | no threshold reaches 97% | | |
+
+Context over an item's parts is what wins (h3 against h1: the warning and the "ring me first" after it).
+
+**Full training (Modal, 8 CPUs, all train rows: 699,579 parts, 48,575 key; 4 epochs; the epoch and the
+configuration chosen on val alone, by the fewest item bytes at 97% of val facts with look-alikes at least 95%):**
+
+| run | best epoch | facts | look-alikes | item bytes |
+| --- | --- | --- | --- | --- |
+| h3, 64 bits | 1 | 97.1% | 95.8% | 46.3% |
+| h3, 64 bits, trained on `pick`'s parts only | 0 | 97.1% | 95.5% | 45.2% |
+| **h3, 32 bits** | 1 | **97.2%** | **95.5%** | **42.9%** |
+
+Chosen: h3 at 32 bits (commit d3a34348): each part a 32-bit sign code (a ternary table over 65,536 hashed n-gram
+buckets, 2 bits a weight, batch norm folded into a scale and shift a bit) beside 27 numbers (cue words, digits, dates,
+amounts, the request's words it shares, and where it stands among the item's parts); a one-layer bidirectional GRU
+(32 a direction) over the item's parts in order; a linear head, plus a linear term over the same hashed features.
+At its val threshold (0.0236) the bytes come off non-planted items (31.3% of theirs kept; 81% of val's item bytes)
+while planted items keep 94.2% of theirs.
+
+**TypeScript** (`trim.ts`): parity 69/69 keep decisions identical with the trainer (max score difference 1.7e-7);
+the weights file is 1.15 MB; on 568 synth-val no-check packets (3.46 items each) p50 0.63–0.68 ms, p90 1.07–1.17 ms
+a packet (three runs, `bench.ts`). The first port (string-built CRC n-grams, a bit-unpacked table, allocating GRU)
+took 1.72 ms p50 at 64 bits.
+
+## 5. Held-out screen (read once, at d3a34348) and the decision
+
+Real funnel packets, the engine's trimmer in the loop (`--set '{"packetTrim":true}'`, `screen_funnel.py` against
+the same suites and seeds with the default): `synth-test` (`--blind`, 293 worlds) and train5, train6, train5r,
+train6r (seeds 41–44).
+
+| held-out set | tasks | facts kept | look-alikes kept | item bytes | packet bytes |
+| --- | --- | --- | --- | --- | --- |
+| synth-test (M2 v2 test families) | 6,618 | **97.8%** (798 / 816) | **96.2%** (691 / 718) | **42.8%** | 58.4% |
+| train5–6 and their rewordings | 1,536 | **73.2%** (221 / 302) | **79.4%** (212 / 267) | 53.2% | 67.9% |
+
+**Stop on the pre-registered rule (D920):** clauses 1 and 3 fail on train5–6, so `packetTrim` is deleted with its
+code and tests (they are in commit d3a34348; the weights are on the Volume `eden-m6`, `runs/m-h3c`). The Pi pair was
+not run: $0 of its $8.
+
+Not a harness fault: of the 81 train5–6 facts lost, 38 were cut to their title alone ("Re: January!" without "the
+spare room is yours on the 9th, I've already told Sami") and 43 lost a key part; on synth-test 7 and 11. The sim's
+hand-written templates are written differently from the generated worlds the model mostly learned from (train1–4
+and their versions are about a tenth of the training rows), and a model that keeps 97.8% on unseen generated
+families keeps 73.2% on unseen hand-written ones: M3's lesson (D913) again, this time on item text rather than
+retrieval.
+
+## 6. What it leaves
+
+- **Subtractive is the shape a trimmer needs.** Ranking an item's parts afresh and fitting the best to the budget
+  lost 13% of facts with every part allowed; removing parts only from `pick`'s own selection starts at the shipped
+  line and lets the threshold buy bytes.
+- **Context over an item's parts carries the decision.** A tiny bidirectional GRU over per-part sign codes beat a
+  linear model, a binarised pair net, a bilinear one and trees by 11–20 points of bytes at the same keep on val.
+- **At 97% keep the bytes come off items that carry nothing for the request.** Planted facts and look-alikes keep
+  about 94% of their bytes; non-planted items keep 31%. Under the shipped push check (S) most of those items no
+  longer reach the packet, so the live cut would be well under the offline one, and with S's packets about 1,061 of
+  a Haiku agent's 5,534 re-read prompt tokens a task (P2 §3.6) and the lead and envelope fixed, the −15% aim was
+  out of reach from item text alone **[EST]**.
+- **A successor** would train on the sim's hand-written families at a real share (or on items S delivers) and be
+  screened on a held-out set nobody has read (train5–6 are read now; heldout19 is not for this).
+
+## 7. Spend and reproduce
+
+Anthropic **$1.44** of $10 (Haiku 5.5 part labels for 27,179 planted items, `.local/m6/ledger.jsonl`); no Pi or
+other paid run. Modal: three 8-CPU training runs of about 20 minutes and the Volume `eden-m6`, about $1 **[EST]**.
+Haiku helper sessions ran rounds 1 and 2 on their own machines (no paid calls).
+
+```bash
+bun run funnel --suite synth-train --seeds 1,…,30 --jobs 3 -- --neutral --packets D.jsonl --packet-parts  # 30 a run
+bun run funnel --blind --suite synth-test --seeds … -- --neutral --packets T.jsonl --packet-parts          # held out
+bun packages/sim/src/lab/m6/label.ts D*.jsonl --out L.jsonl --spend-cap 3                  # pay once, ~$0.00005 an item
+python3 -I packages/sim/lab/m6/prep.py --labels L.jsonl --out DIR D*.jsonl T*.jsonl
+python3 -I packages/sim/lab/m6/baselines.py DIR/items.jsonl --sets val
+python packages/sim/lab/m6/cands.py --items DIR/items.jsonl --arch h3 --within-pick --bits 32 --buckets 65536 \
+  --lr 0.005 --epochs 4 --out RUN                               # torch CPU; Modal: packages/sim/modal/m6_trim.py
+# the deleted switch (commit d3a34348): copy RUN/trim-model.json to packages/engine/models/, then
+bun run funnel … --set '{"packetTrim":true}' -- --neutral --packets A.jsonl --packet-parts
+python3 -I packages/sim/lab/m6/screen_funnel.py --labels L.jsonl --base T.jsonl --arm A.jsonl
+```
+
+Funnel dumps need about 30 seeds a process group (memory grows with seeds in one process; 100 were killed).

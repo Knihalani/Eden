@@ -45,16 +45,10 @@ export function renderPacket(
      */
     lead?: string;
     /**
-     * Lab only (M6's dump, `--packets`): told each compacted item's parts as `messageParts` read them and the text
-     * compaction kept. Reads only; never set by the engine.
+     * Lab only (M6's dump, `hidden-funnel --packet-parts`, D921): told each compacted item's parts as `messageParts`
+     * read them and the text compaction kept. Reads only; the engine never sets it.
      */
     onParts?: (item: ContextItem, parts: readonly Part[], text: string) => void;
-    /**
-     * `packetTrim` (M6, D920; trim.ts): each part's keep score for the request, or null to fall back to `pick`. A
-     * compacted item keeps only the parts at or above the trimmer's threshold, the best that fit `itemBytes` in their
-     * own order; none kept says the item by its title alone.
-     */
-    trim?: (title: string, parts: readonly Part[]) => { scores: ArrayLike<number>; threshold: number } | null;
   },
 ): string {
   const before = options.shownBefore;
@@ -88,9 +82,7 @@ export function renderPacket(
         options.split,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const trimmed = options.trim && !(prior && !saysNew(parts)) ? options.trim(item.title, parts) : null;
-      const text =
-        prior && !saysNew(parts) ? SHOWN : trimmed ? keepScored(parts, focus, trimmed, each) : pick(parts, focus, each);
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
@@ -110,8 +102,7 @@ export function renderPacket(
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
     const named = safeLine(item.title);
-    // An item trimmed to nothing (`packetTrim`) is said by its title alone, with no colon after it.
-    const title = said + (named ? (item.text ? `${named}: ` : named) : "");
+    const title = said + (named ? `${named}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -465,94 +456,31 @@ export function messageParts(
   return parts;
 }
 
-/**
- * `packetTrim`: the parts scored at or above the threshold, the best-scored that fit `maxBytes`, in their own order,
- * gaps marked "…"; empty when none is kept (the line is then the item's title alone).
- */
-function keepScored(
-  parts: Part[],
-  focus: ReadonlySet<string>,
-  t: { scores: ArrayLike<number>; threshold: number },
-  maxBytes: number,
-): string {
-  // Subtractive (D920): only the parts `pick` keeps can stay, so the trimmer never says what the shipped packet
-  // would not; when `pick` cuts a lone long text, every part it says whole is a candidate, fitted by score.
-  const picked = pickKept(parts, focus, maxBytes);
-  const pool = picked
-    ? picked.keep
-    : parts.map((_, k) => k).filter((k) => !parts[k]!.quoted || pickScore(parts[k]!, k, focus) > 0);
-  const kept = pool.filter((k) => t.scores[k]! >= t.threshold);
-  let bytes = 0;
-  for (const k of kept) bytes += utf8Length(parts[k]!.text) + 3;
-  let keep = kept;
-  if (bytes > maxBytes) {
-    keep = [];
-    let room = maxBytes;
-    for (const k of [...kept].sort((a, b) => t.scores[b]! - t.scores[a]! || a - b)) {
-      const b = utf8Length(parts[k]!.text) + 3;
-      if (b > room) continue;
-      keep.push(k);
-      room -= b;
-    }
-    keep.sort((a, b) => a - b);
-    // Nothing fits: the best part alone, cut to the budget (as `pick` cuts when nothing fits).
-    if (keep.length === 0 && kept.length > 0) {
-      const best = kept.reduce((a, b) => (t.scores[b]! > t.scores[a]! ? b : a));
-      return truncateUtf8(parts[best]!.text, maxBytes - 3) + "…";
-    }
+/** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
+function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
+  const score = (part: Part, k: number) => {
+    let n = k === 0 ? 0.5 : 0;
+    for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
+    n += DIGIT.test(part.text) ? 1 : 0;
+    return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
+  };
+  const ranked = parts.map((p, k) => ({ k, s: score(p, k), bytes: utf8Length(p.text) + 3 }));
+  const whole = parts.filter((p, k) => !p.quoted || ranked[k]!.s > 0).map((p) => p.text);
+  if (utf8Length(whole.join(" ")) <= maxBytes) return whole.join(" ");
+  const keep = new Set<number>();
+  let room = maxBytes;
+  for (const o of ranked.filter((x) => x.s > -1).sort((a, b) => b.s - a.s)) {
+    if (o.bytes > room) continue;
+    keep.add(o.k);
+    room -= o.bytes;
   }
-  return joinParts(parts, keep);
-}
-
-function joinParts(parts: Part[], keep: readonly number[]): string {
+  if (keep.size === 0) return truncateUtf8(whole.join(" "), maxBytes - 3) + "…";
   let out = "";
   let last = -1;
-  for (const k of keep) {
+  for (let k = 0; k < parts.length; k++) {
+    if (!keep.has(k)) continue;
     out += out ? (k === last + 1 ? " " : " … ") + parts[k]!.text : parts[k]!.text;
     last = k;
   }
   return out;
-}
-
-/** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
-function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
-  const kept = pickKept(parts, focus, maxBytes);
-  if (kept === null) return truncateUtf8(wholeOf(parts, focus).join(" "), maxBytes - 3) + "…";
-  if (kept.whole) return kept.keep.map((k) => parts[k]!.text).join(" ");
-  return joinParts(parts, kept.keep);
-}
-
-function pickScore(part: Part, k: number, focus: ReadonlySet<string>): number {
-  let n = k === 0 ? 0.5 : 0;
-  for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
-  n += DIGIT.test(part.text) ? 1 : 0;
-  return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
-}
-
-/** The parts `pick` says whole (a quoted part only when it holds a request word, a number or a time). */
-function wholeOf(parts: Part[], focus: ReadonlySet<string>): string[] {
-  return parts.filter((p, k) => !p.quoted || pickScore(p, k, focus) > 0).map((p) => p.text);
-}
-
-/**
- * The indexes of the parts `pick` keeps, in order (`whole`: every part it says whole, joined without gap marks), or
- * null when none fits and it cuts the whole text instead.
- */
-function pickKept(
-  parts: Part[],
-  focus: ReadonlySet<string>,
-  maxBytes: number,
-): { keep: number[]; whole: boolean } | null {
-  const ranked = parts.map((p, k) => ({ k, s: pickScore(p, k, focus), bytes: utf8Length(p.text) + 3 }));
-  const whole = ranked.filter((o) => !parts[o.k]!.quoted || o.s > 0).map((o) => o.k);
-  if (utf8Length(whole.map((k) => parts[k]!.text).join(" ")) <= maxBytes) return { keep: whole, whole: true };
-  const keep: number[] = [];
-  let room = maxBytes;
-  for (const o of ranked.filter((x) => x.s > -1).sort((a, b) => b.s - a.s)) {
-    if (o.bytes > room) continue;
-    keep.push(o.k);
-    room -= o.bytes;
-  }
-  if (keep.length === 0) return null;
-  return { keep: keep.sort((a, b) => a - b), whole: false };
 }
