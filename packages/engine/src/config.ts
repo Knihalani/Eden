@@ -166,11 +166,6 @@ export interface EngineConfig {
    */
   densePacket: boolean;
   /**
-   * Trial (E1, D1031): a session's first candidates' packet handed out says `CANDIDATES_LEAD` whole; later ones say
-   * `CANDIDATES_AGAIN`, pointing back to it (the transcript keeps every packet, D336). `ASK_NUDGE` stays whole.
-   */
-  leadOnce: boolean;
-  /**
    * With no model's say, the event a request names the way people do is grounded: by its occasion and who it is with
    * ("dinner with Elena"), its occasion and day ("lunch on Monday"), or, for a message from someone about meeting, the
    * next event whose title names them (`Partner.occasion`).
@@ -793,7 +788,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   groundConflict: true,
   quietClear: true,
   densePacket: true,
-  leadOnce: false,
   groundOccasion: true,
   quietNameOnly: true,
   conflictVocab: true,

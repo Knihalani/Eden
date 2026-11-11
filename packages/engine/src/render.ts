@@ -157,13 +157,6 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
- * `leadOnce` (E1, D1031): the candidates' lead after the session's first. The agent's transcript keeps every packet
- * (D336), so `CANDIDATES_LEAD` is said once a session in full and later packets point back to it. `ASK_NUDGE` is
- * never shortened (D859: its words carry the asks).
- */
-export const CANDIDATES_AGAIN = `${EDEN_NOTE}more unchecked candidates; the same check as above.`;
-
-/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

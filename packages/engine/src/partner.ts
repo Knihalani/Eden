@@ -119,7 +119,6 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
-  CANDIDATES_AGAIN,
   CANDIDATES_LEAD,
   citationsOf,
   PLAN_LEAD,
@@ -368,11 +367,6 @@ interface Session {
    * and the ids of the push pool's items past those handed, for the ask's deeper look in that request.
    */
   nudged?: { request: number; anchors: Anchors; deeper: string[] };
-  /**
-   * `leadOnce` (D1031): a candidates' packet with the whole `CANDIDATES_LEAD` was handed out in this session, so later
-   * ones say `CANDIDATES_AGAIN`. Set at hand-out, not at build: a packet withdrawn untaken showed the agent nothing.
-   */
-  led?: boolean;
   /**
    * With `askReader`: the cue of the session's latest user request (its redacted words, names and days), so an ask
    * about it is read against what the user asked.
@@ -2030,7 +2024,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(s, candidates.unsettled !== undefined),
+                this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2708,15 +2702,12 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(s: Session, nudge = false): PacketFrame {
+  private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: (() => {
-        const lead = this.config.leadOnce && s.led ? CANDIDATES_AGAIN : CANDIDATES_LEAD;
-        return nudge ? `${lead} ${ASK_NUDGE}` : lead;
-      })(),
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
@@ -3178,7 +3169,6 @@ export class ContextPartner {
       this.noteShown(s, built.shown.items, built.shown.text);
       built.shown = undefined;
     }
-    if (this.config.leadOnce && injection.text.includes(`\n${CANDIDATES_LEAD}`)) s.led = true;
     if (built?.copies) {
       this.watchCopies(s, built.copies);
       built.copies = undefined;
