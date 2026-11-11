@@ -619,3 +619,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D993 | 2026-11-11 | Per-tenant caps across machines: held whole at the cluster router, divided below it. | adopted |
 | D994 | 2026-11-11 | Readiness, metrics and a draining shutdown. | adopted |
 | D995 | 2026-11-11 | Fencing and forget across machines (the reviewer's findings on D992-D994). | adopted |
+| D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
+| D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
+| D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
