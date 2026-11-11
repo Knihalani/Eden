@@ -20,6 +20,9 @@ import { childOwns, prunePersistDirs } from "./persist";
 import { keyOf } from "./auth";
 import { rehomeSourceMaps, runRouter, userOf } from "./router";
 
+/** Logs the persistence problems counted since the last line; shutdown calls it, so the last minute's show (R1). */
+let flushPersistReport: () => void = () => {};
+
 const started = performance.now();
 const config = configOrExit();
 // Dev mode takes requests with no key as tenant "dev": say so loudly when anything but this machine can reach it (a
@@ -166,6 +169,8 @@ async function serve(config: ServerConfig): Promise<void> {
     // D100: Bun's default is 128 MB; the handler's content-length check cannot see chunked bodies, this cap can.
     maxRequestBodySize: config.maxBodyBytes,
     fetch: ops.wrap(createHandler(partner, config, sources.userSources, tenants)),
+    // `Ops.wrap` answers a throw itself; this is the backstop for anything Bun raises around it (never a 500, R1).
+    error: () => Response.json({ error: "temporarily unable to serve context" }, { status: 503 }),
   });
   // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
   // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
@@ -194,6 +199,7 @@ async function serve(config: ServerConfig): Promise<void> {
         if (left > 0) console.error(`eden: ${left} store writes unfinished at shutdown: those users re-sync`);
       }
     }
+    flushPersistReport();
     try {
       sourceMap.close();
     } catch (e) {
@@ -273,6 +279,7 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | SharedFrozenD
     : new EncryptedFrozenDisk(options);
   flush();
   setInterval(flush, 60_000).unref();
+  flushPersistReport = flush;
   return store;
 }
 

@@ -54,6 +54,8 @@ export interface ClusterMessage {
 
 /** Routes that reach every node whoever owns the user (`/v1/forget` and `/v1/usage` fan out), never fenced. */
 const FAN_OUT = new Set(["/v1/forget", "/v1/usage"]);
+/** The most nodes `OwnerTable` places over (placement.ts): a larger membership is refused with a 400. */
+const MAX_NODES = 32_767;
 
 export interface ClusterAnswer {
   released: number;
@@ -112,6 +114,19 @@ export class Ops {
 
   /** Wraps the API handler: answers the ops routes itself and times every other request. */
   wrap(handler: (req: Request) => Promise<Response> | Response): (req: Request) => Promise<Response> {
+    const inner = this.serve(handler);
+    // Never a 500 (R1): a throw anywhere below (the fence reading a body the client cut off, a handler bug) is the
+    // 503 an integration treats as silence. Bun's default answer to a throw is a 500 with no body.
+    return async (req) => {
+      try {
+        return await inner(req);
+      } catch {
+        return Response.json({ error: "temporarily unable to serve context" }, { status: 503 });
+      }
+    };
+  }
+
+  private serve(handler: (req: Request) => Promise<Response> | Response): (req: Request) => Promise<Response> {
     return async (req) => {
       const path = new URL(req.url).pathname;
       if (req.method === "GET" && path === "/readyz") {
@@ -137,6 +152,8 @@ export class Ops {
           typeof msg?.self !== "string" ||
           !Array.isArray(msg.nodes) ||
           !msg.nodes.every((n) => typeof n === "string") ||
+          // Placement's own bound (`OwnerTable`): past it the table throws (R1).
+          msg.nodes.length > MAX_NODES ||
           (msg.epoch !== undefined && !Number.isInteger(msg.epoch)) ||
           (msg.mode !== undefined && msg.mode !== "release" && msg.mode !== "drop")
         ) {
@@ -198,8 +215,11 @@ export class Ops {
       if ((await deadline) === 1) pending = shared.backlog;
       shared.forgetAbsent();
     }
-    this.table = table;
-    this.self = msg.self;
+    // A newer membership landed while the hand-offs ran (R1): its table stands, not this older one.
+    if (this.epoch === epoch) {
+      this.table = table;
+      this.self = msg.self;
+    }
     for (const s of released) this.opts.onReleased?.(s);
     this.add("eden_cluster_released_users_total", released.length);
     return { released: released.length, written, pending, ms: Math.round(performance.now() - t0) };

@@ -39,7 +39,15 @@ export interface SharedDiskOptions extends DiskOptions {
   concurrency?: number;
   /** Tries of a store write before it is dropped and counted (default 3). */
   tries?: number;
+  /** Users remembered as absent from the store at most (default `MAX_ABSENT`); past it the memory starts over. */
+  maxAbsent?: number;
 }
+
+/**
+ * The most users `absent` holds (R1): one name per user a process ever missed or deleted, cleared otherwise only by a
+ * membership change, so a single machine with a store grew it forever. Starting over costs one store read per user.
+ */
+export const MAX_ABSENT = 100_000;
 
 type Job = { kind: "put"; bytes: Uint8Array } | { kind: "delete" };
 
@@ -53,6 +61,7 @@ export class SharedFrozenDisk implements FrozenDisk {
   private readonly tries: number;
   private readonly owns: (bucket: number) => boolean;
   private readonly maxAgeMs: number;
+  private readonly maxAbsent: number;
   /** The latest job per file name not yet started; a newer one replaces it. */
   private readonly queued = new Map<string, Job>();
   /** Jobs running, per file name, so `handOff` can wait for a user's own. */
@@ -77,7 +86,8 @@ export class SharedFrozenDisk implements FrozenDisk {
   };
 
   constructor(options: SharedDiskOptions) {
-    const { store, prefix, concurrency, tries, ...disk } = options;
+    const { store, prefix, concurrency, tries, maxAbsent, ...disk } = options;
+    this.maxAbsent = maxAbsent ?? MAX_ABSENT;
     this.store = store;
     this.prefix = prefix;
     this.concurrency = concurrency ?? 8;
@@ -93,6 +103,16 @@ export class SharedFrozenDisk implements FrozenDisk {
         this.enqueue(name, { kind: "put", bytes });
       },
     });
+  }
+
+  /** Users remembered as absent from the store (bounded by `maxAbsent`). */
+  get absentCount(): number {
+    return this.absent.size;
+  }
+
+  private noteAbsent(name: string): void {
+    if (this.absent.size >= this.maxAbsent) this.absent.clear();
+    this.absent.add(name);
   }
 
   /** Blobs in the local directory this process owns. */
@@ -120,7 +140,7 @@ export class SharedFrozenDisk implements FrozenDisk {
     const name = this.local.nameOf(scope);
     this.local.delete(scope);
     if (this.fetching.has(name)) this.gens.set(name, (this.gens.get(name) ?? 0) + 1);
-    this.absent.add(name);
+    this.noteAbsent(name);
     this.enqueue(name, { kind: "delete" });
   }
 
@@ -158,13 +178,13 @@ export class SharedFrozenDisk implements FrozenDisk {
           }
           if (bytes === null) {
             this.remote.missed++;
-            this.absent.add(name);
+            this.noteAbsent(name);
             return;
           }
           this.remote.fetched++;
           this.remote.bytesFetched += bytes.byteLength;
           // Checked like a file found at open; refused (another key, expired) means the user re-syncs.
-          if (!this.local.adopt(name, bytes, Date.now())) this.absent.add(name);
+          if (!this.local.adopt(name, bytes, Date.now())) this.noteAbsent(name);
         },
         () => {
           // Unreachable: not remembered as absent, so the next request tries again.
@@ -251,7 +271,11 @@ export class SharedFrozenDisk implements FrozenDisk {
   private enqueue(name: string, job: Job): void {
     const m = NAME.exec(name);
     if (m && !this.writable(parseInt(m[1]!, 16))) {
+      // Fenced (R1): a job of ours still queued for the name goes too. Kept, a late put would land after the new
+      // owner's delete of a forgotten user and bring them back in the store.
+      if (this.queued.delete(name)) this.remote.cancelled++;
       this.remote.skipped++;
+      this.pump();
       return;
     }
     this.queued.set(name, job);
@@ -286,7 +310,13 @@ export class SharedFrozenDisk implements FrozenDisk {
     this.queued.delete(name);
     this.active++;
     const run = async () => {
+      const m = NAME.exec(name);
       for (let attempt = 1; ; attempt++) {
+        // Fenced while waiting to retry (R1): the bucket's new owner decides what the store holds now.
+        if (attempt > 1 && m && !this.writable(parseInt(m[1]!, 16))) {
+          this.remote.skipped++;
+          return;
+        }
         try {
           if (job.kind === "put") {
             await this.store.put(this.prefix + name, job.bytes);

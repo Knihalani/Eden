@@ -221,7 +221,8 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   a process released 60 users in 422 ms and 120 in 1.65 s (live ones about 30 ms each, warm ones 3-7 ms), all in
   the store within 0.7-2.4 s; so a 64 GB node giving a fifth of 16,000 users to a new one takes about 6-11 s, its
   processes in parallel, under the router's 60 s bound (d1-scale-out.md §3).
-- **A failure:** a node failing `/readyz` three probes in a row (2 s apart: 4.6 s measured) is dropped; its users go
+- **A failure:** a node failing `/readyz?all=1` (ready only with every child process up; plain `/readyz`, which Caddy
+  and the container's health check read, stays ready while any child is up, D1070) three probes in a row (2 s apart: 4.6 s measured) is dropped; its users go
   to their second-choice nodes, which read their last stored blob (the 30-minute compact freeze, the last release or
   shutdown) and poll their sources for what changed. Users that were live and never stored re-sync. When it answers
   again it is first told to drop everything it still holds (older than what the others served since), then its

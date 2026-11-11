@@ -649,3 +649,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
 | D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
 | D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
+| D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
