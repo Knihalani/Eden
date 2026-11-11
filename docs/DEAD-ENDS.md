@@ -67,7 +67,6 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1031 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | Failed its rule (pre-registered in b3cc3f12, extended once in 9ba0cc2d before the call): hidden raised… |
 | D1050 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | stopped on its pre-registered screen |
 | D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
-| D1010 | Rejected (deleted by its pre-registered bar, M13): `pushGate`, a tiny learned turn gate in place of `pushStart`'s verb lists and lead-ins | deleted by its pre-registered bar, M13 |
 
 ## Reader
 

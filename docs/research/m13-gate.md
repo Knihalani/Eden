@@ -1,7 +1,7 @@
 # M13: a tiny learned gate for the push (does this turn need context, and what kind of turn is it)
 
-Status: 2026-11-11, branch `claude/m13-gate`. **Rejected by its pre-registered bar after three rounds (D1010); the
-engine switch, module, weights and tests are deleted; the lab kit stays (D1013).** Decisions D1010–D1013. Every paid
+Status: 2026-11-11, branch `claude/m13-gate`. **Rejected by its pre-registered bar after three rounds (D1010), then
+shipped by the owner's decision (D1014, §7): `pushGate` is in `DEFAULT_CONFIG`, part `gate`.** Decisions D1010–D1014. Every paid
 call went to Anthropic directly (`HAIKU_API_KEY`, lab transport): $2.75 for data and blind sets; Modal $0 (unreachable
 from this container). Numbers marked **[EST]** are judgement; every other number comes from a command in this note.
 
@@ -15,8 +15,10 @@ from this container). Numbers marked **[EST]** are judgement; every other number
   rules catch (D1011). Generated text also taught it the wrong cues until the data was rebuilt (D1012).
 - It still failed the bar set before it was scored: where the rules are already near-perfect (hand-written English,
   95%) it is not better, Hindi requests and Portuguese chatter fell outside the five-point parity band, and a few
-  hard-gate turns ("yes please cancel it", "Who won the 2018 World Cup?") came out wrong. So it is deleted, as the
-  pre-registration said. The data, harness and scorer stay for a next attempt.
+  hard-gate turns ("yes please cancel it", "Who won the 2018 World Cup?") came out wrong. So it was deleted, as the
+  pre-registration said; the owner then accepted those clauses as not blocking and asked for it in the default
+  (D1014). On the funnel its facts are level on train and up on reworded requests, and on Pi it raised hidden facts
+  +1.2 points (−1.4..+3.8) with no confirmed concern, at the same cost and wall time (§7).
 
 ## 0. Pre-registration (committed before any held-out set is written or scored)
 
@@ -265,3 +267,21 @@ arms `eden` and `eden~G` (`pushGate` on), `--variants hidden,control,neutral`, s
 (Haiku grade) have a template-clustered 95% lower bound above −1.5 points (gate − default, both suites pooled) and
 control and neutral concerns are not up (Sonnet regrade of the concerns if the Haiku counts differ). Neutral packets
 and false starts reported.
+
+**Pi pair result** (Haiku 5.5 agent, grader, cards and check; train and reworded, seeds 41–42; 3,072 task runs an arm
+of hidden, control and neutral; Sonnet 5.5 regraded every hidden answer and every flagged concern; P3's
+`report.py --pair eden~G:eden --cluster template`):
+
+| | `eden` | `eden~G` |
+| --- | --- | --- |
+| Hidden facts raised | 512 / 768 (66.7%) | 520 / 767 (67.8%) |
+| Planted item handed at its request | 616 (80%) | 621 (81%) |
+| Control concerns (Haiku; Sonnet-confirmed) | 8; 0 | 7; 0 |
+| Neutral concerns (Haiku; Sonnet-confirmed) | 4; 0 | 3; 0 |
+| Neutral requests given a packet | 415 (54%) | 435 (57%) |
+| $ per 1,000 task runs (agent + Eden) / wall | $0.479 / 4.14 s | $0.482 / 4.12 s |
+
+Hidden raised, gate − default: **+1.2 points (−1.4..+3.8)**, 767 pairs in 384 template clusters (train +1.0, −2.3..+4.7;
+reworded +1.3, −2.6..+5.0). The pre-registered rule holds (lower bound above −1.5, confirmed concerns not up):
+promoted (D1014). Spend: $3.42 (four runs $0.62–0.65 each, the regrade batch $0.88). No new held-out read: the veto
+was not tuned, so §4's read of this frozen model stands.
