@@ -768,12 +768,6 @@ export interface EngineConfig {
    * acting request for plan alerts (D301).
    */
   pushOpen: boolean;
-  /**
-   * P3 (D833; a trial, off; docs/research/p3-baselines.md §3, `alias.ts`): each item is indexed with the other written
-   * forms of its dates and first names ("Thu 10 Dec" also as `thursday`, `december`; "Alexander" also as `alex`), so
-   * a request that writes them another way reaches it in every search. No model; nothing stored.
-   */
-  aliasTerms: boolean;
   pushWidenEmbed: number;
   pushWidenIntent: number;
   pushWidenDeep: number;
@@ -945,7 +939,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSilent: true,
   pushCheckAnchored: false,
   pushOpen: true,
-  aliasTerms: false,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,
   pushWidenDeep: 0,

@@ -27,7 +27,6 @@ import { dedupText, hamming64, SparseIndex, TextSketcher, Vocab } from "@eden/pr
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
-import { aliasTerms } from "./alias";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packItem, repackLike } from "./packed-text";
 import type { FrozenDisk } from "./persist";
@@ -684,12 +683,6 @@ export class ItemCache {
   private lastNow = 0;
   private lastWall = 0;
 
-  /**
-   * `aliasTerms` (P3, D833; a trial, off): index each item with the other forms of its dates and first names. Set by
-   * the partner from its configuration before anything is stored; a user indexed before the switch keeps their index.
-   */
-  aliasTerms = false;
-
   constructor(limits: Partial<CacheLimits> = {}) {
     this.limits = { ...DEFAULT_CACHE_LIMITS, ...limits };
   }
@@ -1187,15 +1180,7 @@ export class ItemCache {
     titleIds.set(t.ids.subarray(0, t.n));
     const nt = t.n;
     const b = termIds(item.text, u.vocab, true);
-    // `aliasTerms` (D833): the other forms of the item's dates and names join its body field (`alias.ts`).
-    const forms = this.aliasTerms ? aliasTerms(`${item.title}\n${item.text}`) : "";
-    if (!forms) return u.index.addFields([titleIds, b.ids], [nt, b.n]);
-    const nb = b.n;
-    if (bodyIds.length < nb + forms.length) bodyIds = new Uint32Array((nb + forms.length) * 2);
-    bodyIds.set(b.ids.subarray(0, nb));
-    const f = termIds(forms, u.vocab, true);
-    bodyIds.set(f.ids.subarray(0, f.n), nb);
-    return u.index.addFields([titleIds, bodyIds], [nt, nb + f.n]);
+    return u.index.addFields([titleIds, b.ids], [nt, b.n]);
   }
 
   /**

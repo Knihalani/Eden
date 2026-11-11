@@ -685,8 +685,6 @@ export class ContextPartner {
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     this.now = deps.now ?? Date.now;
-    // `aliasTerms` (D833): the cache indexes each item with its dates' and names' other forms from here on.
-    if (this.config.aliasTerms) deps.cache.aliasTerms = true;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
     const sink = deps.onSpan;
