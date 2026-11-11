@@ -125,7 +125,7 @@ export function isOpenRequest(raw: string, strict = false, minWords = 4): boolea
   }
   const first = clean(words[i]);
   if (!first || REMARKS.has(first) || ASKING.has(first) || STATING.has(first)) return false;
-  if (strict && (CHATTER.has(first) || STATING_STRICT.has(first))) return false;
+  if (strict && (CHATTER.has(first) || STATING_STRICT.has(first) || LAUGH.test(first))) return false;
   const next = clean(words[i + 1]);
   if (TELL_ME.has(first) && (next === "me" || next === "us")) return false;
   if (/\?\s*$/.test(raw.slice(-32))) return polite;
@@ -139,11 +139,14 @@ export function isOpenRequest(raw: string, strict = false, minWords = 4): boolea
  */
 const CHATTER = new Set(
   (
-    "anyway anyways haha hahaha lol lmao ugh argh oh ah aw aww wow omg yay meh hmm hm morning evening afternoon " +
-    "night hello hiya brb fyi btw fun good welcome congrats whew phew"
+    "anyway anyways ugh argh oh ah aw aww wow omg yay meh hmm hm morning evening afternoon night hello hiya brb " +
+    "fyi btw fun good welcome congrats whew phew bro dude mate honestly seriously literally nothing ciao hola " +
+    "bonjour salut hallo ola olá mamma qué que quoi comment wie warum cómo como dove perché"
   ).split(" "),
 );
-const STATING_STRICT = new Set("id lets wed youd theyd youre theyre youve theyve hes shes".split(" "));
+const STATING_STRICT = new Set("id lets wed youd theyd youre theyre youve theyve hes shes thats".split(" "));
+/** Laughter and its spellings in a few languages ("hahaha", "lmaooo", "jajaja", "kkkk", "mdr"). */
+const LAUGH = /^(?:(?:ha|he|ja|je|hi){2,}h?|lo+l|lma+o+|ro+fl|k{3,}|mdr|xd+)$/;
 
 /**
  * `pushIndirect` (D820): a pasted log line, not a request (`isOpenRequest`'s strict form). A level word in capitals,
@@ -152,7 +155,7 @@ const STATING_STRICT = new Set("id lets wed youd theyd youre theyre youve theyve
  */
 const LOG_LEVEL = /\b(?:ERROR|ERR!?|WARN(?:ING)?|INFO|DEBUG|FATAL|TRACE|CRITICAL)\b/;
 const LOG_MARK =
-  /traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
+  /^\s*[\w.-]+:\s+(?:error|fatal|warning|panic)\b|^\s*(?:panic|fatal|error|e|w):\s|\b\w+\.(?:js|ts|py|go|rs|java|rb|c|cpp):\d+|\b\d+ failed, \d+ passed|\b[a-z]*error:\s|traceback|\bexception\b|\bexit code\b|\bstack ?trace\b|\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:get|post|put|patch|delete) \//i;
 function looksLogged(raw: string): boolean {
   const head = raw.slice(0, OPEN_HEAD_CHARS);
   if (LOG_LEVEL.test(head) || LOG_MARK.test(head)) return true;
@@ -169,8 +172,34 @@ function looksLogged(raw: string): boolean {
  * ("I need to pay …", "We should move …", "I want you to book …", "Should I book …?", "Can I cancel …?", "Is it OK to
  * renew …?"). `isOpenRequest` reads them as statements or questions, so the push never started for them.
  */
-const INDIRECT =
-  /^(?:i\s+(?:really\s+)?(?:need|have|want|got)\s+to|i\s+(?:must|should)|i(?:'|’)?ve\s+got\s+to|i(?:'|’)d\s+like\s+to|i\s+would\s+like\s+to|we\s+(?:really\s+)?(?:need|have|want|got)\s+to|we\s+(?:must|should)|we(?:'|’)d\s+(?:like\s+to|better)|let(?:'|’)?s|let\s+us|should\s+(?:i|we)|(?:can|could|may)\s+(?:i|we)|is\s+it\s+ok(?:ay)?\s+to|(?:i|we)(?:'|’)?d\s+like\s+you\s+to|(?:i|we)\s+(?:want|need|would\s+like)\s+you\s+to|time\s+to)\s+/i;
+const A = "(?:'|’)?";
+const INDIRECT = new RegExp(
+  "^(?:" +
+    [
+      // Needs, obligations and plans: "I need to …", "we've got to …", "I'm supposed to …", "gotta …".
+      `(?:i|we)\\s+(?:really\\s+|probably\\s+|just\\s+)?(?:need|have|want|got|ought)\\s+to`,
+      `(?:i|we)\\s+(?:really\\s+|probably\\s+)?(?:must|should)`,
+      `(?:i|we)${A}(?:ve|\\s+have)\\s+(?:got|been\\s+meaning|decided)\\s+to`,
+      `(?:i${A}m|i\\s+am|we${A}re|we\\s+are)\\s+(?:supposed|meant|going|due)\\s+to`,
+      `(?:need|have|got)\\s+to|gotta|time\\s+to`,
+      // Wishes: "I'd like to …", "would like to …", "would be good to …".
+      `(?:(?:i|we)${A}d|(?:i|we)\\s+would|would)\\s+(?:like|love|prefer)\\s+to`,
+      `(?:it\\s+)?would\\s+be\\s+(?:good|great|nice|best)\\s+to`,
+      `let${A}s|let\\s+us`,
+      // Questions about acting: "Should I …?", "Shall we …?", "Is it OK to …?", "Would it be fine to …?".
+      `(?:should|shall|can|could|may)\\s+(?:i|we)`,
+      `(?:is|would)\\s+it\\s+be\\s+(?:ok(?:ay)?|fine|possible|alright|all\\s+right)\\s+to`,
+      `is\\s+it\\s+(?:ok(?:ay)?|fine|alright|all\\s+right)\\s+to`,
+      `(?:do\\s+you\\s+think|i\\s+think|i${A}m\\s+thinking|i\\s+reckon|maybe)\\s+(?:i|we)\\s+should`,
+      // Asking the assistant: "I want you to …", "I'd love it if you could …", "I was wondering if you could …".
+      `(?:i|we)(?:${A}d|\\s+would)\\s+(?:like|love|prefer)\\s+(?:it\\s+if\\s+)?you\\s+(?:to|could)`,
+      `(?:i|we)\\s+(?:want|need)\\s+you\\s+to`,
+      `i(?:${A}d|\\s+would)\\s+be\\s+grateful\\s+if\\s+you\\s+could`,
+      `i\\s+was\\s+wondering\\s+if\\s+you\\s+could|any\\s+chance\\s+you\\s+could`,
+    ].join("|") +
+    ")\\s+",
+  "i",
+);
 /** Verbs after a lead-in that think, say or wait rather than act ("I need to think …", "Let's see how …"). */
 const NOT_ACTING = new Set(
   (
