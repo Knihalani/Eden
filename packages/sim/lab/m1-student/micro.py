@@ -133,6 +133,8 @@ def grams(ws, cap=160):
 
 
 TYPED = os.environ.get("MICRO_TYPED", "0") == "1"
+# Round 3b (M14's finding: length alone ranks M2's fact above its twin in 94% of tasks): no length feature.
+NO_LENGTH = os.environ.get("MICRO_NO_LENGTH", "0") == "1"
 AMOUNT = re.compile(r"[£$€]\s?(\d[\d,]*(?:\.\d+)?)\s*(k|m|bn)?", re.I)
 
 
@@ -207,8 +209,8 @@ def features(request, title, text, today=""):
         len(nums_r & nums_i) / (1 + len(nums_r)),
         sum(c in low for c in BINDING) / 4,
         sum(c in low for c in ALLCLEAR) / 2,
-        min(len(item), 700) / 700,
-        1.0 if len(item) < 160 else 0.0,
+        0.0 if NO_LENGTH else min(len(item), 700) / 700,
+        0.0 if NO_LENGTH else (1.0 if len(item) < 160 else 0.0),
     ] + (round2(request, item, today) if ROUND2 else [])
     rcs = sorted(rc)[:24]
     ics = sorted(ic)[:48]
@@ -365,6 +367,22 @@ def quality(rows, scores, m):
     return {"model": tally(mine), "haiku": tally([set(r["haiku"]) for r in rows])}
 
 
+def twin_hard(groups, scores, hard=True):
+    """M14's length-controlled read: in pools holding a fact and a look-alike at least as long, the share where the
+    fact scores higher (ties half). `hard` False: every fact-and-twin pair of a pool (`twin_all`)."""
+    hits = n = 0
+    for g, s in zip(groups, scores):
+        its = list(zip(g["items"], s))
+        facts = [(it, v) for it, v in its if it["truth"] == "planted"]
+        twins = [(it, v) for it, v in its if it["truth"] == "decoy" and it.get("role", "decoy") == "decoy"]
+        for f, fv in facts:
+            for t, tv in twins:
+                if not hard or len(t["title"]) + len(t["text"]) >= len(f["title"]) + len(f["text"]):
+                    n += 1
+                    hits += 1.0 if fv > tv else 0.5 if fv == tv else 0.0
+    return {"acc": round(hits / n, 3), "n": n} if n else None
+
+
 def pair_auc(groups, scores, key="model"):
     """Planted against its look-alike (role decoy, or the sim's decoy) and against same-subject neutral items."""
     pl, dc, ne = [], [], []
@@ -385,8 +403,13 @@ def evaluate(model, sel, m7, fixtures, teacher_mark):
     out = {}
     for name, groups in sel.items():
         sc = score_groups(model, groups)
+        ts = [[it["t8b"] for it in g["items"]] for g in groups]
         out[f"auc_{name}"] = pair_auc(groups, sc)
-        out[f"auc_{name}_teacher"] = pair_auc(groups, [[it["t8b"] for it in g["items"]] for g in groups])
+        out[f"auc_{name}_teacher"] = pair_auc(groups, ts)
+        out[f"twin_hard_{name}"] = twin_hard(groups, sc)
+        out[f"twin_hard_{name}_teacher"] = twin_hard(groups, ts)
+        out[f"twin_all_{name}"] = twin_hard(groups, sc, hard=False)
+        out[f"twin_all_{name}_teacher"] = twin_hard(groups, ts, hard=False)
     fit = [r for r in m7 if r["split"] == "train" and r["suite"] in ("train1", "train2", "train3", "train4")
            and r["haiku"] is not None]
     dev = [r for r in m7 if r["split"] == "dev" and r["haiku"] is not None]
@@ -448,12 +471,19 @@ def main():
     random.seed(a.seed)
     torch.manual_seed(a.seed)
     groups = []
+    balance = os.environ.get("MICRO_LENGTH_BALANCE", "0") == "1"
     for p in a.train.split(","):
         for l in open(p):
             g = json.loads(l)
             if g.get("family", "").startswith("sim/"):
                 for it in g["items"]:
                     it["_sim"] = True
+            elif balance:
+                # Round 3b: an M2 group's look-alikes shorter than its fact are dropped, so length cannot separate them.
+                fl = [len(it["title"]) + len(it["text"]) for it in g["items"] if it["truth"] == "planted"]
+                if fl:
+                    g["items"] = [it for it in g["items"] if not (it["truth"] == "decoy" and
+                                  len(it["title"]) + len(it["text"]) < max(fl))]
             groups.append(g)
     random.shuffle(groups)
     groups = groups[: a.groups] if a.groups else groups

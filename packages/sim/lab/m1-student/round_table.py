@@ -13,16 +13,23 @@ def rows(path):
     return [json.loads(l) for l in open(path) if l.startswith('{"epoch')]
 
 
+def tw(x):
+    if isinstance(x, dict):
+        return f"{x['acc']:.3f} ({x['n']})"
+    return "—" if x is None else f"{x:.3f}"
+
+
 def f3(x):
     return "—" if x is None else f"{x:.3f}"
 
 
-print("| run | ep | AUC synth (decoy / neutral) | AUC sim dev | mark | dev facts / look-alikes / neutral (Haiku) | G1 m7 | G1 m3r audited |")
+print("| run | ep | sim dev AUC / twin_all / twin_hard (n) | synth AUC (decoy / neutral) / twin_hard | mark | dev facts / look-alikes / neutral (Haiku) | G1 m7 | G1 m3r audited |")
 print("| --- | --- | --- | --- | --- | --- | --- | --- |")
 for p in sys.argv[1:]:
     for r in rows(p):
         q, h = r["quality_dev"]["model"], r["quality_dev"]["haiku"]
-        print(f"| {os.path.basename(p).split('.')[0]} | {r['epoch']} | {f3(r['auc_synth']['vs_decoy'])} / "
-              f"{f3(r['auc_synth']['vs_neutral'])} | {f3(r['auc_sim']['vs_decoy'])} | {r['mark']} | "
+        print(f"| {os.path.basename(p).split('.')[0]} | {r['epoch']} | {f3(r['auc_sim']['vs_decoy'])} / "
+              f"{tw(r.get('twin_all_sim'))} / {tw(r.get('twin_hard_sim'))} | {f3(r['auc_synth']['vs_decoy'])} / "
+              f"{f3(r['auc_synth']['vs_neutral'])} / {tw(r.get('twin_hard_synth'))} | {r['mark']} | "
               f"{q['hidden']} / {q['control']} / {q['neutral']} ({h['hidden']} / {h['control']} / {h['neutral']}) | "
               f"{r['g1_m7']} | {r['g1_m3r_audited']} |")
