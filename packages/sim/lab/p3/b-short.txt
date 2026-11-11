@@ -1,0 +1,17 @@
+== 2 runs, arms eden, hits, tools; clusters: template
+  eden             hidden raised 254/384 =  66.1% (60.2..71.9); handed at its request 316 (82%), raised 254 = 80.4% (75.0..85.6); in hand not raised 19.6%
+                   control: 384; concerns 4, confirmed 0; packet on 383 (100%), items a packet 4.3
+                   neutral: 384; concerns 1, confirmed 0; packet on 371 (97%), items a packet 4.6
+                   cost per 1,000 task runs $0.265 (agent + Eden per task), wall 2.15 s
+  hits             hidden raised 154/384 =  40.1% (33.6..46.9); handed at its request 201 (52%), raised 154 = 76.6% (69.0..83.7); in hand not raised 23.4%
+                   control: 384; concerns 3, confirmed 0; packet on 384 (100%), items a packet 5.0
+                   neutral: 384; concerns 1, confirmed 0; packet on 383 (100%), items a packet 5.0
+                   cost per 1,000 task runs $0.176 (agent + Eden per task), wall 1.57 s
+  tools            hidden raised 37/384 =   9.6% (6.2..13.5)
+                   control: 384; concerns 0, confirmed 0; packet on 0 (0%), items a packet 0.0
+                   neutral: 384; concerns 4, confirmed 0; packet on 0 (0%), items a packet 0.0
+                   cost per 1,000 task runs $0.229 (agent + Eden per task), wall 3.29 s
+  [eden - hits] hidden raised +26.0 points (+19.3..+33.1), 384 pairs, 192 clusters; only eden 126, only hits 26
+             handed at its request in both: 189; raised 149 against 148 (+0.5 points)
+  [hits - tools] hidden raised +30.5 points (+23.7..+37.2), 384 pairs, 192 clusters; only hits 127, only tools 10
+  [eden - tools] hidden raised +56.5 points (+50.3..+62.8), 384 pairs, 192 clusters; only eden 223, only tools 6

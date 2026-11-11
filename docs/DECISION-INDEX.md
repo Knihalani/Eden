@@ -498,7 +498,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D705 | 2026-11-10 | `candidatesSpecifics` is rejected and deleted with its code and tests | rejected |
 | D706 | 2026-11-10 | Finding: `pushOpen` (D702) passes its pre-registered rule and goes to the owner; it stays an off trial | finding |
 | D707 | 2026-11-10 | Finding: over a user's days `pushOpen` (D702) fails its pre-registered hidden clause; it is not promoted | finding |
-| D708 | 2026-11-10 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | superseded (deleted by D711) |
+| D708 | 2026-11-10 | Trial `pushPointer`: the candidates' lead names the items of this request's candidates that the agent was handed for an earlier request | superseded (deleted by D832) |
 | D709 | 2026-11-10 | `pushOpen` (D702) is kept off as a trial until its end date instead of being deleted on D707, and one powered days run decides it | adopted |
 | D710 | 2026-11-11 | `pushOpen` (D702) is promoted into the default as the part `open` | adopted |
 | D711 | 2026-11-11 | `pushPointer` (D708) failed its rule and is deleted with its code and tests | rejected |
@@ -531,6 +531,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D817 | 2026-11-11 | Deleted: `syncSweepSpread` (D604), `EDEN_SPEND_LEASES` (D327) and `EDEN_PERSIST_DISK_ONLY` (D652); `anthropicCache` (D145) is a… | rejected |
 | D818 | 2026-11-11 | Lab scripts refuse to start while `OPENROUTER_API_KEY` is set, unless `EDEN_ALLOW_OPENROUTER=1` | adopted |
 | D819 | 2026-11-11 | The cold gate trusts the content-addressed Prettier set, and five heavy end-to-end tests share their work | adopted |
+| D830 | 2026-11-11 | Lab only: Sonnet 5.5 as the Pi agent on train, short and days, the default against tools, is pre-registered | lab |
+| D831 | 2026-11-11 | Finding (lab only): Eden's selection against plain retrieval | finding |
+| D832 | 2026-11-11 | `pushPointer` tried again on today's default and deleted for good | rejected |
+| D833 | 2026-11-11 | Rejected: a per-user alias table for the push's recall. | rejected |
+| D834 | 2026-11-11 | Finding: "a handed fact not raised" (weak point 6) is the agent model and the grade's every-clause rule, not Eden | finding |
 | D840 | 2026-11-11 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | rejected |
 | D841 | 2026-11-11 | Lab: `days-calls.ts --move-after N` and owed updates by source. | lab |
 | D842 | 2026-11-11 | The `caldav` preset names a fetch tool, `caldav_get_event_by_uid`; the sim's calendar never changes in the future; mcpvault keeps no fetch… | adopted |
