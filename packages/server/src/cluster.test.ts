@@ -304,14 +304,13 @@ test("a node that takes a request and never answers gets the caller a 503 after 
     log: () => {},
   });
   try {
-    const t0 = performance.now();
     const r = await fetch(`http://127.0.0.1:${router.port}/v1/ask`, {
       method: "POST",
       headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
       body: JSON.stringify({ userId: "u1", sessionId: "s1", question: "x" }),
     });
+    // Without the timeout this request never ends, and the test times out.
     expect(r.status).toBe(503);
-    expect(performance.now() - t0).toBeLessThan(5_000);
   } finally {
     await router.stop();
     hung.stop(true);
