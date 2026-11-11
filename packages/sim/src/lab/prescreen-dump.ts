@@ -6,8 +6,10 @@
  * the planted item's id). Sim data only.
  */
 import { appendFileSync } from "node:fs";
+import type { Model } from "@eden/llm";
 import {
   checkKey,
+  checkMessages,
   PushChecker,
   type PrescreenInput,
   type PrescreenVerdict,
@@ -38,13 +40,34 @@ export class RecordingPrescreen implements PushPrescreen {
   }
 }
 
+/** The check's model with each reply kept by its user message, so a row can carry the reply it was answered with. */
+export function replyKeeping(model: Model): { model: Model; replies: Map<string, string> } {
+  const replies = new Map<string, string>();
+  return {
+    replies,
+    model: {
+      id: model.id,
+      chat: async (request) => {
+        const res = await model.chat(request);
+        const user = request.messages.find((m) => m.role === "user")?.content ?? "";
+        replies.set(user, res.text);
+        while (replies.size > 256) replies.delete(replies.keys().next().value as string);
+        return res;
+      },
+    },
+  };
+}
+
 /** A `PushChecker` that writes each answered check as a row. */
 export class DumpingChecker extends PushChecker {
   constructor(
     deps: ConstructorParameters<typeof PushChecker>[0],
+    private readonly replies: Map<string, string>,
     private readonly file: string,
     private readonly screen: RecordingPrescreen,
     private readonly taskOf: (session: string) => DumpTask | undefined,
+    /** The cached item's title and text as the tagger reads them (`title\ntext`), or "" when gone. */
+    private readonly fullOf: (id: string) => string = () => "",
   ) {
     super(deps);
   }
@@ -70,8 +93,10 @@ export class DumpingChecker extends PushChecker {
         date: it.date,
         from: it.from,
         text: it.text,
+        full: this.fullOf(it.id),
       })),
       yes: read.yes ? [...read.yes] : null,
+      reply: this.replies.get(checkMessages(input).find((m) => m.role === "user")?.content ?? "") ?? null,
       called: read.called,
     };
     appendFileSync(this.file, `${JSON.stringify(row)}\n`);

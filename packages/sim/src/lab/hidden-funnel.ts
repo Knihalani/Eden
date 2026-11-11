@@ -137,7 +137,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
-import { DumpingChecker, RecordingPrescreen, type DumpTask } from "./prescreen-dump";
+import { DumpingChecker, RecordingPrescreen, replyKeeping, type DumpTask } from "./prescreen-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -1058,9 +1058,15 @@ async function runSeed(
   const checker = !laneCheck
     ? null
     : screen
-      ? new DumpingChecker({ model: laneCheck, budget: new Budget(UNCAPPED) }, PRESCREEN_DUMP, screen, (key) =>
-          dumpTasks.get(key.slice(key.indexOf("#") + 1)),
-        )
+      ? ((kept) =>
+          new DumpingChecker(
+            { model: kept.model, budget: new Budget(UNCAPPED) },
+            kept.replies,
+            PRESCREEN_DUMP,
+            screen,
+            (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
+            (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
+          ))(replyKeeping(laneCheck))
       : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
