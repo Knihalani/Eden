@@ -175,6 +175,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   poolExpandTerms: PUSH,
   poolScan: PUSH,
   poolScanItems: PUSH,
+  poolScanKeep: PUSH,
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],

@@ -53,6 +53,7 @@ ap.add_argument("--eval-every", type=int, default=0)
 ap.add_argument("--threads", type=int, default=0)
 ap.add_argument("--out", default="")
 ap.add_argument("--load", default="")
+ap.add_argument("--item-cap", type=int, default=0, help="an item is read as its title and first N text terms (0: all)")
 ap.add_argument("--len-aug", type=float, default=0.0, help="share of items seen cut to their title and first terms")
 ap.add_argument("--dot-weight", type=float, default=0.0, help="also train the codes' agreement q.i as a scan score")
 ap.add_argument("--fit-terms", default="", help="sim fit worlds (m12-export --corpus): the code scan's screen")
@@ -69,6 +70,12 @@ random.seed(args.seed)
 torch.manual_seed(args.seed)
 NB = args.buckets
 t0 = time.time()
+
+
+def itemterms(title, text):
+    """What the item encoder reads: the title's terms and the text's first `--item-cap` (all with 0): past the cap a
+    long item and its cut copy read the same, so length is not a cue."""
+    return title + (text[: args.item_cap] if args.item_cap else text)
 
 
 def grams(terms, cap=400):
@@ -94,7 +101,7 @@ def load_terms(path, limit=0):
     for i, w in enumerate(D.read_jsonl(path)):
         if limit and i >= limit:
             break
-        items = [{"id": it["id"], "g": grams(it["title"] + it["text"]),
+        items = [{"id": it["id"], "g": grams(itemterms(it["title"], it["text"])),
                   "s": grams(it["title"] + it["text"][:20]) if args.len_aug else None} for it in w["items"]]
         reqs = []
         for t in w["tasks"]:
@@ -188,7 +195,7 @@ teacher = D.load_teacher(args.teacher)
 train = load_terms(args.train, args.worlds)
 val = load_terms(args.val)
 vteacher = D.load_teacher(args.val_teacher) if args.val_teacher else {}
-dist = [{"g": grams(it["title"] + it["text"]), "s": grams(it["title"] + it["text"][:20])}
+dist = [{"g": grams(itemterms(it["title"], it["text"])), "s": grams(it["title"] + it["text"][:20])}
         for it in next(D.read_jsonl(args.distract))["items"]]
 allitems = [it for w in train for it in w["items"]] + dist
 print(f"loaded {len(train)} train worlds ({len(allitems)} items), {len(val)} val ({time.time() - t0:.0f}s)", flush=True)
@@ -290,7 +297,7 @@ def wide_rows(pattern, keep_text=False, sample=0):
                         "template": r["template"], "seed": r["seed"],
                         **({"titles": [x.get("title", "") for x in c]} if keep_text else {}),
                         "ids": [x["id"] for x in c], "q": grams(terms(r["request"])),
-                        "g": [grams(terms(x.get("title", "")) + terms(x.get("text", ""))) for x in c]})
+                        "g": [grams(itemterms(terms(x.get("title", "")), terms(x.get("text", "")))) for x in c]})
     return out
 
 
@@ -408,7 +415,7 @@ def eval_scan(tag):
             continue
         v = var[0]
         ids = [it["id"] for it in w["items"]]
-        gi = [grams(it["title"] + it["text"]) for it in w["items"]]
+        gi = [grams(itemterms(it["title"], it["text"])) for it in w["items"]]
         codes = torch.cat([net.ienc(gi[i: i + 512]) for i in range(0, len(gi), 512)])
         pos = {k: i for i, k in enumerate(ids)}
         for t in w["tasks"]:

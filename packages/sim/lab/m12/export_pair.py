@@ -75,13 +75,14 @@ hw = st["head.weight"].numpy().astype(np.float32).reshape(-1)
 hb = st["head.bias"].numpy().astype(np.float32).reshape(-1)
 dscale = float(st["dscale"])
 parts = [qp, qn, qs, qt, ip, inn, is_, ishift, l1w, l1s, l1t, l2w, l2s, l2t, hw, hb]
-head = b"EP12" + struct.pack("<IIIIIf", 1, B, NB, W, 32, dscale)
+cap = int(targs.get("item_cap") or 0)
+head = b"EP12" + struct.pack("<IIIIIfI", 2, B, NB, W, 32, dscale, cap)
 with open(a.out, "wb") as f:
     f.write(head)
     for x in parts:
         f.write(np.ascontiguousarray(x).tobytes())
 size = len(head) + sum(x.nbytes for x in parts)
-print(f"{a.out}: {size} bytes (bits {B}, buckets {NB}, width {W})")
+print(f"{a.out}: {size} bytes (bits {B}, buckets {NB}, width {W}, item cap {cap})")
 
 # Parity cases from PyTorch itself.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -128,10 +129,11 @@ cases = []
 w = next(D.read_jsonl(a.val))
 for r in [r for t in w["tasks"] for r in t["requests"]][: a.n // 2]:
     for item in w["items"][:2]:
-        qterms, iterms = r["q"], item["title"] + item["text"]
+        qterms = r["q"]
+        iterms = item["title"] + (item["text"][:cap] if cap else item["text"])
         qc = encode(qp, qn, qs, qt, grams(qterms))
         icode = encode(ip, inn, is_, ishift, grams(iterms))
-        cases.append({"q": qterms, "i": iterms, "qcode": qc.astype(int).tolist(), "icode": icode.astype(int).tolist(),
+        cases.append({"q": qterms, "title": item["title"], "text": item["text"], "qcode": qc.astype(int).tolist(), "icode": icode.astype(int).tolist(),
                       "dot": float(qc @ icode) * dscale, "score": forward(qc, icode)})
 json.dump({"cases": cases}, open(a.checks, "w"))
 print(f"{len(cases)} parity cases → {a.checks}")

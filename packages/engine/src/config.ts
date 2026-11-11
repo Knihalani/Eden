@@ -744,6 +744,8 @@ export interface EngineConfig {
    */
   poolScan: number;
   poolScanItems: number;
+  /** `poolScan`: a pooled item's score bonus against a new candidate (its place in the lexical order is evidence). */
+  poolScanKeep: number;
   /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
@@ -910,5 +912,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   poolExpandTerms: 8,
   poolScan: 0,
   poolScanItems: 30,
+  poolScanKeep: 0,
   revisionDiff: true,
 };

@@ -100,8 +100,10 @@ export interface PoolPair {
   readonly buckets: number;
   /** Bytes the model holds. */
   readonly bytes: number;
-  /** A request's code (its query terms, stopwords out) or an item's (its title's terms, then its text's). */
-  code(terms: readonly string[], side: "request" | "item"): Int32Array;
+  /** A request's code, from its query terms (stopwords out). */
+  code(terms: readonly string[], side: "request"): Int32Array;
+  /** An item's code, from its title's terms and its text's (the file says how many of the text's it reads). */
+  itemCode(title: readonly string[], text: readonly string[]): Int32Array;
   /** The codes' agreement, scaled (the scan score). */
   scan(q: Int32Array, i: Int32Array): number;
   /** The pair score of a request code and an item code. */
@@ -112,15 +114,18 @@ export interface PoolPair {
 export function loadPoolPair(buf: Uint8Array): PoolPair {
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   if (buf.byteLength < 28 || view.getUint32(0, true) !== MAGIC) throw new Error("pool pair: not an EP12 file");
-  if (view.getUint32(4, true) !== 1) throw new Error("pool pair: unknown version");
+  const version = view.getUint32(4, true);
+  if (version !== 1 && version !== 2) throw new Error("pool pair: unknown version");
   const B = view.getUint32(8, true);
   const NB = view.getUint32(12, true);
   const W = view.getUint32(16, true);
   const H = view.getUint32(20, true);
   const dscale = view.getFloat32(24, true);
+  // Version 2: an item is read as its title's terms and its text's first `itemCap` (0: all).
+  const itemCap = version >= 2 ? view.getUint32(28, true) : 0;
   if (B % 32 || W % 32 || H !== 32) throw new Error("pool pair: bad shape");
   const bw = B / 32;
-  let at = 28;
+  let at = version >= 2 ? 32 : 28;
   // Copies, so every array is 4-byte aligned whatever the buffer's offset.
   // Bit words as Int32Array: bitwise operators work on int32, and a Uint32Array element over 2^31 is not a small
   // integer to the JIT (a pair score ran 6x slower with them).
@@ -152,35 +157,40 @@ export function loadPoolPair(buf: Uint8Array): PoolPair {
   let lastQ: Int32Array | null = null;
   const [l1w, l1s, l1t] = [l1.w, l1.scale, l1.shift];
   const [l2w, l2s, l2t] = [l2.w, l2.scale, l2.shift];
+  const encode = (e: typeof qe, terms: readonly string[]): Int32Array => {
+    count.fill(0);
+    const g = gramsOf(terms, NB);
+    for (let k = 0; k < g.length; k++) {
+      const row = g[k]! * bw;
+      for (let j = 0; j < bw; j++) {
+        let p = e.pos[row + j]!;
+        let n = e.neg[row + j]!;
+        const base = j * 32;
+        while (p !== 0) {
+          const b = 31 - Math.clz32(p & -p);
+          count[base + b]!++;
+          p &= p - 1;
+        }
+        while (n !== 0) {
+          const b = 31 - Math.clz32(n & -n);
+          count[base + b]!--;
+          n &= n - 1;
+        }
+      }
+    }
+    const out = new Int32Array(bw);
+    for (let b = 0; b < B; b++) if (count[b]! * e.scale[b]! + e.shift[b]! >= 0) out[b >>> 5]! |= 1 << (b & 31);
+    return out;
+  };
   return {
     bits: B,
     buckets: NB,
     bytes: buf.byteLength,
-    code(terms, which) {
-      const e = which === "request" ? qe : ie;
-      count.fill(0);
-      const g = gramsOf(terms, NB);
-      for (let k = 0; k < g.length; k++) {
-        const row = g[k]! * bw;
-        for (let j = 0; j < bw; j++) {
-          let p = e.pos[row + j]!;
-          let n = e.neg[row + j]!;
-          const base = j * 32;
-          while (p !== 0) {
-            const b = 31 - Math.clz32(p & -p);
-            count[base + b]!++;
-            p &= p - 1;
-          }
-          while (n !== 0) {
-            const b = 31 - Math.clz32(n & -n);
-            count[base + b]!--;
-            n &= n - 1;
-          }
-        }
-      }
-      const out = new Int32Array(bw);
-      for (let b = 0; b < B; b++) if (count[b]! * e.scale[b]! + e.shift[b]! >= 0) out[b >>> 5]! |= 1 << (b & 31);
-      return out;
+    code(terms) {
+      return encode(qe, terms);
+    },
+    itemCode(title, text) {
+      return encode(ie, itemCap > 0 && text.length > itemCap ? [...title, ...text.slice(0, itemCap)] : [...title, ...text]);
     },
     scan(q, i) {
       let diff = 0;

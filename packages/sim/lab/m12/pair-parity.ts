@@ -11,14 +11,14 @@ const [model, checks] = process.argv.slice(2);
 if (!model || !checks) throw new Error("usage: pair-parity.ts MODEL.ep12 CHECKS.json");
 const net = loadPoolPair(new Uint8Array(readFileSync(model)));
 const { cases } = JSON.parse(readFileSync(checks, "utf8")) as {
-  cases: { q: string[]; i: string[]; qcode: number[]; icode: number[]; dot: number; score: number }[];
+  cases: { q: string[]; title: string[]; text: string[]; qcode: number[]; icode: number[]; dot: number; score: number }[];
 };
 const bits = (c: Int32Array) => Array.from({ length: net.bits }, (_, b) => ((c[b >>> 5]! >>> (b & 31)) & 1 ? 1 : -1));
 let ok = 0;
 let worst = 0;
 for (const c of cases) {
   const q = net.code(c.q, "request");
-  const i = net.code(c.i, "item");
+  const i = net.itemCode(c.title, c.text);
   const sameQ = bits(q).every((v, k) => v === c.qcode[k]);
   const sameI = bits(i).every((v, k) => v === c.icode[k]);
   const ds = Math.abs(net.scan(q, i) - c.dot);
@@ -28,11 +28,11 @@ for (const c of cases) {
 }
 console.log(`parity ${ok}/${cases.length}, worst score difference ${worst.toExponential(2)}`);
 // Timings: an item's code, a scan over 3,000 codes, 100 pair scores.
-const item = cases[0]!.i;
+const item = cases[0]!;
 let t = performance.now();
-for (let k = 0; k < 500; k++) net.code(item, "item");
+for (let k = 0; k < 500; k++) net.itemCode(item.title, item.text);
 const codeUs = ((performance.now() - t) / 500) * 1000;
-const codes = cases.map((c) => net.code(c.i, "item"));
+const codes = cases.map((c) => net.itemCode(c.title, c.text));
 const q = net.code(cases[0]!.q, "request");
 t = performance.now();
 let sink = 0;

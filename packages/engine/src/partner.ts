@@ -2427,6 +2427,9 @@ export class ContextPartner {
       }
       pool = this.poolTail(s, cue, pool, wide, cap);
     }
+    // The ranked pool's own items: only they open the gate (`like`), so a seat the scorer fills never starts a packet
+    // the shipped pool would not have sent (neutral packets stay as they were); the check reads them all.
+    const ranked0 = pool;
     if (this.config.poolScan > 0 && this.deps.poolPair) pool = this.poolScanned(s, cue, pool, wide ?? [], cap);
     const cards =
       pool.length > 0 && this.config.cards && this.deps.cards
@@ -2436,7 +2439,11 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    return { pool, like: pool.map((x) => this.constraintLike(x, cards)), ...(wide ? { wide } : {}) };
+    if (pool === ranked0) return { pool, like: pool.map((x) => this.constraintLike(x, cards)), ...(wide ? { wide } : {}) };
+    // `poolScan`: whether a packet goes (and the check is asked) is the ranked pool's call, as without the scorer, so
+    // the seats it fills never start a packet the shipped pool would not have sent; per item, the final pool's tests.
+    const before = ranked0.some((x) => this.constraintLike(x, cards));
+    return { pool, like: pool.map((x) => this.constraintLike(x, cards)), open: before, ...(wide ? { wide } : {}) };
   }
 
   /**
@@ -2457,7 +2464,7 @@ export class ContextPartner {
     const codeOf = (item: ContextItem): Int32Array => {
       let c = this.poolCodes.get(item);
       if (!c) {
-        c = net.code([...tokenize(item.title ?? "", scratch), ...tokenize(item.text, scratch)], "item");
+        c = net.itemCode(tokenize(item.title ?? "", scratch), tokenize(item.text, scratch));
         this.poolCodes.set(item, c);
       }
       return c;
@@ -2485,7 +2492,11 @@ export class ContextPartner {
       if (h) scanned.push({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc });
     }
     const cands = [...pool, ...wide, ...scanned];
-    const scores = new Map(cands.map((x) => [x, net.score(q, codeOf(x.item))] as const));
+    const pooled = new Set(pool);
+    const keep = this.config.poolScanKeep;
+    const scores = new Map(
+      cands.map((x) => [x, net.score(q, codeOf(x.item)) + (pooled.has(x) ? keep : 0)] as const),
+    );
     const head = pool.slice(0, Math.max(0, Math.min(pool.length, cap) - seats));
     const kept = new Set(head.map((x) => x.item.id));
     const rest = cands
@@ -2550,7 +2561,7 @@ export class ContextPartner {
    */
   private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    if (!this.config.pushCheck || !checker || !(gate.open ?? gate.like.some(Boolean))) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const focus = readerFocus(cue.raw);
@@ -2656,7 +2667,7 @@ export class ContextPartner {
     const open = reported.filter((x) => !bulkMail(x.item));
     let items = yes
       ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
-      : like.some(Boolean)
+      : (gate.open ?? like.some(Boolean))
         ? open.slice(0, this.config.pushCandidates)
         : [];
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
@@ -6767,6 +6778,8 @@ interface PushGate {
   pool: Scored[];
   /** `pushWide` (D1000): the candidates past the pool that its tail seats were chosen from. */
   wide?: Scored[];
+  /** `poolScan` (D1002): whether the ranked pool (before the scorer chose its tail) opens the gate. */
+  open?: boolean;
   like: boolean[];
 }
 
