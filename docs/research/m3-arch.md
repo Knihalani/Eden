@@ -277,3 +277,18 @@ fixed precision (0.95, 0.90), binary and float.
 
 The parent's recall push: the low recall was the threshold, not the model. Set for 95% precision, the float net catches
 82% of silent replacements and the binary one 71%; binarisation costs 0.10 of recall here (the tagger lost 0.01 AUC).
+
+**H1 and H7 at full scale, fold A** (437 worlds, 2 epochs, prior bits; H1 also the multi-task head, 256 bits and width).
+Counts on the held-out requests whose fact is among the candidates (147) and the 148 controls:
+
+| run | fact@1 | fact@5 | twin@5 | silent controls | hidden that speak |
+|---|---|---|---|---|---|
+| lexical order | 64 | 86 | 66 | — | — |
+| H7 BloomMatch, epoch 0 / 1 | — | 98 / 105 | 76 / 73 | 136 / 124 | 14 / 34 |
+| H1, checks at 150 … 750 steps | 67 / 67 / 62 / 63 / 53 | 108 / 107 / 106 / 105 / 96 | 69 / 71 / 68 / 68 / 56 | 122–143 | 21–32 |
+| H1, end of epoch 0 / 1 | 59 / 56 | 110 / **109** | 74 / **59** | 130 / 137 | 30 / 23 |
+
+Against the pre-registered bar (all 157 held-out hidden requests; the shipped default's pool, `--at5 --key all`):
+H1 alone holds 109 facts in its five against the shipped pool's 123 (its candidates have no intent hits) with **decoys
+83 → 59 (−29%)**; fused with the shipped pool (k 5) facts 133 (+6.4 points) and decoys 87: **fail** on both bars. The
+ranker hands a cleaner five than the shipped pool but not more facts; fused, it adds facts and loses the decoy cut.
