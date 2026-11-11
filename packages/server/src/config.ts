@@ -37,6 +37,8 @@
  *                    (local, no real users: off unless the key is set). The key is never generated here: one stored
  *                    beside the files would protect nothing.
  * EDEN_PERSIST       "off" turns persistence off (a restart re-reads every user's sources); unset or "on", on.
+ * EDEN_PERSIST_DISCARD "1": start even when EDEN_PERSIST_KEY opens none of the persisted users, discarding them (a
+ *                    key changed on purpose, D1071); unset, such a start stops with exit 2 and deletes nothing.
  * EDEN_PERSIST_FROZEN_DIR where the files go, default $EDEN_HOME/frozen. Each process writes its own subdirectory
  *                    (`<i>-of-<N>`).
  * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default the machine's memory, at least 4,096: what
@@ -87,7 +89,17 @@ export interface ServerConfig {
    * EDEN_PERSIST=off (or dev mode with nothing set). `maxBytes` is the whole directory's; a router child gets 1/N of
    * it. `store` (D992, EDEN_PERSIST_STORE): an S3-compatible store every machine of a cluster reaches.
    */
-  persist?: { dir: string; key: PersistKey; maxBytes: number; store?: StoreConfig | null } | null;
+  persist?: {
+    dir: string;
+    key: PersistKey;
+    maxBytes: number;
+    store?: StoreConfig | null;
+    /**
+     * EDEN_PERSIST_DISCARD=1 (D1071): start even when the key opens none of the persisted users, discarding them
+     * (a key rotated on purpose). Unset, such a start stops with exit 2 and deletes nothing.
+     */
+    discard?: boolean;
+  } | null;
   /**
    * D992: this machine in a cluster. `key` (EDEN_CLUSTER_KEY, 24+ characters) authenticates the cluster router's
    * membership messages (`/internal/cluster`); `size` (EDEN_CLUSTER_SIZE, the machines) divides the tenant's model
@@ -238,10 +250,14 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memo
   const dir = env.EDEN_PERSIST_FROZEN_DIR ?? "";
   const raw = env.EDEN_PERSIST_KEY ?? "";
   const max = env.EDEN_PERSIST_MAX_MB ?? "";
+  const discard = env.EDEN_PERSIST_DISCARD ?? "";
+  if (!["", "0", "1"].includes(discard)) throw new Error(`EDEN_PERSIST_DISCARD must be 1 or unset, got ${discard}`);
   if (mode === "off") {
     if (env.EDEN_PERSIST_STORE) throw new Error("EDEN_PERSIST_STORE needs persistence: remove EDEN_PERSIST=off");
-    if (dir !== "" || raw !== "" || max !== "") {
-      throw new Error("EDEN_PERSIST=off with EDEN_PERSIST_FROZEN_DIR, _KEY or _MAX_MB set: remove them, or the =off");
+    if (dir !== "" || raw !== "" || max !== "" || discard === "1") {
+      throw new Error(
+        "EDEN_PERSIST=off with EDEN_PERSIST_FROZEN_DIR, _KEY, _MAX_MB or _DISCARD set: remove them, or the =off",
+      );
     }
     return null;
   }
@@ -259,6 +275,7 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memo
     key: new PersistKey(key),
     maxBytes: Math.floor((mb * 1_048_576) / share),
     store: storeConfig(env),
+    discard: discard === "1",
   };
 }
 

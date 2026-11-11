@@ -628,6 +628,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
 | D996 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | rejected |
 | D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
+| D998 | 2026-11-11 | A heavy user's memory, cut where it was exact to cut; card state frozen with its user rejected. | adopted |
 | D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
 | D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
 | D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
@@ -661,3 +662,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D947 | 2026-11-11 | The parent's decisions on D942's rule (recorded with their reasons). | adopted |
 | D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
 | D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
+| D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
+| D1071 | 2026-11-11 | A persistence key that opens none of the persisted users stops the start (the parent's decision on R1's finding; amends D425 and D991). | adopted |

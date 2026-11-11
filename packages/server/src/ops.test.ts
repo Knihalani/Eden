@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { ContextPartner, ItemCache } from "@eden/engine";
-import { clusterKeyMatches, Ops, sumMetrics } from "./ops";
+import { turnGateNotice } from "./build";
+import { clusterKeyMatches, Ops, serveError, sumMetrics } from "./ops";
 
 const KEY = "cluster-key-0123456789abcdef";
 
@@ -76,4 +77,64 @@ test("the membership route needs the cluster key, compared whole (D992)", async 
   expect(ok.status).toBe(200);
   expect(await ok.json()).toMatchObject({ released: 0, written: 0, pending: 0 });
   expect(clusterKeyMatches(undefined, new Request("http://x", { headers: { authorization: "Bearer " } }))).toBe(false);
+});
+
+test("a membership with more nodes than placement takes is a 400, and a throw in the fence is a 503, never a 500 (R1)", async () => {
+  const o = ops();
+  const handler = o.wrap(() => new Response("api"));
+  const nodes = Array.from({ length: 40_000 }, (_, i) => `n${i}`);
+  const r = await handler(
+    new Request("http://x/internal/cluster", {
+      method: "POST",
+      headers: { authorization: `Bearer ${KEY}` },
+      body: JSON.stringify({ self: "n0", nodes }),
+    }),
+  );
+  expect(r.status).toBe(400);
+  const failing = o.wrap(() => {
+    throw new Error("boom");
+  });
+  expect((await failing(new Request("http://x/v1/events", { method: "POST", body: "{}" }))).status).toBe(503);
+});
+
+test("a release that finishes after a newer drop does not put its older table back (R1)", async () => {
+  const cache = new ItemCache();
+  cache.close();
+  const partner = new ContextPartner({
+    sources: async () => [],
+    sourceMap: new SourceMap(":memory:"),
+    cache,
+    budget: new Budget(),
+    model: null,
+  });
+  // A shared disk whose hand-offs take a while: the release awaits it while the drop lands.
+  const disk = {
+    handOff: async () => {},
+    forgetAbsent: () => {},
+    backlog: 0,
+    local: { dropWhere: () => {} },
+    setWritable: () => {},
+  };
+  const o = new Ops(partner, disk as never, { clusterKey: KEY, child: { index: 0, count: 1 }, releaseMs: 50 });
+  const release = o.cluster({ self: "a", nodes: ["a"], epoch: 5, mode: "release" });
+  await o.cluster({ self: "a", nodes: ["b"], epoch: 6, mode: "drop" });
+  await release;
+  // Epoch 6 says machine "a" owns nothing.
+  expect(o.machineOwns(0)).toBe(false);
+  expect(o.machineOwns(1234)).toBe(false);
+});
+
+test("every server's error handler is the 503, never Bun's default 500 (R1)", async () => {
+  const r = serveError();
+  expect(r.status).toBe(503);
+  expect(await r.json()).toEqual({ error: "temporarily unable to serve context" });
+  // main.ts passes it to Bun.serve (an entry point, so read, not imported).
+  const main = await Bun.file(new URL("./main.ts", import.meta.url)).text();
+  expect(main).toMatch(/Bun\.serve\(\{[\s\S]*?error: serveError,/);
+});
+
+test("the turn gate's startup notice: said only when the gate is on and its weights could not be read (R1)", () => {
+  expect(turnGateNotice(true, null)).toContain("turn-gate.bin could not be read");
+  expect(turnGateNotice(true, {})).toBeNull();
+  expect(turnGateNotice(false, null)).toBeNull();
 });

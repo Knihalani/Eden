@@ -468,3 +468,83 @@ describe("every start has a deadline (D172)", () => {
     30_000,
   );
 });
+
+describe("a machine router in a cluster (R1)", () => {
+  test.concurrent(
+    "a restarted child is told the last membership before it serves, and /readyz stays ready while one child is down",
+    async () => {
+      const dir = tempDir("eden-router-cluster-");
+      const clusterKey = "cluster-key-0123456789abcdef";
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_API_KEYS: keys,
+        EDEN_PERSIST: "off",
+        EDEN_CLUSTER_KEY: clusterKey,
+      };
+      const config = { ...loadConfig(env), port: 0, processes: 2 };
+      const router = await startRouter({ config, env, restartMs: 100, log: () => {}, onOutput: () => {} });
+      try {
+        const base = `http://127.0.0.1:${router.port}`;
+        // This machine ("me") owns no bucket: every request for a user is fenced (503) by the child that holds it.
+        const told = await fetch(`${base}/internal/cluster`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${clusterKey}`, "content-type": "application/json" },
+          body: JSON.stringify({ self: "me", nodes: ["other"], epoch: 1, mode: "drop" }),
+        });
+        expect(told.status).toBe(200);
+        const ask = () =>
+          fetch(`${base}/v1/ask`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+            body: JSON.stringify({ userId: "u1", sessionId: "s1", question: "x" }),
+          });
+        const fenced = await ask();
+        expect(fenced.status).toBe(503);
+        expect(((await fenced.json()) as { error: string }).error).toContain("not the owner");
+
+        const victim = router.children[childFor("acme", "u1", 2)]!;
+        const pid = victim.pid;
+        process.kill(pid, "SIGKILL");
+        for (let i = 0; i < 100 && victim.up; i++) await Bun.sleep(10);
+        expect(victim.up).toBe(false);
+        // One child down: ready for a load balancer, not for the cluster router (`?all=1`).
+        expect((await fetch(`${base}/readyz`)).status).toBe(200);
+        expect((await fetch(`${base}/readyz?all=1`)).status).toBe(503);
+        for (let i = 0; i < 500 && !victim.up; i++) await Bun.sleep(20);
+        expect(victim.up).toBe(true);
+        expect(victim.pid).not.toBe(pid);
+        // The new process got the membership: still fenced, not serving a user another machine owns.
+        const again = await ask();
+        expect(again.status).toBe(503);
+        expect(((await again.json()) as { error: string }).error).toContain("not the owner");
+        expect((await fetch(`${base}/readyz?all=1`)).status).toBe(200);
+      } finally {
+        await router.stop();
+      }
+    },
+    30_000,
+  );
+});
+
+describe("a child that ignores SIGTERM (R1)", () => {
+  test.concurrent("is killed 1.25x the shutdown grace after it, not at the grace its drain fills", async () => {
+    const dir = tempDir("eden-router-kill-");
+    // Listens, reports its port as main.ts does, and ignores SIGTERM: only the router's SIGKILL ends it.
+    const entry = join(dir, "stubborn.ts");
+    writeFileSync(
+      entry,
+      'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("ok") });\n' +
+        'process.on("SIGTERM", () => {});\nprocess.send?.({ edenListening: s.port });\n',
+    );
+    const env = { ...process.env, EDEN_HOME: dir, EDEN_DEV: "1" };
+    const config = { ...loadConfig(env), port: 0, processes: 1, shutdownGraceMs: 400 };
+    const router = await startRouter({ config, env, entry, log: () => {}, onOutput: () => {} });
+    const pid = router.children[0]!.pid;
+    const t0 = performance.now();
+    await router.stop();
+    // A lower bound only: a loaded machine makes it later, never earlier. At the grace itself it took ~400 ms.
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(480);
+    expect(await exited(pid)).toBe(true);
+  });
+});

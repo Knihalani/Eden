@@ -39,11 +39,25 @@ export interface SharedDiskOptions extends DiskOptions {
   concurrency?: number;
   /** Tries of a store write before it is dropped and counted (default 3). */
   tries?: number;
+  /** Users remembered as absent from the store at most (default `MAX_ABSENT`); past it the memory starts over. */
+  maxAbsent?: number;
 }
+
+/**
+ * The most users `absent` holds (R1): one name per user a process ever missed or deleted, cleared otherwise only by a
+ * membership change, so a single machine with a store grew it forever. Starting over costs one store read per user.
+ */
+export const MAX_ABSENT = 100_000;
 
 type Job = { kind: "put"; bytes: Uint8Array } | { kind: "delete" };
 
 const NAME = /^([0-9a-f]{4})-[0-9a-f]{40}\.blob$/;
+/** The store's marker of the key its users were written with (D1071); not a blob name: no sweep or fetch reads it. */
+const KEY_MARK = "key-id";
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.byteLength === b.byteLength && a.every((x, i) => x === b[i]);
+}
 
 export class SharedFrozenDisk implements FrozenDisk {
   readonly local: EncryptedFrozenDisk;
@@ -53,6 +67,7 @@ export class SharedFrozenDisk implements FrozenDisk {
   private readonly tries: number;
   private readonly owns: (bucket: number) => boolean;
   private readonly maxAgeMs: number;
+  private readonly maxAbsent: number;
   /** The latest job per file name not yet started; a newer one replaces it. */
   private readonly queued = new Map<string, Job>();
   /** Jobs running, per file name, so `handOff` can wait for a user's own. */
@@ -77,7 +92,8 @@ export class SharedFrozenDisk implements FrozenDisk {
   };
 
   constructor(options: SharedDiskOptions) {
-    const { store, prefix, concurrency, tries, ...disk } = options;
+    const { store, prefix, concurrency, tries, maxAbsent, ...disk } = options;
+    this.maxAbsent = maxAbsent ?? MAX_ABSENT;
     this.store = store;
     this.prefix = prefix;
     this.concurrency = concurrency ?? 8;
@@ -93,6 +109,16 @@ export class SharedFrozenDisk implements FrozenDisk {
         this.enqueue(name, { kind: "put", bytes });
       },
     });
+  }
+
+  /** Users remembered as absent from the store (bounded by `maxAbsent`). */
+  get absentCount(): number {
+    return this.absent.size;
+  }
+
+  private noteAbsent(name: string): void {
+    if (this.absent.size >= this.maxAbsent) this.absent.clear();
+    this.absent.add(name);
   }
 
   /** Blobs in the local directory this process owns. */
@@ -120,7 +146,7 @@ export class SharedFrozenDisk implements FrozenDisk {
     const name = this.local.nameOf(scope);
     this.local.delete(scope);
     if (this.fetching.has(name)) this.gens.set(name, (this.gens.get(name) ?? 0) + 1);
-    this.absent.add(name);
+    this.noteAbsent(name);
     this.enqueue(name, { kind: "delete" });
   }
 
@@ -158,13 +184,13 @@ export class SharedFrozenDisk implements FrozenDisk {
           }
           if (bytes === null) {
             this.remote.missed++;
-            this.absent.add(name);
+            this.noteAbsent(name);
             return;
           }
           this.remote.fetched++;
           this.remote.bytesFetched += bytes.byteLength;
           // Checked like a file found at open; refused (another key, expired) means the user re-syncs.
-          if (!this.local.adopt(name, bytes, Date.now())) this.absent.add(name);
+          if (!this.local.adopt(name, bytes, Date.now())) this.noteAbsent(name);
         },
         () => {
           // Unreachable: not remembered as absent, so the next request tries again.
@@ -232,6 +258,58 @@ export class SharedFrozenDisk implements FrozenDisk {
     return n;
   }
 
+  /**
+   * R1b (D1071): whether this key is the one the store's users were written with. The store holds a marker object
+   * (`<prefix>key-id`: the key's id, as every blob header carries it): the same id is "ok" (the marker refreshed, so
+   * an age rule on the bucket never takes it), another is "foreign", unless `discard` (the operator's
+   * EDEN_PERSIST_DISCARD=1), which moves the marker to this key: "discarded". The old key's blobs are then never read
+   * (names come from the key) and the age sweep deletes them; a sample of them must not refuse the next start (the
+   * review of R1b). With no marker yet (a store from before it) up to `sample` blobs are read: all foreign is
+   * "foreign"; otherwise the marker is written. A store that fails or takes longer than `timeoutMs` is "unknown": the
+   * start goes ahead (fail open).
+   */
+  async verifyStoreKey(
+    discard: boolean,
+    timeoutMs = 3_000,
+    sample = 8,
+  ): Promise<{ verdict: "ok" | "foreign" | "discarded" | "unknown"; sampled: number; foreign: number }> {
+    const unknown = { verdict: "unknown" as const, sampled: 0, foreign: 0 };
+    const check = async () => {
+      const mine = this.local.keyMark;
+      const marker = await this.store.get(this.prefix + KEY_MARK);
+      let sampled = 0;
+      let foreign = 0;
+      let theirs = false;
+      if (marker !== null) theirs = !sameBytes(marker, mine);
+      else {
+        for await (const { key } of this.store.list(this.prefix)) {
+          if (sampled >= sample) break;
+          if (!NAME.test(key.slice(this.prefix.length))) continue;
+          const bytes = await this.store.get(key);
+          const k = bytes === null ? null : this.local.keyOf(bytes);
+          if (k === null) continue;
+          sampled++;
+          if (k === "key") foreign++;
+        }
+        theirs = sampled > 0 && foreign === sampled;
+      }
+      if (theirs && !discard) return { verdict: "foreign" as const, sampled, foreign };
+      await this.store.put(this.prefix + KEY_MARK, mine);
+      return { verdict: theirs ? ("discarded" as const) : ("ok" as const), sampled, foreign };
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        check(),
+        new Promise<typeof unknown>((resolve) => (timer = setTimeout(() => resolve(unknown), timeoutMs))),
+      ]);
+    } catch {
+      return unknown;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Store writes waiting or running. */
   get backlog(): number {
     return this.queued.size + this.active;
@@ -251,7 +329,11 @@ export class SharedFrozenDisk implements FrozenDisk {
   private enqueue(name: string, job: Job): void {
     const m = NAME.exec(name);
     if (m && !this.writable(parseInt(m[1]!, 16))) {
+      // Fenced (R1): a job of ours still queued for the name goes too. Kept, a late put would land after the new
+      // owner's delete of a forgotten user and bring them back in the store.
+      if (this.queued.delete(name)) this.remote.cancelled++;
       this.remote.skipped++;
+      this.pump();
       return;
     }
     this.queued.set(name, job);
@@ -286,7 +368,14 @@ export class SharedFrozenDisk implements FrozenDisk {
     this.queued.delete(name);
     this.active++;
     const run = async () => {
+      const m = NAME.exec(name);
       for (let attempt = 1; ; attempt++) {
+        // Fenced before it ran or while waiting to retry (R1): the bucket's new owner decides what the store holds
+        // now. A write queued behind a release past its deadline would overwrite the new owner's newer copy.
+        if (m && !this.writable(parseInt(m[1]!, 16))) {
+          this.remote.skipped++;
+          return;
+        }
         try {
           if (job.kind === "put") {
             await this.store.put(this.prefix + name, job.bytes);

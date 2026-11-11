@@ -97,9 +97,9 @@ about €30.49/month (4 vCPU, 8 GB; in stock that day); Hetzner dedicated AX41/A
 cheapest RAM. The image is multi-arch from source; move by restoring a backup (§13, Restore).
 
 Compute per user-month on the fallback (arithmetic on §6's measured RSS and the listed prices): paid A1 4 / 24 GB at
-$55.48 holds 3,296 heavy users at their peak hour ($0.017 a user-month), 5,698 prose users at a quarter active
-($0.0097), 8,719 at a twentieth ($0.0064); a Hetzner AX41-class 64 GB at about $66 holds 8,871 heavy users at peak
-($0.0074). docs/COST-MODEL.md, "Hosting", adds the store, the load balancer and monitoring.
+$55.48 holds 3,702 heavy users at their peak hour ($0.015 a user-month), 5,698 prose users at a quarter active
+($0.0097), 8,719 at a twentieth ($0.0064); a Hetzner AX41-class 64 GB at about $66 holds 9,964 heavy users at peak
+($0.0066). docs/COST-MODEL.md, "Hosting", adds the store, the load balancer and monitoring.
 
 ## 3. TLS
 
@@ -119,7 +119,7 @@ tenant and the box. Either way Eden's own port is never public.
 | Secret | Made by | Lives | Rotation |
 | --- | --- | --- | --- |
 | `EDEN_API_KEYS` (tenant:key, 16+ chars) | `openssl rand -hex 24` per tenant | `.env` (600) on each Eden box and the cluster router | list the new key beside the old (`acme:<new>,acme:<old>`: a tenant may have several), restart, move the tenant over, remove the old (§13) |
-| `EDEN_PERSIST_KEY` (32 bytes) | `openssl rand -hex 32`, **once** | `.env`; a copy in your password manager | none: a new key discards every persisted user (they re-sync, D425) |
+| `EDEN_PERSIST_KEY` (32 bytes) | `openssl rand -hex 32`, **once** | `.env`; a copy in your password manager | none: a start with a key that opens none of the persisted users stops (exit 2, no foreign blob deleted, D1071); `EDEN_PERSIST_DISCARD=1` discards them on purpose (they re-sync, D425) |
 | `EDEN_CLUSTER_KEY` (24+ chars) | `openssl rand -hex 24` | `.env` on nodes and routers | replace on all at once (a rolling restart) |
 | `EDEN_S3_*` | the store's console, scoped to the one bucket | `.env` on nodes | create the new key, roll, delete the old |
 | `OPENROUTER_API_KEY` (optional) | OpenRouter | `.env` | in OpenRouter; restart |
@@ -151,12 +151,13 @@ weights a process as an upper bound).
 | Sim text, 1/4 | 2.10 MB | 4,139 | 8,304 | 22,347 | 44,721 |
 | Sim text, 1/20 | 1.05 MB | 8,278 | 16,608 | 44,695 | 89,442 |
 | Heavy (20 connectors, prose), 1/4 | 3.36 MB | 2,587 | 5,190 | 13,967 | 27,950 |
-| **Heavy, peak hour** (all active, 1/6 live, 5/6 warm) | **5.29 MB** | **1,643** | **3,296** | **8,871** | **17,753** |
+| **Heavy, peak hour** (all active, 1/6 live, 5/6 warm; D998) | **4.71 MB** | **1,845** | **3,702** | **9,964** | **19,939** |
 
 Read the prose rows for real mail (the sim's templated text compresses better than mail will), and **size daily
 agents by the heavy peak row**: when a tenant's users all work the same hours, every one is active within 30 minutes,
-a sixth of them live at any moment (about 9-10 MB each at the cap) and the rest warm (3.3 MB): 5.29 MB a user against
-3.36 at a quarter active. Compacting warm users sooner was tried and rejected (D996): at most 11% less memory for
+a sixth of them live at any moment (about 7.3-7.5 MB each at the cap after a thaw since D998, 8.6 before) and the rest
+warm: 4.71 MB a user (5.20 before D998, the same day). With a model key, card state adds about 3.7 MB a user: 8.43
+MB at the peak (docs/research/d1-livemem.md). The other rows were measured before D998, which lowers them too. Compacting warm users sooner was tried and rejected (D996): at most 11% less memory for
 200 ms more on every return after a pause. Latency at a realistic rate on the 2-core budget (`bun run sim:perf steady --synced`: 300 synced users of the sim
 world at real pacing and connector latency, 39 events and 87 requests a second, one server process, the reviewer's
 runs sharing the machine): observe p50 0.95 ms, p99 21.7 ms (a user's message 2.9 / 25.4 ms), `ask_context` 6.4 /
@@ -221,13 +222,14 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   a process released 60 users in 422 ms and 120 in 1.65 s (live ones about 30 ms each, warm ones 3-7 ms), all in
   the store within 0.7-2.4 s; so a 64 GB node giving a fifth of 16,000 users to a new one takes about 6-11 s, its
   processes in parallel, under the router's 60 s bound (d1-scale-out.md §3).
-- **A failure:** a node failing `/readyz` three probes in a row (2 s apart: 4.6 s measured) is dropped; its users go
-  to their second-choice nodes, which read their last stored blob (the 30-minute compact freeze, the last release or
-  shutdown) and poll their sources for what changed. Users that were live and never stored re-sync. When it answers
-  again it is first told to drop everything it still holds (older than what the others served since), then its
-  users move back the planned way (D995). A node being stopped (`/readyz` says "draining") is a planned leave: it
-  hands its users over during its drain delay. Every node refuses requests for users another machine owns (503
-  "not the owner") and writes nothing of them to the store.
+- **A failure:** a node failing `/readyz?all=1` (ready only with every child process up; plain `/readyz`, which Caddy
+  and the container's health check read, stays ready while any child is up, D1070) three probes in a row (2 s apart:
+  4.6 s measured) is dropped; its users go to their second-choice nodes, which read their last stored blob (the
+  30-minute compact freeze, the last release or shutdown) and poll their sources for what changed. Users that were live
+  and never stored re-sync. When it answers again it is first told to drop everything it still holds (older than what
+  the others served since), then its users move back the planned way (D995). A node being stopped (`/readyz` says
+  "draining") is a planned leave: it hands its users over during its drain delay. Every node refuses requests for users
+  another machine owns (503 "not the owner") and writes nothing of them to the store.
 - **Latency through the router:** +0.05-0.1 ms at p50 and +0.6-1.4 ms at p99 on one host (a network hop adds its
   round trip).
 
@@ -310,8 +312,8 @@ machines; real Ampere hardware (the arm64 run was emulated, so no arm64 timings 
 for `/readyz`, add its line to the nodes file. Down: remove the line, watch the router log the release, then
 destroy it.
 
-**Restore a box** (disk lost, moving providers): new box (§2), the same `.env` (the same `EDEN_PERSIST_KEY`, or the
-persisted users are discarded), then before starting Eden: `tar -xzf eden-<host>-<stamp>.tar.gz -C
+**Restore a box** (disk lost, moving providers): new box (§2), the same `.env` (the same `EDEN_PERSIST_KEY`: with
+another key Eden refuses to start, D1071), then before starting Eden: `tar -xzf eden-<host>-<stamp>.tar.gz -C
 <the eden-data volume's mountpoint>` and `chown -R 1000:1000` it (the image's `bun` user); start, smoke-check.
 Users come back from their files on first use; anything after the backup re-syncs from the sources.
 
@@ -330,8 +332,10 @@ without context meanwhile.
 answering`). Bring it back or replace it; when it answers it gets its users back. If the store is failing too
 (`EdenStoreFailing`), moved users re-sync: check the store's status page and credentials.
 
-**Incident: a leak of a key.** A tenant key: rotate it. `EDEN_PERSIST_KEY` with the disk or store: rotate it (users
-re-sync), and treat the store's and disk's contents as exposed (redacted content, D10; T12 in THREAT-MODEL.md).
+**Incident: a leak of a key.** A tenant key: rotate it. `EDEN_PERSIST_KEY` with the disk or store: rotate it, and
+start once with `EDEN_PERSIST_DISCARD=1` beside the new key (the old users are discarded and re-sync; without it Eden
+refuses to start, D1071), then remove it; treat the store's and disk's contents as exposed (redacted content, D10;
+T12 in THREAT-MODEL.md).
 
 ## 14. Persistence is the default (D991)
 

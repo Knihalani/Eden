@@ -30,7 +30,9 @@ REF=main                                    # the git tag or branch to run
 #    created with deploy/tofu/oci, which did this through its user data.
 deploy/scripts/bootstrap-dedicated.sh root@$SERVER single $REF https://github.com/KaiavN/Eden.git $ADMIN
 
-# 3. Secrets: a tenant key, the persistence key (make it once; keep a copy in your password manager).
+# 3. Secrets: a tenant key, the persistence key (make it once; keep a copy in your password manager). Eden refuses
+#    to start if the key opens none of the users it persisted (a mistyped key, D1071); EDEN_PERSIST_DISCARD=1 for
+#    one start discards them on purpose (a rotated key).
 cp deploy/compose/single/.env.example secrets/single.env
 sed -i "s|^EDEN_DOMAIN=.*|EDEN_DOMAIN=$DOMAIN|; s|^ACME_EMAIL=.*|ACME_EMAIL=$EMAIL|" secrets/single.env
 sed -i "s|^EDEN_API_KEYS=.*|EDEN_API_KEYS=acme:$(openssl rand -hex 24)|" secrets/single.env

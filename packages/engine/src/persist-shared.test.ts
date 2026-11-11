@@ -182,6 +182,131 @@ describe("a store shared between machines (D992)", () => {
     expect(db.remote.cancelled).toBe(1);
   });
 
+  test("a fenced process's forget drops its own queued and retrying writes of the user (R1)", async () => {
+    // The old owner after a release that passed its deadline: fenced, its write of bob still queued behind alice's.
+    // The new owner's delete lands; a late put from here would bring the forgotten user back in the store.
+    const store = new MemoryStore();
+    const c = freezing();
+    const d = new SharedFrozenDisk({
+      dir: tempDir(),
+      key: KEY,
+      maxBytes: 64 << 20,
+      maxAgeMs: 7 * 24 * HOUR,
+      store,
+      prefix: "f/",
+      concurrency: 1,
+    });
+    c.persist(d);
+    store.delayMs = 40;
+    c.put(alice, items("alice", 3), T0);
+    c.put(bob, items("bob", 3), T0);
+    freezeAll(c, T0); // alice's put runs, bob's waits
+    expect(d.backlog).toBe(2);
+    d.setWritable(() => false);
+    c.forget(bob);
+    await d.settle(1_000);
+    expect([...store.objects.keys()]).toEqual([`f/${d.local.nameOf(alice)}`]);
+
+    // Without a forget, a put still queued when the fence moves is not written either: the new owner decides.
+    const store3 = new MemoryStore();
+    const c3 = freezing();
+    const d3 = new SharedFrozenDisk({
+      dir: tempDir(),
+      key: KEY,
+      maxBytes: 64 << 20,
+      maxAgeMs: 7 * 24 * HOUR,
+      store: store3,
+      prefix: "f/",
+      concurrency: 1,
+    });
+    c3.persist(d3);
+    store3.delayMs = 40;
+    c3.put(alice, items("alice", 3), T0);
+    c3.put(bob, items("bob", 3), T0);
+    freezeAll(c3, T0);
+    d3.setWritable(() => false);
+    await d3.settle(1_000);
+    expect([...store3.objects.keys()]).toEqual([`f/${d3.local.nameOf(alice)}`]);
+
+    // A put that failed once and is waiting to retry is not retried once its bucket is fenced.
+    const store2 = new MemoryStore();
+    const c2 = freezing();
+    const d2 = shared(store2);
+    c2.persist(d2);
+    store2.down = true;
+    c2.put(alice, items("alice", 3), T0);
+    freezeAll(c2, T0);
+    await Bun.sleep(20);
+    store2.down = false;
+    d2.setWritable(() => false);
+    await d2.settle(2_000);
+    expect(store2.objects.size).toBe(0);
+    expect(d2.remote.skipped).toBeGreaterThan(0);
+  });
+
+  test("the store's key check: a marker of the key, sampling before there is one, rotation, a down or hung store (R1b)", async () => {
+    const store = new MemoryStore();
+    const OLD = KEY;
+    const NEW = new Uint8Array(32).map((_, i) => 250 - i);
+    const disk = (key: Uint8Array, s: BlobStore = store) =>
+      new SharedFrozenDisk({
+        dir: tempDir(),
+        key,
+        maxBytes: 64 << 20,
+        maxAgeMs: 7 * 24 * HOUR,
+        store: s,
+        prefix: "f/",
+      });
+    // Blobs written under the old key by a server from before the marker: none names the key yet.
+    const c = freezing();
+    const old = disk(OLD);
+    c.persist(old);
+    for (const u of ["a", "b", "c"]) c.put({ tenantId: "t", userId: u }, items(u, 3), T0);
+    freezeAll(c, T0);
+    await old.settle(1_000);
+    expect(store.objects.size).toBe(3);
+    // No marker: the blobs are sampled; all foreign is refused and nothing is written.
+    expect(await disk(NEW).verifyStoreKey(false)).toMatchObject({ verdict: "foreign", sampled: 3, foreign: 3 });
+    expect(store.objects.has("f/key-id")).toBe(false);
+    // The old key's own start writes the marker.
+    expect(await disk(OLD).verifyStoreKey(false)).toMatchObject({ verdict: "ok" });
+    expect(store.objects.has("f/key-id")).toBe(true);
+    // A rotation: discarding moves the marker to the new key; the old blobs stay (the age sweep takes them), and the
+    // next start with the new key is not refused by them, however many there are (the review of R1b).
+    expect(await disk(NEW).verifyStoreKey(true)).toMatchObject({ verdict: "discarded" });
+    expect(await disk(NEW).verifyStoreKey(false)).toMatchObject({ verdict: "ok" });
+    expect(store.objects.size).toBe(4); // three old blobs and the marker
+    // The old key is now the foreign one.
+    expect(await disk(OLD).verifyStoreKey(false)).toMatchObject({ verdict: "foreign" });
+    // An empty store: ok, and the marker is written.
+    const empty = new MemoryStore();
+    expect(await disk(NEW, empty).verifyStoreKey(false)).toMatchObject({ verdict: "ok" });
+    expect(empty.objects.has("f/key-id")).toBe(true);
+    // Down or hung: unknown, the start goes ahead (fail open).
+    store.down = true;
+    expect(await disk(NEW).verifyStoreKey(false)).toMatchObject({ verdict: "unknown" });
+    store.down = false;
+    store.getDelayMs = 1_000;
+    expect(await disk(NEW).verifyStoreKey(false, 50)).toMatchObject({ verdict: "unknown" });
+  });
+
+  test("users remembered as absent from the store are bounded (R1)", async () => {
+    const store = new MemoryStore();
+    const d = new SharedFrozenDisk({
+      dir: tempDir(),
+      key: KEY,
+      maxBytes: 64 << 20,
+      maxAgeMs: 7 * 24 * HOUR,
+      store,
+      prefix: "f/",
+      maxAbsent: 10,
+    });
+    for (let i = 0; i < 25; i++) await d.fetch({ tenantId: "t", userId: `u${i}` });
+    for (let i = 0; i < 25; i++) d.delete({ tenantId: "t", userId: `v${i}` });
+    expect(d.absentCount).toBeLessThanOrEqual(10);
+    await d.settle(1_000);
+  });
+
   test("forgetting one source, or items deleted at their source, deletes the store's older copy (review of D992)", async () => {
     for (const how of ["source", "removed"] as const) {
       const store = new MemoryStore();

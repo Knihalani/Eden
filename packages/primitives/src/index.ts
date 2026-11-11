@@ -1,6 +1,6 @@
 export { fnv1a, hashString, mix32, murmur3 } from "./hash";
 export { CLASS, FOLD, FOLD_DROP, FOLD_EXPAND, WORD_PART, WORD_START, classOf, foldOf, foldString } from "./charclass";
-export { Vocab, termHash } from "./vocab";
+export { clearTermMemo, Vocab, termHash } from "./vocab";
 export type { VocabSnapshot } from "./vocab";
 export { tokenize, tokenizeInto } from "./tokenize";
 export { MultiMatcher, type MatcherOptions, type OnMatch } from "./matcher";
