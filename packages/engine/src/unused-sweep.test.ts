@@ -352,8 +352,9 @@ describe("syncUnusedSweepMs (D356)", () => {
 
   /**
    * Ten weeks of a user active 09:00-18:00 on the days `active` says (T0 is 09:00; the clock runs through the rest):
-   * the longest gap between two sweeps of a source (days, the backfill counted as one) and the most sources listed in
-   * one tick after the first week.
+   * the longest gap between two sweeps of a source (days, the backfill counted as one), the gaps longer than D356
+   * allows (a week, then the days to the user's next active day), the most sources listed in one tick after the
+   * first week, and the sweeps.
    */
   async function absences(spread: boolean, active: (day: number) => boolean, n = 60) {
     const all = Array.from({ length: n }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
@@ -362,8 +363,14 @@ describe("syncUnusedSweepMs (D356)", () => {
     const last = all.map(() => 0);
     const counts = all.map((x) => x.lists);
     let longest = 0;
+    let late = 0;
     let worstTick = 0;
     let sweeps = 0;
+    const dueBy = (from: number) => {
+      let d = from + 7;
+      while (!active(d)) d++;
+      return d;
+    };
     for (let day = 0; day < 70; day++) {
       for (let k = 0; k < 144; k++) {
         t.advance(10 * MIN);
@@ -377,25 +384,41 @@ describe("syncUnusedSweepMs (D356)", () => {
           inTick++;
           sweeps++;
           longest = Math.max(longest, day - last[i]!);
+          if (day > dueBy(last[i]!)) late++;
           last[i] = day;
         });
         if (day >= 7) worstTick = Math.max(worstTick, inTick);
       }
     }
-    return { longest, worstTick, sweeps };
+    return { longest, late, worstTick, sweeps };
   }
 
-  test("syncSweepSpread: whatever days the user is away, no source waits longer than with the switch off", async () => {
-    for (const active of [(d: number) => d % 7 < 3, (d: number) => d % 7 < 5, (d: number) => d % 7 === 2]) {
-      const off = await absences(false, active);
+  const PATTERNS: [string, (d: number) => boolean][] = [
+    ["Monday to Friday", (d) => d % 7 < 5],
+    ["three days a week", (d) => d % 7 < 3],
+    ["one day a week", (d) => d % 7 === 2],
+    ["away every other weekend", (d) => !(d % 14 === 5 || d % 14 === 6)],
+    ["three days of every five", (d) => d % 5 < 3],
+  ];
+
+  test("syncSweepSpread: whatever days the user is away, a source is swept by the first active day a week on", async () => {
+    for (const [name, active] of PATTERNS) {
       const on = await absences(true, active);
-      expect(on.longest).toBeLessThanOrEqual(off.longest);
-      // No burst is worse than the one the switch is for.
-      expect(on.worstTick).toBeLessThanOrEqual(off.worstTick);
+      const off = await absences(false, active);
+      if (process.env.O1_ABSENCES) {
+        const big = { on: await absences(true, active, 200), off: await absences(false, active, 200) };
+        console.log("ABSENCES", name, JSON.stringify(big));
+      }
+      // D356's bound, per sweep: a week after the source's own last sweep, or the user's next active day after that.
+      expect(on.late).toBe(0);
+      expect(off.late).toBe(0);
+      // Fewer sources in the worst tick than all of them, which is the default's.
+      expect(off.worstTick).toBe(60);
+      expect(on.worstTick).toBeLessThan(60);
     }
     const weekdays = await absences(true, (d) => d % 7 < 5);
     expect(weekdays.longest).toBe(7);
-    expect(weekdays.worstTick).toBeLessThan(60);
+    expect(weekdays.worstTick).toBeLessThan(30);
   });
 
   test("syncSweepSpread: with a short long period, a turn inside a day of the last sweep waits for the cache", async () => {

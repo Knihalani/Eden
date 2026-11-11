@@ -513,10 +513,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
   Trial `syncSweepSpread` (D604, off; ends 2026-11-18): each such source is swept at its own point in the week (a
-  hash of tenant, user and source, `Sync.sweepTurn`) or a week after its last sweep, whichever is first, so a
-  user's unused sources are not all listed in one tick and none waits longer than with the switch off. A source
-  swept off its point is swept up to a week early (half a sweep more on average). Its turn is part of the tick's
-  `due` test, so a frozen user is thawed through `ready` first.
+  hash of tenant, user and source, `Sync.sweepTurn`), so a user's unused sources are not all listed in one tick. The
+  points are a week apart, so it is due no later than a week after its own last sweep, as without the switch. A
+  source swept off its point is swept up to a week early (half a sweep more on average). Its turn is part of the
+  tick's `due` test, so a frozen user is thawed through `ready` first.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

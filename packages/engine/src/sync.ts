@@ -112,8 +112,8 @@ export interface SyncOptions {
   /**
    * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
    * tenant, the user and the source) and is swept at the first tick past it, so a user's unused sources are not
-   * all listed in the tick a week after the backfill. Never later than `unusedSweepMs` after its last sweep
-   * (`sweepTurn`); a source swept off its point is swept up to a period early, once each time.
+   * all listed in the tick a week after the backfill. Due no later than `unusedSweepMs` after its last sweep
+   * (`sweepTurn`); a source swept off its point is swept up to a period early, each time.
    */
   sweepSpread?: boolean;
   /**
@@ -1055,16 +1055,17 @@ export class SyncManager {
   }
 
   /**
-   * `sweepSpread`: the source's own point in the long period has passed since its last sweep, or a whole period
-   * has (the rule without the spread), whichever is first: so no source ever waits longer than it would with the
-   * switch off, whatever days the user is away. The point is a hash of the tenant, the user and the source, so it
-   * needs no saved state and two users' sweeps do not line up. A source swept at its point is swept a period
-   * later; one swept off it (the backfill, `sweepSoon`, a return after more than a period) is swept at its next
-   * point, up to a period early: half a sweep more on average, each time that happens. The hash is 32 bits, so a
-   * period over about 49.7 days (2^32 ms) has points in its first 49.7 days only: uneven, never late.
+   * `sweepSpread`: the source's own point in the long period has passed since its last sweep. The points are a
+   * period apart, so one has always passed a period after the last sweep: the spread is never due later than the
+   * rule without it, given the same last sweep (D356's bound, unchanged; nothing else enforces it). The point is
+   * a hash of the tenant, the user and the source, so it needs no saved state and two users' sweeps do not line
+   * up. A source swept at its point is swept a period later; one swept off it (the backfill, `sweepSoon`, an
+   * absence over its point) is swept at its next point, up to a period early: half a sweep more on average, each
+   * time. Its sweep days differ from the default's, so an absence the default's days miss can lengthen one of its
+   * gaps (9 days against 7, a user away every other weekend). The hash is 32 bits, so a period over about 49.7
+   * days (2^32 ms) has points in its first 49.7 days only: uneven, never late.
    */
   private sweepTurn(u: UserSync, s: SourceSync, now: number, every: number): boolean {
-    if (now - s.sweptAt >= every) return true;
     const at = hashString(`${u.scope.tenantId}\0${u.scope.userId}\0${s.id}`, 0x5eed) % every;
     return Math.floor((now + at) / every) > Math.floor((s.sweptAt + at) / every);
   }
@@ -1161,7 +1162,7 @@ export class SyncManager {
     // long period near `sweepMs` it can come inside a day of the last sweep; the review).
     const long = (s: SourceSync) => (this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : 0);
     const spread = (s: SourceSync) => this.o.sweepSpread === true && long(s) > 0;
-    // `sweepSpread`: a long-sweep source is due at its own point, not a period after its last sweep.
+    // `sweepSpread`: a long-sweep source is due at its own point (never later than a period after its last sweep).
     const longDue = (s: SourceSync) =>
       spread(s) ? this.sweepTurn(u, s, now, long(s)) : now - s.sweptAt >= (long(s) || this.o.sweepMs);
     const due = (s: SourceSync) =>
