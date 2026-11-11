@@ -236,3 +236,11 @@ python3 -I packages/sim/lab/m13/gen_train.py .local/m13/train/gen.jsonl --calls-
 .venv-m3/bin/python -I packages/sim/lab/m13/export.py .local/m13/r3/R2f-s1.pt G.bin P.json
 bun packages/sim/lab/m13/parity.ts G.bin P.json && bun packages/sim/lab/m13/bench.ts G.bin .local/m13/sets/dev.jsonl
 ```
+
+## 6. Ready state
+
+On the branch after merging origin/main: `CHECK_COLD=1 bun run check` passed (format, types, every test, 64 s);
+`bun run eval` precision 0.65, recall 0.52, falseFireRate 0, acting block 19 of 28 neutral packets (1.18 items), 10
+of 11 facts handed, 3 of 10 look-alikes; `bun run funnel` hidden 281/384, decoys 264/384: main's numbers, as the
+engine, server and client are byte-identical to main (the trial's code is deleted). No `reviewer` run: the branch
+leaves no engine, server or privacy change (CLAUDE.md's rule).
