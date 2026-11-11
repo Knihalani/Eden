@@ -309,7 +309,7 @@ describe("syncUnusedSweepMs (D356)", () => {
     }
   });
 
-  test("syncSweepSpread (D604): unused sources are swept at their own points in the week, at no extra sweep", async () => {
+  test("syncSweepSpread (D604): unused sources are swept at their own points in the week, none later", async () => {
     const days = async (spread: boolean) => {
       const make = () => Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
       const mine = make();
@@ -321,26 +321,16 @@ describe("syncUnusedSweepMs (D356)", () => {
         ]),
         { ...ON, syncSweepSpread: spread },
       );
-      let ready = 0;
-      const real = t.cache.ready.bind(t.cache);
-      t.cache.ready = (scope) => {
-        ready++;
-        return real(scope);
-      };
       await warm(t.partner, alice);
       await warm(t.partner, bob);
       // The day (after the backfill) of each source's sweeps over four weeks.
       const seen = [...mine, ...theirs].map(() => [] as number[]);
       const counts = [...mine, ...theirs].map((x) => x.lists);
       for (let day = 0; day < 28; day++) {
-        const before = ready;
         await live(t, [alice, bob], 1);
-        let swept = false;
         [...mine, ...theirs].forEach((x, k) => {
-          for (; counts[k]! < x.lists; counts[k]!++, swept = true) seen[k]!.push(day);
+          for (; counts[k]! < x.lists; counts[k]!++) seen[k]!.push(day);
         });
-        // A sweep reads the cache: the user's frozen cache is waited for first (D325).
-        if (swept) expect(ready).toBeGreaterThan(before);
       }
       return { alice: seen.slice(0, 40), bob: seen.slice(40) };
     };
@@ -351,47 +341,61 @@ describe("syncUnusedSweepMs (D356)", () => {
     const perDay = Array.from({ length: 28 }, (_, day) => on.alice.filter((d) => d.includes(day)).length);
     expect(Math.max(...perDay)).toBeLessThan(20);
     for (const d of [...on.alice, ...on.bob]) {
-      // The first 4 to 11 days after the backfill, then weekly: never more sweeps than off, never a longer gap.
-      expect(d[0]!).toBeGreaterThanOrEqual(3);
-      expect(d[0]!).toBeLessThanOrEqual(11);
-      expect(d.length).toBeLessThanOrEqual(4);
-      expect(d.length).toBeGreaterThanOrEqual(3);
+      // The first within a week of the backfill, then weekly: at most one sweep more than off, never a longer gap.
+      expect(d[0]!).toBeLessThanOrEqual(6);
+      expect(d.length === 4 || d.length === 5).toBe(true);
       for (let k = 1; k < d.length; k++) expect(d[k]! - d[k - 1]!).toBe(7);
     }
-    // No more listings than off over the four weeks.
-    expect(on.alice.flat().length).toBeLessThanOrEqual(off.alice.flat().length);
     // Another user's sources of the same ids have points of their own.
     expect(on.alice.filter((d, k) => d[0] === on.bob[k]![0]).length).toBeLessThan(20);
   });
 
-  test("syncSweepSpread: a user away four days of every week has no source wait past 11 days", async () => {
-    const all = Array.from({ length: 60 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
-    const t = setup(new Map([["alice", all]]), { ...ON, syncSweepSpread: true });
+  /**
+   * Ten weeks of a user active 09:00-18:00 on the days `active` says (T0 is 09:00; the clock runs through the rest):
+   * the longest gap between two sweeps of a source (days, the backfill counted as one) and the most sources listed in
+   * one tick after the first week.
+   */
+  async function absences(spread: boolean, active: (day: number) => boolean, n = 60) {
+    const all = Array.from({ length: n }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
+    const t = setup(new Map([["alice", all]]), { ...ON, syncSweepSpread: spread });
     await warm(t.partner, alice);
     const last = all.map(() => 0);
     const counts = all.map((x) => x.lists);
     let longest = 0;
+    let worstTick = 0;
     let sweeps = 0;
-    // Ten weeks, active 09:00-18:00 on three days of each (T0 is 09:00); the clock runs through the rest.
     for (let day = 0; day < 70; day++) {
       for (let k = 0; k < 144; k++) {
         t.advance(10 * MIN);
-        if (day % 7 < 3 && k < 54) {
-          t.partner.sync!.track(alice, t.now());
-          await t.partner.sync!.tick();
-        }
+        if (!active(day) || k >= 54) continue;
+        t.partner.sync!.track(alice, t.now());
+        await t.partner.sync!.tick();
+        let inTick = 0;
+        all.forEach((x, i) => {
+          if (x.lists === counts[i]) return;
+          counts[i] = x.lists;
+          inTick++;
+          sweeps++;
+          longest = Math.max(longest, day - last[i]!);
+          last[i] = day;
+        });
+        if (day >= 7) worstTick = Math.max(worstTick, inTick);
       }
-      all.forEach((x, k) => {
-        if (x.lists === counts[k]) return;
-        counts[k] = x.lists;
-        sweeps++;
-        longest = Math.max(longest, day - last[k]!);
-        last[k] = day;
-      });
     }
-    // The bound is 11 days; the user's next active day after it is at most four days on.
-    expect(longest).toBeLessThanOrEqual(15);
-    expect(sweeps).toBeLessThanOrEqual(60 * 10);
+    return { longest, worstTick, sweeps };
+  }
+
+  test("syncSweepSpread: whatever days the user is away, no source waits longer than with the switch off", async () => {
+    for (const active of [(d: number) => d % 7 < 3, (d: number) => d % 7 < 5, (d: number) => d % 7 === 2]) {
+      const off = await absences(false, active);
+      const on = await absences(true, active);
+      expect(on.longest).toBeLessThanOrEqual(off.longest);
+      // No burst is worse than the one the switch is for.
+      expect(on.worstTick).toBeLessThanOrEqual(off.worstTick);
+    }
+    const weekdays = await absences(true, (d) => d % 7 < 5);
+    expect(weekdays.longest).toBe(7);
+    expect(weekdays.worstTick).toBeLessThan(60);
   });
 
   test("syncSweepSpread: with a short long period, a turn inside a day of the last sweep waits for the cache", async () => {

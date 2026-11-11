@@ -103,10 +103,9 @@ export interface SyncOptions {
   unusedSweepMs?: number;
   /**
    * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
-   * user and the source) and is swept there, so a user's unused sources are not all listed in the tick a week
-   * after the backfill. A source swept off its point (the backfill, a return) waits 4/7 to 11/7 of a period for
-   * its next sweep (`sweepTurn`), again each time a long absence takes it off its point; its unswept copies are
-   * doubted as ever (`sweepLapsed`).
+   * tenant, the user and the source) and is swept at the first tick past it, so a user's unused sources are not
+   * all listed in the tick a week after the backfill. Never later than `unusedSweepMs` after its last sweep
+   * (`sweepTurn`); a source swept off its point is swept up to a period early, once each time.
    */
   sweepSpread?: boolean;
   /**
@@ -157,8 +156,6 @@ interface PollResume {
 
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
-/** `sweepSpread`: how much of a period before a sweep is due its source's point is taken (`sweepTurn`). */
-const SPREAD_EARLY = 3 / 7;
 const HOUR = 3_600_000;
 /** Pushed item ids held per source between polls (`SourceSync.pushed`); past it the oldest are let go. */
 const MAX_PUSHED = 1_000;
@@ -869,18 +866,18 @@ export class SyncManager {
   }
 
   /**
-   * `sweepSpread`: the source's own point in the long period has come, counted from `SPREAD_EARLY` of a period
-   * before its sweep would be due. The point is a hash of the tenant, the user and the source, so it needs no saved
-   * state and two users' sweeps do not line up. A source swept at its point is swept a period later (the margin
-   * takes a sweep that ran up to three days late, a weekend the user was away); one swept off its point (the
-   * backfill, `sweepSoon`, a return) waits between 4/7 and 11/7 of a period. Never longer: past 11/7 it is due
-   * whatever its point (the review: a user away four days of every week kept some sources on a two-period gap).
+   * `sweepSpread`: the source's own point in the long period has passed since its last sweep, or a whole period
+   * has (the rule without the spread), whichever is first: so no source ever waits longer than it would with the
+   * switch off, whatever days the user is away. The point is a hash of the tenant, the user and the source, so it
+   * needs no saved state and two users' sweeps do not line up. A source swept at its point is swept a period
+   * later; one swept off it (the backfill, `sweepSoon`, a return after more than a period) is swept at its next
+   * point, up to a period early: half a sweep more on average, each time that happens. The hash is 32 bits, so a
+   * period over about 49.7 days (2^32 ms) has points in its first 49.7 days only: uneven, never late.
    */
   private sweepTurn(u: UserSync, s: SourceSync, now: number, every: number): boolean {
-    if (now - s.sweptAt >= every + (1 - SPREAD_EARLY) * every) return true;
+    if (now - s.sweptAt >= every) return true;
     const at = hashString(`${u.scope.tenantId}\0${u.scope.userId}\0${s.id}`, 0x5eed) % every;
-    const from = s.sweptAt + every - SPREAD_EARLY * every;
-    return Math.floor((now + at) / every) > Math.floor((from + at) / every);
+    return Math.floor((now + at) / every) > Math.floor((s.sweptAt + at) / every);
   }
 
   private isCurrent(s: SourceSync, now: number): boolean {
