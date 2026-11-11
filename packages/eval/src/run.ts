@@ -6,11 +6,13 @@
 import {
   AskReader,
   ContextPartner,
+  DEFAULT_CONFIG,
   ItemCache,
   ModelReaderMaker,
   type EngineConfig,
   type ReaderReport,
   type Trace,
+  PushChecker,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS, OpenRouterModel, TenantSpend, type Model } from "@eden/llm";
@@ -319,6 +321,11 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
             ...(options.onReaderFailure ? { onFailure: options.onReaderFailure } : {}),
           })
         : null;
+    // The push check (D828) on the reader's model, as `buildPartner` wires it with a key: only under `--live`.
+    const checker =
+      options.readerModel && { ...DEFAULT_CONFIG, ...options.config }.pushCheck
+        ? new PushChecker({ model: options.readerModel, budget: budget() })
+        : null;
     if (!pool.byCategory.has(category)) pool.byCategory.set(category, { expected: 0, expectedInPool: 0 });
     const poolTally = pool.byCategory.get(category)!;
     const partner = new ContextPartner({
@@ -332,6 +339,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       now,
       ...(options.planner ? { planner: new QueryPlanner({ seed: 1 }) } : {}),
       ...(reader ? { reader, onReader: (r: ReaderReport) => reports.push(r) } : {}),
+      ...(checker ? { checker } : {}),
     });
     // The ids in the pools reported for a session between two `reports` indexes.
     const pooled = (sessionId: string, from: number, to: number) =>
@@ -551,7 +559,7 @@ export function proxyOf(m: Metrics) {
  * Flags in `config` whose dependency the eval does not wire: each runs as if off. The lab's precedent is the funnel,
  * which refuses `askReader` without `--reader` (funnel.ts); cli.ts refuses that too and labels the rest.
  */
-export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boolean }): string[] {
+export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boolean; checker?: boolean }): string[] {
   const out: string[] = [];
   // The push's candidates (D237) run with no reader (D276): only the reader's own reading is unwired then.
   if (config.askReader && !wired.reader) {
@@ -563,5 +571,8 @@ export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boo
   }
   if (config.cards) out.push("cards (needs a card maker; the eval wires none, so no card is made or matched)");
   if (config.intent) out.push("intent (needs the card maker's intent requests; not wired)");
+  // The push check (D828) needs a checker on a model: `--live` wires one on the reader's model, as the servers do.
+  if (config.pushCheck && !wired.checker)
+    out.push("pushCheck (needs a checker: only `--live` wires one, so no push is checked)");
   return out;
 }

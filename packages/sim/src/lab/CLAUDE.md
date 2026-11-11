@@ -56,19 +56,25 @@ refuses `--suite`, `--days`, `--day`, `--variants`, `--templates`, `--dress`, `-
 role not on a `claude-*` model, and `--allow-logging` (real data stays off OpenRouter). Only `bun run pilot run`
 should start it on real data (docs/PILOT.md).
 
-**The push check in the lab (I3, N2, N5):** `--check live|replay --check-cache F` wires the check's model in the
-funnel (`--check-log F` writes each prompt and reply; a row's `pushCheckCalled` says whether the task made the call),
-pi-ab wires it for any arm with `pushCheck`. `--widen-table` (N2, ids, short worlds) or `--widen-hash` (N5, D530, item
-content, any world of the same seed; `n2-widen.ts`) is the `widen` dependency of an arm with `pushWiden`.
-`../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix; `days_hidden.py` resamples
-whole users. Recipes: docs/LAB.md 1f, 1g.
+**The push check in the lab (I3, N5, P2; in the default since D828):** `--check live|replay --check-cache F` wires the
+check's model in the funnel (`--check-log F` writes each prompt and reply; a row's `pushCheckCalled` says whether the
+task made the call); without `--check` the funnel wires no checker and the part is inert. pi-ab wires it for any arm
+with `pushCheck` (the default). `../../lab/n5/mix.py` pairs an arm against `eden` for cost and wall on the 1:1:8 mix;
+`days_hidden.py` resamples whole users; `../../lab/p2/packet_reread.py` reads the packet characters an agent re-reads
+over a day. The widening's table and flags were deleted (D828).
+
+**Reworded requests (P2, D820):** `--suite train-rw` runs train with each request reworded into an indirect form
+(`reword.ts`; ids `<suite>rw`, same worlds, cards and intent replayed); `../../lab/p2/compare_rw.py` pairs it with a
+train run. `gate-negatives.ts` holds log lines, chatter, statements and questions for the push's request gate;
+`../../lab/p2/calls.py` reads a ledger's check calls (tokens, p50, time to first token).
 
 **Offline retrieval screens over days (M3, M5; D911):** `days-calls.ts --corpus-dump F` (each user's items, redacted,
 1,200 characters), `--pool-diag F` rows with the planted id, request, template and pool ids, `--cards-live MODEL
 --cards-out F` (the shipped card coverage, carded live and recorded; needs the spend flags) and `--intent none`.
 `m5-ledger.ts extract` writes typed constraint records per item content (Haiku, pay once, `--prompt v2` the
 rejected variant); `../../lab/m5/m5_match.py` scores the no-model matcher at @5 against a pool dump (D910: stopped).
-`--widen-ranks` feeds only `pushWiden` under `pushCheck` on main (M3's `pushRetrieve` is on its unmerged branch).
+`--widen-ranks` is refused since D828 deleted the widened pool (an empty string stays in the replay key, so recorded
+runs still replay).
 
 Scorers: `packages/sim/lab/scripts/funnel-score.py`, `reader-score.py`, `haiku-bench.py` (run with `python3 -I`).
 Modal (D408): `packages/sim/modal/` (fan-out, card distillation, embedding screen; README there); its Python tests run
