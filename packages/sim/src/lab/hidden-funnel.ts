@@ -1501,7 +1501,16 @@ async function runSeed(
       ...(push ? { pushHandedN: push.handed.length } : {}),
       // `+stale` synth suites (D908 rule 1): the stale version's place in that pool, and whether it was handed.
       ...(push && task.stale
-        ? { stalePoolAt: push.pool.indexOf(task.stale), staleHanded: push.handed.includes(task.stale) }
+        ? {
+            stalePoolAt: push.pool.indexOf(task.stale),
+            staleHanded: push.handed.includes(task.stale),
+            // M3b's diagnosis (D914): the ids, to join the superseder's pair trace (M3B_SUPERSEDE_TRACE).
+            staleId: task.stale,
+            factId: id,
+            user: scope.userId,
+            pool: push.pool,
+            handed: push.handed,
+          }
         : {}),
       ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).

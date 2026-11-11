@@ -29,9 +29,9 @@ const NEW = item("new", "Harlow venue update", "The Harlow deposit dispute is se
 
 type Dep = (scope: { tenantId: string; userId: string }, older: ContextItem, newer: ContextItem) => number | null;
 
-function setup(config: Record<string, unknown>, dep?: Dep) {
+function setup(config: Record<string, unknown>, dep?: Dep, items: ContextItem[] = [OLD, NEW]) {
   const pools: PushPoolReport[] = [];
-  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => [OLD, NEW] };
+  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
   const p = new ContextPartner({
     sources: async () => [source],
     sourceMap: new SourceMap(),
@@ -83,6 +83,16 @@ describe("pushSupersede (M3, D908 rule 1)", () => {
     await say(p);
     expect(pools.at(-1)!.handed).toEqual([NEW.id]);
     expect(asked.every(([o, n]) => o === OLD.id && n === NEW.id)).toBe(true);
+  });
+
+  test("the newer item need not name the request's anchors (D914): it is asked about and replaces", async () => {
+    const plain = item("plain", "Venue update", "The deposit dispute is settled: payments resume this week.", 1);
+    const asked: string[] = [];
+    const dep: Dep = (_, o, n) => (asked.push(`${o.id}>${n.id}`), n.id === plain.id ? 0.9 : 0);
+    const { p, pools } = setup({ pushSupersede: 0.5 }, dep, [OLD, plain]);
+    await say(p);
+    expect(asked).toContain(`${OLD.id}>${plain.id}`);
+    expect(pools.at(-1)!.handed).not.toContain(OLD.id);
   });
 
   test("under the threshold, or with a model that throws or answers null, nothing is replaced (fail open)", async () => {

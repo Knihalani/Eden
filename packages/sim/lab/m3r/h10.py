@@ -62,6 +62,10 @@ def pairs_of(path, every=1):
     return P
 
 
+def read_pairs(path):
+    return [(x["a"], x["b"], x["y"]) for x in map(json.loads, open(path))]
+
+
 def load_teacher(path):
     ck = torch.load(path, map_location="cpu", weights_only=False)
     if "cfg" in ck:
@@ -238,7 +242,15 @@ def train(o):
     t0 = time.time()
     corpus = Corpus()
     tr = corpus.pairs(pairs_of(o.train))
+    weight = torch.ones(len(tr))
+    if o.extra_pairs:
+        # Engine-drawn pairs (h10_pool_pairs.py): the push pool's (handed, newer) pairs, which the M2 pairs alone
+        # under-represent (many same-topic negatives a request).
+        ex = corpus.pairs(read_pairs(o.extra_pairs))
+        tr = torch.cat([tr, ex])
+        weight = torch.cat([weight, torch.full((len(ex),), o.extra_weight)])
     dev = corpus.pairs(pairs_of(o.dev))
+    pool_dev = corpus.pairs(read_pairs(o.extra_dev)) if o.extra_dev else None
     evs = {os.path.basename(p): corpus.pairs(pairs_of(p)) for p in o.eval}
     extra = torch.empty(0, dtype=torch.long)
     if o.extra_texts:
@@ -284,7 +296,8 @@ def train(o):
             c = net.act(pre[: len(u)])
             logit = net.pair(c[inv[:, 0]], c[inv[:, 1]])
             y = P[:, 2].float()
-            loss = nn.functional.binary_cross_entropy_with_logits(logit, y)
+            wb = weight[bi]
+            loss = (nn.functional.binary_cross_entropy_with_logits(logit, y, reduction="none") * wb).sum() / wb.sum()
             if teacher is not None and o.kd > 0:
                 T = o.temp
                 soft = torch.sigmoid(tlog[bi] / T)
@@ -299,6 +312,10 @@ def train(o):
         m, _ = eval_student(net, corpus, dev)
         key = m["recall@p0.95"] + m["auc"]
         row = {"epoch": ep, "dev": m, "loss": round(float(loss.detach()), 4), "s": round(time.time() - t0)}
+        if pool_dev is not None:
+            mp, _ = eval_student(net, corpus, pool_dev)
+            key += mp["recall@p0.95"] + mp["auc"]
+            row["pool_dev"] = mp
         if best is None or key > best:
             best = key
             best_state = {k: v.clone() for k, v in net.state_dict().items()}
@@ -307,7 +324,9 @@ def train(o):
         print(json.dumps(row), flush=True)
     net.load_state_dict(best_state)
     res = {"variant": o.name, "cfg": net.cfg, "size_bytes": net.size_bytes(), "code_bytes": net.code_bytes(),
-           "dev": max(log, key=lambda r: r["dev"]["recall@p0.95"] + r["dev"]["auc"])["dev"]}
+           "dev": next(r for r in reversed(log) if r.get("best"))["dev"]}
+    if pool_dev is not None:
+        res["pool_dev"] = next(r for r in reversed(log) if r.get("best"))["pool_dev"]
     for name, P in evs.items():
         res[name] = eval_student(net, corpus, P)[0]
     res["seconds"] = round(time.time() - t0)
@@ -454,6 +473,9 @@ if __name__ == "__main__":
     a.add_argument("--bs", type=int, default=128)
     a.add_argument("--lr", type=float, default=2e-3)
     a.add_argument("--seed", type=int, default=7)
+    a.add_argument("--extra-pairs", default="", help="engine-drawn pairs to train on (h10_pool_pairs.py's jsonl)")
+    a.add_argument("--extra-weight", type=float, default=1.0)
+    a.add_argument("--extra-dev", default="", help="engine-drawn pairs held out for selection")
     a.add_argument("--save", default="")
     a.add_argument("--n", type=int, default=64, help="export: held-out pairs checked against PyTorch")
     o = a.parse_args()

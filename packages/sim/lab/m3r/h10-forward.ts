@@ -155,7 +155,7 @@ export function h10Network(dir: string) {
   const acc = new Float64Array(width);
 
   /** An item's stored code: d int8 values (q in [-127, 127]) or d signs (±1). Runs once an item, at ingest. */
-  const encode = (text: string): Int8Array => {
+  const encode = (text: string): Int8Array | Float32Array => {
     acc.fill(0);
     const ids = fastGrams(text);
     for (const g0 of ids.length ? ids : [0]) {
@@ -164,7 +164,8 @@ export function h10Network(dir: string) {
       const base = g * width;
       for (let k = 0; k < width; k++) acc[k]! += table[base + k]! * s;
     }
-    const out = new Int8Array(d);
+    // A float-code net (a full-width teacher) keeps tanh as is; the students store int8 or signs.
+    const out = code === "float" ? new Float32Array(d) : new Int8Array(d);
     for (let j = 0; j < d; j++) {
       let pre: number;
       if (proj) {
@@ -173,14 +174,15 @@ export function h10Network(dir: string) {
         for (let k = 0; k < width; k++) s += proj[base + k]! * acc[k]!;
         pre = s + encH[j]!;
       } else pre = acc[j]! * encS![j]! + encH[j]!;
-      out[j] = code === "bits" ? (pre >= 0 ? 1 : -1) : roundEven(Math.tanh(pre) * 127);
+      out[j] =
+        code === "bits" ? (pre >= 0 ? 1 : -1) : code === "float" ? Math.tanh(pre) : roundEven(Math.tanh(pre) * 127);
     }
     return out;
   };
 
   const ab = new Float32Array(d);
   /** The logit that `newer` replaces `older`, from their stored codes. Runs a pair. */
-  const replaces = (a: Int8Array, b: Int8Array): number => {
+  const replaces = (a: Int8Array | Float32Array, b: Int8Array | Float32Array): number => {
     for (let k = 0; k < d; k++) ab[k] = a[k]! * b[k]!;
     let y = outB;
     for (let o = 0; o < H; o++) {
@@ -213,7 +215,7 @@ if (import.meta.main) {
     for (const t of texts) net.encode(t);
     const reps = 20;
     let t0 = performance.now();
-    let codes: Int8Array[] = [];
+    let codes: (Int8Array | Float32Array)[] = [];
     for (let r = 0; r < reps; r++) codes = texts.map((t) => net.encode(t));
     const encodeUs = ((performance.now() - t0) * 1000) / (reps * texts.length);
     let sink = 0;
