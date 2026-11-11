@@ -3,7 +3,7 @@
  *
  *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
  *   POST /v1/ask       an AskRequest              → AskResponse
- *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376; the firewall, `actionCheck`)
+ *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
  *   POST /v1/whoami    {tenantId,userId,sessionId?} → {ok}  (checks the key, tenant and ids; changes nothing)
  *   POST /v1/explain   {tenantId,userId,sessionId} → {decisions}: the session's last decisions and why, no content
@@ -178,7 +178,7 @@ export function createHandler(
         return json(observed);
       }
       case "/v1/check": {
-        // The action firewall: a tool call the agent is about to make, checked against what is held (no model).
+        // The party check (D376): a tool call the agent is about to make, checked before it runs (no model).
         const checked = checkEvent(body);
         if (!checked.ok) return fail(400, checked.error);
         if (checked.value.kind !== "tool_call") return fail(400, "check takes a tool_call event");

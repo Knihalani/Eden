@@ -201,19 +201,14 @@ tools = guard_tools(eden, {"send_email": send_email, "book_meeting": book_meetin
   Haiku 5.5) it cut such attacks followed from 12 in 576 tasks to 0, with no finding on a legitimate call in 576
   control and neutral tasks (docs/research/a25-action-guard.md). It only works if you call `check` (`guardTools` does):
   Eden cannot see a call you do not send it.
-- The fuller action firewall, `actionCheck` (calendar clashes, conflicts, absences; a trial switch, off, D112's
-  trials table), needs the switch in the server's engine config; the grounds it reads are in the default.
 - Eden returns context as data and never "do not"; whether to hold the call, ask the user or go ahead is your policy.
   `heldResult` is one choice: hold the call and let the agent call again to go ahead.
-- The check makes no model call and no source call (4–5 ms p50 in the lab). It fails open: an error or a server without
-  the flag returns `proceed`.
-- Tool arguments are your user's data. Eden passes them through its secret gate first and leaves free-text fields out
-  of the check. The redacted argument words join the session's term vocabulary, whatever the answer, and the session
-  keeps a 24-hex digest of each call it answered with a finding; all of it is dropped with the session. The call is not
-  added to the session's window and nothing is sent anywhere. See [PRIVACY.md](PRIVACY.md) (the action firewall row).
-- **Measured (`actionCheck`)** beside a tools-only agent in one in-sample seed (unsafe actions 0.269 → 0.134); beside
-  Eden's full configuration its own effect was about one task in 134. Treat it as an option for tool-acting agents,
-  not a default.
+- The check makes no model call and no source call. It fails open: an error or a server with the check off returns
+  `proceed`.
+- Tool arguments are your user's data. The session keeps digests of the identifiers its packets showed, never the
+  identifiers, and the call is not added to the session's window; nothing is sent anywhere. See
+  [PRIVACY.md](PRIVACY.md) (the party check row). The fuller action firewall (`actionCheck`, D69) was deleted by
+  D815: an engine config that still names it stops the server (`unknown key`).
 
 ## Connect each user's own sources (D108)
 
@@ -669,8 +664,9 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
   call and run there too (D276): a request that acts or opens like an instruction gets up to five items to check, at $0.
 - Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.
 - `EDEN_ENGINE_CONFIG` takes a JSON file of settings over the default, usually one of `docs/profiles/minus-*.json`
-  ("default minus a part") for a comparison. New behaviour arrives as a trial switch with an owner and an end date
-  (DECISIONS.md, "Trial switches"); it becomes the default or is deleted. A deleted setting stops a server whose
+  ("default minus a part") for a comparison. New behaviour arrives as a trial switch
+  (DECISIONS.md, "Trial switches") and is decided by the session that opened it (D814); it becomes the default or is
+  deleted. A deleted setting stops a server whose
   file still names it (`unknown key`): drop it from the file. D225–D228 deleted `graph`, `graphMerge` and the other
   `graph*` keys, `askVerdicts`, `anticipate*` and `slowPathQueue`.
 
@@ -723,11 +719,6 @@ docs/research/c3-persist-frozen.md): synced again in 14.1-14.2 s instead of 42.9
 and 32.4 s instead of 121.8 s at the 3,000-item cap; listing calls 2,400 → 600 and 6,000 → 600. Live users are
 written at SIGTERM (within 1.5 s), warm users with them; a crash loses users used within the last 30 minutes (they
 re-sync), as before D862.
-
-Trial (D652, off): `EDEN_PERSIST_DISK_ONLY=1` also lets go of the memory's copy of a frozen user once their file
-is written, and reads the file back when they return (a thaw 6-9 ms slower at the median). A frozen user then holds
-0.33-0.38 MB of resident memory instead of 0.62 MB; on a fleet that is 1.2x more users when a twentieth are active
-and 1.06x at an eighth (docs/research/o2-users-per-box.md). A file that does not open: that user is synced again.
 
 What you take on: redacted item content of idle users is on disk until the user returns, is forgotten (`/v1/forget`
 deletes the file too) or the file is 7 days old; the key in the environment opens every file, so put the directory

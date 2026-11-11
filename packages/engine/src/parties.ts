@@ -15,6 +15,29 @@
 import { createHash } from "node:crypto";
 import { sanitizeForStore } from "@eden/redact";
 
+/** Free-mail domains name no organisation. */
+const FREE_MAIL = new Set(
+  "gmail googlemail icloud me mac outlook hotmail live msn yahoo aol proton protonmail hey fastmail gmx yandex".split(
+    " ",
+  ),
+);
+/** Labels of a domain that are not the organisation's name ("co" in "globex.co.uk"). */
+const SUFFIXES = new Set("com co org net gov edu ac io ai app inc ltd uk us de fr eu nz au ca".split(" "));
+
+/** A domain's organisation label: "umbrellahealth" for umbrellahealth.com, "globex" for mail.globex.co.uk. */
+export function orgLabel(domain: string): string | null {
+  const parts = domain.toLowerCase().split(".").filter(Boolean);
+  // The top-level label is never the name ("hooli.xyz" is Hooli); then any second-level one ("co" in ".co.uk").
+  if (parts.length > 1) parts.pop();
+  while (parts.length > 1 && SUFFIXES.has(parts.at(-1)!)) parts.pop();
+  const label = parts.at(-1);
+  if (!label || parts.length === 0 || FREE_MAIL.has(label) || label.length < 2) return null;
+  return label.replace(/[^a-z0-9]/g, "") || null;
+}
+
+/** Findings a session remembers (`partyFinding`'s keys), so the same parties added again proceed. */
+export const MAX_CHECKED = 32;
+
 /** One identifier a call or a packet carries: its kind, its normal form (the digest's input) and how it was written. */
 export interface Party {
   kind: "address" | "account";

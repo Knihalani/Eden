@@ -5,15 +5,16 @@
 # only thing that ever looks at them. Every file named exactly tsconfig.json outside archived/ is a program.
 #
 # TYPECHECK picks the checker:
-#   (unset) or tsc   TypeScript 5's tsc: the gate (`bun run check`) until TypeScript 7 is stable.
-#   tsgo             TypeScript 7's native preview (@typescript/native-preview, pinned): about 5x faster cold and
-#                    after an edit to a widely imported file (docs/TESTING.md); `bun run check:fast` uses it.
+#   (unset) or tsgo  TypeScript 7's native preview (@typescript/native-preview, pinned): the gate (`bun run check`)
+#                    since D816, about 5x faster than tsc cold and after an edit to a widely imported file
+#                    (docs/TESTING.md); every recorded parity run agreed with tsc.
+#   tsc              TypeScript 5's tsc, the gate before D816: for a second opinion.
 #   parity           Both, one after the other; fails, printing both outputs, when their errors (file, line, column
 #                    and code) differ. Run it after bumping either checker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-mode=${TYPECHECK:-tsc}
+mode=${TYPECHECK:-tsgo}
 case "$mode" in
   tsc | tsgo | parity) ;;
   *)
@@ -48,10 +49,13 @@ cache_dir=node_modules/.cache/tsc
 # and an unreadable one (copied mid-write) is treated as absent.
 seed_cache() {
   local here head wt sha info from= best= distance tmp
+  # The root program's build info of the checker this run uses (tsgo's has its own suffix, `check` below).
+  local root=tsconfig.tsbuildinfo
+  [ "$mode" = tsc ] || root=tsconfig.tsgo.tsbuildinfo
   here=$(pwd -P)
   head=$(git rev-parse HEAD 2>/dev/null) || head=
   while read -r sha wt; do
-    info=$wt/node_modules/.cache/tsc/tsconfig.tsbuildinfo
+    info=$wt/node_modules/.cache/tsc/$root
     [ -f "$info" ] || continue
     [ "$(cd "$wt" && pwd -P)" != "$here" ] || continue
     if [ "$sha" = "$head" ]; then
@@ -65,7 +69,7 @@ seed_cache() {
       distance=$((distance + 1))
     fi
     if [ -z "$from" ] || [ "$distance" -lt "$best" ] ||
-      { [ "$distance" = "$best" ] && [ "$info" -nt "$from/tsconfig.tsbuildinfo" ]; }; then
+      { [ "$distance" = "$best" ] && [ "$info" -nt "$from/$root" ]; }; then
       from=$wt/node_modules/.cache/tsc
       best=$distance
     fi
