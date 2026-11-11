@@ -270,13 +270,15 @@ SWITCH_VARIANTS = {
     "off-earn": {"sourceYieldEarn": False, "sourceYieldNames": 0, "sourceYieldEngage": False},
     # The same three switched on by name, as O1's runs 2 and 3 and its days check passed them (a no-op since D603).
     "earn2": {"sourceYieldEarn": True, "sourceYieldNames": 4, "sourceYieldEngage": True},
+    # Trial `leadShort` on (D855): the candidates' lead and the ask nudge in fewer words (P5's arm).
+    "short": {"leadShort": True},
 }
 # A user with about 1,000 connected sources, 5% of whose connectors send change notices (N1's shape, D509).
 SCALE = ["--noise-sources", "995", "--notify-share", "0.05"]
 
 
-def _bench(conditions, variants=(), more=()):
-    args = [*RECIPE, *more, "--conditions", ",".join(conditions), "--variants", "hidden,control"]
+def _bench(conditions, variants=(), more=(), tasks="hidden,control"):
+    args = [*RECIPE, *more, "--conditions", ",".join(conditions), "--variants", tasks]
     if variants:
         known = {**PART_VARIANTS, **SWITCH_VARIANTS}
         args += ["--variant-config", json.dumps({v: known[v] for v in variants}, separators=(",", ":"))]
@@ -304,6 +306,9 @@ PRESETS = {
                     "args": _bench(["eden", "eden~earn2"], ["earn2"], SCALE),
                     "about": "O1's runs 2 and 3 as they were paid (D601): the pre-D603 default against the three "
                              "switches on; on a tree at or after D603 both arms are the default"},
+    "bench-lead-short": {"kind": "pi-ab", "suites": "train",
+                         "args": _bench(["eden", "eden~short"], ["short"], tasks="hidden,control,neutral"),
+                         "about": "the default against leadShort on, with neutral tasks (P5, D855's pre-registered run)"},
 }
 
 
