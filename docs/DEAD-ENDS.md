@@ -148,6 +148,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D604 | Trial `syncSweepSpread`: an unused source is swept at its own point in the week | killed by D817 |
 | D606 | part of: no fix holds polls level, and `syncOwedPollMs` (built to test it) is deleted | because the item's source was not polled |
 | D910 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | stopped on its pre-registered rule |
+| D940 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | killed by D948: the clause asked for a lower bound above −1.5, so it fails (half-width 1.3, minimum detectable effect 1.8… |
+| D943 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | killed by D949: The re-test (rule in acacab82: fresh seeds 89–112, held-out families) read steady calls 11.50 → 3.46 a… |
 
 ## Ask
 
