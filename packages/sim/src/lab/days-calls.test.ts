@@ -47,6 +47,27 @@ describe("days-calls: connector calls over a user's days (A8)", () => {
     }
   });
 
+  // M3's corpus dump (D911): the user's items redacted and cut, and the planted rows' ids among them.
+  test("onCorpus dumps the user's items; planted rows carry ids the corpus holds and the pool's ids", async () => {
+    let items: { id: string; title: string; text: string }[] = [];
+    const rows: PlantedRow[] = [];
+    await daysCalls(41, {
+      days: 1,
+      push: "payload",
+      onCorpus: (_seed, xs) => void (items = xs),
+      onPlanted: (row) => void rows.push(row),
+    });
+    expect(items.length).toBeGreaterThan(500);
+    for (const it of items) expect(it.text.length).toBeLessThanOrEqual(1_200);
+    const ids = new Set(items.map((it) => it.id));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(ids.has(r.planted!)).toBe(true);
+      expect(r.template).toMatch(/^train\d\//);
+      expect(r.pool!.length).toBe(r.poolSize);
+    }
+  });
+
   test("signals are unchanged: a bare signal still doubts the source's copies, which are re-read", async () => {
     const signals = await daysCalls(41, { days: 2, push: "signals" });
     expect(fetchesAtRequest(signals.counts)).toBeGreaterThan(5);

@@ -1,7 +1,8 @@
 # M5: a standing-constraint ledger built when items arrive
 
-Status: 2026-11-11, branch `claude/m5-ledger`, session M5 (decisions D910–D911). **Stopped** (D910). Train suites only; held-out 17–19
-are not run or read. Anthropic cap $30 (ledger `.local/m5/ledger.jsonl`), Modal cap $100. Numbers marked **[EST]**
+Status: 2026-11-11, branch `claude/m5-ledger`, session M5 (decisions D910–D911). **Stopped** (D910). Train suites
+only; held-out 17–19 are not run or read. Anthropic cap $30 (ledger `.local/m5/ledger.jsonl`), Modal cap $100.
+Numbers marked **[EST]**
 are arithmetic or judgement; every other number comes from a command in this note.
 
 ## 0. The idea, and why D526 does not already answer it
@@ -16,8 +17,10 @@ pool's candidates.
 D526 asked "would this item change an action?" at ingest and stored keys; look-alikes (a real constraint about
 another venue, person or day) passed as often as facts. The ledger answers the three look-alike kinds with fields
 instead of a verdict: an all-clear twin is a `clears` record (never matched; it supersedes the `blocks` record it
-answers), another day is a dated record whose days miss the request's named days, another venue or person is an
-exact-anchor miss (the request must name one of the record's specific anchors as whole words).
+answers), another day is a dated record whose days miss the explicit dates the request names (weekday names and
+"tomorrow" are not read), another venue or person is an exact-anchor miss (the request must name one of the record's
+specific anchors as whole words). As frozen, the last rule binds only the anchor score: a record's plain things also
+count when it names another person or venue (§2), which the fit split preferred.
 
 ## 1. Pre-registration (committed before any held-out result is read)
 
@@ -36,10 +39,14 @@ exact-anchor miss (the request must name one of the record's specific anchors as
 
 Prompt v1 (`LEDGER_VERSION` 1 in `m5-ledger.ts`), matcher defaults of `m5_match.py` at this commit: a record matches
 at score ≥ 2 (a person's name token 2, an organisation 2.5 or its rarest token 2, a reference 4, each plain thing the
-request says 2; anchors in more than 5% of the user's records, the user's own name, do not count); `clears` records
-other than kind `done`, and `blocks` records a later `clears` shares a specific anchor and a thing with, never match;
-a dated record whose days miss every day the request names is rejected; the first two matches go before the shipped
-pool. Fit split (train1–4 days requests): facts @5 186 → 205 of 276, decoys @5 211 → 211 of 285. Prompt v2 (roles,
+request says 2; a person also matches a request word of four or more letters that begins the name, "Chris" for
+"Christopher"; anchors in more than 5%, and at least 5, of the user's records, the user's own name, do not count);
+things count for every live record, also one naming another person or venue (`--strict` limits them to records whose
+specific anchors the request names or that have none: fit facts 186 → 194, decoys 211 → 211); `clears` records other
+than kind `done`, and `blocks` records a later `clears` shares a whole anchor string and a thing with, never match; a
+dated record whose days miss every explicit date the request names is rejected; the first two matches go before the
+shipped pool. Fit split (train1–4 days requests): facts @5 186 → 205 of 276 (21 in, 2 out of the first five),
+decoys @5 211 → 211 of 285 (net: 3 in, 3 out). Prompt v2 (`LEDGER_SYSTEM_V2`, `--prompt v2`; roles,
 up to 8 broader request words in `things`; $1.72 for the days corpora) was worse on the fit split (best 186 → 196,
 decoys 211 → 220): broader words bring the twins back (D526's failure), and it was rejected before any held-out read.
 
@@ -62,8 +69,9 @@ matcher): fit facts @5 403 → 417 of 512, decoys 371 → 380; held-out families
 held); the shipped push already sends a packet on about 97% of them, so neutral packets would not rise in count, only
 change content.
 
-**Why it falls short.** The ledger is precise: on the fit split it moved no decoy (211 → 211), because the all-clear
-twin is written as a `clears` record and another day is a date miss. What it lacks is reach. Of the 90 fit facts the
+**Why it falls short.** The ledger is precise: on the fit split decoys @5 did not move net (211 → 211, 3 in and 3
+out), because the all-clear twin is written as a `clears` record and another day is a date miss. What it lacks is
+reach. Of the 90 fit facts the
 shipped pool misses at @5, 85 have a record and about 20 match the request's words; the rest need a leap the
 request never states ("Dubai" for a pause on international trips, "£120k" for a £50k signing limit, "our usual
 babysitter" for Megan's exams, "Saturday 31 Oct" for a provider's maintenance window). Widening the records' words
@@ -72,8 +80,9 @@ A symbolic match over model-written records reaches the facts that share an anch
 shipped pool mostly reaches already.
 
 **Costs (measured):** extraction $0.000035 an item (Haiku 5.5 direct, no thinking, 15 items a call; 46,859 days
-items read for $1.72 with prompt v2 and $1.63 with v1; the short worlds' 6,891 for $0.31), p50 1.1 s a call; Batch pricing would halve it
-**[EST]**. The sim's users get about 25 dated items a day (w41: 1,215 dated items over 61 days, peak 40), so about
+items read for $1.72 with prompt v2 and $1.63 with v1; the short worlds' 6,891 for $0.31), p50 1.1 s a call; Batch
+pricing would halve it **[EST]**. The sim's users get about 25 dated items a day (w41: 1,215 dated items over 61
+days, peak 40), so about
 **$0.0009 a user a day** (300 items a day would be $0.011) **[EST from the measured rate]**. Request time: 3.3 ms in
 unoptimised Python over a 266-record ledger (anchors recomputed per request); a TypeScript matcher with the anchors
 built at ingest would be well under that **[EST]**. Records: about 0.18 an item.

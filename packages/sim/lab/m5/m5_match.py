@@ -1,14 +1,18 @@
-"""M5 (D910-D919, docs/research/m5-ledger.md): the standing-constraint ledger matched against a request with no model.
+"""M5 (D910-D911, docs/research/m5-ledger.md): the standing-constraint ledger matched against a request with no model.
 
 Reads a ledger (`m5-ledger.ts extract`: per item content hash, typed records), a corpus dump and a pool dump
 (`days-calls.ts --corpus-dump --pool-diag`, or the funnel's `--corpus-dump --pool-dump`), and for each request:
 
   1. the user's live records: effect "blocks", or kind "done" (an action already taken blocks doing it again); a
      blocks record is dropped when a later "clears" record of the same user shares its anchors (supersession);
-  2. a record matches when the request names one of its specific anchors (a person, an organisation or place, a
-     reference) exactly, as whole words; anchors common across the user's records (the user's own name) do not count;
-  3. a dated record whose days the request's explicit dates miss is rejected (another day); a record whose
-     organisations include one the request does not name but a sibling anchor it does is kept;
+  2. a record scores 2 a person's name token the request says (or a request word of 4+ letters that begins it:
+     "Chris" for "Christopher"), 2.5 an organisation (2 its rarest token), 4 a reference, and 2 each plain thing the
+     request says; anchors in more than 5% (and at least 5) of the user's records, the user's own name, do not count;
+     it matches at score >= 2. By default (as frozen and read) a thing counts for any live record, even one naming
+     another person or venue; `--strict` counts things only for records whose specific anchors the request names or
+     that have none (the anchor-gated variant: fit facts @5 194, not 205);
+  3. a dated record whose days miss every explicit date the request names (day and month) is rejected; weekday names
+     and "tomorrow" are not read;
   4. matches are ranked by anchor weight (rarity) and put before the shipped pool, at most `--front` of them, and the
      first five are the packet's candidates (@5).
 
@@ -56,7 +60,7 @@ def req_dates(text, year):
         out.append((MONTHS[m.group(1)], int(m.group(2))))
     res = []
     for mo, d in out:
-        # The request names no year: the one nearest the user's clock (`year` is the world's).
+        # The request names no year: both the world's year and the next are accepted.
         for y in (year, year + 1):
             try:
                 res.append(date(y, mo, d))
@@ -96,6 +100,7 @@ class Ledger:
             ts = [t for t in toks(a) if t not in STOP and t not in self.common and len(t) > 1]
             for t in ts:
                 out.append(("who", (t,), 2.0))
+        # `roles`: written only by the rejected prompt v2 (LEDGER_SYSTEM_V2); v1 records have none.
         for a in r.get("roles", []):
             ts = tuple(stem(t) for t in toks(a) if t not in STOP and t not in self.common)
             if ts:
@@ -132,7 +137,8 @@ def supersede(recs):
             if j == i:
                 continue
             ca = {fold(x) for x in c.get("who", []) + c.get("org", []) + c.get("ref", [])} - common
-            if a & ca and th & {fold(x) for x in c.get("things", [])} and (c.get("said") or "") >= (r.get("said") or ""):
+            later = (c.get("said") or "") >= (r.get("said") or "")
+            if a & ca and th & {fold(x) for x in c.get("things", [])} and later:
                 gone = True
                 break
         if not gone:
@@ -186,9 +192,8 @@ def match(led, request, year, min_score=2.0, things_w=1.0, general=True, day_w=0
             if ok:
                 s += w
                 hit.append(" ".join(ts))
-        # A record about a specific person, organisation or reference the request does not name is about someone or
-        # something else (D526's look-alikes): its plain things alone never match it. A general rule (no specific
-        # anchor beyond the user's own) matches on its things.
+        # With `loose` (the frozen default) things count for every live record; without it a record about a person,
+        # organisation or reference the request does not name (D526's look-alikes) cannot match on things alone.
         if general and (s > 0 or not anchors or loose):
             th = thing_hits(r, rstems)
             s += things_w * len(th)
@@ -263,7 +268,8 @@ def main():
         fold_ = "held" if tmpl.split("/")[0] in o.heldout.split(",") else "fit"
         if o.only != "all" and fold_ != o.only:
             continue
-        m, why = match(worlds[wk], p["request"], o.year, o.min_score, o.things_w, not o.no_general, o.day_w, not o.strict)
+        m, why = match(worlds[wk], p["request"], o.year, o.min_score, o.things_w, not o.no_general, o.day_w,
+                       not o.strict)
         front = [i for i in m[: o.front]]
         arm = front + [i for i in pool if i not in front]
         g = agg[(fold_, kind)]
@@ -275,7 +281,8 @@ def main():
         g["fires"] += bool(front)
         g["fires_new"] += bool(set(front) - set(pool[:5]))
         if o.show and kind in o.show.split(",") and (x in pool[:5]) != (x in arm[:5]):
-            print(f"[{kind} {'+' if x in arm[:5] else '-'}] {tmpl} | {p['request'][:100]} | {why.get(x) or [why.get(i) for i in front]}")
+            sign = "+" if x in arm[:5] else "-"
+            print(f"[{kind} {sign}] {tmpl} | {p['request'][:100]} | {why.get(x) or [why.get(i) for i in front]}")
     print(f"items without a ledger line: {missing}")
     for k in sorted(agg):
         g = agg[k]

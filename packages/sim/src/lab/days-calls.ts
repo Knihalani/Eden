@@ -80,15 +80,18 @@ export interface DaysCallsOptions {
   noiseVocab?: number;
   /**
    * `--pool-diag FILE` (O3, D712): one row per hidden or control request saying where its planted item was in the
-   * push's pool (`onPushPool`): ids and flags only.
+   * push's pool (`onPushPool`): ids and flags, and since M3 the request's text and template and the pool's ids.
    */
   onPlanted?: (row: PlantedRow) => void;
   /**
-   * `--corpus-dump FILE` (M3, D900): the user's world as its sources list it and the cache holds it (redacted), one
+   * `--corpus-dump FILE` (M3, D900 on the unmerged M3 branch; D911): the user's world as its sources list it and the cache holds it (redacted), one
    * line a user, for offline retrieval screens. Simulated items only.
    */
   onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
-  /** `--widen-ranks FILE` (M3, D901): per user, the `widen` dependency `pushRetrieve` reads (`widenRanks`). */
+  /**
+   * `--widen-ranks FILE` (M3; D901 is on the unmerged claude/m3-retriever branch): per user, the `widen` dependency.
+   * On main only `pushWiden` under `pushCheck` reads it (`--set`), so with the default config it does nothing.
+   */
   widen?: (seed: number) => (scope: unknown, request: string, k: number) => Promise<readonly string[]>;
 }
 
@@ -100,7 +103,7 @@ const normRequest = (s: string) =>
     .trim();
 
 /**
- * M3 (D901): a retriever's ranks precomputed offline (`m3r/widen_table.py`: per seed and request, the user's item ids
+ * M3 (D901, unmerged branch): a retriever's ranks precomputed offline (M3's `m3r/widen_table.py`, not on main: per seed and request, the user's item ids
  * a model ranks first, from a fold that never trained on the request's template), served as the `widen` dependency.
  * Lab only; the push makes no call.
  */
@@ -139,7 +142,7 @@ export interface PlantedRow {
   pushed: boolean;
   got: boolean;
   today: boolean;
-  /** M3 (D900): the planted item's id, the request's text and template, and the pool's ids in order. */
+  /** M3 (D900, unmerged branch; D911): the planted item's id, the request's text and template, and the pool's ids in order. */
   planted?: string;
   request?: string;
   template?: string;
@@ -550,9 +553,10 @@ if (import.meta.main) {
   // replays no requests file (M3: only the requests the run's own card calls wrote, the shipped coverage).
   const intentArg = opt("intent", INTENT_PATH);
   const intentFiles = intentArg === "none" ? [] : intentArg.split(",");
-  // `--cards-live MODEL --cards-out FILE` (M3, D900): items the cards file does not hold are carded live, as the
-  // shipped enricher asks for them (its coverage, its requests), and recorded to FILE for later replay. A `claude-*`
-  // model needs `--spend-ledger` and `--spend-cap` (D97).
+  // `--cards-live MODEL --cards-out FILE` (M3, D900 on the unmerged M3 branch; D911): items the cards file does not
+  // hold are carded live, as the shipped enricher asks for them (its coverage, its requests), and recorded to FILE for
+  // later replay. A `claude-*` model needs `--spend-ledger` and `--spend-cap` (D97). Without `--cards`, FILE is also
+  // read first, so a re-run replays the earlier run's cards instead of carding afresh.
   const cardsLive = opt("cards-live", "");
   const cardsOut = opt("cards-out", "");
   if (cardsLive && !cardsOut) throw new Error("--cards-live needs --cards-out FILE");

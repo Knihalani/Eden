@@ -40,7 +40,8 @@ if __name__ == "__main__":
     if o.train_out:
         with gzip.open(o.train_out, "wt") as g:
             for k, w in enumerate(m2):
-                own = [{"id": f"{w['id']}:{i['id']}", "title": i["title"], "text": i["text"][:1200]} for i in w["items"]]
+                own = [{"id": f"{w['id']}:{i['id']}", "title": i["title"], "text": i["text"][:1200]}
+                       for i in w["items"]]
                 tasks = [{"suite": "m2", "template": t["family"], "request": r["text"], "pos": f"{w['id']}:{t['fact']}",
                           "decoy": f"{w['id']}:{t['decoy']}"} for t in w["tasks"] for r in t["requests"]]
                 g.write(json.dumps({"seed": k, "items": bases[k % len(bases)] + own, "tasks": tasks}) + "\n")
@@ -50,7 +51,8 @@ if __name__ == "__main__":
         with gzip.open(o.eval_out, "wt") as g:
             for k, w in enumerate(m2):
                 items = [{"id": i["id"], "text": f"{i['title']}\n{i['text'][:1200]}"} for i in bases[k % len(bases)]]
-                items += [{"id": f"{w['id']}:{i['id']}", "text": f"{i['title']}\n{i['text'][:1200]}"} for i in w["items"]]
+                items += [{"id": f"{w['id']}:{i['id']}", "text": f"{i['title']}\n{i['text'][:1200]}"}
+                          for i in w["items"]]
                 reqs = []
                 for t in w["tasks"]:
                     for r in t["requests"]:
