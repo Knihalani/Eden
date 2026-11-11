@@ -562,6 +562,14 @@ packet or ask bytes by lexical anchoring drop planted facts or move the bytes in
 bytes are what recall costs. An agent with a fixed prompt under the provider's cache minimum (512 tokens on Haiku 5.5)
 pays its whole prompt as a cache write on every task; Pi's minimal Eden agent did (D260, D271).
 
+**What the packet costs the agent now (E1, D1030–D1032; docs/research/e1-lean.md; Anthropic-direct lab figures).** With
+the push check in the default, over a user's days (`pi-ab --days 8`, Haiku 5.5 agent, users 105–120): 0.78–0.80
+packets a task of 516–544 B (206–223 B fixed envelope and lead, 310–321 B items), and the day's re-read packets about
+950 of the agent's 5,600 prompt tokens a task (17%, 4 characters a token **[EST]**). Saying the lead once a session cut
+the fixed bytes 32% and the agent's prompt tokens about 93 a task (−1.7%; $ −0.002 to −0.004 per 1,000 tasks), and
+dropping item boilerplate 3% of item bytes; both were deleted for their hidden-fact readings (D1031, D1032). No no-model
+cut of the packet is left that moves the agent's bill by more than a few percent: the items are what recall costs.
+
 ## The push check (I3, `pushCheck`, a trial; D500–D504)
 
 A per-push model call, so it needs this estimate (CLAUDE.md, "model last"). One Haiku 5.5 call a push over the whole
