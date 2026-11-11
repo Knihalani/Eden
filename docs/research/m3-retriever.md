@@ -50,6 +50,23 @@ memory a user at 3,000 items on one CPU core, and ingest cost an item. On a go: 
 decoys against main's 315/276) and `days-calls` against D712's misses, then a pre-registered Pi pair (short and
 days) behind a trial switch.
 
+### 1b. Amendment (the parent's review, committed before any result against these bars was read)
+
+The parent approved §1 with changes, which replace §1's single bar:
+
+- **Two primary bars; either passes**, on the held-out families' (train5–6) days requests:
+  1. **@15 against the no-intent lexical path:** hidden recall@15 at least +15 points (§1's bar, its decoy clause
+     included: decoys at @15 rise by no larger ratio than facts).
+  2. **@5 against the shipped default:** hidden recall@5 at least +10 points over the pool of the shipped pipeline
+     (lexical plus the intent requests its own card calls write, the shipped coverage: `days-calls.ts --cards-live
+     claude-haiku-5-5 --intent none`, cards recorded; not the full replay), with the same decoy clause at @5.
+- **Promotion needs a gain over the shipped default on Pi**, not only over the lexical path. A second route is the
+  $0 stand-in: if a model matches shipped intent's recall at $0 a request, it can replace or cut intent calls, and
+  the saving is reported explicitly.
+- The held-out split stays by family (train5–6, second fold train1–2). Results are also reported on M2's synthetic
+  held-out families when its data lands.
+- The reranker over the lexical top 50 alone is dropped (its ceiling, §1).
+
 ## 2. The pipeline
 
 - `packages/sim/src/lab/m3-export.ts`: the training worlds.

@@ -9,7 +9,8 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]]
+ *     [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]|none]
+ *     [--cards-live MODEL --cards-out FILE --spend-ledger FILE --spend-cap USD]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
@@ -24,12 +25,16 @@ import {
   CardEnricher,
   ContextPartner,
   ItemCache,
+  ModelCardMaker,
   sanitizeItem,
-  type EngineConfig, type PushPoolReport } from "@eden/engine";
+  type EngineConfig,
+  type PushPoolReport,
+} from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
 import { DiskCardMaker, INTENT_PATH } from "./cards-disk";
+import { keyFor, labAccess, labModel } from "./free";
 import { noiseSources } from "./noise-sources";
 import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
@@ -430,15 +435,34 @@ if (import.meta.main) {
   const recap = opt("recap-notice", "push");
   if (!["push", "signal", "none"].includes(recap)) throw new Error("--recap-notice must be push, signal or none");
   const cardsFile = opt("cards", "");
-  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one.
-  const intentFiles = opt("intent", INTENT_PATH).split(",");
+  // `--intent` (O3, D713): the requests files replayed beside the cards, in place of the checked-in one; `none`
+  // replays no requests file (M3: only the requests the run's own card calls wrote, the shipped coverage).
+  const intentArg = opt("intent", INTENT_PATH);
+  const intentFiles = intentArg === "none" ? [] : intentArg.split(",");
+  // `--cards-live MODEL --cards-out FILE` (M3, D900): items the cards file does not hold are carded live, as the
+  // shipped enricher asks for them (its coverage, its requests), and recorded to FILE for later replay. A `claude-*`
+  // model needs `--spend-ledger` and `--spend-cap` (D97).
+  const cardsLive = opt("cards-live", "");
+  const cardsOut = opt("cards-out", "");
+  if (cardsLive && !cardsOut) throw new Error("--cards-live needs --cards-out FILE");
+  const liveMaker = cardsLive
+    ? new ModelCardMaker(
+        labModel(labAccess(argv, [cardsLive]), { apiKey: keyFor(cardsLive), model: cardsLive }, "eden.cards"),
+      )
+    : undefined;
   const o: DaysCallsOptions = {
     days: Number(opt("days", "8")),
     push,
     ask: argv.includes("--ask"),
     recapSignal: recap === "signal",
     recapSilent: recap === "none",
-    cards: cardsFile ? new DiskCardMaker(cardsFile, undefined, { requests: intentFiles }) : null,
+    cards:
+      cardsFile || liveMaker
+        ? new DiskCardMaker(cardsFile || cardsOut, liveMaker, {
+            ...(cardsOut ? { out: cardsOut } : {}),
+            requests: intentFiles,
+          })
+        : null,
     config: JSON.parse(opt("set", "{}")) as Partial<EngineConfig>,
     notifyShare: parseNotifyShare(opt("notify-share", "")),
     noiseSources: Number(opt("noise-sources", "0")),
@@ -464,7 +488,7 @@ if (import.meta.main) {
   const set = Object.keys(o.config!).length ? `, set ${JSON.stringify(o.config)}` : "";
   const label =
     `push ${push}${o.recapSignal ? " (recap: bare signal)" : ""}${o.ask ? ", one ask a request" : ""}` +
-    `${cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
+    `${cardsLive ? `, cards live (${cardsLive}, recorded)` : cardsFile ? ", cards replayed" : ", no cards"}, night ${o.nightMs! / 3_600_000} h${set}`;
   console.log(`days-calls: seeds ${seeds.join(",")}, ${o.days} days, ${requests} requests, ${label}`);
   console.log("phase     source    op       calls   per request  per user-day");
   // With noise connectors, one row for all of them a phase and operation: a thousand rows say nothing more.
