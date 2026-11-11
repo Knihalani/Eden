@@ -60,3 +60,33 @@ and longtail, seeds 41–44, hidden, control and neutral; every hidden answer an
 **Decision.** Both pass: `cardsRequestsFix` joins `DEFAULT_CONFIG` (D814), with COST-MODEL updated (the re-ask's
 calls and the fixed prompt's longer output) and the new funnel baseline recorded where CLAUDE.md quotes 281/264.
 Either fails: the switch, its code and its tests are deleted, and the form-3 lines leave the shipped file.
+
+## 3. Results so far, and an addendum (before the Pi pair's first call)
+
+**Caches** (at c05fe0be; `.local/h2b/regen-{1,2,3}.json`): 84 worlds, 581 card calls (17 of them re-asks, 2.9%),
+$0.63. Of 9,376 items sent, 9,165 got requests (97.7%). 9,623 form-3 lines are now in `cards-shipped.jsonl.gz` after
+its 11,024 shipped-form lines (longtail's first, then train's, so train's win on shared items, as before).
+
+**Funnel** (shipped coverage, train5, train6, train5r, train6r and longtail, seeds 41–44: 608 hidden, 608 control,
+608 neutral; the pre-registration's "n 1,088" was an arithmetic slip, the families hold 608):
+
+| | default | `cardsRequestsFix` | task by task |
+| --- | --- | --- | --- |
+| Hidden surfaced | 468 | **513 (+45)** | +53 −8 |
+| Decoys surfaced | 385 | **396 (+11)** | +27 −16 |
+| Neutral given a packet | 553 | 548 | |
+| Card calls (replayed); re-asks | 949; 0 | 1,534; 574 | |
+| Items given requests | 4,631 | 4,714 | |
+
+By family, hidden rose in all five (train5 96 → 108, train5r 92 → 104, train6 112 → 121, train6r 108 → 116, longtail
+60 → 64); decoys rose in the four train families (+4 to +6) and fell on longtail (58 → 50).
+
+**The pre-registered funnel bar fails on its second clause: decoys rose 11.** By §2's rule the trial is deleted. The
+574 re-asks in replay are items the funnel's per-task worlds send that the recording's worlds did not; they replay
+nothing and cost nothing.
+
+**Addendum.** The trade is the shape D829 accepted for `pushIndirect` (more facts for a small rise in look-alikes,
+which the funnel overstates: live agents reject most of them, LAB.md). So it goes to the parent, and the Pi pair of
+§2 runs now as the information for that call, unchanged in shape and cap. It decides nothing by itself: unless the
+parent explicitly accepts the funnel's +11 decoys, the trial is deleted whatever Pi reads. If the parent accepts,
+Pi's two clauses decide (hidden's clustered lower bound > −1.5, Sonnet-confirmed concerns not up).
