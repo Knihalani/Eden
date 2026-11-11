@@ -272,15 +272,19 @@ export const TENANT_GUIDE =
 /** The agent's system prompt: who it works for, when it is, and (with any tool) to look things up. */
 export function systemPrompt(
   world: World,
-  options: { lookups: boolean; data: boolean; act?: boolean; tenant?: boolean },
+  /** `pushed` (P3's `hits` arm): the user's data comes only in context before the request, with no tool to look. */
+  options: { lookups: boolean; data: boolean; act?: boolean; tenant?: boolean; pushed?: boolean },
 ): string {
   const today = new Date(world.now).toUTCString().replace(" GMT", " UTC");
   return (
     `You are the personal assistant of ${world.user.full} (${world.user.email}). Now: ${today}. ` +
-    (options.data
-      ? "Use the tools to look up the user's own mail, calendar, documents, CRM and chat when the request " +
-        "depends on them. "
-      : "") +
+    (options.pushed
+      ? "Items from the user's own mail, calendar, documents, CRM and chat may be given to you as context before " +
+        "the request; use them when the request depends on them. "
+      : options.data
+        ? "Use the tools to look up the user's own mail, calendar, documents, CRM and chat when the request " +
+          "depends on them. "
+        : "") +
     "Be concise, and state the specific details you rely on (names, times, places, amounts, references)." +
     // The hidden-context requests are actions: with no tool to act, the agent says what it would do; with the action
     // tools (`--act`, act.ts), it acts and reports what it did.

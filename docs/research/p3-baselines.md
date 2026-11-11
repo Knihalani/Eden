@@ -1,6 +1,7 @@
 # P3: baselines (a stronger agent, plain retrieval, the pointer) and weak points 2 and 6
 
-Status: 2026-11-11, session P3, branch `claude/p3-baselines`. Decisions D830–D839. Train suites only (there is no
+Status: 2026-11-11, session P3, branch `claude/p3-pointer` (it holds `claude/p3-baselines` and `claude/p3-alias`).
+Decisions D830–D835. Train suites only (there is no
 unread blind suite, D802). Paid calls go to the Anthropic API with `HAIKU_API_KEY` through the lab provider (D97):
 every live figure here is an **Anthropic-direct lab figure** on simulated worlds. Numbers marked **[EST]** are
 arithmetic or judgement; every other number comes from a command named beside it. Motivation:
@@ -266,3 +267,18 @@ Haiku 5.5 as the agent, Sonnet's grade (`b-short.txt`, `b-days.txt`, `b-mix.txt`
 - **Cost.** One request a session `hits` is $0.10 per 1,000 tasks cheaper and 0.68 s faster than `eden`: Eden's
   agent calls `ask_context` (0.64 tool calls a task) and takes half a model turn more. Over days `hits` is $0.017 per
   1,000 dearer: five items on every request stay in the day's transcript.
+
+## 7. Pre-registration: (b2) the `hits` arm again, with its own prompt and Eden's compaction (D831)
+
+Written after (b)'s results and the review of this branch, before any call of this run. The review found two
+differences between `hits` and its design: its system prompt said "Use the tools to look up…" though the arm has no
+tool (`systemPrompt`'s `data` sentence, true for `eden`, which has `ask_context`), and its excerpts were compacted
+without `DEFAULT_CONFIG`'s `densePacket`, `compactParts` and the user's own name. Both are fixed: `hits` now gets "Items
+from the user's own mail, calendar, documents, CRM and chat may be given to you as context before the request; use
+them when the request depends on them." and Eden's compaction. The item ids handed are unchanged.
+
+- **Runs:** `b2-short-S` (S = 41, 42; `--conditions hits --variants hidden,control,neutral`, `--budget 0.5`) and
+  `b2-days-S` (S = 45..60; `--conditions hits --days 4 --day-size 16`, `--budget 0.3`), on the same tasks and users as
+  (b), two processes at a time; hidden answers and concerns regraded by Sonnet. Cost [EST] about $1.
+- **Read and rule:** as (b), with `eden` taken from (b)'s runs and paired task by task (the same seeds, plans and
+  worlds). (b2) replaces (b)'s `hits` figures in D831 whichever way it reads; (b)'s are kept in §6 as run.

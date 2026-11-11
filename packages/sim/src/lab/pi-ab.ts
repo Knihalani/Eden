@@ -1335,7 +1335,9 @@ async function runWorld(
         initialState: {
           systemPrompt: systemPrompt(world, {
             lookups: LOOKUPS,
-            data: useTools || useEden || hits,
+            data: useTools || useEden,
+            // `hits` (P3): its items come only in the packet; the prompt names no tool it does not have.
+            pushed: hits,
             act,
             tenant: TENANT_PROMPT,
           }),

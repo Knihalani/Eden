@@ -1,8 +1,8 @@
 /**
  * P3's `hits` arm (weak-points-1111 §3 B10): the plain retrieval baseline Eden's selection is measured against. On
  * every request, the `k` best BM25 hits for the request's own words over every item the user's sources hold, handed to
- * the agent in Eden's candidates packet (the same envelope, lead, excerpt length and byte cap), with nothing of Eden's
- * logic: no cards, intent requests, gate, constraint test, settled cut, not-twice ledger, ask tool or silence. The
+ * the agent in Eden's candidates packet (the same envelope, lead, excerpt length, byte cap and compaction), with
+ * nothing of Eden's logic: no cards, intent requests, gate, constraint test, settled cut, not-twice ledger, ask tool or silence. The
  * ranking is `SimIndex`'s ranked search (the one the `tools` arm's sources answer with), over all sources at once.
  *
  * So `hits` against `eden` reads what Eden's choice of items and of when to speak is worth beyond "push any retrieval",
@@ -56,6 +56,10 @@ export function hitsPacket(
       focus,
       itemBytes: ITEM_BYTES,
       year: new Date(world.now).getUTCFullYear(),
+      // As `DEFAULT_CONFIG` renders candidates: `densePacket`, `compactParts`, and the user's own name shortened.
+      dense: true,
+      split: true,
+      self: world.user.full,
     }),
     citations: items.map((i) => ({ itemId: i.id, sourceId: i.sourceId, title: i.title })),
   };
