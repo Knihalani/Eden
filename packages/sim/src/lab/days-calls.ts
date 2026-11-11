@@ -9,18 +9,23 @@
  *
  *   bun packages/sim/src/lab/days-calls.ts [--seeds 41,42] [--days 8] [--push none|signals|payload] [--ask]
  *     [--cards FILE] [--recap-notice push|signal|none] [--gap-min 10] [--night-h 2] [--set JSON] [--json FILE]
- *     [--pool-diag FILE] [--intent FILE[,FILE]]
+ *     [--pool-diag FILE] [--corpus-dump FILE] [--intent FILE[,FILE]]
  *
  * `--recap-notice signal` announces the recap as pi-ab did before D272: a bare `sourceChanged` whatever `--push` says.
  * `--cards FILE` replays cards and the checked-in intent requests with no live call (a miss gets no card); without it
  * the no-key path. `--night-h 20` with the default day sizes puts about 24 hours of Eden's clock in a day (pi-ab's
  * 2 h nights compress eight days into about 36 hours, so a daily sweep runs about once a user).
  */
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import type { AgentEvent } from "@eden/protocol";
-import { CardEnricher, ContextPartner, ItemCache, type EngineConfig, type PushPoolReport } from "@eden/engine";
+import {
+  CardEnricher,
+  ContextPartner,
+  ItemCache,
+  sanitizeItem,
+  type EngineConfig, type PushPoolReport } from "@eden/engine";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
 import { applyNotifyShare, parseNotifyShare, recapNotice, sourceFields, type PushMode } from "./connector-options";
@@ -66,6 +71,11 @@ export interface DaysCallsOptions {
    * push's pool (`onPushPool`): ids and flags only.
    */
   onPlanted?: (row: PlantedRow) => void;
+  /**
+   * `--corpus-dump FILE` (M3, D900): the user's world as its sources list it and the cache holds it (redacted), one
+   * line a user, for offline retrieval screens. Simulated items only.
+   */
+  onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
 }
 
 /** Where a request's planted item was (`DaysCallsOptions.onPlanted`). */
@@ -88,6 +98,11 @@ export interface PlantedRow {
   pushed: boolean;
   got: boolean;
   today: boolean;
+  /** M3 (D900): the planted item's id, the request's text and template, and the pool's ids in order. */
+  planted?: string;
+  request?: string;
+  template?: string;
+  pool?: string[];
 }
 
 export interface DaysCallsUser {
@@ -154,6 +169,16 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
+  if (o.onCorpus) {
+    const rows = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
+    o.onCorpus(
+      seed,
+      rows.map((raw) => {
+        const it = sanitizeItem(raw);
+        return { id: raw.id, title: it.title, text: it.text.slice(0, 1_200) };
+      }),
+    );
+  }
   if (o.push !== "none") for (const s of own) s.notifies = true;
   const sources = [
     ...own,
@@ -325,6 +350,10 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
             pushed,
             got: handed.has(task.planted),
             today: handedToday.has(task.planted),
+            planted: task.planted,
+            request: task.text,
+            template: `${task.suite}/${task.type}`,
+            pool: report?.pool ?? [],
           });
         }
       }
@@ -418,6 +447,11 @@ if (import.meta.main) {
     nightMs: Number(opt("night-h", "2")) * 3_600_000,
   };
   const diag = opt("pool-diag", "");
+  const corpus = opt("corpus-dump", "");
+  if (corpus) {
+    writeFileSync(corpus, "");
+    o.onCorpus = (seed, items) => appendFileSync(corpus, `${JSON.stringify({ seed, items })}\n`);
+  }
   const planted: PlantedRow[] = [];
   if (diag) o.onPlanted = (row) => void planted.push(row);
   const users: DaysCallsUser[] = [];
