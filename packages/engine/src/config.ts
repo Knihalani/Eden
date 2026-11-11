@@ -730,6 +730,13 @@ export interface EngineConfig {
    */
   pushWide: number;
   /**
+   * M12 (D1001, trial, off at 0): the pool's last `poolExpand` seats go to the request's expansion (`pool-expand.ts`,
+   * a table learned from a teacher's scores: request terms → item terms), searched in the index, when a model is
+   * wired (`PartnerDeps.poolExpansion`); its first `poolExpandTerms` item terms are searched.
+   */
+  poolExpand: number;
+  poolExpandTerms: number;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -891,5 +898,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushOpen: true,
   pushIndirect: true,
   pushWide: 0,
+  poolExpand: 0,
+  poolExpandTerms: 8,
   revisionDiff: true,
 };

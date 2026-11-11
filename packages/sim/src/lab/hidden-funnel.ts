@@ -71,8 +71,9 @@
  * planted) and prints a NEUTRAL line per suite (any packet delivered, items, bytes, ask items, calls, ms per task); its
  * rows go to the JSON's `neutral` block, never to `rows`, `total` or `perTask`.
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
+  loadPoolExpansion,
   AskReader,
   CardEnricher,
   cardKey,
@@ -204,6 +205,7 @@ const cli = flags(
         "candidates",
         "ask-diag",
         "pool-dump",
+        "pool-model",
         "corpus-dump",
         "label",
         "json",
@@ -650,6 +652,9 @@ const ASK_DIAG = opt("ask-diag", "");
  * and flags (handed, automated sender, `readerGate`'s constraint test), and the planted item's (decoy's) place in it.
  */
 const POOL_DUMP = opt("pool-dump", "");
+/** `--pool-model FILE` (M12, D1001): the `poolExpand` table, loaded once for the run (`loadPoolExpansion`). */
+const POOL_MODEL = opt("pool-model", "");
+const poolExpansion = POOL_MODEL ? loadPoolExpansion(new Uint8Array(readFileSync(POOL_MODEL))) : undefined;
 /**
  * `--corpus-dump FILE` (a diagnostic, docs/research/a2-quality.md): per suite world, its items (title, text head) and
  * its tasks with their planted ids, for offline retrieval screens. Since A15 (docs/research/a15-retrieval.md) each
@@ -1089,6 +1094,7 @@ async function runSeed(
       : {}),
     ...(onCandidates ? { onCandidates } : {}),
     // `pushCandidates`' pool per pass (`--pool-dump`, and `pushPoolAt` in each task's row).
+    ...(poolExpansion ? { poolExpansion } : {}),
     onPushPool: (r: PushPoolReport) => {
       const list = pushPools.get(r.sessionId) ?? [];
       pushPools.set(r.sessionId, list);

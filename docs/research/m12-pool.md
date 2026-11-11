@@ -21,3 +21,20 @@ Fit (tune) on train1–4, train1r–4r and M2 v2 train/val; held out: train5, tr
 
 Decided the same day (D814): pass → promoted with a `PARTS` entry and a COST-MODEL entry; fail → the switch, its
 code, weights and tests deleted.
+
+## 2. Where main's misses are (fit only, $0)
+
+`bun run funnel --suite train1–4,train1r–4r --seeds 41,42 -- --neutral` on main: hidden in the push's pool 370/512
+(72.3%), decoys 349/512, neutral packets 596. Of the 142 hidden misses (the lab switch `pushWide` reads the lexical
+search 60 deep and reports what the pool left out; the pool itself unchanged, 370 → 370):
+
+| where the fact is | facts |
+|---|---|
+| no push at all (the request gate did not start one) | 23 |
+| in the ranked rest or the lexical hits 13–60 (`pushWide` 60) | 38 |
+| shares a word with the request, below the sixtieth hit | 34 |
+| shares no word with the request | 53 |
+
+Pools are full (1,168 of 1,536 passes hold 15), so any new channel displaces; 20 of the 370 pooled facts sit in seats
+10–14. Date proximity (a day the request names within three days of one the fact names) reaches 9 of 119 misses
+with about 32 competing items each.

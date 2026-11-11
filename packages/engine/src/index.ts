@@ -128,3 +128,4 @@ export {
   type PushCheckStats,
 } from "./push-check";
 export { mayConstrain } from "./conflict";
+export { loadPoolExpansion, type PoolExpansion } from "./pool-expand";

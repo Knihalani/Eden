@@ -37,6 +37,7 @@ ap.add_argument("--val-teacher", default="")
 ap.add_argument("--distract", required=True)
 ap.add_argument("--model", default="lowrank", choices=["lowrank", "qnet"])
 ap.add_argument("--rank", type=int, default=64)
+ap.add_argument("--min-worlds", type=int, default=0, help="vocabulary: terms in at least this many training worlds")
 ap.add_argument("--hidden", type=int, default=256)
 ap.add_argument("--buckets", type=int, default=1 << 18)
 ap.add_argument("--bin", action="store_true", help="qnet: binary hidden (straight-through)")
@@ -53,8 +54,10 @@ ap.add_argument("--batch", type=int, default=64)
 ap.add_argument("--lr", type=float, default=3e-3)
 ap.add_argument("--topk", type=int, default=32)
 ap.add_argument("--seats", type=str, default="3,5")
+ap.add_argument("--serve-terms", type=int, default=0, help="screen as served: the top N expansion terms, unweighted")
 ap.add_argument("--eval-every", type=int, default=0)
 ap.add_argument("--out", default="")
+ap.add_argument("--load", default="", help="evaluate a saved model.pt (same --train/--worlds), no training")
 ap.add_argument("--fit-terms", default="", help="sim fit worlds (m12-export --corpus) for the funnel-shaped screen")
 ap.add_argument("--fit-pool", default="", help="the funnel pool dump of those worlds (main's pool)")
 ap.add_argument("--seed", type=int, default=1)
@@ -72,8 +75,8 @@ if args.worlds:
     train = train[: args.worlds]
 val = D.load_synth(args.val, D.load_teacher(args.val_teacher) if args.val_teacher else {})
 dist = D.load_fit(args.distract)[0]["items"]
-IV = D.item_vocab(train)
-RV = D.req_vocab(train)
+IV = D.item_vocab(train, min_worlds=args.min_worlds)
+RV = D.req_vocab(train, min_worlds=args.min_worlds)
 print(f"loaded {len(train)} train worlds, {len(val)} val, vocab items {len(IV)} requests {len(RV)}, "
       f"teacher groups {len(teacher)} ({time.time() - t0:.0f}s)", flush=True)
 
@@ -270,6 +273,16 @@ def expansion_fn():
     return fn
 
 
+def served(ex):
+    ev = np.zeros(NV, np.float32)
+    items = sorted(ex.items(), key=lambda kv: -kv[1])
+    if args.serve_terms:
+        items = [(j, 1.0) for j, _ in items[: args.serve_terms]]
+    for j, v in items:
+        ev[j] = v
+    return ev
+
+
 def evaluate(tag):
     fn = expansion_fn()
     seats = [int(s) for s in args.seats.split(",")]
@@ -287,9 +300,7 @@ def evaluate(tag):
             expn.append(len(ex))
             qv = qvec(r)
             lex = X @ qv
-            ev = np.zeros(NV, np.float32)
-            for j, v in ex.items():
-                ev[j] = v
+            ev = served(ex)
             exs = X @ ev
             for var, keep, drop in (("h", r["fact"], r["decoy"]), ("c", r["decoy"], r["fact"])):
                 if keep not in pos:
@@ -357,9 +368,7 @@ def evaluate_fit(tag):
             if pool is None:
                 continue
             ex = fn(t["q"])
-            ev = np.zeros(NV, np.float32)
-            for j, v in ex.items():
-                ev[j] = v
+            ev = served(ex)
             sc = X @ ev
             eo = [ids[i] for i in np.argsort(-sc) if sc[i] > 0][:60]
             tot[var] = tot.get(var, 0) + 1
@@ -377,6 +386,13 @@ def evaluate_fit(tag):
 
 
 step = 0
+if args.load:
+    ck = torch.load(args.load, weights_only=False)
+    assert ck["iv"] == IV.terms and ck["rv"] == RV.terms, "vocabulary differs: same --train and --worlds as saved"
+    model.load_state_dict(ck["state"])
+    evaluate("loaded")
+    evaluate_fit("loaded")
+    sys.exit(0)
 for ep in range(args.epochs):
     tl = 0.0
     for b in batches(train):

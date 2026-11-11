@@ -74,21 +74,27 @@ class Vocab:
         return len(self.terms)
 
 
-def item_vocab(worlds, min_df=3, cap=40000):
-    df = Counter()
+def item_vocab(worlds, min_df=3, cap=40000, min_worlds=0):
+    df, dw = Counter(), Counter()
     for w in worlds:
+        seen = set()
         for it in w["items"]:
             df.update(it["tf"].keys())
-    terms = [t for t, n in df.most_common() if n >= min_df][:cap]
+            seen.update(it["tf"].keys())
+        dw.update(seen)
+    terms = [t for t, n in df.most_common() if n >= min_df and dw[t] >= min_worlds][:cap]
     return Vocab(terms)
 
 
-def req_vocab(worlds, min_df=2, cap=30000):
-    df = Counter()
+def req_vocab(worlds, min_df=2, cap=30000, min_worlds=0):
+    df, dw = Counter(), Counter()
     for w in worlds:
+        seen = set()
         for r in w["reqs"]:
             df.update(set(r["q"]))
-    return Vocab([t for t, n in df.most_common() if n >= min_df][:cap])
+            seen.update(r["q"])
+        dw.update(seen)
+    return Vocab([t for t, n in df.most_common() if n >= min_df and dw[t] >= min_worlds][:cap])
 
 
 def bm25_matrix(items, vocab, idf=None):

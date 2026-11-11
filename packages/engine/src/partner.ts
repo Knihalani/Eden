@@ -137,6 +137,7 @@ import {
   type Party,
 } from "./parties";
 import { safeLine } from "./line";
+import type { PoolExpansion } from "./pool-expand";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -218,6 +219,11 @@ export interface PartnerDeps {
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
+  /**
+   * M12 (`poolExpand`, D1001): the request expansion table, loaded once per process by the embedder
+   * (`loadPoolExpansion`); absent, the switch is inert.
+   */
+  poolExpansion?: PoolExpansion;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -2406,6 +2412,7 @@ export class ContextPartner {
     }
     // `pushWide` (D1000): what the pool left out (the ranked rest, then the deeper lexical hits), for the tail seats.
     let wide: Scored[] | undefined;
+    if (this.config.poolExpand > 0 && this.deps.poolExpansion) pool = this.poolExpanded(s, cue, pool, cap);
     if (this.config.pushWide > 0) {
       wide = [];
       for (const x of [...ranked, ...deep]) {
@@ -2424,6 +2431,39 @@ export class ContextPartner {
           )
         : new Map<string, Card>();
     return { pool, like: pool.map((x) => this.constraintLike(x, cards)), ...(wide ? { wide } : {}) };
+  }
+
+  /**
+   * `poolExpand` (D1001): the pool's last seats from the request's expansion searched in the index, best first, the
+   * pool's own items keeping the seats the expansion leaves empty. The first `cap - poolExpand` items stay as ranked.
+   */
+  private poolExpanded(s: Session, cue: Cue, pool: Scored[], cap: number): Scored[] {
+    const model = this.deps.poolExpansion!;
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    const seats = Math.min(this.config.poolExpand, cap);
+    if (!vocab || seats <= 0) return pool;
+    const ex = model.expand(cue.text, this.config.poolExpandTerms);
+    const ids: number[] = [];
+    for (let i = 0; i < ex.n; i++) {
+      const id = vocab.lookup(model.itemTerms[ex.terms[i]!]!);
+      if (id >= 0) ids.push(id);
+    }
+    if (ids.length === 0) return pool;
+    const head = pool.slice(0, Math.max(0, Math.min(pool.length, cap - seats)));
+    const have = new Set(head.map((x) => x.item.id));
+    const fill: Scored[] = [];
+    for (const h of this.deps.cache.search(s.scope, ids, ids.length, head.length + seats, this.now())) {
+      if (fill.length >= seats) break;
+      if (have.has(h.item.id)) continue;
+      have.add(h.item.id);
+      fill.push({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc });
+    }
+    const out = [...head, ...fill];
+    for (const x of pool.slice(head.length)) {
+      if (out.length >= cap) break;
+      if (!have.has(x.item.id)) out.push(x);
+    }
+    return out;
   }
 
   /**
