@@ -309,142 +309,19 @@ describe("syncUnusedSweepMs (D356)", () => {
     }
   });
 
-  test("syncSweepSpread (D604): unused sources are swept at their own points in the week, none later", async () => {
-    const days = async (spread: boolean) => {
-      const make = () => Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
-      const mine = make();
-      const theirs = make();
-      const t = setup(
-        new Map([
-          ["alice", mine],
-          ["bob", theirs],
-        ]),
-        { ...ON, syncSweepSpread: spread },
-      );
-      await warm(t.partner, alice);
-      await warm(t.partner, bob);
-      // The day (after the backfill) of each source's sweeps over four weeks.
-      const seen = [...mine, ...theirs].map(() => [] as number[]);
-      const counts = [...mine, ...theirs].map((x) => x.lists);
-      for (let day = 0; day < 28; day++) {
-        await live(t, [alice, bob], 1);
-        [...mine, ...theirs].forEach((x, k) => {
-          for (; counts[k]! < x.lists; counts[k]!++) seen[k]!.push(day);
-        });
-      }
-      return { alice: seen.slice(0, 40), bob: seen.slice(40) };
-    };
-    const off = await days(false);
-    // Off: every source a week after the backfill, in the same tick.
-    for (const d of off.alice) expect(d).toEqual([6, 13, 20, 27]);
-    const on = await days(true);
-    const perDay = Array.from({ length: 28 }, (_, day) => on.alice.filter((d) => d.includes(day)).length);
-    expect(Math.max(...perDay)).toBeLessThan(20);
-    for (const d of [...on.alice, ...on.bob]) {
-      // The first within a week of the backfill, then weekly: at most one sweep more than off, never a longer gap.
-      expect(d[0]!).toBeLessThanOrEqual(6);
-      expect(d.length === 4 || d.length === 5).toBe(true);
-      for (let k = 1; k < d.length; k++) expect(d[k]! - d[k - 1]!).toBe(7);
-    }
-    // Another user's sources of the same ids have points of their own.
-    expect(on.alice.filter((d, k) => d[0] === on.bob[k]![0]).length).toBeLessThan(20);
-  });
-
-  /**
-   * Ten weeks of a user active 09:00-18:00 on the days `active` says (T0 is 09:00; the clock runs through the rest):
-   * the longest gap between two sweeps of a source (days, the backfill counted as one), the gaps longer than D356
-   * allows (a week, then the days to the user's next active day), the most sources listed in one tick after the
-   * first week, and the sweeps.
-   */
-  async function absences(spread: boolean, active: (day: number) => boolean, n = 60) {
-    const all = Array.from({ length: n }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
-    const t = setup(new Map([["alice", all]]), { ...ON, syncSweepSpread: spread });
+  test("unused sources are swept a week after the backfill, all in the same tick, then weekly", async () => {
+    const mine = Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
+    const t = setup(new Map([["alice", mine]]), ON);
     await warm(t.partner, alice);
-    const last = all.map(() => 0);
-    const counts = all.map((x) => x.lists);
-    let longest = 0;
-    let late = 0;
-    let worstTick = 0;
-    let sweeps = 0;
-    const dueBy = (from: number) => {
-      let d = from + 7;
-      while (!active(d)) d++;
-      return d;
-    };
-    for (let day = 0; day < 70; day++) {
-      for (let k = 0; k < 144; k++) {
-        t.advance(10 * MIN);
-        if (!active(day) || k >= 54) continue;
-        t.partner.sync!.track(alice, t.now());
-        await t.partner.sync!.tick();
-        let inTick = 0;
-        all.forEach((x, i) => {
-          if (x.lists === counts[i]) return;
-          counts[i] = x.lists;
-          inTick++;
-          sweeps++;
-          longest = Math.max(longest, day - last[i]!);
-          if (day > dueBy(last[i]!)) late++;
-          last[i] = day;
-        });
-        if (day >= 7) worstTick = Math.max(worstTick, inTick);
-      }
+    // The day (after the backfill) of each source's sweeps over four weeks.
+    const seen = mine.map(() => [] as number[]);
+    const counts = mine.map((x) => x.lists);
+    for (let day = 0; day < 28; day++) {
+      await live(t, alice, 1);
+      mine.forEach((x, k) => {
+        for (; counts[k]! < x.lists; counts[k]!++) seen[k]!.push(day);
+      });
     }
-    return { longest, late, worstTick, sweeps };
-  }
-
-  const PATTERNS: [string, (d: number) => boolean][] = [
-    ["Monday to Friday", (d) => d % 7 < 5],
-    ["three days a week", (d) => d % 7 < 3],
-    ["one day a week", (d) => d % 7 === 2],
-    ["away every other weekend", (d) => !(d % 14 === 5 || d % 14 === 6)],
-    ["three days of every five", (d) => d % 5 < 3],
-  ];
-
-  test("syncSweepSpread: whatever days the user is away, a source is swept by the first active day a week on", async () => {
-    for (const [name, active] of PATTERNS) {
-      const on = await absences(true, active);
-      const off = await absences(false, active);
-      if (process.env.O1_ABSENCES) {
-        const big = { on: await absences(true, active, 200), off: await absences(false, active, 200) };
-        console.log("ABSENCES", name, JSON.stringify(big));
-      }
-      // D356's bound, per sweep: a week after the source's own last sweep, or the user's next active day after that.
-      expect(on.late).toBe(0);
-      expect(off.late).toBe(0);
-      // Fewer sources in the worst tick than all of them, which is the default's.
-      expect(off.worstTick).toBe(60);
-      // (One day a week is left out: nearly every point passes while the user is away.)
-      if (name !== "one day a week") expect(on.worstTick).toBeLessThan(60);
-    }
-    const weekdays = await absences(true, (d) => d % 7 < 5);
-    expect(weekdays.longest).toBe(7);
-    expect(weekdays.worstTick).toBeLessThan(30);
-  });
-
-  test("syncSweepSpread: with a short long period, a turn inside a day of the last sweep waits for the cache", async () => {
-    const all = Array.from({ length: 40 }, (_, k) => new FetchSource(`s${k}`, [item(`s${k}`, 0, "x")], true));
-    const t = setup(new Map([["alice", all]]), { syncUnusedSweepMs: 1.2 * DAY, syncSweepSpread: true });
-    let ready = 0;
-    const real = t.cache.ready.bind(t.cache);
-    t.cache.ready = (scope) => {
-      ready++;
-      return real(scope);
-    };
-    await warm(t.partner, alice);
-    let early = 0;
-    // The first 23 hours: the daily rule calls for nothing yet, so every listing is a spread turn.
-    for (let k = 0; k < 23 * 6; k++) {
-      const lists = all.reduce((n, x) => n + x.lists, 0);
-      const before = ready;
-      t.advance(10 * MIN);
-      t.partner.sync!.track(alice, t.now());
-      await t.partner.sync!.tick();
-      if (all.reduce((n, x) => n + x.lists, 0) > lists) {
-        early++;
-        expect(ready).toBeGreaterThan(before);
-      }
-    }
-    expect(early).toBeGreaterThan(0);
+    for (const d of seen) expect(d).toEqual([6, 13, 20, 27]);
   });
 });

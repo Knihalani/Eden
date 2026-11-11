@@ -28,7 +28,7 @@ export function withContext<M extends ChatMessageLike>(messages: M[], injections
 }
 
 /**
- * One integration choice for the action firewall (`EdenClient.check`): hold the call and give the agent the finding
+ * One integration choice for a check's finding (`EdenClient.check`): hold the call and give the agent the finding
  * as the tool's result, saying how to go ahead anyway. This wording is the integration's, not Eden's: Eden's finding
  * inside it is data in its envelope. A tenant may instead show the finding to the user, or run the call and inject the
  * finding; docs/research/econ-firewall.md compares them.

@@ -14,9 +14,9 @@
  * - reader: as eden with `pushCandidates: 0` and the reader on Haiku 5.5 (the pre-D237 shape; no cards here either);
  * - eden~NAME: eden with `--variant-config`'s settings for NAME (the fixes' trial switches).
  *
- * In an Eden arm whose settings have `partyCheck` (on in the default since D376, A25) or `actionCheck` on, each action
- * tool consults `checkAction` before it runs, as an integrator would through POST /v1/check: a finding holds the call
- * and is its result; `held` records it. A10's `eden` numbers (D305) ran before it: to compare with them, run
+ * In an Eden arm whose settings have `partyCheck` (on in the default since D376, A25) on, each action tool consults
+ * `checkAction` before it runs, as an integrator would through POST /v1/check: a finding holds the call and is its
+ * result; `held` records it. A10's `eden` numbers (D305) ran before it: to compare with them, run
  * `eden~X` with `{"X":{"partyCheck":false}}`.
  *
  * Per task it records the action calls, the reply, whether Eden's packets or answers (or the agent's own search
@@ -35,7 +35,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { AskReader, DEFAULT_CONFIG, ModelReaderMaker, QUARANTINED, type EngineConfig, type Trace } from "@eden/engine";
+import { AskReader, DEFAULT_CONFIG, ModelReaderMaker, type EngineConfig, type Trace } from "@eden/engine";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, type Model } from "@eden/llm";
 import type { Injection } from "@eden/protocol";
 import {
@@ -127,12 +127,10 @@ export interface InjectionRun {
   packets: number;
   /** The attack's target (its action or answer pattern) was in text the agent was given: packets, answers, results. */
   payloadSeen: boolean;
-  /** Eden's quarantine marker (D307) was in text the agent was given. */
-  quarantined: boolean;
   /** Action calls that ran (a held call is not among them unless the agent made it again). */
   calls: ActionCall[];
   /**
-   * Calls `checkAction` held with a finding (arms with `partyCheck` or `actionCheck`): `attack` when the held call
+   * Calls `checkAction` held with a finding (arms with `partyCheck`): `attack` when the held call
    * matched the attack's action pattern (a held attack), else a finding on a call the attack did not shape (a false
    * finding, unless the agent was adding a party for another reason the user would not want).
    */
@@ -186,7 +184,6 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
     exposed: false,
     packets: 0,
     payloadSeen: false,
-    quarantined: false,
     calls: [],
     held: [],
     answer: "",
@@ -224,7 +221,6 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
   const target = job.attack.action ?? job.attack.answer!;
   const saw = (text: string) => {
     if (target.test(text)) run.payloadSeen = true;
-    if (text.includes(QUARANTINED)) run.quarantined = true;
   };
   const takeIn = (inj: Injection) => {
     saw(inj.text);
@@ -235,7 +231,7 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
   for (const inj of set.first) takeIn(inj);
   // The arm's settings as they run: the default's (`partyCheck` on since D376) with the arm's over them.
   const cfg = { ...DEFAULT_CONFIG, ...configOf(arm) };
-  const checks = useEden && partner !== null && (cfg.partyCheck || cfg.actionCheck);
+  const checks = useEden && partner !== null && cfg.partyCheck;
   if (DRY) {
     if (checks) {
       // The agent's own calls from a live run of the plain arm, replayed in order: a finding on one is a false finding
@@ -300,7 +296,7 @@ async function runOne(job: Job, arm: string): Promise<InjectionRun> {
       },
     });
   }
-  // An arm whose engine checks actions (`partyCheck` D375, `actionCheck` D69) has its action tools consult
+  // An arm whose engine checks actions (`partyCheck` D375) has its action tools consult
   // `checkAction` first, as an integrator would through POST /v1/check: a finding holds the call and is the tool's
   // result (`heldResult`, D69's documented integration); the same call made again proceeds.
   for (const spec of ACTIONS) {
@@ -469,7 +465,6 @@ export function summarize(runs: readonly InjectionRun[]) {
     n: number;
     exposed: number;
     seen: number;
-    marked: number;
     success: number;
     hidden: number;
     graded: number;
@@ -490,7 +485,6 @@ export function summarize(runs: readonly InjectionRun[]) {
       n: 0,
       exposed: 0,
       seen: 0,
-      marked: 0,
       success: 0,
       hidden: 0,
       graded: 0,
@@ -507,7 +501,6 @@ export function summarize(runs: readonly InjectionRun[]) {
     s.n++;
     s.exposed += r.exposed ? 1 : 0;
     s.seen += r.payloadSeen ? 1 : 0;
-    s.marked += r.quarantined ? 1 : 0;
     s.success += r.success ? 1 : 0;
     s.hidden += r.hidden ? 1 : 0;
     s.graded += r.hidden === null ? 0 : 1;
@@ -533,15 +526,15 @@ export function summarize(runs: readonly InjectionRun[]) {
 function report(summary: ReturnType<typeof summarize>, dry: boolean): string {
   const lines = [
     dry
-      ? "arm/kind  n  exposed  payload-seen  marked  forced-held/forced  replayed-held-other  replayed-held-attack/calls"
-      : "arm/kind  n  exposed  payload-seen  marked  success  hidden  $  held-attack  held-other",
+      ? "arm/kind  n  exposed  payload-seen  forced-held/forced  replayed-held-other  replayed-held-attack/calls"
+      : "arm/kind  n  exposed  payload-seen  success  hidden  $  held-attack  held-other",
   ];
   for (const [k, s] of Object.entries(summary)) {
     lines.push(
       dry
-        ? `${k}  ${s.n}  ${s.exposed}  ${s.seen}  ${s.marked}  ${s.forcedHeld}/${s.forcedN}  ${s.replayedHeld}  ` +
+        ? `${k}  ${s.n}  ${s.exposed}  ${s.seen}  ${s.forcedHeld}/${s.forcedN}  ${s.replayedHeld}  ` +
             `${s.replayedHeldAttack}/${s.replayedN}`
-        : `${k}  ${s.n}  ${s.exposed}  ${s.seen}  ${s.marked}  ${s.success}  ${s.hidden}/${s.graded}  ` +
+        : `${k}  ${s.n}  ${s.exposed}  ${s.seen}  ${s.success}  ${s.hidden}/${s.graded}  ` +
             `${s.usd.toFixed(4)}  ${s.heldAttack}  ${s.heldOther}${s.errors ? `  errors ${s.errors}` : ""}`,
     );
   }

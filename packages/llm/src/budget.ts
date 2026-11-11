@@ -59,17 +59,9 @@ export class TenantSpend {
     const tenant = slash < 0 ? user : user.slice(0, slash);
     const key = this.key(tenant);
     const t = this.days.get(key) ?? { calls: 0, usd: 0 };
-    if (t.usd + estimateUsd > this.capFor(tenant, key.slice(tenant.length + 1), t.usd)) return null;
+    if (t.usd + estimateUsd > this.usdPerTenantDay) return null;
     this.days.set(key, t);
     return t;
-  }
-
-  /**
-   * The tenant's cap today, read at every tally with what it has spent so far: `usdPerTenantDay` here. A subclass
-   * whose cap is granted from elsewhere (the server's spend leases across processes, D327) answers its own.
-   */
-  protected capFor(_tenant: string, _day: string, _spentUsd: number): number {
-    return this.usdPerTenantDay;
   }
 
   /** The tenant's model calls today. */
@@ -77,10 +69,9 @@ export class TenantSpend {
     return this.days.get(this.key(tenant))?.calls ?? 0;
   }
 
-  /** The tenant's cap today (`capFor`), for reports: what this process may spend for it. */
-  capOf(tenant: string): number {
-    const key = this.key(tenant);
-    return this.capFor(tenant, key.slice(tenant.length + 1), this.days.get(key)?.usd ?? 0);
+  /** The tenant's cap today, for reports: what this process may spend for it. */
+  capOf(_tenant: string): number {
+    return this.usdPerTenantDay;
   }
 
   /** What the tenant spent today (estimates until settled). */

@@ -39,7 +39,7 @@ import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./groundi
 import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
-import { orgLabel } from "./firewall";
+import { orgLabel } from "./parties";
 
 const NO_TERMS = new Uint32Array(0);
 
@@ -213,11 +213,8 @@ class FrozenUser {
     readonly synced: number,
     readonly size: number,
     readonly probes: Map<string, { ids: string[]; at: number }>,
-    /**
-     * The entries, zstd JSON; null once it is held on disk only (`persistDiskOnly`, D652): the copy on disk is then the
-     * only one, read back at the thaw.
-     */
-    public blob: Uint8Array | null,
+    /** The entries, zstd JSON. */
+    readonly blob: Uint8Array,
     /** Per class (`LOOSE`, `SYNCED`): the fetch time of its oldest and newest entry, NaN for none (expiry). */
     readonly oldest: [number, number],
     readonly newest: [number, number],
@@ -232,10 +229,10 @@ class FrozenUser {
     readonly fromDisk = false,
     readonly extra?: unknown,
   ) {
-    this.bytes = blob?.byteLength ?? 0;
-    this.warm = blob !== null && isFast(blob);
+    this.bytes = blob.byteLength;
+    this.warm = isFast(blob);
   }
-  /** The blob's size, kept when the blob itself is on disk only (D652). */
+  /** The blob's size. */
   readonly bytes: number;
   /** Frozen warm (`CacheLimits.warmIdleMs`, D862): to be frozen again in the compact form once idle long enough. */
   readonly warm: boolean;
@@ -767,28 +764,13 @@ export class ItemCache {
   private readonly thawing = new Map<string, { from: FrozenUser; done: Promise<void> }>();
   /**
    * Users frozen and thawed since the cache was built (D325): for the benches and stats. `loaded`: users read back
-   * from disk (D425), counted in `thawed` too once thawed; `loadMs` their reads. `released`: blobs let go of in memory
-   * (D652), `releasedReadMs` their reads at the thaw, `lost`: such users whose file could not be read back.
+   * from disk (D425), counted in `thawed` too once thawed; `loadMs` their reads.
    */
-  readonly freezes = {
-    frozen: 0,
-    thawed: 0,
-    thawMs: 0,
-    recompacted: 0,
-    loaded: 0,
-    loadMs: 0,
-    released: 0,
-    releasedReadMs: 0,
-    lost: 0,
-  };
-  /** Users a thaw made empty because their blob, on disk only, could not be read (D652), until `thawed` reports. */
-  private readonly lost = new WeakSet<UserCache>();
+  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0, recompacted: 0, loaded: 0, loadMs: 0 };
   /** The owner's restores still settling, per user read back from disk (D425): `ready` waits on them. */
   private readonly restoring = new Map<string, Promise<unknown>>();
   /** Where frozen users are also written (D425, opt-in); null by default: nothing goes to disk (D8). */
   private disk: FrozenDisk | null = null;
-  /** `persistDiskOnly` (D652, a trial): a frozen user written to disk keeps no copy of the blob in memory. */
-  private diskOnly = false;
   /**
    * The owner's part of a persisted user (D425; the partner: its sync's per-source state): what to save beside the
    * blob, and what to do once a user written by an earlier process is thawed here.
@@ -797,8 +779,6 @@ export class ItemCache {
     save(scope: Scope): unknown;
     /** May return a promise: a `ready` that read the user back resolves only once it settles. */
     restored(scope: Scope, items: ContextItem[], extra: unknown): Promise<unknown> | void;
-    /** A user's blob held on disk only could not be read back (D652): the cache holds nothing of theirs any more. */
-    lost?(scope: Scope): void;
   } | null = null;
   private readonly perTenant = new Map<string, number>();
   /**
@@ -839,9 +819,8 @@ export class ItemCache {
    * deletes it (what is on disk is only ever a frozen user's state), and a user this process does not hold is read
    * back from it on first use. Content reaches the disk only through here.
    */
-  persist(disk: FrozenDisk, options: { diskOnly?: boolean } = {}): void {
+  persist(disk: FrozenDisk): void {
     this.disk = disk;
-    this.diskOnly = options.diskOnly === true;
   }
 
   /** Whether frozen users are written to disk (D425). */
@@ -863,7 +842,7 @@ export class ItemCache {
     for (const x of this.users.values()) {
       if (performance.now() - t0 > deadlineMs) break;
       if (x instanceof FrozenUser) {
-        if (x.warm && x.blob !== null && this.write(x)) n++;
+        if (x.warm && this.write(x)) n++;
         continue;
       }
       if (x.items.size === 0) continue;
@@ -885,7 +864,7 @@ export class ItemCache {
   private write(f: FrozenUser): boolean {
     const disk = this.disk;
     const blob = f.blob;
-    if (disk === null || blob === null) return false;
+    if (disk === null) return false;
     let extra: unknown;
     try {
       extra = this.persistHooks?.save(f.scope);
@@ -1693,13 +1672,6 @@ export class ItemCache {
           else this.freeze(key, this.thaw(key, x, true), false);
           continue;
         }
-        // D652: everything a user held on disk only has expired, and so has their file (D428). Dropped as an
-        // expired user is, without a read that would find no file and count them lost.
-        if (this.allExpired(x, now)) {
-          this.dropUser(key, x.scope.tenantId);
-          n++;
-          continue;
-        }
         if (sliced) {
           this.later.add(key);
           continue;
@@ -1788,10 +1760,6 @@ export class ItemCache {
         }
         return;
       }
-      if (this.allExpired(x, now)) {
-        this.dropUser(key, x.scope.tenantId);
-        return;
-      }
       yield* this.thawJob(key, x);
       x = this.users.get(key);
       if (!(x instanceof UserCache) || this.expireUser(key, x, now)) return;
@@ -1873,11 +1841,6 @@ export class ItemCache {
     return false;
   }
 
-  /** Whether a user held on disk only (D652) has nothing left alive: its file's expiry (`frozenExpiry`) has passed. */
-  private allExpired(f: FrozenUser, now: number): boolean {
-    return f.blob === null && !(this.frozenExpiry(f) > now);
-  }
-
   /** Whether a frozen user holds an expired item (`anyExpired` on the oldest of each class) or holds none. */
   private frozenExpired(f: FrozenUser, now: number): boolean {
     if (f.size === 0) return true;
@@ -1912,15 +1875,11 @@ export class ItemCache {
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
-    // D652 (`persistDiskOnly`): once it is on disk the memory's copy goes; a write that failed keeps it.
     // D862: a warm user is not written. An active user pauses every few minutes, and each pause would write (and its
     // thaw delete) a file of 1-3 MB; the warm blob is written at a shutdown (`flush`) and the compact one at its
-    // freeze, so a crash loses what it lost before the trial: users used within the compact bound re-sync.
+    // freeze, so a crash loses what it lost before: users used within the compact bound re-sync.
     if (f.warm) return;
-    if (this.write(f) && this.diskOnly) {
-      f.blob = null;
-      this.freezes.released++;
-    }
+    this.write(f);
   }
 
   /** The work of a freeze, a step per `STEP_ITEMS` entries (reading each item's text inflates it). */
@@ -2239,18 +2198,6 @@ export class ItemCache {
     }
     // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes.
     this.disk?.delete(u.scope);
-    if (this.lost.delete(u)) {
-      // D652: a user held on disk only whose file could not be read back. What was derived from their items goes
-      // (cards), and the owner starts the user's sync over; both fail open.
-      this.freezes.lost++;
-      try {
-        this.dropped?.(u.scope, null);
-        this.persistHooks?.lost?.(u.scope);
-      } catch {
-        // The user is held, empty: the next lookup searches their sources live.
-      }
-      return u;
-    }
     if (f.fromDisk && this.persistHooks) {
       const items: ContextItem[] = [];
       for (const e of u.items.values()) items.push(e.item);
@@ -2270,26 +2217,9 @@ export class ItemCache {
     return u;
   }
 
-  /** A blob held on disk only, read back (D652), or null when the file is gone, expired or does not open. */
-  private diskRead(f: FrozenUser): Uint8Array | null {
-    const t0 = performance.now();
-    const p = this.disk?.read(f.scope, this.clock()) ?? null;
-    this.freezes.releasedReadMs += performance.now() - t0;
-    return p?.blob ?? null;
-  }
-
   /** The work of a thaw, a step per `STEP_ITEMS` entries; returns the thawed user, not yet in `users`. */
   private *thawSteps(f: FrozenUser): Generator<undefined, UserCache> {
-    const blob = f.blob ?? this.diskRead(f);
-    if (blob === null) {
-      // The user's file is gone or unreadable (reported by the disk, D425): nothing of theirs is held any more.
-      // `thawed` tells the owner, who syncs the user again, as after a restart without the file.
-      const empty = new UserCache(f.scope, this.limits.releaseTerms);
-      empty.revision = ++this.revisions;
-      empty.seen = f.seen;
-      this.lost.add(empty);
-      return empty;
-    }
+    const blob = f.blob;
     if (isFast(blob)) return yield* this.fastThawSteps(f, blob);
     const body = JSON.parse(fromUtf8.decode(Bun.zstdDecompressSync(blob))) as FrozenBody;
     yield;
