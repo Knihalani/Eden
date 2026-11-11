@@ -7,6 +7,20 @@ every live figure here is an **Anthropic-direct lab figure** on simulated worlds
 arithmetic or judgement; every other number comes from a command named beside it. Motivation:
 [weak-points-1111.md](weak-points-1111.md) (Q1, Q2, Q3, B6, B10).
 
+## In plain words
+
+- **A stronger agent closes "handed but not stated" (weak point 6, D834).** With Sonnet 5.5 as the agent, a fact Eden
+  hands at its request has its core stated in 192 of 193 tasks; with Haiku 5.5, 316 of 333. The rest of the "one in
+  five" is the grade asking for every clause of a multi-part fact. No Eden lever is built for it.
+- **Eden against "push the five best search hits" (D831).** One request a session Eden raises 13.5 more hidden facts
+  in 100 as shipped (+7.3..+20.1), 25.8 with the full intent index. Over 48 users' days the gap is +3.4 (−2.1..+8.3):
+  not shown. Pushing any retrieval is itself worth about +31 over an agent with search tools.
+- **The pointer on today's default fails (D832):** +2.4 (−0.5..+5.5) over 32 users' days; deleted for good.
+- **Weak point 2 is not the lab's density and not lexical (D833).** Of 112 facts outside the push's pool, 60 share no
+  word with their request. A per-user alias table (dates and names written another way) moved 3–5 facts in 433 and
+  more decoys; on fresh users with the shipped pipeline, nothing. Deleted.
+- Spend: $21.04 Anthropic of $30 (every call Anthropic-direct; 0 OpenRouter), $0 Modal.
+
 ## 0. What was measured at $0 before anything was spent
 
 | Command | Result |
@@ -238,6 +252,9 @@ paired rows above; Opus graded all of them.
   it requires every clause.
 
 ## 6. Results: (b) the five best lexical hits on every request
+
+**Superseded by §9–§11:** this `hits` arm's prompt named tools it did not have; the re-run (b2) and the later runs
+replace its figures. Kept as run.
 
 Haiku 5.5 as the agent, Sonnet's grade (`b-short.txt`, `b-days.txt`, `b-mix.txt`). No run stopped on its budget.
 
