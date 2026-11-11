@@ -60,6 +60,21 @@ trained.
   D493's packet bar, and measured on Pi under a rule written before that run (§6), against the default and against
   Haiku's push check: hidden facts, decoys handed, neutral packets, concerns, cost, wall.
 
+## 2b. Pre-registration: the funnel screen (D895), written before it ran
+
+The chosen student is the 8B rung (`t8b-truth-a`), served by `m1_serve.py` (H100, the prompt head shared across a
+pool's items). Arm: the default + `pushCheck` + `pushCheckLocal` (`pushCheckWaitMs` 60,000, so every decision is the
+student's; the rest of the check's rule as I3 shipped it: pool order, first `pushCandidates`, a pool it names nothing
+of sends no packet). Against the default, task by task, `bun run funnel --suite train --seeds 41-48 -- --neutral`.
+
+- **Pass mark, on the dev templates only** (24 templates × 8 seeds): of `pushCheckLocalPass` 0.5, 0.2, 0.05 and 0.01,
+  the one with the largest (planted handed − decoys handed) on dev; a tie goes to the higher mark.
+- **Bar, on the 40 held-out templates, seeds 41–48 (320 tasks a variant), read once:** D493's clauses doubled for
+  twice its seeds: decoys handed **32 or more fewer** than the default; planted handed **at most 10 fewer**; hidden
+  surfaced **at most 4 fewer**; decoys surfaced **at most 4 more**; neutral tasks given a candidates packet **not
+  more**. Every clause must hold. Reported beside it: the same on the in-sample templates (not a test).
+- Passing sends the arm to Pi (§6, written before that run); failing stops the line there.
+
 ## 3. The pipeline (D891)
 
 `packages/sim/modal/m1_data.py` (rows, splits, prompt, AUCs, the template-clustered interval; `tests/test_m1_data.py`),

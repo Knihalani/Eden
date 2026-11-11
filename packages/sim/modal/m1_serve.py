@@ -26,11 +26,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import m1_data as d  # noqa: E402
 
+# The endpoint's settings, from the deploying shell, are baked into the image env: the container imports this module
+# without that shell's environment, and the class below is defined only when the run is named.
+SERVE_ENV = {k: os.environ[k] for k in ("EDEN_M1_RUN", "EDEN_M1_GPU", "EDEN_M1_MIN", "EDEN_M1_MAX") if k in os.environ}
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("torch==2.8.0", "transformers==4.56.2", "peft==0.17.1", "accelerate==1.10.1", "numpy==2.3.3",
                  "hf_transfer==0.1.9", "fastapi[standard]==0.118.0")
-    .env({"HF_HOME": "/vol/hf", "HF_HUB_ENABLE_HF_TRANSFER": "1", "TOKENIZERS_PARALLELISM": "false"})
+    .env({"HF_HOME": "/vol/hf", "HF_HUB_ENABLE_HF_TRANSFER": "1", "TOKENIZERS_PARALLELISM": "false", **SERVE_ENV})
     .add_local_python_source("m1_data")
 )
 vol = modal.Volume.from_name("eden-checker", create_if_missing=True)
