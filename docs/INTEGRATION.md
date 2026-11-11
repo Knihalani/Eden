@@ -21,7 +21,9 @@ const tools = guardTools(eden, { send_email, book_meeting });
 await eden.sourceChanged(sourceId, { refs: changedIds, removed: deletedIds });
 ```
 
-On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
+On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below. On the Vercel AI SDK,
+`examples/ai-sdk/eden-ai-sdk.ts` does (D854): `edenSession(eden)`, then `session.wrap(model)`, `session.tools` and
+`session.guard(actingTools)` in `generateText`/`streamText` ([examples/ai-sdk](../examples/ai-sdk/README.md)).
 
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
   session (D9); a shared id would mix users' context.
