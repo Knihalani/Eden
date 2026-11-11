@@ -1448,7 +1448,10 @@ async function runSeed(
         };
       });
       const line = { suite, seed, variant, template: task.template, request: task.text, detail: task.detail };
+      // The user's day at the ask, as the push check is given it (`PushCheckInput.today`; M1's student reads it).
+      const today = new Date(askAt + cache.offsetOf(scope) * 60_000).toISOString().slice(0, 10);
       const extra = {
+        today,
         planted: id,
         at: ids.indexOf(id),
         ...(push?.unsettled !== undefined ? { unsettled: push.unsettled } : {}),
