@@ -79,7 +79,7 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
-import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
+import { CHECK_MAX_ITEMS, checkKey, itemMark, localCheckText, type PushCheck, type PushCheckRead } from "./push-check";
 import {
   accounts,
   actionKey,
@@ -225,9 +225,10 @@ export interface PartnerDeps {
   onPushPool?: PushPoolSink;
   /**
    * I3 (D500, trial `pushCheck`): the push check's model call (`push-check.ts`), with its own budget. Absent, or the
-   * flag off: no call is made and the default's candidates go.
+   * flag off: no call is made and the default's candidates go. With `pushCheckLocal` (M1, D894) the embedder wires a
+   * `LocalPushChecker` (a distilled student's scores) behind the same interface instead.
    */
-  checker?: PushChecker;
+  checker?: PushCheck;
   /**
    * N2 (D511, trial `pushWiden`): item ids a non-lexical retrieval ranks first for the request (at most `k`, best
    * first). The lab wires an embedding table; no server wires one.
@@ -2598,7 +2599,12 @@ export class ContextPartner {
     const read = [...head, ...(gate.widened ?? []).slice(0, Math.max(0, CHECK_MAX_ITEMS - head.length))];
     const input = {
       request,
-      items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
+      // `pushCheckLocal` (M1, D894): the student reads each item's title and cached text as it was trained on them.
+      items: read.map((x) =>
+        this.config.pushCheckLocal
+          ? { ...readerItem(x.item, focus, undefined, 40), text: localCheckText(x.item.text) }
+          : readerItem(x.item, focus, undefined, this.config.pushCheckItemChars),
+      ),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
       ...(this.config.pushCheckForm === 2 ? { form: 2 as const } : {}),

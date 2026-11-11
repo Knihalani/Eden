@@ -760,6 +760,15 @@ export interface EngineConfig {
    */
   pushCheckAnchored: boolean;
   /**
+   * M1 (D894; a trial, off; docs/research/m1-student.md): with `pushCheck`, the check is a distilled student's scores
+   * (the embedder's `LocalPushChecker`), not a model call: each item of the pool is scored alone on its title and the
+   * first 700 characters of its cached text, and those at or above `pushCheckLocalPass` change the action. The rest
+   * of the push check's rule (pool order, `pushCandidates`, silence, the wait, the kept answers) is unchanged.
+   */
+  pushCheckLocal: boolean;
+  /** M1 (D894): with `pushCheckLocal`, the student's pass mark as a probability (its score's sigmoid). */
+  pushCheckLocalPass: number;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates` and without
    * `pushCheck`, the push also runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -938,6 +947,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckForm: 1,
   pushCheckSilent: true,
   pushCheckAnchored: false,
+  pushCheckLocal: false,
+  pushCheckLocalPass: 0.05,
   pushOpen: true,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,

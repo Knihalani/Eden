@@ -109,6 +109,8 @@ import {
   AskReader,
   ModelReaderMaker,
   PushChecker,
+  LocalPushChecker,
+  type PushCheck,
   cardKey,
   sanitizeItem,
   type CardMaker,
@@ -188,6 +190,7 @@ import {
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
 import { loadWidenHashTable, loadWidenTable, widenByHash, widenFor, widenKey, type WidenUse } from "./n2-widen";
+import { HttpScorer } from "./m1-scorer";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 
@@ -338,7 +341,25 @@ const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
 const USES_READER = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).askReader);
 /** `pushCheck` (I3, D500): the push check's model, `--check-model` (default Haiku 5.5, on the spend ledger). */
 const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
-const USES_CHECK = CONDITIONS.some((c) => c.withPartner && !c.noKey && effective(c.config).pushCheck);
+const USES_CHECK = CONDITIONS.some(
+  (c) => c.withPartner && !c.noKey && effective(c.config).pushCheck && !effective(c.config).pushCheckLocal,
+);
+/**
+ * `--checker-url URL` (M1, D894): the student behind an arm with `pushCheckLocal` (`m1_serve.py`, key from
+ * `EDEN_LAB_CHECKER_KEY`), called live so the wait is real; `--checker-cache F` keeps its answers (appended to; a
+ * cached answer replays with no wait, so a timed run leaves it out).
+ */
+const CHECKER_URL = opt("checker-url", "");
+const CHECKER_CACHE = opt("checker-cache", "");
+const USES_LOCAL = CONDITIONS.some((c) => c.withPartner && effective(c.config).pushCheckLocal);
+if (USES_LOCAL && !CHECKER_URL && !CHECKER_CACHE)
+  throw new Error("pushCheckLocal needs --checker-url or --checker-cache");
+const localScorer = USES_LOCAL
+  ? new HttpScorer({
+      ...(CHECKER_URL ? { url: CHECKER_URL, key: process.env.EDEN_LAB_CHECKER_KEY ?? "" } : {}),
+      ...(CHECKER_CACHE ? { cacheFile: CHECKER_CACHE } : {}),
+    })
+  : null;
 /**
  * `--widen-table FILE` (N2, D511): the `widen` dependency of an arm with `pushWiden` (`n2-widen.ts`), the embedding's
  * nearest items per (suite, seed, variant, request) of the funnel's worlds, which one-request-a-session worlds are
@@ -350,7 +371,7 @@ const WIDEN_HASH = opt("widen-hash", "") ? loadWidenHashTable(opt("widen-hash", 
 if (WIDEN_TABLE && WIDEN_HASH) throw new Error("--widen-table and --widen-hash are two forms of one table: pass one");
 const widenUse: WidenUse = { asked: 0, found: 0, hashes: 0, held: 0 };
 /** Every stream's push checker, for the run's CHECK line. */
-const checkers: PushChecker[] = [];
+const checkers: PushCheck[] = [];
 // Every model a role of this run calls, once: the pacer and spend ledger are set up for them, and the key check below
 // reads the same list, so a role added here cannot go unchecked.
 const RUN_MODELS = [
@@ -887,8 +908,24 @@ async function runWorld(
       : undefined;
   if (reader) budgeted.reader.push(reader);
   // `pushCheck` (I3, D500): one budgeted call per push whose pool is constraint-like, charged to the running task.
-  const checker =
-    withPartner && !noKey && effective(config).pushCheck
+  // `pushCheckLocal` (M1, D894): the student's scores instead of the model call; no key needed, $0 a call here
+  // (its serving is costed apart), its wait on the agent's path traced as "eden.check".
+  const local = withPartner && effective(config).pushCheck && effective(config).pushCheckLocal && localScorer;
+  const checker: PushCheck | undefined = local
+    ? new LocalPushChecker({
+        scorer: {
+          score: async (input, signal) => {
+            const start = performance.now();
+            try {
+              return await localScorer.score(input, signal);
+            } finally {
+              current?.span("eden.check", "eden", "path", start, performance.now(), { local: true });
+            }
+          },
+        },
+        pass: effective(config).pushCheckLocalPass,
+      })
+    : withPartner && !noKey && effective(config).pushCheck
       ? new PushChecker({
           model: meteredModel(
             ownedModel(
@@ -1874,7 +1911,7 @@ console.error(
 );
 console.error(overBudgetLine(budgeted));
 if (checkers.length) {
-  const sum = (k: keyof PushChecker["stats"]) => checkers.reduce((n, c) => n + c.stats[k], 0);
+  const sum = (k: keyof PushCheck["stats"]) => checkers.reduce((n, c) => n + c.stats[k], 0);
   const calls = sum("calls");
   console.error(
     `CHECK (I3, ${CHECK_MODEL}): ${calls} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
@@ -1883,6 +1920,7 @@ if (checkers.length) {
       `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
   );
 }
+if (localScorer) console.error(`CHECK (M1, pushCheckLocal): ${localScorer.summary()}`);
 if (WIDEN_HASH && widenUse.asked) {
   console.error(
     `WIDEN (N5, by content): ${widenUse.found} of ${widenUse.asked} requests in the table; ` +
