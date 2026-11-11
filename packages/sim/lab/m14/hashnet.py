@@ -213,6 +213,16 @@ class HashNet:
         return item_scores, pair_scores
 
 
+    @torch.no_grad()
+    def probe(self, items: list[dict]) -> dict:
+        """D908's short-constraint gate on the item head: the share read as a fact (P(fact) ≥ 0.5) and the share not
+        read as all-clear (1 − P(clear) ≥ 0.5)."""
+        n = self.net
+        p = F.softmax(n.item_head(n.encode([self._f(item_text(x)) for x in items], n.item_proj)), dim=1)
+        return {"probe_fact": round(float((p[:, 0] >= 0.5).float().mean()), 4),
+                "probe_not_clear": round(float((1 - p[:, 1] >= 0.5).float().mean()), 4)}
+
+
 def para_key(text: str) -> str:
     return f"{zlib.crc32(text.encode()):08x}{len(text)}"
 

@@ -70,6 +70,8 @@ def run(args: argparse.Namespace) -> dict:
                 model = mod.make(cfg).fit(train)
                 scores = model.score(test)
                 g = grade(test, *scores)
+                if args.probe and hasattr(model, "probe"):
+                    g.update(model.probe(read_rows(args.probe)))
                 g.update(seed=seed, train_rows=len(train), secs=round(time.time() - t0, 1))
                 print(json.dumps({"held": held, "mode": mode, **g}), flush=True)
                 g["per_task"] = per_task(test, *scores)
@@ -207,6 +209,7 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--max-test", type=int, default=0)
     r.add_argument("--para", default="")
     r.add_argument("--teacher", default="")
+    r.add_argument("--probe", default="", help="items to read alone, e.g. m3r/short-constraints.jsonl (D908's gate)")
     r.add_argument("--out", default="")
     f = sub.add_parser("folds")
     f.add_argument("--source", action="append", required=True)
