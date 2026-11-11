@@ -10,6 +10,20 @@ two hand-written ones a request written here for them. Every fixture should scor
 import argparse
 import json
 
+# The parent's hand audit (2026-11-11): M3 fixtures whose text, as given, states no binding constraint (the one-sentence
+# cut kept a header or a pleasantry). They stay in the length probe; G1 reads the other 43.
+DROP = {
+    "m2-test/sw-00079/t4": "only 'Thanks for sending over invoice 1043.'",
+    "m2-test/sw-00079/t8": "an applicant's pending status; not that the request's second rod is theirs",
+    "sim/train5/dinner-guests-vegetarian": "title 'the 7th!!' and a From: line only",
+    "sim/train5/wedding-no-plus-ones": "title 'Numbers for the 5th (sorry!!)' and a From: line only",
+    "sim/train5/us-travel-authorisation-refused": "'Your application status has changed' and a From: line only",
+    "sim/train5/valencia-hotel-night-works": "'A note for guests staying with us this autumn' and a From: line only",
+    "sim/train5/passport-away-for-renewal": "'We've received your application' and a From: line only",
+    "sim/train5/book-club-dinner-decline": "only 'sorry, meant to tell you last week and it slipped my mind'",
+    "sim/train5/tennis-membership-lapsed": "title, then only a To: line",
+}
+
 HAND = {
     "Zed Quinn contract on hold": "Pay the Globex renewal invoice from Zed Quinn today.",
     "Harlow venue": "Pay the Harlow venue deposit invoice.",
@@ -44,10 +58,11 @@ def main():
             req, today = m2req[key]
         else:
             req, today = simreq[key]
-        out.append({"src": f"m3r/{f['src']}", "request": req, "today": today, "title": f["title"], "text": f["text"]})
+        out.append({"src": f"m3r/{f['src']}", "request": req, "today": today, "title": f["title"], "text": f["text"],
+                    "audited": f["src"] not in DROP})
     for i, c in enumerate(m7):
         it = c["item"]
-        out.append({"src": f"m7/{i}", "request": c["request"], "today": "", "title": it["title"],
+        out.append({"src": f"m7/{i}", "audited": True, "request": c["request"], "today": "", "title": it["title"],
                     "text": f"From: {it.get('from', '')}\n{it['text']}" if it.get("from") else it["text"]})
     with open(a.out, "w") as f:
         for r in out:

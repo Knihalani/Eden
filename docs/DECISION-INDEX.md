@@ -598,6 +598,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D898 | 2026-11-11 | Lab only: Pi round 2 is pre-registered | lab |
 | D899 | 2026-11-11 | Stopped by the owner's decision (through the parent): the LLM-sized local checker; Pi round 2 (D898) is cancelled before any shard ran. | adopted |
 | D980 | 2026-11-11 | Finding (M1 micro track, gate G0): the 8B teacher does not agree with Haiku's push check as closely as Haiku agrees with itself, because… | finding |
+| D981 | 2026-11-11 | Lab only: the micro checker's bar is pre-registered: better than Haiku, not within its noise | lab |
 | D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
 | D930 | 2026-11-11 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | rejected |
 | D931 | 2026-11-11 | Finding: the push check does not repeat itself closely. | finding |

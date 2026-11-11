@@ -259,6 +259,35 @@ the 8B's held-out templates, the 8B names the fact about as often (162–174 of 
 look-alike and neutral pools far less (16 of 234 and 2 of 215 at −3.0, against 40 and 40). The gap to Haiku is mostly
 Haiku's extra yeses. A quality bar in place of the agreement bar is with the parent.
 
+### 5a. Pre-registration: the micro checker's bar (D981), written before any held-out read
+
+The owner's bar, through the parent: the micro model must be **better than Haiku**, not within its noise, and the
+ship decision is a Pi pair. The gates, in order; every number is read on the splits named, no other.
+
+- **Splits.** Train: M2 v2 train (2,880 families, the 8B's scores) and the sim's train-split templates. Selection
+  (between candidates and rounds): M2 v2 val **and** the sim's 25 dev templates, reported apart (M6's lesson, D920:
+  a model chosen on synthetic val alone did not transfer). Held-out, read once a head: the sim's **40 held-out
+  templates** (the 679 recorded Haiku check calls on them, and their pairs) and M2 v2 test, reported apart; the bar
+  must hold on the sim held-out.
+- **One operating mark, fitted on train only:** on M7's recorded calls of train1–4's train-split templates, the
+  lowest score mark at which the model names no more look-alikes than Haiku did and speaks on at most half as many
+  neutral pools; the same rule gives the 8B teacher's mark for the comparisons below.
+- **G1 (fixtures):** M7's 16 hand-written cases at ≥ 15 of 16; M3's 52 short constraints audited by hand (9 dropped:
+  their text as given states no constraint, listed in `fixtures.py`), the remaining 43 at ≥ the teacher's own pass
+  rate at its mark; all 52 reported as a length probe. The teacher on the audited 43: 33 at −3.0, 37 at −6.0.
+- **G2 (length and format):** on the selection split, the fact shown as title only, one sentence and full, with
+  headers stripped and sentences shuffled: the fact-against-look-alike AUC drops by at most 0.03.
+- **G3/G4 (offline, held-out, at the one mark):** facts named **≥ Haiku's**; look-alikes named **≤ Haiku's**;
+  neutral pools spoken on **≤ 0.5 × Haiku's**; planted-vs-decoy AUC ≥ Haiku's on the same pools (Haiku's from its
+  recorded verdicts; the 8B's reported as the teacher's ceiling).
+- **G5 (the arbiter), push-check head:** a Pi pair on fresh seeds, the micro model in S's place against Haiku-S on
+  main: hidden facts' point estimate **≥ +1 point**, template-clustered lower bound **> −1.5**; confirmed concerns
+  and decoys handed no higher; wall time reported (expected about −1 s).
+- **Reader head:** the same structure against the Haiku `askReader` (bearing: the item's most binding sentence in a
+  template, no model prose), and the agent must still use the fact.
+- **Stop:** a head that cannot beat Haiku after two development rounds is reported with its numbers and not shipped.
+  If facts land at +0 within noise with precision clearly better, it is reported for the owner's decision.
+
 ## Reproduce
 
 ```bash
