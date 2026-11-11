@@ -480,6 +480,25 @@ not as a line per request.
   Priya Raman to 11:30 on Thursday?", got back "Priya emailed that she can't do anything before 12:15, so 11:30 may
   not work for her": the candidate packet carried the mail the agent had no tool to read. One run, not a measurement.
 
+## Check your integration (`eden doctor`, D852)
+
+Each step of the loop above has a measured cost when it is skipped, and Eden's answer to a skipped step is silence,
+which is also its normal answer. `eden doctor` names the ones your integration skips:
+
+```bash
+EDEN_API_KEY=… bun run doctor --url http://127.0.0.1:8790    # no key against a dev server; or: bun run eden doctor
+docker exec <container> bun packages/server/src/cli.ts doctor --env   # in the image, with the server's own config
+```
+
+It reads the server's content-free counters for the key's tenant (`/v1/usage`'s `integration`: event kinds, the wait
+sent on each user message, `pending` replies and takes, asks, checks of acting tools, change notices by form, refused
+requests; since the server started), an `EDEN_TRACE=1` log when given, and with `--env` the environment it runs in
+(variable names and the user-sources file's flags, never a value; so run that where the server runs). For each
+obligation it prints `ok`, `FIX` or `?` (no evidence either way yet, normal on a first run with a few requests) and
+what it saw in counts; for each `FIX` the measured cost of missing it, with its source, and the fix (`--verbose` adds
+them for `?`). It exits 1 when something needs fixing, so it can run in your CI against a staging server. It cannot
+see whether you keep packets in your transcript (D336): that one is always `?`.
+
 ## Why did Eden say this, or stay silent? (`explain`, D277)
 
 Every decision Eden makes is traced with no content (D56): its kind, fixed reason words or a cue id (a hash), its

@@ -120,6 +120,9 @@
     "packages/server": {
       "name": "@eden/server",
       "version": "0.0.0",
+      "bin": {
+        "eden": "src/cli.ts",
+      },
       "dependencies": {
         "@eden/engine": "workspace:*",
         "@eden/graph": "workspace:*",
@@ -130,6 +133,9 @@
         "@eden/sources": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "zod": "^4.0.0",
+      },
+      "devDependencies": {
+        "@eden/client": "workspace:*",
       },
     },
     "packages/sim": {

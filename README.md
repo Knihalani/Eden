@@ -67,7 +67,7 @@ bun run trace-report server.log    # the server's output, saved by `tee` above
 Four things that tripped first-time users (fresh-eyes walkthroughs, D856):
 
 - **Another port:** `PORT=8711 bun run dev` moves the server; set `EDEN_URL=http://127.0.0.1:8711` for everything
-  else (both clients, the examples, and the proxy read it when no base URL is passed).
+  else (both clients, the examples, the proxy and `bun run doctor` read it when no base URL is passed).
 - **Keys in dev mode:** with `EDEN_DEV=1` pass no API key at all (unset `apiKey`/`api_key`, no `EDEN_API_KEY`): a dev
   server accepts a missing key and refuses any made-up one with a 401.
 - **Staying at $0:** the startup line says `model roles on` when `OPENROUTER_API_KEY` is in the server's environment,
@@ -75,6 +75,9 @@ Four things that tripped first-time users (fresh-eyes walkthroughs, D856):
   no-model path.
 - **One `sessionId` per conversation:** an item is handed out once per session, so a second script (or the curls
   above) reusing `"s"` gets `(shown above)` instead of the text. Use a fresh session id per run or conversation.
+
+Then `bun run doctor` checks your integration against each obligation (D852): what it saw, what a missing one
+costs, and the fix.
 
 What you see: the first request gets a packet (`injection.text`, the `<context …>` envelope your agent puts before
 its model call) and `pending: true` (slower work may queue more for `/v1/pending`). An item is delivered once per
