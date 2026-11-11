@@ -25,7 +25,7 @@ its model roles.
 | `src/cli.ts`          | `eden doctor`, `eden serve`, `eden trace-report`, `eden digest` (the package's `bin`, `bun run eden`) |
 | `src/digest.ts`       | `bun run digest [log …] [--json]` (D293): "Eden caught this" as Markdown over an `EDEN_TRACE=1` log: how often context was added, its kinds, connectors, how often the agent used it (from `{"usage": …}` lines, `onUsage`; "not measured" without agent events or feedback), silence (explain's sentences), time and spend; connector calls per 1,000 requests priced on market.py's plans (`CONNECTOR_PLANS`; the sync's `{"sync": …}` counter lines `main.ts` logs once a minute; `--baseline LOG` for a without-Eden column); counts and connector ids only |
 | `src/connector-presets.ts` | `PRESETS` (`gmail`, `google-calendar`, `caldav`, `obsidian`) and `expandPreset` (D294): a spec's `preset` filled in by `checkSpecs` before every other check; read tools only (search, a listing), never `trustedReadTools`; only `caldav` names a fetch tool (`caldav_get_event_by_uid`, D842: its fetched copy equals the searched one in the connector lab); the others say why in `noFetch` (D415: a Gmail thread fetch holds every message, the summary search the newest; no Calendar reply captured; D842: mcpvault's search ref is a uri `read_note` does not take), so those keep the daily sweep (D356) unless an operator adds one; `lab-preset-tools.json` is the lab's capture; `connector-presets.test.ts` maps each against real schemas (`src/fixtures/google-tools.json`, the lab's fixtures), and checks the weekly sweep (D356) for a preset with an operator's fetch tool and the daily sweep without |
-| `src/persist.ts`       | D425 (opt-in): `childPersistDir` (`<i>-of-<N>` under `EDEN_PERSIST_FROZEN_DIR`, one per process) and `prunePersistDirs` (another N's directories deleted before any child starts: those users re-sync); `persist.test.ts` holds the settings, the pruning and a SIGTERM-and-restart run of `main.ts` |
+| `src/persist.ts`       | D425 (on by default since D991): `childPersistDir` (`<i>-of-<N>` under `EDEN_PERSIST_FROZEN_DIR`, one per process) and `prunePersistDirs` (another N's directories deleted before any child starts: those users re-sync); `persist.test.ts` holds the settings, the pruning and a SIGTERM-and-restart run of `main.ts` |
 | `src/router.ts`        | The multi-process router (D113, D163; `/v1/usage` summed over every child, D326): `startRouter`/`runRouter` spawn N `main.ts` children (each `PORT=0`, its own `source-map.<i>.db`), route each request by `childFor(tenant, userId, N)` (tenant from the key, `userOf` parses the body's top-level `userId`), forward the bytes unchanged, answer `/healthz` (200 while any child is up, 503 when none is), an oversized declared length and a tenant past its whole rate (429, before reading the body) themselves, send `/v1/forget` to every child (owner's answer, 503 if any failed), return 503 for a dead child and restart it (1 s, doubling to 30 s), give every start (restarts too) a `startTimeoutMs` deadline after which the child is SIGKILLed and retried (D172); `rehomeSourceMaps` merges source-map files no child of the current N opens into the current set and deletes them (router before its children, `main.ts` before `buildPartner` with one process); `bench/router.bench.ts` is its gate |
 
 ## Rules that apply here
@@ -128,9 +128,13 @@ its model roles.
   A child holds 1/N of the tenant's daily model spend (D163; the spend leases of D327 were deleted by D817). A new
   per-tenant cap is divided by N too.
 - **Secrets.** Never log API keys or request bodies; `EDEN_API_KEYS` entries need keys of 16+ characters.
-- **Persisted frozen users (D425, opt-in).** `EDEN_PERSIST_FROZEN_DIR` and `EDEN_PERSIST_KEY` (both or neither; 32
-  bytes as hex or base64, held in `PersistKey`, which prints `[redacted]`; no message names its value) and
-  `EDEN_PERSIST_MAX_MB` (default 4,096, divided by N in a child). `main.ts` builds one `EncryptedFrozenDisk` per
+- **Persisted frozen users (D425; on by default since D991).** `EDEN_PERSIST_KEY` is required (32 bytes as hex or
+  base64, held in `PersistKey`, which prints `[redacted]`; no message names its value): startup stops without it
+  unless `EDEN_PERSIST=off` (which refuses the other variables beside it) or `EDEN_DEV=1` with none of them set. Never
+  generate a key here: one beside the files protects nothing. `EDEN_PERSIST_FROZEN_DIR` defaults to
+  `$EDEN_HOME/frozen`; `EDEN_PERSIST_MAX_MB` to the machine's memory (`machineMemory`, a cgroup limit lowers it; at
+  least 4,096; `defaultPersistMb`), divided by N in a child. A test or bench that starts a non-dev server and does
+  not measure persistence sets `EDEN_PERSIST: "off"`. `main.ts` builds one `EncryptedFrozenDisk` per
   process in its own directory, logs problems as counts by reason once a minute at most, and writes live users at
   SIGTERM within 1.5 s (the router kills a child 2 s after its SIGTERM). The router (or one process with no router)
   deletes other N's directories first (`prunePersistDirs`), the treatment D163 asks of any per-user file.

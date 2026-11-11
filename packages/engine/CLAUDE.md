@@ -14,7 +14,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `partner.ts` (about 7,000 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
 | `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
 | `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188)                                                                  |
-| `persist.ts`                                                               | `EncryptedFrozenDisk` (D425, opt-in): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
+| `persist.ts`                                                               | `EncryptedFrozenDisk` (D425; the servers' default since D991): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
 | `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
 | `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
@@ -54,8 +54,8 @@ and `source-days` (the same over whole days with changing sources: listing and c
 - **Untrusted text (D11, D19).** Source and event text are data in every prompt (fenced, labelled), and everything
   delivered is inside the data envelope.
 - **Item content stays in memory (D8):** only content-free metadata goes to the source map. The one exception is
-  opt-in (D425): `ItemCache.persist(disk)` writes frozen users' blobs encrypted (`persist.ts`); nothing else may write
-  item content to disk.
+  D425 (the servers turn it on by default since D991, with the operator's key): `ItemCache.persist(disk)` writes
+  frozen users' blobs encrypted (`persist.ts`); nothing else may write item content to disk.
 - **One product (D112, D814).** `DEFAULT_CONFIG` is the best measured configuration and what ships. A new behaviour
   lands as a trial switch in `config.ts` (off), with a row in DECISIONS.md's trials table, and the session that
   opened it decides it as soon as its evidence is in (no end dates weeks out): it joins the default (and a part in
@@ -475,8 +475,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   interval, with at least `COMPACT_MIN_DELTA` (32) delta docs or removals waiting, has `index.compact()` (a full
   merge, 2.6-6 ms at 3,000 items, the delta's spare room let go) as a sliced background job, looked at again when it
   runs. Its purge can release terms, as a write's purge can.
-- **Persisted frozen users (D425, D426, opt-in; `persist.ts`, `persist.test.ts`, `bench/restart.bench.ts`).** With
-  `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
+- **Persisted frozen users (D425, D426; on in the servers by default since D991; `persist.ts`, `persist.test.ts`,
+  `bench/restart.bench.ts`).** With `ItemCache.persist(disk)`, `install` (every freeze) writes the blob and the partner's `persistHooks.save` (the sync's
   `snapshot`); `thawed` deletes it (on disk is only ever a frozen user's state) and, for a user read back from disk
   (`FrozenUser.fromDisk`), calls `restored` (the sync's `restore`, cards enqueued again). `peek`, `touch` and `ready`
   read a user this process does not hold from disk (`load`): synchronous, ~1-3 ms a user. A loaded user gets a new

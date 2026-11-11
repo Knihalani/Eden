@@ -1,7 +1,7 @@
 # Eden's HTTP server (D280). Build and run from the repo root:
 #   docker build -t eden .
 #   docker run -p 8790:8790 -e EDEN_API_KEYS="acme:$(openssl rand -hex 24)" -e EDEN_PROCESSES=2 \
-#     -v eden-data:/data eden
+#     -e EDEN_PERSIST_KEY="$(cat /run/secrets/eden_persist_key)" -v eden-data:/data eden
 # (keep the key: callers send it as Authorization: Bearer <key>; one tenant:key pair per tenant, comma-separated).
 # Add -e OPENROUTER_API_KEY=… for the model roles. Connectors: -v ./sources:/sources:ro
 # -e EDEN_USER_SOURCES_FILE=/sources/users.json (a path inside the container), plus -e for each token variable the
@@ -25,8 +25,9 @@ RUN --mount=type=secret,id=ca,required=false \
   if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
   bun install --frozen-lockfile --production
 # The source map (entity names and counts, never content, D8) persists in EDEN_HOME; item text stays in memory.
-# Opt-in (D425): -e EDEN_PERSIST_FROZEN_DIR=/data/frozen -e EDEN_PERSIST_KEY=<openssl rand -hex 32> keeps idle
-# users across restarts, encrypted on disk (docs/INTEGRATION.md, "Restarts without a full re-sync").
+# Idle users are kept across restarts, encrypted in /data/frozen (D991): pass -e EDEN_PERSIST_KEY=<32 bytes, made once
+# with openssl rand -hex 32 and kept in a secret store>, or -e EDEN_PERSIST=off; without either the server refuses to
+# start (docs/INTEGRATION.md, "Restarts without a full re-sync").
 ENV HOST=0.0.0.0 PORT=8790 EDEN_HOME=/data NODE_ENV=production
 RUN mkdir -p /data && chown bun:bun /data
 VOLUME /data

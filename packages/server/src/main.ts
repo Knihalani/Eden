@@ -148,7 +148,9 @@ async function serve(config: ServerConfig): Promise<void> {
     if (persist) {
       const t0 = performance.now();
       const n = partner.persistLive(PERSIST_FLUSH_MS);
-      console.error(`eden: persisted ${n} live users at shutdown in ${Math.round(performance.now() - t0)} ms`);
+      // Only when it wrote something: a router's failed start stops its children, whose lines would bury the cause.
+      if (n > 0)
+        console.error(`eden: persisted ${n} live users at shutdown in ${Math.round(performance.now() - t0)} ms`);
     }
     try {
       sourceMap.close();
@@ -166,7 +168,9 @@ async function serve(config: ServerConfig): Promise<void> {
       ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
       `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
-      (persist ? `; frozen users persisted, encrypted (${persist.count} on disk, D425)` : "") +
+      (persist
+        ? `; frozen users persisted, encrypted (${persist.count} on disk, cap ${mb(config.persist!.maxBytes)} MB, D991)`
+        : "; frozen users NOT persisted (EDEN_PERSIST=off or dev mode): a restart re-reads every user's sources") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
           ` $${round(models.usdPerTenantDay / child.count)}/day,` +
@@ -221,4 +225,8 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | null {
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function mb(bytes: number): number {
+  return Math.round(bytes / 1_048_576);
 }

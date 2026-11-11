@@ -637,8 +637,8 @@ facts and time in the run above.
 `docker build -t eden .` from the repo root builds the server image (D280); its header lists the flags. It listens on
 `PORT` (8790) on all interfaces, keeps the source map (entity names and counts, never content, D8) in the `/data`
 volume, and reports health on `/healthz`. Item text, sessions and the explain traces live in memory: a restart starts
-users' caches over (the background sync refills them) and loses nothing a user wrote. To restart without re-reading
-every source, opt in to persisting idle users (below, "Restarts without a full re-sync"). Set `EDEN_PROCESSES` to the
+idle users are read back from disk, encrypted, and polled for what is new (D991, below: "Restarts without a full
+re-sync"); the server needs `EDEN_PERSIST_KEY` for that and refuses to start without it unless `EDEN_PERSIST=off`. Set `EDEN_PROCESSES` to the
 container's CPU quota and read "Processes and per-tenant caps" below. Never run `EDEN_DEV=1` on a reachable port (the
 server warns when it listens beyond loopback). Generate each tenant's key with `openssl rand -hex 24`; requests send
 it as `Authorization: Bearer <key>` (no other header is read). A configuration mistake (a short key, a missing
@@ -695,21 +695,31 @@ router over 4 children served 3.26x the events per second of one process (D178, 
   CPU request without a limit, a memory limit) are not seen: set `EDEN_PROCESSES` explicitly in any container, to
   the CPUs it may use and no more than its memory limit allows at ~67 MB each.
 
-### Restarts without a full re-sync (`EDEN_PERSIST_FROZEN_DIR`, opt-in, D425-D427)
+### Restarts without a full re-sync (persistence, on by default since D991; D425-D427)
 
 **Upgrading across D603** (persist format 3): files written by an earlier version are discarded at startup or first
 read, so each persisted user syncs from the start once. An `EDEN_ENGINE_CONFIG` file that still sets
 `sourceYieldFloor` or `sourceYieldWords` stops the server at startup with "unknown key" (D103): remove the two keys.
 
-By default no item content touches the disk (D8), so a restart re-reads every active user's sources from the start:
-on a full 4-core box about 3.6 minutes of all four cores (A14), and every connector lists everything again. Set
-both of these to keep idle users across a restart instead:
+Idle users are kept across a restart by default (D991; until then D8 kept content in memory only, and D425 made this
+an opt-in). The server needs one secret for it and refuses to start without it:
 
 ```bash
-EDEN_PERSIST_FROZEN_DIR=/data/frozen          # one subdirectory per process (<i>-of-<N>)
-EDEN_PERSIST_KEY=$(openssl rand -hex 32)      # 32 bytes, hex or base64; keep it in your secret store, not the image
-EDEN_PERSIST_MAX_MB=4096                      # optional; the directory's cap across processes (default 4,096)
+EDEN_PERSIST_KEY=...                          # 32 random bytes, hex or base64 (openssl rand -hex 32), made ONCE and
+                                              # kept in your secret store, never in the image or a committed file
+EDEN_PERSIST_FROZEN_DIR=/data/frozen          # optional; default $EDEN_HOME/frozen; one subdirectory per process
+EDEN_PERSIST_MAX_MB=12288                     # optional; the directory's cap across processes (default: the
+                                              # machine's memory, at least 4,096; a cgroup memory limit lowers it)
+EDEN_PERSIST=off                              # instead of the three above: nothing written, every restart re-reads
+                                              # every user's sources (about 2 minutes and 30 listings a user, D863)
 ```
+
+Dev mode (`EDEN_DEV=1`) is off unless one of these is set. The listening line says which: "frozen users persisted,
+encrypted (N on disk, cap M MB, D991)" or "frozen users NOT persisted". The default cap holds a file for every user
+a box can serve: users are bound by memory (2-4.4 MB of RSS a user at the 3,000-item cap) and a user's file is
+smaller than that (compact 0.8-1.2 MB, warm 1.8-2.7 MB). Without persistence a restart re-reads every active user's
+sources from the start: on a full 4-core box about 3.6 minutes of all four cores (A14), and every connector lists
+everything again.
 
 A user idle 30 minutes (frozen compact; the two-minute warm freeze, D862, writes nothing) is then also written to
 that directory, encrypted (AES-256-GCM, a file per user under a

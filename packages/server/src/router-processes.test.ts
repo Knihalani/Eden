@@ -92,6 +92,7 @@ describe("router rate limit, divided", () => {
         ...process.env,
         EDEN_HOME: dir,
         EDEN_API_KEYS: keys,
+        EDEN_PERSIST: "off",
         EDEN_TENANT_RPS: "0.01",
         EDEN_TENANT_BURST: "4",
       };
@@ -124,6 +125,7 @@ describe("router rate limit, divided", () => {
         ...process.env,
         EDEN_HOME: dir,
         EDEN_API_KEYS: keys,
+        EDEN_PERSIST: "off",
         EDEN_TENANT_RPS: "0.01",
         EDEN_TENANT_BURST: "2",
       };
@@ -186,7 +188,13 @@ describe("router rate limit, divided", () => {
       const dir = tempDir("eden-router-bad-");
       const sources = join(dir, "bad.json");
       writeFileSync(sources, "{not json");
-      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, EDEN_SOURCES_FILE: sources };
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_API_KEYS: keys,
+        EDEN_PERSIST: "off",
+        EDEN_SOURCES_FILE: sources,
+      };
       const pids: number[] = [];
       const start = startRouter({
         config: { ...loadConfig(env), port: 0, processes: 2 },
@@ -205,7 +213,7 @@ describe("router rate limit, divided", () => {
     "a router port already in use fails the start, and every child it started is stopped",
     async () => {
       const dir = tempDir("eden-router-port-");
-      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys };
+      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, EDEN_PERSIST: "off" };
       const taken = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("taken") });
       const pids: number[] = [];
       try {
@@ -241,6 +249,7 @@ describe("changing N never strands a user's source-map rows (D163)", () => {
         EDEN_SOURCE_MAP: join(dir, "source-map.db"),
         EDEN_SOURCES_FILE: sources,
         EDEN_API_KEYS: keys,
+        EDEN_PERSIST: "off",
         EDEN_TENANT_RPS: "1000",
         EDEN_TENANT_BURST: "1000",
       };
@@ -327,7 +336,13 @@ describe("every start has a deadline (D172)", () => {
       const dir = tempDir("eden-router-hang-");
       const entry = join(dir, "entry.ts");
       writeFileSync(entry, ENTRY);
-      const env = { ...process.env, EDEN_HOME: dir, EDEN_API_KEYS: keys, MARKER: join(dir, "started") };
+      const env = {
+        ...process.env,
+        EDEN_HOME: dir,
+        EDEN_API_KEYS: keys,
+        EDEN_PERSIST: "off",
+        MARKER: join(dir, "started"),
+      };
       const config = { ...loadConfig(env), port: 0, processes: 1 };
       const restartMs = 50;
       const startTimeoutMs = 500;

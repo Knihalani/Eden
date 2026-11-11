@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
-import { loadConfig } from "./config";
+import { defaultPersistMb, loadConfig, machineMemory } from "./config";
 import { childPersistDir, prunePersistDirs } from "./persist";
 
 const root = mkdtempSync(join(tmpdir(), "eden-persist-server-"));
@@ -17,12 +17,44 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 const HEX = "a3".repeat(16) + "5c".repeat(16);
 const dev = { EDEN_DEV: "1" };
 
-describe("EDEN_PERSIST_* (D425)", () => {
-  test("off unless both are set; one alone stops startup naming the other", () => {
+describe("EDEN_PERSIST_* (D425, on by default since D991)", () => {
+  const prod = { EDEN_API_KEYS: "acme:0123456789abcdef" };
+  test("a production start without a key stops naming EDEN_PERSIST_KEY and EDEN_PERSIST=off; never a generated key", () => {
+    expect(() => loadConfig(prod)).toThrow(/EDEN_PERSIST_KEY is not set.*EDEN_PERSIST=off/);
+    expect(() => loadConfig({ ...prod, EDEN_PERSIST_FROZEN_DIR: root })).toThrow(/EDEN_PERSIST_KEY is not set/);
+    expect(() => loadConfig({ ...prod, EDEN_PERSIST: "on" })).toThrow(/EDEN_PERSIST_KEY is not set/);
+    expect(() => loadConfig({ ...prod, EDEN_PERSIST: "yes" })).toThrow(/EDEN_PERSIST must be/);
+    // On with the key alone, in EDEN_HOME's frozen directory.
+    const on = loadConfig({ ...prod, EDEN_PERSIST_KEY: HEX }).persist!;
+    expect(on.dir).toBe(join(process.env.EDEN_HOME!, "frozen"));
+    expect(loadConfig({ ...prod, EDEN_PERSIST_KEY: HEX, EDEN_PERSIST_FROZEN_DIR: root }).persist!.dir).toBe(root);
+  });
+
+  test("EDEN_PERSIST=off is the operator's explicit choice, and refuses a half-set configuration", () => {
+    expect(loadConfig({ ...prod, EDEN_PERSIST: "off" }).persist).toBeNull();
+    for (const extra of [{ EDEN_PERSIST_KEY: HEX }, { EDEN_PERSIST_FROZEN_DIR: root }, { EDEN_PERSIST_MAX_MB: "10" }])
+      expect(() => loadConfig({ ...prod, EDEN_PERSIST: "off", ...extra })).toThrow(/EDEN_PERSIST=off with/);
+  });
+
+  test("dev mode is off unless a persistence variable asks for it, and then needs the key", () => {
     expect(loadConfig(dev).persist).toBeNull();
-    expect(() => loadConfig({ ...dev, EDEN_PERSIST_FROZEN_DIR: root })).toThrow(/without EDEN_PERSIST_KEY/);
-    expect(() => loadConfig({ ...dev, EDEN_PERSIST_KEY: HEX })).toThrow(/without EDEN_PERSIST_FROZEN_DIR/);
-    expect(() => loadConfig({ ...dev, EDEN_PERSIST_MAX_MB: "10" })).toThrow(/EDEN_PERSIST_MAX_MB/);
+    expect(() => loadConfig({ ...dev, EDEN_PERSIST_FROZEN_DIR: root })).toThrow(/EDEN_PERSIST_KEY is not set/);
+    expect(() => loadConfig({ ...dev, EDEN_PERSIST_MAX_MB: "10" })).toThrow(/EDEN_PERSIST_KEY is not set/);
+    expect(loadConfig({ ...dev, EDEN_PERSIST_KEY: HEX }).persist).not.toBeNull();
+  });
+
+  test("the default cap is the machine's memory (a cgroup limit lowers it), at least 4,096 MB", () => {
+    const GB = 1_073_741_824;
+    const env = { ...prod, EDEN_PERSIST_KEY: HEX };
+    expect(loadConfig(env, 2, 12 * GB).persist!.maxBytes).toBe(12 * GB);
+    expect(loadConfig(env, 2, 2 * GB).persist!.maxBytes).toBe(4 * GB);
+    expect(defaultPersistMb(NaN)).toBe(4_096);
+    const files: Record<string, string> = { "/sys/fs/cgroup/memory.max": "6442450944\n" };
+    expect(machineMemory((p) => files[p] ?? null, 16 * GB)).toBe(6 * GB);
+    expect(machineMemory((p) => (p.endsWith("memory.max") ? "max\n" : null), 16 * GB)).toBe(16 * GB);
+    // cgroup v1's "no limit" is a huge number, never above the machine's total.
+    const v1 = (p: string) => (p.endsWith("limit_in_bytes") ? "9223372036854771712" : null);
+    expect(machineMemory(v1, 16 * GB)).toBe(16 * GB);
   });
 
   test("the key is 32 bytes (hex or base64), never a placeholder, and no message or log shows it", () => {
