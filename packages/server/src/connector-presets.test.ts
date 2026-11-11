@@ -32,7 +32,7 @@ const SCHEMAS: Record<string, ToolSchema> = {
   search_notes: (labTools as Record<string, { inputSchema: ToolSchema }>).mcpvault!.inputSchema,
   // P4 (D842): captured from the lab's caldav server over Radicale.
   caldav_get_event_by_uid: (
-    labPresetTools as { caldav: { tools: { name: string; inputSchema: ToolSchema }[] } }
+    labPresetTools as unknown as { caldav: { tools: { name: string; inputSchema: ToolSchema }[] } }
   ).caldav.tools.find((t) => t.name === "caldav_get_event_by_uid")!.inputSchema,
 };
 
