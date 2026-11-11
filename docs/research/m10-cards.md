@@ -21,6 +21,25 @@ per item at ingest, on CPU.
 
 All five hold, or the trial is deleted with its code and tests (D814).
 
+### Amended bar (the owner's, before any held-out funnel or Pi read)
+
+Haiku is to be cut out entirely, and a replacement must be better than Haiku, not equal. This replaces bars 1–3:
+
+1. **Funnel ($0), micro cards against Haiku cards** (the shipped coverage's requests in both arms; arm A replays the
+   shipped Haiku cards, arm B the micro tagger's cards for the same items), on the held-out families: train5 and
+   train6, seeds 41–44, with `--neutral`. Hidden surfaced at least +1% (relative) over the Haiku arm, decoys surfaced
+   no higher, neutral packets (any packet) no higher. train1–4 (whose planted items are in the training split) and
+   M2's synth-test are reported beside it, never in the bar.
+2. **Pi pair, micro against Haiku**: hidden facts point estimate ≥ +1 point, template-clustered lower bound > −1.5,
+   confirmed concerns no higher; cap $8.
+3. **The headline arm with M11**: micro cards plus M11's micro expansion, no Haiku call at ingest, against the shipped
+   Haiku cards and intent, on the same two rules.
+4. Size and speed (≤ 1 ms an item, ≤ 4 MB) and the hard gates (short constraints flagged at least as often as Haiku's
+   mean over two readings, 37 of 52; every field fixture) stand.
+5. **Field agreement with Haiku is a diagnostic only.** Fields are weighed by what the engine consumes.
+
+Two development rounds; if no arm passes, M10 reports with numbers and ships nothing (no downgrade).
+
 ## Data
 
 - **Sim items** (`packages/sim/src/lab/m10/export.ts`): every item a sync of the train and longtail worlds holds
