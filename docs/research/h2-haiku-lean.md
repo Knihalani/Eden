@@ -120,3 +120,26 @@ read a day under each setting × the measured $ a item.
 ## 2. Results
 
 (Filled in below as each run is read.)
+
+### 1d. Addendum (before the Pi pair's first call): workstream 3's Pi pair, exactly
+
+Written after workstreams 1 and 2 stopped on their screens (§2) and after workstream 3's funnels were read; no Pi call
+made yet. Both arms replay the same requests (`--coverage full`: Haiku's every-item index), so they differ only in
+which items the enricher reads for their requests; the background card calls are replayed, so this pair measures the
+agent's answers, not the card bill (that is §2's cold-start figure).
+
+```bash
+EDEN_COMMIT=<this commit> SSL_CERT_FILE=/root/.ccr/ca-bundle.crt .venv-modal/bin/modal run \
+  packages/sim/modal/lab_fanout.py --kind pi-ab --suites train5,train6,train5r,train6r --seeds 41,42,43,44 --cap 8 \
+  --run h2-every --args "--config default --tenant-prompt --push payload --source-profile \
+  packages/sim/lab/before-after/market-profiles/direct.json --model claude-haiku-5-5 --grader claude-haiku-5-5 \
+  --card-model claude-haiku-5-5 --reader-model claude-haiku-5-5 --cards <fanout_plan.CARDS> --coverage full \
+  --conditions eden,eden~every --variant-config {\"every\":{\"cardsLean\":false}} --variants hidden,control,neutral"
+bun packages/sim/src/lab/i3-regrade.ts --results <the four shards' out.json> --conditions eden,eden~every \
+  --spend-ledger .local/h2/ledger.jsonl --spend-cap 25 --run-label h2-every-sonnet
+python3 -I packages/sim/modal/bench_report.py --pair eden~every:eden --group every=<run dir> --sonnet
+```
+
+Read: hidden raised (Sonnet) with its template-clustered interval; Sonnet-confirmed concerns on control and neutral;
+Eden's per-task $ and wall. Reported to the owner as a decision input; nothing is promoted (the brief), whatever it
+reads. The whole pair, regrade included, stops at $8.
