@@ -288,6 +288,36 @@ ship decision is a Pi pair. The gates, in order; every number is read on the spl
 - **Stop:** a head that cannot beat Haiku after two development rounds is reported with its numbers and not shipped.
   If facts land at +0 within noise with precision clearly better, it is reported for the owner's decision.
 
+### 5b. Three rounds, and the stop (D982)
+
+The reader head was dropped before any round (the parent's decision): with `pushCandidates` at 5 the default's
+`askReader` makes no call (D236, D237), and the round-1 Pi ledgers hold no reader row; Eden's Haiku spend there was
+the check (about $0.20 per 1,000 tasks) and the background cards (about $0.08).
+
+Each round: three candidates (PairHash, BinPair, PoolSet), local CPU, one thread, five epochs, run by Haiku
+subagents; selection only (dev = the sim's 25 dev templates and their 414 recorded Haiku calls; M2 v2 val);
+the mark fitted on train1–4's train-split recorded calls by D981's rule (the teacher's: −6.37, where it passes 38
+of the 43 audited fixtures). Haiku on the dev calls: facts 116/144, look-alikes 36/137, neutral speaks 36/133.
+
+| Round | What it added | Best candidate | Sim dev AUC (fact vs look-alike) | Dev facts / look-alikes / neutral at the mark | G1 m7 · m3r audited |
+| --- | --- | --- | --- | --- | --- |
+| 1 | hashed n-grams and cross features, distilled on the 8B (M2 one group a family + the sim's train pools) | BinPair, lr 0.01 | 0.60 | 23 / 9 / 11 | 9/16 · 29/43 |
+| 2 | date relations, binding and all-clear cues near the request's words, a fact-above-twin margin, sim weight 3 | BinPair | 0.62 | 25 / 11 / 12 | 4/16 · 19/43 |
+| 3 | typed normalisation (dates, periods, amounts, names, numbers) and 2,088 new sim pools (train1–4 on 16 seeds, train1r–4r, longtail; no dev or held-out template) scored by the 8B | BinPair | **0.656** | **51** / 24 / 10 | 7/16 · 38/43 |
+| 3 | the same | PairHash · PoolSet | 0.61 · 0.62 | 44/15/2 · 34/21/5 | 3/16 · 1/16 |
+| 3 | sim pools only | BinPair | 0.54 | 14 / 6 / 7 | 6/16 · 26/43 |
+
+M2 val stayed at 0.83–0.91 in every round; M14 found that item length alone ranks M2's fact above its twin in 94%
+of tasks (0.68 on the sim), so part of that is a length cue (the harness now has length-free switches and
+length-controlled reads, `twin_all` and `twin_hard`; the runs above still had length features). Sizes 2.4 MB (BinPair
+6.3 MB counted at int8, about 1.6 MB packed), 3–5 ms a 15-item pool in Python with its feature extraction.
+
+**Stopped (D982).** After two development rounds and the parent's transfer round, the best micro student names
+fewer than half the facts Haiku names on the sim's dev templates at a mark with no more look-alikes: no held-out read
+and no Pi pair were made. The 8B teacher stays the only model past Haiku on the sim (D980), and it needs a datacentre
+GPU (D893). Kept: the harness (`packages/sim/lab/m1-student/`), the teacher's scores over M2 v2 and M14's rows
+(`eden-synth:v2/pairgroups/*.t8b.jsonl.gz`; branch `claude/m1-teacher-logo`, never merged).
+
 ## Reproduce
 
 ```bash
