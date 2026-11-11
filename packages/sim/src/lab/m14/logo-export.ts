@@ -42,7 +42,7 @@ export interface LogoRow {
 }
 
 const OTHERS = 24;
-const clean = (source: string, title: string, text: string): LogoItem => {
+export const cleanItem = (source: string, title: string, text: string): LogoItem => {
   const it = sanitizeItem({ id: "x", ref: "x", source, kind: "doc", title, text, updatedAt: 0 } as never);
   return { source, title: it.title, text: it.text.slice(0, 2_000) };
 };
@@ -50,7 +50,7 @@ const clean = (source: string, title: string, text: string): LogoItem => {
 /** A synth world (M2, G2, G3: one schema) as LOGO rows. */
 export function synthRows(w: SynthWorld, src: string): LogoRow[] {
   const items = new Map(w.items.map((i) => [i.id, i]));
-  const own = (i: SynthItem) => clean(i.source, i.title, i.text);
+  const own = (i: SynthItem) => cleanItem(i.source, i.title, i.text);
   const taken = new Set(w.tasks.flatMap((t) => [t.fact, t.decoy, ...t.neutrals]));
   const rng = new Rng(w.items.length * 7919 + w.tasks.length);
   return w.tasks.map((t) => {
