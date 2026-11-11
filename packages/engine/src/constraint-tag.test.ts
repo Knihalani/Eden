@@ -5,7 +5,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { checkEngineConfig } from "./config-check";
-import { ContextPartner, type PushPoolReport } from "./partner";
+import { ContextPartner, type PushPoolReport, type TagReader } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
 // M3 (D908): `constraintTag` vetoes the push gate's constraint test with a small item tagger's reading: an item the
@@ -29,7 +29,7 @@ const PLAIN = item("plain", "Harlow invoice", "Harlow invoice for the venue depo
 
 type Tag = (scope: { tenantId: string; userId: string }, it: ContextItem) => number | null;
 
-function setup(config: Record<string, unknown>, tag?: Tag) {
+function setup(config: Record<string, unknown>, tag?: Tag | TagReader | null) {
   const pools: PushPoolReport[] = [];
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => [HOLD, PLAIN] };
   const p = new ContextPartner({
@@ -50,7 +50,7 @@ function setup(config: Record<string, unknown>, tag?: Tag) {
       ...config,
     },
     onPushPool: (r) => void pools.push(r),
-    ...(tag ? { constraintTag: tag } : {}),
+    ...(tag === undefined ? {} : { constraintTag: typeof tag === "function" ? { read: tag } : tag }),
   });
   return { p, pools };
 }
@@ -99,9 +99,36 @@ describe("constraintTag (M3, D908)", () => {
     });
     await say(broken.p, "u7");
     expect(likeOf(broken.pools.at(-1)!, HOLD.id)).toBe(true);
+    expect(asked.length).toBeGreaterThan(0);
     expect(asked.every((u) => u === "u7")).toBe(true);
     const silent = setup({ constraintTag: 0.5 }, () => null);
     await say(silent.p);
     expect(likeOf(silent.pools.at(-1)!, HOLD.id)).toBe(true);
+  });
+
+  test("stored items go to the tagger's background ingest, per user; a user's forget drops their readings", async () => {
+    const ingested: string[] = [];
+    const forgot: string[] = [];
+    const reader: TagReader = {
+      read: () => 0.9,
+      ingest: (scope, items) => void ingested.push(...items.map((i) => `${scope.userId}:${i.id}`)),
+      forget: (scope, ids) => void forgot.push(`${scope.userId}:${ids ? ids.join(",") : "*"}`),
+    };
+    const { p } = setup({ constraintTag: 0.5 }, reader);
+    await say(p, "u1");
+    expect(ingested).toContain(`u1:${HOLD.id}`);
+    expect(ingested.every((x) => x.startsWith("u1:"))).toBe(true);
+    p.forget({ tenantId: "t", userId: "u1" });
+    expect(forgot).toContain("u1:*");
+  });
+
+  test("null turns the veto off; absent, the partner reads the shipped tagger itself", async () => {
+    const off = setup({ constraintTag: 0.5 }, null);
+    await say(off.p);
+    expect(likeOf(off.pools.at(-1)!, HOLD.id)).toBe(true);
+    const own = setup({ constraintTag: 0.999 });
+    await say(own.p);
+    // At a threshold no reading clears, the shipped tagger vetoes the constraint-worded item.
+    expect(likeOf(own.pools.at(-1)!, HOLD.id)).toBe(false);
   });
 });

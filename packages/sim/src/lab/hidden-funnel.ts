@@ -148,6 +148,7 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
+import { loadTagger } from "./m3-tagger";
 import {
   coverageLines,
   intentPlace,
@@ -230,6 +231,7 @@ const cli = flags(
         "connect-tick-s",
         "connect-stagger-s",
         "cards-ms",
+        "tagger",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -553,6 +555,14 @@ const CHECK_CACHE = opt("check-cache", "");
 if (CHECK !== "none" && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
 if (CHECK !== "none" && !RUN.pushCheck)
   throw new Error("--check is inert unless pushCheck is on (--set pushCheck=true)");
+/**
+ * `--tagger DIR` (M3, D908): the `constraintTag` trial's item tagger, an exported binnet `tags` network. Inert unless
+ * the run's configuration sets `constraintTag` above 0.
+ */
+const TAGGER_DIR = opt("tagger", "");
+if (TAGGER_DIR && !(RUN.constraintTag > 0)) throw new Error("--tagger is inert unless constraintTag > 0 (--set)");
+const tagger = TAGGER_DIR ? loadTagger(TAGGER_DIR) : null;
+if (tagger) process.on("exit", () => console.error(`TAGGER ${JSON.stringify(tagger.stats())}`));
 /** The judge's, the reader's and the check's requests: paced, capped and retried, with the run's logging choice. */
 const ACCESS = labAccess(args, [
   ...(LIVE ? [MODEL] : []),
@@ -1059,6 +1069,7 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
+    ...(tagger ? { constraintTag: { read: tagger.tag } } : {}),
     ...(reader
       ? {
           reader,
@@ -1481,6 +1492,10 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `+stale` synth suites (D908 rule 1): the stale version's place in that pool, and whether it was handed.
+      ...(push && task.stale
+        ? { stalePoolAt: push.pool.indexOf(task.stale), staleHanded: push.handed.includes(task.stale) }
+        : {}),
       ...(checkCalled ? { pushCheckCalled: true } : {}),
       // `askNudge` (D316): whether that pass's candidates left the request unsettled (the packet nudged an ask).
       ...(push?.unsettled !== undefined ? { pushUnsettled: push.unsettled } : {}),

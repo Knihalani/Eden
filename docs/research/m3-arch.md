@@ -351,7 +351,60 @@ against main e4f3649a.
   request ever meets a stale version beside its replacement. Reading the rule needs a variant that plants both (the
   older version as background beside the fact); raised with the parent before building it.
 
-### 7h. H10 made small and fast (M3b; the bar pre-registered in commit 3715f552 before any run below)
+### 7h. Results of the wiring rules and of H1's screen (2026-11-11)
+
+**Rule 2, ingest tag (`constraintTag`, D908): passes.** The fold-A binary tagger (`w-tags-bin`: M2 v2 train plus the
+sim's train1–4 planted items, 3 epochs, 256 bits; fact against twin AUC 0.947 on M2 val, 0.759 on the sim's held-out
+items), exported to TypeScript (`tags-bin`, max error against PyTorch 0), read in the push gate as the probability of
+its `fact` tag; θ 0.5 was fixed in a commit before any funnel run (e6aef109). `bun run funnel --jobs 2 -- --neutral`
+on this branch, switch off (= main e4f3649a's behaviour; no checker wired, reader stub) against
+`--set '{"constraintTag":0.5}' -- --tagger .local/m3/nets/tags-bin`, train1–6, seeds 41–42, $0:
+
+| | all (384 a variant) | train1–4 (trained on) | train5–6 (held out) |
+|---|---|---|---|
+| hidden surfaced | 281 → 281 | 181 → 181 | 100 → 100 |
+| hidden delivered by the push | 265 → 263 | 170 → 169 | 95 → 94 |
+| control packets | 490 → 343 (−30.0%) | 321 → 204 | 169 → 139 (−17.8%) |
+| control tasks with a candidates packet | 380 → 134 | 254 → 44 | 126 → 90 |
+| decoy delivered by the push | 243 → 125 | 167 → 70 | 76 → 55 |
+| neutral packets | 459 → 150 (−67.3%) | 310 → 107 | 149 → 43 (−71.1%) |
+| **control + neutral packets** | **949 → 493 (−48.1%)** | 631 → 311 (−50.7%) | **318 → 182 (−42.8%)** |
+
+The rule's bar is −20% packets with hidden surfaced not down more than 1%: met overall and on the held-out suites
+alone. The lab tagger encoded 492 distinct items in 377 ms in that run (0.77 ms an item with the funnel's lanes contending for 4 cores); the engine's own bench reads 266–307 µs an item alone (`bench/tagger.bench.ts`, D908). Not yet measured:
+the pair with the push check S live in front (the shipped path with a key; pre-registered in commit after e6aef109,
+running), and Pi.
+
+**Rule 1, supersession (`pushSupersede`), amended before any result.** (a) The suite: `synth:<M2 v2 val>+stale`
+(`+stale`, D884's synth family, a separate option: a hidden silent-change task's earlier revision stays as a background
+item beside the fact; the default suites are unchanged, `synth.test.ts` pins it), worlds H10 never trained on. (b) The
+newer item is looked for in the push pool (15), not the whole cache: both versions match the request, and a cache-wide
+search per handed item would be a second lookup. (c) Arms: off, binary H10 at θ 0.5, float H10 at θ 0.5 (θ fixed
+here, not read from val). Read: stale versions handed (`staleHanded`) down ≥ 50%, facts handed (`pushHanded`) not
+down > 2%; recall@p0.95 of each export reported from its own offline run beside them.
+
+**Rule 1 result: fails; `pushSupersede` deleted (code in 3a74a4c4).** `bun run funnel --suite
+'synth:.local/m3/m2v2/worlds-val.jsonl+stale@4' --seeds 1..25 --jobs 2` (738 hidden tasks, 98 with a stale version;
+intent inert: no card replay covers synth worlds, the same in every arm; $0):
+
+| arm | stale handed | facts handed (`pushHanded`) | hidden surfaced | decoys handed (control) | per pair |
+|---|---|---|---|---|---|
+| off | 64 of 98 | 457 of 738 | 580 | 356 | |
+| binary H10, θ 0.5 | 51 (−20%) | 457 | 579 | 355 | 47 µs (6,096 pairs, 285 ms) |
+| float H10, θ 0.5 | 52 (−19%) | 458 | 579 | 355 | 48 µs |
+
+The bar was −50%. In 63 of the 64 stale hand-outs the fact was in the same pool, so the newer item was there to
+swap in: the pair model (with the anchor gate on the newer item) replaced 13. End to end, then, the pair reads
+"replaces" on about one stale/fresh pair in five of the sim's planted worlds, far under its offline recall on M2 val
+(binary recall@p0.95 0.71, AUC 0.965; float 0.815, 0.986). M3b's compression work (claude/m3b-h10) inherits this
+measurement and the `+stale` suite; a better H10 re-enters as a new trial against the same rule.
+
+**H1, set-level variant (Haiku round, local CPU slice, 150 worlds): killed.** On fold A's held-out train5–6 days
+requests (`score.py --at5 --key all`, eval-ship) its own ranking hands facts@5 33 of 56 against the shipped pool's
+47, and every fusion with the shipped pool is below the shipped pool (hyb10: 45 facts at 27 decoys against 47 at 26).
+Far from D909's bar; not taken to Modal.
+
+### 7i. H10 made small and fast (M3b; the bar pre-registered in commit 3715f552 before any run below)
 
 **The bar**, on M2 v2 val and test (never tuned on; selection only on `dev`, 264 of train's 2,128 worlds split by world
 id, its families shared with the rest of train, so dev reads optimistic and serves only to compare variants):

@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 type Meta = {
   arch: "supersede" | "tags";
+  tags?: string[];
   float: boolean;
   bits: number;
   buckets: number;
