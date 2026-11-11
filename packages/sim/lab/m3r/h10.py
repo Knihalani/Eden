@@ -247,7 +247,12 @@ def train(o):
     if o.extra_pairs:
         # Engine-drawn pairs (h10_pool_pairs.py): the push pool's (handed, newer) pairs, which the M2 pairs alone
         # under-represent (many same-topic negatives a request).
-        ex = corpus.pairs(read_pairs(o.extra_pairs))
+        rows = read_pairs(o.extra_pairs)
+        if o.extra_reverse:
+            # The pool never shows a pair newest-first (the trial asks only about newer items), so its positives
+            # say nothing about direction; their reverses, as negatives, keep the order M2's reversed pairs teach.
+            rows += [(b, a, 0) for a, b, y in rows if y]
+        ex = corpus.pairs(rows)
         tr = torch.cat([tr, ex])
         weight = torch.cat([weight, torch.full((len(ex),), o.extra_weight)])
     dev = corpus.pairs(pairs_of(o.dev))
@@ -476,6 +481,7 @@ if __name__ == "__main__":
     a.add_argument("--seed", type=int, default=7)
     a.add_argument("--extra-pairs", default="", help="engine-drawn pairs to train on (h10_pool_pairs.py's jsonl)")
     a.add_argument("--extra-weight", type=float, default=1.0)
+    a.add_argument("--extra-reverse", action="store_true", help="add each engine-drawn positive reversed, as a negative")
     a.add_argument("--extra-dev", default="", help="engine-drawn pairs held out for selection")
     a.add_argument("--save", default="")
     a.add_argument("--n", type=int, default=64, help="export: held-out pairs checked against PyTorch")
