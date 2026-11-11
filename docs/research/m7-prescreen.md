@@ -119,8 +119,10 @@ held-out disagreement with the recorded verdict when the pools with the lowest t
 | H1 | GBM without lexical overlap | 0.836 | 12.4% | 23.2% | 25.6% | 30.0% |
 | H3 | HitBloom, binary / float (helper C) | 0.837 / 0.843 | 18.1 / 16.2% | 27.5 / 23.2% | 34.4 / 27.4% | 38.5 / 33.3% |
 | H5 | ReplyHeads, binary / float (helper C) | 0.837 / 0.845 | 9.5 / 13.3% | 20.4 / 27.5% | 26.8 / 31.9% | 31.0 / 32.2% |
-| H2 | XnorPair (helper B) | see §3.1 | | | | |
-| H4, H6 | PoolSet, RequestPrior (helper D) | see §3.1 | | | | |
+| H2 | XnorPair, binary / float (helper B) | 0.830 / 0.879 | 18.1 / 9.5% | 27.5 / 19.4% | 33.8 / 26.5% | 35.5 / 30.0% |
+| H2 | XnorPair, 256 bits and width / no prior bits | 0.817 / 0.760 | 17.1 / 23.8% | 30.8 / 27.5% | 35.3 / 36.0% | 37.8 / 39.5% |
+| H4 | PoolSet, binary / float / no prior bits (helper D) | 0.829 / 0.820 / 0.802 | 21.9 / 12.4 / 13.3% | 27.0 / 27.5 / 21.8% | 32.2 / 31.9 / 30.3% | 34.5 / 35.0 / 33.8% |
+| H6 | RequestPrior | 0.746 | 19.0% | 27.0% | 31.5% | 36.4% |
 | R2 | PairHash alone (C 0.1) | 0.850 | 6.7% | 18.0% | 24.6% | 31.0% |
 | R2 | **H1 + PairHash, stacked** | **0.895** | 5.7% | 13.3% | 21.8% | 27.7% |
 | R2 | the same, then a pool-level GBM head | pool AUC 0.746 | 11.4% | 17.1% | 24.3% | 31.2% |
@@ -142,9 +144,15 @@ calls, the same order as the reader cascade (D110: 2.5%).
 **Planted facts lost.** On held-out, of the 277 hidden pools where the check named the planted fact, H1 + PairHash
 settles 0 / 4 / 15 / 27 silent at 10 / 20 / 30 / 40%. Those would be facts the packet no longer hands the agent.
 
-### 3.1 Helpers B and D
+### 3.1 Reading the round
 
-<!-- filled when their reports arrive -->
+- **Binarisation costs here.** The float XnorPair (0.879) was round 1's best net, and its binary twin read 0.830. On
+  the other nets binary and float were within about 0.01 AUC.
+- **H1's quantised features carry the nets.** Without them XnorPair fell to 0.760, while PoolSet barely moved.
+- **The pool-level models were weakest at the pool level.** PoolSet and RequestPrior trail the item models at every
+  share, as M3's set classifier did for silence (H5 there).
+- **Stacking won.** The learned word-pair table helped most when stacked on the symbolic GBM (0.895). No round-2
+  helper session was spent: the frozen read (§4) settled the question at a 16-point gap.
 
 ## 4. The frozen read (D930)
 
