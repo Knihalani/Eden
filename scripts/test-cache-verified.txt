@@ -25,7 +25,6 @@ e4c996101a28a8fa3d6a09c2f34a73d15e0179c2 packages/engine/src/econ-judge.test.ts
 ede2c45d27b07e28170b0e603fc6dc6b953307d3 packages/engine/src/econ.test.ts
 8cb09983aee2557ed4a10aa90f7b4a50451fb409 packages/engine/src/economy.test.ts
 855bd8f10a6d52a47cd5d210712752070461fd22 packages/engine/src/explain.test.ts
-7e7369913c5f856285d54db09d4027e61c0384c6 packages/engine/src/firewall.test.ts
 385665362796a7bdf428a7bd4f5c5b96fbe7f060 packages/engine/src/fold.test.ts
 944ee3c3672f220a11d26d9507c667e9958c3e30 packages/engine/src/freshen-deadline.test.ts
 35c36f600f0f4b46cdb4b521856500b56487800b packages/engine/src/freshness-push.test.ts
@@ -47,7 +46,6 @@ d11b3ade6df0c191121b142f82f30fb98445dcbb packages/engine/src/moon-review2.test.t
 2520b6c5c175cefba1907fb58fb5da0ad95b9b2b packages/engine/src/packed-text.test.ts
 54f4ef034872f6e54677a4e02df136f9067358e3 packages/engine/src/parties.test.ts
 e922101fd1d28a917f8d3a1f48749b835996e261 packages/engine/src/partner.test.ts
-4739573c637d175f5630c60e13cea36a012feeff packages/engine/src/persist-disk-only.test.ts
 1798bbb2c0a9a7ee860cc0fc8f78f939b4c26a08 packages/engine/src/persist.test.ts
 1c6bc62f7484005a8d55b9041e1de16c6a77be44 packages/engine/src/plan-conflict.test.ts
 36a89e4c23f47ecb9fb56565b11c66b8160c8af3 packages/engine/src/probes.test.ts
@@ -68,7 +66,6 @@ b252a13e1ad0e5a2aeb2047925a0cfd835b85636 packages/engine/src/review-regressions.
 ee613eb6eb293e57b0d864810228b44472674d5a packages/engine/src/revision-diff.test.ts
 e1df062bc2f14ed6ea79e18613dad63b6b1d81fd packages/engine/src/revision-notice.test.ts
 dce31d66399aa0df36462d551d87342ba6ba412c packages/engine/src/scale2.test.ts
-355c6d9b4c63243b47eff779694ed1ecef872ee2 packages/engine/src/shield.test.ts
 7314a917403e282dc6ca25cec0ccd9f61abf9e1c packages/engine/src/source-calls.test.ts
 ef763c98d25bf4b825f75348bf5201739c31050d packages/engine/src/source-refs.test.ts
 d615010b12c8e13e42626b739829128b2126571f packages/engine/src/source-yield-partner.test.ts
@@ -134,7 +131,6 @@ bb543a1f203b5e8a6d4a3400a328c2fa705ea38d packages/server/src/http-review.test.ts
 f5bf4e7ef4a0a5954a0830da9661131e3cfeb2e1 packages/server/src/http.test.ts
 110eb0968d0a35c16c6db94f67a57a1de8f4d9b9 packages/server/src/mcp.test.ts
 4314b615751a9411d7b0493d39c1c48840dc2698 packages/server/src/reader-log.test.ts
-7b692770d597a7124853ba2f7fc3b5a83746e002 packages/server/src/spend-lease.test.ts
 51d3785d228a05ce6f0aa4655e211132d85a1d04 packages/server/src/trace-report.test.ts
 bbaff333631f0ff240761229a6e7397cb4522665 packages/sim/src/deletes.test.ts
 d996bd29a0d5dc64148a7cf3573b992031b6c6f5 packages/sim/src/drafts.test.ts

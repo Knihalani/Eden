@@ -131,7 +131,7 @@ export interface Task {
   secrets: string[];
   /**
    * A hidden-context task's planted item (the hidden fact; on a control task, its decoy): its id in the user's
-   * sources, so a report can tell whether what Eden cited, or what a firewall finding cited, was the planted item.
+   * sources, so a report can tell whether what Eden cited, or what a check's finding cited, was the planted item.
    */
   planted?: string;
 }
@@ -442,7 +442,7 @@ export interface RunResult {
   error?: string;
   facts?: Record<string, boolean>;
   leaked?: boolean;
-  /** `--act` (act.ts): each action tool call, its firewall verdict and whether it executed, in order. */
+  /** `--act` (act.ts): each action tool call, its check's verdict and whether it executed, in order. */
   actions?: ActionRecord[];
   /**
    * `pi-ab --connect-at` (O5): the request's checkpoint (s after the user's first event), when it was sent, which of

@@ -15,7 +15,6 @@ import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
 import { childPersistDir, prunePersistDirs } from "./persist";
 import { rehomeSourceMaps, runRouter } from "./router";
-import { isLeaseGrant, LeasedSpend } from "./spend-lease";
 
 const started = performance.now();
 const config = configOrExit();
@@ -91,11 +90,8 @@ async function serve(config: ServerConfig): Promise<void> {
   // Held here so a shutdown can write its last outcome batch (`SourceMap.close` flushes).
   const sourceMap = new SourceMap(config.sourceMapPath);
   const child = config.child;
-  // The cap every model role shares (D163): divided by N in a router child, or leased from the router (D327, trial).
-  const tenants =
-    child && config.spendLeases
-      ? leasedSpend(models.usdPerTenantDay, child.count)
-      : tenantSpendFor(models.usdPerTenantDay, child?.count ?? 1);
+  // The cap every model role shares (D163): divided by N in a router child.
+  const tenants = tenantSpendFor(models.usdPerTenantDay, child?.count ?? 1);
   const partner = buildPartner({
     tenants,
     gatePool,
@@ -111,7 +107,7 @@ async function serve(config: ServerConfig): Promise<void> {
     onTrace: process.env.EDEN_TRACE === "1" ? (t) => console.log(JSON.stringify(t)) : undefined,
     // Whether the agent used each injection (D293), for `bun run digest`; content-free like the traces.
     onUsage: process.env.EDEN_TRACE === "1" ? (u) => console.log(JSON.stringify({ usage: u })) : undefined,
-    ...(persist ? { persist, persistDiskOnly: config.persist?.diskOnly === true } : {}),
+    ...(persist ? { persist } : {}),
   });
   // The background sync's own connector calls (backfill, sweeps) are made outside any request, so no trace has them:
   // with EDEN_TRACE=1 its cumulative counters are logged once a minute, per process, for `bun run digest` (D293).
@@ -161,15 +157,10 @@ async function serve(config: ServerConfig): Promise<void> {
       ` (startup ${startupMs} ms; model roles ${process.env.OPENROUTER_API_KEY ? "on" : "off (no OPENROUTER_API_KEY)"}` +
       `; sources ${sources.shared} shared${sources.userSources ? " + per user (EDEN_USER_SOURCES_FILE)" : ""}` +
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
-      (persist
-        ? `; frozen users persisted, encrypted (${persist.count} on disk, D425` +
-          `${config.persist?.diskOnly ? "; on disk only while frozen, D652 trial" : ""})`
-        : "") +
+      (persist ? `; frozen users persisted, encrypted (${persist.count} on disk, D425)` : "") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
-          (config.spendLeases
-            ? ` model spend leased from the router (D327),`
-            : ` $${round(models.usdPerTenantDay / child.count)}/day,`) +
+          ` $${round(models.usdPerTenantDay / child.count)}/day,` +
           ` ${round(config.tenantRatePerSec)} rps, burst ${round(config.tenantBurst)}`
         : "") +
       ")",
@@ -217,18 +208,6 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | null {
   flush();
   setInterval(flush, 60_000).unref();
   return store;
-}
-
-/** A child's spend cap leased from the router over IPC (D327): requests go up, grants come back. */
-function leasedSpend(usdPerTenantDay: number, processes: number): LeasedSpend {
-  const spend = new LeasedSpend(usdPerTenantDay, processes, (r) => {
-    if (!process.send) throw new Error("no IPC channel");
-    process.send(r);
-  });
-  process.on("message", (m: unknown) => {
-    if (isLeaseGrant(m)) spend.grant(m.edenGrant);
-  });
-  return spend;
 }
 
 function round(n: number): number {

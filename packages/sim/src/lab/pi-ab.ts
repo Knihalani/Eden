@@ -23,10 +23,8 @@
  * `--variant-config '{"ALL2":{"syncPollBehind":true}}' --conditions eden,eden~ALL2` gives each name the settings it
  * adds over `--config`, and `eden+askDedup` is shorthand for one flag on. `--act` is a mode of its own: every
  * condition gets stub action tools (`act.ts`) and a system prompt that lets the agent act, and each task records its
- * action calls (`act-report.ts` reads them). `-act-firewall` conditions (`tools-act-firewall`, `eden-act-firewall`)
- * also turn on the engine's `actionCheck` (D69) and send each action call to `checkAction` before it runs (Pi's
- * `beforeToolCall`): a finding holds the call and is the tool's result (`heldResult`), and the same call made again
- * runs. Beside tools, Eden runs only as that check: it observes the request but injects nothing and gives no tool.
+ * action calls (`act-report.ts` reads them). (The `-act-firewall` conditions went with the action firewall, D815;
+ * A25's party check on actions is measured with `injection-ab.ts`.)
  *
  * `--cards FILE` (alias `--cards-disk`) replays implication cards from a disk cache (`cards-disk.ts`, as the funnel
  * does) and makes only the missing ones live, so the conditions of a run, and later runs, do not each pay for the same
@@ -99,7 +97,6 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { Agent, type AgentEvent as PiEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
-import { heldResult } from "@eden/client";
 import {
   CardEnricher,
   ContextPartner,
@@ -248,7 +245,7 @@ const DRESS = args.includes("--dress");
 if (DRESS && (USER_DAYS > 0 || args.includes("--reuse-arms"))) {
   throw new Error("--dress dresses the per-suite worlds only: not with --days or --reuse-arms");
 }
-const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden,eden-act-firewall" : "none,tools,eden,both").split(",");
+const CONDITION_NAMES = opt("conditions", ACT ? "tools,eden" : "none,tools,eden,both").split(",");
 const OUT = opt("out", "pi-ab.json");
 const TIMELINE = opt("timeline", `${OUT.replace(/\.json$/, "")}.timeline`);
 const TIME_SCALE = Number(opt("time-scale", "1"));
@@ -769,7 +766,6 @@ async function runWorld(
     askTool,
     judge,
     act,
-    firewall,
     config,
     noKey,
     packets: layout,
@@ -1020,7 +1016,6 @@ async function runWorld(
   const closePrevious = async () => {
     if (!partner || !previous) return;
     const who = { ...scope, sessionId: previous.sessionId };
-    // Late items reach the agent only where Eden delivers; beside tools-act-firewall they are drained, not counted.
     const late = partner.takePending(who).reduce((n, i) => n + i.citations.length, 0);
     previous.r.lateItems = useEden ? late : 0;
     await partner.observe({ ...who, at: clock, kind: "session_end" });
@@ -1178,7 +1173,6 @@ async function runWorld(
     const uptake = new UptakeLog();
     const packets = uptake.packets;
     const takeEden = () => {
-      // `tools-act-firewall`: Eden only checks actions; what it would have delivered never reaches the agent.
       if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
         r.injectedItems += i.citations.length;
@@ -1270,10 +1264,8 @@ async function runWorld(
           },
         });
       }
-      // `--act`: the stub action tools; each call is recorded and runs. With the firewall, Eden checks each call
-      // first (`beforeToolCall` below) and the check's record waits here for the call to run; without it, `off`.
+      // `--act`: the stub action tools; each call is recorded (verdict `off`: no check runs here) and runs.
       const actions: ActionRecord[] = [];
-      const checkedCalls = new Map<string, ActionRecord>();
       if (act) {
         r.actions = actions;
         for (const spec of ACTIONS) {
@@ -1283,18 +1275,9 @@ async function runWorld(
             label: spec.name,
             parameters: actionParams(spec),
             prepareArguments: (a) => coerceArgs(spec, a),
-            execute: async (id, raw) => {
+            execute: async (_id, raw) => {
               const args = raw as Record<string, string | string[]>;
-              const rec = checkedCalls.get(id) ?? {
-                tool: spec.name,
-                args,
-                verdict: "off",
-                executed: false,
-                checkMs: 0,
-              };
-              checkedCalls.delete(id);
-              rec.executed = true;
-              actions.push(rec);
+              actions.push({ tool: spec.name, args, verdict: "off", executed: true, checkMs: 0 });
               return { content: [{ type: "text", text: executed(spec.name, actions.length) }], details: {} };
             },
           });
@@ -1433,37 +1416,6 @@ async function runWorld(
             },
           });
         },
-        // The firewall: an action call goes to Eden before it runs; a finding holds it and is the tool's result.
-        ...(firewall && partner
-          ? {
-              beforeToolCall: async (ctx: { toolCall: { id: string; name: string }; args: unknown }) => {
-                if (!ACTIONS.some((a) => a.name === ctx.toolCall.name)) return undefined;
-                const o = tl.begin("eden.check", "eden", "path", { tool: ctx.toolCall.name });
-                const check = await partner.checkAction(
-                  ev({ kind: "tool_call", tool: ctx.toolCall.name, input: ctx.args }),
-                );
-                tl.end(o, { verdict: check.verdict, reason: check.reason });
-                const rec: ActionRecord = {
-                  tool: ctx.toolCall.name,
-                  args: ctx.args as ActionRecord["args"],
-                  verdict: check.verdict,
-                  executed: false,
-                  checkMs: check.latencyMs,
-                  reason: check.reason,
-                  ...(check.finding ? { cited: check.finding.citations.map((c) => c.itemId) } : {}),
-                };
-                if (check.verdict === "proceed" || !check.finding) {
-                  checkedCalls.set(ctx.toolCall.id, rec);
-                  return undefined;
-                }
-                actions.push(rec);
-                r.injectedItems += check.finding.citations.length;
-                r.injectedChars += check.finding.text.length;
-                uptake.finding(check.finding);
-                return { block: true, reason: heldResult(ctx.toolCall.name, check.finding) };
-              },
-            }
-          : {}),
         finishTurn: async () => {
           turns++;
           // agent-ab's cap: six model calls, the last one's text the answer even if it asked for more tools.

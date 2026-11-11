@@ -64,11 +64,14 @@ runs the same shipped wiring with the reader on `claude-haiku-5-5` (`HAIKU_API_K
 
 ## Engineering rules
 
-- **One product (D112).** `DEFAULT_CONFIG` is the best measured configuration, and it is what ships: the servers run
-  it, with its model roles on when a model key is set and its no-model path when not. New behaviour enters behind a
-  trial switch with an owner and an end date (the trials table in docs/DECISIONS.md, below the decisions); at the
-  end it is promoted into the default (measured better or neutral at no extra paid cost) or deleted with its code and
-  tests. Lab presets are only `default` and `default minus <part>` (`PARTS` in `@eden/engine`).
+- **One product (D112, D814).** `DEFAULT_CONFIG` is the best measured configuration, and it is what ships: the
+  servers run it, with its model roles on when a model key is set and its no-model path when not. New behaviour
+  enters behind a trial switch (a row in the trials table in docs/DECISIONS.md, below the decisions), and the branch
+  or session that opened it decides it as soon as its evidence is in: promoted into the default (measured better or
+  neutral at no extra paid cost) or deleted with its code and tests. No end dates weeks out, no "owner's call later";
+  where a cost trade-off remains, the session recommends and the parent decides that day. Pre-register the rule in
+  one line of a commit before a paid run. Lab presets are only `default` and `default minus <part>` (`PARTS` in
+  `@eden/engine`).
 - **Silence by default; precision over recall.** A change that raises recall by also raising `falseFireRate` needs
   an explicit decision.
 - **Model last.** No model call on the fast path. Every model call goes through `Budget` and has bounded input.
@@ -92,6 +95,6 @@ runs the same shipped wiring with the reader on `claude-haiku-5-5` (`HAIKU_API_K
 2. Tests first for behaviour changes; eval scenarios for engine behaviour.
 3. `CHECK_COLD=1 bun run check` green; eval JSON in the PR if the engine changed.
 4. Update `docs/` in the same PR when behaviour, a decision or the roadmap changes.
-5. Run the `reviewer` subagent (`.claude/agents/reviewer.md`) on the diff before merging engine, server or privacy
-   changes; fix its correctness findings.
+5. Run the `reviewer` subagent (`.claude/agents/reviewer.md`) once on the code before merging engine, server or
+   privacy changes; fix its correctness findings and merge (D814). No re-review for docs-only fixes or low findings.
 6. Agents may open and merge their own PRs into `main` once the above holds. Never force-push `main`.

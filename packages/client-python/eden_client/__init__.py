@@ -131,7 +131,7 @@ def with_context(messages: List[Any], injections: List[Dict[str, Any]]) -> List[
 
 
 def held_result(tool: str, finding: Dict[str, Any]) -> str:
-    """One way to use a firewall finding: hold the call and give the agent the finding as its result (D69)."""
+    """One way to use a check's finding: hold the call and give the agent the finding as its result (D69)."""
     return (
         f"Not executed: {tool} was held because the user's context partner has context on it.\n{finding['text']}\n"
         f"To execute it anyway, call {tool} again with the same arguments."
@@ -367,7 +367,7 @@ class EdenClient:
                           and isinstance(v.get("citations"), list))
 
     def check(self, tool: str, input: Any, timeout_s: Optional[float] = None) -> Dict[str, Any]:
-        """The action firewall (a trial on the server); ``proceed`` on any failure."""
+        """The party check (on in the server's default, D376); ``proceed`` on any failure."""
         unavailable = {"verdict": "proceed", "finding": None, "reason": "unavailable", "latencyMs": 0}
         body = {**self._who(), "at": int(time.time() * 1000), "kind": "tool_call", "tool": tool, "input": input}
         res = self._post("/v1/check", body, timeout_s)

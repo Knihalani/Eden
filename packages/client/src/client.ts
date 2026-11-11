@@ -324,10 +324,10 @@ export class EdenClient {
   }
 
   /**
-   * The action firewall (`actionCheck` on the server): a tool call the agent is about to make, checked against what
-   * Eden holds before it runs. `finding` carries held context that bears on it, as data; what to do with it is the
-   * integration's choice (`heldResult` is one: hold the call and show the agent the finding). Fails open: any error,
-   * timeout or a server without the flag is `proceed`.
+   * The party check (`partyCheck` on the server, D376): a tool call the agent is about to make, checked before it
+   * runs for a party it adds that only Eden's packets showed. `finding` carries the held context that bears on it, as
+   * data; what to do with it is the integration's choice (`heldResult` is one: hold the call and show the agent the
+   * finding). Fails open: any error, timeout or a server with the check off is `proceed`.
    */
   async check(tool: string, input: unknown, options: { timeoutMs?: number } = {}): Promise<ActionCheck> {
     const body = { ...this.who, at: Date.now(), kind: "tool_call", tool, input };

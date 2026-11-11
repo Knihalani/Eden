@@ -17,9 +17,8 @@
  * 4. events: one `observe` per user (a fresh session each) on the thawed caches, timed (the fast path, `waitMs` 0).
  *
  * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
- * [--persist] [--disk-only] [--config=<EngineConfig JSON>]`.
- * `--persist`: frozen users are also written, encrypted, to a temp directory (D425); `--disk-only`: and held there only
- * (D652).
+ * [--persist] [--config=<EngineConfig JSON>]`.
+ * `--persist`: frozen users are also written, encrypted, to a temp directory (D425).
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
  * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
  * `--world` takes item text from the sim world (as `ingest.bench.ts --world`). No model, no network.
@@ -41,7 +40,6 @@ import { buildWorkload } from "./workload";
 const WORLD = process.argv.includes("--world");
 const NO_FREEZE = process.argv.includes("--no-freeze");
 const PERSIST = process.argv.includes("--persist");
-const DISK_ONLY = process.argv.includes("--disk-only");
 /** `--config=<EngineConfig JSON>`: settings over the default (as `storm.bench.ts`), e.g. a switch's off arm. */
 const CONFIG = JSON.parse(
   process.argv.find((a) => a.startsWith("--config="))?.slice(9) ?? "{}",
@@ -149,16 +147,15 @@ const byUser = new Map(users.map((x) => [x.scope.userId, x.sources]));
 
 const cache = new ItemCache({ maxUsersPerTenant: USERS + 1, maxSyncedPerUser: Math.max(5_000, PER_USER) });
 cache.close(); // The bench runs the expiry ticks itself.
-// `--persist`: frozen users are also written to a temp directory, encrypted (D425); `--disk-only`: and their blobs are
-// then held on disk only (`persistDiskOnly`, D652). The thaw line then includes the file's read.
-if (PERSIST || DISK_ONLY) {
+// `--persist`: frozen users are also written to a temp directory, encrypted (D425).
+if (PERSIST) {
   const disk = new EncryptedFrozenDisk({
     dir: mkdtempSync(join(tmpdir(), "eden-users-frozen-")),
     key: new Uint8Array(32).map((_, i) => (i * 37 + 11) & 0xff),
     maxBytes: 64 * 1024 ** 3,
     maxAgeMs: 7 * 24 * 3_600_000,
   });
-  cache.persist(disk, { diskOnly: DISK_ONLY });
+  cache.persist(disk);
 }
 const partner = new ContextPartner({
   sources: async (scope) => byUser.get(scope.userId)!,

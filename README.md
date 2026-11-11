@@ -137,9 +137,9 @@ $6.25 a day, 50 rps and a burst of 100. Raise the caps or set `EDEN_PROCESSES=1`
 with a CPU quota set `EDEN_PROCESSES` to the quota (see [docs/INTEGRATION.md](docs/INTEGRATION.md), "Processes"). To change a setting, or take a part out (`PARTS` in `packages/engine/src/parts.ts`),
 point `EDEN_ENGINE_CONFIG` at a JSON file of engine settings (`packages/engine/src/config.ts`); an unknown key, a wrong
 type, a number out of its range or a setting that would do nothing stops startup with a message naming it (D103).
-Trial switches (such as the action firewall, `actionCheck`) stay off until measured;
+Trial switches stay off until measured;
 [docs/profiles/](docs/profiles/README.md) holds "default minus a part" files, and docs/DECISIONS.md lists the trials
-with their owners and end dates.
+still being measured (each decided in the session that opened it, D814).
 `EDEN_SOURCES_FILE` holds static documents only, since that file's sources are shared by every user. Each user's MCP
 connectors, with their own credentials, go in `EDEN_USER_SOURCES_FILE` or an embedding's `SourceDirectory` (D108,
 docs/INTEGRATION.md).

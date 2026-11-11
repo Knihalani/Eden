@@ -4,8 +4,8 @@
  * other action), so a run measures what the agent *did*, not only what it said. Each takes structured arguments, as a
  * real action API does, and executes as a stub: nothing leaves the process, and the result is a confirmation.
  *
- * The record keeps a verdict per call for the action firewall (the econ firewall track's `actionCheck`), whose
- * conditions come with the engine change that adds the check; until then every call's verdict is `off`.
+ * The record keeps a verdict per call for a check on actions (`checkAction`: A25's party check in `injection-ab.ts`);
+ * pi-ab runs none, so its calls' verdict is `off` (the action firewall's arms were deleted with it, D815).
  */
 import { Type } from "@earendil-works/pi-ai";
 import type { RunResult, Task } from "./ab-common";
@@ -172,10 +172,10 @@ export function executed(name: string, n: number): string {
 export interface ActionRecord {
   tool: string;
   args: Record<string, string | string[]>;
-  /** Eden's verdict: `proceed`, `finding`, or `off` (no firewall in this condition). */
+  /** Eden's verdict: `proceed`, `finding`, or `off` (no check in this condition). */
   verdict: "proceed" | "finding" | "off";
   executed: boolean;
-  /** Eden's check, ms (0 with no firewall). */
+  /** Eden's check, ms (0 with no check). */
   checkMs: number;
   /** The finding's cited item ids (for the funnel: was it the planted item). */
   cited?: string[];

@@ -33,9 +33,11 @@ export interface OpenRouterOptions {
    */
   allowLogging?: boolean;
   /**
-   * Send Anthropic `cache_control` breakpoints (content blocks) to an `anthropic/*` model. Default off: whether
-   * OpenRouter's ZDR Anthropic endpoints accept and honour them is unverified, so a live probe must confirm it before
-   * this is enabled in production. The lab may turn it on; every other model ignores it.
+   * A documented, untested opt-in (D817; was the trial D145): send Anthropic `cache_control` breakpoints (content
+   * blocks) to an `anthropic/*` model. Default off, and nothing in the servers sets it (`modelRolesFromEnv`): whether
+   * OpenRouter's ZDR Anthropic endpoints accept and honour them has never been probed, and this repository makes no
+   * paid OpenRouter call to find out. An embedder that turns it on should check its reported cached tokens first.
+   * Every other model ignores it; its unit tests cover only the request it builds (`llm.test.ts`).
    */
   anthropicCache?: boolean;
 }

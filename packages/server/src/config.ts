@@ -29,17 +29,12 @@
  *                    serves in this process with no router. Above 1, each tenant/user is pinned to one child, each
  *                    child keeps its own source-map file (`childSourceMapPath`), and each divides the per-tenant
  *                    caps (rate, burst, model spend) by N: a tenant concentrated on few users needs higher caps or 1.
- * EDEN_SPEND_LEASES=1 trial (D327, spend-lease.ts): the router grants each child a tenant's model spend in chunks
- *                    from one ledger per tenant and day, instead of each child holding 1/N of the cap.
  * EDEN_ROUTER_CHILD  set by the router only ("i/N"): this process is child i of N.
  * EDEN_PERSIST_FROZEN_DIR, EDEN_PERSIST_KEY  opt-in (D425, off by default): users frozen while idle (D325) are also
  *                    written to this directory, encrypted (AES-256-GCM) with this key (32 bytes, as 64 hex digits or
  *                    base64; never logged), so a restart thaws them from disk instead of re-reading every source. Set
  *                    both or neither. Each process writes its own subdirectory (`<i>-of-<N>`).
  * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default 4096): a freeze past it is not written.
- * EDEN_PERSIST_DISK_ONLY=1 trial (D652; needs the two above): a frozen user written to disk keeps no copy of its items
- *                    in memory; the file is read back when they return (a few ms). A file that does not open: the
- *                    user is synced again.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -74,15 +69,10 @@ export interface ServerConfig {
    */
   child: { index: number; count: number } | null;
   /**
-   * Trial (D327, EDEN_SPEND_LEASES=1): with N > 1, each tenant's daily model spend is leased from the router's one
-   * ledger (spend-lease.ts) instead of divided by N. Off by default.
-   */
-  spendLeases: boolean;
-  /**
    * D425 (opt-in, EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY): where frozen users are written, encrypted; null (the
    * default) writes no content to disk (D8). `maxBytes` is the whole directory's; a router child gets 1/N of it.
    */
-  persist?: { dir: string; key: PersistKey; maxBytes: number; diskOnly?: boolean } | null;
+  persist?: { dir: string; key: PersistKey; maxBytes: number } | null;
 }
 
 /**
@@ -162,7 +152,6 @@ export function loadConfig(env = process.env, cores = machineCores()): ServerCon
     // A child never starts a router of its own, whatever EDEN_PROCESSES it inherited.
     processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
-    spendLeases: flag(env.EDEN_SPEND_LEASES, "EDEN_SPEND_LEASES"),
     persist: persistConfig(env, share),
   };
 }
@@ -179,7 +168,6 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number): ServerConfig["per
   const raw = env.EDEN_PERSIST_KEY ?? "";
   if (dir === "" && raw === "") {
     if (env.EDEN_PERSIST_MAX_MB) throw new Error("EDEN_PERSIST_MAX_MB is set without EDEN_PERSIST_FROZEN_DIR");
-    if (env.EDEN_PERSIST_DISK_ONLY) throw new Error("EDEN_PERSIST_DISK_ONLY is set without EDEN_PERSIST_FROZEN_DIR");
     return null;
   }
   if (dir === "") throw new Error("EDEN_PERSIST_KEY is set without EDEN_PERSIST_FROZEN_DIR: set both or neither");
@@ -189,11 +177,7 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number): ServerConfig["per
     throw new Error("EDEN_PERSIST_KEY must be 32 random bytes as 64 hex digits or base64 (e.g. openssl rand -hex 32)");
   }
   const mb = positive(env.EDEN_PERSIST_MAX_MB, DEFAULT_PERSIST_MAX_MB, "EDEN_PERSIST_MAX_MB");
-  const diskOnly = env.EDEN_PERSIST_DISK_ONLY === "1";
-  if (env.EDEN_PERSIST_DISK_ONLY && !diskOnly && env.EDEN_PERSIST_DISK_ONLY !== "0") {
-    throw new Error("EDEN_PERSIST_DISK_ONLY must be 1 or 0");
-  }
-  return { dir, key: new PersistKey(key), maxBytes: Math.floor((mb * 1_048_576) / share), diskOnly };
+  return { dir, key: new PersistKey(key), maxBytes: Math.floor((mb * 1_048_576) / share) };
 }
 
 /** 64 hex digits or base64 of exactly 32 bytes; null otherwise (a key of all one byte too: a placeholder). */
@@ -326,12 +310,6 @@ function bodyBytes(raw: string | undefined): number {
 }
 
 /** An on/off variable: "1" on, "0" or unset off; anything else stops startup. */
-function flag(raw: string | undefined, name: string): boolean {
-  if (raw === undefined || raw === "" || raw === "0") return false;
-  if (raw === "1") return true;
-  throw new Error(`${name} must be 0 or 1, got ${raw}`);
-}
-
 /**
  * Default 0 (D26): on the real engine with realistic source latency the pool was neutral in steady state and cost
  * more CPU. Deployments whose sources return large or keyword-dense items may gain; more than cores − 1 never helps.

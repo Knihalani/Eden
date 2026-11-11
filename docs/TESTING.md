@@ -8,7 +8,7 @@
 | `bun run test:changed` | Packages touched since the merge base with origin/main, plus their dependents, minus six end-to-end files of packages that are only dependents (D161, below) | The inner loop |
 | `bun run test:pkg engine sim` | Named packages | Working inside one package |
 | `bun run check:fast` | format:check + typecheck:fast (tsgo) + test:changed | Before pushing a work-in-progress commit |
-| `bun run typecheck:fast` | The typecheck on tsgo, TypeScript 7's native preview (about 5x faster) | The inner loop |
+| `bun run typecheck:fast` | The typecheck on tsgo, TypeScript 7's native preview (the gate's checker since D816) | The inner loop |
 | `bun run typecheck:parity` | tsc and tsgo one after the other; fails when their errors differ | After bumping either checker |
 | `bun run check` | format:check + typecheck + the tests whose inputs changed (D650) | While developing |
 | `CHECK_COLD=1 bun run check` | The same with every test and no Prettier, tsc or test-result cache | Before every merge and in every review (CLAUDE.md, D657) |
@@ -181,11 +181,12 @@ the repo shares. Prettier's own `--cache` could not: it keys absolute paths, so 
 `scripts/check-line-length.ts` has no cache and still reads every file, so an overlong comment is always caught,
 whatever the set holds.
 
-**tsc: per-worktree build info, seeded.** `scripts/typecheck.sh` runs `tsc --incremental` with one build-info file
-per `tsconfig.json` under the gitignored `node_modules/.cache/tsc/`. A worktree with no such directory is seeded with
-a copy (never a link: two checkouts writing one file would race) from the other worktree whose HEAD is closest: the
+**Per-worktree build info, seeded.** `scripts/typecheck.sh` runs its checker (tsgo since D816, or tsc) with
+`--incremental` and one build-info file per `tsconfig.json` and checker under the gitignored
+`node_modules/.cache/tsc/`. A worktree with no such directory is seeded with a copy (never a link: two checkouts
+writing one file would race) from the other worktree, holding that checker's build info, whose HEAD is closest: the
 same commit first, else the fewest `*.ts`/`*.tsx`/`*.mts`/`*.json` files in `git diff --name-only` between the two
-HEADs, ties to the most recently written. tsc trusts nothing in the copy: each file's recorded version is its content
+HEADs, ties to the most recently written. The checker trusts nothing in the copy: each file's recorded version is its content
 hash, so it re-checks whatever differs.
 
 Measured 2026-11-05 (4-core container shared with other agents, Bun 1.4.4), in a worktree after `bun install` with
@@ -210,13 +211,13 @@ Earlier, with Prettier's own cache (2026-11-03): format:check 11.8 s and 10.7 s 
 that proposed the caches; not re-measured).
 
 
-## tsgo in the fast loop (measured 2026-11-03b, 4-core container shared with other agents, Bun 1.4.4)
+## tsgo, the gate's checker (D816; measured 2026-11-03b, 4-core container shared with other agents, Bun 1.4.4)
 
-`scripts/typecheck.sh` takes `TYPECHECK=tsc` (the default), `tsgo` or `parity`. tsgo is TypeScript 7's native
-checker, `@typescript/native-preview` pinned to `7.0.0-dev.20260707.2` as a devDependency (dev only: nothing in
-`packages/` imports it). `bun run check:fast` and `bun run typecheck:fast` use it; **`bun run check` keeps tsc 5.9.3
-as the gate** until TypeScript 7 is stable. Each checker keeps its own build-info file (`*.tsgo.tsbuildinfo` for
-tsgo), so switching between them never reads the other's format. `bun run typecheck:parity` runs both with
+`scripts/typecheck.sh` takes `TYPECHECK=tsgo` (the default since D816), `tsc` or `parity`. tsgo is TypeScript 7's
+native checker, `@typescript/native-preview` pinned to `7.0.0-dev.20260707.2` as a devDependency (dev only: nothing in
+`packages/` imports it). `bun run typecheck` (so `bun run check`) and `bun run typecheck:fast` use it; tsc 5.9.3
+stays for a second opinion (`TYPECHECK=tsc`) and for `typecheck:parity`. Each checker keeps its own build-info file
+(`*.tsgo.tsbuildinfo` for tsgo), so switching between them never reads the other's format. `bun run typecheck:parity` runs both with
 `--pretty false` and fails, printing both outputs, when their errors differ by file, line, column or code (message
 wording may differ between versions) or one passes where the other fails.
 
@@ -233,7 +234,9 @@ Two rounds of `scripts/typecheck.sh` (wall, user CPU; the edit appends an export
 Parity (`bun run typecheck:parity`): the clean tree gave 0 errors from both; six planted errors in
 `packages/protocol/src/index.ts` each gave the same single error from both checkers: TS2322 (string to number),
 TS2307 (missing module), TS7006 (implicit any), TS2353 (excess property), TS2532 (`Map.get(...).n`) and TS2339
-(missing property). Make tsgo the gate after about a month of parity runs that agree.
+(missing property). On D816's base (b4848545), `CHECK_COLD=1 bun run typecheck:parity`: "tsc and tsgo agree (0
+errors)". No recorded parity run has disagreed, so tsgo became the gate (D816); run `typecheck:parity` after bumping
+either checker. On that branch, cold, on a box at load average 19-36: tsc 42.4 s wall, tsgo 12.6 s.
 
 ## Parallel runs (measured 2026-11-02, 4-core container, Bun 1.4.4)
 
