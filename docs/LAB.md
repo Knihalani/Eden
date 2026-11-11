@@ -551,7 +551,7 @@ The default has the check on; the funnel wires a checker only with `-- --check l
 the part is inert and the funnel is the no-model screen). A live check keeps the funnel to one process: run one seed a
 process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
 call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant;
-`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token).
+`python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token). `-- --check-dump F` (D932) writes each call as a training row: the pool exactly as the check read it, each item's cached text, the verdict, the raw reply and the task's labels; one process and one file a seed. `packages/sim/lab/m7/self-agree.ts` re-asks a sample of those rows live and prints how often Haiku repeats its own verdict (D931: 75–79% of item sets, about 90% of silences); score any student of the check against that, not against one recorded answer (docs/research/m7-prescreen.md).
 `python3 -I packages/sim/lab/n2/compare.py --arm NAME=F …` prints planted and decoy handed and neutral packets. For a
 live pair read quality from `bench_report.py --sonnet`, cost and wall on the 1:1:8 mix from `python3 -I
 packages/sim/lab/n5/mix.py --base eden --arms eden~V OUT.json…` (`--days` for a days run), days' hidden facts by user
