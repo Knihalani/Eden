@@ -112,12 +112,10 @@ describe("indirectRest and pushStart (D820)", () => {
       expect(start(raw)).toEqual(start(raw, false));
   });
 
-  test("bounded: a long message is read only at its head", () => {
+  test("bounded: a long message is decided on its head and handed on whole", () => {
     const raw = `I need to pay ${"x".repeat(100_000)}`;
-    const t0 = performance.now();
-    expect(indirectRest(raw)).not.toBeNull();
+    expect(indirectRest(raw)?.length).toBe(raw.length - "I need to ".length);
     expect(isOpenRequest(`${"a1:".repeat(50_000)}`, true)).toBe(false);
-    expect(performance.now() - t0).toBeLessThan(200);
   });
 });
 

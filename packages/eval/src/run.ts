@@ -563,5 +563,7 @@ export function unwiredFlags(config: Partial<EngineConfig>, wired: { reader: boo
   }
   if (config.cards) out.push("cards (needs a card maker; the eval wires none, so no card is made or matched)");
   if (config.intent) out.push("intent (needs the card maker's intent requests; not wired)");
+  // The push check (D828) needs a checker on a model; the eval wires none, so the push hands unchecked candidates.
+  if (config.pushCheck) out.push("pushCheck (needs a checker; the eval wires none, so no push is checked)");
   return out;
 }

@@ -3,5 +3,6 @@
   "askNudge": false,
   "askNudgeDeep": false,
   "pushCandidatesSettled": 0,
-  "pushOpen": false
+  "pushOpen": false,
+  "pushCheck": false
 }
