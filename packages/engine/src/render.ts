@@ -159,6 +159,16 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `pushPointer` (O3, D708): added to the candidates' lead when items that rank for this request were handed for an
+ * earlier one. The not-twice ledger (D13) keeps them out of this packet, and the agent rarely goes back to them on
+ * its own (over a user's days 37 of 101 hidden facts were handed only at an earlier request, 12 of them raised).
+ * The line names them by title and source, quoted and made inert; their text is not sent again.
+ */
+export const POINTER_LEAD =
+  "Already sent to you earlier in this conversation and ranking for this request too (read them again above and " +
+  "judge them the same way):";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

@@ -88,3 +88,31 @@ Cost [EST]: about $3 with the regrade.
 above 0 on short and on days, and `eden`'s confirmed concerns are not above `hits`'. If `hits` is within 2 points of
 `eden` (interval including 0) on either horizon, the report says that Eden's selection adds nothing measurable over
 plain retrieval there, and what `eden` costs over `hits`.
+
+## 2. Pre-registration: (c) the pointer on today's default (D832, a trial, off)
+
+Written and committed before any paid call of this run.
+
+**What is built.** `pushPointer` exactly as O3 built it (D708; commits 31ac72ad and f8d8cfdd, re-applied without
+change on today's default, where `pushOpen` is on): with `pushCandidates`, the items among this request's candidates
+that the agent was handed for an earlier request of the session are named in the candidates' lead (`POINTER_LEAD`, at
+most three, by title and source, quoted and inert); no item text twice, no model call; with no new candidate the names
+go as a packet with no item of its own. Off by default; owner P3; ends 2026-11-25.
+
+**Why again.** O3 measured it beside the old default (`pushOpen` off): −1.2 points (−4.8..+2.3). Beside `pushOpen` it
+read +2.5 (+0.2..+4.9), an unplanned comparison (D711). Today's default has `pushOpen`, so the comparison that read
++2.5 is now the plain one; it needs its own run on fresh users.
+
+**Run.** `pi-ab --days 8` (pi-user's 1:1:8 days of 12–20 requests), Haiku 5.5 as the agent, one user a process, two
+processes at a time, arms `eden` and `eden~P` (`--variant-config '{"P":{"pushPointer":true}}'`), **users w73–w104 (32,
+none run before by O3 or B18), cards and intent requests made in-run** (the shipped pipeline; no replay covers them),
+`--budget 0.5` a process, `packages/sim/lab/p3/run.sh`. Every hidden answer and every control or neutral concern
+regraded by Sonnet 5.5 (`i3-regrade.ts`). Cost [EST] from O3's run ($5.74 for four arms on 32 users): about $2.9, the
+regrade about $0.5.
+
+**Rule.** It goes to the parent for the default only if, against `eden`, **hidden raised (Sonnet's grade) is at least
++2.0 points with the user-resampled 95% interval's lower bound above 0** (`n5/days_hidden.py`); Sonnet-confirmed
+concerns (control and neutral) are not up by more than one; cost rises by at most $0.20 per 1,000 tasks and wall by at
+most 0.1 s a task (`n5/mix.py --days --cluster user`). Otherwise it is deleted with its code and tests for good.
+**Also reported, no bar:** where the fact was (handed at its own request, handed earlier the same day only, not that
+day), and raised in each group, per arm.
