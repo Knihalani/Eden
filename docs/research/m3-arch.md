@@ -467,3 +467,87 @@ includes a better float teacher (early-stopped on dev).
 | A1 | better binary | the binary net distilled from the float teacher's soft scores, hard negatives (teacher-scored) drawn again | the binary net's loss is recall at the top: the hard labels say nothing about which negatives are close | 256 bits = 32 B an item |
 | A2 | better binary | wider sign codes (512 bits) and a float/int8 head over [a, b, a XNOR b] | binarising the head cost more than the codes in H13 | 64 B an item |
 | A3 | better binary | a 2–3 net ensemble of A1/A2 | variance at the top of the ranking | ×2–3 pair cost |
+
+B4 (product quantisation) and A3 (ensembles) were not run: B1 reached the size and offline quality first, and the
+end-to-end diagnosis below changed the target.
+
+**Round 1** (Haiku helpers, local CPU, 2 epochs, M2 v2 pairs only, distilled from the new float teacher `teacher-s7`:
+val AUC 0.995, recall@p0.95 0.828; test 0.996, 0.866). Val read for every row, chosen on dev:
+
+| variant | shared model | code an item | val AUC | val recall@p0.95 |
+|---|---|---|---|---|
+| B1 rank 16, int8 table | 1.40 MB | 256 B | 0.996 | 0.822 |
+| B1 rank 32 | 2.46 MB | 256 B | 0.996 | 0.838 |
+| B1 rank 48 | 3.53 MB | 256 B | 0.996 | 0.808 |
+| H rank 32, d 128 | 2.34 MB | 128 B | 0.996 | 0.805 |
+| H rank 32, h 32 | 2.36 MB | 256 B | 0.988 | 0.727 |
+| B2 2^13 buckets, int8 | 2.31 MB | 256 B | 0.995 | 0.758 |
+| B3 int4, full table | 8.7 MB | 256 B | 0.995 | 0.825 |
+| B1 rank 32, no distillation | 2.46 MB | 256 B | 0.996 | 0.832 |
+| A0 binary (ternary table, sign codes, binary head), this schedule | 4.2 MB | 32 B | 0.993 | 0.771 |
+| A1 + distillation + hard negatives | 4.2 MB | 32 B | 0.992 | 0.788 |
+| A2 512 bits, int8 head | 8.5 MB | 64 B | 0.993 | 0.795 |
+| A2 rank-32 table into 256 bits, float head | 2.46 MB | 32 B | 0.993 | 0.781 |
+
+The low-rank table carries the compression (a sum of rows is linear, so rank 16–32 keeps the float's quality); the
+one-cycle schedule, not distillation, is most of the binary nets' gain over the saved binary (0.963 → 0.993 AUC), and
+no binary variant reached recall 0.80. The TypeScript forward (`h10-forward.ts`, from `h10.py export`) matches
+PyTorch on 64 of 64 decisions (max logit error 1e-5); a byte-level CRC n-gram hasher (`fastGrams`, the same ids as
+`binnet.grams` on all 14,317 val items) halves the encode.
+
+**Why H10 failed end to end (D913), diagnosed.** On `synth:<M2 v2 val>+stale@4`, seeds 1–25 (with M3's tag veto on:
+off 62 of 98 stale versions handed), of the 62 stale hand-outs under the float H10 at θ 0.5: in **34 the stale→fact
+pair was never scored** (the trial asked only about a newer pool item that itself named one of the request's anchors,
+and the fact usually does not), 14 scored under θ, 12 swapped, 1 fact not in the pool. And **θ 0.5 is logit 0, where
+the float net's val recall is 0.374** (precision 1.0); its precision-0.95 point is logit −5.69 (p 0.0034). The
+funnel's renamed texts score as offline for most pairs (persona renaming moved a few by 3–9 logits).
+
+| arm (float H10, tag on) | stale handed | facts handed | control decoys handed |
+|---|---|---|---|
+| off | 62 | 442 | 278 |
+| θ 0.5 | 50 (−19%) | 443 | 277 |
+| θ 0.0034 (dev p0.95) | 40 (−35%) | 444 | 252 |
+| θ 0.0034, no anchor gate | 9 (−85%) | 428 (−3.2%) | 195 |
+
+Without the gate the swaps are there but the precision is not: 5,048 of 30,197 pool pairs read "replaces" at an
+M2-calibrated threshold. M2's offline pairs (reversed, fact against twin, fact against neutral) are not the pairs the
+push pool presents (many same-topic items, always older then newer).
+
+**The fix.** (1) `pushSupersede` drops the anchor gate on the newer item (`push-supersede.test.ts`). (2) H10 is
+trained on engine-drawn pairs as well: the funnel on synth *train* +stale (M2 v2 train in ten parts of ~213 worlds,
+seeds 1–52 each, `pushSupersede` 1 so nothing swaps, the lab superseder's trace with texts) records every (handed,
+newer pool item) pair; a pair is positive when it is a task's (stale version, fact) (in M2 v2 every `revisionOf` pair
+is a silent-change task's), every other is negative (`h10_pool_pairs.py`). Parts 00–08: 458,943 distinct pairs, 1,342
+positives (training); part 09: 51,314, 117 (calibration). M2-trained nets read those calibration pairs at AUC 0.92
+with no precision (the old float at logit 0: 58 true swaps, 1,223 false); trained on both, 0.995. (3) θ is the
+model's precision-0.80 point on the calibration pairs, confirmed on part 09's funnel before any held-out read
+(pre-registered). With the tag veto rejected on main (#256), every read below is tag off, as main ships.
+
+| funnel, tag off | stale handed | facts handed | control decoys |
+|---|---|---|---|
+| part 09 (train, calibration), off | 93 / 156 | 893 / 1,558 | 732 |
+| part 09, pool-float θ 0.97 / 0.91 / 0.53 (pool p0.95 / p0.90 / p0.80) | 44 / 17 / 6 | 894 / 895 / 895 | 732 |
+| part 09, rank 32 d 128 θ 0.926 (pool weight 1) | 20 | 896 | 732 |
+| part 09, rank 32 d 128 θ 0.941 (pool weight 0.3, reversed positives) | 40 | 895 | 732 |
+| part 09 (merged tree), rank 16 d 128 θ 0.5867 (Modal, 4 epochs, reversed positives) | 15 | 895 | 731 |
+| part 09 (merged tree), rank 32 d 128 θ 0.75 (local, reversed positives) | 20 | 895 | 732 |
+| **val** (read once), off | 64 / 98 | 457 / 738 | 356 |
+| **val**, pool-float θ 0.53 | **15 (−77%)** | 460 | 354 |
+| **test** (`synth-test+stale@4 --blind`, read once), off | 57 / 95 | 451 / 759 | 355 |
+| **test**, pool-float θ 0.53 | **22 (−61%)** | 450 (−0.2%) | 354 |
+| **test**, rank 16 d 128 θ 0.5867 | **36 (−37%)** | 450 (−0.2%) | 355 |
+
+Pool training moves M2's offline calibration: pool-float reads M2 val AUC 0.993 but recall@p0.95 0.741 (the M2-only
+float: 0.828), the reversed and fact-against-twin pairs the pool never draws rising above its 80%-recall score; the
+reversed pool positives as negatives (`--extra-reverse`) did not win it back (rank-32 students 0.71–0.76). The parent
+retired the offline M2 recall as the arbiter for this reason; the student's bar became pool-float's end-to-end result
+within the size and speed limits.
+
+**Result: the float passes end to end, the compressed student does not.** pool-float (67 MB) cuts stale versions
+handed on test by 61% with facts level; the rank-16 student (1.42 MB shared, 128 B an item, TypeScript encode 120–154
+µs an item and 19–23 µs a pair, 64/64 decisions against PyTorch; in the funnel 24 µs a pair, 0.18 ms an item) cuts
+37%, under the −50% bar; on part 09 it read −84%, so the train-side screen overstated it. Its calibration pairs show
+why: at p0.80 it catches 93 of 117 against the float's 104, and the gap widens on unseen families. Weights: Modal
+Volume `eden-retriever`, `models/m3b-teacher-s7.pt` (M2-only float teacher), `models/m3b-pool-float.pt`,
+`models/m3b-final-r16-d128-rev.pt`, `models/m3b-final-r32-d128-rev.pt`, round 2's `models/m3b-r2-*.pt`; data
+`data/g/m3b-{core,dev}.jsonl`, `data/g/m3b-pool-{train,calib}.jsonl.gz`.
