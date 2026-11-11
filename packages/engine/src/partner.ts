@@ -113,6 +113,7 @@ import {
   startMinutes,
   topicOf,
 } from "./probes";
+import { type TurnGate, turnGate } from "./turn-gate";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
@@ -163,6 +164,11 @@ export interface PartnerDeps {
   /** Null runs the engine with no model at all: fast and source paths only. */
   model: Model | null;
   config?: Partial<EngineConfig>;
+  /**
+   * The turn gate for `pushGate` (D1014): omitted, the shipped weights (`turnGate()`, read once a process); null, no
+   * gate, so `pushStart` decides alone (what a missing or unreadable weights file gives).
+   */
+  turnGate?: TurnGate | null;
   onTrace?: TraceSink;
   /** Whether the agent used each injection, once known (D293): content-free, for an integrator's digest. */
   onUsage?: UsageSink;
@@ -584,6 +590,8 @@ const MAX_OUTSTANDING = 64;
 
 export class ContextPartner {
   readonly config: EngineConfig;
+  /** The turn gate (`pushGate`, D1014), or null: the rule alone. */
+  private readonly gate: TurnGate | null;
   private readonly sessions = new Map<string, Session>();
   /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
   private readonly userSessions = new Map<string, Set<Session>>();
@@ -660,6 +668,8 @@ export class ContextPartner {
 
   constructor(private readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
+    // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
+    this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
@@ -855,13 +865,31 @@ export class ContextPartner {
     // `pushCheck` its pool is checked as a listed request's (D823, D828).
     // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
     // and the push's lookup is given that imperative; the open shape then refuses log lines and chatter.
-    const start =
+    const ruled =
       event.kind === "user_message"
         ? pushStart(event.text, {
             open: this.config.pushOpen && this.config.pushCandidates > 0,
             indirect: this.config.pushIndirect,
           })
         : null;
+    // `pushGate` (M13, D1014): the turn gate keeps a rule start unless it vetoes it, and adds a start the rule has
+    // none for, as an opened one, only where the open shape could start one (`pushOpen` with the candidates: the
+    // reader's own push never pays for a gate-only start). The rule's request text (a lead-in's imperative) is kept.
+    // No gate, or one that fails, and the rule decides alone (fail open).
+    const said = event.kind === "user_message" ? event.text : "";
+    let verdict: { needs: boolean } | null = null;
+    if (this.gate && event.kind === "user_message")
+      try {
+        verdict = this.gate.read(said, { how: ruled?.how ?? "none", rest: ruled !== null && ruled.request !== said });
+      } catch {
+        verdict = null;
+      }
+    const adds = this.config.pushOpen && this.config.pushCandidates > 0;
+    const start = !verdict
+      ? ruled
+      : !verdict.needs
+        ? null
+        : (ruled ?? (adds ? { how: "opened" as const, request: said } : null));
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
     // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can

@@ -97,6 +97,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   pushOpen: true,
   pushCheck: true,
   pushIndirect: true,
+  // D1014 (M13): the turn gate decides the push's start beside `pushStart`, in any language.
+  pushGate: true,
   // D342 (A17): updates name the times they drop.
   revisionDiff: true,
   // D376 (A25): checkAction holds a party only Eden's packets showed.

@@ -212,3 +212,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
 | D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
 | D996 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | stopped on its pre-registered rule, 327c9fb2 |
+| D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |
