@@ -4,7 +4,7 @@
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent, SharedFrozenDisk } from "@eden/engine";
+import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent, SharedFrozenDisk, turnGate } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
@@ -141,6 +141,10 @@ async function serve(config: ServerConfig): Promise<void> {
   }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
+  // The turn gate fails open (D1014): unreadable weights leave the start rule alone. Said once, so a missing
+  // `turn-gate.bin` in an image is seen (R1), not only measured.
+  if (partner.config.pushGate && turnGate() === null)
+    console.error("eden: turn-gate.bin could not be read; the push's start rule decides alone (D1014)");
   const grace = config.shutdownGraceMs ?? 10_000;
   // D992: readiness, metrics and the cluster router's membership messages, around the API.
   const ops = new Ops(partner, persist, {
