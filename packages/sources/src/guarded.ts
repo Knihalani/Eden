@@ -144,6 +144,8 @@ interface PerSource {
   callLatency?: RollingHistogram;
   /** Until when the rate limit is pushed back by the connector's own rate-limit error (engine clock), if it was. */
   pushedBackUntil?: number;
+  /** When a call last took this state (`state`, the fan-out's clock): `park` reads it. */
+  usedAt: number;
 }
 
 /**
@@ -188,6 +190,16 @@ const RATE_LIMITED = /\b429\b|rate.?limit|too many requests/i;
 const GATE_ERROR = "GateError";
 /** Per-source state kept for at most this many (user, source) pairs; the least recently used is dropped. */
 const MAX_STATES = 100_000;
+/** A pair's concurrency limit before it has learned one. */
+const LIMIT_INITIAL = 2;
+/**
+ * A (user, source) pair's guards are parked once no call has taken them for this long (D754): longer than every
+ * window they hold (the breaker's 60 s, the latency histogram's 60 s, the planner calls' ten minutes), so an idle
+ * pair's guards hold nothing a new set would not, bar the concurrency limit it learned, which is what is kept.
+ */
+const PARK_IDLE_MS = CALL_LATENCY_WINDOW_MS;
+/** Pairs `state` looks at for parking each time it is called: the least recently used. */
+const PARK_SCAN = 8;
 
 /**
  * A results-cache key: the (user, source) pair, length-prefixed so the pair is read back exactly (`pairOf`) whatever
@@ -217,6 +229,12 @@ function pairOf(key: string): string {
 
 export class SourceFanout {
   private readonly per = new Map<string, PerSource>();
+  /**
+   * The concurrency limit of each pair whose guards were parked (`park`), by the pair's key, when it differs from
+   * a new limiter's. A user with 1,000 sources otherwise holds about 1 MB of guards for sources called once, in
+   * their backfill (o4-per-source.md).
+   */
+  private readonly parked = new Map<string, number>();
   private readonly flights = new Singleflight<string, ContextItem[]>();
   private readonly results: S3FifoCache<string, ContextItem[]> | null;
   private readonly rate: Gcra<string>;
@@ -459,6 +477,9 @@ export class SourceFanout {
     if (sourceId) this.results?.deleteGroup(`${scopeKey(scope)}|${sourceId}`);
     else this.results?.deleteWhere((k) => pairOf(k).startsWith(prefix)); // Rare (forget-a-user): a scan is fine.
     for (const k of [...this.per.keys()]) if (`${k}|`.startsWith(prefix) || k.startsWith(prefix)) this.per.delete(k);
+    for (const k of [...this.parked.keys()]) {
+      if (`${k}|`.startsWith(prefix) || k.startsWith(prefix)) this.parked.delete(k);
+    }
   }
 
   /**
@@ -682,20 +703,56 @@ export class SourceFanout {
   }
 
   private state(key: string): PerSource {
+    const now = this.now();
     let s = this.per.get(key);
     if (s) {
       this.per.delete(key); // Re-insert: Map order is least recently used first.
       this.per.set(key, s);
     } else {
       if (this.per.size >= this.maxStates) this.per.delete(this.per.keys().next().value as string);
+      // A parked pair comes back with the limit it had learned; everything else it held had run out (`park`).
+      const limit = this.parked.get(key);
+      this.parked.delete(key);
       s = {
         breaker: new CircuitBreaker({ ...this.options.breaker, now: this.now }),
-        limiter: new AimdLimiter({ initial: 2, min: 1, max: this.options.maxConcurrency ?? 4 }),
+        limiter: new AimdLimiter({ initial: limit ?? LIMIT_INITIAL, min: 1, max: this.options.maxConcurrency ?? 4 }),
         latency: new RollingHistogram(60_000, this.now),
+        usedAt: now,
       };
       this.per.set(key, s);
     }
+    s.usedAt = now;
+    this.park(now);
     return s;
+  }
+
+  /** How many (user, source) pairs hold guards, and how many hold only a parked limit (observability, tests). */
+  guards(): { live: number; parked: number } {
+    return { live: this.per.size, parked: this.parked.size };
+  }
+
+  /**
+   * D754: parks the guards of pairs no call has taken for `PARK_IDLE_MS`, looking at the `PARK_SCAN` least recently
+   * used each time `state` is called (so the work is bounded per call and needs no timer). A pair is parked only
+   * when a new set of guards would behave as its own do: nothing in flight, the breaker closed (its window has run
+   * out, as the histograms' have), no rate-limit push-back still standing. Its learned concurrency limit is kept
+   * (`parked`) and given back on its next call. A pair that is idle but not so (an open breaker, a call that never
+   * returned its permit) is moved behind the others, so it cannot hold up the scan; it is still dropped at
+   * `maxStates` as before, a little later than its last use alone would have it.
+   */
+  private park(now: number): void {
+    let seen = 0;
+    for (const [key, s] of this.per) {
+      if (seen++ >= PARK_SCAN || now - s.usedAt < PARK_IDLE_MS) return;
+      this.per.delete(key);
+      const quiet = s.limiter.inFlight === 0 && s.breaker.state === "closed" && !(s.pushedBackUntil! > now);
+      if (!quiet) {
+        this.per.set(key, s);
+        continue;
+      }
+      const limit = s.limiter.learned;
+      if (limit !== LIMIT_INITIAL) this.parked.set(key, limit);
+    }
   }
 
   private async one(

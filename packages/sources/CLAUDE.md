@@ -14,7 +14,7 @@ anything is held).
 | `src/schema-args.ts` | Arguments built from a tool's JSON schema (search, fetch, list), deterministic; operator `fixed` values win |
 | `src/shapes.ts` | Query shapes (terms, entities, one call per entity…); `inert` strips search-syntax operators from untrusted text |
 | `src/planner.ts` | `QueryPlanner`, `PlannedSource`: Thompson sampling over shapes per (tenant, user, connector), learned cascade (D28–D33, D38, D39) |
-| `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48); `list`'s `reuse` (`ListReuse`: a held, unchanged item is not redacted again); `list`'s `turn` (awaited after the source answers, before redaction, only when given: the sync's `syncIngestTurns` trial, D328); `fetchChecked` (ok / gone / failed with `why`, D126, D211; an MCP error result is `FetchErrorResult`, settled as answered and reported as "error-result", D298); `dropResults` (a changed or deleted source's held pages, D126) |
+| `src/guarded.ts` | `SourceFanout`: per-(user, source) breaker, AIMD, GCRA, histogram; singleflight; stale-on-failure result cache; `SharedCalls` (D48); `list`'s `reuse` (`ListReuse`: a held, unchanged item is not redacted again); `list`'s `turn` (awaited after the source answers, before redaction, only when given: the sync's `syncIngestTurns` trial, D328); `fetchChecked` (ok / gone / failed with `why`, D126, D211; an MCP error result is `FetchErrorResult`, settled as answered and reported as "error-result", D298); `dropResults` (a changed or deleted source's held pages, D126); `park` (D754: a pair idle ten minutes keeps only its learned concurrency limit) |
 | `src/fanout.ts` | `searchSources`: the plain parallel search with per-source outcome (an aborted `signal` is a "timeout", no call) |
 | `src/static-source.ts` | `StaticSource`: in-memory documents (tests, examples, `EDEN_SOURCES_FILE`, per-user static specs); an inverted index built on the first search and a ref map for `fetch` (D175) |
 | `bench/static-source.bench.ts` | Old search vs lazy term sets vs the shipped index at 400 / 4,000 / 40,000 docs: construct, first-search and per-search ms, heap per doc; checks identical refs |
@@ -48,6 +48,13 @@ bun packages/sources/bench/static-source.bench.ts   # ~10 s; no assertions beyon
 
 ## Pitfalls
 
+- **Idle guards are parked (D754, `SourceFanout.park`).** A (user, source) pair no call has taken for ten minutes
+  (`PARK_IDLE_MS`, the longest window its guards hold) loses its breaker, limiter and histograms and keeps only the
+  limit it learned (`parked`), given back at its next call; a pair with a call in flight, a breaker not closed or a
+  rate limit pushed back is kept. A new guard, or a window longer than ten minutes, must either be rebuilt
+  identically from nothing after that long or be carried in `parked`, or an idle pair comes back changed
+  (`park.test.ts`; the funnel parks every pair between two requests, so it shows any difference). `forget` drops
+  parked limits too.
 - Planner tests are statistical over seeded generators: keep seeds fixed; a change to arm selection usually needs
   the planner research runs (`docs/research/query-planner-results.md`), not a test tweak.
 - The planner's defaults are decided by D31–D33 on held-out simulation sets; changing them needs a new decision.

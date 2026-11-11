@@ -126,3 +126,31 @@ test("past 65,534 slots the table widens and keeps every id", () => {
   expect(all[0]).toBe("w1");
   expect(all.at(-1)).toBe("w139999");
 });
+
+test("a set that holds nothing allocates nothing, and one that lost most of its ids gives their room back", () => {
+  const set = new IdSet();
+  expect(set.bytesHeld).toBeLessThanOrEqual(40); // the shared empty arrays
+  const ids = Array.from({ length: 20 }, (_, i) => `gmail:message-${i}`);
+  for (const id of ids) set.add(id);
+  const full = set.bytesHeld;
+  // A page stored and then trimmed to the user's cap: three ids are kept.
+  for (const id of ids.slice(3)) set.delete(id);
+  expect(set.size).toBe(3);
+  expect(set.bytesHeld).toBeLessThan(full / 3);
+  expect([...set]).toEqual(ids.slice(0, 3));
+  for (const id of ids) expect(set.has(id)).toBe(ids.indexOf(id) < 3);
+  // It grows again as before, in insertion order.
+  for (const id of ids.slice(3)) set.add(id);
+  expect([...set]).toEqual(ids);
+  // Deleting everything goes back to nothing; deleting while iterating never moves what the iterator reads.
+  const seen: string[] = [];
+  for (const id of set) {
+    seen.push(id);
+    set.delete(id);
+  }
+  expect(seen).toEqual(ids);
+  expect(set.size).toBe(0);
+  set.add("x").delete("x");
+  expect(set.bytesHeld).toBeLessThanOrEqual(40);
+  expect(set.has("x")).toBe(false);
+});
