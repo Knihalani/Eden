@@ -692,13 +692,6 @@ export interface EngineConfig {
    */
   askNudge: boolean;
   /**
-   * Trial (D855; owner P5, ends 2026-12-10): the candidates' lead and the ask nudge in fewer words with the same three
-   * instructions (check the person, thing and date; check it is still current; otherwise ignore it and say nothing),
-   * `CANDIDATES_LEAD_SHORT` and `ASK_NUDGE_SHORT`. The lead is on nearly every packet and every kept packet is re-read
-   * all day (C1 of docs/research/weak-points-1111.md); promoted only on a pre-registered Pi run (D855).
-   */
-  leadShort: boolean;
-  /**
    * D460 (M5, docs/research/m5-nudge-narrow.md; promoted by D461, on in the default, part `nudge`): a narrower
    * `askNudge`. The nudge fires only when, besides
    * leaving the request unsettled, the push pool past the handed candidates holds an item (not bulk mail) that names
@@ -935,7 +928,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   partyCheck: true,
   planConflict: true,
   askNudge: true,
-  leadShort: false,
   askNudgeDeep: true,
   pushCandidatesSettled: 2,
   pushCheck: false,

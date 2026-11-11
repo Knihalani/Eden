@@ -8,7 +8,7 @@ import { checkEngineConfig } from "./config-check";
 import { ContextPartner, type PushPoolReport, type ReaderReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { AskReader, type ReaderInput, type ReaderMaker } from "./reader";
-import { CANDIDATES_LEAD, CANDIDATES_LEAD_SHORT, shownText } from "./render";
+import { CANDIDATES_LEAD, shownText } from "./render";
 
 // CL6 (docs/research/cl-cl6.md, D236, D237): "the agent is the reader". The push makes no reader call; it hands the
 // agent the top of the pool the reader would have read, framed as candidates to check against the request. Unit tests
@@ -130,24 +130,6 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     expect(text.endsWith("</context>")).toBe(true);
     // The framing is no item's words.
     expect(shownText(text)).not.toContain("nothing has checked");
-  });
-
-  test("leadShort (D855, trial): the same items under a shorter lead with the same instructions", async () => {
-    const long = setup({ ...quiet, pushCandidates: 3 });
-    await say(long.p, REQUEST);
-    const short = setup({ ...quiet, pushCandidates: 3, leadShort: true });
-    await say(short.p, REQUEST);
-    const [a] = candidates(long.p);
-    const [b] = candidates(short.p);
-    expect(b!.text.split("\n")[1]).toBe(CANDIDATES_LEAD_SHORT);
-    // Only the lead differs: the envelope and every item line are the same.
-    expect(b!.text.split("\n").filter((_, i) => i !== 1)).toEqual(a!.text.split("\n").filter((_, i) => i !== 1));
-    expect(b!.citations.map((c) => c.itemId)).toEqual(a!.citations.map((c) => c.itemId));
-    expect(CANDIDATES_LEAD_SHORT.length).toBeLessThan(CANDIDATES_LEAD.length * 0.65);
-    for (const w of ["person", "thing", "date", "current", "ignore it and do not mention it"]) {
-      expect(CANDIDATES_LEAD_SHORT).toContain(w);
-    }
-    expect(shownText(b!.text)).not.toContain("unchecked candidates");
   });
 
   test("k cuts the candidates", async () => {
