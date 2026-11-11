@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
 import { ItemTagger, readTagger, sharedTagger, TAGGER_PATH, TagMemo } from "./tagger";
 
@@ -97,5 +97,20 @@ describe("TagMemo", () => {
     const m = new TagMemo(t, 3);
     for (let i = 0; i < 5; i++) m.read(A, item(`b${i}`, `text ${i}`));
     expect(m.size().items).toBe(3);
+  });
+});
+
+describe("length invariance (D908's gate)", () => {
+  test("short real constraints read as constraints: at least 97% of the fixture at 0.5 or more", () => {
+    // fixtures/short-constraints.jsonl: two hand-written, 30 from M2 v2's test split and 20 from the sim's held-out
+    // train5-6, each a fact cut to its title and one sentence (packages/sim/lab/m3r/short_fixture.py).
+    const rows = readFileSync(new URL("../fixtures/short-constraints.jsonl", import.meta.url), "utf8")
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as { title: string; text: string });
+    expect(rows.length).toBeGreaterThanOrEqual(32);
+    const t = sharedTagger()!;
+    const low = rows.filter((r) => t.constraintProbability(r) < 0.5);
+    expect(low.length / rows.length).toBeLessThanOrEqual(0.03);
   });
 });
