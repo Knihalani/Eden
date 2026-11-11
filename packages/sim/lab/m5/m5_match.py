@@ -79,8 +79,9 @@ def pdate(s):
 class Ledger:
     """One user's records, with each anchor's phrase tokens and weight."""
 
-    def __init__(self, recs, common_share=0.05):
+    def __init__(self, recs, common_share=0.05, text=None):
         self.recs = recs  # [(item_id, record)]
+        self.text = text or {}  # item id -> "title text" (v3's role test reads the record's own item)
         df = Counter()
         for _, r in recs:
             seen = set()
@@ -169,10 +170,56 @@ def thing_hits(r, rstems):
     return hits
 
 
-def match(led, request, year, min_score=2.0, things_w=1.0, general=True, day_w=0.0, loose=False):
+# v3 (§4): typed comparisons with no model. A small hand-built gazetteer of the places the sim's worlds name: a place
+# outside the UK adds the words a record about travel abroad uses (synthetic entries, not a geography service).
+ABROAD = set("""dubai lisbon porto paris berlin bengaluru bangalore mumbai delhi toronto kraków krakow prague ostrava
+    czech amsterdam madrid barcelona rome milan munich frankfurt dublin new york boston chicago singapore tokyo
+    hong kong sydney zurich geneva vienna copenhagen stockholm oslo helsinki warsaw brussels lyon nice athens
+    istanbul cape town lagos nairobi toronto montreal vancouver san francisco seattle austin""".split())
+ABROAD_TAGS = {"international", "abroad", "overseas", "passport", "visa"}
+ROLES = set("""babysitter babysit nanny childminder cleaner mum dad mother father approver accountant landlord plumber
+    builder gardener tutor walker vet gp doctor dentist boss manager""".split())
+MONEY = re.compile(r"([£$€])\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|bn)?\b", re.I)
+THRESH = re.compile(r"(?:over|above|more than|up to|exceeding|beyond|greater than|at most|capped at|limit(?:ed)? (?:of|to)|"
+                    r"max(?:imum)?(?: of)?)\s+([£$€])\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|bn)?\b", re.I)
+
+
+def money(m):
+    v = float(m.group(2).replace(",", ""))
+    return m.group(1), v * {"k": 1e3, "m": 1e6, "bn": 1e9}.get((m.group(3) or "").lower(), 1)
+
+
+def typed_hits(r, request, rstems, item_text):
+    """v3's three comparisons: the request's amount over the record's threshold; a role word the request uses that
+    the record's own item uses; and (through the stems, `abroad_stems`) a destination's category."""
+    hits = []
+    if r.get("kind") in ("limit", "restriction", "fee"):
+        src = f"{r.get('amount') or ''} {r.get('what') or ''}"
+        th = [money(m) for m in THRESH.finditer(src)]
+        if not th and r.get("kind") == "limit":
+            th = [money(m) for m in MONEY.finditer(r.get("amount") or "")]
+        asked = [money(m) for m in MONEY.finditer(request)]
+        if any(c == tc and v > tv for c, v in asked for tc, tv in th):
+            hits.append("amount>limit")
+    roles = {t for t in rstems if t in ROLES}
+    if roles:
+        body = {stem(t) for t in toks(item_text or "")} | {stem(t) for t in toks(r.get("what") or "")}
+        if roles & body:
+            hits.append("role")
+    return hits
+
+
+def abroad_stems(request):
+    t = " " + " ".join(toks(request)) + " "
+    return ABROAD_TAGS if any(f" {p} " in t for p in ABROAD) else set()
+
+
+def match(led, request, year, min_score=2.0, things_w=1.0, general=True, day_w=0.0, loose=False, typed=False):
     rt = toks(request)
     rset = set(rt)
     rstems = {stem(t) for t in rt}
+    if typed:
+        rstems |= abroad_stems(request)
     rtext = " " + " ".join(rt) + " "
     days = req_dates(request, year)
     scored = defaultdict(float)
@@ -197,6 +244,10 @@ def match(led, request, year, min_score=2.0, things_w=1.0, general=True, day_w=0
         if general and (s > 0 or not anchors or loose):
             th = thing_hits(r, rstems)
             s += things_w * len(th)
+            hit += th
+        if typed:
+            th = typed_hits(r, request, rstems, led.text.get(iid))
+            s += 2.0 * len(th)
             hit += th
         # A dated record whose days hold a day the request names (a clash, an absence, a closure on that day).
         if day_w and r.get("dated") and days:
@@ -237,6 +288,7 @@ def main():
     a.add_argument("--things-w", type=float, default=2.0)  # frozen (§2)
     a.add_argument("--no-general", action="store_true")
     a.add_argument("--day-w", type=float, default=0.0)
+    a.add_argument("--typed", action="store_true", help="v3: amount, role and destination comparisons (§4)")
     a.add_argument("--strict", action="store_true", help="things only for records with no foreign anchor")
     a.add_argument("--year", type=int, default=2026)
     a.add_argument("--only", default="fit", help="fit | held | all: the held-out rows are read once per frozen version")
@@ -256,7 +308,7 @@ def main():
                 continue
             for r in rr:
                 recs.append((it["id"], r))
-        worlds[wk] = Ledger(supersede(recs))
+        worlds[wk] = Ledger(supersede(recs), text={it["id"]: f"{it['title']} {it['text']}" for it in w["items"]})
     agg = defaultdict(Counter)
     for p in load_jsonl(o.pool):
         wk = (p.get("suite", "days"), p["seed"], p.get("variant", "days"))
@@ -269,7 +321,7 @@ def main():
         if o.only != "all" and fold_ != o.only:
             continue
         m, why = match(worlds[wk], p["request"], o.year, o.min_score, o.things_w, not o.no_general, o.day_w,
-                       not o.strict)
+                       not o.strict, o.typed)
         front = [i for i in m[: o.front]]
         arm = front + [i for i in pool if i not in front]
         g = agg[(fold_, kind)]

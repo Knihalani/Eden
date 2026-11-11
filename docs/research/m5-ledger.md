@@ -133,3 +133,7 @@ decoys @5 rising by no larger ratio. Anthropic cap for this version: $5.
 
 **Caveat, written before the read:** train1–2 were in v1's fit split, and v1's miss examples from them were read
 while v1 was built, so this fold is not blind to the author. The read is a second fold, not a clean held-out set.
+
+**Frozen (v3):** `m5_match.py --typed` at this commit, other defaults as in §2 (front 2; `--day-w` stays 0, a day
+weight added nothing on fit). Fit (train3–6 days requests): facts @5 220 → 246 of 315 (+8.3 points; v1's matcher
+239), decoys @5 184 → 188 of 287 (v1's 188).
