@@ -2,7 +2,7 @@
 the dev templates (where the pass mark is chosen), the 40 held-out templates (the bar, read once) and the in-sample
 templates. Reuses I1's `compare.tally`; the splits are m1_data's. Lab only.
 
-    python3 -I packages/sim/lab/m1/compare.py --base BASE.json --trial TRIAL.json [--bar]
+    python3 -I packages/sim/lab/m1-student/compare.py --base BASE.json --trial TRIAL.json [--bar]
 """
 import argparse
 import json

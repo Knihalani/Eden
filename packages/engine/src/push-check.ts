@@ -279,6 +279,7 @@ export interface PushCheckStats {
  * session holds what a check answered (`partner.ts`); this class holds no user content.
  */
 export class PushChecker {
+  readonly local = false;
   private readonly limits: PushCheckLimits;
   readonly stats: PushCheckStats = {
     asked: 0,
@@ -380,6 +381,9 @@ export interface LocalCheckInput {
 
 /** The characters of an item's text the student reads (`m1_data.ITEM_CHARS`). */
 export const LOCAL_CHECK_ITEM_CHARS = 700;
+/** The characters of the request and of an item's title the student is sent (`m1_data.REQUEST_CHARS`, the endpoint's). */
+export const LOCAL_CHECK_REQUEST_CHARS = 400;
+export const LOCAL_CHECK_TITLE_CHARS = 300;
 
 /**
  * A student's scores for a push's pool: one log-odds an item ("does this item change what the assistant should do for
@@ -394,6 +398,11 @@ export interface PushCheckScorer {
  * What the partner needs of a push check: I3's model call (`PushChecker`) or a student's scores (`LocalPushChecker`).
  */
 export interface PushCheck {
+  /**
+   * True for a student's scores (`LocalPushChecker`), false for the paid model call (`PushChecker`). The partner reads
+   * this, never the config flag alone, before treating a check as free (D896) or sending it the student's item text.
+   */
+  readonly local: boolean;
   check(scope: Scope, session: string, input: PushCheckInput, signal: AbortSignal): Promise<PushCheckRead>;
   endSession(session: string): void;
   readonly stats: PushCheckStats;
@@ -407,6 +416,7 @@ export interface PushCheck {
  * (`localCheckItems`), which the partner builds when `pushCheckLocal` is on.
  */
 export class LocalPushChecker implements PushCheck {
+  readonly local = true;
   readonly stats: PushCheckStats = {
     asked: 0,
     calls: 0,
@@ -435,11 +445,17 @@ export class LocalPushChecker implements PushCheck {
     this.stats.calls++;
     const mark = Math.log(this.deps.pass / (1 - this.deps.pass));
     try {
+      // Bounded input whatever the scorer does (the student's own cuts, `m1_data`): the request's head, each title's
+      // first 300 characters, each text's first 700.
       const scores = await this.deps.scorer.score(
         {
-          request: input.request,
+          request: input.request.slice(0, LOCAL_CHECK_REQUEST_CHARS),
           today: input.today,
-          items: items.map(({ id, title, text }) => ({ id, title, text })),
+          items: items.map(({ id, title, text }) => ({
+            id,
+            title: title.slice(0, LOCAL_CHECK_TITLE_CHARS),
+            text: text.slice(0, LOCAL_CHECK_ITEM_CHARS),
+          })),
         },
         signal,
       );
@@ -471,4 +487,9 @@ export class LocalPushChecker implements PushCheck {
 /** The student's text of an item: its cached text, redacted again, cut to `LOCAL_CHECK_ITEM_CHARS` (D894). */
 export function localCheckText(text: string): string {
   return sanitizeForStore(text.slice(0, LOCAL_CHECK_ITEM_CHARS * 2)).slice(0, LOCAL_CHECK_ITEM_CHARS);
+}
+
+/** The student's title of an item: as cached (not the reader's 120 characters, whitespace kept), redacted, cut. */
+export function localCheckTitle(title: string): string {
+  return sanitizeForStore(title.slice(0, LOCAL_CHECK_TITLE_CHARS * 2)).slice(0, LOCAL_CHECK_TITLE_CHARS);
 }

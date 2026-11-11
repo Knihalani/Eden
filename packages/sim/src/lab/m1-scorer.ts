@@ -32,8 +32,13 @@ export class HttpScorer implements PushCheckScorer {
     if (opts.cacheFile && existsSync(opts.cacheFile)) {
       for (const line of readFileSync(opts.cacheFile, "utf8").split("\n")) {
         if (!line.trim()) continue;
-        const r = JSON.parse(line) as { k: string; s: number[] };
-        this.cache.set(r.k, r.s);
+        // A torn line (a killed process, or concurrent appends from `--jobs`) is skipped, not fatal.
+        try {
+          const r = JSON.parse(line) as { k: string; s: number[] };
+          if (typeof r.k === "string" && Array.isArray(r.s) && r.s.every(Number.isFinite)) this.cache.set(r.k, r.s);
+        } catch {
+          continue;
+        }
       }
     }
   }
@@ -66,6 +71,14 @@ export class HttpScorer implements PushCheckScorer {
       });
       if (!res.ok) throw new Error(`m1 scorer: HTTP ${res.status}`);
       const body = (await res.json()) as { scores: number[] };
+      // Only a well-formed answer is kept: a bad one would otherwise replay as the same failure every rerun.
+      if (
+        !Array.isArray(body.scores) ||
+        body.scores.length !== input.items.length ||
+        !body.scores.every(Number.isFinite)
+      ) {
+        throw new Error("m1 scorer: the endpoint's scores do not match the pool");
+      }
       this.ms.push(performance.now() - t0);
       this.cache.set(k, body.scores);
       this.log(input, body.scores);

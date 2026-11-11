@@ -79,7 +79,15 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
-import { CHECK_MAX_ITEMS, checkKey, itemMark, localCheckText, type PushCheck, type PushCheckRead } from "./push-check";
+import {
+  CHECK_MAX_ITEMS,
+  checkKey,
+  itemMark,
+  localCheckText,
+  localCheckTitle,
+  type PushCheck,
+  type PushCheckRead,
+} from "./push-check";
 import {
   accounts,
   actionKey,
@@ -877,7 +885,7 @@ export class ContextPartner {
       event.kind === "user_message" &&
       this.config.pushOpen &&
       this.config.pushCandidates > 0 &&
-      (!this.config.pushCheck || this.config.pushCheckLocal) &&
+      (!this.config.pushCheck || this.localCheck()) &&
       isOpenRequest(event.text);
     if (opened) internal.open = true;
     const push =
@@ -2231,11 +2239,17 @@ export class ContextPartner {
         // that joined the slow path's in flight, or was answered by the fan-out's cache, is none), and a harness
         // summing `sourceCalls` over a task counts what its connectors were sent. Plans and sync use stay off.
         sourceCalls,
-        modelCalls: (reading?.called ? 1 : 0) + (check?.called ? 1 : 0),
+        modelCalls: (reading?.called ? 1 : 0) + (check?.called && !this.localCheck() ? 1 : 0),
         costUsd: costUsd + (check?.costUsd ?? 0),
         ...(reading ? { readerCalls: reading.called ? 1 : 0, readerCostUsd: reading.costUsd } : {}),
         ...(candidates ? { candidates: true } : {}),
-        ...(check ? { checkCalls: check.called ? 1 : 0, checkCostUsd: check.costUsd } : {}),
+        ...(check
+          ? {
+              checkCalls: check.called ? 1 : 0,
+              checkCostUsd: check.costUsd,
+              ...(this.localCheck() ? { checkLocal: true } : {}),
+            }
+          : {}),
         itemIds: injection ? injection.citations.map((c) => c.itemId) : [],
       });
       const turn = internal.turn ?? s.turn;
@@ -2584,6 +2598,15 @@ export class ContextPartner {
   }
 
   /**
+   * `pushCheckLocal` (M1, D894, D896): the switch is on and the wired checker is a student's (`PushCheck.local`). A
+   * server that wires the paid `PushChecker` with the switch on gets I3's check unchanged: no opened push is checked
+   * and the paid call is never sent the student's longer item text.
+   */
+  private localCheck(): boolean {
+    return this.config.pushCheckLocal && this.deps.checker?.local === true;
+  }
+
+  /**
    * `pushCheck` (D500): the push check's answer for this pool, or null (off, unwired, no constraint-like item, no
    * request text, or `pushCheckAnchored` left the push to the default). Waits at most `pushCheckWaitMs`; a check
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
@@ -2602,8 +2625,12 @@ export class ContextPartner {
       request,
       // `pushCheckLocal` (M1, D894): the student reads each item's title and cached text as it was trained on them.
       items: read.map((x) =>
-        this.config.pushCheckLocal
-          ? { ...readerItem(x.item, focus, undefined, 40), text: localCheckText(x.item.text) }
+        this.localCheck()
+          ? {
+              ...readerItem(x.item, focus, undefined, 40),
+              title: localCheckTitle(x.item.title),
+              text: localCheckText(x.item.text),
+            }
           : readerItem(x.item, focus, undefined, this.config.pushCheckItemChars),
       ),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
@@ -2687,7 +2714,8 @@ export class ContextPartner {
       reason: "push check",
       latencyMs: Math.round(performance.now() - t0),
       sourceCalls: 0,
-      modelCalls: 1,
+      modelCalls: this.localCheck() ? 0 : 1,
+      ...(this.localCheck() ? { checkLocal: true } : {}),
       costUsd: r.costUsd,
       checkCalls: 1,
       checkCostUsd: r.costUsd,

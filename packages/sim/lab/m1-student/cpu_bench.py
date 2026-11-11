@@ -2,7 +2,7 @@
 (torch), 15 pool items as one batch. Latency depends on the architecture and the tokens, not the trained weights,
 so the base model stands in for a merged student. Lab tooling.
 
-    .venv-cpu/bin/python -I packages/sim/lab/m1/cpu_bench.py --rows .local/m1/data/train-truth.jsonl \
+    .venv-cpu/bin/python -I packages/sim/lab/m1-student/cpu_bench.py --rows .local/m1/data/train-truth.jsonl \
         --base Qwen/Qwen3-0.6B --threads 4 [--int8] [--pools 5]
 """
 import argparse

@@ -189,7 +189,8 @@ def train_remote(cfg: dict) -> dict:
     vol.commit()
     return {"report": d.by_src(held, held_scores), "insample": d.report(ins, ins_scores), "scores": held_scores,
             "latency_15": lat, "train_seconds": train_s, "seconds": round(time.time() - t0),
-            "train_rows": len(train), "held_rows": len(held), "steps": steps, "loss_tail": float(np.mean(losses[-200:]))}
+            "train_rows": len(train), "held_rows": len(held), "steps": steps,
+            "loss_tail": float(np.mean(losses[-200:]))}
 
 
 @app.function(gpu="L40S", volumes={"/vol": vol}, timeout=3 * 3600)
