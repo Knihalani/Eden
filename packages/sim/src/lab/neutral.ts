@@ -19,12 +19,20 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "heldout16",
   "heldout17",
   "heldout18",
+  "heldout19",
   "train1",
   "train2",
   "train3",
   "train4",
   "train5",
   "train6",
+  "longtail",
+  "train1r",
+  "train2r",
+  "train3r",
+  "train4r",
+  "train5r",
+  "train6r",
 ];
 
 /** Generated suites (`synth-*`, `synth:<file>`, D884) build `neutral` too: their planting function plants nothing. */

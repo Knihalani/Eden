@@ -166,7 +166,7 @@ register as suites. Seed `s` plants world `s mod N` into the base world:
 - background and neutral items overwrite base noise items in place, so the planted items stay last, one a task, as
   the harnesses read them;
 - the persona is renamed to the base user;
-- rare sources get drive's connector profile;
+- rare sources take the profile P7's rare-sources.ts gives them, and drive's for the four it does not list (sms, files, tickets, household);
 - `@K` plants K worlds a seed, for `--days` users.
 
 Smoke runs:

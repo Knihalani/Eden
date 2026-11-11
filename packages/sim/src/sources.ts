@@ -16,6 +16,7 @@
 import type { ContextItem, Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { Rng } from "./rng";
+import { RARE_SOURCES } from "./rare-sources";
 import { DAY, type World, type WorldItem } from "./world";
 
 /**
@@ -598,12 +599,21 @@ export function simIndexes(world: World): SimIndex[] {
   return Object.keys(world.sources).map((id) => new SimIndex(id, world));
 }
 
+const SYNTH_RARE = new Set(["sms", "files", "tickets", "household"]);
+
 /**
- * One user's connectors over shared indexes. A source the profile set does not name (a synth world's rare source,
- * D884: notes, bank, health app...) is served with drive's profile, a relevance-searched store of documents.
+ * A source's profile: its own, or for a rare source (rare-sources.ts) the world source it is like. A synth world's
+ * rare source that rare-sources.ts does not list (sms, files, tickets, household; D884) gets drive's profile.
  */
+export function profileFor(profiles: ProfileSet, id: string): SourceProfile {
+  const p = profiles[id] ?? profiles[RARE_SOURCES[id]?.like ?? ""] ?? (SYNTH_RARE.has(id) ? profiles.drive : undefined);
+  if (!p) throw new Error(`no source profile for "${id}"`);
+  return p;
+}
+
+/** One user's connectors over shared indexes. */
 export function sourcesFor(indexes: SimIndex[], profiles: ProfileSet, timeScale: number, seed: number, track = true) {
-  return indexes.map((ix, i) => new SimSource(ix, profiles[ix.id] ?? profiles.drive!, timeScale, seed * 31 + i, track));
+  return indexes.map((ix, i) => new SimSource(ix, profileFor(profiles, ix.id), timeScale, seed * 31 + i, track));
 }
 
 /** One SimSource per source id in the world, all with the same profile set. */

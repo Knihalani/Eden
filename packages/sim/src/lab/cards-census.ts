@@ -19,7 +19,7 @@ import { REALISTIC, simSources } from "../sources";
 import { buildWorld } from "../world";
 import { loadCards } from "./cards-disk";
 import { clearSlot, dress } from "./hidden-context";
-import { parseSuites, SUITES } from "./suites";
+import { parseSuites, prepareWorld, SUITES } from "./suites";
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => {
@@ -70,12 +70,13 @@ for (const suite of SUITE_LIST) {
   for (const variant of ["hidden", "control"] as const) {
     for (const seed of SEEDS) {
       const world = buildWorld({ seed: seed * 1_000 });
+      prepareWorld(suite, world, seed);
       const before = world.items.length;
       const tasks = SUITES[suite]!(world, seed, variant);
       const planted = world.items.slice(before);
       for (const it of planted) dress(world, it);
       const keep = new Set(planted.map((it) => it.id));
-      for (const task of tasks) clearSlot(world, task.text, keep);
+      for (const task of tasks) clearSlot(world, task.slotText ?? task.text, keep);
       const cache = new ItemCache({ maxItemsPerUser: 100_000 });
       const raw = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
       const items: ContextItem[] = cache.put({ tenantId: "t", userId: "u" }, raw, world.now);
