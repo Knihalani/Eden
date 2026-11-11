@@ -1,7 +1,9 @@
-"""M7 (D930): the push check's pre-screen, trained and screened offline (docs/research/m7-prescreen.md).
+"""M7 (D930, D931; rejected): the push check's pre-screen, trained and screened offline (docs/research/m7-prescreen.md).
 
-Rows come from `bun run funnel ... -- --check live|replay --prescreen-dump F` (prescreen-dump.ts): one check call as
-the engine made it (request, day, the pool's items as the check read them, the gate's flags) and the check's answer.
+Rows come from `bun run funnel ... -- --check live|replay --check-dump F` (check-dump.ts): one check call as
+the engine made it (request, day, the pool's items as the check read them) and the check's answer. M7's own rows
+also carry the gate's flags (`like`), recorded through the deleted `pushPrescreen` hook; rows without them read
+every item as gated.
 `tag-dump.ts` writes the constraint tagger's logits beside each dump (`F.tags.jsonl`).
 
 The pre-screen settles a pool or abstains:

@@ -137,7 +137,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
-import { DumpingChecker, RecordingPrescreen, replyKeeping, type DumpTask } from "./prescreen-dump";
+import { DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -226,7 +226,7 @@ const cli = flags(
         "check-model",
         "check-cache",
         "check-log",
-        "prescreen-dump",
+        "check-dump",
         "templates",
         "connect-at",
         "connect-tick-s",
@@ -588,14 +588,10 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
       }
     : checkModel;
 const checkLanes: PushChecker[] = [];
-/** `--prescreen-dump FILE` (M7, D930): each check call as a pre-screen training row (`prescreen-dump.ts`). */
-const PRESCREEN_DUMP = opt("prescreen-dump", "");
-if (PRESCREEN_DUMP && CHECK === "none") throw new Error("--prescreen-dump needs --check");
-if (PRESCREEN_DUMP && !RUN.pushPrescreen)
-  throw new Error(
-    "--prescreen-dump reads the pre-screen hook: --set pushPrescreen=true (it abstains, so no pool changes)",
-  );
-if (PRESCREEN_DUMP) writeFileSync(PRESCREEN_DUMP, "");
+/** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
+const CHECK_DUMP = opt("check-dump", "");
+if (CHECK_DUMP && CHECK === "none") throw new Error("--check-dump needs --check");
+if (CHECK_DUMP) writeFileSync(CHECK_DUMP, "");
 /** One replaying reader model for every seed and suite (each lane keeps its own verdict cache, `AskReader`). */
 const readerModel =
   READER === "none" || NO_MODEL_READER
@@ -1054,16 +1050,14 @@ async function runSeed(
   const readerReports = new Map<string, ReaderReport[]>();
   const laneCheck = loggedCheck({ suite, seed, variant });
   const dumpTasks = new Map<string, DumpTask>();
-  const screen = PRESCREEN_DUMP ? new RecordingPrescreen() : null;
   const checker = !laneCheck
     ? null
-    : screen
+    : CHECK_DUMP
       ? ((kept) =>
           new DumpingChecker(
             { model: kept.model, budget: new Budget(UNCAPPED) },
             kept.replies,
-            PRESCREEN_DUMP,
-            screen,
+            CHECK_DUMP,
             (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)),
             (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
           ))(replyKeeping(laneCheck))
@@ -1083,7 +1077,6 @@ async function runSeed(
     ...(timeline ? { onSpan: timeline.sink(lane) } : NOOP_SPANS ? { onSpan: () => {} } : {}),
     ...(cards ? { cards } : {}),
     ...(checker ? { checker } : {}),
-    ...(screen ? { prescreen: screen } : {}),
     ...(reader
       ? {
           reader,

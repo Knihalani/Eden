@@ -75,13 +75,11 @@ import {
   readerNote,
   type AskReader,
   type ReaderInput,
-  type ReaderItem,
   type ReaderRead,
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
 import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
-import type { PrescreenVerdict, PushPrescreen } from "./prescreen";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -220,11 +218,6 @@ export interface PartnerDeps {
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
-  /**
-   * `pushPrescreen` (M7, D930): settles a clear pool before the check's call, or abstains (`prescreen.ts`). Read only
-   * with `pushPrescreen` on and a checker wired; absent, nothing is settled and every gated pool is checked.
-   */
-  prescreen?: PushPrescreen;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -256,8 +249,6 @@ export interface PushPoolReport {
    * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
-  /** `pushPrescreen` (D930): the pre-screen settled this pass's pool, with no call. */
-  checkScreened?: boolean;
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -2456,11 +2447,6 @@ export class ContextPartner {
       };
     }
     let kept = checks.get(key);
-    // `pushPrescreen` (D930): a pool the pre-screen settles makes no call; one it abstains on is checked as before.
-    if (!kept && this.config.pushPrescreen && this.deps.prescreen) {
-      const settled = this.prescreen(items, gate.like, input.request, input.today);
-      if (settled) return settled;
-    }
     const fresh = !kept;
     if (!kept) {
       const entry: KeptCheck = {
@@ -2495,30 +2481,6 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  /**
-   * `pushPrescreen` (D930): the pre-screen's verdict as a check's answer at no cost, or null (it abstained, threw or
-   * named an item the pool does not hold: the call is made, fail open to the check).
-   */
-  private prescreen(items: ReaderItem[], like: readonly boolean[], request: string, today: string) {
-    let verdict: PrescreenVerdict | null = null;
-    try {
-      verdict = this.deps.prescreen!.decide({ request, today, items, like: like.slice(0, items.length) });
-    } catch {
-      return null;
-    }
-    if (!verdict) return null;
-    const ids = new Set(items.map((it) => it.id));
-    if (!verdict.yes.every((id) => ids.has(id))) return null;
-    const read: PushCheckRead = {
-      yes: new Set(verdict.yes),
-      costUsd: 0,
-      called: false,
-      overBudget: false,
-      screened: true,
-    };
-    return read;
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2600,7 +2562,6 @@ export class ContextPartner {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
             ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
-            ...(check?.screened ? { checkScreened: true } : {}),
           }
         : {}),
     });

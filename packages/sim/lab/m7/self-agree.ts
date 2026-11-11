@@ -1,5 +1,5 @@
 /**
- * M7 (D930): the check's agreement with itself. Re-asks a sample of recorded check calls (`--prescreen-dump` rows)
+ * M7 (D930): the check's agreement with itself. Re-asks a sample of recorded check calls (`--check-dump` rows)
  * live with the same prompt (`checkMessages`), and compares the verdict (the set of items named) with the recorded
  * one: the noise floor under any pre-screen's disagreement. Sim data; Anthropic (lab, D97), spend-capped.
  *

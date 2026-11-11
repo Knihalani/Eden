@@ -1,5 +1,5 @@
 /**
- * M7 (D930): the constraint tagger's nine logits for every item of a `--prescreen-dump` file, as the engine's `TagMemo`
+ * M7 (D930): the constraint tagger's nine logits for every item of a `--check-dump` file, as the engine's `TagMemo`
  * reads them (the cached item's `title\ntext`), written beside it (`<dump>.tags.jsonl`, one line a row: logits per
  * item). The tagger module is M3's (`tagger.ts`, D908), passed by path until it is on main.
  *

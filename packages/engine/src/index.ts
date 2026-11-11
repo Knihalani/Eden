@@ -119,5 +119,4 @@ export {
   type PushCheckRead,
   type PushCheckStats,
 } from "./push-check";
-export { type PrescreenInput, type PrescreenVerdict, type PushPrescreen } from "./prescreen";
 export { mayConstrain } from "./conflict";
