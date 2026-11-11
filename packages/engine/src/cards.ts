@@ -30,7 +30,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Frame } from "./conflict";
 import { CLASSES, hasWord } from "./consequence";
 import { parseWhen } from "./grounding";
-import { cleanRequests, IntentIndex, MAX_REQUESTS, type IntentExpander, type IntentHit } from "./intent";
+import { cleanRequests, IntentIndex, intentTerms, MAX_REQUESTS, type IntentExpander, type IntentHit } from "./intent";
 import { inert } from "./render";
 import { isStopword } from "./text";
 import type { Tracer } from "./spans";
@@ -1410,6 +1410,20 @@ export class CardEnricher {
     const s = hash ? u!.byHash.get(hash) : undefined;
     if (!s?.requests || !(s.at < before) || this.deps.now() - s.seenAt > this.limits.ttlMs) return [];
     return s.requests;
+  }
+
+  /**
+   * The stemmed terms an item is indexed under in the intent index (made before `before`): its requests' terms, or
+   * its expansion's (`intentMicro`) where that stands in their place. What `anchoredIntents` reads for rare words.
+   */
+  intentTermsOf(scope: Scope, id: string, before: number): string[] {
+    const u = this.users.get(scopeKey(scope));
+    const hash = u?.byItem.get(id);
+    if (!u || !hash) return [];
+    const s = u.byHash.get(hash);
+    const m = u.micro.get(hash);
+    if (m && (this.microMode === 1 || !s?.requests?.length)) return m.at < before ? [...m.terms] : [];
+    return intentTerms(this.requestsOf(scope, id, before).join("\n"));
   }
 
   /** Items holding requests in the user's intent index (tests and bounds). */

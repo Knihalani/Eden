@@ -252,7 +252,8 @@ def main():
     ap.add_argument("--delex", action="store_true")
     ap.add_argument("--lenaug", action="store_true")
     ap.add_argument("--twins", action="store_true", help="look-alike twins of training templates as rank negatives")
-    ap.add_argument("--extra", default="")
+    ap.add_argument("--extra", default="", help="Haiku-labelled rows (m11-enrich.ts + stem.ts): title, text, terms, target")
+    ap.add_argument("--extra-n", type=int, default=0)
     ap.add_argument("--synth", default="", help="M2 rows (m11-synth.ts): fact + requests, decoy and neutrals as negatives")
     ap.add_argument("--synth-n", type=int, default=0, help="at most this many synth rows (0: all)")
     ap.add_argument("--seed", type=int, default=1)
@@ -263,7 +264,9 @@ def main():
     items, worlds = D.load()
     rows = rows_of(items, a)
     if a.extra:
-        for x in D.read_jsonl(a.extra):
+        ex = D.read_jsonl(a.extra)
+        random.shuffle(ex)
+        for x in ex[: a.extra_n or None]:
             reqs = x["target"]
             c = Counter(t for r in reqs for t in set(r))
             rows.append({"h": None, "text": f"{x['title']}\n{x['text']}", "terms": x["terms"],

@@ -5798,7 +5798,7 @@ export class ContextPartner {
     }
     for (const [id, f] of found) {
       const carded = (cards.get(id)?.kind ?? "none") !== "none";
-      const tied = () => intentTerms(enricher.requestsOf(s.scope, id, before).join("\n")).some((t) => rare.has(t));
+      const tied = () => enricher.intentTermsOf(s.scope, id, before).some((t) => rare.has(t));
       if (carded || tied()) out.set(id, { ...f, rank: out.size });
     }
     return out;

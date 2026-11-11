@@ -9,13 +9,25 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { intentTerms, sanitizeItem } from "@eden/engine";
 
 const [inp, out] = process.argv.slice(2);
-if (!inp || !out || /test/.test(inp)) throw new Error("usage: m11-synth.ts WORLDS.jsonl OUT.jsonl (never the test split)");
+if (!inp || !out || /test/.test(inp))
+  throw new Error("usage: m11-synth.ts WORLDS.jsonl OUT.jsonl (never the test split)");
 type Item = { id: string; source: string; title: string; text: string };
-type Task = { fact: string; decoy: string; neutrals: string[]; family: string; requests: { lang: string; text: string }[] };
+type Task = {
+  fact: string;
+  decoy: string;
+  neutrals: string[];
+  family: string;
+  requests: { lang: string; text: string }[];
+};
 const rows: string[] = [];
 const view = (w: string, it: Item) => {
   const s = sanitizeItem({ id: `${w}:${it.id}`, sourceId: it.source, ref: it.id, title: it.title, text: it.text });
-  return { title: s.title, text: s.text, terms: intentTerms(`${s.title}\n${s.text}`), titleTerms: intentTerms(s.title) };
+  return {
+    title: s.title,
+    text: s.text,
+    terms: intentTerms(`${s.title}\n${s.text}`),
+    titleTerms: intentTerms(s.title),
+  };
 };
 for (const line of readFileSync(inp, "utf8").split("\n")) {
   if (!line.trim()) continue;
