@@ -72,9 +72,9 @@ const funnelTimed = (jobs: string) => {
       join(lab, "funnel.ts"),
       ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync), "--json", out],
       // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
-      // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs). At 0.05
-      // too once the sim's calendar stopped changing in the future (D842): its on-demand poll came due and raced the
-      // lookup's 75 ms deadline (2 of 3 pairs differed on one task); at 0.2 none of 5 did, for about 0.4 s a run.
+      // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs). At
+      // 0.05 too once the sim's calendar stopped changing in the future (D842): its on-demand poll came due and raced
+      // the lookup's 75 ms deadline (2 of 3 pairs differed on one task); at 0.2 none of 5 did, for about 0.4 s a run.
       ...["--", "--time", "0.2", "--limit", "1"],
     ],
     out,
