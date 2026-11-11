@@ -59,6 +59,18 @@ def main():
                 if e.get("kind") == "user_message":
                     out["train"].append({"text": e["text"], "needs": True, "kind": "act", "lang": "en",
                                          "src": "eval-acting", "group": "eval", "split": "train"})
+    # M14's independent generators (G2: Sonnet, five new styles, some non-English worlds; G3: programmatic, OCR
+    # noise): every request acts. Dev only, as transfer families for selection (never a gradient step).
+    for g in ("g2", "g3"):
+        path = f"{L}/m14/{g}.jsonl.gz"
+        if os.path.exists(path):
+            for line in gzip.open(path, "rt"):
+                w = json.loads(line)
+                for t in w["tasks"]:
+                    for r in t.get("requests", []):
+                        out["dev"].append({"text": r["text"], "needs": True, "kind": "act", "lang": r.get("lang", "en"),
+                                           "src": f"{g}:" + str(r.get("style")), "group": f"{g}-" + w["id"],
+                                           "split": "dev"})
     neg = subprocess.run(["bun", "-e", "import {GATE_NEGATIVES as g} from './packages/sim/src/lab/gate-negatives.ts';"
                           "console.log(JSON.stringify(g))"], capture_output=True, text=True, check=True).stdout
     for r in json.loads(neg):

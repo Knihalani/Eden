@@ -266,7 +266,7 @@ def summary(rows, p, thr):
 def family(r):
     s = r["src"]
     fam = ("sim" if s.startswith("suite") else "p2" if s.startswith("p2") else "gen" if s.startswith("gen")
-           else "m2" if s.startswith("m2") else "other")
+           else "m2" if s.startswith("m2") else "g2" if s.startswith("g2") else "g3" if s.startswith("g3") else "other")
     if fam == "gen" and r["lang"] not in ("en", "xx"):
         fam = "gen-other-lang"
     if fam == "m2" and r["lang"] != "en":
