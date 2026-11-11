@@ -155,7 +155,7 @@ Haiku 5.5 as the agent, Sonnet's grade (`b-short.txt`, `b-days.txt`, `b-mix.txt`
 | Short: handed at its own request; raised of handed | | 201 (52%); 76.6% | 316 (82%); 80.4% | |
 | Days, w45–w60 (16 fresh users, 128 hidden), users resampled | not run | 48.4% | 60.9% | **+12.5 (+4.7..+20.3)** |
 | Days: at its own request; earlier that day only (raised); not that day | | 70; 41 (11); 17 | 66; 40 (23); 22 | |
-| Confirmed concerns, control and neutral (short; days) | 0; | 0; 0 | 0; 0 | |
+| Confirmed concerns, control and neutral (short; days) | 0; not run | 0; 0 | 0; 0 | |
 | Neutral requests given a packet (short; days) | | 100%; 100% | 97%; 97% | |
 | Agent + Eden $ per 1,000 tasks, 1:1:8 mix (short) | −$0.040 | **−$0.104** (−0.116..−0.091) | $0.264 | |
 | Same, days (users resampled) | | **+$0.017** (+0.011..+0.024) | $0.236 | |
