@@ -769,7 +769,23 @@ def run(o):
             ot = [a for a, t in zip(pf, tags) if t == "other"]
             pred = lg.argmax(-1).tolist()
             per = {t: round(sum(1 for p_, g in zip(pred, tags) if g == t and TAGS[p_] == t) / max(1, tags.count(t)), 3) for t in TAGS}
-            result = {"auc_fact_vs_twin": round(auc(f + tw, [1] * len(f) + [0] * len(tw)), 3),
+            if o.eval2:
+                # Transfer: the sim's held-out families (an export_groups eval file): each request's planted item is
+                # the fact (hidden) or its all-clear twin (control).
+                xs, ys = [], []
+                for w in load(o.eval2):
+                    for r in w["reqs"]:
+                        if r["planted"] >= 0 and held(r, heldout):
+                            xs.append(w["texts"][r["planted"]])
+                            ys.append(1 if r["kind"] == "hidden" else 0)
+                with torch.no_grad():
+                    net.eval()
+                    pt = torch.softmax(torch.cat([net(xs[a : a + 512]) for a in range(0, len(xs), 512)]), -1)[:, 0].tolist()
+                    net.train()
+                transfer = {"sim_auc_fact_vs_twin": round(auc(pt, ys), 3), "sim_items": len(ys)}
+            else:
+                transfer = {}
+            result = {**transfer, "auc_fact_vs_twin": round(auc(f + tw, [1] * len(f) + [0] * len(tw)), 3),
                       "auc_fact_vs_neutral": round(auc(f + ne, [1] * len(f) + [0] * len(ne)), 3),
                       "auc_fact_vs_other": round(auc(f + ot, [1] * len(f) + [0] * len(ot)), 3),
                       "acc_per_tag": per, "items": len(Ie)}
