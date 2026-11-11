@@ -1,6 +1,6 @@
 # B19: the final benchmark — raw Hermes, Eden before the wave, Eden final
 
-Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1043 (of D1040–D1049). **Lab only: no engine
+Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1045 (of D1040–D1049). **Lab only: no engine
 or server file changes.** Every paid call goes to Anthropic through the lab provider (D97); none goes to OpenRouter,
 so every figure here is a lab-provider figure. Sections 1–2 were written and committed before the final run;
 section 3 is filled in after it.
@@ -20,10 +20,19 @@ section 3 is filled in after it.
     now builds a `PushChecker` on the reader's model, as `buildPartner` does (D1042).
   - **pi-ab could not load against an older engine.** It imported P3's `hits` helper, which needs engine exports
     5026ba512 lacks. It now loads that helper only for the `hits` arm (D1041).
-- **Hermes has no days mode; only pi-ab has `--days`.** So the days arm runs on Pi (D1043).
-- **The dry runs cost $2.30** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They covered 13 small runs
-  of all three arms: Hermes short in three connector settings, Pi short, and Pi days.
-- **The final run should cost about $6.5** (estimate, from the dry runs' cost a task). Its hard cap is $25.
+- **hermes-ab now has pi-ab's `--days` mode, with the D813 journal and `--resume` (D1044).** A day's requests share
+  one Hermes transcript, which the runner holds and sends with each request, and one Eden session. The day ends with
+  pi-ab's recap after the day's planted times move. Tested on train:
+  - all three arms ran, and the transcript carries within a day (prompt tokens grow request by request and reset at
+    the next day);
+  - a killed run resumed from its journal: day 0 was reused at $0, the Eden arm was refused without
+    `--resume-biased`, and the run completed with it.
+- **The amended pre-registration (D1045):** Hermes short and Hermes days are the headline; Pi short and Pi days are
+  the secondary readout.
+- **The dry runs cost $2.89** in total (the ledger, `.local/b19/ledger.jsonl`), all on train, seeds 41–44. They
+  covered 17 small runs of all three arms: Hermes short in three connector settings, Hermes days, Pi short, Pi days,
+  a resume test and two rehearsals of `go.sh`.
+- **The final run should cost about $7.5** (estimate, from the dry runs' cost a task). Its hard cap is $25.
 
 ## 1. How it works
 
@@ -89,38 +98,53 @@ python3 -I packages/sim/lab/b19/report.py --ledger .local/b19/ledger.jsonl --arm
   --arm before=.local/b19/runs/dry-h-before --arm final=.local/b19/runs/dry-h-final
 ```
 
-`KIND=pi` runs the Pi arms the same way, and `--days 2 --day-size 16` gives Pi's days. `HERMES_SRC` is a
+`KIND=pi` runs the Pi arms the same way, and `--days 2 --day-size 20` gives either harness's days (one user a
+seed; hermes-ab runs one stream a user, `HC` of them at once). `HERMES_SRC` is a
 hermes-agent checkout at 06433066 whose `.venv` was installed from wheels only:
 `UV_NO_BUILD=1 uv sync --project SRC --frozen --no-install-project --extra mcp`.
 
 ## 2. Pre-registration of the final run (committed before any heldout19 call; heldout19 is unread and unrun)
 
+First committed as D1043 (Pi days). Amended by D1045 before the go: Hermes days was added once hermes-ab gained
+`--days` (D1044), and the headline became Hermes short and Hermes days. Nothing else changed, and no heldout19 call
+had been made.
+
 - **Suite:** `heldout19` (P7, D870): 40 templates, with hidden, control and neutral variants, read once. Seeds
   41–44, the seeds shipped coverage covers (`SHIPPED_COVERS`).
-- **Runs (`go.sh`, each once):**
-  1. **Hermes, short:** the three arms side by side. One process an arm runs all four seeds, with four workers and
-     `--budget 6`. Expected: 480 tasks an arm.
-  2. **Pi, short:** one seed a process (`--budget 2`). For each seed, the three arms run side by side.
-  3. **Pi, days:** one user a process, `--days 2 --day-size 20` (heldout19's 40 templates bound a user), on the
-     1:1:8 mix, `--budget 2`. For each user, the three arms run side by side.
+- **Runs (`go.sh`, each once, in this order):**
+  1. **Hermes, short (headline):** the three arms side by side. One process an arm runs all four seeds, with four
+     workers and `--budget 6`. Expected: 480 tasks an arm.
+  2. **Hermes, days (headline):** the three arms side by side. One process an arm runs all four users (one stream a
+     user), `--days 2 --day-size 20` (heldout19's 40 templates bound a user) on the 1:1:8 mix, `--budget 4`. That is
+     40 requests a user (16 hidden, 16 control and 128 neutral an arm) plus a recap a day.
+  3. **Pi, short (secondary):** one seed a process, `--budget 2`. For each seed, the three arms run side by side.
+  4. **Pi, days (secondary):** one user a process, `--days 2 --day-size 20`, `--budget 2`. For each user, the three
+     arms run side by side.
 - **Caps:** the ledger's hard cap is what the dry runs spent plus $25, at most $40 (`go.sh` computes it). No Modal.
+  If the cap stops a step, the steps already finished stand, and the Pi steps are the ones that give way.
 - **Before any call:** the parent's final commit is merged into this branch, and the harness is that tree.
   `tasks-hash.ts heldout19 41,42,43,44 2 20` must print the same hashes in the `before` and `final` trees, and only
   hashes and counts are printed.
   - If the final main adds a model role that hermes-ab or pi-ab does not wire, wiring it is part of the merge, and
     it is reported.
-  - A process that crashes before writing its results is restarted (pi-ab with `--resume`) and reported. A finished
-    process is never run again (`run.sh` refuses).
+  - A process that crashes before writing its results is resumed with `--resume` (`--resume-biased` for an Eden arm
+    under `--days`, marked so) and reported. A finished process is never run again (`run.sh` refuses).
 - **Reading:**
   - Every metric of §1 is reported for every arm and every pair, short and days, on both harnesses.
-  - The headline is **final − before, hidden raised, Hermes short**, with its template-clustered interval (40
-    clusters). It counts as a change only when that interval excludes 0.
+  - The headline is **final − before, hidden raised, on Hermes short** (template-clustered, 40 clusters) **and on
+    Hermes days** (user-day-clustered, 8 clusters). Each counts as a change only when its interval excludes 0.
+  - Hermes days has 16 hidden tasks an arm, so it reads a direction, not a size.
   - Every control and neutral answer Sonnet flags as a concern is read by hand and reported with the verdict, since
     live false concerns overstate harm (fix-w2b).
   - No setting is changed after any result is seen.
-- **Estimated cost:** about $6.5 in total. The rates come from the dry runs on the final connector settings: Hermes
-  $1.7–2.8 per 1,000 tasks by arm, Pi $1.3–1.8. That gives Hermes about $3.5, Pi short about $2.2 and Pi days about
-  $0.7 (estimate).
+- **Estimated cost:** about $7.5 in total, at rates from the dry runs on the final connector settings:
+
+  | step        | $ per 1,000 tasks, by arm | estimate |
+  | ----------- | ------------------------- | -------: |
+  | Hermes short | 1.7–2.8                  |     $3.5 |
+  | Hermes days  | 1.2–1.7                  |     $1.0 |
+  | Pi short     | 1.3–1.8                  |     $2.2 |
+  | Pi days      | 1.0–1.5                  |     $0.7 |
 
 ## Dry runs (train only)
 
@@ -136,10 +160,18 @@ harness and price the final run, and **none of them is a result**.
 | `dry4-ps` | Pi short, `direct`, payload, tenant prompt          |           90 | 1/30, 18/30, 23/30          | 0.17 / 0.40              |          $0.42 |
 | `dry4-pd` | Pi days, 2 × 16, same                               |           32 | 0/4, 2/4, 3/4               | 0.21 / 0.40              |          $0.14 |
 | `dry5-h`  | Hermes, `direct`, payload                           |           36 | 0/12, 8/12, 9/12            | 0.42 / 0.69              |          $0.26 |
+| `dry6-hd` | Hermes days, 2 × 12, `direct`, payload (D1044)      |           24 | 0/2, 1/2, 2/2               | 0.32 / 0.51              |          $0.13 |
 
 `go.sh` itself was rehearsed on train1, seed 42 (`SUITE=train1 SEEDS=42 PREFIX=reh EXTRA="--limit 1" FINAL=HEAD`).
 It built both trees, the hashes matched, and all nine processes ran: Hermes short, Pi short and Pi days, 3, 3 and
 40 tasks an arm, with 0 ungraded. It cost $0.23. `analyze.sh` (`PREFIX=reh SEEDS=42`) wrote the three reports.
+After D1044 it was rehearsed again with Hermes days (`SEEDS=43 PREFIX=reh2`). All twelve processes ran (Hermes days
+40 tasks an arm), with 0 ungraded, for $0.40, and `analyze.sh` wrote the four reports.
+
+The resume test (`dry7-res`, Hermes days, final arm, train seed 42) was killed twice. The second time day 0 was in the
+journal. A `--resume` without `--resume-biased` exited 2 with its reason. With it, the run reused day 0 at $0 ($0.0274
+of earlier spend counted against `--budget`), ran day 1, wrote 24 results with `resumed.biased` true and deleted the
+journal.
 
 In every dry run with the check wired, the `final` arm hands a packet on fewer neutral turns. The counts are
 18/30 vs 29/30 (dry3-h), 16/30 vs 28/30 (dry4-ps), 8/24 vs 21/24 (dry4-pd) and 5/12 vs 12/12 (dry5-h), and the

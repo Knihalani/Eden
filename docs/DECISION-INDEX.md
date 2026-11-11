@@ -600,3 +600,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1041 | 2026-11-11 | Lab only: pi-ab loads P3's `hits` helper (`lexical-hits.ts`) only for the `hits` arm | lab |
 | D1042 | 2026-11-11 | Lab fix: hermes-ab wires the push check | adopted |
 | D1043 | 2026-11-11 | Lab only: B19's final run is pre-registered | lab |
+| D1044 | 2026-11-11 | Adopted (lab tooling, B19): `hermes-ab --days`, pi-ab's user days on Hermes, with the D813 journal and `--resume`. | lab |
+| D1045 | 2026-11-11 | Lab only: B19's pre-registration amended before the go | lab |

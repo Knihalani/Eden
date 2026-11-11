@@ -1114,6 +1114,12 @@ about 3× Pi's input tokens per request; on free models tasks after a stream's f
 nine-suite bench was estimated at 2.6 h at concurrency 6 if the rate limit does not bind, 7.6 h at 18 requests a
 minute on free models (hermes-lab.md, estimates).
 
+`--days D --day-size N` (D1044) runs pi-ab's user days on Hermes: one stream a user, the day's Hermes transcript
+held by the runner and sent with each request, pi-ab's recap; every hermes-ab run journals its units and takes
+`--resume` (and `--resume-biased` for an Eden arm under `--days`) as pi-ab does. Before D1042 hermes-ab wired no push
+check, so Hermes figures from D828 to B19 measured the default minus `check`. An Eden arm at another commit:
+`packages/sim/lab/b19/arm-tree.sh` and `run.sh` (D1040).
+
 `hermes-eden` (A16) gives Hermes Eden's `ask_context` and plugin with no `search_<source>` tools, as Pi's `eden` arm
 has none: `hermes+eden` keeps them (Pi's `both+ask`), so a "Hermes keeps searching" comparison against Pi's `eden`
 compares two arm shapes. The report pairs `hermes-eden` with `hermes` and with `hermes+eden`.
