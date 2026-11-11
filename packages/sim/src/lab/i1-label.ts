@@ -44,6 +44,8 @@ export interface PairGroup {
   seed: number;
   template: string;
   request: string;
+  /** The user's day at the ask (the pool dump's `today`, M1), when the dump carries it. */
+  today?: string;
   split: "train" | "eval";
   items: PairItem[];
 }
@@ -61,6 +63,7 @@ interface PoolRow {
   variant: "hidden" | "control" | "neutral";
   template: string;
   request: string;
+  today?: string;
   planted: string;
   pool: { id: string; title: string; text: string }[];
 }
@@ -78,6 +81,7 @@ export function buildGroups(rows: PoolRow[], share = 0.2): PairGroup[] {
         seed: r.seed,
         template: r.template,
         request: r.request,
+        ...(r.today ? { today: r.today } : {}),
         split: splitOf(r.suite, r.template, share),
         items: [],
       };

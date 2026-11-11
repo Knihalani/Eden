@@ -36,7 +36,8 @@ def main():
             f"{run:18} {len(ds):5d} {statistics.mean(d['costUsd'] for d in ds):9.6f}"
             f" {statistics.mean(x['inputTokens'] for x in u):6.0f} {statistics.mean(x['cachedInputTokens'] for x in u):6.0f}"
             f" {statistics.mean(x['outputTokens'] for x in u):5.0f} {pct([d['latencyMs'] for d in ds], .5) / 1000:6.2f}"
-            f" {pct([d['latencyMs'] for d in ds], .9) / 1000:6.2f} {pct([d.get('ttftMs', 0) for d in ds], .5) / 1000:6.2f}"
+            f" {pct([d['latencyMs'] for d in ds], .9) / 1000:6.2f}"
+            f" {pct([d.get('ttftMs') or 0 for d in ds], .5) / 1000:6.2f}"
         )
     for spec in a.log:
         run, path = spec.split("=", 1)

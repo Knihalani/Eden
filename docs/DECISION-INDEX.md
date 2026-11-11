@@ -587,7 +587,24 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
+| D890 | 2026-11-11 | Lab only: M1's distilled "changes the action" student and its stop rule are pre-registered | lab |
+| D891 | 2026-11-11 | Adopted (lab tooling, M1): the student pipeline. | lab |
+| D892 | 2026-11-11 | Finding: a 4B–8B decoder learns "changes the action" on templates it never saw; smaller ones do not | finding |
+| D893 | 2026-11-11 | Finding: the student needs a datacentre GPU; CPU is out. | finding |
+| D894 | 2026-11-11 | Trial `pushCheckLocal`: the push check's verdict from a distilled student's scores instead of a model call | superseded (deleted by D983) |
+| D895 | 2026-11-11 | Finding: in the funnel the student's check is as good as D493's Opus oracle. | finding |
+| D896 | 2026-11-11 | With `pushCheckLocal`, `pushOpen` (D702) opens the push and the check reads it. | adopted |
+| D897 | 2026-11-11 | Finding (M1, Pi round 1, pre-registered §2c): the student's check fails live. | finding |
+| D898 | 2026-11-11 | Lab only: Pi round 2 is pre-registered | lab |
+| D899 | 2026-11-11 | Stopped by the owner's decision (through the parent): the LLM-sized local checker; Pi round 2 (D898) is cancelled before any shard ran. | adopted |
+| D980 | 2026-11-11 | Finding (M1 micro track, gate G0): the 8B teacher does not agree with Haiku's push check as closely as Haiku agrees with itself, because… | finding |
+| D981 | 2026-11-11 | Lab only: the micro checker's bar is pre-registered: better than Haiku, not within its noise | lab |
+| D982 | 2026-11-11 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | rejected |
+| D983 | 2026-11-11 | Rejected and deleted: the `pushCheckLocal` trial (D894) with its code and tests. | rejected |
 | D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
+| D914 | 2026-11-11 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | rejected |
+| D920 | 2026-11-11 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | rejected |
+| D921 | 2026-11-11 | Adopted (lab tooling, M6): `hidden-funnel --packet-parts` (each delivered item's parts as compaction reads them, re-rendered from the… | lab |
 | D930 | 2026-11-11 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | rejected |
 | D931 | 2026-11-11 | Finding: the push check does not repeat itself closely. | finding |
 | D932 | 2026-11-11 | Adopted (lab tooling, M7): the funnel's `--check-dump F` (`check-dump.ts`): one row a push-check call (the request head, day and pool… | lab |
@@ -597,3 +614,21 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D961 | 2026-11-11 | Finding: what the engine consumes of a card, at $0. | finding |
 | D962 | 2026-11-11 | Adopted (lab tooling, M10): `packages/sim/src/lab/m10/` (`export.ts` items with the tagger's candidates from the train and longtail… | lab |
 | D963 | 2026-11-11 | Not taken: dropping the card fields from the card call (cards off, the call writing requests only). | rejected |
+| D970 | 2026-11-11 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | rejected |
+| D971 | 2026-11-11 | Finding: Haiku's intent value is its bridge terms, and a $0 item-side model does not learn them for new families. | finding |
+| D972 | 2026-11-11 | Adopted (lab tooling, M11): `m11-export.ts` (items, worlds, tasks, twins and the checked-in Haiku requests by card key), `m11-enrich.ts`… | lab |
+| D990 | 2026-11-11 | Fix: the server image started nothing. | adopted |
+| D991 | 2026-11-11 | Persistence on by default. | adopted |
+| D992 | 2026-11-11 | More than one machine, built (D864's design, refreshed). | adopted |
+| D993 | 2026-11-11 | Per-tenant caps across machines: held whole at the cluster router, divided below it. | adopted |
+| D994 | 2026-11-11 | Readiness, metrics and a draining shutdown. | adopted |
+| D995 | 2026-11-11 | Fencing and forget across machines (the reviewer's findings on D992-D994). | adopted |
+| D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
+| D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
+| D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
+| D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
+| D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
+| D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
+| D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
+| D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
+| D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |

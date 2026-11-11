@@ -88,7 +88,21 @@ async function dockerStep() {
   const name = `eden-publish-check-${process.pid}`;
   const key = `k_check_${crypto.randomUUID().replaceAll("-", "")}`;
   const started = await run(
-    ["docker", "run", "-d", "--name", name, "-e", `EDEN_API_KEYS=check:${key}`, "-e", "EDEN_PROCESSES=1", tag],
+    // A throwaway persistence key (D991) for this throwaway container: a real one comes from a secret store.
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      name,
+      "-e",
+      `EDEN_API_KEYS=check:${key}`,
+      "-e",
+      `EDEN_PERSIST_KEY=${crypto.getRandomValues(new Uint8Array(32)).toHex()}`,
+      "-e",
+      "EDEN_PROCESSES=1",
+      tag,
+    ],
     root,
   );
   if (started.code !== 0) return results.push({ step: "docker run", status: "failed", detail: tail(started.out) });
