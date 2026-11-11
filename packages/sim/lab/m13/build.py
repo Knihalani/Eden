@@ -34,7 +34,9 @@ def main():
         out[r["split"]].append(r)
     for r in m2(f"{L}/data/test.jsonl.gz", "m2t"):
         out["m2t"].append(r)
-    for path in [f"{L}/train/gen.jsonl", f"{L}/train/logs.jsonl"]:
+    for path in [f"{L}/train/gen.jsonl", f"{L}/train/logs.jsonl", f"{L}/train/gen-work.jsonl"]:
+        if not os.path.exists(path):
+            continue
         for line in open(path):
             r = json.loads(line)
             if not r["text"]:
@@ -62,12 +64,13 @@ def main():
     for r in json.loads(neg):
         out["train"].append({"text": r["text"], "needs": False, "kind": P2_KIND[r["kind"]], "lang": "en",
                              "src": "p2neg:" + r["kind"], "group": "p2neg", "split": "train"})
-    # P2's sets 1 and 2 (fitted and read by P2) are M13's dev: selection only, never a gradient step.
+    # P2's sets 1 and 2 (both fitted and read by P2): set 1, hand-written, trains (round 2); set 2 is dev.
     for i in (1, 2):
+        split = "train" if i == 1 else "dev"
         for r in json.load(open(f"packages/sim/lab/p2/blind-gate-{i}.json")):
-            out["dev"].append({"text": r["text"], "needs": P2_KIND[r["kind"]] == "act", "kind": P2_KIND[r["kind"]],
+            out[split].append({"text": r["text"], "needs": P2_KIND[r["kind"]] == "act", "kind": P2_KIND[r["kind"]],
                                "lang": r.get("lang", "en"), "src": f"p2s{i}:" + r["kind"], "group": f"p2s{i}",
-                               "split": "dev"})
+                               "split": split})
     for r in json.load(open("packages/sim/lab/p2/blind-gate-3.json")):
         out["s3"].append({"text": r["text"], "needs": P2_KIND[r["kind"]] == "act", "kind": P2_KIND[r["kind"]],
                           "lang": "en", "src": "s3:" + r["kind"], "group": "s3", "split": "s3"})

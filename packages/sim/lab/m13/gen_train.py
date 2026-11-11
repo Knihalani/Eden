@@ -35,14 +35,26 @@ STYLES = ["normal punctuation and capitals", "all lowercase, little or no punctu
           "every message ends with a full stop or '!'", "some emoji"]
 AREAS = ["family", "health", "money and bills", "home and repairs", "work", "travel", "school and kids", "friends",
          "shopping", "admin and paperwork", "pets", "car", "events and parties", "subscriptions", "sport and hobbies"]
+WORK_AREAS = ["software engineering and code review", "IT admin, accounts and access", "cloud, devops and on-call",
+              "data, dashboards and analytics", "customer support tickets", "finance ops and invoices",
+              "HR, hiring and payroll", "legal and contracts", "sales and accounts", "product launches and releases",
+              "security and compliance", "office facilities and vendors"]
+SHAPES_V2 = SHAPES + [
+    "a concrete wish (\"I want to delete the old exports\", \"I'd like to cancel the gym this month\")",
+    "a request that quotes a pasted error or log line (\"deploy failed with ERROR 502, roll back to v2.3?\")",
+    "a plain imperative with technical details (accounts, buckets, clusters, tickets, invoice numbers)",
+]
 SYSTEM = "You write labelled training data. Output only a JSON array of objects, nothing else."
 
 
 def prompt(lang, rnd):
+    work = os.environ.get("M13_WORK") == "1"
     sets = []
     for i in range(8):
-        sets.append(f"Set {i + 1}: area {rnd.choice(AREAS)}; length {rnd.choice(LENGTHS)}; style "
-                    f"{rnd.choice(STYLES)}; act2 shape: {rnd.choice(SHAPES)}.")
+        area = rnd.choice(WORK_AREAS if work else AREAS)
+        shape = rnd.choice(SHAPES_V2 if work else SHAPES)
+        sets.append(f"Set {i + 1}: area {area}; length {rnd.choice(LENGTHS)}; style {rnd.choice(STYLES)}; "
+                    f"act2 shape: {shape}.")
     return (f"A person types messages to their AI personal assistant, which can read their email, calendar, files "
             f"and chats and can act for them. Write 8 sets of messages in {lang}, as natives really type (their "
             "names, places, currencies; not translated from English). Each set is about one concrete topic of its "
@@ -56,7 +68,8 @@ def prompt(lang, rnd):
             "- chatter: small talk, thanks, a reaction, a mood, laughter.\n"
             "- intent: the user's own wish, resolution, vague plan or lack that asks the assistant for nothing "
             "(\"I need a new bed\", \"I should really drink more water\", \"we should go to Iceland one day\", "
-            "\"I want to learn the guitar\"); make it sound as close to a request as you can while asking for nothing.\n"
+            "\"I want to learn the guitar\"); make it sound as close to a request as you can while asking for nothing. "
+            "A concrete task on a named thing (\"I want to cancel the Netflix plan\") is an act, never an intent.\n"
             "- statement: news, context, an observation or a complaint that asks for nothing.\n\n"
             + "\n".join(sets)
             + '\n\nOutput: [{"topic": "...", "act1": "...", "act2": "...", "act3": "...", "qact": "...", "ask": "...", '
