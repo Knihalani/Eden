@@ -64,8 +64,8 @@ export interface BuildOptions {
    */
   processes?: number;
   /**
-   * The tenant spend cap every model role shares, when the caller holds it (main.ts, for `/v1/usage` and the spend
-   * leases, D326, D327); otherwise `tenantSpendFor(models.usdPerTenantDay, processes)`.
+   * The tenant spend cap every model role shares, when the caller holds it (main.ts, for `/v1/usage`, D326);
+   * otherwise `tenantSpendFor(models.usdPerTenantDay, processes)`.
    */
   tenants?: TenantSpend;
   /**
@@ -78,8 +78,6 @@ export interface BuildOptions {
    * and EDEN_PERSIST_KEY). Unset, the default: no item content reaches the disk (D8).
    */
   persist?: FrozenDisk;
-  /** Trial (D652, EDEN_PERSIST_DISK_ONLY=1; with `persist`): a frozen user on disk keeps no blob in memory. */
-  persistDiskOnly?: boolean;
 }
 
 /**
@@ -157,7 +155,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
       : undefined;
   const cache = new ItemCache();
   // Before the partner is built: it wires the sync's state into what a persisted user carries.
-  if (options.persist) cache.persist(options.persist, { diskOnly: options.persistDiskOnly === true });
+  if (options.persist) cache.persist(options.persist);
   const partner = new ContextPartner({
     sources: options.sources,
     sourceMap,

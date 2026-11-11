@@ -132,7 +132,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,
   syncUnusedSweepMs: ["sync", "verifyDelivery"],
-  syncSweepSpread: ["sync", "verifyDelivery"],
   syncMaxUsersPerTenant: SYNC,
   syncLocalAll: SYNC,
   cardItems: ["cards"],

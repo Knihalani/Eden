@@ -22,7 +22,7 @@
  * the fast path (timers or a lookup's slow path), and stores only what the fan-out has already redacted. Users idle
  * longer than `syncDropMs` are no longer synced and their synced items are dropped (retention, D57).
  */
-import { Gcra, hashString, IdSet } from "@eden/primitives";
+import { Gcra, IdSet } from "@eden/primitives";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
@@ -109,13 +109,6 @@ export interface SyncOptions {
    * before delivering them, since a deletion may be behind them.
    */
   unusedSweepMs?: number;
-  /**
-   * Trial `syncSweepSpread` (D604): each source on the long sweep has its own point in the period (a hash of the
-   * tenant, the user and the source) and is swept at the first tick past it, so a user's unused sources are not
-   * all listed in the tick a week after the backfill. Due no later than `unusedSweepMs` after its last sweep
-   * (`sweepTurn`); a source swept off its point is swept up to a period early, each time.
-   */
-  sweepSpread?: boolean;
   /**
    * `syncPush`: a source that says it `notifies` is current until told it changed (`Sync.changed`) or its last poll
    * is `maxStaleMs` old, instead of by its learned change rate.
@@ -1054,22 +1047,6 @@ export class SyncManager {
     return (this.o.unusedSweepMs ?? 0) > 0 && !s.engaged && s.fetches;
   }
 
-  /**
-   * `sweepSpread`: the source's own point in the long period has passed since its last sweep. The points are a
-   * period apart, so one has always passed a period after the last sweep: the spread is never due later than the
-   * rule without it, given the same last sweep (D356's bound, unchanged; nothing else enforces it). The point is
-   * a hash of the tenant, the user and the source, so it needs no saved state and two users' sweeps do not line
-   * up. A source swept at its point is swept a period later; one swept off it (the backfill, `sweepSoon`, an
-   * absence over its point) is swept at its next point, up to a period early: half a sweep more on average, each
-   * time. Its sweep days differ from the default's, so an absence the default's days miss can lengthen one of its
-   * gaps (9 days against 7, a user away every other weekend). The hash is 32 bits, so a period over about 49.7
-   * days (2^32 ms) has points in its first 49.7 days only: uneven, never late.
-   */
-  private sweepTurn(u: UserSync, s: SourceSync, now: number, every: number): boolean {
-    const at = hashString(`${u.scope.tenantId}\0${u.scope.userId}\0${s.id}`, 0x5eed) % every;
-    return Math.floor((now + at) / every) > Math.floor((s.sweptAt + at) / every);
-  }
-
   private isCurrent(s: SourceSync, now: number): boolean {
     if (s.phase !== "warm") return false;
     const age = now - s.polledAt;
@@ -1158,13 +1135,9 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
-    // A sweep reads the cache: a frozen user is thawed first (`ready`, D325), for a spread sweep's turn too (with a
-    // long period near `sweepMs` it can come inside a day of the last sweep; the review).
+    // A sweep reads the cache: a frozen user is thawed first (`ready`, D325).
     const long = (s: SourceSync) => (this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : 0);
-    const spread = (s: SourceSync) => this.o.sweepSpread === true && long(s) > 0;
-    // `sweepSpread`: a long-sweep source is due at its own point (never later than a period after its last sweep).
-    const longDue = (s: SourceSync) =>
-      spread(s) ? this.sweepTurn(u, s, now, long(s)) : now - s.sweptAt >= (long(s) || this.o.sweepMs);
+    const longDue = (s: SourceSync) => now - s.sweptAt >= (long(s) || this.o.sweepMs);
     const due = (s: SourceSync) =>
       s.phase === "warm" && (s.sweep !== null || now - s.sweptAt >= this.o.sweepMs || longDue(s));
     thawing = [...u.sources.values()].some(due) ? this.deps.cache.ready(u.scope) : null;
@@ -1739,8 +1712,8 @@ export class SyncManager {
     // counted as synced, or the listing would undo `removed`.
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
     const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
-    // The put thawed a user whose file was lost (D652) and the owner forgot their sync inside it: what was just
-    // stored belongs to no sync state, so it goes rather than sit unswept.
+    // A user whose sync was forgotten by the time the put returned (it can thaw the user, and the owner's hooks run
+    // inside a thaw): what was just stored belongs to no sync state, so it goes rather than sit unswept.
     if (u.gone) {
       this.deps.cache.dropSynced(
         u.scope,

@@ -106,6 +106,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | # | What was tried | Why it ended |
 |---|---|---|
 | D528 | Rejected and deleted: thinking on I3's short reply, and a check that reads only stored-`act` items |  |
+| D815 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | The firewall flagged 0.070 of control tasks against D72's 0.05 bar and was never re-run |
 
 ## Sync, sources and scale
 
@@ -127,7 +128,9 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D479 | `syncCold` and `syncDelta` are not promoted; they stay trial switches, off. | because the same runs measured tasks slower by 1.2 s of wall at 5/5/90 (+0.85..+1.58; 2.1 s at 30/30/40) and… |
 | D508 | Rejected at $0 and deleted: one search of a source a lookup |  |
 | D602 | Not kept: dormant sources (`syncDormantMs`), built, screened at $0 and removed after two reviews. | because nothing can end the trial (D112): the lab's noise connectors never hold a fact and `--days` never… |
+| D604 | Trial `syncSweepSpread`: an unused source is swept at its own point in the week | killed by D817 |
 | D606 | part of: no fix holds polls level, and `syncOwedPollMs` (built to test it) is deleted | because the item's source was not polled |
+| D910 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | stopped on its pre-registered rule |
 
 ## Ask
 
@@ -188,3 +191,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D507 | Rejected at $0 and deleted: reusing a search's answer across a user's day | A user's searches do not repeat: about one search a task matches an earlier (source, text) of the same user… |
 | D515 | Trial `takeSettleMs`, opened and closed 2026-11-10: not promoted, deleted. | measured hidden +1.4 points (−4.2..+6.9); killed for another reason (read the row) |
 | D824 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items |  |
+| D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |

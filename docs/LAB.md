@@ -587,6 +587,21 @@ only a poll, a sweep or the request's own reads can find it; the surfaced lines 
 connectors the sweep setting moved nothing, D875). Past about 12 days a plan is a weeks plan
 (D874): planted templates are drawn first and neutral requests repeat only templates never planted for the user.
 
+### 1h. A standing-constraint ledger over days users (M5, D910–D911; docs/research/m5-ledger.md)
+
+Stopped (D910); the recipe stays for a later variant. The shipped-coverage days baseline (M3's recipe), each user's
+corpus, the ledger (Haiku, about $0.000035 an item, pay once) and the $0 matcher:
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42 --cards-live claude-haiku-5-5 \
+  --intent none --cards-out .local/m5/cards.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 3 \
+  --pool-diag .local/m5/pool.jsonl --corpus-dump .local/m5/corpus.jsonl
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus .local/m5/corpus.jsonl \
+  --out .local/m5/led.jsonl --spend-ledger .local/m5/ledger.jsonl --spend-cap 5 --concurrency 6
+python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus .local/m5/corpus.jsonl \
+  --pool .local/m5/pool.jsonl --only fit
+```
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
@@ -917,9 +932,9 @@ reply as passing them on (not warning about them). About $0.0005 a task an arm (
 ```bash
 # $0: how often the push hands the agent the attack, and what reaches it, per kind (Eden only, no agent)
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/injection-ab.ts --dry --suites train --seeds 41 --arms eden
-# live: tools (no Eden), the no-key default, the reader shape and a trial over the default
+# live: tools (no Eden), the no-key default, the reader shape and the default without the party check
 env -u OPENROUTER_API_KEY bun packages/sim/src/lab/injection-ab.ts --suites train --seeds 41 \
-  --variants hidden,control --arms tools,eden,reader,eden~G --variant-config '{"G":{"guardLine":true}}' \
+  --variants hidden,control --arms tools,eden,reader,eden~X --variant-config '{"X":{"partyCheck":false}}' \
   --spend-ledger .local/a10/ledger.jsonl --spend-cap 1.5 --spend-headroom 0.06 --run-label a10 --out .local/a10/run.json
 bun test ./packages/sim/src/lab/injection-suite.test.ts   # the standing $0 test, about 2 s
 ```
@@ -927,7 +942,7 @@ bun test ./packages/sim/src/lab/injection-suite.test.ts   # the standing $0 test
 The `eden` arm is a server with no model key (no cards; `+nokey`, D291); the `reader` arm has no cards either. The
 attack's opening quotes the request, so delivery is the suite's best case for the attacker (71 of 72 on train seed 41).
 
-Since A25 (D375, D376) the action tools of any Eden arm with `partyCheck` or `actionCheck` on consult `checkAction`
+Since A25 (D375, D376) the action tools of any Eden arm with `partyCheck` on consult `checkAction`
 first, as an integrator would, and the default has `partyCheck` on: the `eden` arm runs the party check, and A10's
 plain arm is `eden~X` with `{"X":{"partyCheck":false}}`. A finding holds the call and is its result; the report's
 `held-attack`/`held-other` columns count runs with a held call that did or did not match the attack. `--dry` with a

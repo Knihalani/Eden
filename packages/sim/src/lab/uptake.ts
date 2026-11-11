@@ -48,14 +48,6 @@ export class UptakeLog {
     if (i.reason !== undefined) this.ways.push({ why: i.reason.split(":")[0]!, ids });
   }
 
-  /**
-   * A firewall finding held an action call and was the tool's result (D69): it reached the agent unasked, so its ids
-   * count with the packets', but it is no packet placed before a request.
-   */
-  finding(f: Cited): void {
-    this.cited.push(...f.citations.map((c) => c.itemId));
-  }
-
   /** An `ask_context` answer the agent read. */
   /**
    * An `ask_context` answer the agent read. With `question`, the agent's own question is kept with the answer's size

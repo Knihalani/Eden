@@ -150,7 +150,8 @@ endpoints, with very different reasoning lengths:
 **Every Haiku 5.5 reader and card figure in this file is "lab provider, cached" (D145)** unless it says otherwise: it
 was measured on the lab's `AnthropicModel` (Anthropic directly, thinking off, the system prompt always read from the
 prompt cache after the first call), not on the path the servers ship, which reaches `anthropic/claude-haiku-5.5`
-through OpenRouter and sends no cache breakpoint (`anthropicCache` is a trial, off). Re-priced with no cache, the lab
+through OpenRouter and sends no cache breakpoint (`anthropicCache` is a documented, untested opt-in, off and set by
+nothing in the servers, D817). Re-priced with no cache, the lab
 ledger's `eden.reader` rows cost 1.32x and its `eden.cards` rows 1.27x what they did (D145; the gap at lab traffic
 density, an upper bound for sparser traffic). The OpenRouter path's cost and latency are **unmeasured**: this
 audit's runs could call Anthropic only.
@@ -317,12 +318,8 @@ Sync push (D66) was deleted by D112.
 The knowledge graph (`graph`, D58) and its judge seat were deleted by D225 (2026-11-07;
 docs/research/fix-w2a-parts.md): no measured value on train with the paid reader replayed.
 
-The action firewall (`actionCheck`, off by default; proposed D69, docs/research/econ-firewall.md) adds no model call
-and no source call: each check of an agent's tool call is CPU on what is held (the cache, the probes' memo, the
-cards), 4–5 ms p50 and at most 28 ms per check in the no-model replay of the track's recorded calls (seeds 41–43,
-ALL). Its cost is the agent's: a held call costs the agent about one more model request to read the finding and
-answer, +$0.3–0.6 per 1,000 such tasks and +5–7 s on them (the track's live runs, in-sample; agent cost over
-all tasks, within noise).
+The action firewall (`actionCheck`, D69) was deleted by D815; the party check that `POST /v1/check` runs (D376) adds
+no model call and no source call.
 
 These are arithmetic on list prices, not measurements. Output is billed on tokens used, not the cap: a judge verdict
 is a few tokens plus low-effort reasoning (about 20 tokens on GLM 5.3 Flash in a probe of three calls).
