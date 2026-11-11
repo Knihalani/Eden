@@ -34,8 +34,11 @@ On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
   finds the user's state next time. Never fold a bad id by replacing characters (`+` to `-` would merge
   `alice+work@x.com` with `alice-work@x.com`). The client reports a bad id once through `onError` when it is
   constructed.
-- **Set `onError`.** A refused key or id, a wrong port and a down server all look like Eden's normal silence
-  otherwise: the SDK swallows every error (it fails open) and has no default logger. The error's message carries the
+- **Read what `onError` prints, then set your own.** The SDK swallows every error (it fails open). With no `onError`
+  it uses `defaultOnError` (D850): in development each distinct problem is printed once with `console.warn` (Python:
+  stderr) followed by its fix (`fix: start the server … and check baseUrl`); with `EDEN_ENV=production` (or
+  `NODE_ENV=production`) only the first problem of each route and status is printed. Pass your logger to keep them
+  all, or `onError: null` (`on_error=None`) to silence it. The error's message carries the
   server's reason (`eden /v1/events: 400 userId must be 1-128 characters of [A-Za-z0-9._:@-]`), capped at 300
   characters; it never includes the request or the key.
 - **Check the setup with `health()`** at startup: `await eden.health()` resolves `{ ok: true }` when the server
@@ -43,6 +46,9 @@ On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below.
   changes no state (`POST /v1/whoami`).
 - **Report every event**: user messages, the agent's tool calls and results, arriving messages. Eden stays silent on
   most of them; the ones it reads are how it knows what the agent is about to do.
+- **`collect` takes what it returns.** `pending` drains the session's queue, and an item is handed out once per
+  session: if your model call then fails, retry it with the same messages (with the packet already in them), not
+  with a fresh `collect`.
 - **Inject before each model call, not only the first**: work Eden finishes after the first request (the slow path, a
   poll behind the lookup, D65) is delivered at the next one through `collect`/`pending`.
 - **The SDK fails open.** A timeout or an error is "no context", never an exception in the agent's loop. Keep it that
@@ -410,7 +416,15 @@ EDEN_PROXY_UPSTREAM=https://api.openai.com/v1 EDEN_URL=http://127.0.0.1:8790 EDE
 # Anthropic's Messages API (D653): the same proxy, the SDK's base URL without /v1
 EDEN_PROXY_UPSTREAM=https://api.anthropic.com/v1 bun run proxy
 # the agent: Anthropic(base_url="http://127.0.0.1:8791", default_headers={"x-eden-user-id": user_id})
+
+# The same request by hand (proxy on PROXY_PORT=8791, Eden on EDEN_URL; keep max_tokens above the model's thinking)
+curl -s http://127.0.0.1:8791/v1/messages -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" -H "x-eden-user-id: u1" -H "x-eden-session-id: chat-1" \
+  -d '{"model":"claude-haiku-5-5","max_tokens":1024,"messages":[{"role":"user","content":"Can you move my lunch with Priya Raman to 11:30 on Thursday?"}]}'
 ```
+
+The packet is not in the answer: it went to the model. To see what Eden added, ask the server
+(`POST $EDEN_URL/v1/explain {"userId":"u1","sessionId":"chat-1"}` lists the item ids it handed out and why).
 
 `EDEN_PROXY_UPSTREAM` keeps the provider's version path (`/v1`, `/api/v1`; the proxy warns at startup when it has no
 path). `EDEN_URL` defaults to `http://127.0.0.1:8790`; `EDEN_API_KEY` is one of the server's `EDEN_API_KEYS` keys

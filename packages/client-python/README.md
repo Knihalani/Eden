@@ -9,6 +9,7 @@ from eden_client import EdenClient, with_context, eden_id, ASK_CONTEXT_DESCRIPTI
 eden = EdenClient(api_key=KEY, user_id=eden_id(user.email), session_id=eden_id(chat.id),
                   base_url="http://127.0.0.1:8790", on_error=log.warning)
 assert eden.health()["ok"]                                         # at startup: key, tenant and ids accepted
+eden.observe({"kind": "session_start"})                            # when the user connects: Eden starts reading
 
 result = eden.observe({"kind": "user_message", "text": text})      # each event (waits up to 3 s on a user message)
 messages = with_context(messages, eden.collect(result["injection"]))  # before each model call
@@ -19,9 +20,18 @@ for d in eden.explain():                                           # why Eden sp
 ```
 
 - **Fails open (D14).** A network error, a timeout, a non-2xx or an answer of the wrong shape is "no context"
-  (`None`, `[]`, `proceed` for `check`), never an exception. Set `on_error`: otherwise a refused key looks exactly
-  like Eden's normal silence. Errors carry the server's reason (`eden /v1/whoami: 401 missing or unknown API key`),
+  (`None`, `[]`, `proceed` for `check`), never an exception. With no `on_error`, each problem is printed to stderr
+  once with its fix (with `EDEN_ENV=production`, the first of each kind; D850); pass your logger, or `on_error=None`
+  to silence it. Errors carry the server's reason (`eden /v1/whoami: 401 missing or unknown API key`),
   never the request or the key.
+- **A local dev server** (`EDEN_DEV=1`): pass no `api_key` at all (a made-up one is refused with a 401). Unset
+  `base_url` and `api_key` come from `EDEN_URL` and `EDEN_API_KEY` (D856), default `http://127.0.0.1:8790`.
+- **One `session_id` per conversation.** Eden hands an item out once per session; an ask in the same session cites
+  it as `(shown above)` (it is in the packet already in your messages). A second script reusing a session id sees
+  that too.
+- **What comes back:** `observe` returns `{"injection": dict or None, "pending": bool}`; `collect` and `pending` a
+  list of injections (`{"id", "text", "citations", …}`); `ask` `{"answer", "citations", …}` or None; `check`
+  `{"verdict": "proceed" or "finding", "finding": …}`; `health` `{"ok": bool, "error"?: str}`.
 - **Ids.** `user_id`, `session_id` and `tenant_id` are 1-128 characters of `[A-Za-z0-9._:@-]`; map any other string
   with `eden_id`, which gives exactly the TypeScript `edenId`'s id (tested), so a mixed stack finds one user's state.
 - **Events** are the protocol's (`docs/INTEGRATION.md`): `user_message`, `agent_message`, `tool_call`

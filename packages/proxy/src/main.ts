@@ -59,6 +59,8 @@ const server = Bun.serve({
     ...(process.env.EDEN_API_KEY ? { edenApiKey: process.env.EDEN_API_KEY } : {}),
     ...(proxyKey ? { proxyKey } : {}),
     ...(process.env.EDEN_PROXY_KEEP_PACKETS === "0" ? { keepPackets: false } : {}),
+    // Trial (D851): Eden's ask_context offered to the model and answered in the proxy.
+    ...(process.env.EDEN_PROXY_ASK === "1" ? { askTool: true } : {}),
     ...(process.env.EDEN_PROXY_SHADOW === "1"
       ? { shadow: true, onShadow: (r) => console.log(JSON.stringify({ shadow: true, ...r })) }
       : {}),
