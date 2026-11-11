@@ -9,7 +9,7 @@
  * read, so a run cannot change its own input halfway (the oneturn track's replay file was mutated during a run), and
  * the next run that names both files replays both.
  */
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -146,7 +146,10 @@ export function harnessCoverage(o: {
     );
   }
   if (uncovered.length) throw new Error(`--coverage shipped: ${SHIPPED_FILE} does not cover ${uncovered.join(", ")}`);
-  const file = join(mkdtempSync(join(tmpdir(), "eden-shipped-")), "shipped.jsonl");
+  const dir = mkdtempSync(join(tmpdir(), "eden-shipped-"));
+  // Removed when the harness exits: one ~10 MB copy a run otherwise piles up in the temp directory.
+  process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, "shipped.jsonl");
   writeFileSync(file, gunzipSync(readFileSync(SHIPPED_PATH)));
   return { coverage: "shipped", cards: file, intent: file, note: `coverage shipped (${SHIPPED_FILE}, D878)` };
 }

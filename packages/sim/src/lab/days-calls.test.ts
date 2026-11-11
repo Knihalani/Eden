@@ -125,5 +125,6 @@ describe("days-calls: weeks, the long tail and silent arrivals (D874, D875)", ()
     expect(n("hidden")).toBe(u.surfaced.hidden!.n);
     expect(n("control")).toBe(u.surfaced.control!.n);
     expect(callsWhere(u.counts, (_p, src, op) => src === "notes" && op === "list")).toBeGreaterThan(0);
-  });
+    // 14 days of one user: about 1 s alone, past bun's 5 s default under a parallel cold run.
+  }, 60_000);
 });
