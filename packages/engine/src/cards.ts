@@ -23,7 +23,6 @@
  * they describe (an item leaving the cache unlinks its card: `forgetItems`), with a revoked source's items, and after
  * `ttlMs` unseen.
  */
-import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import type { Budget, ChatMessage, Model } from "@eden/llm";
 import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
@@ -827,33 +826,6 @@ class UserCards {
   /** With `cardsLanes` > 1: sentence keys of the batches in flight, so another lane waits for their card. */
   readonly flying = new Set<string>();
   readonly abort = new AbortController();
-  /** The cache froze the user while work was in flight (`CardEnricher.freeze` refused): freeze once it settles. */
-  freezeWanted = false;
-}
-
-/**
- * A user's card state while their cache is frozen (D998, `CardEnricher.freeze`): every map of `UserCards` as one zstd
- * JSON blob, and the intent index as it is (rebuilding it was most of a thaw: about 20 ms at 3,000 items, on a
- * returning user's first event). Card state was kept live for frozen users before: with a card and requests an item,
- * about 3.7 MB of heap a heavy user (3,000 items, `users.bench.ts --cards`), more than the frozen cache. The cache's
- * thaw of the user thaws it into the same state (`wake`), and so does any read or write first; a forget drops it.
- */
-class FrozenCards {
-  constructor(
-    readonly tenantId: string,
-    readonly blob: Uint8Array,
-    readonly intent: IntentIndex | undefined,
-  ) {}
-}
-
-/** What `FrozenCards.blob` holds: each map's entries in its order. */
-interface FrozenCardsBody {
-  enlisted: number;
-  byHash: [string, Stored][];
-  byItem: [string, string][];
-  /** The holders of hashes with more than one, in the order they were linked; the rest follow from `byItem`. */
-  shared: [string, string[]][];
-  bySentence: [string, string][];
 }
 
 /** Counters for research and cost reporting. */
@@ -897,8 +869,7 @@ export interface CardStats {
  * an exhausted budget leaves items uncovered).
  */
 export class CardEnricher {
-  /** Per user, live or frozen with their cache (`freeze`); the order is least recently written first. */
-  private readonly users = new Map<string, UserCards | FrozenCards>();
+  private readonly users = new Map<string, UserCards>();
   private readonly perTenant = new Map<string, number>();
   private limits: CardLimits;
   readonly stats: CardStats = {
@@ -997,7 +968,7 @@ export class CardEnricher {
 
   private user(scope: Scope): UserCards {
     const key = scopeKey(scope);
-    let u = this.live(key);
+    let u = this.users.get(key);
     if (u) {
       // Most recently written last: the tenant's oldest user is the first of its own in insertion order.
       this.users.delete(key);
@@ -1022,7 +993,7 @@ export class CardEnricher {
   private drop(key: string, tenantId: string): void {
     const u = this.users.get(key);
     if (!u) return;
-    if (u instanceof UserCards) u.abort.abort();
+    u.abort.abort();
     this.users.delete(key);
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n > 0) this.perTenant.set(tenantId, n);
@@ -1038,7 +1009,7 @@ export class CardEnricher {
    * time to live starts again, since the content they describe is still held. Never makes a card.
    */
   touch(scope: Scope, ids: Iterable<string>): void {
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     if (!u) return;
     const now = this.deps.now();
     for (const id of ids) {
@@ -1164,8 +1135,6 @@ export class CardEnricher {
     u.draining = work.finally(() => {
       u.draining = null;
       if (u.queue.length > 0 && !u.abort.signal.aborted && this.users.get(scopeKey(scope)) === u) this.start(scope, u);
-      // The cache froze the user while this ran (D998): their card state follows now that nothing is in flight.
-      else if (u.freezeWanted && this.users.get(scopeKey(scope)) === u) this.freeze(scope);
     });
   }
 
@@ -1464,8 +1433,7 @@ export class CardEnricher {
   /** Waits for every user's enrichment in flight (tests and the lab). */
   async idle(): Promise<void> {
     for (;;) {
-      const busy: Promise<void>[] = [];
-      for (const u of this.users.values()) if (u instanceof UserCards && u.draining !== null) busy.push(u.draining);
+      const busy = [...this.users.values()].map((u) => u.draining).filter((d): d is Promise<void> => d !== null);
       if (busy.length === 0) return;
       await Promise.all(busy);
     }
@@ -1477,7 +1445,7 @@ export class CardEnricher {
    */
   cardsOf(scope: Scope, ids: Iterable<string>, before: number): Map<string, Card> {
     const out = new Map<string, Card>();
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     if (!u) return out;
     const now = this.deps.now();
     for (const id of ids) {
@@ -1506,7 +1474,7 @@ export class CardEnricher {
     k: number,
     accept: (id: string) => boolean,
   ): { ids: string[]; hit: IntentHit; carded: boolean }[] {
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     if (!u?.intent || k <= 0) return [];
     const now = this.deps.now();
     const out: { ids: string[]; hit: IntentHit; carded: boolean }[] = [];
@@ -1529,7 +1497,7 @@ export class CardEnricher {
 
   /** The requests written for an item's content before `before` (ms); none when unread, unmade or past its TTL. */
   requestsOf(scope: Scope, id: string, before: number): readonly string[] {
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     const hash = u?.byItem.get(id);
     const s = hash ? u!.byHash.get(hash) : undefined;
     if (!s?.requests || !(s.at < before) || this.deps.now() - s.seenAt > this.limits.ttlMs) return [];
@@ -1538,7 +1506,7 @@ export class CardEnricher {
 
   /** Items holding requests in the user's intent index (tests and bounds). */
   intentSize(scope: Scope): number {
-    return this.live(scopeKey(scope))?.intent?.size ?? 0;
+    return this.users.get(scopeKey(scope))?.intent?.size ?? 0;
   }
 
   /**
@@ -1546,14 +1514,14 @@ export class CardEnricher {
    * go, and a card whose content no cached item still has goes with them. A card is never held longer than its item.
    */
   forgetItems(scope: Scope, ids: Iterable<string>): void {
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     if (!u) return;
     for (const id of ids) unlink(u, id);
   }
 
   /** The ids of the user's items with a constraint card, newest last (bounded by `maxCardsPerUser` twice). */
   carded(scope: Scope): string[] {
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     if (!u) return [];
     const out: string[] = [];
     for (const [id, hash] of u.byItem) if (u.byHash.get(hash)?.card) out.push(id);
@@ -1569,7 +1537,7 @@ export class CardEnricher {
       this.drop(scopeKey(scope), scope.tenantId);
       return;
     }
-    const u = this.live(scopeKey(scope));
+    const u = this.users.get(scopeKey(scope));
     if (!u) return;
     const prefix = `${sourceId}:`;
     for (const id of [...u.byItem.keys()]) if (id.startsWith(prefix)) unlink(u, id);
@@ -1578,92 +1546,6 @@ export class CardEnricher {
 
   get userCount(): number {
     return this.users.size;
-  }
-
-  /** Users whose card state is frozen (tests and benches). */
-  get frozenCount(): number {
-    let n = 0;
-    for (const u of this.users.values()) if (u instanceof FrozenCards) n++;
-    return n;
-  }
-
-  /**
-   * Freezes a user's card state with their cache (D998; the partner calls it when the cache freezes the user): only
-   * when nothing of theirs is queued, draining or in flight, so no batch can land in it. True when frozen.
-   */
-  freeze(scope: Scope): boolean {
-    const key = scopeKey(scope);
-    const u = this.users.get(key);
-    if (!(u instanceof UserCards)) return false;
-    if (u.queue.length > 0 || u.draining !== null || u.flying.size > 0 || u.spawn !== null) {
-      // Not now: the drain's end freezes it, unless the cache thaws the user first (`wake`). Never left live for good.
-      u.freezeWanted = true;
-      return false;
-    }
-    const shared: [string, string[]][] = [];
-    for (const [hash, ids] of u.holders) if (typeof ids !== "string") shared.push([hash, [...ids]]);
-    const body: FrozenCardsBody = {
-      enlisted: u.enlisted,
-      byHash: [...u.byHash],
-      byItem: [...u.byItem],
-      shared,
-      bySentence: [...u.bySentence],
-    };
-    // Same key: the user keeps their place in the least-recently-written order.
-    const blob = Bun.zstdCompressSync(Buffer.from(JSON.stringify(body)));
-    this.users.set(key, new FrozenCards(u.tenantId, blob, u.intent));
-    return true;
-  }
-
-  /** Thaws a user's card state if frozen (the partner calls it as the cache thaws the user). */
-  wake(scope: Scope): void {
-    const u = this.live(scopeKey(scope));
-    if (u) u.freezeWanted = false; // in use again: a freeze waiting for the drain's end is no longer wanted
-  }
-
-  /**
-   * The user's live card state, thawed first if frozen (`freeze`); undefined for a user with none. A thaw that fails
-   * (a corrupt blob) fails open: the user's card state is dropped and made again, as after a restart.
-   */
-  private live(key: string): UserCards | undefined {
-    const u = this.users.get(key);
-    if (!(u instanceof FrozenCards)) return u;
-    try {
-      return this.thawCards(key, u);
-    } catch {
-      this.drop(key, u.tenantId);
-      return undefined;
-    }
-  }
-
-  /**
-   * A frozen user's card state as it was: every map in its order, the intent index as it was kept. Each content hash
-   * is one string again, as when live (JSON gives each occurrence its own: 0.3 MB more a heavy user), the intent
-   * index's own where it has one.
-   */
-  private thawCards(key: string, f: FrozenCards): UserCards {
-    const body = JSON.parse(Buffer.from(Bun.zstdDecompressSync(f.blob)).toString("utf8")) as FrozenCardsBody;
-    const canon = new Map<string, string>();
-    if (f.intent) for (const h of f.intent.hashes()) canon.set(h, h);
-    const one = (h: string): string => {
-      const c = canon.get(h);
-      if (c !== undefined) return c;
-      canon.set(h, h);
-      return h;
-    };
-    const u = new UserCards(f.tenantId);
-    u.enlisted = body.enlisted;
-    for (const [hash, s] of body.byHash) u.byHash.set(one(hash), s);
-    for (const [id, h] of body.byItem) {
-      const hash = one(h);
-      u.byItem.set(id, hash);
-      if (!u.holders.has(hash)) u.holders.set(hash, id);
-    }
-    for (const [hash, ids] of body.shared) u.holders.set(one(hash), new Set(ids));
-    for (const [k, hash] of body.bySentence) u.bySentence.set(k, one(hash));
-    u.intent = f.intent;
-    this.users.set(key, u); // the same place in the order: a read is not a write
-    return u;
   }
 }
 

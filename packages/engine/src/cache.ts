@@ -773,16 +773,6 @@ export class ItemCache {
   /** Where frozen users are also written (D425, opt-in); null by default: nothing goes to disk (D8). */
   private disk: FrozenDisk | null = null;
   /**
-   * Called with each user the cache freezes, warm or compact (D998: the partner freezes the user's card state with
-   * them, `CardEnricher.freeze`). Null when no owner listens.
-   */
-  onFreeze: ((scope: Scope) => void) | null = null;
-  /**
-   * Called with each user the cache thaws for use (not a warm user thawed only to be frozen compact): the partner
-   * thaws the user's card state here, in the cache's own thaw, not inside the first lookup that reads it (D998).
-   */
-  onThaw: ((scope: Scope) => void) | null = null;
-  /**
    * The owner's part of a persisted user (D425; the partner: its sync's per-source state): what to save beside the
    * blob, and what to do once a user written by an earlier process is thawed here.
    */
@@ -1937,11 +1927,6 @@ export class ItemCache {
     this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
     clearTermMemo();
-    try {
-      this.onFreeze?.(f.scope);
-    } catch {
-      // The owner's freeze fails open: its state stays live.
-    }
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
     // D862: a warm user is not written. An active user pauses every few minutes, and each pause would write (and its
@@ -2271,11 +2256,6 @@ export class ItemCache {
     else {
       this.freezes.thawed++;
       this.freezes.thawMs += performance.now() - t0;
-      try {
-        this.onThaw?.(u.scope);
-      } catch {
-        // The owner's thaw fails open: its state thaws at its own first read.
-      }
     }
     // D425: on disk is only ever a frozen user's state; a live one changes, and is written again when it freezes. A
     // shared store keeps its copy (D992: the failover copy), so `thawed` when the store has one.

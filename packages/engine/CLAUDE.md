@@ -495,17 +495,12 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   warm freeze without `releaseTerms` (the blob carries the vocabulary) or with `freezeIdleMs` 0. A new per-user
   field of `UserCache` must be carried by both forms, and a test that counts thaws or freezes with the default limits
   now sees warm ones.
-- **Card state freezes with its user (D998; `CardEnricher.freeze`, `cards-freeze.test.ts`).** When the cache
-  freezes a user (warm or compact, `ItemCache.onFreeze`, wired by the partner), their `UserCards` becomes one zstd
-  JSON blob (`FrozenCards`), but only with nothing queued, draining or in flight; the first read or write (`live`)
-  thaws it into the same maps in the same order; the intent index stays live beside the blob (rebuilding it was most
-  of a thaw), and the cache's thaw wakes the cards (`ItemCache.onThaw`) so no lookup pays for it. A thaw that fails
-  drops the user's card state (made again, as after a restart); a freeze refused while work is in flight happens
-  when the drain ends (`freezeWanted`). Before, card state stayed live for frozen users: about 3.7 MB of heap a heavy user with a card and
-  requests an item (`users.bench.ts --cards`). A new field of `UserCards` must be carried by `FrozenCardsBody` and
-  `cards-freeze.test.ts`'s `state`, or a thaw loses it; per-hash state belongs on `Stored`, not in a new Map keyed by
-  hash (a Map of thousands is 40-130 bytes an entry in JSC, a one-element `Set` 248: D998's C1, C4, C5 folded three
-  such). Card state is not persisted (a restart cards again).
+- **Card state stays live while its user is frozen.** A user's `UserCards` is not frozen with the cache: with a card
+  and two requests an item it is about 3.7 MB of heap a heavy user, more than the frozen cache. Freezing it with the
+  user was built and rejected on its pre-registered rule (D998, C6: frozen RSS -18.9%, short of -20%, and +4% after
+  a thaw; a rebuilt intent index cost a returning user's first event about 20 ms; code in commit 527089e6). Per-hash
+  state belongs on `Stored`, not in a new Map keyed by hash (a Map of thousands is 40-130 bytes an entry in JSC, a
+  one-element `Set` 248: D998's C1, C4, C5 folded three such).
 - **Idle compaction (D861, in the default; `idleCompact`).** At an expiry tick a live user not used through a whole
   interval, with at least `COMPACT_MIN_DELTA` (32) delta docs or removals waiting, has `index.compact()` (a full
   merge, 2.6-6 ms at 3,000 items, the delta's spare room let go) as a sliced background job, looked at again when it

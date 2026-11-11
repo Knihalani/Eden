@@ -166,16 +166,6 @@ export class IntentIndex {
     this.hashOf[doc] = hash;
   }
 
-  /** The content hashes indexed (D998: a card thaw reuses these strings rather than hold a second copy of each). */
-  hashes(): IterableIterator<string> {
-    return this.docs.keys();
-  }
-
-  /** The docs as data: each one's hash, requests and place among equal scores, in order (tests, D998's twin). */
-  export(): { docs: [string, string, number][]; nextSeq: number } {
-    return { docs: [...this.docs].map(([hash, d]) => [hash, d.text, d.seq]), nextSeq: this.nextSeq };
-  }
-
   /** A fresh vocabulary and index from the live docs: terms only removed docs held are forgotten. */
   private rebuild(): void {
     this.vocab = new Vocab(256);
