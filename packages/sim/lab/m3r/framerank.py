@@ -59,11 +59,12 @@ def qx_channel(W, rq, table, n=25):
     return order[:n], ex, {k: r for r, k in enumerate(order[:100])}
 
 
-def pair_rows(W, request, table):
-    """(candidate ids into W.items, feature rows) for one request."""
+def pair_rows(W, request, table, also=()):
+    """(candidate ids into W.items, feature rows) for one request. `also`: item indices joined to the candidates (the
+    shipped pool's items, intent hits included, so a ranker re-ranks the pool it is measured against)."""
     rq = F.request_frame(request)
     extra, qx, qx_rank = qx_channel(W, rq, table)
-    found, lex, order = F.candidates(W, rq, extra)
+    found, lex, order = F.candidates(W, rq, list(extra) + [k for k in also if k not in extra])
     rank = {k: r for r, k in enumerate(order[:200])}
     nbr = W.neighbours()
     head = order[:5]
