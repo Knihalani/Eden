@@ -307,3 +307,25 @@ The margin moves the ranker along the same trade-off, twins down by giving up fa
 against 59 at 109 without it); it does not escape it. Reading: what separates a fact from its twin on the sim's held-out
 families is about AUC 0.75 even read from the item alone with all the data (§7e), and the pair net adds little to that.
 The owner's targets (twin@5 near 0, fact@5 in the high 130s) are not reachable from these signals on these families.
+
+### 7f. Pre-registered rules for wiring (committed before any of these results; decided the same day, D814)
+
+Baseline: main e4f3649a (the push check S and `pushIndirect` in the default). Trials compare `default` against
+`default + <switch>` on the same runs.
+
+1. **Supersession (`pushSupersede`, H10).** When a handed candidate has a newer item in the user's cache, sharing one
+   of the request's anchors, that H10 says replaces it, the newer item goes in its place. Measured on main's funnel
+   over M2's held-out worlds (`synth-val`; its late and silent-change tasks hold a newer item replacing an older one):
+   **stale versions handed down at least 50%, facts handed not down by more than 2%.** `days-calls --recap-notice none`
+   is reported as a control only: its silent changes edit the same item in place, which H10 does not see.
+2. **Ingest tag (`constraintTag`, H13).** The tag bit joins `constraintLike` in the push gate (a candidates packet goes
+   only when a pooled item is tag-positive or card-positive). Funnel on train: **packets on control and neutral requests
+   down at least 20%, hidden facts surfaced not down by more than 1%** against e4f3649a.
+3. **Ranker (`pushRetrieve` successor, H1).** §1b's @5 bar against the shipped pool on fold A's held-out families: facts
+   @5 at least +10 points, decoys rising no faster than facts.
+4. **Supersession as a rank-time demotion (the parent's steer 2), offline screen first.** For the shipped pool's first
+   five, an item a newer cached item replaces or clears (H10, anchor-sharing items only) moves behind the five: **twins
+   @5 down at least 15% with facts @5 not down by more than 2**, on fold A's held-out days requests. Expected: little or
+   nothing in the sim, whose twins are planted alone (no clearing item exists in the world); reported either way.
+
+Float or binary: whichever wins held out at under 1 ms a request in TypeScript; both timings reported.
