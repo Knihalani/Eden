@@ -115,7 +115,7 @@ describe("digest (D293)", () => {
     expect(formatDigest(digest([t({})]))).toContain("not in this log");
   });
 
-  test("a restart under the same pid (a container's pid 1) or run id adds its counts; the firewall's finding is no second call", () => {
+  test("a restart under the same pid (a container's pid 1) or run id adds its counts; the party check's finding is no second call", () => {
     const line = (backgroundCalls: number, run?: string) =>
       JSON.stringify({ sync: { ...(run ? { run } : {}), pid: 1, backgroundCalls } });
     // pid only (a log from before `run`): 50, then a restart counting 10, 20: 70 in all.

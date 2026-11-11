@@ -114,7 +114,19 @@ export const DEFAULT_MAX_BODY_BYTES = 8_388_608;
  * `cores` is the machine's core count, a parameter so tests can pin it; the default reads it at call time
  * (`machineCores`).
  */
+/**
+ * Variables of deleted trials (D817): set, they stop startup, as a removed `EDEN_ENGINE_CONFIG` key does (D103),
+ * rather than being ignored while the operator believes the trial still runs.
+ */
+export const RETIRED_ENV: Record<string, string> = {
+  EDEN_SPEND_LEASES: "D817 deleted the spend leases: each child holds 1/N of the tenant's daily cap (D163)",
+  EDEN_PERSIST_DISK_ONLY: "D817 deleted disk-only frozen users: a frozen user's blob stays in memory as well",
+};
+
 export function loadConfig(env = process.env, cores = machineCores()): ServerConfig {
+  for (const [name, why] of Object.entries(RETIRED_ENV)) {
+    if (env[name]) throw new Error(`${name} is no longer read (${why}): unset it`);
+  }
   const port = Number(env.PORT ?? 8790);
   if (!Number.isInteger(port) || port < 0 || port > 65_535)
     throw new Error(`PORT must be a port number, got ${env.PORT}`);

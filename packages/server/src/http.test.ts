@@ -174,6 +174,11 @@ describe("per-tenant rate limit", () => {
 describe("loadConfig", () => {
   test("refuses to start without keys outside dev, and rejects short keys", () => {
     expect(() => loadConfig({})).toThrow(/EDEN_API_KEYS/);
+    // Deleted trials' variables stop startup rather than being ignored (D817).
+    for (const name of ["EDEN_SPEND_LEASES", "EDEN_PERSIST_DISK_ONLY"]) {
+      expect(() => loadConfig({ EDEN_DEV: "1", [name]: "1" })).toThrow(new RegExp(`${name} is no longer read`));
+    }
+    expect(loadConfig({ EDEN_DEV: "1", EDEN_SPEND_LEASES: "" }).dev).toBe(true);
     expect(() => loadConfig({ EDEN_API_KEYS: "acme:short" })).toThrow(/16\+/);
     expect(loadConfig({ EDEN_DEV: "1" }).dev).toBe(true);
     expect(() => loadConfig({ EDEN_API_KEYS: "a/b:0123456789abcdef" })).toThrow(/tenant/);
