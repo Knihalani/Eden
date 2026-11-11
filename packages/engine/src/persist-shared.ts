@@ -52,6 +52,12 @@ export const MAX_ABSENT = 100_000;
 type Job = { kind: "put"; bytes: Uint8Array } | { kind: "delete" };
 
 const NAME = /^([0-9a-f]{4})-[0-9a-f]{40}\.blob$/;
+/** The store's marker of the key its users were written with (D1071); not a blob name: no sweep or fetch reads it. */
+const KEY_MARK = "key-id";
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.byteLength === b.byteLength && a.every((x, i) => x === b[i]);
+}
 
 export class SharedFrozenDisk implements FrozenDisk {
   readonly local: EncryptedFrozenDisk;
@@ -253,26 +259,55 @@ export class SharedFrozenDisk implements FrozenDisk {
   }
 
   /**
-   * R1b (D1071): reads up to `sample` blobs from the store and says how many another key wrote. A store that cannot
-   * be listed or read counts as empty (fail open: the server starts). Deletes nothing.
+   * R1b (D1071): whether this key is the one the store's users were written with. The store holds a marker object
+   * (`<prefix>key-id`: the key's id, as every blob header carries it): the same id is "ok" (the marker refreshed, so
+   * an age rule on the bucket never takes it), another is "foreign", unless `discard` (the operator's
+   * EDEN_PERSIST_DISCARD=1), which moves the marker to this key: "discarded". The old key's blobs are then never read
+   * (names come from the key) and the age sweep deletes them; a sample of them must not refuse the next start (the
+   * review of R1b). With no marker yet (a store from before it) up to `sample` blobs are read: all foreign is
+   * "foreign"; otherwise the marker is written. A store that fails or takes longer than `timeoutMs` is "unknown": the
+   * start goes ahead (fail open).
    */
-  async checkStoreKey(sample: number): Promise<{ sampled: number; foreign: number }> {
-    let sampled = 0;
-    let foreign = 0;
-    try {
-      for await (const { key } of this.store.list(this.prefix)) {
-        if (sampled >= sample) break;
-        if (!NAME.test(key.slice(this.prefix.length))) continue;
-        const bytes = await this.store.get(key);
-        const k = bytes === null ? null : this.local.keyOf(bytes);
-        if (k === null) continue;
-        sampled++;
-        if (k === "key") foreign++;
+  async verifyStoreKey(
+    discard: boolean,
+    timeoutMs = 3_000,
+    sample = 8,
+  ): Promise<{ verdict: "ok" | "foreign" | "discarded" | "unknown"; sampled: number; foreign: number }> {
+    const unknown = { verdict: "unknown" as const, sampled: 0, foreign: 0 };
+    const check = async () => {
+      const mine = this.local.keyMark;
+      const marker = await this.store.get(this.prefix + KEY_MARK);
+      let sampled = 0;
+      let foreign = 0;
+      let theirs = false;
+      if (marker !== null) theirs = !sameBytes(marker, mine);
+      else {
+        for await (const { key } of this.store.list(this.prefix)) {
+          if (sampled >= sample) break;
+          if (!NAME.test(key.slice(this.prefix.length))) continue;
+          const bytes = await this.store.get(key);
+          const k = bytes === null ? null : this.local.keyOf(bytes);
+          if (k === null) continue;
+          sampled++;
+          if (k === "key") foreign++;
+        }
+        theirs = sampled > 0 && foreign === sampled;
       }
+      if (theirs && !discard) return { verdict: "foreign" as const, sampled, foreign };
+      await this.store.put(this.prefix + KEY_MARK, mine);
+      return { verdict: theirs ? ("discarded" as const) : ("ok" as const), sampled, foreign };
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        check(),
+        new Promise<typeof unknown>((resolve) => (timer = setTimeout(() => resolve(unknown), timeoutMs))),
+      ]);
     } catch {
-      return { sampled: 0, foreign: 0 };
+      return unknown;
+    } finally {
+      clearTimeout(timer);
     }
-    return { sampled, foreign };
   }
 
   /** Store writes waiting or running. */

@@ -140,14 +140,15 @@ export interface DiskOptions {
   startEmpty?: boolean;
   /**
    * R1b (D1071): when the directory holds blobs of this store's own buckets and the key opens none of them, the open
-   * throws `PersistKeyMismatch` and deletes none of them (a mistyped key on an upgrade would otherwise wipe every
-   * persisted user). A directory where some blob opens is a key that works: the foreign ones are discarded, as when
-   * this is off (the default here; the servers turn it on unless the operator asks to discard).
+   * throws `PersistKeyMismatch` and deletes none of the foreign ones (temporary, corrupt and other-version files go):
+   * a mistyped key on an upgrade would otherwise wipe every persisted user. A directory where some blob opens is a
+   * key that works: the foreign ones are discarded, as when this is off (the default here; the servers turn it on
+   * unless the operator asks to discard).
    */
   refuseForeignKey?: boolean;
 }
 
-/** The key opens none of the blobs on disk (`DiskOptions.refuseForeignKey`): nothing was deleted. */
+/** The key opens none of the blobs on disk (`DiskOptions.refuseForeignKey`): no foreign blob was deleted. */
 export class PersistKeyMismatch extends Error {
   constructor(
     readonly foreign: number,
@@ -378,6 +379,8 @@ export class EncryptedFrozenDisk implements FrozenDisk {
   private open(now: number): void {
     // Blobs another key wrote: deleted after the loop, unless no blob opens and the store refuses (D1071).
     const foreign: string[] = [];
+    // Blobs this key wrote, expired ones too: one is enough to show the key is the right one (review of R1b).
+    let own = 0;
     for (const name of readdirSync(this.o.dir)) {
       const path = join(this.o.dir, name);
       // Another process's files in a shared directory (D992) are left alone, a half-written one included.
@@ -407,6 +410,8 @@ export class EncryptedFrozenDisk implements FrozenDisk {
         foreign.push(path);
         continue;
       }
+      // `headerProblem` checks the key before the expiry: an expired blob was written with this key.
+      if (bad === "expired" || bad === null) own++;
       if (bad) {
         rmSync(path, { force: true });
         this.stats.discarded++;
@@ -417,7 +422,7 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       this.files.set(name, { bytes, at, life: lifetime(at, head.readDoubleLE(24), this.o.maxAgeMs) });
       this.bytes += bytes;
     }
-    if (foreign.length > 0 && this.files.size === 0 && this.o.refuseForeignKey) {
+    if (foreign.length > 0 && own === 0 && this.o.refuseForeignKey) {
       throw new PersistKeyMismatch(foreign.length, this.o.dir);
     }
     for (const path of foreign) {
@@ -425,6 +430,11 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       this.stats.discarded++;
       this.o.report?.({ kind: "discarded", reason: "key" });
     }
+  }
+
+  /** The key's id as blob headers carry it (8 bytes derived from the key, not the key): the store's marker (D1071). */
+  get keyMark(): Uint8Array {
+    return new Uint8Array(this.keyId);
   }
 
   /**

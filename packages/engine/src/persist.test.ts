@@ -214,6 +214,11 @@ describe("frozen users on disk (D425)", () => {
     expect(d.count).toBe(2);
     expect(events).toEqual([{ kind: "discarded", reason: "key" }]);
     expect(files(dir).length).toBe(2);
+    // An expired blob of this key beside a foreign one shows the key is right: no refusal (review of R1b).
+    for (const f of files(otherDir)) copyFileSync(join(otherDir, f), join(dir, f));
+    const late = new EncryptedFrozenDisk({ dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 1, refuseForeignKey: true });
+    expect(late.count).toBe(0);
+    expect(files(dir)).toEqual([]);
   });
 
   test("forget deletes the user's blob, read back or not; a source's forget and a removal too", () => {

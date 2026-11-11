@@ -119,7 +119,7 @@ tenant and the box. Either way Eden's own port is never public.
 | Secret | Made by | Lives | Rotation |
 | --- | --- | --- | --- |
 | `EDEN_API_KEYS` (tenant:key, 16+ chars) | `openssl rand -hex 24` per tenant | `.env` (600) on each Eden box and the cluster router | list the new key beside the old (`acme:<new>,acme:<old>`: a tenant may have several), restart, move the tenant over, remove the old (§13) |
-| `EDEN_PERSIST_KEY` (32 bytes) | `openssl rand -hex 32`, **once** | `.env`; a copy in your password manager | none: a start with a key that opens none of the persisted users stops (exit 2, nothing deleted, D1071); `EDEN_PERSIST_DISCARD=1` discards them on purpose (they re-sync, D425) |
+| `EDEN_PERSIST_KEY` (32 bytes) | `openssl rand -hex 32`, **once** | `.env`; a copy in your password manager | none: a start with a key that opens none of the persisted users stops (exit 2, no foreign blob deleted, D1071); `EDEN_PERSIST_DISCARD=1` discards them on purpose (they re-sync, D425) |
 | `EDEN_CLUSTER_KEY` (24+ chars) | `openssl rand -hex 24` | `.env` on nodes and routers | replace on all at once (a rolling restart) |
 | `EDEN_S3_*` | the store's console, scoped to the one bucket | `.env` on nodes | create the new key, roll, delete the old |
 | `OPENROUTER_API_KEY` (optional) | OpenRouter | `.env` | in OpenRouter; restart |

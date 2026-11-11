@@ -251,3 +251,13 @@ test("a problem found on a user's first read is logged at shutdown, not left to 
   await b.post("/v1/ask", { userId: "u1", sessionId: "s1", question: "What does Dana Lee want?" });
   expect(await b.stop()).toContain("frozen users on disk: 1 discarded (corrupt)");
 }, 30_000);
+
+test("EDEN_PERSIST_DISCARD is 1 or unset, and is refused beside EDEN_PERSIST=off (D1071)", () => {
+  const prod = { EDEN_API_KEYS: "acme:k_acme_0123456789abcdef", EDEN_HOME: root };
+  expect(loadConfig({ ...prod, EDEN_PERSIST_KEY: HEX, EDEN_PERSIST_DISCARD: "1" }).persist!.discard).toBe(true);
+  expect(loadConfig({ ...prod, EDEN_PERSIST_KEY: HEX }).persist!.discard).toBe(false);
+  expect(() => loadConfig({ ...prod, EDEN_PERSIST_KEY: HEX, EDEN_PERSIST_DISCARD: "yes" })).toThrow(
+    /EDEN_PERSIST_DISCARD must be 1 or unset/,
+  );
+  expect(() => loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_PERSIST_DISCARD: "1" })).toThrow(/_DISCARD/);
+});

@@ -281,28 +281,36 @@ async function persistStore(config: ServerConfig): Promise<EncryptedFrozenDisk |
     refuseForeignKey: !p.discard,
   };
   // A mistyped key on an upgrade would otherwise delete every persisted user (R1's smoke): exit 2, nothing deleted.
-  const refused = (n: number, where: string) =>
+  const refused = (what: string) =>
     new Error(
-      `EDEN_PERSIST_KEY opens none of the ${n} persisted users ${where} (a mistyped or changed key?): set the key ` +
-        "they were written with, or EDEN_PERSIST_DISCARD=1 to discard them and start (D1071)",
+      `EDEN_PERSIST_KEY ${what} (a mistyped or changed key?): set the key they were written with, or ` +
+        "EDEN_PERSIST_DISCARD=1 to discard them and start (D1071)",
     );
   let store: EncryptedFrozenDisk | SharedFrozenDisk;
   try {
     store = makeStore();
   } catch (e) {
-    if (e instanceof PersistKeyMismatch) throw refused(e.foreign, `in ${p.dir}`);
+    if (e instanceof PersistKeyMismatch) throw refused(`opens none of the ${e.foreign} persisted users in ${p.dir}`);
     throw e;
   }
   if (store instanceof SharedFrozenDisk) {
-    // In a cluster the local files were emptied (the store is the copy of record): the store's blobs are sampled.
-    const { sampled, foreign } = await store.checkStoreKey(8);
-    if (!p.discard && sampled > 0 && foreign === sampled) throw refused(foreign, "sampled from the store");
-    if (p.discard && foreign > 0) {
-      console.error(
-        `eden: EDEN_PERSIST_DISCARD=1: ${foreign} of ${sampled} users sampled from the store were written with ` +
-          "another key; each is discarded when first read (D1071)",
+    // In a cluster the local files were emptied (the store is the copy of record): the store's key marker decides,
+    // or a sample of its blobs before there is one (D1071). A store that fails or hangs does not block the start.
+    const { verdict, sampled, foreign } = await store.verifyStoreKey(p.discard === true);
+    if (verdict === "foreign") {
+      throw refused(
+        sampled > 0
+          ? `opens none of the ${foreign} persisted users sampled from the store`
+          : "is not the key the store's persisted users were written with (its key marker)",
       );
     }
+    if (verdict === "discarded") {
+      console.error(
+        "eden: EDEN_PERSIST_DISCARD=1: the store's users were written with another key; they are no longer read and " +
+          "go with the store's 7-day age sweep (D1071)",
+      );
+    }
+    if (verdict === "unknown") console.error("eden: the store did not answer the key check in time; starting (D1071)");
   }
   const byKey = counts.get("discarded (key)") ?? 0;
   if (byKey > 0) {
