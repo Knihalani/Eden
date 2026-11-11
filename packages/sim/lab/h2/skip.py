@@ -29,7 +29,6 @@ def terms(text):
 def main():
     rows = [json.loads(l) for f in sys.argv[1:] for l in open(f) if l.strip()]
     rows = [r for r in rows if r.get("called")]
-    skip = lost = Counter()
     skip, lost = Counter(), Counter()
     yes_pos, plant_pos, plant_yes_pos = Counter(), Counter(), Counter()
     for r in rows:
@@ -49,10 +48,12 @@ def main():
                 lost[r["variant"]] += 1
             if yes:
                 lost[("any-yes", r["variant"])] += 1
-    print(f"calls {len(rows)}; the rule settles {sum(skip.values())} silent ({100 * sum(skip.values()) / len(rows):.1f}%)"
-          f" by variant {dict(skip)}")
-    print(f"  of those the check named the planted item: hidden {lost['hidden']}, control (look-alike) {lost['control']};"
-          f" pools with any yes: { {k[1]: v for k, v in lost.items() if isinstance(k, tuple)} }")
+    settled = sum(skip.values())
+    share = 100 * settled / len(rows)
+    print(f"calls {len(rows)}; the rule settles {settled} silent ({share:.1f}%), by variant {dict(skip)}")
+    anyyes = {k[1]: v for k, v in lost.items() if isinstance(k, tuple)}
+    print(f"  of those the check named the planted item: hidden {lost['hidden']}, control {lost['control']};"
+          f" pools with any yes: {anyyes}")
     print("yes items by pool position:", [yes_pos[i] for i in range(1, 16)])
     for v in ("hidden", "control"):
         print(f"{v}: planted item at position 1-15:", [plant_pos[(v, i)] for i in range(1, 16)],

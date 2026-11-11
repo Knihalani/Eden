@@ -146,7 +146,8 @@ function expand(text: string): string {
     const requests = (o.r ?? [])
       .filter(Array.isArray)
       .map((r) => ({ i: (r as unknown[])[0], q: (r as unknown[]).slice(1) }));
-    return JSON.stringify({ cards, requests });
+    // A reply with no `r` leaves its items uncovered (null), as the shipped parser reads a reply with no requests.
+    return JSON.stringify(o.r === undefined ? { cards } : { cards, requests });
   } catch {
     return "";
   }

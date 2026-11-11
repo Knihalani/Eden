@@ -531,8 +531,10 @@ Anthropic-direct lab figures, Haiku 5.5, thinking off.
   26.5% ($0.000171) and handed 20 fewer facts of 384 (D1050). The push reaches the call about 9 ms after the request,
   so the wait is the call itself.
 - **Card-and-intent call** (400 items, batches of 20): $0.000073 a item, 201 input tokens a item (66 cached) and 118
-  output: **output is about 80% of its price.** Batches of 40 cost 12% less a item and write requests for fewer
-  items; a compact reply (no key names) 23% less (D1052). Neither is taken.
+  output: **output is about 80% of its price.** On batches whose reply lists requests, batches of 40 cost the same a
+  item; a compact reply (no key names) 27% less (D1052). Neither is taken. The shipped prompt leaves the requests
+  list out of about a quarter of its replies (D1053), so its price per item given requests is about a third higher
+  than its price per item sent. A requests-only call (no cards) costs 45% less an item, 57% with a compact reply.
 - **Every item read for intent** (`cardsLean` false; D1053): a heavy user's backfill (about 1,500 items) is 74 calls
   and $0.058–0.060 against 7 calls and $0.0074–0.0080, with 70–74 s to idle against 3.5–6.3 s; about $0.000040 a
   item sent. At 50 new items a day **[EST]** about +$0.04 a user-month after a one-time +$0.051. Not taken: the same

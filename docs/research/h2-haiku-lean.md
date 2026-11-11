@@ -107,7 +107,8 @@ full`: Haiku's every-item requests replayed, the shipped lean selection reads th
 `cardsLean` false: every item reads them). Longtail's rare-connector items are topped up into a copy of
 `intent-v2.jsonl` first (`cards-enrich.ts --intent`, 107 items, 6 calls, about $0.01 [EST]). shipped against every is
 the owner's question; (the train5–6 and 5r–6r funnels of these three arms and the same three on all of train were
-run and read at $0 before this commit, while finding what "full" means in the funnel; no rule here depends on them); lean-full against every isolates what reading more items is worth with the same requests.
+run and read at $0 before this commit, while finding what "full" means in the funnel; no rule here depends on them);
+lean-full against every isolates what reading more items is worth with the same requests.
 
 **Pi pair (cap $8; addendum with the exact command before its first call).** `eden` against `eden~every`
 (`cardsLean` false), `--coverage full`, held-out families, Haiku 5.5 agent, Sonnet regrade; hidden raised (clustered
@@ -116,123 +117,6 @@ interval), confirmed concerns, Eden's background $ (card calls) and total $ per 
 **Cost per heavy user-month (measured, then arithmetic).** `cold-start.ts` through `buildPartner` for 3 users with
 and without `cardsLean` false: the one-time backfill's $ and calls. The daily trickle at 50 new items a day: items
 read a day under each setting × the measured $ a item.
-
-## 2. Results
-
-**In plain words.**
-
-- **Push check: nothing passes; the default is unchanged.** Feeding it a smaller pool cut its price per call by 26.5%,
-  short of the 30% bar. It also handed 20 fewer facts and 18 more look-alikes (§2a). Its wait is the call itself:
-  the push reaches the call 9 ms after the request, so starting it earlier saves under 1%. A no-model skip rule
-  would silence only 3% of calls.
-- **Card-and-intent call: nothing passes; the default is unchanged.** Most of its price is output. Batches of 40 save
-  12% per item but write requests for 29% fewer items. A compact reply saves 23%, short of the 30% bar (§2b).
-- **Full intent coverage is mostly a different requests file, not more items.** With the same requests, reading
-  every item finds no more facts than today's lean selection, and slightly fewer look-alikes. M11's "+19" compared
-  two files (§2c). For a heavy user it adds about $0.05 once and about $0.04 a month in Haiku spend [EST], and a
-  new user's background enrichment takes about 72 s instead of 5 s.
-
-### 2a. Workstream 1: the push check
-
-**Funnel** (train seeds 42–43, 576 tasks a seed, live Haiku 5.5 check at the shipped wait of 1,500 ms, two processes
-at once; `p2/calls.py`, `n2/compare.py`). Run at c26b4f2c.
-
-| Arm | Calls | $ a call | in (cached) / out tokens | p50 / p90 s | TTFT p50 | Planted handed | Decoy handed | Neutral packets |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| base (15 items × 200 chars) | 1,121 | 0.000232 | 2,738 (1,184) / 128 | 0.92 / 1.34 | 0.45 | 292 | 81 | 115 |
-| A (10 × 140) | 1,117 | 0.000171 (−26.5%) | 2,146 (1,171) / 123 | 0.89 / 1.36 | 0.45 | **272 (−20)** | **99 (+18)** | **126 (+11)** |
-
-- **A fails every clause** (cost −26.5% against −30%; p50 −3%; planted −20 against a floor of −10; decoys +18 and
-  neutral +11 against ceilings of +10). Seed by seed, A changed the planted handed +4 −14 and +3 −13, and the decoys
-  +29 −14 and +20 −17. Some of that is the check's own noise (D931: it names the same items 75–79% of the time), but
-  the rule is read as written.
-- **B (12 × 160) was not run.** B reads more of every pool than A, so its input, and with it its $ a call, cannot
-  fall further than A's. B cannot reach −30% [EST, by construction].
-- **Where the check's yes items sit (base, `h2/skip.py`).** Of the planted facts the check named on hidden tasks,
-  8 of 150 sat at pool positions 11–15, the ones A drops (74, 33, 11, 11 and 5 at positions 1–5). That is about the −20
-  above over 384 tasks, with the noise. The check's whole price is the pool. Its instructions are cached and its
-  output is a fixed shape (D822). So no cut in what it reads keeps its facts at −30%.
-- **Skip rule** (no read item shares a content word or number with the request): on base's 392 dumped calls it
-  settles 12 silent (3.1%, against ≥ 10%), and among them the check had named a planted fact once and something in 4
-  pools. Fails; not built. M7's finding stands: Haiku's yes is semantic (D930).
-- **Speculative start.** With no checker and connectors at their profiles' latency (`-- --time 1`, train1–3 seed 42,
-  124 handed pushes), the push reaches its packet in **8.7 ms at p50 and 18.5 ms at p90**. That is the most a check
-  started earlier could overlap, against a call of about 920 ms: under 1% (the rule's bound is 10%). Not built. The
-  push already runs on the index before the poll answers (`readerPushBehind`), so the check starts within milliseconds
-  of the request.
-- **Prompt caching** is already where it can be (§0); a 1-hour TTL would only pay where traffic leaves 5-minute gaps,
-  and the check's prefix is shared by every user. **A tighter reply** was measured by P2 (D822). It halved the output
-  and cut p50 by 0.19 s, and let look-alikes in. Not re-run.
-
-No arm went to Pi; the default's check is unchanged.
-
-### 2b. Workstream 2: the card-and-intent call
-
-**Screen** (`h2-cards-screen.ts`, 400 items of train1–6 seed 41 as the shipped enricher sends them for intent, 211
-prefilter passes; Haiku 5.5, thinking off; 70 calls, $0.105). Run at 90d1a665.
-
-| Arm | Calls | $ a item | in (cached) / out tokens a item | p50 s a call | Items carded | Items given requests | Requests a item | Card kind / request words vs B20 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| B20 (shipped) | 20 | 0.0000729 | 201 (66) / 117.5 | 9.3 | 227 | 335 | 2.38 | |
-| B20b (the same again) | 20 | 0.0000685 | 201 (66) / 108.7 | 8.2 | 217 | 294 | 2.00 | 0.820 / 0.358 |
-| B40 | 10 | 0.0000644 (−12%) | 167 (33) / 101.2 | 15.3 | 218 | **239 (−29%)** | 1.56 | 0.745 / 0.334 |
-| K20 (compact reply) | 20 | 0.0000561 (−23%) | 201 (63) / 83.1 | 7.2 | 225 | 399 (+19%) | 2.46 | 0.760 / 0.362 |
-
-- **Output is 80% of a card call's price** [EST from B20's tokens: 117.5 out against 135 uncached and 66 cached in a
-  item]. That fixes what each lever can do. More items a call saves on the cached instructions and the per-item
-  instruction overhead (−12%). But Haiku then writes requests for far fewer items (239 against 294–335): it shortens
-  its answer over a long batch. A compact reply drops the key names (−29% output tokens, −23% $ a item) and keeps
-  every item's requests. Neither reaches −30%. Against the mean of the two B20 runs, K20 is −20%.
-- Haiku's own repeat (B20b) agrees with B20 on the card kind for 82% of items and shares 36% of request words, so
-  B40's and K20's agreement (75–76%, 33–36%) sits near Haiku's own noise.
-- By the rule neither goes to the funnel; the screen stays as lab tooling. **The Message Batches API stays rejected
-  (D242)**: the wait it costs a new user and the shipped route have not changed.
-
-### 2c. Workstream 3: full intent coverage (a decision input; not promoted)
-
-**What "full" is.** The lab's "full" index (`--coverage full`) replays `intent-v2`, Haiku's requests written for every
-item in separate batches. Under the default's lean selection (`cardsLean`, 7 days) the enricher reads 6,560 items'
-requests from it on train seeds 41–42. With `cardsLean` false it reads 35,486. The shipped file (`cards-shipped`,
-what `cold-start.ts` recorded through `buildPartner`) has requests for 2,805 of the items the lean selection reads,
-so "shipped" against "full" mixes two things: which items are read, and which recorded requests exist for them.
-
-**Funnel ($0; seeds 41–42).** Run at main 39237c4b (no engine change since).
-
-| Families | shipped (default) | lean-full (default, Haiku every-item requests) | every (`cardsLean` false, the same requests) |
-| --- | --- | --- | --- |
-| train1–6, hidden / decoys of 384 | 281 / 264 | 315 / 276 | 305 / 266 |
-| train5–6, 5r–6r, hidden / decoys of 256 | 196 / 159 | 213 / 171 | 210 / 168 |
-| the same, neutral given a packet of 256 | 243 | 240 | 232 |
-| longtail, hidden / decoys of 48 | 30 / 28 | 28 / 29 | 30 / 28 |
-| longtail, neutral given a packet of 48 | 36 | 35 | 31 |
-| held-out pooled (n 304 hidden) | 226 / 187 | 241 / 200 | 240 / 196 |
-
-- **Reading every item adds nothing over today's selection when the requests are the same**: on the held-out
-  families pooled, 240 against 241 facts, 196 against 200 look-alikes, 263 against 275 neutral packets; on all of
-  train 305 against 315.
-- **The gain M11 saw (D971: 300 / 252 against 281 / 264) is the requests file**, not coverage: "lean-full" reads the
-  same items as shipped and finds +15 facts on the held-out families. The shipped file lacks requests for most of
-  the items the funnel's lean selection reads, probably because it was recorded on `cold-start.ts`'s own clock and
-  batches. In the funnel (no wall clock) those items get no requests [EST: the cause is not measured here]. So the funnel's
-  shipped figure may understate what the shipped pipeline writes in a deployment. That is a lab question
-  (D714, D872), worth its own session; it changes no engine figure here.
-- 15 of longtail's 48 planted hidden facts have no requests in any file (Haiku wrote none, or their items are built
-  differently by the lab's two world builders); the longtail rows read the same in all three arms.
-
-**Cost** (`cold-start.ts` through `buildPartner`, users w41–w43, about 1,500 items each; Anthropic-direct lab figures):
-
-| | default (lean) | every item |
-| --- | --- | --- |
-| items sent to the card call, backfill | 107–113 | 1,468–1,474 |
-| calls; $ a user, backfill | 7; $0.0074–0.0080 | 74; $0.0575–0.0605 |
-| time to idle (enrichment) | 3.5–6.3 s | 69.8–74.2 s |
-
-A heavy user (50 new items a day) [EST]: today about 14 of 50 a day reach the card call. That is COST-MODEL's 10 of
-36 (CL3), scaled. Every item sends about 49. At the measured $0.000040 a item sent (every-item backfill: $0.0587
-over 1,470 items), that adds 35 × $0.00004 ≈ **$0.0014 a day, about $0.04 a user-month**, on top of a one-time
-**+$0.051** backfill. So about **+$0.09 in a heavy user's first month and +$0.04 a month after**, against today's
-$0.026 for a first month (COST-MODEL). Roughly 3–4 times today's background spend, for no measured gain in facts
-on the funnel. The Pi pair (§2d) is the live read.
 
 ### 1d. Addendum (before the Pi pair's first call): workstream 3's Pi pair, exactly
 
@@ -273,3 +157,240 @@ changed. The shipped first example shows `{"cards":[...]}` alone, and B20 and B2
 3 and 5 of 20 replies. Read: batches with no requests list, items given requests, $ a item, card kind and request
 words against B20. `--arms B20,B20r,R20,RK20`. A measurement: a prompt change for the shipped call would be a trial of
 its own (it changes every card cache key's replay), pre-registered in a later session if this reads well.
+
+## 2. Results
+
+**In plain words.**
+
+- **The push check: nothing passed, and the default is unchanged.** A smaller pool cut its price per call by 26.5%,
+  short of the 30% bar, and it handed 20 fewer facts and 18 more look-alikes (§2a). Its wait is the call itself: the
+  push reaches the call about 9 ms after the request, so starting it earlier saves under 1%. A no-model skip rule
+  would settle only 3.5% of calls.
+- **The card-and-intent call: nothing passed, and the default is unchanged.** Output is about 80% of its price.
+  Batches of 40 save nothing once the batches with no requests list are set aside. A compact reply saves 27%, short
+  of 30% (§2b).
+- **A finding along the way: the shipped card call leaves the whole requests list out of about a quarter of its
+  replies** (15 of 60 batches over three runs), so those items get no intent requests. Showing the list in the
+  prompt's first example cut it to 1 of 20 and raised the items given requests from 260 to 379 of 400, at no extra
+  cost an item. That needs its own trial: it changes what every card cache replays (§2b, D1053).
+- **A requests-only call** (if cards go micro or off, M10) costs 45% less an item (57% with a compact reply) and
+  answers in 3.4–4.8 s instead of 8.5 s. Its requests overlap B20's less than B20's overlap its own repeat (§2b).
+- **Full intent coverage is mostly a different requests file, not more items.** With the same requests, reading
+  every item finds no more facts than today's lean selection, on the funnel (240 against 241 on the held-out
+  families) and on Pi (−1.8 points, −5.5..+2.0). M11's "+19" compared two files. For a heavy user it adds about
+  $0.05 once and $0.04 a month [EST], and a new user's background enrichment takes about 72 s instead of 5 s (§2c).
+
+Anthropic $3.13 in all: `.local/h2/ledger.jsonl` books $1.43 (the Sonnet regrade's $0.58 included), the Modal shards'
+ledgers $1.70. Modal compute: four shards of about 2.5 minutes each.
+
+### 2a. Workstream 1: the push check
+
+**Funnel** (train seeds 42–43, 576 tasks a seed, live Haiku 5.5 check at the shipped wait of 1,500 ms, two processes
+at once; `p2/calls.py`, `n2/compare.py`; run at c26b4f2c):
+
+| Arm | Calls | $ a call | in (cached) / out tokens | p50 / p90 s | TTFT p50 | Planted handed | Decoy handed | Neutral packets |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base (15 items × 200 chars) | 1,121 | 0.000232 | 2,738 (1,184) / 128 | 0.92 / 1.34 | 0.45 | 292 | 81 | 115 |
+| A (10 × 140) | 1,117 | 0.000171 (−26.5%) | 2,146 (1,171) / 123 | 0.89 / 1.36 | 0.45 | **272 (−20)** | **99 (+18)** | **126 (+11)** |
+
+- **A fails every clause.**
+  - Cost a call −26.5% against a bar of −30%; p50 −3%.
+  - Planted −20 against a floor of −10.
+  - Decoys +18 and neutral packets +11 against ceilings of +10.
+  - Seed by seed, A moved planted handed +4 −14 and +3 −13, and decoys +29 −14 and +20 −17. Part of that is the
+    check's own noise: it names the same items only 75–79% of the time (D931). The rule is read as written.
+- **B (12 × 160) was not run.** It reads more of every pool than A, so its $ a call cannot fall further than A's,
+  and A missed the bar [EST, by construction].
+- **Where the check's yes items sit** (base's 1,125 dumped calls, `h2/skip.py`).
+  - Of the 289 planted facts the check named on hidden tasks, 12 sat at pool positions 11–15, the ones A drops. By
+    position 1–5 the counts are 150, 66, 19, 12 and 6.
+  - So the dropped positions explain about 12 of A's −20; the 140-character items and the check's noise the rest.
+  - The check's price is the pool: its instructions are cached, and its output is a fixed shape (D822). So no cut
+    of what it reads keeps its facts at −30%.
+- **Skip rule** (no item read shares a content word or a number with the request). On the 1,125 calls it settles 39
+  silent (3.5%, against a bar of ≥ 10%). In those pools the check had named the planted fact twice, and named
+  something in 6. It fails and is not built: Haiku's yes is semantic, as M7 found (D930).
+- **Speculative start.** Measured at $0 with no checker wired, unlike the pre-registered live run: train1–3 instead
+  of train1–2, seed 42, connectors at their profiles' latency (`-- --time 1`), 124 handed pushes.
+  - The push reaches its packet in **8.7 ms at p50 and 18.5 ms at p90**. That is the most a check started earlier
+    could overlap, against a call of about 920 ms: under 1%, against a bound of 10%. Not built.
+  - The push already runs on the index before the poll answers (`readerPushBehind`), so the check starts within
+    milliseconds of the request.
+- **Prompt caching** is already where it can be (§0). A 1-hour TTL would pay only where traffic leaves 5-minute gaps,
+  and the check's prefix is shared by every user. **A tighter reply** was measured by P2 (D822): it halved the
+  output, cut p50 by 0.19 s and let look-alikes in. Not re-run.
+
+No arm went to Pi; the default's check is unchanged (D1050, D1051).
+
+### 2b. Workstream 2: the card-and-intent call
+
+**Screen** (`h2-cards-screen.ts`; `h2/w2.py` reads it). The 400 items are those of train1–6 seed 41 that the
+shipped enricher sends for intent: the strict prefilter's passes (211) and the rejects `readForIntent` keeps. Unlike
+the enricher, the screen does not apply sentence reuse or known-card reuse. Haiku 5.5, thinking off, called directly
+with `cardMessages` and the maker's output cap (not through `ModelCardMaker`). Run 1 at 90d1a665: 70 calls, $0.105.
+Run 2 (§1e) at 073b97e5: 80 calls.
+
+"Listed-only" is the $ a item over the batches whose reply held a requests list. A reply with none leaves its whole
+batch without requests, and is cheaper because it is shorter, so it flatters the plain $ a item.
+
+| Run, arm | Calls | $ a item | listed-only $ a item | Batches with no requests list | in (cached) / out tokens a item | p50 s | Items carded | Items given requests | Requests a item |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1, B20 (shipped) | 20 | 0.0000729 | 0.0000765 | 3 of 20 | 201 (66) / 117.5 | 9.3 | 227 | 335 | 2.38 |
+| 1, B20b (the same again) | 20 | 0.0000685 | 0.0000741 | 5 of 20 | 201 (66) / 108.7 | 8.2 | 217 | 294 | 2.00 |
+| 1, B40 | 10 | 0.0000644 | 0.0000767 (+0%) | 4 of 10 | 167 (33) / 101.2 | 15.3 | 218 | 239 | 1.56 |
+| 1, K20 (compact reply) | 20 | 0.0000561 | 0.0000561 (−26.7%) | 0 of 20 | 201 (63) / 83.1 | 7.2 | 225 | 399 | 2.46 |
+| 2, B20 (shipped) | 20 | 0.0000665 | 0.0000766 | 7 of 20 | 201 (63) / 104.0 | 8.5 | 224 | 260 | 1.80 |
+| 2, B20r (list in the first example) | 20 | 0.0000759 | 0.0000770 (+1%) | 1 of 20 | 201 (63) / 122.7 | 9.2 | 237 | 379 | 2.53 |
+| 2, R20 (requests only) | 20 | 0.0000419 | 0.0000419 (−45%) | 0 of 20 | 152 (0) / 53.4 | 4.8 | — | 387 | 2.87 |
+| 2, RK20 (requests only, compact) | 20 | 0.0000333 | 0.0000333 (−57%) | 0 of 20 | 151 (0) / 36.4 | 3.4 | — | 391 | 2.30 |
+
+Percentages are against the same run's B20, listed-only.
+
+Agreement with the same run's B20 on the 400 items is read two ways. Card kind is compared on every item. Request
+words are the Jaccard of content words of four letters or more, over every item (an item one arm left without
+requests has no words; both without counts as 1) and over the items both arms gave requests:
+
+| Arm | Card kind | Request words, every item | Request words, both requested (items) |
+| --- | --- | --- | --- |
+| B20b (Haiku's own repeat) | 0.820 | 0.358 | 0.478 (250) |
+| B40 | 0.745 | 0.334 | 0.417 (217) |
+| K20 | 0.760 | 0.362 | 0.434 (334) |
+| B20r | 0.767 | 0.275 | 0.461 (239) |
+| R20 | — | 0.234 | 0.363 (250) |
+| RK20 | — | 0.226 | 0.345 (253) |
+
+- **Output is about 80% of the call's price** [EST from B20's tokens a item: 117.5 out, 135 uncached and 66 cached
+  in]. That fixes what each lever can do.
+- **More items a call saves nothing.** On the batches that list requests, B40 costs the same a item as B20. Its lower
+  plain figure came from 4 of its 10 replies having no requests list (160 items).
+- **A compact reply saves 26.7%** a item, short of the 30% bar. It also changed the example reply (`r` shown beside
+  `c`), which is the likelier reason it never dropped the list. Neither arm goes to the funnel (D1052).
+- **The shipped prompt drops the requests list** (D1053; found by the review).
+  - B20 left the whole list out of 3, 5 and 7 of 20 replies in three runs: 15 of 60, 25%. Within batches that
+    listed requests, almost every item got some.
+  - In `CardEnricher` an item in such a batch keeps its card and is not read again for intent. The cold-start runs
+    agree: 93–109 of 107–113 items sent got requests under the default.
+  - The likely cause is the first format sentence. Its example reply is `{"cards":[...]}` alone; the requests key
+    appears only in the intent paragraph after it.
+  - B20r adds `"requests":[...]` to that first example and nothing else: 1 of 20 replies without the list, 379 items
+    given requests against 260, at the same price per item covered. Its card kinds agree with B20 at 0.767, against
+    Haiku's own 0.820.
+  - Not taken here. A shipped prompt change re-keys every replayed card and intent cache, so it needs a trial of its
+    own with fresh shipped caches, a funnel and a Pi pair. Recommended as the next session's first step.
+- **Requests only** (R20, RK20; the parent's ask, for M10).
+  - 45% and 57% less an item, 3.4–4.8 s a call against 8.5 s, and no dropped lists.
+  - Its prompt (about 250 tokens) is under Haiku's 512-token cache minimum, so none of it is cached; it is still the
+    cheapest shape.
+  - Its requests share fewer words with B20's (0.36 and 0.35 where both requested) than B20's repeat does (0.48):
+    without the card part, Haiku writes different requests. Their funnel effect is not measured. That is the step
+    before any requests-only call ships.
+- **The Message Batches API stays rejected (D242):** the wait it costs a new user and the shipped route have not
+  changed.
+
+### 2c. Workstream 3: full intent coverage (a decision input; not promoted)
+
+**What "full" is.**
+
+- The lab's "full" index (`--coverage full`) replays `intent-v2`: Haiku's requests written for every item, in
+  separate batches.
+- Under the default's lean selection (`cardsLean`, 7 days), the funnel's enricher reads 6,560 items' requests from
+  it on train seeds 41–42. With `cardsLean` false it reads 35,486.
+- The shipped file (`cards-shipped`, recorded by `cold-start.ts` through `buildPartner`) holds requests for only
+  2,805 of the items the lean selection reads.
+- So "shipped" against "full" mixes two things: which items are read, and which recorded requests exist for them.
+
+**Funnel ($0; seeds 41–42; run at main 39237c4b, no engine change since):**
+
+| Families | shipped (default) | lean-full (default, Haiku's every-item requests) | every (`cardsLean` false, the same requests) |
+| --- | --- | --- | --- |
+| train1–6, hidden / decoys of 384 | 281 / 264 | 315 / 276 | 305 / 266 |
+| train5–6, 5r–6r, hidden / decoys of 256 | 196 / 159 | 213 / 171 | 210 / 168 |
+| the same, neutral given a packet of 256 | 243 | 240 | 232 |
+| longtail, hidden / decoys of 48 | 30 / 28 | 28 / 29 | 30 / 28 |
+| longtail, neutral given a packet of 48 | 36 | 35 | 31 |
+| held-out pooled (304 hidden): hidden / decoys / neutral packets | 226 / 187 / 279 | 241 / 200 / 275 | 240 / 196 / 263 |
+
+**Pi pair** (§1d, at 2246d56d: train5, train6, train5r, train6r, seeds 41–44, hidden, control and neutral, 3,072
+task runs, no 429; Sonnet 5.5 regraded 1,035 answers, 0 failed; `bench_report.py --sonnet`; $1.70 the run, $0.58 the
+regrade):
+
+| `eden~every` − `eden`, both `--coverage full` | |
+| --- | --- |
+| Hidden raised (Sonnet) | −1.8 points (−5.5..+2.0), 78.3 vs 80.1, n 512 pairs over 128 templates |
+| Confirmed concerns, control and neutral | +0.0 (−0.3..+0.3): 1 vs 1 of 1,024 |
+| Eden's per-task $ per 1,000 tasks (card calls replayed, so not in it) | −0.009 (−0.016..−0.002) |
+| Wall a task | −0.045 s (−0.090..+0.000) |
+| `ask_context` calls a task | +0.043 (+0.005..+0.081) |
+
+- **Reading every item adds nothing over today's selection when the requests are the same.**
+  - Funnel, held-out pooled: 240 against 241 facts, 196 against 200 look-alikes, 263 against 275 neutral packets.
+  - Funnel, all of train: 305 against 315.
+  - Pi: −1.8 points, with an interval from −5.5 to +2.0.
+- **M11's gain (D971: 300 / 252 against 281 / 264) is the requests file, not coverage.** "lean-full" reads the same
+  items as "shipped" and finds +15 facts on the held-out families.
+  - The shipped file lacks requests for most of the items the funnel's lean selection reads. Two likely causes
+    [EST, neither measured here]: it was recorded on `cold-start.ts`'s own clock and batches, and the shipped prompt
+    drops whole requests lists (§2b).
+  - So the funnel's shipped figure may understate what the shipped pipeline writes in a deployment. Fixing the
+    dropped lists is the cheaper route to that gain (D1053).
+- 15 of longtail's 48 planted hidden facts have no requests in any file: Haiku wrote none, or the lab's two world
+  builders build their items differently. The longtail rows differ by at most two facts between arms.
+
+**Cost** (`cold-start.ts` through `buildPartner`, users w41–w43, about 1,500 items each; Anthropic-direct lab
+figures):
+
+| | default (lean) | every item |
+| --- | --- | --- |
+| Items sent to the card call, backfill | 107–113 | 1,468–1,474 |
+| Calls; $ a user, backfill | 7; $0.0074–0.0080 | 74; $0.0575–0.0605 |
+| Time to idle (enrichment) | 3.5–6.3 s | 69.8–74.2 s |
+
+A heavy user at 50 new items a day [EST]:
+
+- **Today:** about 14 of the 50 reach the card call a day. That is COST-MODEL's 10 of 36 (CL3), scaled. Scaled the
+  same way, a first month costs about $0.031 (COST-MODEL: $0.026 at 36 a day).
+- **Every item:** about 49 a day reach the call. At the measured $0.000040 an item (the every-item backfill: $0.0587
+  over 1,470 items), the extra 35 a day add about **$0.0014 a day, $0.04 a user-month**, on top of a one-time
+  **+$0.051** backfill.
+- **Together:** about **+$0.09 in a heavy user's first month and +$0.04 a month after**, roughly three to four times
+  today's background spend, for no measured gain in facts. Not promoted (the brief); the owner's call.
+
+## 3. Decisions
+
+- **D1050** Rejected: a leaner push-check pool (`pushCheckItems` 10, `pushCheckItemChars` 140). Both settings already
+  exist; nothing changes.
+- **D1051** Rejected, not built: a no-model skip rule and a speculative start for the push check.
+- **D1052** Rejected: more items a card call (40) and a compact card reply. The Message Batches API stays rejected
+  (D242 unchanged).
+- **D1053** Finding: the shipped card prompt leaves the whole requests list out of about a quarter of its replies. A
+  trial of the fix (B20r's example) is recommended.
+- **D1054** Finding: full intent coverage adds no facts over the lean selection with the same requests (funnel and
+  Pi), at about +$0.04 a heavy user-month [EST].
+- **D1055** Lab tooling: `h2-cards-screen.ts` (with `--show`, `--arms`), `h2/skip.py`, `h2/w2.py`, `readForIntent`
+  exported from `@eden/engine`, and the `p2/calls.py` fix (ledger rows without a time to first token).
+
+## 4. Reproduce
+
+```bash
+unset OPENROUTER_API_KEY; L="--spend-ledger .local/h2/ledger.jsonl --spend-cap 25 --spend-headroom 0.5"
+# §2a, one process a seed (S = 42, 43); arm A adds --set '{"pushCheckItems":10,"pushCheckItemChars":140}'
+bun run funnel --suite train --seeds S --jobs 1 --json B-S.json -- --neutral --check live \
+  --check-cache c-S.jsonl --check-dump B-S.dump.jsonl $L --run-label h2-w1-base-S
+python3 -I packages/sim/lab/p2/calls.py .local/h2/ledger.jsonl
+python3 -I packages/sim/lab/n2/compare.py --arm base=B-42.json --arm A=A-42.json
+python3 -I packages/sim/lab/h2/skip.py B-42.dump.jsonl B-43.dump.jsonl
+bun run funnel --suite train1,train2,train3 --seeds 42 --jobs 3 --json t1.json -- --time 1       # deliveryMs
+# §2b
+bun packages/sim/src/lab/h2-cards-screen.ts --items 400 --out w2.jsonl $L --run-label h2-w2
+bun packages/sim/src/lab/h2-cards-screen.ts --items 400 --arms B20,B20r,R20,RK20 --out w2r.jsonl $L
+python3 -I packages/sim/lab/h2/w2.py w2.jsonl; python3 -I packages/sim/lab/h2/w2.py w2r.jsonl
+# §2c: the funnels (add --suite train for the train rows); longtail's top-up first
+bun packages/sim/src/lab/cards-enrich.ts --dir .local/h2/lt --funnel longtail --seeds 41,42 --intent \
+  --model claude-haiku-5-5 --batch 20 $L --spend .local/h2/lt/spend.jsonl --cap 0.1   # intent-v2.jsonl copied in
+bun run funnel --suite train5,train6,train5r,train6r --seeds 41,42 --jobs 4 --coverage shipped -- --neutral
+bun run funnel --suite train5,train6,train5r,train6r --seeds 41,42 --jobs 4 --coverage full -- --neutral
+bun run funnel --suite train5,train6,train5r,train6r --seeds 41,42 --jobs 4 --coverage full \
+  --set '{"cardsLean":false}' -- --neutral
+bun packages/sim/src/lab/cold-start.ts --users user:41,user:42,user:43 [--set '{"cardsLean":false}'] $L
+# the Pi pair and its regrade: §1d's commands
+```
