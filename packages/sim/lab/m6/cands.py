@@ -209,6 +209,17 @@ class Sign(torch.autograd.Function):
         return g * (x.abs() <= 1).float()
 
 
+def ternary_bag(weight, ids, offs):
+    """Sum over each bag of ternary weights {-a, 0, +a} (a = mean |w| of the whole table, a constant), quantising
+    only the rows the batch uses; straight-through to the float latent."""
+    a = weight.detach().abs().mean()
+    uniq, inv = torch.unique(ids, return_inverse=True)
+    rows = weight[uniq]
+    q = torch.where(rows > 0.5 * a, a, torch.where(rows < -0.5 * a, -a, torch.zeros_like(rows)))
+    rows = rows + (q - rows).detach()
+    return nn.functional.embedding_bag(inv, rows, offs, mode="sum")
+
+
 class LR(nn.Module):
     """h1/h5/h6/h9: a weight per hashed feature plus a dense head (int8 at export)."""
 
@@ -238,9 +249,7 @@ class Xor(nn.Module):
         self.head = nn.Linear(64 + N_DENSE, 1)
 
     def code(self, emb, bn, ids, offs):
-        w = Ternary.apply(emb.weight)
-        x = nn.functional.embedding_bag(ids, w, offs, mode="sum")
-        return Sign.apply(bn(x))
+        return Sign.apply(bn(ternary_bag(emb.weight, ids, offs)))
 
     def forward(self, d):
         p = self.code(self.ep, self.bnp, d["ids"], d["offs"])
@@ -263,15 +272,18 @@ class Thread(nn.Module):
         self.lr = LR()
 
     def forward(self, d):
-        w = Ternary.apply(self.ep.weight)
-        p = Sign.apply(self.bn(nn.functional.embedding_bag(d["ids"], w, d["offs"], mode="sum")))
+        p = Sign.apply(self.bn(ternary_bag(self.ep.weight, d["ids"], d["offs"])))
         x = torch.cat([p, d["dense"]], -1)
         # Group units by item (consecutive runs of the same row), pad, run the GRU.
         seg = d["seg"]
-        out = torch.zeros(x.shape[0], 64)
-        for a, b in seg:
-            o, _ = self.gru(x[a:b].unsqueeze(0))
-            out[a:b] = o.squeeze(0)
+        lens = torch.tensor([b - a for a, b in seg])
+        pad = torch.zeros(len(seg), int(lens.max()), x.shape[1])
+        for i, (a, b) in enumerate(seg):
+            pad[i, : b - a] = x[a:b]
+        packed = nn.utils.rnn.pack_padded_sequence(pad, lens, batch_first=True, enforce_sorted=False)
+        o, _ = self.gru(packed)
+        o, _ = nn.utils.rnn.pad_packed_sequence(o, batch_first=True)
+        out = torch.cat([o[i, : b - a] for i, (a, b) in enumerate(seg)])
         return self.head(torch.cat([out, d["dense"]], -1)).squeeze(-1) + self.lr(d)
 
 
@@ -447,8 +459,12 @@ report = {"arch": A.arch, "epochs": []}
 if A.arch == "h7":
     import lightgbm as lgb
 
-    m = lgb.LGBMClassifier(n_estimators=300, num_leaves=31, learning_rate=0.05, verbose=-1)
-    m.fit(dt["dense"].numpy(), dt["y"].numpy())
+    m = lgb.train(
+        {"objective": "binary", "num_leaves": 31, "learning_rate": 0.05, "verbose": -1},
+        lgb.Dataset(dt["dense"].numpy(), dt["y"].numpy()),
+        num_boost_round=300,
+    )
+    m.predict_proba = lambda x: np.stack([1 - m.predict(x), m.predict(x)], 1)
     sv = m.predict_proba(dv["dense"].numpy())[:, 1]
     best = tune(val, dv, sv)
     ep = {"epoch": 0, "auc_val": auc(dv["y"].numpy(), sv)}
