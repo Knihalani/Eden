@@ -173,7 +173,6 @@ import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Bu
 import { parseSuites } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
-import { hitsPacket } from "./lexical-hits";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
@@ -1329,6 +1328,9 @@ async function runWorld(
       }
       // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
       if (hits) {
+        // Loaded only for this arm (B19, D1041): lexical-hits needs engine exports an older Eden tree lacks, and pi-ab
+        // must load against any commit's engine (packages/sim/lab/b19/arm-tree.sh).
+        const { hitsPacket } = await import("./lexical-hits");
         const h = hitsPacket(world, task.text);
         if (h) {
           r.injectedItems += h.citations.length;
