@@ -163,17 +163,18 @@ reworded 579/504 before it):
 The full index lifts train's hidden level by 59 of 768 (7.7 points) and its decoys by 25. This matches D714's reading
 of seeds 41–44 against 45–48. The reworded gap is the same under both coverages (−56 and −56 hidden).
 
-**Recommendation: make shipped coverage the default for train seeds, and keep the label on every run.**
+**Shipped coverage is now the funnel's default (D877).** The owner's directive was to ship now, so it was flipped in
+this branch instead of at the next wave.
 
-- The funnel's headline should be the level a deployment would see. The full index is the generous case (D714,
-  D715), and D715 found full coverage not worth its cost as a product lever, so it should not set the lab's level.
-- Paired deltas inside one run are unaffected either way.
-- Switching mid-wave would move the 315/276 baseline (seeds 41–42) that every open branch compares against. So:
-  1. Today every run prints and records its coverage. The funnel prints `coverage:` beside the score and the TOTAL
-     line and writes it in the JSON; pi-ab and hermes-ab's intent note says "coverage full".
-  2. `--coverage shipped` is available now.
-  3. The parent flips the funnel's default to `shipped` (and pi-ab's `--intent default` to the shipped file) at the
-     start of the next wave, re-recording the main baseline in one commit.
+- `bun run funnel` replays the shipped caches wherever they cover the run. It falls back to the full index elsewhere,
+  or when a run names its own cards or intent.
+- The re-recorded baseline (train seeds 41–42, default, stub reader) reads hidden 281/384 and decoys 264/384.
+  `--coverage full` still reads 315/276.
+- A no-model screen refuses a `--baseline` recorded at the other coverage.
+- The reader replay cache of recipe 2a and the retrieval screen were recorded at full coverage, so they pass
+  `--coverage full`. Under shipped, recipe 2a misses 1,278 prompts against 417 at full.
+- pi-ab and hermes-ab still replay the full index by default (their intent line says "coverage full"). Switching them
+  is the parent's call.
 
 ## 4. Costs
 

@@ -67,7 +67,7 @@ a benchmark answers its question and no other, and each has a bias that moves it
 | Benchmark | Question it answers | Known biases (what it cannot see) |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `bun run eval` | Did an engine change move behaviour on the hand-written scenarios? (precision 0.65, recall 0.52, falseFireRate 0 on main) | Its `falseFireRate` does not count candidates on nothing-to-add requests, and cards and intent are inert in it (B1). A merge gate, not a level |
-| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); intent at full coverage on seeds 41–44 (B8, D714: pass `--coverage shipped` for a deployment's); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
+| Funnel on `train` (`bun run funnel`) | Does a change surface more planted facts and fewer decoys, at $0, one request a session? | Imperative English requests only (B4: use `reworded`); every template's constraint and decoy in one world at once (B6); the funnel always asks (B13); shipped coverage by default since D877 (281/264 on seeds 41–42; `--coverage full`, the older 315/276, is the generous index, D714); facts in the world's five sources only (B5: use `longtail`); one author per suite, tuned on for weeks |
 | Funnel on `train1r`–`train6r` | Does the push start for needs, plans, questions and non-English requests (Q6)? | Rewordings by one writer; the six non-English requests a suite are a handful per language; slot clearing reads the original request, so worlds equal train's |
 | Funnel on `longtail` | Is a fact in a rarely used connector found when it is there from the backfill? | Easy at one request a session (every connector is read at the backfill); its question is a days one. 24 templates, P7's own; rare connectors hold only 6–8 filler items each, so their search is easier than a real notes app's |
 | `days-calls.ts` ($0, weeks) | Connector calls and facts handed over a user's days and weeks: sweeps, polls, dormancy, `--arrive-days` | No agent and no model (facts handed, not facts used); Eden's clock moves while the world's "now" is fixed, so items age against requests written for it (worse over weeks); weeks plans repeat neutral requests (only on templates never planted for the user, D874); recaps move each day's planted times |
@@ -633,7 +633,8 @@ The cache is plain JSONL that a live reader appends to, so it is unpacked under 
 
 ```bash
 gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz > .local/reader-haiku-train-4142-intent.jsonl
-bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/haiku-default.json -- --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --coverage full --json .local/haiku-default.json \
+  -- --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-haiku-train-4142-intent.jsonl
 ```
 

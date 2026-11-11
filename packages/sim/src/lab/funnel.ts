@@ -33,13 +33,14 @@
  *   as `-- --intent`, when the configuration has intent and cards and the run's suites and seeds are all covered, so
  *   the screen runs the shipped default. `none` leaves intent inert (the pre-D158 screens); a file, or
  *   `-- --intent F`, replays that file.
- * - `--coverage full|shipped` (P7, D872): which card and intent index the run replays. `full` (the default) is the
- *   above: the checked-in cards and `cards-enrich.ts --intent`'s every-item requests, about seven times the items a
- *   deployment's enricher writes requests for (D714). `shipped` replays `cards-shipped.jsonl.gz`, the cards and
- *   requests the shipped enricher (`buildPartner`'s own `CardEnricher`) made for each world (`cold-start.ts
- *   --cards-out`; SHIPPED_COVERS in cards-disk.ts), as both `--cards` and `--intent`; it refuses `--cards`,
- *   `--intent` and an uncovered suite or seed. Every run prints its coverage beside the score and TOTAL line and
- *   writes it to the JSON (`coverage`): compare like with like.
+ * - `--coverage shipped|full` (P7, D872, D877): which card and intent index the run replays. `shipped`, the default
+ *   wherever it covers the run (SHIPPED_COVERS in cards-disk.ts: train, reworded, longtail and heldout19, seeds
+ *   41-44), replays `cards-shipped.jsonl.gz` as both `--cards` and `--intent`: the cards and requests the shipped
+ *   enricher (`buildPartner`'s own `CardEnricher`) made for each world (`cold-start.ts --cards-out`). `full` is the
+ *   older default: the checked-in cards and `cards-enrich.ts --intent`'s every-item requests, about seven times the
+ *   items a deployment's enricher writes requests for (D714); a run shipped coverage does not cover, or one naming
+ *   `--cards`, `--intent` or an endpoint, gets it. An explicit `--coverage shipped` refuses those. Every run prints
+ *   its coverage beside the score and TOTAL line and writes it to the JSON (`coverage`): compare like with like.
  * - With intent on and nothing replayed (`--intent none`, an uncovered run, or a file for other items), every TOTAL
  *   and pool line and the JSON label say `[intent inert: no replay]`; `--reader stub|oracle` refuse a `--baseline`
  *   whose intent differs.
@@ -238,16 +239,26 @@ const seedList = seeds.split(",");
 // the $0 screen runs what ships (`intent` is on in DEFAULT_CONFIG). Resolved before the baseline check below.
 const endpoint = opt("cards-endpoint", "");
 // `--coverage shipped` (D872): the shipped enricher's own cards and requests, as both files; checked before any use.
-const coverage = opt("coverage", "full");
+// The default (D877): shipped coverage wherever the file covers the run and no card or intent source is named; a run
+// it does not cover, or one that names its own, keeps the full index's default and says so.
+const ownCards = !!endpoint || cli.has("cards") || cli.has("intent") || has("--intent") || has("--cards");
+const coverage = opt("coverage", !ownCards && !shippedUncovered(suites, seedList).length ? "shipped" : "full");
 if (coverage !== "full" && coverage !== "shipped") fail(`--coverage takes full or shipped, not ${coverage}`);
 let shippedFile = "";
 if (coverage === "shipped") {
-  if (endpoint || cli.has("cards") || cli.has("intent") || has("--intent") || has("--cards"))
+  if (ownCards)
     fail("--coverage shipped replays its own cards and requests: drop --cards, --intent and --cards-endpoint");
   const uncovered = shippedUncovered(suites, seedList);
   if (uncovered.length) fail(`--coverage shipped: ${SHIPPED_FILE} does not cover ${uncovered.join(", ")}`);
   shippedFile = join(scratch, "shipped.jsonl");
   writeFileSync(shippedFile, gunzipSync(readFileSync(SHIPPED_PATH)));
+}
+// The checked-in reader caches were recorded with the full index (D877): their prompts differ under shipped coverage.
+if (coverage === "shipped" && !cli.has("coverage") && passValue("reader") === "replay") {
+  console.error(
+    "funnel: coverage is shipped by default (D877); the checked-in reader caches were recorded at --coverage full, " +
+      "so pass it to replay them",
+  );
 }
 if (endpoint && opt("cards", "default") === "none") fail("--cards-endpoint makes cards: drop --cards none");
 // With an endpoint the requests are the endpoint's own (its calls ask for them), so none are replayed by default.
@@ -289,12 +300,21 @@ const noModelReader = readerKind === "stub" || readerKind.startsWith("oracle");
 const baseline = opt("baseline", "");
 const checkBaseline = (current: IntentState) => {
   if (!noModelReader || !baseline) return;
-  const why = intentMismatch(current, intentOfRun(JSON.parse(readFileSync(baseline, "utf8"))));
+  const base = JSON.parse(readFileSync(baseline, "utf8")) as Parameters<typeof intentOfRun>[0] & { coverage?: string };
+  const why = intentMismatch(current, intentOfRun(base));
   if (why) fail(`--baseline ${baseline} refused: ${why}`);
+  // D877: a baseline that recorded another coverage measured another index (a run before D872 recorded none).
+  const now = shippedFile ? "shipped" : intentByDefault ? "full" : "";
+  const then = base.coverage?.split(" ")[0] ?? "";
+  if (now && then && (then === "shipped" || then === "full") && now !== then) {
+    fail(`--baseline ${baseline} refused: its coverage is ${then} and this run's is ${now} (pass --coverage ${then})`);
+  }
 };
 if (!run.intent || !run.cards) checkBaseline("off");
 // The endpoint writes requests for what it cards: live unless it wrote none (checked again after the run).
 else if (endpoint) checkBaseline("live");
+// Shipped coverage covers the run by construction (SHIPPED_COVERS), so it is live (checked again after).
+else if (shippedFile) checkBaseline("live");
 else if (!has("--intent")) checkBaseline("inert");
 // The checked-in requests cover this run, so it is live unless the replay matches nothing (checked again after).
 else if (intentByDefault) checkBaseline("live");
