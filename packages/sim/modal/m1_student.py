@@ -229,7 +229,7 @@ def _save(run, rows_path, remote_path, cfg, res):
     # The train suites' eval split is D890's test set: a trained run's figures on it go to their own file, not the
     # console, and are read once a rung (docs/research/m1-student.md §2). Zero-shot runs choose nothing: printed.
     if "epochs" in cfg or cfg.get("adapter_run"):
-        sealed = {k: res["report"].pop(k) for k in list(res["report"]) if k == "train/eval"}
+        sealed = {k: res["report"].pop(k) for k in list(res["report"]) if k in ("train/eval", "synth/test")}
         with open(os.path.join(out, "eval_sealed.json"), "w") as f:
             json.dump(sealed, f, indent=1)
     with open(os.path.join(out, "report.json"), "w") as f:

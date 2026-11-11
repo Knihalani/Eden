@@ -60,6 +60,16 @@ class Rows(unittest.TestCase):
         self.assertTrue(5 < ev < 35, ev)
         self.assertTrue(all(r["family"].startswith("synth/") for r in rs))
 
+    def test_synth_keeps_m2_splits_and_drops_unseen_items(self):
+        g = synth("famx")
+        g["split"] = "val"
+        g["items"].append({"key": "z", "title": "t", "text": "later", "truth": "other", "visible": False})
+        rs = d.rows_from_synth_groups([g])
+        self.assertEqual({r["split"] for r in rs}, {"dev"})
+        self.assertEqual([r["key"] for r in rs], ["p", "q"])
+        g["split"] = "test"
+        self.assertEqual({r["split"] for r in d.rows_from_synth_groups([g])}, {"test"})
+
     def test_synth_refuses_suites_and_bad_truth(self):
         g = synth()
         g["suite"] = "heldout19"

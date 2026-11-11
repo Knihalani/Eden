@@ -83,21 +83,31 @@ def rows_from_train_groups(groups, labels=None, dev_share=0.0):
     return out
 
 
+# M2's own family-level splits: its `val` families tune (as the train suites' dev templates do), its `test` families
+# are held back.
+SYNTH_SPLITS = {"train": "train", "val": "dev", "test": "test"}
+
+
 def rows_from_synth_groups(groups, share=0.15, labels=None):
-    """Rows from M2's synthetic groups (I1's group shape plus `family`). Whole families go to `eval` by a hash, so a
-    synthetic held-out figure never shares a family with training. Refuses any group that names a suite."""
+    """Rows from M2's synthetic groups (I1's group shape plus `family`). A group's own `split` (M2's, by family) is
+    kept as above; without one, whole families go to `eval` by a hash. Either way no family is in two splits. Items
+    the request could not have seen (`visible` false: dated after it) are left out. Refuses any group that names a
+    suite."""
     by = {(lab["group"], lab["key"]): lab["y"] / 100.0 for lab in (labels or [])}
     out = []
     for g in groups:
         if "suite" in g and (TRAIN_SUITE.match(str(g["suite"])) or "heldout" in str(g["suite"])):
             raise ValueError(f"m1: synthetic group {g['group']} names suite {g['suite']}")
         fam = f"synth/{g['family']}"
+        split = SYNTH_SPLITS.get(g.get("split", ""), None) or family_split(fam, share)
         for it in g["items"]:
+            if it.get("visible") is False:
+                continue
             truth = it["truth"]
             if truth not in ("planted", "decoy", "other"):
                 raise ValueError(f"m1: {g['group']} item {it.get('key')} has truth {truth!r}")
             out.append({"src": "synth", "family": fam, "group": g["group"], "key": it["key"],
-                        "split": family_split(fam, share), "request": g["request"], "today": g.get("today", ""),
+                        "split": split, "request": g["request"], "today": g.get("today", ""),
                         "title": it.get("title", ""), "text": it.get("text", ""), "truth": truth,
                         "y": by.get((g["group"], it["key"]))})
     return out

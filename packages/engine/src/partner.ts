@@ -869,14 +869,15 @@ export class ContextPartner {
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
     const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
     // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list. Not with
-    // `pushCheck`: an opened push would add the check's paid call, which D702 did not measure or cost.
+    // `pushCheck`: an opened push would add the check's paid call, which D702 did not measure or cost. A local
+    // student's check (`pushCheckLocal`, M1, D896) is not a paid call, so with it an opened push runs and is checked.
     const listed = event.kind === "user_message" && isImperative(event.text, MORE_VERBS);
     const opened =
       !listed &&
       event.kind === "user_message" &&
       this.config.pushOpen &&
       this.config.pushCandidates > 0 &&
-      !this.config.pushCheck &&
+      (!this.config.pushCheck || this.config.pushCheckLocal) &&
       isOpenRequest(event.text);
     if (opened) internal.open = true;
     const push =

@@ -75,6 +75,37 @@ of sends no packet). Against the default, task by task, `bun run funnel --suite 
   more**. Every clause must hold. Reported beside it: the same on the in-sample templates (not a test).
 - Passing sends the arm to Pi (§6, written before that run); failing stops the line there.
 
+## 2c. Pre-registration: the live run on Pi (D897), written before any shard started
+
+The funnel screen passed (§4). The live question: does the student's check raise the facts the agent states, without
+false concerns, inside a wait an interactive agent can take, and how does it stand against Haiku's check?
+
+- **Harness:** Pi on Modal (`lab_fanout.py --preset bench-tools`, the F3/I3 recipe: tenant prompt, payload notices,
+  direct profile, Haiku 5.5 agent and grader, cards replayed where covered and made in-run elsewhere), train suites,
+  **only the 40 held-out templates** (`--templates`; the student never saw them at any seed), seeds **41–64** (24
+  seeds), `--variants hidden,control,neutral`, one seed a shard, the existing `HAIKU_API_KEY` Secret, the checker's
+  key as an ephemeral secret. From the commit that holds this section.
+- **Arms:** `eden` (the default); `eden~local` (`pushCheck`, `pushCheckLocal`, pass 0.5: the student `t8b-truth-a`
+  on one H100 endpoint kept warm for the run, `min_containers` 1); `eden~check` (Haiku's check as N5 left it to
+  ship without an embedder: `pushCheck`, `pushCheckForm` 2). Both checks wait the shipped `pushCheckWaitMs` (2,500
+  ms); neither widens the pool.
+- **Regrade:** every hidden answer and every control or neutral answer the Haiku grader called a concern, all arms,
+  by Sonnet 5.5 (`i3-regrade.ts`, one Message Batch a shard); Sonnet's verdict replaces Haiku's where it graded.
+- **Outcomes** (each arm against `eden`, and `eden~local` against `eden~check`, paired by task, intervals from
+  `bench_report.py`'s template-clustered bootstrap): (1) hidden raised, Sonnet-graded (primary); (2) concerns on
+  control and neutral tasks, Sonnet-confirmed; (3) wall p50 and mean, and Eden on the agent's critical path;
+  (4) cost: the agent's billed $ per 1,000 tasks, Haiku's check $ per 1,000 tasks, and the student's serving
+  **[EST]** from its measured GPU time a call at list price; (5) check calls a task, failures and late answers.
+- **Rule.** The student's check is recommended to the owner as a trial to promote with an optional endpoint (§7)
+  if, against `eden`: hidden is better (the clustered interval above zero); confirmed concerns are not up (point
+  estimate at most +0.5 points); and wall rises at most **+0.3 s** a task on average (N5's target). Against
+  `eden~check` it is called **at least as good** if its hidden point estimate is not below Haiku's by more than one
+  point. If the hidden clause holds and the wall clause does not, the trade goes to the owner as in D504/D536; if
+  hidden is not better, `pushCheckLocal` is deleted at its trial's end (D112).
+- **Budget:** Anthropic **[EST]** about $6 for the shards (24 seeds × 360 task runs × $0.0003, cards made in-run for
+  seeds 49–64, Haiku's checks) and about $2 for the regrade; cap $14 for this step. Modal: the endpoint's H100 for
+  the run's length (about $4 an hour **[EST]**) and the shards.
+
 ## 3. The pipeline (D891)
 
 `packages/sim/modal/m1_data.py` (rows, splits, prompt, AUCs, the template-clustered interval; `tests/test_m1_data.py`),

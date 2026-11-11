@@ -90,7 +90,7 @@ const ON = { pushCheck: true, pushCheckLocal: true };
 describe("pushCheckLocal (M1, D894): a student's scores pick the push's candidates", () => {
   test("off in the default", () => {
     expect(DEFAULT_CONFIG.pushCheckLocal).toBe(false);
-    expect(DEFAULT_CONFIG.pushCheckLocalPass).toBe(0.05);
+    expect(DEFAULT_CONFIG.pushCheckLocalPass).toBe(0.5);
   });
 
   test("on: items at or above the mark enter in pool order; the rest leave", async () => {
@@ -170,5 +170,21 @@ describe("pushCheckLocal (M1, D894): a student's scores pick the push's candidat
     await handed(partner, { tenantId: "t", userId: "u2", sessionId: "s2" });
     expect(calls.length).toBe(2);
     expect(calls.every((c) => c.items.length > 0)).toBe(true);
+  });
+});
+
+describe("pushCheckLocal with pushOpen (M1, D896)", () => {
+  test("a request on no verb list still pushes, and is checked: the student is not a paid call", async () => {
+    const { s, calls } = scorer(["Harlow deposit"]);
+    const text = "Settle the Harlow venue deposit invoice today";
+    const run = async (config: Record<string, unknown>, sc: PushCheckScorer | null) => {
+      const { partner } = setup({ pushOpen: true, ...config }, sc);
+      await partner.observe({ ...ref, at: NOW, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
+      return partner.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
+    };
+    expect(await run({}, null)).toBeDefined();
+    const got = await run(ON, s);
+    expect(got?.citations.map((c) => c.itemId)).toEqual(["mail:dated"]);
+    expect(calls.length).toBe(1);
   });
 });

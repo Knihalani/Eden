@@ -231,6 +231,7 @@ const cli = flags(
         "check-log",
         "checker-url",
         "checker-cache",
+        "checker-log",
         "widen-table",
         "widen-hash",
         "widen-embed",
@@ -607,6 +608,7 @@ const localScorer = RUN.pushCheckLocal
   ? new HttpScorer({
       ...(CHECKER_URL ? { url: CHECKER_URL, key: process.env.EDEN_LAB_CHECKER_KEY ?? "" } : {}),
       cacheFile: CHECKER_CACHE,
+      ...(opt("checker-log", "") ? { logFile: opt("checker-log", "") } : {}),
     })
   : null;
 /** `--check-log FILE` (N5): each check call's prompt (request and items as read) and reply, sim data only. */

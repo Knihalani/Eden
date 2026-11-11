@@ -948,7 +948,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSilent: true,
   pushCheckAnchored: false,
   pushCheckLocal: false,
-  pushCheckLocalPass: 0.05,
+  pushCheckLocalPass: 0.5,
   pushOpen: true,
   pushWidenEmbed: 3,
   pushWidenIntent: 2,

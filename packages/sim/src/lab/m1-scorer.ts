@@ -41,6 +41,7 @@ export class HttpScorer implements PushCheckScorer {
     const kept = this.cache.get(k);
     if (kept) {
       this.hits++;
+      this.log(input, kept);
       return kept;
     }
     if (!this.opts.url) {
@@ -65,12 +66,20 @@ export class HttpScorer implements PushCheckScorer {
       const body = (await res.json()) as { scores: number[] };
       this.ms.push(performance.now() - t0);
       this.cache.set(k, body.scores);
+      this.log(input, body.scores);
       if (this.opts.cacheFile) appendFileSync(this.opts.cacheFile, `${JSON.stringify({ k, s: body.scores })}\n`);
       return body.scores;
     } catch (err) {
       this.failures++;
       throw err;
     }
+  }
+
+  /** `--checker-log F`: each check's request and its items' ids, titles and scores (sim data only). */
+  private log(input: LocalCheckInput, scores: number[]): void {
+    if (!this.opts.logFile) return;
+    const items = input.items.map((it, i) => ({ id: it.id, title: it.title, s: scores[i] }));
+    appendFileSync(this.opts.logFile, `${JSON.stringify({ request: input.request, today: input.today, items })}\n`);
   }
 
   summary(): string {
