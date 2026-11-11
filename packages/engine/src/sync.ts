@@ -393,8 +393,9 @@ export class SyncManager {
 
   /**
    * `syncKick` (D751, D753, in the default since D755): starts a user's step now instead of at the next `tick`,
-   * for a user `track` just added: a new user's backfill otherwise waits for the timer (60 s on the servers, 30 s on average), and their first
-   * requests run on live searches alone meanwhile. Not awaited by the caller; never throws; nothing of the step runs
+   * for a user `track` just added: a new user's backfill otherwise waits for the timer (60 s on the servers, 30 s
+   * on average), and their first requests run on live searches alone meanwhile. Not awaited by the caller; never
+   * throws; nothing of the step runs
    * inside the call (the step starts in a microtask, so the caller's event is not held by the tenant's resolver).
    * A tick that comes while it runs waits for it. Nothing happens for a user the sync does not hold, one whose kick
    * is running, waiting or timed, or after `stopKicks`. At most `KICKS_AT_ONCE` kicked steps run at once, across
