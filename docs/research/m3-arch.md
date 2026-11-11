@@ -350,3 +350,33 @@ against main e4f3649a.
   tasks the older version is the task's decoy, and the synth suite plants the fact *or* the decoy, never both: no
   request ever meets a stale version beside its replacement. Reading the rule needs a variant that plants both (the
   older version as background beside the fact); raised with the parent before building it.
+
+### 7h. H10 made small and fast (M3b; the bar pre-registered in commit 3715f552 before any run below)
+
+**The bar**, on M2 v2 val and test (never tuned on; selection only on `dev`, 264 of train's 2,128 worlds split by world
+id, its families shared with the rest of train, so dev reads optimistic and serves only to compare variants):
+recall @ precision 0.95 ≥ 0.80, AUC ≥ 0.985, shared model ≤ 4 MB, ≤ 40 µs a pair and ≤ 0.4 ms an item's encode in
+the TypeScript forward, ≤ 256 bytes stored an item, no pretrained tables.
+
+**Where the size and time are.** The float net (binnet `PairTag`, 256 bits) is a 2^16 × 256 float32 hashed n-gram
+table (67.1 MB, 99.7% of the model) into a batch norm and tanh, then a pair head [a, b, a·b] → 64 → 1 (49,152
+multiply-adds a pair, 0.2 MB). So the size is the table and the pair time is the head's first layer; the item's
+encode is the hashing plus 300 table rows of 256.
+
+**The starting point, re-measured** (`h10.py score`): the saved float checkpoint (`w-supersede-float.pt`, 3 epochs)
+reads val AUC 0.979, recall@p0.95 0.785 and test 0.981, 0.801: **itself short of the bar** (the 0.815 in §7e was an
+earlier epoch of another run, not saved). The saved binary: val 0.963 / 0.623, test 0.966 / 0.593. So the work
+includes a better float teacher (early-stopped on dev).
+
+**Hypotheses** (step 1, written before any student's result):
+
+| # | route | change | why it could work | size, pair cost |
+|---|---|---|---|---|
+| B1 | compressed float | low-rank table: 2^16 × r (int8, a scale a row) then r → 256, started from the teacher's SVD, distilled (soft scores + matching the teacher's pre-activation codes on all training items) | a sum of rows is linear, so the factorisation is exact up to the rank; the table's useful rank is probably far below 256 | r 32: 2.4 MB; r 48: 3.5 MB; encode 300·r + r·256 |
+| B2 | compressed float | fewer buckets (2^13–2^14), int8, retrained with distillation | collisions cost little when the head reads 256 summed dims | 2^13 × 256: 2.1 MB |
+| B3 | compressed float | int4 table with row scales plus pruning rare buckets | — | 2^16 × 256 int4 is 8.4 MB: needs > 55% of rows pruned; expected to lose to B1 |
+| B4 | compressed float | product quantisation of rows (32 subspaces of 8, 256 centroids) | rows cluster | 2.1 MB codes + 0.26 MB codebooks |
+| H | hybrid | B1's encoder at ingest, the item stored as an int8 code (128 or 256 bytes), a slimmer pair head (d·3 → 32–64) on int8 codes | the pair needs only the codes; halving d or h halves the head | 128-d code, h 64: 24,576 MACs a pair |
+| A1 | better binary | the binary net distilled from the float teacher's soft scores, hard negatives (teacher-scored) drawn again | the binary net's loss is recall at the top: the hard labels say nothing about which negatives are close | 256 bits = 32 B an item |
+| A2 | better binary | wider sign codes (512 bits) and a float/int8 head over [a, b, a XNOR b] | binarising the head cost more than the codes in H13 | 64 B an item |
+| A3 | better binary | a 2–3 net ensemble of A1/A2 | variance at the top of the ranking | ×2–3 pair cost |
