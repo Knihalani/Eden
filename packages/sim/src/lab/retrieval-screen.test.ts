@@ -105,6 +105,8 @@ describe("retrieval screen (audit 2026-11-06 F25)", () => {
       "41",
       "--json",
       "/tmp/o.json",
+      "--coverage",
+      "full",
       "--set",
       "{}",
       "--",

@@ -38,6 +38,11 @@ const noKey = { ...process.env, OPENROUTER_API_KEY: "" };
 // would search them live: at `--time 0.05` a lookup's deadline is 75 ms, which a loaded machine's searches race, so a
 // task's finds would depend on timing. These tests check the sharding, not that, so cut copies answer locally here.
 const smallSync = { syncMaxItems: 100, pushCandidates: 0, syncLocalComplete: false };
+// The timed runs below also take every synced copy as current (a chance of 1 is never reached), so no lookup makes an
+// on-demand poll: whether a poll beat the lookup's deadline depends on the machine's load, and a source polled late
+// is searched live, which changes a task's calls and finds between two runs (D842: once the sim's calendar stopped
+// changing in the future, its poll came due and raced the deadline in about half the pairs under the cold gate).
+const timedSync = { ...smallSync, syncStaleChance: 1 };
 
 type Run = { status: number | null; stdout: string; stderr: string; out: string };
 /** `bun args…` in a child process without blocking this one, so the runs below can go out together. */
@@ -70,7 +75,7 @@ const funnelTimed = (jobs: string) => {
   return spawn(
     [
       join(lab, "funnel.ts"),
-      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync), "--json", out],
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(timedSync), "--json", out],
       // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
       // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs).
       ...["--", "--time", "0.05", "--limit", "1"],
@@ -322,12 +327,23 @@ describe("funnel.ts flags", () => {
     writeFileSync(base, JSON.stringify({ config: { intent: false }, perTask: [] }));
     const r = spawnSync(
       "bun",
-      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      [
+        join(lab, "funnel.ts"),
+        "--preset",
+        "default",
+        "--coverage",
+        "full",
+        "--baseline",
+        base,
+        "--",
+        "--reader",
+        "stub",
+      ],
       { encoding: "utf8", env: noKey },
     );
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("refused");
-    // The default replays the checked-in intent requests on train 41-42 (D158), so this run is live.
+    // At full coverage the funnel replays the checked-in intent requests on train 41-42 (D158), so this run is live.
     expect(r.stderr).toContain("baseline's intent is off and this run's is live");
     // `--intent none` keeps the pre-D158 inert screen, refused against the same baseline.
     const none = spawnSync(
@@ -344,12 +360,44 @@ describe("funnel.ts flags", () => {
     writeFileSync(base, JSON.stringify({ config: {}, intent: { state: "inert" }, perTask: [] }));
     const r = spawnSync(
       "bun",
-      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      [
+        join(lab, "funnel.ts"),
+        "--preset",
+        "default",
+        "--coverage",
+        "full",
+        "--baseline",
+        base,
+        "--",
+        "--reader",
+        "stub",
+      ],
       { encoding: "utf8", env: noKey },
     );
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("intent-v2.jsonl.gz by default");
     expect(r.stderr).toContain("baseline's intent is inert and this run's is live");
+    // The default (shipped coverage, D877) is live too, and refused against it before running.
+    const shipped = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(shipped.status).toBe(2);
+    expect(shipped.stderr).toContain("baseline's intent is inert and this run's is live");
+  });
+
+  test("a baseline recorded at the other coverage is refused before running (D877)", () => {
+    const base = join(scratch(), "full.json");
+    const at = { config: {}, intent: { state: "live" }, coverage: "full (intent-v2)", perTask: [] };
+    writeFileSync(base, JSON.stringify(at));
+    const r = spawnSync(
+      "bun",
+      [join(lab, "funnel.ts"), "--preset", "default", "--baseline", base, "--", "--reader", "stub"],
+      { encoding: "utf8", env: noKey },
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("its coverage is full and this run's is shipped (pass --coverage full)");
   });
 
   test("a run the checked-in intent requests do not cover stays inert and says why", () => {

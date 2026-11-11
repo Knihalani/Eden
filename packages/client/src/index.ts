@@ -7,6 +7,7 @@ export {
   type PushedItem,
   type SourceChange,
 } from "./client";
+export { defaultOnError, edenEnv, fixFor, type EdenEnv } from "./on-error";
 export { guardTool, guardTools, type Checker, type GuardOptions } from "./guard";
 export { heldResult, withContext, type ChatMessageLike } from "./messages";
 // The description Eden recommends for `ask` registered as the agent's tool.

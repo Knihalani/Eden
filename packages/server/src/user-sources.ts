@@ -506,7 +506,7 @@ export function checkSpecs(input: unknown, where: string): SourceSpec[] {
 }
 
 /** Each user's specs, or the message of what is wrong with their entry. */
-type UsersFile = Map<string, SourceSpec[] | { error: string }>;
+export type UsersFile = Map<string, SourceSpec[] | { error: string }>;
 
 export interface FileDirectoryOptions {
   /** Only this scope's entry is read and checked (the stdio server, one user per process). */
@@ -555,7 +555,7 @@ export function fileDirectory(path: string, options: FileDirectoryOptions = {}):
   };
 }
 
-function readUsersFile(path: string, only: string | undefined): UsersFile {
+export function readUsersFile(path: string, only?: string): UsersFile {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
