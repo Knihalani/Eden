@@ -115,3 +115,18 @@ held-out rows say anything.
 query 7.1 ms, scoring 3,000 int8 vectors 1.1 ms (numpy), item encoding at ingest 23 ms (256 tokens), 1.15 MB a
 user at 3,000 items; fp32 19 ms and 58 ms. rerank-a1 (MiniLM-L2): **652 ms a request** for 60 pairs (fp32 1.19 s):
 two orders of magnitude over the request path's few milliseconds.
+
+**The @5 bar against the shipped default (§1b).** The shipped pipeline's own coverage, made live and recorded
+(`days-calls.ts --cards-live claude-haiku-5-5 --intent none`, users w41–w72 in four processes; cards in
+`.local/m3/d/cards-ship-*.jsonl`): over all 433 hidden requests the planted item is in the pool's first 5 for 319
+and its 15 for 362 (decoys 296 and 326); pushed at its own request 204, handed earlier that day 141. On the held-out
+families' days requests: facts @5 123 of 157, decoys @5 83 of 148. Each model fused with the shipped pool (the
+hybrid's lexical list is the shipped pool here):
+
+| run | best variant at @5 | facts @5 | decoys @5 | bar (+10 points, decoys no faster) |
+|---|---|---|---|---|
+| dense-a1 | hybrid k 15 | 135 (+7.6) | 92 | fail |
+| dense-a4 | hybrid k 5 | 136 (+8.3) | 98 | fail |
+| sparse-a1 | hybrid k 15 | 132 (+5.7) | 91 | fail |
+| asym-a2 | hybrid k 10 | 137 (+8.9) | 81 | fail (decoys down 2) |
+| rerank-a1 | hybrid k 5 | 131 (+5.1) | 89 | fail |
