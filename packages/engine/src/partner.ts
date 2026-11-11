@@ -225,6 +225,8 @@ export interface PushPoolReport {
   sessionId: string;
   /** The push's pool in order (the ids the reader would have read). */
   pool: string[];
+  /** `pushWide` (D1000): the candidates past the pool, in order (the ranked rest, then deeper lexical hits). */
+  wide?: string[];
   /** Per pool item, `readerGate`'s constraint test (cards included). */
   constraintLike: boolean[];
   /** The candidates handed (none when no pooled item is constraint-like). */
@@ -474,6 +476,8 @@ interface ProbeOpts {
 }
 /** `intent`'s reciprocal-rank constant: rank 0 scores 1/k (the usual 60 flattens a five-item list to a tie). */
 const ASK_FUSE_K = 2;
+/** The lexical hits a lookup reads before it builds its candidates (`pushWide` reads more). */
+const LEXICAL_HITS = 12;
 /** `densePacket`: a word on fewer than this share of the user's items is rare; an item adding one is no echo. */
 const RARE_SHARE = 0.03;
 
@@ -1810,9 +1814,11 @@ export class ContextPartner {
     const intentFound = this.intentFinds(s, cue);
     const extra = [...intentFound.keys()];
     const ranking = spans?.open("rank", cue.span);
+    const deep: Scored[] = [];
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
       probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
+      ...(internal.push && this.config.pushWide > 0 ? { wide: this.config.pushWide, deep } : {}),
     });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
     // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.
@@ -1941,7 +1947,7 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored], deep) : null;
       // `pushCheck` (D500, D828): one budgeted call over the pool, only when the gate would hand candidates. With no
       // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
       const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
@@ -2388,8 +2394,8 @@ export class ContextPartner {
    * `askReaderPool` distinct items of `ranked`) in its own order; per item, `readerGate`'s constraint test, cards
    * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none.
    */
-  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
-    const pool: Scored[] = [];
+  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[], deep: readonly Scored[] = []): PushGate {
+    let pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     for (const x of ranked) {
@@ -2397,6 +2403,17 @@ export class ContextPartner {
       if (seen.has(x.item.id)) continue;
       seen.add(x.item.id);
       pool.push(x);
+    }
+    // `pushWide` (D1000): what the pool left out (the ranked rest, then the deeper lexical hits), for the tail seats.
+    let wide: Scored[] | undefined;
+    if (this.config.pushWide > 0) {
+      wide = [];
+      for (const x of [...ranked, ...deep]) {
+        if (seen.has(x.item.id) || wide.length >= this.config.pushWide) continue;
+        seen.add(x.item.id);
+        wide.push(x);
+      }
+      pool = this.poolTail(s, cue, pool, wide, cap);
     }
     const cards =
       pool.length > 0 && this.config.cards && this.deps.cards
@@ -2406,7 +2423,15 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+    return { pool, like: pool.map((x) => this.constraintLike(x, cards)), ...(wide ? { wide } : {}) };
+  }
+
+  /**
+   * `pushWide` (D1000): the pool's last seats, chosen from its own tail and the wide candidates. With no selector
+   * the pool is unchanged (the lab reads the candidates through `onPushPool`).
+   */
+  private poolTail(_s: Session, _cue: Cue, pool: Scored[], _wide: readonly Scored[], _cap: number): Scored[] {
+    return pool;
   }
 
   /**
@@ -2547,6 +2572,7 @@ export class ContextPartner {
     this.deps.onPushPool?.({
       sessionId: s.id,
       pool: reported.map((x) => x.item.id),
+      ...(gate.wide ? { wide: gate.wide.map((x) => x.item.id) } : {}),
       constraintLike: reported.length > like.length ? [...like, ...reported.slice(like.length).map(() => false)] : like,
       handed: items.map((x) => x.item.id),
       ...(this.config.askNudge ? { unsettled: unsettled !== undefined } : {}),
@@ -3235,7 +3261,11 @@ export class ContextPartner {
    * Scores cached items for a cue: idf-weighted query coverage, plus a bonus when the item names a cue entity as
    * whole terms ("Al" never matches "also"). Both come from the cache's index: the item's text is never rescanned.
    */
-  private rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean; probed?: string[] } = {}): Scored[] {
+  private rank(
+    s: Session,
+    cue: Cue,
+    options: { ignoreLedger?: boolean; probed?: string[]; wide?: number; deep?: Scored[] } = {},
+  ): Scored[] {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
@@ -3274,7 +3304,12 @@ export class ContextPartner {
       }
       return n;
     };
-    const found = query.length > 0 ? cache.search(s.scope, query, query.length, 12, this.now()) : [];
+    // `pushWide` (D1000): the search reads deeper, but only its first `LEXICAL_HITS` rank here as they always did; the
+    // rest go to `options.deep` in the index's order, after the same freshness filters, for the pool's tail seats.
+    const limit = Math.max(LEXICAL_HITS, options.deep ? (options.wide ?? 0) : 0);
+    const searched = query.length > 0 ? cache.search(s.scope, query, query.length, limit, this.now()) : [];
+    const found = searched.length > LEXICAL_HITS ? searched.slice(0, LEXICAL_HITS) : searched;
+    const deeper = searched.length > LEXICAL_HITS ? searched.slice(LEXICAL_HITS) : [];
     for (const h of timed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
     const probed = options.probed?.length ? cache.hits(s.scope, options.probed, this.now()) : [];
@@ -3286,6 +3321,16 @@ export class ContextPartner {
         ? found.filter((h) => s.ledger.revised(h.item.id, versionOf(h.item), s.turn)).map((h) => h.item.id)
         : [],
     );
+    if (options.deep && deeper.length > 0) {
+      const have = new Set(found.map((h) => h.item.id));
+      for (const h of deeper) {
+        if (have.has(h.item.id)) continue;
+        if (!options.ignoreLedger && !s.ledger.isFresh(h.item.id, s.turn)) continue;
+        if (!options.ignoreLedger && s.delivered.some((d) => nearDuplicate(d, h.sketch))) continue;
+        if (!options.ignoreLedger && this.alreadyHas(s, h.item, h.doc, vocab)) continue;
+        options.deep.push({ item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc });
+      }
+    }
     return (
       found
         .filter((h) => options.ignoreLedger || revised.has(h.item.id) || s.ledger.isFresh(h.item.id, s.turn))
@@ -6612,6 +6657,8 @@ interface KeptCheck {
 /** `pushCandidates` (D236): the push's pool and, per item, whether it is constraint-like. */
 interface PushGate {
   pool: Scored[];
+  /** `pushWide` (D1000): the candidates past the pool that its tail seats were chosen from. */
+  wide?: Scored[];
   like: boolean[];
 }
 

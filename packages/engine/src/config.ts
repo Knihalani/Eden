@@ -724,6 +724,12 @@ export interface EngineConfig {
    */
   pushIndirect: boolean;
   /**
+   * M12 (D1000, trial, off at 0; docs/research/m12-pool.md): how many lexical hits the push's and the ask's lookup
+   * reads before it builds the pool (12 when 0), so a re-ranker can bring a held fact ranked below the twelfth into
+   * the pool's last seats.
+   */
+  pushWide: number;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -884,5 +890,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushOpen: true,
   pushIndirect: true,
+  pushWide: 0,
   revisionDiff: true,
 };

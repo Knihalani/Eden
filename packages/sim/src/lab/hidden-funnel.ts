@@ -1439,6 +1439,15 @@ async function runSeed(
         ...(push?.unsettled !== undefined ? { unsettled: push.unsettled } : {}),
         ...(push?.anchorKinds ? { anchorKinds: push.anchorKinds } : {}),
         pool: items,
+        // `pushWide` (M12, D1000): the candidates past the pool, for the tail-seat models' training and screens.
+        ...(push?.wide
+          ? {
+              wide: push.wide.map((x) => {
+                const it = cache.get(scope, x, askAt);
+                return { id: x, title: it?.title ?? "", text: it?.text ?? "" };
+              }),
+            }
+          : {}),
       };
       appendFileSync(POOL_DUMP, `${JSON.stringify({ ...line, ...extra })}\n`);
     }

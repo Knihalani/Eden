@@ -170,6 +170,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
   pushIndirect: PUSH,
+  pushWide: PUSH,
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
@@ -192,6 +193,7 @@ const SHARE: Range = { max: 1 };
  */
 const RANGES: Partial<Record<Key, Range>> = {
   minMatchedTerms: COUNT,
+  pushWide: { integer: true, max: 200 },
   fallbackMatchedTerms: COUNT,
   maxItemsPerInjection: COUNT,
   lookupSources: COUNT,
