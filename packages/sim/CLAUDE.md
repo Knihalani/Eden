@@ -44,7 +44,7 @@ fan-out, card distillation, embedding screen; Python, `modal==1.6.3`, README the
 ## Test
 
 ```bash
-bun run test:pkg sim             # 33 files, 12-14 s wall (two runs, shared 4-core box, 2026-11-05); reader-stub and sim.test lead
+bun run test:pkg sim             # 58 files, 22.9-23.6 s cold (4 cores, 2026-11-11); cards-disk and sim.test lead
 bun run sim --users 2 --sessions 5         # a small quality run (JSON), no model, ~1 s
 ```
 
