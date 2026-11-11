@@ -66,12 +66,13 @@ const WIDE = 0xffff;
  * evicts the id's entry, and `clearTermMemo` empties it (the engine calls it when a user is forgotten).
  */
 const MEMO_SLOTS = 8_192;
-const memoOwner = new Int32Array(MEMO_SLOTS);
+/** Owners as doubles: a serial counts up to 2^53 and never comes back, so no two vocabularies ever share one. */
+const memoOwner = new Float64Array(MEMO_SLOTS);
 const memoId = new Int32Array(MEMO_SLOTS);
 const memoTerm: string[] = new Array<string>(MEMO_SLOTS).fill("");
 let serials = 0;
 
-const memoSlot = (serial: number, id: number) => (Math.imul(id, 0x9e3779b1) ^ Math.imul(serial, 0x85ebca6b)) >>> 19;
+const memoSlot = (serial: number, id: number) => (Math.imul(id, 0x9e3779b1) ^ Math.imul(serial | 0, 0x85ebca6b)) >>> 19;
 
 /** Empties the decoded-term memo (a forgotten user's terms must not stay resident). */
 export function clearTermMemo(): void {
@@ -97,9 +98,9 @@ export class Vocab {
   /**
    * The terms (D998): each Latin-1 term's characters as bytes in one arena (`start`, `blen` per id), a term past
    * Latin-1 as a string in `wide`. A string per term was about 35 bytes a term with its array slot (0.5 MB of a heavy
-   * user's 18,000 terms, `live-heap.bench.ts`); bytes and offsets are about 6 plus its length. `term` decodes
-   * (a Latin-1 decode, about 40 ns, behind the memo above); a released term's bytes are zeroed and their room taken back
-   * when the arena next needs to grow (`room`).
+   * user's 18,000 terms, `live-heap.bench.ts`); bytes and offsets are about 6 plus its length. `term` decodes (a
+   * Latin-1 decode, about 40 ns, behind the memo above); a released term's bytes are zeroed and their room taken
+   * back when the arena next needs to grow (`room`).
    */
   private bytes: Buffer = Buffer.alloc(256);
   private used = 0;
@@ -110,7 +111,7 @@ export class Vocab {
   /** Ids handed out, live or released. */
   private count = 0;
   /** This vocabulary's key in the decoded-term memo (never 0: a cleared slot's owner). */
-  private readonly serial = (serials = (serials % 0x7fff_fffe) + 1);
+  private readonly serial = ++serials;
   /** Released ids, reused last-released first. */
   private readonly free: number[] = [];
   private readonly listeners: ((id: number) => void)[] = [];

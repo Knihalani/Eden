@@ -117,7 +117,8 @@ export function repackLike(item: ContextItem, held: ContextItem): ContextItem {
 
 /**
  * Drops every decoded text the memo holds. Called when a user's items are forgotten or removed, so their decoded text
- * does not outlive them in the memo (it is never reachable from another item, but it should not stay resident).
+ * does not outlive them in the memo (another item reaches an entry only with the same bytes, so the same text; it
+ * should not stay resident all the same).
  */
 export function clearDecoded(): void {
   for (const memo of decoded) memo.clear();

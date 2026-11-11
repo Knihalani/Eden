@@ -773,10 +773,6 @@ export class ItemCache {
   /** Where frozen users are also written (D425, opt-in); null by default: nothing goes to disk (D8). */
   private disk: FrozenDisk | null = null;
   /**
-   * The owner's part of a persisted user (D425; the partner: its sync's per-source state): what to save beside the
-   * blob, and what to do once a user written by an earlier process is thawed here.
-   */
-  /**
    * Called with each user the cache freezes, warm or compact (D998: the partner freezes the user's card state with
    * them, `CardEnricher.freeze`). Null when no owner listens.
    */
@@ -786,6 +782,10 @@ export class ItemCache {
    * thaws the user's card state here, in the cache's own thaw, not inside the first lookup that reads it (D998).
    */
   onThaw: ((scope: Scope) => void) | null = null;
+  /**
+   * The owner's part of a persisted user (D425; the partner: its sync's per-source state): what to save beside the
+   * blob, and what to do once a user written by an earlier process is thawed here.
+   */
   persistHooks: {
     save(scope: Scope): unknown;
     /** May return a promise: a `ready` that read the user back resolves only once it settles. */

@@ -279,9 +279,9 @@ console.log(
 );
 for (const [k, b] of out) {
   if (b / USERS < 1_024) continue;
-  console.log(
-    `${k.padEnd(36)} ${(b / USERS / MB).toFixed(3).padStart(7)} MB  ${((100 * b) / total).toFixed(1).padStart(5)}%  ${(b / USERS / PER_USER).toFixed(0).padStart(5)} B/item`,
-  );
+  const mb = `${(b / USERS / MB).toFixed(3).padStart(7)} MB`;
+  const share = `${((100 * b) / total).toFixed(1).padStart(5)}%`;
+  console.log([k.padEnd(36), mb, share, `${(b / USERS / PER_USER).toFixed(0).padStart(5)} B/item`].join("  "));
 }
 
 if (process.argv.includes("--fields")) {

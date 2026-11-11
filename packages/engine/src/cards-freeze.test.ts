@@ -139,9 +139,39 @@ describe("card state frozen with its user (D998)", () => {
     const e = enricher();
     e.enqueue(u1, [item(2), item(4)]);
     expect(e.freeze(u1)).toBe(false);
+    expect(e.frozenCount).toBe(0);
+    await e.idle();
+    expect(e.frozenCount).toBe(1); // frozen at the drain's end
+    expect(e.freeze(u2)).toBe(false); // no state at all
+  });
+
+  test("a freeze refused while work is in flight happens when the drain ends, unless the user is woken first", async () => {
+    const e = enricher();
+    e.enqueue(u1, [item(2), item(4)]);
+    expect(e.freeze(u1)).toBe(false);
+    await e.idle();
+    expect(e.frozenCount).toBe(1);
+    e.wake(u1);
+    expect(e.frozenCount).toBe(0);
+    e.enqueue(u1, [item(6)]);
+    expect(e.freeze(u1)).toBe(false);
+    e.wake(u1); // the cache thawed the user before the drain ended: stay live
+    await e.idle();
+    expect(e.frozenCount).toBe(0);
+  });
+
+  test("a thaw that fails drops the user's card state and starts it again (fails open)", async () => {
+    const e = enricher();
+    e.enqueue(u1, [item(2), item(4)]);
     await e.idle();
     expect(e.freeze(u1)).toBe(true);
-    expect(e.freeze(u2)).toBe(false); // no state at all
+    const users = (e as unknown as { users: Map<string, { blob: Uint8Array }> }).users;
+    users.get("t/u1")!.blob.fill(7); // corrupt
+    expect(e.cardsOf(u1, ["mail:m2"], NOW + 1).size).toBe(0);
+    expect(e.userCount).toBe(0);
+    e.enqueue(u1, [item(2)]);
+    await e.idle();
+    expect(e.cardsOf(u1, ["mail:m2"], NOW + 1).size).toBe(1);
   });
 
   test("users stay apart, and forget drops a frozen user's state", async () => {
@@ -181,7 +211,7 @@ describe("card state frozen with its user (D998)", () => {
     for (let t = 0; t < 4 && cache.frozenCount === 0; t++) cache.expireIdle(NOW);
     expect(cache.frozenCount).toBe(1);
     expect(cards.frozenCount).toBe(1);
-    // The cache's thaw of the user (a returning user's `ready`) thaws their cards with it, before any lookup reads them.
+    // The cache's thaw of the user (a returning user's `ready`) thaws their cards with it, before a lookup reads them.
     await cache.ready(u1);
     expect(cache.frozenCount).toBe(0);
     expect(cards.frozenCount).toBe(0);

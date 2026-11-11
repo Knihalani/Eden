@@ -477,8 +477,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **Card state freezes with its user (D998; `CardEnricher.freeze`, `cards-freeze.test.ts`).** When the cache
   freezes a user (warm or compact, `ItemCache.onFreeze`, wired by the partner), their `UserCards` becomes one zstd
   JSON blob (`FrozenCards`), but only with nothing queued, draining or in flight; the first read or write (`live`)
-  thaws it into the same maps in the same order, the intent index rebuilt from its docs (`IntentIndex.export`/
-  `from`). Before, card state stayed live for frozen users: about 3.7 MB of heap a heavy user with a card and
+  thaws it into the same maps in the same order; the intent index stays live beside the blob (rebuilding it was most
+  of a thaw), and the cache's thaw wakes the cards (`ItemCache.onThaw`) so no lookup pays for it. A thaw that fails
+  drops the user's card state (made again, as after a restart); a freeze refused while work is in flight happens
+  when the drain ends (`freezeWanted`). Before, card state stayed live for frozen users: about 3.7 MB of heap a heavy user with a card and
   requests an item (`users.bench.ts --cards`). A new field of `UserCards` must be carried by `FrozenCardsBody` and
   `cards-freeze.test.ts`'s `state`, or a thaw loses it; per-hash state belongs on `Stored`, not in a new Map keyed by
   hash (a Map of thousands is 40-130 bytes an entry in JSC, a one-element `Set` 248: D998's C1, C4, C5 folded three

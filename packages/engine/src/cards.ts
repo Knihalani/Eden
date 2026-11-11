@@ -750,6 +750,8 @@ class UserCards {
   /** With `cardsLanes` > 1: sentence keys of the batches in flight, so another lane waits for their card. */
   readonly flying = new Set<string>();
   readonly abort = new AbortController();
+  /** The cache froze the user while work was in flight (`CardEnricher.freeze` refused): freeze once it settles. */
+  freezeWanted = false;
 }
 
 /**
@@ -1077,6 +1079,8 @@ export class CardEnricher {
     u.draining = work.finally(() => {
       u.draining = null;
       if (u.queue.length > 0 && !u.abort.signal.aborted && this.users.get(scopeKey(scope)) === u) this.start(scope, u);
+      // The cache froze the user while this ran (D998): their card state follows now that nothing is in flight.
+      else if (u.freezeWanted && this.users.get(scopeKey(scope)) === u) this.freeze(scope);
     });
   }
 
@@ -1454,8 +1458,12 @@ export class CardEnricher {
   freeze(scope: Scope): boolean {
     const key = scopeKey(scope);
     const u = this.users.get(key);
-    if (!(u instanceof UserCards) || u.queue.length > 0 || u.draining !== null || u.flying.size > 0) return false;
-    if (u.spawn !== null) return false;
+    if (!(u instanceof UserCards)) return false;
+    if (u.queue.length > 0 || u.draining !== null || u.flying.size > 0 || u.spawn !== null) {
+      // Not now: the drain's end freezes it, unless the cache thaws the user first (`wake`). Never left live for good.
+      u.freezeWanted = true;
+      return false;
+    }
     const shared: [string, string[]][] = [];
     for (const [hash, ids] of u.holders) if (typeof ids !== "string") shared.push([hash, [...ids]]);
     const body: FrozenCardsBody = {
@@ -1473,27 +1481,50 @@ export class CardEnricher {
 
   /** Thaws a user's card state if frozen (the partner calls it as the cache thaws the user). */
   wake(scope: Scope): void {
-    this.live(scopeKey(scope));
+    const u = this.live(scopeKey(scope));
+    if (u) u.freezeWanted = false; // in use again: a freeze waiting for the drain's end is no longer wanted
   }
 
-  /** The user's live card state, thawed first if frozen (`freeze`); undefined for a user with none. */
+  /**
+   * The user's live card state, thawed first if frozen (`freeze`); undefined for a user with none. A thaw that fails
+   * (a corrupt blob) fails open: the user's card state is dropped and made again, as after a restart.
+   */
   private live(key: string): UserCards | undefined {
     const u = this.users.get(key);
-    return u instanceof FrozenCards ? this.thawCards(key, u) : u;
+    if (!(u instanceof FrozenCards)) return u;
+    try {
+      return this.thawCards(key, u);
+    } catch {
+      this.drop(key, u.tenantId);
+      return undefined;
+    }
   }
 
-  /** A frozen user's card state as it was: every map in its order, the intent index rebuilt from its docs. */
+  /**
+   * A frozen user's card state as it was: every map in its order, the intent index as it was kept. Each content hash
+   * is one string again, as when live (JSON gives each occurrence its own: 0.3 MB more a heavy user), the intent
+   * index's own where it has one.
+   */
   private thawCards(key: string, f: FrozenCards): UserCards {
     const body = JSON.parse(Buffer.from(Bun.zstdDecompressSync(f.blob)).toString("utf8")) as FrozenCardsBody;
+    const canon = new Map<string, string>();
+    if (f.intent) for (const h of f.intent.hashes()) canon.set(h, h);
+    const one = (h: string): string => {
+      const c = canon.get(h);
+      if (c !== undefined) return c;
+      canon.set(h, h);
+      return h;
+    };
     const u = new UserCards(f.tenantId);
     u.enlisted = body.enlisted;
-    for (const [hash, s] of body.byHash) u.byHash.set(hash, s);
-    for (const [id, hash] of body.byItem) {
+    for (const [hash, s] of body.byHash) u.byHash.set(one(hash), s);
+    for (const [id, h] of body.byItem) {
+      const hash = one(h);
       u.byItem.set(id, hash);
       if (!u.holders.has(hash)) u.holders.set(hash, id);
     }
-    for (const [hash, ids] of body.shared) u.holders.set(hash, new Set(ids));
-    for (const [k, hash] of body.bySentence) u.bySentence.set(k, hash);
+    for (const [hash, ids] of body.shared) u.holders.set(one(hash), new Set(ids));
+    for (const [k, hash] of body.bySentence) u.bySentence.set(k, one(hash));
     u.intent = f.intent;
     this.users.set(key, u); // the same place in the order: a read is not a write
     return u;
