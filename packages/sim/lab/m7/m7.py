@@ -190,6 +190,18 @@ def load(patterns, need_tags=True):
     return rows
 
 
+def shortened(r, k):
+    """A training pool again with each item's text cut to a random 35-100% of its words (title kept), so item length
+    is not a cue (the parent's note: M3's tagger learned length). The tag logits stay the full item's, as served."""
+    rng = np.random.default_rng(1000 + k)
+    items = []
+    for it in r["items"]:
+        ws = it["text"].split()
+        n = max(3, int(len(ws) * rng.uniform(0.35, 1.0)))
+        items.append({**it, "text": " ".join(ws[:n])})
+    return {**r, "items": items}
+
+
 def suite_of(r):
     return r.get("suite", "")
 
@@ -452,6 +464,11 @@ def main():
     ap.add_argument("--drop", default="", help="comma-separated feature names to zero (ablation)")
     ap.add_argument("--json", default="")
     ap.add_argument("--pairhash", action="store_true", help="stack the PairHash score as a feature (round 2)")
+    ap.add_argument("--share", type=float, default=0.0, help="settle silent this share of out-of-fold pools (no target)")
+    ap.add_argument("--augment-length", action="store_true", help="add each training pool again with items cut short")
+    ap.add_argument("--fixtures", default="", help="short real-constraint pools (hard gate: none settled silent)")
+    ap.add_argument("--oof-only", action="store_true", help="read nothing held out: out-of-fold and fixtures only")
+    ap.add_argument("--settled-out", default="", help="write the held-out pools settled silent (for the re-ask)")
     args = ap.parse_args()
     rows = load(args.dumps, need_tags=not args.no_tags)
     held = set(args.heldout.split(","))
@@ -459,6 +476,8 @@ def main():
     tr = [r for r in rows if base(r) not in held]
     te = [r for r in rows if base(r) in held]
     print(f"rows {len(rows)}: train {len(tr)} held-out {len(te)}; held-out silent {sum(1 for r in te if not r['yes'])}")
+    if args.augment_length:
+        tr = tr + [shortened(r, k) for k, r in enumerate(tr)]
     Xtr, Ytr, Gtr = matrix(tr)
     Xte, Yte, Gte = matrix(te)
     drop = [FEATURE_NAMES.index(n) for n in args.drop.split(",") if n]
@@ -475,7 +494,7 @@ def main():
     pool_fold = np.array([fold_of[family(r)] for r in tr])
     if args.pairhash:
         Ptr, Pte = pair_matrix(tr), pair_matrix(te)
-        pcol, pte_col, _ = pair_column(Ptr, Ytr, pool_fold[Gtr], Pte, args.folds)
+        pcol, pte_col, pair_model = pair_column(Ptr, Ytr, pool_fold[Gtr], Pte, args.folds)
         Xtr = np.c_[Xtr, pcol].astype(np.float32)
         Xte = np.c_[Xte, pte_col].astype(np.float32)
     oof = np.zeros(len(Ytr), dtype=np.float32)
@@ -484,7 +503,12 @@ def main():
         va_idx = np.where(pool_fold[Gtr] == k)[0]
         m = fit_gbm(Xtr[tr_idx], Ytr[tr_idx], args)
         oof[va_idx] = m.predict_proba(Xtr[va_idx])[:, 1]
-    ts, tp, tl = pick(pools_of(tr, oof, Gtr), args.target)
+    if args.share > 0:
+        # Silent only, at the share of out-of-fold pools asked for (the bar's settled share, frozen before the read).
+        maxes = np.sort([max(pr) for pr, _ in pools_of(tr, oof, Gtr)])
+        ts, tp, tl = float(maxes[int(args.share * len(maxes))]), 2.0, 2.0
+    else:
+        ts, tp, tl = pick(pools_of(tr, oof, Gtr), args.target)
     n, s, b, sil, pas = score_rule(pools_of(tr, oof, Gtr), ts, tp, tl)
     print(f"thresholds silent<{ts:.4f} pass>={tp} low<{tl}; out-of-fold: settled {s}/{n} ({s/n:.1%}), "
           f"disagree {b} ({b/max(1,s):.2%}), silent {sil}, pass {pas}")
@@ -494,6 +518,29 @@ def main():
 
     auc = roc_auc_score(Yte, pte) if len(set(Yte)) > 1 else float("nan")
     n, s, b, sil, pas = score_rule(pools_of(te, pte, Gte), ts, tp, tl)
+    if args.oof_only:
+        print("OOF " + curve_line(pools_of(tr, oof, Gtr)) + "; " + lost_line(tr, oof, Gtr))
+        te = []
+    if args.settled_out and te:
+        with open(args.settled_out, "w") as out:
+            for gi, r in enumerate(te):
+                v = settle([float(x) for x in pte[Gte == gi]], ts, tp, tl)
+                if v == []:
+                    out.write(json.dumps({k: r[k] for k in r if k != "tagl"}) + "\n")
+    if args.fixtures:
+        fx = load([args.fixtures], need_tags=not args.no_tags)
+        Xf, _, Gf = matrix(fx)
+        for d in drop:
+            Xf[:, d] = 0
+        if args.pairhash:
+            Xf = np.c_[Xf, pair_model.predict_proba(pair_matrix(fx))[:, 1]].astype(np.float32)
+        pf = m.predict_proba(Xf)[:, 1]
+        silenced = [fx[gi]["request"] for gi in range(len(fx)) if settle([float(x) for x in pf[Gf == gi]], ts, tp, tl) == []]
+        print(f"FIXTURES: {len(silenced)} of {len(fx)} short real constraints settled silent (gate: 0)")
+        for q in silenced:
+            print("  silenced:", q)
+    if args.oof_only:
+        return
     print("HELD-OUT " + curve_line(pools_of(te, pte, Gte)))
     print("HELD-OUT " + lost_line(te, pte, Gte))
     res = {"model": args.model, "curve": curve(pools_of(te, pte, Gte)), "heldout_calls": n, "settled": s, "settled_frac": s / max(1, n), "disagree": b,

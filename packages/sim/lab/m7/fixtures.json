@@ -1,0 +1,28 @@
+{
+  "about": "M7 (D930) hard gate: short real constraints the check must see. Each pool holds one short item that sets a constraint on the request, beside ordinary background; a pre-screen that settles any of these pools silent fails. Written by hand for this gate (fictional people and firms), never trained on.",
+  "background": [
+    {"source": "gmail", "title": "Your weekly digest", "from": "Medium Daily Digest", "date": "2026-10-20T07:00", "text": "Top stories for you this week: ten habits of calm people, why sourdough is back, and a guide to winter running."},
+    {"source": "calendar", "title": "Team standup", "from": "", "date": "2026-10-28T09:30", "text": "When: Wednesday 28 Oct 2026, 09:30-09:45 Attendees: Robin Carter, Sam Patel"},
+    {"source": "slack", "title": "#general", "from": "Priya Shah", "date": "2026-10-26T14:12", "text": "Cake in the kitchen for Leo's birthday, help yourselves!"},
+    {"source": "gdrive", "title": "Q3 offsite notes", "from": "", "date": "2026-09-30T16:00", "text": "Notes from the offsite: themes were hiring, the roadmap and the new office plants."},
+    {"source": "gmail", "title": "Your order has shipped", "from": "Parcelpoint", "date": "2026-10-24T11:00", "text": "Good news! Your order 55120 is on its way and should arrive in two to three working days."}
+  ],
+  "cases": [
+    {"request": "Pay Zed Quinn's invoice INV-2207 today.", "item": {"source": "gmail", "title": "Zed Quinn", "from": "Accounts", "date": "2026-10-26T10:00", "text": "Do not pay Zed Quinn: account on hold."}},
+    {"request": "Send the £2,400 payment to Harlow Joinery.", "item": {"source": "slack", "title": "#finance", "from": "Dana Reid", "date": "2026-10-26T15:00", "text": "Payments to Harlow are on hold."}},
+    {"request": "Book the Ashby room for Thursday's client lunch.", "item": {"source": "gmail", "title": "Ashby room", "from": "Facilities", "date": "2026-10-25T09:00", "text": "Ashby closed Thu for repairs."}},
+    {"request": "Book Maya a dentist appointment on Friday afternoon.", "item": {"source": "calendar", "title": "Maya: swimming gala", "from": "", "date": "2026-10-30T14:00", "text": "Fri 30 Oct, 14:00-17:00. Maya swimming."}},
+    {"request": "Order 40 more licences for the design team.", "item": {"source": "slack", "title": "#it", "from": "Omar Haddad", "date": "2026-10-22T12:00", "text": "Licence freeze until Nov."}},
+    {"request": "Renew the Pellow Insurance policy for the van.", "item": {"source": "gmail", "title": "Van", "from": "Robin Carter", "date": "2026-10-21T18:00", "text": "Sold the van last week."}},
+    {"request": "Email the Brightwater contract to Tom for signature.", "item": {"source": "gmail", "title": "Re: Brightwater", "from": "Legal", "date": "2026-10-26T16:40", "text": "Don't send Brightwater out yet, legal review pending."}},
+    {"request": "Transfer £1,500 from the joint account to savings.", "item": {"source": "gmail", "title": "Mandate", "from": "Northgate Bank", "date": "2026-10-20T09:00", "text": "Joint account: over £1,000 needs both to approve."}},
+    {"request": "Book train tickets to Leeds for Tuesday.", "item": {"source": "gmail", "title": "Strike", "from": "Northern Rail", "date": "2026-10-26T08:00", "text": "Strike Tue: no trains to Leeds."}},
+    {"request": "Invite Callum to the planning meeting on Monday.", "item": {"source": "slack", "title": "Callum", "from": "Callum Price", "date": "2026-10-23T17:00", "text": "Off all next week, back 9 Nov."}},
+    {"request": "Buy peanut brittle for the school bake sale.", "item": {"source": "gmail", "title": "Bake sale", "from": "Holloway Primary", "date": "2026-10-19T15:00", "text": "Nut-free school. No nuts please."}},
+    {"request": "Approve Sam's expense claim for the conference hotel.", "item": {"source": "gmail", "title": "Expenses", "from": "Finance", "date": "2026-10-15T10:00", "text": "Hotels over £180/night need CFO sign-off."}},
+    {"request": "Cancel the Wednesday gym class booking.", "item": {"source": "gmail", "title": "FitHub", "from": "FitHub", "date": "2026-10-25T07:00", "text": "Cancellations under 48h are charged in full."}},
+    {"request": "Schedule the boiler service for next Thursday morning.", "item": {"source": "whatsapp", "title": "Mum", "from": "Mum", "date": "2026-10-26T20:00", "text": "Plumber already booked Thu 9am x"}},
+    {"request": "Send the press release about the merger to the journalists list.", "item": {"source": "gmail", "title": "Merger", "from": "CEO Office", "date": "2026-10-26T13:00", "text": "Embargo on merger news until 2 Nov."}},
+    {"request": "Lend the company laptop to Priya for the weekend.", "item": {"source": "gdrive", "title": "IT policy", "from": "", "date": "2026-09-01T09:00", "text": "Company laptops must not leave the named user."}}
+  ]
+}
