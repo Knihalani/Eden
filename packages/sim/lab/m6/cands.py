@@ -39,7 +39,7 @@ ap.add_argument("--lr", type=float, default=0.02)
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--target", type=float, default=0.97)
 ap.add_argument("--out", default="")
-ap.add_argument("--eval-sets", default="test,sim")
+ap.add_argument("--eval-sets", default="none", help="held-out sets read at the tuned threshold (test,sim): final runs only")
 A = ap.parse_args()
 random.seed(A.seed)
 np.random.seed(A.seed)
@@ -446,7 +446,7 @@ random.shuffle(train)
 if A.train_limit:
     train = train[: A.train_limit]
 val = [r for r in all_rows if r["set"] == "val"]
-evals = {s: [r for r in all_rows if r["set"] == s] for s in A.eval_sets.split(",")}
+evals = {s: [r for r in all_rows if r["set"] == s] for s in A.eval_sets.split(",") if s != "none"}
 use_req = A.arch not in ("h5",)
 print(f"rows train {len(train)} val {len(val)} " + " ".join(f"{k} {len(v)}" for k, v in evals.items()), flush=True)
 dt = featurize(train, use_req)
