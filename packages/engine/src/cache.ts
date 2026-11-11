@@ -2130,8 +2130,8 @@ export class ItemCache {
       const r = entries[j]!;
       let item: ContextItem;
       if (r.p) {
-        // `slice` copies: each item owns its bytes, as `packItem` would have made them.
-        item = packedFrom(r.i, blob.slice(t, t + r.p[0]), r.p[1] === 1);
+        // A view, not a copy: `packedFrom` copies the bytes into the item's own string (D998).
+        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1] === 1);
         t += r.p[0];
       } else item = r.i as ContextItem;
       const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
