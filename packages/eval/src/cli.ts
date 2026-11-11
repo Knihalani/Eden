@@ -109,9 +109,12 @@ const options = {
 // With the oracle, the headline metrics come from the stub run; the oracle's run is reported only as a proxy.
 const metrics = await runScenarios(scenarios, { ...options, ...(reader ? { reader: "stub" as const } : {}) });
 const proxy = reader === "oracle" ? proxyOf(await runScenarios(scenarios, { ...options, reader: "oracle" })) : null;
-const actingRun = actingScenarios.length
-  ? await runScenarios(actingScenarios, { ...options, ...(reader ? { reader: "stub" as const } : {}) })
-  : null;
+// Not under --live: its reader calls would share the run's cap and spend with the headline run, and `spentUsd` would
+// no longer compare with earlier live runs. The acting block measures the no-model push.
+const actingRun =
+  actingScenarios.length && !live
+    ? await runScenarios(actingScenarios, { ...options, ...(reader ? { reader: "stub" as const } : {}) })
+    : null;
 console.log(
   JSON.stringify(
     {
@@ -134,7 +137,9 @@ console.log(
       ...(proxy ? { oracleProxy: proxy } : {}),
       ...(actingRun
         ? { acting: { scenarios: actingRun.scenarios, ...actingRun.acting, decisions: actingRun.decisions } }
-        : {}),
+        : actingScenarios.length
+          ? { acting: "not run under --live (its reader calls would share the cap; run it without --live)" }
+          : {}),
     },
     null,
     2,

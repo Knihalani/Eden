@@ -15,7 +15,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
 | `src/reader-stub.ts` | No-model readers behind the real `AskReader`: `StubReader` (nothing binds), `OracleReader` (flags the expected items; a proxy). The eval's own copy of the lab's semantics: eval never imports `packages/sim` |
 | `src/cli.ts` | `bun run eval [--live --usd-cap usd [--judge]] [--wait ms] [--no-planner] [--config '{…}'] [--reader stub\|oracle] [dir]` → one JSON object |
 | `scenarios/*.json` | The scenarios; [docs/research/eval-suite.md](../../docs/research/eval-suite.md) says what each covers |
-| `scenarios/acting/*.json` | The acting suite (D810): five worlds, one request a session; 28 neutral requests (they act, no fact is owed) and 10 owed ones, each with a labelled look-alike. Run apart and reported as `acting` |
+| `scenarios/acting/*.json` | The acting suite (D810): 38 scenarios over five worlds, one request each (its own user); 28 neutral requests (they act, no fact is owed) and 10 owed ones, each with a labelled look-alike. Run apart (not under `--live`) and reported as `acting` |
 
 ## Rules that apply here
 
@@ -55,11 +55,13 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   (the owed fact and its look-alike). `cli.ts` runs it apart, so precision, recall and falseFireRate stay those of the
   31 scenarios and comparable with every earlier run, and prints an `acting` block: `packetsOnNeutral` (and its
   rate), `itemsPerNeutralTurn`, `factsHanded` (of `factsOwed`, recall's window) and `decoyHanded` (owed requests
-  where a look-alike was handed). On main: 18 of 28 neutral requests get a packet (0.64, 95% Wilson 0.46–0.79), 1.14
-  items each; 9 of 10 facts handed; a look-alike on 3 of 10. `pushOpen` off: 15 of 28, 9 of 10, 2 of 10;
-  `minus-candidates`: 7 of 28, 4 of 10, 0 of 10. Every labelled request starts the push (`run.test.ts` pins it), so
-  the suite measures what the push hands, not its gate. Labels follow the same rule as the rest: what the agent truly
-  needs, never what the engine delivers.
+  where a look-alike was handed). On main: 19 of 28 neutral requests get a packet (0.68, 95% Wilson 0.49–0.82), 1.18
+  items each; 10 of 11 facts handed; a look-alike on 3 of 10. `pushOpen` off: 13 of 28, 10 of 11, 3 of 10;
+  `minus-candidates`: 4 of 28, 5 of 11, 1 of 10. Every labelled request starts the push (`run.test.ts` pins it), so
+  the suite measures what the push hands, not its gate. Each request is its own scenario, so its own user: requests
+  of one world that shared a user moved each other's scores (18 of 28 in order, 21 alone). Labels follow the same
+  rule as the rest: what the agent truly needs, never what the engine delivers. Not run under `--live`: its reader
+  calls would share the run's cap and `spentUsd`.
 - **The reader (`--reader stub|oracle`).** `bun run eval` runs the default with no model: its reader, cards and
   intent are inert (listed under `inert`), which is the shipped default's no-model path. An override that names
   `askReader` itself is refused without `--reader`. `--reader stub` wires the real

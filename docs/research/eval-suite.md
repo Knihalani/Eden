@@ -105,19 +105,25 @@ Per category, with the planner:
 
 The weak-point analysis of 2026-11-11 (weak-points-1111.md, B1, R2) found that `bun run eval` read the same with
 `pushOpen` on or off, and that `falseFireRate` could not see candidate packets on requests that owe nothing: every
-silent turn above is a remark, a question or a tool result, where no push starts. `scenarios/acting/` adds five worlds
-(money and admin, work operations, family, travel, social), one request a session, each request one that acts: 28
-neutral (no stored fact bears on it, though it shares words with stored constraint-worded items) and 10 that owe a
-fact, each beside a labelled look-alike (another year's terms, another team's cap, another person's dates). It runs
-apart from the 31 scenarios, so the three headline numbers are unchanged, and reports an `acting` block.
+silent turn above is a remark, a question or a tool result, where no push starts. `scenarios/acting/` adds 38
+scenarios over five worlds (money and admin, work operations, family, travel, social), each one request that acts
+by its own user: 28 neutral (no stored fact bears on it, though it shares words with stored constraint-worded items)
+and 10 that owe a fact, each beside a labelled look-alike (another year's withdrawn terms, another team's cap,
+another person's dates). It runs apart from the 31 scenarios, so the three headline numbers are unchanged, and
+reports an `acting` block.
 
 | Configuration | Packets on neutral requests | Items per neutral request | Facts handed | Look-alike handed |
 | --- | --- | --- | --- | --- |
-| default | 18 / 28 (0.46–0.79) | 1.14 | 9 / 10 (0.60–0.98) | 3 / 10 (0.11–0.60) |
-| `pushOpen` off | 15 / 28 (0.36–0.70) | 0.75 | 9 / 10 | 2 / 10 (0.06–0.51) |
-| `minus-candidates` | 7 / 28 (0.13–0.43) | 0.25 | 4 / 10 (0.17–0.69) | 0 / 10 (0–0.28) |
+| default | 19 / 28 (0.49–0.82) | 1.18 | 10 / 11 (0.62–0.98) | 3 / 10 (0.11–0.60) |
+| `pushOpen` off | 13 / 28 (0.30–0.64) | 0.71 | 10 / 11 | 3 / 10 |
+| `minus-candidates` | 4 / 28 (0.06–0.31) | 0.14 | 5 / 11 (0.21–0.72) | 1 / 10 (0.02–0.40) |
 
 Intervals are 95% Wilson on the counts; the suite is small and hand-written, so read differences of a few requests
-as direction, not size. The fact missed by the default is the visa's limit on an extended trip ("Extend my Delhi
-trip …"). In the lab the default speaks on 92–98% of neutral requests; here on 64%: these worlds hold 6–9 items each,
-so fewer requests share a word with a constraint-worded one.
+as direction, not size. The fact missed by the default is the visa's 30-day limit on an extended trip ("Extend my
+Delhi trip …"). In the lab the default speaks on 92–98% of neutral requests; here on 68%: these worlds hold 6–9
+items each, so fewer requests share a word with a constraint-worded one.
+
+Review (2026-11-11) changed the first version: a world's requests had shared one user, so each moved the others'
+scores (18 of 28 neutral packets in order, 21 alone); one look-alike was a rule still in force; one neutral request
+(planning a family lunch) owed the child's allergy; three neutral requests were reworded where a stored item was
+their own context; the travel world's return date already broke the visa limit before the request.

@@ -1,5 +1,5 @@
 {
-  "id": "acting-travel",
+  "id": "acting-travel-1",
   "category": "travel",
   "description": "Travel. Two requests owe a stored constraint (the visa's validity, the fare's change fee window) beside a look-alike (a lapsed visa, another airline's rule); the rest are travel errands that share words with stored items but do not depend on them.",
   "clock": "2026-11-09T10:00:00Z",
@@ -47,7 +47,7 @@
         {
           "ref": "evt-delhi",
           "title": "Delhi trip",
-          "text": "Fly out 28 November, back 10 January."
+          "text": "Fly out 28 November, back 20 December."
         }
       ]
     }
@@ -74,115 +74,6 @@
               "mail:msg-visa-old"
             ]
           }
-        }
-      ]
-    },
-    {
-      "id": "acting-travel-2",
-      "turns": [
-        {
-          "event": {
-            "kind": "session_start"
-          }
-        },
-        {
-          "event": {
-            "kind": "user_message",
-            "text": "Move my TAP flight to Delhi two days later"
-          },
-          "expect": {
-            "items": [
-              "mail:msg-fare"
-            ],
-            "decoys": [
-              "mail:msg-fare-other"
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "acting-travel-3",
-      "turns": [
-        {
-          "event": {
-            "kind": "session_start"
-          }
-        },
-        {
-          "event": {
-            "kind": "user_message",
-            "text": "Make a packing list for Delhi in late November"
-          },
-          "expect": "neutral"
-        }
-      ]
-    },
-    {
-      "id": "acting-travel-4",
-      "turns": [
-        {
-          "event": {
-            "kind": "session_start"
-          }
-        },
-        {
-          "event": {
-            "kind": "user_message",
-            "text": "Download offline maps of Lisbon to my phone"
-          },
-          "expect": "neutral"
-        }
-      ]
-    },
-    {
-      "id": "acting-travel-5",
-      "turns": [
-        {
-          "event": {
-            "kind": "session_start"
-          }
-        },
-        {
-          "event": {
-            "kind": "user_message",
-            "text": "Translate a short thank-you note into Hindi for my host family"
-          },
-          "expect": "neutral"
-        }
-      ]
-    },
-    {
-      "id": "acting-travel-6",
-      "turns": [
-        {
-          "event": {
-            "kind": "session_start"
-          }
-        },
-        {
-          "event": {
-            "kind": "user_message",
-            "text": "Convert 200 EUR into rupees at today's rate for my budget sheet"
-          },
-          "expect": "neutral"
-        }
-      ]
-    },
-    {
-      "id": "acting-travel-7",
-      "turns": [
-        {
-          "event": {
-            "kind": "session_start"
-          }
-        },
-        {
-          "event": {
-            "kind": "user_message",
-            "text": "Recommend three novels set in Delhi for the flight"
-          },
-          "expect": "neutral"
         }
       ]
     }

@@ -366,7 +366,16 @@ describe("the acting suite (D810)", () => {
   const run = (config = {}) => runScenarios(acting, { model: null, waitMs: 2_000, planner: true, config });
 
   test("every label is a request, and every owed fact and look-alike exists in its scenario's sources", () => {
-    expect(acting.length).toBeGreaterThanOrEqual(5);
+    expect(acting.length).toBeGreaterThanOrEqual(30);
+    // One request a user: a scenario is one session of a start and one labelled request, so a request is scored on its
+    // own user's state and the order of the files changes nothing (the review found 18 of 28 neutral packets in order,
+    // 21 alone, when a world's requests shared a user).
+    for (const s of acting) {
+      expect(s.sessions).toHaveLength(1);
+      const turns = s.sessions[0]!.turns;
+      expect(turns.filter((t) => t.expect)).toHaveLength(1);
+      expect(turns.at(-1)!.expect).toBeDefined();
+    }
     for (const t of labelled) {
       expect(t.event.kind).toBe("user_message");
       expect(t.expect === "neutral" || (typeof t.expect === "object" && (t.expect.decoys?.length ?? 0) > 0)).toBe(true);
@@ -398,14 +407,14 @@ describe("the acting suite (D810)", () => {
     expect(m.counts.expected).toBe(a.factsOwed);
   });
 
-  test("it sees the push's parts: pushOpen and the candidates move it, where the headline numbers do not", async () => {
+  test("it sees the push's parts: pushOpen and the candidates move it", async () => {
     const on = (await run()).acting!;
     const open = (await run({ pushOpen: false })).acting!;
     const none = (await run({ pushCandidates: 0 })).acting!;
     expect(open.packetsOnNeutral).toBeLessThan(on.packetsOnNeutral);
     expect(none.packetsOnNeutral).toBeLessThan(open.packetsOnNeutral);
     expect(none.factsHanded).toBeLessThan(on.factsHanded);
-  });
+  }, 30_000); // Three runs of the suite: about 1.5 s alone.
 
   test("a scenario without its labels reports no acting block", async () => {
     const m = await runScenarios([scenario], { model: null, waitMs: 0 });
