@@ -652,6 +652,75 @@ ask may make one reader call under its own `Budget`. D70 measured the SDK arm wi
 cost and 11.9 points fewer hidden facts raised; the proxy's figure is not measured (docs/research/p5-integrator.md
 §4b). A streamed asking round is buffered, so the agent's first token waits for the rounds.
 
+## Hosting: our cost and the tenant's, per heavy user (D1, D990-D994)
+
+A **heavy user**: a daily agent (Hermes, say) making about 50 requests a day (1,500 a month), 20 connectors, at the
+3,000-item cap. Sized for the **peak hour**, when every heavy user of a tenant is active within 30 minutes, a sixth
+live and the rest warm: **5.29 MB of RSS a user, measured** (`users.bench.ts 200 3000 --prose --sources=20 --waves=6
+--warm-waves=5`, the 2-core 12 GB budget; docs/research/d1-scale-out.md §1). Users per box by
+`deploy/scripts/sizing.py` (75% of RAM, 70 MB a process, 60 MB of micro-model weights a process): 1,643 on 2 OCPU /
+12 GB, 3,296 on 4 / 24, 8,871 on 64 GB (8 processes), 17,753 on 128 GB (16). Prices read 2026-11-11
+(docs/research/d1-providers.md; EUR at 1.1127; **check at signup**).
+
+**(a) Our cost per heavy user-month** (no model key: the shipped no-model path, $0 a call):
+
+| | 1,000 users | 10,000 users | 100,000 users |
+| --- | --- | --- | --- |
+| Machines | 1 Hetzner AX41-class, 64 GB ($66) | 3 x AX41-class (one can fail: 2 hold 17,742) ($197) | 7 x AX102-class, 128 GB (6 hold 106,518; one spare) ($1,238) |
+| Load balancer | none (Caddy on the box) | Hetzner LB11 $8.33 | LB11 $8.33 **[traffic allowance unverified]**, or DNS over two routers, $0 |
+| Shared store (cluster) / backups | Hetzner Object Storage $7.22 (backups) | $7.22 (blobs about 27 GB, 1 TB included) | $7.22 (blobs about 270 GB; requests free) |
+| Disk | the servers' NVMe (persisted files about 1.2-2.7 MB a user) | included | included |
+| Bandwidth | included (dedicated: unmetered 1 Gbit/s) | included | included |
+| Monitoring | Grafana Cloud free tier **[unverified terms]** | free (about 1,500 series) | free (about 3,500 series) |
+| Cluster router | none | on two of the nodes (no state, little CPU) | on two of the nodes |
+| **Total a month** | **$73** | **$213** | **$1,254** |
+| **Per heavy user-month** | **$0.073** | **$0.021** | **$0.0125** |
+| Free start instead | Oracle Always Free A1 2 / 12 GB: $0 for up to about 1,600 heavy users (reclamation, capacity and suspension risks: docs/DEPLOY.md §2.1) | | |
+| Fallback host | Oracle paid A1 4 / 24 GB $55.48 (3,296 users) | 4 x A1 4/24 ($222) | about 31 x A1 4/24 or 8 x A1 16 OCPU / 128 GB ($257 each: $2,056) **[EST]** |
+
+Per box, **[EST]** for everything but the RSS: CPU is not the bound (100,000 heavy users at 50 requests a day is 58
+requests a second over 7 machines; an event costs about 10-12 ms at p50 on the fast path); the store's writes are
+one per idle period (about 5-10 a heavy user a day **[EST]**), free at Hetzner and OVH, about $0.0007-0.0014 a user
+a month at Cloudflare R2's $4.50 a million; bandwidth about 0.1-0.2 GB a heavy user a month **[EST]** (events and
+packets of a few KB, connector listings), inside every plan above except Oracle past its free 10 TB ($0.0085/GB).
+
+**Eden's model calls today** (with `OPENROUTER_API_KEY`, Haiku 5.5), per heavy user-month **[EST]** from the
+measured per-call figures above: the push check on about 0.97 of requests at $0.00023-0.00026 a call ($0.33-0.38) and
+cards and intent at about $0.026 a month (the 36-new-items-a-day estimate): **about $0.36-0.41**, 5 to 30 times the
+hosting cost. The plan is micro CPU models in every role at $0 a call, their weights inside the RSS budget above;
+on main at this writing four were stopped on their pre-registered rules (the push check M1, D982; intent M11, D970;
+supersession M3b, D914; the packet trimmer M6, D920) and cards (M10) and the source router (M8) were not in yet.
+Until a role lands, a deployment either runs that role on Haiku (the figure above) or runs without a key, the no-model
+default (eval 0.65 / 0.52 / 0), at $0.
+
+**(b) The tenant's cost per heavy user-month** (paid by the tenant, not by us):
+
+- **Connector calls.** Over a user's days the agent alone made 0.89 tool calls a request and Eden-equipped agents
+  0.16 of Eden's (5 sources, a3-cost-speed.md §11); at about 1,000 sources Eden made 2.4 a request with the earn
+  rule (O1). For 20 connectors **[EST]**: about 1,300-3,300 calls a month with the agent's own search (0.89-2.2 a
+  request) against about 300-1,200 with Eden (0.2-0.8 a request, background listings and the backfill included).
+  Priced at `CONNECTOR_PLANS`' list prices ($ per 1,000 calls; assumed, from market.py):
+
+  | Plan | Agent alone (1,300-3,300 calls) | With Eden (300-1,200 calls) |
+  | --- | --- | --- |
+  | First-party APIs (quota only) | $0 | $0 |
+  | Composio ($0.30) | $0.39-0.99 | $0.09-0.36 |
+  | Unified.to ($0.75) | $0.98-2.48 | $0.23-0.90 |
+  | Arcade.dev ($10) | $13-33 | $3-12 |
+  | Pipedream Connect ($12) | $16-40 | $3.6-14 |
+  | Zapier MCP ($25.8) | $34-85 | $7.7-31 |
+
+- **The agent's tokens.** Measured per 1,000 tasks on the lab's cached Pi agent (a3-cost-speed.md, p2-push-check.md):
+  a Haiku 5.5 agent's own bill is about $0.18-0.25 per 1,000 requests, so $0.27-0.37 per heavy user-month; Eden's
+  packets add $0.05-0.07 per 1,000 requests without a model key (+$0.08-0.10 a month). A Sonnet 5.5 agent is about
+  $3.5-4.2 per 1,000 requests **[EST, priced from the Haiku tokens]**, $5.2-6.3 a month; with the push check (a model
+  key) its bill falls $0.86 per 1,000 requests over days (D826). Lab tasks are short: a production agent's prompts
+  (system prompt, tools, history) are larger, and its own bill scales with them, not with Eden.
+
+So at 10,000 heavy users our hosting is about 2 cents a user a month, under a tenth of what today's model roles
+would cost, and small beside the tenant's own agent tokens and any per-call connector plan, where Eden's fewer
+calls are the larger effect.
+
 ## Levers, in order of leverage
 
 1. Fewer model calls: better cheap scoring (M1 tuning), the graph (M3; deleted by D225), learned silence. Done so far: ask answers

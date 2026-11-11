@@ -647,6 +647,11 @@ sources file, a busy port, an unwritable `EDEN_HOME`) stops the server with an `
 (`-v ./sources:/sources:ro -e EDEN_USER_SOURCES_FILE=/sources/users.json`), plus `-e` for each token variable the file
 names; the file is re-read when it changes, so adding a user needs no restart.
 
+**Running it for real:** docs/DEPLOY.md is the operator's guide (one box with Caddy, a free Oracle A1 box, backups,
+monitoring, upgrades with no failed requests, and more than one machine behind the cluster router, D992-D994), with
+the kit in `deploy/`. Beside `/healthz` every process answers `/readyz` (503 while it drains) and `/metrics`
+(Prometheus text, counts only); a stop drains within `EDEN_SHUTDOWN_GRACE_MS`.
+
 ## Configuration
 
 There is one configuration, the default (D112): the best measured setup, NEWL (D99) with the speed and memory

@@ -45,8 +45,14 @@ is the engineering side of that story. It is not legal advice and not a certific
    data. `OpenRouterModel.fromEnv`, the engine and the server never set it; tests pin that `fromEnv` sends "deny"
    whatever the environment says and that no file under the server, engine, client, sources, protocol, graph or
    redact packages names the option.
-2. **Hosting provider** (not chosen).
-3. The user's **source providers** are not Eden's subprocessors: the user connected them, and Eden only reads.
+2. **Hosting provider**: not chosen; docs/DEPLOY.md recommends Hetzner (dedicated, EU) with Oracle Cloud as the
+   fallback (docs/research/d1-providers.md). Its disks hold the persisted users, encrypted (D991).
+3. **Object storage**, only for more than one machine (D992): every persisted user's blob, the same encrypted bytes
+   as on disk (AES-256-GCM under the operator's key; names a bucket and a keyed hash, no id), each user's last
+   written state, at most 7 days (the bucket's lifecycle rule and Eden's sweep), deleted on forget. Recommended:
+   the hosting provider's own (Hetzner Object Storage) so content stays with one processor; Cloudflare R2 or
+   another S3-compatible store adds one.
+4. The user's **source providers** are not Eden's subprocessors: the user connected them, and Eden only reads.
 
 Tenants will need: a subprocessor list, a DPA, a data-flow diagram (this file is the start), regional hosting options,
 and a statement on training (none).

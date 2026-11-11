@@ -41,6 +41,13 @@
  *                    (`<i>-of-<N>`).
  * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default the machine's memory, at least 4,096: what
  *                    every user a box can hold needs, `defaultPersistMb`). A freeze past it is not written.
+ * EDEN_PERSIST_STORE s3://bucket/prefix (D992): frozen users mirrored to an S3-compatible store every machine of a
+ *                    cluster reaches (blob-store.ts: EDEN_S3_ENDPOINT, _REGION, _ACCESS_KEY_ID, _SECRET_ACCESS_KEY).
+ * EDEN_CLUSTER_KEY   the cluster router's membership messages (D992), 24+ characters, the same on every machine;
+ *                    EDEN_CLUSTER_SIZE the machine count, which divides the tenant's spend cap with N (D993).
+ * EDEN_NODES, EDEN_NODES_FILE  this process is the cluster router over those machines (cluster.ts); it holds no users.
+ * EDEN_SHUTDOWN_GRACE_MS a stop's budget (default 10,000, D994); EDEN_DRAIN_DELAY_MS how long a draining process keeps
+ *                    serving after /readyz turned 503 (default 0; 5,000 behind Caddy or a load balancer).
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";

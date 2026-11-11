@@ -37,9 +37,9 @@ seeds the same no-key path caught the deciding item for 208 of 384 requests (D29
 
 Needs [Bun](https://bun.sh) 1.4+ (`bun.lock` is lockfile format 2, which Bun 1.3.14 refuses), or Docker:
 `docker build -t eden .` then `docker run -p 127.0.0.1:8790:8790 -e EDEN_DEV=1 eden` (the `Dockerfile` header has the
-production flags; D280). Everything below runs without any API key: Eden's default answers from its
-no-model path, and for a request that acts or opens like an instruction it hands the agent candidates to check
-(D237, D276, D710).
+production flags; D280; docs/DEPLOY.md runs it for real). Everything below runs without any API key: Eden's default
+answers from its no-model path, and for a request that acts or opens like an instruction it hands the agent candidates
+to check (D237, D276, D710).
 
 ```bash
 bun install
