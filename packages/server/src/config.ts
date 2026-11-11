@@ -30,17 +30,31 @@
  *                    child keeps its own source-map file (`childSourceMapPath`), and each divides the per-tenant
  *                    caps (rate, burst, model spend) by N: a tenant concentrated on few users needs higher caps or 1.
  * EDEN_ROUTER_CHILD  set by the router only ("i/N"): this process is child i of N.
- * EDEN_PERSIST_FROZEN_DIR, EDEN_PERSIST_KEY  opt-in (D425, off by default): users frozen while idle (D325) are also
- *                    written to this directory, encrypted (AES-256-GCM) with this key (32 bytes, as 64 hex digits or
- *                    base64; never logged), so a restart thaws them from disk instead of re-reading every source. Set
- *                    both or neither. Each process writes its own subdirectory (`<i>-of-<N>`).
- * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default 4096): a freeze past it is not written.
+ * EDEN_PERSIST_KEY   required (D991; D425 made persistence opt-in, D991 makes it the default): users frozen while
+ *                    idle (D325) are also written to disk, encrypted (AES-256-GCM) with this key (32 bytes, as 64 hex
+ *                    digits or base64; never logged), so a restart thaws them instead of re-reading every source.
+ *                    Startup stops without it, unless EDEN_PERSIST=off (the operator's explicit choice) or EDEN_DEV=1
+ *                    (local, no real users: off unless the key is set). The key is never generated here: one stored
+ *                    beside the files would protect nothing.
+ * EDEN_PERSIST       "off" turns persistence off (a restart re-reads every user's sources); unset or "on", on.
+ * EDEN_PERSIST_FROZEN_DIR where the files go, default $EDEN_HOME/frozen. Each process writes its own subdirectory
+ *                    (`<i>-of-<N>`).
+ * EDEN_PERSIST_MAX_MB the directory's cap (MB, across processes; default the machine's memory, at least 4,096: what
+ *                    every user a box can hold needs, `defaultPersistMb`). A freeze past it is not written.
+ * EDEN_PERSIST_STORE s3://bucket/prefix (D992): frozen users mirrored to an S3-compatible store every machine of a
+ *                    cluster reaches (blob-store.ts: EDEN_S3_ENDPOINT, _REGION, _ACCESS_KEY_ID, _SECRET_ACCESS_KEY).
+ * EDEN_CLUSTER_KEY   the cluster router's membership messages (D992), 24+ characters, the same on every machine;
+ *                    EDEN_CLUSTER_SIZE the machine count, which divides the tenant's spend cap with N (D993).
+ * EDEN_NODES, EDEN_NODES_FILE  this process is the cluster router over those machines (cluster.ts); it holds no users.
+ * EDEN_SHUTDOWN_GRACE_MS a stop's budget (default 10,000, D994); EDEN_DRAIN_DELAY_MS how long a draining process keeps
+ *                    serving after /readyz turned 503 (default 0; 5,000 behind Caddy or a load balancer).
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, totalmem } from "node:os";
 import { join } from "node:path";
 import { edenHome, isId, scopeKey } from "@eden/protocol";
+import { type StoreConfig, storeConfig } from "./blob-store";
 
 export interface ServerConfig {
   port: number;
@@ -69,10 +83,29 @@ export interface ServerConfig {
    */
   child: { index: number; count: number } | null;
   /**
-   * D425 (opt-in, EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY): where frozen users are written, encrypted; null (the
-   * default) writes no content to disk (D8). `maxBytes` is the whole directory's; a router child gets 1/N of it.
+   * D425, on by default since D991 (EDEN_PERSIST_KEY): where frozen users are written, encrypted; null with
+   * EDEN_PERSIST=off (or dev mode with nothing set). `maxBytes` is the whole directory's; a router child gets 1/N of
+   * it. `store` (D992, EDEN_PERSIST_STORE): an S3-compatible store every machine of a cluster reaches.
    */
-  persist?: { dir: string; key: PersistKey; maxBytes: number } | null;
+  persist?: { dir: string; key: PersistKey; maxBytes: number; store?: StoreConfig | null } | null;
+  /**
+   * D992: this machine in a cluster. `key` (EDEN_CLUSTER_KEY, 24+ characters) authenticates the cluster router's
+   * membership messages (`/internal/cluster`); `size` (EDEN_CLUSTER_SIZE, the machines) divides the tenant's model
+   * spend cap with the child count, as D163 divides it by N. Both unset on a single machine.
+   */
+  cluster?: { key: string | null; size: number };
+  /**
+   * A shutdown's whole budget (EDEN_SHUTDOWN_GRACE_MS, default 10 s, D992): in-flight requests finish, live users are
+   * written, store writes settle, then the process exits; the router kills a child still running after it. Give the
+   * container more (`docker stop -t 30`, compose `stop_grace_period: 30s`).
+   */
+  shutdownGraceMs?: number;
+  /**
+   * How long a draining process keeps serving after /readyz turned 503 (EDEN_DRAIN_DELAY_MS, default 0, D994): the
+   * time a load balancer or Caddy takes to see it and stop sending. Without it a request on a kept-alive connection
+   * can meet the closing listener (a 502 at Caddy, which does not retry a POST). The grace counts from after it.
+   */
+  drainDelayMs?: number;
 }
 
 /**
@@ -123,7 +156,7 @@ export const RETIRED_ENV: Record<string, string> = {
   EDEN_PERSIST_DISK_ONLY: "D817 deleted disk-only frozen users: a frozen user's blob stays in memory as well",
 };
 
-export function loadConfig(env = process.env, cores = machineCores()): ServerConfig {
+export function loadConfig(env = process.env, cores = machineCores(), memoryBytes = machineMemory()): ServerConfig {
   for (const [name, why] of Object.entries(RETIRED_ENV)) {
     if (env[name]) throw new Error(`${name} is no longer read (${why}): unset it`);
   }
@@ -155,7 +188,8 @@ export function loadConfig(env = process.env, cores = machineCores()): ServerCon
     host: env.HOST ?? "127.0.0.1",
     keys,
     dev,
-    sourceMapPath: env.EDEN_SOURCE_MAP ?? join(edenHome(), "source-map.db"),
+    // From the env given (a test's, the router's), not only the process's: EDEN_HOME of this env wins.
+    sourceMapPath: env.EDEN_SOURCE_MAP ?? join(homeOf(env), "source-map.db"),
     tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS") / share,
     tenantBurst: Math.max(1, positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST") / share),
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
@@ -164,32 +198,109 @@ export function loadConfig(env = process.env, cores = machineCores()): ServerCon
     // A child never starts a router of its own, whatever EDEN_PROCESSES it inherited.
     processes: child ? 1 : processCount(env.EDEN_PROCESSES, cores),
     child,
-    persist: persistConfig(env, share),
+    persist: persistConfig(env, share, dev, memoryBytes),
+    cluster: clusterConfig(env, persistConfigured(env)),
+    shutdownGraceMs: Math.max(2_000, positive(env.EDEN_SHUTDOWN_GRACE_MS, 10_000, "EDEN_SHUTDOWN_GRACE_MS")),
+    drainDelayMs: drainDelay(env.EDEN_DRAIN_DELAY_MS),
   };
 }
 
-/** Default cap of the persistence directory (D425), MB across every process. */
+/** The least default cap of the persistence directory (D425), MB across every process. */
 export const DEFAULT_PERSIST_MAX_MB = 4_096;
 
 /**
- * EDEN_PERSIST_FROZEN_DIR and EDEN_PERSIST_KEY (D425): both or neither. The key's own value is never in a message.
+ * The directory's default cap (D991): the machine's memory in MB, at least `DEFAULT_PERSIST_MAX_MB`. Users per box are
+ * bound by memory (2-4.4 MB of RSS a user at the 3,000-item cap, docs/research/p6-scale.md), and a user's file is
+ * smaller than what it holds in memory (compact 0.8-1.2 MB, warm 1.8-2.7 MB at the cap): so a cap of the memory's size
+ * holds a file for every user the box can serve, warm ones written at shutdown included. 4,096 MB (the old default)
+ * was past at about 3,400 prose users, which a 16 GB box holds (D863).
+ */
+export function defaultPersistMb(memoryBytes: number): number {
+  const mb = Number.isFinite(memoryBytes) && memoryBytes > 0 ? Math.floor(memoryBytes / 1_048_576) : 0;
+  return Math.max(DEFAULT_PERSIST_MAX_MB, mb);
+}
+
+const NO_KEY =
+  "EDEN_PERSIST_KEY is not set: idle users are persisted to disk, encrypted, by default (D991). Set it to 32 random " +
+  "bytes kept in your secret store (openssl rand -hex 32), or set EDEN_PERSIST=off to re-read every user's sources " +
+  "after each restart";
+
+/**
+ * Persistence (D425, the default since D991): on unless EDEN_PERSIST=off, and then the operator's key is required;
+ * EDEN_DEV=1 with no persistence variable set is off (local, no real users). The key's own value is never in a message.
  * A child's cap is its 1/N share (`share`) of EDEN_PERSIST_MAX_MB.
  */
-function persistConfig(env: NodeJS.ProcessEnv, share: number): ServerConfig["persist"] {
+function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memoryBytes: number) {
+  // The cluster router (D992, EDEN_NODES) holds no user: nothing of its own to persist.
+  if (env.EDEN_NODES || env.EDEN_NODES_FILE) return null;
+  const mode = env.EDEN_PERSIST ?? "";
+  if (!["", "on", "off"].includes(mode)) throw new Error(`EDEN_PERSIST must be "on" or "off", got ${mode}`);
   const dir = env.EDEN_PERSIST_FROZEN_DIR ?? "";
   const raw = env.EDEN_PERSIST_KEY ?? "";
-  if (dir === "" && raw === "") {
-    if (env.EDEN_PERSIST_MAX_MB) throw new Error("EDEN_PERSIST_MAX_MB is set without EDEN_PERSIST_FROZEN_DIR");
+  const max = env.EDEN_PERSIST_MAX_MB ?? "";
+  if (mode === "off") {
+    if (env.EDEN_PERSIST_STORE) throw new Error("EDEN_PERSIST_STORE needs persistence: remove EDEN_PERSIST=off");
+    if (dir !== "" || raw !== "" || max !== "") {
+      throw new Error("EDEN_PERSIST=off with EDEN_PERSIST_FROZEN_DIR, _KEY or _MAX_MB set: remove them, or the =off");
+    }
     return null;
   }
-  if (dir === "") throw new Error("EDEN_PERSIST_KEY is set without EDEN_PERSIST_FROZEN_DIR: set both or neither");
-  if (raw === "") throw new Error("EDEN_PERSIST_FROZEN_DIR is set without EDEN_PERSIST_KEY: set both or neither");
+  if (raw === "") {
+    if (dev && mode === "" && dir === "" && max === "") return null;
+    throw new Error(NO_KEY);
+  }
   const key = persistKey(raw);
   if (key === null) {
     throw new Error("EDEN_PERSIST_KEY must be 32 random bytes as 64 hex digits or base64 (e.g. openssl rand -hex 32)");
   }
-  const mb = positive(env.EDEN_PERSIST_MAX_MB, DEFAULT_PERSIST_MAX_MB, "EDEN_PERSIST_MAX_MB");
-  return { dir, key: new PersistKey(key), maxBytes: Math.floor((mb * 1_048_576) / share) };
+  const mb = positive(max === "" ? undefined : max, defaultPersistMb(memoryBytes), "EDEN_PERSIST_MAX_MB");
+  return {
+    dir: dir === "" ? join(homeOf(env), "frozen") : dir,
+    key: new PersistKey(key),
+    maxBytes: Math.floor((mb * 1_048_576) / share),
+    store: storeConfig(env),
+  };
+}
+
+/**
+ * EDEN_HOME of the env given, created 0700 as `edenHome` does for the process's (review of D992: a test's or a
+ * router's env names its own home); the process's otherwise.
+ */
+function homeOf(env: NodeJS.ProcessEnv): string {
+  if (!env.EDEN_HOME) return edenHome();
+  mkdirSync(env.EDEN_HOME, { recursive: true, mode: 0o700 });
+  return env.EDEN_HOME;
+}
+
+/** Whether persistence is on for this env (the same rule as `persistConfig`, without its checks). */
+function persistConfigured(env: NodeJS.ProcessEnv): boolean {
+  if (env.EDEN_NODES || env.EDEN_NODES_FILE || env.EDEN_PERSIST === "off") return false;
+  return Boolean(env.EDEN_PERSIST_KEY);
+}
+
+/** EDEN_DRAIN_DELAY_MS: 0-60,000 ms, default 0. */
+function drainDelay(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 0;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 60_000) throw new Error(`EDEN_DRAIN_DELAY_MS must be 0-60000, got ${raw}`);
+  return n;
+}
+
+/** EDEN_CLUSTER_KEY and EDEN_CLUSTER_SIZE (D992); the key's value is never in a message. */
+function clusterConfig(env: NodeJS.ProcessEnv, persisting: boolean): { key: string | null; size: number } {
+  const key = env.EDEN_CLUSTER_KEY ?? "";
+  if (key !== "" && key.length < 24) throw new Error("EDEN_CLUSTER_KEY must be 24+ characters (openssl rand -hex 24)");
+  // A cluster node that persists to its own disk only would keep stale blobs of users it released and read them back
+  // if they returned (review of D992): a node needs the shared store, or no persistence at all.
+  const router = Boolean(env.EDEN_NODES || env.EDEN_NODES_FILE);
+  if (key !== "" && !router && persisting && !env.EDEN_PERSIST_STORE) {
+    throw new Error(
+      "a cluster node (EDEN_CLUSTER_KEY) that persists needs EDEN_PERSIST_STORE, the store every node reaches",
+    );
+  }
+  const size = positive(env.EDEN_CLUSTER_SIZE, 1, "EDEN_CLUSTER_SIZE");
+  if (!Number.isInteger(size) || size > 1_000) throw new Error("EDEN_CLUSTER_SIZE must be a whole number, 1-1000");
+  return { key: key === "" ? null : key, size };
 }
 
 /** 64 hex digits or base64 of exactly 32 bytes; null otherwise (a key of all one byte too: a placeholder). */
@@ -258,6 +369,22 @@ export function cgroupCpuQuota(read: (path: string) => string | null): number | 
     if (m === null || Number(m[2]) <= 0) continue;
     const cpus = Math.max(1, Math.floor(Number(m[1]) / Number(m[2])));
     least = least === null ? cpus : Math.min(least, cpus);
+  }
+  return least;
+}
+
+/**
+ * The memory this process may use, in bytes (D991, for the persistence directory's default cap): the machine's total,
+ * lowered to a cgroup limit where one is visible (v2 `memory.max`, v1 `memory.limit_in_bytes`; "max" and v1's huge
+ * "no limit" value are no limit). Not exact for every orchestrator: EDEN_PERSIST_MAX_MB overrides it.
+ */
+export function machineMemory(read: (path: string) => string | null = readOrNull, total = totalmem()): number {
+  let least = total;
+  for (const path of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+    const raw = read(path)?.trim() ?? "";
+    if (!/^\d+$/.test(raw)) continue;
+    const n = Number(raw);
+    if (n > 0 && n < least) least = n;
   }
   return least;
 }

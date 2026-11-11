@@ -603,8 +603,9 @@ minutes) is thawed and frozen again *compact*, the one zstd stream above. A live
 interval has its index compacted first (D861: the delta tier merged and its spare room let go, 0.5-1 MB at the
 cap).
 
-An operator may opt in to persisting frozen users (D425-D427, `persist.ts`; `EDEN_PERSIST_FROZEN_DIR` and
-`EDEN_PERSIST_KEY`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
+Frozen users are persisted by default (D991; D425-D427 built it opt-in, `persist.ts`; the operator's
+`EDEN_PERSIST_KEY` is required unless `EDEN_PERSIST=off`, and the directory is `EDEN_PERSIST_FROZEN_DIR`, default
+`$EDEN_HOME/frozen`): each freeze also writes the blob, with the sync's state for the user (`SyncManager.snapshot`),
 AES-256-GCM to one file per user under a keyed-hash name, and a thaw deletes it. A restarted process reads a user
 back on first use (`ItemCache.load`, from `peek`, `touch` or `ready`), thaws them in slices, and restores their sync
 state (`SyncManager.restore`), so their sources are polled for what is new instead of backfilled; copies of notifying
