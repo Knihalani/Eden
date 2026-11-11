@@ -63,6 +63,7 @@ export {
   ModelCardMaker,
   parseCards,
   parseRequests,
+  readForIntent,
   requestActions,
   worthCarding,
   worthCardingStrict,
