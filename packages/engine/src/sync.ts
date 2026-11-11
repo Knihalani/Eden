@@ -42,6 +42,14 @@ export interface SyncOptions {
    * one at a time.
    */
   backfillLanes?: number;
+  /** `syncKickLanes` (D751, with `syncKick`): a kicked user's backfill reads this many at once (`backfillPool`). */
+  kickLanes?: number;
+  /**
+   * With `syncKick` (D753): a backfill page that fails for the first time is tried again after this long (ms), not
+   * after the 30 s every other failure starts at; a second failure in a row waits the 30 s, and it doubles from
+   * there as before. 0 or absent: 30 s from the first.
+   */
+  kickRetryMs?: number;
   /**
    * An incremental poll's first page, at least (`syncPollPageSize`; 0 or absent: every page is `pageSize`). Set, a
    * poll's first page is sized to the changes the source's learned rate expects since its last poll (twice that, at
@@ -136,7 +144,38 @@ export interface SyncDeps {
   onListed?: (scope: Scope, ids: string[]) => void;
   /** Span tracing (`spans.ts`): each listing call is a `sync.list` span naming its phase; absent or null when off. */
   tracer?: Tracer | null;
+  /**
+   * A timer on `now`'s clock: calls `fn` once, `ms` of that clock from now, and returns its cancel. `kick`'s waits
+   * (a budget's wait and a back-off's end are in `now`'s milliseconds) go through it and through nothing else.
+   * Absent: `setTimeout`, which is right when `now` is the wall clock (the servers); a caller whose clock is not
+   * the wall's passes its own.
+   */
+  after?: (ms: number, fn: () => void) => () => void;
 }
+
+const wallAfter = (ms: number, fn: () => void): (() => void) => {
+  const t = setTimeout(fn, ms);
+  t.unref?.();
+  return () => clearTimeout(t);
+};
+
+/**
+ * `kick`: times a kicked backfill is resumed (a 3,000-item cap is 30 pages and a source's budget gives ten at once;
+ * a user with 1,000 sources may be stopped by a guard many times), so a clock that does not move (a test's) or a
+ * source that never answers cannot keep a timer alive for good: the ticks take over.
+ */
+const KICK_RESUMES = 128;
+/** `kick`: how soon a backfill one of our own guards stopped (a busy source, a rate limit's reserve) is tried again. */
+const KICK_RESUME_MS = 500;
+/**
+ * `kick`: kicked steps running at once, across users and tenants; a kick past it waits its turn (first come, first
+ * started, so one tenant's storm delays another's new user as a tick's queue does). A tick works on `USERS_AT_ONCE`
+ * (16) users in batches of `syncBackfillLanes` (8): 128 listings at once at most. Four kicked users of
+ * `syncKickLanes` (32) are the same 128, and a tick does not step a user waiting for a kick turn, so the kicks of
+ * users arriving together (a deploy, a morning) read no more at once than a tick already reads, beside the tick's
+ * own batches (`sync-kick.test.ts`; `bench/storm.bench.ts`, D753).
+ */
+const KICKS_AT_ONCE = 4;
 
 /** Hours of item history the backfill reads a source's change rate from. */
 const PRIOR_HOURS = 7 * 24;
@@ -274,6 +313,17 @@ interface UserSync {
   used: Set<string>;
   /** `rareTerms` (D600): which few of the user's sources hold each word their listings had; null until one is. */
   rare: RareTerms | null;
+  /** `kick`: the user's kicked step while one runs; a tick waits for it and does not start another. */
+  kicked?: Promise<void> | null;
+  /** `kick`: how long the backfill's last pass must wait for its own call budget (0: it did not stop for it). */
+  budgetWaitMs?: number;
+  /** `kick`: the cancel of the timer that resumes the user's backfill, and how many times one was set. */
+  resume?: (() => void) | null;
+  resumes?: number;
+  /** `kick`: the user's step waits its turn (`KICKS_AT_ONCE`). */
+  queued?: boolean;
+  /** A tick's step is running for the user (`kick` waits for it). */
+  ticking?: boolean;
 }
 
 export interface SyncStats {
@@ -297,6 +347,11 @@ export class SyncManager {
    * user's state dropped and made again (eviction, `untrack`) starts past every mark a stored copy holds.
    */
   private marks = 0;
+  /** `kick`: kicked steps running, the users waiting for a turn, and whether kicks are stopped (`stopKicks`). */
+  private kicking = 0;
+  private kickQueue: UserSync[] = [];
+  private kicksStopped = false;
+  private readonly after: (ms: number, fn: () => void) => () => void;
   readonly stats: SyncStats = {
     backgroundCalls: 0,
     demandCalls: 0,
@@ -314,18 +369,20 @@ export class SyncManager {
       burst: Math.max(1, Math.ceil(o.callsPerMin / 3)),
       now: deps.now,
     });
+    this.after = deps.after ?? wallAfter;
   }
 
   /**
    * Notes that the user is active (an event arrived), and starts syncing them if they were not. O(1) and no I/O, so
-   * safe on the fast path: the backfill itself runs at the next `tick`.
+   * safe on the fast path: the backfill itself runs at the next `tick` (or at once, `kick`). Returns whether the user
+   * is new to the sync.
    */
-  track(scope: Scope, now = this.deps.now()): void {
+  track(scope: Scope, now = this.deps.now()): boolean {
     const key = scopeKey(scope);
     const u = this.users.get(key);
     if (u) {
       u.activeAt = now;
-      return;
+      return false;
     }
     this.users.set(key, {
       key,
@@ -338,6 +395,118 @@ export class SyncManager {
       used: new Set(),
       rare: null,
     });
+    return true;
+  }
+
+  /**
+   * `syncKick` (D751, D753, in the default since D755): starts a user's step now instead of at the next `tick`,
+   * for a user `track` just added: a new user's backfill otherwise waits for the timer (60 s on the servers, 30 s
+   * on average), and their first requests run on live searches alone meanwhile. Not awaited by the caller; never
+   * throws; nothing of the step runs
+   * inside the call (the step starts in a microtask, so the caller's event is not held by the tenant's resolver).
+   * A tick that comes while it runs waits for it. Nothing happens for a user the sync does not hold, one whose kick
+   * is running, waiting or timed, or after `stopKicks`. At most `KICKS_AT_ONCE` kicked steps run at once, across
+   * users; the rest wait their turn. A tick leaves a user alone while their kick waits for a turn (the review:
+   * stepped by a tick as well, a storm's users read past the bound), and only a kicked step reads as a pool: a
+   * tick's step for the same user reads batches.
+   *
+   * Each resume is a whole step, so the tenant's source resolver is asked again each time (a few times in a new
+   * user's first seconds, `KICK_RESUMES` at most, where a tick asks once a minute).
+   *
+   * A backfill that stops before its end is taken up again here, at most `KICK_RESUMES` times, instead of at the
+   * next tick: when its own call budget allows (`syncCallsPerMin`: ten pages of a source at once, then one every two
+   * seconds), `KICK_RESUME_MS` after one of our own guards refused a page (the source was busy with the user's
+   * first request, or its rate limit kept its tokens for serving), and when a failed source's back-off ends. The
+   * calls are the ones the ticks would have made, at the same budget, without the timer's wait between them. Every
+   * wait is on `now`'s clock (`SyncDeps.after`).
+   */
+  kick(scope: Scope): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u || u.gone || this.kicksStopped || u.kicked || u.resume || u.queued) return;
+    this.kickDue(u);
+  }
+
+  /** The user's kicked step is due: started, queued behind `KICKS_AT_ONCE`, or put off while a tick's step runs. */
+  private kickDue(u: UserSync): void {
+    if (u.gone || this.kicksStopped || u.kicked) return;
+    // Nothing left to resume: a tick finished the backfill meanwhile.
+    if (u.sources.size > 0 && ![...u.sources.values()].some((x) => x.phase === "backfill")) return;
+    if (u.ticking) {
+      // A tick's step is running for this user: it is their step. Look again shortly, within the same cap.
+      this.kickLater(u, KICK_RESUME_MS);
+      return;
+    }
+    if (this.kicking >= KICKS_AT_ONCE) {
+      u.queued = true;
+      this.kickQueue.push(u);
+      return;
+    }
+    this.kicking++;
+    u.budgetWaitMs = 0;
+    u.kicked = Promise.resolve()
+      .then(() => this.step(u, true))
+      .catch(() => {})
+      .finally(() => {
+        u.kicked = null;
+        this.kicking--;
+        // An embedder's clock or timer that throws must not keep the turn from the users waiting below (a tick
+        // skips them), nor reach a tick that waits on this step: the user is then left to the ticks.
+        try {
+          const filling = [...u.sources.values()].filter((x) => x.phase === "backfill");
+          if (!u.gone && filling.length > 0) {
+            const now = this.deps.now();
+            // The soonest any source left can be read: its back-off's end, the budget's wait, never at once.
+            const retryIn = Math.min(...filling.map((x) => Math.max(0, x.retryAt - now)));
+            this.kickLater(u, Math.max(KICK_RESUME_MS, u.budgetWaitMs ?? 0, retryIn));
+          }
+        } catch {
+          u.resume = null;
+        }
+        // The turn this step held goes to the users waiting, first come first.
+        while (this.kicking < KICKS_AT_ONCE && this.kickQueue.length > 0) {
+          const next = this.kickQueue.shift()!;
+          next.queued = false;
+          this.kickDue(next);
+        }
+      });
+  }
+
+  /** Sets the user's resume timer, on `now`'s clock, unless one is set or the cap on resumes is reached. */
+  private kickLater(u: UserSync, wait: number): void {
+    if (u.resume || this.kicksStopped || (u.resumes ?? 0) >= KICK_RESUMES || !Number.isFinite(wait)) return;
+    u.resumes = (u.resumes ?? 0) + 1;
+    u.resume = this.after(wait, () => {
+      u.resume = null;
+      this.kickDue(u);
+    });
+  }
+
+  /**
+   * Stops every kick (`stopSync`): resume timers are cancelled, users waiting for a turn are let go and `kick` does
+   * nothing until `startKicks`. A kicked step already running ends on its own, and sets no timer unless kicks were
+   * started again before it ended. The users stay synced: a `tick` goes on with their backfill.
+   */
+  stopKicks(): void {
+    this.kicksStopped = true;
+    for (const u of this.kickQueue) u.queued = false;
+    this.kickQueue = [];
+    for (const u of this.users.values()) this.unkick(u);
+  }
+
+  /** `startSync`: kicks run again. A user whose kick was stopped is not kicked again; the ticks have them. */
+  startKicks(): void {
+    this.kicksStopped = false;
+  }
+
+  /** The user's kicked step while one runs (a caller that must wait for it; the lab and the tests), else null. */
+  kicked(scope: Scope): Promise<void> | null {
+    return this.users.get(scopeKey(scope))?.kicked ?? null;
+  }
+
+  /** Cancels the user's resume timer. */
+  private unkick(u: UserSync): void {
+    u.resume?.();
+    u.resume = null;
   }
 
   /**
@@ -483,6 +652,7 @@ export class SyncManager {
     if (!u) return;
     if (sourceId === undefined) {
       u.gone = true;
+      this.unkick(u);
       this.users.delete(key);
       return;
     }
@@ -793,7 +963,26 @@ export class SyncManager {
       // Users in parallel, `USERS_AT_ONCE` at a time: one user's slow connector must not hold up the rest.
       const queue = [...this.users.values()];
       const lane = async () => {
-        for (let u = queue.shift(); u; u = queue.shift()) if (!u.gone) await this.step(u).catch(() => {});
+        for (let u = queue.shift(); u; u = queue.shift()) {
+          if (u.gone) continue;
+          // A user waiting for a kick turn is the kicks' to read: stepped here as well, users arriving together
+          // would read past `KICKS_AT_ONCE` (a stopped kick waits for none, so the ticks have its user). A user
+          // whose kick waits for its resume timer is stepped: the wait may be a failed source's long back-off,
+          // and their other sources' work is the tick's.
+          if (u.queued) continue;
+          // A kicked step still running is this user's step: one more would read the same pages again.
+          if (u.kicked) await u.kicked;
+          else {
+            // Noted for `kick`: a resume timer that fires meanwhile must not start a second step beside this one
+            // (the review: the same page was listed twice). No await is added on this path.
+            u.ticking = true;
+            try {
+              await this.step(u).catch(() => {});
+            } finally {
+              u.ticking = false;
+            }
+          }
+        }
       };
       await Promise.all(Array.from({ length: Math.min(USERS_AT_ONCE, queue.length) }, lane));
     } finally {
@@ -912,11 +1101,12 @@ export class SyncManager {
   /** Stops syncing a user and drops their synced items from the cache (retention, D57). */
   private drop(u: UserSync): void {
     u.gone = true;
+    this.unkick(u);
     this.users.delete(u.key);
     for (const s of u.sources.values()) this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
   }
 
-  private async step(u: UserSync): Promise<void> {
+  private async step(u: UserSync, kicked = false): Promise<void> {
     // A resolver that fails says nothing about which sources the user has: nothing is changed until it answers.
     const all = await this.deps.sources(u.scope).catch((): null => null);
     if (u.gone || all === null) return;
@@ -944,7 +1134,7 @@ export class SyncManager {
     // Dropped even when the user went meanwhile: their sources' drop (`drop`) no longer holds these.
     for (const s of unlisted) this.stats.deleted += this.deps.cache.dropSynced(u.scope, s.ids);
     if (u.gone) return;
-    await this.backfill(u, byId);
+    await this.backfill(u, byId, kicked);
     if (this.o.engagedDeep) {
       await Promise.all(
         [...u.sources.values()].map(async (s) => {
@@ -994,7 +1184,9 @@ export class SyncManager {
    * read (the smallest `frontier` gap), until the user's `maxItems` or every listing is read. A source whose budget
    * or guards say wait is left for the next tick, as is the rest once any call fails.
    */
-  private async backfill(u: UserSync, byId: Map<string, Source>): Promise<void> {
+  private async backfill(u: UserSync, byId: Map<string, Source>, kicked = false): Promise<void> {
+    // `syncKick`: a kicked step's backfill reads as a pool (`backfillPool`); a tick's reads batches.
+    if (kicked && (this.o.kickLanes ?? 0) > 0) return this.backfillPool(u, byId, this.o.kickLanes!);
     const lanes = Math.max(1, Math.floor(this.o.backfillLanes ?? 1));
     for (;;) {
       if (u.gone) return;
@@ -1017,7 +1209,12 @@ export class SyncManager {
       for (const next of ready) {
         if (batch.length >= lanes) break;
         const source = byId.get(next.id);
-        if (!source || this.budget.take(budgetKey(u, next)) > 0) break;
+        if (!source) break;
+        const wait = this.budget.take(budgetKey(u, next));
+        if (wait > 0) {
+          u.budgetWaitMs = wait; // `kick` resumes the backfill then.
+          break;
+        }
         batch.push({ next, source });
       }
       if (batch.length === 0) return;
@@ -1067,6 +1264,92 @@ export class SyncManager {
       }
       if (stop) return;
     }
+  }
+
+  /**
+   * `syncKick` (D751): a kicked user's backfill as a pool of `lanes` reads. `backfill` reads a batch of sources and
+   * waits for the slowest of them before the next (a batch of 8 at market latency takes about 0.9 s: 9 pages a
+   * second, two minutes for a user with 1,000 sources); here a lane takes the next source as soon as it is free.
+   * Still newest unread page first, the same pages, the same budget and guards. What differs: a source that must
+   * wait for its budget, or whose page failed or was refused, is left for the resume (`kick`) and the others go on,
+   * where `backfill` ends its pass; the trim runs once per page landed.
+   */
+  private async backfillPool(u: UserSync, byId: Map<string, Source>, lanes: number): Promise<void> {
+    const flying = new Map<SourceSync, Promise<void>>();
+    // Sources not to read again in this pass: a failed page, or one a guard refused (it has no back-off to wait for).
+    const left = new Set<SourceSync>();
+    const read = async (next: SourceSync, source: Source): Promise<void> => {
+      let page: Awaited<ReturnType<SourceFanout["list"]>> | undefined;
+      next.noticesBackfill = next.notices;
+      await this.run(next, async () => {
+        const readMark = this.marks;
+        page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
+          timeoutMs: this.o.timeoutMs,
+          reserve: SERVING_HEADROOM,
+        });
+        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
+      });
+      flying.delete(next);
+      if (u.gone) return;
+      if (page === undefined) {
+        left.add(next);
+        return;
+      }
+      if (typeof page === "string") {
+        if (page !== "limited" && page !== "busy") this.stats.backgroundCalls++;
+        this.failed(next, page);
+        left.add(next);
+        return;
+      }
+      this.stats.backgroundCalls++;
+      this.stats.backgroundItems += page.items.length;
+      next.failures = 0;
+      for (const it of page.items)
+        if (it.updatedAt !== undefined) next.frontier = Math.min(next.frontier, it.updatedAt);
+      if (page.items.length > 0 && page.items.every((it) => it.updatedAt === undefined)) next.frontier = -Infinity;
+      next.cursor = page.next ?? undefined;
+      if (page.next === null || page.items.length === 0) {
+        next.exhausted = true;
+        this.warmUp(u, next, this.deps.now());
+      }
+    };
+    for (;;) {
+      if (u.gone) break;
+      const now = this.deps.now();
+      const filling = [...u.sources.values()].filter((s) => s.phase === "backfill");
+      if (filling.length === 0) break;
+      if (this.total(u) >= this.o.maxItems) {
+        const cut = this.trim(u, now);
+        // A source whose page is on the wire is warmed, or not, when it lands.
+        for (const s of filling) if (s.frontier <= cut && !flying.has(s)) this.warmUp(u, s, now);
+      }
+      const ready = filling.filter(
+        (s) => s.phase === "backfill" && now >= s.retryAt && !s.busy && !flying.has(s) && !left.has(s),
+      );
+      ready.sort((a, b) => b.frontier - a.frontier);
+      for (const next of ready) {
+        if (flying.size >= lanes) break;
+        const source = byId.get(next.id);
+        if (!source) continue;
+        const wait = this.budget.take(budgetKey(u, next));
+        if (wait > 0) {
+          // `kick` resumes then. Not put in `left`: a refused `take` spends nothing, and asking again as a later
+          // page lands only reads the wait anew.
+          u.budgetWaitMs = u.budgetWaitMs ? Math.min(u.budgetWaitMs, wait) : wait;
+          continue;
+        }
+        flying.set(
+          next,
+          read(next, source).catch(() => {
+            flying.delete(next);
+            left.add(next);
+          }),
+        );
+      }
+      if (flying.size === 0) break;
+      await Promise.race(flying.values());
+    }
+    await Promise.all(flying.values());
   }
 
   /**
@@ -1497,7 +1780,12 @@ export class SyncManager {
     // A source skipped as busy or limited is tried at the next tick; one that failed backs off, doubling to 30 min.
     if (why === "busy" || why === "limited") return;
     s.failures++;
-    s.retryAt = this.deps.now() + Math.min(30 * 60_000, 30_000 * 2 ** (s.failures - 1));
+    // `kickRetryMs` (D753): a source still in its first backfill whose page failed once is tried again soon. A new
+    // user waits on it (a lookup cannot answer from a copy not yet read), and most listings that fail once answer
+    // the next call; a second failure in a row waits the 30 s the first would have, and it doubles from there.
+    const soon = s.phase === "backfill" ? (this.o.kickRetryMs ?? 0) : 0;
+    const step = soon > 0 ? s.failures - 2 : s.failures - 1;
+    s.retryAt = this.deps.now() + (step < 0 ? soon : Math.min(30 * 60_000, 30_000 * 2 ** step));
   }
 
   /** One listing call through the fan-out's guards, as a `sync.list` span when tracing (content-free: D19). */

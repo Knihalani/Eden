@@ -405,8 +405,11 @@ shipped wiring over N users with three instant connectors each; backfill CPU, me
 JS heap plus `external`, which `heapUsed` alone leaves out: typed-array stores, most of an index and every packed
 text; and RSS read once it stops falling), thaw time per user, the sliced freeze and thaw's event-loop lag.
 `--waves=4` is the steady state where three quarters of the users are idle. `bun packages/engine/bench/storm.bench.ts
-[users=300] [itemsPerUser=1000] [--config=<json>]`: a cold-start storm on the wall clock with 20-80 ms connectors
-while warm users send events (open loop): storm time and their `observe` p99. Figures:
+[users=300] [itemsPerUser=1000] [--config=<json>] [--tick-ms=N]`: a cold-start storm on the wall clock with 20-80 ms
+connectors while warm users send events (open loop): storm time and their `observe` p99. With
+the default each storm user is kicked as their first event would (D753, D755; `--config='{"syncKick":false}'` is
+the storm before it); `--tick-ms=60000` ticks
+as the servers' timer does instead of back to back (`packages/sim/lab/o5/storm.txt`, `storm-paced.txt`). Figures:
 docs/research/a14-scale-users.md. A change to the cache, the sync's ingest or per-user state reports both.
 
 ## Scale anchors: memory per user and ingest cost (2026-11-03, 4-core container shared with other agents, Bun 1.4.4)

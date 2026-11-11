@@ -11,7 +11,11 @@
  * from when it was due, so a stalled loop's wait counts).
  *
  * Run: `bun packages/engine/bench/storm.bench.ts [users=300] [itemsPerUser=1000] [--probe=20] [--every=10]
- * [--config=<EngineConfig JSON>]`. No model, no network.
+ * [--config=<EngineConfig JSON>]`. No model, no network. Each storm user is kicked as their first event would
+ * (`syncKick`, D751, D753, in the default since D755): the kicked steps run beside the back-to-back ticks.
+ * `--config='{"syncKick":false}'` is the storm before it. `--tick-ms=N`
+ * ticks every N ms as the servers' timer does (60,000 there) instead of back to back, the first after N ms (users
+ * who arrive just after a tick; the probe users are still synced back to back).
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,6 +35,7 @@ const USERS = Number(args[0] ?? 300);
 const PER_USER = Number(args[1] ?? 1_000);
 const PROBE = Number(opt("probe") ?? 20);
 const EVERY = Number(opt("every") ?? 10);
+const TICK_MS = Number(opt("tick-ms") ?? 0);
 const CONFIG = JSON.parse(opt("config") ?? "{}") as Partial<EngineConfig>;
 const SOURCES = ["mail", "calendar", "docs"] as const;
 const random = rng(11);
@@ -102,9 +107,15 @@ const partner = new ContextPartner({
 });
 const sync = partner.sync!;
 const synced = (us: string[]) => us.reduce((s, u) => s + cache.syncedCount(scope(u)), 0);
-const syncAll = async (us: string[], target: number) => {
+const syncAll = async (us: string[], target: number, tickMs = 0) => {
   for (let i = 0; synced(us) < target; i++) {
     if (i > 100_000) throw new Error(`the sync stopped at ${synced(us)} of ${target}`);
+    // `--tick-ms`: the servers' timer; between its ticks only kicked steps read.
+    if (tickMs > 0) {
+      const until = performance.now() + tickMs;
+      while (performance.now() < until && synced(us) < target) await Bun.sleep(20);
+      if (synced(us) >= target) break;
+    }
     await sync.tick();
   }
 };
@@ -149,8 +160,12 @@ const sender = (async () => {
 })();
 const cpu0 = process.cpuUsage();
 const t0 = performance.now();
-for (const u of storm) sync.track(scope(u), Date.now());
-await syncAll(storm, USERS * PER_USER);
+for (const u of storm) {
+  sync.track(scope(u), Date.now());
+  // `syncKick` (D751): a new user's first event kicks their backfill, as `observe` does.
+  if (partner.config.syncKick) sync.kick(scope(u));
+}
+await syncAll(storm, USERS * PER_USER, TICK_MS);
 const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
 probing = false;
@@ -161,7 +176,7 @@ const pct = (xs: number[], p: number) =>
 const f = (x: number, d = 1) => x.toFixed(d);
 console.log(
   `${USERS} storm users x ${PER_USER} items (3 connectors, 20-80 ms a listing), ${PROBE} warm users sending an event` +
-    ` every ${EVERY} ms; config ${JSON.stringify(CONFIG)}`,
+    ` every ${EVERY} ms; config ${JSON.stringify(CONFIG)}${TICK_MS ? `; a tick every ${TICK_MS} ms` : ""}`,
 );
 console.log(
   `storm: ${f(stormMs / 1000)} s wall, ${f((cpu.user + cpu.system) / 1e6)} s CPU, ${f(USERS / (stormMs / 1000))} users/s`,

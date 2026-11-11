@@ -373,6 +373,29 @@ tie rule), with 43 hidden tasks moving between them. Screen a lever on the inten
 A new user's first requests (F2, D482): `bun run funnel --jobs 4 -- --cards-calls N` gives each world's card model N
 calls and leaves the rest uncovered (a train world needs about 16); `--set '{"cardsOrder":false}'` is the old read
 order. pi-ab takes the same flag; without `--cards` every card is made in-run.
+A new user in real time (O4, D751): `bun run funnel --seeds 41 --jobs 3 --json F.json -- --time 1 --source-profile
+packages/sim/lab/before-after/market-profiles/direct.json --push payload --connect-at 0,10,25,35,45,60,90,180` runs
+each world once per task as a user of its own, who connects at second 0 (their first event) and makes one request at
+each checkpoint; the sync ticks as the servers' timer does (`--connect-tick-s`, first tick at 30 s) and card calls
+take `--cards-ms` (2,700). `python3 -I packages/sim/lab/o4/new-user.py LABEL=F.json …` prints hidden surfaced by
+checkpoint. About 11 minutes an arm at five sources (three shards at a time: a shard holds 64 users, 3.4 GB; six at
+once were killed for memory). With `--noise-sources 995 --limit 16 --connect-stagger-s 12 --jobs 2` a world's users
+share its noise connectors, so calls a task mean nothing there. Rows carry `connectS`, `sinceConnectMs`,
+`warmAtRequest`, `syncedAtRequest`. Since D755 the switch is in the default: the "today" arm of these recipes
+is `--set '{"syncKick":false}'`. The run's `sync: backfill` line reads the sync's own count there, so a
+kicked backfill's calls are in it. A world's users share its noise connectors' rate buckets and fault draws as well
+as their content. `--connect-at` needs the real sync and says so without it.
+One new user alone (O5): `bun packages/sim/src/lab/new-user-trace.ts --noise 995 --users 3 --lanes 32` traces a
+kicked backfill with nothing else in the process (every source's first page, all complete, at the cap, calls);
+`--lanes 0` is batches, `--retry-ms 0` the 30 s first back-off.
+The same on Pi (O5, D753): `packages/sim/lab/o5/run.sh SEED LABEL LIMIT SUITE` (`all.sh SEED` loops the train
+suites, one process each) runs `pi-ab --connect-at 10,45` on train
+with Haiku in every role (Anthropic-direct lab figures): one user a task and arm, their first event at second 0, a
+request at each checkpoint, cards replayed at `--cards-ms` 2,700, each user kept until their backfill is complete
+(`--connect-settle-s` 200) so connector calls a user compare, at most `--connect-users` 48 at once (2.5 GB at
+seed 41). About $0.0003 a task run and 50 minutes a seed (576 tasks, two arms, two checkpoints).
+`python3 -I packages/sim/lab/o5/new-user-pi.py [--sonnet regrade.json] RUN.json …` pairs the arms by task and
+checkpoint. `regrade.ts` keeps each answer's `connectS`.
 `-- --cards-calls N --cards-rest cards` (N4, funnel only) answers the calls past N with their cards and no requests:
 a card-only model reading the rest of the backfill, with the replayed teacher's cards standing in for it (an upper
 bound; it adds +1 hidden task of 384 at every cap, docs/research/n4-agents.md).
