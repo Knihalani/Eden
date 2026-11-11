@@ -185,6 +185,8 @@ export function screenArgs(screen: typeof SCREEN, passthrough: readonly string[]
     screen.seeds.join(","),
     "--json",
     json,
+    // Its pairs were chosen at the full index's coverage (D877 made shipped the default): keep it unless named.
+    ...(mine.includes("--coverage") ? [] : ["--coverage", "full"]),
     ...mine,
     ...(hidden.length ? ["--", ...hidden] : []),
   ];
