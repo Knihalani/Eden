@@ -394,6 +394,21 @@ The sim's gain came from the length cue, not from reading all-clears; on real sh
 Recommendation: delete `constraintTag` and the shipped weights (D814); a tagger trained with short items in every class
 (and short all-clears) would re-enter as a new trial on the same rule.
 
+**Rule 2, the length-balanced retrain (the parent's one round; pre-registered in 1b230abb): fails; `constraintTag`
+deleted (D908; code in bce85de1).** `w-tags-len`: as `w-tags-bin` with every training item also as its title with one
+and two body sentences and one sentence alone, under its tag (`binnet.py --len-aug`; 1,025 s on Modal). Gate: the 52
+short constraints of `packages/sim/lab/m3r/short-constraints.jsonl` (built by `short_fixture.py` before training) must
+read ≥ 0.5 under 1 − P(all-clear) in at least 97%:
+
+| weights | gate, 1 − P(all-clear) | gate, P(fact) | fact vs twin AUC, M2 val | fact vs twin AUC, sim held-out |
+|---|---|---|---|---|
+| `w-tags-bin` | 37 of 52 (71%) | 3 of 52 | 0.947 | 0.759 |
+| `w-tags-len` | 36 of 52 (69%) | 33 of 52 | 0.934 | 0.664 |
+
+The augmentation moved P(fact) on short items (3 → 33) but not the all-clear reading, and lost separation on the sim.
+Both clauses were required; the gate failed, so rule 2 was not run. The switch, `tagger.ts`, the weights and their
+tests are deleted; the fixture stays in the lab for any later tagger.
+
 **Rule 1, supersession (`pushSupersede`), amended before any result.** (a) The suite: `synth:<M2 v2 val>+stale`
 (`+stale`, D884's synth family, a separate option: a hidden silent-change task's earlier revision stays as a background
 item beside the fact; the default suites are unchanged, `synth.test.ts` pins it), worlds H10 never trained on. (b) The

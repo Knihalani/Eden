@@ -489,9 +489,6 @@ alerts (docs/research/o3-push-open.md). **Indirect requests (`pushIndirect`, D82
 (`pushStart`, `indirectRest`, `secondClause`), the push's lookup is given the message from where the request starts, and
 the open shape refuses pasted log lines and chatter openers (docs/research/p2-push-check.md §1, §7, §8). Listed, opened
 and indirect pushes are all checked when the push check is wired (D823, D828), so each may make the check's paid call.
-**The constraint tagger (`constraintTag`, D908, a trial, off):** a small binarised network (`tagger.ts`) that can
-veto the push's constraint test for items it reads as all-clears; not in the default (it vetoed short real constraints
-in the form that passed on the sim; docs/research/m3-arch.md §7h).
 
 **The intent index** (`intent`, needs `cards`, on in the default, D112; D87, D109, `intent.ts`,
 [research/edge-intent.md](research/edge-intent.md)). The background card call also writes, per item, up to four requests

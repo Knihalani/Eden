@@ -5,7 +5,7 @@ content words with what makes it binding (an M2 test task's `detail`; for the si
 no detail, the request). Sources: M2 v2's test split (first N tasks in file order) and the sim's held-out train5-6
 (the tagger trained on train1-4), plus two hand-written fixtures. Every line should read as a constraint.
 
-  python3 -I short_fixture.py --m2 worlds-test.jsonl --sim train-worlds.jsonl.gz --out short-constraints.jsonl
+  python3 -I short_fixture.py --m2 worlds-test.jsonl --sim train-worlds.jsonl.gz --out packages/sim/lab/m3r/short-constraints.jsonl
 """
 import argparse, gzip, json, re
 

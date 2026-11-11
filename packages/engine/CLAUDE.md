@@ -25,7 +25,6 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
-| `tagger.ts`                                                                | The constraint tagger (`constraintTag`, D908, a trial, off): `ItemTagger` (hashed n-grams, ternary encoder, binary layer, from `models/tags-v1.bin`, read once per process by `sharedTagger`), `TagMemo` (per-user readings, filled in the background after a store); `tagger.test.ts`, `constraint-tag.test.ts`, `bench/tagger.bench.ts` |
 | `push-check.ts`                                                            | The push check (`pushCheck`, D500, in the default since D828, part `check`): one budgeted call a push names the pool's items that change the action, compare-first (`CHECK_SYSTEM`, `parseCompare`, `PushChecker`, D527); `push-check.test.ts`                |
 | `parties.ts`                                                               | The party check (`partyCheck`, D375, D376, on in the default; `checkAction`'s only check since D815 deleted the action firewall and A10's text filters): identifiers a call adds and its packets showed; `orgLabel`, which `ItemCache.isCorrespondent` reads with the user's header addresses |
 | `decide.ts`                                                                | Per-candidate facts for the lab's candidate dump (`onCandidates`)                                                                                                                                                             |
@@ -314,14 +313,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`pushCheckBehind`, D704: its follow-up reached the agent in 36 of 768 hidden tasks, hidden +0.0), a lead line
   asking for the item's specifics (`candidatesSpecifics`, D705: +2.0) and a lead line naming items handed for an
   earlier request (`pushPointer`, D711: −1.2 over days).
-- **The constraint tagger's veto (`constraintTag`, D908, a trial, off; `tagger.ts`).** Its first reading (P(fact))
-  passed on the sim but vetoed short real constraints (short items read as `other`); the safe reading fails the bar. Read only for an item
-  `constraintLike` already passed (`tagVetoes`), so it can only take constraint-likeness away, in the push gate and
-  in `checkPlans` (plan alerts mirror the gate); not in the ask's `readerGate`. A new path that applies the constraint
-  test must call `tagVetoes` too, or look-alikes come back through it. The weights (`models/tags-v1.bin`) are made by
-  `packages/sim/lab/m3r/pack-tagger.ts` from a binnet export; replacing them re-runs `tagger.test.ts` (parity, size)
-  and the funnel with `--neutral` and the push check (docs/research/m3-arch.md §7h). `TagMemo` holds one number an
-  item, per user, dropped through the cache's `onDropped` (one listener, shared with the cards: keep both in it).
 - **Indirect requests (`pushIndirect`, P2, D820; in the default since D828, part `indirect`; p2-push-check.md §1, §7).** `pushStart`
   decides how a user message starts the push: a listed verb, the open shape, or (with the switch) an indirect lead-in
   ("I need to …", "Should I …?", "We should …", "I want you to …"), or a request after a first clause of context

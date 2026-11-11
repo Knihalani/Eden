@@ -119,5 +119,4 @@ export {
   type PushCheckRead,
   type PushCheckStats,
 } from "./push-check";
-export { ALL_CLEAR, ItemTagger, readTagger, sharedTagger, TAGGER_PATH, TagMemo } from "./tagger";
 export { mayConstrain } from "./conflict";
