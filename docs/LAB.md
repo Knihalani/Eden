@@ -162,9 +162,9 @@ never be read back as a recorded one) and leaves its approximated calls out of t
 are the default's 15), recorded once live (recipe 2) into `W/rc-wide.jsonl`:
 
 ```bash
-bun run funnel --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
+bun run funnel --coverage full --set '{"askReaderPool":30}' -- --reader replay --reader-model claude-haiku-5-5 \
   --reader-cache W/rc-wide.jsonl --reader-log W/log-wide.jsonl          # $0: the wide run's verdicts, logged
-bun run funnel --jobs 4 --allow-misses -- --reader replay --reader-model claude-haiku-5-5 \
+bun run funnel --jobs 4 --allow-misses --coverage full -- --reader replay --reader-model claude-haiku-5-5 \
   --reader-cache W/rc-wide.jsonl --reader-subset W/log-wide.jsonl         # the default's pool, approximated
 ```
 
@@ -390,7 +390,8 @@ with stub and oracle too: one line per read (task, the prompt a model would have
 train1 seed 41 wrote 54 lines for its 54 reader calls.
 
 A second, independent draw of train seeds 41–42's requests with the shipped prompt is checked in as
-`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710
+`packages/sim/lab/distilled/intent-v2-draw2.jsonl.gz` (D361): the default reads 315/276 on the shipped sample since D710 (at `--coverage full`; 281/264 at
+shipped coverage, the funnel's default since D877)
 (314/274 before, when it read 307/281 on the second draw, which was not re-run after D710; 314/273 before D483's
 tie rule), with 43 hidden tasks moving between them. Screen a lever on the intent index on both (`zcat` it, then
 `--intent FILE`) and do not report a delta under about 10 tasks from one sample.
@@ -676,7 +677,8 @@ main file it replays `-- --neutral` with 0 misses (without it, 608 neutral reade
 ```bash
 (gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-intent.jsonl.gz; \
  gunzip -c packages/sim/lab/distilled/reader-haiku-train-4142-neutral.jsonl.gz) > .local/reader-train.jsonl
-bun run funnel --jobs 4 --allow-misses --preset minus-candidates --json .local/h18.json -- --neutral --reader replay \
+bun run funnel --jobs 4 --allow-misses --preset minus-candidates --coverage full --json .local/h18.json -- --neutral \
+  --reader replay \
   --reader-model claude-haiku-5-5 --reader-cache .local/reader-train.jsonl
 ```
 

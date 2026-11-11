@@ -47,10 +47,12 @@ export function record(
   const at = new Date().toISOString();
   // BENCH_COMMIT records a run made earlier, on another commit (a backfill): its own commit, never the current one.
   const commit = process.env.BENCH_COMMIT || git("rev-parse", "--short=10", "HEAD") || "unknown";
-  // Changes outside bench/ only: the ledger itself changes with every run.
+  // Changes outside bench/ only: the ledger itself changes with every run. The pathspecs are anchored at the top
+  // (git runs in bench/): `.` and `:(exclude)bench` there checked bench/ alone, so every row after a run's first was
+  // marked dirty by the first row's own write and a change to the code was never seen (found by P7, D877).
   const dirty = process.env.BENCH_COMMIT
     ? false
-    : git("status", "--porcelain", "--", ".", ":(exclude)bench").length > 0;
+    : git("status", "--porcelain", "--", ":(top)", ":(top,exclude)bench").length > 0;
   const id = `${at.slice(0, 19).replace(/[-:T]/g, "")}-${entry.tier}-${entry.suite}-${entry.label}`.replace(
     /[^\w.-]/g,
     "_",
