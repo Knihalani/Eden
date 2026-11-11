@@ -56,6 +56,19 @@ class SynthDataTest(unittest.TestCase):
         self.assertGreater(len(leak), 0)
         self.assertGreater(sd.duplicate_requests({"val": self.worlds, "test": self.worlds[:1]}), 0)
 
+    def test_pair_groups_hold_one_planted_fact_and_its_twin(self):
+        gs = sd.pair_groups(self.worlds, other=4, seed=1)
+        normal = [g for g in gs if not g.get("neutral")]
+        self.assertEqual(len(normal), sd.summary(self.worlds)["requests"])
+        for g in normal:
+            truths = [i["truth"] for i in g["items"]]
+            self.assertEqual(truths.count("planted"), 1)
+            self.assertIn("decoy", [i["role"] for i in g["items"]])
+        for g in gs:
+            if g.get("neutral"):
+                self.assertNotIn("planted", [i["truth"] for i in g["items"]])
+        self.assertEqual(gs, sd.pair_groups(self.worlds, other=4, seed=1))
+
 
 if __name__ == "__main__":
     unittest.main()

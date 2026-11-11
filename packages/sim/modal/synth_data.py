@@ -171,3 +171,63 @@ def duplicate_requests(worlds_by_split):
                     h = hashlib.sha1(" ".join(r["text"].lower().split()).encode()).hexdigest()
                     where.setdefault(h, set()).add(split)
     return sum(1 for s in where.values() if len(s) > 1)
+
+
+def _day(ms):
+    import datetime
+
+    return datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc).strftime("%Y-%m-%d")
+
+
+def pair_groups(worlds, other=6, neutral_share=0.25, seed=1):
+    """I1's PairGroup shape (i1-label.ts) for M1: one group per request, holding the task's fact (`planted`), its
+    decoy and neutral items (`decoy`, with `role` saying which) and `other` distractors from the same world. A share of
+    groups is also written as a neutral group: the same request with the fact left out (nothing changes the action),
+    as the lab's `neutral` variant plants nothing. `family` is the split unit: no family is in two splits."""
+    rng = random.Random(seed)
+    out = []
+    for w in worlds:
+        items = {i["id"]: i for i in w["items"]}
+        owned = {x for t in w["tasks"] for x in [t["fact"], t["decoy"], *t["neutrals"]]}
+        for t in w["tasks"]:
+            pool = [i for i in w["items"] if i["id"] not in {t["fact"], t["decoy"], *t["neutrals"]}]
+            for r in t["requests"]:
+                others = rng.sample(pool, min(other, len(pool)))
+
+                def row(i, truth, role):
+                    return {
+                        "key": i["id"],
+                        "title": i["title"],
+                        "text": i["text"],
+                        "source": i["source"],
+                        "truth": truth,
+                        "role": role,
+                        "visible": i["at"] <= r["at"],
+                    }
+
+                base = [row(items[t["decoy"]], "decoy", "decoy")]
+                base += [row(items[n], "decoy", "neutral") for n in t["neutrals"]]
+                base += [row(i, "other", "other-task" if i["id"] in owned else "background") for i in others]
+                group = {
+                    "group": f"{t['family']}/{w['id']}/{t['id']}/{r['id']}",
+                    "family": t["family"],
+                    "split": w["split"],
+                    "world": w["id"],
+                    "task": t["id"],
+                    "archetype": t["archetype"],
+                    "area": t["area"],
+                    "timing": t["timing"],
+                    "style": r["style"],
+                    "lang": r["lang"],
+                    "request": r["text"],
+                    "today": _day(r["at"]),
+                    "why": t["detail"],
+                }
+                items_ = [row(items[t["fact"]], "planted", "fact")] + base
+                rng.shuffle(items_)
+                out.append({**group, "items": items_})
+                if rng.random() < neutral_share:
+                    n_items = list(base)
+                    rng.shuffle(n_items)
+                    out.append({**group, "group": group["group"] + "/neutral", "neutral": True, "items": n_items})
+    return out

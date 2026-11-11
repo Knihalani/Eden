@@ -7,7 +7,8 @@ API (packages/sim/src/lab/synth/gen.ts); Modal stores and checks the result.
     modal volume get eden-synth v1/worlds/val.jsonl .local/m2/synth/worlds/val.jsonl
 
 Volume layout (`<tag>/`): `worlds/{train,val,test}.jsonl`, `families.jsonl`, `stats.json`, `families-qc.json`,
-`critic/*.jsonl`, `datasheet.md`, and `manifest.json` (validate's counts, checks and sha256 of every file).
+`critic/*.jsonl`, `datasheet.md`, `pairgroups/{split}.jsonl` (M1's I1-shaped groups, written by validate), and
+`manifest.json` (validate's counts, checks and sha256 of every file).
 """
 import hashlib
 import json
@@ -67,6 +68,14 @@ def validate_remote(tag: str) -> dict:
         "requestTextsAcrossSplits": sd.duplicate_requests(by_split),
         "sha256": sha,
     }
+    # M1's input (I1's PairGroup shape, synth_data.pair_groups): one group per request, written beside the worlds.
+    os.makedirs(f"{root}/pairgroups", exist_ok=True)
+    for split, ws in by_split.items():
+        gs = sd.pair_groups(ws)
+        with open(f"{root}/pairgroups/{split}.jsonl", "w") as f:
+            for g in gs:
+                f.write(json.dumps(g) + "\n")
+        manifest.setdefault("pairGroups", {})[split] = len(gs)
     with open(f"{root}/manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
     vol.commit()
