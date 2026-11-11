@@ -1579,7 +1579,8 @@ async function runWorld(
     record.wallMs = Math.round(r.wallMs);
     record.firstTokenMs = record.requests[0]?.firstTokenMs ?? null;
     if (r.error) record.error = r.error.slice(0, 200);
-    if (partner) Object.assign(record, uptake.fields());
+    // `hits` (P3) has no partner, but its packets are cited the same way.
+    if (partner || hits) Object.assign(record, uptake.fields());
     // `--late`: every answer after a planted item arrived is one of its later replies; the recap closes the day and
     // grades them against the planted request.
     for (const l of dayLate) l.entry.after.push(r.error ? "" : r.answer);
