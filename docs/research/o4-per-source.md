@@ -54,27 +54,32 @@ miss 115 → 113 ns, delete and add 350 → 355 ns, iterate 3,000 198 → 200 µ
 ## 3. The fan-out's guards (O5, D754)
 
 A breaker, a concurrency limiter and a latency histogram a (user, source), made at the pair's first call and kept
-until the user is forgotten or 100,000 pairs exist: about 1 KB a pair, 1.00 MB for a user with 1,000 sources, almost
-all for sources called once, in the backfill. A pair no call has taken for ten minutes is now parked
-(`SourceFanout.park`): its guards are dropped and only the concurrency limit it had learned is kept (a number by the
-pair's key), given back to the new limiter at the pair's next call. Ten minutes is the longest window the guards
-hold (the breaker's and the lookup histogram's are 60 s, the planner calls' ten minutes), so a parked pair's new
-guards behave as its old ones would have: an idle breaker that is closed has an empty window, and an idle histogram
-is empty. A pair is kept when that is not so: a call in flight, a breaker open or half-open, a rate limit still
-pushed back. The work is done as calls come (up to 64 of the least recently used pairs are looked at each call,
-stopping at the first that is not idle), with no timer.
+until the user is forgotten or 100,000 pairs exist: about 1 KB a pair, 1 MB for a user with 1,000 sources, almost
+all for sources called once, in the backfill. A pair no call has taken for twenty minutes is now looked at for
+parking (`SourceFanout.park`): if its guards hold nothing a new set would not, they are dropped and only the
+concurrency limit the pair had learned is kept (a number by the pair's key, at most as many as guards may be kept),
+given back to the new limiter at the pair's next call.
+
+"Nothing a new set would not" is checked, not assumed from the time: no call in flight, the breaker closed with
+no call counted in its window (`CircuitBreaker.idle`), both latency histories empty, no rate-limit push-back still
+standing. Twenty minutes is the longest any of them holds a sample by default (the planner calls' history answers
+over its current and its previous ten-minute window). The first version parked after ten minutes on the time
+alone; the review showed four cases where that changed a result (a planner history 10-20 minutes old, a breaker
+configured with a longer window, a report written long after its call began, a rate-limit error reported for a
+parked pair), each now a test. A rate-limit error reported for a parked pair brings its guards back to note it.
+One thing is not kept: the phase of a histogram's rolling windows, so a later sample can run out up to a window
+sooner or later than it would have. The work is done as calls come (up to 64 of the least recently used pairs are
+looked at each call, stopping at the first that is not idle), with no timer.
 
 `source-heap.ts 995 3 10` on main @ 74204885 (`packages/sim/lab/o5/source-heap.txt`), MB of heap a user after ten
-requests, before → after: 12.73 → 11.90; the guards 0.94 → 0.01, with 0.17 kept as parked limits. After the
-backfill alone nothing is idle yet: 10.14 and 10.15. (On the branch's first base, before O1's earn rule cut the
-calls a request makes: 13.61 → 12.70. With fewer calls a scan of eight pairs a call left 0.24 MB of idle guards
-after ten requests, 12.13 MB; hence 64.)
+requests, before → after: 12.73 → 11.77; the guards 0.94 → 0.00, with 0.10 kept as
+parked limits (two earlier runs of the same change read 11.90 and 11.89). After the backfill alone nothing is
+idle yet: 10.14 and 10.12.
 
-Meant to change no result: the funnel's clock moves an hour between requests, so every pair is parked and brought
-back between any two of a user's requests there. Checked on main's tree: the default funnel reads 315 and 276 with
-all 768 task rows identical to the run without it (connector calls 2,066 both), and the 1,000-source funnel 192 of
-192 rows (77 and 77, calls 859 both). `packages/sim/lab/o5/mutate-park.py`: each of 10 mutations of `park` fails
-`park.test.ts`.
+No result of the funnel changes: its clock moves an hour between requests, so every pair is parked and brought back
+between any two of a user's requests there. On main's tree the default funnel reads 315 and 276 with all 768 task
+rows identical to the run without it (connector calls 2,066 both), and the 1,000-source funnel 192 of 192 rows (77
+and 77, calls 859 both). `packages/sim/lab/o5/mutate-park.py`: each of 15 mutations of `park` fails `park.test.ts`.
 
 ## 4. Not done
 

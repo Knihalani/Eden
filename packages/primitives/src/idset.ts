@@ -10,7 +10,8 @@
  * Same semantics as `Set<string>` for `add`, `has`, `delete`, `size`, `clear` and iteration in insertion order
  * (re-adding a present id does not move it). Deleting while iterating is allowed (the iterator skips what was
  * deleted, as `Set`'s does); an id added while iterating is visited, as with `Set`. Deleted slots are reclaimed by
- * the next `add` that needs room once they are half the slots, never while an iterator is open: an iterator stepped
+ * the next `add` that needs room once they are half the slots, and by a `delete` that leaves a quarter of the slots
+ * live or none (D752: the arrays are then sized for what is left), never while an iterator is open: an iterator stepped
  * by hand must be finished or `return()`ed (a `for…of` does both), or the set stops compacting. Iteration makes a
  * string per id: use `has` on hot paths.
  */
@@ -105,7 +106,9 @@ export class IdSet implements Iterable<string> {
     // A set that has lost three quarters of its slots gives their room back (never while an iterator is open): a
     // source whose page was stored and then trimmed to the user's cap kept arrays sized for the page (786 bytes a
     // source for three ids, o4-per-source.md), and nothing was added later to compact them.
-    if (this.open === 0 && this.slots >= 2 * FIRST_SLOTS && this.count * 4 <= this.slots) this.shrink();
+    // An emptied set goes back to the shared empty arrays, however small it was.
+    if (this.count === 0 && this.open === 0) this.clear();
+    else if (this.open === 0 && this.slots >= 2 * FIRST_SLOTS && this.count * 4 <= this.slots) this.shrink();
     return true;
   }
 

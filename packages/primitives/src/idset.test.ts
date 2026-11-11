@@ -154,3 +154,21 @@ test("a set that holds nothing allocates nothing, and one that lost most of its 
   expect(set.bytesHeld).toBeLessThanOrEqual(40);
   expect(set.has("x")).toBe(false);
 });
+
+test("a small set emptied goes back to the shared empty arrays too (D752's review)", () => {
+  const set = new IdSet();
+  const empty = set.bytesHeld;
+  set.add("x");
+  expect(set.bytesHeld).toBeGreaterThan(empty);
+  set.delete("x");
+  expect(set.bytesHeld).toBe(empty);
+  expect(set.size).toBe(0);
+  // And it works on: the next add allocates again.
+  set.add("y");
+  expect([...set]).toEqual(["y"]);
+  // Not while an iterator is open: the iterator still sees what is added after.
+  const it = set[Symbol.iterator]();
+  set.delete("y");
+  set.add("z");
+  expect([...{ [Symbol.iterator]: () => it }]).toEqual(["z"]);
+});

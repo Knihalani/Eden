@@ -48,13 +48,15 @@ bun packages/sources/bench/static-source.bench.ts   # ~10 s; no assertions beyon
 
 ## Pitfalls
 
-- **Idle guards are parked (D754, `SourceFanout.park`).** A (user, source) pair no call has taken for ten minutes
-  (`PARK_IDLE_MS`, the longest window its guards hold) loses its breaker, limiter and histograms and keeps only the
-  limit it learned (`parked`), given back at its next call; a pair with a call in flight, a breaker not closed or a
-  rate limit pushed back is kept. A new guard, or a window longer than ten minutes, must either be rebuilt
-  identically from nothing after that long or be carried in `parked`, or an idle pair comes back changed
-  (`park.test.ts`; the funnel parks every pair between two requests, so it shows any difference). `forget` drops
-  parked limits too.
+- **Idle guards are parked (D754, `SourceFanout.park`).** A (user, source) pair no call has taken for twenty
+  minutes (`PARK_IDLE_MS`) whose guards hold nothing a new set would not (no call in flight, `CircuitBreaker.idle`,
+  both latency histories empty, no push-back standing) loses its breaker, limiter and histograms and keeps only the
+  limit it learned (`parked`, bounded by `maxStates`), given back at its next call. The check reads what the guards
+  hold, never the time alone: a first version on time alone changed results in four cases the review found. A new
+  guard must be added to that check (or carried in `parked`), and a path that reports on a pair without `state()`
+  (`rateLimited` does: it brings a parked pair's guards back) must not assume the guards are there. Rolling-window
+  phase is not kept. `park.test.ts`, `packages/sim/lab/o5/mutate-park.py`; the funnel parks every pair between
+  two requests, so it shows a difference in what a lookup does. `forget` drops parked limits too.
 - Planner tests are statistical over seeded generators: keep seeds fixed; a change to arm selection usually needs
   the planner research runs (`docs/research/query-planner-results.md`), not a test tweak.
 - The planner's defaults are decided by D31–D33 on held-out simulation sets; changing them needs a new decision.

@@ -1,21 +1,21 @@
 == after (D754), on main @ 74204885
 1000 sources, 3 users, 3001 items; MB of heap a user
-  after the backfill             10.15
-  after 10 requests each         11.90
+  after the backfill             10.12
+  after 10 requests each         11.77
   - sync: per-source sketches                        0.23
-  - sync: per-source id sets                         0.87
-  - sync: the rest of its per-source state           0.61
-  - sync: its call budget's keys                    -0.00
-  - fan-out: per-(user, source) guards               0.01
-  - fan-out: parked limits (D754)                    0.17
-  - fan-out: rate limiters' keys                     0.00
+  - sync: per-source id sets                         0.68
+  - sync: the rest of its per-source state           0.47
+  - sync: its call budget's keys                     0.21
+  - fan-out: per-(user, source) guards               0.00
+  - fan-out: parked limits (D754)                    0.10
+  - fan-out: rate limiters' keys                     0.07
   - fan-out: held search pages                       0.00
   - planner: per-connector state                     0.01
   - source yield                                     0.00
   - sessions and other partner maps                  0.00
   - source map (SQLite, mostly outside the heap)     0.01
-  - item cache: items, text, index                   5.40
-  left unaccounted                 4.58
+  - item cache: items, text, index                   5.37
+  left unaccounted                 4.62
 == before (main's guarded.ts)
 1000 sources, 3 users, 3001 items; MB of heap a user
   after the backfill             10.14

@@ -1,13 +1,15 @@
 /**
- * D754: a (user, source) pair's guards are parked once no call has taken them for ten minutes, and come back as they
- * were (docs/research/o4-per-source.md). Each test holds one part of `SourceFanout.park`.
+ * D754: a (user, source) pair's guards are parked once no call has taken them for twenty minutes and they hold
+ * nothing a new set would not, and come back as they were (docs/research/o4-per-source.md). Each test holds one
+ * part of `SourceFanout.park`.
  */
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
+import { RollingHistogram } from "@eden/primitives";
 import { SourceFanout } from "./guarded";
 import type { SearchQuery, Source } from "./source";
 
-const IDLE_MS = 600_000;
+const IDLE_MS = 1_200_000;
 const scope = { tenantId: "t", userId: "u" };
 const other = { tenantId: "t", userId: "v" };
 const query = (text: string, who = scope): SearchQuery => ({ scope: who, text, entities: [], limit: 5 });
@@ -33,7 +35,7 @@ function fanout(extra: Record<string, unknown> = {}) {
 }
 
 describe("SourceFanout.park (D754)", () => {
-  test("idle pairs' guards are parked as later calls come, 64 a call, and not before ten minutes", async () => {
+  test("idle pairs' guards are parked as later calls come, 64 a call, and not before twenty minutes", async () => {
     const { f, clock, ask } = fanout();
     const idle = Array.from({ length: 100 }, (_, i) => source(`s${i}`));
     for (const s of idle) await ask(s, "a");
@@ -140,5 +142,87 @@ describe("SourceFanout.park (D754)", () => {
     expect(f.guards()).toEqual({ live: 1, parked: 1 });
     f.forget(other, "mine");
     expect(f.guards()).toEqual({ live: 1, parked: 0 });
+  });
+
+  test("a pair whose planner calls' latency history is not empty is kept (a report can come long after its call)", async () => {
+    const { f, clock, ask } = fanout();
+    await ask(source("s"), "a");
+    // A planner call that began with the lookup reports fifteen minutes on: the pair's history holds a sample,
+    // though no call has taken the pair since.
+    clock.now += 15 * 60_000;
+    const per = (f as unknown as { per: Map<string, { callLatency?: RollingHistogram }> }).per;
+    const state = [...per.values()][0]!;
+    state.callLatency = new RollingHistogram(600_000, () => clock.now);
+    state.callLatency.record(5);
+    clock.now += 5 * 60_000;
+    await ask(source("else"), "a", other);
+    expect(f.guards()).toEqual({ live: 2, parked: 0 });
+    // Twenty minutes after the sample it has run out, and the pair is parked.
+    clock.now += IDLE_MS;
+    await ask(source("else"), "b", other);
+    expect(f.guards()).toEqual({ live: 1, parked: 1 });
+  });
+
+  test("a breaker with a window longer than the idle time keeps its counted failures", async () => {
+    const down = () =>
+      source("s", async () => {
+        throw new Error("down");
+      });
+    const run = async (parkIt: boolean) => {
+      const { f, clock, ask } = fanout({ breaker: { windowMs: 60 * 60_000, minCalls: 5, failureRate: 0.5 } });
+      const s = down();
+      for (let i = 0; i < 4; i++) await ask(s, `q${i}`);
+      clock.now += IDLE_MS + 60_000;
+      if (parkIt) await ask(source("else"), "a", other);
+      // The fifth failure in the hour opens it, parked on the way or not: the pair was not parked.
+      return { live: f.guards().live, statuses: [await ask(s, "x"), await ask(s, "y")] };
+    };
+    expect((await run(true)).statuses).toEqual(["error", "open"]);
+    expect((await run(false)).statuses).toEqual(["error", "open"]);
+    expect((await run(true)).live).toBe(2);
+  });
+
+  test("a rate-limit push-back still standing keeps the pair", async () => {
+    const { f, clock, ask } = fanout();
+    await ask(
+      source("s", async () => {
+        throw new Error("429 Too Many Requests, retry after 3000");
+      }),
+      "a",
+    );
+    clock.now += IDLE_MS;
+    await ask(source("else"), "a", other);
+    expect(f.guards()).toEqual({ live: 2, parked: 0 });
+  });
+
+  test("a rate-limit error reported for a parked pair is noted as it would be on its guards", async () => {
+    const fetching = () => ({ ...source("s"), fetch: async () => item("s") });
+    const run = async (parkIt: boolean) => {
+      const { f, clock, ask } = fanout();
+      const s = fetching();
+      await ask(s, "a");
+      clock.now += IDLE_MS;
+      if (parkIt) {
+        await ask(source("else"), "a", other);
+        expect(f.guards()).toEqual({ live: 1, parked: 1 });
+      }
+      f.rateLimited(scope, "s", "429 Too Many Requests, retry after 30");
+      return f.fetchChecked(s, scope, "1", { timeoutMs: 1_000 });
+    };
+    const kept = await run(false);
+    expect(kept).toMatchObject({ pushedBack: true });
+    expect(await run(true)).toEqual(kept);
+  });
+
+  test("parked limits are bounded as guards are: past `maxStates` the oldest is let go", async () => {
+    const { f, clock, ask } = fanout({ maxStates: 10 });
+    for (let round = 0; round < 20; round++) {
+      for (let i = 0; i < 10; i++) await ask(source(`s${round}-${i}`), "a");
+      clock.now += IDLE_MS;
+    }
+    const g = f.guards();
+    expect(g.live).toBeLessThanOrEqual(10);
+    expect(g.parked).toBeLessThanOrEqual(10);
+    expect(g.parked).toBeGreaterThan(0);
   });
 });
