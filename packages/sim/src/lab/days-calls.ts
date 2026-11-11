@@ -84,6 +84,12 @@ export interface PlantedRow {
   /** Pool items before it that pass the constraint test. */
   likeAhead: number;
   handed: number;
+  /**
+   * P3 (weak point 2, the lab's density, weak-points-1111 B6): pool items that are other requests' planted items (a
+   * fact or a decoy planted for another request of this user), and of the handed ones.
+   */
+  poolPlanted: number;
+  handedPlanted: number;
   /** Handed by the push; handed at all (the ask included, with `--ask`); handed earlier the same day. */
   pushed: boolean;
   got: boolean;
@@ -151,6 +157,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const u = userWorldOf(seed, plan);
   const world = { ...u.world, items: u.world.items.map((i) => ({ ...i })) };
   const userPrefix = `w${seed}:user`;
+  const allPlanted = new Set(u.tasks.flatMap((t) => (t.planted ? [t.planted] : [])));
   const tasks = withDayRecaps(u.tasks, u.daySizes, (t, d) => recapOf(t, `${userPrefix}:day${d}:recap`));
   // Time scale 0: instant sources, so the run is deterministic and the counts are the connectors' alone.
   const own = simSources(world, REALISTIC, 0, seed);
@@ -311,6 +318,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
         if (o.onPlanted) {
           const report = pooled as PushPoolReport | null;
           const rank = report ? report.pool.indexOf(task.planted) : -1;
+          const other = (id: string) => id !== task.planted && allPlanted.has(id);
           o.onPlanted({
             seed,
             task: task.id,
@@ -322,6 +330,8 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
             like: rank >= 0 && report!.constraintLike[rank] === true,
             likeAhead: rank >= 0 ? report!.constraintLike.slice(0, rank).filter(Boolean).length : 0,
             handed: report?.handed.length ?? 0,
+            poolPlanted: report ? report.pool.filter(other).length : 0,
+            handedPlanted: report ? report.handed.filter(other).length : 0,
             pushed,
             got: handed.has(task.planted),
             today: handedToday.has(task.planted),
