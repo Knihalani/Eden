@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { heapStats } from "bun:jsc";
 import { FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString } from "./charclass";
+import { fnv1a } from "./hash";
 import { Xoshiro128 } from "./random";
-import { Vocab } from "./vocab";
+import { clearTermMemo, Vocab } from "./vocab";
 
 /** `foldString` as it was before it built a flat string (one `+=` per code unit): the output it must still equal. */
 function foldStringRope(s: string): string {
@@ -153,4 +154,80 @@ describe("Vocab.release", () => {
     }
     for (let i = 0; i < 3_000; i++) if (!model.has(`w${i}`)) expect(v.lookup(`w${i}`)).toBe(-1);
   });
+});
+
+describe("Vocab's term arena (D998)", () => {
+  test("terms stay exact through growth, releases, reuse and compaction, Latin-1 or not", () => {
+    const v = new Vocab(16);
+    const model = new Map<number, string>();
+    let seed = 7;
+    const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0);
+    const words = ["zoë", "東京", "a", "x".repeat(300), "naïve", "3pm", "€uro", "ﬁ"];
+    for (let round = 0; round < 20_000; round++) {
+      const w = round % 7 === 0 ? `${words[rnd() % words.length]}${round}` : `w${rnd() % 5_000}`;
+      const id = v.intern(w);
+      model.set(id, v.term(id));
+      expect(v.lookup(w)).toBe(id);
+      if (rnd() % 3 === 0) {
+        const gone = [...model.keys()][rnd() % model.size]!;
+        v.release(gone);
+        model.delete(gone);
+      }
+    }
+    for (const [id, t] of model) {
+      expect(v.term(id)).toBe(t);
+      expect(v.lookup(t)).toBe(id);
+    }
+    // Compaction happened: the arena holds about what the live terms need, not every term ever added.
+    const arena = (v as unknown as { bytes: Uint8Array }).bytes.length;
+    const live = [...model.values()].reduce((n, t) => n + t.length, 0);
+    expect(arena).toBeLessThanOrEqual(Math.max(256, 4 * live));
+  });
+
+  test("termFnv reads the arena as fnv1a and a digit test read the string", () => {
+    const v = new Vocab(16);
+    for (const w of ["renewal", "3pm", "zoë", "東京", "2026-11-20", "x".repeat(70_000)]) {
+      const id = v.intern(w);
+      const t = v.term(id);
+      const latin1 = [...t].every((c) => c.charCodeAt(0) <= 0xff) && t.length < 0xffff;
+      expect(v.termFnv(id)).toBe(latin1 ? fnv1a(t, 0, t.length) : -1);
+      if (latin1) expect(v.lastHadDigit).toBe(/[0-9]/.test(t));
+    }
+  });
+});
+
+test("a released term's bytes are zeroed in the arena (D998)", () => {
+  const v = new Vocab(16);
+  const id = v.intern("globexsecret");
+  v.intern("kept");
+  v.release(id);
+  const bytes = (v as unknown as { bytes: Buffer }).bytes;
+  expect(bytes.toString("latin1")).not.toContain("globexsecret");
+  expect(v.term(v.lookup("kept"))).toBe("kept");
+});
+
+test("the decoded-term memo answers each vocabulary with its own terms, and forgets released ones (D998)", () => {
+  // Two vocabularies give the same ids to different terms: neither reads the other's from the memo.
+  const a = new Vocab(16);
+  const b = new Vocab(16);
+  for (let i = 0; i < 2_000; i++) {
+    a.intern(`alpha${i}`);
+    b.intern(`beta${i}`);
+  }
+  for (let round = 0; round < 3; round++) {
+    for (let i = 0; i < 2_000; i++) {
+      expect(a.term(i)).toBe(`alpha${i}`);
+      expect(b.term(i)).toBe(`beta${i}`);
+    }
+  }
+  // A released id reused by a new term reads the new term, never the memo's old one.
+  const id = a.lookup("alpha7");
+  expect(a.term(id)).toBe("alpha7");
+  a.release(id);
+  expect(a.term(id)).toBe("");
+  expect(a.intern("gamma")).toBe(id);
+  expect(a.term(id)).toBe("gamma");
+  clearTermMemo();
+  expect(a.term(id)).toBe("gamma");
+  expect(b.term(7)).toBe("beta7");
 });

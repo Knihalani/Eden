@@ -9,6 +9,7 @@ import {
   popcount32,
   TextSketcher,
 } from "./dedup";
+import { ReferenceSketcher } from "./dedup.reference";
 import { mix32 } from "./hash";
 import { Vocab } from "./vocab";
 
@@ -392,31 +393,11 @@ describe("TextSketcher after the vocabulary releases ids", () => {
       expect([...out]).toEqual([...want]);
       vocab.release(vocab.lookup(run));
     }
-    expect((sk as unknown as { pool: Uint32Array }).pool.length).toBeLessThanOrEqual(4_096);
   });
 });
 
-describe("TextSketcher starts small and grows (audit 2026-11-05, memory-user-fixed-overhead-sketcher)", () => {
-  type Slots = {
-    termHashes: Uint32Array;
-    expStart: Uint32Array;
-    expLen: Uint32Array;
-    state: Uint8Array;
-    pool: Uint32Array;
-  };
-  const slots = (sk: TextSketcher) => sk as unknown as Slots;
-  /** A sketcher laid out as before the change: every per-id array and the pool at 1,024 slots from the start. */
-  const wide = (vocab: Vocab, maxTerms: number, w: number): TextSketcher => {
-    const sk = new TextSketcher(vocab, maxTerms, w);
-    const s = slots(sk);
-    s.termHashes = new Uint32Array(1_024);
-    s.expStart = new Uint32Array(1_024);
-    s.expLen = new Uint32Array(1_024);
-    s.state = new Uint8Array(1_024);
-    s.pool = new Uint32Array(1_024);
-    return sk;
-  };
-  const sketches = (sk: TextSketcher, text: string): number[] => {
+describe("TextSketcher holds nothing per term (D998)", () => {
+  const sketches = (sk: TextSketcher | ReferenceSketcher, text: string): number[] => {
     sk.load(text);
     const f = new Uint32Array(2);
     const sim = new Uint32Array(2);
@@ -424,63 +405,38 @@ describe("TextSketcher starts small and grows (audit 2026-11-05, memory-user-fix
     sk.fingerprint(f);
     sk.simhash(sim);
     sk.minhash(mh);
-    return [...f, ...sim, ...mh, sk.numberKey, sk.termCount, sk.shingles];
+    const sh = new Uint32Array(8_192);
+    const n = sk.copyShingles(sh);
+    return [...f, ...sim, ...mh, sk.numberKey, sk.termCount, sk.shingles, ...sh.subarray(0, n)];
   };
 
-  test("a new sketcher holds 64-slot arrays (about 1.3 KB, not 17 KB)", () => {
-    const s = slots(new TextSketcher(new Vocab(256), 8_192, 3));
-    const bytes = [s.termHashes, s.expStart, s.expLen, s.state, s.pool].reduce((n, a) => n + a.byteLength, 0);
-    expect([s.termHashes.length, s.expStart.length, s.expLen.length, s.state.length, s.pool.length]).toEqual([
-      64, 64, 64, 64, 64,
-    ]);
-    expect(bytes).toBe(64 * 4 * 4 + 64);
+  test("no typed array on the instance, however large the vocabulary grows", () => {
+    const sk = new TextSketcher(new Vocab(16), 8_192, 3);
+    for (let round = 0; round < 50; round++) sk.load(Array.from({ length: 200 }, (_, i) => `w${round}x${i}`).join(" "));
+    expect(sk.vocab.size).toBeGreaterThan(8_192);
+    for (const v of Object.values(sk)) expect(ArrayBuffer.isView(v)).toBe(false);
   });
 
-  test("growing past 64 and past 1,024 terms and pool units gives the sketches of a 1,024-slot sketcher", () => {
-    const small = new TextSketcher(new Vocab(16), 8_192, 3);
-    const ref = wide(new Vocab(16), 8_192, 3);
-    // Texts that add new Latin, numeric and unsegmented-script terms each round, so ids and pool units pass 64 and
-    // then 1,024 at different loads, and earlier terms come back (their memo must survive each growth).
+  test("every output equals the per-id memo's (the reference) through growth, release and reuse of ids", () => {
+    const vocab = new Vocab(16);
+    const sk = new TextSketcher(vocab, 8_192, 3);
+    const ref = new ReferenceSketcher(new Vocab(16), 8_192, 3);
+    // New Latin, numeric and unsegmented terms each round, earlier ones back, some released (their ids reused by
+    // later terms), a ligature that folds longer, a lone surrogate, a digit inside unsegmented script.
     for (let round = 0; round < 60; round++) {
       const words: string[] = [];
       for (let i = 0; i < 40; i++) words.push(`w${round}x${i}`, `${round * 40 + i}pm`);
       const han = Array.from({ length: 30 }, (_, i) => String.fromCharCode(0x4e00 + ((round * 13 + i * 7) % 2_000)));
-      words.push(han.join(""), "renewal", `w${Math.max(0, round - 1)}x3`, "東京のホテル", "Ünïcödé", "\ud800lone");
+      words.push(han.join(""), "renewal", `w${Math.max(0, round - 1)}x3`, "東京のホテル", "Ünïcödé", "ﬁnance");
+      words.push("\ud800lone", `第${round}回`, "ｶﾀｶﾅ");
       const text = words.join(" ");
-      expect(sketches(small, text)).toEqual(sketches(ref, text));
-    }
-    const s = slots(small);
-    expect(small.vocab.size).toBeGreaterThan(4_096);
-    expect(s.state.length).toBeGreaterThanOrEqual(small.vocab.size);
-    expect([s.termHashes.length, s.expStart.length, s.expLen.length]).toEqual([
-      s.state.length,
-      s.state.length,
-      s.state.length,
-    ]);
-    expect(s.pool.length).toBeGreaterThan(1_024);
-    // A text seen in the first round still sketches the same after all the growth.
-    const first = Array.from({ length: 40 }, (_, i) => `w0x${i} ${i}pm`).join(" ");
-    expect(sketches(small, first)).toEqual(sketches(ref, first));
-  });
-
-  test("a compacted pool restarts small (the 1,024 floor is gone) and sketches stay exact through churn", () => {
-    const vocab = new Vocab(64);
-    const sk = new TextSketcher(vocab, 4_096, 2);
-    const ref = wide(new Vocab(64), 4_096, 2);
-    let shrunkTo = Infinity;
-    let last = slots(sk).pool.length;
-    for (let round = 0; round < 400; round++) {
-      // A new run of ideographs every round, released after use: dead pool units pile up until compaction.
-      const run = Array.from({ length: 12 }, (_, i) => String.fromCharCode(0x4e00 + ((round * 31 + i * 5) % 3_000)));
-      const text = `${run.join("")} renewal ${round % 10}`;
       expect(sketches(sk, text)).toEqual(sketches(ref, text));
-      vocab.release(vocab.lookup(run.join("")));
-      const s = slots(sk);
-      if (s.pool.length < last) shrunkTo = Math.min(shrunkTo, s.pool.length);
-      last = s.pool.length;
-      expect(s.pool.length).toBeLessThanOrEqual(4_096);
+      if (round % 3 === 0) for (let i = 0; i < 20; i++) vocab.release(vocab.lookup(`w${round}x${i}`));
     }
-    // Compaction ran (the pool passed 1,024 units: 400 rounds of 11 units) and shrank the pool below 1,024 slots.
-    expect(shrunkTo).toBeLessThan(1_024);
+    // A cap shorter than the text's units: both stop at the same unit, inside an unsegmented run too.
+    const short = new TextSketcher(new Vocab(16), 7, 2);
+    const shortRef = new ReferenceSketcher(new Vocab(16), 7, 2);
+    for (const text of ["a b c 東京のホテルと大阪 d e f g h", "one two three four five six seven eight nine"])
+      expect(sketches(short, text)).toEqual(sketches(shortRef, text));
   });
 });

@@ -2,7 +2,7 @@
  * Duplicate and near-duplicate detection over text: an exact fingerprint, MinHash with an LSH index, and SimHash.
  *
  * All three see a text as its term sequence from the shared tokenizer (`tokenizeInto`), so case, accents, punctuation
- * and whitespace never matter, and a term hash is computed once per vocabulary id, not once per occurrence. Hashes
+ * and whitespace never matter. Each load hashes its terms (D998: no per-id memo; see `TextSketcher`). Hashes
  * come from the folded term string (FNV-1a, then murmur's finalizer), not from the id, so fingerprints and signatures
  * are stable across processes and vocabularies and can be stored. All 32-bit `Math.imul` arithmetic: no BigInt.
  *
@@ -45,15 +45,17 @@ let scratchSeq = new Uint32Array(0);
 let scratchShingles = new Uint32Array(0);
 let owner: TextSketcher | null = null;
 
-/** Starting length of a sketcher's per-id arrays and unit pool; a power of two, so doubling stays aligned. */
-const INITIAL_SLOTS = 64;
-
 /**
  * Tokenizes a text once and derives its fingerprint, MinHash signature and SimHash from the same terms. Share the
  * Vocab with the index that tokenizes the same texts.
  *
  * Usage: `load(text)`, then any of `fingerprint`, `minhash`, `simhash`, before any other sketcher loads: loaded
  * terms live in scratch shared by all sketchers, and reading them after another sketcher's `load` throws.
+ *
+ * Holds nothing per term (D998): each load hashes its terms' strings again (`unitsOf`). Until D998 a sketcher kept
+ * each vocabulary id's hash, digit flag and unsegmented units in arrays as long as the vocabulary, about 13 bytes an
+ * id: 0.4 MB of a heavy user's live memory (32,768 ids at 3,000 items, `live-heap.bench.ts`), for loads that run once
+ * an item (a hit's first sketch). `dedup.reference.ts` keeps that layout as the oracle.
  */
 export class TextSketcher {
   readonly vocab: Vocab;
@@ -61,19 +63,6 @@ export class TextSketcher {
   readonly maxTerms: number;
   /** Words per shingle. */
   readonly shingleSize: number;
-  // Per vocabulary id: the term's hash, or, for a term in a script written without spaces, a run of unit hashes in
-  // `pool` (expLen > 0). Filled on an id's first use, and again after the vocabulary releases the id (it may then
-  // name another term): `state` is 0 until filled, else HASHED, plus NUMERIC when the term holds a digit.
-  // All five start at INITIAL_SLOTS and double as ids and units need (`growTerms`, `poolPush`): the engine keeps one
-  // sketcher per user and most users hold few terms, so 1,024-slot arrays were ~17 KB of a one-item user's ~29.5 KB.
-  private termHashes: Uint32Array = new Uint32Array(INITIAL_SLOTS);
-  private expStart: Uint32Array = new Uint32Array(INITIAL_SLOTS);
-  private expLen: Uint32Array = new Uint32Array(INITIAL_SLOTS);
-  private state: Uint8Array = new Uint8Array(INITIAL_SLOTS);
-  private pool: Uint32Array = new Uint32Array(INITIAL_SLOTS);
-  private poolUsed = 0;
-  // Pool units that a live id's run holds; the rest belong to released ids, reclaimed by `compactPool`.
-  private poolLive = 0;
   private terms = 0;
   private shingleCount = 0;
   private numbers = 0;
@@ -83,15 +72,6 @@ export class TextSketcher {
     this.vocab = vocab;
     this.maxTerms = maxTerms;
     this.shingleSize = shingleSize;
-    vocab.onRelease((id) => this.forgetTerm(id));
-  }
-
-  /** Drops what was derived from a released id's term: the id may come back as another term. */
-  private forgetTerm(id: number): void {
-    if (id >= this.state.length || this.state[id] === 0) return;
-    this.state[id] = 0;
-    this.poolLive -= this.expLen[id]!;
-    this.expLen[id] = 0;
   }
 
   /** The shared scratch, checked to still hold this sketcher's text. */
@@ -142,27 +122,27 @@ export class TextSketcher {
     owner = this;
     const ids = scratchIds.length === cap ? scratchIds : scratchIds.subarray(0, cap);
     const found = tokenizeInto(text, this.vocab, true, ids, null);
-    if (this.vocab.size > this.state.length) this.growTerms(this.vocab.size);
-    const th = this.termHashes;
-    const expLen = this.expLen;
+    const vocab = this.vocab;
     const seq = scratchSeq;
-    const state = this.state;
     let n = 0;
     let numbers = 0;
     for (let i = 0; i < found && n < cap; i++) {
       const id = ids[i]!;
-      let st = state[id]!;
-      if (st === 0) st = this.hashTerm(id);
-      // A sum of mixed hashes: a multiset key, so the order numbers appear in does not matter.
-      if (st === HASHED_NUMERIC) numbers = (numbers + mix32(th[id]! ^ 0x7f4a7c15)) | 0;
-      const len = expLen[id]!;
-      if (len === 0) {
-        seq[n++] = th[id]!;
+      // A Latin-1 term is hashed in the vocabulary's arena, with no string made (D998); others are read as strings.
+      const fnv = vocab.termFnv(id);
+      if (fnv >= 0) {
+        const h = mix32(fnv);
+        if (vocab.lastHadDigit) numbers = (numbers + mix32(h ^ 0x7f4a7c15)) | 0;
+        seq[n++] = h;
         continue;
       }
-      const start = this.expStart[id]!;
-      const pool = this.pool; // read after hashTerm, which may have grown or compacted it
-      for (let j = 0; j < len && n < cap; j++) seq[n++] = pool[start + j]!;
+      const term = vocab.term(id);
+      const h = mix32(fnv1a(term, 0, term.length));
+      const kind = kindOf(term);
+      // A sum of mixed hashes: a multiset key, so the order numbers appear in does not matter.
+      if ((kind & NUMERIC) !== 0) numbers = (numbers + mix32(h ^ 0x7f4a7c15)) | 0;
+      if ((kind & UNSEGMENTED) === 0) seq[n++] = h;
+      else n = unitsOf(term, seq, n, cap);
     }
     this.terms = n;
     this.numbers = numbers >>> 0;
@@ -256,84 +236,43 @@ export class TextSketcher {
     out[0] = lo >>> 0;
     out[1] = hi >>> 0;
   }
-
-  /** Grows the per-id arrays so ids below `size` fit. */
-  private growTerms(size: number): void {
-    let n = this.termHashes.length;
-    while (n < size) n *= 2;
-    this.termHashes = grown(this.termHashes, n);
-    this.expStart = grown(this.expStart, n);
-    this.expLen = grown(this.expLen, n);
-    const state = new Uint8Array(n);
-    state.set(this.state);
-    this.state = state;
-  }
-
-  /** Fills an id's hash (and units, for unsegmented script) from its term; returns its new `state`. */
-  private hashTerm(id: number): number {
-    const term = this.vocab.term(id);
-    this.termHashes[id] = mix32(fnv1a(term, 0, term.length));
-    if (hasUnsegmented(term)) this.expand(id, term);
-    const st = /[0-9]/.test(term) ? HASHED_NUMERIC : HASHED;
-    this.state[id] = st;
-    return st;
-  }
-
-  /**
-   * Units of a term containing unsegmented script: each maximal run of such characters as its character bigrams (a
-   * single character alone), each other run as one unit. "osakaの小さなホテル" → osaka, の小, 小さ, さな, なホ, ホテ, テル.
-   */
-  private expand(id: number, term: string): void {
-    // Released ids' runs are dead weight: once they are most of the pool, copy the live runs down.
-    if (this.poolUsed > 1_024 && this.poolUsed > 2 * this.poolLive + term.length * 2) this.compactPool();
-    const start = this.poolUsed;
-    let i = 0;
-    while (i < term.length) {
-      let j = i;
-      if (isUnsegmented(term.charCodeAt(i))) {
-        while (j < term.length && isUnsegmented(term.charCodeAt(j))) j++;
-        if (j - i === 1) this.poolPush(mix32(fnv1a(term, i, j)));
-        for (let k = i; k + 1 < j; k++) this.poolPush(mix32(fnv1a(term, k, k + 2)));
-      } else {
-        while (j < term.length && !isUnsegmented(term.charCodeAt(j))) j++;
-        this.poolPush(mix32(fnv1a(term, i, j)));
-      }
-      i = j;
-    }
-    this.expStart[id] = start;
-    this.expLen[id] = this.poolUsed - start;
-    this.poolLive += this.poolUsed - start;
-  }
-
-  /** Copies the live ids' unit runs to the front of a fresh pool, dropping released ids' runs. */
-  private compactPool(): void {
-    // The floor is the starting size, not 1,024: a larger floor would bring the big pool back after one compaction.
-    const pool = new Uint32Array(Math.max(INITIAL_SLOTS, this.poolLive * 2));
-    let used = 0;
-    for (let id = 0; id < this.state.length; id++) {
-      const len = this.expLen[id]!;
-      if (len === 0) continue;
-      pool.set(this.pool.subarray(this.expStart[id]!, this.expStart[id]! + len), used);
-      this.expStart[id] = used;
-      used += len;
-    }
-    this.pool = pool;
-    this.poolUsed = used;
-  }
-
-  private poolPush(h: number): void {
-    if (this.poolUsed === this.pool.length) this.pool = grown(this.pool, this.pool.length * 2);
-    this.pool[this.poolUsed++] = h;
-  }
 }
 
-const HASHED = 1;
-const HASHED_NUMERIC = 3;
+/** `kindOf`'s bits: the term holds an ASCII digit; it holds a character of a script written without spaces. */
+const NUMERIC = 1;
+const UNSEGMENTED = 2;
 
-function grown(a: Uint32Array, n: number): Uint32Array {
-  const b = new Uint32Array(n);
-  b.set(a);
-  return b;
+/** `NUMERIC` and `UNSEGMENTED` of a term, in one pass. */
+function kindOf(term: string): number {
+  let kind = 0;
+  for (let i = 0; i < term.length; i++) {
+    const c = term.charCodeAt(i);
+    if (c >= 48 && c <= 57) kind |= NUMERIC;
+    else if (c >= 0x0e00 && isUnsegmented(c)) kind |= UNSEGMENTED;
+  }
+  return kind;
+}
+
+/**
+ * Writes the units of a term containing unsegmented script into `seq` from `n`, at most up to `cap`; returns the new
+ * length. Each maximal run of such characters gives its character bigrams (a single character alone), each other run
+ * one unit: "osakaの小さなホテル" → osaka, の小, 小さ, さな, なホ, ホテ, テル.
+ */
+function unitsOf(term: string, seq: Uint32Array, n: number, cap: number): number {
+  let i = 0;
+  while (i < term.length && n < cap) {
+    let j = i;
+    if (isUnsegmented(term.charCodeAt(i))) {
+      while (j < term.length && isUnsegmented(term.charCodeAt(j))) j++;
+      if (j - i === 1) seq[n++] = mix32(fnv1a(term, i, j));
+      for (let k = i; k + 1 < j && n < cap; k++) seq[n++] = mix32(fnv1a(term, k, k + 2));
+    } else {
+      while (j < term.length && !isUnsegmented(term.charCodeAt(j))) j++;
+      seq[n++] = mix32(fnv1a(term, i, j));
+    }
+    i = j;
+  }
+  return n;
 }
 
 /**
@@ -350,11 +289,6 @@ export function isUnsegmented(c: number): boolean {
   if (c >= 0x4e00 && c <= 0x9fff) return true; // CJK unified ideographs
   if (c >= 0xf900 && c <= 0xfaff) return true; // CJK compatibility ideographs
   return c >= 0xff66 && c <= 0xff9f; // half-width Katakana
-}
-
-function hasUnsegmented(term: string): boolean {
-  for (let i = 0; i < term.length; i++) if (isUnsegmented(term.charCodeAt(i))) return true;
-  return false;
 }
 
 const simCounts = new Int32Array(64);
