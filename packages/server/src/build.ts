@@ -13,6 +13,7 @@ import {
   type ShadowSink,
   type TraceSink,
   type UsageSink,
+  intentMicroExpander,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS, TenantSpend, type Model } from "@eden/llm";
@@ -164,6 +165,8 @@ export function buildPartner(options: BuildOptions): ContextPartner {
     model: options.model ?? null,
     ...(options.now ? { now: options.now } : {}),
     ...(cards ? { cards } : {}),
+    // `intentMicro` (M11, D970): the shared expansion model, loaded once a process; missing weights leave it off.
+    ...(cards && config.intentMicro > 0 && intentMicroExpander() ? { intentExpander: intentMicroExpander()! } : {}),
     ...(reader ? { reader } : {}),
     ...(checker ? { checker } : {}),
     onTrace: options.onTrace,

@@ -113,6 +113,7 @@ import {
   cardKey,
   sanitizeItem,
   type CardMaker,
+  intentMicroExpander,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
@@ -424,6 +425,8 @@ const CARDS_FILE = COVERAGE.cards;
  * `cardsLanes` K (N4) a stream gets N × K: the calls K lanes have made when one lane has made N.
  */
 const CARDS_CALLS = Number(opt("cards-calls", "-1"));
+/** `--micro-model FILE` (M11, D970): intentMicro arms read these weights instead of the engine's shipped file. */
+const MICRO_MODEL = opt("micro-model", "");
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
 // Compared as files, not strings: `./a.cards.jsonl` or a symlink must not send new cards into the replay file.
 if (CARDS_FILE && samePath(CARDS_OUT, CARDS_FILE)) {
@@ -958,6 +961,10 @@ async function runWorld(
         now: () => clock,
         config,
         ...(cards ? { cards } : {}),
+        // `intentMicro` (M11, D970): the engine's expansion model (`--micro-model FILE` names other weights).
+        ...(cards && Number(config.intentMicro ?? 0) > 0 && intentMicroExpander(MICRO_MODEL || undefined)
+          ? { intentExpander: intentMicroExpander(MICRO_MODEL || undefined)! }
+          : {}),
         ...(reader ? { reader } : {}),
         ...(checker ? { checker } : {}),
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
