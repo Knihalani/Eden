@@ -213,6 +213,13 @@ Deleted by addendum B's rule: `pushGate`, `turn-gate.ts` in the engine, its weig
 - **Pi pair:** not run. The pre-registration ran it only after an offline pass.
 - **Helpers:** round 1 ran on four Haiku helper sessions; in round 2 three of them treated the peer message as
   needing a human's go-ahead, so their configurations ran in this session instead.
+- **The gains, as a finding (round 3, blind S5 and M2T):** false starts on chatter, statements and wants −82% across
+  nine languages (−69% in English), acting requests started +13.0 points (92.7 against 79.7) on S5 and +19.0 on M2T,
+  logs started 0 against 31%; 42.6 µs a turn and 1.59 MB of weights in TypeScript.
+- **What blocked it, where a next attempt starts:** Hindi acting requests (84.4, English 94.6); Portuguese chatter
+  and wants (25.0% started, English 14.6); hand-written English requests, where the rule is already at 94.6% and the
+  bar asked 98%; five hard-gate turns; and the funnel's push handing 13 fewer hidden facts on train (512 against 525,
+  round 2's provisional model: the union still dropped some English starts the rule makes).
 - **Next, if anyone tries again [EST]:** the misses are where the rule is already right (hand-written English) and
   where the generated data is thin (Hindi requests, Portuguese chatter); a gate that only ever adds starts to the rule
   for non-English and terse turns, and vetoes only the rule's open-shape starts, would keep English exactly as it is.
