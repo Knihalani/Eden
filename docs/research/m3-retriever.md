@@ -220,3 +220,31 @@ than the sim's do, so there is little room.
 
 asym-s1 alone holds 73 more of M2's held-out facts than BM25 and **297 fewer decoys** (−26%), on a generator it
 never trained on; fused (k 10), facts @5 1,211 → 1,329 of 1,435 (+8.2 points).
+
+### 3f. Fold B for asym and sparse with generated families: the go
+
+| run (fold B, held out train1–2) | variant | facts @15 (76) | decoys @15 (107) | §1 bar | facts @5 vs shipped (83) | decoys @5 (114) | §1b bar |
+|---|---|---|---|---|---|---|---|
+| asym-sb1 | model alone | 100 | 95 | pass | 83 | 80 | fail |
+| asym-sb1 | hybrid k 5 / 10 / 15 | 108 / 111 / 111 | 120 / 121 / 121 | pass | 98 / **102** / 102 | 114 / 116 / 113 | **pass** (every k) |
+| sparse-sb1 | model alone | 103 | 106 | pass | 94 | 98 | fail |
+| sparse-sb1 | hybrid k 5 / 10 / 15 | 102 / 105 / 105 | 113 / 116 / 116 | pass | 99 / 98 / 97 | 116 / 116 / 114 | pass (every k) |
+
+**Go (§1's rule, both bars): asym trained with generated families, fused with the shipped pool.** It passes §1b's
+@5 bar against the shipped default at every k on fold A (asym-s1: 148 / 149 / 147 of 157 against 123) and on fold
+B (asym-sb1: 98 / 102 / 102 of 118 against 83), with decoys rising more slowly than facts on both, and passes the
+@15 bar everywhere. Sparse passes both bars on fold B and the @15 bar on fold A, but not @5 on fold A (+7.6): it is
+the fallback. The third fold (train3–4 held out, asym-sc1, generated families with train3–4's themes left out:
+1,256 templates, $0.300) gives every train suite out-of-family ranks for the funnel and days-calls.
+
+### 3g. setrank: an abstaining set-level ranker over asym's vectors (D903; secondary)
+
+A 2-layer transformer (width 256) reads the request vector and asym-s1's top 32 candidates at once, with a learned
+NULL slot; trained listwise on train1–4, the generated families and M2's train split, each request with its fact
+present (target: the fact) and with only its twin (target: NULL). Read two ways:
+
+- **As a gate** (only candidates above NULL): on M2's held-out families it keeps 822 of 1,435 facts and **92 of
+  1,435 decoys**; on fold A's days requests 26 of 157 facts and 9 of 148 decoys. A strong look-alike filter, a weak
+  recall list.
+- **As a ranker** (its full order): fold A facts @15 alone 149, decoys 90; fused k 10, @5 against shipped 147 with
+  decoys 84 (asym-s1: 149, 92); M2's test @5 fused 1,357 against asym-s1's 1,329. About asym's level, not above it.
