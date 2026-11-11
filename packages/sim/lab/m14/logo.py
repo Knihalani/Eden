@@ -30,7 +30,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from logo_core import Source, cap_rows, grade, length_balanced, load_source, read_rows  # noqa: E402
+from logo_core import (  # noqa: E402
+    Source, cap_rows, cluster_diff, grade, length_balanced, load_source, per_task, read_rows,
+)
 
 
 def fold_rows(sources: list[Source], held: str, mode: str, cap: int, seed: int) -> list[dict]:
@@ -66,10 +68,12 @@ def run(args: argparse.Namespace) -> dict:
                              for r in length_balanced([x for x in train if x["src"] == s], seed)]
                 t0 = time.time()
                 model = mod.make(cfg).fit(train)
-                g = grade(test, *model.score(test))
+                scores = model.score(test)
+                g = grade(test, *scores)
                 g.update(seed=seed, train_rows=len(train), secs=round(time.time() - t0, 1))
-                per_seed.append(g)
                 print(json.dumps({"held": held, "mode": mode, **g}), flush=True)
+                g["per_task"] = per_task(test, *scores)
+                per_seed.append(g)
             mean = {k: round(sum(g[k] for g in per_seed) / len(per_seed), 4)
                     for k in ("twin", "twin_hard", "twin_auc_all_clear", "twin_req", "fact_at1", "relevance")}
             spread = {f"{k}_sd": round(_sd([g[k] for g in per_seed]), 4) for k in ("twin", "fact_at1")}
@@ -136,6 +140,23 @@ def para_texts(args: argparse.Namespace) -> None:
     print(f"{len(out)} texts → {args.out}")
 
 
+def compare(args: argparse.Namespace) -> None:
+    """B against A, per held-out source and mode they share: seed-averaged task outcomes, cluster-bootstrap interval."""
+    a, b = (json.load(open(f, encoding="utf8")) for f in (args.a, args.b))
+
+    def avg(res: dict) -> dict:
+        ts = [s["per_task"] for s in res["seeds"]]
+        return {"group": ts[0]["group"], "hard": ts[0]["hard"],
+                **{k: [sum(t[k][i] for t in ts) / len(ts) for i in range(len(ts[0][k]))] for k in ("twin", "at1")}}
+
+    for ra in a["results"]:
+        rb = next((x for x in b["results"] if x["held"] == ra["held"] and x["mode"] == ra["mode"]), None)
+        if not rb or "per_task" not in ra["seeds"][0] or "per_task" not in rb["seeds"][0]:
+            continue
+        for m in args.metrics.split(","):
+            print(json.dumps({"held": ra["held"], "mode": ra["mode"], **cluster_diff(avg(ra), avg(rb), m)}))
+
+
 def grade_cmd(args: argparse.Namespace) -> None:
     rows = read_rows(args.rows)
     sc = read_rows(args.scores)
@@ -168,12 +189,16 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("grade")
     g.add_argument("--rows", required=True)
     g.add_argument("--scores", required=True)
+    c = sub.add_parser("compare")
+    c.add_argument("a")
+    c.add_argument("b")
+    c.add_argument("--metrics", default="twin,twin_hard,at1")
     t = sub.add_parser("para-texts")
     t.add_argument("--source", action="append", required=True)
     t.add_argument("--rows", type=int, default=700)
     t.add_argument("--out", required=True)
     a = p.parse_args(argv)
-    {"run": run, "folds": folds, "grade": grade_cmd, "para-texts": para_texts}[a.cmd](a)
+    {"run": run, "folds": folds, "grade": grade_cmd, "para-texts": para_texts, "compare": compare}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -77,6 +77,21 @@ class LogoCoreTest(unittest.TestCase):
         longer = sum(len(lc.item_text(r["fact"])) > len(lc.item_text(r["decoy"])) for r in b)
         self.assertEqual(longer, 10)
 
+    def test_per_task_and_cluster_diff(self):
+        rows = [row("s", "a", fact="long fact", decoy="d"), row("s", "a", fact="f", decoy="long decoy"),
+                row("s", "b", fact="f", decoy="long decoy")]
+        items = [{"fact": 1, "decoy": 0, "neutrals": [0], "others": [0, 0]}] * 3
+        pairs = [[{"fact": (1, 1), "decoy": (0, 1), "neutrals": [(0, 1)], "others": [(0, 0), (0, 0)]}]] * 3
+        a = lc.per_task(rows, items, pairs)
+        self.assertEqual(a["hard"], [False, True, True])
+        self.assertEqual(a["twin"], [1.0, 1.0, 1.0])
+        self.assertEqual(a["at1"], [1.0, 1.0, 1.0])
+        b = dict(a, twin=[1.0, 0.0, 0.0])
+        d = lc.cluster_diff(a, b, "twin_hard", n_boot=200)
+        self.assertEqual((d["tasks"], d["groups"], d["diff"]), (2, 2, -1.0))
+        self.assertLessEqual(d["lo"], d["diff"])
+        self.assertGreaterEqual(d["hi"], d["diff"])
+
     def test_cap_rows(self):
         self.assertEqual(len(lc.cap_rows(list(range(10)), 4, 1)), 4)
         self.assertEqual(lc.cap_rows([1, 2], 0, 1), [1, 2])

@@ -133,6 +133,43 @@ def grade(rows: list[dict], item_scores: list[dict], pair_scores: list[list[dict
     }
 
 
+def per_task(rows: list[dict], item_scores: list[dict], pair_scores: list[list[dict]]) -> dict:
+    """Task-level outcomes for paired comparisons: the group (the bootstrap's cluster), the twin win (1, 0.5, 0),
+    whether the task is length-controlled, and the share of its requests whose fact ranks first."""
+    out = {"group": [], "twin": [], "hard": [], "at1": []}
+    for r, it, ps in zip(rows, item_scores, pair_scores):
+        out["group"].append(r["group"])
+        out["twin"].append(1.0 if it["fact"] > it["decoy"] else 0.5 if it["fact"] == it["decoy"] else 0.0)
+        out["hard"].append(len(item_text(r["decoy"])) >= len(item_text(r["fact"])))
+        firsts = [1.0 if p["fact"][0] > max([p["decoy"][0]] + [x[0] for x in p["neutrals"] + p["others"]]) else 0.0
+                  for p in ps]
+        out["at1"].append(sum(firsts) / max(1, len(firsts)))
+    return out
+
+
+def cluster_diff(a: dict, b: dict, metric: str, n_boot: int = 2000, seed: int = 1) -> dict:
+    """B minus A on the same test rows (per_task dicts, seeds averaged by the caller), with a 95% interval from a
+    bootstrap over groups: tasks of one template or family move together (D488's lesson)."""
+    hard_only = metric == "twin_hard"
+    key = "twin" if hard_only else metric
+    idx = [k for k in range(len(a[key])) if not hard_only or a["hard"][k]]
+    groups: dict[str, list[int]] = {}
+    for k in idx:
+        groups.setdefault(a["group"][k], []).append(k)
+    names = sorted(groups)
+    diff = lambda ks: sum(b[key][k] - a[key][k] for k in ks) / max(1, len(ks))  # noqa: E731
+    point = diff(idx)
+    rng = random.Random(seed)
+    boots = []
+    for _ in range(n_boot):
+        ks = [k for g in (rng.choice(names) for _ in names) for k in groups[g]]
+        boots.append(diff(ks))
+    boots.sort()
+    return {"metric": metric, "tasks": len(idx), "groups": len(names), "a": round(sum(a[key][k] for k in idx) / max(1, len(idx)), 4),
+            "b": round(sum(b[key][k] for k in idx) / max(1, len(idx)), 4), "diff": round(point, 4),
+            "lo": round(boots[int(0.025 * n_boot)], 4), "hi": round(boots[int(0.975 * n_boot)], 4)}
+
+
 # ------------------------------------------------------------------------------------------------------------------
 # Text transforms (the recipes that need no model call).
 
