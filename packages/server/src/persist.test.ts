@@ -57,9 +57,11 @@ describe("EDEN_PERSIST_* (D425, on by default since D991)", () => {
       loadConfig({ ...prod, EDEN_NODES: "a=http://h:1", EDEN_CLUSTER_KEY: node.EDEN_CLUSTER_KEY }).persist,
     ).toBeNull();
     // Paths come from the env given, not only the process's (review of D992).
-    expect(loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_HOME: "/x/home" }).sourceMapPath).toBe(
-      "/x/home/source-map.db",
+    const home = join(root, "own-home");
+    expect(loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_HOME: home }).sourceMapPath).toBe(
+      join(home, "source-map.db"),
     );
+    expect(readdirSync(root)).toContain("own-home"); // created, as edenHome() creates the process's
   });
 
   test("the default cap is the machine's memory (a cgroup limit lowers it), at least 4,096 MB", () => {

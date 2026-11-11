@@ -189,7 +189,7 @@ export function loadConfig(env = process.env, cores = machineCores(), memoryByte
     keys,
     dev,
     // From the env given (a test's, the router's), not only the process's: EDEN_HOME of this env wins.
-    sourceMapPath: env.EDEN_SOURCE_MAP ?? join(env.EDEN_HOME || edenHome(), "source-map.db"),
+    sourceMapPath: env.EDEN_SOURCE_MAP ?? join(homeOf(env), "source-map.db"),
     tenantRatePerSec: positive(env.EDEN_TENANT_RPS, 200, "EDEN_TENANT_RPS") / share,
     tenantBurst: Math.max(1, positive(env.EDEN_TENANT_BURST, 400, "EDEN_TENANT_BURST") / share),
     gateWorkers: workers(env.EDEN_GATE_WORKERS),
@@ -255,11 +255,21 @@ function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memo
   }
   const mb = positive(max === "" ? undefined : max, defaultPersistMb(memoryBytes), "EDEN_PERSIST_MAX_MB");
   return {
-    dir: dir === "" ? join(env.EDEN_HOME || edenHome(), "frozen") : dir,
+    dir: dir === "" ? join(homeOf(env), "frozen") : dir,
     key: new PersistKey(key),
     maxBytes: Math.floor((mb * 1_048_576) / share),
     store: storeConfig(env),
   };
+}
+
+/**
+ * EDEN_HOME of the env given, created 0700 as `edenHome` does for the process's (review of D992: a test's or a
+ * router's env names its own home); the process's otherwise.
+ */
+function homeOf(env: NodeJS.ProcessEnv): string {
+  if (!env.EDEN_HOME) return edenHome();
+  mkdirSync(env.EDEN_HOME, { recursive: true, mode: 0o700 });
+  return env.EDEN_HOME;
 }
 
 /** Whether persistence is on for this env (the same rule as `persistConfig`, without its checks). */
