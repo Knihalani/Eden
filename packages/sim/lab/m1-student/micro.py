@@ -40,7 +40,7 @@ torch.set_num_threads(int(os.environ.get("MICRO_THREADS", "1")))
 BUCKETS = 1 << 16
 PAIR_BUCKETS = 1 << 18
 ITEM_CHARS = 700
-WORD = re.compile(r"[a-z0-9£$€%]+")
+WORD = re.compile(r"<[a-z:-]+[a-z0-9-]*>|[a-z0-9£$€%]+")
 NAME = re.compile(r"\b[A-Z][a-z]{2,}\b")
 NUM = re.compile(r"\d[\d,.:/]*")
 STOP = set("the a an and or of to in on for with is are be was this that it as at by from your you i we our me my "
@@ -132,9 +132,67 @@ def grams(ws, cap=160):
     return out or [0]
 
 
+TYPED = os.environ.get("MICRO_TYPED", "0") == "1"
+AMOUNT = re.compile(r"[£$€]\s?(\d[\d,]*(?:\.\d+)?)\s*(k|m|bn)?", re.I)
+
+
+def typed(text, request, today):
+    """Round 3 (the parent's transfer lever): surface forms to typed tokens, so a model cannot latch onto one
+    generator's wording. Dates -> relative-day buckets against today (and "the request's day"); tax periods ->
+    current, past or future; money -> a magnitude bucket (and "the request's amount", "above it"); capitalised names ->
+    "named in the request" or "another name"; other numbers -> <num>."""
+    year = int(today[:4]) if today[:4].isdigit() else 2026
+    t = days(today[:4], today[5:7], today[8:10]) if len(today) >= 10 else None
+    req_days = set(dates_in(request, year))
+    req_amt = {float(a.replace(",", "")) for a, _ in AMOUNT.findall(request)}
+    req_names = set(NAME.findall(request))
+
+    def day_tok(x):
+        if x is None or t is None:
+            return " <date> "
+        if x in req_days:
+            return " <d:reqday> "
+        dlt = x - t
+        b = ("past-long" if dlt < -60 else "past-month" if dlt < -7 else "past-week" if dlt < 0 else "today"
+             if dlt == 0 else "next-week" if dlt <= 7 else "next-month" if dlt <= 60 else "future-long")
+        return f" <d:{b}> "
+
+    def sub_dates(rx, conv):
+        def f(m):
+            try:
+                return day_tok(conv(m))
+            except Exception:
+                return " <date> "
+        return f
+    s = text
+    s = PERIOD.sub(lambda m: " <period:current> " if t and days(int(m.group(1)), 4, 6) <= t < days(int(m.group(1)) + 1, 4, 6)
+                   else (" <period:past> " if t and days(int(m.group(1)) + 1, 4, 6) <= t else " <period:future> "), s)
+    s = DATE_ISO.sub(sub_dates(DATE_ISO, lambda m: days(m.group(1), m.group(2), m.group(3))), s)
+    s = DATE_DMY.sub(sub_dates(DATE_DMY, lambda m: days(m.group(3) or year, MONTHS[m.group(2)[:3].lower()],
+                                                         m.group(1))), s)
+    s = DATE_MDY.sub(sub_dates(DATE_MDY, lambda m: days(m.group(3) or year, MONTHS[m.group(1)[:3].lower()],
+                                                         m.group(2))), s)
+
+    def amt(m):
+        try:
+            v = float(m.group(1).replace(",", "")) * {"k": 1e3, "m": 1e6, "bn": 1e9}.get((m.group(2) or "").lower(), 1)
+        except ValueError:
+            return " <amt> "
+        rel = (" <amt:req> " if v in req_amt else " <amt:above-req> " if req_amt and v > max(req_amt)
+               else " <amt:below-req> " if req_amt else "")
+        return f" <amt:e{int(math.log10(v)) if v >= 1 else 0}>{rel}"
+    s = AMOUNT.sub(amt, s)
+    s = re.sub(r"\b\d[\d,.:]*\b", " <num> ", s)
+    s = NAME.sub(lambda m: " <name:req> " if m.group(0) in req_names else " <name> ", s)
+    return s
+
+
 def features(request, title, text, today=""):
     """The pair's ids and cross features (shared by every candidate)."""
     item = f"{title}\n{text[:ITEM_CHARS]}"
+    if TYPED:
+        item = typed(item, request, today)
+        request = typed(request, request, today)
     iw, rw = words(item), words(request[:400])
     rc = {w for w in rw if w not in STOP and len(w) > 2}
     ic = {w for w in iw if w not in STOP and len(w) > 2}
