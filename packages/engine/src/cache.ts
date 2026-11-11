@@ -549,9 +549,9 @@ export interface CacheLimits {
    */
   warmIdleMs: number;
   /**
-   * Trial (D861, off): at each expiry tick a live user idle two ticks or more has its index compacted
-   * (`SparseIndex.compact`): the delta tier merged and its spare room let go, an eighth of a heavy user's items held
-   * at about three times a merged item's index bytes.
+   * D861 (on by default): at each expiry tick a live user not read or written since the last one has its index
+   * compacted (`SparseIndex.compact`): the delta tier merged and its spare room let go, about 0.5-1.0 MB of a
+   * 3,000-item user (167-317 B an item), answers unchanged. A no-op once done, until the user writes again.
    */
   idleCompact: boolean;
 }
@@ -568,7 +568,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   packText: true,
   freezeIdleMs: 30 * 60_000,
   warmIdleMs: 0,
-  idleCompact: false,
+  idleCompact: true,
 };
 
 /**
@@ -1700,8 +1700,9 @@ export class ItemCache {
       const form = this.freezeForm(u, freezeTicks);
       if (form === null) {
         // D861: an idle user's index merged at the tick, its delta's spare room let go (a no-op when already done).
-        // Idle two ticks, as a freeze: a lookup that took term ids before an await is not left holding a released one.
-        if (this.limits.idleCompact && this.epoch - u.seen >= 2) u.index.compact();
+        // D861. Its purge may release terms no live item holds, as any write's purge does (a lookup holding ids
+        // across an await already meets that); `releaseTerms` off releases none.
+        if (this.limits.idleCompact && this.epoch - u.seen >= 1) u.index.compact();
         continue;
       }
       if (sliced) this.later.add(key);

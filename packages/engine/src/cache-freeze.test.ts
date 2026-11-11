@@ -170,6 +170,38 @@ describe("idle users frozen (D325)", () => {
     expect(b.frozenBytes).toBeLessThan(warmBytes);
   });
 
+  test("an idle user's index is compacted at the tick, and answers as before (D861)", () => {
+    const limits = { maxItemsPerUser: 400, maxSyncedPerUser: 400, freezeIdleMs: 0, expireEveryMs: 1 };
+    const a = manual({ ...limits, idleCompact: false });
+    const b = manual({ ...limits, idleCompact: true });
+    const r = rng(17);
+    // Enough items for a heavy index (a chained delta), some removed: a purge, a merge and the delta's spare room.
+    const items = Array.from({ length: 300 }, (_, n) => makeItem(r, n, "alice"));
+    for (let p = 0; p < 300; p += 20) for (const c of [a, b]) c.put(alice, items.slice(p, p + 20), T0, false, true, 1);
+    const gone = items.filter((_, n) => n % 7 === 0).map((x) => x.id);
+    for (const c of [a, b]) c.removeItems(alice, gone, T0, 5 * MIN);
+    // A removal's purge may merge the delta away: these land behind it.
+    const late = Array.from({ length: 30 }, (_, n) => makeItem(r, 300 + n, "alice"));
+    for (const c of [a, b]) c.put(alice, late, T0, false, true, 1);
+    const delta = (c: ItemCache) =>
+      (c as unknown as { users: Map<string, { index: { deltaN: number } }> }).users.get("t/alice")!.index.deltaN;
+    expect(delta(b)).toBeGreaterThan(0);
+    // Not read or written since the last tick (here: since none): compacted at this one.
+    b.expireIdle(T0);
+    expect(delta(b)).toBe(0);
+    // Written again: its new docs wait in the delta until the user is idle through a tick.
+    const again = [makeItem(r, 400, "alice")];
+    for (const c of [a, b]) c.put(alice, again, T0, false, true, 1);
+    expect(delta(b)).toBe(1);
+    b.expireIdle(T0);
+    expect(delta(b)).toBe(0);
+    expect(snapshot(b, alice, T0)).toEqual(snapshot(a, alice, T0));
+    // Writes after it answer as the twin's.
+    const more = Array.from({ length: 40 }, (_, n) => makeItem(r, 500 + n, "alice"));
+    for (const c of [a, b]) c.put(alice, more, T0 + MIN, false, true, 2);
+    expect(snapshot(b, alice, T0 + MIN)).toEqual(snapshot(a, alice, T0 + MIN));
+  });
+
   test("a warm blob keeps item text as its deflated bytes, and the thawed items are packed (D860)", () => {
     const b = manual({ freezeIdleMs: 0, warmIdleMs: 1, expireEveryMs: 1 });
     const r = rng(5);

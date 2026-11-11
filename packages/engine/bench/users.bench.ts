@@ -55,7 +55,7 @@ const CACHE = JSON.parse(process.argv.find((a) => a.startsWith("--cache="))?.sli
 >;
 /**
  * `--warm-waves=J` (D862): users freeze warm after two idle ticks of a minute (`warmIdleMs` 2 min, `expireEveryMs` 1
- * min, `idleCompact` on) and compact once idle 2J+1 ticks: with `--waves=K` the steady state then holds the last wave
+ * min) and compact once idle 2J+1 ticks: with `--waves=K` the steady state then holds the last wave
  * live, the J before it warm and the rest compact (each earlier wave idles two ticks per later wave).
  */
 const WARM_WAVES = Number(process.argv.find((a) => a.startsWith("--warm-waves="))?.slice(13) ?? -1);
@@ -64,7 +64,6 @@ if (WARM_WAVES >= 0) {
     warmIdleMs: 120_000,
     expireEveryMs: 60_000,
     freezeIdleMs: (2 * WARM_WAVES + 1) * 60_000,
-    idleCompact: true,
     ...CACHE,
   });
 }
