@@ -726,9 +726,11 @@ class UserCards {
   readonly byItem = new Map<string, string>();
   /**
    * The items linked to each content hash, cards made or not: a card that lands for content no item links to any more
-   * is not kept, and an intent search names the items a hash stands for.
+   * is not kept, and an intent search names the items a hash stands for. One holder is its id alone, a Set only from
+   * the second (D998): a one-element Set is about 250 bytes, and a hash nearly always has one item (0.75 MB of a heavy
+   * user's 3,000 items, `live-heap.bench.ts --cards`). `holdersOf` reads either, in the order the items were linked.
    */
-  readonly holders = new Map<string, Set<string>>();
+  readonly holders = new Map<string, string | Set<string>>();
   queue: Queued[] = [];
   /** Items queued so far: each one's `seq`, the order the user's items came in whatever order they are read in. */
   enlisted = 0;
@@ -1341,7 +1343,7 @@ export class CardEnricher {
         dropCard(u, hit.hash);
         continue;
       }
-      const ids = [...(u.holders.get(hit.hash) ?? [])].filter(accept);
+      const ids = holdersOf(u, hit.hash).filter(accept);
       if (ids.length === 0) continue;
       // `carded`: the content holds a constraint card (a `none` card is held as no card), for `intentByKind`.
       out.push({ ids, hit, carded: !!s.card });
@@ -1408,8 +1410,15 @@ export class CardEnricher {
 function link(u: UserCards, id: string, hash: string): void {
   u.byItem.set(id, hash);
   const ids = u.holders.get(hash);
-  if (ids) ids.add(id);
-  else u.holders.set(hash, new Set([id]));
+  if (ids === undefined) u.holders.set(hash, id);
+  else if (typeof ids !== "string") ids.add(id);
+  else if (ids !== id) u.holders.set(hash, new Set([ids, id]));
+}
+
+/** The ids linked to a content hash, in the order they were linked (`UserCards.holders`). */
+function holdersOf(u: UserCards, hash: string): string[] {
+  const ids = u.holders.get(hash);
+  return ids === undefined ? [] : typeof ids === "string" ? [ids] : [...ids];
 }
 
 /** Unlinks an item; content no item links to any more loses its card (held no longer than its items, D8). */
@@ -1418,8 +1427,12 @@ function unlink(u: UserCards, id: string): void {
   if (hash === undefined) return;
   u.byItem.delete(id);
   const ids = u.holders.get(hash);
-  ids?.delete(id);
-  if (ids && ids.size > 0) return;
+  if (typeof ids === "object") {
+    ids.delete(id);
+    // Back to the id alone once one is left: the same order, the smaller form.
+    if (ids.size === 1) u.holders.set(hash, ids.values().next().value!);
+    if (ids.size > 0) return;
+  } else if (ids !== undefined && ids !== id) return;
   u.holders.delete(hash);
   dropCard(u, hash);
 }
