@@ -18,6 +18,11 @@ export interface HiddenTask {
   text: string;
   /** The hidden consideration a good answer raises, as the grader reads it. */
   detail: string;
+  /**
+   * The text whose calendar slot the harness clears (`clearSlot`), when not `text`: a reworded suite's original
+   * request (D871), so its world is the original suite's whatever language the request is in.
+   */
+  slotText?: string;
 }
 
 interface Planted {
