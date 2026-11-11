@@ -473,7 +473,7 @@ describe("syncKick (D751)", () => {
     }
   });
 
-  test("a tick leaves the users the kicks hold alone: users arriving together read no more at once than four pools", async () => {
+  test("a tick leaves users waiting for a kick turn alone: users arriving together read no more at once than four pools", async () => {
     // 24 users of 40 sources arrive together and a tick comes while they are read. The tick's 16 lanes stepping the
     // waiting users as well (as pools: 512 listings at once in the review's probe; as batches: 128 more) would pass
     // the bound.

@@ -164,9 +164,9 @@ const KICK_RESUME_MS = 500;
  * `kick`: kicked steps running at once, across users and tenants; a kick past it waits its turn (first come, first
  * started, so one tenant's storm delays another's new user as a tick's queue does). A tick works on `USERS_AT_ONCE`
  * (16) users in batches of `syncBackfillLanes` (8): 128 listings at once at most. Four kicked users of
- * `syncKickLanes` (32) are the same 128, and a tick does not step a user the kicks hold, so users arriving together
- * (a deploy, a morning) are read no more at once than a tick already reads (`sync-kick.test.ts`;
- * `bench/storm.bench.ts`, D753).
+ * `syncKickLanes` (32) are the same 128, and a tick does not step a user waiting for a kick turn, so the kicks of
+ * users arriving together (a deploy, a morning) read no more at once than a tick already reads, beside the tick's
+ * own batches (`sync-kick.test.ts`; `bench/storm.bench.ts`, D753).
  */
 const KICKS_AT_ONCE = 4;
 
@@ -399,9 +399,9 @@ export class SyncManager {
    * inside the call (the step starts in a microtask, so the caller's event is not held by the tenant's resolver).
    * A tick that comes while it runs waits for it. Nothing happens for a user the sync does not hold, one whose kick
    * is running, waiting or timed, or after `stopKicks`. At most `KICKS_AT_ONCE` kicked steps run at once, across
-   * users; the rest wait their turn. A tick leaves a user alone while their kick waits for a turn or for its resume
-   * timer (the review: stepped by a tick as well, a storm's users read past the bound), and only a kicked step
-   * reads as a pool: a tick's step for the same user, once the kicks are done with them, reads batches.
+   * users; the rest wait their turn. A tick leaves a user alone while their kick waits for a turn (the review:
+   * stepped by a tick as well, a storm's users read past the bound), and only a kicked step reads as a pool: a
+   * tick's step for the same user reads batches.
    *
    * Each resume is a whole step, so the tenant's source resolver is asked again each time (a few times in a new
    * user's first seconds, `KICK_RESUMES` at most, where a tick asks once a minute).
@@ -952,9 +952,11 @@ export class SyncManager {
       const lane = async () => {
         for (let u = queue.shift(); u; u = queue.shift()) {
           if (u.gone) continue;
-          // A user whose kick waits for its turn or its timer is the kicks' to read: stepped here as well, users
-          // arriving together would read past `KICKS_AT_ONCE` (stopped kicks hold neither, so the ticks have them).
-          if (u.queued || u.resume) continue;
+          // A user waiting for a kick turn is the kicks' to read: stepped here as well, users arriving together
+          // would read past `KICKS_AT_ONCE` (a stopped kick waits for none, so the ticks have its user). A user
+          // whose kick waits for its resume timer is stepped: the wait may be a failed source's long back-off,
+          // and their other sources' work is the tick's.
+          if (u.queued) continue;
           // A kicked step still running is this user's step: one more would read the same pages again.
           if (u.kicked) await u.kicked;
           else {

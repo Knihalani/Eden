@@ -134,8 +134,7 @@ the lookups wait for is each source being known complete or cut, which needs its
   most 128 times (`KICK_RESUMES`), then the ticks take over. Every wait is on the engine's clock, through one
   injected timer (`SyncDeps.after`, D753).
 - At most four kicked steps run at once across users (`KICKS_AT_ONCE`: the 128 listings at once a tick already
-  allows); the rest wait their turn, and a tick leaves a user alone while a kick holds them (waiting for a turn or
-  for its timer). Only a kicked step reads as a pool; a tick's step reads batches. `stopSync` cancels them (D753).
+  allows); the rest wait their turn, and a tick leaves a user alone while they wait for a kick turn. Only a kicked step reads as a pool; a tick's step reads batches. `stopSync` cancels them (D753).
 - A page of a first backfill that failed once is tried again after 1.5 s (`syncKickRetryMs`), then 30 s and
   doubling as before (D753).
 - A kicked user's backfill reads as a pool: a lane takes the next source, newest unread page first, as soon as it is

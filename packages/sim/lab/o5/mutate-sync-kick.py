@@ -32,7 +32,7 @@ M=[
  ("a kicked step's backfill is not the pool", "if (kicked && (this.o.kickLanes ?? 0) > 0)", "if (false)", 1),
  # The second review's survivors, and the bound under a tick.
  ("a tick's step reads as a pool too", "if (kicked && (this.o.kickLanes ?? 0) > 0)", "if ((this.o.kickLanes ?? 0) > 0)", 1),
- ("a tick steps users the kicks hold", "          if (u.queued || u.resume) continue;\n", "", 1),
+ ("a tick steps users waiting for a kick turn", "          if (u.queued) continue;\n", "", 1),
  ("every event kicks", "if (fresh && this.config.syncKick)", "if (this.config.syncKick)", 1, PARTNER),
  ("a tick's step stays noted", "              u.ticking = false;\n", "", 1),
  ("the quick retry for warm sources too", "const soon = s.phase === \"backfill\" ? (this.o.kickRetryMs ?? 0) : 0;", "const soon = this.o.kickRetryMs ?? 0;", 1),

@@ -484,7 +484,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   Since D753: every kick wait goes through `SyncDeps.after`, a timer on the engine's clock (`PartnerDeps.after`;
   `setTimeout` when absent, right only when `now` is the wall clock: an embedder or a test with another clock passes
   its own, or the waits are in the wrong unit); at most `KICKS_AT_ONCE` (4) kicked steps run across users, the rest
-  queue, a tick skips a user whose kick is queued or timed, and only a kicked step reads as a pool (a tick stepping
+  queue, a tick skips a user whose kick is queued for a turn, and only a kicked step reads as a pool (a tick stepping
   queued users as pools read 512 listings at once, the second review); `stopSync` cancels timers and queue (`stopKicks`); a first backfill page that failed once is retried after
   `syncKickRetryMs` (1.5 s), then 30 s and doubling. `sync-kick.test.ts` drives the clock and the timer by hand and
   each test names the mechanism it holds: after a change there, run

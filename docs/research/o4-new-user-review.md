@@ -27,7 +27,7 @@ their outputs are in
 4. **Kicks were not bounded across users, and `stopSync` did not stop them.** At most four kicked steps run at
    once (`KICKS_AT_ONCE`): four pools of 32 are the 128 listings at once that a tick's 16 users in batches of 8
    already are. The rest wait their turn in arrival order (across tenants, as a tick's queue is), and a tick leaves
-   a user alone while a kick holds them (the second review, below). `stopSync` cancels
+   a user alone while they wait for a kick turn (the second review, below). `stopSync` cancels
    every resume timer, lets the waiting users go and stops new kicks until `startSync` (`stopKicks`).
    `bench/storm.bench.ts`, 300 users arriving at once beside 20 warm users sending an event every 10 ms, off → on:
 
@@ -74,7 +74,9 @@ results (identical), found the paid check's conclusion sound, and returned four 
    the four kicked steps: 512 listings at once in the reviewer's probe (24 users of 40 sources), against 128
    without the switch. The storm bench could not see it (three sources a user). Fixed: only a kicked step reads as
    a pool (a tick's step reads batches, for a user who was kicked too), and a tick does not step a user whose kick
-   is waiting for a turn or for its resume timer. Tested with the reviewer's shape: 24 users of 40 sources and a
+   is waiting for a turn. (A first form of the fix also skipped users waiting for their resume timer; the cold gate
+   caught it: a user whose one unfinished source is backing off would get no tick, nor would any embedder whose
+   clock is not the wall's without a timer of its own.) Tested with the reviewer's shape: 24 users of 40 sources and a
    tick in the middle read at most 128 at once, four users at a time, each page once.
 2. **Mechanisms no test held** (25 further mutations of the reviewer's). Now held: only a user new to the sync is
    kicked (a later event, or a user tracked another way, starts nothing); the pool at the user's cap keeps and cuts
