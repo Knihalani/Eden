@@ -2,5 +2,6 @@
   "pushCandidates": 0,
   "askNudge": false,
   "askNudgeDeep": false,
-  "pushCandidatesSettled": 0
+  "pushCandidatesSettled": 0,
+  "pushOpen": false
 }

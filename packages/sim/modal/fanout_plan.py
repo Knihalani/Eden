@@ -255,6 +255,7 @@ PART_VARIANTS = {
     "minus-nudge": {"askNudge": False, "askNudgeDeep": False},
     "minus-plans": {"planConflict": False},
     "minus-fewer": {"pushCandidatesSettled": 0},
+    "minus-open": {"pushOpen": False},
     "minus-freshness": {"verifyDelivery": False, "readerVerifyAfter": False, "revisionNotice": False,
                         "revisionDiff": False},
 }
