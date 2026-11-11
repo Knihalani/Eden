@@ -106,6 +106,21 @@ false concerns, inside a wait an interactive agent can take, and how does it sta
   seeds 49–64, Haiku's checks) and about $2 for the regrade; cap $14 for this step. Modal: the endpoint's H100 for
   the run's length (about $4 an hour **[EST]**) and the shards.
 
+## 2d. Pre-registration: Pi round 2 (D898), written after round 1 and before any round-2 choice was read
+
+Round 1 (§4d) showed the student stricter than Haiku on Pi worlds. Round 2 asks whether a more lenient mark, and the
+student retrained with M2's synthetic families, close that gap. It is motivated by round 1's diagnostics, so it runs
+on **fresh worlds** (seeds 65–88) and every choice below is fixed by a rule on the dev split before the run.
+
+- **Student:** of `t8b-truth-a` (train suites only) and `s8b-a` (the same recipe on the train suites plus M2's v0
+  synthetic train families, §4e), the one with the higher planted-vs-decoy AUC on the train suites' **dev**
+  templates; within 0.01, the higher on M2's synthetic **val** families.
+- **Mark:** the most lenient `pushCheckLocalPass` of 0.5, 0.2, 0.05, 0.01 and 0.002 whose dev-template funnel (seeds
+  41–48, cached scores) hands at most **10%** of the default's decoys (13 of 131). For `t8b-truth-a` that is 0.01
+  (12 handed; 0.002 hands 24), read before this section was written.
+- **Harness, arms, regrade, outcomes and rule:** as §2c (40 held-out templates, `eden`, `eden~local` with the chosen
+  student and mark, `eden~check`), seeds 65–88. Budget about $4 for the shards and $1.6 for the regrade.
+
 ## 3. The pipeline (D891)
 
 `packages/sim/modal/m1_data.py` (rows, splits, prompt, AUCs, the template-clustered interval; `tests/test_m1_data.py`),
