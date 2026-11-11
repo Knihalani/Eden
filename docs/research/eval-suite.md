@@ -100,3 +100,30 @@ Per category, with the planner:
 - **A first version had label errors,** found in review: items a good partner should deliver (a meeting's calendar
   entry, the overdue invoice email, a clashing train) were labelled wrong, and two labels asked for repeats. Its
   baseline (precision 0.875) measured the labels, not the engine; the numbers above are from the corrected suite.
+
+## The acting suite (D810, 2026-11-11)
+
+The weak-point analysis of 2026-11-11 (weak-points-1111.md, B1, R2) found that `bun run eval` read the same with
+`pushOpen` on or off, and that `falseFireRate` could not see candidate packets on requests that owe nothing: every
+silent turn above is a remark, a question or a tool result, where no push starts. `scenarios/acting/` adds 38
+scenarios over five worlds (money and admin, work operations, family, travel, social), each one request that acts
+by its own user: 28 neutral (no stored fact bears on it, though it shares words with stored constraint-worded items)
+and 10 that owe a fact, each beside a labelled look-alike (another year's withdrawn terms, another team's cap,
+another person's dates). It runs apart from the 31 scenarios, so the three headline numbers are unchanged, and
+reports an `acting` block.
+
+| Configuration | Packets on neutral requests | Items per neutral request | Facts handed | Look-alike handed |
+| --- | --- | --- | --- | --- |
+| default | 19 / 28 (0.49–0.82) | 1.18 | 10 / 11 (0.62–0.98) | 3 / 10 (0.11–0.60) |
+| `pushOpen` off | 13 / 28 (0.30–0.64) | 0.71 | 10 / 11 | 3 / 10 |
+| `minus-candidates` | 4 / 28 (0.06–0.31) | 0.14 | 5 / 11 (0.21–0.72) | 1 / 10 (0.02–0.40) |
+
+Intervals are 95% Wilson on the counts; the suite is small and hand-written, so read differences of a few requests
+as direction, not size. The fact missed by the default is the visa's 30-day limit on an extended trip ("Extend my
+Delhi trip …"). In the lab the default speaks on 92–98% of neutral requests; here on 68%: these worlds hold 6–9
+items each, so fewer requests share a word with a constraint-worded one.
+
+Review (2026-11-11) changed the first version: a world's requests had shared one user, so each moved the others'
+scores (18 of 28 neutral packets in order, 21 alone); one look-alike was a rule still in force; one neutral request
+(planning a family lunch) owed the child's allergy; three neutral requests were reworded where a stored item was
+their own context; the travel world's return date already broke the visa limit before the request.

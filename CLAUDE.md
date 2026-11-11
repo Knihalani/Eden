@@ -53,8 +53,9 @@ bun run eval    # no-model metrics; paste the JSON in the PR when engine behavio
 ```
 
 The no-model eval runs on each scenario's own clock, so its result does not depend on the day it runs (D435). On
-main it reads precision 0.65, recall 0.52, falseFireRate 0. Treat a difference from those numbers as a change in
-behaviour.
+main it reads precision 0.65, recall 0.52, falseFireRate 0. Its `acting` block (D810: requests that act, where the
+default's push of candidates runs) reads packets on 19 of 28 neutral requests (1.18 items each), facts handed 10 of
+11, a look-alike handed on 3 of 10 owed requests. Treat a difference from any of those numbers as a change in behaviour.
 
 The standard agent for live agent tests (`agent-ab.ts`, any "Eden against tools" comparison) is the **Pi harness**
 (pi-mono's agent loop, `earendil-works/pi`, formerly `badlogic/pi-mono`): its minimal loop and tools, with Eden added
