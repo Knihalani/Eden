@@ -8,7 +8,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { ASK_NUDGE, CANDIDATES_LEAD } from "./render";
+import { ASK_NUDGE, ASK_NUDGE_SHORT, CANDIDATES_LEAD, CANDIDATES_LEAD_SHORT } from "./render";
 import { anchored, anchorsOf, namedDays, namesDay, settledCut, settles } from "./settle";
 
 // A12 (docs/research/a12-quality.md, D316): `askNudge`. When no candidate the push hands holds every kind of anchor the
@@ -152,6 +152,13 @@ describe("askNudge (D316): a nudge to ask when the candidates do not settle the 
     await say(p, DATED_REQUEST);
     const got = packet(p)!;
     expect(got.text.split("\n")[1]).toBe(CANDIDATES_LEAD);
+  });
+
+  test("leadShort (D855): the short lead adds the short nudge", async () => {
+    const p = setup({ askNudge: true, leadShort: true });
+    await say(p, DATED_REQUEST);
+    expect(packet(p)!.text.split("\n")[1]).toBe(`${CANDIDATES_LEAD_SHORT} ${ASK_NUDGE_SHORT}`);
+    expect(ASK_NUDGE_SHORT.length).toBeLessThan(ASK_NUDGE.length);
   });
 
   test("on, unsettled: the lead adds the nudge, in the data envelope", async () => {
