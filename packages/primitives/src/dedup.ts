@@ -127,7 +127,16 @@ export class TextSketcher {
     let n = 0;
     let numbers = 0;
     for (let i = 0; i < found && n < cap; i++) {
-      const term = vocab.term(ids[i]!);
+      const id = ids[i]!;
+      // A Latin-1 term is hashed in the vocabulary's arena, with no string made (D998); others are read as strings.
+      const fnv = vocab.termFnv(id);
+      if (fnv >= 0) {
+        const h = mix32(fnv);
+        if (vocab.termHasDigit(id)) numbers = (numbers + mix32(h ^ 0x7f4a7c15)) | 0;
+        seq[n++] = h;
+        continue;
+      }
+      const term = vocab.term(id);
       const h = mix32(fnv1a(term, 0, term.length));
       const kind = kindOf(term);
       // A sum of mixed hashes: a multiset key, so the order numbers appear in does not matter.
