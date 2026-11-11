@@ -659,3 +659,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D947 | 2026-11-11 | The parent's decisions on D942's rule (recorded with their reasons). | adopted |
 | D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
 | D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
+| D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |

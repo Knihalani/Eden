@@ -4,7 +4,7 @@
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent, SharedFrozenDisk } from "@eden/engine";
+import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent, SharedFrozenDisk, turnGate } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
@@ -19,6 +19,9 @@ import { Ops } from "./ops";
 import { childOwns, prunePersistDirs } from "./persist";
 import { keyOf } from "./auth";
 import { rehomeSourceMaps, runRouter, userOf } from "./router";
+
+/** Logs the persistence problems counted since the last line; shutdown calls it, so the last minute's show (R1). */
+let flushPersistReport: () => void = () => {};
 
 const started = performance.now();
 const config = configOrExit();
@@ -138,6 +141,10 @@ async function serve(config: ServerConfig): Promise<void> {
   }
   // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
   warmGate();
+  // The turn gate fails open (D1014): unreadable weights leave the start rule alone. Said once, so a missing
+  // `turn-gate.bin` in an image is seen (R1), not only measured.
+  if (partner.config.pushGate && turnGate() === null)
+    console.error("eden: turn-gate.bin could not be read; the push's start rule decides alone (D1014)");
   const grace = config.shutdownGraceMs ?? 10_000;
   // D992: readiness, metrics and the cluster router's membership messages, around the API.
   const ops = new Ops(partner, persist, {
@@ -166,6 +173,8 @@ async function serve(config: ServerConfig): Promise<void> {
     // D100: Bun's default is 128 MB; the handler's content-length check cannot see chunked bodies, this cap can.
     maxRequestBodySize: config.maxBodyBytes,
     fetch: ops.wrap(createHandler(partner, config, sources.userSources, tenants)),
+    // `Ops.wrap` answers a throw itself; this is the backstop for anything Bun raises around it (never a 500, R1).
+    error: () => Response.json({ error: "temporarily unable to serve context" }, { status: 503 }),
   });
   // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
   // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
@@ -194,6 +203,7 @@ async function serve(config: ServerConfig): Promise<void> {
         if (left > 0) console.error(`eden: ${left} store writes unfinished at shutdown: those users re-sync`);
       }
     }
+    flushPersistReport();
     try {
       sourceMap.close();
     } catch (e) {
@@ -273,6 +283,7 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | SharedFrozenD
     : new EncryptedFrozenDisk(options);
   flush();
   setInterval(flush, 60_000).unref();
+  flushPersistReport = flush;
   return store;
 }
 

@@ -77,3 +77,48 @@ test("the membership route needs the cluster key, compared whole (D992)", async 
   expect(await ok.json()).toMatchObject({ released: 0, written: 0, pending: 0 });
   expect(clusterKeyMatches(undefined, new Request("http://x", { headers: { authorization: "Bearer " } }))).toBe(false);
 });
+
+test("a membership with more nodes than placement takes is a 400, and a throw in the fence is a 503, never a 500 (R1)", async () => {
+  const o = ops();
+  const handler = o.wrap(() => new Response("api"));
+  const nodes = Array.from({ length: 40_000 }, (_, i) => `n${i}`);
+  const r = await handler(
+    new Request("http://x/internal/cluster", {
+      method: "POST",
+      headers: { authorization: `Bearer ${KEY}` },
+      body: JSON.stringify({ self: "n0", nodes }),
+    }),
+  );
+  expect(r.status).toBe(400);
+  const failing = o.wrap(() => {
+    throw new Error("boom");
+  });
+  expect((await failing(new Request("http://x/v1/events", { method: "POST", body: "{}" }))).status).toBe(503);
+});
+
+test("a release that finishes after a newer drop does not put its older table back (R1)", async () => {
+  const cache = new ItemCache();
+  cache.close();
+  const partner = new ContextPartner({
+    sources: async () => [],
+    sourceMap: new SourceMap(":memory:"),
+    cache,
+    budget: new Budget(),
+    model: null,
+  });
+  // A shared disk whose hand-offs take a while: the release awaits it while the drop lands.
+  const disk = {
+    handOff: async () => {},
+    forgetAbsent: () => {},
+    backlog: 0,
+    local: { dropWhere: () => {} },
+    setWritable: () => {},
+  };
+  const o = new Ops(partner, disk as never, { clusterKey: KEY, child: { index: 0, count: 1 }, releaseMs: 50 });
+  const release = o.cluster({ self: "a", nodes: ["a"], epoch: 5, mode: "release" });
+  await o.cluster({ self: "a", nodes: ["b"], epoch: 6, mode: "drop" });
+  await release;
+  // Epoch 6 says machine "a" owns nothing.
+  expect(o.machineOwns(0)).toBe(false);
+  expect(o.machineOwns(1234)).toBe(false);
+});
