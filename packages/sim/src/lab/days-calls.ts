@@ -84,8 +84,8 @@ export interface DaysCallsOptions {
    */
   onPlanted?: (row: PlantedRow) => void;
   /**
-   * `--corpus-dump FILE` (M3, D900 on the unmerged M3 branch; D911): the user's world as its sources list it and the cache holds it (redacted), one
-   * line a user, for offline retrieval screens. Simulated items only.
+   * `--corpus-dump FILE` (M3, D900 on the unmerged M3 branch; D911): the user's world as its sources list it and the
+   * cache holds it (redacted), one line a user, for offline retrieval screens. Simulated items only.
    */
   onCorpus?: (seed: number, items: { id: string; title: string; text: string }[]) => void;
   /**
@@ -103,8 +103,9 @@ const normRequest = (s: string) =>
     .trim();
 
 /**
- * M3 (D901, unmerged branch): a retriever's ranks precomputed offline (M3's `m3r/widen_table.py`, not on main: per seed and request, the user's item ids
- * a model ranks first, from a fold that never trained on the request's template), served as the `widen` dependency.
+ * M3 (D901, unmerged branch): a retriever's ranks precomputed offline (M3's `m3r/widen_table.py`, not on main: per
+ * seed and request, the user's item ids a model ranks first, from a fold that never trained on the request's
+ * template), served as the `widen` dependency.
  * Lab only; the push makes no call.
  */
 export function widenRanks(path: string): DaysCallsOptions["widen"] {
@@ -142,7 +143,7 @@ export interface PlantedRow {
   pushed: boolean;
   got: boolean;
   today: boolean;
-  /** M3 (D900, unmerged branch; D911): the planted item's id, the request's text and template, and the pool's ids in order. */
+  /** M3 (D900, unmerged branch; D911): the planted item's id, the request's text and template, the pool's ids. */
   planted?: string;
   request?: string;
   template?: string;
