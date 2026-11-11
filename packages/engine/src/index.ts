@@ -16,6 +16,7 @@ export { SyncManager, type SyncOptions, type SyncSnapshot, type SyncStats } from
 export {
   EncryptedFrozenDisk,
   PERSIST_FORMAT,
+  PersistKeyMismatch,
   type DiskOptions,
   type FrozenDisk,
   type PersistedUser,

@@ -4,7 +4,7 @@
  * that writes its live users at SIGTERM, reads them back on the next start and deletes them on `/v1/forget`.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
@@ -183,4 +183,71 @@ test("a server writes live users at SIGTERM, reads them back after a restart, an
   expect((await b.post("/v1/forget", { userId: "u1" })).status).toBe(200);
   expect(blobs()).toEqual([]);
   await b.stop();
+}, 30_000);
+
+/** A static sources file with one document, so a user who asks holds an item (an empty user is not written). */
+function oneDoc(name: string): string {
+  const path = join(root, `${name}.json`);
+  const doc = { ref: "d1", title: "Globex renewal", text: "Dana Lee wants 12% off" };
+  writeFileSync(path, JSON.stringify({ sources: [{ id: "crm", description: "deals", docs: [doc] }] }));
+  return path;
+}
+
+test("a wrong key stops the start and deletes nothing; EDEN_PERSIST_DISCARD=1 starts and says so (D1071)", async () => {
+  const home = join(root, "home-key");
+  const dir = join(root, "frozen-key");
+  mkdirSync(home, { recursive: true });
+  const env = {
+    EDEN_HOME: home,
+    EDEN_SOURCES_FILE: oneDoc(dir.slice(root.length + 1)),
+    EDEN_PERSIST_FROZEN_DIR: dir,
+    EDEN_PERSIST_KEY: HEX,
+  };
+  const blobs = () => readdirSync(dir).filter((f) => f.endsWith(".blob"));
+  const a = await start(env);
+  await a.post("/v1/ask", { userId: "u1", sessionId: "s1", question: "What does Dana Lee want?" });
+  await a.post("/v1/ask", { userId: "u2", sessionId: "s1", question: "What does Dana Lee want?" });
+  expect(await a.stop()).toContain("persisted 2 live users at shutdown");
+  expect(blobs().length).toBe(2);
+
+  const WRONG = "5c".repeat(16) + "a3".repeat(16);
+  const refused = Bun.spawn(["bun", join(import.meta.dir, "main.ts")], {
+    env: { ...process.env, ...env, EDEN_PERSIST_KEY: WRONG, PORT: "0", EDEN_PROCESSES: "1", EDEN_DEV: "1" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(await refused.exited).toBe(2);
+  const said = await new Response(refused.stderr).text();
+  expect(said).toContain("EDEN_PERSIST_KEY opens none of the 2 persisted users");
+  expect(said).toContain("EDEN_PERSIST_DISCARD=1");
+  expect(said).not.toContain(WRONG);
+  expect(blobs().length).toBe(2);
+
+  const b = await start({ ...env, EDEN_PERSIST_KEY: WRONG, EDEN_PERSIST_DISCARD: "1" });
+  expect(b.out).toContain("listening on");
+  expect(blobs()).toEqual([]);
+  expect(await b.stop()).toContain("EDEN_PERSIST_DISCARD=1: discarded 2 persisted users written with another key");
+}, 30_000);
+
+test("a problem found on a user's first read is logged at shutdown, not left to the minute's timer (R1)", async () => {
+  const home = join(root, "home-flush");
+  const dir = join(root, "frozen-flush");
+  mkdirSync(home, { recursive: true });
+  const env = {
+    EDEN_HOME: home,
+    EDEN_SOURCES_FILE: oneDoc(dir.slice(root.length + 1)),
+    EDEN_PERSIST_FROZEN_DIR: dir,
+    EDEN_PERSIST_KEY: HEX,
+  };
+  const a = await start(env);
+  await a.post("/v1/ask", { userId: "u1", sessionId: "s1", question: "What does Dana Lee want?" });
+  await a.stop();
+  const [blob] = readdirSync(dir).filter((f) => f.endsWith(".blob"));
+  // A flipped ciphertext byte: the header passes at open, the read fails its tag.
+  const bytes = readFileSync(join(dir, blob!));
+  bytes[bytes.length - 40] = bytes[bytes.length - 40]! ^ 0xff;
+  writeFileSync(join(dir, blob!), bytes);
+  const b = await start(env);
+  await b.post("/v1/ask", { userId: "u1", sessionId: "s1", question: "What does Dana Lee want?" });
+  expect(await b.stop()).toContain("frozen users on disk: 1 discarded (corrupt)");
 }, 30_000);

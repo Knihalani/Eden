@@ -84,6 +84,16 @@ export interface BuildOptions {
  * The tenant spend cap one process holds (D163): `usdPerTenantDay` divided by the processes sharing each tenant, so
  * N router children together spend at most the configured cap per tenant per UTC day, as one process did.
  */
+/**
+ * The startup line when the turn gate's weights cannot be read (R1): the gate fails open (D1014), so without it a
+ * missing `turn-gate.bin` in an image would show only in the push's numbers. Null when there is nothing to say.
+ */
+export function turnGateNotice(pushGate: boolean, gate: unknown): string | null {
+  return pushGate && gate === null
+    ? "eden: turn-gate.bin could not be read; the push's start rule decides alone (D1014)"
+    : null;
+}
+
 export function tenantSpendFor(usdPerTenantDay: number, processes = 1): TenantSpend {
   return new TenantSpend(usdPerTenantDay / Math.max(1, processes));
 }

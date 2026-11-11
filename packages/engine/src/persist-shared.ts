@@ -252,6 +252,29 @@ export class SharedFrozenDisk implements FrozenDisk {
     return n;
   }
 
+  /**
+   * R1b (D1071): reads up to `sample` blobs from the store and says how many another key wrote. A store that cannot
+   * be listed or read counts as empty (fail open: the server starts). Deletes nothing.
+   */
+  async checkStoreKey(sample: number): Promise<{ sampled: number; foreign: number }> {
+    let sampled = 0;
+    let foreign = 0;
+    try {
+      for await (const { key } of this.store.list(this.prefix)) {
+        if (sampled >= sample) break;
+        if (!NAME.test(key.slice(this.prefix.length))) continue;
+        const bytes = await this.store.get(key);
+        const k = bytes === null ? null : this.local.keyOf(bytes);
+        if (k === null) continue;
+        sampled++;
+        if (k === "key") foreign++;
+      }
+    } catch {
+      return { sampled: 0, foreign: 0 };
+    }
+    return { sampled, foreign };
+  }
+
   /** Store writes waiting or running. */
   get backlog(): number {
     return this.queued.size + this.active;

@@ -621,3 +621,10 @@ describe("deletion notifications (syncPush)", () => {
     expect((await post("/v1/sources/removed", { userId: "u1", sourceId: "crm", refs: many })).status).toBe(400);
   });
 });
+
+test("an unknown path is 404 whatever the method; a known one with the wrong method is 405 (R1)", async () => {
+  expect((await handle(new Request("http://x/v1/nope"))).status).toBe(404);
+  expect((await handle(new Request("http://x/favicon.ico"))).status).toBe(404);
+  expect((await handle(new Request("http://x/v1/ask"))).status).toBe(405);
+  expect((await handle(new Request("http://x/healthz"))).status).toBe(200);
+});

@@ -244,6 +244,31 @@ describe("a store shared between machines (D992)", () => {
     expect(d2.remote.skipped).toBeGreaterThan(0);
   });
 
+  test("the store's key check samples its blobs: all foreign, some foreign, empty or down (R1b)", async () => {
+    const store = new MemoryStore();
+    const c = freezing();
+    const d = shared(store);
+    c.persist(d);
+    for (const s of [alice, bob]) c.put(s, items(s.userId, 3), T0);
+    freezeAll(c, T0);
+    await d.settle(1_000);
+    const other = new SharedFrozenDisk({
+      dir: tempDir(),
+      key: new Uint8Array(32).map((_, i) => 250 - i),
+      maxBytes: 64 << 20,
+      maxAgeMs: 7 * 24 * HOUR,
+      store,
+      prefix: "f/",
+    });
+    expect(await other.checkStoreKey(8)).toEqual({ sampled: 2, foreign: 2 });
+    expect(await d.checkStoreKey(8)).toEqual({ sampled: 2, foreign: 0 });
+    expect(await d.checkStoreKey(1)).toEqual({ sampled: 1, foreign: 0 });
+    expect(store.objects.size).toBe(2); // a check deletes nothing
+    expect(await shared(new MemoryStore()).checkStoreKey(8)).toEqual({ sampled: 0, foreign: 0 });
+    store.down = true;
+    expect(await other.checkStoreKey(8)).toEqual({ sampled: 0, foreign: 0 });
+  });
+
   test("users remembered as absent from the store are bounded (R1)", async () => {
     const store = new MemoryStore();
     const d = new SharedFrozenDisk({

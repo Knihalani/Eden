@@ -4,18 +4,25 @@
  * router (router.ts, D163) and each of its children runs this file again as one server process (EDEN_ROUTER_CHILD).
  */
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_LIMITS, EncryptedFrozenDisk, type PersistEvent, SharedFrozenDisk, turnGate } from "@eden/engine";
+import {
+  DEFAULT_CACHE_LIMITS,
+  EncryptedFrozenDisk,
+  type PersistEvent,
+  PersistKeyMismatch,
+  SharedFrozenDisk,
+  turnGate,
+} from "@eden/engine";
 import { SourceMap } from "@eden/graph";
 import { warmGate } from "@eden/redact";
 import { loadConfig, type ServerConfig } from "./config";
 import { sourcesOrExit } from "./connectors";
-import { buildPartner, startGatePool, tenantSpendFor } from "./build";
+import { buildPartner, startGatePool, tenantSpendFor, turnGateNotice } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv } from "./models";
 import { S3BlobStore } from "./blob-store";
 import { nodesFromEnv, runCluster } from "./cluster";
-import { Ops } from "./ops";
+import { Ops, serveError } from "./ops";
 import { childOwns, prunePersistDirs } from "./persist";
 import { keyOf } from "./auth";
 import { rehomeSourceMaps, runRouter, userOf } from "./router";
@@ -102,7 +109,7 @@ async function serve(config: ServerConfig): Promise<void> {
   const engine = engineConfig();
   // D425, on by default since D991: frozen users written encrypted to the machine's directory (this child's buckets,
   // D992), read back on first use; with EDEN_PERSIST_STORE also mirrored to the store every machine reaches.
-  const persist = persistStore(config);
+  const persist = await persistStore(config);
   // Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate
   // pool, so a bad sources file exits 2 with its message before any worker starts.
   const sources = sourcesOrExit();
@@ -143,8 +150,8 @@ async function serve(config: ServerConfig): Promise<void> {
   warmGate();
   // The turn gate fails open (D1014): unreadable weights leave the start rule alone. Said once, so a missing
   // `turn-gate.bin` in an image is seen (R1), not only measured.
-  if (partner.config.pushGate && turnGate() === null)
-    console.error("eden: turn-gate.bin could not be read; the push's start rule decides alone (D1014)");
+  const gateNotice = turnGateNotice(partner.config.pushGate, turnGate());
+  if (gateNotice) console.error(gateNotice);
   const grace = config.shutdownGraceMs ?? 10_000;
   // D992: readiness, metrics and the cluster router's membership messages, around the API.
   const ops = new Ops(partner, persist, {
@@ -174,7 +181,7 @@ async function serve(config: ServerConfig): Promise<void> {
     maxRequestBodySize: config.maxBodyBytes,
     fetch: ops.wrap(createHandler(partner, config, sources.userSources, tenants)),
     // `Ops.wrap` answers a throw itself; this is the backstop for anything Bun raises around it (never a 500, R1).
-    error: () => Response.json({ error: "temporarily unable to serve context" }, { status: 503 }),
+    error: serveError,
   });
   // Stop on SIGTERM/SIGINT with the source map's last outcome batch written. Without a handler a container's PID 1
   // ignores SIGTERM (`docker stop` waited 10 s, then SIGKILL), and a router child died by the signal, batch unwritten.
@@ -244,7 +251,7 @@ async function serve(config: ServerConfig): Promise<void> {
  * directories a router's children wrote first (their users re-sync). Problems are reported by reason and count only,
  * a line a minute at most, never a name, id or the key.
  */
-function persistStore(config: ServerConfig): EncryptedFrozenDisk | SharedFrozenDisk | null {
+async function persistStore(config: ServerConfig): Promise<EncryptedFrozenDisk | SharedFrozenDisk | null> {
   const p = config.persist;
   if (!p) return null;
   const child = config.child ?? { index: 0, count: 1 };
@@ -270,21 +277,57 @@ function persistStore(config: ServerConfig): EncryptedFrozenDisk | SharedFrozenD
     report,
     // D992: one directory per machine; this child reads only the buckets it serves.
     owns: childOwns(child.index, child.count),
+    // D1071: a key that opens none of the users on disk stops the start, unless the operator asked to discard them.
+    refuseForeignKey: !p.discard,
   };
-  const store = p.store
-    ? // In a cluster the store is the copy of record: local files left from before this start may be older than what
-      // another machine wrote since, so this child's are deleted first (D992).
-      new SharedFrozenDisk({
-        ...options,
-        startEmpty: true,
-        store: new S3BlobStore(p.store),
-        prefix: p.store.prefix,
-      })
-    : new EncryptedFrozenDisk(options);
+  // A mistyped key on an upgrade would otherwise delete every persisted user (R1's smoke): exit 2, nothing deleted.
+  const refused = (n: number, where: string) =>
+    new Error(
+      `EDEN_PERSIST_KEY opens none of the ${n} persisted users ${where} (a mistyped or changed key?): set the key ` +
+        "they were written with, or EDEN_PERSIST_DISCARD=1 to discard them and start (D1071)",
+    );
+  let store: EncryptedFrozenDisk | SharedFrozenDisk;
+  try {
+    store = makeStore();
+  } catch (e) {
+    if (e instanceof PersistKeyMismatch) throw refused(e.foreign, `in ${p.dir}`);
+    throw e;
+  }
+  if (store instanceof SharedFrozenDisk) {
+    // In a cluster the local files were emptied (the store is the copy of record): the store's blobs are sampled.
+    const { sampled, foreign } = await store.checkStoreKey(8);
+    if (!p.discard && sampled > 0 && foreign === sampled) throw refused(foreign, "sampled from the store");
+    if (p.discard && foreign > 0) {
+      console.error(
+        `eden: EDEN_PERSIST_DISCARD=1: ${foreign} of ${sampled} users sampled from the store were written with ` +
+          "another key; each is discarded when first read (D1071)",
+      );
+    }
+  }
+  const byKey = counts.get("discarded (key)") ?? 0;
+  if (byKey > 0) {
+    console.error(
+      `eden: ${p.discard ? "EDEN_PERSIST_DISCARD=1: " : ""}discarded ${byKey} persisted users written with ` +
+        "another key; they re-sync from their sources (D1071)",
+    );
+  }
   flush();
   setInterval(flush, 60_000).unref();
   flushPersistReport = flush;
   return store;
+
+  function makeStore(): EncryptedFrozenDisk | SharedFrozenDisk {
+    return p!.store
+      ? // In a cluster the store is the copy of record: local files left from before this start may be older than what
+        // another machine wrote since, so this child's are deleted first (D992).
+        new SharedFrozenDisk({
+          ...options,
+          startEmpty: true,
+          store: new S3BlobStore(p!.store),
+          prefix: p!.store.prefix,
+        })
+      : new EncryptedFrozenDisk(options);
+  }
 }
 
 function round(n: number): number {
