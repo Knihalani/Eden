@@ -47,7 +47,7 @@ def main():
     arrays += [("needsW", st["needs.weight"].reshape(-1)), ("needsB", st["needs.bias"]),
                ("kindW", st["kind.weight"]), ("kindB", st["kind.bias"])]
     head = {"v": 1, "arch": a.arch, "bits": a.bits, "dim": a.dim, "hidden": a.hidden, "quant": a.quant,
-            "groups": a.groups, "rule": bool(a.rule), "threshold": thr,
+            "groups": a.groups, "rule": bool(a.rule), "rule2": bool(getattr(a, "rule2", False)), "threshold": thr,
             "logit": float(np.log(thr / (1 - thr))), "kinds": G.KINDS, "skel": skel or [], "arrays": []}
     off = 0
     blobs = []

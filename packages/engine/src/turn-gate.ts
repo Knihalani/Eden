@@ -134,6 +134,7 @@ interface Header {
   hidden: number;
   quant: "int8" | "none";
   rule: boolean;
+  rule2: boolean;
   logit: number;
   kinds: TurnVerdict["kind"][];
   skel: string[];
@@ -180,8 +181,9 @@ export class TurnGate {
     this.emb = emb;
     this.scale = this.arr.get("scale") ?? null;
     this.skel = this.h.skel.length ? new Set(this.h.skel) : undefined;
-    this.x = new Float64Array(this.h.dim);
-    this.y = new Float64Array(this.h.hidden || this.h.dim);
+    // H7': the rule's reading (listed, opened, none, lead-in read) sits beside the pooled code.
+    this.x = new Float64Array(this.h.dim + (this.h.rule2 ? 4 : 0));
+    this.y = new Float64Array(this.h.hidden || this.x.length);
   }
 
   get bytes(): number {
@@ -206,15 +208,23 @@ export class TurnGate {
     }
     const n = ids2.length;
     for (let d = 0; d < dim; d++) x[d] = (x[d]! * (this.scale ? this.scale[d]! : 1)) / n;
+    if (this.h.rule2) {
+      // A clause is read with no rule reading (zeros), as gate.py's `Mil` reads it.
+      x[dim] = rule?.how === "listed" ? 1 : 0;
+      x[dim + 1] = rule?.how === "opened" ? 1 : 0;
+      x[dim + 2] = rule?.how === "none" ? 1 : 0;
+      x[dim + 3] = rule?.rest ? 1 : 0;
+    }
     if (!hidden) {
       this.y.set(x);
       return this.y;
     }
     const W = this.arr.get("hidW")!;
     const B = this.arr.get("hidB")!;
+    const width = x.length;
     for (let j = 0; j < hidden; j++) {
       let s = B[j]!;
-      for (let d = 0; d < dim; d++) s += W[j * dim + d]! * x[d]!;
+      for (let d = 0; d < width; d++) s += W[j * width + d]! * x[d]!;
       this.y[j] = s > 0 ? s : 0;
     }
     return this.y;

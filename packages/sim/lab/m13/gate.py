@@ -68,27 +68,30 @@ class Bag(nn.Module):
         super().__init__()
         self.emb = nn.Parameter(torch.randn(1 << a.bits, a.dim) * 0.1)
         self.quant = a.quant
-        d = a.dim
+        self.rule2 = getattr(a, "rule2", False)
+        d = a.dim + (4 if self.rule2 else 0)
         self.hid = nn.Linear(d, a.hidden) if a.hidden else None
         d = a.hidden or d
         self.needs = nn.Linear(d, 1)
         self.kind = nn.Linear(d, len(KINDS))
 
-    def encode(self, ids, offsets):
+    def encode(self, ids, offsets, rule=None):
         w = quantise(self.emb, self.quant)
         x = F.embedding_bag(ids, w, offsets, mode="mean")
+        if self.rule2:  # H7': the shipped rule's reading beside the pooled code, not pooled with it
+            x = torch.cat([x, rule if rule is not None else torch.zeros(x.shape[0], 4)], -1)
         if self.hid is not None:
             x = F.relu(self.hid(x))
         return x
 
     def forward(self, batch):
-        x = self.encode(*batch["bag"])
+        x = self.encode(*batch["bag"], batch.get("rule"))
         return self.needs(x).squeeze(-1), self.kind(x)
 
 
 class Mil(Bag):
     def forward(self, batch):
-        xw = self.encode(*batch["bag"])
+        xw = self.encode(*batch["bag"], batch.get("rule"))
         xc = self.encode(*batch["clauses"])
         lc = self.needs(xc).squeeze(-1)
         owner = batch["owner"]
@@ -188,6 +191,9 @@ def batchify(rows, a):
         offs.append(len(ids))
         ids.extend(r["_f"] or [0])
     b["bag"] = (torch.tensor(ids), torch.tensor(offs))
+    if getattr(a, "rule2", False):
+        b["rule"] = torch.tensor([[float(r["rule"] == "listed"), float(r["rule"] == "opened"),
+                                   float(r["rule"] == "none"), float(bool(r["rest"]))] for r in rows])
     if a.arch == "mil":
         ids, offs, owner = [], [], []
         for i, r in enumerate(rows):
@@ -257,13 +263,40 @@ def summary(rows, p, thr):
             "ask": [f(ask, 0), f(ask, 1), len(ask)]}
 
 
+def family(r):
+    s = r["src"]
+    fam = ("sim" if s.startswith("suite") else "p2" if s.startswith("p2") else "gen" if s.startswith("gen")
+           else "m2" if s.startswith("m2") else "other")
+    if fam == "gen" and r["lang"] not in ("en", "xx"):
+        fam = "gen-other-lang"
+    if fam == "m2" and r["lang"] != "en":
+        fam = "m2-other-lang"
+    return fam + (":act" if r["needs"] else ":ask" if r["kind"] == "ask" else ":neg")
+
+
+def grouped(rows, dec):
+    """Start rates by family (generated, sim hand-written, P2 hand-written, M2; other languages apart) and class."""
+    g = defaultdict(lambda: [0, 0, 0])
+    for r, d in zip(rows, dec):
+        c = g[family(r)]
+        c[0] += 1
+        c[1] += d
+        c[2] += r["rule"] != "none"
+    return {k: {"n": v[0], "gate": round(v[1] / v[0], 3), "rule": round(v[2] / v[0], 3)} for k, v in sorted(g.items())}
+
+
+def macro(rows, dec):
+    """Mean acting recall over the acting families minus 2 × mean false starts over the negative families (asks out),
+    so the sim's and P2's hand-written families weigh as much as the generated rows (addendum A)."""
+    g = grouped(rows, dec)
+    act = [v["gate"] for k, v in g.items() if k.endswith(":act")]
+    neg = [v["gate"] for k, v in g.items() if k.endswith(":neg")]
+    return sum(act) / len(act) - 2 * sum(neg) / len(neg)
+
+
 def pick(rows, p):
-    """The threshold that maximises acting recall − 2 × false starts on dev (fixed before any held-out read)."""
-    best = (-9, 0.5)
-    for t in [i / 100 for i in range(5, 96)]:
-        s = summary(rows, p, t)
-        best = max(best, (s["acting"][0] - 2 * s["false"][0], t))
-    return best[1]
+    """The threshold that maximises `macro` on dev (fixed before any held-out read)."""
+    return max((macro(rows, [x >= t for x in p]), t) for t in [i / 100 for i in range(5, 96)])[1]
 
 
 def main():
@@ -279,6 +312,7 @@ def main():
     ap.add_argument("--kind-weight", type=float, default=0.3)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--rule", action="store_true", help="H7: the shipped rule's reading as features")
+    ap.add_argument("--rule2", action="store_true", help="H7': the rule's reading concatenated after pooling")
     ap.add_argument("--skel", type=int, default=0, help="H8: keep the K commonest words, the rest as shapes")
     ap.add_argument("--out", default=".local/m13/runs/run")
     a = ap.parse_args()
@@ -317,12 +351,16 @@ def main():
     thr = pick(dev, p)
     kacc = [kp[i] == kind_of(r) for i, r in enumerate(dev) if kind_of(r) >= 0]
     params = sum(x.numel() for x in model.parameters())
-    res = {"args": vars(a), "threshold": thr, "dev": summary(dev, p, thr), "dev_kind_acc": round(sum(kacc) / len(kacc), 4),
+    union = [x >= thr or (r["rule"] != "none" and x >= 0.05) for r, x in zip(dev, p)]
+    res = {"args": vars(a), "threshold": thr, "macro": round(macro(dev, [x >= thr for x in p]), 4),
+           "macro_union_veto05": round(macro(dev, union), 4), "dev": summary(dev, p, thr),
+           "families": grouped(dev, [x >= thr for x in p]), "families_union_veto05": grouped(dev, union), "dev_kind_acc": round(sum(kacc) / len(kacc), 4),
            "by": report(dev, p, thr), "params": params, "train_s": round(time.time() - t0, 1)}
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     torch.save({"args": vars(a), "state": model.state_dict(), "threshold": thr, "skel": skel}, a.out + ".pt")
     json.dump(res, open(a.out + ".json", "w"), indent=1)
-    print(json.dumps({k: res[k] for k in ("threshold", "dev", "dev_kind_acc", "params", "train_s")}))
+    print(json.dumps({k: res[k] for k in ("threshold", "macro", "macro_union_veto05", "dev", "dev_kind_acc", "params", "train_s")}))
+    print(json.dumps({"families": {k: (v["gate"], v["rule"], v["n"]) for k, v in res["families"].items()}}))
 
 
 if __name__ == "__main__":
