@@ -42,6 +42,8 @@ def decode(row, out, t_flag=0.5, t_act=0.5, t_role=0.5, t_amt=0.5):
     acts = [ACTIONS[i] for i in sorted(range(len(ACTIONS)), key=lambda i: -ap[i]) if ap[i] >= t_act][:MAX_ACTIONS]
     if not acts:
         acts = [ACTIONS[max(range(len(ACTIONS)), key=lambda i: ap[i])]]
+    # In the vocabulary's order: two saturated probabilities tie in one precision and not in another.
+    acts = [x for x in ACTIONS if x in acts]
     toks = [t[0] for t in row["toks"]]
     ents, cur = [], []
     for i, p in enumerate(out.get("bio", [])):

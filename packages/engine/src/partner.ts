@@ -67,6 +67,7 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import { microCardNet, microCardOf } from "./micro-cards";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -694,6 +695,9 @@ export class ContextPartner {
       if (this.config.cardsOrder) cards.order();
       // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
+      // `cardsMicro` (M10, D960): cards from the micro tagger at ingest; with no weights the model's cards stand.
+      const net = this.config.cardsMicro ? microCardNet() : null;
+      if (net) cards.micro = (item, today) => microCardOf(net, item, today);
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({

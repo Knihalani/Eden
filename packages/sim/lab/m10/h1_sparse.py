@@ -186,6 +186,7 @@ def main():
                 "amt": torch.sigmoid(o["amt"]).tolist(), "stmt": o["stmt"].tolist()}
 
     os.makedirs(a.out, exist_ok=True)
+    torch.save({"buckets": a.buckets, "state": heads.state_dict()}, f"{a.out}/model.pt")
     held = [r for r in rows if r["split"] == "heldout"]
     preds = {r["h"]: outs(r) for r in held}
     with open(f"{a.out}/preds.jsonl", "w") as f:
