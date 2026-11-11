@@ -1,25 +1,19 @@
 /**
- * The server's side of persisting frozen users (D425, opt-in): each process's own directory, and the directories of
- * another process count, deleted before any child starts. Kept out of `@eden/engine` so the router, which holds no
- * user state, does not load the engine.
+ * The server's side of persisting frozen users (D425; on by default since D991). Since D992 every process of a
+ * machine shares one directory: a file's name starts with its user's bucket, and each child reads, sweeps and cleans
+ * up only the buckets it owns (`childTable`), so changing the child count moves nothing on disk: a user's new child
+ * finds their file where it was. Kept out of `@eden/engine` so the router, which holds no user state, does not load
+ * the engine.
  */
 import { readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { childTable } from "@eden/primitives";
 
 /**
- * A process's own directory under the operator's (D425): `<i>-of-<n>`, one per router child, as each keeps its own
- * source-map file (D163). Users are pinned to one child, so a child reads only blobs it wrote.
+ * Deletes the per-process directories of the layout before D992 (`<i>-of-<N>`): their files have names without a
+ * bucket, which no process of this build reads. Those users re-sync once. Returns how many directories went.
  */
-export function childPersistDir(base: string, index: number, count: number): string {
-  return join(base, `${index}-of-${count}`);
-}
-
-/**
- * Deletes the directories of any other process count (D425): after N changes, users move to other children, whose
- * own directories do not hold them. Their blobs are deleted, not moved (a name does not say which child owns its
- * user); those users re-sync, as their memory state would (D163). Returns how many directories went.
- */
-export function prunePersistDirs(base: string, count: number): number {
+export function prunePersistDirs(base: string): number {
   let n = 0;
   let names: string[];
   try {
@@ -28,11 +22,15 @@ export function prunePersistDirs(base: string, count: number): number {
     return 0;
   }
   for (const name of names) {
-    const m = /^(\d+)-of-(\d+)$/.exec(name);
-    if (!m) continue;
-    if (Number(m[2]) === count && Number(m[1]) < count) continue;
+    if (!/^\d+-of-\d+$/.test(name)) continue;
     rmSync(join(base, name), { recursive: true, force: true });
     n++;
   }
   return n;
+}
+
+/** Whether child `index` of `count` owns a bucket (D992): the router routes by the same table. */
+export function childOwns(index: number, count: number): (bucket: number) => boolean {
+  const table = childTable(count);
+  return (bucket) => table[bucket] === index;
 }

@@ -74,3 +74,9 @@ benchmarks/memory-cues/nim/cache/
 # Agent worktrees
 .claude/worktrees/
 .claude/worktrees/
+
+# deploy kit: local state, secrets and per-box files never committed
+deploy/tofu/**/.terraform/
+deploy/tofu/**/*.tfstate*
+deploy/tofu/**/terraform.tfvars
+deploy/compose/cluster-router/nodes

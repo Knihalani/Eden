@@ -178,6 +178,8 @@ async function main() {
     EDEN_API_KEYS: Array.from({ length: TENANTS }, (_, t) => `t${t}:${key(t)}`).join(","),
     EDEN_TENANT_RPS: "1000000", // the rate limit is not what is measured
     EDEN_TENANT_BURST: "1000000",
+    // Not what is measured, and these runs hold no real users: no key needed (D991).
+    EDEN_PERSIST: "off",
     PORT: "0",
     ROUTER_SIM_PROFILE: profile,
     ROUTER_SIM_WORLDS: String(worlds),

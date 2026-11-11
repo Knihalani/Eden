@@ -176,7 +176,7 @@ Against: content at rest on every server by default, which D8 has kept off since
 (6-34 s instead of about 2 minutes for 200 users, a tenth of the connector calls), which matter most for operators on
 per-call connector plans and for deploys.
 
-## 6. More than one machine (design, nothing built)
+## 6. More than one machine (design, nothing built here; built by D992, docs/research/d1-scale-out.md §3)
 
 What one machine does today (D113, D163, D425): a router hashes each tenant/user to one of N child processes
 (`childFor`: FNV-1a mixed, mod N); every piece of per-user state lives in that child; each child has its own

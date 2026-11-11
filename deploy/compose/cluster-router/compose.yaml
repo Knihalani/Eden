@@ -1,0 +1,64 @@
+# The cluster router (D992) and TLS in front of it (docs/DEPLOY.md §9). It holds no user state: run two behind a
+# load balancer or DNS for redundancy; each reads the same nodes file.
+#
+#   cp .env.example .env && chmod 600 .env && cp nodes.example nodes && docker compose up -d --build
+#   (edit nodes, then: docker compose kill -s HUP router   # a planned rebalance; it also re-reads on change)
+name: eden-router
+
+services:
+  router:
+    build:
+      context: ../../..
+    image: eden:${EDEN_VERSION:-local}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8790"
+      EDEN_NODES_FILE: /etc/eden/nodes
+      EDEN_SHUTDOWN_GRACE_MS: "10000"
+      # Keep serving 5 s after /readyz turns 503, while Caddy (health_interval 2s) or the router stops sending (D994).
+      EDEN_DRAIN_DELAY_MS: "5000"
+    volumes:
+      - ./nodes:/etc/eden/nodes:ro
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:8790:8790"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "fetch('http://127.0.0.1:8790/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    depends_on:
+      router:
+        condition: service_healthy
+    environment:
+      EDEN_DOMAIN: ${EDEN_DOMAIN:?set EDEN_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../single/Caddyfile.router:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -629,6 +629,17 @@ Lab tooling only: both tracks stopped (D899, D982) and the engine trial was dele
 `packages/sim/lab/m1-student/micro.py` trains the CPU micro students on the teacher's scores; `compare.py` reads a
 screen on M1's splits (dev templates, held-out templates with `--bar`). Recipes in the note's Reproduce.
 
+### 1k. A day's packet bytes at $0 (E1, D1030; docs/research/e1-lean.md)
+
+`days-calls.ts --packets F` writes, one line a request, every packet and ask answer the `--days` user was handed
+(`how`: push, pending or ask; the text; the cited ids in line order), for a byte breakdown by fixed text and items or a
+repeat count by item id over a day. Not with `--resume`.
+
+```bash
+env -u OPENROUTER_API_KEY bun packages/sim/src/lab/days-calls.ts --seeds 41,42,43,44 --days 8 --ask \
+  --cards .local/cards-all.jsonl --packets .local/e1/days-base.jsonl          # ~7 s; --set '{…}' for an arm
+```
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash

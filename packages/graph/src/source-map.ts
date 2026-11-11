@@ -254,6 +254,65 @@ export class SourceMap {
     for (const a of arms) upsert.run(key, sourceId, a.bucket, a.shape, a.alpha, a.beta);
   }
 
+  /**
+   * Every row held for a user (D992), to carry with them to another process or machine in their persisted blob:
+   * columns in table order, scope left out (the importer's is used). Entity names, source ids and counts: what this
+   * file holds anyway, no content (D8).
+   */
+  exportUser(scope: Scope): UserRows {
+    this.flush();
+    const key = scopeKey(scope);
+    const rows = (sql: string) => this.db.query(sql).values(key) as (string | number)[][];
+    return {
+      mention: rows("SELECT entity, source_id, count, last_seen FROM mention WHERE scope = ?"),
+      utility: rows("SELECT situation, source_id, shown, used FROM utility WHERE scope = ?"),
+      arms: rows("SELECT source_id, bucket, shape, alpha, beta FROM planner_arm WHERE scope = ?"),
+    };
+  }
+
+  /**
+   * Replaces a user's rows with carried ones (D992): what the blob holds is at least as new as anything this file
+   * holds for them (a process that served them since would have written a newer blob). Malformed rows are skipped,
+   * never written: the blob is authenticated, but its extra is still parsed input.
+   */
+  importUser(scope: Scope, rows: UserRows): void {
+    this.forget(scope);
+    const key = scopeKey(scope);
+    const str = (v: unknown) => typeof v === "string";
+    const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+    const each = (list: unknown, ok: (r: unknown[]) => boolean, run: (r: unknown[]) => void) => {
+      if (!Array.isArray(list)) return;
+      for (const r of list) if (Array.isArray(r) && ok(r)) run(r);
+    };
+    const m = this.db.query("INSERT OR REPLACE INTO mention VALUES (?, ?, ?, ?, ?)");
+    const u = this.db.query("INSERT OR REPLACE INTO utility VALUES (?, ?, ?, ?, ?)");
+    const a = this.db.query("INSERT OR REPLACE INTO planner_arm VALUES (?, ?, ?, ?, ?, ?)");
+    type V = string | number;
+    this.db.transaction(() => {
+      each(
+        rows.mention,
+        (r) => str(r[0]) && str(r[1]) && num(r[2]) && num(r[3]),
+        (r) => {
+          m.run(key, r[0] as V, r[1] as V, r[2] as V, r[3] as V);
+        },
+      );
+      each(
+        rows.utility,
+        (r) => str(r[0]) && str(r[1]) && num(r[2]) && num(r[3]),
+        (r) => {
+          u.run(key, r[0] as V, r[1] as V, r[2] as V, r[3] as V);
+        },
+      );
+      each(
+        rows.arms,
+        (r) => str(r[0]) && num(r[1]) && str(r[2]) && num(r[3]) && num(r[4]),
+        (r) => {
+          a.run(key, r[0] as V, r[1] as V, r[2] as V, r[3] as V, r[4] as V);
+        },
+      );
+    })();
+  }
+
   /** Deletes everything held for a user (account deletion, connector revocation). */
   forget(scope: Scope, sourceId?: string): void {
     this.flush();
@@ -268,6 +327,13 @@ export class SourceMap {
     this.flush();
     this.db.close();
   }
+}
+
+/** A user's rows (D992), as `exportUser` gives them: arrays of column values, in the table's column order. */
+export interface UserRows {
+  mention: (string | number)[][];
+  utility: (string | number)[][];
+  arms: (string | number)[][];
 }
 
 const NONE = { shown: 0, used: 0 } as const;
