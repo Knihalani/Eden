@@ -371,6 +371,47 @@ def curve_line(pools):
     return "curve (settled share: disagreement) " + ", ".join(f"{f:.0%}: {d:.1%}" for f, d in curve(pools))
 
 
+PAIR_BUCKETS = 1 << 18
+
+
+def pair_matrix(rows):
+    """PairHash (round 2): each (request content word, item content word) pair and each item word, hashed: a sparse
+    0/1 row an item. Learns which words of an item bear on which words of a request (travel <- flights), no vectors."""
+    from scipy.sparse import csr_matrix
+
+    ind, ptr = [], [0]
+    for r in rows:
+        rc = sorted(set(content(r["request"])))
+        for it in r["items"]:
+            ic = sorted(set(content(f"{it['title']} {it['text']}")))
+            f = {crc(f"{a}|{b}") % PAIR_BUCKETS for a in rc for b in ic}
+            f |= {crc(f"i|{b}") % PAIR_BUCKETS for b in ic}
+            ind += sorted(f)
+            ptr.append(len(ind))
+    return csr_matrix(([1.0] * len(ind), ind, ptr), shape=(len(ptr) - 1, PAIR_BUCKETS))
+
+
+def pair_column(Ptr, Ytr, folds_of_rows, Pte, folds):
+    """The PairHash score as one stacked feature: out of fold on train, a full fit for the held-out rows."""
+    from sklearn.linear_model import LogisticRegression
+
+    oof = np.zeros(Ptr.shape[0])
+    for k in range(folds):
+        m = LogisticRegression(C=0.1, max_iter=2000).fit(Ptr[folds_of_rows != k], Ytr[folds_of_rows != k])
+        oof[folds_of_rows == k] = m.predict_proba(Ptr[folds_of_rows == k])[:, 1]
+    full = LogisticRegression(C=0.1, max_iter=2000).fit(Ptr, Ytr)
+    return oof, full.predict_proba(Pte)[:, 1], full
+
+
+def lost_line(rows, probs, groups, fracs=(0.1, 0.2, 0.3, 0.4)):
+    """At each settled share: hidden pools whose planted fact the check named, now settled silent (lost)."""
+    mx = np.array([max(pr) for pr, _ in pools_of(rows, probs, groups)])
+    named = np.array([r.get("variant") == "hidden" and r.get("planted") in set(r["yes"]) for r in rows])
+    order = np.argsort(mx, kind="stable")
+    parts = [f"{f:.0%}: {int(named[order[: max(1, int(f * len(rows)))]].sum())}" for f in fracs]
+    return f"planted named by the check {int(named.sum())}; lost when settled " + ", ".join(parts)
+
+
 def pools_of(rows, probs, groups):
     out = []
     for gi, r in enumerate(rows):
@@ -410,6 +451,7 @@ def main():
     ap.add_argument("--no-tags", action="store_true")
     ap.add_argument("--drop", default="", help="comma-separated feature names to zero (ablation)")
     ap.add_argument("--json", default="")
+    ap.add_argument("--pairhash", action="store_true", help="stack the PairHash score as a feature (round 2)")
     args = ap.parse_args()
     rows = load(args.dumps, need_tags=not args.no_tags)
     held = set(args.heldout.split(","))
@@ -431,6 +473,11 @@ def main():
     rng.shuffle(fams)
     fold_of = {f: k % args.folds for k, f in enumerate(fams)}
     pool_fold = np.array([fold_of[family(r)] for r in tr])
+    if args.pairhash:
+        Ptr, Pte = pair_matrix(tr), pair_matrix(te)
+        pcol, pte_col, _ = pair_column(Ptr, Ytr, pool_fold[Gtr], Pte, args.folds)
+        Xtr = np.c_[Xtr, pcol].astype(np.float32)
+        Xte = np.c_[Xte, pte_col].astype(np.float32)
     oof = np.zeros(len(Ytr), dtype=np.float32)
     for k in range(args.folds):
         tr_idx = np.where(pool_fold[Gtr] != k)[0]
@@ -448,12 +495,13 @@ def main():
     auc = roc_auc_score(Yte, pte) if len(set(Yte)) > 1 else float("nan")
     n, s, b, sil, pas = score_rule(pools_of(te, pte, Gte), ts, tp, tl)
     print("HELD-OUT " + curve_line(pools_of(te, pte, Gte)))
+    print("HELD-OUT " + lost_line(te, pte, Gte))
     res = {"model": args.model, "curve": curve(pools_of(te, pte, Gte)), "heldout_calls": n, "settled": s, "settled_frac": s / max(1, n), "disagree": b,
            "disagree_frac": b / max(1, s), "silent": sil, "pass": pas, "item_auc": auc,
            "thresholds": [ts, tp, tl]}
     print(f"HELD-OUT {args.heldout}: settled {s}/{n} ({s/max(1,n):.1%}), disagree {b} ({b/max(1,s):.2%}), "
           f"silent {sil}, pass {pas}; item AUC {auc:.3f}")
-    for pat in args.extra_eval:
+    for pat in [] if args.pairhash else args.extra_eval:
         ex = load([pat], need_tags=not args.no_tags)
         Xe, Ye, Ge = matrix(ex)
         for d in drop:
@@ -461,7 +509,7 @@ def main():
         n, s, b, sil, pas = score_rule(pools_of(ex, m.predict_proba(Xe)[:, 1], Ge), ts, tp, tl)
         print(f"EXTRA {pat}: settled {s}/{n} ({s/max(1,n):.1%}), disagree {b} ({b/max(1,s):.2%}), silent {sil}, pass {pas}")
         res[f"extra:{pat}"] = [n, s, b]
-    imp = sorted(zip(m.feature_importances_, FEATURE_NAMES), reverse=True)[:12]
+    imp = sorted(zip(m.feature_importances_, FEATURE_NAMES + ["pairhash"]), reverse=True)[:12]
     print("importance:", ", ".join(f"{n}={v}" for v, n in imp))
     if args.json:
         json.dump(res, open(args.json, "w"))
