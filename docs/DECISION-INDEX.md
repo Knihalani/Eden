@@ -587,6 +587,20 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D910 | 2026-11-11 | Rejected (stopped on its pre-registered rule): a per-user standing-constraint ledger, typed records a cheap model writes when each item… | rejected |
 | D911 | 2026-11-11 | Adopted (lab tooling, M5): `m5-ledger.ts extract` (typed constraint records per item content, pay once, redacted with `sanitizeForStore`… | lab |
 | D912 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | rejected |
+| D890 | 2026-11-11 | Lab only: M1's distilled "changes the action" student and its stop rule are pre-registered | lab |
+| D891 | 2026-11-11 | Adopted (lab tooling, M1): the student pipeline. | lab |
+| D892 | 2026-11-11 | Finding: a 4B–8B decoder learns "changes the action" on templates it never saw; smaller ones do not | finding |
+| D893 | 2026-11-11 | Finding: the student needs a datacentre GPU; CPU is out. | finding |
+| D894 | 2026-11-11 | Trial `pushCheckLocal`: the push check's verdict from a distilled student's scores instead of a model call | superseded (deleted by D983) |
+| D895 | 2026-11-11 | Finding: in the funnel the student's check is as good as D493's Opus oracle. | finding |
+| D896 | 2026-11-11 | With `pushCheckLocal`, `pushOpen` (D702) opens the push and the check reads it. | adopted |
+| D897 | 2026-11-11 | Finding (M1, Pi round 1, pre-registered §2c): the student's check fails live. | finding |
+| D898 | 2026-11-11 | Lab only: Pi round 2 is pre-registered | lab |
+| D899 | 2026-11-11 | Stopped by the owner's decision (through the parent): the LLM-sized local checker; Pi round 2 (D898) is cancelled before any shard ran. | adopted |
+| D980 | 2026-11-11 | Finding (M1 micro track, gate G0): the 8B teacher does not agree with Haiku's push check as closely as Haiku agrees with itself, because… | finding |
+| D981 | 2026-11-11 | Lab only: the micro checker's bar is pre-registered: better than Haiku, not within its noise | lab |
+| D982 | 2026-11-11 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | rejected |
+| D983 | 2026-11-11 | Rejected and deleted: the `pushCheckLocal` trial (D894) with its code and tests. | rejected |
 | D913 | 2026-11-11 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | rejected |
 | D914 | 2026-11-11 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | rejected |
 | D920 | 2026-11-11 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | rejected |

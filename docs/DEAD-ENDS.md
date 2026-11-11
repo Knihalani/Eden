@@ -58,6 +58,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D833 | Rejected: a per-user alias table for the push's recall. |  |
 | D855 | Trial `leadShort`: the candidates' lead and the ask nudge in fewer words, same three instructions | killed by D859: Hidden facts raised −1.4 points (−3.8..+0.9 clustered by template; by seed −2.3..−0.5), below the rule's −3… |
 | D908 | Rejected (stopped on its pre-registered rules; deleted with its code, weights and tests): `constraintTag`, a small binarised item tagger's… | stopped on its pre-registered rules; deleted with its code, weights and tests |
+| D894 | Trial `pushCheckLocal`: the push check's verdict from a distilled student's scores instead of a model call | killed by D983: Eval and funnel identical to main before and after (the switch was off by default). |
+| D982 | Rejected (stopped on its pre-registered rule, D981): a micro CPU push check distilled from the 8B. | stopped on its pre-registered rule, D981 |
 | D913 | Rejected (stopped on its pre-registered rule, M3, D908 rule 1): `pushSupersede`, a binarised pair model handing a newer pooled item in… | stopped on its pre-registered rule, M3, D908 rule 1 |
 | D914 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | stopped on its pre-registered hand-written gate, M3b |
 | D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
