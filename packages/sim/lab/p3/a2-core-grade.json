@@ -1,0 +1,764 @@
+[
+ {
+  "dir": "a-haiku-days-41",
+  "task": "w41:train1:gym-commitment-period",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-haiku-days-41",
+  "task": "w41:train1:boiler-claim-covered",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-haiku-days-42",
+  "task": "w42:train3:provider-maintenance-saturday",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-haiku-days-41",
+  "task": "w41:train4:auto-renewal-notice-window",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "a-sonnet-days-41",
+  "task": "w41:train1:landlord-arranges-repairs",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-days-41",
+  "task": "w41:train1:boiler-claim-covered",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-haiku-days-44",
+  "task": "w44:train5:whisky-tasting-friend-pregnant",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:pension-guaranteed-rate",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:contents-cover-switched",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:boiler-claim-covered",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-days-43",
+  "task": "w43:train1:pension-guaranteed-rate",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:parking-permit-paused",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train2:cleaner-lockbox-changed",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train2:piano-fee-already-paid",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:licence-address-pending",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train2:term-time-leave-rules",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train3:release-already-shipped",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train2:nursery-paid-via-tax-free",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train5:riverside-10k-postponed",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train4:p1-escalation-reference-ask",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train5:us-travel-authorisation-refused",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train5:festival-ticket-named-holder",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train5:sister-passport-pages",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:mot-leased-car",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:gym-commitment-period",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train5:entebbe-yellow-fever-shortage",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:pcn-challenge-accepted",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train5:whisky-tasting-friend-pregnant",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:contents-cover-switched",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:joint-account-dual-approval",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:pension-guaranteed-rate",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:parking-permit-paused",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:dad-phone-already-covered",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:balance-via-tax-code",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:mum-staying-in-leeds",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:breakfast-club-inset-day",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:inhaler-prescription-ready",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:cleaner-lockbox-changed",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:piano-fee-already-paid",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:maya-jumpers-bought",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:term-time-leave-rules",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:theo-peanut-allergy-party",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train3:editor-seats-exhausted",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train2:nursery-paid-via-tax-free",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train4:auto-renewal-notice-window",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train4:new-supplier-three-quotes",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train5:rail-strike-leeds",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train3:gpu-spend-needs-cfo",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train5:india-evisa-on-hold",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train5:festival-ticket-named-holder",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train5:housewarming-babysitter-cancelled",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train6:festive-dinner-already-booked",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train6:signed-off-sick",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:passport-renewal-trip",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train6:support-cover-clash",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:gym-commitment-period",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:pcn-challenge-accepted",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:contents-cover-switched",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:joint-account-dual-approval",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:boiler-claim-covered",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:pension-guaranteed-rate",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train1:parking-permit-paused",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:maya-jumpers-bought",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:piano-fee-already-paid",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:landlord-repairs-via-me",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:theo-peanut-allergy-party",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train3:release-already-shipped",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:term-time-leave-rules",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:cleaner-lockbox-changed",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:nursery-paid-via-tax-free",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train3:rollout-below-crash-gate",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:snack-rota-sesame-free",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train3:retro-already-booked",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train3:editor-seats-exhausted",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train2:breakfast-vs-fasting-blood-test",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train3:search-incident-already-resolved",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train3:release-already-shipped",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train3:old-indices-already-purged",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train4:most-favoured-pricing-clause",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train4:auto-renewal-notice-window",
+  "sonnet": false,
+  "core": false
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train5:passport-away-for-renewal",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train5:festival-ticket-named-holder",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train5:india-evisa-on-hold",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train5:entebbe-yellow-fever-shortage",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train5:sister-passport-pages",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train6:rejection-before-feedback",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:adviser-already-filed",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:adviser-already-filed",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:balance-via-tax-code",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:boiler-claim-covered",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-42",
+  "task": "w42:train6:support-cover-clash",
+  "sonnet": false,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:breakdown-cover-included",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:builder-details-hacked",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:builder-details-hacked",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:breakdown-cover-included",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:company-cards-suspended",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:council-tax-dd-exists",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:company-cards-suspended",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:council-tax-dd-exists",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:dad-phone-already-covered",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:debit-card-blocked",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:debit-card-blocked",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:energy-fix-exit-fees",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:energy-fix-exit-fees",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:expenses-need-signoff",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-days-41",
+  "task": "w41:train1:gym-commitment-period",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:isa-allowance-used",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:isa-allowance-used",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:gym-commitment-period",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:joint-account-dual-approval",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:junior-isa-already-opened",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:landlord-arranges-repairs",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:landlord-arranges-repairs",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:junior-isa-already-opened",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:mot-leased-car",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:no-new-credit-before-completion",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:licence-address-pending",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:no-new-credit-before-completion",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:notice-account-locked",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:notice-account-locked",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:pcn-challenge-accepted",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:sister-cottage-repaid",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:sister-cottage-repaid",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:stag-pay-owner-direct",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:stag-pay-owner-direct",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "b-short-41",
+  "task": "w41:train1:streamly-already-renewed",
+  "sonnet": true,
+  "core": true
+ },
+ {
+  "dir": "a-sonnet-short-h",
+  "task": "w41:train1:streamly-already-renewed",
+  "sonnet": true,
+  "core": true
+ }
+]
