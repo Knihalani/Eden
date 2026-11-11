@@ -142,6 +142,9 @@ each beside the export worlds' base items. dense-s1 is dense-a1's recipe on trai
 | dense-s1 | hybrid k 5 | 144 | 107 | 134 | **pass** | 143 (+12.7) | 100 | fail (decoy ratio 1.205 against 1.163) |
 | dense-s1 | hybrid k 10 / 15 | 145 | 111 | 132 / 128 | fail | 143 / 142 | 100 / 98 | fail |
 
-Generated families move the model alone from 127 to 142 held-out facts: D491's reading (more families, not more
+| sparse-s1 | model alone | **143** (+19.1) | 106 (ratio 1.247 against 1.265) | 124 | **pass** | 124 (+0.6) | 97 | fail |
+| sparse-s1 | hybrid k 15 | 139 | 113 | 121 | fail | 135 (+7.6) | 98 | fail |
+
+Generated families move the dense model alone from 127 to 142 held-out facts and the sparse one from 129 to 143: D491's reading (more families, not more
 pairs) holds for retrieval. A fold-B confirmation needs generated families with train1–2's themes left out
 (`domains-b.txt`), being written.
