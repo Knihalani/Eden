@@ -69,7 +69,7 @@ tests }`, so the other parts do not move its result; the default as a whole is `
 ## Test
 
 ```bash
-bun run test:pkg engine          # 91 files, 8-10 s wall (two runs, shared 4-core box, 2026-11-05); partner and reader lead
+bun run test:pkg engine          # 91 files, 15.6-15.8 s cold (4 cores, 2026-11-11); source-refs and fuzz lead
 bun test ./packages/engine/src/conflict.test.ts      # one file, from the repo root (the preload is read from cwd)
 bun run eval                     # the scenario metrics; paste the JSON in the PR when behaviour changes
 bun run funnel --jobs 4          # the lab's $0 screen of the default on train (reader stub; docs/LAB.md)
