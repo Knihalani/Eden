@@ -1,9 +1,9 @@
 # M13: a tiny learned gate for the push (does this turn need context, and what kind of turn is it)
 
 Status: 2026-11-11, branch `claude/m13-gate`. **Rejected by its pre-registered bar after three rounds (D1010), then
-shipped by the owner's decision (D1014, §7): `pushGate` is in `DEFAULT_CONFIG`, part `gate`.** Decisions D1010–D1014. Every paid
-call went to Anthropic directly (`HAIKU_API_KEY`, lab transport): $2.75 for data and blind sets; Modal $0 (unreachable
-from this container). Numbers marked **[EST]** are judgement; every other number comes from a command in this note.
+shipped by the owner's decision (D1014, §7): `pushGate` is in `DEFAULT_CONFIG`, part `gate`.** Decisions
+D1010–D1014. Every paid call went to Anthropic directly (`HAIKU_API_KEY`, lab transport): $2.75 for data and blind
+sets; Modal $0 (unreachable from this container). Numbers marked **[EST]** are judgement; every other number comes from a command in this note.
 
 **In plain words.**
 
@@ -207,7 +207,8 @@ S5's English part (S5's logs are tagged `xx`): a scorer artefact, neither a pass
 Deleted by addendum B's rule: `pushGate`, `turn-gate.ts` in the engine, its weights and tests. Kept as lab tooling:
 `packages/sim/lab/m13/` (the TypeScript forward moved there) and the data on `claude/m13-data`.
 
-- **Funnel and eval** (before deletion): `bun run eval` gave the same JSON with the switch on and off (the eval's
+- **Funnel and eval** (before deletion): `bun run eval` gave the same headline numbers and acting block with the
+  switch on and off (its `decisions` block moves: one reader-push decision, four planned lookups; the eval's
   turns are English imperatives the union passes; acting block 19 of 28 neutral packets, 10 of 11 facts, 3 of 10
   look-alikes). The funnel (train 41–44, `--neutral`, round 2's provisional model, not a frozen candidate) surfaced
   575 hidden and 528 look-alikes either way and handed 512 hidden by the push against 525. The funnel covers train5–6,

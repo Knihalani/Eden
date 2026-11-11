@@ -148,7 +148,10 @@ const CLAUSE = /(?<=[,;:.!?¿¡—–])\s+|\s+(?=(?:but|so|and then|anyway|also)
 
 /** A turn's clauses for the clause gate (H4): at most six, none when the turn is one clause. */
 export function gateClauses(text: string): string[] {
-  const parts = text.split(CLAUSE).filter((p) => p && p.trim());
+  const parts = text
+    .slice(0, 8 * MAXCP)
+    .split(CLAUSE)
+    .filter((p) => p && p.trim());
   return parts.length > 1 ? parts.slice(0, 6) : [];
 }
 
@@ -170,6 +173,9 @@ export class TurnGate {
     let emb: Int8Array | Float32Array | null = null;
     for (const a of this.h.arrays) {
       const n = a.shape.reduce((x, y) => x * y, 1);
+      // An array past the file's end (a cut or partial file) is refused, never read as zeros.
+      if (8 + len + a.offset + n * (a.dtype === "int8" ? 1 : 4) > bytes.byteLength)
+        throw new Error("turn gate: an array past the end of the file");
       if (a.dtype === "int8") emb = new Int8Array(bytes.buffer, base + a.offset, n);
       else {
         // Float arrays are copied: the file's offsets are 4-aligned within it, not necessarily in the buffer.
@@ -180,6 +186,29 @@ export class TurnGate {
       }
     }
     if (!emb) throw new Error("turn gate: no table");
+    // Every array the forward reads, at the size it reads: a file that would throw or read garbage at `read` is
+    // refused here, so `loadTurnGate` gives null and the rule decides (fail open).
+    const { bits, dim, hidden, kinds, logit, veto } = this.h;
+    const width = dim + (this.h.rule2 ? 4 : 0);
+    const out = hidden || width;
+    const size = (name: string) => this.arr.get(name)?.length ?? -1;
+    const ok =
+      (this.h.arch === "bag" || this.h.arch === "mil") &&
+      Number.isInteger(bits) &&
+      bits > 0 &&
+      bits <= 24 &&
+      emb.length === (1 << bits) * dim &&
+      (this.h.quant !== "int8" || size("scale") === dim) &&
+      (!hidden || (size("hidW") === hidden * width && size("hidB") === hidden)) &&
+      size("needsW") === out &&
+      size("needsB") === 1 &&
+      Array.isArray(kinds) &&
+      kinds.length > 0 &&
+      size("kindW") === kinds.length * out &&
+      size("kindB") === kinds.length &&
+      Number.isFinite(logit) &&
+      (veto === null || Number.isFinite(veto));
+    if (!ok) throw new Error("turn gate: a malformed weights file");
     this.emb = emb;
     this.scale = this.arr.get("scale") ?? null;
     this.skel = this.h.skel.length ? new Set(this.h.skel) : undefined;

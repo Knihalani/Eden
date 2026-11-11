@@ -7,6 +7,9 @@ import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { pushStart } from "./probes";
+import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { gateFeatures, loadTurnGate, turnGate } from "./turn-gate";
 
 // M13 (D1010, D1011; docs/research/m13-gate.md): the turn gate decides whether a user turn starts the push.
@@ -30,9 +33,8 @@ describe("gate features (the Python twin is packages/sim/lab/m13/feats.py)", () 
     });
 
   test("bounded: a 100,000-character turn is read on its head", () => {
-    const t0 = performance.now();
-    expect(gateFeatures(`book ${"x".repeat(100_000)}`, 16).length).toBeGreaterThan(0);
-    expect(performance.now() - t0).toBeLessThan(200);
+    // `gateNorm` keeps 300 code points, so the long tail adds no feature (the speed is bench.ts's, not a test's).
+    expect(gateFeatures(`book ${"x".repeat(100_000)}`, 16)).toEqual(gateFeatures(`book ${"x".repeat(400)}`, 16));
   });
 });
 
@@ -43,11 +45,8 @@ describe("the shipped gate", () => {
     return { how: s?.how ?? ("none" as const), rest: s !== null && s.request !== text };
   };
 
-  test("the shipped weights stay within 2 MB (M13's bar) and decide a turn in well under a millisecond", () => {
+  test("the shipped weights stay within 2 MB (M13's bar; its speed is packages/sim/lab/m13/bench.ts's)", () => {
     expect(gate!.bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
-    const t0 = performance.now();
-    for (let i = 0; i < 200; i++) gate!.read(`Kannst du den Termin ${i} auf Freitag verschieben?`, rule("x"));
-    expect((performance.now() - t0) / 200).toBeLessThan(1);
   });
 
   test("loads once a process; a missing or broken file gives null (the rules stay)", () => {
@@ -55,6 +54,11 @@ describe("the shipped gate", () => {
     expect(turnGate()).toBe(gate);
     expect(loadTurnGate("/nonexistent/turn-gate.bin")).toBeNull();
     expect(loadTurnGate(new URL("./turn-gate.test.ts", import.meta.url))).toBeNull();
+    // A file whose header parses but whose arrays are cut short is refused at load, never at `read` (the review).
+    const bytes = readFileSync(new URL("./turn-gate.bin", import.meta.url));
+    const cut = join(tmpdir(), `turn-gate-cut-${process.pid}.bin`);
+    writeFileSync(cut, bytes.subarray(0, bytes.length - 4096));
+    expect(loadTurnGate(cut)).toBeNull();
   });
 
   // The hard gates (packages/sim/lab/m13/fixtures.json holds the full list the bar reads).
@@ -100,7 +104,7 @@ const ITEMS: ContextItem[] = [
   },
 ];
 
-function setup(config: Record<string, unknown>) {
+function setup(config: Record<string, unknown>, gate?: null) {
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
   return new ContextPartner({
     sources: async () => [source],
@@ -109,6 +113,7 @@ function setup(config: Record<string, unknown>) {
     budget: new Budget(),
     model: null,
     now: () => NOW,
+    ...(gate === null ? { turnGate: null } : {}),
     config: {
       ...CORE_CONFIG,
       askReader: true,
@@ -134,6 +139,22 @@ describe("pushGate in the partner (D1010, D1014)", () => {
     const text = "Kannst du den Zahnarzttermin auf Freitag verschieben?";
     expect(pushStart(text, { open: true, indirect: true })).toBeNull();
     expect(await packets(setup({}), text)).toHaveLength(0);
+    expect(await packets(setup({ pushGate: true }), text)).toHaveLength(1);
+  });
+
+  test("with no gate (unreadable weights) the rule decides alone", async () => {
+    const text = "Kannst du den Zahnarzttermin auf Freitag verschieben?";
+    expect(await packets(setup({ pushGate: true }, null), text)).toHaveLength(0);
+  });
+
+  test("a start only the gate makes needs the open shape's switches: the gate cannot open a reader push", async () => {
+    const text = "Kannst du den Zahnarzttermin auf Freitag verschieben?";
+    expect(await packets(setup({ pushGate: true, pushOpen: false }), text)).toHaveLength(0);
+  });
+
+  test("a rule start the gate passes keeps the rule's start", async () => {
+    const text = "Cancel the Zahnarzttermin on Freitag";
+    expect(pushStart(text, { open: true, indirect: true })?.how).toBe("listed");
     expect(await packets(setup({ pushGate: true }), text)).toHaveLength(1);
   });
 

@@ -26,11 +26,23 @@ CATS = {
            "the oven fixed before Friday, I have to cancel the gym this month, the bed needs returning to IKEA by "
            "Sunday, I need the Dublin hotel changed to a double)",
 }
-KIND = {"ask": "ask", "chatter-ack": "chatter", "chatter-retract": "chatter", "chatter-social": "chatter",
+# Round 4 (D1014's review): the turns the shipped gate started though they ask nothing.
+SHORT = {
+    "chatter-greet": "greetings and openers of one to three words, often lowercase with no punctuation (hello, hi, "
+                     "hello there, hey you, morning, good evening, hi all, hallo zusammen, ciao a tutti, salut)",
+    "chatter-noise": "throwaway inputs of one to three characters or words: a lone '?', '...', 'hmm', 'asdf', 'test', "
+                     "a single letter, a single emoji, 'm0', 'x2', a keyboard mash, 'ping', 'you there'",
+}
+KIND = {"chatter-greet": "chatter", "chatter-noise": "chatter", "ask": "ask", "chatter-ack": "chatter", "chatter-retract": "chatter", "chatter-social": "chatter",
         "intent": "intent", "act": "act"}
 
 if __name__ == "__main__":
     rnd = random.Random(7171)
+    short = "--short" in sys.argv
+    if short:
+        CATS.clear()
+        CATS.update(SHORT)
+        rnd = random.Random(8282)
     jobs = [(L, c, rnd.randrange(10**6)) for L in BAR for c in CATS for _ in range(2 if L != "en" else 4)]
 
     def run(job):
@@ -47,7 +59,7 @@ if __name__ == "__main__":
         return [{"text": x.strip(), "kind": KIND[c], "lang": L, "group": f"extra-{L}-{c}-{seed}", "src": "genx:" + c}
                 for x in xs if x.strip()]
 
-    with ThreadPoolExecutor(12) as ex, open(sys.argv[1], "w") as f:
+    with ThreadPoolExecutor(12) as ex, open(sys.argv[1], "w") as f:  # OUT.jsonl [--short]
         for rows in ex.map(run, jobs):
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
