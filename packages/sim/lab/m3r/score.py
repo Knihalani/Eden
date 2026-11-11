@@ -58,7 +58,7 @@ def show(agg, label):
         cells = "  ".join(f"{k} {v:4d}" for k, v in g.items() if k != "n")
         print(f"  {'/'.join(key):22s} n {n:4d}  {cells}")
 
-def bar(agg, run, horizon="days"):
+def bar(agg, run, horizon="days", at5=False):
     """The pre-registered bar (m3-retriever.md §1) on the held-out days requests, one line a variant."""
     h, c = agg.get((horizon, "held", "hidden")), agg.get((horizon, "held", "control"))
     if not h or not c:
@@ -68,6 +68,14 @@ def bar(agg, run, horizon="days"):
         h1, c1 = h[f"{v}@15"], c[f"{v}@15"]
         pts = 100 * (h1 - h0) / h["n"]
         ok = pts >= 15 and c1 / max(1, c0) <= h1 / max(1, h0)
+        if at5:
+            # §1b's second bar: recall@5 at least +10 points over the shipped default's pool, decoys at @5 no faster.
+            f0, f1, d0, d1 = h["lex@5"], h[f"{v}@5"], c["lex@5"], c[f"{v}@5"]
+            p5 = 100 * (f1 - f0) / h["n"]
+            ok5 = p5 >= 10 and d1 / max(1, d0) <= f1 / max(1, f0)
+            print(f"  BAR5 {run.rstrip('/').split('/')[-1]:13s} {v:6s} facts@5 {f0}->{f1} ({p5:+.1f} pts)  "
+                  f"decoys@5 {d0}->{d1}  ratio {f1 / f0:.3f} vs {d1 / d0:.3f}  {'PASS' if ok5 else 'fail'}")
+            continue
         print(f"  BAR {run.rstrip('/').split('/')[-1]:14s} {v:6s} facts@15 {h0}->{h1} ({pts:+.1f} pts)  "
               f"decoys@15 {c0}->{c1}  ratio {h1 / h0:.3f} vs {c1 / c0:.3f}  @5 {h['lex@5']}->{h[f'{v}@5']}  "
               f"{'PASS' if ok else 'fail'}")
@@ -79,10 +87,11 @@ if __name__ == "__main__":
     a.add_argument("--heldout", default="train5,train6")
     a.add_argument("--ks", default="5,10,15")
     a.add_argument("--brief", action="store_true")
+    a.add_argument("--at5", action="store_true", help="§1b's @5 bar (the eval's pool15 is the shipped default's)")
     o = a.parse_args()
     reqs = load_eval(o.eval)
     for run in o.runs:
         agg = table(reqs, load_ranks(run), set(o.heldout.split(",")), [int(k) for k in o.ks.split(",")])
         if not o.brief:
             show(agg, run)
-        bar(agg, run)
+        bar(agg, run, at5=o.at5)
