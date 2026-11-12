@@ -691,5 +691,5 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
-| F6 checked lead | `checkedLead` (engine, off) | F6 (claude/f6-uptake) | 2026-11-12 | Pi pair on train1–6 41–44, Sonnet-graded (rule in the commit opening it): uptake up with lower bound > 0, hidden not down, confirmed concerns not up, packet bytes ≤ +10% |
-| F6 context guide | `+guide` (lab harness flag; `CONTEXT_GUIDE` in @eden/protocol) | F6 (claude/f6-uptake) | 2026-11-12 | The same rule, `both+ask+guide` against `both+ask` |
+| F6 checked lead | `checkedLead` (engine, off) | F6 (claude/f6-uptake) | Decided on its pre-registered Pi pair once API credit returns (held: the lab's Anthropic account ran out of credit on 2026-11-12, blocking the evidence; the parent's call under D814) | Pi pairs on train1–6 and dev20, seeds 41–44, Sonnet-graded (rule in f06aea8a, amended a18958e1): uptake up with lower bound > 0, hidden not down, confirmed concerns not up, packet bytes ≤ +10% |
+| F6 context guide | `+guide` (lab harness flag; `CONTEXT_GUIDE` in @eden/protocol) | F6 (claude/f6-uptake) | Decided on its pre-registered Pi pair once API credit returns (held: the lab's Anthropic account ran out of credit on 2026-11-12, blocking the evidence; the parent's call under D814) | The same rule, `both+ask+guide` against `both+ask` |

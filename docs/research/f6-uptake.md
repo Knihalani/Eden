@@ -70,6 +70,7 @@ dev20 Sonnet-confirmed concerns are not up. dev20 uptake is reported with its ow
   committed).
 - A one-seed probe (train1, seed 41) then failed every call at $0, with the credit-balance error above.
 - Spend: $3.49 of the $50 cap, all on the discarded run (`.local/f6/ledger.jsonl`).
+- The trials are held, not deleted (the parent's call under D814): the outage blocks the evidence, so both rows end "decided on its pre-registered Pi pair once API credit returns".
 - Hermes was not run: cloning hermes-agent into this session was refused by its permission policy.
 
 ## Gates on the branch (switch off, so the shipped default is unchanged)
