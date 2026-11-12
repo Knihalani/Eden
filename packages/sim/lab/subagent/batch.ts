@@ -238,6 +238,9 @@ if (cmd === "take") {
       last: last.length,
       tools: JSON.stringify(req.tools ?? []).length,
       out: (answer.text ?? "").length + JSON.stringify(answer.toolCalls ?? []).length,
+      // G3: the push check's rule sheet (D1180) is its own cached block ahead of `<today>`; the transport joins it
+      // to the request's message, so its size is kept apart for pricing (cached, or written by a cold user).
+      ...(req.role === "eden.check" && last.indexOf("\n<today>") > 0 ? { sheet: last.indexOf("\n<today>") } : {}),
     };
     writeAtomic(join(dirs.done, `${a.id}.json`), {
       id: a.id,
