@@ -700,6 +700,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1128 | 2026-11-12 | Lab only: D1127's pilot read out under its rule, and a powered re-test is pre-registered (before any of its answers is made). | lab |
 | D1129 | 2026-11-12 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | superseded (deleted by D1130) |
 | D1130 | 2026-11-12 | Rejected (stopped on D1128's pre-registered rule): `freshenAgeMs` (D1127, deleted by D1130) and `freshenBehind` (D1129, deleted by D1130)… | rejected |
+| D1131 | 2026-11-12 | Trial `syncActivePollMs`: a background poll floor for active users, so a silent edit is stored before the request that needs it and no… | adopted |
+| D1132 | 2026-11-12 | Promoted: the freshness floor (`syncActivePollMs` 2 h, D1131) into the default, with two cost guards: `syncActivePollBackoff` (on in the… | adopted |
 | D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
 | D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
 | D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |

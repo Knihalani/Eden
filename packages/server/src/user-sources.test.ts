@@ -319,6 +319,21 @@ describe("UserSources: per-user sources and connections (D108)", () => {
     expect((await twice.status(alice)).error).toMatch(/listed twice/);
   });
 
+  test("callPriced (D1132) reaches the leased source, per user; a non-boolean is refused", async () => {
+    // The freshness floor skips a source billed per call: the field must survive the spec, McpSource and the lease.
+    const mail = mailServer("alice");
+    const us = userSources((scope) =>
+      scope.userId === "alice" ? [{ ...mcpSpec(mail.transport), callPriced: true }] : [mcpSpec(mail.transport)],
+    );
+    const [a] = await us.resolver(alice);
+    const [b] = await us.resolver(bob);
+    expect(a!.callPriced).toBe(true);
+    expect(b!.callPriced).toBe(false);
+    const bad = userSources(() => [{ ...mcpSpec(mail.transport), callPriced: "yes" } as never]);
+    expect(await bad.resolver(alice)).toEqual([]);
+    expect((await bad.status(alice)).error).toMatch(/callPriced must be true or false/);
+  });
+
   test("read-only (D7) is untouched: a search tool not marked read-only is refused through the handle", async () => {
     const mail = mailServer("alice", false);
     const us = userSources(() => [mcpSpec(mail.transport)]);

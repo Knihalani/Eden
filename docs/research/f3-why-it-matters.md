@@ -225,6 +225,82 @@ and the wait.
 - an agent that asks again (Pi, or a two-request pass), so a background re-read's update can land;
 - no connector round trip on the push.
 
+## Round 4: freshness with no wait (`syncActivePollMs`, D1131, trial)
+
+Round 3's re-read put a connector round trip on the push (11.4 → 285.1 ms). The owner's brief: fix it without adding
+wait. Three shapes were weighed: (a) a background floor on how stale a synced copy may be while its user is active,
+(b) a prefetch at turn start, (c) a re-read with a short deadline falling back to the cache. (b) and (c) both start
+their read once the request is known, so a connector at market latency (hundreds of ms) seldom answers before the push
+hands its packet. (a) reads before the request comes, so it was built.
+
+The trial: while a user is active (`syncActiveMs`), each sync tick runs a complete background poll of every warm
+synced source whose last complete poll is older than the floor. The first build read one page only, and the reviewer
+found it left that page as a false boundary: the next poll stopped there and marked the source current with newer
+items unread. The fix runs a real poll; every number here is from the fixed build.
+
+$0 screens (sim data, `--no-ask`):
+
+| screen | arm | stale / current handed | hidden delivered | control delivered | request calls | background |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| dev20 silent, seeds 41–44, F8 coverage | base | 13 / 22 | | | 1,292 | 0 |
+| | floor 60 min | 3 / 52 | | | 71 | 4,255 |
+| train+silent, seeds 41–44 | base | | 483 / 768 | 566 / 768 | 5,330 | 863 |
+| | floor 60 min | | 497 / 768 | 565 / 768 | 197 | 8,555 |
+| train, seed 41, `--time 1 --jobs 1` | base | | 140 / 192 | 123 / 192 | 3.28 a task | 216 |
+| | floor 60 min | | 150 / 192 | 145 / 192 | 0.08 a task | 2,130 |
+
+A 10-minute floor hands the same as a 60-minute one. The price is about one complete poll per synced source per active
+user-hour, and the request path almost stops polling, because its sources are current. The push's wait does not move
+(train seed 41: p50 8.30 → 8.21 ms, p99 38.4 → 36.0). The pool is current, so planted items of both kinds reach it
+more often on train. Funnel look-alikes overstate harm, so the pilot's concerns are the test.
+
+**Pilot (pre-registered in 70d4be7e0; subagent-simulated).** Haiku subagents answered each distinct prompt once,
+single-shot, and Sonnet subagents graded with the lab's grader. Tasks whose two arms got the same prompt count 0.
+Run on dev20's silent templates, seeds 41–44, base against 3,600,000:
+
+- **Hidden raised:** +14.4 points (+5.6..+24.4, template-clustered), 23 gained and 0 lost of 160.
+- **Control and neutral concerns:** +2 as graded (+0.6 points, +0.0..+1.9, of 320). Both are the neutral template
+  `early-standup-phased-return` on two seeds. Both floor answers say "hold off" over a newer channel message (the
+  standup moved to 10:15) and never mention the returning colleague or their hours. They are grader errors on reading,
+  so the difference read is 0. As graded, +2 is over the rule's limit of 1.
+
+**Notifying sources and the price.** The parent's condition: a source that sends change notifications (`syncPush`;
+Gmail push, calendar watch) is current until it says it changed, so the floor skips it. dev20, `--push signals
+--notify-share 0.1` (about 90% of connectors send nothing, the owner's estimate):
+
+| floor | stale / current handed | hidden delivered | control delivered | request calls | background calls | total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| off | 14 / 20 | 42 / 160 | 49 / 160 | 1,252 | 0 | 1,252 |
+| 60 min | 5 / 45 | 54 / 160 | 49 / 160 | 98 | 3,832 | 3,930 |
+| 2 h | 5 / 45 | 54 / 160 | 49 / 160 | 792 | 1,554 | 2,346 |
+| 3 h | 5 / 41 | 48 / 160 | 49 / 160 | 889 | 872 | 1,761 |
+
+In the sim a silent edit sends no notice even from a notifying source, so a skipped source's edits stay stale here
+(at a 50% share: 11 stale against 5). A real notifying source would announce the edit.
+
+Cost **[EST]**: about one call per non-notifying source per active user-hour at 60 minutes, half that at two hours. A
+heavy user with 20 connectors, 18 not notifying, about 220 active hours a month: about 4,000 calls a month at 60
+minutes, about 2,000 at two hours. COST-MODEL §Hosting (b) has 300–1,200 a month with Eden today and 1,300–3,300 for
+the agent alone. So the floor is the largest connector line Eden would have; on per-call plans it can make Eden plus
+the agent dearer in connector calls than the agent alone. Against S1 (docs/research/s1-scale-1m.md): floor polls are
+background reads, below a new user's first page and a lookup's own poll in P1's value order, and the tenant's pace
+bounds them. A Gmail-scale tenant uses notifications, which the floor skips.
+
+**Promoted (D1132), with two cost guards the parent set.** A floor poll that finds nothing new doubles that source's
+interval up to 8 h (`syncActivePollBackoff`), and a source billed per call (`Source.callPriced`) is not floor-polled
+unless the deployment opts in (`syncActivePollPriced`). Same screen, 10% notifying:
+
+| arm | stale / current | hidden delivered | look-alikes delivered | request calls | background | total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| off | 14 / 20 | 42 | 49 | 1,252 | 0 | 1,252 |
+| 2 h | 5 / 45 | 54 | 49 | 792 | 1,554 | 2,346 |
+| 2 h + backoff (the default) | 5 / 45 | 54 | 49 | 890 | 730 | 1,620 |
+
+The backoff keeps the whole gain for 53% fewer background calls. The default eval (0.65 / 0.52 / 0) and the default
+funnel (318 / 299 surfaced) do not move. The two neutral concerns of the pilot report a real, newer message (the
+parent's reading). The open caveat is look-alikes on plain train at `--time 1` with no source notifying (123 → 145
+delivered of 192): F2's structural filters are the planned answer.
+
 ## Recommendations
 
 - **Freshness for silently edited items (the lever D1126 points at; first attempts rejected, D1130, above).** Before a packet hands an item from a synced
