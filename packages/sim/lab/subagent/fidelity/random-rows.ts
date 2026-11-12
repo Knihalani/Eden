@@ -25,16 +25,14 @@ const meta = pick.map((r, id) => ({
 }));
 writeFileSync(`${out}/meta.json`, JSON.stringify(meta));
 for (let b = 0; b < 4; b++) {
-  const prompts = pick
-    .slice(b * 24, (b + 1) * 24)
-    .map((r, k) => ({
-      id: b * 24 + k,
-      user: checkMessages({
-        request: r.request,
-        today: r.today,
-        items: r.items.map((it: object) => ({ ...it, hash: "" })),
-      })[1]!.content,
-    }));
+  const prompts = pick.slice(b * 24, (b + 1) * 24).map((r, k) => ({
+    id: b * 24 + k,
+    user: checkMessages({
+      request: r.request,
+      today: r.today,
+      items: r.items.map((it: object) => ({ ...it, hash: "" })),
+    })[1]!.content,
+  }));
   writeFileSync(`${out}/W-${b}.json`, JSON.stringify({ system: CHECK_SYSTEM, prompts }));
 }
 console.log(pick.length, pick.filter((r) => r.variant === "hidden").length, "hidden");
