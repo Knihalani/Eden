@@ -172,6 +172,10 @@ the mean (the table's 4.71 holds; the collector's peaks reach ~22% above it, so 
 25% headroom is left); user message p99 15 ms, `ask_context` p99 272 ms; no leak over 40 minutes. **A full box's restart
 keeps only what its shutdown budget writes:** at the single-box compose file's 15 s grace a process wrote about 170 of
 its 750 users (~26 ms a heavy user, in 0.3 of the grace); the rest re-synced from their sources on their next event.
+Writing the most recently used users first instead was measured and rejected (D1076): a live user costs about three
+times a warm one's write, so fewer were written (406 against 541 of 1,000) and fewer of those back within 5 minutes
+found their state (25% against 54%). The order stays oldest first; size `EDEN_SHUTDOWN_GRACE_MS` to the users a
+process holds if restarts must keep them.
 
 **Restart, 200 users at the cap, the 2-core budget** (`restart.bench.ts`, connectors answering in 20-80 ms):
 every user synced again in 158 s with 6,000 listing calls without persistence; 48 s with compact files; 12 s with

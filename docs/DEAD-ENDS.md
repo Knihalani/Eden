@@ -222,3 +222,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1001 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | deleted with its code |
 | D1002 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… |  |
 | D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |
+| D1076 | Rejected: a shutdown's flush writing the most recently used users first. | R1d, r1-release.md §Round 4 |

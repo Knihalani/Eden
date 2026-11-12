@@ -840,14 +840,7 @@ export class ItemCache {
     if (disk === null) return 0;
     const t0 = performance.now();
     let n = 0;
-    // Most recently used first (D1076): a shutdown's deadline (0.3 of the grace) cuts a full box's flush short, and
-    // the users it writes should be those likely back within minutes. By last use (`seen`, the expiry tick), ties to
-    // the later written (Map order is least recently written first). Before, oldest first: the cut kept those least
-    // likely to return.
-    const users = [...this.users.values()];
-    const order = users.map((_, i) => i).sort((a, b) => users[b]!.seen - users[a]!.seen || b - a);
-    for (const i of order) {
-      const x = users[i]!;
+    for (const x of this.users.values()) {
       if (performance.now() - t0 > deadlineMs) break;
       if (x instanceof FrozenUser) {
         if (x.warm && this.write(x)) n++;

@@ -195,3 +195,43 @@ echo 200000 > $C/cpu/r1soak/cpu.cfs_quota_us; echo 100000 > $C/cpu/r1soak/cpu.cf
 sh -c 'for g in memory cpuset cpu; do echo $$ > /sys/fs/cgroup/$g/r1soak/cgroup.procs; done; exec env -u \
   OPENROUTER_API_KEY bun packages/sim/src/lab/soak.ts --users 1500 --minutes 30 --restart-at 15 --out .local/soak.json'
 ```
+
+## Round 4: the restart flush's order, rejected (D1076)
+
+The parent's ask on D1075: write the most recently used users first at a shutdown, so the users the 0.3 × grace
+budget keeps are those likely back within minutes. Pre-registered in 6e71bc8d before any run: at the soak's session
+rate (1,000 users, 2 processes, `--seed 7`, restart after 8 minutes of load, the 2-core 12 GB cgroup) it passes if the
+share of users whose first request in the 5 minutes after the restart finds their state restored goes up, with 0
+errors and ask p99 during the re-sync no worse; else oldest first stays. A bursty variant (`--burst 0.5`: half the
+sessions followed within ~2 minutes, the same 12-minute mean) reported beside it, not decided on. The soak gained
+per-user seeded schedules that continue across the restart (`schedule`), `--burst`, and the restored-on-first-touch
+count; the "before" arm ran main ce0e41eb with the same soak.ts.
+
+| | oldest first (main) | most recent first |
+| --- | --- | --- |
+| **Deciding: 1,000 users, the 12 GB box** | | |
+| Users written at SIGTERM (4.5 s) | 541 (267 + 274) | 406 (186 + 220) |
+| First request in the 5 min after: restored | **299 of 557 (53.7%)** | **138 of 557 (24.8%)** |
+| Errors in the 5 min after | 0 of 4,639 | 0 of 4,639 |
+| Ask p50 / p99 in the 5 min after (ms) | 11.2 / 249 | 70.2 / 287 |
+| User message p99 in the 5 min after (ms) | 17.1 | 13.0 |
+| **Information: bursty, 400 users, 2 cores, 4.5 GiB** | | |
+| Users written at SIGTERM | 386 | 282 |
+| First request in the 5 min after: restored | 224 of 231 (97%) | 117 of 231 (51%) |
+| Ask p99 in the 5 min after (ms) | 195 | 266 |
+
+**Rejected on its rule; oldest first restored (the engine is unchanged from main).** Two reasons, both measured. A
+live user costs about 35 ms to write (it is frozen first: serialising its index and items) against about 11 ms for a
+warm one (its blob is ready: 5.1 ms of `persistHooks.save`, the sync snapshot and source-map rows as ~530 KB of JSON a
+heavy user, and 5.4 ms to encrypt and write ~2.7 MB; `users.bench.ts 40 3000 --prose --sources=20 --persist`, one
+run), so most recent first, which starts with the live users, writes a quarter fewer users in the same 4.5 s. And the
+users it keeps were not the ones back first: under the soak's memoryless sessions a recent session does not make an
+early next one likelier, and even with bursts the cheaper users the old order writes cover more of those who return.
+The lever the data points at is the count written (the cost a user), not the order: a cheaper write, or a longer
+grace (D1075). The write's cost has no cheap fix: the snapshot's size is its format (a new `PERSIST_FORMAT`).
+
+**A process killed by its cgroup during the flush.** A first pair ran each arm in a 7 GiB cgroup of its own (two at
+once on the 16 GB host); in both, the kernel's OOM killer took one process during the shutdown's flush (3.8 GB of
+anonymous memory, the cgroup at its 7 GiB): freezing users to write them takes memory. Those runs were discarded and
+the pair re-run one at a time in the 12 GB box, where nothing was killed. A box sized to the edge of its RAM can lose a
+process at its shutdown: one more reason sizing.py keeps a quarter of RAM free.

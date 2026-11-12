@@ -123,7 +123,7 @@ const newWindow = (): Window => ({ event: [], message: [], ask: [], errors: 0, s
 
 /** When the load stops (wall clock): from `--end-at`, or the orchestrator's message once the backfill is done. */
 let endAt = Number(arg("end-at", "Infinity"));
-/** When the load started (wall clock): every user's sessions are a fixed schedule from it, the same across a restart. */
+/** When the load started (wall clock): each user's sessions are a fixed schedule from it, kept across a restart. */
 let loadStart = Number(arg("load-start", "NaN"));
 const SEED = Number(arg("seed", "7"));
 /**
