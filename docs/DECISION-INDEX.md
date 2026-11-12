@@ -709,4 +709,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
 | D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
 | D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
+| D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |
 | D1154 | 2026-11-12 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | rejected |
