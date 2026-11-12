@@ -68,7 +68,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckWaitMs: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
-  pushSearchedLead: "checker",
 };
 
 /**
@@ -178,7 +177,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
-  pushSearchedLead: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
 };
 

@@ -323,3 +323,42 @@ only removes the queue's wait, as the API's ~1 s check never meets either cap). 
 queue. The raw arm is unaffected and stands. The void arms' facts were seen before this amendment (final 8/12,
 searched 10/12 hidden raised). The re-run is decided by the defect (the late-check counts above), not by those
 readings, and the §10 rule is read on `final2` against `searched2` only.
+
+### 10a. The baseline, read (served by subagents, D1101; [EST] cost and wall)
+
+36 tasks an arm. No re-run has a check landing after the first model call (`mt.py`). Tools: `price-queue.py` (tokens
+from the queue's sizes) and `mt.py`. Sums are per task on the 1:1:8 mix; the modelled wall is the timeline's path
+with every model call and check swapped for H3's fit.
+
+| | raw (`tools`) | final2 (`both+ask`, the default) | searched2 (`+pushSearchedLead`) |
+| --- | ---: | ---: | ---: |
+| agent model calls a task (hidden / control / neutral) | 2.00 (2.00 / 2.00 / 2.00) | 1.69 (1.25 / 1.67 / 1.75) | 1.71 |
+| agent tool calls a task (mean of the three kinds) | 1.33 | 0.69 | 0.72 |
+| agent tokens a call: input (cacheable), output | 949 (898), 59 | 1,216 (1,077), 98 | 1,241 (1,089), 98 |
+| agent $ per 1,000 tasks [EST] | 0.108 | 0.146 | 0.150 |
+| push check $ per 1,000 tasks [EST] | 0 | 0.142 | 0.142 |
+| **agent + check $ per 1,000 tasks [EST]** | **0.108** | **0.288** | 0.292 |
+| cards (here 1.7 live calls a task: an 18-world backfill spread over 36 tasks; background, priced per user-month in §8) | 0 | 0.210 | 0.208 |
+| modelled wall a task [EST]: all / model / tools / Eden | 2.04 / 1.54 / 0.50 / 0 | 3.04 / 1.49 / 0.58 / 0.97 | 3.01 / 1.51 / 0.56 / 0.94 |
+| hidden raised (subagent grader) | 0/12 | 11/12 | 10/12 |
+| concerns on control and neutral (subagent grader) | 7/24 | 10/24 | 12/24 |
+
+What it says (direction only: 36 tasks, subagents for the agent and the grader):
+- **Eden does make the agent do less.** Model calls fall 2.00 → 1.69 a task (hidden 1.25: the packet answers it), and
+  tool calls 1.33 → 0.69.
+- **But each call costs more.** The packet adds about 270 input tokens a call. The agent also writes about 66% more
+  output (98 against 59 tokens) because it now has facts to state, so the agent's own bill rises (+$0.04 per 1,000
+  tasks) and its model time barely falls (1.54 → 1.49 s).
+- **The push check is the rest.** It adds $0.14 per 1,000 tasks, and Eden's path is 0.97 s a task: the check's 0.72
+  s and about 0.25 s of lookup before the check starts.
+- **So the agent alone is cheaper and faster here by about $0.18 per 1,000 tasks and 1.0 s a task.** The real-API
+  B19 reads the gap as smaller ($0.24 and +0.39 s on Pi, the agent level), because there the agent's searches cost
+  more than the subagents' short answers suggest. The subagents' agents search less, answer shorter and grade
+  differently, so the raw arm here is optimistic.
+- **The lead's wording moved nothing** (searched2 against final2): deleted, D1192.
+- **Concerns are high in every arm,** raw included (7/24). That is the subagent grader's leniency on control and
+  neutral; read them only between arms.
+
+**Hold-and-abort on final2's timelines** (`holdabort.py`, [EST]): wall −0.31 s a task on the mix, +$0.047 per 1,000
+tasks (0.57 first calls aborted a task: every hidden task, 8 of 12 control, 6 of 12 neutral). Facts are the
+default's by construction.

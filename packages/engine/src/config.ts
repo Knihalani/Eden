@@ -716,12 +716,6 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * F7 (a trial, off; docs/research/f7-cost-latency.md §10): a candidates packet the push check picked says Eden
-   * searched the user's sources for the request and read the matches (`SEARCHED_LEAD`), not that nothing has checked
-   * them, so the agent may skip searching again before it acts.
-   */
-  pushSearchedLead: boolean;
-  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -907,7 +901,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushSearchedLead: false,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
