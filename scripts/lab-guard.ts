@@ -21,3 +21,11 @@ if (why) {
   console.error(why);
   process.exit(2);
 }
+
+// The queue transport (F9, D1101): with EDEN_LAB_QUEUE set, every lab script answers Anthropic Messages API calls
+// through the queue's files, including the scripts that build their own `AnthropicModel` without `labAccess`.
+const entry = process.argv[1] ?? "";
+if (process.env.EDEN_LAB_QUEUE && /[\\/]packages[\\/]sim[\\/]/.test(entry) && !/[\\/]subagent[\\/]/.test(entry)) {
+  const { installQueue } = await import("../packages/sim/src/lab/queue-transport");
+  installQueue(process.env.EDEN_LAB_QUEUE);
+}

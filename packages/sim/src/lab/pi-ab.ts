@@ -191,6 +191,7 @@ import {
 } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
+import { queueDir, TRANSPORT } from "./queue-transport";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import {
@@ -268,6 +269,37 @@ const TIME_SCALE = Number(opt("time-scale", "1"));
 // `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
 const CONNECTORS = connectorOptions(opt);
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
+/**
+ * `--agent-sim single` (F9, D1101; packages/sim/lab/subagent/README.md): the agent answers in ONE model call, for runs
+ * served by the queue transport, where a multi-turn loop through subagents is too slow. Before that call the harness
+ * runs, with the request's own text as the argument, what the arm's tools would give: `ask_context` (an arm with it)
+ * and each search tool (the tools arms: the first search's top results, as if the agent searched the request). Those
+ * results go in as system messages beside Eden's packets, and the call has no tools. Not the real loop: the agent
+ * chooses no query, asks no second question and cannot decline to search; label the results so.
+ */
+const AGENT_SIM = opt("agent-sim", "loop");
+const SIM_STOP = new Set(
+  "a an the my me i to of in on at for from into this that these those with and or is are be by it its this our we you your please can could would will do does next week today tomorrow".split(
+    " ",
+  ),
+);
+/**
+ * The search query `--agent-sim single` sends for the agent: the request's two most telling words (names and
+ * numbers first, then the longest; the opening word's capital does not count), as an agent's keyword search would
+ * be. Several sources match every word (AND), so the whole request as a query would find nothing.
+ */
+function simQuery(text: string): string {
+  const words = [...new Set(text.match(/[\p{L}\p{N}£$€][\p{L}\p{N}'’.,-]*/gu) ?? [])]
+    .map((w) => w.replace(/[.,]+$/, ""))
+    .filter((w) => w.length > 2 && !SIM_STOP.has(w.toLowerCase()));
+  const first = text.trim().split(/\s+/)[0];
+  const score = (w: string) => (w !== first && /^\p{Lu}/u.test(w) ? 100 : 0) + (/\d/.test(w) ? 50 : 0) + w.length;
+  return words
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 2)
+    .join(" ");
+}
+if (AGENT_SIM !== "loop" && AGENT_SIM !== "single") throw new Error("--agent-sim must be loop or single");
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
 const LIMIT = Number(opt("limit", "0"));
@@ -538,6 +570,11 @@ const graderReplay = REPLAY_DIR
  * reads them as F recorded them.
  */
 const REUSE_FILE = opt("reuse-arms", "");
+if (AGENT_SIM === "single" && (DAYS_ON || ACT || REUSE_FILE)) {
+  throw new Error("--agent-sim single runs one request a session: not with --day, --days, --act or --reuse-arms");
+}
+// The queue's files are read by subagents and kept on disk: never a pilot bundle's real data (D1101).
+if (WORLD_FILE && queueDir()) throw new Error("--world-file cannot run on the queue transport (EDEN_LAB_QUEUE)");
 if (REUSE_FILE && DAY > 0) throw new Error("--reuse-arms copies single-request arms: it cannot stand in for --day");
 if (REUSE_FILE && !existsSync(REUSE_FILE)) throw new Error(`--reuse-arms ${REUSE_FILE}: no such file`);
 
@@ -1426,6 +1463,19 @@ async function runWorld(
           });
         }
       }
+      // `--agent-sim single`: the tools run once, up front, on the request's text; the agent gets their results and no
+      // tools.
+      const simContext: string[] = [];
+      if (AGENT_SIM === "single") {
+        for (const t of tools) {
+          const isAsk = t.name === "ask_context";
+          const arg = isAsk ? task.text : simQuery(task.text);
+          const out = await t.execute("agent-sim", (isAsk ? { question: arg } : { query: arg }) as never);
+          const text = out.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+          simContext.push(`Result of ${t.name}(${JSON.stringify(arg)}):\n${text}`);
+        }
+        tools.length = 0;
+      }
       let turns = 0;
       let request: {
         id: number;
@@ -1469,9 +1519,10 @@ async function runWorld(
             // `+ephemeral`, `+ephemeralBp` (D336): earlier requests' packets gone, as `withContext` and the proxy send.
             return placePackets(messages, earlierPackets(layout, dayPackets), packets, asSystem);
           }
-          if (!packets.length) return messages;
+          const placed = simContext.length ? [...packets, ...simContext] : packets;
+          if (!placed.length) return messages;
           const at = messages.map((m) => m.role).lastIndexOf("user");
-          const sys = packets.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
+          const sys = placed.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
           return [...messages.slice(0, at), ...sys, ...messages.slice(at)];
         },
         streamFn: (model, context, options) => {
@@ -1983,6 +2034,8 @@ writeFileSync(
       spent,
       harness: "pi",
       harnessVersion: HARNESS_VERSION,
+      ...(AGENT_SIM === "single" ? { agentSim: "single (one call, tools run up front; F9, D1101)" } : {}),
+      ...(queueDir() ? { transport: TRANSPORT } : {}),
       promptsHash: PROMPTS_HASH,
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
