@@ -121,6 +121,7 @@ import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
   CANDIDATES_LEAD,
+  CHECKED_LEAD,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -1462,7 +1463,7 @@ export class ContextPartner {
       if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
     }
     // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
-    for (let rest = changed; rest.length > 0;) {
+    for (let rest = changed; rest.length > 0; ) {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
@@ -2111,7 +2112,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                this.candidateFrame(candidates.unsettled !== undefined, candidates.checked === true),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2599,7 +2600,7 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; checked?: boolean } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
@@ -2609,7 +2610,10 @@ export class ContextPartner {
     if (reported.length === 0) return { items: [], pool };
     const open = reported.filter((x) => !bulkMail(x.item));
     let items = yes
-      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
+      ? (this.config.checkedLead ? inCheckOrder(open, yes) : open.filter((x) => yes.has(x.item.id))).slice(
+          0,
+          this.config.pushCandidates,
+        )
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
@@ -2652,7 +2656,12 @@ export class ContextPartner {
           }
         : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    return {
+      items,
+      pool,
+      ...(unsettled ? { unsettled } : {}),
+      ...(yes && this.config.checkedLead ? { checked: true } : {}),
+    };
   }
 
   /**
@@ -2789,12 +2798,13 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false): PacketFrame {
+  private candidateFrame(nudge = false, checked = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      // `checkedLead` (F6): items the push check named are framed as checked, not as unchecked candidates.
+      lead: `${checked ? CHECKED_LEAD : CANDIDATES_LEAD}${nudge ? ` ${ASK_NUDGE}` : ""}`,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
@@ -4646,7 +4656,7 @@ export class ContextPartner {
     const windows: SearchQuery["window"][] = [];
     if (!off.has("day") && !listed && days.length > 0 && days.length <= 7 && isScheduling(cue.raw)) {
       const next = (d: string) => new Date(Date.parse(d) + 86_400_000).toISOString().slice(0, 10);
-      for (let i = 0; i < days.length;) {
+      for (let i = 0; i < days.length; ) {
         let j = i;
         while (j + 1 < days.length && days[j + 1] === next(days[j]!)) j++;
         windows.push({ start: days[i]!, end: next(days[j]!), offsetMinutes: cue.offset });
@@ -6756,6 +6766,20 @@ function localDay(at: number, offsetMin: number): string {
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
+}
+
+/**
+ * `checkedLead` (F6): the pool's items the push check named, in the order its reply named them (the most decisive
+ * first, `CHECK_SYSTEM`), not the pool's. `yes` keeps the reply's order (`parseCompare`, a Set in insertion order).
+ */
+function inCheckOrder(open: readonly Scored[], yes: ReadonlySet<string>): Scored[] {
+  const byId = new Map(open.map((x) => [x.item.id, x] as const));
+  const out: Scored[] = [];
+  for (const id of yes) {
+    const x = byId.get(id);
+    if (x) out.push(x);
+  }
+  return out;
 }
 
 /** The names each item mentions, as the source map records them (D57): at most 20 an item, persistable kinds. */

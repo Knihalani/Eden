@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG } from "@eden/engine";
 import { pairedWith, parseCondition, parseConditions, parseVariants } from "./pi-conditions";
+import { CONTEXT_GUIDE } from "@eden/protocol";
+import { systemPrompt } from "./ab-common";
 
 const ALL = { sync: true, cards: true, densePacket: true };
 
@@ -151,6 +153,17 @@ describe("pi-ab conditions", () => {
     for (const n of ["tools+nokey", "none+nokey", "eden-judge+nokey"])
       expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
     expect(pairedWith("eden+nokey")).toBe("eden");
+  });
+  test("+guide (F6): the integrator's line about Eden's context in the system prompt, a harness flag", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const g = parseCondition("both+ask+guide", { config: ALL, defaults });
+    expect([g.guide, g.askTool, g.config]).toEqual([true, true, ALL]);
+    expect(parseCondition("both+ask", { config: ALL }).guide).toBe(false);
+    for (const n of ["tools+guide", "none+guide"]) expect(() => parseCondition(n, { config: ALL })).toThrow(/guide/);
+    const world = { now: Date.parse("2026-10-27T09:00:00Z"), user: { full: "Robin Carter", email: "r@example.com" } };
+    const on = systemPrompt(world as never, { lookups: false, data: true, tenant: true, guide: true });
+    expect(on.endsWith(CONTEXT_GUIDE)).toBe(true);
+    expect(systemPrompt(world as never, { lookups: false, data: true, tenant: true })).not.toContain(CONTEXT_GUIDE);
   });
   test("+ephemeral, +ephemeralBp: how earlier requests' packets are kept, a harness setting (D336)", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;

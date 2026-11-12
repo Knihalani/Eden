@@ -685,6 +685,13 @@ export interface EngineConfig {
    */
   askNudgeDeep: boolean;
   /**
+   * F6 (trial, docs/research/f6-uptake.md): when the push check named the packet's items (`pushCheck`), the packet
+   * is led by `CHECKED_LEAD` (a check found they may change the request; tell the user every one that applies)
+   * instead of `CANDIDATES_LEAD` ("nothing has checked them"), and the items go in the check's order (its reply
+   * lists the most decisive first) rather than the pool's. No model call, no new item; about the same bytes.
+   */
+  checkedLead: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -896,6 +903,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   planConflict: true,
   askNudge: true,
   askNudgeDeep: true,
+  checkedLead: false,
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,

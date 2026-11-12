@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import { inert } from "@eden/engine";
-import { ASK_CONTEXT_DESCRIPTION, type AgentEvent } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION, CONTEXT_GUIDE, type AgentEvent } from "@eden/protocol";
 import type { Model } from "@eden/llm";
 import { buildSessions } from "../sessions";
 import type { ActionRecord } from "./act";
@@ -275,7 +275,7 @@ export const TENANT_GUIDE =
 export function systemPrompt(
   world: World,
   /** `pushed` (P3's `hits` arm): the user's data comes only in context before the request, with no tool to look. */
-  options: { lookups: boolean; data: boolean; act?: boolean; tenant?: boolean; pushed?: boolean },
+  options: { lookups: boolean; data: boolean; act?: boolean; tenant?: boolean; pushed?: boolean; guide?: boolean },
 ): string {
   const today = new Date(world.now).toUTCString().replace(" GMT", " UTC");
   return (
@@ -296,7 +296,9 @@ export function systemPrompt(
       : !options.lookups
         ? " You cannot send, book, pay or order anything yourself: say what you would do, or draft it."
         : "") +
-    (options.tenant ? TENANT_GUIDE : "")
+    (options.tenant ? TENANT_GUIDE : "") +
+    // `+guide` (F6): the integrator's line about Eden's context blocks, after the tenant's own rules.
+    (options.guide ? `\n\n${CONTEXT_GUIDE}` : "")
   );
 }
 

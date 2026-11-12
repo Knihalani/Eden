@@ -157,6 +157,18 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `checkedLead` (F6, trial): the candidates' lead when the push check named the packet's items. `CANDIDATES_LEAD`
+ * says nothing has checked them, which is false then; this says a check found they may change the request and asks
+ * the agent to tell the user every one that applies (h19: a packet with two items, one raised and the clash not).
+ * Still Eden's own fixed words inside the data envelope (D11, D19, D237), still "ignore one that does not apply".
+ * About as long as `CANDIDATES_LEAD`, so the packet's bytes stay level.
+ */
+export const CHECKED_LEAD =
+  `${EDEN_NOTE}a check found these items from the user's sources may change this request. Compare each with the ` +
+  "request's people, dates and times; tell the user every one that applies and what it changes, before acting. " +
+  "Ignore one that does not apply; do not mention it.";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.
@@ -310,7 +322,7 @@ function withoutEcho(part: string, title: string[]): string {
     [prev, cur] = [cur, prev];
   }
   // From the end: a run ending at word i covers words i-run+1..i; take it whole and continue before it.
-  for (let i = words.length - 1; i >= 0;) {
+  for (let i = words.length - 1; i >= 0; ) {
     const run = best[i]!;
     if (run >= ECHO_RUN) {
       const a = words[i - run + 1]!;
