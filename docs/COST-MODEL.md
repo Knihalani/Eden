@@ -792,13 +792,13 @@ default (eval 0.65 / 0.52 / 0), at $0.
 
 - **The freshness floor (`syncActivePollMs` 2 h with `syncActivePollBackoff`, D1131, D1132; in the default).** While a
   user is active, each synced source that sends no change notifications and is not billed per call (`callPriced`,
-  unless the tenant opts in with `syncActivePollPriced`) gets a complete background poll once per floor, its interval
+  unless the deployment opts in with `syncActivePollPriced`) gets a complete background poll once per floor, its interval
   doubling to 8 h while polls find nothing new. Measured on dev20 (32 users of 13 sources, 10% notifying): 730
   background calls, about 0.2 a non-notifying source per active user-hour (1,554 without the backoff), and the request
   path's polls fell 1,252 to 890; total calls +29% over no floor. For 20 connectors, 18 without notifications, about 220
   active hours a month **[EST]**: about 800 floor calls a month, less the request path's polls it replaces, so about
   1,100-2,000 calls a month with Eden against the 300-1,200 above: $0.33-0.60 on Composio, $11-20 on Arcade.dev,
-  $28-52 on Zapier MCP (on such per-call plans the floor is off unless the tenant opts in, so they stay at the figures
+  $28-52 on Zapier MCP (on such per-call plans the floor is off unless the deployment opts in, so they stay at the figures
   above). On first-party APIs it costs quota, not money: floor polls are background reads, under the tenant's pace and
   behind first pages and a lookup's own polls (docs/research/s1-scale-1m.md §3, P1); a Gmail-scale tenant uses
   notifications, which the floor skips.

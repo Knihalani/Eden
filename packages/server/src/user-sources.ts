@@ -74,7 +74,7 @@ export interface McpSpec {
   notifies?: boolean;
   /**
    * Each call is billed by the connector's transport (Arcade.dev, Pipedream Connect, Zapier MCP class): the freshness
-   * floor (`syncActivePollMs`, D1131) leaves this source to its learned rate unless the tenant opts in
+   * floor (`syncActivePollMs`, D1131) leaves this source to its learned rate unless the deployment opts in
    * (`syncActivePollPriced`). Absent: first-party or flat-rate.
    */
   callPriced?: boolean;

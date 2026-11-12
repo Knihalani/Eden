@@ -20,6 +20,8 @@ class Notes implements Source {
   readonly description = "notes";
   docs = new Map<string, { text: string; at: number }>();
   lists = 0;
+  /** A listing at this cursor throws once (a connector's transient failure mid-poll). */
+  failOnceAt: string | undefined;
   constructor(readonly id: string) {}
   item(ref: string): ContextItem {
     const d = this.docs.get(ref)!;
@@ -30,6 +32,10 @@ class Notes implements Source {
   }
   async list(_s: Scope, cursor: string | undefined, limit: number): Promise<ListPage> {
     this.lists++;
+    if (cursor !== undefined && cursor === this.failOnceAt) {
+      this.failOnceAt = undefined;
+      throw new Error("connector hiccup");
+    }
     const all = [...this.docs.keys()].map((r) => this.item(r)).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     const at = cursor ? Number(cursor) : 0;
     return { items: all.slice(at, at + limit), next: at + limit < all.length ? String(at + limit) : null };
@@ -139,10 +145,17 @@ describe("syncActivePollMs (D1131)", () => {
     // and with it 10, 20, then every 40 minutes.
     const plain = await setup(10 * MIN);
     const back = await setup(10 * MIN, 5, false, { syncActivePollBackoff: true });
-    const [p0, b0] = [plain.src.a.lists, back.src.a.lists];
-    await plain.tick(300);
-    await back.tick(300);
+    const [p0, b0, bb0] = [plain.src.a.lists, back.src.a.lists, back.src.b.lists];
+    await plain.tick(150);
+    // B's source changes throughout while A's stays quiet: B keeps the floor, A's state does not touch B's.
+    for (let k = 0; k < 15; k++) {
+      back.src.b.docs.set(`b${k}`, { text: `b edit ${k}`, at: back.clock.now });
+      await back.tick(10);
+    }
+    await plain.tick(150);
+    await back.tick(150);
     const [p, b] = [plain.src.a.lists - p0, back.src.a.lists - b0];
+    expect(back.src.b.lists - bb0).toBeGreaterThanOrEqual(12);
     expect(p).toBeGreaterThanOrEqual(25);
     expect(b).toBeLessThanOrEqual(10);
     expect(b).toBeGreaterThanOrEqual(6);
@@ -162,7 +175,7 @@ describe("syncActivePollMs (D1131)", () => {
     expect(t.held(A, "e8")).toBe("edit 8");
   });
 
-  test("a source billed per call is not polled by the floor unless the tenant opts in", async () => {
+  test("a source billed per call is not polled by the floor unless the deployment opts in", async () => {
     const off = await setup(10 * MIN, 5, false, { callPriced: true });
     const on = await setup(10 * MIN, 5, false, { callPriced: true, syncActivePollPriced: true });
     const [o0, n0] = [off.src.a.lists, on.src.a.lists];
@@ -174,5 +187,16 @@ describe("syncActivePollMs (D1131)", () => {
     expect(off.held(A, "n2")).toBe("note 2 unchanged");
     expect(on.src.a.lists - n0).toBeGreaterThanOrEqual(1);
     expect(on.held(A, "n2")).toBe("note 2 MOVED to Friday");
+  });
+
+  test("a floor poll cut off after its first page leaves no false boundary: the next poll reads on (review)", async () => {
+    // 50 old notes, 30 new, pages of 10: the first floor poll stores page 1, then page 2 throws. Without the fix the
+    // next poll stopped at page 1's items (held, unchanged), marked the source current, and 20 new notes were never
+    // read until the daily sweep.
+    const t = await setup(10 * MIN, 50);
+    for (let k = 0; k < 30; k++) t.src.a.docs.set(`new${k}`, { text: `new note ${k}`, at: t.clock.now + k });
+    t.src.a.failOnceAt = "10";
+    await t.tick(240);
+    for (let k = 0; k < 30; k++) expect(t.held(A, `new${k}`)).toBe(`new note ${k}`);
   });
 });

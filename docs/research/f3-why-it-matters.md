@@ -288,7 +288,7 @@ bounds them. A Gmail-scale tenant uses notifications, which the floor skips.
 
 **Promoted (D1132), with two cost guards the parent set.** A floor poll that finds nothing new doubles that source's
 interval up to 8 h (`syncActivePollBackoff`), and a source billed per call (`Source.callPriced`) is not floor-polled
-unless the tenant opts in (`syncActivePollPriced`). Same screen, 10% notifying:
+unless the deployment opts in (`syncActivePollPriced`). Same screen, 10% notifying:
 
 | arm | stale / current | hidden delivered | look-alikes delivered | request calls | background | total |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |

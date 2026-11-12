@@ -766,8 +766,9 @@ export interface EngineConfig {
    */
   syncActivePollBackoff: boolean;
   /**
-   * D1131, with `syncActivePollMs`: the tenant's opt-in to floor polls of sources whose calls are billed by the
-   * connector's transport (`Source.callPriced`). Off: those sources keep their learned rate, as without the floor.
+   * D1132, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one for
+   * every tenant the server runs) to floor polls of sources whose calls are billed by the connector's transport
+   * (`Source.callPriced`). Off: those sources keep their learned rate, as without the floor.
    */
   syncActivePollPriced: boolean;
 }

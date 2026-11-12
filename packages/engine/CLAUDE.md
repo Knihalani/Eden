@@ -554,9 +554,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   a user is active, `Sync.step` runs a complete background poll (`poll`, to the boundary, `polled` and the rate
   taught) of each warm source not polled for the floor, doubling a quiet source's interval up to 8 h
   (`SourceSync.floorLevel`, reset in `store` by anything new from any read). Never a partial page: one page left its
-  items as a false boundary, and the next poll marked the source current short of what changed (the review). A
-  source that notifies is skipped, and one with `Source.callPriced` unless `syncActivePollPriced` (the tenant's
-  opt-in); a wrapper around a `Source` copies `callPriced` as it copies `notifies`. The request path's polls mostly
+  items as a false boundary, and the next poll marked the source current short of what changed (the review). For the
+  same reason any poll that stops before it completes (call budget, a failed page, a lookup giving up) marks what it
+  stored as pushed (`s.pushed`), so the next poll reads past it; the next complete poll clears the marks (the second
+  review). A source that notifies is skipped, and one with `Source.callPriced` unless `syncActivePollPriced` (the
+  deployment's opt-in, one for every tenant); a wrapper around a `Source` copies `callPriced` as it copies
+  `notifies`. A due floor poll thaws a frozen user through `cache.ready` (D325), and the sources past half their
+  interval go in the same thaw. The request path's polls mostly
   stop (its sources are current), so look-alikes reach the push's pool more often on train (funnel delivered 123 →
   145 of 192, seed 41); F2's structural filters are the planned answer. `active-poll.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a

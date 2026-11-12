@@ -48,7 +48,7 @@ export interface Source {
   /**
    * Whether each call to this source is billed by the connector's transport (an Arcade.dev, Pipedream Connect or
    * Zapier MCP class of plan, COST-MODEL §Hosting (b)), rather than metered by a quota or a flat rate. The engine's
-   * freshness floor (`syncActivePollMs`, D1131) does not poll such a source unless the tenant opts in
+   * freshness floor (`syncActivePollMs`, D1131) does not poll such a source unless the deployment opts in
    * (`syncActivePollPriced`). Absent: not billed per call.
    */
   readonly callPriced?: boolean;
