@@ -145,8 +145,41 @@ def main():
             print(f"    connector fees per 1,000 tasks by plan [EST]: {fees}")
     print("\n  Production connector latency L s a call: walls here assume the direct profile (~0.45 s a call); add")
     print("  0.72 x (L - 0.45) s a task on Pi and 0.78 x (L - 0.45) on Hermes [EST, F7].")
+    speculate(run, by, P)
     if unsized:
         print(f"\n  calls with no sized answer (not priced): {dict(unsized)}")
+
+
+def speculate(run, by, P):
+    """[EST] F10's `speculate` proxy option (D1273), modelled from this run: the agent's first call goes out while the
+    push check runs and is aborted when a packet arrives. A silent push (the check named nothing, no packet) saves
+    the push wait; a speaking one pays for the aborted call. Pi does not go through the proxy, so this is arithmetic
+    on the final arm's own silent share and push wait (single-shot) and the multi-turn sample's agent call price,
+    not a measurement. F10's own estimate: about -0.41 s a task for +$0.037 per 1,000."""
+    tl = os.path.join(run, "final.tl", "tasks.jsonl")
+    if not os.path.exists(tl):
+        return
+    pushed = spoke = 0
+    for line in open(tl):
+        t = json.loads(line)
+        pools = t.get("pushPools") or []
+        if not any(p.get("check") for p in pools):
+            continue
+        pushed += 1
+        spoke += any(p.get("handed") for p in pools)
+    if not pushed:
+        return
+    silent = 1 - spoke / pushed
+    roles = by.get(f"{P}-final", {})
+    check = roles.get("eden.check", [0, 0.0, 0.0, 0.0])
+    wait_a_check = check[2] / max(1, check[0])
+    agent = by.get(f"{P}-mt-final", {}).get("agent") or roles.get("agent") or [0, 0.0, 0.0, 0.0]
+    call_usd = agent[1] / max(1, agent[0])
+    print(f"\n== speculate (F10, D1273; proxy only) [EST, modelled]: of {pushed} checked pushes {100 * silent:.1f}% "
+          f"were silent; a silent push saves its check's wait ({wait_a_check:.0f} ms), a speaking one aborts a call "
+          f"(${call_usd:.6f})")
+    print(f"   wall {-silent * wait_a_check / 1000:+.2f} s a checked task; cost {+1000 * (1 - silent) * call_usd:+.4f} $ "
+          f"per 1,000 checked tasks (F10's estimate: -0.41 s, +$0.037)")
 
 
 if __name__ == "__main__":
