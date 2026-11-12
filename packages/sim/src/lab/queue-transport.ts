@@ -303,7 +303,17 @@ export function installQueue(dir: string, options: { pollMs?: number; timeoutS?:
     const hit = existsSync(join(done, `${key}.json`));
     const t0 = Date.now();
     const answer = await wait(key, requestOf(key, role, body));
-    log({ key, role, model: body.model, hit, waitedMs: Date.now() - t0, at: new Date().toISOString() });
+    // `EDEN_LAB_QUEUE_RUN` labels a run's calls, so two arms sharing one queue (and its replay store) price apart (F7).
+    const run = process.env.EDEN_LAB_QUEUE_RUN;
+    log({
+      key,
+      role,
+      model: body.model,
+      hit,
+      waitedMs: Date.now() - t0,
+      at: new Date().toISOString(),
+      ...(run ? { run } : {}),
+    });
     const model = body.model ?? "claude-haiku-5-5";
     return body.stream
       ? sse(messageEvents(model, answer, body.stop_sequences))
