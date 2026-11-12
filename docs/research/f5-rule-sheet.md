@@ -170,3 +170,14 @@ no other way in), at a look-alike rate of about one in eight, without moving the
 silence by more than two of 40. Applied to the funnel's counts (train, reworded and longtail, seeds 41–42: 54 such
 facts and 39 such look-alikes of 816 hidden and 816 control tasks), the sheet would hand about +51 planted facts
 (+6.3 points of hidden) for about +5 look-alikes [EST: the pilot's rates times the dump's counts].
+
+## 6. The dev20 screen (pre-registered before any dev20 check was asked)
+
+Served by subagents (D1101's queue transport, `EDEN_LAB_QUEUE`), both arms through it. `bun run funnel --suite dev20
+--seeds 41 --jobs 1 -- --neutral --check live`, at dev20's coverage as F8 records it on the world's clock; arms **B**
+(main), **S** (`pushCheckSheet` 80) and **SR** (S with `pushCheckSheetRefs`). Read per arm: planted handed, decoy
+handed and neutral given a packet (`n2/compare.py`'s fields), and the check's input tokens from the queue's calls.
+**S passes** if, against B: planted handed at least +8 of dev20's 160 hidden tasks; decoy handed up by at most half
+that gain; neutral packets up by at most 5 of 160. **SR replaces S** if it passes too, with planted handed at least
+S's less 4. A passing arm goes to the integrator's final protocol as the candidate; none passing: the switches are
+deleted with their code and tests, the findings kept.
