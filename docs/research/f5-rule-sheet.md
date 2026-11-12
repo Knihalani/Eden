@@ -383,3 +383,25 @@ pass 2 replayed every answer (306 of 306, 0 misses). `n2/compare.py`:
 By the pre-registered rule `cardsKeepOnly` is deleted (D814) with its code and tests. Reading: the planted-handed
 drop sits within the per-task churn of two fresh samples (+4 −13 handed against +6 −5 surfaced); stage 1's $0
 gain was +1 hidden on 640 dev20 tasks. Nothing here says kept cards help the check enough to pay for a re-test.
+
+### 11c. The selected sheet at 300 cards: the $0 ceiling (before any call)
+
+`pushCheckSheetSelect` is wired (partner `sheetOf` → `ruleIndex.select`, only above 60 active cards, k from the
+switch, the request's named days passed, fail open to the whole sheet; `push-check-sheet.test.ts`). Lab: `pilot.ts`
+with `PILOT_SELECT=k` draws §9b's sets on the 300-card padded sheet, then keeps the index's k (F10's
+`ReplayRuleIndex`, e5-small vectors of every text here, `ruleScore` with days), so a planted card the selection drops
+counts as missed. Each card gets its anticipated requests from the shipped coverage, matched by statement.
+
+Where the planted card ranks among 300 (rank < k keeps it), train/reworded/longtail seeds 41–42:
+
+| set | k 10 | 20 | 30 | 60 | 80 | 120 | whole sheet, model-read (§9b) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Th: hidden, missed by the pool (54) | 10 | 16 | 18 | 29 | 37 | 48 | named 26 |
+| Tc: look-alike, missed by the pool (39) | 9 | 10 | 12 | 27 | 29 | 30 | named 0 |
+
+**At k = 20 the selection keeps the planted card on 16 of 54 Th tasks: below the 26 the whole 300-card sheet already
+finds, and far below the bar (at least half of 54 → 26 recovered, so 40).** No queue run can pass it, so none was
+made. Caveat: only 8,476 of 72,311 sheet-card lines in these dumps (12%) match a shipped card's statement, so most
+candidates carry no anticipated requests, the index's main signal (F10: "most of the signal"); the dumps were made
+before D1102's coverage fix. This is the statement-only lower bound, on the hardest tasks (a fact no lexical lookup
+reached). On all hidden rows with requests, F10 measured 568 of 674 in the top 20 at 300 cards.
