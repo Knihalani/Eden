@@ -286,8 +286,20 @@ the agent dearer in connector calls than the agent alone. Against S1 (docs/resea
 background reads, below a new user's first page and a lookup's own poll in P1's value order, and the tenant's pace
 bounds them. A Gmail-scale tenant uses notifications, which the floor skips.
 
-Recommendation: promote at two hours, the cheapest floor at the full gain here. The parent decides on the call price
-and on the reading of the two concerns.
+**Promoted (D1132), with two cost guards the parent set.** A floor poll that finds nothing new doubles that source's
+interval up to 8 h (`syncActivePollBackoff`), and a source billed per call (`Source.callPriced`) is not floor-polled
+unless the tenant opts in (`syncActivePollPriced`). Same screen, 10% notifying:
+
+| arm | stale / current | hidden delivered | look-alikes delivered | request calls | background | total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| off | 14 / 20 | 42 | 49 | 1,252 | 0 | 1,252 |
+| 2 h | 5 / 45 | 54 | 49 | 792 | 1,554 | 2,346 |
+| 2 h + backoff (the default) | 5 / 45 | 54 | 49 | 890 | 730 | 1,620 |
+
+The backoff keeps the whole gain for 53% fewer background calls. The default eval (0.65 / 0.52 / 0) and the default
+funnel (318 / 299 surfaced) do not move. The two neutral concerns of the pilot report a real, newer message (the
+parent's reading). The open caveat is look-alikes on plain train at `--time 1` with no source notifying (123 → 145
+delivered of 192): F2's structural filters are the planned answer.
 
 ## Recommendations
 

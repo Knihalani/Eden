@@ -65,12 +65,19 @@ export interface SyncOptions {
   /** A user with an event this recently (ms) is active: sweeps run only for active users. */
   activeMs: number;
   /**
-   * `syncActivePollMs` (F3, trial; 0 or absent: off): while the user is active, a tick polls (one page, in the
-   * background) every warm source whose last poll is older than this, whatever its learned rate says. A quiet source
-   * is otherwise trusted for up to `maxStaleMs` (6 h), and an edit made at it silently (no notice) is handed as the
-   * pre-edit copy until a lookup's poll stores it behind the packet (D1126). The request waits for none of it.
+   * `syncActivePollMs` (D1131; 0 or absent: off): while the user is active, a tick runs a complete background poll of
+   * every warm source (not notifying, not billed per call unless `activePollPriced`) whose last complete poll is older
+   * than this, whatever its learned rate says. A quiet source is otherwise trusted for up to `maxStaleMs` (6 h), and an
+   * edit made at it silently (no notice) went out as the pre-edit copy (D1126). The request waits for none of it.
    */
   activePollMs?: number;
+  /**
+   * `syncActivePollBackoff` (D1131): a floor poll that stores nothing doubles that source's interval, up to
+   * `FLOOR_BACKOFF_LEVELS` doublings; anything new stored from the source (any poll, a notice's items) resets it.
+   */
+  activePollBackoff?: boolean;
+  /** `syncActivePollPriced` (D1131): the floor also polls sources whose calls are billed (`Source.callPriced`). */
+  activePollPriced?: boolean;
   /** A full re-listing, for deletes, this often per source (ms) while the user is active. */
   sweepMs: number;
   /** A user idle this long (ms) is no longer synced; their synced items are dropped. */
@@ -265,6 +272,10 @@ interface SourceSync {
   noticedMark: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
+  /** `activePollBackoff`: the floor's doublings for this source (0: the floor itself), reset by anything stored. */
+  floorLevel: number;
+  /** Items stored new or changed from this source, ever (in memory): whether a floor poll found anything. */
+  storedCount: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
   noticesBackfill: number;
   /**
@@ -337,6 +348,9 @@ export interface SyncStats {
   /** Items dropped because their source no longer lists them. */
   deleted: number;
 }
+
+/** `activePollBackoff`: a quiet source's floor interval doubles at most this often (a 2 h floor waits up to 8 h). */
+const FLOOR_BACKOFF_LEVELS = 2;
 
 export class SyncManager {
   private readonly users = new Map<string, UserSync>();
@@ -1148,13 +1162,31 @@ export class SyncManager {
     // (D1131's review). Busy, backing off or out of budget: the next tick looks again.
     const floor = this.o.activePollMs ?? 0;
     if (floor > 0) {
+      // A source that notifies (`push`) is current until it says it changed, and one whose calls are billed is left to
+      // its learned rate unless the tenant opted in: no floor poll for either.
+      const floorDue = (s: SourceSync, source: Source | undefined): source is Source =>
+        source !== undefined &&
+        !s.notifies &&
+        s.phase === "warm" &&
+        !s.busy &&
+        now >= s.retryAt &&
+        (source.callPriced !== true || this.o.activePollPriced === true) &&
+        now - s.polledAt >= floor * 2 ** s.floorLevel;
+      // A poll stores into the cache: a frozen user is thawed first (`ready`, D325), as for a sweep.
+      if ([...u.sources.values()].some((s) => floorDue(s, byId.get(s.id)))) {
+        await this.deps.cache.ready(u.scope);
+        if (u.gone) return;
+      }
       await Promise.all(
         [...u.sources.values()].map(async (s) => {
           const source = byId.get(s.id);
-          // A source that notifies (`push`) is current until it says it changed: no floor poll.
-          if (!source || s.notifies || s.phase !== "warm" || s.busy || now < s.retryAt) return;
-          if (now - s.polledAt < floor) return;
+          if (!floorDue(s, source)) return;
+          const [polledAt, stored] = [s.polledAt, s.storedCount];
           await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
+          // `activePollBackoff`: a complete floor poll that brought nothing new waits twice as long next time.
+          if (this.o.activePollBackoff && s.polledAt > polledAt && s.storedCount === stored) {
+            s.floorLevel = Math.min(s.floorLevel + 1, FLOOR_BACKOFF_LEVELS);
+          }
         }),
       );
       if (u.gone) return;
@@ -1763,7 +1795,12 @@ export class SyncManager {
       u.scope,
       own.map((it) => it.id),
     );
-    if (changed.length > 0) this.deps.onStored?.(u.scope, changed);
+    if (changed.length > 0) {
+      // Something new from the source, by any read: the freshness floor's interval is the floor again.
+      s.storedCount += changed.length;
+      s.floorLevel = 0;
+      this.deps.onStored?.(u.scope, changed);
+    }
     return changed.length;
   }
 
@@ -1971,6 +2008,8 @@ function newSourceSync(id: string): SourceSync {
     notices: 0,
     noticedMark: 0,
     noticesPolled: 0,
+    floorLevel: 0,
+    storedCount: 0,
     noticesBackfill: 0,
     pushed: new Map(),
     pushSeq: 0,

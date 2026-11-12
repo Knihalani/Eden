@@ -750,12 +750,26 @@ export interface EngineConfig {
    */
   revisionDiff: boolean;
   /**
-   * F3 (trial, 0 = off; D1131): while a user is active (`syncActiveMs`), the sync's tick polls one page of each warm
-   * synced source whose last poll is older than this (ms), in the background. A quiet source is otherwise trusted for
-   * up to `syncMaxStaleMs` (6 h), so a silent edit there goes out as the pre-edit copy (D1126). No request waits for
-   * it; its price is connector calls per active user-hour. A source that notifies (`syncPush`) is never polled by it.
+   * F3 (D1131, in the default at 2 h; 0 = off): while a user is active (`syncActiveMs`), the sync's tick runs a
+   * complete background poll of each warm synced source whose last complete poll is older than this (ms), whatever
+   * its learned rate says. A quiet source is otherwise trusted for up to `syncMaxStaleMs` (6 h), so a silent edit
+   * there went out as the pre-edit copy (D1126). No request waits for it, and the request path's own polls mostly
+   * stop (its sources are current); its price is connector calls per active user-hour (COST-MODEL §Hosting (b)). A
+   * source that notifies (`syncPush`) is never polled by it, nor one billed per call unless `syncActivePollPriced`.
    */
   syncActivePollMs: number;
+  /**
+   * F3 (D1132, in the default), with `syncActivePollMs`: a floor poll of a source that brings in nothing new doubles
+   * that source's interval, up to four times the floor (2 h to 8 h); anything new stored from the source, by any
+   * read, sets it back to the floor. A quiet source is then polled about a quarter as often, one that changes as
+   * before.
+   */
+  syncActivePollBackoff: boolean;
+  /**
+   * D1131, with `syncActivePollMs`: the tenant's opt-in to floor polls of sources whose calls are billed by the
+   * connector's transport (`Source.callPriced`). Off: those sources keep their learned rate, as without the floor.
+   */
+  syncActivePollPriced: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -912,5 +926,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
-  syncActivePollMs: 0,
+  syncActivePollMs: 7_200_000,
+  syncActivePollBackoff: true,
+  syncActivePollPriced: false,
 };

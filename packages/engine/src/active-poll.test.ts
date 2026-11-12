@@ -40,10 +40,15 @@ const A: Scope = { tenantId: "t", userId: "a" };
 const B: Scope = { tenantId: "t", userId: "b" };
 
 /** Two users, each with their own notes source of `n` items, both synced warm on a clock the test moves. */
-async function setup(syncActivePollMs: number, n = 5, notifies = false) {
+async function setup(
+  syncActivePollMs: number,
+  n = 5,
+  notifies = false,
+  extra: { syncActivePollBackoff?: boolean; syncActivePollPriced?: boolean; callPriced?: boolean } = {},
+) {
   const clock = { now: T0 };
   const src = { a: new Notes("notes"), b: new Notes("notes") };
-  for (const s of [src.a, src.b]) (s as { notifies?: boolean }).notifies = notifies;
+  for (const s of [src.a, src.b]) Object.assign(s, { notifies, callPriced: extra.callPriced === true });
   for (const s of [src.a, src.b])
     for (let k = 0; k < n; k++) s.docs.set(`n${k}`, { text: `note ${k} unchanged`, at: T0 - (k + 1) * 60 * MIN });
   const cache = new ItemCache();
@@ -54,7 +59,15 @@ async function setup(syncActivePollMs: number, n = 5, notifies = false) {
     budget: new Budget(),
     model: null,
     now: () => clock.now,
-    config: { ...CORE_CONFIG, sync: true, syncPush: notifies, syncPageSize: 10, syncActivePollMs },
+    config: {
+      ...CORE_CONFIG,
+      sync: true,
+      syncPush: notifies,
+      syncPageSize: 10,
+      syncActivePollMs,
+      syncActivePollBackoff: extra.syncActivePollBackoff === true,
+      syncActivePollPriced: extra.syncActivePollPriced === true,
+    },
   });
   const sync = partner.sync!;
   for (const scope of [A, B]) sync.track(scope, clock.now);
@@ -62,6 +75,8 @@ async function setup(syncActivePollMs: number, n = 5, notifies = false) {
   const tick = async (minutes: number) => {
     for (let m = 0; m < minutes; m++) {
       clock.now += MIN;
+      // The users stay active (an event every minute), as a session in use is.
+      for (const scope of [A, B]) sync.track(scope, clock.now);
       await sync.tick();
     }
   };
@@ -117,5 +132,47 @@ describe("syncActivePollMs (D1131)", () => {
     const lists = t.src.a.lists;
     await t.tick(30);
     expect(t.src.a.lists - lists).toBe(0);
+  });
+
+  test("backoff: a quiet source's floor polls thin out to a quarter, bounded", async () => {
+    // 10-minute floor, so up to 40 minutes between polls: in 300 quiet minutes at most 30 polls without the backoff,
+    // and with it 10, 20, then every 40 minutes.
+    const plain = await setup(10 * MIN);
+    const back = await setup(10 * MIN, 5, false, { syncActivePollBackoff: true });
+    const [p0, b0] = [plain.src.a.lists, back.src.a.lists];
+    await plain.tick(300);
+    await back.tick(300);
+    const [p, b] = [plain.src.a.lists - p0, back.src.a.lists - b0];
+    expect(p).toBeGreaterThanOrEqual(25);
+    expect(b).toBeLessThanOrEqual(10);
+    expect(b).toBeGreaterThanOrEqual(6);
+  });
+
+  test("backoff: a source that changes keeps the floor, and an edit after a quiet spell is back to the floor", async () => {
+    const t = await setup(10 * MIN, 5, false, { syncActivePollBackoff: true });
+    await t.tick(120); // Quiet: backed off to 40 minutes.
+    // A source edited every 10 minutes: each floor poll finds something, so it is polled every 10-40 minutes and
+    // never waits the backed-off 40 after the first find.
+    const lists = t.src.a.lists;
+    for (let k = 0; k < 9; k++) {
+      t.src.a.docs.set(`e${k}`, { text: `edit ${k}`, at: t.clock.now });
+      await t.tick(10);
+    }
+    expect(t.src.a.lists - lists).toBeGreaterThanOrEqual(6);
+    expect(t.held(A, "e8")).toBe("edit 8");
+  });
+
+  test("a source billed per call is not polled by the floor unless the tenant opts in", async () => {
+    const off = await setup(10 * MIN, 5, false, { callPriced: true });
+    const on = await setup(10 * MIN, 5, false, { callPriced: true, syncActivePollPriced: true });
+    const [o0, n0] = [off.src.a.lists, on.src.a.lists];
+    off.src.a.docs.set("n2", { text: "note 2 MOVED to Friday", at: off.clock.now });
+    on.src.a.docs.set("n2", { text: "note 2 MOVED to Friday", at: on.clock.now });
+    await off.tick(30);
+    await on.tick(30);
+    expect(off.src.a.lists - o0).toBe(0);
+    expect(off.held(A, "n2")).toBe("note 2 unchanged");
+    expect(on.src.a.lists - n0).toBeGreaterThanOrEqual(1);
+    expect(on.held(A, "n2")).toBe("note 2 MOVED to Friday");
   });
 });
