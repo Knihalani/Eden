@@ -107,7 +107,17 @@ rule's −0.3 connector calls. Where it fired on a silent turn (15 of 32) the ag
 it did not reach (no record in the pool named the request's anchors, e.g. "Send Ilse Marchetti at Corvalis a revised
 quote") all searched.
 
-**Round 4** (pre-registered in 2c93b9e9): `pushLookupAny` hands the pool's head when nothing is named.
+**Round 4** (pre-registered in 2c93b9e9): `pushLookupAny` hands the pool's head when nothing is named. Against B,
+72 tasks an arm: connector calls −0.597 a task (−1.097..−0.111), model calls −0.306 (−0.569..−0.069), hidden 20/24
+both, [EST] wait −0.48 s (−0.90..−0.11), agent $ −0.018 per 1,000; packets on every task (B 60%). Every control and
+neutral answer, Sonnet: concerns by B19's standard B 4, LK2 5; naming a planted specific 4 and 5; hedges ("check it
+is approved", "no record found", naming none of the specifics) 17 and 21 (neutral 9 and 14).
+
+**Review.** The reviewer found two defects behind these numbers, fixed before any deciding run. The gate needed the
+check to have been called this pass, so a late or reused answer (the shipped waits) never gave the lookup. The
+pool-head branch reused a lead claiming its items name the request. **Round 5** (LK3: LK2 with the fixed code and
+`pushLookupQuiet`, a lead that calls the records background, not a reason to warn) decides on seeds 41–44 and 45–48,
+with a days run.
 
 ## Reproduce
 

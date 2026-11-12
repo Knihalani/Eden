@@ -1558,8 +1558,9 @@ async function runWorld(
           }
           const at = performance.now();
           request = {
-            // `inChars`/`prefixChars` (F11): the request's size and its part before the last message, so a run the
-            // queue transport answers (zero usage, D1101) can still be priced per arm ([EST], 4 characters a token).
+            // `inChars`/`lastChars` (F11): the request's size and its last message's (the rest is the cached prefix), so
+            // a run the queue transport answers (zero usage, D1101) can still be priced per arm ([EST], 4 characters a
+            // token).
             id: tl.begin("model.request", "model", "path", {
               turn: turns + 1,
               inChars:

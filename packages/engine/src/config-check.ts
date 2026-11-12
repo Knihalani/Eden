@@ -170,7 +170,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   askNudge: PUSH,
   askNudgeDeep: [...PUSH, "askNudge"],
   pushLookup: [...PUSH, "pushCheck"],
-  // Its other parent is `pushLookup` > 0, a number this table cannot name.
+  // Their other parent is `pushLookup` > 0, a number this table cannot name: checked after the table (below).
   pushLookupAny: [...PUSH, "pushCheck"],
   pushLookupQuiet: [...PUSH, "pushCheck"],
   pushCandidatesSettled: PUSH,
@@ -243,6 +243,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentSeats: COUNT,
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
+  pushLookup: { integer: true, max: 40 },
   pushCandidatesSettled: { integer: true, max: 40 },
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
@@ -315,6 +316,12 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
           `${where}: "${key}" acts only with ${parents.map((p) => `"${p}"`).join(" and ")} on, and this ` +
             `configuration has ${off.map((p) => `"${p}"`).join(" and ")} off: it would do nothing`,
         );
+      }
+    }
+    // `pushLookupAny` and `pushLookupQuiet` (D1252) act only with `pushLookup` > 0, which PARENTS cannot name.
+    for (const key of ["pushLookupAny", "pushLookupQuiet"] as const) {
+      if (key in out && merged[key] && !(merged.pushLookup > 0)) {
+        throw new Error(`${where}: "${key}" acts only with "pushLookup" above 0: it would do nothing`);
       }
     }
   }
