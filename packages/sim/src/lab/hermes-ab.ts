@@ -879,6 +879,8 @@ async function runWorld(
         return items.map((i) => i.text).join("\n\n");
       };
       let observed = false;
+      /** Packets a tool result's observe handed out, placed at the next `pending` (`transform_tool_result`). */
+      const handed: Parameters<typeof deliver>[0] = [];
       const binding: TaskBinding = {
         token: crypto.randomUUID(),
         async observe() {
@@ -903,11 +905,14 @@ async function runWorld(
         async tool(tool, output) {
           if (!partner) return;
           const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-          await partner.observe(ev({ kind: "tool_result", tool, output }));
-          tl.end(o);
+          const seen = await partner.observe(ev({ kind: "tool_result", tool, output }));
+          tl.end(o, { injected: seen.injection?.citations.length ?? 0 });
+          // The observe hands out a packet queued since the last one (Eden marks its items shown): kept for the next
+          // `pending`, which places it with the rest, or a later ask answer says "(shown above)" for unread items.
+          if (seen.injection) handed.push(seen.injection);
         },
         pending() {
-          return partner ? deliver(partner.takePending({ ...scope, sessionId })) : "";
+          return partner ? deliver([...handed.splice(0), ...partner.takePending({ ...scope, sessionId })]) : "";
         },
       };
       task = { binding, tl, record, r, sessionId, uptake };
