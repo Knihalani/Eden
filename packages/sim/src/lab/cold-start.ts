@@ -29,6 +29,10 @@
  * world as the funnel and pi-ab do. `wall` is the wall clock every recording before it used (the D872 caches): weeks
  * past the worlds' date, so the window skipped almost every past item (train1:41: 36 request-only reads against 179).
  *
+ * `--queue-dir D` (F8, D1101): no API call; the card role is `card-queue.ts`'s queue model, answered per item from
+ * `D/answers/*.jsonl` by subagents (`card-queue-cli.ts`), unanswered items written to `D/pending` and their call
+ * failed. Run until nothing is pending; coverage made so is "subagent-simulated", never a model's own recording.
+ *
  * `--set JSON`: engine settings over the default (e.g. `{"cardsLeanDays":30}`, CL3's comparison with D244). The
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
  */
@@ -43,6 +47,7 @@ import { parseJson } from "./flags";
 import type { UserShape } from "./pi-cost";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf } from "./pi-user";
 import { parseSuites } from "./suites";
+import { queueModel } from "./card-queue";
 import { labAccess, labModel } from "./free";
 import { warmAll } from "../server";
 
@@ -77,7 +82,10 @@ const userWorld = (seed: number) => {
   const { suites, days, daySize: size, mix } = USER_SHAPE;
   return userWorldOf(seed, planUser(seed, suiteTemplates(seed, suites), { days, size, mix })).world;
 };
-const ACCESS = labAccess(args, [MODEL]);
+const QUEUE = opt("queue-dir", "");
+// The queue transport makes no API call, so it needs no key, ledger or cap.
+const ACCESS = QUEUE ? null : labAccess(args, [MODEL]);
+const QUEUED = QUEUE ? queueModel(QUEUE) : null;
 const CLOCK = opt("clock", "world");
 if (CLOCK !== "world" && CLOCK !== "wall") throw new Error(`--clock takes world or wall, not ${CLOCK}`);
 
@@ -123,7 +131,7 @@ for (const { suite, seed, variant } of USERS) {
   let inTok = 0;
   let outTok = 0;
   let cachedTok = 0;
-  const model = labModel(ACCESS, { apiKey: "", model: MODEL }, "eden.cards");
+  const model = QUEUED ?? labModel(ACCESS!, { apiKey: "", model: MODEL }, "eden.cards");
   // Counted here as well as on the ledger, so each user's row is its own.
   const count = (m: Model): Model => ({
     id: m.id,
