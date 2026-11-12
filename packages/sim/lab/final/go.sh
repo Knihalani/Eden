@@ -52,6 +52,26 @@ if ! cmp -s "$L/tasks-hash-$B9.txt" "$L/tasks-hash-$F9.txt"; then
 fi
 TB="$TREES/$B9-on-$HARNESS"
 TF="$TREES/$F9-on-$HARNESS"
+# DRY_ONLY=1: trees and task hashes above, then a `--dry` start of every arm on the shipped coverage (modules, worlds,
+# FINAL_CONFIG; no model call, nothing queued), and stop: the start-up check to run at the freeze.
+if [ "${DRY_ONLY:-0}" = 1 ]; then
+  W=36000000
+  for a in "$TF raw tools default" "$TB before both~Q+ask@w$W default" \
+    "$TF final both~Q+ask@w$W ${FINAL_CONFIG:-default}"; do
+    read -r t n c g <<<"$a"
+    (cd "$t" && env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --conditions "$c" --config "$g" \
+      --variant-config "{\"Q\":{\"pushCheckWaitMs\":$W,\"readerPushWaitMs\":$W}}" --agent-sim single \
+      --model claude-haiku-5-5 --grader claude-sonnet-5-5 --card-model claude-haiku-5-5 \
+      --reader-model claude-haiku-5-5 --suite "$SUITE" --seeds "${SEED_ARR[0]}" --variants hidden,control,neutral \
+      --split "$SPLIT" --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 100000 --spend-headroom 0 \
+      --out "$L/dry-$n.json" --dry) >"$L/dry-$n.log" 2>&1 || {
+      log "go: dry: the $n arm does not start ($L/dry-$n.log)"
+      exit 2
+    }
+  done
+  log "go: dry run passed (trees, task hashes, every arm starts)"
+  exit 0
+fi
 
 # 1. Coverage, each tree its own (identical card prompts across the trees replay from the queue, answered once).
 # `--users` takes one suite a world: a group name (dev20) is expanded to its suites.
