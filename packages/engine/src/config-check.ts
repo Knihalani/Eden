@@ -97,6 +97,12 @@ const SYNC: Key[] = ["sync"];
 const POLL_BEHIND: Key[] = ["sync", "syncOnDemand", "syncPollBehind"];
 const READER: Key[] = ["askReader"];
 const PUSH: Key[] = ["askReader", "readerPush"];
+/** Settings that act only while a number setting is above 0 (its off value), checked as `PARENTS` are. */
+export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
+  syncActivePollBackoff: "syncActivePollMs",
+  syncActivePollPriced: "syncActivePollMs",
+};
+
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncMaxItems: SYNC,
   syncPageSize: SYNC,
@@ -182,6 +188,9 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckSheet: [...PUSH, "pushCheck", "cards"],
   pushCheckSheetRefs: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
+  syncActivePollMs: ["sync"],
+  syncActivePollBackoff: ["sync"],
+  syncActivePollPriced: ["sync"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -317,6 +326,14 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
             `configuration has ${off.map((p) => `"${p}"`).join(" and ")} off: it would do nothing`,
         );
       }
+    }
+    // A child whose parent is a number (0 = off) rather than a flag (D1132's review).
+    for (const key of Object.keys(out) as Key[]) {
+      const parent = NUMBER_PARENTS[key];
+      if (!parent || isCore(key, merged[key]) || merged[parent] !== 0) continue;
+      throw new Error(
+        `${where}: "${key}" acts only with "${parent}" above 0, and this configuration has it 0: it would do nothing`,
+      );
     }
   }
   return out as Partial<EngineConfig>;
