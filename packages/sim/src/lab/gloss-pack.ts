@@ -26,7 +26,15 @@ const read = (f: string) =>
   readFileSync(join(GLOSS, f), "utf8")
     .split("\n")
     .filter(Boolean)
-    .map((l) => JSON.parse(l) as { w: string; g: string; fn?: boolean });
+    .flatMap((l) => {
+      // A writer's malformed line is skipped, not fatal: the vocabulary is written by models (subagents or the API).
+      try {
+        const v = JSON.parse(l) as { w?: unknown; g?: unknown; fn?: unknown };
+        return typeof v.w === "string" ? [{ w: v.w, g: typeof v.g === "string" ? v.g : "", fn: v.fn === true }] : [];
+      } catch {
+        return [];
+      }
+    });
 const files = readdirSync(GLOSS)
   .filter((f) => f.endsWith(".jsonl"))
   .sort();
