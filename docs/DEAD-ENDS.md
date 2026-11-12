@@ -71,6 +71,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1073 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | stopped on its pre-registered Pi clause |
 | D1074 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | Hidden raised −0.2 points (−1.533..+1.271), 3,066 pairs over 384 templates (Haiku's own grade not read for… |
 | D1141 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
+| D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
 
 ## Reader
 
