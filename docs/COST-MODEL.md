@@ -782,15 +782,21 @@ Break-even against sending the sheet uncached is a hit rate of 0.22 on the 5-min
 | uncached (the shipped OpenRouter route without `anthropicCache`, D1196; cost.py's old pricing) | +0.00016 to +0.00023 | +0.15 to +0.22 |
 | every check reading it | about 0 | about 0 |
 
-Where each route stands today:
-- The lab's Anthropic transport (`anthropic.ts`) sends the 5-minute TTL unless `cacheTtl: "1h"` is set. On the
-  random spacing, that is the dearest row.
-- The shipped OpenRouter route sends no breakpoint unless `anthropicCache` is on (D1196, a trial with its probe
-  pending the owner). So production pays the uncached row today.
-- Whether OpenRouter passes a 1-hour `ttl` through is unverified (no probe today).
+Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`):
+- The lab's Anthropic transport (`anthropic.ts`) sends every breakpoint of a check with a sheet at 1 hour, and prices
+  its writes at 2x.
+- The shipped OpenRouter route does the same under `anthropicCache` (D1196). That is a trial whose probe is pending
+  the owner, so production pays the uncached row today. Whether OpenRouter passes the 1-hour `ttl` through is
+  unverified.
 
-So the sheet is worth sending with the 1-hour TTL as its own breakpoint, or not cached at all. A 5-minute breakpoint
-on a user whose requests are tens of minutes apart costs more than none. `packages/sim/lab/final/cost.py` prices the
+The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
+- 58.4 cards a user on train seeds 41–42 (p90 68, 759 worlds) and 59.4 on dev20 seeds 41–44 (p90 67, 896 worlds);
+- about 8,200 characters (2,050 tokens);
+- every world has more than 40.
+
+**At 8,200 characters on the 1-hour TTL with requests at random over active hours: +$0.000098 a check, +$0.09 per
+1,000 tasks [EST].** A cap of 40 would therefore turn the sheet off for every lab user under D1183's guard; the
+newest 40 instead is the slice D1183 found speaking on neutral requests. `packages/sim/lab/final/cost.py` prices the
 check's sheet block five ways when the queue's done files carry `size.sheet`: no sheet, uncached, all read, 1-hour
 mix, 5-minute mix.
 

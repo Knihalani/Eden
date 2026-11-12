@@ -4,6 +4,7 @@ import {
   anthropicBody,
   anthropicCost,
   anthropicPrice,
+  requestTtl,
   type AnthropicCallRecord,
   type AnthropicMeter,
 } from "./anthropic";
@@ -71,6 +72,39 @@ describe("AnthropicModel", () => {
     expect(body.messages).toEqual([{ role: "user", content: "a\n\nb" }]);
     expect("temperature" in body).toBe(false);
     expect(body.thinking).toEqual({ type: "disabled" });
+  });
+
+  test("a message asking a 1-hour TTL sends every breakpoint of the request at 1 hour, and prices writes at 2x", () => {
+    const request = {
+      messages: [
+        { role: "system" as const, content: "fixed instructions" },
+        { role: "user" as const, content: "the user's rule sheet", cache: true, cacheTtl: "1h" as const },
+        { role: "user" as const, content: "the request" },
+      ],
+      maxTokens: 100,
+    };
+    const body = anthropicBody({ apiKey: "k" }, request, false);
+    const hour = { type: "ephemeral" as const, ttl: "1h" as const };
+    // Anthropic wants a longer TTL before a shorter one: the system breakpoint goes at an hour too.
+    expect(body.system?.[0]?.cache_control).toEqual(hour);
+    expect(body.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "the user's rule sheet", cache_control: hour },
+          { type: "text", text: "the request" },
+        ],
+      },
+    ]);
+    expect(requestTtl({ apiKey: "k" }, request)).toBe("1h");
+    // Without the ask, the 5-minute TTL as before; the model-wide option still wins.
+    const plain = { ...request, messages: request.messages.map(({ cacheTtl: _, ...m }) => m) };
+    expect(requestTtl({ apiKey: "k" }, plain)).toBe("5m");
+    expect(anthropicBody({ apiKey: "k" }, plain, false).system?.[0]?.cache_control).toEqual({ type: "ephemeral" });
+    expect(requestTtl({ apiKey: "k", cacheTtl: "1h" }, plain)).toBe("1h");
+    // An uncached message's ask is ignored: it ends no prefix.
+    const loose = { ...request, messages: [{ role: "user" as const, content: "x", cacheTtl: "1h" as const }] };
+    expect(requestTtl({ apiKey: "k" }, loose)).toBe("5m");
   });
 
   test("reports a reply its stop sequence ended; a stream cut with no stop reason is an error", async () => {
@@ -159,6 +193,39 @@ describe("AnthropicModel", () => {
     expect(booked[0]!.costUsd).toBeCloseTo(res.costUsd, 12);
     // 40 uncached at $0.10/M, 600 read at $0.01/M, 12 out at $0.50/M.
     expect(res.costUsd).toBeCloseTo((40 * 0.1 + 600 * 0.01 + 12 * 0.5) / 1e6, 12);
+  });
+
+  test("a request whose sheet asks a 1-hour TTL books and reports its cache writes at 2x input (D1197)", async () => {
+    const writes: object[] = okEvents("ok");
+    writes[0] = {
+      type: "message_start",
+      message: {
+        usage: { input_tokens: 40, cache_creation_input_tokens: 2000, cache_read_input_tokens: 0, output_tokens: 1 },
+      },
+    };
+    const run = async (cacheTtl?: "1h") => {
+      const { meter, booked } = recordingMeter();
+      const res = await new AnthropicModel({ apiKey: "k", fetch: streamFetch(writes), meter }).chat({
+        messages: [
+          { role: "system", content: "sys" },
+          { role: "user", content: "the sheet", cache: true, ...(cacheTtl ? { cacheTtl } : {}) },
+          { role: "user", content: "q" },
+        ],
+        maxTokens: 50,
+      });
+      return { res, booked };
+    };
+    const hour = await run("1h");
+    const five = await run();
+    const price = anthropicPrice("claude-haiku-5-5");
+    // 40 uncached and 2,000 written at $0.10/M (written at 2x on the hour, 1.25x on five minutes), 12 out at $0.50/M.
+    expect(hour.res.costUsd).toBeCloseTo((40 * 0.1 + 2000 * 0.2 + 12 * 0.5) / 1e6, 12);
+    const usage = { inputTokens: 2040, cachedInputTokens: 0, cacheWriteTokens: 2000, outputTokens: 12 };
+    expect(hour.res.usage).toEqual(usage);
+    expect(hour.res.costUsd).toBeCloseTo(anthropicCost(usage, price, "1h"), 12);
+    expect(hour.booked[0]!.costUsd).toBeCloseTo(hour.res.costUsd, 12);
+    expect(five.res.costUsd).toBeCloseTo((40 * 0.1 + 2000 * 0.125 + 12 * 0.5) / 1e6, 12);
+    expect(five.booked[0]!.costUsd).toBeCloseTo(five.res.costUsd, 12);
   });
 
   test("a refused meter stops the call before anything is sent", async () => {
