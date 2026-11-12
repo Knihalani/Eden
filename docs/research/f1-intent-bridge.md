@@ -75,7 +75,13 @@ which tell the language: a request is read as language L when it holds at least 
 not English stopwords (ties keep both). German, Dutch and the Scandinavian languages split an unknown compound into two
 known words. Hindi in Latin script is not covered (no frequency list).
 
-**Licence, before shipping.** The word lists' content is CC-BY-SA-4.0 (the repository's code is MIT). The glossary
+**Licence: being replaced (the integrator's call, 2026-11-12: do not ship CC-BY-SA content).** `gloss-make.ts` now
+writes the vocabulary itself: per language, one Haiku call per everyday topic (38 topics fixed in the script, life
+areas rather than suites) for the words a native speaker uses with their English, and one for the function words; no
+outside list. 26 languages (the 12 above plus ca, fi, hu, cs, id, ms, tl, sw, vi, ru, el, ar, ko and Hinglish), at
+most $6.11 by its reservation. It waits for Anthropic credit; the Pi pair waits for it, and the screens above are
+re-run on the rebuilt glossary first (a material change is noted here, the rule stays as committed). Until then the
+committed `gloss.bin` is the frequency-list build and must not merge. The original note: The word lists' content is CC-BY-SA-4.0 (the repository's code is MIT). The glossary
 holds those words as its keys, with Haiku's glosses. Whether that needs attribution or share-alike is the owner's
 call; the glossary can be rebuilt from another word list (or a model-written one) with `gloss-make.ts` for about $1.
 

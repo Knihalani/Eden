@@ -1,10 +1,11 @@
 /**
- * F1: packs `gloss-make.ts`'s output into the engine's `gloss.bin` (gzip of JSON; gloss.ts reads it). Per language:
- * its function words (the first `--fn` words of its frequency list whose gloss is empty or English stopwords only,
- * less any of the first `--en` English words, so "die" or "has" never tells German or Dutch from English) and its
- * glossed words (a word whose gloss is itself is left out: searching it again adds nothing).
+ * F1: packs `gloss-make.ts`'s output into the engine's `gloss.bin` (gzip of JSON, version 1; gloss.ts reads it). Per
+ * language: its function words (`fn` lines, less any an English request also uses: an English stopword or a word the
+ * glosses use, so "die" or "has" never tells German or Dutch from English) and its glossed words (one word each, NFC,
+ * its glosses from every topic merged, at most three English words; a word whose gloss is itself is left out:
+ * searching it again adds nothing).
  *
- *   bun packages/sim/src/lab/gloss-pack.ts --freq DIR --gloss DIR --out packages/engine/src/gloss.bin [--fn 300]
+ *   bun packages/sim/src/lab/gloss-pack.ts --gloss DIR --out packages/engine/src/gloss.bin
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,60 +13,58 @@ import { gzipSync } from "node:zlib";
 import { isStopword } from "@eden/engine";
 
 const argv = process.argv.slice(2);
-const opt = (k: string, d?: string) => {
+const opt = (k: string) => {
   const i = argv.indexOf(`--${k}`);
-  if (i >= 0) return argv[i + 1]!;
-  if (d === undefined) throw new Error(`--${k} is required`);
-  return d;
+  if (i < 0) throw new Error(`--${k} is required`);
+  return argv[i + 1]!;
 };
-const FREQ = opt("freq");
 const GLOSS = opt("gloss");
-const FN = Number(opt("fn", "300"));
-const EN = Number(opt("en", "2000"));
+const WORD = /^\p{L}+$/u;
+const MAX_ENGLISH = 3;
 
-const ranked = (lang: string) =>
-  readFileSync(join(FREQ, `${lang}.txt`), "utf8")
+const read = (f: string) =>
+  readFileSync(join(GLOSS, f), "utf8")
     .split("\n")
-    .map((l) => l.split(" ")[0]?.toLowerCase() ?? "")
-    .filter((w) => /^\p{L}{2,}$/u.test(w));
-const english = new Set(ranked("en").slice(0, EN));
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { w: string; g: string; fn?: boolean });
+const files = readdirSync(GLOSS)
+  .filter((f) => f.endsWith(".jsonl"))
+  .sort();
+const tables = new Map<string, { fn: Set<string>; g: Map<string, string[]> }>();
+const english = new Set<string>();
+for (const f of files) {
+  const fn = new Set<string>();
+  const g = new Map<string, string[]>();
+  for (const { w: raw, g: e, fn: isFn } of read(f)) {
+    const w = raw.normalize("NFC").toLowerCase();
+    if (!WORD.test(w)) continue;
+    if (isFn) {
+      fn.add(w);
+      continue;
+    }
+    // English letters only: the gloss is searched as English words.
+    const words = e
+      .replace(/[^a-z ]/g, " ")
+      .split(" ")
+      .filter((x) => x.length > 1);
+    const have = g.get(w) ?? [];
+    for (const x of words) if (have.length < MAX_ENGLISH && !have.includes(x)) have.push(x);
+    g.set(w, have);
+    for (const x of words) english.add(x);
+  }
+  tables.set(f.slice(0, -6), { fn, g });
+}
 const langs: Record<string, { fn: string[]; tsv: string }> = {};
 let words = 0;
-for (const f of readdirSync(GLOSS)
-  .filter((f) => f.endsWith(".jsonl"))
-  .sort()) {
-  const lang = f.slice(0, -6);
-  const g = new Map<string, string>();
-  for (const l of readFileSync(join(GLOSS, f), "utf8").split("\n")) {
-    if (!l) continue;
-    const { w, g: e } = JSON.parse(l) as { w: string; g: string };
-    // English letters and spaces only: the gloss is searched as English words.
-    g.set(
-      w,
-      e
-        .replace(/[^a-z ]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim(),
-    );
-  }
-  const fn = ranked(lang)
-    .slice(0, FN)
-    .filter(
-      (w) =>
-        g.has(w) &&
-        !english.has(w) &&
-        g
-          .get(w)!
-          .split(" ")
-          .every((e) => e === "" || isStopword(e)),
-    );
+for (const [lang, { fn, g }] of tables) {
+  const fns = [...fn].filter((w) => !isStopword(w) && !english.has(w)).sort();
   const lines = [...g]
-    .filter(([w, e]) => e !== "" && e !== w)
+    .filter(([w, e]) => e.length > 0 && !(e.length === 1 && e[0] === w) && !fn.has(w))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([w, e]) => `${w}\t${e}`);
+    .map(([w, e]) => `${w}\t${e.join(" ")}`);
   words += lines.length;
-  langs[lang] = { fn, tsv: lines.join("\n") };
-  console.log(`${lang}: ${fn.length} function words, ${lines.length} glossed`);
+  langs[lang] = { fn: fns, tsv: lines.join("\n") };
+  console.log(`${lang}: ${fns.length} function words, ${lines.length} glossed`);
 }
 const bin = gzipSync(JSON.stringify({ v: 1, langs }), { level: 9 });
 writeFileSync(opt("out"), bin);
