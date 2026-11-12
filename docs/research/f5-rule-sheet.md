@@ -301,3 +301,30 @@ most of its prompts; its numbers were discarded and the file layout now keys on 
 `push-check-sheet.test.ts` ("staleness"): an item edited at its source leaves the sheet as soon as its new copy is
 stored (its old card is no longer the item's), and its new card joins once made (`cardsOf` reads the item's current
 content hash).
+
+## 10. Pre-registered next steps (the integrator's decisions after §9; committed before any of their calls)
+
+### 10a. The neutral re-test with a noise floor (subagent-simulated)
+
+The dev20 seed 41 neutral checks of §9a (`SR-p2.dump.jsonl`, every neutral row with a check: the same input for all
+arms) rebuilt by `pilot.ts` in three arms: **B** (main's prompt), **SR** (the sheet with pointers) and **S** (the
+sheet, pool items in full, `pushCheckSheetRefs` off). Each arm is asked **twice**, by separate subagents (fresh
+samples), one user's prompts a file as in §5. Read per arm and sample: neutral prompts with any yes. Noise floor
+D = prompts where B's two samples disagree on any yes. **An arm passes the neutral clause** if its mean any-yes count
+over its two samples exceeds B's mean by at most max(3, D/2). SR passes §6 if it passes here (its fact and decoy
+clauses passed in §9a); S is reported beside it and goes forward instead of SR if it passes and SR does not.
+
+### 10b. `cardsKeepOnly` ($0, then the queue)
+
+Stage 1, $0: no-model funnel at shipped coverage, `--jobs 1 -- --neutral`, dev20 seeds 41–44 and train seeds 41–42,
+main against `{"cardsKeepOnly":true}`. Passes if hidden surfaced is not down, decoys surfaced up by at most half the
+hidden gain (or not up), and neutral packets up by at most 3 points of neutral tasks. Stage 2 (only if stage 1
+passes): the same with the check live through the queue on dev20 seed 41 (`pushCheckSheet` as the stage-1 winner
+of 10a, or 0 if none), the same three clauses on planted and decoy handed and neutral packets. Pass both: promote
+`cardsKeepOnly` (D814). Fail: delete it.
+
+### 10c. The selected sheet
+
+F10's rule index selects a request's candidate cards (`ruleIndex.select`, `pushCheckSheetSelect` k); the check sees
+only those. The 300- and 500-card stress of §9b is re-run on the selected sheet once F10's selector exists; its
+rule is written then, before its calls.
