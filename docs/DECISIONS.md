@@ -688,3 +688,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| F5's rule sheet (docs/research/f5-rule-sheet.md) | `pushCheckSheet` (cards on the sheet, 0 off), `pushCheckSheetAlways` | F5 (this session) | the day it opened, 2026-11-12 (D814) | §1: a $0-tool funnel screen with the check live on train, reworded and longtail, then a Sonnet-regraded Pi pair against `eden`, its clauses pre-registered before any paid call |
