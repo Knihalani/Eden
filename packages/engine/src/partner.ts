@@ -121,7 +121,6 @@ import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
   CANDIDATES_LEAD,
-  CHECKED_LEAD,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -2112,7 +2111,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined, candidates.checked === true),
+                this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2527,10 +2526,8 @@ export class ContextPartner {
       if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
       // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
-      // Kept in the reply's order (`checkedLead` hands them so); membership is all the default reads.
-      const present = new Set(items.map((it) => it.id));
       return {
-        yes: new Set([...yes].filter((id) => present.has(id))),
+        yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
         costUsd: 0,
         called: false,
         overBudget: false,
@@ -2602,7 +2599,7 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; checked?: boolean } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
@@ -2612,10 +2609,7 @@ export class ContextPartner {
     if (reported.length === 0) return { items: [], pool };
     const open = reported.filter((x) => !bulkMail(x.item));
     let items = yes
-      ? (this.config.checkedLead ? inCheckOrder(open, yes) : open.filter((x) => yes.has(x.item.id))).slice(
-          0,
-          this.config.pushCandidates,
-        )
+      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
@@ -2658,12 +2652,7 @@ export class ContextPartner {
           }
         : {}),
     });
-    return {
-      items,
-      pool,
-      ...(unsettled ? { unsettled } : {}),
-      ...(yes && this.config.checkedLead ? { checked: true } : {}),
-    };
+    return { items, pool, ...(unsettled ? { unsettled } : {}) };
   }
 
   /**
@@ -2800,13 +2789,12 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false, checked = false): PacketFrame {
+  private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      // `checkedLead` (F6): items the push check named are framed as checked, not as unchecked candidates.
-      lead: `${checked ? CHECKED_LEAD : CANDIDATES_LEAD}${nudge ? ` ${ASK_NUDGE}` : ""}`,
+      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
@@ -6768,20 +6756,6 @@ function localDay(at: number, offsetMin: number): string {
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
-}
-
-/**
- * `checkedLead` (F6): the pool's items the push check named, in the order its reply named them (the most decisive
- * first, `CHECK_SYSTEM`), not the pool's. `yes` keeps the reply's order (`parseCompare`, a Set in insertion order).
- */
-function inCheckOrder(open: readonly Scored[], yes: ReadonlySet<string>): Scored[] {
-  const byId = new Map(open.map((x) => [x.item.id, x] as const));
-  const out: Scored[] = [];
-  for (const id of yes) {
-    const x = byId.get(id);
-    if (x) out.push(x);
-  }
-  return out;
 }
 
 /** The names each item mentions, as the source map records them (D57): at most 20 an item, persistable kinds. */

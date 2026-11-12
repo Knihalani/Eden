@@ -128,6 +128,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 |---|---|---|
 | D528 | Rejected and deleted: thinking on I3's short reply, and a check that reads only stored-`act` items |  |
 | D815 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | The firewall flagged 0.070 of control tasks against D72's 0.05 bar and was never re-run |
+| D1160 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | the rule asked for a lower bound above 0. dev20 14/14 in every arm |
 
 ## Sync, sources and scale
 

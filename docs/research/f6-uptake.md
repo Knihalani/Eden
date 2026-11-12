@@ -1,9 +1,11 @@
 # F6: uptake — what happens between Eden's packet and the agent's answer
 
-Status: 2026-11-12. **Blocked before any valid paid result.** Two levers are built, tested at $0 and pre-registered
-(commit f06aea8a); neither is measured, both are off. The Anthropic account the lab spends through returned
-`400 "Your credit balance is too low to access the Anthropic API"` on every call from about 08:10 UTC, so the first
-Pi run was discarded and nothing here is a verdict.
+Status: 2026-11-12. **Rejected and deleted (D1160), on a subagent-simulated, single-shot pilot.** Two levers were
+built and pre-registered: `checkedLead`, a "checked" lead line with the check's order, and `CONTEXT_GUIDE`, an
+integrator's system-prompt line. The lab's Anthropic account ran out of credit at about 08:10 UTC, so there was no
+Pi run. Haiku and Sonnet subagents stood in for the API instead. Neither lever met the rule. In this setup the
+default already raised 95% of the planted facts it was handed, so there was almost no room to measure a gain.
+The code is in commit 10800cb2.
 
 ## The problem (from docs/research/h19-diagnosis.md, heldout19, read once there; not tuned on here)
 
@@ -25,7 +27,7 @@ false, and the whole line leans to ignoring. The items go in the pool's order, t
 most decisive first". The agent's system prompt, in the lab and in INTEGRATION.md, says nothing about Eden's
 `<context>` blocks.
 
-## The two levers (both off; F6 owns both trial rows)
+## The two levers (deleted by D1160)
 
 1. **`checkedLead`** (engine, `config.ts`; `render.ts`'s `CHECKED_LEAD`, `partner.ts`'s `candidatesOf`,
    `inCheckOrder`, `candidateFrame`). When the check named the packet's items, the lead reads: "Eden: a check found
@@ -108,10 +110,63 @@ single-shot" and are not Pi numbers. The train and dev20 Pi rules above are supe
   with the planted item in a packet can differ between arms. The report prints each arm's denominator, and the rule's
   "hidden not down" clause guards the whole.
 
+## The pilot: subagent-simulated, single-shot (rule of 56b375d9)
+
+How it ran:
+
+1. **Packets.** `bun run funnel --suite train|dev20 --seeds 41 -- --check replay --check-cache F --check-log L` logs
+   each push-check prompt that missed the cache, with its replay key. Each of the 200 selected tasks had exactly one
+   check prompt. Eight Haiku subagents answered them, using the shipped `CHECK_SYSTEM`, 25 prompts each. Their
+   replies were written to the cache under those keys. The funnel was then re-run twice, default and
+   `--set '{"checkedLead":true}'`, with 0 misses on the selected tasks. So both arms' packets are the engine's own,
+   built from one shared check verdict.
+2. **Answers.** `packages/sim/lab/f6/single-shot.ts prompts` built 600 prompts (200 tasks × 3 arms). Each prompt was
+   the lab's system prompt with the tenant's house rules, in the pushed-context form with no tools; the guide arm
+   also had the line. Then the push's packets, then the request. 24 Haiku subagents answered them, 25 prompts each.
+   The arms were mixed, and no task appeared twice in one batch.
+3. **Grades.** 20 Sonnet subagents graded with the lab's grader prompt (`gradeMessages`), 30 a batch, blind to the
+   arm.
+4. **One subagent error, fixed.** A word-overlap check found answers attached to the wrong ids in two batches: two
+   pairs of neighbouring lines swapped. They were swapped back and the 4 answers re-graded by a Sonnet subagent.
+5. **Spot check.** The other flags were on-topic answers, and a read of five grades agreed with them.
+6. **Report.** `python3 -I packages/sim/lab/f6/pilot-report.py`.
+
+Tasks: the first 100 hidden and 100 control tasks of `tasks-seed41.json`. That gives 84 hidden on train, short of
+the rule's 100, plus 16 hidden on dev20. With the check replayed, the planted item was in the packet on 98 of the 100
+hidden tasks. `checkedLead` changed the items or their order on 5 tasks, so this is mostly a test of the lead's
+wording.
+
+| train (84 hidden, 87 control) | hidden raised | uptake | control concerns | bytes a packet |
+| --- | ---: | ---: | ---: | ---: |
+| default | 80 (95.2%) | 80/84 | 0 | 768 |
+| `checkedLead` | 80 (95.2%) | 80/84 | 0 | 769 |
+| `+guide` | 81 (96.4%) | 81/84 | 0 | 768 |
+
+Against the default, paired by task, with a 95% bootstrap over templates:
+
+- `checkedLead`: +0.0 points (−3.6..+3.6), 1 up and 1 down, McNemar p = 1.
+- `+guide`: +1.2 (+0.0..+3.6), 1 up and 0 down.
+
+The rule asked for a lower bound above 0, so both fail. On dev20, uptake was 14/14 in every arm, with 1 control
+concern of 13 in every arm.
+
+**Why the pilot cannot see uptake.** The single-shot agent raised 95% of the planted facts it was handed, against 81%
+for the Pi agent on heldout19. A one-call answer has the packet as its only context, with no tool results and no
+search turns to crowd it out. So the ceiling leaves at most 4 of 84 tasks to win. A lever worth +5 points on Pi
+would be invisible here.
+
+The levers are deleted, not held:
+
+- The API will not come back.
+- Single-shot is the only measurement available, and it has no room to show a gain.
+- D814 decides on the evidence in hand.
+
+A future uptake trial needs a harness where the agent misses facts it holds: the Pi loop, or a multi-turn
+subagent agent with tool results in its context.
+
 ## Next
 
-When the account has credit: `bash packages/sim/lab/f6/run.sh tr train 41,42,43,44 hidden,control,neutral`, two
-processes at a time at most if other sessions share the key (429s were seen beside the credit errors), then
-`python3 -I packages/sim/lab/f6/report.py both+ask .local/f6/runs/tr-4{1,2,3,4}`. Decide both rows that day (D814).
-A promoted `+guide` goes to INTEGRATION.md and into the lab's Eden arms; Hermes needs the same flag in
-`hermes-conditions.ts` and its plugin's system prompt before a Hermes pair.
+- The uptake gap (16 facts reached and not raised on heldout19) remains. The diagnosis ties it to silent edits that
+  do not say what changed. That is F3's `packetWhy` (a per-item "why it matters" line), and it is the better lever
+  than framing.
+- Measuring framing needs a multi-turn agent. The single-shot subagent mode sits at the ceiling.

@@ -852,7 +852,6 @@ async function runWorld(
     config,
     noKey,
     packets: layout,
-    guide,
     hits,
   } = cond;
   const scope = { tenantId: "ab", userId: connect ? `w${seed}r${connect.replica}` : `w${seed}` };
@@ -1501,7 +1500,6 @@ async function runWorld(
             pushed: hits,
             act,
             tenant: TENANT_PROMPT,
-            guide,
           }),
           // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
           ...(DAYS_ON && !startsDay ? { messages: dayMessages } : {}),

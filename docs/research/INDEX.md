@@ -269,4 +269,4 @@ Every decision in one line with its status: [DECISION-INDEX.md](../DECISION-INDE
 
 Not in this directory: [../RESEARCH.md](../RESEARCH.md) (the Meta PMA paper and open questions),
 [../plans/](../plans/) (the query-planner plan and `next.md`), [../LAB.md](../LAB.md) (how to run the lab).
-| [f6-uptake.md](f6-uptake.md) | 2026-11-12 | trials `checkedLead`, `+guide` | Uptake levers between the packet and the answer: a "checked" lead with the check's order (engine trial) and an integrator's system-prompt line on Eden's context (`CONTEXT_GUIDE`, lab `+guide`); rule pre-registered, paid run blocked (Anthropic credit), $3.49 spent on a discarded run | blocked |
+| [f6-uptake.md](f6-uptake.md) | 2026-11-12 | D1160 | Uptake levers between the packet and the answer: a "checked" lead with the check's order (engine trial) and an integrator's system-prompt line on Eden's context (`CONTEXT_GUIDE`, lab `+guide`); rejected on a subagent-simulated single-shot pilot (uptake at 95% ceiling: `checkedLead` +0.0, `+guide` +1.2, lower bounds not above 0) | rejected (D1160) |

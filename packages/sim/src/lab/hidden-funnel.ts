@@ -118,6 +118,7 @@ import {
   DEFAULT_READER_MODEL,
   missGate,
   overBudgetLine,
+  promptKey,
   ReplayModel,
   SubsetReplay,
   systemHash,
@@ -587,8 +588,17 @@ const loggedCheck = (tag: Record<string, unknown>): Model | null =>
     ? {
         id: checkModel.id,
         chat: async (request) => {
-          const res = await checkModel.chat(request);
           const prompt = request.messages.find((m) => m.role === "user")?.content ?? "";
+          let res;
+          try {
+            res = await checkModel.chat(request);
+          } catch (e) {
+            // F6: a replay miss is logged with its replay key, so the prompt can be answered elsewhere (a subagent)
+            // and written to the cache under that key; the check then fails open, as any failed call does.
+            const k = promptKey(checkModel.id, request);
+            appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, k, prompt, reply: null })}\n`);
+            throw e;
+          }
           appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, prompt, reply: res.text })}\n`);
           return res;
         },
