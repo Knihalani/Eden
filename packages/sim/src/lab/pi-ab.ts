@@ -1559,7 +1559,16 @@ async function runWorld(
           }
           const at = performance.now();
           request = {
-            id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
+            // `inChars`/`prefixChars` (F11): the request's size and its part before the last message, so a run the
+            // queue transport answers (zero usage, D1101) can still be priced per arm ([EST], 4 characters a token).
+            id: tl.begin("model.request", "model", "path", {
+              turn: turns + 1,
+              inChars:
+                ((context as { systemPrompt?: string }).systemPrompt ?? "").length +
+                chars +
+                JSON.stringify((context as { tools?: unknown[] }).tools ?? []).length,
+              lastChars: JSON.stringify(context.messages.at(-1) ?? "").length,
+            }),
             at,
             first: null,
             in: 0,
@@ -1677,7 +1686,13 @@ async function runWorld(
           r.promptTokens += q.in;
           r.completionTokens += q.out;
           r.costUsd += cost;
-          tl.end(q.id, { in: q.in, out: q.out, cost, stop: e.message.stopReason });
+          tl.end(q.id, {
+            in: q.in,
+            out: q.out,
+            cost,
+            stop: e.message.stopReason,
+            outChars: JSON.stringify(e.message.content ?? "").length,
+          });
           record.requests.push({
             startMs: tl.at(q.at),
             firstTokenMs: q.first === null ? null : Math.round(q.first - q.at),
