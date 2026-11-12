@@ -119,6 +119,31 @@ pool-head branch reused a lead claiming its items name the request. **Round 5** 
 `pushLookupQuiet`, a lead that calls the records background, not a reason to warn) decides on seeds 41–44 and 45–48,
 with a days run.
 
+**Round 5, LK3 (fixed code, quiet lead), seeds 41–44:** connector calls −0.556 (−1.028..−0.083), model calls −0.375,
+hidden 20 → 21/24, asks 0.069 → 0.056, [EST] wait −0.50 s, hedges 20 → 17, but concerns naming a planted specific
+3 → 7: the ISA look-alike, which the check had read and rejected, handed as reference on all four control seeds and
+surfaced by the agent. Rejected; the lookup now hands only plain (not constraint-like) records.
+
+**LK4 (plain records):**
+
+| run | connector calls | model calls | hidden | asks | specific concerns | hedges | [EST] wait | agent $/1k |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| seeds 45–48, 72 an arm | −0.667 (−1.194..−0.153) | −0.389 | 6 → 8/24 | equal | 1 → 1 | 13 → 13 | −0.60 s | −0.021 |
+| seeds 41–44, 72 an arm | −0.319 (−0.667..+0.069) | −0.208 | 19 → 19 | +0.014 | 4 → 5 | 8 → 12 | −0.29 s | −0.012 |
+| days, seeds 41–42, 24 an arm | −0.083 | −0.042 | 2 → 2 | 0 | — | — | −0.08 s | +0.015 (+0.005..+0.024) |
+
+The hedge bar (+1) sits far below the classifier's noise: the same default arm read 20 hedges in round 5 and 8 in
+round 6 (28 of its 48 answers differed between the runs, and on the 20 identical ones the verdict agreed 16 times).
+Within a day the records saved almost no search but stayed in the transcript, so **LK5** hands them only on a
+session's first request (one-request sessions are unchanged: its rerun on seeds 41–44 read connector calls −0.25,
+model calls −0.22, hidden 20 → 20). LK5's days run was stopped by the subagent API's weekly limit (every Haiku and
+Sonnet worker failed at about 11:00 UTC), so it is unmeasured.
+
+**Where it stands:** not passed as registered (hedges on seeds 41–44, connector calls −0.25 on LK5's rerun there, and
+LK5's days bar unmeasured). It stays a trial switch, off in the default, offered to F12's candidate profile as
+`{"pushLookup":3,"pushLookupAny":true,"pushLookupQuiet":true}`. All of these runs predate #315 (the harnesses now
+place the packet a tool result's observe hands out; before it both arms dropped it).
+
 ## Reproduce
 
 ```bash
