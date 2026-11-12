@@ -4,7 +4,7 @@
  * request in the user turn. One line a distinct prompt (identical prompts across arms are answered once, so they
  * differ by nothing), and a map from (arm, task) to the prompt. Sim data only.
  *
- *   bun packages/sim/lab/f3/pilot-build.ts .local/f3/pilot   # reads {base,CH,CW}.packets.jsonl there
+ *   bun packages/sim/lab/f3/pilot-build.ts .local/f3/pilot [arm…]   # reads <arm>.packets.jsonl there (base CH CW)
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -12,7 +12,8 @@ import { systemPrompt } from "../../src/lab/ab-common";
 import { buildWorld } from "../../src/world";
 
 const dir = process.argv[2]!;
-const arms = ["base", "CH", "CW"];
+// Arms: the packet dumps `<dir>/<arm>.packets.jsonl` to read (default: D1125's three).
+const arms = process.argv.length > 3 ? process.argv.slice(3) : ["base", "CH", "CW"];
 const prompts = new Map<string, { id: string; system: string; user: string }>();
 const tasks: Record<string, unknown>[] = [];
 const sys = new Map<number, string>();
