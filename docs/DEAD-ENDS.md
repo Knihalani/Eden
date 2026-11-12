@@ -73,6 +73,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
 | D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
 | D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
+| D1271 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | asked of the check it lost facts: planted handed 94 against main's 99 of 120 hidden rows (bar: ≥ 96)… |
+| D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
 
 ## Reader
 
