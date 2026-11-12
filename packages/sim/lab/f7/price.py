@@ -51,7 +51,8 @@ def main():
             n = d["calls"]
             line = (
                 f"  {role}: {n:.0f} calls, {n / tasks:.3f} a task; a call {d['in'] / n:.0f} in + {d['cr'] / n:.0f} "
-                f"cache read + {d['cw'] / n:.0f} cache write, {d['out'] / n:.0f} out; ${1000 * usd / tasks:.4f} per 1,000"
+                f"cache read + {d['cw'] / n:.0f} cache write, {d['out'] / n:.0f} out; "
+                f"${1000 * usd / tasks:.4f} per 1,000"
             )
             if role in path:
                 line += f"; wait {d['wait'] / tasks:.0f} ms a task"

@@ -31,7 +31,10 @@ def main():
     out = sum(c["usage"]["outputTokens"] for c in calls) / n
     hit = sum(1 for c in calls if c["usage"]["cachedInputTokens"] > 0) / n
     usd = (inp - cr) * P_IN + cr * P_CR + out * P_OUT
-    print(f"check a call: {inp:.0f} in ({cr:.0f} cached, hit rate {hit:.0%}), {out:.0f} out; ${usd:.6f}; wait {wait(out):.0f} ms")
+    print(
+        f"check a call: {inp:.0f} in ({cr:.0f} cached, hit rate {hit:.0%}), {out:.0f} out; ${usd:.6f}; "
+        f"wait {wait(out):.0f} ms"
+    )
     rows = [json.loads(l) for f in dumps for l in open(f)]
     seeds = len(dumps)
     per_kind = Counter(r["variant"] for r in rows)
@@ -56,13 +59,15 @@ def main():
         if r["variant"] == "hidden" and r["planted"] in r["yes"]:
             named_planted += 1
             idx = [it["id"] for it in r["items"]].index(r["planted"]) + 1
-            found = re.search(r'"i"\s*:\s*"?%d"?[^{}]*"act"\s*:\s*true' % idx, r["reply"][: m.start()] if m else r["reply"])
+            head = r["reply"][: m.start()] if m else r["reply"]
+            found = re.search(r'"i"\s*:\s*"?%d"?[^{}]*"act"\s*:\s*true' % idx, head)
             lost_planted += not found
     share = {v: k[1] / k[0] for v, k in kept.items()}
     mix_share = sum(W[v] * rate[v] * share.get(v, 1) for v in W) / mix_rate
     d_out = out * (1 - mix_share)
     print(
-        f"1 lean stop: output kept {mix_share:.0%} on the mix (by kind {', '.join(f'{v} {s:.0%}' for v, s in share.items())}); "
+        f"1 lean stop: output kept {mix_share:.0%} on the mix "
+        f"(by kind {', '.join(f'{v} {s:.0%}' for v, s in share.items())}); "
         f"-{d_out:.0f} tokens a call, -{2.93 * d_out:.0f} ms a call, -{mix_rate * 2.93 * d_out:.0f} ms a task, "
         f"-${1000 * mix_rate * d_out * P_OUT:.4f} per 1,000 tasks ({d_out * P_OUT / usd:.0%} of the check); "
         f"planted named after the first no: {lost_planted}/{named_planted}"

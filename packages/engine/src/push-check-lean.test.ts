@@ -139,6 +139,33 @@ describe("pushCheckLeanStop (F7)", () => {
     expect(JSON.parse(closeLean(text)).items).toEqual([{ i: 1, on: 'a {brace} and "quote"', hits: "x}", act: true }]);
     expect(closeLean(`{"items":[{"i":2,"on":"y",`)).toBe(`{"items":[]}`);
     expect(closeLean("not json")).toBe("not json");
+    // A fence the model opened is stripped: a stopped reply never has its closing fence (review of F7).
+    expect(
+      JSON.parse(closeLean('```json\n{"items":[{"i":1,"on":"a","hits":"b","act":true},{"i":2,')).items,
+    ).toHaveLength(1);
+  });
+
+  test("a lean reply cut at the token cap fails open; one the provider says ended otherwise reads as is", async () => {
+    const reply = (over: Partial<ChatResponse>): Model => ({
+      id: "x",
+      chat: async () => ({
+        text: `{"items":[${yes(1)},${no(2)},${yes(3)}]}`,
+        usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+        costUsd: 0,
+        model: "x",
+        latencyMs: 0,
+        ...over,
+      }),
+    });
+    const run = (m: Model) =>
+      new PushChecker({ model: m, budget: new Budget() }).check(
+        { tenantId: "t", userId: "u" },
+        "s",
+        { ...INPUT, lean: true },
+        new AbortController().signal,
+      );
+    expect((await run(reply({ truncated: true }))).yes).toBeNull();
+    expect([...(await run(reply({ stopped: false }))).yes!]).toEqual(["mail:hold", "mail:dated"]);
   });
 });
 

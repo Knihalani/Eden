@@ -118,8 +118,11 @@ export const CHECK_LEAN_STOP = ['"act":false', '"act": false'];
  * A lean reply cut at its stop, closed after its last whole entry (the entry being written is a no, dropped); the text
  * as is when it does not open as the reply does.
  */
-export function closeLean(text: string): string {
-  if (!OPENING.test(text)) return text;
+export function closeLean(raw: string): string {
+  // A stopped reply never has a closing fence, so a fence the model opened is stripped here (the provider adapter
+  // unfences only a complete reply).
+  const text = raw.replace(/^\s*```(?:json)?\s*\n?/, "");
+  if (!OPENING.test(text)) return raw;
   const at = text.indexOf("[");
   let end = -1;
   let depth = 0;

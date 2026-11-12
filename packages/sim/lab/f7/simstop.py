@@ -27,7 +27,8 @@ def main():
             kept = reply[: m.start()] if m else reply
             kept_yes = set()
             for e in ENTRY.finditer(kept):
-                if re.search(r'"act"\s*:\s*(true|"true")', e.group(0)) and not re.search(r'"hits"\s*:\s*"none', e.group(0), re.I):
+                said_yes = re.search(r'"act"\s*:\s*(true|"true")', e.group(0))
+                if said_yes and not re.search(r'"hits"\s*:\s*"none', e.group(0), re.I):
                     i = int(e.group(1)) - 1
                     if 0 <= i < len(ids):
                         kept_yes.add(ids[i])
