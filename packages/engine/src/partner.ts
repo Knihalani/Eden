@@ -67,6 +67,7 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import { glossOf, warmGlossary } from "./gloss";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -79,7 +80,16 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
-import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
+import {
+  CHECK_MAX_ITEMS,
+  checkKey,
+  itemMark,
+  SHEET_MAX_CARDS,
+  sheetText,
+  type PushCheckRead,
+  type PushChecker,
+  type SheetCard,
+} from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -261,6 +271,8 @@ export interface PushPoolReport {
   checkCalled?: boolean;
   /** `pushLookup` (D1252): `handed` is reference records naming the request's anchors, or (`head`) the pool's head. */
   lookup?: "named" | "head";
+  /** `pushCheckSheet` (F5): the item ids of the rule sheet the check read, in its order (ids only, for the lab). */
+  sheet?: string[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -444,6 +456,8 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
+  /** `requestGloss`: the English words a request in another language means (`glossOf`), searched beside it. */
+  gloss?: string;
 }
 
 /**
@@ -676,6 +690,8 @@ export class ContextPartner {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
+    // `requestGloss` (F1, D1153): the glossary is read here too, once a process, not on the first request.
+    if (this.config.requestGloss) warmGlossary();
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
@@ -764,6 +780,13 @@ export class ContextPartner {
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
+            ...(c.syncActivePollMs > 0
+              ? {
+                  activePollMs: c.syncActivePollMs,
+                  activePollBackoff: c.syncActivePollBackoff,
+                  activePollPriced: c.syncActivePollPriced,
+                }
+              : {}),
             activeMs: c.syncActiveMs,
             sweepMs: c.syncSweepMs,
             dropMs: c.syncDropMs,
@@ -1853,14 +1876,18 @@ export class ContextPartner {
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
+    // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
+    // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
+    const gloss = this.config.requestGloss ? glossOf(question) : "";
     const cue = buildCue(
       question,
-      distinctTermIds(question, s.vocab),
+      distinctTermIds(gloss ? `${gloss}\n${question}` : question, s.vocab),
       s.vocab,
       this.now(),
       this.deps.cache.offsetOf(s.scope),
       this.config.probes,
     );
+    if (gloss) cue.gloss = gloss;
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
@@ -2512,19 +2539,30 @@ export class ContextPartner {
    */
   private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    if (!this.config.pushCheck || !checker) return null;
+    const like = gate.like.some(Boolean);
+    if (!like) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
+    const today = localDay(this.now(), this.deps.cache.offsetOf(s.scope));
+    const sheet = this.sheetOf(s, cue, today);
     const focus = readerFocus(cue.raw);
     const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
-      today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      today,
+      ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
     };
     const key = checkKey(input);
-    const asked = `${input.today}\n${request}`;
+    const ids = sheet.map((c) => c.id);
+    const withSheet = (r: PushCheckRead): PushCheckRead => (ids.length > 0 ? { ...r, sheet: ids } : r);
+    // A kept answer read this sheet too: a card landing or expiring between passes asks again.
+    const asked =
+      sheet.length > 0
+        ? `${input.today}\n${request}\n${createHash("sha256").update(sheetText(sheet)).digest("hex").slice(0, 16)}`
+        : `${input.today}\n${request}`;
     const checks: Map<string, KeptCheck> = (s.pushChecks ??= new Map());
     // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
     // pass (`readerPushBehind`) often only reorders the pool or drops an item.
@@ -2534,12 +2572,13 @@ export class ContextPartner {
       if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
       // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
-      return {
+      return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
         costUsd: 0,
         called: false,
         overBudget: false,
-      };
+      });
     }
     let kept = checks.get(key);
     const fresh = !kept;
@@ -2562,7 +2601,7 @@ export class ContextPartner {
     try {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
-      if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
+      if (got) return withSheet(fresh ? got : { ...got, costUsd: 0, called: false });
       // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
@@ -2572,10 +2611,55 @@ export class ContextPartner {
           () => undefined,
         );
       }
-      return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
+      return withSheet({ yes: null, costUsd: 0, called: false, overBudget: false, late: true });
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * `pushCheckSheet` (F5): the user's rule sheet, at most `pushCheckSheet` of their constraint cards made before the
+   * request (no `none` or `preference` card, none whose span ended before `today`), one a statement (the newest
+   * item's), newest items first; only items still cached, no bulk mail. No model call and no source call: the card
+   * store and the cache, both the user's own.
+   */
+  private sheetOf(s: Session, cue: Cue, today: string): SheetCard[] {
+    const n = Math.min(this.config.pushCheckSheet, SHEET_MAX_CARDS);
+    const cards = this.deps.cards;
+    if (n <= 0 || !this.config.cards || !cards) return [];
+    const ids = cards.carded(s.scope);
+    if (ids.length === 0) return [];
+    const now = this.now();
+    const rows: { id: string; card: Card; item: ContextItem; at: number }[] = [];
+    for (const [id, card] of cards.cardsOf(s.scope, ids, cue.arrived ?? now)) {
+      if (card.kind === "none" || card.kind === "preference") continue;
+      if (card.end !== undefined && card.end < today) continue;
+      const item = this.deps.cache.get(s.scope, id, now);
+      if (!item || bulkMail(item)) continue;
+      rows.push({ id, card, item, at: item.updatedAt ?? 0 });
+    }
+    rows.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const out: SheetCard[] = [];
+    const said = new Set<string>();
+    for (const { id, card, item } of rows) {
+      const statement = sanitizeForStore(card.statement);
+      const key = statement.toLowerCase().replace(/\s+/g, " ").trim();
+      if (!key || said.has(key)) continue;
+      said.add(key);
+      // A heavy user's rules do not fit: the newest `n` of them speak on neutral requests more than main does
+      // (F5 §11d, D1183), so the check reads the pool alone, as without a sheet.
+      if (out.length >= n) return [];
+      out.push({
+        id,
+        kind: card.kind,
+        statement,
+        title: sanitizeForStore(item.title),
+        source: sanitizeForStore(item.sourceId),
+        ...(card.start ? { start: card.start } : {}),
+        ...(card.end ? { end: card.end } : {}),
+      });
+    }
+    return out;
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2614,10 +2698,12 @@ export class ContextPartner {
     const yes = check?.yes ?? null;
     const pool = gate.pool;
     const reported = pool;
-    if (reported.length === 0) return { items: [], pool };
+    // `pushCheckSheet` (F5): the items of the sheet's rules the check named, after the pool's (current copies only).
+    const ruled = yes && check?.rules?.size ? this.ruledItems(s, check.rules, pool) : [];
+    if (reported.length === 0 && ruled.length === 0) return { items: [], pool };
     const open = reported.filter((x) => !bulkMail(x.item));
     let items = yes
-      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
+      ? [...open.filter((x) => yes.has(x.item.id)), ...ruled].slice(0, this.config.pushCandidates)
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
@@ -2677,6 +2763,7 @@ export class ContextPartner {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
             ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
+            ...(check?.sheet ? { sheet: [...check.sheet] } : {}),
           }
         : {}),
       // `pushLookup` (D1252): `handed` is reference records, not checked candidates.
@@ -2688,6 +2775,19 @@ export class ContextPartner {
       ...(unsettled ? { unsettled } : {}),
       ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
     };
+  }
+
+  /** `pushCheckSheet` (F5): the cached items a check's named rules stand for, not already in the pool, no bulk mail. */
+  private ruledItems(s: Session, ids: ReadonlySet<string>, pool: readonly Scored[]): Scored[] {
+    const inPool = new Set(pool.map((x) => x.item.id));
+    const now = this.now();
+    const out: Scored[] = [];
+    for (const id of ids) {
+      if (inPool.has(id)) continue;
+      const item = this.deps.cache.get(s.scope, id, now);
+      if (item && !bulkMail(item)) out.push({ item, score: 0, matched: 0, sketch: null });
+    }
+    return out;
   }
 
   /**
@@ -5898,7 +5998,7 @@ export class ContextPartner {
     // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
     // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
     const cut = intentCut(c);
-    const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+    const text = intentQuery(cue);
     const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
     const found = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.intentHits, accept);
     // `intentByKind`: a second, deeper search for the carded pass only (`intentReach`, intent.ts, says why apart).
@@ -5924,8 +6024,7 @@ export class ContextPartner {
     const before = cue.arrived ?? this.now();
     const cards = enricher.cardsOf(s.scope, found.keys(), before);
     const rare = new Set<string>();
-    for (const w of cue.raw
-      .slice(0, INTENT_QUERY_CHARS)
+    for (const w of intentQuery(cue)
       .toLowerCase()
       .match(/[\p{L}\p{N}]+/gu) ?? []) {
       if (w.length < 3 || isStopword(w)) continue;
@@ -6163,6 +6262,7 @@ export class ContextPartner {
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
       ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
+      ...(source.callPriced !== undefined ? { callPriced: source.callPriced } : {}),
       ...(source.fetchReportsGone !== undefined ? { fetchReportsGone: source.fetchReportsGone } : {}),
       ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
@@ -6624,6 +6724,10 @@ function onlyTime(cue: Cue): boolean {
     (cue.time?.days.size ?? 0) > 0 && cue.entities.length === 0 && cue.text.split(" ").every((w) => TIME_WORD.test(w))
   );
 }
+
+/** The text the intent index is searched with: the request's head, after its gloss when it has one (`requestGloss`). */
+const intentQuery = (cue: Cue) =>
+  cue.gloss ? `${cue.gloss}\n${cue.raw.slice(0, INTENT_QUERY_CHARS)}` : cue.raw.slice(0, INTENT_QUERY_CHARS);
 
 /** The cue's time on the user's wall clock, read as UTC: its ISO day is the user's day. */
 const localNow = (cue: Cue) => cue.at + cue.offset * 60_000;

@@ -61,6 +61,8 @@ const server = Bun.serve({
     ...(process.env.EDEN_PROXY_KEEP_PACKETS === "0" ? { keepPackets: false } : {}),
     // Trial (D851): Eden's ask_context offered to the model and answered in the proxy.
     ...(process.env.EDEN_PROXY_ASK === "1" ? { askTool: true } : {}),
+    // F10 (trial, off): send the turn upstream during Eden's wait and keep the answer when Eden adds nothing new.
+    ...(process.env.EDEN_PROXY_SPECULATE === "1" ? { speculate: true } : {}),
     ...(process.env.EDEN_PROXY_SHADOW === "1"
       ? { shadow: true, onShadow: (r) => console.log(JSON.stringify({ shadow: true, ...r })) }
       : {}),

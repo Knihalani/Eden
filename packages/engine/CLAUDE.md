@@ -23,6 +23,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
+| `gloss.ts`, `gloss.bin`                                                    | The request glossary (`requestGloss`, in the default since D1153; part `gloss`; F1): a non-English request's words glossed into English with no model, from a 26-language glossary written by Haiku subagents (`gloss.bin`, packed by the lab's `gloss-pack.ts`), loaded once a process when the partner is built (118 ms, +29 MB RSS); an English request is searched as written |
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
@@ -141,7 +142,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
   sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
   sentence. Re-run the default funnel after touching it (`--coverage full`: 315 / 276, card calls 382–392 by load;
-  the default, shipped coverage since D877: 295 / 268 since D1062, 281 / 264 before).
+  the default, shipped coverage since D877: 318 / 299 since D1102's world-clock re-record, 295 / 268 since D1062,
+  281 / 264 before).
 - **The card prompt shows the requests list in its first example (`cardsRequestsFix`, D1060, D1062, on in the
   default, parts `cards` and `intent`; docs/research/h2-requests-fix.md).** Before it, Haiku left the whole list out
   of about a quarter of its replies and every item of such a batch got no requests (D1053). A reply that still drops
@@ -549,6 +551,19 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
   outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
   keep iteration off per-item paths.
+- **The freshness floor (`syncActivePollMs` 2 h, `syncActivePollBackoff`; D1131, in the default, part `sync`).** While
+  a user is active, `Sync.step` runs a complete background poll (`poll`, to the boundary, `polled` and the rate
+  taught) of each warm source not polled for the floor, doubling a quiet source's interval up to 8 h
+  (`SourceSync.floorLevel`, reset in `store` by anything new from any read). Never a partial page: one page left its
+  items as a false boundary, and the next poll marked the source current short of what changed (the review). For the
+  same reason any poll that stops before it completes (call budget, a failed page, a lookup giving up) marks what it
+  stored as pushed (`s.pushed`), so the next poll reads past it; the next complete poll clears the marks (the second
+  review). A source that notifies is skipped, and one with `Source.callPriced` unless `syncActivePollPriced` (the
+  deployment's opt-in, one for every tenant); a wrapper around a `Source` copies `callPriced` as it copies
+  `notifies`. A due floor poll thaws a frozen user through `cache.ready` (D325), and the sources past half their
+  interval go in the same thaw. The request path's polls mostly
+  stop (its sources are current), so look-alikes reach the push's pool more often on train (funnel delivered 123 →
+  145 of 192, seed 41); F2's structural filters are the planned answer. `active-poll.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
   skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
   daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle

@@ -123,6 +123,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
+import { observeToolResult } from "./observe-tool";
 import type { World, WorldItem } from "../world";
 import {
   applyNotifyShare,
@@ -173,7 +174,7 @@ import {
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
-import { parseSuites } from "./suites";
+import { parseSuites, setRealism } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
@@ -279,6 +280,20 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
  * chooses no query, asks no second question and cannot decline to search; label the results so.
  */
 const AGENT_SIM = opt("agent-sim", "loop");
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's (twenty connectors, rule-like items
+ * that never apply), as the funnel and cold-start.ts take it; set before any world is built. `off` (default).
+ */
+setRealism(opt("realism", "off"));
+/**
+ * `--split N` (final benchmark, lab only): one request a session only; each world's tasks run as N streams (round
+ * robin), each with its own partner, instead of one. Through the queue transport a stream waits minutes a call, so a
+ * world's tasks one after another take hours; N streams put N calls in the queue at once. Each stream's partner holds
+ * only its own tasks' sessions (cross-task state such as `sourceYield` sees fewer requests): compare arms run with
+ * the same N.
+ */
+const SPLIT = Number(opt("split", "1"));
+if (!Number.isInteger(SPLIT) || SPLIT < 1) throw new Error(`--split must be a whole number >= 1, not ${SPLIT}`);
 const SIM_STOP = new Set(
   "a an the my me i to of in on at for from into this that these those with and or is are be by it its this our we you your please can could would will do does next week today tomorrow".split(
     " ",
@@ -577,6 +592,9 @@ const REUSE_FILE = opt("reuse-arms", "");
 if (AGENT_SIM === "single" && (DAYS_ON || ACT || REUSE_FILE)) {
   throw new Error("--agent-sim single runs one request a session: not with --day, --days, --act or --reuse-arms");
 }
+if (SPLIT > 1 && (DAYS_ON || CONNECT)) {
+  throw new Error("--split runs one request a session: not with --day, --days or --connect-at");
+}
 // The queue's files are read by subagents and kept on disk: never a pilot bundle's real data (D1101).
 if (WORLD_FILE && queueDir()) throw new Error("--world-file cannot run on the queue transport (EDEN_LAB_QUEUE)");
 if (REUSE_FILE && DAY > 0) throw new Error("--reuse-arms copies single-request arms: it cannot stand in for --day");
@@ -756,6 +774,11 @@ function ownedModel(inner: Model, owner: () => RunResult | null): Model {
 
 /** What a task records beside its result: its timeline and the per-request detail. */
 interface TaskRecord {
+  /**
+   * Each push pass's pool for this task (`onPushPool`, ids and flags only, D269): the final benchmark's stage
+   * attribution (never retrieved, dropped by the check, reached) reads it from the same run.
+   */
+  pushPools?: { pool: string[]; handed: string[]; constraintLike: boolean[]; checked?: boolean[]; check?: string }[];
   task: string;
   condition: string;
   suite: string;
@@ -873,6 +896,8 @@ async function runWorld(
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  /** The task record each session's push pools are written to (`TaskRecord.pushPools`). */
+  const poolsOf = new Map<string, TaskRecord>();
   // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
   // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
   let edenCalls = 0;
@@ -1017,6 +1042,17 @@ async function runWorld(
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
         ...(checker ? { checker } : {}),
+        onPushPool: (p) => {
+          const rec = poolsOf.get(p.sessionId);
+          if (!rec) return;
+          (rec.pushPools ??= []).push({
+            pool: [...p.pool],
+            handed: [...p.handed],
+            constraintLike: [...p.constraintLike],
+            ...(p.checked ? { checked: [...p.checked] } : {}),
+            ...(p.check ? { check: p.check } : {}),
+          });
+        },
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -1347,12 +1383,25 @@ async function runWorld(
       dropped: 0,
       ...(task.planted ? { planted: task.planted } : {}),
     };
+    poolsOf.set(sessionId, record);
     activeTasks++;
     tl.point("task.start", { condition, kind: task.kind });
     // Eden's packets for this task, oldest first: each a system message before the user turn, as agent-ab places them.
     // With the ids each packet and `ask_context` answer cited, so the line tells delivery from uptake (uptake.ts).
     const uptake = new UptakeLog();
     const packets = uptake.packets;
+    /** An injection an observe returned, placed with the task's packets (as `takeEden` places the queued ones). */
+    const deliver = (i: Parameters<UptakeLog["packet"]>[0]) => {
+      if (!useEden) return;
+      r.injectedItems += i.citations.length;
+      r.injectedChars += i.text.length;
+      uptake.packet(i);
+      day?.packet(
+        i.citations.map((c) => c.itemId),
+        i.text,
+      );
+      tl.point("eden.inject", { items: i.citations.length, chars: i.text.length });
+    };
     const takeEden = () => {
       if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
@@ -1377,16 +1426,7 @@ async function runWorld(
         const o2 = tl.begin("eden.observe", "eden", "path", { event: task.event });
         const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), { waitMs });
         tl.end(o2, { injected: first.injection?.citations.length ?? 0, pending: first.pending });
-        if (first.injection && useEden) {
-          r.injectedItems += first.injection.citations.length;
-          r.injectedChars += first.injection.text.length;
-          uptake.packet(first.injection);
-          day?.packet(
-            first.injection.citations.map((c) => c.itemId),
-            first.injection.text,
-          );
-          tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
-        }
+        if (first.injection) deliver(first.injection);
       }
       // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
       if (hits) {
@@ -1428,8 +1468,13 @@ async function runWorld(
               // Eden sees what the agent fetched, so it does not deliver it again.
               if (partner) {
                 const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-                await partner.observe(ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }));
-                tl.end(o);
+                // A packet the observe hands out reaches the agent, as a client places it (`observe-tool.ts`).
+                const injected = await observeToolResult(
+                  partner,
+                  ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }),
+                  deliver,
+                );
+                tl.end(o, { injected });
               }
               return { content: [{ type: "text", text: result }], details: {} };
             },
@@ -2047,7 +2092,24 @@ const streams = worlds.flatMap((w, wi) =>
           return connected(() => runWorld(w.world, w.seed, w.tasks, c, records, grading, undefined, who));
         }),
       )
-    : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes, undefined, wi)),
+    : SPLIT > 1
+      ? // `--split N`: a world's tasks round-robin over N streams, each with a partner of its own (see SPLIT).
+        live.flatMap((c) =>
+          Array.from({ length: Math.min(SPLIT, w.tasks.length) }, (_, k) =>
+            runWorld(
+              w.world,
+              w.seed,
+              w.tasks.filter((_, i) => i % SPLIT === k),
+              c,
+              records,
+              grading,
+              undefined,
+              undefined,
+              wi,
+            ),
+          ),
+        )
+      : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes, undefined, wi)),
 );
 for (const settled of await Promise.allSettled(streams)) {
   if (settled.status === "fulfilled") results.push(...settled.value);
@@ -2173,7 +2235,13 @@ if (checkers.length) {
     `CHECK (I3, ${CHECK_MODEL}): ${calls} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
       `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}; ` +
       `${calls ? (sum("inputTokens") / calls).toFixed(0) : 0} in (${calls ? (sum("cachedInputTokens") / calls).toFixed(0) : 0} ` +
-      `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
+      `cached, ${calls ? (sum("cacheWriteTokens") / calls).toFixed(0) : 0} written) / ` +
+      `${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call` +
+      // `pushCheckSheet` (F5): checks that read a rule sheet, its mean size, and the rules the replies named.
+      (sum("sheetChecks")
+        ? `; sheet on ${sum("sheetChecks")} calls, ${(sum("sheetCards") / sum("sheetChecks")).toFixed(1)} cards a ` +
+          `sheet, ${sum("sheetNamed")} rules named`
+        : ""),
   );
 }
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);
