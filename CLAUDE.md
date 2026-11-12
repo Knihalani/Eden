@@ -12,7 +12,7 @@ what is worth mining from it.
 
 ## Repo
 
-Bun/TypeScript monorepo, no build step (packages export `src/*.ts`). Repo `KaiavN/Eden`, work targets `main`.
+Bun/TypeScript monorepo, no build step (packages export `src/*.ts`). Repo `Knihalani/Eden`, work targets `main`.
 Packages: `protocol`, `primitives`, `redact`, `sources`, `graph`, `llm`, `engine`, `server`, `client`, `client-python`,
 `proxy`, `eval`, `sim`;
 examples in `examples/`. Hot-path code uses `@eden/primitives` (one tokenizer, typed-array structures) and follows its

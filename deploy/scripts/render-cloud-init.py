@@ -4,7 +4,7 @@
 syntax: ${name} and %{ if role == "..." ~} ... %{ else ~} ... %{ endif ~}.
 
     python3 -I deploy/scripts/render-cloud-init.py --role single --ref main \\
-      --git-url https://github.com/KaiavN/Eden.git --admin-cidr 203.0.113.4/32 > user-data.yaml
+      --git-url git@github.com:Knihalani/Eden.git --admin-cidr 203.0.113.4/32 > user-data.yaml
 """
 import argparse
 import pathlib
