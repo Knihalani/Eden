@@ -708,6 +708,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |
 | D1250 | 2026-11-12 | Finding: with Eden the agent takes fewer turns and connector calls, and the calls it still makes are on the turns Eden stays silent. | finding |
 | D1251 | 2026-11-12 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. | rejected |
+| D1252 | 2026-11-12 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | rejected |
 | D1192 | 2026-11-12 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | rejected |
 | D1150 | 2026-11-12 | Finding (F1, subagent-simulated; rejected as built, no engine trial): an encoder's candidates added to the push check's pool. | finding |
 | D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
@@ -725,7 +726,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1270 | 2026-11-12 | Finding: a CPU-only band on the push check (a semantic rule index) cannot take the model off the request path at facts in the 90s | finding |
 | D1271 | 2026-11-12 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | rejected |
 | D1272 | 2026-11-12 | Finding: a learned no-model skip of the push check reaches about 20% of calls at 1% of facts lost, not the 40% asked | finding |
-| D1273 | 2026-11-12 | Trial `speculate`: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte for byte… | trial |
+| D1273 | 2026-11-12 | Promoted by the integrator: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte… | adopted |
 | D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
 | D1550 | 2026-11-12 | Finding: the agent's wait, read task by task, puts the default level with the agent alone at the lab's connector latency and slower at 0.3… | finding |
 | D1552 | 2026-11-12 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). | rejected |

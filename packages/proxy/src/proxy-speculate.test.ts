@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createProxy } from "./proxy";
 
-// `speculate` (F10, trial, off; docs/research/f10-rule-index.md §9): the turn goes upstream during Eden's wait, and the
+// `speculate` (F10, D1273, on by default; docs/research/f10-rule-index.md §9): the turn goes upstream during Eden's wait, and the
 // held answer reaches the agent only when the request that would go after the wait is byte for byte the same.
 
 const KEY = "k_proxy_spec_0123456789abc";

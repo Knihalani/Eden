@@ -72,6 +72,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1074 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | Hidden raised −0.2 points (−1.533..+1.271), 3,066 pairs over 384 templates (Haiku's own grade not read for… |
 | D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
 | D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
+| D1252 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | hidden −2.5 |
 | D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
 | D1181 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | F5, D814 |
 | D1182 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | The bar: on a user with 300 rule cards, the selection must bring back at least half of what a 300-card sheet… |

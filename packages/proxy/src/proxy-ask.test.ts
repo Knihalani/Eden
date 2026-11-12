@@ -355,11 +355,13 @@ describe("ask_context through the proxy (D851)", () => {
 
   test("not offered: switch off (the default), shadow mode, no user, or the caller's own ask_context", async () => {
     mode = "once";
+    // Speculate off (D1273's default is on): this counts the one request the ask switch shapes.
     const off = createProxy({
       upstream: `${upstream.url.href}v1`,
       edenUrl: eden.url.href,
       edenApiKey: KEY,
       waitMs: 500,
+      speculate: false,
     });
     for (const [proxy, raw, user] of [
       [off, chat(), "u-ask"],
