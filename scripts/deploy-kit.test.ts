@@ -37,7 +37,7 @@ cat > "${log}/$n.stdin"`,
   stub(
     "ssh-keygen",
     `f="\${@: -1}"
-if [ "$1" = -y ]; then ! grep -q PASSPHRASE "$f"; exit; fi
+if [ "$1" = -y ]; then if grep -q PASSPHRASE "$f"; then echo "incorrect passphrase supplied" >&2; exit 1; fi; exit 0; fi
 if grep -q 'ssh-ed25519 GOOD' "$f"; then echo "256 ${GITHUB_FP} github.com (ED25519)"; else echo "256 SHA256:other x"; fi`,
   );
   stub("ssh-keyscan", `echo "github.com ssh-ed25519 \${KEYSCAN:-GOOD}"`);
@@ -45,7 +45,8 @@ if grep -q 'ssh-ed25519 GOOD' "$f"; then echo "256 ${GITHUB_FP} github.com (ED25
   writeFileSync(key, "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n");
   const run = (env: Record<string, string> = {}) => {
     const p = Bun.spawnSync(["bash", script, "root@203.0.113.10", "single", "main", URL, "198.51.100.7/32"], {
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ...env },
+      // DEPLOY_KEY and KEYSCAN from the developer's own shell must not leak in (the quickstart exports DEPLOY_KEY).
+      env: { ...process.env, DEPLOY_KEY: "", KEYSCAN: "", PATH: `${bin}:${process.env.PATH}`, ...env },
     });
     return { code: p.exitCode, stderr: p.stderr.toString() };
   };
@@ -87,6 +88,8 @@ test("DEPLOY_KEY: the key, the github.com entry and the host key are installed b
   expect(config).toContain(`  IdentityFile ${s.ssh}/eden_deploy\n  IdentitiesOnly yes\n`);
   expect(config.split("Host github.com").length).toBe(2);
   expect(config).toContain("Host other\n  User me\n");
+  // The block is closed by "Host *", so whatever follows it is not read as part of the github.com entry.
+  expect(config).toContain("  IdentitiesOnly yes\nHost *\n# eden-deploy-key end\n");
   expect(readFileSync(join(s.ssh, "known_hosts"), "utf8")).toBe(
     "example.org ssh-ed25519 AAAA\ngithub.com ssh-ed25519 GOOD\n",
   );
@@ -97,11 +100,23 @@ test("DEPLOY_KEY: a github.com host key other than GitHub's published one stops 
   const r = s.run({ DEPLOY_KEY: s.key, KEYSCAN: "EVIL" });
   expect(r.code).not.toBe(0);
   expect(r.stderr).toContain(`expected ${GITHUB_FP}`);
+  expect(r.stderr).toContain("nothing installed");
   expect(s.calls().length).toBe(1);
-  expect(readdirSync(s.ssh).filter((f) => f.startsWith("known_hosts") || f.startsWith("github"))).toEqual([
-    "known_hosts",
-  ]);
-  expect(readFileSync(join(s.ssh, "known_hosts"), "utf8")).toBe("");
+  // The host key is checked first: no key, no config entry, no known_hosts line, no temp file is left behind.
+  expect(readdirSync(s.ssh)).toEqual([]);
+});
+
+test("DEPLOY_KEY: global options an existing config starts with still apply to every host", () => {
+  const s = stage();
+  mkdirSync(s.ssh, { recursive: true });
+  writeFileSync(join(s.ssh, "config"), "ServerAliveInterval 30\nUser ops\n\nHost other\n  Port 2222\n");
+  for (let i = 0; i < 2; i++) expect(s.run({ DEPLOY_KEY: s.key }).code).toBe(0);
+  const config = readFileSync(join(s.ssh, "config"), "utf8");
+  // ssh reads "Host *" as matching every host, so the owner's global options are global again after the block.
+  const end = config.indexOf("Host *\n# eden-deploy-key end\n");
+  expect(end).toBeGreaterThan(0);
+  expect(config.indexOf("ServerAliveInterval 30")).toBeGreaterThan(end);
+  expect(config.split("# eden-deploy-key begin").length).toBe(2);
 });
 
 test("DEPLOY_KEY: a missing key or one with a passphrase is refused before any SSH call", () => {
@@ -111,6 +126,7 @@ test("DEPLOY_KEY: a missing key or one with a passphrase is refused before any S
   const r = s.run({ DEPLOY_KEY: s.key });
   expect(r.code).toBe(2);
   expect(r.stderr).toContain("without a passphrase");
+  expect(r.stderr).toContain("incorrect passphrase supplied");
   expect(s.calls().length).toBe(0);
 });
 

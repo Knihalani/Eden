@@ -68,7 +68,9 @@ advantage, free store requests, matters only at 100k users on a per-request stor
    `upgrade.sh` fetches the same way. The key never goes into user data, which the provider keeps and any process on
    the box can read through the metadata service, so a machine made with `deploy/tofu/*` boots without it and its
    clone fails: after `tofu apply`, run `bootstrap-dedicated.sh` with `DEPLOY_KEY` on each machine (it runs the same
-   cloud-init again, now with the key), or set `eden_git_url` to a public mirror. Without `DEPLOY_KEY` the script
+   cloud-init again, now with the key; set `eden_git_url` to the SSH URL before `tofu apply`, since a rerun on a machine
+   that booted from the provider's datasource may read the provider's user data again, unverified on a real machine),
+   or set `eden_git_url` to a public mirror. Without `DEPLOY_KEY` the script
    installs nothing, as before. A box first cloned over HTTPS moves to the key with the bootstrap step's key install
    and `git -C /opt/eden remote set-url origin git@github.com:Knihalani/Eden.git`.
 3. **Secrets** (§4). On your machine: `cp deploy/compose/single/.env.example secrets/single.env`, fill it in, then
@@ -316,7 +318,8 @@ suite.
 Also validated: the cloud-init file rendered for each role (`render-cloud-init.py`) passes `cloud-init schema`
 (cloud-init 26.2 from Ubuntu's archive).
 
-Validated on 2026-11-12 with the real tools (release binaries from GitHub, x86-64 host):
+Validated on 2026-11-12 with the real tools (release binaries from GitHub, x86-64 host), by the session that wrote
+PR #331; its command output was not kept, and the reviewer's sandbox had no copy of these tools to rerun them:
 
 - **OpenTofu v1.10.6**: `tofu init -backend=false && tofu validate` in `deploy/tofu/hetzner` (providers
   hetznercloud/hcloud 1.70.2 and hashicorp/aws 5.100.0, as `versions.tf` resolved them that day) and
