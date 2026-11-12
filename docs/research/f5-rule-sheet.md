@@ -405,3 +405,13 @@ made. Caveat: only 8,476 of 72,311 sheet-card lines in these dumps (12%) match a
 candidates carry no anticipated requests, the index's main signal (F10: "most of the signal"); the dumps were made
 before D1102's coverage fix. This is the statement-only lower bound, on the hardest tasks (a fact no lexical lookup
 reached). On all hidden rows with requests, F10 measured 568 of 674 in the top 20 at 300 cards.
+
+### 10d. Pre-registered: the shipped sheet on a heavy user (subagent-simulated, D1101)
+
+The integrator's guard question: on a user with about 300 active rule cards (F8's heavy realism: 333–350), is the
+shipped SR (`pushCheckSheet` 80 + refs, so the newest 80 of the 300 reach the check) at least as good as main?
+`pilot.ts` with `PILOT_PAD=300 PILOT_CAP=80`, arms B (main) and R (SR), sets Th, Tc, Hh, Hc, N drawn on the padded
+sheet (as §9b; Th and Tc are named only through the sheet, so main names none). **SR holds** if, against B on the same
+prompts: Hh (fact in the pool) named ≥ B − 2 of 40; Hc (look-alike in the pool) named ≤ B + 3 of 40; N (neutral) any
+yes ≤ B + 4.5 of 40 (10a's bound). Else SR gets a guard before the freeze: the sheet off above a card count chosen on
+these runs' $0 statistics, re-checked the same way.
