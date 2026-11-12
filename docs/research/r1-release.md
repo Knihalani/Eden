@@ -85,20 +85,20 @@ Not done: `bun run eval --live` (no engine scoring, threshold or delivery change
 ## Round 2 (the parent's decisions on what round 1 left, D1071)
 
 - **A wrong `EDEN_PERSIST_KEY` (finding 11): fixed.** A start whose key opens none of the blobs on disk (its own
-  buckets) exits 2 with `eden: cannot start: EDEN_PERSIST_KEY opens none of the N persisted users in <dir> (a
-  mistyped or changed key?): … or EDEN_PERSIST_DISCARD=1 …`, and deletes no foreign blob; with a shared store, a
-  marker object of the key's id (`<prefix>key-id`) decides, and a store from before the marker is sampled (up to 8 blobs, all foreign stops it) before the marker is written. The
-  reviewer found that sampling alone refused the right key after a rotation in a cluster (the old key's blobs stay
-  until the 7-day age sweep: a probe with 5 of 20 users rewritten sampled 8 of 8 foreign), and that an unanswering
-  store blocked the start: the marker fixes the first, a 3 s bound the second (unknown: the start goes ahead). Some blob
-  opening is a key that works: the foreign ones are discarded and logged, as before. `EDEN_PERSIST_DISCARD=1` starts
-  and logs `EDEN_PERSIST_DISCARD=1: discarded N persisted users written with another key`. Tests: engine
-  `persist.test.ts` (all foreign: refused, files kept; partial: starts, one discarded; an expired blob of the key
-  beside a foreign one: not refused), `persist-shared.test.ts` (no marker: sampled; the marker written; a rotation;
-  an empty, a down and a hung store), server `persist.test.ts` (a real process: exit 2 and both blobs kept, then the
-  override starts and the blobs go; the variable's values). Not driven end to end: a cluster node's start refused by
-  the marker (the engine test covers the check, `cluster.test.ts`'s machines start through it). DEPLOY.md (§ secrets
-  table, restore, key leak) and the quickstart say so.
+  buckets) exits 2 with `eden: cannot start: EDEN_PERSIST_KEY opens none of the N persisted users in <dir> (a mistyped
+  or changed key?): … or EDEN_PERSIST_DISCARD=1 …`, and deletes no foreign blob; with a shared store, a marker object of
+  the key's id (`<prefix>key-id`) decides, and a store from before the marker is sampled (up to 8 blobs, all foreign
+  stops it) before the marker is written. The reviewer found that sampling alone refused the right key after a rotation
+  in a cluster (the old key's blobs stay until the 7-day age sweep: a probe with 5 of 20 users rewritten sampled 8 of 8
+  foreign), and that an unanswering store blocked the start: the marker fixes the first, a 3 s bound the second
+  (unknown: the start goes ahead). Some blob opening is a key that works: the foreign ones are discarded and logged, as
+  before. `EDEN_PERSIST_DISCARD=1` starts and logs `EDEN_PERSIST_DISCARD=1: discarded N persisted users written with
+  another key`. Tests: engine `persist.test.ts` (all foreign: refused, files kept; partial: starts, one discarded; an
+  expired blob of the key beside a foreign one: not refused), `persist-shared.test.ts` (no marker: sampled; the marker
+  written; a rotation; an empty, a down and a hung store), server `persist.test.ts` (a real process: exit 2 and both
+  blobs kept, then the override starts and the blobs go; the variable's values). Not driven end to end: a cluster node's
+  start refused by the marker (the engine test covers the check, `cluster.test.ts`'s machines start through it).
+  DEPLOY.md (§ secrets table, restore, key leak) and the quickstart say so.
 - **Pins for round 1's lows:** the 1.25x kill (`router-processes.test.ts`: a child that ignores SIGTERM under a 400 ms
   grace takes at least 480 ms to go; fails at 1x), the 503 `error` handler (`serveError`, passed by `main.ts`), the
   shutdown flush (a flipped ciphertext byte read after start is logged at SIGTERM; fails without the flush), the
@@ -132,23 +132,25 @@ restart halfway; every message and a 10-second RSS sample journaled as it lands)
 process (no socket): the latencies are Eden's own work. The cgroup: cpuset 0-1, CFS quota 200000/100000, memory 12
 GiB (cgroup v1), as d1-scale-out.md §6. Main b3d8edc4 (round 2 merged). No model key.
 
-**Run 1 (1,800 users), cut short.** Backfill 13.6 min (900 users a process through the real sync kick); 7.27 GB of
-RSS in the two processes just after it (3.66 + 3.61 GB), the cgroup's peak 10.6 GB (page cache included); 15 minutes
-of load with no error in its last window; at the halfway SIGTERM a process wrote 275 users in its 4.5 s budget; the
-container itself restarted six seconds after the processes came back up. The cause is not known (the cgroup's own
-limit kills processes, not the machine); the orchestrator then wrote its report only at the end, so the samples were
-lost. The harness now journals every message as it lands, and run 2 used 1,500 users for headroom on the 16 GB host.
+**Run 1 (1,800 users), cut short.** Backfill 13.6 min (900 users a process through the real sync kick); 7.27 GB of RSS
+in the two processes just after it (3.66 + 3.61 GB, read by hand with `ps`; not journaled), the cgroup's peak 10.6 GB
+(`memory.max_usage_in_bytes`, page cache included, read by hand); 15 minutes of load with no error in its last window;
+at the halfway SIGTERM one process reported writing 275 users in its 4.5 s budget (the other's report was lost: the
+harness exited before its message was sent, fixed since); the container itself restarted six seconds after the processes
+came back up. The cause is not known (the cgroup's own limit kills processes, not the machine); the orchestrator then
+wrote its report only at the end, so the samples were lost. The harness now journals every message as it lands, and run
+2 used 1,500 users for headroom on the 16 GB host.
 
 **Run 2 (1,500 users, 30 minutes, restart at 15; `--users 1500 --procs 2 --minutes 30 --restart-at 15`).**
 
 | | |
 | --- | --- |
 | Backfill | 10.9 min; RSS peak in it 7.58 GB |
-| Requests in the load | 33,382; **0 errors** (no 5xx, no throw), 0 4xx |
+| Requests in the load | 33,382 (the restart's own windows, 479 requests with 0 errors, are left out of the totals and the latencies); **0 errors** (no 5xx, no throw), 0 4xx |
 | RSS, first half (90 samples) | mean 6.96 GB, p95 8.28, max 8.82, min 6.05; slope +29 MB/min (the collector's sawtooth spans 2.8 GB) |
-| RSS, last 10 min of the second half | mean 7.46 GB, p95 8.36, max 8.47 |
+| RSS, last 10 min of the second half (60 samples) | mean 6.60 GB, p95 8.29, max 8.47 (the last 5 min: 7.46, 8.36) |
 | cgroup peak (RSS + page cache) | 9.66 GB (cache at most 1.40 GB) |
-| A process before its users | 95 MB (just after the restart) |
+| A process before its users | 95 MB (the smaller of the two just after the restart; the other read 139 MB with a few users back: at most 0.03 MB a user) |
 | Event (session start/end, tool call and result, pending) | p50 0.46 ms, p99 95.7 ms (first half 0.59 / 42.6; second 0.35 / 123.7) |
 | User message (`waitMs` 0) | p50 4.86 ms, p99 15.1 ms |
 | `ask_context` | p50 9.54 ms, p99 272 ms (first half 8.0 / 21.4; second half 13.0 / 304) |
@@ -161,25 +163,27 @@ sizing.py and the docs stay. One caution for the docs: the collector's peaks sit
 so at 1,845 users the processes would reach about 10.8 GB at their peaks, most of the formula's 25% headroom (page
 cache is reclaimable; no OOM was seen at 1,500).
 
-**The restart: a full box loses most of its warm users (a finding for the parent; not changed, it needs an engine or
-a deployment trade-off).** `ItemCache.flush` writes users oldest first until its deadline, 0.3 of the shutdown grace
-(4.5 s at the compose files' 15 s): 169 and 179 of 750 users a process here, so about 77% of the users were not
-written and re-synced from their sources after the restart (the RSS rebuilt over about 10 minutes, at the cost of a
-backfill each). Latency held through it (user message p99 17 ms, ask p99 312 ms while users re-synced; 0 errors).
-DEPLOY.md's restart figures (12 s with warm files, 200 users) do not scale to a full box at the shipped grace. Two
-ways out, each the parent's call: a longer `EDEN_SHUTDOWN_GRACE_MS` (about 26 ms a heavy user a process at 0.3 of the
-grace: 65 s for 750; requests wait or fail while the process writes, since its listener is closed by then), or an
-engine change (write the most recently used users first, so those likely to return are kept; or write warm users in
-the background before the shutdown, which D862 chose not to).
+**The restart: a full box loses most of its warm users (a finding for the parent; not changed, it needs an engine or a
+deployment trade-off).** `ItemCache.flush` writes users oldest first until its deadline, 0.3 of the shutdown grace (4.5
+s at the single-box compose file's 15 s; the node file has 20 s, the cluster files 10 s): 169 and 179 of 750 users a
+process here, so about 77% of the users were not written and re-synced from their sources after the restart, each on
+their next event (the sessions' 12-minute arrivals set the pace: all 750 back about 13 minutes after it; not a re-sync
+throughput), at the cost of a backfill each. Latency held through it (user message p99 17 ms, ask p99 312 ms while users
+re-synced; 0 errors). DEPLOY.md's restart figures (12 s with warm files, 200 users) do not scale to a full box at the
+shipped grace. Two ways out, each the parent's call: a longer `EDEN_SHUTDOWN_GRACE_MS` (about 26 ms a heavy user a
+process at 0.3 of the grace: 65 s for 750; requests wait or fail while the process writes, since its listener is closed
+by then), or an engine change (write the most recently used users first, so those likely to return are kept; or write
+warm users in the background before the shutdown, which D862 chose not to).
 
 **Leak check: none (run 3; `--users 1000 --procs 2 --minutes 40 --restart-at 99 --gc-every 120`, the same cgroup).**
 Each process ran a full collection every 2 minutes and read its heap and RSS after it, over 40 minutes of steady load
-(no restart; 500 users a process, 400-457 of them warm at each reading). Heap after the collection: 1.69-1.71 GB a
-process on average, least-squares slope **−3.2 and −3.0 MB a minute** (flat to falling; the first readings fall in the
-backfill's last minutes); RSS slope −1.3 and −6.0 MB a minute. Settled RSS a user: (2,245 + 2,152 − 2 × 95) / 1,000 =
-**4.21 MB** (sizing.py: 4.71; the run's mix is about 13% live, a little under the peak hour's sixth). 25,035 requests,
-**0 errors**; event p50 0.58 ms, p99 37.2; user message 4.54 / 9.58; `ask_context` 7.62 / 16.1. The reading pauses
-the process (each full collection), so this run's latencies include them.
+(no restart; 500 users a process, 382-457 of them warm at each reading). Heap after the collection: 1.69-1.71 GB a
+process on average, least-squares slope **−3.2 and −3.0 MB a minute** (flat to falling; the first readings, from minute
+9.3, two minutes after the backfill, rise to 1.89 GB under the load's warm-up and settle); RSS slope −1.3 and −6.0 MB a
+minute. Settled RSS a user: (2,245 + 2,152 − 2 × 95) / 1,000 = **4.21 MB** (sizing.py: 4.71; the run's mix is about 13%
+live, a little under the peak hour's sixth). 25,035 requests, **0 errors**; event p50 0.58 ms, p99 37.2; user message
+4.54 / 9.58; `ask_context` 7.62 / 16.1. The reading pauses the process (each full collection), so this run's latencies
+include them.
 
 Reproduce (as root, cgroup v1; the soak's processes inherit the cgroup):
 

@@ -167,11 +167,11 @@ average; a request costs tens of milliseconds); a cold start without persisted u
 x 0.35 ms of ingest each is about 4 hours of one core), which is why persistence is on (D991).
 
 **A half-hour soak on the 2-core 12 GB box (D1075, r1-release.md §Round 3):** 1,500 heavy users through the server's
-wiring with persistence, sessions every ~12 minutes, a restart halfway: 33,382 requests, 0 errors, RSS 4.51 MB a user
-on the mean (the table's 4.71 holds; the collector's peaks reach ~22% above it, so at the table's 1,845 users little
-of the 25% headroom is left); user message p99 15 ms, `ask_context` p99 272 ms; no leak over 40 minutes. **A full
-box's restart keeps only what its shutdown budget writes:** at the compose files' 15 s grace a process wrote about 170
-of its 750 users (~26 ms a heavy user, in 0.3 of the grace); the rest re-synced from their sources over ~10 minutes.
+wiring with persistence, sessions every ~12 minutes, a restart halfway: 33,382 requests, 0 errors, RSS 4.51 MB a user on
+the mean (the table's 4.71 holds; the collector's peaks reach ~22% above it, so at the table's 1,845 users little of the
+25% headroom is left); user message p99 15 ms, `ask_context` p99 272 ms; no leak over 40 minutes. **A full box's restart
+keeps only what its shutdown budget writes:** at the single-box compose file's 15 s grace a process wrote about 170 of
+its 750 users (~26 ms a heavy user, in 0.3 of the grace); the rest re-synced from their sources on their next event.
 
 **Restart, 200 users at the cap, the 2-core budget** (`restart.bench.ts`, connectors answering in 20-80 ms):
 every user synced again in 158 s with 6,000 listing calls without persistence; 48 s with compact files; 12 s with

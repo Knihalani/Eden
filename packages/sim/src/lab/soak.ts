@@ -183,8 +183,10 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
     partner.stopSync();
     const t = performance.now();
     const n = partner.persistLive(15_000 * 0.3);
-    send({ kind: "persisted", index, users: n, ms: Math.round(performance.now() - t), window: summarise(w) });
-    process.exit(0);
+    // Exit once the message is out: an exit right after `send` could lose it (run 1 lost one process's report).
+    const m = { kind: "persisted", index, users: n, ms: Math.round(performance.now() - t), window: summarise(w) };
+    if (process.send) process.send(m, () => process.exit(0));
+    else process.exit(0);
   });
 
   // Backfill (first start only): each user's first event kicks their sync; a few kicks run at once (D753).
@@ -283,8 +285,8 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
   }
   setInterval(() => {
     if (Date.now() >= endAt + 5_000) {
-      send({ kind: "done", index });
-      process.exit(0);
+      if (process.send) process.send({ kind: "done", index }, () => process.exit(0));
+      else process.exit(0);
     }
   }, 1_000);
 }
@@ -378,10 +380,10 @@ async function orchestrate(): Promise<void> {
                 const { raw: _raw, ...rest } = m.window as Record<string, unknown>;
                 windows.push({ ...m, window: rest, phase, min: (Date.now() - t0) / 60_000 });
                 const r = m.window as { raw: { event: number[]; message: number[]; ask: number[] } };
-                if (phase.startsWith("load"))
+                if (phase !== "backfill")
                   for (const k of ["event", "message", "ask"] as const) all[k].push(...r.raw[k]);
                 const s = m.window as { errors: number; status4xx: number; requests: number };
-                if (phase.startsWith("load")) {
+                if (phase !== "backfill") {
                   totals.errors += s.errors;
                   totals.status4xx += s.status4xx;
                   totals.requests += s.requests;
