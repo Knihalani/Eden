@@ -387,3 +387,60 @@ default's by construction.
   - Today the agent's bill does not fall with Eden (B19: level).
   - The agent must save at least about 30% of Pi's $0.26, or about 19% of Hermes' $0.42, which is F11's lever.
   - Hold-and-abort works against this target: +$0.05 × (1 − *s*). Build it only once the wall target is the one left.
+
+### 10c. Targets 3 and 4 with the connectors counted (the integrator's correction; all [EST])
+
+The connectors do take time in the lab. pi-ab runs at time scale 1 on the `direct` market profile (medians: gmail 600
+ms, calendar 280, drive 700, crm 450, slack 550; `hosted.json` adds about 200 ms each), and the raw arm's tool spans
+here averaged 0.38 s a call. So B19's walls already include about 0.45 s a connector call. What they leave out is
+production latency above that, and the per-call fees.
+
+**The calls Eden saves.**
+- Agent tool calls a task fall from 2.77 to 2.05 on Pi (B19), 3.00 to 2.22 on Hermes (B19), and 1.33 to 0.69 in this
+  run.
+- Eden's own calls offset part of that: about 0.07–0.08 a task at the request (B19), plus its background listings
+  (backfill, polls and sweeps) amortised over a user's requests. COST-MODEL §Hosting (b) puts those, with Eden's
+  others, at 0.2–0.8 calls a request for 20 connectors; at about 1,000 sources it is 2.4 (O1).
+- Net, for 5–20 sources: **about −0.25 to −0.65 connector calls a task on Pi and −0.3 to −0.7 on Hermes**. The low end
+  takes the larger background share.
+
+**Cost: Eden − agent alone, $ per 1,000 tasks.**
+- Model spend from B19: Pi +$0.25 (Eden's roles, agent level); Hermes +$0.23 (Eden +$0.24, agent −$0.01).
+- Connector fees: plan prices from COST-MODEL §Hosting (b) (`CONNECTOR_PLANS`, assumed list prices, $ per 1,000
+  calls).
+
+| plan ($ per 1,000 calls) | Pi: fees saved | Pi: net | Hermes: fees saved | Hermes: net |
+| --- | ---: | ---: | ---: | ---: |
+| first-party APIs ($0) | 0 | **+0.25** | 0 | **+0.23** |
+| Composio ($0.30) | −0.08 to −0.20 | **+0.05 to +0.17** | −0.09 to −0.21 | **+0.02 to +0.14** |
+| Unified.to ($0.75) | −0.19 to −0.49 | **−0.24 to +0.06** | −0.23 to −0.53 | **−0.30 to +0.00** |
+| Arcade.dev ($10) | −2.5 to −6.5 | **−2.3 to −6.3** | −3.0 to −7.0 | **−2.8 to −6.8** |
+| Pipedream Connect ($12) | −3.0 to −7.8 | **−2.8 to −7.6** | −3.6 to −8.4 | **−3.4 to −8.2** |
+| Zapier MCP ($25.8) | −6.5 to −16.8 | **−6.2 to −16.5** | −7.7 to −18.1 | **−7.5 to −17.8** |
+
+So "cheaper" holds on Arcade, Pipedream and Zapier with room to spare, roughly breaks even on Unified.to, and fails on
+Composio and on first-party APIs. There, Eden's own model spend (the push check $0.16, cards $0.07–0.09) must fall:
+F10's skip, and the cards levers.
+
+**Wall: Eden − agent alone, s a task, by production latency L a connector call.** B19's walls are at about L₀ = 0.45 s;
+each call Eden saves on the path is worth L − L₀ more than they show. The agent's tool calls drop by 0.72 a task on
+Pi and 0.78 on Hermes. Eden's own calls at the request run behind the push (D405, D431) and are not added.
+- Pi: +0.39 − 0.72 × (L − 0.45).
+- Hermes: +0.09 − 0.78 × (L − 0.45).
+
+| L (s a call) | 0.3 | 0.6 | 1.0 | 1.5 | 2.0 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pi, today | +0.50 | +0.28 | −0.01 | −0.37 | −0.73 |
+| Pi + F10's skip at *s* = 0.7 (−0.60) | −0.10 | −0.32 | −0.61 | −0.97 | −1.33 |
+| Hermes, today | +0.21 | −0.03 | −0.34 | −0.73 | −1.12 |
+| Hermes + F10's skip at *s* = 0.7 | −0.39 | −0.63 | −0.94 | −1.33 | −1.72 |
+
+So "faster" is already met in production on Hermes at about 0.6 s or more a connector call, and on Pi at about 1.0 s
+or more. With F10 skipping 70% of checks, it is met at every latency from 0.3 s.
+
+**A compact packet.** The packet adds about 267 input tokens to each agent call. It is written to the agent's cache
+on the first call and read on later ones: about 267 × $0.10 + 0.7 × 267 × $0.01 per million, about $0.029 per 1,000
+tasks for the whole packet. Halving it would save about **$0.015 per 1,000 tasks** and no measurable wall (input is
+not what a call's wait is made of, D241), and every lexical cut so far lost facts (D258, D273). The agent's longer
+answers (+39 output tokens a call, about $0.02 per 1,000 tasks) are the facts being stated: not waste. **Not
+worth building:** the levers that move cost are the check (F10) and the cards.
