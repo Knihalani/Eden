@@ -1,6 +1,7 @@
 # F3: saying why a handed item matters to this request
 
-Status: 2026-11-12. Trial `packetWhy` (D1120), RESULT_PENDING.
+Status: 2026-11-12. Trial `packetWhy` (D1120) rejected on its pre-registered rule and deleted (D1121; code and tests in
+dcf47d8d5).
 
 ## The problem
 
@@ -79,8 +80,59 @@ the called-off rule. Same-day items whose times miss the request's lost their no
 
 ## The Pi pair (pre-registered, D1120)
 
-RESULT_PENDING
+**The rule.** It was committed in the trial's first commit (dcf47d8d5), and amended to two pooled replicates before
+any result was read (dcdb71bf1).
+
+**The setup:**
+- Pi, arms `both+ask` (the default) and `both~WHY+ask`, paired task by task in one process.
+- Haiku 5.5 for the agent and Eden's roles, with a Sonnet 5.5 grader, on Anthropic direct (lab transport, D97).
+- Shipped coverage, the market `direct` profile, payload notices and `--tenant-prompt`.
+- train1–6 and train1r–6r, seeds 41–44, on the 36 templates where the $0 funnel notes some item, with the hidden,
+  control and neutral variants.
+- Scripts: `packages/sim/lab/f3/go.sh` (`REP=1`, `REP=2`) and `report.py`. The task sets are in `sets.json`. The
+  scripts need the trial's commit, since the switch is deleted.
+
+| readout (WHY − base, template-clustered 95%) | base | why | difference |
+| --- | ---: | ---: | --- |
+| **primary**: hidden raised, tasks where the funnel notes the fact | 83/91 | 79/91 | −4.4 pts (−12.8..+2.2) |
+| hidden raised, all 36 templates | 361/512 | 359/512 | −0.4 pts (−3.1..+2.4) |
+| concerns, control + neutral | 4/1010 | 4/1010 | +0.0 pts (−0.3..+0.3) |
+| packet characters | 1,338,042 | 1,385,897 | +3.6% |
+
+The primary needed a lower bound above 0, and its point estimate is negative: rejected. Concerns did not move, and
+the bytes stayed within the 15% bound. On the primary tasks, 2 were gained and 6 lost. Across all hidden tasks the
+pair split 29 gained and 31 lost, which is noise.
+
+Spend: $5.25 in all, about 1,700 task-arms a replicate.
+
+**Why it failed:**
+1. **Ceiling.** Without the note the agent already raised 91% of the primary facts. Train's clashes are written
+   plainly ("Blood test, Thursday 5 Nov, 08:40", against breakfast at 8:30 that day), so the agent does the arithmetic
+   unaided. Train has none of H19's silent edits, where the item reads as an ordinary event and the clash is the only
+   tell. A suite that cannot show the loss cannot show the fix.
+2. **A wrong note hurts.** `support-cover-clash` lost 4 of the 6:
+   - The request is "Approve Sam's holiday request for 21–31 December".
+   - `timeWindow` reads only "31 December" of the range.
+   - The item's own clash, "Mark: Fri 18 Dec – Fri 1 Jan", was not joined into a range, because the join pattern
+     takes full weekday names only.
+   - So the note said "dated Thu 31 Dec, a day the request names", which pointed at the item's line repeating Sam's own
+     request, not at the overlapping leave. The agent followed the pointer.
 
 ## Recommendations
 
-RESULT_PENDING
+- **Re-test only on a suite whose clashes the agent misses unaided.** F8's dev20 suites (silent edits, clashes) are
+  the candidate. Re-test with both parser fixes:
+  - day ranges in the request ("21–31 December", "2–8 Nov") in `timeWindow`;
+  - short weekdays after a dash in the item's ranges.
+
+  Pre-register a primary restricted to tasks whose base arm misses the fact at a measurable rate.
+- **Say nothing when unsure.** A note that names a partial match (the request's day found only in the item's echo of
+  the request) is worse than none. Require the noted span not to be the request's own words echoed: a line naming the
+  request's subject.
+- **Versions.** "Changed on 23 Oct: was 11:00–15:00" needs a per-user store of an item's earlier times across syncs,
+  bounded, sanitised, frozen and persisted with the user, with an isolation test. No lab suite edits an item between
+  two syncs before its request. Build it only with such a suite (a `--days` world whose planted item is edited
+  overnight), or the store cannot be measured.
+- **The push check's `on`/`hits`.** F6 noted that the check's reply already names, per item, what of the request it
+  lands on, and that this is discarded. It is model text, so it needs `safeLine`, redaction and the data envelope. It
+  costs nothing extra, but exists only when the check runs. It is untested here.

@@ -749,12 +749,6 @@ export interface EngineConfig {
    * model, no call.
    */
   revisionDiff: boolean;
-  /**
-   * F3 (trial, off; `why.ts`): each item a packet or ask answer hands over gets Eden's own note on why it bears on the
-   * request, when its dates meet the days the request names: "(Eden: dated Thu 29 Oct, a day the request names; its
-   * 14:00-17:30 overlaps the request's 16:40)". No model and no call; fixed words, numbers and day names only.
-   */
-  packetWhy: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -911,5 +905,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
-  packetWhy: false,
 };

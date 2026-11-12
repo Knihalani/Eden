@@ -127,7 +127,6 @@ import {
   renderPacket,
   shownText,
 } from "./render";
-import { whyNote } from "./why";
 import {
   callParties,
   MAX_CHECKED,
@@ -5960,15 +5959,7 @@ export class ContextPartner {
         : {}),
       ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...this.whyOf(cue),
     };
-  }
-
-  /** `packetWhy` (F3, trial): the render option that notes why each item bears on the request (`why.ts`). */
-  private whyOf(cue: Cue): Pick<Parameters<typeof renderPacket>[1], "why"> {
-    if (!this.config.packetWhy || !cue.time) return {};
-    const input = { time: cue.time, raw: cue.raw, offset: cue.offset, now: cue.at };
-    return { why: (item: ContextItem) => whyNote(item, input) };
   }
 
   /**
@@ -6071,7 +6062,6 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...this.whyOf(cue),
     };
     const injection: Injection = {
       ...s.scope,
