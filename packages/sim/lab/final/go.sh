@@ -199,6 +199,17 @@ fi
   bash packages/sim/lab/final/report.sh "$L" "$SUITE"
   echo
   python3 -I packages/sim/lab/final/cost.py "$L"
+  echo
+  python3 -I packages/sim/lab/final/wall.py "$L" --hold
+  echo
+  echo "== answers rejected by batch.ts put (format failures, re-queued and answered again; F7 §13), by arm and role"
+  if [ -e "$EDEN_LAB_QUEUE/invalid.jsonl" ]; then
+    python3 -I -c 'import json,sys,collections
+c=collections.Counter((r.get("run"),r.get("role")) for r in map(json.loads,open(sys.argv[1])) if r)
+[print(f"  {run} {role}: {n}") for (run,role),n in sorted(c.items(),key=str)]' "$EDEN_LAB_QUEUE/invalid.jsonl"
+  else
+    echo "  none"
+  fi
   if [ -e "$L/rh-final.json" ]; then
     echo
     echo "== realism heavy (F8, D1103): raw against final, single-shot"
