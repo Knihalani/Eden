@@ -706,3 +706,6 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| D1250 `askCoverage` (F11) | `askCoverage` (engine, off) | F11 | 2026-11-12 | The rule of D1252's run (below) |
+| D1251 `pushCheckCoverage` (F11) | `pushCheckCoverage` (engine, off) | F11 | 2026-11-12 | The rule of D1252's run (below) |
+| D1252 `+askfirst` (F11) | `ASK_CONTEXT_DESCRIPTION_FIRST` (@eden/protocol; lab flag `+askfirst`) | F11 | 2026-11-12 | Multi-turn Pi on the queue transport (D1101), train1–6 seeds 41–43, hidden/control/neutral, `--limit 1` (54 tasks an arm): arms `both+ask` (B), `both+ask+askfirst~ASK` (`askCoverage`) and `both+ask+askfirst~ALL` (both switches), with `tools`. An arm is promoted if, against B, its connector calls a task (agent's + Eden's on the task) fall by at least 0.3, its agent model calls a task do not rise by more than 0.05, hidden raised is not lower by more than 1 task, and control plus neutral concerns do not rise; else deleted |

@@ -1,7 +1,7 @@
 /**
  * The queue transport's batcher (F9, D1101; README.md here, ../../src/lab/queue-transport.ts). LAB ONLY, sim data.
  *
- *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--max-chars N]
+ *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--skip-role R] [--max-chars N]
  *   bun packages/sim/lab/subagent/batch.ts put --dir Q B.answers.json
  *   bun packages/sim/lab/subagent/batch.ts status --dir Q
  *   bun packages/sim/lab/subagent/batch.ts requeue --dir Q [--older-min 30]
@@ -115,6 +115,8 @@ if (cmd === "take") {
   const n = Number(opt("n", "20"));
   const out = opt("out");
   const role = opt("role");
+  // `--skip-role R` (F11): every role but R, so a Haiku worker leaves the Sonnet grader's calls to a Sonnet worker.
+  const skipRole = opt("skip-role");
   const maxChars = Number(opt("max-chars", "400000"));
   if (!out) throw new Error("take needs --out FILE");
   // Oldest first, so a long-waiting request is not starved by newer ones.
@@ -132,6 +134,7 @@ if (cmd === "take") {
       continue;
     }
     if (role && req.role !== role) continue;
+    if (skipRole && req.role === skipRole) continue;
     const size = req.system.length + req.messages.reduce((k, m) => k + m.content.length, 0);
     if (batch.length && chars + size > maxChars) break;
     try {

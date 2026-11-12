@@ -176,6 +176,23 @@ export const ASK_NUDGE =
   "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
   "those specifics, if you have it.";
 
+/**
+ * `pushCheckCoverage` (D1251, trial): the lead of a candidates packet the push check picked, in place of
+ * `CANDIDATES_LEAD`. Fixed words (D11, D19). It says what was done (the search and the check), keeps the look-alike
+ * guard, and does not say "nothing else exists" (D257: an all-clear made the agent skip the ask that finds more).
+ */
+export const CHECKED_COVERAGE_LEAD =
+  `${EDEN_NOTE}searched the user's connected sources for this request, and a check picked these items as bearing ` +
+  "on it; they carry what was found. Before using one, check it is about the same person, thing and date as the " +
+  "request and still current; if it is not, ignore it and do not mention it.";
+
+/**
+ * `askCoverage` (D1250, trial): an ask answer's closing line when every chosen source answered: the sources by the
+ * operator's ids (never source text), so the agent knows its own per-source searches would cover the same ground.
+ */
+export const askCoverageLine = (ids: readonly string[]) =>
+  `${EDEN_NOTE}searched ${ids.join(", ")} for this; every one answered, and these are its matches.`;
+
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;

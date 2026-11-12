@@ -9,3 +9,15 @@ export const ASK_CONTEXT_DESCRIPTION =
   "Ask the user's context partner a question. It searches the user's connected sources (mail, calendar, " +
   "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
   "people, projects or history that is not in the conversation.";
+
+/**
+ * D1252 (F11, trial; the lab's `+askfirst`): `ask_context` described as the agent's first, fast search. Eden answers
+ * from its local index of every connected source in milliseconds, where each of the agent's own per-source searches
+ * is a connector call (0.3–2 s and, on paid connector plans, money). It says when to fall back to a source's own
+ * tool, so the agent does not stop searching where the answer is short (D257's lesson).
+ */
+export const ASK_CONTEXT_DESCRIPTION_FIRST =
+  "Search all of the user's connected sources (mail, calendar, documents, CRM, chat and more) at once. It answers " +
+  "in milliseconds from a local index, with citations, and says which sources it searched. Call it first, before " +
+  "any per-source search tool, whenever the request depends on the user's own data; one question can cover " +
+  "several sources. Use a per-source search tool only for what its answer does not cover.";

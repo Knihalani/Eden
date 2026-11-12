@@ -152,6 +152,15 @@ describe("pi-ab conditions", () => {
       expect(() => parseCondition(n, { config: ALL })).toThrow(/nokey/);
     expect(pairedWith("eden+nokey")).toBe("eden");
   });
+  test("+askfirst: ask_context described as the first search, a harness setting (F11, D1252)", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const c = parseCondition("both+ask+askfirst", { config: ALL, defaults });
+    expect([c.askFirst, c.askTool, c.config]).toEqual([true, true, ALL]);
+    expect(parseCondition("eden+askfirst", { config: ALL, defaults }).askFirst).toBe(true);
+    expect(parseCondition("both+ask", { config: ALL }).askFirst).toBe(false);
+    // Without ask_context there is nothing to describe.
+    for (const n of ["both+askfirst", "tools+askfirst"]) expect(() => parseCondition(n, { config: ALL })).toThrow();
+  });
   test("+ephemeral, +ephemeralBp: how earlier requests' packets are kept, a harness setting (D336)", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
     expect(parseCondition("eden", { config: ALL }).packets).toBe("kept");

@@ -120,7 +120,9 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
+  askCoverageLine,
   CANDIDATES_LEAD,
+  CHECKED_COVERAGE_LEAD,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -2111,7 +2113,11 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                this.candidateFrame(
+                  candidates.unsettled !== undefined,
+                  // D1251: the check picked these (it was called and named them), so the lead says so.
+                  this.config.pushCheckCoverage && check?.called === true && check.yes != null,
+                ),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2176,6 +2182,7 @@ export class ContextPartner {
       searched.closed === true || s.closed,
       unconfirmed,
       unswept,
+      this.config.askCoverage,
     );
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
@@ -2789,12 +2796,12 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false): PacketFrame {
+  private candidateFrame(nudge = false, checked = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      lead: `${checked ? CHECKED_COVERAGE_LEAD : CANDIDATES_LEAD}${nudge ? ` ${ASK_NUDGE}` : ""}`,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
@@ -6348,8 +6355,19 @@ function honestAnswer(
   closed = false,
   unconfirmed?: ReadonlyMap<string, number>,
   unswept?: ReadonlyMap<string, number>,
+  coverage = false,
 ): string {
   const told = reachAnswer(packet, sources, unresolved, closed);
+  // `askCoverage` (D1250): only an answer with items whose every chosen source answered, nothing left out.
+  const whole =
+    coverage &&
+    packet !== "" &&
+    told === packet &&
+    !unconfirmed?.size &&
+    !unswept?.size &&
+    (sources ?? []).length > 0 &&
+    (sources ?? []).every((x) => ANSWERED.has(x.status));
+  if (whole) return `${told}\n${askCoverageLine((sources ?? []).map((x) => x.sourceId))}`;
   const notes: string[] = [];
   const list = (m: ReadonlyMap<string, number>) => [...m].map(([id, n]) => `${id} (${n})`).join(", ");
   if (unconfirmed && unconfirmed.size > 0) {

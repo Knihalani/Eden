@@ -119,7 +119,7 @@ import * as engineExports from "@eden/engine";
 const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
-import type { AgentEvent, ContextItem } from "@eden/protocol";
+import { ASK_CONTEXT_DESCRIPTION_FIRST, type AgentEvent, type ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
@@ -1440,7 +1440,8 @@ async function runWorld(
       if (askTool && partner) {
         tools.push({
           name: "ask_context",
-          description: ASK_DESCRIPTION,
+          // `+askfirst` (D1252): described as the agent's first, fast search.
+          description: cond.askFirst ? ASK_CONTEXT_DESCRIPTION_FIRST : ASK_DESCRIPTION,
           label: "ask_context",
           parameters: askParams,
           prepareArguments: (a) => {
