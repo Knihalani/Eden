@@ -229,12 +229,21 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
     expect([...sheet.keys()].some((s) => s.includes("office closed"))).toBe(false);
   });
 
-  test("the sheet's size is bounded by the switch", async () => {
-    const model = naming("nothing");
-    const { warm, handed } = setup({ pushCheckSheet: 1 }, model);
-    await warm();
-    await handed(REQUEST);
-    expect(rules(model.calls.at(-1)!).size).toBe(1);
+  test("rules that fit are all read; more than the switch, and no sheet is sent (D1183)", async () => {
+    for (const [size, sheet] of [
+      [80, 71],
+      [40, 0],
+    ] as const) {
+      const model = naming("nothing");
+      const t = setup({ pushCheckSheet: size }, model);
+      await t.warm();
+      await t.site();
+      await t.handed(REQUEST);
+      const last = model.calls.at(-1)!;
+      expect(rules(last).size).toBe(sheet);
+      // No sheet: main's prompt, two messages.
+      if (sheet === 0) expect(last.messages.length).toBe(2);
+    }
   });
 
   test("isolation: one user's cards are never on another's sheet", async () => {
@@ -304,6 +313,20 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
 });
 
 describe("the sheet's prompt and parser", () => {
+  test("a rules-list entry is a rule even with an item number; a no there without one is skipped", () => {
+    const yes = (e: string) => `{"items":[],"rules":[${e}]}`;
+    expect(parseCompareSheet(yes(`{"r":1,"i":1,"on":"x","hits":"y","act":true}`), 3, 2)).toEqual({
+      items: [],
+      rules: [0],
+    });
+    expect(parseCompareSheet(yes(`{"rule":1,"on":"x","hits":"y","act":false}`), 3, 2)).toEqual({
+      items: [],
+      rules: [],
+    });
+    // A yes in the rules list whose rule cannot be read fails open (null), as an unreadable item yes does.
+    expect(parseCompareSheet(yes(`{"rule":1,"on":"x","hits":"y","act":true}`), 3, 2)).toBeNull();
+  });
+
   const sheet: SheetCard[] = [
     {
       id: "mail:a",

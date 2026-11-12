@@ -144,7 +144,7 @@ export interface PushCheckInput {
   items: ReaderItem[];
   today: string;
   /** `pushCheckSheet` (F5): the user's active constraint cards, in the order the sheet lists them. */
-  sheet?: SheetCard[];
+  sheet?: readonly SheetCard[];
   /**
    * `pushCheckSheetRefs` (F5): a pool item that is on the sheet is sent as its title and a pointer to its rule, not
    * its text, so the cached sheet stands in for part of the uncached pool.
@@ -184,7 +184,7 @@ export function checkKey(input: PushCheckInput): string {
   );
   for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) h.update(`${itemMark(it)}\t${it.text}\n`);
   // With no sheet the key is main's, so recorded replies replay; a sheet's every card is part of what was read.
-  const sheet = input.sheet?.slice(0, SHEET_MAX_CARDS) ?? [];
+  const sheet = sheetOfInput(input);
   if (sheet.length > 0) h.update(`sheet${input.sheetRefs ? "+refs" : ""}\n${sheetText(sheet)}`);
   return h.digest("hex").slice(0, 32);
 }
@@ -202,8 +202,20 @@ const oneLine = (v: string, n: number) =>
     .slice(0, n);
 
 /** `pushCheckSheet` (F5): the sheet's rules, one fenced line each, numbered from 1 in the order given. */
+// A checked push renders its sheet for the kept-check key, the cache key, the prompt and the call (about 1 ms each at
+// 80 cards): the text is kept per sheet array, which `checkPush` builds once.
+const rendered = new WeakMap<readonly SheetCard[], string>();
+
+/** The input's sheet, bounded; the same array when already within bounds, so its rendering is kept (`sheetText`). */
+function sheetOfInput(input: { sheet?: readonly SheetCard[] }): readonly SheetCard[] {
+  const sheet = input.sheet ?? [];
+  return sheet.length > SHEET_MAX_CARDS ? sheet.slice(0, SHEET_MAX_CARDS) : sheet;
+}
+
 export function sheetText(sheet: readonly SheetCard[]): string {
-  return sheet
+  const kept = rendered.get(sheet);
+  if (kept !== undefined) return kept;
+  const text = sheet
     .slice(0, SHEET_MAX_CARDS)
     .map(
       (c, i) =>
@@ -212,6 +224,8 @@ export function sheetText(sheet: readonly SheetCard[]): string {
         `${inert(oneLine(c.title, SHEET_TITLE_CHARS))}: ${inert(oneLine(c.statement, SHEET_STATEMENT_CHARS))}</rule>`,
     )
     .join("\n");
+  rendered.set(sheet, text);
+  return text;
 }
 
 /** `pushCheckSheet` (F5): the sheet's rule numbers (1-based) whose items are among the pool's read items. */
@@ -229,7 +243,7 @@ export function inItems(sheet: readonly SheetCard[], items: readonly ReaderItem[
  * then the day, the request and the items, each fenced as data.
  */
 export function checkMessages(input: PushCheckInput): ChatMessage[] {
-  const sheet = input.sheet?.slice(0, SHEET_MAX_CARDS) ?? [];
+  const sheet = sheetOfInput(input);
   const ruleOf = new Map<string, number>(input.sheetRefs ? sheet.map((c, k) => [c.id, k + 1] as const) : []);
   const items = input.items.slice(0, CHECK_MAX_ITEMS).map((it, i) => {
     const rule = ruleOf.get(it.id);
@@ -310,18 +324,16 @@ export function parseCompareSheet(
   }
   if (!Array.isArray(entries)) return null;
   if (listed !== undefined && !Array.isArray(listed)) return null;
-  let all: unknown[] = entries;
-  if (Array.isArray(listed)) {
-    // Rule entries are read after the items' own, whatever list holds them.
-    all = [
-      ...entries.slice(0, COMPARE_MAX_ENTRIES * 2),
-      ...listed.slice(0, SHEET_MAX_NAMED * 2).map((e) => (e && typeof e === "object" && !("r" in e) ? null : e)),
-    ];
-  }
+  // Each entry with the list it came from: an entry of the rules list is a rule, whatever else it carries (an "i"
+  // copied from the items' format must not name a pool item).
+  const all: { e: unknown; rule: boolean }[] = entries
+    // A sheet's rules may come inside "items" too, after the items' own.
+    .slice(0, COMPARE_MAX_ENTRIES * 2 + (rules > 0 ? SHEET_MAX_NAMED * 2 : 0))
+    .map((e) => ({ e, rule: false }));
+  if (Array.isArray(listed)) for (const e of listed.slice(0, SHEET_MAX_NAMED * 2)) all.push({ e, rule: true });
   const out: number[] = [];
   const named: number[] = [];
-  const max = rules > 0 ? COMPARE_MAX_ENTRIES * 2 + SHEET_MAX_NAMED * 2 : COMPARE_MAX_ENTRIES * 2;
-  for (const e of all.slice(0, max)) {
+  for (const { e, rule } of all) {
     if (!e || typeof e !== "object") return null;
     const { i, r, hits, act } = e as { i?: unknown; r?: unknown; hits?: unknown; act?: unknown };
     if (act !== true && act !== "true") continue;
@@ -330,7 +342,8 @@ export function parseCompareSheet(
     if (hits !== undefined && typeof hits !== "string") return null;
     // A verdict the entry's own comparison contradicts is a no: the point lands on nothing of the request's.
     if (hits === undefined || NO_HIT.test(hits)) continue;
-    if (i === undefined && r !== undefined) {
+    if (rule || (i === undefined && r !== undefined)) {
+      // A yes in the rules list with no readable rule number is a format error (fail open), as an item's is.
       const k = typeof r === "string" && /^\d+$/.test(r) ? Number(r) : r;
       if (typeof k !== "number" || !Number.isInteger(k) || k < 1 || k > rules) return null;
       if (!named.includes(k - 1) && named.length < SHEET_MAX_NAMED) named.push(k - 1);
@@ -408,7 +421,7 @@ export class PushChecker {
   async check(scope: Scope, session: string, input: PushCheckInput, signal: AbortSignal): Promise<PushCheckRead> {
     this.stats.asked++;
     const items = input.items.slice(0, CHECK_MAX_ITEMS);
-    const sheet = input.sheet?.slice(0, SHEET_MAX_CARDS) ?? [];
+    const sheet = sheetOfInput(input);
     const none = { yes: null, costUsd: 0, called: false, overBudget: false };
     if (items.length === 0 || signal.aborted) return none;
     // A sheet is up to `SHEET_MAX_CARDS` lines of about 50 tokens, written to the cache at 1.25x when it changes.

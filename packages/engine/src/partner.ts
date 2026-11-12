@@ -2629,11 +2629,13 @@ export class ContextPartner {
     const out: SheetCard[] = [];
     const said = new Set<string>();
     for (const { id, card, item } of rows) {
-      if (out.length >= n) break;
       const statement = sanitizeForStore(card.statement);
       const key = statement.toLowerCase().replace(/\s+/g, " ").trim();
       if (!key || said.has(key)) continue;
       said.add(key);
+      // A heavy user's rules do not fit: the newest `n` of them speak on neutral requests more than main does
+      // (F5 §11d, D1183), so the check reads the pool alone, as without a sheet.
+      if (out.length >= n) return [];
       out.push({
         id,
         kind: card.kind,

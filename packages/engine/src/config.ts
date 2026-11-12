@@ -735,7 +735,8 @@ export interface EngineConfig {
    * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
    * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
    * reply names brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards
-   * (an end before the user's day) and `none` cards are left out; the newest items' cards are kept first.
+   * (an end before the user's day), `none` and `preference` cards are left out, newest items first. A user with more
+   * active rules than this gets no sheet (D1183: a newest slice of a heavy user's rules speaks on neutral requests).
    */
   pushCheckSheet: number;
   /**
