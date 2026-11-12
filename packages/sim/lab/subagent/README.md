@@ -120,6 +120,14 @@ The tools that measured it are in `fidelity/`: `check-fidelity.py` (recorded che
 against the API), `random-rows.ts` (a random sample of `--check-dump` rows), `cards-fidelity.py` and
 `check-agree.py`.
 
+## Check-prompt arms: use the API (D1104)
+
+A change to the push check's own prompt or rule cannot be read on the queue. A calibrated recipe (`fidelity/recipes/`)
+and a paired-delta replay (`fidelity/paired-delta.py`) were both measured against the API's real answers under
+changed prompts, and neither reproduces them. What does carry over: `bun packages/sim/src/lab/check-api-replay.ts DUMP
+DIR` seeds a queue with recorded API check replies, so a run whose check prompts match recorded ones byte for byte
+reads the API's own answers ($0; `calls.jsonl` marks them `hit`).
+
 ## Never
 
 Send real user data (the queue is read by subagents and kept on disk), point it at the pilot (`--world-file`), or
