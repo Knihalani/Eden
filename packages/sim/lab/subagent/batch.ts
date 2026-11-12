@@ -94,11 +94,22 @@ export function invalid(req: QueuedRequest, a: Answer): string | null {
 }
 
 /**
+ * The first line of every subagent prompt (F9, D1101): F5 saw batch workers call remote-session tools (they created
+ * sessions). A worker reads one file and writes one file; nothing else.
+ */
+export const WORKER_TOOLS_LINE =
+  "TOOLS: use only Read and Write (and Bash only to run the batch.ts command your task names). Never call any " +
+  "mcp__ tool, never create, message, interrupt or archive a session, never spawn an agent, never push or edit " +
+  "any other file.";
+
+/**
  * `prompt --recipe fast` (F9, D1101): the subagent replays a small model with thinking off, answering each request
  * in isolation from its first reading. Measured against recorded API replies in docs/research/f9-subagent-transport.md.
  */
 export function fastPrompt(batch: string, answers: string): string {
-  return `You are a raw model endpoint replaying a small, fast language model that runs with thinking disabled. Read \
+  return `${WORKER_TOOLS_LINE}
+
+You are a raw model endpoint replaying a small, fast language model that runs with thinking disabled. Read \
 the file ${batch} (use the Read tool; it is a JSON array). Each element is one model request: {id, role, model, \
 system, messages, tools?, outputSpec}.
 
@@ -119,7 +130,9 @@ Write the answers with the Write tool to ${answers} as a JSON array [{"id": "<id
 
 /** The prompt a driver gives the subagent that answers `batch` into `answers`. */
 export function driverPrompt(batch: string, answers: string): string {
-  return `You are standing in for a language model API. Read the file ${batch} (use the Read tool; it is a JSON array). \
+  return `${WORKER_TOOLS_LINE}
+
+You are standing in for a language model API. Read the file ${batch} (use the Read tool; it is a JSON array). \
 Each element is one model request: {id, role, model, system, messages, tools?, outputSpec}.
 
 For EACH request, produce exactly the reply the model named in \`model\` would give: follow its \`system\` prompt and the \
