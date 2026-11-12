@@ -11,3 +11,7 @@
 2026-11-12T13:40:06Z go: step 2 single-shot raw and final (drive the queue now)
 2026-11-12T14:23:19Z go: step 2 done
 2026-11-12T14:23:19Z go: step 2b multi-turn sample (drive the queue now)
+2026-11-12T14:35:12Z go: step 2b done
+2026-11-12T14:35:12Z go: step 2b' before coverage and arm (drive the queue now)
+2026-11-12T14:59:27Z go: step 2b' done
+2026-11-12T14:59:31Z go: done
