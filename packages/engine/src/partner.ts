@@ -758,6 +758,7 @@ export class ContextPartner {
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
+            ...(c.syncActivePollMs > 0 ? { activePollMs: c.syncActivePollMs } : {}),
             activeMs: c.syncActiveMs,
             sweepMs: c.syncSweepMs,
             dropMs: c.syncDropMs,

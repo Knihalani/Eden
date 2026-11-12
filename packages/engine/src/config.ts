@@ -749,6 +749,13 @@ export interface EngineConfig {
    * model, no call.
    */
   revisionDiff: boolean;
+  /**
+   * F3 (trial, 0 = off; D1131): while a user is active (`syncActiveMs`), the sync's tick polls one page of each warm
+   * synced source whose last poll is older than this (ms), in the background. A quiet source is otherwise trusted for
+   * up to `syncMaxStaleMs` (6 h), so a silent edit there goes out as the pre-edit copy (D1126). No request waits for
+   * it; its price is connector calls per active user-hour.
+   */
+  syncActivePollMs: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -905,4 +912,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
+  syncActivePollMs: 0,
 };
