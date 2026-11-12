@@ -515,6 +515,12 @@ user's background enrichment is a one-time backfill plus a daily trickle:
 | 30 days of use, estimate | ≈ $0.038 | ≈ $0.026 |
 | Per 1,000 tasks at 12–20 requests a day for 30 days, estimate | ≈ $0.06–0.10 | ≈ $0.04–0.07 |
 
+**Correction (F5's finding, relayed 2026-11-12; F8 re-recording):** the recorded coverage ran on the wall clock, not
+the sim world's, so `cardsLean`'s 7-day window skipped most of a world's items. A heavy world's backfill is about
+16–17 card calls a new user, not 7–9: about twice the "since D244" column's calls, so about $0.016–0.018 a new user
+and, over 30 days, about $0.034 rather than $0.026 **[EST: the measured $ a call times the corrected count; the
+daily trickle is unchanged]**. Re-read this table when F8's re-recording lands.
+
 Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
 is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
 −45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
