@@ -338,12 +338,7 @@ export interface SyncStats {
   deleted: number;
 }
 
-/** `activePollMs`: the items one floor poll lists (newest first). */
-const FLOOR_PAGE = 20;
-
 export class SyncManager {
-  /** `activePollMs`: when the floor last polled each source (in memory only; a source's state going takes it along). */
-  private readonly floorAt = new WeakMap<SourceSync, number>();
   private readonly users = new Map<string, UserSync>();
   private readonly budget: Gcra<string>;
   private ticking = false;
@@ -1147,20 +1142,17 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
-    // `activePollMs`: an active user's quiet sources polled on a floor (one page each, newest first, so an item edited
-    // since is in it), within the per-source budget; a source busy or backing off waits for the next tick.
+    // `activePollMs`: an active user's sources whose last complete poll is older than the floor are polled in the
+    // background, as a complete poll (read to the boundary, the change rate taught): a one-page read left the items
+    // it stored as a false boundary for the next poll, which then marked the source current short of what changed
+    // (D1131's review). Busy, backing off or out of budget: the next tick looks again.
     const floor = this.o.activePollMs ?? 0;
     if (floor > 0) {
       await Promise.all(
         [...u.sources.values()].map(async (s) => {
           const source = byId.get(s.id);
-          const last = Math.max(s.polledAt, this.floorAt.get(s) ?? -Infinity);
-          if (!source || s.phase !== "warm" || s.busy || now < s.retryAt || now - last < floor) return;
-          if (this.budget.take(budgetKey(u, s)) > 0) return;
-          // A one-page poll that does not reach what it already holds is not a complete poll (`polled` keeps the old
-          // `polledAt`): the floor keeps its own time, so it reads the source once an interval, not every tick.
-          this.floorAt.set(s, now);
-          await this.run(s, async () => void (await this.floorPoll(u, s, source)));
+          if (!source || s.phase !== "warm" || s.busy || now < s.retryAt || now - s.polledAt < floor) return;
+          await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
         }),
       );
       if (u.gone) return;
@@ -1555,28 +1547,6 @@ export class SyncManager {
         this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false, undefined, undefined, from)),
       );
     }
-  }
-
-  /**
-   * `activePollMs`: one listing call, the source's newest `FLOOR_PAGE` items, stored as a poll's page is (an item
-   * edited since it was synced is listed first, newest-modified, and replaces the held copy). Not a complete poll: the
-   * change-rate posterior and `polledAt` are left to the polls that read to their boundary. Returns what it stored.
-   */
-  private async floorPoll(u: UserSync, s: SourceSync, source: Source): Promise<number> {
-    const readMark = this.marks;
-    const page = await this.list("poll", source, u.scope, undefined, FLOOR_PAGE, {
-      timeoutMs: this.o.timeoutMs,
-      reserve: SERVING_HEADROOM,
-    });
-    if (u.gone) return 0;
-    this.count(false);
-    if (typeof page === "string") {
-      if (page !== "limited" && page !== "busy") this.failed(s, page);
-      return 0;
-    }
-    this.stats.backgroundItems += page.items.length;
-    s.failures = 0;
-    return this.store(u, s, page.items, readMark, new Set<string>(), this.o.keepCut);
   }
 
   /**
