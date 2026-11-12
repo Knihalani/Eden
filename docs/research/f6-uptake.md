@@ -62,6 +62,25 @@ since shipped coverage is not recorded; `run.sh dv dev20 41,42,43,44 hidden,cont
 decides; a lever that passes it is promoted only if its dev20 uptake difference has a point estimate ≥ 0 and its
 dev20 Sonnet-confirmed concerns are not up. dev20 uptake is reported with its own clustered interval.
 
+**Re-registration for the subagent transport (pre-registered in the commit adding this paragraph, before any
+call through it).** There will be no Anthropic API credit; the lab's model calls go to Haiku subagents (graders
+Sonnet subagents) through F9's queue transport, in its single-shot agent mode: the agent's answer is one model call
+that sees the house prompt, the request, Eden's packet and ask answer. Results are labelled "subagent-simulated,
+single-shot" and are not Pi numbers. The train and dev20 Pi rules above are superseded by this one.
+
+- Tasks: seed 41, hidden and control, on train1–6 and dev20a–d, only those whose $0 funnel push hands the planted
+  item (hidden) or its look-alike (control): 137 + 119 on train, 29 + 21 on dev20 (`bun run funnel --suite train
+  --seeds 41 --json`, `pushHanded`). If the transport cannot take them all, tasks are taken in ascending sha-1 of
+  their id, at least 100 hidden on train.
+- Arms: `both+ask` (default), `both~C+ask` (`checkedLead`), `both+ask+guide` (`CONTEXT_GUIDE`). The combined arm is
+  dropped.
+- Uptake: P(raised | planted in the packet the answer saw). Where the arms saw the same packet items (the check's
+  reply replayed), differences are paired by task (McNemar exact, and a template-clustered bootstrap); otherwise
+  unpaired, clustered by template.
+- A lever is promoted only if, on train, uptake rises with its 95% lower bound above 0, hidden raised is not down
+  (point estimate ≥ 0), Sonnet-confirmed control concerns are not up, and mean packet bytes rise at most 10%; and
+  on dev20 its uptake point estimate is ≥ 0 and control concerns are not up. Else it is deleted.
+
 ## What happened
 
 - The first run (four processes, one a seed, four arms each) started at 08:06 UTC. Seeds 41 and 43 "finished" in
