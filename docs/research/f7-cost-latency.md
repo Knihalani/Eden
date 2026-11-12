@@ -281,3 +281,22 @@ held stream's wall are real; served by subagents (D1101) neither exists, so it i
 - a pre-registered Pi pair at time scale 1 against the default, read on wall p50 (upper bound below 0), total $ (the
   aborts' cost, reported), hidden raised (lower bound above −1.5), and the share of first calls aborted;
 - Hermes too, since its prompt is the one that makes the aborts dear.
+
+## 10. Target 3+4: Eden net cheaper and faster than the agent alone (new mandate, 09:30 UTC)
+
+The integrator's mandate: the agent with Eden must cost less and finish sooner than the agent alone. Today Eden adds
+about $0.24 per 1,000 tasks on Hermes, and wall time of about +0.1 s on Hermes and +0.4 s on Pi, mostly the push check
+on the request path. Everything is re-opened under this priority, D248 included.
+
+**Baseline run, pre-registered before its first call (report only, no rule).** Multi-turn Pi (the real loop, not
+`--agent-sim single`), **served by subagents (D1101)**:
+- Two processes sharing one queue (`.local/q-f7b`), labelled `EDEN_LAB_QUEUE_RUN=raw` and `final`: `--conditions
+  tools` and `--conditions both+ask`.
+- `--suite train --seeds 41 --variants hidden,control,neutral --limit 2` (36 tasks an arm).
+- Haiku 5.5 in every role, `--tenant-prompt`, `--push payload`, the `direct` profile, time scale 1, cards replayed.
+- `--config '{"pushCheckWaitMs":900000}'`, so the push waits for its subagent-served check as it would for the API's
+  (about 1 s). No other setting differs from the default.
+
+Reported per arm: agent model calls and tool calls a task; tokens a call by role; $ per 1,000 tasks and per task
+(`price-queue.py`) [EST]; and a modelled wall a task: H3's fit summed over the task's agent calls and the push check,
+plus the connector time the timeline measures [EST]. Measured walls are the subagents' and are not read.
