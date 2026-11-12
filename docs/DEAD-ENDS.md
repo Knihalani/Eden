@@ -77,6 +77,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1182 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | The bar: on a user with 300 rule cards, the selection must bring back at least half of what a 300-card sheet… |
 | D1271 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | asked of the check it lost facts: planted handed 94 against main's 99 of 120 hidden rows (bar: ≥ 96)… |
 | D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
+| D1552 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). |  |
 | D1156 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | because the funnel's on-demand poll already hands current copies, while connector calls rose 3.52 → 5.52 a… |
 
 ## Reader

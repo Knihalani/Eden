@@ -22,11 +22,15 @@ timeline instead and adds up what the agent waits for, in order:
 
 Arms are paired with the raw arm task by task; intervals are a bootstrap over templates (2,000 draws, seed 7).
 
-`--hold` adds the hold-and-release reading (`holdFirstCall`, D1551): the agent's first model request goes out when
-the user's message arrives, beside the check, and its reply is held until the check answers. A check that hands
-nothing releases it, so the task's wait falls by min(check, first call). A check that hands a packet aborts the call
-and sends it again with the packet, so the wait is unchanged and the aborted call's input is paid for nothing; the
-count of those is printed for the cost side. The agent sees the default's context either way.
+`--hold` adds two hold-and-release readings. In both the agent's first model request goes out when the user's
+message arrives, beside the check, and its reply is held until the check answers; a released call cuts the task's
+wait by min(check, first call), and any other checked turn aborts the call and sends it again as today (no change
+in the wait; the aborted call's input is paid for nothing, and their count is printed for the cost side). The agent
+sees the default's context either way.
+- "speculate" (F10's proxy option, D1273): the call is sent as if the turn got no packet, so it is released only
+  when the turn hands nothing. With `pushLookup` a silent check still hands reference records, so it never is.
+- "ahead" (D1551): the call is sent with the packet a silent check would hand (the lookup's records are built with
+  no model), so it is released whenever the check names nothing.
 """
 
 import argparse
@@ -137,15 +141,25 @@ def read_arm(run, name, check_out, check_wait_ms):
             late=late,
             other=max(0.0, other),
             handed=handed.get(tid, 0),
+            # The check named an item of some pool (a packet of checked candidates), as against a silent check whose
+            # turn got nothing or `pushLookup`'s reference records (D1252), which need no check answer to build.
+            named=any(any(p.get("checked") or []) for p in d.get("pushPools") or []),
         )
     return tasks, check_ms, check_out
 
 
-def wall(t, latency=None, hold=False):
+def released(t, hold):
+    """Whether a held first call is released: "speculate" needs a turn with no packet, "ahead" only a silent check."""
+    if not hold or not t["checks"] or not t["calls"]:
+        return False
+    return not t["named"] if hold == "ahead" else not t["handed"]
+
+
+def wall(t, latency=None, hold=None):
     """A task's wait in ms: at the measured connector latency (latency None) or at `latency` seconds a round."""
     conn = t["tools"] if latency is None else 1000.0 * latency * t["n_rounds"]
     w = t["model"] + conn + t["asks"] + t["check"] + t["other"]
-    if hold and t["checks"] and not t["handed"] and t["calls"]:
+    if released(t, hold):
         w -= min(t["check"], t["calls"][0])
     return w
 
@@ -215,15 +229,17 @@ def main():
                   f"{part(ts, 'other'):.0f} ms; late checks {sum(ts[i]['late'] for i in ids)}")
         rows = [("measured connector latency", None)] + [(f"{l:g} s a connector round", l) for l in lats]
         out[name] = {"n": n, "check_ms": check_ms, "rows": []}
-        for hold in ([False, True] if a.hold else [False]):
+        for hold in ([None, "speculate", "ahead"] if a.hold else [None]):
             if hold:
-                held = [i for i in ids if arm[i]["checks"] and not arm[i]["handed"]]
-                aborted = [i for i in ids if arm[i]["checks"] and arm[i]["handed"]]
-                print(f"    with hold-and-release (D1551): {len(held)} of {n} tasks released early, "
-                      f"{len(aborted)} first calls aborted and sent again ({len(aborted) / n:.2f} a task)")
+                held = [i for i in ids if released(arm[i], hold)]
+                aborted = [i for i in ids if arm[i]["checks"] and arm[i]["calls"] and not released(arm[i], hold)]
+                what = ("speculate (D1273): the first call sent with no packet" if hold == "speculate" else
+                        "speculate with the silent packet ahead (D1551)")
+                print(f"    {what}: {len(held)} of {n} tasks released early, {len(aborted)} first calls aborted "
+                      f"and sent again ({len(aborted) / n:.2f} a task)")
             for label, lat in rows:
                 k, r, f, d, lo, hi = paired(raw, arm, lambda t: wall(t, lat), lambda t: wall(t, lat, hold))
-                print(f"    {'hold: ' if hold else ''}{label}: {a.raw} {r:.0f} ms, {name} {f:.0f} ms, "
+                print(f"    {hold + ': ' if hold else ''}{label}: {a.raw} {r:.0f} ms, {name} {f:.0f} ms, "
                       f"{100 * d:+.1f}% ({100 * lo:+.1f}..{100 * hi:+.1f})")
                 out[name]["rows"].append(dict(hold=hold, latency=lat, raw=r, arm=f, change=d, lo=lo, hi=hi))
             mix = {}
@@ -235,7 +251,7 @@ def main():
                 mr = sum(MIX[k] * mix[k][0] for k in MIX)
                 mf = sum(MIX[k] * mix[k][1] for k in MIX)
                 kinds = ", ".join(f"{k} {mix[k][0]:.0f} -> {mix[k][1]:.0f} ({mix[k][2]})" for k in MIX)
-                print(f"    {'hold: ' if hold else ''}by kind, measured latency: {kinds}; on the 1:1:8 mix "
+                print(f"    {hold + ': ' if hold else ''}by kind, measured latency: {kinds}; on the 1:1:8 mix "
                       f"{mr:.0f} -> {mf:.0f} ms ({100 * (mf / mr - 1):+.1f}%)")
     if a.json:
         json.dump(out, open(a.json, "w"), indent=1)
