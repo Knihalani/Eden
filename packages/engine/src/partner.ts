@@ -711,8 +711,6 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
-      // `cardsRequestsWide` (trial, F1): the requests asked in varied forms (prompt form 4).
-      if (this.config.intent && this.config.cardsRequestsFix && this.config.cardsRequestsWide) cards.wideRequests();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
