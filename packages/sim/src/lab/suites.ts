@@ -27,10 +27,10 @@ import { plantHeldout16 } from "./hidden-heldout16";
 import { plantHeldout17 } from "./hidden-heldout17";
 import { plantHeldout18 } from "./hidden-heldout18";
 import { plantHeldout19 } from "./hidden-heldout19";
-import { plantDev20a } from "./hidden-dev20a";
-import { plantDev20b } from "./hidden-dev20b";
-import { plantDev20c } from "./hidden-dev20c";
-import { plantDev20d } from "./hidden-dev20d";
+import { dev20aBefore, plantDev20a } from "./hidden-dev20a";
+import { dev20bBefore, plantDev20b } from "./hidden-dev20b";
+import { dev20cBefore, plantDev20c } from "./hidden-dev20c";
+import { dev20dBefore, plantDev20d } from "./hidden-dev20d";
 import { plantLongtail } from "./hidden-longtail";
 import { REWORDED } from "./reworded";
 import { plantTrain1 } from "./hidden-train1";
@@ -39,6 +39,7 @@ import { plantTrain3 } from "./hidden-train3";
 import { plantTrain4 } from "./hidden-train4";
 import { plantTrain5 } from "./hidden-train5";
 import { withRevision } from "./revision";
+import { withSilent } from "./silent";
 import { plantTrain6 } from "./hidden-train6";
 import { formOf, rewordOf } from "./reword";
 import { plantSynth, readWorlds, SAMPLE_PATH, synthPath } from "./synth/suite";
@@ -110,6 +111,26 @@ const needsPrepared =
     if (!RARE_SOURCE_IDS.every((id) => id in world.sources))
       throw new Error(`${name}: call prepareWorld("${name}", world, seed) before planting (suites.ts)`);
     return plant(world, seed, variant);
+  };
+
+/**
+ * F3 (D1123): a suite that gives each silent edit's earlier copy (F8's `dev20xBefore`) sets it as the hidden task's
+ * `before`, matched by template; the harnesses then plant it for the backfill and swap the edit in (silent.ts). Control
+ * and neutral tasks are unchanged.
+ */
+const withBefore =
+  (
+    plant: Plant,
+    befores: (world: World, seed: number) => { template: string; before: NonNullable<HiddenTask["before"]> }[],
+  ): Plant =>
+  (world, seed, variant) => {
+    const tasks = plant(world, seed, variant);
+    if (variant !== "hidden") return tasks;
+    const by = new Map(befores(world, seed).map((b) => [b.template, b.before]));
+    return tasks.map((t) => {
+      const b = by.get(t.template);
+      return b ? { ...t, before: b } : t;
+    });
   };
 
 /**
@@ -222,10 +243,10 @@ export const SUITES: Record<string, Plant> = {
   // scaffold, the HiddenTask interface, the sim world API and a theme (work and admin; family and health; money and
   // home; travel and social), weighted to the weak points: indirect plans, questions, non-English, no word overlap,
   // silent edits, rare connectors, world knowledge (DEV20*_ lists). Not held out: tune on them. Not in `all`.
-  dev20a: needsPrepared("dev20a", plantDev20a),
-  dev20b: needsPrepared("dev20b", plantDev20b),
-  dev20c: needsPrepared("dev20c", plantDev20c),
-  dev20d: needsPrepared("dev20d", plantDev20d),
+  dev20a: needsPrepared("dev20a", withBefore(plantDev20a, dev20aBefore)),
+  dev20b: needsPrepared("dev20b", withBefore(plantDev20b, dev20bBefore)),
+  dev20c: needsPrepared("dev20c", withBefore(plantDev20c, dev20cBefore)),
+  dev20d: needsPrepared("dev20d", withBefore(plantDev20d, dev20dBefore)),
   // P2's reworded train (Q6): the same tasks, indirect wording. Tune on them as on train; not in `all`.
   ...Object.fromEntries(
     [plantTrain1, plantTrain2, plantTrain3, plantTrain4, plantTrain5, plantTrain6].map((p, i) => {
@@ -322,6 +343,19 @@ function registerRevision(name: string): boolean {
   return true;
 }
 
+/** The hand-written suites `+silent` applies to (F3, D1123): train and its rewordings. */
+export const SILENT_BASES = [1, 2, 3, 4, 5, 6].flatMap((n) => [`train${n}`, `train${n}r`]);
+
+/** Registers `<suite>+silent` (silent.ts) for a base in SILENT_BASES on first use; the bases are unchanged. */
+function registerSilent(name: string): boolean {
+  if (name in SUITES) return true;
+  if (!name.endsWith("+silent")) return false;
+  const base = name.slice(0, -"+silent".length);
+  if (!SILENT_BASES.includes(base)) return false;
+  SUITES[name] = withSilent(name, SUITES[base]!);
+  return true;
+}
+
 /**
  * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
  * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's,
@@ -350,7 +384,7 @@ export function parseSuites(arg: string): string[] {
                     ? TRAIN_RW
                     : [name];
     for (const n of names) {
-      if (!registerSynth(n) && !registerRevision(n) && !(n in SUITES))
+      if (!registerSynth(n) && !registerRevision(n) && !registerSilent(n) && !(n in SUITES))
         throw new Error(
           `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, dev20, ` +
             "synth, synth-train, synth-val, synth-test, synth:<file>)",
