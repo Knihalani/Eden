@@ -20,9 +20,9 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
-// `cardsState` and `pushStateFilter` (F2, D1193, on in the default; docs/research/f2-card-state.md): the card model says whether an
-// item's constraint is in force, lifted, met or superseded, and the push's pool leaves out an item carded none
-// because a constraint was lifted, met or superseded.
+// `cardsState` and `pushStateFilter` (F2, D1193, on in the default; docs/research/f2-card-state.md): the card model
+// says whether an item's constraint is in force, lifted, met or superseded, and the push's pool leaves out an item
+// carded none because a constraint was lifted, met or superseded.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const HOUR = 3_600_000;
