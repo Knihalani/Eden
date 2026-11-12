@@ -362,3 +362,28 @@ What it says (direction only: 36 tasks, subagents for the agent and the grader):
 **Hold-and-abort on final2's timelines** (`holdabort.py`, [EST]): wall −0.31 s a task on the mix, +$0.047 per 1,000
 tasks (0.57 first calls aborted a task: every hidden task, 8 of 12 control, 6 of 12 neutral). Facts are the
 default's by construction.
+
+### 10b. What it takes to beat the agent alone (arithmetic on B19's real-API Pi figures [EST])
+
+**B19, Pi, one request a session (real API, heldout19):**
+- raw: agent $0.26 per 1,000 tasks;
+- final: agent $0.26, plus Eden $0.25 (cards and intent $0.088, check $0.162);
+- wall: final − raw = +0.39 s a task; the check's wait is about 0.86 s.
+
+| lever | Eden $ per 1,000 | wall vs raw | who |
+| --- | ---: | ---: | --- |
+| today | +0.25 | +0.39 s | |
+| skip the check on a share *s* of pushes (F10's CPU index, uncertain band only) | −0.162 × *s* | −0.86 × *s* s | F10 |
+| hold-and-abort on the checks left (§9; Pi) | +0.05 × (1 − *s*) | −0.31 × (1 − *s*) s | F7, proxy |
+| cards and intent per task: a heavy user's month (§8, about $0.035) over about 480 requests | about 0.07 (floor) | 0 | background |
+| the agent's own bill (fewer searches and turns, smaller tool results) | needs −0.07 or more | its model time | F11 |
+
+- **Faster than the agent alone is reachable.**
+  - With *s* = 0.7, wall is +0.39 − 0.60 = −0.21 s.
+  - Hold-and-abort on the remaining 30% of checks takes it to about −0.30 s.
+  - At *s* = 0.5 with hold-and-abort, it is about −0.20 s.
+- **Cheaper than the agent alone is not reachable from Eden's side alone.**
+  - Even with no check at all (*s* = 1), the cards' floor of about $0.07 per 1,000 tasks stays.
+  - Today the agent's bill does not fall with Eden (B19: level).
+  - The agent must save at least about 30% of Pi's $0.26, or about 19% of Hermes' $0.42, which is F11's lever.
+  - Hold-and-abort works against this target: +$0.05 × (1 − *s*). Build it only once the wall target is the one left.
