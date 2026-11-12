@@ -1,6 +1,6 @@
 """F7: wall p50 a task on the 1:1:8 mix, an arm against the base, with a template-clustered bootstrap.
 
-    python3 -I wall.py --base both+ask --arms 'both+ask+pushCheckLeanStop,…' OUT.json [OUT.json ...]
+    python3 -I wall.py --base both+ask --arms 'both+ask~V,…' OUT.json [OUT.json ...]
 
 The mix's p50 is the weighted median of the tasks' wall seconds, each task weighted so its kind carries its share
 (0.1 hidden, 0.1 control, 0.8 neutral) whatever the kind's count. Only tasks both arms finished are read. The

@@ -89,56 +89,6 @@ export const CHECK_SYSTEM = [
     'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
 ].join("\n\n");
 
-/**
- * `pushCheckLeanStop` (F7, a trial): the same instructions with one clause changed, so that every entry whose verdict
- * is a yes comes before any that is not; the call then stops at the first "act" false (`CHECK_LEAN_STOP`), so the
- * rejections the compare-first reply would list after its yeses are never written (most replies are rejections:
- * neutral requests, the usual case). The compare step of each written entry is unchanged.
- */
-const LEAN_ORDER =
-  'List only the items that touch the request\'s own subject, at most 6: first every item whose "act" is true, the ' +
-  "most decisive first, then the others; leave every other item out.";
-/** The ordering clause the lean form replaces, as `CHECK_SYSTEM` (and any variant built on its format) says it. */
-const SHIPPED_ORDER =
-  "List only the items that touch the request's own subject, the most decisive first, at most 6; leave every other " +
-  "item out.";
-/**
- * The lean form of a check's instructions: the ordering clause replaced, the rest as given, so another switch's
- * wording of the same format (another rule sentence) composes with it. A reply with a second list after its items
- * (a rule sheet) must not be sent the stop, which would cut that list.
- */
-export function leanSystem(system: string): string {
-  return system.replace(SHIPPED_ORDER, LEAN_ORDER);
-}
-export const CHECK_SYSTEM_LEAN = leanSystem(CHECK_SYSTEM);
-/** Where a lean reply stops: the first entry whose verdict is not a yes (both spacings Haiku writes). */
-export const CHECK_LEAN_STOP = ['"act":false', '"act": false'];
-
-/**
- * A lean reply cut at its stop, closed after its last whole entry (the entry being written is a no, dropped); the text
- * as is when it does not open as the reply does.
- */
-export function closeLean(raw: string): string {
-  // A stopped reply never has a closing fence, so a fence the model opened is stripped here (the provider adapter
-  // unfences only a complete reply).
-  const text = raw.replace(/^\s*```(?:json)?\s*\n?/, "");
-  if (!OPENING.test(text)) return raw;
-  const at = text.indexOf("[");
-  let end = -1;
-  let depth = 0;
-  let quoted = false;
-  for (let i = at + 1; i < text.length; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === "\\") i++;
-      else if (c === '"') quoted = false;
-    } else if (c === '"') quoted = true;
-    else if (c === "{") depth++;
-    else if (c === "}" && --depth === 0) end = i;
-  }
-  return `${text.slice(0, end < 0 ? at + 1 : end + 1)}]}`;
-}
-
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
   request: string;
@@ -146,8 +96,6 @@ export interface PushCheckInput {
   today: string;
   /** The user's opaque sticky-routing key (`userCacheKey`): routing only, never prompt text, not in `checkKey`. */
   cacheKey?: string;
-  /** `pushCheckLeanStop` (F7): yeses first, the reply stopped at the first no (`CHECK_SYSTEM_LEAN`). */
-  lean?: boolean;
 }
 
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
@@ -170,7 +118,7 @@ const head = (text: string) =>
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
   // "c": the compare-first reply's key since D527, kept so the lab's recorded replies still replay.
-  const form = input.lean ? "cy" : "c";
+  const form = "c";
   const h = createHash("sha256").update(
     `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
@@ -193,7 +141,7 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     );
   });
   return [
-    { role: "system", content: input.lean ? leanSystem(CHECK_SYSTEM) : CHECK_SYSTEM },
+    { role: "system", content: CHECK_SYSTEM },
     {
       role: "user",
       content:
@@ -315,18 +263,13 @@ export class PushChecker {
         messages: checkMessages({ ...input, items }),
         maxTokens: COMPARE_MAX_TOKENS,
         json: true,
-        // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop; the lean
-        // reply puts its yeses first and stops at its first no.
-        ...(input.lean ? { stop: CHECK_LEAN_STOP } : {}),
+        // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop.
         ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
         signal,
       });
       this.deps.budget.settle(reservation, res.costUsd);
       this.count(res.costUsd, res.usage);
-      // A lean reply its stop ended is closed after its last whole entry; one the provider says ended otherwise is
-      // read as is (a complete reply with no no in it).
-      const text = input.lean && res.stopped !== false ? closeLean(res.text) : res.text;
-      const at = res.truncated ? null : parseCompare(text, items.length);
+      const at = res.truncated ? null : parseCompare(res.text, items.length);
       if (!at) {
         this.stats.failures++;
         this.failed(new Error("push check reply unreadable (cut off at the token cap, or not the expected JSON)"));

@@ -716,17 +716,6 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * F7 (a trial, off; docs/research/f7-cost-latency.md): the push check asks for its yeses first and stops its reply at
-   * the first entry that is not one (`CHECK_SYSTEM_LEAN`, `CHECK_LEAN_STOP`), so the rejections are not written: fewer
-   * output tokens, a shorter wait on the request path.
-   */
-  pushCheckLeanStop: boolean;
-  /**
-   * F7 (a trial, off; docs/research/f7-cost-latency.md): a candidates packet the push check picked is framed as such
-   * (`CHECKED_LEAD`) rather than as unchecked (`CANDIDATES_LEAD`), so the agent may search less before it acts.
-   */
-  pushCheckLeanLead: boolean;
-  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -912,8 +901,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushCheckLeanStop: false,
-  pushCheckLeanLead: false,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
