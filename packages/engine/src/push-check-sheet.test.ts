@@ -269,6 +269,20 @@ describe("the sheet's prompt and parser", () => {
     });
     expect(pooled[2]!.content).toContain("<in-items>1</in-items>");
     expect(pooled[1]!.content).toBe(msgs[1]!.content);
+    // `pushCheckSheetRefs`: the pooled item on the sheet is its title and a pointer, its text left to the rule.
+    const pooledItem = {
+      id: "mail:a",
+      source: "mail",
+      title: "Prescription",
+      date: "",
+      from: "",
+      text: "xyz",
+      hash: "h",
+    };
+    const refs = checkMessages({ ...input, sheet, sheetRefs: true, items: [pooledItem] });
+    expect(refs[2]!.content).toContain('rule="1">Prescription: see rule 1</item>');
+    expect(refs[2]!.content).not.toContain("xyz");
+    expect(checkKey({ ...input, sheet, sheetRefs: true })).not.toBe(checkKey({ ...input, sheet }));
   });
 
   test("the key is main's with no sheet, and changes with the sheet", () => {

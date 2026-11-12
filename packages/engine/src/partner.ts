@@ -2530,7 +2530,7 @@ export class ContextPartner {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
       today,
-      ...(sheet.length > 0 ? { sheet } : {}),
+      ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
     };
     const key = checkKey(input);

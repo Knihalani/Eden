@@ -145,6 +145,11 @@ export interface PushCheckInput {
   today: string;
   /** `pushCheckSheet` (F5): the user's active constraint cards, in the order the sheet lists them. */
   sheet?: SheetCard[];
+  /**
+   * `pushCheckSheetRefs` (F5): a pool item that is on the sheet is sent as its title and a pointer to its rule, not
+   * its text, so the cached sheet stands in for part of the uncached pool.
+   */
+  sheetRefs?: boolean;
   /** The user's opaque sticky-routing key (`userCacheKey`): routing only, never prompt text, not in `checkKey`. */
   cacheKey?: string;
 }
@@ -180,7 +185,7 @@ export function checkKey(input: PushCheckInput): string {
   for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) h.update(`${itemMark(it)}\t${it.text}\n`);
   // With no sheet the key is main's, so recorded replies replay; a sheet's every card is part of what was read.
   const sheet = input.sheet?.slice(0, SHEET_MAX_CARDS) ?? [];
-  if (sheet.length > 0) h.update(`sheet\n${sheetText(sheet)}`);
+  if (sheet.length > 0) h.update(`sheet${input.sheetRefs ? "+refs" : ""}\n${sheetText(sheet)}`);
   return h.digest("hex").slice(0, 32);
 }
 
@@ -224,13 +229,17 @@ export function inItems(sheet: readonly SheetCard[], items: readonly ReaderItem[
  * then the day, the request and the items, each fenced as data.
  */
 export function checkMessages(input: PushCheckInput): ChatMessage[] {
-  const items = input.items.slice(0, CHECK_MAX_ITEMS).map((it, i) => {
-    return (
-      `<item n="${i + 1}" source="${attr(it.source)}" date="${attr(it.date)}"` +
-      `${it.from ? ` from="${attr(it.from)}"` : ""}>${inert(it.title)}: ${inert(it.text)}</item>`
-    );
-  });
   const sheet = input.sheet?.slice(0, SHEET_MAX_CARDS) ?? [];
+  const ruleOf = new Map<string, number>(input.sheetRefs ? sheet.map((c, k) => [c.id, k + 1] as const) : []);
+  const items = input.items.slice(0, CHECK_MAX_ITEMS).map((it, i) => {
+    const rule = ruleOf.get(it.id);
+    const opening =
+      `<item n="${i + 1}" source="${attr(it.source)}" date="${attr(it.date)}"` +
+      `${it.from ? ` from="${attr(it.from)}"` : ""}`;
+    // On the sheet: the rule's line says what the item holds (`pushCheckSheetRefs`).
+    if (rule !== undefined) return `${opening} rule="${rule}">${inert(it.title)}: see rule ${rule}</item>`;
+    return `${opening}>${inert(it.title)}: ${inert(it.text)}</item>`;
+  });
   return [
     { role: "system", content: CHECK_SYSTEM },
     ...(sheet.length > 0

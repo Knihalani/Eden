@@ -54,6 +54,11 @@ CHECK line (calls, $ a call). **Rule.** An arm passes if, summed over the runs, 
 tasks; the check's $ per task at most 1.5x B's. The passing arm with the most planted handed goes to Pi (a tie: S).
 None passes: no Pi run, the switches and their code are deleted, the findings kept.
 
+**Amendment (before any screen result was read; the first screen's numbers were discarded, §2).** A fourth arm,
+**SR**: S with `pushCheckSheetRefs` (a pool item on the sheet is sent as its title and its rule's number, its text
+left to the cached sheet line; the cost lever). It passes by the same rule. Among passing arms, SR goes to Pi over a
+passing S or SA when its planted handed is at least theirs less 4 and its $ per task is lower.
+
 ### 1b. The Pi pair
 
 The arm's settings as `eden~F` against `eden`, M13's and H3's recipe (`packages/sim/lab/h3/pi.sh`'s flags: Haiku 5.5

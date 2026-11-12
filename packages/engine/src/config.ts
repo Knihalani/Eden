@@ -729,6 +729,11 @@ export interface EngineConfig {
    */
   pushCheckSheetAlways: boolean;
   /**
+   * Trial (F5): with `pushCheckSheet`, a pool item on the sheet is sent as its title and its rule's number instead of
+   * its text: the cached sheet line stands in for part of the uncached pool (cost).
+   */
+  pushCheckSheetRefs: boolean;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -916,6 +921,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushCheckSheet: 0,
   pushCheckSheetAlways: false,
+  pushCheckSheetRefs: false,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
