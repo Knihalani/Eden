@@ -195,6 +195,36 @@ describe("AnthropicModel", () => {
     expect(res.costUsd).toBeCloseTo((40 * 0.1 + 600 * 0.01 + 12 * 0.5) / 1e6, 12);
   });
 
+  test("a request whose sheet asks a 1-hour TTL books and reports its cache writes at 2x input (D1197)", async () => {
+    const writes = okEvents("ok");
+    const start = writes[0] as { message: { usage: Record<string, number> } };
+    writes[0] = {
+      type: "message_start",
+      message: { usage: { ...start.message.usage, cache_creation_input_tokens: 2000, cache_read_input_tokens: 0 } },
+    };
+    const run = async (cacheTtl?: "1h") => {
+      const { meter, booked } = recordingMeter();
+      const res = await new AnthropicModel({ apiKey: "k", fetch: streamFetch(writes), meter }).chat({
+        messages: [
+          { role: "system", content: "sys" },
+          { role: "user", content: "the sheet", cache: true, ...(cacheTtl ? { cacheTtl } : {}) },
+          { role: "user", content: "q" },
+        ],
+        maxTokens: 50,
+      });
+      return { res, booked };
+    };
+    const hour = await run("1h");
+    const five = await run();
+    const price = anthropicPrice("claude-haiku-5-5");
+    // 40 uncached and 2,000 written at $0.10/M (written at 2x on the hour, 1.25x on five minutes), 12 out at $0.50/M.
+    expect(hour.res.costUsd).toBeCloseTo((40 * 0.1 + 2000 * 0.2 + 12 * 0.5) / 1e6, 12);
+    expect(hour.res.costUsd).toBeCloseTo(anthropicCost(hour.res.usage, price, "1h"), 12);
+    expect(hour.booked[0]!.costUsd).toBeCloseTo(hour.res.costUsd, 12);
+    expect(five.res.costUsd).toBeCloseTo((40 * 0.1 + 2000 * 0.125 + 12 * 0.5) / 1e6, 12);
+    expect(five.booked[0]!.costUsd).toBeCloseTo(five.res.costUsd, 12);
+  });
+
   test("a refused meter stops the call before anything is sent", async () => {
     let sent = 0;
     const fetchSpy = (async () => {

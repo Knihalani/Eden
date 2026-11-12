@@ -579,7 +579,8 @@ sizes come from the funnel's dumped checks at shipped coverage (`--check replay 
 - about 8,200 characters either way.
 
 The sheet then costs **+$0.000098 a check, +$0.09 per 1,000 tasks** (`sheet-cache.py`, requests at random over
-active hours, hit rate 0.75). That compares with +$0.20 a check on the 5-minute TTL and +$0.19 uncached.
+active hours, hit rate 0.75). That compares with +$0.0002 a check (+$0.19 per 1,000 tasks) on the 5-minute TTL and +$0.00019 a check
+(+$0.17 per 1,000) uncached.
 
 **2. An in-force-only sheet: not taken.** F2's form-19 re-card of dev20 seeds 41–44 (1,929 items, states from the
 card call, served by subagents per item, D1102) gives these sheet-eligible cards: 834 in force, 88 with no state, 49
