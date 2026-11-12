@@ -86,8 +86,8 @@ Not done: `bun run eval --live` (no engine scoring, threshold or delivery change
 
 - **A wrong `EDEN_PERSIST_KEY` (finding 11): fixed.** A start whose key opens none of the blobs on disk (its own
   buckets) exits 2 with `eden: cannot start: EDEN_PERSIST_KEY opens none of the N persisted users in <dir> (a
-  mistyped or changed key?): … or EDEN_PERSIST_DISCARD=1 …`, and deletes no foreign blob; with a shared store, a marker object of the key's id (`<prefix>key-id`) decides, and a
-  store from before the marker is sampled (up to 8 blobs, all foreign stops it) before the marker is written. The
+  mistyped or changed key?): … or EDEN_PERSIST_DISCARD=1 …`, and deletes no foreign blob; with a shared store, a
+  marker object of the key's id (`<prefix>key-id`) decides, and a store from before the marker is sampled (up to 8 blobs, all foreign stops it) before the marker is written. The
   reviewer found that sampling alone refused the right key after a rotation in a cluster (the old key's blobs stay
   until the 7-day age sweep: a probe with 5 of 20 users rewritten sampled 8 of 8 foreign), and that an unanswering
   store blocked the start: the marker fixes the first, a 3 s bound the second (unknown: the start goes ahead). Some blob
@@ -171,3 +171,23 @@ ways out, each the parent's call: a longer `EDEN_SHUTDOWN_GRACE_MS` (about 26 ms
 grace: 65 s for 750; requests wait or fail while the process writes, since its listener is closed by then), or an
 engine change (write the most recently used users first, so those likely to return are kept; or write warm users in
 the background before the shutdown, which D862 chose not to).
+
+**Leak check: none (run 3; `--users 1000 --procs 2 --minutes 40 --restart-at 99 --gc-every 120`, the same cgroup).**
+Each process ran a full collection every 2 minutes and read its heap and RSS after it, over 40 minutes of steady load
+(no restart; 500 users a process, 400-457 of them warm at each reading). Heap after the collection: 1.69-1.71 GB a
+process on average, least-squares slope **−3.2 and −3.0 MB a minute** (flat to falling; the first readings fall in the
+backfill's last minutes); RSS slope −1.3 and −6.0 MB a minute. Settled RSS a user: (2,245 + 2,152 − 2 × 95) / 1,000 =
+**4.21 MB** (sizing.py: 4.71; the run's mix is about 13% live, a little under the peak hour's sixth). 25,035 requests,
+**0 errors**; event p50 0.58 ms, p99 37.2; user message 4.54 / 9.58; `ask_context` 7.62 / 16.1. The reading pauses
+the process (each full collection), so this run's latencies include them.
+
+Reproduce (as root, cgroup v1; the soak's processes inherit the cgroup):
+
+```bash
+C=/sys/fs/cgroup; for g in memory cpuset cpu; do mkdir -p $C/$g/r1soak; done
+echo $((12*1024**3)) > $C/memory/r1soak/memory.limit_in_bytes
+echo 0-1 > $C/cpuset/r1soak/cpuset.cpus; echo 0 > $C/cpuset/r1soak/cpuset.mems
+echo 200000 > $C/cpu/r1soak/cpu.cfs_quota_us; echo 100000 > $C/cpu/r1soak/cpu.cfs_period_us
+sh -c 'for g in memory cpuset cpu; do echo $$ > /sys/fs/cgroup/$g/r1soak/cgroup.procs; done; exec env -u \
+  OPENROUTER_API_KEY bun packages/sim/src/lab/soak.ts --users 1500 --minutes 30 --restart-at 15 --out .local/soak.json'
+```
