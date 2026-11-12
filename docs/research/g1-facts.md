@@ -106,4 +106,68 @@ Rule, committed in 1d76d907 before any live call (D1400): on dev20 seeds 41–44
 (`packages/sim/lab/g1/go.sh`): hidden raised +15 points absolute; decoys handed up by at most a third of that gain;
 neutral concerns within noise; cost at most +$0.03 per 1,000 requests; wait at most +100 ms a request.
 
-RESULTS_PENDING
+**The bar was re-set by the integrator before any live result** (D1400's addendum, commit 3b6fa170): headline hidden
+raised at least 55% absolute, on the harness fixed by D1155; guards decoys handed and neutral concerns flat, cost at
+most +$0.01 per 1,000 requests, wait at most +50 ms; ship rule for the final's candidate, at least +5 points of hidden
+raised with decoys handed and neutral concerns not up. A first run on the pre-D1155 harness was stopped by a platform
+restart at 699 answers and is void; its outputs were never read.
+
+**A third arm, `pushDayStartSeated` (D1401), was registered before any result** (commit f0a6fd4b), because the $0
+screen said the plain arm would fail the cost guard: a push that only the day started is checked, and hands
+anything, only when one of its day seats is itself constraint-like. At $0 it keeps 55 of the 79 facts (364 in a
+checked pool) while the check calls that would be made on neutral requests rise 419 → 428 instead of 532.
+
+### Result (dev20 seeds 41 and 42 only, 960 tasks an arm; served by subagents, D1101, single-shot)
+
+`bash packages/sim/lab/g1/go.sh` (tree f0a6fd4b, shipped coverage, one queue; the strict arm replayed all but two
+of its calls from the plain arm's answers), read with `python3 -I packages/sim/lab/g1/report.py .local/final/g1b
+base seats strict --seeds 41,42`. Differences are paired by task, 95% intervals a bootstrap over templates.
+
+| | default | `pushDaySeats` 3 | with `pushDayStartSeated` |
+| --- | ---: | ---: | ---: |
+| hidden raised (of 320) | 157 (49.1%) | 170 (53.1%), +4.1 (+1.2..+7.2) | 165 (51.6%), +2.5 (+0.3..+5.0) |
+| fact handed by the push | 130 | 158, +8.8 (+4.4..+13.1) | 145, +4.7 (+1.2..+8.1) |
+| fact reached the agent (push or ask) | 192 | 202, +3.1 (+0.3..+6.2) | 196, +1.2 (−0.6..+3.4) |
+| look-alike handed by the push (control, of 320) | 27 | 33, +1.9 (+0.0..+4.1) | 29, +0.6 (−0.6..+1.9) |
+| control concerns | 8 | 7 | 7 |
+| neutral concerns (of 320) | 96 | 106, +3.1 (+0.6..+5.6) | 100, +1.2 (−0.6..+3.1) |
+| neutral tasks with a packet | 99 | 116, +5.3 (+2.5..+8.4) | 106, +2.2 (+0.6..+4.1) |
+| tasks whose push was checked (of 960) | 661 | 832 (+26%) | 706 (+7%; neutral 213 → 214) |
+| cost of the extra checks [EST, $0.00023 a check, F5's sheet price] | — | about +$0.04 per 1,000 | about +$0.01 per 1,000 |
+| wait of the extra checks [EST, 0.8 s a check, F7] | — | about +140 ms a request | about +40 ms a request |
+
+**Verdict: both arms fail the rule; neither is promoted and nothing goes to the final's candidate.**
+
+- The headline (55%) is not reached: 53.1% and 51.6%.
+- The ship rule (+5 points with decoys and neutral not up) is not met. The plain arm reads +4.1 points and raises
+  neutral concerns (+3.1, interval above 0) and look-alikes handed; it would also fail the cost and wait guards by
+  estimate. The strict arm is clean on every guard but adds only +2.5 points.
+- Seeds 43 and 44 were not run: the strict arm cannot reach +5 on these numbers and the plain arm fails on neutral
+  concerns whatever its facts read, so the pre-registered four-seed run would not change the decision. The result
+  is two seeds, and is labelled so.
+
+**Why the screen's gain shrank.** The push handed the fact on 28 more tasks (+8.8 points), but the agent already
+reached most of those facts through `ask_context` in the default arm (reached 192 against handed 130): the plans
+that start no push are requests where the single-shot agent asks, and the ask's lookup finds the day's items. Only
++3.1 points of facts newly reached the agent, and +4.1 were newly raised. On the fixed harness (D1155) the ask path
+carries more than the $0 funnel's pool counts show, so a lever that starts more pushes buys less than its pool gain.
+
+## 4. What is kept, and what is open
+
+Deleted with their code and tests (D1402; the code is in commit f0a6fd4b): `pushDaySeats`, `pushDayStartSeated`,
+`days.ts`, `ItemCache.dated`, the seats in `pushGate`, the day-plan start.
+
+Kept:
+
+- the finding that 183 of 640 dev20 hidden requests start no push (§1), and `packages/sim/lab/g1/start.ts`, which
+  reads any suite's requests as `observe` does;
+- `packages/sim/lab/g1/labels.ts` (pool misses by the suites' own labels), `go.sh` (two Eden arms on one tree, one
+  process an arm a seed: four seeds in one process held 8.7 GB) and `report.py` (any arms, paired);
+- the date-reading gaps (§1): "the 20th", "Monday the 9th", weekdays in other languages. They also feed the
+  conflict test and the day grounds, where they were not measured: a fix there is its own trial.
+
+Open:
+
+- The neutral concerns the plain arm added came with the packets (99 → 116 neutral tasks with one). A day-started
+  push that hands only to an agent that then asks nothing more was not separated from the ask path here.
+- A request in a language whose day words the glossary lacks still starts no push (17 of 160 templates).
