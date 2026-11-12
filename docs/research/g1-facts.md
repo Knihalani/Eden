@@ -55,8 +55,9 @@ A plan with a day is an action on that day. With no model and no source call:
    is a day.
 2. **A turn that names a coming day starts the push** (`namesComingDay`): only where nothing else started one (no
    rule, or the gate's statement veto), only when the gate does not read chatter, four words or more, the day today
-   or later within 62 days, a window of at most a week; or a coming period with no day ("in January", "over
-   Christmas", "next month"). With no gate loaded nothing is added.
+   or later within 62 days, in a window of at most three days (one whose items can be seated). With no gate loaded
+   nothing is added. (As measured it also started on windows up to a week and on a coming period with no day, "in
+   January"; under the promoted rule such a push could hand nothing, so the review took those starts out, §6.)
 3. **Up to 3 items on the request's day take seats in the pool** right after the first `pushCandidates`
    (`ItemCache.dated`, `pushGate`): events starting that day (soonest first), then items whose text spans it
    (`coversDay`), then items that write the date, newest first; bulk mail out; windows of more than three days get
@@ -196,8 +197,32 @@ wired), the part out against the default:
 | planted fact in a pool the check would read | 308 | 368 |
 | look-alike in a pool the check would read | 207 | 229 |
 | check calls that would be made: hidden / control / neutral | 448 / 441 / 419 | 510 / 476 / 425 |
-| funnel score (surfaced): hidden / decoys | 372 / 238 | 390 / 258 |
+| funnel score (surfaced): hidden / decoys | 372 / 238 | 386 / 250 |
+| requests that start a push: hidden / neutral | 457 / 453 | 553 / 549 |
 
 Train (`bun run funnel`, seeds 41–42): 319 / 296 with the part out, 322 / 294 in the default. The no-model eval is
 unchanged (precision 0.65, recall 0.52, falseFireRate 0; acting 19 of 28, 1.18 items, 10 of 11, 3 of 10): it wires
 no checker, so no seat is handed there.
+
+## 6. The review (once, D814) and what it changed
+
+The reviewer returned REQUEST_CHANGES on the promoted tree. Fixed before the merge, each with a test:
+
+- **A constraint-like seat opened a hand-out no model judged.** With no check answer (no checker, a late or failed
+  check) the push handed the pool's head whenever any pooled item was constraint-like, the seats included: a no-key
+  server sent packets where main was silent, day-started statements among them. Now the push with no answer hands
+  the pool as it stood before the seats, behind that pool's own gate, and a day-started push hands nothing.
+- **`datedText` invented days.** "the 3rd party vendor", "the 2nd invoice", "I am 30." and a past "what happened on
+  Monday the 9th" were all given a coming date. An ordinal is now rewritten only where it reads as a date (a date's
+  preposition, "the" or a weekday before it; the clause's end or a time word after it; no past tense before it).
+- A draft read the user's offset and thawed a frozen user (D325); day-started pushes on windows too long to seat or
+  on a period with no day could by construction hand nothing; an open range ("until 2 November") was read from an
+  item of any year; the scan's cap stopped event finds too; the start redacted 10,000 characters before counting
+  words.
+
+The live pair ran before these fixes. They do not touch what it measured: every check in that run answered (the
+queue waits for it), and at $0 on dev20 the fixed tree makes the same check calls (510 / 476 / 425) on the same
+pools (368 facts and 229 look-alikes in a checked pool) as before them; only the pushes that could hand nothing are
+gone (hidden 573 → 553). Not re-measured live: the narrower ordinal reading on the requests of seeds 41–42 (the $0
+pools are unchanged, so no dev20 request lost its day).
+

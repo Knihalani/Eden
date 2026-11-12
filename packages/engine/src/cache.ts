@@ -1566,7 +1566,8 @@ export class ItemCache {
         found.push({ e, cls: 0, at: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t });
         continue;
       }
-      if (++read > DATED_SCAN) break;
+      // Past the cap no more text is read; events (told by their start alone) are still found.
+      if (++read > DATED_SCAN) continue;
       const text = `${e.item.title}\n${e.item.text}`.slice(0, DATED_CHARS).toLowerCase();
       // No digit, no date: most chat lines and short notes end here.
       if (!/\d/.test(text)) continue;

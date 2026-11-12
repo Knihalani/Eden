@@ -29,14 +29,26 @@ const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const WEEKDAY = String.raw`(?:sun|mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?)(?:day)?`;
 
-/** An ordinal that counts something other than a day of the month: "5th floor", "20th anniversary", "3rd time". */
-const NOT_A_DAY =
-  /^\s*(?:floor|anniversary|birthday|time|century|edition|place|grade|year|week|month|day|street|avenue|ave|st|quarter|person|attempt|round|draft|version|of\s+(?:the\s+)?(?:year|month))\b/;
+/**
+ * What may follow a day of the month: the end of the clause, or one of these words. Any other word after an ordinal
+ * makes it a count ("the 3rd party vendor", "the 2nd invoice", "a 1st class ticket", "the 5th floor").
+ */
+const AFTER_DAY =
+  /^\s*(?:$|[,.;:!?)\]–—-]|(?:at|in|on|by|for|to|from|and|or|but|so|then|if|when|is|was|works|would|will|please|morning|afternoon|evening|night|after|before|until|till|instead|rather|around|about|next|this|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b)/;
+/** What must stand before a bare day of the month: a date's preposition or "the", a weekday, or both. */
+const BEFORE_DAY = new RegExp(
+  String.raw`(?:\b(?:on|by|for|until|till|before|after|from|of|to)\s+(?:the\s+)?|\bthe\s+|\b${WEEKDAY},?\s+(?:the\s+)?)$`,
+);
+/** A past tense before the ordinal ("what happened on the 9th", "we agreed on the 5th"): not a coming day. */
+const PAST =
+  /\b(?:met|happened|had|was|were|went|spoke|called|saw|did|agreed|said|sent|paid|got|came|left|told|decided|arrived)\b[^.!?\n]{0,40}$/;
 
 /**
  * `text` with each bare day of the month given its month: "the 20th" becomes "20 November" (the next 20th on or after
- * today), "Monday the 9th" becomes "Monday 9 November" (the next 9th that is a Monday, within four months). An
- * ordinal that already has its month, or counts something else, is left as written. Bounded: the first 8 ordinals.
+ * today), "Monday the 9th" becomes "Monday 9 November" (the next 9th that is a Monday, within four months). Only an
+ * ordinal that reads as a date is rewritten: a date's preposition, "the" or a weekday before it, the end of the
+ * clause or a time word after it, and no past tense before it (a past day is `timeWindow`'s to read, as written).
+ * One that already has its month is left as written. Bounded: the first 8 ordinals.
  */
 export function datedText(text: string, now: number, offsetMinutes = 0): string {
   if (!/\d/.test(text)) return text;
@@ -47,20 +59,25 @@ export function datedText(text: string, now: number, offsetMinutes = 0): string 
   let out = "";
   let last = 0;
   let n = 0;
-  // English ordinals ("20th"), Swedish ("12:e", "1:a"), and a German or Scandinavian day after its article ("am 12.").
-  const re = /\b(\d{1,2})(?:(st|nd|rd|th)\b|:[ea]\b)|\b(?:am|den|dem)\s+(\d{1,2})\.(?=\s|$)/g;
+  // English ordinals ("20th"); Swedish after its article ("den 12:e"); a German day after its article ("am 12."),
+  // never after "I" ("I am 30.").
+  const re =
+    /\b(\d{1,2})(st|nd|rd|th)\b|\b(?:den|på|till)\s+(\d{1,2}):[ea]\b|(?<!\bi\s)\b(?:am|dem)\s+(\d{1,2})\.(?=\s|$)/g;
   for (const m of lower.matchAll(re)) {
     if (++n > 8) break;
-    const day = Number(m[1] ?? m[3]);
+    const english = m[1] !== undefined;
+    const digits = english ? m[1]! : (m[3] ?? m[4])!;
+    const day = Number(digits);
     if (day < 1 || day > 31) continue;
-    const at = m.index!;
-    const end = at + m[0].length;
+    const at = m.index! + m[0].indexOf(digits);
+    const end = m.index! + m[0].length;
     const after = lower.slice(end, end + 24);
     const before = lower.slice(Math.max(0, at - 24), at);
     // Already a date: "20th of November", "November 20th".
     if (new RegExp(String.raw`^(?:\s+of)?\s+${MONTH}\b`).test(after)) continue;
     if (new RegExp(String.raw`\b${MONTH}\s+(?:the\s+)?$`).test(before)) continue;
-    if (NOT_A_DAY.test(after)) continue;
+    if (english && (!BEFORE_DAY.test(before) || !AFTER_DAY.test(after))) continue;
+    if (PAST.test(lower.slice(Math.max(0, at - 80), at))) continue;
     const wd = new RegExp(String.raw`\b(${WEEKDAY}),?\s+(?:the\s+)?$`).exec(before);
     const want = wd ? WEEKDAYS.findIndex((w) => w.startsWith(wd[1]!.slice(0, 3))) : -1;
     let found = -1;
@@ -70,17 +87,10 @@ export function datedText(text: string, now: number, offsetMinutes = 0): string 
       if (want >= 0 && new Date(d).getUTCDay() !== want) continue;
       found = d;
     }
-    // A weekday that no coming such date falls on: the ordinal stands, the weekday is the request's slip.
-    if (found < 0 && want >= 0) {
-      for (let k = 0; k < 2 && found < 0; k++) {
-        const d = Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth() + k, day);
-        if (new Date(d).getUTCDate() === day && d >= today) found = d;
-      }
-    }
+    // A weekday that no coming such date falls on: the text stands as written (`timeWindow` reads the weekday).
     if (found < 0) continue;
-    const digits = m[3] !== undefined ? at + m[0].indexOf(m[3]) : at;
     // "Monday the 9th" is written "Monday 9 November": `timeWindow` then reads the date, not the coming Monday.
-    const lead = text.slice(last, digits);
+    const lead = text.slice(last, at);
     out += `${wd ? lead.replace(/\bthe\s+$/i, "") : lead}${day} ${MONTH_NAMES[new Date(found).getUTCMonth()]!}`;
     last = end;
   }
@@ -167,8 +177,17 @@ export function coversDay(text: string, days: ReadonlySet<string>, updatedAt?: n
     const b = dates[i + 1]!;
     if (b.at - a.end <= 24 && BETWEEN.test(lower.slice(a.end, b.at)) && inside(a.key, b.key)) return true;
   }
-  if (updatedAt !== undefined && Number.isFinite(updatedAt)) {
-    const u = new Date(updatedAt);
+  // An open range runs from the item's own day, so only an item written within the span's reach of a wanted day
+  // (last year's "closed until 2 November" covers nothing now).
+  const near =
+    updatedAt !== undefined &&
+    Number.isFinite(updatedAt) &&
+    [...days].some((d) => {
+      const gap = Date.parse(d) - updatedAt;
+      return gap > -DAY && gap <= (MAX_SPAN_DAYS + 1) * DAY;
+    });
+  if (near) {
+    const u = new Date(updatedAt!);
     const from = u.getUTCMonth() * 32 + u.getUTCDate();
     for (let i = 0; i < dates.length; i++) {
       const d = dates[i]!;

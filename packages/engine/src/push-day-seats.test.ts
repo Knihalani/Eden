@@ -124,6 +124,42 @@ describe("pushDaySeats (G1, D1400): items on the request's day are seated where 
     expect(on).not.toContain("mail:lift");
   });
 
+  // The review's probe: no constraint-worded item among the request's own matches, one among the day's.
+  const QUIET = [
+    item("plain", "Sofa order", "Your sofa order is confirmed. Delivery slot to follow."),
+    item("plain2", "Sofa fabric", "The sofa fabric sample you asked about is in stock."),
+    item(
+      "lift",
+      "Goods lift",
+      "Out of service from Fri 30 Oct to Fri 6 Nov. Deliveries must not be booked in this period.",
+    ),
+  ];
+  const down = () =>
+    new FakeModel(() => {
+      throw new Error("down");
+    });
+
+  test("a constraint-like seat never opens a hand-out no model judged", async () => {
+    // No checker, and a checker that fails: silent with the seats off, and silent with them on.
+    for (const model of [null, down()]) {
+      expect(await handed(setup({}, model, [], QUIET))).toEqual([]);
+      expect(await handed(setup({ pushDaySeats: 3 }, model ? down() : null, [], QUIET))).toEqual([]);
+    }
+    // With an answer, the seat is the check's to name.
+    expect(await handed(setup({ pushDaySeats: 3 }, says(["Goods lift"]), [], QUIET))).toEqual(["mail:lift"]);
+  });
+
+  test("an on-day item the pool already held is handed as before when no check answers", async () => {
+    // The dentist's mail shares the request's word here, so the pool holds it with the seats off too.
+    const items = [
+      { ...ITEMS[0]!, meta: { category: "promotions" } },
+      item("dentist", "Sofa and dentist", "Dentist Sat 31 Oct 2026, 08:30, then the sofa delivery."),
+      ITEMS[1]!,
+    ];
+    const off = await handed(setup({}, null, [], items));
+    expect(await handed(setup({ pushDaySeats: 3 }, null, [], items))).toEqual(off);
+  });
+
   test("a failed check hands no seat either", async () => {
     const failing = new FakeModel(() => {
       throw new Error("down");
@@ -144,6 +180,21 @@ describe("pushDaySeats (G1, D1400): items on the request's day are seated where 
     const p = setup({ pushDaySeats: 3 }, says(["Goods lift"]), pools);
     await handed(p, "Arrange the sofa delivery for next week.");
     expect(pools.at(-1)!.pool).not.toContain("mail:lift");
+  });
+
+  test("a frozen user is thawed for the scan and reads the same", () => {
+    // Ticks run by hand (`expireIdle`): frozen warm after two idle ticks.
+    const cache = new ItemCache({ freezeIdleMs: 5, warmIdleMs: 1, expireEveryMs: 1 });
+    cache.close();
+    const scope = { tenantId: "t", userId: "u1" };
+    cache.put(scope, ITEMS, NOW);
+    const days = new Set(["2026-10-31"]);
+    const ids = () => cache.dated(scope, days, () => false, NOW, 5, 0).map((h) => h.item.id);
+    const live = ids();
+    for (let i = 0; i < 3; i++) cache.expireIdle(NOW);
+    expect(cache.frozenCount).toBe(1);
+    expect(ids()).toEqual(live);
+    expect(live.length).toBeGreaterThan(0);
   });
 
   test("isolation: the scan reads the asking user's cache only (tenant and user)", () => {
@@ -194,6 +245,31 @@ describe("pushDaySeats: a turn that names a coming day starts the push", () => {
     // A push the rule starts is checked as before, whatever its seats.
     const listed = says(["Sofa delivery"]);
     expect(await handed(setup({ ...gated, pushDaySeats: 3 }, listed, [], plain), REQUEST)).toContain("mail:hold");
+  });
+
+  test("on: with no checker, or a failed check, a day-started push hands nothing", async () => {
+    for (const model of [
+      null,
+      new FakeModel(() => {
+        throw new Error("down");
+      }),
+    ]) {
+      expect(await handed(setup({ ...gated, pushDaySeats: 3 }, model, [], MUST), PLAN)).toEqual([]);
+    }
+  });
+
+  test("on: a window too long to seat, or a period with no day, starts none", async () => {
+    for (const text of ["The sofa's being delivered sometime next week.", "I was really ill for most of this year."]) {
+      const pools: PushPoolReport[] = [];
+      await handed(setup({ ...gated, pushDaySeats: 3 }, says(["Goods lift"]), pools), text);
+      expect(pools.length).toBe(0);
+    }
+  });
+
+  test("a draft never reads the user's offset (a frozen user stays frozen, D325)", async () => {
+    const p = setup({ ...gated, pushDaySeats: 3 }, null);
+    const r = await p.observe({ ...ref, at: NOW, kind: "user_message", text: PLAN, draft: true } as AgentEvent);
+    expect(r.injection ?? null).toBeNull();
   });
 
   test("on: chatter, a past day, a short turn and a turn with no day start none", async () => {

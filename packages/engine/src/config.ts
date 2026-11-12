@@ -759,12 +759,13 @@ export interface EngineConfig {
    * `pushDaySeats` (G1, D1400–D1402; 3 in the default, part `days`; 0 = off): a plan with a day is an action on that
    * day, with no model. (1) The request's days are read past `timeWindow` (`days.ts`): a bare day of the month ("on
    * the 20th", "Monday the 9th") and, through the glossary, a weekday in another language. (2) A turn that starts no
-   * push, that the turn gate does not read as chatter, and that names a coming day or period starts an opened one;
-   * such a push is checked, and hands anything, only when one of its day seats is itself constraint-like. (3) Up to
+   * push, that the turn gate does not read as chatter, and that names a coming day (a window of at most three)
+   * starts an opened one; such a push is checked only when one of its day seats is itself constraint-like. (3) Up to
    * this many items on a day the request names take seats in the push's pool right after the first `pushCandidates`,
    * where the push check reads them: events starting that day, items whose text spans it ("26 Oct – 6 Nov", "until
    * 2 November") and items that write the date, bulk mail out; windows of more than three days get none. A seat is
-   * handed only when the check names it: with no check the push hands what it handed before. Served by subagents,
+   * handed only when the check names it: with no answer the push hands the pool as it stood before the seats, and a
+   * day-started push hands nothing. Served by subagents,
    * dev20 seeds 41–42, single-shot: hidden raised +2.5 points (+0.3..+5.0), look-alikes handed and neutral concerns
    * within their intervals, checked pushes +7% (docs/research/g1-facts.md).
    */
