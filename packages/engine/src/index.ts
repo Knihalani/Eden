@@ -67,6 +67,7 @@ export {
   CARD_STATES,
   CLEARED_STATES,
   type CardState,
+  CARD_FORM_WIDE,
   type CardMakeOptions,
   requestMessages,
   cardVerdict,
