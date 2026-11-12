@@ -131,3 +131,19 @@ whatever the model wrote; no extra call). At shipped coverage it changes almost 
 never read when the coverage was recorded (train, reworded, longtail seeds 41–42, no-model funnel, `--jobs 1`):
 hidden surfaced 602 → 602 of 816, decoys 538 → 536, planted handed 551 → 551, neutral packets 765 → 770. It can only
 be judged on coverage recorded on the right clock.
+
+## 5. The subagent-simulated pilot (pre-registered before any answer was read)
+
+The API has no credit for the rest of the day (the owner). Haiku subagents (the Agent tool, model "haiku") stand in
+for the check's model; every number from them is labelled **subagent-simulated**, and their cost and latency are
+not the API's. `packages/sim/lab/f5/pilot.ts` builds the prompts from `--check-dump` rows recorded with
+`pushCheckSheet` 80 on train, reworded and longtail, seeds 41–42 (the calls failed: $0) with the engine's own
+`checkMessages`, one user's prompts a batch file (the system message and the sheet written once), and scores the
+answers with `parseCompareSheet`. Sets: Th and Tc (the planted fact, or the look-alike, on the sheet and not in the
+pool; asked with the sheet only), Hh and Hc (in the pool; 40 sampled each; asked with and without), N (neutral; 40
+sampled; with and without).
+
+**Reading, fixed now.** The sheet goes on to the dev20 screen if Th named is at least 30% of Th; Tc named at most
+half Th's rate; Hh named with the sheet at least without it less 3; Hc named with the sheet at most without it plus
+3; N with any yes, with the sheet, at most without it plus 3. Otherwise the sheet's prompt is revised once, on these
+sets, before dev20.
