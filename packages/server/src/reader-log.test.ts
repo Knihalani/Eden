@@ -100,8 +100,11 @@ describe("the reader's failures are logged once by the server, without the key",
     const check = readerFailureLog(() => {}, undefined, "check failed", "check");
     for (let i = 0; i < 3; i++) reader(new Error("openrouter 403"));
     check(new Error("openrouter 403"));
-    expect(modelFailures.reader - before.reader).toBe(3);
-    expect(modelFailures.check - before.check).toBe(1);
+    check(new Error("push check reply unreadable (cut off at the token cap, or not the expected JSON)"));
+    expect(modelFailures["reader:error"] - before["reader:error"]).toBe(3);
+    expect(modelFailures["check:error"] - before["check:error"]).toBe(1);
+    // An unreadable reply is routine (about 2% of checks) and counted apart: the alert reads errors only.
+    expect(modelFailures["check:unreadable"] - before["check:unreadable"]).toBe(1);
   });
 
   test("without a key there is no reader, so nothing to log", () => {

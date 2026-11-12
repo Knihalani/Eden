@@ -275,8 +275,10 @@ export class Ops {
         }
       }
     }
-    for (const [role, n] of Object.entries(modelFailures))
-      this.counts.set(`eden_model_failures_total{role="${role}"}`, n);
+    for (const [key, n] of Object.entries(modelFailures)) {
+      const [role, kind] = key.split(":");
+      this.counts.set(`eden_model_failures_total{kind="${kind}",role="${role}"}`, n);
+    }
     let family = "";
     for (const [k, v] of [...this.counts].sort()) {
       const base = k.split("{")[0]!;
