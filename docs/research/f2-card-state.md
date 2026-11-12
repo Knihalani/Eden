@@ -71,3 +71,43 @@ approval) none, per its prompt.
 
 **Arm 2, registered here before its run.** Same labels, same suites, same bar. `pushStateFilter` drops an item only
 when its card is kind none and its state is lifted, met or superseded: the model said nothing constrains, and why.
+
+## 3. Arm 2: facts kept, decoys short of the bar
+
+Same runs, the filter on none cards only (`.local/f2s-run2`). Handed, base → arm 2:
+
+| suite | decoys | facts |
+|---|---|---|
+| train 41–42 | 276 → 198 | 296 → 294 |
+| reworded 41–42 | 250 → 180 | 273 → 271 |
+| longtail 41–42 | 22 → 18 | 32 → 32 |
+| dev20 41–44 | 152 → 139 | 210 → 208 |
+| pooled | 700 → 535 (−23.6%) | 811 → 805 (−0.7%) |
+
+Surfaced counts (any path, the ask included) and neutral packets are unchanged on every suite: the dropped decoys
+were handed by the push and are still listed or cited by the ask, so this changes what the agent is told to check, not
+what it can find. dev20's kinds: a (a constraint lifted) 48 → 35, b 41 → 43, c 63 → 61.
+
+**Against the bar:** decoys −23.6% (bar −30%: fails), facts −0.7% (bar ≤ −1%: passes), card cost about +7%
+(estimate below; bar +15%: passes). By the registered rule the trial fails.
+
+**Why it stops near −24%.** Of the handed decoys whose item is labelled lifted, met or superseded, the rest are
+carded status-change or already-done, the same kinds the facts it must keep are carded (train: 19 decoys
+status-change/superseded against 10 facts). Read alone, an item cannot tell an old change from the one that bears on
+the request; that needs the request (the push check, or the agent). Dropping cleared items of the standing kinds too
+(freeze, deadline, limit, absence, dependency, prohibition) would add about 46 decoys and lose about 4 facts on these
+suites (counted from the base pools, not run): −30.2% and −1.2%, failing the facts bar instead.
+
+**Uncarded decoys (step 2).** Handed decoys never carded: train 10, reworded 10, longtail 3, dev20 12 (§1). Carding
+every one, and every one judged cleared, would move the pooled cut by at most 35 of 700 (5 points), so the prefilter
+was not widened and its added calls were not measured.
+
+**Card cost (estimate, not a measured run).** Over the 1,210 labelled items with a replayed card: the replay's output
+is about 109,000 tokens (characters / 3.5); a state on 1,011 cards and 176 new none cards add about 10,600 (+9.7%);
+the longer clause adds about 130 input tokens a call. At Haiku's 1:5 input:output price, with about 3,700 input and
+900 output tokens a 10-item call, that is about +7% a card call.
+
+**What is not measured.** The states came from Haiku subagents judging each item alone with `build.py`'s instruction,
+standing in for the card call's own clause; the card call judges the item among nine others and also writes its card.
+No paid card call was made (no Anthropic credit). Before a promotion the recommended check is a re-card of dev20
+41–44 in form 3 + 16 through the queue, then the same screen.
