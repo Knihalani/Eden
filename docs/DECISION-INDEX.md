@@ -690,3 +690,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1124 | 2026-11-12 | Lab only: the pre-registered rule for D1122 and D1123 | lab |
 | D1125 | 2026-11-12 | Lab only: D1124's run moves to subagents, with unrelated silent edits in every variant | lab |
 | D1126 | 2026-11-12 | Rejected (stopped on D1125's pre-registered rule): `packetChanges` (D1123) and `packetWhy` v2 (D1122, deleted by D1126); both deleted with… | rejected |
+| D1127 | 2026-11-12 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | trial |

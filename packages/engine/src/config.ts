@@ -749,6 +749,13 @@ export interface EngineConfig {
    * model, no call.
    */
   revisionDiff: boolean;
+  /**
+   * F3 (trial, 0 = off; D1127): with `verifyDelivery`, a cached copy no read has refreshed for longer than this (ms) is
+   * re-read by its ref before it is handed over or cited, as a copy a change signal doubted is (D126, D211). A silent
+   * edit at a source the request's lookup did not poll otherwise goes out as the pre-edit copy (D1126). No model; one
+   * fetch an aged item handed, inside the delivery's re-read deadline.
+   */
+  freshenAgeMs: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -905,4 +912,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
+  freshenAgeMs: 0,
 };

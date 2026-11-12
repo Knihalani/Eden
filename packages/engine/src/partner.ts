@@ -4998,6 +4998,14 @@ export class ContextPartner {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     if (this.unswept(s.scope, item)) return true;
+    // `freshenAgeMs` (F3, trial): a copy no read has refreshed for that long may have been edited silently at its source
+    // (no notice, no poll since): it is re-read before it is handed over, as a doubted copy is.
+    // A sent message (a mail's header block, a chat line's stamp) is not edited in place: only documents, events,
+    // notes and records are, so only they are re-read.
+    if (this.config.freshenAgeMs > 0 && !SENT_MESSAGE.test(item.text.slice(0, 64))) {
+      const at = this.deps.cache.fetchedAt(s.scope, item.id);
+      if (at !== undefined && this.now() - at > this.config.freshenAgeMs) return true;
+    }
     const mark = this.deps.cache.readMark(s.scope, item.id);
     if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
@@ -6210,6 +6218,9 @@ interface PacketFrame {
   itemBytes: number;
   maxBytes: number;
 }
+
+/** `freshenAgeMs`: text that starts as a sent message does (a mail's "From:" header, a chat line's "[09:14]" stamp). */
+const SENT_MESSAGE = /^(?:From: |\[\d{1,2}:\d{2}\])/;
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */
 const UPDATED = "updated:";
