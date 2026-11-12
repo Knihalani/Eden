@@ -85,7 +85,13 @@ if (cmd === "build") {
     ).slice(0, 40),
   };
   // Which arms each set is asked in: T can only be named with the sheet.
-  const base: Record<string, ("S" | "B" | "R")[]> = { Th: ["S"], Tc: ["S"], Hh: ["S", "B"], Hc: ["S", "B"], N: ["S", "B"] };
+  const base: Record<string, ("S" | "B" | "R")[]> = {
+    Th: ["S"],
+    Tc: ["S"],
+    Hh: ["S", "B"],
+    Hc: ["S", "B"],
+    N: ["S", "B"],
+  };
   const arms = ARMS.length ? Object.fromEntries(Object.keys(base).map((k) => [k, ARMS])) : base;
   const key: Record<string, unknown>[] = [];
   const byFile = new Map<string, { sheet: string; prompts: string[] }>();

@@ -67,9 +67,21 @@ const CARDS: Record<string, Card> = {
   },
 };
 
+// The revised policy (edited at its source): its own card, made only once `release` is called.
+const REVISED_CARD: Card = {
+  kind: "status-change",
+  actions: ["travel"],
+  entities: ["TravelPerk"],
+  statement: "TravelPerk no longer required for bookings",
+};
+let release: () => void = () => undefined;
 class TableMaker implements CardMaker {
   async make(items: ContextItem[]) {
-    return { cards: items.map((i) => CARDS[i.title] ?? NONE), costUsd: 0 };
+    if (items.some((i) => i.text.includes("no longer"))) await new Promise<void>((r) => (release = r));
+    return {
+      cards: items.map((i) => (i.text.includes("no longer") ? REVISED_CARD : (CARDS[i.title] ?? NONE))),
+      costUsd: 0,
+    };
   }
 }
 
@@ -95,11 +107,13 @@ const naming = (word: string) =>
 
 function setup(config: Record<string, unknown>, model: FakeModel) {
   let clock = NOW;
+  // The policy as its source holds it now (`revise` edits it).
+  let policy = POLICY;
   const source: Source = {
     id: "mail",
     kind: "test",
     description: "Mail",
-    search: async (q) => (/policy|closure/i.test(q.text) ? [POLICY, OLD] : POOL),
+    search: async (q) => (/policy|closure/i.test(q.text) ? [policy, OLD] : POOL),
   };
   const cards = new CardEnricher({ maker: new TableMaker(), budget: new Budget(), now: () => clock });
   const checker = new PushChecker({ model, budget: new Budget() });
@@ -125,7 +139,10 @@ function setup(config: Record<string, unknown>, model: FakeModel) {
     cards,
     checker,
   });
-  const warm = async (userId = "u1") => {
+  const revise = (text: string) => {
+    policy = { ...POLICY, text, updatedAt: clock };
+  };
+  const warm = async (userId = "u1", idle = true, text = "Any news on the travel policy or the office closure?") => {
     // A question brings the rules into the user's cache, and their cards are made.
     await partner.observe(
       {
@@ -134,11 +151,11 @@ function setup(config: Record<string, unknown>, model: FakeModel) {
         sessionId: "s0",
         at: clock,
         kind: "user_message",
-        text: "Any news on the travel policy or the office closure?",
+        text,
       } as AgentEvent,
       { waitMs: 1_000 },
     );
-    await cards.idle();
+    if (idle) await cards.idle();
     clock += HOUR;
   };
   const handed = async (text: string, userId = "u1"): Promise<string[]> => {
@@ -147,7 +164,7 @@ function setup(config: Record<string, unknown>, model: FakeModel) {
     const got = partner.takePending(at).find((x) => x.reason.startsWith("candidates:"));
     return got ? got.citations.map((c) => c.itemId) : [];
   };
-  return { partner, checker, warm, handed };
+  return { partner, checker, warm, handed, revise, cards };
 }
 
 const REQUEST = "Pay the Harlow venue deposit invoice and get me a return to Edinburgh";
@@ -230,6 +247,30 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
         );
       }
     }
+  });
+
+  test("staleness: a rule edited at its source leaves the sheet at once and returns as its new card", async () => {
+    const model = naming("nothing");
+    const { warm, handed, revise, cards } = setup({ pushCheckSheet: 80 }, model);
+    await warm();
+    await handed(REQUEST);
+    expect([...rules(model.calls.at(-1)!).keys()].some((s) => s.includes("only through TravelPerk"))).toBe(true);
+    // The edit is read (its new copy stored; a held search page would hide it, so another question reads it, as a
+    // source's change notice would); its card is still being made.
+    revise("Update: TravelPerk is no longer required, book trains and flights anywhere.");
+    await warm("u1", false, "What changed in the travel policy?");
+    await handed(REQUEST);
+    const during = [...rules(model.calls.at(-1)!).keys()];
+    expect(during.some((s) => s.includes("only through TravelPerk"))).toBe(false);
+    expect(during.some((s) => s.includes("no longer required"))).toBe(false);
+    release();
+    await cards.idle();
+    // A request after the new card was made reads it.
+    await warm("u1", true, "Is the travel policy settled now?");
+    await handed(REQUEST);
+    const after = [...rules(model.calls.at(-1)!).keys()];
+    expect(after.some((s) => s.includes("no longer required"))).toBe(true);
+    expect(after.some((s) => s.includes("only through TravelPerk"))).toBe(false);
   });
 
   test("the config checker knows the keys: the sheet needs cards and the check", () => {
