@@ -208,7 +208,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 |---|---|---|
 | D51 | A per-user standing-constraints register, behind `register`, off by default. | killed later: The sweep breaks the calls bar (8.66 per lookup) |
 | D58 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | killed by D225 |
-| D60 | Anticipation, behind `anticipate`, off by default. | killed by D227 |
+| D60 | Anticipation, behind `anticipate`, off by default. | killed by D1301: Fit on train at 2% neutral packets, the best arm (the pass's acts, cosine less the request's median rule… |
 | D89 | The request-time bridging query, `bridgeQuery` (`bridge.ts`, `PartnerDeps.bridge`: a `QueryBridge` with its own `BridgeMaker`, model and… | killed by D112: no measurement favoured them on |
 | D102 | `slowPathQueue`: a request that reaches the slow path while the session's slow path is busy is kept in a one-slot per-session queue (the… | killed by D228: The queued lookups' deliveries were almost all rule paths (hidden 23 → 2, decoys 67 → 4 by rule path), and… |
 | D107 | The knowledge graph (D58) costs less to hold and to build, with the same results. | killed by D225: hidden +0 |
@@ -218,6 +218,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D141 | part of: deleting the graph's code is rejected | because no switch exists yet |
 | D196 | Retiring rule paths (trial `rulesOff`) is rejected and deleted | hidden −2.3 (−6.6..+2.0) |
 | D216 | Rejected: ingest off the event loop. | hidden +0 |
+| D227 | Anticipation (`anticipate`, `anticipateCalls`, `anticipateSessionCalls`, `anticipateOff`; D60) is deleted with its code and tests |  |
 | D233 | Rejected: read at ingest, not per request. | It fails on the same wall: the match back to the request is lexical, and the model judging an item without… |
 | D238 | part of: trimming it by what cannot bind is rejected | a 160-character item window (`askReaderItemChars` 240 → 160) costs more |
 | D308 | `senderDomains` (a compacted From line keeping its address's domain) measured and deleted with its code and tests |  |
