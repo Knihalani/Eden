@@ -263,7 +263,7 @@ PART_VARIANTS = {
     "minus-plans": {"planConflict": False},
     "minus-fewer": {"pushCandidatesSettled": 0},
     "minus-open": {"pushOpen": False},
-    "minus-check": {"pushCheck": False},
+    "minus-check": {"pushCheck": False, "packetHeedsCheck": False},
     "minus-indirect": {"pushIndirect": False},
     "minus-freshness": {"verifyDelivery": False, "readerVerifyAfter": False, "revisionNotice": False,
                         "revisionDiff": False},

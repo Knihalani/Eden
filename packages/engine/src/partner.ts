@@ -432,6 +432,8 @@ interface Cue {
   key: string;
   /** A content-free id for the cue, for traces and injection reasons. */
   id: string;
+  /** `packetHeedsCheck` (D1450): the user request (`Session.requests`) an observed event's cue was made in. */
+  request?: number;
   /** The days the request names, resolved against the event's clock (D44); null when it names no time. */
   time: TimeWindow | null;
   /** When the triggering event happened (ms): "the next one" is the first at or after this. */
@@ -648,6 +650,8 @@ export class ContextPartner {
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
    */
   private readonly undoable = new WeakMap<Injection, Undo>();
+  /** `packetHeedsCheck` (D1450): the user request each rule-path packet was made for (its cue's). */
+  private readonly madeFor = new WeakMap<Injection, number>();
   /** Tenant → user scope key → injection id → outcome; both inner maps least recently recorded first. */
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
@@ -950,7 +954,8 @@ export class ContextPartner {
           )
         : null;
     const t0 = performance.now();
-    const observing = this.observeEvent(event, options);
+    // With a push running, the reply's packet is handed out below, once the push's check has had its say (D1450).
+    const observing = this.observeEvent(event, options, push !== null);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
     // Its turn too: the push's trace names its request's turn, as a lookup's does, not the one current when it settles.
     if (push) {
@@ -977,12 +982,24 @@ export class ContextPartner {
     const live = this.sessions.get(sessionKey(event));
     if (live) this.checkPlans(live);
     const queued = (live?.pending.length ?? 0) > 0;
-    return { ...result, pending: result.pending || !settled || queued };
+    // `packetHeedsCheck` (D1450): the reply's packet (a rule path made it before the check answered) is not handed
+    // when its request's check has since read every item in it and said yes to none. Nothing was noted as shown or
+    // outstanding for it (`handOut` was held for this); its items stay marked in the ledger: silence, no repeat.
+    let injection = result.injection;
+    if (injection && live && !options.shadow) {
+      if (settled && this.allCheckedOut(live, injection)) {
+        this.traceHeld(live, injection);
+        injection = null;
+      } else this.handOut(live, injection);
+    }
+    return { ...result, injection, pending: result.pending || !settled || queued };
   }
 
   private async observeEvent(
     event: AgentEvent,
     options: { waitMs?: number; shadow?: boolean } = {},
+    /** The caller hands the reply's packet out itself (`observe`, while a push runs: `packetHeedsCheck`). */
+    held = false,
   ): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
@@ -1038,7 +1055,7 @@ export class ContextPartner {
       });
     };
     const reply = (injection: Injection | null): ObserveResult => {
-      if (injection && !options.shadow) this.handOut(s, injection);
+      if (injection && !options.shadow && !held) this.handOut(s, injection);
       if (root) {
         spans!.close(root, {
           session: s.id,
@@ -1062,6 +1079,7 @@ export class ContextPartner {
     const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
+    cue.request = s.requests;
     if (root) cue.span = root.id;
     // `askReader`: the request's own cue, kept so an ask reads what its frame already holds.
     if (event.kind === "user_message" && this.config.askReader) {
@@ -1322,6 +1340,7 @@ export class ContextPartner {
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
     this.dropRemovedPending(s);
+    this.dropCheckedOut(s);
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
@@ -1338,6 +1357,56 @@ export class ContextPartner {
       s.pending.splice(k, 1);
       this.withdraw(s, packet);
     }
+  }
+
+  /**
+   * `packetHeedsCheck` (G2, D1450): a queued rule-path packet of this request whose every item its push check read
+   * and said yes to none of is not handed out (the rule path queued it before the check answered: the no-model
+   * conflict test reads "hold lifted" as a hold). It goes whole, as a removed item's packet does, and only when
+   * nothing else is in it; what its delivery marked stays marked (silence over a repeat).
+   */
+  private dropCheckedOut(s: Session): void {
+    if (s.pending.length === 0) return;
+    const out = this.checkedOut(s);
+    if (!out) return;
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!this.allCheckedOut(s, packet, out)) continue;
+      s.pending.splice(k, 1);
+      this.traceHeld(s, packet);
+    }
+  }
+
+  /**
+   * `packetHeedsCheck` (D1450): a rule path's packet (`RULE_PATHS`), made for the session's current request, whose
+   * every item that request's push check turned down. Never the candidates' own packet (a check that failed open or
+   * came late left them), an update, a plan alert, an ask's follow-up or the fast path's.
+   */
+  private allCheckedOut(s: Session, packet: Injection, out = this.checkedOut(s)): boolean {
+    if (!out || packet.mode !== "proactive" || packet.citations.length === 0) return false;
+    if (!RULE_PATHS.some((prefix) => packet.reason.startsWith(prefix))) return false;
+    if (this.madeFor.get(packet) !== s.requests) return false;
+    const now = this.now();
+    return packet.citations.every((c) => {
+      const item = this.deps.cache.get(s.scope, c.itemId, now);
+      return !!item && out(item);
+    });
+  }
+
+  /** `packetHeedsCheck` (D1450): the decision not to hand a packet, traced (ids only), so `explain` says why. */
+  private traceHeld(s: Session, packet: Injection): void {
+    this.trace(s, {
+      sessionId: s.id,
+      turn: s.turn,
+      event: "user_message",
+      decision: "silent",
+      reason: "push check turned it down",
+      latencyMs: 0,
+      sourceCalls: 0,
+      modelCalls: 0,
+      costUsd: 0,
+      itemIds: packet.citations.map((c) => c.itemId),
+    });
   }
 
   /**
@@ -2074,7 +2143,10 @@ export class ContextPartner {
       const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
       // `pushCheck` (D500, D828): one budgeted call over the pool, only when the gate would hand candidates. With no
       // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
-      const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
+      const check =
+        gate && this.config.pushCheck && this.deps.checker
+          ? await this.checkPush(s, cue, gate, internal.request)
+          : null;
       if (check && s.closed) {
         // The session closed while the check ran: its call was paid for, so it is traced on its own.
         if (check?.called) this.traceCheck(s, check, t0);
@@ -2576,7 +2648,7 @@ export class ContextPartner {
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
    * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
-  private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
+  private async checkPush(s: Session, cue: Cue, gate: PushGate, forRequest?: number): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
     if (!this.config.pushCheck || !checker) return null;
     const like = gate.like.some(Boolean);
@@ -2624,6 +2696,7 @@ export class ContextPartner {
     if (!kept) {
       const entry: KeptCheck = {
         asked,
+        ...(forRequest !== undefined ? { request: forRequest } : {}),
         marks: new Map(items.map((it) => [it.id, itemMark(it)])),
         read: checker.check(s.scope, s.key, input, s.abort.signal),
       };
@@ -2654,6 +2727,29 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * `packetHeedsCheck` (G2, D1450): the test of whether this request's push check read an item and did not say yes
+   * to it, or null when no settled check of this request did. An item counts only as the copy the check read
+   * (`itemMark`'s id and content hash): a changed copy is not the one it turned down.
+   */
+  private checkedOut(s: Session): ((item: ContextItem) => boolean) | null {
+    if (!this.config.packetHeedsCheck || !s.pushChecks) return null;
+    const out = new Map<string, string>();
+    for (const kept of s.pushChecks.values()) {
+      const read = kept.settled;
+      if (kept.request !== s.requests || !read?.yes) continue;
+      // A reply that named its most (5) may have left out items it would have named: it turned nothing down.
+      if (read.yes.size + (read.rules?.size ?? 0) >= 5) continue;
+      // A rule the reply named brings its item in too (`pushCheckSheet`): that is a yes.
+      for (const [id, mark] of kept.marks) {
+        if (read.yes.has(id) || read.rules?.has(id)) out.delete(id);
+        else out.set(id, mark);
+      }
+    }
+    if (out.size === 0) return null;
+    return (item) => out.get(item.id)?.startsWith(`${item.id}\t${cardKey(item)}\t`) === true;
   }
 
   /**
@@ -6172,6 +6268,7 @@ export class ContextPartner {
     const spans = this.spans;
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
     const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, frame);
+    if (cue.request !== undefined) this.madeFor.set(injection, cue.request);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;
   }
@@ -6872,9 +6969,14 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 /** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
 const CHECK_KEPT = 4;
 
+/** `packetHeedsCheck` (D1450): the reasons of the packets the no-model rule paths make for a request. */
+const RULE_PATHS = ["fallback:", "grounded-", "sources:"];
+
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {
   asked: string;
+  /** The user request (`Session.requests`) the check was made for (`packetHeedsCheck`). */
+  request?: number;
   /** Per item read, `itemMark`: id, content hash, date and sender. */
   marks: Map<string, string>;
   read: Promise<PushCheckRead>;
