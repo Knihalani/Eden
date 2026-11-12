@@ -49,3 +49,25 @@ handed):
   a state) priced against the replay's own output tokens per call.
 
 Pass: both switches go to F12's candidate the same day (off until the final run). Fail: deleted, findings kept.
+
+## 2. Arm 1 (as registered): fails the facts bar
+
+`pushStateFilter` dropped every pool item whose state was lifted, met or superseded. Handed, base → arm (no model,
+shipped coverage, states overlaid from subagent labels; `.local/f2s-run`):
+
+| suite | decoys | facts |
+|---|---|---|
+| train 41–42 | 276 → 150 | 296 → 273 |
+| reworded 41–42 | 250 → 132 | 273 → 252 |
+| longtail 41–42 | 22 → 15 | 32 → 32 |
+| dev20 41–44 | 152 → 120 | 210 → 205 |
+| pooled | 700 → 417 (−40.4%) | 811 → 762 (−6.0%) |
+
+The facts lost on train are items that announce the new state of affairs: a race postponed to a new date, a flight
+retimed, an expense already paid, a template withdrawn for a new one. Labelled alone, each says an earlier
+constraint was superseded or a condition met, but the item is the fact in force. The card model already tells the
+two apart: it cards these items already-done, status-change or limit, and it cards a decoy (a lifted hold, a cleared
+approval) none, per its prompt.
+
+**Arm 2, registered here before its run.** Same labels, same suites, same bar. `pushStateFilter` drops an item only
+when its card is kind none and its state is lifted, met or superseded: the model said nothing constrains, and why.
