@@ -23,6 +23,7 @@ export {
   type FetchMapping,
   type ToolSchema,
 } from "./schema-args";
+export * from "./mcp";
 export { searchSources, type SourceOutcome } from "./fanout";
 export {
   reachedSource,

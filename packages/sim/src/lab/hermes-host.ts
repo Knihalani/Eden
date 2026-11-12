@@ -19,7 +19,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ContextPartner } from "@eden/engine";
 import type { Scope } from "@eden/protocol";
-import { createMcpServer } from "@eden/server";
+import { createMcpServer, type EdenMcpServer } from "@eden/server";
 
 /** The task a stream is running now, and what its routes call. */
 export interface TaskBinding {
@@ -38,7 +38,7 @@ export interface StreamHost {
   /** A fresh MCP server for one request (stateless transport), bound to the current task. */
   sourcesServer(): McpServer;
   /** Eden's MCP server for one request (`edenMcpServer`), or null in a condition without Eden. */
-  edenServer(): McpServer | null;
+  edenServer(): EdenMcpServer | null;
   /** The model endpoint: `path` after `/v1/`. */
   model(path: string, req: Request): Promise<Response>;
 }
@@ -58,7 +58,7 @@ async function readBody(req: Request): Promise<Record<string, unknown> | Respons
   }
 }
 
-async function serveMcp(server: McpServer, req: Request): Promise<Response> {
+async function serveMcp(server: McpServer | EdenMcpServer, req: Request): Promise<Response> {
   // Stateless, JSON responses: each request gets its own server and transport (the SDK's stateless pattern).
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -125,7 +125,7 @@ export interface AskTask {
  * `ask_context` from the agent's tools. A `tools/call` reads the running task when it arrives and is refused (a tool
  * error, nothing asked of Eden) when there is none: an answer must belong to the task that asked.
  */
-export function edenMcpServer(partner: ContextPartner, scope: Scope, current: () => AskTask | null): McpServer {
+export function edenMcpServer(partner: ContextPartner, scope: Scope, current: () => AskTask | null): EdenMcpServer {
   const view = {
     config: partner.config,
     ask: async (q: Parameters<ContextPartner["ask"]>[0]) => {
