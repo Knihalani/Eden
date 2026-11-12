@@ -280,8 +280,8 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
  */
 const AGENT_SIM = opt("agent-sim", "loop");
 /**
- * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's (twenty connectors, rule-like items that
- * never apply), as the funnel and cold-start.ts take it; set before any world is built. `off` (default).
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's (twenty connectors, rule-like items
+ * that never apply), as the funnel and cold-start.ts take it; set before any world is built. `off` (default).
  */
 setRealism(opt("realism", "off"));
 /**
