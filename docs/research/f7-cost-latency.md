@@ -498,7 +498,7 @@ is therefore a ceiling, not a plan. Without it, target 3 on model spend alone st
 
 ## 12. The shipped route's prompt cache
 
-On `claude/f7-cache` (trial D1193, probe pending the owner): `EDEN_MODEL_CACHE=on` sets `anthropicCache` on all
+On `claude/f7-cache` (trial D1196, probe pending the owner): `EDEN_MODEL_CACHE=on` sets `anthropicCache` on all
 three model roles of the OpenRouter route, with tests that the cached prefix is byte-identical across calls.
 
 ## 13. The compact card reply: dropped unrun (10:30 UTC)
