@@ -95,39 +95,73 @@ wait $CB && wait $CF || { log "go: coverage failed: stopped"; exit 1; }
 log "go: step 1 done"
 
 # 2. The arms. One process an arm (all seeds), the three side by side so their calls share the queue's batches.
+# Through the queue a push check takes a minute or more (a subagent), so every wait on it is lifted: the check's own
+# (`pushCheckWaitMs`), the push observe's cap (`readerPushWaitMs`, 60 s: F7 found checks landing after the agent's first
+# call on 21 of 36 tasks without it) and the harness's first observe (`@w`). check-order.py asserts it after each arm.
+# FINAL_CONFIG (a preset name or JSON, e.g. F12's candidate profile) is the final arm's configuration; the before arm
+# runs `default` at BEFORE. The waits are a variant (`~Q`) over either, so a preset keeps its own settings.
 WAIT=36000000
-COMMON=(--agent-sim single --model claude-haiku-5-5 --grader claude-sonnet-5-5 --card-model claude-haiku-5-5
+WAITS="{\"Q\":{\"pushCheckWaitMs\":$WAIT,\"readerPushWaitMs\":$WAIT}}"
+EDEN_COND="both~Q+ask@w$WAIT"
+COMMON=(--model claude-haiku-5-5 --grader claude-sonnet-5-5 --card-model claude-haiku-5-5
   --reader-model claude-haiku-5-5 --time-scale 1 --tenant-prompt --push payload
-  --source-profile packages/sim/lab/before-after/market-profiles/direct.json --suite "$SUITE" --seeds "$SEEDS"
-  --variants hidden,control,neutral --split "$SPLIT" --budget 5 --config "{\"pushCheckWaitMs\":$WAIT}"
+  --source-profile packages/sim/lab/before-after/market-profiles/direct.json --suite "$SUITE"
+  --variants hidden,control,neutral --split "$SPLIT" --budget 5 --variant-config "$WAITS"
   --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 100000 --spend-headroom 0)
-arm() { # TREE ARM CONDITION COVERAGE
-  local out="$L/$2"
+arm() { # TREE ARM CONDITION COVERAGE CONFIG [flags...]
+  local t=$1 name=$2 cond=$3 cov=$4 cfg=$5 out="$L/$2"
+  shift 5
   [ -e "$out.json" ] && return 0
-  (cd "$1" && EDEN_LAB_QUEUE_RUN="$P-$2" env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts \
-    --conditions "$3" "${COMMON[@]}" --coverage full --cards "$4" --intent "$4" --run-label "$P-$2" \
-    --cards-out "$out.cards.jsonl" --timeline "$out.tl" --out "$out.json" ${EXTRA:-}) >"$out.log" 2>&1
+  (cd "$t" && EDEN_LAB_QUEUE_RUN="$P-$name" env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts \
+    --conditions "$cond" "${COMMON[@]}" --config "$cfg" --coverage full --cards "$cov" --intent "$cov" \
+    --run-label "$P-$name" --cards-out "$out.cards.jsonl" --timeline "$out.tl" --out "$out.json" "$@" ${EXTRA:-}) \
+    >"$out.log" 2>&1 || return 1
+  # The push check must land before the agent's first model request, or the arm measured late injection.
+  if [ "$cond" != tools ] && ! python3 -I packages/sim/lab/final/check-order.py "$out.tl/tasks.jsonl" >>"$out.log"; then
+    log "go: $name: a push check ended after the agent's first request (see $out.log): stopped"
+    return 1
+  fi
 }
-# A --dry start of every arm first (modules, worlds, coverage; no model call).
-for a in "$TF raw tools $L/cov-final.jsonl" "$TB before both+ask@w$WAIT $L/cov-before.jsonl" \
-  "$TF final both+ask@w$WAIT $L/cov-final.jsonl"; do
-  read -r t n c v <<<"$a"
+FCFG=${FINAL_CONFIG:-default}
+SINGLE=(--agent-sim single --seeds "$SEEDS")
+# A --dry start of every arm first (modules, worlds, coverage, configuration; no model call).
+for a in "$TF raw tools $L/cov-final.jsonl default" "$TB before $EDEN_COND $L/cov-before.jsonl default" \
+  "$TF final $EDEN_COND $L/cov-final.jsonl $FCFG"; do
+  read -r t n c v g <<<"$a"
   (cd "$t" && env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --conditions "$c" "${COMMON[@]}" \
-    --coverage full --cards "$v" --intent "$v" --seeds "${SEED_ARR[0]}" --out "$L/dry-$n.json" --dry) \
+    --config "$g" --coverage full --cards "$v" --intent "$v" --seeds "${SEED_ARR[0]}" --out "$L/dry-$n.json" --dry) \
     >"$L/dry-$n.log" 2>&1 || { log "go: the $n arm does not start (see $L/dry-$n.log): stopped"; exit 2; }
 done
-log "go: step 2 arms (drive the queue now)"
-arm "$TF" raw tools "$L/cov-final.jsonl" &
+log "go: step 2 single-shot arms (drive the queue now)"
+arm "$TF" raw tools "$L/cov-final.jsonl" default "${SINGLE[@]}" &
 A1=$!
-arm "$TB" before "both+ask@w$WAIT" "$L/cov-before.jsonl" &
+arm "$TB" before "$EDEN_COND" "$L/cov-before.jsonl" default "${SINGLE[@]}" &
 A2=$!
-arm "$TF" final "both+ask@w$WAIT" "$L/cov-final.jsonl" &
+arm "$TF" final "$EDEN_COND" "$L/cov-final.jsonl" "$FCFG" "${SINGLE[@]}" &
 A3=$!
 fail=0
 for pid in $A1 $A2 $A3; do wait "$pid" || fail=1; done
 [ $fail -eq 0 ] || { log "go: an arm failed (see $L/*.log): stopped"; exit 1; }
 log "go: step 2 done"
 
-# 3. The report.
-bash packages/sim/lab/final/report.sh "$L" "$SUITE" | tee "$L/report.txt"
+# 2b. The multi-turn sample (the owner's cost and speed targets need the agent's own turns, which single-shot cannot
+# see): the real Pi loop through the queue, raw against final, MT_LIMIT tasks a world of MT_SEEDS (default: the first
+# seed, 20 a world: 60 tasks an arm on a one-suite run).
+MT=(--seeds "${MT_SEEDS:-${SEED_ARR[0]}}" --limit "${MT_LIMIT:-20}")
+log "go: step 2b multi-turn sample (drive the queue now)"
+arm "$TF" mt-raw tools "$L/cov-final.jsonl" default "${MT[@]}" &
+M1=$!
+arm "$TF" mt-final "$EDEN_COND" "$L/cov-final.jsonl" "$FCFG" "${MT[@]}" &
+M2=$!
+fail=0
+for pid in $M1 $M2; do wait "$pid" || fail=1; done
+[ $fail -eq 0 ] || { log "go: a multi-turn arm failed (see $L/mt-*.log): stopped"; exit 1; }
+log "go: step 2b done"
+
+# 3. The report: quality (report.py), then quality, cost and speed side by side (cost.py), then F7's per-role pricing.
+{
+  bash packages/sim/lab/final/report.sh "$L" "$SUITE"
+  echo
+  python3 -I packages/sim/lab/final/cost.py "$L"
+} | tee "$L/report.txt"
 log "go: done"
