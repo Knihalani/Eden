@@ -149,9 +149,12 @@ function* schedule(u: number): Generator<number> {
   const r = rng(Math.imul(SEED, 2_654_435_761) ^ (u * 40_503 + 1));
   const exp = (meanMin: number) => -Math.log(1 - r()) * meanMin * 60_000;
   const longMin = BURST > 0 ? (SESSION_MIN - BURST * 2) / (1 - BURST) : SESSION_MIN;
-  let t = r() * SESSION_MIN * 60_000;
+  // Started two hours before the load, so the first session at or after 0 is in the process's steady state: a first
+  // session uniform over the first `--session-min` minutes (R1d's first runs) made users with none before an early
+  // restart sure to come back soon after it, which favoured writing the least recently used (the review of R1d).
+  let t = -120 * 60_000 + r() * SESSION_MIN * 60_000;
   for (;;) {
-    yield t;
+    if (t >= 0) yield t;
     t += BURST > 0 && r() < BURST ? exp(2) : exp(longMin);
   }
 }
@@ -255,8 +258,9 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
   // The load: sessions at exponential intervals per user, until `endAt` (wall clock), once the orchestrator set it.
   while (!Number.isFinite(endAt) || !Number.isFinite(loadStart)) await Bun.sleep(100);
   let seq = 0;
-  const askCoin = rng(SEED * 7 + index);
-  const session = async ({ scope, key }: (typeof mine)[number]) => {
+  // Each user's own coin (not the process's, drawn in wall-clock order): the same asks in both arms of a comparison.
+  const coins = new Map(mine.map(({ u }) => [u, rng(Math.imul(SEED + 1, 2_246_822_519) ^ (u * 7_919 + 3))]));
+  const session = async ({ scope, key, u }: (typeof mine)[number]) => {
     if (resume && !touched.has(scope.userId)) {
       touched.add(scope.userId);
       firsts.push({ dt: Date.now() - started, restored: onDisk.has(scope.userId) });
@@ -277,7 +281,8 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
       { ...who, kind: "tool_result", tool: "search_mail", output: "3 messages: budget review moved to Friday" },
       w.event,
     );
-    if (askCoin() < 0.5) await post(key, "/v1/ask", { ...who, question: QUESTIONS[seq % QUESTIONS.length] }, w.ask);
+    if (coins.get(u)!() < 0.5)
+      await post(key, "/v1/ask", { ...who, question: QUESTIONS[seq % QUESTIONS.length] }, w.ask);
     await post(key, "/v1/pending", who, w.event);
     await post(key, "/v1/events", { ...who, kind: "session_end" }, w.event);
   };
@@ -487,13 +492,22 @@ async function orchestrate(): Promise<void> {
     phase = "restart";
     log("SIGTERM to every process (they write their live users)");
     const r0 = Date.now();
-    await Promise.all(
+    const persistedBefore = events.filter((e) => e.kind === "persisted").length;
+    const codes = await Promise.all(
       procs.map((p) => {
         p.kill("SIGTERM");
         return p.exited;
       }),
     );
     down = Date.now() - r0;
+    // A process killed during its flush (the review of R1d: an OOM kill in a tight cgroup) is an error of the run, not
+    // a quiet zero: a non-zero exit, or no "persisted" report, counts.
+    const reported = events.filter((e) => e.kind === "persisted").length - persistedBefore;
+    const lost = codes.filter((c) => c !== 0).length + Math.max(0, PROCS - reported);
+    if (lost > 0) {
+      totals.errors += lost;
+      log(`restart: ${lost} process(es) exited non-zero or did not report their flush`);
+    }
     await start(true);
     log(`restarted: down ${down} ms, up again in ${Date.now() - r0} ms`);
     phase = "load-2";
@@ -513,15 +527,22 @@ async function orchestrate(): Promise<void> {
     restore: (() => {
       const r = events
         .filter((e) => e.kind === "done" && e.restore)
-        .map((e) => e.restore as { onDisk: number; within5: { touched: number; restored: number }; all: typeof e });
+        .map(
+          (e) =>
+            e.restore as {
+              onDisk: number;
+              within5: { touched: number; restored: number };
+              all: { touched: number; restored: number };
+            },
+        );
       const sum = (f: (x: (typeof r)[number]) => number) => r.reduce((a, x) => a + f(x), 0);
       return r.length
         ? {
             onDisk: sum((x) => x.onDisk),
             within5: { touched: sum((x) => x.within5.touched), restored: sum((x) => x.within5.restored) },
             all: {
-              touched: sum((x) => (x.all as unknown as { touched: number }).touched),
-              restored: sum((x) => (x.all as unknown as { restored: number }).restored),
+              touched: sum((x) => x.all.touched),
+              restored: sum((x) => x.all.restored),
             },
           }
         : null;
