@@ -4,6 +4,7 @@
  * rejected call (or an `onerror`), never as a throw out of the client or a request left waiting.
  */
 import { describe, expect, test } from "bun:test";
+import { McpSource, ReadOnlyViolation } from "../mcp-source";
 import { McpClient } from "./client";
 import { StreamableHttpTransport } from "./http";
 import { SseParser } from "./sse";
@@ -11,6 +12,12 @@ import { asMessage, ErrorCode, McpError, type JsonRpcMessage } from "./types";
 
 const URL_ = new URL("http://mcp.test/mcp");
 const INIT = { protocolVersion: "2025-11-25", capabilities: {}, serverInfo: { name: "s", version: "1" } };
+
+// Bounds on work, not on waiting: process CPU time, as cards.test.ts reads it, so a loaded machine does not fail them.
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
 
 type Reply = (
   msg: { id?: number; method?: string },
@@ -71,7 +78,11 @@ describe("malformed and oversized replies", () => {
   test("JSON that is valid JSON-RPC for nothing (no jsonrpc field) answers nothing", async () => {
     const { c, errors } = await client((m) => json({ id: m.id, result: {} }));
     await expect(c.callTool({ name: "x" })).rejects.toThrow("Reply did not answer the request");
-    expect(errors.some((e) => /not JSON-RPC/.test(e.message))).toBe(true);
+    // One report for what was dropped, then the request's own failure.
+    expect(errors.map((e) => e.message)).toEqual([
+      "Streamable HTTP error: Reply carried 1 malformed or unasked messages",
+      "Streamable HTTP error: Reply did not answer the request",
+    ]);
   });
 
   test("a JSON body past the cap is refused, declared or streamed", async () => {
@@ -146,7 +157,7 @@ describe("event streams", () => {
     ]);
   });
 
-  test("a server request on the stream (sampling) is refused with Method not found, never acted on", async () => {
+  test("a server request on the stream (sampling) is dropped unanswered: no POST, never acted on", async () => {
     const ask = JSON.stringify({
       jsonrpc: "2.0",
       id: "s1",
@@ -156,11 +167,103 @@ describe("event streams", () => {
     const { c, posted } = await client(() => sse(chunks([`data: ${ask}\n\n`, `data: ${result(1)}\n\n`])));
     await c.callTool({ name: "x" });
     await new Promise((r) => setTimeout(r, 5));
-    expect(posted).toContainEqual({
-      jsonrpc: "2.0",
-      id: "s1",
-      error: { code: ErrorCode.MethodNotFound, message: "Method not found" },
+    expect(posted.filter((m) => (m as { id?: unknown }).id === "s1")).toEqual([]);
+  });
+
+  test("a leading byte-order mark is dropped", async () => {
+    const { c } = await client((m) => sse(`\uFEFFdata: ${result(m.id)}\n\n`));
+    expect((await c.callTool({ name: "x" })).content).toEqual([{ type: "text", text: "ok" }]);
+  });
+
+  test("a 202 to a request fails at once instead of at the call's timeout", async () => {
+    const { c } = await client(() => new Response(null, { status: 202 }));
+    // Failing fast is the message: a wait would end in the call's 60 s timeout, past this test's own 5 s.
+    await expect(c.callTool({ name: "x" })).rejects.toThrow("Server accepted the request without answering it");
+  });
+});
+
+/** Regressions from the security review's proofs of concept (sse-quad, sse-e2e, ping-flood, pages, tiny). */
+describe("floods and slow growth", () => {
+  test("sse-quad: an 8 MiB unended line in 4 KB chunks is linear (was 1.6 s; quadratic re-joining)", () => {
+    const p = new SseParser(16 * 1024 * 1024, () => false);
+    const chunk = new Uint8Array(4_096).fill(0x61);
+    const t = cpuMs();
+    for (let n = 0; n < 8 * 1024 * 1024; n += chunk.length) expect(p.push(chunk)).toBe("more");
+    expect(p.push(new Uint8Array([0x0a]))).toBe("more");
+    expect(cpuMs() - t).toBeLessThan(400);
+  });
+
+  test("sse-e2e: 1 KB writes with no line end are cut at the 4 MiB event cap, cheaply", async () => {
+    const piece = new Uint8Array(1_024).fill(0x61);
+    let sent = 0;
+    const endless = () =>
+      sse(
+        new ReadableStream({
+          pull(c) {
+            sent += piece.length;
+            c.enqueue(piece);
+          },
+        }),
+      );
+    const { c } = await client(endless);
+    const t = cpuMs();
+    await expect(c.callTool({ name: "x" })).rejects.toThrow("Event stream larger than 4194304 bytes");
+    expect(sent).toBeLessThan(4 * 1024 * 1024 + 64 * 1024);
+    expect(cpuMs() - t).toBeLessThan(2_000);
+  });
+
+  test("ping-flood: server requests on a reply cost at most 16 POSTs at once and fail the reply past 100", async () => {
+    let pending = 0;
+    let peak = 0;
+    let replies = 0;
+    const o = over((m) => {
+      let s = "";
+      for (let i = 0; i < 20_000; i++) s += `data: {"jsonrpc":"2.0","id":"p${i}","method":"ping"}\n\n`;
+      return sse(s + `data: ${result(m.id)}\n\n`);
     });
+    // Answers to pings hang until aborted: the server never takes them.
+    const fetchFn = (o.transport as unknown as { fetchFn: typeof fetch }).fetchFn;
+    (o.transport as unknown as { fetchFn: typeof fetch }).fetchFn = ((url: URL, init?: RequestInit) => {
+      const msg = JSON.parse(String(init?.body)) as { method?: string };
+      if (msg.method) return fetchFn(url, init);
+      replies++;
+      pending++;
+      peak = Math.max(peak, pending);
+      return new Promise((_resolve, reject) =>
+        init?.signal?.addEventListener("abort", () => (pending--, reject(new Error("aborted")))),
+      );
+    }) as typeof fetch;
+    const c = new McpClient({ name: "eden", version: "0" });
+    await c.connect(o.transport);
+    await expect(c.callTool({ name: "x" })).rejects.toThrow("Reply carried over 100 server requests");
+    expect(peak).toBeLessThanOrEqual(16);
+    expect(replies).toBeLessThanOrEqual(16);
+    // Any other method is dropped outright: no POST at all.
+    const other = await client((m) => {
+      let s = "";
+      for (let i = 0; i < 50; i++) s += `data: {"jsonrpc":"2.0","id":"r${i}","method":"roots/list"}\n\n`;
+      return sse(s + `data: ${result(m.id)}\n\n`);
+    });
+    await other.c.callTool({ name: "x" });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(other.posted.filter((m) => !(m as { method?: string }).method)).toEqual([]);
+    await c.close();
+  });
+
+  test("pages: a tools/list reply is capped at 4 MiB, below the general cap", async () => {
+    const tool = `{"name":"${"a".repeat(40)}","inputSchema":{"type":"object"}},`;
+    const big = (id: number | undefined) =>
+      json(`{"jsonrpc":"2.0","id":${id},"result":{"tools":[${tool.repeat(80_000)}{"name":"b","inputSchema":{}}]}}`);
+    const { c } = await client((m) => big(m.id));
+    await expect(c.listTools()).rejects.toThrow("Reply larger than 4194304 bytes");
+  });
+
+  test.each(["data:x\n\n", "data:1\n\n"])("tiny: a flood of junk events (%j) fails the reply after 100", async (ev) => {
+    const { c, errors } = await client((m) => sse(ev.repeat(1_000_000) + `data: ${result(m.id)}\n\n`));
+    const t = cpuMs();
+    await expect(c.callTool({ name: "x" })).rejects.toThrow("over 100 bad messages");
+    expect(cpuMs() - t).toBeLessThan(1_000);
+    expect(errors.filter((e) => /malformed/.test(e.message))).toHaveLength(1);
   });
 });
 
@@ -216,7 +319,7 @@ describe("ids, hangs and errors", () => {
   test("a response to another id is dropped; the call is not answered by it", async () => {
     const { c, errors } = await client(() => json(result(99)));
     await expect(c.callTool({ name: "x" })).rejects.toThrow("Reply did not answer the request");
-    expect(errors.some((e) => /was not sent on this reply/.test(e.message))).toBe(true);
+    expect(errors.some((e) => /1 malformed or unasked/.test(e.message))).toBe(true);
     const onStream = await client(() => sse(`data: ${result(99)}\n\n`));
     await expect(onStream.c.callTool({ name: "x" })).rejects.toThrow("Event stream ended before the response");
   });
@@ -382,5 +485,45 @@ describe("fuzz", () => {
       );
     }
     expect(settled).toBe(3_000);
+  });
+});
+
+describe("pages: McpSource keeps only the tools it uses (D7 unchanged)", () => {
+  const filler = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ name: `t${i}`, inputSchema: { type: "object" } }));
+  const search = { name: "search", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } };
+  const source = (pages: (cursor: string | undefined) => { tools: unknown[]; nextCursor?: string }, lists: string[]) =>
+    new McpSource({
+      id: "s",
+      description: "s",
+      transport: () =>
+        over((m, posted) => {
+          const msg = posted[posted.length - 1] as { method: string; params?: { cursor?: string } };
+          if (msg.method !== "tools/list") return json(result(m.id, { content: [] }));
+          lists.push(msg.params?.cursor ?? "");
+          return json(result(m.id, pages(msg.params?.cursor)));
+        }).transport,
+      searchTool: { name: "search", args: (q) => ({ q: q.text }) },
+    });
+  const query = { scope: { tenantId: "t", userId: "u" }, text: "x", entities: [], limit: 5 };
+
+  test("a repeated cursor stops the listing; a tool never listed is 'no tool'", async () => {
+    const lists: string[] = [];
+    const s = source(() => ({ tools: filler(1_000), nextCursor: "same" }), lists);
+    await expect(s.search(query, AbortSignal.timeout(2_000))).rejects.toThrow("server has no tool search");
+    expect(lists).toEqual(["", "same"]);
+  });
+
+  test("the listing stops once every wanted tool is found", async () => {
+    const lists: string[] = [];
+    const s = source((c) => (c ? { tools: filler(10) } : { tools: [...filler(10), search], nextCursor: "p2" }), lists);
+    expect(await s.search(query, AbortSignal.timeout(2_000))).toEqual([]);
+    expect(lists).toEqual([""]);
+    await s.close();
+  });
+
+  test("a wanted tool that is not read-only still fails the connect", async () => {
+    const s = source(() => ({ tools: [{ ...search, annotations: {} }] }), []);
+    await expect(s.search(query, AbortSignal.timeout(2_000))).rejects.toBeInstanceOf(ReadOnlyViolation);
   });
 });

@@ -1,7 +1,9 @@
 /**
  * A server-sent events parser over bytes, one pass (D1704). Lines end in LF, CRLF or CR, also when the CR and LF
  * arrive in different chunks; `data:` lines of one event are joined by LF; comments, `id:` and `retry:` are skipped
- * (Eden does not resume streams). Bytes are decoded once per event, never per chunk or line. Bounded: a line or an
+ * (Eden does not resume streams); a leading byte-order mark is dropped. Bytes are decoded once per event, never per
+ * chunk or line. A line split across chunks is kept as a list of its parts and joined once, at its end: joining at
+ * every chunk made a long unended line quadratic (an 8 MiB line in 4 KB chunks took 1.6 s). Bounded: a line or an
  * event's data past `maxBytes` fails the parse instead of growing, and nothing here throws on any input.
  */
 
@@ -17,8 +19,11 @@ const MESSAGE = [0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65]; // "message"
 export type SseStep = "more" | "stop" | "too-large";
 
 export class SseParser {
-  /** A line not yet ended, carried to the next chunk (empty most of the time: lines rarely straddle chunks). */
-  private carry: Uint8Array = new Uint8Array(0);
+  /** The parts of a line not yet ended (empty most of the time: lines rarely straddle chunks), and their bytes. */
+  private parts: Uint8Array[] = [];
+  private carried = 0;
+  /** No line has been read yet: the first may start with a byte-order mark. */
+  private atStart = true;
   private skipLf = false;
   private data: Uint8Array = new Uint8Array(1024);
   private dataLen = 0;
@@ -46,9 +51,11 @@ export class SseParser {
       const c = chunk[i]!;
       if (c !== LF && c !== CR) continue;
       let line = chunk.subarray(start, i);
-      if (this.carry.length > 0) {
-        line = concat(this.carry, line);
-        this.carry = new Uint8Array(0);
+      if (this.parts.length > 0) {
+        if (this.carried + line.length > this.maxBytes) return "too-large";
+        line = join(this.parts, this.carried, line);
+        this.parts = [];
+        this.carried = 0;
       }
       if (c === CR) {
         if (i + 1 < chunk.length) {
@@ -60,13 +67,20 @@ export class SseParser {
       if (step !== "more") return step;
     }
     if (start < chunk.length) {
-      if (this.carry.length + chunk.length - start > this.maxBytes) return "too-large";
-      this.carry = this.carry.length ? concat(this.carry, chunk.subarray(start)) : chunk.slice(start);
+      if (this.carried + chunk.length - start > this.maxBytes) return "too-large";
+      // Copied: the caller may reuse its chunk.
+      this.parts.push(chunk.slice(start));
+      this.carried += chunk.length - start;
     }
     return "more";
   }
 
   private line(line: Uint8Array): SseStep {
+    if (this.atStart) {
+      this.atStart = false;
+      if (line[0] === 0xef && line[1] === 0xbb && line[2] === 0xbf) line = line.subarray(3);
+    }
+    if (line.length > this.maxBytes) return "too-large";
     if (line.length === 0) return this.dispatch();
     if (line[0] === COLON) return "more";
     let colon = line.indexOf(COLON);
@@ -115,9 +129,14 @@ function equals(v: Uint8Array, name: number[]): boolean {
   return true;
 }
 
-function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a);
-  out.set(b, a.length);
+/** The carried parts of a line and its last piece, in one array. */
+function join(parts: Uint8Array[], carried: number, last: Uint8Array): Uint8Array {
+  const out = new Uint8Array(carried + last.length);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  out.set(last, at);
   return out;
 }
