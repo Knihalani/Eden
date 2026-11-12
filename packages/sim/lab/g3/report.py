@@ -310,7 +310,8 @@ def main():
         ("TOTAL $/1k Composio", lambda r: 1000 * r["composio"]),
     ]
     for x in prods:
-        metrics.append((f"TOTAL $/1k prompt +{x // 1000}k", lambda r, x=x: 1000 * (r["total"] + r["turns"] * x * CACHED)))
+        bigger = lambda r, x=x: 1000 * (r["total"] + r["turns"] * x * CACHED)
+        metrics.append((f"TOTAL $/1k prompt +{x // 1000}k", bigger))
     metrics.append(("wait s", lambda r: r["wait"]))
     out = {"arms": {a: {l[0]: l[1 + i] for l in lines} for i, a in enumerate(arms)}, "pairs": {}}
     for a in arms:
