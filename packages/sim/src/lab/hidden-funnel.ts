@@ -130,7 +130,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, setRealism, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -221,6 +221,7 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "realism",
         "notify-share",
         "noise-items",
         "noise-edits",
@@ -272,6 +273,11 @@ const TIME = Number(opt("time", "0"));
  * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
  */
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's, twenty connectors and about 400
+ * rule-like items that never apply, duplicated and forwarded threads, mail in five other languages. `off` (default).
+ */
+setRealism(opt("realism", "off"));
 /**
  * `--source-profile FILE|JSON`, `--push none|signals|payload`, `--push-rates` (A18, the live harnesses' connector
  * options, connector-options.ts): the market latency profiles and change notices pi-ab runs under, so the funnel at
