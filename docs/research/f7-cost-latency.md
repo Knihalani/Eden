@@ -57,3 +57,48 @@ alone against the base; their combination is not measured here and is said so). 
 Hermes checkout's dependencies was refused in this container); any wall claim is Pi's. If the session's cap or the
 day would cut stage 2, the rule is read on the whole seeds (both suites) finished, the rest unrun; no seed is added
 after a result is read.
+
+## 3. Where the cost and the wait are, and the levers weighed at $0
+
+**The check's bill, measured on the base funnels** (`python3 -I packages/sim/lab/p2/calls.py .local/f7/ledger.jsonl`,
+1,092 calls, train and reworded seed 43 with neutral, two processes at once):
+
+| run | calls | $ a call | input / cached / output tokens | p50 / p90 s | time to first token p50 |
+| --- | ---: | ---: | --- | --- | ---: |
+| train 43 | 563 | 0.000201 | 2,361 / 1,002 / 110 | 1.11 / 1.83 | 0.52 |
+| reworded 43 | 529 | 0.000219 | 2,615 / 1,136 / 120 | 1.08 / 1.64 | 0.52 |
+
+At Haiku 5.5's $0.10 / $0.01 (cache read) / $0.50 per million, a call of 2,500 input tokens with 1,185 read from the
+cache and 115 out is about $0.000131 of uncached input (the pool and the request: **about 60%**), $0.000012 of cache
+reads and $0.000058 of output (**about 27%**) **[EST: arithmetic on the table]**.
+
+**Prompt caching is already on and mostly hits.** The fixed instructions (1,185 tokens) are the only stable prefix.
+983 of the 1,092 calls read them from the cache (90%), and no call reported a cache write (the prefix was warm from
+earlier calls on the account). A miss pays about $0.00011 more [EST], so the 10% that miss cost about 5% of the
+check's bill: nothing large to win. The pool is the request's own (its items, ranked for that request), so it has no
+prefix to cache across requests; one request a session never reads the same pool twice.
+
+**Levers weighed and not built (reasoned at $0):**
+
+- **Overlap the check with the agent's first model call.** D156 bounded it at 1.05–1.14x of task wall and D248
+  measured it: wall −0.14 s (−0.52..+0.28) for +$0.058/1k, because half the first calls had to be re-sent when the
+  packet landed, and re-sending only on an answer made the agent ask first. The push check makes it worse, not
+  better, for this lever: the check names nothing on most requests (silence), but on the requests where it names an
+  item the packet is what keeps the agent from searching (D98, D191), so a first call sent without it is the one
+  re-sent. Nothing measured since changes D248's arithmetic; not reopened.
+- **Skip the check when nothing in its pool could be handed** (every item already handed this session): the
+  candidates then send nothing anyway, so the skip would change no packet. One request a session never meets it, and
+  over a day the check reads 15 items of which a packet hands at most 5, so a pool with no fresh item is rare
+  [EST]. Not built.
+- **Skip the check when the turn gate is sure.** The gate decides whether a push starts, not whether its pool holds a
+  fact; H19 found the facts lost before the agent are lost in retrieval (31%) and in the check (9%), and a skip would
+  hand the unchecked candidates (the before arm's neutral packets: +17.5 points of neutral packets, B19) or stay
+  silent (a fact lost wherever the check would have said yes). Neither is cheaper overall: the agent's bill is about
+  twice Eden's.
+- **Shorter compare-first entries or an ids-only reply.** D822 measured a shorter reply letting look-alikes in, and
+  H3 found a line reply longer. Not reopened; the lean stop (Y) keeps every written entry's compare step whole.
+- **A cheaper model or route.** The check is already on the cheapest Claude model the lab uses (Haiku 5.5); the
+  shipped OpenRouter route sends no cache breakpoint (D145), about +$0.0001 a call [EST], which is a route decision
+  outside this lab (Anthropic only).
+- **Concurrent split calls, a line reply, a smaller pool.** Measured by H3 (D1072–D1074): no faster, or facts not
+  held.
