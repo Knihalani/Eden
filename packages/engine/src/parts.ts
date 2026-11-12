@@ -167,6 +167,11 @@ export const PARTS = {
    * request or correspondence (D375, D376).
    */
   parties: { partyCheck: false },
+  /**
+   * A request in another language also searches with the English its words mean (`glossOf`, a glossary read with no
+   * model; F1, D1153). Out, a request is searched only as written.
+   */
+  gloss: { requestGloss: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

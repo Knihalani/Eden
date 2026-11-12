@@ -67,6 +67,7 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import { glossOf, warmGlossary } from "./gloss";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -438,6 +439,8 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
+  /** `requestGloss`: the English words a request in another language means (`glossOf`), searched beside it. */
+  gloss?: string;
 }
 
 /**
@@ -670,6 +673,8 @@ export class ContextPartner {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
+    // `requestGloss` (F1, D1153): the glossary is read here too, once a process, not on the first request.
+    if (this.config.requestGloss) warmGlossary();
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
@@ -706,6 +711,8 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
+      // `cardsRequestsWide` (trial, F1): the requests asked in varied forms (prompt form 4).
+      if (this.config.intent && this.config.cardsRequestsFix && this.config.cardsRequestsWide) cards.wideRequests();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -1847,14 +1854,18 @@ export class ContextPartner {
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
+    // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
+    // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
+    const gloss = this.config.requestGloss ? glossOf(question) : "";
     const cue = buildCue(
       question,
-      distinctTermIds(question, s.vocab),
+      distinctTermIds(gloss ? `${gloss}\n${question}` : question, s.vocab),
       s.vocab,
       this.now(),
       this.deps.cache.offsetOf(s.scope),
       this.config.probes,
     );
+    if (gloss) cue.gloss = gloss;
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
@@ -5853,7 +5864,7 @@ export class ContextPartner {
     // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
     // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
     const cut = intentCut(c);
-    const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+    const text = intentQuery(cue);
     const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
     const found = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.intentHits, accept);
     // `intentByKind`: a second, deeper search for the carded pass only (`intentReach`, intent.ts, says why apart).
@@ -5879,8 +5890,7 @@ export class ContextPartner {
     const before = cue.arrived ?? this.now();
     const cards = enricher.cardsOf(s.scope, found.keys(), before);
     const rare = new Set<string>();
-    for (const w of cue.raw
-      .slice(0, INTENT_QUERY_CHARS)
+    for (const w of intentQuery(cue)
       .toLowerCase()
       .match(/[\p{L}\p{N}]+/gu) ?? []) {
       if (w.length < 3 || isStopword(w)) continue;
@@ -6579,6 +6589,10 @@ function onlyTime(cue: Cue): boolean {
     (cue.time?.days.size ?? 0) > 0 && cue.entities.length === 0 && cue.text.split(" ").every((w) => TIME_WORD.test(w))
   );
 }
+
+/** The text the intent index is searched with: the request's head, after its gloss when it has one (`requestGloss`). */
+const intentQuery = (cue: Cue) =>
+  cue.gloss ? `${cue.gloss}\n${cue.raw.slice(0, INTENT_QUERY_CHARS)}` : cue.raw.slice(0, INTENT_QUERY_CHARS);
 
 /** The cue's time on the user's wall clock, read as UTC: its ISO day is the user's day. */
 const localNow = (cue: Cue) => cue.at + cue.offset * 60_000;
