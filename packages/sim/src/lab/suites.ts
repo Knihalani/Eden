@@ -43,6 +43,7 @@ import { withSilent } from "./silent";
 import { plantTrain6 } from "./hidden-train6";
 import { formOf, rewordOf } from "./reword";
 import { plantSynth, readWorlds, SAMPLE_PATH, synthPath } from "./synth/suite";
+import { addRealism, REALISM_LEVELS, type RealismLevel } from "../realism";
 
 export type { HiddenTask };
 /** `neutral` (RealUse-1): the same requests, nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
@@ -93,9 +94,24 @@ const PREPARE: Record<string, (world: World, seed: number) => void> = {
   dev20d: (w, s) => void addRareSources(w, s),
 };
 
+/**
+ * The lab's realism level (F8, D1103; `--realism heavy` in the funnel, `cold-start.ts`): a heavy user's twenty
+ * connectors and hundreds of rule-like items that do not apply (realism.ts), added to every suite's base world.
+ * Process-wide, set once by a harness before it builds a world; "off" (the default) leaves every world as it was.
+ */
+let REALISM: RealismLevel = "off";
+export function setRealism(level: string): void {
+  if (!(REALISM_LEVELS as readonly string[]).includes(level))
+    throw new Error(`--realism takes ${REALISM_LEVELS.join(" or ")}, not ${level}`);
+  REALISM = level as RealismLevel;
+}
+export const realism = (): RealismLevel => REALISM;
+
 /** Make `world` what `suite` plants into (a no-op for most suites). Call before taking `world.items.length`. */
 export function prepareWorld(suite: string, world: World, seed: number): void {
   PREPARE[suite]?.(world, seed);
+  // After the suite's own preparation: realism adds the rare sources itself, so it is the same whatever the suite.
+  if (REALISM !== "off") addRealism(world, seed, REALISM);
 }
 
 /** A seed's base world (`buildWorld({ seed: seed * 1_000 })`, as every harness builds it), prepared for `suite`. */
