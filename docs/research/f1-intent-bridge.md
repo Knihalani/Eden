@@ -113,7 +113,7 @@ Committed before any paid run, in the commit that adds the switch:
 - Suite `reworded`, the 36 non-English templates (the only tasks the switch can change: English requests get no
   gloss), seeds 41–48 (41–44 at shipped coverage, 45–48 with cards made in-run by Haiku, shared by both arms), variants
   hidden, control and neutral.
-- Arms `both+ask` (the default) and `both+ask~gloss` (`requestGloss` on), one process a seed; Haiku 5.5 agent, cards,
+- Arms `both+ask` (the default) and `both~gloss+ask` (`requestGloss` on), one process a seed; Haiku 5.5 agent, cards,
   reader and check; Sonnet 5.5 grader; `--tenant-prompt`, `--push payload`, the direct market profile.
 - **Promote** if hidden raised rises with the template-clustered 95% lower bound above 0 points, confirmed concerns
   (control and neutral, Sonnet) do not rise, and neutral tasks given a packet rise by no more than 2 points; else
@@ -126,3 +126,11 @@ Committed before any paid run, in the commit that adds the switch:
   requests: 290/280 against 305/267) and D201 (agent-worded requests) already lost facts on the funnel.
 - **Lever (d), scoring.** The carded intent hits that are kept but not handed (reworded: 79 facts, 50 look-alikes) are
   the ranking's to win; D266 and D330 put more such items in the packet and raised no more facts live.
+- **The whole message beside the push's request (`pushContext`, built and deleted at $0).** When `pushStart` reads the
+  request from part of a message ("I need Mum to collect Theo from nursery…, can you message her?" is pushed as "can
+  you message her?"), the lookup also searched with the whole message. On reworded 56 hidden requests lose two or more
+  content words this way (41 of them in the check's view, against 505 of 648 for the rest), but the switch moved
+  reworded's facts in view +4 −0 and handed +0 −2 (surfaced 555 → 554), train nothing: not opened as a trial. Two of
+  the English facts rewording loses are pushes that never start ("I want a morning flight…": `pushStart` is null), the
+  push gate's matter rather than retrieval's.
+
