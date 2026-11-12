@@ -46,3 +46,21 @@ test("the COPY parser sees a single file, a directory and flags", () => {
   expect(inImage("scripts/lab-guard.ts", ["packages"])).toBe(false);
   expect(inImage("packages/server/src/main.ts", ["packages"])).toBe(true);
 });
+
+// D1310: the server runs on Bun's distroless image, which has no /bin/sh. A shell-form RUN, CMD or HEALTHCHECK in the
+// final stage fails only when the container starts (or turns unhealthy), so the final stage is checked here. It runs
+// as uid 1000, the full image's `bun` user, so a volume an earlier image wrote stays writable.
+test("the final stage is distroless, runs as uid 1000, and needs no shell", () => {
+  const stages = read("Dockerfile").split(/^FROM\s+/m);
+  const last = stages[stages.length - 1]!;
+  expect(last.split("\n")[0]).toMatch(/^oven\/bun:[\d.]+-distroless\b/);
+  // The build stage installs with the same Bun version that serves.
+  const versions = stages.slice(1).map((s) => /^oven\/bun:([\d.]+)/.exec(s)?.[1]);
+  expect(new Set(versions).size).toBe(1);
+  // Instructions, joined across continuation lines.
+  const instructions = last.replace(/\\\n\s*/g, " ").split("\n");
+  expect(instructions.filter((l) => /^RUN\s/.test(l))).toEqual([]);
+  for (const l of instructions.filter((l) => /^(CMD|ENTRYPOINT)\s/.test(l))) expect(l).toMatch(/^\w+\s+\[/);
+  expect(instructions.find((l) => l.startsWith("HEALTHCHECK"))).toMatch(/\sCMD\s+\[/);
+  expect(instructions.find((l) => l.startsWith("USER"))).toBe("USER 1000:1000");
+});
