@@ -92,25 +92,29 @@ any result was read (dcdb71bf1).
 - Scripts: `packages/sim/lab/f3/go.sh` (`REP=1`, `REP=2`) and `report.py`. The task sets are in `sets.json`. The
   scripts need the trial's commit, since the switch is deleted.
 
+**The outage.** Replicate 2's reworded half ran into the account's credit outage: HTTP 400 on 36–203 of 216 tasks
+a file. Eden's model roles fail open, so even its finished tasks may have run degraded. Those four files are discarded
+whole. What follows is replicate 1, plus replicate 2 on train.
+
 | readout (WHY − base, template-clustered 95%) | base | why | difference |
 | --- | ---: | ---: | --- |
-| **primary**: hidden raised, tasks where the funnel notes the fact | 83/91 | 79/91 | −4.4 pts (−12.8..+2.2) |
-| hidden raised, all 36 templates | 361/512 | 359/512 | −0.4 pts (−3.1..+2.4) |
-| concerns, control + neutral | 4/1010 | 4/1010 | +0.0 pts (−0.3..+0.3) |
-| packet characters | 1,338,042 | 1,385,897 | +3.6% |
+| **primary**: hidden raised, tasks where the funnel notes the fact | 68/75 | 64/75 | −5.3 pts (−12.8..+0.0) |
+| hidden raised, all 36 templates | 305/431 | 304/431 | −0.2 pts (−2.8..+2.3) |
+| concerns, control + neutral | 3/862 | 2/862 | −0.1 pts (−0.5..+0.2) |
+| packet characters | 1,107,487 | 1,150,150 | +3.9% |
 
-The primary needed a lower bound above 0, and its point estimate is negative: rejected. Concerns did not move, and
-the bytes stayed within the 15% bound. On the primary tasks, 2 were gained and 6 lost. Across all hidden tasks the
-pair split 29 gained and 31 lost, which is noise.
+Replicate 1 alone, as first registered, gives a primary of −8.0 pts (−20.8..+0.0). Every cut fails the rule (a lower
+bound above 0), and the point estimate is negative on each. Concerns did not move, and the bytes stayed within the 15%
+bound.
 
-Spend: $5.25 in all, about 1,700 task-arms a replicate.
+Spend: $5.25 in all, the 400s included.
 
 **Why it failed:**
 1. **Ceiling.** Without the note the agent already raised 91% of the primary facts. Train's clashes are written
    plainly ("Blood test, Thursday 5 Nov, 08:40", against breakfast at 8:30 that day), so the agent does the arithmetic
    unaided. Train has none of H19's silent edits, where the item reads as an ordinary event and the clash is the only
    tell. A suite that cannot show the loss cannot show the fix.
-2. **A wrong note hurts.** `support-cover-clash` lost 4 of the 6:
+2. **A wrong note hurts.** `support-cover-clash` lost 3 of the 5 primary tasks lost (1 was gained):
    - The request is "Approve Sam's holiday request for 21–31 December".
    - `timeWindow` reads only "31 December" of the range.
    - The item's own clash, "Mark: Fri 18 Dec – Fri 1 Jan", was not joined into a range, because the join pattern
