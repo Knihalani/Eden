@@ -4998,28 +4998,12 @@ export class ContextPartner {
     // A ref notice's re-read still on the wire (D347): the copy held is from before the change.
     if (this.refreshing.size > 0 && this.refreshing.has(`${scopeKey(s.scope)}|${item.id}`)) return true;
     if (this.unswept(s.scope, item)) return true;
-    // `freshenAgeMs` (F3, trial): a copy no read has refreshed for that long may have been edited silently at its source
-    // (no notice, no poll since): it is re-read before it is handed over, as a doubted copy is.
-    // A sent message (a mail's header block, a chat line's stamp) is not edited in place: only documents, events,
-    // notes and records are, so only they are re-read.
-    // With `freshenBehind` the re-read does not hold the delivery: `verifyItems` starts it beside it (`aged`).
-    if (!this.config.freshenBehind && this.aged(s, item)) return true;
     const mark = this.deps.cache.readMark(s.scope, item.id);
     if (mark === undefined || this.sync?.signalledSince(s.scope, item.sourceId, mark) !== true) return false;
     // A re-read since that signal could not tell (a null that proves nothing): another says the same until it signals.
     const held = this.unverifiable.get(scopeKey(s.scope))?.get(item.id);
     if (held === undefined || this.now() - held.at > UNVERIFIABLE_HOLD_MS) return true;
     return this.sync.signalledSince(s.scope, item.sourceId, held.mark);
-  }
-
-  /**
-   * `freshenAgeMs` (D1127): a copy no read has refreshed for that long, of an item that is edited in place (not a sent
-   * message), may have changed at its source with no notice and no poll since.
-   */
-  private aged(s: Session, item: ContextItem): boolean {
-    if (!(this.config.freshenAgeMs > 0) || SENT_MESSAGE.test(item.text.slice(0, 64))) return false;
-    const at = this.deps.cache.fetchedAt(s.scope, item.id);
-    return at !== undefined && this.now() - at > this.config.freshenAgeMs;
   }
 
   /**
@@ -6043,15 +6027,6 @@ export class ContextPartner {
       );
     }
     for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
-    // `freshenBehind` (D1129): every delivery path builds here, the fast path too. Aged copies are re-read beside the
-    // delivery, not before it: the cached copy goes now, and a re-read that finds the item changed stores and
-    // announces it (`queueRevised`), so an "updated:" packet follows at the agent's next take (D205, D232). The
-    // re-reads start after this synchronous build returns (a microtask), as background work, so the fast path itself
-    // makes no network call (D4); `check` never throws.
-    if (this.config.freshenBehind && this.config.verifyDelivery) {
-      const aged = scored.filter((x) => this.aged(s, x.item)).map((x) => x.item);
-      if (aged.length > 0) queueMicrotask(() => aged.forEach((item) => void this.check(s, item)));
-    }
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
@@ -6235,9 +6210,6 @@ interface PacketFrame {
   itemBytes: number;
   maxBytes: number;
 }
-
-/** `freshenAgeMs`: text that starts as a sent message does (a mail's "From:" header, a chat line's "[09:14]" stamp). */
-const SENT_MESSAGE = /^(?:From: |\[\d{1,2}:\d{2}\])/;
 
 /** `revisionNotice`: an "updated:" packet's reason prefix, and what each of its items' titles starts with. */
 const UPDATED = "updated:";

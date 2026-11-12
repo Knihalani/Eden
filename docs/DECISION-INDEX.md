@@ -690,6 +690,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1124 | 2026-11-12 | Lab only: the pre-registered rule for D1122 and D1123 | lab |
 | D1125 | 2026-11-12 | Lab only: D1124's run moves to subagents, with unrelated silent edits in every variant | lab |
 | D1126 | 2026-11-12 | Rejected (stopped on D1125's pre-registered rule): `packetChanges` (D1123) and `packetWhy` v2 (D1122, deleted by D1126); both deleted with… | rejected |
-| D1127 | 2026-11-12 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | trial |
+| D1127 | 2026-11-12 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | superseded (deleted by D1130) |
 | D1128 | 2026-11-12 | Lab only: D1127's pilot read out under its rule, and a powered re-test is pre-registered (before any of its answers is made). | lab |
-| D1129 | 2026-11-12 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | trial |
+| D1129 | 2026-11-12 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | superseded (deleted by D1130) |
+| D1130 | 2026-11-12 | Rejected (stopped on D1128's pre-registered rule): `freshenAgeMs` (D1127, deleted by D1130) and `freshenBehind` (D1129, deleted by D1130)… | rejected |
