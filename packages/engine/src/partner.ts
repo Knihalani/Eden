@@ -2655,7 +2655,7 @@ export class ContextPartner {
       ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
       // `askHeedsCheck` 1 (D1450): the check says what kind of no each ruled-out item is.
-      ...(this.config.askHeedsCheck === 1 || this.config.askHeedsCheck === 3 ? { why: true } : {}),
+      ...(this.config.askHeedsCheck === 1 ? { why: true } : {}),
     };
     const key = checkKey(input);
     const ids = sheet.map((c) => c.id);
@@ -2742,7 +2742,7 @@ export class ContextPartner {
    */
   private checkedOut(s: Session): ((item: ContextItem) => boolean) | null {
     const mode = this.config.askHeedsCheck;
-    if (mode <= 0 || mode === 3 || !s.pushChecks) return null; // LAB-TEMP 3: the why prompt, nothing left out
+    if (mode <= 0 || !s.pushChecks) return null;
     const out = new Map<string, string>();
     for (const kept of s.pushChecks.values()) {
       const read = kept.settled;

@@ -60,8 +60,13 @@ function says(yes: string[], extra = "") {
   });
 }
 
-function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = []) {
-  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
+function setup(
+  config: Record<string, unknown>,
+  model: Model | null,
+  pools: PushPoolReport[] = [],
+  items: ContextItem[] = ITEMS,
+) {
+  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
     sources: async () => [source],
@@ -416,6 +421,24 @@ describe("askHeedsCheck (G2, D1450): an ask leaves out what its request's push c
     const got = await asked({ askHeedsCheck: 1 });
     expect(got).not.toContain("mail:dated");
     expect(got).toContain("mail:plain");
+  });
+
+  test("1: a go-ahead the check read from a cut excerpt stays (the rest of the item may say otherwise)", async () => {
+    const filler = [
+      "parking behind the hall",
+      "catering for forty",
+      "the room layout",
+      "the stage lights",
+      "coat racks",
+    ]
+      .map((x, i) => `Note ${i + 1} from the Harlow venue team covers ${x} and who to call about it on the day.`)
+      .join(" ");
+    const long = item("dated", "Harlow deposit", `The Harlow venue deposit is due on Friday 30 October. ${filler}`, 4);
+    const items = ITEMS.map((x) => (x.id === long.id ? long : x));
+    const { partner } = setup({ pushCheck: true, pushCandidates: 5, askHeedsCheck: 1 }, model(), [], items);
+    await handed(partner);
+    const res = await partner.ask({ ...ref, question: "Harlow venue deposit invoice", maxItems: 5 });
+    expect(res.citations.map((c) => c.itemId)).toContain("mail:dated");
   });
 
   test("2: every item the check read and did not say yes to is left out", async () => {
