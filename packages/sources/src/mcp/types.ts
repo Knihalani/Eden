@@ -122,6 +122,14 @@ export function asMessage(x: unknown): JsonRpcMessage | null {
   return null;
 }
 
+/**
+ * Whether a response's id answers request `sent`: equal, or the same number echoed as a string ("1" for 1), which the
+ * SDK's client accepts too (it matches on `Number(id)`) and some servers send.
+ */
+export function answers(id: JsonRpcId | undefined, sent: JsonRpcId): boolean {
+  return id === sent || (typeof sent === "number" && typeof id === "string" && id === String(sent));
+}
+
 export const isRequest = (m: JsonRpcMessage): m is JsonRpcRequest => "method" in m && "id" in m;
 export const isNotification = (m: JsonRpcMessage): m is JsonRpcNotification => "method" in m && !("id" in m);
 export const isResponse = (m: JsonRpcMessage): m is JsonRpcResultResponse | JsonRpcErrorResponse => !("method" in m);

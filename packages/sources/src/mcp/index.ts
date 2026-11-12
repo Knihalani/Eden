@@ -3,6 +3,7 @@ export { parseJsonBytes } from "./json";
 export { SseParser, type SseStep } from "./sse";
 export { MAX_RESPONSE_BYTES, StreamableHttpError, StreamableHttpTransport, type StreamableHttpOptions } from "./http";
 export {
+  answers,
   asMessage,
   ErrorCode,
   isNotification,
