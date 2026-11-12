@@ -671,3 +671,12 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1072 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | finding |
 | D1073 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | rejected |
 | D1074 | 2026-11-12 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | rejected |
+| D1040 | 2026-11-11 | Adopted (lab tooling, B19): an Eden arm at any commit beside a pinned harness. | lab |
+| D1041 | 2026-11-11 | Lab only: pi-ab loads P3's `hits` helper (`lexical-hits.ts`) only for the `hits` arm | lab |
+| D1042 | 2026-11-11 | Lab fix: hermes-ab wires the push check | adopted |
+| D1043 | 2026-11-11 | Lab only: B19's final run is pre-registered | lab |
+| D1044 | 2026-11-11 | Adopted (lab tooling, B19): `hermes-ab --days`, pi-ab's user days on Hermes, with the D813 journal and `--resume`. | lab |
+| D1045 | 2026-11-11 | Lab only: B19's pre-registration amended before the go | lab |
+| D1046 | 2026-11-11 | Lab only: B19's coverage when the final default keys its cards apart | lab |
+| D1047 | 2026-11-11 | Lab only: B19's harnesses load against an older engine through `compat.py`, and `go.sh` checks it before spending. | lab |
+| D1048 | 2026-11-12 | Finding (B19, blind heldout19, read once): the night's wave raised hidden facts on both harnesses with no confirmed concern. | finding |

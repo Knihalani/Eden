@@ -104,7 +104,6 @@ import { Type, type Model as PiModel } from "@earendil-works/pi-ai";
 import {
   CardEnricher,
   ContextPartner,
-  CARD_FORM_REQUESTS,
   DEFAULT_CONFIG,
   ItemCache,
   ModelCardMaker,
@@ -115,6 +114,9 @@ import {
   sanitizeItem,
   type CardMaker,
 } from "@eden/engine";
+import * as engineExports from "@eden/engine";
+// B19 (D1047): read so an older engine without it loads (packages/sim/lab/b19/compat.py).
+const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -174,7 +176,6 @@ import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Bu
 import { parseSuites } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
-import { hitsPacket } from "./lexical-hits";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
 import {
   DayLog,
@@ -1334,6 +1335,9 @@ async function runWorld(
       }
       // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
       if (hits) {
+        // Loaded only for this arm (B19, D1041): lexical-hits needs engine exports an older Eden tree lacks, and pi-ab
+        // must load against any commit's engine (packages/sim/lab/b19/arm-tree.sh).
+        const { hitsPacket } = await import("./lexical-hits");
         const h = hitsPacket(world, task.text);
         if (h) {
           r.injectedItems += h.citations.length;
