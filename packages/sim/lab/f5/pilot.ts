@@ -66,6 +66,65 @@ if (cmd === "build") {
         )
           rows.push(r);
       }
+  // F5's realism stress (§8): pad each sheet to PILOT_PAD cards with other users' constraint cards (base-world items
+  // only: no planted fact or look-alike of any task), at random places among the user's own (newest first: the
+  // padding models a heavier user's other cards spread over time), then keep the first PILOT_CAP (0: all).
+  const worldOf = (r: Row) => `${r.suite}|${r.seed}|${r.variant}`;
+  // Which template planted each item of each world: a card planted for the same template elsewhere (another seed,
+  // the reworded suite) is the same fact, never a distractor.
+  const templateOf = new Map(rows.map((r) => [`${worldOf(r)}|${r.planted}`, r.template] as const));
+  const pool: { card: NonNullable<Row["sheet"]>[number]; world: string; template?: string }[] = [];
+  const seenStatement = new Set<string>();
+  for (const r of rows)
+    for (const c of r.sheet ?? []) {
+      const k = c.statement.toLowerCase();
+      if (seenStatement.has(k)) continue;
+      seenStatement.add(k);
+      const template = templateOf.get(`${worldOf(r)}|${c.id}`);
+      pool.push({ card: c, world: worldOf(r), ...(template ? { template } : {}) });
+    }
+  const hash = (t: string) => [...t].reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0, 7);
+  const padded = (r: Row, pad: number, cap: number): Row["sheet"] => {
+    const own = r.sheet ?? [];
+    const mine = new Set(own.map((c) => c.statement.toLowerCase()));
+    const others = shuffled(
+      pool.filter(
+        (p) => p.world !== worldOf(r) && p.template !== r.template && !mine.has(p.card.statement.toLowerCase()),
+      ),
+      hash(`${worldOf(r)}|${r.template}`),
+    )
+      .slice(0, Math.max(0, pad - own.length))
+      // Another user's ids are not this user's: a named distractor must never match a pooled item or the planted one.
+      .map((p, i) => ({ ...p.card, id: `pad:${i}:${p.card.id}` }));
+    // Interleave: each distractor at a seeded random place among the user's own cards.
+    const out = [...own];
+    let h = hash(`${r.template}|pad`);
+    for (const d of others) {
+      h = (Math.imul(h, 1664525) + 1013904223) >>> 0;
+      out.splice(h % (out.length + 1), 0, d);
+    }
+    return cap > 0 ? out.slice(0, cap) : out;
+  };
+  const PAD = Number(process.env.PILOT_PAD ?? 0);
+  const CAP = Number(process.env.PILOT_CAP ?? 0);
+  if (process.env.PILOT_STATS) {
+    // How often a cap keeps the planted fact's (or the look-alike's) card, by sheet size: $0, no model.
+    for (const variant of ["hidden", "control"]) {
+      const on = rows.filter((r) => r.variant === variant && r.sheet?.some((c) => c.id === r.planted));
+      for (const pad of [0, 150, 300, 500])
+        console.log(
+          `${variant} on own sheet ${on.length}; padded to ${pad || "none"}: ` +
+            [0, 60, 80, 120]
+              .map((cap) => {
+                const kept = on.filter((r) => padded(r, pad, cap)!.some((c) => c.id === r.planted)).length;
+                return `cap ${cap || "none"} keeps ${kept}`;
+              })
+              .join(", "),
+        );
+    }
+    process.exit(0);
+  }
+  if (PAD > 0 || CAP > 0) for (const r of rows) if (r.sheet?.length) r.sheet = padded(r, PAD, CAP);
   const inPool = (r: Row) => r.items.some((it) => it.id === r.planted);
   const onSheet = (r: Row) => !!r.sheet?.some((c) => c.id === r.planted);
   const sets: Record<string, Row[]> = {
@@ -92,6 +151,8 @@ if (cmd === "build") {
     Hc: ["S", "B"],
     N: ["S", "B"],
   };
+  const only = (process.env.PILOT_SETS ?? "").split(",").filter(Boolean);
+  for (const k of Object.keys(sets)) if (only.length && !only.includes(k)) delete sets[k];
   const arms = ARMS.length ? Object.fromEntries(Object.keys(base).map((k) => [k, ARMS])) : base;
   const key: Record<string, unknown>[] = [];
   const byFile = new Map<string, { sheet: string; prompts: string[] }>();
