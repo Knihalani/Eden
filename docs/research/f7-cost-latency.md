@@ -569,3 +569,37 @@ the sheet was priced as uncached input.
 Against target 3 (F6's rehearsal gap, $0.09 per 1,000 tasks): the sheet adds $0.08–0.12 more at the 1-hour rate and
 $0.15–0.22 uncached on the shipped route. That is the price of D1180's +10 handed planted facts of 160 (served by
 subagents).
+
+## 16. Making the sheet cheap: the 1-hour TTL, an in-force-only sheet, a cap of 40 (11:40 UTC; [EST], $0)
+
+**1. The 1-hour TTL (D1197, built).** The sheet's message asks for it, and both Anthropic routes send it. Sheet
+sizes come from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
+- train seeds 41–42: 58.4 cards a user (p90 68, 759 worlds);
+- dev20 seeds 41–44: 59.4 cards a user (p90 67, 896 worlds);
+- about 8,200 characters either way.
+
+The sheet then costs **+$0.000098 a check, +$0.09 per 1,000 tasks** (`sheet-cache.py`, requests at random over
+active hours, hit rate 0.75). That compares with +$0.20 a check on the 5-minute TTL and +$0.19 uncached.
+
+**2. An in-force-only sheet: not taken.** F2's form-19 re-card of dev20 seeds 41–44 (1,929 items, states from the
+card call, served by subagents per item, D1102) gives these sheet-eligible cards: 834 in force, 88 with no state, 49
+superseded, 10 met, 0 lifted. Lifted only comes on `none` cards, which the sheet already drops.
+
+| rule | cards off the sheet | sheet size | $ per 1,000 tasks | planted facts off | decoys off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| sheet as built | 0 | 8,200 characters | +0.092 | 0 | 0 |
+| superseded and met off | 59 (6%) | about 7,700 | +0.085 | 13 | 29 |
+| no state also off | 147 (15%) | about 7,000 | +0.075 | 21 | 53 |
+
+Facts and decoys are counted in task occurrences. The saving is $0.007–0.017 per 1,000 tasks. The cost is 13–21
+planted facts: a superseded status-change is the new value, the fact itself (F2's arm 1). F2 recommends the rule
+"eligible and not (cleared state and kind none)", which changes nothing on the sheet, and so do I.
+
+**3. A cap of 40: not taken.** Every lab user's sheet holds more than 40 cards (all 1,655 worlds; the smallest has
+46). Under D1183's guard a cap of 40 turns the sheet off for every user, which deletes D1180's gain. The
+other reading, the newest 40, is the slice F5's §11d found speaking on neutral requests: a padded heavy user's newest
+slice took neutral yeses from 1 to 9 of 40. F5's 10d/11d ran 80 against no sheet, not 40, so no data supports 40.
+The cap stays at 80.
+
+**The per-check delta after 1 and 2:** +$0.000098 a check (+$0.09 per 1,000 tasks) on the 1-hour TTL. Step 2 adds
+nothing, since the in-force filter is not taken.
