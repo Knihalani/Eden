@@ -120,6 +120,14 @@ case "$FCFG" in
   \{*) COVSET=(--set "$FCFG") ;;
   *) log "go: FINAL_CONFIG=$FCFG is a preset: the final tree's coverage runs its default configuration" ;;
 esac
+# BEFORE_COVERAGE_ONLY=1: the before tree's coverage alone, then stop. BEFORE is fixed, so its coverage can be made
+# ahead of the final (same PREFIX, same queue); the final run then finds cov-before.jsonl and skips it.
+if [ "${BEFORE_COVERAGE_ONLY:-0}" = 1 ]; then
+  log "go: before coverage only (drive the queue now)"
+  coverage "$TB" before || { log "go: before coverage failed: stopped"; exit 1; }
+  log "go: before coverage done ($L/cov-before.jsonl)"
+  exit 0
+fi
 log "go: step 1 final coverage (drive the queue now)"
 coverage "$TF" final "${COVSET[@]}" || { log "go: coverage failed: stopped"; exit 1; }
 log "go: step 1 done"
