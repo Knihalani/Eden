@@ -218,7 +218,8 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   both to Grafana Cloud's free tier (10k series, 14 days, 3 users at the time of writing: **unverified**, check the
   plan) or any Prometheus. Eden's own series: under 300 per box.
 - **Alerts:** `deploy/monitoring/alerts.yaml`: down, a process or node down, 5xx over 1%, `/v1/events` p99 over
-  500 ms, memory over 75% (plan a box) and 90% (act), store failures and backlog, disk over 80%.
+  500 ms, memory over 75% (plan a box) and 90% (act), store failures and backlog, disk over 80%, model calls failing
+  (`EdenModelFailing`: thrown errors, not unreadable replies; D1690).
 - **Logs:** Docker's `json-file`, 5 x 20 MB per container; journald capped at 1 GB. Eden's logs are content-free by
   rule (D56); Alloy can ship them (Loki, free tier).
 - **Uptime from outside:** any free HTTP monitor on `https://<name>/readyz` (UptimeRobot's free plan: 50 monitors
@@ -374,6 +375,12 @@ without context meanwhile.
 **Incident: a node is down** (cluster): the router already moved its users (`eden cluster: node … stopped
 answering`). Bring it back or replace it; when it answers it gets its users back. If the store is failing too
 (`EdenStoreFailing`), moved users re-sync: check the store's status page and credentials.
+
+**Incident: the model is failing** (`EdenModelFailing`, D1690): Eden is serving its no-model path. The first
+failure's `eden:` log line names the provider's error. A 401 is the key; a 402 or "credit" is the balance; a 403
+"violation of provider Terms Of Service" on `anthropic/*` is OpenRouter refusing that model for the account or the
+region the box calls from: check it from the box with one small call, ask OpenRouter, or set `EDEN_MODEL` to a model
+the account can reach until it is resolved (the quality numbers in docs/research were measured on Haiku).
 
 **Incident: a leak of a key.** A tenant key: rotate it. `EDEN_PERSIST_KEY` with the disk or store: rotate it, and
 start once with `EDEN_PERSIST_DISCARD=1` beside the new key (the old users are discarded and re-sync; without it Eden

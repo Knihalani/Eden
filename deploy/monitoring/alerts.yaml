@@ -61,6 +61,12 @@ groups:
         annotations:
           summary: "{{ $labels.instance }}: memory above 90%: the kernel may kill Eden; add a box or move users now"
 
+      - alert: EdenModelFailing
+        expr: increase(eden_model_failures_total{kind="error"}[15m]) > 5
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $labels.role }} model calls failing; Eden is running its no-model path (check the provider key, balance and the log line naming the error)"
+
       - alert: EdenStoreFailing
         expr: increase(eden_store_failed_total[15m]) > 5
         labels: { severity: warn }

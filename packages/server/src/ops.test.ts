@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { ContextPartner, ItemCache } from "@eden/engine";
-import { turnGateNotice } from "./build";
+import { modelFailures, readerFailureLog, turnGateNotice } from "./build";
 import { clusterKeyMatches, Ops, serveError, sumMetrics } from "./ops";
 
 const KEY = "cluster-key-0123456789abcdef";
@@ -46,6 +46,18 @@ test("metrics count requests by known route and status, never a caller's path, w
   // Every sample line is "name{labels} value", parseable as Prometheus text.
   for (const line of text.split("\n").filter((l) => l && !l.startsWith("#")))
     expect(line).toMatch(/^[a-z_]+(\{[^}]*\})? \S+$/);
+});
+
+test("model failures reach /metrics by role and kind, and sum across processes (D1690)", async () => {
+  const o = ops();
+  const handler = o.wrap(() => new Response("api"));
+  const before = modelFailures["check:error"];
+  readerFailureLog(() => {}, undefined, "check failed", "check")(new Error("openrouter 403"));
+  const text = await (await handler(new Request("http://x/metrics"))).text();
+  expect(text).toContain(`eden_model_failures_total{kind="error",role="check"} ${before + 1}`);
+  expect(text).toMatch(/^eden_model_failures_total\{kind="unreadable",role="reader"\} \d+$/m);
+  const summed = sumMetrics([text, text]);
+  expect(summed).toContain(`eden_model_failures_total{kind="error",role="check"} ${2 * (before + 1)}`);
 });
 
 test("sumMetrics adds samples with the same name and labels, keeps the largest _max", () => {
