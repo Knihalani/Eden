@@ -1,0 +1,167 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { createProxy } from "./proxy";
+
+// `speculate` (F10, trial, off; docs/research/f10-rule-index.md §9): the turn goes upstream during Eden's wait, and the
+// held answer reaches the agent only when the request that would go after the wait is byte for byte the same.
+
+const KEY = "k_proxy_spec_0123456789abc";
+// A scripted Eden: a user message's text maps to the packet it returns (none if absent), after `EDEN_MS`.
+const EDEN_MS = 300;
+const UPSTREAM_MS = 300;
+const script: Record<string, string> = {};
+const eden = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    const url = new URL(req.url);
+    const body = (await req.json().catch(() => ({}))) as { kind?: string; text?: string };
+    if (url.pathname === "/v1/pending") return Response.json({ injections: [] });
+    if (url.pathname !== "/v1/events" || body.kind !== "user_message") return Response.json({ injection: null });
+    await Bun.sleep(EDEN_MS);
+    const packet = script[body.text ?? ""];
+    return Response.json({ injection: packet ? { id: `i-${packet}`, text: packet } : null });
+  },
+});
+/** Every upstream call's messages (the speculative call's abort is the proxy's; Bun's server does not report it). */
+const calls: { messages: any[]; aborted: boolean }[] = [];
+const failed = new Set<string>();
+const upstream = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    const call = { messages: (JSON.parse(await req.text()) as { messages: any[] }).messages, aborted: false };
+    calls.push(call);
+    req.signal.addEventListener("abort", () => (call.aborted = true));
+    await Bun.sleep(UPSTREAM_MS);
+    // "overloaded" fails the first time it is seen (a 503), as a rate-limited or busy provider does.
+    const asked = JSON.stringify(call.messages);
+    if (asked.includes("overloaded") && !failed.has(asked)) {
+      failed.add(asked);
+      return new Response("busy", { status: 503 });
+    }
+    const text = JSON.stringify(call.messages);
+    return Response.json({ choices: [{ message: { role: "assistant", content: `answer to ${text.length}` } }] });
+  },
+});
+afterAll(() => {
+  eden.stop(true);
+  upstream.stop(true);
+});
+
+/** The proxy's own upstream fetches, and whether each was aborted by the proxy (Bun's server cannot tell). */
+const fetched: { aborted: () => boolean }[] = [];
+const proxyFor = (speculate: boolean) =>
+  createProxy({
+    upstream: `${upstream.url.href}v1`,
+    edenUrl: eden.url.href,
+    edenApiKey: KEY,
+    waitMs: 1_000,
+    speculate,
+    fetch: ((input: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal;
+      fetched.push({ aborted: () => !!signal?.aborted });
+      return fetch(input, init);
+    }) as typeof fetch,
+  });
+const chat = (proxy: (r: Request) => Promise<Response>, messages: unknown[], user: string) =>
+  proxy(
+    new Request("http://proxy/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-eden-user-id": user, "x-eden-session-id": `${user}-s` },
+      body: JSON.stringify({ model: "m", messages }),
+    }),
+  );
+const u = (content: string) => ({ role: "user", content });
+const timed = async (f: () => Promise<Response>) => {
+  const t0 = performance.now();
+  const res = await f();
+  const body = (await res.json()) as any;
+  return { ms: performance.now() - t0, body };
+};
+
+describe("speculate (F10)", () => {
+  test("off: Eden's wait, then the model (the two in a row)", async () => {
+    const before = calls.length;
+    const { ms } = await timed(() => chat(proxyFor(false), [u("plain question one")], "s-off"));
+    expect(ms).toBeGreaterThanOrEqual(EDEN_MS + UPSTREAM_MS - 20);
+    expect(calls.length - before).toBe(1);
+  });
+
+  test("Eden adds nothing: one upstream call, sent during the wait, and its answer is the agent's", async () => {
+    const before = calls.length;
+    const off = await timed(() => chat(proxyFor(false), [u("plain question two")], "s-a"));
+    const on = await timed(() => chat(proxyFor(true), [u("plain question two")], "s-b"));
+    expect(calls.length - before).toBe(2);
+    expect(on.body).toEqual(off.body);
+    expect(on.ms).toBeLessThan(EDEN_MS + UPSTREAM_MS - 100);
+  });
+
+  test("Eden adds a packet: the speculative call is aborted and the request goes with the packet", async () => {
+    script["book the venue"] = "PKT-VENUE";
+    const before = calls.length;
+    const { body } = await timed(() => chat(proxyFor(true), [u("book the venue")], "s-c"));
+    const mine = calls.slice(before);
+    expect(mine.length).toBe(2);
+    expect(fetched.at(-2)!.aborted()).toBe(true);
+    expect(fetched.at(-1)!.aborted()).toBe(false);
+    expect(JSON.stringify(mine[0]!.messages)).not.toContain("PKT-VENUE");
+    expect(JSON.stringify(mine[1]!.messages)).toContain("PKT-VENUE");
+    // The agent's answer is the packet request's.
+    expect(body.choices[0].message.content).toBe(`answer to ${JSON.stringify(mine[1]!.messages).length}`);
+  });
+
+  test("not in shadow mode or with askTool: no speculative call", async () => {
+    for (const extra of [{ shadow: true }, { askTool: true }]) {
+      const proxy = createProxy({
+        upstream: `${upstream.url.href}v1`,
+        edenUrl: eden.url.href,
+        edenApiKey: KEY,
+        waitMs: 1_000,
+        speculate: true,
+        ...extra,
+      });
+      const { ms } = await timed(() => chat(proxy, [u("plain question three")], `s-x-${Object.keys(extra)[0]}`));
+      expect(ms).toBeGreaterThanOrEqual(EDEN_MS + UPSTREAM_MS - 20);
+    }
+  });
+
+  test("an early 503 is not passed on: the request goes again and the agent gets that answer (review)", async () => {
+    const before = calls.length;
+    const res = await chat(proxyFor(true), [u("overloaded right now")], "s-503");
+    expect(res.status).toBe(200);
+    expect(calls.length - before).toBe(2);
+  });
+
+  test("a second turn with an earlier turn's packet kept: one call, the same bytes as off (review)", async () => {
+    script["first turn with a packet"] = "PKT-FIRST";
+    const run = async (speculate: boolean, user: string) => {
+      const p = proxyFor(speculate);
+      await chat(p, [u("first turn with a packet")], user);
+      const before = calls.length;
+      await chat(
+        p,
+        [u("first turn with a packet"), { role: "assistant", content: "ok" }, u("a plain follow-up")],
+        user,
+      );
+      return calls.slice(before);
+    };
+    const off = await run(false, "s-k-off");
+    const on = await run(true, "s-k-on");
+    expect(on.length).toBe(1);
+    expect(on[0]!.messages).toEqual(off[0]!.messages);
+    expect(JSON.stringify(on[0]!.messages)).toContain("PKT-FIRST");
+  });
+
+  test("Anthropic Messages: nothing new, one call during the wait (review)", async () => {
+    const before = calls.length;
+    const t0 = performance.now();
+    const res = await proxyFor(true)(
+      new Request("http://proxy/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-eden-user-id": "s-anth", "x-eden-session-id": "s-anth-s" },
+        body: JSON.stringify({ model: "m", max_tokens: 10, messages: [u("plain anthropic question")] }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(calls.length - before).toBe(1);
+    expect(performance.now() - t0).toBeLessThan(EDEN_MS + UPSTREAM_MS - 100);
+  });
+});
