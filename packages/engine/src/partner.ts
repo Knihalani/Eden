@@ -775,6 +775,13 @@ export class ContextPartner {
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
+            ...(c.syncActivePollMs > 0
+              ? {
+                  activePollMs: c.syncActivePollMs,
+                  activePollBackoff: c.syncActivePollBackoff,
+                  activePollPriced: c.syncActivePollPriced,
+                }
+              : {}),
             activeMs: c.syncActiveMs,
             sweepMs: c.syncSweepMs,
             dropMs: c.syncDropMs,
@@ -6276,6 +6283,7 @@ export class ContextPartner {
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
       ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
+      ...(source.callPriced !== undefined ? { callPriced: source.callPriced } : {}),
       ...(source.fetchReportsGone !== undefined ? { fetchReportsGone: source.fetchReportsGone } : {}),
       ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.

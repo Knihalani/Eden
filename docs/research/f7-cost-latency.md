@@ -546,3 +546,26 @@ saves.
 - **On "do it now" requests Eden adds calls.** The agent does not search raw, but an Eden packet leads it to search or
   ask (offer-above-band +4, ISA +1 and 2 asks). There Eden's packet should be read as final, not as a prompt to
   check.
+
+## 15. The rule sheet's cache (D1180), priced (10:55 UTC; [EST])
+
+D1180 put the user's rule sheet (up to 80 active cards) in the check as a cached block after its instructions. That
+grew the check's message from about 3,300 to 11,000–13,000 characters. `cost.py` priced every message as uncached
+input, so the sheet looked like 2.5–3x the check. Whether it is depends on how often the sheet is read from cache.
+
+`packages/sim/lab/f7/sheet-cache.py` models this per user-day; COST-MODEL ("The sheet's cache hit rate") has the
+tables. In short, for a heavy user (16 requests a day, 1–4 sheet changes a day, a sheet of 7,000–10,000 characters):
+- **1-hour TTL:** hit rate 0.75–0.80 under all three spacings. **+$0.08 to +0.12 per 1,000 tasks** (+$0.000081 to
+  +0.000124 a check, net of the pointers).
+- **5-minute TTL:** hit rate 0.00 at the lab's 10-minute gap, 0.16 at random spacing, 0.71 in bursts. At random
+  spacing it costs +$0.16 to +0.23, dearer than sending the sheet uncached (+$0.15 to +0.22). Break-even hit rates
+  are 0.22 for the 5-minute TTL and 0.53 for the 1-hour one.
+- **Today:** the lab transport sends 5-minute breakpoints. The shipped OpenRouter route sends none unless D1196 is on.
+
+`cost.py` now prices the sheet five ways (no sheet, uncached, all read, 1-hour mix at 0.75, 5-minute mix at 0.16)
+when the queue's done files carry `size.sheet`. G3's `batch.ts` change records that field. Without it, cost.py says
+the sheet was priced as uncached input.
+
+Against target 3 (F6's rehearsal gap, $0.09 per 1,000 tasks): the sheet adds $0.08–0.12 more at the 1-hour rate and
+$0.15–0.22 uncached on the shipped route. That is the price of D1180's +10 handed planted facts of 160 (served by
+subagents).

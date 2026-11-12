@@ -123,6 +123,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
+import { observeToolResult } from "./observe-tool";
 import type { World, WorldItem } from "../world";
 import {
   applyNotifyShare,
@@ -1389,6 +1390,18 @@ async function runWorld(
     // With the ids each packet and `ask_context` answer cited, so the line tells delivery from uptake (uptake.ts).
     const uptake = new UptakeLog();
     const packets = uptake.packets;
+    /** An injection an observe returned, placed with the task's packets (as `takeEden` places the queued ones). */
+    const deliver = (i: Parameters<UptakeLog["packet"]>[0]) => {
+      if (!useEden) return;
+      r.injectedItems += i.citations.length;
+      r.injectedChars += i.text.length;
+      uptake.packet(i);
+      day?.packet(
+        i.citations.map((c) => c.itemId),
+        i.text,
+      );
+      tl.point("eden.inject", { items: i.citations.length, chars: i.text.length });
+    };
     const takeEden = () => {
       if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
@@ -1413,16 +1426,7 @@ async function runWorld(
         const o2 = tl.begin("eden.observe", "eden", "path", { event: task.event });
         const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), { waitMs });
         tl.end(o2, { injected: first.injection?.citations.length ?? 0, pending: first.pending });
-        if (first.injection && useEden) {
-          r.injectedItems += first.injection.citations.length;
-          r.injectedChars += first.injection.text.length;
-          uptake.packet(first.injection);
-          day?.packet(
-            first.injection.citations.map((c) => c.itemId),
-            first.injection.text,
-          );
-          tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
-        }
+        if (first.injection) deliver(first.injection);
       }
       // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
       if (hits) {
@@ -1464,8 +1468,13 @@ async function runWorld(
               // Eden sees what the agent fetched, so it does not deliver it again.
               if (partner) {
                 const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-                await partner.observe(ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }));
-                tl.end(o);
+                // A packet the observe hands out reaches the agent, as a client places it (`observe-tool.ts`).
+                const injected = await observeToolResult(
+                  partner,
+                  ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }),
+                  deliver,
+                );
+                tl.end(o, { injected });
               }
               return { content: [{ type: "text", text: result }], details: {} };
             },
