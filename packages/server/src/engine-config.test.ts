@@ -155,6 +155,10 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "on" }, make as never);
     expect(seen.length).toBe(3);
     expect(seen.every((o) => o.anthropicCache === true)).toBe(true);
+    // A typo stops startup rather than reading as off.
+    expect(() => modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "ON" }, make as never)).toThrow(
+      /EDEN_MODEL_CACHE must be on or off/,
+    );
   });
 
   test("an unknown key stops startup with an error naming it", () => {

@@ -455,8 +455,8 @@ more than the lab's cached figure, about **$0.10 per 1,000 tasks**, and the card
 - Anthropic caching needs `cache_control`. A top-level automatic mode exists only when routed to Anthropic itself.
   Per-block breakpoints, which `anthropicCacheMessages` sends, work on every Anthropic-compatible provider, Bedrock
   and Vertex included.
-- At most four breakpoints. The minimum prefix is 512 tokens on Haiku 5.5: the check's instructions are about 965
-  and the card prompt's about 1,000.
+- At most four breakpoints. The minimum prefix is 512 tokens on Haiku 5.5: the check's instructions are 1,185
+  tokens as the API counts them (about 965 by characters ÷ 4), and the card prompt's about 1,000 by characters ÷ 4.
 - The TTL is 5 minutes (1 hour at 2× write). Writes cost 1.25× and reads 0.1×.
 - Sticky routing follows explicit breakpoints, but is skipped under a manual `provider.order`. The roles set `sort`,
   not `order`; whether `sort` counts is not documented.
@@ -473,5 +473,6 @@ more than the lab's cached figure, about **$0.10 per 1,000 tasks**, and the card
     zone) is another prefix, which a 5-minute cache would not have shared anyway.
   - `engine-config.test.ts`: the variable sets the option on all three roles, and only when `on`.
 
-**Decision:** pending the owner's probe. Cached tokens above 0 on a second call through the ZDR route, at a user's
+**Decision:** pending the owner's probe (departs from D814: no session may make the call). The probe is two calls
+with one `session_id` (one user's reuse) and two with different ones (cross-user sharing, which the $0.10 assumes). Cached tokens above 0 on a second call through the ZDR route, at a user's
 spacing, make it the servers' default. None, or a refusal by the endpoint, deletes the variable.

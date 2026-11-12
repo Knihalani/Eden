@@ -71,7 +71,7 @@ export function modelRolesFromEnv(
     baseUrl: env.OPENROUTER_BASE_URL,
     zdr: env.EDEN_MODEL_ZDR !== "off",
     // D1193's trial: cache breakpoints only when asked for; `OpenRouterModel` sends them to `anthropic/*` models only.
-    ...(env.EDEN_MODEL_CACHE === "on" ? { anthropicCache: true } : {}),
+    ...(cacheOn(env.EDEN_MODEL_CACHE) ? { anthropicCache: true } : {}),
   };
   return {
     reader: make({ ...base, sort: "throughput" }),
@@ -80,6 +80,13 @@ export function modelRolesFromEnv(
     usdPerTenantDay,
     scrub: (text) => text.split(apiKey).join("[key]"),
   };
+}
+
+/** `EDEN_MODEL_CACHE`: `on`, `off` or unset; any other value stops startup (a typo must not read as off, D1193). */
+function cacheOn(raw: string | undefined): boolean {
+  if (raw === undefined || raw === "" || raw === "off") return false;
+  if (raw === "on") return true;
+  throw new Error(`EDEN_MODEL_CACHE must be on or off, got ${raw}`);
 }
 
 function tenantCap(raw: string | undefined): number {
