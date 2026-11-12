@@ -63,6 +63,17 @@ describe("queue transport (F9)", () => {
     ]);
   });
 
+  // F5 saw batch workers call remote-session tools: every worker prompt starts by naming the only tools it may use.
+  test("every subagent prompt starts with the TOOLS line", () => {
+    for (const recipe of ["careful", "fast"]) {
+      const r = spawnSync("bun", [BATCH, "prompt", "B.json", "--recipe", recipe], {
+        encoding: "utf8",
+        env: { ...process.env, OPENROUTER_API_KEY: "" },
+      });
+      expect(r.stdout.split("\n")[0]).toMatch(/^TOOLS: use only Read and Write.*Never call any mcp__ tool/);
+    }
+  });
+
   test("keys depend on role and prompt, not on cache markers", () => {
     const body = (cache: boolean) => ({
       model: "claude-haiku-5-5",

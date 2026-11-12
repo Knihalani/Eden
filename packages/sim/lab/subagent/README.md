@@ -49,6 +49,12 @@ anything else goes back to `pending/`, to be answered again. Run every `bun` her
 
 ## The driver procedure (any Claude Code session)
 
+**Worker safety (F5 saw batch workers create remote sessions).** Spawn workers only as `queue-answerer` or
+`queue-worker`: their tool lists hold no `mcp__` or session tool, so a worker cannot create, message or stop a session
+whatever a batch contains. Every prompt `batch.ts prompt` prints starts with a TOOLS line saying the same. A session
+started before these definitions existed does not list them: spawn `general-purpose` with the printed prompt (its
+TOOLS line first) and start the next session on a tree that has them.
+
 Two ways; both measured in F9's first runs. For large runs (tens of thousands of requests across sessions) take
 20–30 requests a batch and keep about 10 agents running in each driving session; `take` is safe across sessions on
 one queue directory.
@@ -56,16 +62,18 @@ one queue directory.
 **A. Batches (best for a burst of independent calls, e.g. the funnel's push checks).** In a loop:
 
 1. `bun $B take --dir Q --n 10 --out Bi.json` for up to ten batches.
-2. For each, `bun $B prompt Bi.json`, and spawn an Agent with `model: "haiku"`, `subagent_type: "general-purpose"`
-   and that text as its prompt (in the background, up to about 10 at once). For a request whose `model` is a Sonnet
-   grader (`claude-sonnet-*`), use `model: "sonnet"` and `take --role grader`.
+2. For each, `bun $B prompt Bi.json`, and spawn an Agent with `subagent_type: "queue-answerer"` (Read and Write only,
+   haiku; `.claude/agents/queue-answerer.md`) and that text as its prompt (in the background, up to about 10 at
+   once). For a request whose `model` is a Sonnet grader (`claude-sonnet-*`), pass `model: "sonnet"` on the spawn
+   and `take --role grader`.
 3. When an agent says "done N", `bun $B put --dir Q Bi.answers.json`.
 
 A batch of 8–10 push-check requests (about 75,000 characters) took a haiku subagent 47–83 s; all 64 answers of F9's
 first funnel run were valid on the first `put`.
 
 **B. A looping worker (best for a harness that sends calls one after another, e.g. pi-ab).** Spawn one or two
-background haiku agents with this prompt (DIR and W1 set per worker):
+background agents with `subagent_type: "queue-worker"` (Read, Write and Bash only, haiku;
+`.claude/agents/queue-worker.md`) and this prompt (DIR and W1 set per worker):
 
 > You are a worker that stands in for a language model API, serving a file queue. Work in the repository root. Repeat:
 > 1. Run `env -u OPENROUTER_API_KEY bun packages/sim/lab/subagent/batch.ts take --dir DIR --n 8 --out W1.json`.
