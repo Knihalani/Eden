@@ -19,11 +19,14 @@ const reply = (n: number) =>
 console.log("start");
 for (const u of process.argv.slice(2)) {
   const [suite, seed] = u.split(":");
-  for (const clockName of ["wall", "world"] as const) {
+  const clocks = (process.env.CC_CLOCKS ?? "wall,world").split(",") as ("wall" | "world")[];
+  for (const clockName of clocks) {
     console.log("world");
     const { world } = worldOf(Number(seed), suite!, "hidden", { maxTasks: 30, maxOffworld: 5 });
     const sources = simSources(world, REALISTIC, 0, Number(seed));
+    let chars = 0;
     const model = new FakeModel((req) => {
+      chars += req.messages.reduce((n, m) => n + m.content.length, 0);
       const n = (req.messages.at(-1)!.content.match(/<item /g) ?? []).length || 20;
       return reply(n);
     });
@@ -34,6 +37,8 @@ for (const u of process.argv.slice(2)) {
       sourceMapPath: ":memory:",
       queryPlanner: "off",
       models: { reader: null, cards: model, cardsRetry: null, usdPerTenantDay: 25 },
+      // `CC_SET`: engine settings over the default (e.g. `{"cardsLean":false}`), as cold-start's `--set`.
+      ...(process.env.CC_SET ? { engine: JSON.parse(process.env.CC_SET) } : {}),
       ...(now ? { now } : {}),
     });
     partner.stopSync();
@@ -49,7 +54,7 @@ for (const u of process.argv.slice(2)) {
     const s = cards.stats;
     console.log(
       `${u} ${clockName}: enqueued ${s.enqueued} prefiltered ${s.prefiltered} leanSkipped ${s.leanSkipped} ` +
-        `sent ${s.sent} (requestOnly ${s.requestOnly}) calls ${s.calls}`,
+        `sent ${s.sent} (requestOnly ${s.requestOnly}) calls ${s.calls} prompt chars ${chars}`,
     );
     partner.stopSync();
   }

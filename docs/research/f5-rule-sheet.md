@@ -224,3 +224,28 @@ least as good on every set). Coverage: dev20's shipped cards as F8 recorded them
 world clock, ee34b1e9). Each arm's funnel runs twice through one queue: a first pass fills the queue (its checks fail
 open while unanswered), the subagents answer, and a second, identical pass replays every answer; only the second
 pass is read.
+
+## 8. Card coverage on the world's clock, and `cardsKeepOnly` ($0)
+
+After F8 re-recorded shipped coverage on the world's clock (D1102, ee34b1e9), the $0 diagnostic of §3 (seed 41,
+`pushCheckSheet` 120, check calls failing at $0) reads, for hidden facts missing from the push's pool:
+
+| suite | arm | missed | with a constraint card | on the sheet | look-alikes missed / carded |
+| --- | --- | ---: | ---: | ---: | --- |
+| train | main | 20 | 12 (60%) | 12 | 32 / 8 |
+| train | `cardsKeepOnly` | 21 | 15 (71%) | 15 | 30 / 11 |
+| reworded | main | 28 | 16 (57%) | 15 | 37 / 9 |
+| reworded | `cardsKeepOnly` | 28 | 21 (75%) | 20 | 37 / 14 |
+
+(Before the clock fix: 11 of 29 on train, 14 of 36 on reworded.) The no-model funnel, same runs: train hidden 149 →
+150 of 192, decoys 149 → 148; reworded hidden 158 → 160, decoys 151 → 150. `cardsKeepOnly` costs no call: the
+request-only read already asks the model for a card.
+
+**Reading every item instead** (`cardsLean` off): `clock-check.ts` with a fake card model on the world's clock
+(train1:41, train3:42) — shipped: 270–284 items sent, 16 calls, 130–136 thousand prompt characters a world;
+`cardsLean` off: about 1,490 items, 76 calls, about 710 thousand characters. Priced [EST: Haiku 5.5 list, about 4
+characters a token, about 80 output tokens an item]: shipped about $0.0033 in + $0.011 out ≈ **$0.014 a world**;
+`cardsLean` off about $0.018 + $0.06 ≈ **$0.08 a world**, about 5.5x. Only 4 of train's 26 prefilter-rejected missed
+facts were outside the lean read (§4), so reading everything buys little of the missed facts for its 5x;
+`cardsKeepOnly` is the lever. A heavy user's month [EST: 3,000 new items, the shipped read rate of about 18%]: about
+540 items read, 27 calls, about $0.03 a user-month with or without `cardsKeepOnly`; reading everything about $0.16.
