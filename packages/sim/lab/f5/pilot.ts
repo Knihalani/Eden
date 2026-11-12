@@ -84,21 +84,32 @@ if (cmd === "build") {
       pool.push({ card: c, world: worldOf(r), ...(template ? { template } : {}) });
     }
   const hash = (t: string) => [...t].reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0, 7);
+  // Every template planted in a world: a card planted for any of them in another world is one of this user's own
+  // facts in another form, never a distractor. One padded sheet per user (seeded by the world), as a user has one.
+  const worldTemplates = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const set = worldTemplates.get(worldOf(r)) ?? new Set<string>();
+    worldTemplates.set(worldOf(r), set.add(r.template));
+  }
   const padded = (r: Row, pad: number, cap: number): Row["sheet"] => {
     const own = r.sheet ?? [];
     const mine = new Set(own.map((c) => c.statement.toLowerCase()));
+    const theirs = worldTemplates.get(worldOf(r))!;
     const others = shuffled(
       pool.filter(
-        (p) => p.world !== worldOf(r) && p.template !== r.template && !mine.has(p.card.statement.toLowerCase()),
+        (p) =>
+          p.world !== worldOf(r) &&
+          !(p.template && theirs.has(p.template)) &&
+          !mine.has(p.card.statement.toLowerCase()),
       ),
-      hash(`${worldOf(r)}|${r.template}`),
+      hash(worldOf(r)),
     )
       .slice(0, Math.max(0, pad - own.length))
       // Another user's ids are not this user's: a named distractor must never match a pooled item or the planted one.
       .map((p, i) => ({ ...p.card, id: `pad:${i}:${p.card.id}` }));
     // Interleave: each distractor at a seeded random place among the user's own cards.
     const out = [...own];
-    let h = hash(`${r.template}|pad`);
+    let h = hash(`${worldOf(r)}|pad`);
     for (const d of others) {
       h = (Math.imul(h, 1664525) + 1013904223) >>> 0;
       out.splice(h % (out.length + 1), 0, d);
@@ -163,7 +174,8 @@ if (cmd === "build") {
         const msgs = checkMessages(inputOf(r, arm !== "B", arm === "R"));
         const sheetMsg = arm !== "B" ? msgs[1]!.content : "";
         const user = msgs.at(-1)!.content;
-        const fileKey = `${arm}-${r.suite}-${r.seed}-${r.variant}`;
+        // A batch file shows one sheet: prompts with another sheet (a card made between two requests) go elsewhere.
+        const fileKey = `${arm}-${r.suite}-${r.seed}-${r.variant}-${hash(sheetMsg).toString(36)}`;
         const f = byFile.get(fileKey) ?? { sheet: sheetMsg, prompts: [] };
         byFile.set(fileKey, f);
         f.prompts.push(`=== PROMPT ${id}\n${user}`);
