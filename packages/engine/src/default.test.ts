@@ -151,7 +151,7 @@ describe("the unified default and its parts (D112)", () => {
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(81);
+    expect(partKeys.size).toBe(83);
   });
 });
 

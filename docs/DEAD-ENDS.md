@@ -79,6 +79,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
 | D1552 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). |  |
 | D1156 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | because the funnel's on-demand poll already hands current copies, while connector calls rose 3.52 → 5.52 a… |
+| D1452 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | every item it read and did not say yes to, 127 / 362 |
 
 ## Reader
 
@@ -140,6 +141,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D528 | Rejected and deleted: thinking on I3's short reply, and a check that reads only stored-`act` items |  |
 | D815 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | The firewall flagged 0.070 of control tasks against D72's 0.05 bar and was never re-run |
 | D1160 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | the rule asked for a lower bound above 0. dev20 14/14 in every arm |
+| D1453 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | Not worth a prompt change for −8% |
 
 ## Sync, sources and scale
 
