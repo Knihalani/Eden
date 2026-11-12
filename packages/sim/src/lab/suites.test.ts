@@ -511,7 +511,8 @@ describe("heldout20 (F4, D1080): format only, its templates' text is not read he
       }
     }
     expect(UNRUN_BLIND).toContain("heldout20");
-    expect(UNREAD_BLIND).toEqual(["heldout20"]);
+    // Read once by the F-wave final (f-wave-final.md).
+    expect(UNREAD_BLIND).not.toContain("heldout20");
     expect(supportsNeutral("heldout20")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout20");
   });

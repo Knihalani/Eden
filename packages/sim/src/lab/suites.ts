@@ -320,9 +320,9 @@ export const UNRUN_BLIND = [
   "heldout20",
 ];
 /** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
- * read by A29 (D399), held-out 18 (M6, D465) by B18 (D802) and held-out 19 (P7, D870) by B19 (D1048). Held-out 20
- * (F4, D1080) is unread, for the final read of the F1–F3 fixes only. */
-export const UNREAD_BLIND: string[] = ["heldout20"];
+ * read by A29 (D399), held-out 18 (M6, D465) by B18 (D802), held-out 19 (P7, D870) by B19 (D1048) and held-out 20
+ * (F4, D1080) by the F-wave final (docs/research/f-wave-final.md). None is unread now. */
+export const UNREAD_BLIND: string[] = [];
 /**
  * P7's suites (D871, D873), P2's `train-rw` and F8's `dev20` (D1100) stay out of `all`, so `--suite all` measures
  * what it measured before them.
