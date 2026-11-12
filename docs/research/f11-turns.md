@@ -100,7 +100,14 @@ request needs. No new connector or model call. D300 (answer-ahead, rejected 2026
 beside every candidates packet, before the check made silence common, and moved no mix figure; this fires only on
 the silent turns where the agent now searches.
 
-Round 3 (pre-registered in 6defe771): results below when the run finishes.
+**Round 3** (k 3, pre-registered in 6defe771; 72 tasks an arm, against `both+ask`): connector calls −0.222 a task
+(−0.500..+0.000), model calls −0.139 (−0.278..+0.000), agent $ −0.009 per 1,000 tasks [EST], wait at measured search
+time −0.19 s (−0.42..+0.01) [EST], hidden raised 20/24 in both, packets on 76% of tasks against 56%. Short of the
+rule's −0.3 connector calls. Where it fired on a silent turn (15 of 32) the agent searched on 1; the 17 silent turns
+it did not reach (no record in the pool named the request's anchors, e.g. "Send Ilse Marchetti at Corvalis a revised
+quote") all searched.
+
+**Round 4** (pre-registered in 2c93b9e9): `pushLookupAny` hands the pool's head when nothing is named.
 
 ## Reproduce
 
