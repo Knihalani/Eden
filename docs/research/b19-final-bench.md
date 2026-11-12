@@ -1,6 +1,6 @@
 # B19: the final benchmark — raw Hermes, Eden before the wave, Eden final
 
-Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1047 (of D1040–D1049). **Lab only: no engine
+Status: 2026-11-11, branch `claude/b19-final-bench`. Decisions D1040–D1048 (of D1040–D1049). **Lab only: no engine
 or server file changes.** Every paid call goes to Anthropic through the lab provider (D97); none goes to OpenRouter,
 so every figure here is a lab-provider figure. Sections 1–2 were written and committed before the final run;
 section 3 is filled in after it.
@@ -234,4 +234,6 @@ Left as they are:
 
 ## 3. Results
 
-To be filled in after the parent's go.
+In [b19-final.md](b19-final.md) (D1048): the run went as pre-registered on 2026-11-12 from 00:25 to 01:06 UTC, for
+$6.06. In one line: final − before, hidden facts raised, Hermes short +16.3 points (+5.0..+28.1), Pi short +17.5
+(+6.3..+29.4), and 0 confirmed concerns in every arm.

@@ -113,6 +113,8 @@ def read_arm(stem, ledger_rows):
             "edenTaskUsd": 1000 * r.get("edenCostUsd", 0.0),
             "agentConn": float(agent_calls),
             "edenConn": float(eden_calls),
+            # The agent's `ask_context` calls (Eden's MCP tool), from the timeline's tool spans.
+            "asks": float(sum(1 for e in ev if e["ev"] == "tool.ask_context" and e["ph"] == "B")),
             "wall": r.get("wallMs", 0.0) / 1000,
             "first": r["task"] in first,
         }
@@ -197,6 +199,7 @@ def summary(arm):
         "edenUsdPer1kByRole": {k: 1000 * v[1] / n for k, v in sorted(eden_roles.items())},
         "edenCallsPer1kByRole": {k: 1000 * v[0] / n for k, v in sorted(eden_roles.items())},
         "edenUsdPer1k": 1000 * sum(v[1] for v in eden_roles.values()) / n,
+        "asksPerTask": mean([r["asks"] for r in rows]),
         "connectorCallsPerTask": {
             "agent": mean([r["agentConn"] for r in rows]),
             "edenOnTask": mean([r["edenConn"] for r in rows]),
@@ -214,6 +217,7 @@ METRICS = [
     ("agent tokens/task", None, lambda r: r["tokens"], 1),
     ("agent $/1k", None, lambda r: r["agentUsd"], 1),
     ("connector calls/task (agent+Eden)", None, lambda r: r["agentConn"] + r["edenConn"], 1),
+    ("asks/task", None, lambda r: r["asks"], 1),
     ("wall s/task (mean)", None, lambda r: None if r["first"] else r["wall"], 1),
 ]
 

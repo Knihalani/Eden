@@ -679,3 +679,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1045 | 2026-11-11 | Lab only: B19's pre-registration amended before the go | lab |
 | D1046 | 2026-11-11 | Lab only: B19's coverage when the final default keys its cards apart | lab |
 | D1047 | 2026-11-11 | Lab only: B19's harnesses load against an older engine through `compat.py`, and `go.sh` checks it before spending. | lab |
+| D1048 | 2026-11-12 | Finding (B19, blind heldout19, read once): the night's wave raised hidden facts on both harnesses with no confirmed concern. | finding |
