@@ -24,15 +24,19 @@ Optional settings:
 | `REALISM=heavy` | adds step 2c, raw against final under `--realism heavy` (F8, D1103), after the main arms |
 | `SPLIT` | streams a world (default 8) |
 
-The steps are:
+The steps run in this order, so a run that hits the subagents' weekly cap still holds the owner's targets:
 
 1. the two trees;
-2. per-tree coverage on the world clock;
-3. the three single-shot arms (raw, before, final);
+2. the final tree's coverage on the world clock;
+3. the single-shot raw and final arms;
 4. the multi-turn sample (raw against final, the real Pi loop: the agent's own turns, tools and tokens for the cost
    and speed targets);
-5. optionally the realism stage;
-6. the report.
+5. the before tree's coverage and its single-shot arm (`SKIP_BEFORE=1` drops it);
+6. optionally the realism stage;
+7. the report, which reads whatever finished.
+
+`FINAL_CONFIG` as a JSON object also reaches the final tree's coverage (cold-start's `--set`), so a card-form change
+in it is carded in its own form. A preset name cannot reach it: promote the profile into `DEFAULT_CONFIG` instead.
 
 The report holds:
 

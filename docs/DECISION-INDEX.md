@@ -733,6 +733,13 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1500 | 2026-11-12 | Finding (G3, served by subagents, D1101; every $ and second [EST]): no lever makes agent + Eden no dearer than the agent alone at the… | finding |
 | D1156 | 2026-11-12 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | rejected |
 | D1193 | 2026-11-12 | Promoted (F2, the integrator's decision): `cardsState` + `pushStateFilter`, on in the default: the card says whether its constraint still… | adopted |
+| D1455 | 2026-11-12 | Finding: most look-alikes reach the agent round the push check, not through it. | finding |
+| D1450 | 2026-11-12 | Promoted: `packetHeedsCheck`, on in the default: a rule path's proactive packet is not handed when the request's push check read every… | adopted |
+| D1451 | 2026-11-12 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… | rejected |
+| D1452 | 2026-11-12 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | rejected |
+| D1453 | 2026-11-12 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | rejected |
+| D1454 | 2026-11-12 | Finding: `pushCheckItemChars` 400 is not a facts lever. | finding |
+| D1456 | 2026-11-12 | Adopted: `pushStateFilter` keeps a lift notice in the push's pool when the user has a constraint card it could clear. | adopted |
 | D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
 | D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
 | D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |

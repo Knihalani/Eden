@@ -776,6 +776,14 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
+   * On in the default (G2, D1450; docs/research/g2-decoys.md). With `pushCheck` and a checker, a proactive packet a
+   * rule path made for a request (the no-model conflict and grounding tests, which queue before the check answers)
+   * is not handed out when that request's push check read every item in it and said yes to none. The observe
+   * already waits for the push, so no wait is added, and there is no call. A check that did not answer, read another
+   * copy of an item or was for another request holds nothing back; an explicit ask lists as before (D1452).
+   */
+  packetHeedsCheck: boolean;
+  /**
    * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
    * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
    * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
@@ -1004,6 +1012,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  packetHeedsCheck: true,
   pushDaySeats: 3,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,

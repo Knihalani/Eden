@@ -52,8 +52,13 @@ function says(yes: string[], extra = "") {
   });
 }
 
-function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = []) {
-  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
+function setup(
+  config: Record<string, unknown>,
+  model: Model | null,
+  pools: PushPoolReport[] = [],
+  items: ContextItem[] = ITEMS,
+) {
+  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
     sources: async () => [source],
@@ -356,5 +361,121 @@ describe("the compare-first reply (N5, D527)", () => {
     // Repeats count once; at most five.
     const many = Array.from({ length: 8 }, (_, k) => e((k % 7) + 1, "its day", true)).join(",");
     expect(parseCompare(`{"items":[${many}]}`, 10)).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check turned down is not handed", () => {
+  /** A fallback packet (the no-model rule path) for the request, and whatever the push queued beside it. */
+  const run = async (config: Record<string, unknown>, model: Model, at = ref) => {
+    const { partner } = setup({ pushCheck: true, fallbackMatchedTerms: 2, ...config }, model);
+    const res = await partner.observe({ ...at, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
+    });
+    const taken = partner.takePending(at);
+    return [...(res.injection ? [res.injection] : []), ...taken].map((x) => x.reason.split(":")[0]);
+  };
+
+  test("on in the default (D1450); off, the rule path's packet goes out though the check named nothing", async () => {
+    expect(DEFAULT_CONFIG.packetHeedsCheck).toBe(true);
+    expect(await run({ packetHeedsCheck: false }, says([]))).toContain("fallback");
+  });
+
+  test("on: the check read every item of the packet and said yes to none, so it is held back", async () => {
+    expect(await run({ packetHeedsCheck: true }, says([]))).not.toContain("fallback");
+  });
+
+  test("on: a packet with an item the check said yes to goes out", async () => {
+    const got = await run({ packetHeedsCheck: true }, says(["Harlow venue", "Harlow invoice", "Harlow deposit"]));
+    expect(got).toContain("fallback");
+  });
+
+  test("on: a check that did not answer (unreadable) holds nothing back", async () => {
+    expect(await run({ packetHeedsCheck: true }, new FakeModel(() => "not json"))).toContain("fallback");
+  });
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const say = (partner: ContextPartner, text: string, waitMs: number) =>
+    partner.observe({ ...ref, at: NOW, kind: "user_message", text } as AgentEvent, { waitMs });
+  const HELD = { pushCheck: true, fallbackMatchedTerms: 2, packetHeedsCheck: true };
+
+  test("a packet queued before the check answered is held back at the take", async () => {
+    const { partner } = setup(HELD, says([]));
+    const res = await say(partner, REQUEST, 0);
+    expect(res.injection).toBeNull();
+    await sleep(50);
+    expect(partner.takePending(ref).map((x) => x.reason.split(":")[0])).not.toContain("fallback");
+  });
+
+  test("a held-back packet was never shown: a later ask says its item in full, and the trace says why", async () => {
+    const { partner } = setup({ ...HELD, askDedup: true }, says([]));
+    expect((await say(partner, REQUEST, 2_000)).injection).toBeNull();
+    const res = await partner.ask({ ...ref, question: "Harlow venue deposit invoice", maxItems: 5 });
+    expect(res.answer).not.toContain("(shown above)");
+    expect(partner.explain(ref).some((t) => t.reason === "push check turned it down")).toBe(true);
+  });
+
+  test("an earlier request's packet is not held back by a later request's check (review)", async () => {
+    // Request 1's check is unreadable, so its packets stand; request 2's check names nothing.
+    let calls = 0;
+    const model = new FakeModel(() => (calls++ === 0 ? "not json" : '{"items":[]}'));
+    const { partner } = setup(HELD, model);
+    await say(partner, REQUEST, 0);
+    await sleep(50);
+    const second = await say(partner, "Send the Harlow venue deposit invoice PDF to accounts.", 2_000);
+    const got = [...(second.injection ? [second.injection] : []), ...partner.takePending(ref)];
+    expect(got.map((x) => x.reason.split(":")[0])).toContain("fallback");
+  });
+
+  test("a check that answers late does not take back the candidates it failed open to (review)", async () => {
+    const slow: Model = {
+      id: "slow",
+      chat: async (req) => {
+        await sleep(60);
+        return says([]).chat(req);
+      },
+    };
+    const { partner } = setup({ ...HELD, fallbackMatchedTerms: 99, pushCheckWaitMs: 10 }, slow);
+    await say(partner, REQUEST, 2_000);
+    await sleep(120);
+    expect(partner.takePending(ref).map((x) => x.reason.split(":")[0])).toContain("candidates");
+  });
+
+  test("a reply that named its most turned nothing down: an unnamed item's packet goes out (review)", async () => {
+    const many = [
+      ...ITEMS,
+      item("a", "Harlow parking", "Parking for the Harlow venue is behind the hall; the deposit covers ten bays.", 5),
+      item("b", "Harlow catering", "Catering at the Harlow venue is invoiced apart from the deposit, a week ahead.", 6),
+      item("c", "Harlow keys", "Keys for the Harlow venue are handed over once the deposit invoice clears.", 7),
+    ];
+    const model = new FakeModel((req) => {
+      const yes = [...numbers(req).entries()].filter(([t]) => t !== "Harlow invoice").slice(0, 5);
+      return `{"items":[${yes.map(([t, i]) => `{"i":${i},"on":"${t}","hits":"x","act":true}`).join(",")}]}`;
+    });
+    const { partner } = setup(
+      { ...HELD, pushCandidates: 5, askReaderPool: 15, pushCheckItems: 15, maxItems: 1 },
+      model,
+      [],
+      many,
+    );
+    const res = await say(partner, REQUEST, 2_000);
+    const got = [...(res.injection ? [res.injection] : []), ...partner.takePending(ref)];
+    // The scenario holds only if the reply did name five.
+    expect(got.find((x) => x.reason.startsWith("candidates"))?.citations.length).toBe(5);
+    expect(got.some((x) => x.reason.startsWith("fallback"))).toBe(true);
+  });
+
+  test("isolation: one user's check never holds back another user's packet", async () => {
+    // The first call names nothing; the second is unreadable, so the second user's check turned nothing down.
+    let calls = 0;
+    const model = new FakeModel(() => (calls++ === 0 ? '{"items":[]}' : "not json"));
+    const { partner } = setup({ pushCheck: true, fallbackMatchedTerms: 2, packetHeedsCheck: true }, model);
+    const reasons = async (at: typeof ref) => {
+      const res = await partner.observe({ ...at, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+        waitMs: 2_000,
+      });
+      return [...(res.injection ? [res.injection] : []), ...partner.takePending(at)].map((x) => x.reason.split(":")[0]);
+    };
+    expect(await reasons(ref)).not.toContain("fallback");
+    expect(await reasons({ tenantId: "t", userId: "u2", sessionId: "s1" })).toContain("fallback");
   });
 });

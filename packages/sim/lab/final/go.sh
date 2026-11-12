@@ -11,10 +11,12 @@
 # Steps (each skipped when its output exists, so a stopped run resumes where it stopped):
 #   0. Trees: BEFORE (default 006b505c, the pre-F-wave main) and FINAL, each with this checkout's harness (B19's
 #      arm-tree.sh); both must run identical tasks (tasks-hash.ts), and every arm passes a `--dry` start.
-#   1. Coverage for each tree's own card form, on the world's clock (cold-start.ts, `--clock world`, F8 #287), worlds
+#   1. The final tree's coverage on the world's clock (cold-start.ts, `--clock world`, F8 #287), worlds
 #      hidden/control/neutral of every seed, through the queue; each arm replays the shipped file plus its own.
-#   2. Three pi-ab arms side by side, `--agent-sim single`: raw (`tools`, final tree), before and final (`both+ask`,
-#      their trees). Each arm has its own EDEN_LAB_QUEUE_RUN (pricing). The push check and the first observe wait for
+#   2. Single-shot (`--agent-sim single`) raw (`tools`) and final (`both+ask`), then 2b the multi-turn sample (MT_LIMIT
+#      tasks a world), then 2b' the before tree's coverage and arm (SKIP_BEFORE=1 drops it), then 2c REALISM. That
+#      order puts the owner's targets first, against the subagents' weekly cap; report.sh reads whatever finished.
+#      Each arm has its own EDEN_LAB_QUEUE_RUN (pricing). The push check and the first observe wait for
 #      the queue (`pushCheckWaitMs`, `@w`): a subagent answers in minutes, where the API's would land in ~1.5 s.
 #   3. report.sh: hidden raised, concerns, paired template-clustered CIs, splits, stage attribution, cost and wait.
 set -euo pipefail
@@ -83,35 +85,51 @@ USERS=$(for x in $SUITE_LIST; do for s in "${SEED_ARR[@]}"; do printf '%s:%s,%s:
 # One cold-start process a world: a process cards its users one after another and a user's card calls mostly one at a
 # time, so through the queue (minutes a call) one process would take hours; worlds side by side put their calls in the
 # queue together, and identical card prompts (the same base world under several suites and variants) are answered once.
-coverage() { # TREE NAME
-  local out="$L/cov-$2" pids=() u fail=0
+coverage() { # TREE NAME [cold-start flags...]
+  local t=$1 name=$2 out="$L/cov-$2" pids=() u fail=0
+  shift 2
   [ -e "$out.jsonl" ] && return 0
   mkdir -p "$out.d"
   for u in ${USERS//,/ }; do
     [ -e "$out.d/$u.done" ] && continue
-    (cd "$1" && EDEN_LAB_QUEUE_RUN="$P-cov-$2" env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cold-start.ts \
+    (cd "$t" && EDEN_LAB_QUEUE_RUN="$P-cov-$name" env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cold-start.ts \
       --users "$u" --suite "$SUITE" --clock world --cards-out "$out.d/$u.jsonl" \
-      --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 100000 --spend-headroom 0 --run-label "$P-cov-$2" \
-      --out "$out.d/$u.json" \
+      --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 100000 --spend-headroom 0 --run-label "$P-cov-$name" \
+      --out "$out.d/$u.json" "$@" \
       >"$out.d/$u.log" 2>&1 && touch "$out.d/$u.done") &
     pids+=($!)
   done
   for pid in "${pids[@]}"; do wait "$pid" || fail=1; done
-  [ $fail -eq 0 ] || { log "go: a $2 coverage world failed (see $out.d/*.log)"; return 1; }
+  [ $fail -eq 0 ] || { log "go: a $name coverage world failed (see $out.d/*.log)"; return 1; }
   if grep -Eq '"cardCalls": 0,' "$out".d/*.json; then
-    log "go: a $2 world made no card call (see $out.d/*.json): stopped"
+    log "go: a $name world made no card call (see $out.d/*.json): stopped"
     return 1
   fi
   gunzip -c packages/sim/lab/distilled/cards-shipped.jsonl.gz >"$out.jsonl.tmp"
   cat "$out".d/*.jsonl >>"$out.jsonl.tmp"
   mv "$out.jsonl.tmp" "$out.jsonl"
 }
-log "go: step 1 coverage (drive the queue now)"
-coverage "$TB" before &
-CB=$!
-coverage "$TF" final &
-CF=$!
-wait $CB && wait $CF || { log "go: coverage failed: stopped"; exit 1; }
+# Order (integrator, against the subagents' weekly cap): the final tree's coverage, raw and final single-shot, the
+# multi-turn sample, then the before tree (coverage and arm), then realism, so a run cut short still holds the owner's
+# targets. FINAL_CONFIG reaches the final tree's coverage when it is a JSON object (cold-start's `--set`); a preset name
+# cannot, so the card form would be the default's: promote the profile into DEFAULT_CONFIG instead (F12's plan).
+FCFG=${FINAL_CONFIG:-default}
+COVSET=()
+case "$FCFG" in
+  default) ;;
+  \{*) COVSET=(--set "$FCFG") ;;
+  *) log "go: FINAL_CONFIG=$FCFG is a preset: the final tree's coverage runs its default configuration" ;;
+esac
+# BEFORE_COVERAGE_ONLY=1: the before tree's coverage alone, then stop. BEFORE is fixed, so its coverage can be made
+# ahead of the final (same PREFIX, same queue); the final run then finds cov-before.jsonl and skips it.
+if [ "${BEFORE_COVERAGE_ONLY:-0}" = 1 ]; then
+  log "go: before coverage only (drive the queue now)"
+  coverage "$TB" before || { log "go: before coverage failed: stopped"; exit 1; }
+  log "go: before coverage done ($L/cov-before.jsonl)"
+  exit 0
+fi
+log "go: step 1 final coverage (drive the queue now)"
+coverage "$TF" final "${COVSET[@]}" || { log "go: coverage failed: stopped"; exit 1; }
 log "go: step 1 done"
 
 # 2. The arms. One process an arm (all seeds), the three side by side so their calls share the queue's batches.
@@ -142,25 +160,21 @@ arm() { # TREE ARM CONDITION COVERAGE CONFIG [flags...]
     return 1
   fi
 }
-FCFG=${FINAL_CONFIG:-default}
 SINGLE=(--agent-sim single --seeds "$SEEDS")
-# A --dry start of every arm first (modules, worlds, coverage, configuration; no model call).
-for a in "$TF raw tools $L/cov-final.jsonl default" "$TB before $EDEN_COND $L/cov-before.jsonl default" \
-  "$TF final $EDEN_COND $L/cov-final.jsonl $FCFG"; do
+# A --dry start of the final tree's arms first (modules, worlds, coverage, configuration; no model call).
+for a in "$TF raw tools $L/cov-final.jsonl default" "$TF final $EDEN_COND $L/cov-final.jsonl $FCFG"; do
   read -r t n c v g <<<"$a"
   (cd "$t" && env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --conditions "$c" "${COMMON[@]}" \
     --config "$g" --coverage full --cards "$v" --intent "$v" --seeds "${SEED_ARR[0]}" --out "$L/dry-$n.json" --dry) \
     >"$L/dry-$n.log" 2>&1 || { log "go: the $n arm does not start (see $L/dry-$n.log): stopped"; exit 2; }
 done
-log "go: step 2 single-shot arms (drive the queue now)"
+log "go: step 2 single-shot raw and final (drive the queue now)"
 arm "$TF" raw tools "$L/cov-final.jsonl" default "${SINGLE[@]}" &
 A1=$!
-arm "$TB" before "$EDEN_COND" "$L/cov-before.jsonl" default "${SINGLE[@]}" &
-A2=$!
 arm "$TF" final "$EDEN_COND" "$L/cov-final.jsonl" "$FCFG" "${SINGLE[@]}" &
 A3=$!
 fail=0
-for pid in $A1 $A2 $A3; do wait "$pid" || fail=1; done
+for pid in $A1 $A3; do wait "$pid" || fail=1; done
 [ $fail -eq 0 ] || { log "go: an arm failed (see $L/*.log): stopped"; exit 1; }
 log "go: step 2 done"
 
@@ -177,6 +191,19 @@ fail=0
 for pid in $M1 $M2; do wait "$pid" || fail=1; done
 [ $fail -eq 0 ] || { log "go: a multi-turn arm failed (see $L/mt-*.log): stopped"; exit 1; }
 log "go: step 2b done"
+
+# 2b'. The before tree: its own coverage, then its single-shot arm (the comparison with the pre-campaign product).
+if [ "${SKIP_BEFORE:-0}" != 1 ]; then
+  log "go: step 2b' before coverage and arm (drive the queue now)"
+  coverage "$TB" before || { log "go: before coverage failed: stopped"; exit 1; }
+  (cd "$TB" && env -u OPENROUTER_API_KEY bun packages/sim/src/lab/pi-ab.ts --conditions "$EDEN_COND" "${COMMON[@]}" \
+    --config default --coverage full --cards "$L/cov-before.jsonl" --intent "$L/cov-before.jsonl" \
+    --seeds "${SEED_ARR[0]}" --out "$L/dry-before.json" --dry) >"$L/dry-before.log" 2>&1 ||
+    { log "go: the before arm does not start (see $L/dry-before.log): stopped"; exit 2; }
+  arm "$TB" before "$EDEN_COND" "$L/cov-before.jsonl" default "${SINGLE[@]}" ||
+    { log "go: the before arm failed (see $L/before.log): stopped"; exit 1; }
+  log "go: step 2b' done"
+fi
 
 # 2c. Optional (REALISM=heavy): the same single-shot comparison, raw against final only, with every world as a heavy
 # real user's (`--realism heavy`, F8, D1103: twenty connectors, 600 rule-like noise items a world). Run after the main
