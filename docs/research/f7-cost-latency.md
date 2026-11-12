@@ -109,3 +109,29 @@ into an empty file), and its Sonnet-graded hidden raised and confirmed concerns 
 part of it**. The lean wording is now applied as a transform of the check's instructions (`leanSystem`), so a sibling
 switch that rewords the format's act sentence (F2's `pushCheckDone`) composes with it; when F5's rule sheet adds a
 second list to the reply, the stop is not sent.
+
+## 4. Re-pre-registration: no API credit, subagent-simulated runs (08:40 UTC, before any such run)
+
+The owner confirmed there will be no Anthropic API credit. Model calls go through F9's queue lab transport, answered
+by Haiku subagents, which measure neither real latency nor cache billing. So from here every model result is
+labelled **subagent-simulated**, and every $ and wall figure built from it is **[EST]**:
+
+- **Cost [EST]:** each call's input, cache-eligible input (the fixed instructions, 1,185 tokens on the check; 90% read
+  from the cache on the real API, §3) and output tokens, priced at Haiku 5.5's published rates (input $0.10, cache
+  read $0.01, cache write $0.125, output $0.50 per million), times calls a task, on the 1:1:8 mix.
+- **Check wait [EST]:** H3's fit, 596 ms + 2.93 ms an output token (time to first token about 450 ms whatever the
+  reply), per call; the wall claim is the check's modelled wait on the request path, not a measured wall.
+
+**Rule, replacing §1's output-token clause and §2's clause 1** (the facts and concerns clauses stand as written):
+- Screen: Y (else YD) goes on if its output tokens a check are at most 0.75 of W's in the same subagent-simulated
+  run, with §1's planted, look-alike and neutral bars.
+- Pi (or whatever harness the queue transport serves): clause 1 is met if the check's modelled wait a task on the
+  1:1:8 mix, or total $ [EST] a task, is lower with a template-clustered 95% upper bound below 0. Clauses 2 and 3 as
+  in §2, graded as the transport allows (said beside the result).
+- `pushCheckLeanLead` is judged on the agent's tokens and turns [EST] by the same clause 1, as it moves no check call.
+
+**$0 estimate already in hand** (`packages/sim/lab/f7/simstop.py` on the 943 readable recorded replies of §3): a stop
+at the first no on the *shipped* order keeps 72% of the reply's characters (hidden 83%, control 63%, neutral 68%) and
+loses 6 of 283 planted facts the check named, and 6 of 84 look-alikes. At about 115 output tokens a call that is
+about −32 tokens: −94 ms of modelled wait and −$0.000016 a call (−8% of the check) **[EST]**. The lean order is
+meant to keep those 6 facts; only a model answering the lean prompt can say whether it does.
