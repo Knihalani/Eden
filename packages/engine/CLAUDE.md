@@ -313,8 +313,6 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   push makes the agent ask more: measure any change to when the push is silent live, with wall, not on the funnel
   (the funnel wires no checker unless `--check`). `checkKey` keeps the "c" its replies were recorded under. Deleted
   (D828): I3's reply, the anchored gate (arm N), the never-silent rule and the widened pool; code in 572d1569.
-  Trial `pushCheckRecall` (F2, off): another act rule (`CHECK_SYSTEMS` 1, 2), keyed apart in `checkKey`;
-  docs/research/f2-push-recall.md.
 - **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
   `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
   requests are on none. With `pushCandidates`, `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark

@@ -716,14 +716,6 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * F2 (trial, off; docs/research/f2-push-recall.md): with `pushCheck`, which act rule the check is asked with
-   * (`CHECK_SYSTEMS` in push-check.ts). 0: the shipped rule. 1: "already done" (the request's own job paid, renewed,
-   * resolved) and a closure or absence covering its day are reasons to stop, not go-aheads. 2: rule 1, plus person
-   * facts, short group notices and a lean to yes when an item lands and the check is unsure. The reply's format is
-   * the shipped one; `checkKey` keys the form.
-   */
-  pushCheckRecall: number;
-  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -909,7 +901,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushCheckRecall: 0,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,

@@ -9,15 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import {
-  CHECK_SYSTEM,
-  CHECK_SYSTEMS,
-  checkKey,
-  checkMessages,
-  itemMark,
-  parseCompare,
-  PushChecker,
-} from "./push-check";
+import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
 // change what the agent should do; the candidates are those, in pool order; none named sends no packet; any failure
@@ -364,56 +356,5 @@ describe("the compare-first reply (N5, D527)", () => {
     // Repeats count once; at most five.
     const many = Array.from({ length: 8 }, (_, k) => e((k % 7) + 1, "its day", true)).join(",");
     expect(parseCompare(`{"items":[${many}]}`, 10)).toEqual([0, 1, 2, 3, 4]);
-  });
-});
-
-describe("pushCheckRecall (F2, trial): the act rule the check is asked with", () => {
-  const input = {
-    request: "Renew the TLS certificate",
-    today: "2026-10-27",
-    items: [{ id: "a", source: "mail", title: "Renewed", date: "", from: "", text: "Renewed already.", hash: "h" }],
-  };
-
-  test("off in the default and the core; 0 asks the shipped instructions under the shipped key", () => {
-    expect(DEFAULT_CONFIG.pushCheckRecall).toBe(0);
-    expect(CORE_CONFIG.pushCheckRecall).toBe(0);
-    expect(CHECK_SYSTEMS[0]).toBe(CHECK_SYSTEM);
-    expect(checkMessages({ ...input, recall: 0 })[0]!.content).toBe(CHECK_SYSTEM);
-    expect(checkKey({ ...input, recall: 0 })).toBe(checkKey(input));
-  });
-
-  test("each form changes only the act rule: the question, the format line and the closing are the shipped ones", () => {
-    for (const form of [1, 2]) {
-      const sys = CHECK_SYSTEMS[form]!;
-      expect(sys).not.toBe(CHECK_SYSTEM);
-      // Everything up to the act rule, and the closing sentence, are shared word for word.
-      const head = CHECK_SYSTEM.slice(0, CHECK_SYSTEM.indexOf('"act": true only if'));
-      expect(sys.startsWith(head)).toBe(true);
-      expect(
-        sys.endsWith('Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.'),
-      ).toBe(true);
-      expect(sys).toContain("already done");
-      expect(checkMessages({ ...input, recall: form })[0]!.content).toBe(sys);
-      // A form's replies are its own: a replay cache of another form never answers it.
-      expect(checkKey({ ...input, recall: form })).not.toBe(checkKey(input));
-    }
-    expect(checkKey({ ...input, recall: 1 })).not.toBe(checkKey({ ...input, recall: 2 }));
-    expect(CHECK_SYSTEMS[2]).toContain("unsure");
-    expect(CHECK_SYSTEMS[1]).not.toContain("unsure");
-  });
-
-  test("the partner asks the configured form; the reply is read by the shipped parser", async () => {
-    const model = says(["Harlow deposit"]);
-    const { partner } = setup({ pushCheck: true, pushCheckRecall: 1 }, model);
-    expect(await handed(partner)).toEqual(["mail:dated"]);
-    expect(model.calls[0]!.messages[0]).toEqual({ role: "system", content: CHECK_SYSTEMS[1]! });
-  });
-
-  test("needs the check and a checker; whole numbers 0 to 2", () => {
-    expect(() => checkEngineConfig({ pushCheckRecall: 1 }, { deps: { checker: true } })).not.toThrow();
-    expect(() => checkEngineConfig({ pushCheckRecall: 3 }, { deps: { checker: true } })).toThrow();
-    expect(() => checkEngineConfig({ pushCheckRecall: 1.5 }, { deps: { checker: true } })).toThrow();
-    expect(() => checkEngineConfig({ pushCheckRecall: 1 }, { deps: { cards: true, reader: true } })).toThrow();
-    expect(() => checkEngineConfig({ pushCheck: false, pushCheckRecall: 1 }, { deps: { checker: true } })).toThrow();
   });
 });

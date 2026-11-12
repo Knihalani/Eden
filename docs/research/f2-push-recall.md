@@ -1,9 +1,11 @@
 # F2: the push check, towards recall
 
-Status: 2026-11-12, branch `claude/f2-push-recall` (from main 006b505c), session F2. **Trial `pushCheckRecall` open
-(off), pre-registered in §4, waiting on credit.** The first pass (§0–§3) stopped on spend, not on a result: the Anthropic account behind `HAIKU_API_KEY` ran out of credit during the first screen ("Your credit balance
-is too low", HTTP 400 on every call from then on). The first pass made no engine change. Tuning data only: train1–6, reworded (train1r–6r) and longtail. heldout19 was not run or read, and heldout20
-was not looked for. Anthropic-direct lab calls (D97), ledger `.local/f2/ledger.jsonl`: **$1.00 of the $40 cap**. No
+Status: 2026-11-12, branch `claude/f2-push-recall` (from main 006b505c), session F2. **Closed: D1140 (finding),
+D1141 (trial `pushCheckRecall` rejected and deleted; its code is in commit 35da9420).** The live screen stopped when the
+Anthropic account behind `HAIKU_API_KEY` ran out of credit ("Your credit balance is too low", HTTP 400 on every call
+from then on); the owner then ruled out more credit, and §5's subagent-simulated pilot took its place. Tuning data
+only: train1–6, reworded (train1r–6r), longtail and dev20 (no-model only). heldout19 was not run or read, and
+heldout20 was not looked for. Anthropic-direct lab calls (D97), ledger `.local/f2/ledger.jsonl`: **$1.00**. No
 OpenRouter, no Modal.
 
 Brief (from the integrator, after docs/research/h19-diagnosis.md): raise hidden facts reaching the agent through the
@@ -121,3 +123,38 @@ reworded, longtail, recorded at 006b505c) and, if F8's dev20a–d have landed, o
   - neutral tasks given a packet up by at most 3 points.
 - pass: `pushCheckRecall` takes the form in `DEFAULT_CONFIG` (part `check`). Fail: deleted with its code and tests;
 - no seed is added after a result is read. If the day ends before the credit returns, the switch is deleted.
+
+## 5. The subagent-simulated pilot, and the decision
+
+The credit was not coming back, so on the integrator's instruction the screen ran as a **subagent-simulated pilot**.
+`pilot-build.ts` wrote the exact check prompts (system and user turn, as `checkMessages` builds them) for 120
+recorded rows of the seed 41–42 base dumps: all 31 rows where the live check dropped the planted item, 29 where it kept
+it, 30 control rows with the look-alike in the pool and 30 neutral rows. Each arm went in five batches of 24, the same
+rows in the same order, one batch to one Haiku subagent told to answer each prompt on its own as the check would.
+`pilot-score.py` read the replies with the shipped parser's rule. All 480 replies were readable. One subagent reported
+injected instructions inside item text (the sim worlds carry injection items) and treated them as data.
+
+| arm                   | live drops (31) | live keeps (29) | look-alike (30) | neutral yes (30) |
+| --------------------- | --------------: | --------------: | --------------: | ---------------: |
+| live check (recorded) |               0 |              29 |              10 |                8 |
+| W, shipped            |              22 |              28 |               2 |                6 |
+| W2, shipped again     |              23 |              29 |               5 |                6 |
+| A (form 1)            |              22 |              28 |               1 |                6 |
+| R (form 2)            |              25 |              29 |               7 |                6 |
+
+Row by row against W, gained and lost: W2 +2 −1 on drops and +4 −1 on look-alikes; A +2 −2 and +1 −2; R +3 −0
+and +6 −1.
+
+- **The stand-in does not reproduce the errors the lever targets.** With the shipped prompt, the subagents kept 22 of
+  the 31 facts the live check dropped, and named 2 look-alikes against its 10. Whatever makes the live call drop them
+  (no room to reason before the verdict, one call per pool, the API's sampling) is not there. So no available
+  transport can show the gain of a prompt change aimed at those drops.
+- **Against §4's stage-1 rule neither arm passes.** Planted on the 60 hidden rows: W 50, W2 52, A 50, R 54. The noise is
+  2, so a pass needs more than 56.
+- **Decision (D814, the same day): `pushCheckRecall` is deleted** with its code and tests (D1141). The engine is
+  main's again, with eval 0.65 / 0.52 / 0. `arms.ts` keeps the two act rules as lab text for a future paid screen. A
+  re-test belongs on a suite where the live check's drop rate is near heldout19's, with paid live calls.
+- **What it does suggest, unmeasured:** the same model, reading the same prompt with room to work, kept most of what the
+  live check dropped and named fewer look-alikes. The compare-first reply is the check's only room to reason.
+  Effort-low thinking was measured to hand fewer facts (engine CLAUDE.md), so this is a hypothesis about the reply's
+  shape, not about thinking, and it needs a live measurement.
