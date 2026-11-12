@@ -754,6 +754,41 @@ change, or whose carded items re-sync (the sheet is ordered by an item's update 
 next check. A user with more than 80 active rules gets no sheet (D1183) and pays main's check; selection for them was rejected
 (D1182).
 
+**The sheet's cache hit rate (F7, `packages/sim/lab/f7/sheet-cache.py`, [EST]; no request timings from real users
+exist, so the spacing is assumed).** A check reads the sheet from cache only when the same sheet went out within the
+TTL. It writes the sheet again (1.25x input on the 5-minute TTL, 2x on the 1-hour one) after a longer gap, or when a
+card lands or ends, since the sheet lists newest first. The model assumes a heavy user with 16 requests a day (about
+480 a month) and 1–4 sheet changes a day. It tries three spacings: the lab's fixed 10 minutes (pi-ab `--days`),
+requests at random over about 7.3 active hours a day, and bursts of 2–5 requests a minute or two apart. Hit rates:
+
+| TTL | lab (10 min) | random over active hours | bursty |
+| --- | ---: | ---: | ---: |
+| 5 minutes | 0.00 | 0.15–0.16 | 0.71 |
+| 1 hour | 0.79 | 0.75 | 0.79–0.80 |
+
+Break-even against sending the sheet uncached is a hit rate of 0.22 on the 5-minute TTL and 0.53 on the 1-hour one.
+**The assumed rate is 0.75 on the 1-hour TTL** (the random spacing, the cautious case). Per check, for a sheet of
+7,000–10,000 characters (1,750–2,500 tokens) and net of the pointers' −$0.000019:
+
+| sheet sent as | $ a check | $ per 1,000 tasks (0.93 checks a task) |
+| --- | ---: | ---: |
+| 1-hour cache at the 0.75 hit rate (the assumed rate) | +0.000081 to +0.000124 | +0.08 to +0.12 |
+| 5-minute cache at 0.16 | +0.00017 to +0.00025 | +0.16 to +0.23 (dearer than uncached) |
+| uncached (the shipped OpenRouter route without `anthropicCache`, D1196; cost.py's old pricing) | +0.00016 to +0.00023 | +0.15 to +0.22 |
+| every check reading it | about 0 | about 0 |
+
+Where each route stands today:
+- The lab's Anthropic transport (`anthropic.ts`) sends the 5-minute TTL unless `cacheTtl: "1h"` is set. On the
+  random spacing, that is the dearest row.
+- The shipped OpenRouter route sends no breakpoint unless `anthropicCache` is on (D1196, a trial with its probe
+  pending the owner). So production pays the uncached row today.
+- Whether OpenRouter passes a 1-hour `ttl` through is unverified (no probe today).
+
+So the sheet is worth sending with the 1-hour TTL as its own breakpoint, or not cached at all. A 5-minute breakpoint
+on a user whose requests are tens of minutes apart costs more than none. `packages/sim/lab/final/cost.py` prices the
+check's sheet block five ways when the queue's done files carry `size.sheet`: no sheet, uncached, all read, 1-hour
+mix, 5-minute mix.
+
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
 No model call. With `sourceYieldEarn`, `sourceYieldNames` and `sourceYieldEngage` in the default (Pi, train, 995
