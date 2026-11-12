@@ -89,11 +89,27 @@ export const CHECK_SYSTEM = [
     'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
 ].join("\n\n");
 
+/**
+ * `askHeedsCheck` (G2, D1450): the same instructions, with one more field on an entry the check rules out. `why` says
+ * what kind of no it is, written after the verdict so the verdict is decided as before: "clear" (the item itself is a
+ * go-ahead for the request's own), "other" (another one of the same kind) or "background". The ask leaves out only
+ * the first two: a background item may still matter in a way the check did not see.
+ */
+export const CHECK_SYSTEM_WHY =
+  CHECK_SYSTEM +
+  ' Only in an entry whose "act" is false, add a last field "why": "clear" when the item itself is a go-ahead for ' +
+  "the request's own (it says the hold, rule, booking or problem it is about is over, lifted, cancelled, approved, " +
+  'paid or done, or that what it requires is already in place); "other" when its point is about another person, ' +
+  'thing, place, date or time than the request\'s own; "background" for anything else. For example ' +
+  '{"i":4,"on":"lake house repairs finished","hits":"the lake house booking","act":false,"why":"clear"}.';
+
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
   request: string;
   items: ReaderItem[];
   today: string;
+  /** `askHeedsCheck` (D1450): ask each ruled-out entry for its `why` (`CHECK_SYSTEM_WHY`). */
+  why?: boolean;
   /** The user's opaque sticky-routing key (`userCacheKey`): routing only, never prompt text, not in `checkKey`. */
   cacheKey?: string;
 }
@@ -101,8 +117,8 @@ export interface PushCheckInput {
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
 export interface PushCheckRead {
   yes: ReadonlySet<string> | null;
-  /** `askHeedsCheck` (D1450): the item ids the reply named and ruled out (`parseRuledOut`); absent with no answer. */
-  ruledOut?: ReadonlySet<string>;
+  /** `askHeedsCheck` (D1450): the items the reply named and ruled out, with the kind of no (`parseRuledOut`). */
+  ruledOut?: ReadonlyMap<string, "clear" | "other" | "">;
   costUsd: number;
   /** Whether this read made a (budgeted) model call. */
   called: boolean;
@@ -120,7 +136,7 @@ const head = (text: string) =>
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
   // "c": the compare-first reply's key since D527, kept so the lab's recorded replies still replay.
-  const form = "c";
+  const form = input.why ? "cw" : "c";
   const h = createHash("sha256").update(
     `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
@@ -143,7 +159,7 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     );
   });
   return [
-    { role: "system", content: CHECK_SYSTEM },
+    { role: "system", content: input.why ? CHECK_SYSTEM_WHY : CHECK_SYSTEM },
     {
       role: "user",
       content:
@@ -198,24 +214,26 @@ export function parseCompare(text: string, count: number): number[] | null {
 }
 
 /**
- * `askHeedsCheck` (G2, D1450): the 0-based indexes a compare-first reply names and rules out: an entry whose `act` is
- * false or whose `hits` is none. The check listed the item as touching the request's subject and then said it leaves
- * the request alone (a go-ahead, another one of the same kind, background). An item the reply leaves out is not here:
- * the check gave no reading of it. Empty when the reply is unreadable or names an item it does not hold.
+ * `askHeedsCheck` (G2, D1450): the items a compare-first reply names and rules out, by 0-based index, each with the
+ * kind of no the reply gave it: "other" for a `hits` of none or a `why` of other (another one of the same kind),
+ * "clear" for a `why` of clear (the item is a go-ahead), "" for any other stated no. The check listed the item as
+ * touching the request's subject and then said it leaves the request alone. An item the reply leaves out is not
+ * here: the check gave no reading of it. Empty when the reply is unreadable; an entry naming no item is skipped.
  */
-export function parseRuledOut(text: string, count: number): number[] {
-  if (parseCompare(text, count) === null) return [];
+export function parseRuledOut(text: string, count: number): Map<number, "clear" | "other" | ""> {
+  const out = new Map<number, "clear" | "other" | "">();
+  if (parseCompare(text, count) === null) return out;
   const entries = (JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { items: unknown[] }).items;
-  const out: number[] = [];
   for (const e of entries.slice(0, COMPARE_MAX_ENTRIES * 2)) {
-    const { i, hits, act } = e as { i?: unknown; hits?: unknown; act?: unknown };
-    const yes = (act === true || act === "true") && typeof hits === "string" && !NO_HIT.test(hits);
-    if (yes) continue;
+    const { i, hits, act, why } = e as { i?: unknown; hits?: unknown; act?: unknown; why?: unknown };
+    const none = typeof hits === "string" && NO_HIT.test(hits);
+    if ((act === true || act === "true") && typeof hits === "string" && !none) continue;
     // Only a stated no: an entry with no verdict at all is not one.
-    if (act !== false && act !== "false" && !(typeof hits === "string" && NO_HIT.test(hits))) continue;
+    if (act !== false && act !== "false" && !none) continue;
     const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
-    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) continue;
-    if (!out.includes(n - 1)) out.push(n - 1);
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count || out.has(n - 1)) continue;
+    const said = typeof why === "string" ? why.trim().toLowerCase() : "";
+    out.set(n - 1, said === "clear" ? "clear" : none || said === "other" ? "other" : "");
   }
   return out;
 }
@@ -302,11 +320,9 @@ export class PushChecker {
       }
       const yes = new Set(at.map((i) => items[i]!.id));
       // A yes wins over a second entry that rules the same item out.
-      const ruledOut = new Set(
-        parseRuledOut(res.text, items.length)
-          .map((i) => items[i]!.id)
-          .filter((id) => !yes.has(id)),
-      );
+      const ruledOut = new Map<string, "clear" | "other" | "">();
+      for (const [at, why] of parseRuledOut(res.text, items.length))
+        if (!yes.has(items[at]!.id)) ruledOut.set(items[at]!.id, why);
       return { yes, ruledOut, costUsd: res.costUsd, called: true, overBudget: false };
     } catch (err) {
       this.deps.budget.settle(reservation, 0);

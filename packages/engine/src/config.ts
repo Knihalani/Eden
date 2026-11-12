@@ -731,10 +731,12 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * TRIAL (G2, D1450): an explicit ask in the request a push check answered leaves out the items that check read and
-   * did not name: 1, only those its reply named and ruled out (`parseRuledOut`: a go-ahead, another one of the same
-   * kind); 2, every item it read and did not say yes to. No call of its own, and nothing is left out when the check
-   * did not answer, read another copy of the item, or was for another request. 0: off.
+   * TRIAL (G2, D1450): an explicit ask in the request a push check answered leaves out items that check turned down.
+   * 1: the check's reply says what kind of no each ruled-out item is (`CHECK_SYSTEM_WHY`), and the ask leaves out
+   * those it called a go-ahead ("clear") or another one of the same kind ("other", or a `hits` of none); an item
+   * ruled out as background, or left unnamed, stays. 2: every item the check read and did not say yes to (the reply
+   * as it is). No call of its own, and nothing is left out when the check did not answer, read another copy of the
+   * item, or was for another request. 0: off.
    */
   askHeedsCheck: number;
   /**

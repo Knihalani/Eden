@@ -374,7 +374,8 @@ describe("askHeedsCheck (G2, D1450): an ask leaves out what its request's push c
       const n = numbers(req);
       return (
         `{"items":[{"i":${n.get("Harlow venue")},"on":"Harlow payments","hits":"the Harlow deposit","act":true},` +
-        `{"i":${n.get("Harlow deposit")},"on":"deposit due Friday","hits":"the Harlow deposit","act":false}]}`
+        `{"i":${n.get("Harlow deposit")},"on":"deposit due Friday","hits":"the Harlow deposit","act":false,"why":"clear"},` +
+        `{"i":${n.get("Harlow invoice")},"on":"the invoice PDF","hits":"the Harlow invoice","act":false,"why":"background"}]}`
       );
     });
   const asked = async (config: Record<string, unknown>, second?: string) => {
@@ -385,13 +386,25 @@ describe("askHeedsCheck (G2, D1450): an ask leaves out what its request's push c
     return res.citations.map((c) => c.itemId);
   };
 
-  test("parseRuledOut: a stated no (act false, or a link of none); never a yes, an unnamed item or a bad reply", () => {
+  test("parseRuledOut: a stated no with its kind; never a yes, an unnamed item or a bad reply", () => {
     const reply =
-      '{"items":[{"i":1,"on":"a","hits":"b","act":true},{"i":2,"on":"a","hits":"b","act":false},' +
-      '{"i":3,"on":"a","hits":"none - another venue","act":true},{"i":4,"on":"a"},{"i":9,"on":"a","act":false}]}';
-    expect(parseRuledOut(reply, 5)).toEqual([1, 2]);
-    expect(parseRuledOut("not json", 5)).toEqual([]);
-    expect(parseRuledOut('{"items":[]}', 5)).toEqual([]);
+      '{"items":[{"i":1,"on":"a","hits":"b","act":true},{"i":2,"on":"a","hits":"b","act":false,"why":"clear"},' +
+      '{"i":3,"on":"a","hits":"none - another venue","act":true},{"i":4,"on":"a"},{"i":9,"on":"a","act":false},' +
+      '{"i":5,"on":"a","hits":"b","act":false,"why":"background"}]}';
+    expect([...parseRuledOut(reply, 5)]).toEqual([
+      [1, "clear"],
+      [2, "other"],
+      [4, ""],
+    ]);
+    expect(parseRuledOut("not json", 5).size).toBe(0);
+    expect(parseRuledOut('{"items":[]}', 5).size).toBe(0);
+  });
+
+  test("1 asks the check for the kind of no; 0 and 2 send the instructions as they were", () => {
+    const input = { request: REQUEST, items: [], today: "2026-10-27" };
+    expect(checkMessages(input)[0]!.content).toBe(CHECK_SYSTEM);
+    expect(checkMessages({ ...input, why: true })[0]!.content).toContain('"why"');
+    expect(checkKey({ ...input, why: true })).not.toBe(checkKey(input));
   });
 
   test("off (the default): the ask lists the item the check ruled out", async () => {
@@ -399,7 +412,7 @@ describe("askHeedsCheck (G2, D1450): an ask leaves out what its request's push c
     expect(await asked({})).toContain("mail:dated");
   });
 
-  test("1: only the item the reply named and ruled out is left out; an unnamed one stays", async () => {
+  test("1: only the item ruled out as a go-ahead is left out; one ruled out as background stays", async () => {
     const got = await asked({ askHeedsCheck: 1 });
     expect(got).not.toContain("mail:dated");
     expect(got).toContain("mail:plain");

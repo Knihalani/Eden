@@ -2530,6 +2530,8 @@ export class ContextPartner {
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
+      // `askHeedsCheck` 1 (D1450): the check says what kind of no each ruled-out item is.
+      ...(this.config.askHeedsCheck === 1 ? { why: true } : {}),
     };
     const key = checkKey(input);
     const asked = `${input.today}\n${request}`;
@@ -2601,7 +2603,7 @@ export class ContextPartner {
       if (kept.request !== s.requests || !read?.yes) continue;
       for (const [id, mark] of kept.marks) {
         if (read.yes.has(id)) out.delete(id);
-        else if (mode >= 2 || read.ruledOut?.has(id)) out.set(id, mark);
+        else if (mode >= 2 || read.ruledOut?.get(id)) out.set(id, mark);
       }
     }
     if (out.size === 0) return null;
