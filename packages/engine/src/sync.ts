@@ -76,7 +76,10 @@ export interface SyncOptions {
    * `FLOOR_BACKOFF_LEVELS` doublings; anything new stored from the source (any poll, a notice's items) resets it.
    */
   activePollBackoff?: boolean;
-  /** `syncActivePollPriced` (D1131): the floor also polls sources whose calls are billed (`Source.callPriced`). */
+  /**
+   * `syncActivePollPriced` (D1132, D1133): the floor also polls sources not marked first-party or flat-rate
+   * (`Source.callPriced` true or absent).
+   */
   activePollPriced?: boolean;
   /** A full re-listing, for deletes, this often per source (ms) while the user is active. */
   sweepMs: number;
@@ -1162,15 +1165,16 @@ export class SyncManager {
     // (D1131's review). Busy, backing off or out of budget: the next tick looks again.
     const floor = this.o.activePollMs ?? 0;
     if (floor > 0) {
-      // A source that notifies (`push`) is current until it says it changed, and one whose calls are billed is left to
-      // its learned rate unless the deployment opted in: no floor poll for either.
+      // A source that notifies (`push`) is current until it says it changed: no floor poll. Nor for one not marked
+      // first-party or flat-rate (`callPriced` false): unknown counts as billed per call (D1133, fail safe), unless the
+      // deployment opted in.
       const floorDue = (s: SourceSync, source: Source | undefined, share: number): source is Source =>
         source !== undefined &&
         !s.notifies &&
         s.phase === "warm" &&
         !s.busy &&
         now >= s.retryAt &&
-        (source.callPriced !== true || this.o.activePollPriced === true) &&
+        (source.callPriced === false || this.o.activePollPriced === true) &&
         now - s.polledAt >= share * floor * 2 ** s.floorLevel;
       // A poll stores into the cache: a frozen user is thawed first (`ready`, D325), as for a sweep. Once one source
       // is due, those past half their interval go in the same thaw, so a user's sources do not each thaw them in turn

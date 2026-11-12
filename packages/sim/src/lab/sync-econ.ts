@@ -58,6 +58,8 @@ interface Planned {
 /** A source whose listing shows what has arrived by the simulated clock, newest first; counts its listing calls. */
 class ArrivingSource implements Source {
   readonly kind = "sim";
+  /** First-party, as the lab's sim sources are: the freshness floor polls it (D1133). */
+  readonly callPriced = false;
   readonly description: string;
   lists = 0;
   constructor(
