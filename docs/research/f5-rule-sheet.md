@@ -67,3 +67,30 @@ template`, `n5/mix.py` for cost and wall. **Promote** when all hold, else delete
 - neutral given a packet up by at most 3 points;
 - the push check's $ per 1,000 tasks at most +50% over `eden` on the pair's own ledger;
 - p50 wall a task at most +0.3 s.
+
+## 2. What happened first: the account ran out of credit mid-screen
+
+The screen started at 6332e4e8. About 08:10 UTC every Anthropic call began to return 400 "Your credit balance is
+too low" (shown by a 5-token call). Checks fail open, so about half of B's checks on train and reworded, and all of
+S's, fell back to the default's candidates. The runs were stopped and their numbers discarded
+(`.local/f5/screen-bad/`, not read for the rule). Only successful replies are in each run's check cache, so a re-run
+replays them at $0. F5 had spent $0.40.
+
+## 3. The sheet's ceiling, at $0
+
+`pushCheckSheet` 120 with `pushCheckSheetAlways`, check calls failing (the 400s cost nothing), so the sheet is built
+and reported but never read. Per hidden task, the funnel row records whether the planted item is in the push's pool
+(`pushPoolAt`) and on the sheet (`pushSheetAt`), and its card kind (`plantedCard`). Seed 41:
+
+| suite | hidden tasks with a push | planted not in the pool | of those, on the sheet | look-alikes not in the pool, on the sheet |
+| --- | ---: | ---: | ---: | ---: |
+| train | 190 | 29 | 11 | 8 of 46 |
+| reworded | 185 | 36 | 14 | 11 of 55 |
+| longtail | 23 | 8 | 2 | 1 of 11 |
+
+Every missed planted item with a constraint card is on the sheet (sheets hold 32–53 cards, under the cap). The ones
+that are not have no constraint card at shipped coverage: 18 of 29 on train and 21 of 36 on reworded read `none`
+(no card, a `none` card, or not covered by the replay), and one reworded fact is a `preference` card, which the sheet
+leaves out. So on train the sheet can reach at most about a third of the facts retrieval misses; the rest needs
+cards first. heldout19's 42 of 50 carded (h19-diagnosis.md) was measured with the final enricher's own lines, not
+shipped replay coverage, so the ceiling in the lab is lower than in that diagnosis [EST: the coverage differs].
