@@ -649,7 +649,6 @@ python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus
   --pool .local/m5/pool.jsonl --only fit
 ```
 
-<<<<<<< HEAD
 
 ### 1i. The connector router (M8, D940–D949; rejected; docs/research/m8-router.md)
 
