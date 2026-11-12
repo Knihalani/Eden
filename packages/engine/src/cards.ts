@@ -698,7 +698,7 @@ export interface CardLimits {
    * for its requests only, under a reservation of its own.
    */
   requestsFix: boolean;
-  /** `cardsRequestsWide` (trial, F1; `wideRequests()` sets it): with `requestsFix`, the prompt's form 4 (`INTENT_WIDE`). */
+  /** `cardsRequestsWide` (trial, F1; `wideRequests()` sets it): with `requestsFix`, the prompt's form 4. */
   requestsWide: boolean;
   /**
    * `cardsLanes` (N4, D521, D522; `lanes()` sets it): how many model calls one user may have in flight. 1: one
