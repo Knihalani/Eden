@@ -123,6 +123,7 @@ export {
 export {
   CHECK_MAX_ITEMS,
   CHECK_SYSTEM,
+  CHECK_SYSTEMS,
   parseCompare,
   CHECK_VERSION,
   checkKey,

@@ -688,3 +688,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| F2: the push check's act rule towards recall (docs/research/f2-push-recall.md) | `pushCheckRecall` (0 off; 1 "already done" and a day clash are reasons to stop; 2 adds person facts, short group notices and a lean to yes when unsure) | F2 | 2026-11-12 (D814: decided today) | A live screen of recorded check pools on tuning suites (train, reworded, longtail and F8's dev20a–d once landed; with a repeat of the shipped arm for the noise floor), then the pre-registered Pi pair (Sonnet-regraded): hidden lower bound above 0, confirmed concerns not up, neutral-packet share up by at most 3 points. Pass: promoted; fail or no credit by the day's end: deleted with its code and tests. |

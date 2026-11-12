@@ -27,7 +27,9 @@ const EVERY = Number(opt("every", "1"));
 const MODEL = "claude-haiku-5-5";
 const access = labAccess(args, [MODEL]);
 const model = labModel(access, { apiKey: "", model: MODEL, timeoutMs: 60_000 }, "eden.check");
-const systems: Record<string, string> = { W: CHECK_SYSTEM, ...ARM_SYSTEMS };
+// W2 is the shipped check asked again: the noise floor any arm is read against (Haiku repeats 75–79% of item
+// sets, D931).
+const systems: Record<string, string> = { W: CHECK_SYSTEM, W2: CHECK_SYSTEM, ...ARM_SYSTEMS };
 for (const a of ARMS) if (!systems[a]) throw new Error(`no arm ${a}`);
 
 interface Row {
@@ -54,6 +56,7 @@ interface Tally {
   named: Map<string, Set<string>>;
 }
 const tally = new Map<string, Tally>(ARMS.map((a) => [a, { checks: 0, failed: 0, usd: 0, named: new Map() }]));
+let failedInRow = 0;
 const taskOf = (r: Row) => `${r.suite}\t${r.seed}\t${r.template}\t${r.variant}`;
 await Promise.all(
   Array.from({ length: LANES }, async (_, lane) => {
@@ -72,9 +75,15 @@ await Promise.all(
           usd = res.costUsd;
           const at = res.truncated ? null : parseCompare(res.text, input.items.length);
           yes = at ? at.map((i) => input.items[i]!.id) : null;
-        } catch {
+        } catch (err) {
           yes = null;
+          // A refused account (HTTP 400: no credit, a bad key) fails every call: stop rather than count them as checks.
+          if (++failedInRow >= 20) {
+            console.error(`screen: 20 calls in a row failed; stopping (${String(err).slice(0, 200)})`);
+            process.exit(1);
+          }
         }
+        if (yes !== null) failedInRow = 0;
         t.checks++;
         t.usd += usd;
         const task = taskOf(r);

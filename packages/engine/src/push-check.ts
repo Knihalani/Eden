@@ -70,24 +70,66 @@ const CHECK_PARTS = [
  * cut look-alikes the same way (`why` before `binds`). The question, its yes and no and the data rule are I2's and
  * I3's, word for word.
  */
-export const CHECK_SYSTEM = [
-  ...CHECK_PARTS,
+const FORMAT_HEAD =
   "Reply with one JSON object only, no prose and no code fence: " +
-    '{"items":[{"i":<item number>,"on":"<at most 8 words>","hits":"<at most 6 words, or none>","act":true}, ...]}. ' +
-    "List only the items that touch the request's own subject, the most decisive first, at most 6; leave every other " +
-    'item out. In each entry write "on" first: the specific person, organisation, place, account, thing and day ' +
-    "the item's point applies to, in the item's own names. Then \"hits\": what of the request's own that point " +
-    "lands on, in the request's words: its person, its venue, its account, its document, its thing, its day or " +
-    "evening, its money. A point can land without sharing a name: an event on the request's evening, a limit or " +
-    "allowance the request's amount counts against, a clause its offer falls under, the same job already booked, " +
-    "paid or arranged by someone else, a guest of its party, a helper it depends on. Write none when the point is " +
-    "about another one of the same kind and leaves the request's own alone: another venue, another route, another " +
-    "invoice or reference, another person off or covering, another document or template, another day. Then " +
-    '"act": true only if "hits" is not none and the item gives a reason to stop, to check first or to do it another ' +
-    "way; false for a go-ahead (approved, lifted, back to normal, no longer applies), for background and whenever " +
-    '"hits" is none. ' +
-    'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
-].join("\n\n");
+  '{"items":[{"i":<item number>,"on":"<at most 8 words>","hits":"<at most 6 words, or none>","act":true}, ...]}. ' +
+  "List only the items that touch the request's own subject, the most decisive first, at most 6; leave every other " +
+  'item out. In each entry write "on" first: the specific person, organisation, place, account, thing and day ' +
+  "the item's point applies to, in the item's own names. Then \"hits\": what of the request's own that point " +
+  "lands on, in the request's words: its person, its venue, its account, its document, its thing, its day or " +
+  "evening, its money. A point can land without sharing a name: an event on the request's evening, a limit or " +
+  "allowance the request's amount counts against, a clause its offer falls under, the same job already booked, " +
+  "paid or arranged by someone else, a guest of its party, a helper it depends on. Write none when the point is " +
+  "about another one of the same kind and leaves the request's own alone: another venue, another route, another " +
+  "invoice or reference, another person off or covering, another document or template, another day. Then " +
+  '"act": ';
+
+/** The shipped act rule (D527). */
+const ACT_SHIPPED =
+  'true only if "hits" is not none and the item gives a reason to stop, to check first or to do it another way; ' +
+  "false for a go-ahead (approved, lifted, back to normal, no longer applies), for background and whenever " +
+  '"hits" is none. ';
+
+const FORMAT_TAIL = 'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.';
+
+export const CHECK_SYSTEM = [...CHECK_PARTS, FORMAT_HEAD + ACT_SHIPPED + FORMAT_TAIL].join("\n\n");
+
+/**
+ * `pushCheckRecall` 1 (F2, trial; docs/research/f2-push-recall.md): the act rule names two reasons to stop that the
+ * shipped check passed as go-aheads on train: the request's own job already done (a certificate already renewed, an
+ * invoice already paid, an incident resolved), and a closure, absence or other plan covering the request's day. A
+ * go-ahead is narrowed to one that removes an obstacle and leaves the request still to do. The reply's format, its
+ * keys and their order are the shipped ones.
+ */
+const ACT_DONE =
+  'true if "hits" is not none and the item gives a reason to stop, to check first or to do it another way. That ' +
+  "includes the request's own job already done, paid, renewed, fixed, resolved, booked or sent by someone (doing it " +
+  "again would be wasted or wrong), and a closure, absence or other plan that covers the request's day or time. " +
+  "false for a go-ahead, which removes an obstacle and leaves the request still to do (a hold lifted, an approval for " +
+  'it granted, back to normal), for background and whenever "hits" is none. ';
+
+/**
+ * `pushCheckRecall` 2: rule 1, plus a person fact a careful assistant would weigh, a short notice to a group the
+ * user is in about a shared thing the request uses, and a lean to yes when an item lands and the check is unsure
+ * (the agent sets aside what does not bear; an item left out is lost to it).
+ */
+const ACT_LEAN =
+  ACT_DONE.slice(0, ACT_DONE.indexOf("false for a go-ahead")) +
+  "So does a fact about a person in the request that a careful assistant would weigh (a health need, an allergy, a " +
+  "pregnancy, a sensitivity), and a short notice to a group the user is in (their building, street, team, class or " +
+  "club) about a shared thing the request uses or a time it falls in (a lift, parking, a room, access, a closure), " +
+  "even when the request does not name it. An item can be one line of chat or a portal notice: weigh it as you " +
+  "would a letter. " +
+  ACT_DONE.slice(ACT_DONE.indexOf("false for a go-ahead")) +
+  "When an item lands on the request and you are unsure whether it changes what to do, write true: the assistant " +
+  "reads every item you name and sets aside one that does not bear, while an item you leave out is lost to it. ";
+
+/** The check's instructions by `pushCheckRecall` (0: the shipped check). */
+export const CHECK_SYSTEMS: readonly string[] = [
+  CHECK_SYSTEM,
+  [...CHECK_PARTS, FORMAT_HEAD + ACT_DONE + FORMAT_TAIL].join("\n\n"),
+  [...CHECK_PARTS, FORMAT_HEAD + ACT_LEAN + FORMAT_TAIL].join("\n\n"),
+];
 
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
@@ -96,6 +138,8 @@ export interface PushCheckInput {
   today: string;
   /** The user's opaque sticky-routing key (`userCacheKey`): routing only, never prompt text, not in `checkKey`. */
   cacheKey?: string;
+  /** `pushCheckRecall` (F2, trial): which `CHECK_SYSTEMS` entry the check is asked with; 0 or absent is shipped. */
+  recall?: number;
 }
 
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
@@ -118,7 +162,7 @@ const head = (text: string) =>
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
   // "c": the compare-first reply's key since D527, kept so the lab's recorded replies still replay.
-  const form = "c";
+  const form = input.recall ? `c${input.recall}` : "c";
   const h = createHash("sha256").update(
     `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
@@ -141,7 +185,7 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     );
   });
   return [
-    { role: "system", content: CHECK_SYSTEM },
+    { role: "system", content: CHECK_SYSTEMS[input.recall ?? 0] ?? CHECK_SYSTEM },
     {
       role: "user",
       content:
