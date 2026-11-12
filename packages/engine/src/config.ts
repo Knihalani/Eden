@@ -539,13 +539,13 @@ export interface EngineConfig {
    */
   cardsRequestsWide: boolean;
   /**
-   * Trial (F2; docs/research/f2-card-state.md), off. With `cards`: the card prompt asks each card for its `state`
+   * On in the default (F2, D1193; docs/research/f2-card-state.md). With `cards`: the card prompt asks each card for its `state`
    * (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call, and keeps
    * a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
    */
   cardsState: boolean;
   /**
-   * Trial (F2), off. With `cards`: the push's pool (`pushGate`) leaves out an item carded none whose state says a
+   * On in the default (F2, D1193). With `cards` and `cardsState`: the push's pool (`pushGate`) leaves out an item carded none whose state says a
    * constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state, or a card of another kind,
    * stays.
    */
@@ -897,8 +897,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsSourceAware: true,
   cardsRequestsFix: true,
   cardsRequestsWide: false,
-  cardsState: false,
-  pushStateFilter: false,
+  cardsState: true,
+  pushStateFilter: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

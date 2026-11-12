@@ -20,7 +20,7 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
-// `cardsState` and `pushStateFilter` (F2, trials; docs/research/f2-card-state.md): the card model says whether an
+// `cardsState` and `pushStateFilter` (F2, D1193, on in the default; docs/research/f2-card-state.md): the card model says whether an
 // item's constraint is in force, lifted, met or superseded, and the push's pool leaves out an item carded none
 // because a constraint was lifted, met or superseded.
 
@@ -126,13 +126,13 @@ describe("the card's state", () => {
     expect(e.carded(scope)).toEqual([]);
   });
 
-  test("both switches need cards and are off in the default", () => {
-    expect(DEFAULT_CONFIG.cardsState).toBe(false);
-    expect(DEFAULT_CONFIG.pushStateFilter).toBe(false);
+  test("both switches need cards and are on in the default (D1193)", () => {
+    expect(DEFAULT_CONFIG.cardsState).toBe(true);
+    expect(DEFAULT_CONFIG.pushStateFilter).toBe(true);
     expect(() => checkEngineConfig({ cards: false, cardsState: true }, { deps: { cards: true } })).toThrow();
     expect(() => checkEngineConfig({ cards: false, pushStateFilter: true }, { deps: { cards: true } })).toThrow();
     // The filter acts only on states, which only `cardsState` writes.
-    expect(() => checkEngineConfig({ pushStateFilter: true }, { deps: { cards: true } })).toThrow();
+    expect(() => checkEngineConfig({ cardsState: false, pushStateFilter: true }, { deps: { cards: true } })).toThrow();
     expect(() =>
       checkEngineConfig({ cardsState: true, pushStateFilter: true }, { deps: { cards: true } }),
     ).not.toThrow();
