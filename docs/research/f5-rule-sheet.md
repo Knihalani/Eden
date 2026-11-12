@@ -420,3 +420,21 @@ F10's ceiling on the same subset with card requests (its dumps, world-clock cove
 not in the pool, card on the sheet), 300 cards: top 20 61%, top 30 66%, top 60 79% (150 cards: 72%, 79%, 83%; 500:
 top 30 65 of 115). About 33 and 36 of 54 at k 20 and 30: below 40. **`pushCheckSheetSelect` is deleted (D1182)**; its
 code is in commit debfb22e.
+
+### 11d. The shipped sheet on a heavy user (10d, subagent-simulated, D1101): **fails; guard added (D1183)**
+
+300 padded cards a user, the shipped cap (the newest 80 reach the check), B (main) and R (SR) on the same 288
+prompts, 14 Haiku subagents, every prompt answered, none unreadable:
+
+| set | B | R | rule | |
+| --- | ---: | ---: | --- | --- |
+| Hh: fact in the pool named | 39 / 40 | 39 / 40 | ≥ B − 2 | pass |
+| Hc: look-alike in the pool named | 2 / 40 | 2 / 40 | ≤ B + 3 | pass |
+| N: neutral, any yes | 1 / 40 | 9 / 40 | ≤ B + 4.5 | **fail** |
+| Th: fact off the pool named (planted on the capped sheet in 11 tasks) | 0 / 11 | 9 / 11 | — | |
+| Tc: look-alike off the pool named | 0 / 13 | 0 / 13 | — | |
+
+All 9 neutral yeses name a rule from the padding: a newest slice of a heavy user's rules speaks where main is
+silent. **Guard (D1183): a user with more active rules than `pushCheckSheet` gets no sheet**, so the check reads the
+pool alone, exactly as main (by construction: no sheet, main's prompt; `push-check-sheet.test.ts`). The padding is
+other users' rules, a harsher stand-in than a real heavy user's own; F8's `--realism heavy` run is the realistic one.

@@ -751,8 +751,8 @@ for a paid comparison; D1180 owes it).
 
 So with a warm cache the estimate puts the check near main's, but the one measurement read +22%; a user whose cards
 change, or whose carded items re-sync (the sheet is ordered by an item's update time), pays about $0.0002 more on the
-next check. With the sheet on, a heavier user past about 100 cards needs selection
-(`pushCheckSheetSelect`, a trial) rather than a longer sheet (docs/research/f5-rule-sheet.md §9b, §11c).
+next check. A user with more than 80 active rules gets no sheet (D1183) and pays main's check; selection for them was rejected
+(D1182).
 
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
