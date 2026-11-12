@@ -28,6 +28,8 @@ const ITEMS = [
   item("hold", "Harlow venue", "Payments to Harlow are on hold until the venue deposit dispute ends.", 2),
   item("dated", "Harlow deposit", "The Harlow venue deposit is due on Friday 30 October.", 4),
   item("other", "Invoice archive", "Older invoice for a venue deposit, paid last year.", 500),
+  // A plain record (no constraint wording) naming the request's entity: what a lookup hands.
+  item("thread", "Harlow venue booking", "Thanks for booking the Harlow venue for the team dinner, see you there.", 6),
 ];
 const REQUEST = "Pay the Harlow venue deposit invoice today.";
 const ref = { tenantId: "t", userId: "u1", sessionId: "s1" };
@@ -97,6 +99,14 @@ describe("pushLookup (D1252)", () => {
     expect(ids.length).toBeGreaterThan(0);
     expect(ids).not.toContain("mail:other");
     expect(ids.length).toBeLessThanOrEqual(3);
+  });
+
+  test("on: a constraint-like record the check rejected is never handed as reference (a look-alike)", async () => {
+    const got = await taken(partner({ pushLookup: 3, pushLookupAny: true }, silent()));
+    const ids = got!.citations.map((c) => c.itemId);
+    expect(ids).toContain("mail:thread");
+    // "on hold until…" is constraint wording: the check read it and named nothing, so it stays out.
+    expect(ids).not.toContain("mail:hold");
   });
 
   test("on, k caps the records", async () => {

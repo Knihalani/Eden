@@ -2629,9 +2629,14 @@ export class ContextPartner {
     let lookupHead = false;
     if (yes && yes.size === 0 && this.config.pushLookup > 0) {
       const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-      const named = open.filter((x) => anchored(x.item, a));
+      // Only plain records: a constraint-like item here is one the check read and judged not to change the request
+      // (a look-alike), and handed as reference the agent raised it anyway (round 5: the ISA look-alike on 4 of 4
+      // control seeds). What the agent looks up on a silent turn is the meeting, the contact, the thread.
+      const flagged = new Set(reported.filter((x, i) => like[i]).map((x) => x.item.id));
+      const plain = open.filter((x) => !flagged.has(x.item.id));
+      const named = plain.filter((x) => anchored(x.item, a));
       lookupHead = named.length === 0 && this.config.pushLookupAny;
-      items = (lookupHead ? open : named).slice(0, this.config.pushLookup);
+      items = (lookupHead ? plain : named).slice(0, this.config.pushLookup);
       lookup = items.length > 0;
     }
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
