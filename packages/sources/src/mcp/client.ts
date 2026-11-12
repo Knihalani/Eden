@@ -1,6 +1,6 @@
 /**
- * A minimal MCP client (D1704): `initialize` with version negotiation, `tools/list`, `tools/call`, `ping` answered,
- * every other server request refused with "Method not found", server notifications ignored. It matches the
+ * A minimal MCP client (D1704): `initialize` with version negotiation, `tools/list`, `tools/call`, `ping` answered
+ * (at most 16 at once), every other server request dropped unanswered, server notifications ignored. It matches the
  * official SDK's `Client` where Eden depends on it: a JSON-RPC error rejects with `McpError` (`MCP error <code>:
  * <message>`), a request times out after 60 s by default, an aborted signal sends `notifications/cancelled` and
  * rejects, a closed connection rejects every request in flight and calls `onclose`.
@@ -19,6 +19,9 @@ import {
   type Transport,
 } from "./types";
 
+/** Answers to the server's `ping` sent at once, at most; more are dropped until one is done. */
+const MAX_PINGS_IN_FLIGHT = 16;
+
 /** The SDK's default request timeout. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -36,6 +39,8 @@ export class McpClient {
   private transport: Transport | null = null;
   private nextId = 0;
   private readonly pending = new Map<number, Pending>();
+  /** `ping` answers being sent now. */
+  private pings = 0;
 
   constructor(private readonly info: { name: string; version: string }) {}
 
@@ -167,12 +172,16 @@ export class McpClient {
       else handler({ result: m.result });
       return;
     }
-    if (!isRequest(m)) return; // notifications (progress, logging, list changes) are not used
-    const reply: JsonRpcMessage =
-      m.method === "ping"
-        ? { jsonrpc: "2.0", id: m.id, result: {} }
-        : { jsonrpc: "2.0", id: m.id, error: { code: ErrorCode.MethodNotFound, message: "Method not found" } };
-    this.transport?.send(reply).catch(() => {});
+    // Notifications (progress, logging, list changes) are not used. Of the server's requests only `ping` is answered,
+    // and at most `MAX_PINGS_IN_FLIGHT` at once: each answer is a POST carrying the user's credentials, so a server
+    // that floods requests must not turn them into a flood of POSTs (200,000 asked made 200,000 POSTs). Every other
+    // request (sampling, roots, elicitation) is dropped unanswered, never acted on.
+    if (!isRequest(m) || m.method !== "ping" || this.pings >= MAX_PINGS_IN_FLIGHT || !this.transport) return;
+    this.pings++;
+    this.transport
+      .send({ jsonrpc: "2.0", id: m.id, result: {} })
+      .catch(() => {})
+      .finally(() => this.pings--);
   }
 
   private closed(transport: Transport): void {

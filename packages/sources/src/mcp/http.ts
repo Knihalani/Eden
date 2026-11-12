@@ -41,6 +41,28 @@ export interface StreamableHttpOptions {
  */
 export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60_000;
+/**
+ * Cap on one `tools/list` reply: a page of tool descriptions, far below the general cap (a 16 MiB page held ~240,000
+ * tools). `McpSource` caps what it keeps across pages too.
+ */
+export const MAX_TOOLS_LIST_BYTES = 4 * 1024 * 1024;
+/** Cap on one SSE line or event: Eden's replies are a tool page or a search's rows, far below the whole stream's. */
+export const MAX_EVENT_BYTES = 4 * 1024 * 1024;
+/**
+ * Messages on one reply that are not JSON, not JSON-RPC, or a response to another request, before the reply is failed:
+ * a flood of junk events cost seconds of CPU (2.1M `data:x` events, 3.1 s), and one error is reported, not one each.
+ */
+const MAX_BAD_PER_REPLY = 100;
+/** Requests from the server on one reply before it is failed (each `ping` is answered with a POST). */
+const MAX_ASKS_PER_REPLY = 100;
+
+/** What one reply carried besides its response: counted so a flood fails the reply instead of costing per message. */
+interface Tally {
+  bad: number;
+  asks: number;
+  /** Why the reply is failed, once a count passes its cap. */
+  failed: string | null;
+}
 /** Same-origin redirects followed per request, at most. */
 const MAX_REDIRECTS = 5;
 
@@ -130,9 +152,13 @@ export class StreamableHttpTransport implements Transport {
       const f = typeof target === "string" || typeof target === "number" ? this.byId.get(target) : undefined;
       if (f) this.land(f, true);
     }
+    const cap =
+      "method" in message && message.method === "tools/list"
+        ? Math.min(this.maxBytes, MAX_TOOLS_LIST_BYTES)
+        : this.maxBytes;
     let draining = false;
     try {
-      draining = await this.post(message, id, flight);
+      draining = await this.post(message, id, flight, cap);
     } catch (e) {
       const reason = flight.abort.signal.reason;
       const error = reason instanceof StreamableHttpError ? reason : e instanceof Error ? e : new Error(String(e));
@@ -166,7 +192,12 @@ export class StreamableHttpTransport implements Transport {
   }
 
   /** POSTs one message and reads its reply; true when an SSE stream is left draining in the background. */
-  private async post(message: JsonRpcMessage, id: JsonRpcId | undefined, flight: Flight): Promise<boolean> {
+  private async post(
+    message: JsonRpcMessage,
+    id: JsonRpcId | undefined,
+    flight: Flight,
+    cap: number,
+  ): Promise<boolean> {
     const heldSession = this.sessionId !== undefined;
     const res = await this.fetchWithinOrigin(JSON.stringify(message), flight.abort.signal);
     const sid = res.headers.get("mcp-session-id");
@@ -193,29 +224,43 @@ export class StreamableHttpTransport implements Transport {
     }
     if (res.status === 202 || id === undefined) {
       await res.body?.cancel().catch(() => {});
+      // A request accepted with nothing to read will never be answered here (no GET stream): fail it now, not at the
+      // client's 60 s timeout.
+      if (id !== undefined) throw new StreamableHttpError(202, "Server accepted the request without answering it");
       return false;
     }
     const type = mediaType(res.headers.get("content-type"));
+    const tally: Tally = { bad: 0, asks: 0, failed: null };
     if (type === "application/json") {
       const declared = Number(res.headers.get("content-length") ?? "0");
-      if (declared > this.maxBytes) throw await this.tooLarge(res);
-      const bytes = await readCapped(res, this.maxBytes, flight);
-      if (!bytes) throw await this.tooLarge(res);
+      if (declared > cap) throw await this.tooLarge(res, cap);
+      const bytes = await readCapped(res, cap, flight);
+      if (!bytes) throw await this.tooLarge(res, cap);
       const data = parseJsonBytes(bytes);
       if (data === undefined) throw new StreamableHttpError(-1, "Reply is not JSON");
       let answered = false;
-      for (const m of Array.isArray(data) ? data : [data]) answered = this.deliver(m, id) || answered;
+      for (const m of Array.isArray(data) ? data : [data]) {
+        answered = this.deliver(m, id, tally) || answered;
+        if (tally.failed) break;
+      }
+      this.report(tally);
+      if (tally.failed) throw new StreamableHttpError(-1, tally.failed);
       if (!answered) throw new StreamableHttpError(-1, "Reply did not answer the request");
       return false;
     }
-    if (type === "text/event-stream") return this.readStream(res, id, flight);
+    if (type === "text/event-stream") return this.readStream(res, id, flight, cap, tally);
     await res.body?.cancel().catch(() => {});
     throw new StreamableHttpError(-1, `Unexpected content type: ${type || "none"}`);
   }
 
-  private async tooLarge(res: Response): Promise<StreamableHttpError> {
+  private async tooLarge(res: Response, cap: number): Promise<StreamableHttpError> {
     await res.body?.cancel().catch(() => {});
-    return new StreamableHttpError(-1, `Reply larger than ${this.maxBytes} bytes`);
+    return new StreamableHttpError(-1, `Reply larger than ${cap} bytes`);
+  }
+
+  /** One error for what a reply carried that was dropped, however much it was. */
+  private report(t: Tally): void {
+    if (t.bad > 0) this.onerror?.(new StreamableHttpError(-1, `Reply carried ${t.bad} malformed or unasked messages`));
   }
 
   /** `fetch` without following a redirect to another origin, which would carry the user's credentials there. */
@@ -247,47 +292,54 @@ export class StreamableHttpTransport implements Transport {
    * is drained in the background within the POST's deadline and cap, so the connection goes back to the keep-alive
    * pool instead of being torn down; true when that drain is running.
    */
-  private async readStream(res: Response, id: JsonRpcId, flight: Flight): Promise<boolean> {
+  private async readStream(res: Response, id: JsonRpcId, flight: Flight, cap: number, tally: Tally): Promise<boolean> {
     if (!res.body) throw new StreamableHttpError(-1, "Empty event stream");
     const reader = res.body.getReader();
     flight.reader = reader;
     let answered = false;
-    const parser = new SseParser(this.maxBytes, (data) => {
+    const parser = new SseParser(Math.min(cap, MAX_EVENT_BYTES), (data) => {
       const m = parseJsonBytes(data);
       if (m === undefined) {
-        this.onerror?.(new StreamableHttpError(-1, "Event stream carried data that is not JSON"));
-        return false;
-      }
-      answered = this.deliver(m, id);
-      return answered;
+        if (++tally.bad > MAX_BAD_PER_REPLY)
+          tally.failed = `Event stream carried over ${MAX_BAD_PER_REPLY} bad messages`;
+      } else answered = this.deliver(m, id, tally);
+      return answered || tally.failed !== null;
     });
     let read = 0;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      read += value.length;
-      const step = read > this.maxBytes ? "too-large" : parser.push(value);
-      if (step === "too-large") {
-        void reader.cancel().catch(() => {});
-        throw new StreamableHttpError(-1, `Event stream larger than ${this.maxBytes} bytes`);
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        read += value.length;
+        const step = read > cap ? "too-large" : parser.push(value);
+        if (step === "too-large") {
+          void reader.cancel().catch(() => {});
+          throw new StreamableHttpError(-1, `Event stream larger than ${read > cap ? cap : MAX_EVENT_BYTES} bytes`);
+        }
+        if (tally.failed) {
+          void reader.cancel().catch(() => {});
+          throw new StreamableHttpError(-1, tally.failed);
+        }
+        if (step === "stop") {
+          void this.drain(reader, read, flight, cap);
+          return true;
+        }
       }
-      if (step === "stop") {
-        void this.drain(reader, read, flight);
-        return true;
-      }
+    } finally {
+      this.report(tally);
     }
     if (!answered) throw new StreamableHttpError(-1, "Event stream ended before the response");
     return false;
   }
 
   /** Reads what is left of a stream without delivering it; its flight lands when the stream ends or is cut. */
-  private async drain(reader: Reader, read: number, flight: Flight): Promise<void> {
+  private async drain(reader: Reader, read: number, flight: Flight, cap: number): Promise<void> {
     try {
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
         read += value?.length ?? 0;
-        if (read > this.maxBytes) {
+        if (read > cap) {
           void reader.cancel().catch(() => {});
           break;
         }
@@ -299,15 +351,18 @@ export class StreamableHttpTransport implements Transport {
     }
   }
 
-  /** Delivers one message from a reply; true when it is the response to `id`. A response to another id is dropped. */
-  private deliver(x: unknown, id: JsonRpcId): boolean {
+  /**
+   * Delivers one message from a reply; true when it is the response to `id`. A message that is not JSON-RPC, or a
+   * response to another id, is dropped and counted; past the caps the reply is failed (`tally.failed`).
+   */
+  private deliver(x: unknown, id: JsonRpcId, tally: Tally): boolean {
     const m = asMessage(x);
-    if (!m) {
-      this.onerror?.(new StreamableHttpError(-1, "Server sent a message that is not JSON-RPC 2.0"));
+    if (!m || (!("method" in m) && !answers(m.id, id))) {
+      if (++tally.bad > MAX_BAD_PER_REPLY) tally.failed = `Reply carried over ${MAX_BAD_PER_REPLY} bad messages`;
       return false;
     }
-    if (!("method" in m) && !answers(m.id, id)) {
-      this.onerror?.(new StreamableHttpError(-1, "Server answered a request it was not sent on this reply"));
+    if ("method" in m && "id" in m && ++tally.asks > MAX_ASKS_PER_REPLY) {
+      tally.failed = `Reply carried over ${MAX_ASKS_PER_REPLY} server requests`;
       return false;
     }
     this.onmessage?.(m);

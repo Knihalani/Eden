@@ -152,11 +152,11 @@ describe("McpClient against the SDK's McpServer (in memory)", () => {
     await expect(client.listTools()).rejects.toThrow("Not connected");
   });
 
-  test("the server's ping is answered; its other requests are refused with Method not found", async () => {
+  test("the server's ping is answered; its other requests are dropped unanswered", async () => {
     const server = notes();
     await connected(server);
     expect(await server.server.ping()).toEqual({});
-    await expect(server.server.listRoots()).rejects.toThrow(/Method not found/);
+    await expect(server.server.listRoots(undefined, { timeout: 50 })).rejects.toThrow(/Request timed out/);
   });
 });
 
