@@ -15,6 +15,8 @@ prefix; a Haiku call's latency 596 ms + 2.93 ms an output token, H3's fit).
   (CL3, F7: about $0.0165 a user-month [EST]); the backfill is not a month's spend.
 - Push wait a task: `eden.check`'s modelled latency, summed per task (the agent waits for it before its first call).
 - Agent wall a task (multi-turn): the agent's calls' modelled latency plus the push wait.
+- The check's rule sheet (D1180), when done files carry `size.sheet`: Eden $ with the sheet priced five ways (F7,
+  COST-MODEL "The sheet's cache hit rate").
 - Connector calls a task: Eden's (its streams' calls less their backfill) plus the agent's own tool calls (multi-turn).
 """
 
@@ -32,6 +34,17 @@ EDEN_TASK_ROLES = {"eden.check", "eden.reader", "eden.judge"}
 CONNECTOR_FEES = {"first-party": 0.0, "Composio": 0.30, "Unified.to": 0.75, "Arcade": 10.0, "Pipedream": 12.0,
                   "Zapier": 25.8}
 CARD_TRICKLE_MONTH = 0.0165
+# F7 (D1180's rule sheet, COST-MODEL "The rule sheet's cache"): the check's sheet is its own cached block. The queue
+# drops cache markers, so a done file's `size.sheet` (the sheet message's characters, G3's batch.ts) is the only way
+# to price it apart; without it the sheet is uncached input like the rest of the message. Rates are input multiples:
+# a read 0.1x, a 1-hour write 2x, and the realistic mix at `sheet-cache.py`'s 1-hour hit rate for a heavy user
+# (0.75-0.79 at 16 requests a day, 1-4 sheet changes a day) and its 5-minute rate with requests at random over the
+# active hours (0.16; a 1.25x write). "no sheet" drops the block only: without the sheet the pool's pointers would be
+# items again (D1180: about $0.000019 a check), so it understates a sheetless check slightly.
+SHEET_HIT_1H, SHEET_HIT_5M = 0.75, 0.16
+SHEET_RATES = {"no sheet": 0.0, "uncached": 1.0, "all read": 0.1,
+               "1h mix": SHEET_HIT_1H * 0.1 + (1 - SHEET_HIT_1H) * 2.0,
+               "5m mix": SHEET_HIT_5M * 0.1 + (1 - SHEET_HIT_5M) * 1.25}
 
 
 def price(c, s):
@@ -42,6 +55,11 @@ def price(c, s):
     out = s["out"] / CPT
     usd = (total_in - prefix) * p["in"] + prefix * (HIT * p["cr"] + (1 - HIT) * p["cw"]) + out * p["out"]
     return usd, 596 + 2.93 * out, total_in + out
+
+
+def sheet_tokens(c, s):
+    """The check's rule-sheet tokens in this call (priced above as uncached input), 0 when unknown or absent."""
+    return s.get("sheet", 0) / CPT if (c.get("role") == "eden.check") else 0.0
 
 
 def calls(q):
@@ -73,6 +91,7 @@ def main():
             sizes[d["id"]] = d["size"]
     by = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0.0, 0.0, 0.0]))  # run -> role -> n,$,ms,tok
     unsized = collections.Counter()
+    sheet = collections.defaultdict(float)  # run -> the checks' sheet tokens, priced as uncached input
     for c in calls(q):
         s = sizes.get(c.get("key"))
         if not s:
@@ -84,6 +103,7 @@ def main():
         d[1] += usd
         d[2] += ms
         d[3] += tok
+        sheet[c.get("run")] += sheet_tokens(c, s)
 
     def results(name):
         f = os.path.join(run, f"{name}.json")
@@ -145,6 +165,12 @@ def main():
         print(f"    cost: Eden ${eden:.4f}/1k tasks [EST]" + (
             f"; cards ${cu / max(1, worlds):.5f} a world's backfill once ({cc / max(1, worlds):.1f} calls) + "
             f"${CARD_TRICKLE_MONTH} a heavy user-month trickle [EST, CL3]" if worlds else "; cards: none (no Eden)"))
+        st = sheet.get(f"{P}-{arm}", 0.0) / max(1, n)
+        if st:
+            ways = ", ".join(f"{k} ${eden + 1000 * st * HAIKU['in'] * (r - 1.0):.4f}" for k, r in SHEET_RATES.items())
+            print(f"    Eden $/1k with the check's rule sheet ({st:.0f} tokens a task) priced as: {ways} [EST]")
+        elif arm != "raw":
+            print("    rule sheet: no size.sheet in the queue's done files, so priced as uncached input [EST]")
         print(f"    speed: push wait {push:.0f} ms a task [EST, H3 fit]; connector calls a task: Eden at request time "
               f"{conn[0]:.2f}, the single-shot tools {conn[2]:.2f}; Eden's backfill {conn[1]:.0f} a stream (once a user)")
         if ag:
@@ -156,6 +182,11 @@ def main():
                   f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task model calls and "
                   f"push only, {ag['wall'] + 450 * ag['tools']:.0f} with 0.45 s a tool round [EST]; connector "
                   f"calls {ag['conn']:.2f} a task (Eden's and the agent's tools)")
+            mst = sheet.get(f"{P}-mt-{arm}", 0.0) / max(1, ag["n"])
+            if mst:
+                ways = ", ".join(f"{k} ${ag['usd'] + ag['eden_usd'] + 1000 * mst * HAIKU['in'] * (r - 1.0):.4f}"
+                                 for k, r in SHEET_RATES.items())
+                print(f"    agent + Eden $/1k with the rule sheet priced as: {ways} [EST]")
             fees = ", ".join(f"{k} ${ag['conn'] * v:.2f}" for k, v in CONNECTOR_FEES.items())
             print(f"    connector fees per 1,000 tasks by plan [EST]: {fees}")
     print("\n  Production connector latency L s a call: walls here assume the direct profile (~0.45 s a call); add")
