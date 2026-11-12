@@ -72,6 +72,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckSheet: "checker",
   pushCheckSheetAlways: "checker",
   pushCheckSheetRefs: "checker",
+  pushCheckSheetSelect: "checker",
 };
 
 /**
@@ -184,6 +185,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckSheet: [...PUSH, "pushCheck", "cards"],
   pushCheckSheetAlways: [...PUSH, "pushCheck"],
   pushCheckSheetRefs: [...PUSH, "pushCheck"],
+  pushCheckSheetSelect: [...PUSH, "pushCheck", "cards"],
   cardsKeepOnly: ["cards", "intent"],
   revisionDiff: ["revisionNotice"],
 };
@@ -252,6 +254,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
   pushCheckSheet: { integer: true, min: 0, max: 120 },
+  pushCheckSheetSelect: { integer: true, min: 0, max: 120 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
 };

@@ -734,6 +734,13 @@ export interface EngineConfig {
    */
   pushCheckSheetRefs: boolean;
   /**
+   * Trial (F5 with F10): with `pushCheckSheet` and a rule index wired (`PartnerDeps.ruleIndex`), the sheet is the
+   * index's nearest this many of the user's active constraint cards to the request (by meaning: statement, title and
+   * the card's anticipated requests), not the newest; 0 off. The index answers within `RULE_SELECT_WAIT_MS` or the
+   * newest-first sheet is read (fail open). A selected sheet differs per request, so it is not a cached prefix.
+   */
+  pushCheckSheetSelect: number;
+  /**
    * Trial (F5, docs/research/f5-rule-sheet.md): with `intent`, an item the card prefilter rejects but reads for its
    * requests keeps the card the same call wrote for it (today: `none`, whatever the model wrote). No extra call.
    * More items carry constraint cards: the rule sheet, the constraint-like gate and `intentByKind` all read them.
@@ -928,6 +935,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSheet: 0,
   pushCheckSheetAlways: false,
   pushCheckSheetRefs: false,
+  pushCheckSheetSelect: 0,
   cardsKeepOnly: false,
   pushOpen: true,
   pushIndirect: true,
