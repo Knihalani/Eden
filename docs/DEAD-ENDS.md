@@ -171,6 +171,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D231 | Noting ask answers no reading checked (trial `askUnreadNote`) is rejected and deleted | Aimed at D230's finding: an answer with items no reader reading checked (an unread information question, a… |
 | D485 | Trial `askMulti`, opened and closed 2026-11-10: not promoted, deleted. | hidden −0.4 points (−2.8..+2.1, n 813) |
 | D518 | Trial `askReinvite`, opened and closed 2026-11-10: not promoted, deleted. | Same runs as D517. |
+| D1120 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | killed by D1121: stopped on its pre-registered rule, D1120 |
 
 ## Delivery and packet
 
