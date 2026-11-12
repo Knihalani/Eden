@@ -119,3 +119,55 @@ Not done: `bun run eval --live` (no engine scoring, threshold or delivery change
   in a cluster, a hung store blocking the start, an expired blob of the key, the variable's tests, a misplaced doc
   comment) is fixed in d7d4d9c6. Not done: a ranged GET for the sample's headers (8 whole blobs at most, once, only
   for a store with no marker yet).
+
+## Round 3: a capacity soak on the smallest recommended box (D1072)
+
+The question (the parent's): does a 2-core 12 GB box hold what docs/DEPLOY.md §6 and `deploy/scripts/sizing.py` say
+(a heavy user 4.71 MB at the peak hour; 1,845 of them on 2 OCPU / 12 GB), over a half hour of real work with a
+restart, without a leak? The instrument is new: `packages/sim/src/lab/soak.ts` (heavy users as `users.bench.ts
+--prose --sources=20` makes them, 3,000 items over 20 connectors that generate their items on each listing, served
+through `buildPartner` and `createHandler` with the encrypted disk, one process per core, sessions at exponential
+intervals of mean 12 minutes so about a sixth of users are touched within the 2-minute warm bound, a SIGTERM and
+restart halfway; every message and a 10-second RSS sample journaled as it lands). Requests go to the HTTP handler in
+process (no socket): the latencies are Eden's own work. The cgroup: cpuset 0-1, CFS quota 200000/100000, memory 12
+GiB (cgroup v1), as d1-scale-out.md §6. Main b3d8edc4 (round 2 merged). No model key.
+
+**Run 1 (1,800 users), cut short.** Backfill 13.6 min (900 users a process through the real sync kick); 7.27 GB of
+RSS in the two processes just after it (3.66 + 3.61 GB), the cgroup's peak 10.6 GB (page cache included); 15 minutes
+of load with no error in its last window; at the halfway SIGTERM a process wrote 275 users in its 4.5 s budget; the
+container itself restarted six seconds after the processes came back up. The cause is not known (the cgroup's own
+limit kills processes, not the machine); the orchestrator then wrote its report only at the end, so the samples were
+lost. The harness now journals every message as it lands, and run 2 used 1,500 users for headroom on the 16 GB host.
+
+**Run 2 (1,500 users, 30 minutes, restart at 15; `--users 1500 --procs 2 --minutes 30 --restart-at 15`).**
+
+| | |
+| --- | --- |
+| Backfill | 10.9 min; RSS peak in it 7.58 GB |
+| Requests in the load | 33,382; **0 errors** (no 5xx, no throw), 0 4xx |
+| RSS, first half (90 samples) | mean 6.96 GB, p95 8.28, max 8.82, min 6.05; slope +29 MB/min (the collector's sawtooth spans 2.8 GB) |
+| RSS, last 10 min of the second half | mean 7.46 GB, p95 8.36, max 8.47 |
+| cgroup peak (RSS + page cache) | 9.66 GB (cache at most 1.40 GB) |
+| A process before its users | 95 MB (just after the restart) |
+| Event (session start/end, tool call and result, pending) | p50 0.46 ms, p99 95.7 ms (first half 0.59 / 42.6; second 0.35 / 123.7) |
+| User message (`waitMs` 0) | p50 4.86 ms, p99 15.1 ms |
+| `ask_context` | p50 9.54 ms, p99 272 ms (first half 8.0 / 21.4; second half 13.0 / 304) |
+| Restart | SIGTERM to up again 5.5 s; each process wrote 169 and 179 of its 750 users in its 4.5 s budget (~26 ms a user) |
+
+**Sizing: agrees.** RSS a user = (RSS − 2 × 95 MB) / 1,500: **4.51 MB** on the first half's mean (sizing.py: 4.71,
+GC-settled), 5.39 at its p95 and 5.75 at its max. Through sizing.py's formula (75% of 12 GB, 55 MB router, 130 MB a
+process): 1,927 users on the mean (+4% against 1,845), 1,612 on the p95 (−13%); within the 15% bar either way, so
+sizing.py and the docs stay. One caution for the docs: the collector's peaks sit about 22% above the settled figure,
+so at 1,845 users the processes would reach about 10.8 GB at their peaks, most of the formula's 25% headroom (page
+cache is reclaimable; no OOM was seen at 1,500).
+
+**The restart: a full box loses most of its warm users (a finding for the parent; not changed, it needs an engine or
+a deployment trade-off).** `ItemCache.flush` writes users oldest first until its deadline, 0.3 of the shutdown grace
+(4.5 s at the compose files' 15 s): 169 and 179 of 750 users a process here, so about 77% of the users were not
+written and re-synced from their sources after the restart (the RSS rebuilt over about 10 minutes, at the cost of a
+backfill each). Latency held through it (user message p99 17 ms, ask p99 312 ms while users re-synced; 0 errors).
+DEPLOY.md's restart figures (12 s with warm files, 200 users) do not scale to a full box at the shipped grace. Two
+ways out, each the parent's call: a longer `EDEN_SHUTDOWN_GRACE_MS` (about 26 ms a heavy user a process at 0.3 of the
+grace: 65 s for 750; requests wait or fail while the process writes, since its listener is closed by then), or an
+engine change (write the most recently used users first, so those likely to return are kept; or write warm users in
+the background before the shutdown, which D862 chose not to).
