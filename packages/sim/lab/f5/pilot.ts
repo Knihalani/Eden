@@ -153,6 +153,8 @@ if (cmd === "build") {
       rows.filter((r) => r.variant === "neutral" && r.sheet?.length),
       3,
     ).slice(0, 40),
+    // §10a: every neutral check with a sheet, not a sample.
+    NA: rows.filter((r) => r.variant === "neutral" && r.sheet?.length),
   };
   // Which arms each set is asked in: T can only be named with the sheet.
   const base: Record<string, ("S" | "B" | "R")[]> = {
@@ -161,6 +163,7 @@ if (cmd === "build") {
     Hh: ["S", "B"],
     Hc: ["S", "B"],
     N: ["S", "B"],
+    NA: ["S", "B"],
   };
   const only = (process.env.PILOT_SETS ?? "").split(",").filter(Boolean);
   for (const k of Object.keys(sets)) if (only.length && !only.includes(k)) delete sets[k];
