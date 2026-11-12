@@ -87,6 +87,7 @@ import {
   type CandidateDump,
   type CardMaker,
   automated,
+  readForIntent,
   type PushPoolReport,
   PushChecker,
   worthCarding,
@@ -1196,6 +1197,9 @@ async function runSeed(
       cardRead,
       // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
       notSentPrefilterRejects: !cardRead && !prefilter,
+      prefilter,
+      automated: automated(item),
+      forIntent: readForIntent(item, askAt, RUN.cardsLeanDays),
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,

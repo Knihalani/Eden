@@ -734,6 +734,12 @@ export interface EngineConfig {
    */
   pushCheckSheetRefs: boolean;
   /**
+   * Trial (F5, docs/research/f5-rule-sheet.md): with `intent`, an item the card prefilter rejects but reads for its
+   * requests keeps the card the same call wrote for it (today: `none`, whatever the model wrote). No extra call.
+   * More items carry constraint cards: the rule sheet, the constraint-like gate and `intentByKind` all read them.
+   */
+  cardsKeepOnly: boolean;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -922,6 +928,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSheet: 0,
   pushCheckSheetAlways: false,
   pushCheckSheetRefs: false,
+  cardsKeepOnly: false,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,

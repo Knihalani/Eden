@@ -41,6 +41,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cardsLanes: "cards",
   cardsSourceAware: "cards",
   cardsRequestsFix: "cards",
+  cardsKeepOnly: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
@@ -183,6 +184,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckSheet: [...PUSH, "pushCheck", "cards"],
   pushCheckSheetAlways: [...PUSH, "pushCheck"],
   pushCheckSheetRefs: [...PUSH, "pushCheck"],
+  cardsKeepOnly: ["cards", "intent"],
   revisionDiff: ["revisionNotice"],
 };
 
