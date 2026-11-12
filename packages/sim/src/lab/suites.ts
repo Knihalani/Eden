@@ -27,6 +27,10 @@ import { plantHeldout16 } from "./hidden-heldout16";
 import { plantHeldout17 } from "./hidden-heldout17";
 import { plantHeldout18 } from "./hidden-heldout18";
 import { plantHeldout19 } from "./hidden-heldout19";
+import { plantDev20a } from "./hidden-dev20a";
+import { plantDev20b } from "./hidden-dev20b";
+import { plantDev20c } from "./hidden-dev20c";
+import { plantDev20d } from "./hidden-dev20d";
 import { plantLongtail } from "./hidden-longtail";
 import { REWORDED } from "./reworded";
 import { plantTrain1 } from "./hidden-train1";
@@ -82,6 +86,10 @@ const withNeutral =
 const PREPARE: Record<string, (world: World, seed: number) => void> = {
   heldout19: (w, s) => void addRareSources(w, s),
   longtail: (w, s) => void addRareSources(w, s),
+  dev20a: (w, s) => void addRareSources(w, s),
+  dev20b: (w, s) => void addRareSources(w, s),
+  dev20c: (w, s) => void addRareSources(w, s),
+  dev20d: (w, s) => void addRareSources(w, s),
 };
 
 /** Make `world` what `suite` plants into (a no-op for most suites). Call before taking `world.items.length`. */
@@ -210,6 +218,14 @@ export const SUITES: Record<string, Plant> = {
   // The long-tail suite (P7, D873): every fact in a rarely used connector (rare-sources.ts), for pricing sweeps and
   // dormancy over days (`days-calls.ts --arrive-days`). Written by P7, not blind: tune on it.
   longtail: needsPrepared("longtail", plantLongtail),
+  // F8's tuning suites (D1100, `--suite dev20`): four sets of 40 templates, each by an isolated author given a format
+  // scaffold, the HiddenTask interface, the sim world API and a theme (work and admin; family and health; money and
+  // home; travel and social), weighted to the weak points: indirect plans, questions, non-English, no word overlap,
+  // silent edits, rare connectors, world knowledge (DEV20*_ lists). Not held out: tune on them. Not in `all`.
+  dev20a: needsPrepared("dev20a", plantDev20a),
+  dev20b: needsPrepared("dev20b", plantDev20b),
+  dev20c: needsPrepared("dev20c", plantDev20c),
+  dev20d: needsPrepared("dev20d", plantDev20d),
   // P2's reworded train (Q6): the same tasks, indirect wording. Tune on them as on train; not in `all`.
   ...Object.fromEntries(
     [plantTrain1, plantTrain2, plantTrain3, plantTrain4, plantTrain5, plantTrain6].map((p, i) => {
@@ -228,6 +244,8 @@ const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /** The train suites reworded (D871): `--suite reworded`. */
 const REWORDED_TRAIN = TRAIN.map((n) => `${n}r`);
+/** F8's tuning suites (D1100): `--suite dev20`. */
+const DEV20 = ["dev20a", "dev20b", "dev20c", "dev20d"];
 /** P2's reworded train (`train-rw`, `reword.ts`). */
 const TRAIN_RW = TRAIN.map((n) => `${n}rw`);
 /**
@@ -255,10 +273,10 @@ export const UNRUN_BLIND = [
  * confirmation only. */
 export const UNREAD_BLIND: string[] = ["heldout19"];
 /**
- * P7's suites (D871, D873) and P2's `train-rw` stay out of `all`, so `--suite all` measures what it measured before
- * them.
+ * P7's suites (D871, D873), P2's `train-rw` and F8's `dev20` (D1100) stay out of `all`, so `--suite all` measures
+ * what it measured before them.
  */
-const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
+const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW, ...DEV20];
 // Generated suites (D884) stay out of `all` too: their splits are not in git, and `all` means the hand-written suites.
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n) && !n.startsWith("synth"));
 const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
@@ -307,7 +325,7 @@ function registerRevision(name: string): boolean {
 /**
  * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
  * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's,
- * `reword.ts`) or `synth` (the generated train and validation splits);
+ * `reword.ts`), `dev20` (F8's four tuning suites, D1100) or `synth` (the generated train and validation splits);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {
@@ -324,16 +342,18 @@ export function parseSuites(arg: string): string[] {
             ? TRAIN
             : name === "reworded"
               ? REWORDED_TRAIN
-              : name === "synth"
-                ? ["synth-train", "synth-val"]
-                : name === "train-rw"
-                  ? TRAIN_RW
-                  : [name];
+              : name === "dev20"
+                ? DEV20
+                : name === "synth"
+                  ? ["synth-train", "synth-val"]
+                  : name === "train-rw"
+                    ? TRAIN_RW
+                    : [name];
     for (const n of names) {
       if (!registerSynth(n) && !registerRevision(n) && !(n in SUITES))
         throw new Error(
-          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, synth, ` +
-            "synth-train, synth-val, synth-test, synth:<file>)",
+          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, dev20, ` +
+            "synth, synth-train, synth-val, synth-test, synth:<file>)",
         );
       if (!out.includes(n)) out.push(n);
     }
