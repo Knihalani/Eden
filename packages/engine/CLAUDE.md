@@ -593,6 +593,24 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
+- **Plans with a day (`pushDaySeats` 3, G1, D1400–D1402, in the default, part `days`; `days.ts`,
+  docs/research/g1-facts.md).** Three things, no model: `ask` re-reads `cue.time` from `datedText` over the request
+  and its gloss (so the conflict test and the day grounds of a push or an ask see those days too: not measured
+  apart); `observe` starts an opened push for a turn nothing else started that names a coming day in a window the seats
+  take (`namesComingDay`; never when the gate reads chatter, never without a gate, never for a draft: reading the
+  user's offset would thaw a frozen user, D325) and marks it `internal.byDay`;
+  `pushGate` seats up to three of the day's items (`ItemCache.dated`) after the first `pushCandidates`. Two rules
+  hold the guards and were measured (served by subagents): a seat is handed only when the check names it
+  (`candidatesOf`: with no answer it hands `gate.before`, the pool as it stood, behind that pool's own gate
+  `gate.unchecked`, so a constraint-like seat never opens a hand-out no model judged, and a `byDay` push hands
+  nothing; the review's finding), and a
+  `byDay` push is checked only when a seat is itself constraint-like (without that rule neutral concerns rose 3.1
+  points and checked pushes 26%: the plain arm, deleted). `ItemCache.dated` scans the user's items and reads each
+  text: keep it off the fast path and behind a request that names at most three days. `datedText` rewrites an ordinal only where it reads as a date (a
+  preposition, "the" or a weekday before; the clause's end or a time word after; no past tense before): widening it
+  invents days for "the 3rd party vendor" or "what happened on the 9th", which then pull that day's events into the
+  lookup and the conflict grounds. The funnel wires no checker,
+  so it sees the starts and the pool (`--pool-dump`, the `cl` flags) but hands no seat.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

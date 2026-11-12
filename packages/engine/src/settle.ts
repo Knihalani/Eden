@@ -58,16 +58,24 @@ const ORDINAL = (d: number) =>
 export function namesDay(text: string, days: readonly NamedDay[]): boolean {
   if (days.length === 0) return false;
   const t = text.toLowerCase();
-  for (const { day, month } of days) {
-    const name = String.raw`${MONTHS[month]!}[a-z]*`;
-    const dd = String(day).padStart(2, "0");
-    const mm = String(month + 1).padStart(2, "0");
-    const re = new RegExp(
-      String.raw`\b${day}(?:st|nd|rd|th)?(?:\s+of)?\s+${name}\b|\b${name}\s+${day}(?:st|nd|rd|th)?\b|\b${day}${ORDINAL(day)}\b|\b0?${day}/${mm}\b|\b${dd}\.${mm}\b`,
-    );
-    if (re.test(t)) return true;
-  }
+  for (const d of days) if (dayPattern(d).test(t)) return true;
   return false;
+}
+
+/** `namesDay`'s test for one day, over lower-cased text. */
+function dayPattern({ day, month }: NamedDay): RegExp {
+  const name = String.raw`${MONTHS[month]!}[a-z]*`;
+  const dd = String(day).padStart(2, "0");
+  const mm = String(month + 1).padStart(2, "0");
+  return new RegExp(
+    String.raw`\b${day}(?:st|nd|rd|th)?(?:\s+of)?\s+${name}\b|\b${name}\s+${day}(?:st|nd|rd|th)?\b|\b${day}${ORDINAL(day)}\b|\b0?${day}/${mm}\b|\b${dd}\.${mm}\b`,
+  );
+}
+
+/** `namesDay` for many texts against the same days: the patterns are built once (`ItemCache.dated`'s scan). */
+export function dayNamer(days: readonly NamedDay[]): (lower: string) => boolean {
+  const res = days.map(dayPattern);
+  return (lower) => res.some((re) => re.test(lower));
 }
 
 /** What a request names, for `settles` and `anchored`. */

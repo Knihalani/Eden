@@ -36,13 +36,19 @@ import {
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
+import { coversDay } from "./days";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
 import type { FrozenDisk } from "./persist";
+import { dayNamer, type NamedDay } from "./settle";
 import { head, termIds } from "./text";
 import { orgLabel } from "./parties";
 
 const NO_TERMS = new Uint32Array(0);
+
+/** `ItemCache.dated`: the most items whose text one scan reads, and the characters of each it reads. */
+const DATED_SCAN = 20_000;
+const DATED_CHARS = 4_000;
 
 interface Entry {
   item: ContextItem;
@@ -1524,6 +1530,59 @@ export class ItemCache {
     // Sketched after the cut: every item on the day was a candidate above.
     for (const h of kept) h.sketch = sketched(u, u.byDoc[h.doc]!);
     return kept;
+  }
+
+  /**
+   * `pushDaySeats` (G1, D1400): fresh cached items on one of `days` whatever their words, at most `limit`: events
+   * starting that day first (soonest first), then items whose text spans the day (`coversDay`), then items that write
+   * the date (`namesDay`), each newest first. `skip` leaves an item out before its text is read (bulk mail, what the
+   * pool already holds). A scan of the user's items that reads each one's text (at most `DATED_SCAN` texts,
+   * `DATED_CHARS` of each): run only for a request that names a day, off the fast path.
+   */
+  dated(
+    scope: Scope,
+    days: ReadonlySet<string>,
+    skip: (item: ContextItem) => boolean,
+    now = Date.now(),
+    limit = 3,
+    offset?: number,
+  ): CacheHit[] {
+    const u = this.peek(scope);
+    if (!u || days.size === 0 || limit <= 0) return [];
+    offset ??= this.offsetOf(scope);
+    const named: NamedDay[] = [];
+    for (const d of days) {
+      const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(d);
+      if (m) named.push({ day: Number(m[2]), month: Number(m[1]) - 1 });
+    }
+    const names = dayNamer(named);
+    let read = 0;
+    const found: { e: Entry; cls: number; at: number }[] = [];
+    for (const e of u.items.values()) {
+      if (!this.alive(e, now) || skip(e.item)) continue;
+      const start = e.item.meta?.start;
+      if (start && days.has(dayOf(start, offset))) {
+        const t = parseWhen(start);
+        found.push({ e, cls: 0, at: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t });
+        continue;
+      }
+      // Past the cap no more text is read; events (told by their start alone) are still found.
+      if (++read > DATED_SCAN) continue;
+      const text = `${e.item.title}\n${e.item.text}`.slice(0, DATED_CHARS).toLowerCase();
+      // No digit, no date: most chat lines and short notes end here.
+      if (!/\d/.test(text)) continue;
+      const cls = coversDay(text, days, e.item.updatedAt) ? 1 : names(text) ? 2 : -1;
+      if (cls > 0) found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
+    }
+    found.sort((a, b) => a.cls - b.cls || a.at - b.at || a.e.doc - b.e.doc);
+    return found.slice(0, limit).map(({ e }) => ({
+      item: e.item,
+      sketch: sketched(u, e),
+      doc: e.doc,
+      score: 0,
+      coverage: 0,
+      matched: 0,
+    }));
   }
 
   /** A probe this user made within `maxAgeMs` (D46): its ids, when every one is still cached and fresh; else null. */
