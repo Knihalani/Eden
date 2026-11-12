@@ -154,3 +154,17 @@ Committed before any paid run, in the commit that adds the switch:
   the English facts rewording loses are pushes that never start ("I want a morning flight…": `pushStart` is null), the
   push gate's matter rather than retrieval's.
 
+## 6. Lever (b) built: `cardsRequestsWide` (trial, off; waits for credit)
+
+The card prompt's form 4 (`CARD_FORM_WIDE`): form 3 with one sentence added to the intent instructions, asking for the
+same four requests in the forms users word one intent in: a plain request, a plan or need ("I want to …", "thinking of
+…"), the broad kind of action the item bears on in general words (a flight's new time: "book any flight, train or taxi
+that day"), and a question. Its replies are their own replay form (`:f4`), so a run asks and replays them apart from
+form 3's. `cards-requests-wide.test.ts` pins that nothing else in the prompt changes. D331(2) (eight requests) and D201
+(agent-worded requests) lost facts; this keeps the count at four and changes only their spread.
+
+It cannot be screened at $0: every replay file holds forms 0 and 3 only. The pre-registered rule is the trials row in
+DECISIONS: re-made cards for dev20 and reworded (seeds 41–44) in form 4 against form 3, a $0 bar (hidden facts in the
+check's view +28 of 1,408 or more, card output tokens an item +15% or less) before a Pi pair, and the same Pi rule as
+`requestGloss`.
+

@@ -323,7 +323,7 @@ export function cardMessages(items: ContextItem[], today: string, intent = false
         // in the paragraph after it, the list was left out of about a quarter of replies (D1053).
         (intent && form >= CARD_FORM_REQUESTS ? 'Nov"}],"requests":[...]}. ' : 'Nov"}]}. ') +
         "One card per item at most, for the most important constraint; leave out items whose kind is none." +
-        (intent ? INTENT_INSTRUCTIONS : ""),
+        (intent ? intentInstructions(form) : ""),
     },
     { role: "user", content: `<items>\n${list.join("\n")}\n</items>` },
   ];
@@ -334,6 +334,11 @@ export function cardMessages(items: ContextItem[], today: string, intent = false
  * lab's replay caches keep each form's output apart (a card or request made by one form never answers the other).
  */
 export const CARD_FORM_REQUESTS = 3;
+/**
+ * `cardsRequestsWide` (trial, F1): form 3 with the requests asked in varied forms (a plain request, a plan or need, the
+ * broad kind of action, a question: `INTENT_WIDE`), so a user who words the same intent another way still meets one.
+ */
+export const CARD_FORM_WIDE = 4;
 
 /** How a maker is asked (`CardMaker.make`): the prompt's form, and a requests-only re-ask. */
 export interface CardMakeOptions {
@@ -350,12 +355,14 @@ export interface CardMakeOptions {
  * The requests-only prompt (`cardsRequestsFix`'s re-ask, D1060): the card prompt's opening and data rule, the day, and
  * its intent instructions with the card clause and the cards of the example reply left out (H2's R20, D1053).
  */
-export function requestMessages(items: ContextItem[], today: string): ChatMessage[] {
+export function requestMessages(items: ContextItem[], today: string, form = 0): ChatMessage[] {
   const [, user] = cardMessages(items, today, false);
-  const asked = INTENT_INSTRUCTIONS.replace(
-    "Separately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write",
-    "For EVERY item, write",
-  ).replace('{"cards":[...],"requests":', '{"requests":');
+  const asked = intentInstructions(form)
+    .replace(
+      "Separately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write",
+      "For EVERY item, write",
+    )
+    .replace('{"cards":[...],"requests":', '{"requests":');
   return [
     {
       role: "system",
@@ -380,6 +387,25 @@ const INTENT_INSTRUCTIONS =
   "replies to them, a document on the work it describes. Write [] only for bulk mail, newsletters and marketing. " +
   'Put them in "requests", one entry per item: {"cards":[...],"requests":[{"i":0,"q":["deploy the migration on ' +
   'Thursday","ship the release this week"]},{"i":1,"q":["move my 1:1 with Sam","am I free Friday afternoon?"]}]}.';
+
+/**
+ * `cardsRequestsWide` (trial, F1; docs/research/f1-intent-bridge.md): the same number of requests, asked in the forms
+ * users word the same intent in. A user rarely names the item's own thing ("Get me a return to Edinburgh" against a
+ * card's "book a train to the client visit"; "paint over the damp patch" against "repaint the hallway ceiling"), so
+ * one request names the broad kind of action the item bears on, in general words.
+ */
+const INTENT_WIDE =
+  ` Vary the ${MAX_REQUESTS} so they meet the different ways a user asks for the same thing: one plain request; one ` +
+  'as the user\'s plan or need ("I want to …", "thinking of …"); one naming the broad kind of action the item bears ' +
+  'on rather than its specifics, in general words (a flight\'s new time: "book any flight, train or taxi that day"; ' +
+  'a joint account needing both signatures: "pay any bill from the joint account"); and one question.';
+
+/** The intent instructions a prompt form asks with (`INTENT_WIDE` added from `CARD_FORM_WIDE`). */
+const intentInstructions = (form: number) => {
+  if (form < CARD_FORM_WIDE) return INTENT_INSTRUCTIONS;
+  const at = INTENT_INSTRUCTIONS.indexOf(" Most items qualify");
+  return INTENT_INSTRUCTIONS.slice(0, at) + INTENT_WIDE + INTENT_INSTRUCTIONS.slice(at);
+};
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A real calendar day: "2026-11-31" parses in some engines (as 1 December), so the day must round-trip. */
@@ -594,7 +620,7 @@ export class ModelCardMaker implements CardMaker {
     if (options.requestsOnly) {
       // The re-ask writes requests only: under half a card call's output (H2: 53 tokens an item against 118).
       const res = await model.chat({
-        messages: requestMessages(items, today),
+        messages: requestMessages(items, today, options.form),
         maxTokens: this.options.maxTokens ?? Math.max(INTENT_MAX_TOKENS, INTENT_TOKENS_PER_ITEM * items.length),
         json: true,
         signal,
@@ -672,6 +698,8 @@ export interface CardLimits {
    * for its requests only, under a reservation of its own.
    */
   requestsFix: boolean;
+  /** `cardsRequestsWide` (trial, F1; `wideRequests()` sets it): with `requestsFix`, the prompt's form 4 (`INTENT_WIDE`). */
+  requestsWide: boolean;
   /**
    * `cardsLanes` (N4, D521, D522; `lanes()` sets it): how many model calls one user may have in flight. 1: one
    * batch at a time, as ever. More: while a full batch still waits behind a call in flight, another lane takes it, so
@@ -693,6 +721,7 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   leanDays: 0,
   order: false,
   requestsFix: false,
+  requestsWide: false,
   lanes: 1,
 };
 
@@ -959,6 +988,11 @@ export class CardEnricher {
   /** `cardsRequestsFix` (D1060): the requests list shown in the first example, and a dropped list asked again. */
   showRequests(): void {
     this.limits = { ...this.limits, requestsFix: true };
+  }
+
+  /** `cardsRequestsWide` (trial, F1): the requests asked in varied forms (`CARD_FORM_WIDE`). */
+  wideRequests(): void {
+    this.limits = { ...this.limits, requestsWide: true };
   }
 
   /** `cardsLanes` (N4, D521, D522): up to `n` model calls in flight for one user. */
@@ -1392,7 +1426,8 @@ export class CardEnricher {
 
   /** The prompt's form the maker is asked in (`cardsRequestsFix`: the one that shows the requests list). */
   private form(): CardMakeOptions {
-    return this.limits.intent && this.limits.requestsFix ? { form: CARD_FORM_REQUESTS } : {};
+    if (!this.limits.intent || !this.limits.requestsFix) return {};
+    return { form: this.limits.requestsWide ? CARD_FORM_WIDE : CARD_FORM_REQUESTS };
   }
 
   /**
