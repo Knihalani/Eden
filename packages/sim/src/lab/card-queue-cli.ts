@@ -66,7 +66,15 @@ the Write tool: one JSON object per line, one line per item, in the batch's orde
 - \`q\`: up to 4 short requests or questions in the user's everyday words, not the item's own; [] only for bulk mail,
   newsletters and marketing.
 - Every key of the batch exactly once. Valid JSON on every line.
-`;
+${
+  system.includes('"state"')
+    ? `- \`state\` (this prompt asks for it): in each card, "in_force", "lifted", "met" or "superseded" as the prompt
+  defines them, or left out when unclear. An item whose kind is none because it says a constraint was lifted, met or
+  superseded gets a card, not null: {"kind":"none","actions":[],"entities":[],"start":null,"end":null,"limit":null,
+  "unit":"","statement":"<what cleared>","state":"lifted"}.
+`
+    : ""
+}`;
 
 if (cmd === "batch") {
   const n = Number(nArg ?? "25");

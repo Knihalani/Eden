@@ -149,7 +149,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   cardsRequestsFix: ["cards", "intent"],
   cardsRequestsWide: ["cards", "intent", "cardsRequestsFix"],
   cardsState: ["cards"],
-  pushStateFilter: ["cards"],
+  pushStateFilter: ["cards", "cardsState"],
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
