@@ -76,7 +76,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D57 | 2026-10-31 | Background connector sync behind `sync`, off by default: `Source.list` (recent-first pages; `McpSource.listTool` passes D7's read-only… | adopted |
 | D58 | 2026-10-31 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | superseded (deleted by D225) |
 | D59 | 2026-10-31 | Implication cards behind `cards`, off by default: items entering a user's cache that pass a no-model deontic prefilter are read in the… | adopted |
-| D60 | 2026-10-31 | Anticipation, behind `anticipate`, off by default. | superseded (deleted by D227) |
+| D60 | 2026-10-31 | Anticipation, behind `anticipate`, off by default. | superseded (deleted by D1301) |
 | D61 | 2026-10-31 | Live agent results come from the Pi harness: `pi-ab.ts` runs pi-agent-core's loop (`@earendil-works/pi-agent-core` and `pi-ai` 1.3.0… | adopted |
 | D62 | 2026-10-31 | D56–D61 are merged on one tree, every flag off by default, telemetry's spans the one span design (Pi's harness reads them; sync, graph… | adopted |
 | D63 | 2026-10-31 | Fixes from the review of `moon/combined`; where they depart from D57, D59, D60 or D8 this records it. | adopted |
@@ -689,6 +689,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
 | D1102 | 2026-11-12 | Lab only: shipped coverage re-recorded on the world's clock, served by subagents per item; the old shipped baselines were pessimistic | lab |
 | D1103 | 2026-11-12 | Lab only: `--realism heavy`, a heavy real user's sources | lab |
+| D1104 | 2026-11-12 | Finding (lab): no subagent recipe gives an API-faithful read of a push-check prompt arm; check-prompt arms need the API | finding |
 | D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
 | D1122 | 2026-11-12 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | superseded (deleted by D1126) |
 | D1123 | 2026-11-12 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | superseded (deleted by D1126) |
@@ -711,3 +712,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1181 | 2026-11-12 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | rejected |
 | D1182 | 2026-11-12 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | rejected |
 | D1183 | 2026-11-12 | Guard on D1180 (F5, the integrator's question): a user with more active rule cards than `pushCheckSheet` (80) gets no rule sheet. | adopted |
+| D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
+| D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
+| D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |
+| D1154 | 2026-11-12 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | rejected |
