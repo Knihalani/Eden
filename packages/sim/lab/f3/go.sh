@@ -22,6 +22,8 @@ for g in train reworded; do
       --run-label f3-$n --cards-out $R/$n.cards.jsonl --timeline $R/$n.tl --out $R/$n.json >$R/$n.log 2>&1 &
     P+=($!)
   done
+  # Four processes at once (one a seed): RSS reached 3.35 GB a process in the Haiku campaign.
+  for p in "${P[@]}"; do wait $p; done
+  P=()
 done
-for p in "${P[@]}"; do wait $p; done
 echo "done $(date -u +%T)"
