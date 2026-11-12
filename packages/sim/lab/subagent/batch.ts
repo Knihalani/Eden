@@ -1,7 +1,8 @@
 /**
  * The queue transport's batcher (F9, D1101; README.md here, ../../src/lab/queue-transport.ts). LAB ONLY, sim data.
  *
- *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--model PREFIX] [--max-chars N]
+ *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--model PREFIX] [--single-arm]
+ *     [--max-chars N]
  *   bun packages/sim/lab/subagent/batch.ts prompt B.json [--recipe careful|fast]
  *   bun packages/sim/lab/subagent/batch.ts put --dir Q B.answers.json
  *   bun packages/sim/lab/subagent/batch.ts status --dir Q
@@ -12,6 +13,8 @@
  * - `take` moves up to N pending requests into `taken/` (a rename, so two drivers never take the same one) and writes
  *   them as one batch: an array of {id, role, model, system, messages, tools, outputSpec}. `--role` takes only that
  *   role, `--model` only requests whose model starts with PREFIX (haiku workers and sonnet graders apart);
+ *   `--single-arm` (F7 §13: a worker answering two arms' requests in one batch copied one's reply format onto the
+ *   other) fills the batch only with requests of the first one's run (`EDEN_LAB_QUEUE_RUN`) and role;
  *   `--max-chars` stops adding once the batch's prompts pass N characters (default 400,000).
  * - `put` reads [{id, text?, toolCalls?}], checks each against its request's outputSpec (JSON: one parseable object;
  *   tools: known names, an object input with the schema's required keys; stop sequences cut as the API would) and
@@ -19,6 +22,7 @@
  * - `requeue` moves requests taken more than `--older-min` minutes ago back to `pending/` (a driver that died).
  */
 import {
+  appendFileSync,
   existsSync,
   readdirSync,
   readFileSync,
@@ -155,6 +159,8 @@ if (cmd === "take") {
   const out = opt("out");
   const role = opt("role");
   const model = opt("model");
+  const singleArm = rest.includes("--single-arm");
+  let arm: string | undefined;
   const maxChars = Number(opt("max-chars", "400000"));
   if (!out) throw new Error("take needs --out FILE");
   // Oldest first, so a long-waiting request is not starved by newer ones.
@@ -173,6 +179,8 @@ if (cmd === "take") {
     }
     if (role && req.role !== role) continue;
     if (model && !req.model.startsWith(model)) continue;
+    const reqArm = `${req.run ?? ""}\u0000${req.role}`;
+    if (singleArm && arm !== undefined && reqArm !== arm) continue;
     const size = req.system.length + req.messages.reduce((k, m) => k + m.content.length, 0);
     if (batch.length && chars + size > maxChars) break;
     try {
@@ -187,6 +195,7 @@ if (cmd === "take") {
     }
     batch.push(req);
     chars += size;
+    arm ??= `${req.run ?? ""}\u0000${req.role}`;
   }
   writeFileSync(out, JSON.stringify(batch, null, 1));
   console.log(JSON.stringify({ taken: batch.length, chars, out, pendingLeft: list(dirs.pending).length }));
@@ -212,6 +221,11 @@ if (cmd === "take") {
     const why = invalid(req, answer);
     if (why) {
       bad.push({ id: a.id, why });
+      // Every rejected answer, by arm and role, for the final report's format-failure count (F7 §13).
+      appendFileSync(
+        join(DIR, "invalid.jsonl"),
+        `${JSON.stringify({ id: a.id, run: req.run ?? null, role: req.role, why, at: new Date().toISOString() })}\n`,
+      );
       renameSync(takenPath, join(dirs.pending, `${a.id}.json`));
       continue;
     }
