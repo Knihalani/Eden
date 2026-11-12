@@ -147,3 +147,26 @@ sampled; with and without).
 half Th's rate; Hh named with the sheet at least without it less 3; Hc named with the sheet at most without it plus
 3; N with any yes, with the sheet, at most without it plus 3. Otherwise the sheet's prompt is revised once, on these
 sets, before dev20.
+
+### 5a. Result (subagent-simulated; 25 Haiku subagents, 333 prompts, 0 unreadable)
+
+| set | prompts | arm | planted (or look-alike) named | any yes | a rule named |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Th: fact on the sheet, not in the pool | 54 | sheet | **51 (94%)** | 52 | 52 |
+| Tc: look-alike on the sheet, not in the pool | 39 | sheet | **5 (13%)** | 14 | 10 |
+| Hh: fact in the pool | 40 | main / sheet | 40 / 40 | 40 / 40 | 0 / 6 |
+| Hc: look-alike in the pool | 40 | main / sheet | 6 / 7 | 12 / 14 | 0 / 1 |
+| N: neutral | 40 | main / sheet | — | 7 / 9 | 0 / 4 |
+
+Against §5's reading: Th 94% (≥ 30%), Tc 13% (≤ 47%), Hh 40 against 40 (≥ 37), Hc 7 against 6 (≤ 9), N 9
+against 7 (≤ 10): **every clause passes**, so the sheet goes on to dev20.
+
+Caveats. A subagent answered up to 12 prompts of one user in one context, with the system message and the sheet
+written once, so it saw the other requests; the API reads one prompt a call. Subagents are not the API's Haiku with
+thinking off: main's in-pool facts were named 40 of 40 here against about 85% planted handed on Pi with the API
+(h3-pushcheck-lean.md §3b), so the subagent is the more generous reader, and these rates are upper bounds on the
+API's. What the pilot does show is that the sheet makes the check name facts it could not name before (51 of 54 had
+no other way in), at a look-alike rate of about one in eight, without moving the in-pool verdicts or the neutral
+silence by more than two of 40. Applied to the funnel's counts (train, reworded and longtail, seeds 41–42: 54 such
+facts and 39 such look-alikes of 816 hidden and 816 control tasks), the sheet would hand about +51 planted facts
+(+6.3 points of hidden) for about +5 look-alikes [EST: the pilot's rates times the dump's counts].
