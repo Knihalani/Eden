@@ -334,7 +334,8 @@ describe("heldout19 (P7, D870): format only, its templates' text is not read her
       }
     }
     expect(UNRUN_BLIND).toContain("heldout19");
-    expect(UNREAD_BLIND).toEqual(["heldout19"]);
+    // Read once by B19 (D1048).
+    expect(UNREAD_BLIND).not.toContain("heldout19");
     expect(supportsNeutral("heldout19")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout19");
   });
