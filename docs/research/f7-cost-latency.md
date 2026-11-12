@@ -444,3 +444,34 @@ tasks for the whole packet. Halving it would save about **$0.015 per 1,000 tasks
 not what a call's wait is made of, D241), and every lexical cut so far lost facts (D258, D273). The agent's longer
 answers (+39 output tokens a call, about $0.02 per 1,000 tasks) are the facts being stated: not waste. **Not
 worth building:** the levers that move cost are the check (F10) and the cards.
+
+## 12. The shipped route's cache (D1193; a trial pending the owner's probe)
+
+The servers reach Haiku 5.5 through OpenRouter and send no cache breakpoint (`anthropicCache` off since D145 and
+D817), so in production every push check pays its 1,185-token instructions in full. That is about $0.000107 a call
+more than the lab's cached figure, about **$0.10 per 1,000 tasks**, and the card calls pay about 1.27×.
+
+**From OpenRouter's documentation (prompt-caching page, read 2026-11-12; no call made):**
+- Anthropic caching needs `cache_control`. A top-level automatic mode exists only when routed to Anthropic itself.
+  Per-block breakpoints, which `anthropicCacheMessages` sends, work on every Anthropic-compatible provider, Bedrock
+  and Vertex included.
+- At most four breakpoints. The minimum prefix is 512 tokens on Haiku 5.5: the check's instructions are about 965
+  and the card prompt's about 1,000.
+- The TTL is 5 minutes (1 hour at 2× write). Writes cost 1.25× and reads 0.1×.
+- Sticky routing follows explicit breakpoints, but is skipped under a manual `provider.order`. The roles set `sort`,
+  not `order`; whether `sort` counts is not documented.
+- OpenRouter counts explicit caching as no retention under ZDR.
+
+**Built (off):**
+- `EDEN_MODEL_CACHE=on` makes `modelRolesFromEnv` pass `anthropicCache` to every role. `OpenRouterModel` marks the
+  last system message (and any marked message) only for `anthropic/*` models; elsewhere it is a no-op.
+- Tests:
+  - `llm.test.ts`: the cached prefix is the same bytes across two different requests, and absent for a non-Anthropic
+    model.
+  - `prefix-stable.test.ts`: the push check's system message is identical for any request, day and pool. The card
+    call's is identical for any batch on one day. It carries "Today is …", so another day (or a user in another time
+    zone) is another prefix, which a 5-minute cache would not have shared anyway.
+  - `engine-config.test.ts`: the variable sets the option on all three roles, and only when `on`.
+
+**Decision:** pending the owner's probe. Cached tokens above 0 on a second call through the ZDR route, at a user's
+spacing, make it the servers' default. None, or a refusal by the endpoint, deletes the variable.

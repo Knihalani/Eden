@@ -258,6 +258,35 @@ describe("OpenRouterModel", () => {
     );
   });
 
+  test("the cached prefix is byte-identical across calls whose requests differ (D1193's trial)", async () => {
+    const { sent, fake } = capture();
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    const ask = (request: string) =>
+      model.chat({
+        messages: [
+          { role: "system", content: "fixed instructions" },
+          { role: "user", content: request },
+        ],
+        maxTokens: 5,
+        cacheKey: "u-1",
+      });
+    await ask("book the lake house on 12 May");
+    await ask("pay the Harlow deposit");
+    const prefix = (body: any) => JSON.stringify([body.model, body.messages[0]]);
+    expect(prefix(sent[0])).toBe(prefix(sent[1]));
+    expect(sent[0].messages[0].content[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(sent[0].messages[1]).toEqual({ role: "user", content: "book the lake house on 12 May" });
+    // Another provider's model never gets the field: the option is a no-op there.
+    const other = new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake, anthropicCache: true });
+    await other.chat({ messages: [{ role: "system", content: "fixed instructions" }], maxTokens: 5 });
+    expect(sent[2].messages[0]).toEqual({ role: "system", content: "fixed instructions" });
+  });
+
   test("an anthropic/* request is unchanged by default: no cache_control unless anthropicCache is set", async () => {
     const { sent, fake } = capture();
     await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat(cachedRequest);

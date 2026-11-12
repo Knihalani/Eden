@@ -59,6 +59,13 @@ and a statement on training (none).
 
 ## Controls in code
 
+- **Provider prompt cache (D1193, a trial, off: `EDEN_MODEL_CACHE=on`).** With it on, the roles' Anthropic calls
+  through OpenRouter carry `cache_control` breakpoints, and the provider holds the marked prefix in its prompt cache
+  for 5 minutes. For the push check and the card call that prefix is the system message only: Eden's fixed
+  instructions (the card call's adds the user's day). It holds no user content. The ask-time reader (not called by
+  the default's push, D237) also marks its `<standing>` block, which is redacted item text. OpenRouter documents
+  explicit caching as not data retention under ZDR. Off until the owner's probe decides it.
+
 - **Isolation:** tenant from the API key; per-user partitioning of every cache, map row and budget (D9).
 - **Redaction:** `sanitizeForStore` on all stored, indexed, logged or model-bound text (D10).
 - **Read-only sources:** `McpSource` calls only its configured search tool, and refuses it unless the server declares

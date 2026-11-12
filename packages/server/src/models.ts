@@ -10,6 +10,10 @@
  *                                and its reasoning counts against the reply cap (D45). Only Haiku 5.5 is measured.
  * EDEN_MODEL_ZDR=off             drops the ZDR routing requirement (data collection stays denied).
  * EDEN_MODEL_USD_PER_TENANT_DAY  one cap on a tenant's model spend per UTC day, shared by every role; default 25.
+ * EDEN_MODEL_CACHE=on            a trial (F7, D1193; off unless set): Anthropic `cache_control` breakpoints on the
+ *                                roles' stable system prefix (`anthropicCache`), so the push check's and the card
+ *                                call's fixed instructions are read from the provider's cache at 0.1x. Off until one
+ *                                OpenRouter probe shows cached tokens on the ZDR route (the owner's call).
  *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */
@@ -66,6 +70,8 @@ export function modelRolesFromEnv(
     model: env.EDEN_MODEL || DEFAULT_ROLE_MODEL,
     baseUrl: env.OPENROUTER_BASE_URL,
     zdr: env.EDEN_MODEL_ZDR !== "off",
+    // D1193's trial: cache breakpoints only when asked for; `OpenRouterModel` sends them to `anthropic/*` models only.
+    ...(env.EDEN_MODEL_CACHE === "on" ? { anthropicCache: true } : {}),
   };
   return {
     reader: make({ ...base, sort: "throughput" }),

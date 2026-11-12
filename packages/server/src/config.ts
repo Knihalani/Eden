@@ -10,6 +10,7 @@
  *                    without it the same default runs with no model at all.
  * EDEN_MODEL         the roles' model, default anthropic/claude-haiku-5.5 through OpenRouter (D12's routing).
  * EDEN_MODEL_USD_PER_TENANT_DAY one cap on a tenant's model spend per UTC day, across roles; default 25.
+ * EDEN_MODEL_CACHE   `on` sends Anthropic cache breakpoints on the roles' system prefix (a trial, D1193; off).
  * EDEN_TENANT_RPS    requests per second per tenant on the HTTP API (GCRA), default 200; EDEN_TENANT_BURST, 400.
  *                    The stdio MCP server (mcp-stdio.ts) serves one local user and is not limited.
  * EDEN_GATE_WORKERS  workers that redact lookup results off the event loop (D25, D26); default 0, on the loop.
