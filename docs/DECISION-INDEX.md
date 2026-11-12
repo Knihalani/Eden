@@ -682,3 +682,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1048 | 2026-11-12 | Finding (B19, blind heldout19, read once): the night's wave raised hidden facts on both harnesses with no confirmed concern. | finding |
 | D1075 | 2026-11-12 | Finding: the smallest recommended box holds its sizing; a restart of a full box keeps only the users its shutdown budget writes. | finding |
 | D1076 | 2026-11-12 | Rejected: a shutdown's flush writing the most recently used users first. | rejected |
+| D1100 | 2026-11-12 | Lab only: `dev20a`–`dev20d` (`--suite dev20`), four tuning suites on the weak points | lab |

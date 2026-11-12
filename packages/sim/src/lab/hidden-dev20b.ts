@@ -219,7 +219,7 @@ const crmContact = (p: Person, note: string, edited: number): Plant => ({
 const wa = (title: string, lines: [string, string, number][], edited: number): Plant =>
   rare("whatsapp", title, chatText(lines.map(([who, text, when]) => ({ who, text, at: when }))), edited);
 
-// AUTHOR: write the 40 templates here. Each one is preceded by one labelled comment line of this exact shape:
+// Each template is preceded by its labelled comment (split over lines for the 120-column limit):
 // overlap: none|name|topic-word · decoy: (a) resolved/expired/superseded|(b) other entity or date|(c) condition met ·
 // phrasing: imperative|plan|statement|question · source: <sourceId> (<kind>) · anchored: yes|no · silent: yes|no ·
 // rare: yes|no · knowledge: yes|no · language: <English|German|…>
