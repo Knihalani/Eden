@@ -2,7 +2,8 @@
 
 A kit, not a deployment: everything here was built and checked locally on 2026-11-11; nothing was ordered, signed up
 for, applied or published. Numbers come from commands run that day (docs/research/d1-scale-out.md has the raw
-figures and the commands); prices come from docs/research/d1-providers.md and **must be checked at signup**.
+figures and the commands); prices come from docs/research/d1-providers.md, re-read 2026-11-12 in
+docs/research/hosting-2026-11.md (which also sizes a pilot, 10k and 1M users), and **must be checked at signup**.
 
 ## 0. In plain words
 
@@ -11,9 +12,10 @@ figures and the commands); prices come from docs/research/d1-providers.md and **
   no shell inside, so `docker exec <container> bun …` works and `docker exec <container> sh` does not.
 - **Users are bound by memory.** About 2-3.4 MB of RAM per user at the 3,000-item cap, measured. A heavy user
   (a daily agent, about 50 requests a day, 20 connectors) at the peak hour needs the most; plan with §6.
-- **Where:** Hetzner dedicated servers are the cheapest RAM measured (about $1.0-1.4 per GB-month, EU only, not
-  hourly); paid Oracle A1 (ARM, about $1.10 per GB plus $7.30 per core, EU and US, hourly) is the fallback and the
-  free start. Hetzner's cheap cloud lines were out of stock on 2026-11-11.
+- **Where:** Hetzner dedicated servers are the cheapest RAM you can order (about $1.0-1.4 per GB-month at the low
+  end of each model's range, EU only, an hourly rate up to the monthly price on its pages, plus a setup fee); paid A1
+  on Oracle (ARM, about $1.10 per GB plus $7.30 per core, EU and US, hourly) is the fallback and the free start.
+  Every Hetzner cloud line (CX, CAX, CPX, CCX) read "currently unavailable" on 2026-11-12.
 - **Free to start:** Oracle Always Free A1 (2 OCPU / 12 GB in 2026; 4 / 24 on accounts that still have it) holds
   about 1,600 heavy users at their peak hour (2,600 if a quarter are active at once), by the measured RSS. Its risks are real (§2.1): use it for a pilot,
   not for paying tenants.
@@ -43,13 +45,14 @@ Any Ubuntu 24.04 machine with 2+ cores and 8+ GB. Every machine is set up by one
 
 | Host | Role in the plan | How the machine is made |
 | --- | --- | --- |
-| **Hetzner dedicated (AX41/AX42, AX102 class)** | **Primary**: the cheapest RAM measured ($1.0-1.4 per GB-month), unmetered traffic, Hetzner Object Storage with no request fees for the cluster's store | Order in the Robot console (setup fee, monthly, EU only), `installimage` Ubuntu 24.04, then `DEPLOY_KEY=<key> deploy/scripts/bootstrap-dedicated.sh root@<ip> <role> <ref> git@github.com:Knihalani/Eden.git <admin cidr>`: it installs the read-only deploy key, renders the cloud-init (`render-cloud-init.py`) and runs it with cloud-init's NoCloud source over SSH. No Terraform provider exists for dedicated servers |
+| **Hetzner dedicated (AX41/AX42, AX102 class)** | **Primary**: the cheapest RAM you can order (2026-11-12: AX41 64 GB €59, no setup fee, $1.02 per GB-month; AX42 64 GB €79-99 + €49 setup; AX102 128 GB €159-259 + €129; AX162 512 GB €614 + €304, $1.33/GB; AX42-1 and AX102-1 take "several weeks" in Germany), unmetered traffic, Hetzner Object Storage with no request fees for the cluster's store | Order in the Robot console (setup fee, billed hourly up to the monthly price, EU only: FSN1, HEL1), `installimage` Ubuntu 24.04, then `DEPLOY_KEY=<key> deploy/scripts/bootstrap-dedicated.sh root@<ip> <role> <ref> git@github.com:Knihalani/Eden.git <admin cidr>`: it installs the read-only deploy key, renders the cloud-init (`render-cloud-init.py`) and runs it with cloud-init's NoCloud source over SSH. No Terraform provider exists for dedicated servers |
 | **Oracle Cloud A1.Flex** | **Fallback**: the cheapest RAM rented by the hour ($1.10 per GB plus $7.30 a core), EU and US regions (Hetzner dedicated is EU only), ARM verified here (D990), a free tier for the pilot; E4 (x86) when A1 is short | `deploy/tofu/oci` (A1.Flex, the VCN, the security list, the same cloud-init as user data) |
-| OVHcloud | Second fallback if both fail on stock: $3.03 per GB on a 12-month plan, free object-storage requests | by hand, with the rendered cloud-init as user data |
-| Hetzner Cloud | Routers and the load balancer of a cluster (small, hourly), and Eden machines when its stock returns | `deploy/tofu/hetzner` |
+| OVHcloud | Second fallback if both fail on stock: public cloud r3 €3.02 per GB-month hourly ($3.35); its dedicated KS, SYS and Rise lines list €0.28-0.97 per GB with no setup fee but most 128-256 GB configurations were unavailable on 2026-11-12; free object-storage requests | by hand, with the rendered cloud-init as user data |
+| Hetzner Cloud | Routers and the load balancer of a cluster (small, hourly), and Eden machines when its stock returns (no type was orderable on 2026-11-12: put the routers on the nodes or on a dedicated box) | `deploy/tofu/hetzner` |
 
-Why not OVH as the first fallback: Oracle's RAM is a third of OVH's price and hourly, and it adds US regions; OVH's
-advantage, free store requests, matters only at 100k users on a per-request store (docs/COST-MODEL.md, "Hosting").
+Why not OVH as the first fallback: Oracle's RAM is a third of OVH's cloud price and hourly, and it adds US regions;
+OVH's dedicated servers are cheaper still but rarely in stock; its other advantage, free store requests, matters only
+at 100k users on a per-request store (docs/COST-MODEL.md, "Hosting").
 
 1. **DNS.** An A (and AAAA) record for your Eden name (say `eden.example.com`) pointing at the box.
 2. **Machine.** A dedicated server: `bootstrap-dedicated.sh` as above. A cloud one: `cd deploy/tofu/oci` (or
@@ -109,10 +112,12 @@ still has 4 / 24 doubles the figures in §6.
 
 ### 2.2 The fallback when free capacity is gone or reclaimed
 
-A cheap ARM or x86 box elsewhere, same steps (prices read 2026-11-11, docs/research/d1-providers.md; **check at
-signup**): paid Oracle A1 4 OCPU / 24 GB about $55/month (E4 x86 when A1 is short); Hetzner CPX32 in Helsinki
-about €30.49/month (4 vCPU, 8 GB; in stock that day); Hetzner dedicated AX41/AX42 64 GB at €59-79 plus setup, the
-cheapest RAM. The image is multi-arch from source; move by restoring a backup (§13, Restore).
+A cheap ARM or x86 box elsewhere, same steps (prices read 2026-11-12, docs/research/hosting-2026-11.md; **check at
+signup**): paid Oracle A1 4 OCPU / 24 GB about $55/month (E4 x86 when A1 is short); netcup RS 2000 G12.5 (8 dedicated
+cores, 16 GB, €40.70/month on a 12-month term; Vienna, Nuremberg or Manassas, Virginia); Hetzner dedicated AX41 64 GB
+at €59 (no setup fee) or AX42 at €79-99 plus €49, the cheapest RAM. Hetzner's cloud lines (CPX32 in Helsinki was
+€30.49 and in stock on 2026-11-11) read "currently unavailable" on 2026-11-12. The image is multi-arch from source;
+move by restoring a backup (§13, Restore).
 
 Compute per user-month on the fallback (arithmetic on §6's measured RSS and the listed prices): paid A1 4 / 24 GB at
 $55.48 holds 3,702 heavy users at their peak hour ($0.015 a user-month), 5,698 prose users at a quarter active
@@ -235,9 +240,10 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
 ```
 
 - **Nodes** (`deploy/compose/node`): Eden on the private address only, `EDEN_PERSIST_STORE` (an S3-compatible
-  bucket every node reaches: Hetzner Object Storage has no request fees; Cloudflare R2, Oracle, AWS work too),
-  `EDEN_CLUSTER_KEY`, `EDEN_CLUSTER_SIZE` (the machine count: divides each tenant's spend cap, D993). A node clears
-  its local copies at start: the store is the copy of record.
+  bucket every node reaches: Hetzner Object Storage has no request fees but allows 750 requests a second per bucket
+  and 100 buckets an account; Cloudflare R2, Oracle, AWS work too), `EDEN_CLUSTER_KEY`, `EDEN_CLUSTER_SIZE` (the
+  machine count: divides each tenant's spend cap, D993). A node clears its local copies at start: the store is the
+  copy of record. A Hetzner vSwitch (the private network between dedicated servers) joins at most 100 servers.
 - **Cluster router** (`deploy/compose/cluster-router`): `EDEN_NODES_FILE` (`id=url` lines; ids are stable names),
   `EDEN_API_KEYS` (to hold each tenant's whole rate, D993) and the cluster key. Two behind a load balancer for
   redundancy (they hold no state and compute the same placement). TLS in front as in §3.
