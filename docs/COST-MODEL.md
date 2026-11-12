@@ -707,6 +707,18 @@ No model call and no network call: a local model decides, on the fast path, whet
 
 A turn whose weights cannot be read is decided by `pushStart` alone, at its old cost.
 
+## The request glossary (`requestGloss`, F1, in the default since D1153)
+
+No model call: a non-English request is glossed into English words from a glossary held in memory, on the fast path.
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| CPU a request | 12.5 µs English (0 of 468 English requests glossed), 22.6 µs German | `bun` microbench in docs/research/f1-intent-bridge.md §3 |
+| Glossary and load | +29 MB RSS once a process; 118 ms to load when the partner is built | the same |
+| Paid calls it moves | push check calls +13% on non-English requests (343 → 389 over reworded's 36 non-English templates, seeds 41–44), still below the same templates in English (418); none on English | `packages/sim/lab/f1/gloss_score.py`, served by subagents (D1101) |
+
+A glossary that cannot be read leaves every request as written, at its old cost.
+
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
 No model call. With `sourceYieldEarn`, `sourceYieldNames` and `sourceYieldEngage` in the default (Pi, train, 995
