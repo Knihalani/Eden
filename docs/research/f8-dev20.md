@@ -93,6 +93,9 @@ For comparison, train in the same shape (`--cards none --intent none`, seeds 41â
 against dev20's 155/640 (24%). dev20 at `--cards none` is identical to the default run (155/125). So dev20 is much
 harder than train for the no-model paths, as intended.
 
-A tooling bug found on the way: with the default `--jobs` (4 processes), the funnel's NEUTRAL lines merge only one
-shard. Each suite read /40 for four seeds, and two identical runs disagreed. With `--jobs 1` they read /160 and repeat
-exactly. Quote neutral figures from `--jobs 1` until `mergeNeutral` is fixed. The planted counts agree under both.
+Correction (2026-11-12, after the merge): this note first reported a funnel bug, saying the NEUTRAL lines merged only
+one shard under parallel `--jobs`. That was a misread. Each process prints its own `NEUTRAL` lines for its block of
+seeds (/40 a suite here), and a grep for lines starting `NEUTRAL` picked up some of those. The run's figures are the
+`merged NEUTRAL` lines, which read 87/80/79/67 (313/640), exactly as `--jobs 1`. `funnel-flags.test.ts` now checks
+that the JSON's neutral block under `--jobs 2` equals one process's, and the funnel's note on per-process lines now
+names NEUTRAL.
