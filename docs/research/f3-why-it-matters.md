@@ -227,38 +227,44 @@ and the wait.
 
 ## Round 4: freshness with no wait (`syncActivePollMs`, D1131, trial)
 
-Round 3's re-read put a connector round trip on the push (11.4 → 285.1 ms). The owner's brief: fix it without
-adding wait. Three shapes were weighed: (a) a background floor on how stale a synced copy may be while its user is
-active, (b) a prefetch at turn start, (c) a re-read with a short deadline falling back to the cache. (b) and (c) both
-start their read once the request is known, so a connector at market latency (hundreds of ms) seldom answers before
-the push hands its packet; (a) reads before the request comes, so it was built first.
+Round 3's re-read put a connector round trip on the push (11.4 → 285.1 ms). The owner's brief: fix it without adding
+wait. Three shapes were weighed: (a) a background floor on how stale a synced copy may be while its user is active,
+(b) a prefetch at turn start, (c) a re-read with a short deadline falling back to the cache. (b) and (c) both start
+their read once the request is known, so a connector at market latency (hundreds of ms) seldom answers before the push
+hands its packet. (a) reads before the request comes, so it was built.
 
-The trial: while a user is active (`syncActiveMs`), each sync tick polls one page (20 items) of every warm synced
-source whose last poll is older than the floor, under the source's call budget. Nothing on the request path changes.
+The trial: while a user is active (`syncActiveMs`), each sync tick runs a complete background poll of every warm
+synced source whose last complete poll is older than the floor. The first build read one page only, and the reviewer
+found it left that page as a false boundary: the next poll stopped there and marked the source current with newer
+items unread. The fix runs a real poll; every number here is from the fixed build.
 
-$0 screen on dev20's silent templates, seeds 41–44 (32 users, 13 sources each), `--noise-edits 16
---edit-lead-min 60 --no-ask`; handed silent facts by `stale-count.ts`:
+$0 screens (sim data, `--no-ask`):
 
-| arm | stale | current | background calls |
-| --- | ---: | ---: | ---: |
-| base | 9 | 12 | 0 |
-| floor 10 min | 3–4 | 23–25 | 24,960 |
-| floor 30 min | 4 | 23 | 8,320 |
-| floor 60 min | 4 | 23 | 4,160 |
-| floor 60 min, engaged sources only | 9 | 12 | 1,547 |
+| screen | arm | stale / current handed | hidden delivered | control delivered | request calls | background |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| dev20 silent, seeds 41–44, F8 coverage | base | 13 / 22 | | | 1,292 | 0 |
+| | floor 60 min | 3 / 52 | | | 71 | 4,255 |
+| train+silent, seeds 41–44 | base | | 483 / 768 | 566 / 768 | 5,330 | 863 |
+| | floor 60 min | | 497 / 768 | 565 / 768 | 197 | 8,555 |
+| train, seed 41, `--time 1 --jobs 1` | base | | 140 / 192 | 123 / 192 | 3.28 a task | 216 |
+| | floor 60 min | | 150 / 192 | 145 / 192 | 0.08 a task | 2,130 |
 
-A 60-minute floor does what a 10-minute one does: one listing per synced source per active user-hour (13 calls an
-hour for these users). Polling only engaged sources gains nothing, because a source becomes engaged when the lookup
-that needs it runs, which is too late.
+A 10-minute floor hands the same as a 60-minute one. The price is about one complete poll per synced source per active
+user-hour, and the request path almost stops polling, because its sources are current. The push's wait does not move
+(train seed 41: p50 8.30 → 8.21 ms, p99 38.4 → 36.0). The pool is current, so planted items of both kinds reach it
+more often on train. Funnel look-alikes overstate harm, so the pilot's concerns are the test.
 
-The wait (funnel `--time 1 --jobs 1`, train seed 41, push only, 384 tasks): p50 8.31 → 8.29 ms, mean 9.49 → 9.78,
-p90 12.83 → 12.75. Hidden delivered unchanged (140/192). One more control look-alike delivered (train4,
-`unreleased-feature-promise`: a newer item the floor stored). Request calls 3.28 → 3.22 a task.
+**Pilot (pre-registered in 70d4be7e0; subagent-simulated).** Haiku subagents answered each distinct prompt once,
+single-shot, and Sonnet subagents graded with the lab's grader. Tasks whose two arms got the same prompt count 0.
+Run on dev20's silent templates, seeds 41–44, base against 3,600,000:
 
-Pre-registered (commit of D1131): a subagent-simulated single-shot pilot on dev20's silent templates, seeds 41–44,
-with F8's shipped coverage, base against a 60-minute floor. Promote if hidden raised rises with a template-clustered
-95% lower bound above 0 and control and neutral concerns rise by at most 1, and the parent accepts the call price;
-otherwise delete.
+- **Hidden raised:** +14.4 points (+5.6..+24.4, template-clustered), 23 gained and 0 lost of 160.
+- **Control and neutral concerns:** +2 as graded (+0.6 points, +0.0..+1.9, of 320). Both are the neutral template
+  `early-standup-phased-return` on two seeds. Both floor answers say "hold off" over a newer channel message (the
+  standup moved to 10:15) and never mention the returning colleague or their hours. They are grader errors on reading,
+  so the difference read is 0. As graded, +2 is over the rule's limit of 1.
+
+Recommendation: promote. The parent decides on the call price and on the reading of the two concerns.
 
 ## Recommendations
 
