@@ -802,7 +802,8 @@ export interface EngineConfig {
    * its learned rate says. A quiet source is otherwise trusted for up to `syncMaxStaleMs` (6 h), so a silent edit
    * there went out as the pre-edit copy (D1126). No request waits for it, and the request path's own polls mostly
    * stop (its sources are current); its price is connector calls per active user-hour (COST-MODEL §Hosting (b)). A
-   * source that notifies (`syncPush`) is never polled by it, nor one billed per call unless `syncActivePollPriced`.
+   * source that notifies (`syncPush`) is never polled by it, nor one not marked first-party or flat-rate
+   * (`Source.callPriced` false; absent counts as priced, D1133) unless `syncActivePollPriced`.
    */
   syncActivePollMs: number;
   /**
@@ -813,9 +814,9 @@ export interface EngineConfig {
    */
   syncActivePollBackoff: boolean;
   /**
-   * D1132, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one for
-   * every tenant the server runs) to floor polls of sources whose calls are billed by the connector's transport
-   * (`Source.callPriced`). Off: those sources keep their learned rate, as without the floor.
+   * D1132, D1133, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one
+   * for every tenant the server runs) to floor polls of sources not marked first-party or flat-rate
+   * (`Source.callPriced` true, or absent: unknown counts as priced). Off: those sources keep their learned rate.
    */
   syncActivePollPriced: boolean;
 }

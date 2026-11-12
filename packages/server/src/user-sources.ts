@@ -73,9 +73,10 @@ export interface McpSpec {
    */
   notifies?: boolean;
   /**
-   * Each call is billed by the connector's transport (Arcade.dev, Pipedream Connect, Zapier MCP class): the freshness
-   * floor (`syncActivePollMs`, D1131) leaves this source to its learned rate unless the deployment opts in
-   * (`syncActivePollPriced`). Absent: first-party or flat-rate.
+   * `true`: each call is billed by the connector's transport (Composio, Unified.to, Arcade.dev, Pipedream Connect,
+   * Zapier MCP, any per-call plan). `false`: first-party (quota only) or flat-rate; the connector presets set it.
+   * Absent: unknown, counted as priced (D1133): the freshness floor (`syncActivePollMs`) leaves the source to its
+   * learned rate unless the deployment opts in (`syncActivePollPriced`).
    */
   callPriced?: boolean;
 }
@@ -350,8 +351,8 @@ class Lease implements Source {
     return this.inner.notifies === true;
   }
 
-  get callPriced(): boolean {
-    return this.inner.callPriced === true;
+  get callPriced(): boolean | undefined {
+    return this.inner.callPriced;
   }
 
   get fetchReportsGone(): boolean {
@@ -400,7 +401,7 @@ function build(spec: SourceSpec): Source {
     listTool: spec.listTool,
     trustedReadTools: spec.trustedReadTools,
     ...(spec.notifies === true ? { notifies: true } : {}),
-    ...(spec.callPriced === true ? { callPriced: true } : {}),
+    ...(spec.callPriced !== undefined ? { callPriced: spec.callPriced } : {}),
   });
 }
 
