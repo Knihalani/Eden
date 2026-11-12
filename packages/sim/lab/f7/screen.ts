@@ -60,7 +60,11 @@ const parts = (n: number, k: number) => {
 const checkers = new Map(
   ARMS.map((a) => [
     a,
-    new PushChecker({ model, budget: new Budget({ callsPerSession: 1e9, usdPerSession: 1e9, usdPerUserDay: 1e9 }) }),
+    new PushChecker({
+      model,
+      budget: new Budget({ callsPerSession: 1e9, usdPerSession: 1e9, usdPerUserDay: 1e9 }),
+      onFailure: (e) => console.error(`${a}: ${String(e).slice(0, 300)}`),
+    }),
   ]),
 );
 const scope = { tenantId: "h3", userId: "split" };

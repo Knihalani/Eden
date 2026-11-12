@@ -22,3 +22,38 @@ live under each arm, interleaved row by row in the same lanes:
 the look-alike named on control rows at most W + 6, neutral rows with any yes at most W + 6 (the bars are H3's ±4 on
 189 rows of a kind, scaled to about 360), and its output tokens a check at most 0.75 of W's. Of the arms that pass,
 Y goes if it passes (one change); YD only if Y fails. None passes: the switch and its code are deleted, findings kept.
+
+## 2. Pre-registration: the Pi run (committed before its paid calls)
+
+Two trial switches, each its own arm, against the shipped integrator shape `both+ask` in the same pi-ab processes
+(`packages/sim/lab/f7/pi.sh`; H3's recipe: Haiku 5.5 agent, grader, card, reader and check models, shipped card
+coverage replayed, `--tenant-prompt`, payload notices, the `direct` profile, time scale 1):
+
+- **Y** = `both+ask+pushCheckLeanStop`, only if it passes §1's screen (else the run has two arms, base and L);
+- **L** = `both+ask+pushCheckLeanLead`: a packet the check picked is framed as picked ("a quick read of this request
+  picked as likely to change what to do") rather than "nothing has checked them". The funnel cannot see wording, so
+  it has no screen.
+
+**Runs**, two processes at a time, in this order:
+1. Stage 1: `--suite train` and `--suite reworded`, seeds 41, 42, 43, 44 (`--seeds N`), `--variants
+   hidden,control,neutral` (8 runs).
+2. Stage 2: seeds 45, 46, 47, 48, `--variants hidden`: `train` with an empty cards file (`--cards
+   .local/f7/empty.cards.jsonl`, its cards recorded live and shared by the arms), then `reworded` replaying that run's
+   cards (`--cards .local/f7/pi/f7-train-N/out.cards.jsonl`) (8 runs).
+
+**Grading:** `i3-regrade.ts` (Sonnet 5.5) on every hidden answer and every concern the Haiku grader flagged, every arm.
+
+**Rule, per switch against base:** promote (D814) if all three hold, else delete with its code and tests.
+1. **Cheaper or faster:** total $ per 1,000 tasks (agent and Eden) on the 1:1:8 mix (`n5/mix.py --cluster template`,
+   stage 1) has its 95% upper bound below 0, **or** the wall p50 on the 1:1:8 mix (`f7/wall.py`, stage 1) has its
+   upper bound below 0.
+2. **Facts held:** hidden raised by Sonnet, the switch minus base (`p3/report.py --pair X:both+ask --cluster
+   template` over all 16 runs), has its 95% lower bound above −1.5 points.
+3. **No new false concerns:** Sonnet-confirmed concerns on control and neutral (stage 1) are not up (switch ≤ base).
+
+Reported beside, outside the rule: Eden's and the agent's $ per 1,000 tasks, mean wall, agent turns and tool calls,
+asks, the check's output tokens and p50/p90 (`h3/checks.py`). If both switches pass, both are promoted (each measured
+alone against the base; their combination is not measured here and is said so). Hermes is not run (installing the
+Hermes checkout's dependencies was refused in this container); any wall claim is Pi's. If the session's cap or the
+day would cut stage 2, the rule is read on the whole seeds (both suites) finished, the rest unrun; no seed is added
+after a result is read.
