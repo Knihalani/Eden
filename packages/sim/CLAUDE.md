@@ -11,6 +11,7 @@ performance claims cite this package alongside `bun run eval`.
 |---|---|
 | `world.ts`, `names.ts`, `text.ts`, `rng.ts` | `buildWorld({seed})`: a user's people, organisations and ~1,500 items over mail, calendar, docs, CRM and chat, deterministic per seed; realistic item text |
 | `rare-sources.ts` | Eight rarely used connectors (notes, whatsapp, bank, health, school, trips, residents, tasks) with filler, each on a world source's profile (`profileFor`); added by suites.ts's `prepareWorld` (D873) |
+| `realism.ts` | `--realism heavy` (D1103): `addRealism`, a heavy real user's twenty connectors and 600 items a world that never apply (rule-like, forwarded, five languages), added by `prepareWorld` when `setRealism` is on |
 | `sessions.ts`, `updates.ts` | Sessions with ground-truth labels per turn; items changed at the source after caching |
 | `sources.ts` | `SimSource` and profile sets (`IDEAL`, `REALISTIC`, `REALISTIC_ENTITIES`, `ZOO_*`): AND vs relevance search, snippets, latency, errors, 429s, outages (assumed figures, labelled so) |
 | `quality.ts`, `quality-cli.ts` | `runQuality`: sessions through a real `ContextPartner`, scored (`bun run sim`) |

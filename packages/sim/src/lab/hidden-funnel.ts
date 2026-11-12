@@ -76,6 +76,7 @@ import {
   AskReader,
   CardEnricher,
   CARD_FORM_REQUESTS,
+  CARD_FORM_WIDE,
   cardKey,
   intentCut,
   intentReach,
@@ -133,7 +134,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, setRealism, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -225,6 +226,7 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "realism",
         "notify-share",
         "noise-items",
         "noise-edits",
@@ -276,6 +278,11 @@ const TIME = Number(opt("time", "0"));
  * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
  */
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's, twenty connectors and about 400
+ * rule-like items that never apply, duplicated and forwarded threads, mail in five other languages. `off` (default).
+ */
+setRealism(opt("realism", "off"));
 /**
  * `--source-profile FILE|JSON`, `--push none|signals|payload`, `--push-rates` (A18, the live harnesses' connector
  * options, connector-options.ts): the market latency profiles and change notices pi-ab runs under, so the funnel at
@@ -513,7 +520,8 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
-const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
+const CARD_FORM =
+  RUN.cards && RUN.intent && RUN.cardsRequestsFix ? (RUN.cardsRequestsWide ? CARD_FORM_WIDE : CARD_FORM_REQUESTS) : 0;
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
   INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */

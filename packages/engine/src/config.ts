@@ -533,6 +533,12 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
+   * Trial (F1, docs/research/f1-intent-bridge.md; off; needs `cardsRequestsFix`): the card prompt asks for the same
+   * number of requests in varied forms: a plain request, a plan or need, the broad kind of action the item bears on in
+   * general words, and a question (`CARD_FORM_WIDE`). Its replies are a form of their own in the lab's replay files.
+   */
+  cardsRequestsWide: boolean;
+  /**
    * Trial (F2; docs/research/f2-card-state.md), off. With `cards`: the card prompt asks each card for its `state`
    * (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call, and keeps
    * a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
@@ -572,6 +578,15 @@ export interface EngineConfig {
   intentWeight: number;
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
+  /**
+   * F1 (docs/research/f1-intent-bridge.md; promoted by D1153): a request written in another language is given the
+   * English words its own words mean (`glossOf`, gloss.ts: a glossary written once by a model, read with no model and
+   * no call), and the push's and an ask's lookup search with them beside the request's own words, lexically and in the
+   * intent index. An English request is searched as written. reworded's 36 non-English templates, seeds 41–44 (push
+   * check served by subagents): hidden delivered 88 → 112 of 144, look-alikes 45 → 49, neutral 50 → 21 (English
+   * originals 53); +13% check calls on non-English requests, 12–23 µs a request, +29 MB RSS.
+   */
+  requestGloss: boolean;
   /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
@@ -881,6 +896,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
+  cardsRequestsWide: false,
   cardsState: false,
   pushStateFilter: false,
   intentHits: 12,
@@ -891,6 +907,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
+  requestGloss: true,
   askReader: true,
   askReaderPool: 15,
   askReaderWaitMs: 2_500,

@@ -333,8 +333,10 @@ export function cardMessages(items: ContextItem[], today: string, intent = false
         // `cardsRequestsFix` (D1060): with intent, the first example reply shows the requests list too. Shown only
         // in the paragraph after it, the list was left out of about a quarter of replies (D1053).
         (intent && form % CARD_FORM_STATE >= CARD_FORM_REQUESTS ? 'Nov"}],"requests":[...]}. ' : 'Nov"}]}. ') +
-        (form & CARD_FORM_STATE ? STATE_INSTRUCTIONS : "One card per item at most, for the most important constraint; leave out items whose kind is none.") +
-        (intent ? INTENT_INSTRUCTIONS : ""),
+        (form & CARD_FORM_STATE
+          ? STATE_INSTRUCTIONS
+          : "One card per item at most, for the most important constraint; leave out items whose kind is none.") +
+        (intent ? intentInstructions(form % CARD_FORM_STATE) : ""),
     },
     { role: "user", content: `<items>\n${list.join("\n")}\n</items>` },
   ];
@@ -346,8 +348,15 @@ export function cardMessages(items: ContextItem[], today: string, intent = false
  */
 export const CARD_FORM_REQUESTS = 3;
 /**
- * `cardsState` (F2, trial; docs/research/f2-card-state.md): a flag added to the prompt's form. The prompt asks each
- * card for its `state`, and asks for a none card when the item says a constraint was lifted, met or superseded.
+
+ * `cardsRequestsWide` (trial, F1): form 3 with the requests asked in varied forms (a plain request, a plan or need, the
+ * broad kind of action, a question: `INTENT_WIDE`), so a user who words the same intent another way still meets one.
+ */
+export const CARD_FORM_WIDE = 4;
+/**
+ * `cardsState` (F2, trial; docs/research/f2-card-state.md): a flag added to the prompt's form (3 + 16, 4 + 16). The
+ * prompt asks each card for its `state`, and asks for a none card when the item says a constraint was lifted, met or
+ * superseded.
  */
 export const CARD_FORM_STATE = 16;
 
@@ -357,7 +366,7 @@ const STATE_INSTRUCTIONS =
   "lifted, cancelled, reopened or cleared), met (a condition, approval or payment it needed has now happened), " +
   "superseded (it replaces or corrects an earlier constraint, which no longer holds), or leave it out when unclear. " +
   "One card per item at most, for the most important constraint. Leave out items whose kind is none, except an item " +
-  'saying a constraint was lifted, met or superseded: give it a card of kind none with that state.';
+  "saying a constraint was lifted, met or superseded: give it a card of kind none with that state.";
 
 /** How a maker is asked (`CardMaker.make`): the prompt's form, and a requests-only re-ask. */
 export interface CardMakeOptions {
@@ -374,12 +383,14 @@ export interface CardMakeOptions {
  * The requests-only prompt (`cardsRequestsFix`'s re-ask, D1060): the card prompt's opening and data rule, the day, and
  * its intent instructions with the card clause and the cards of the example reply left out (H2's R20, D1053).
  */
-export function requestMessages(items: ContextItem[], today: string): ChatMessage[] {
+export function requestMessages(items: ContextItem[], today: string, form = 0): ChatMessage[] {
   const [, user] = cardMessages(items, today, false);
-  const asked = INTENT_INSTRUCTIONS.replace(
-    "Separately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write",
-    "For EVERY item, write",
-  ).replace('{"cards":[...],"requests":', '{"requests":');
+  const asked = intentInstructions(form % CARD_FORM_STATE)
+    .replace(
+      "Separately, for EVERY item, whatever its kind and even when it states no constraint (kind none), write",
+      "For EVERY item, write",
+    )
+    .replace('{"cards":[...],"requests":', '{"requests":');
   return [
     {
       role: "system",
@@ -404,6 +415,25 @@ const INTENT_INSTRUCTIONS =
   "replies to them, a document on the work it describes. Write [] only for bulk mail, newsletters and marketing. " +
   'Put them in "requests", one entry per item: {"cards":[...],"requests":[{"i":0,"q":["deploy the migration on ' +
   'Thursday","ship the release this week"]},{"i":1,"q":["move my 1:1 with Sam","am I free Friday afternoon?"]}]}.';
+
+/**
+ * `cardsRequestsWide` (trial, F1; docs/research/f1-intent-bridge.md): the same number of requests, asked in the forms
+ * users word the same intent in. A user rarely names the item's own thing ("Get me a return to Edinburgh" against a
+ * card's "book a train to the client visit"; "paint over the damp patch" against "repaint the hallway ceiling"), so
+ * one request names the broad kind of action the item bears on, in general words.
+ */
+const INTENT_WIDE =
+  ` Vary the ${MAX_REQUESTS} so they meet the different ways a user asks for the same thing: one plain request; one ` +
+  'as the user\'s plan or need ("I want to …", "thinking of …"); one naming the broad kind of action the item bears ' +
+  'on rather than its specifics, in general words (a flight\'s new time: "book any flight, train or taxi that day"; ' +
+  'a joint account needing both signatures: "pay any bill from the joint account"); and one question.';
+
+/** The intent instructions a prompt form asks with (`INTENT_WIDE` added from `CARD_FORM_WIDE`). */
+const intentInstructions = (form: number) => {
+  if (form < CARD_FORM_WIDE) return INTENT_INSTRUCTIONS;
+  const at = INTENT_INSTRUCTIONS.indexOf(" Most items qualify");
+  return INTENT_INSTRUCTIONS.slice(0, at) + INTENT_WIDE + INTENT_INSTRUCTIONS.slice(at);
+};
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A real calendar day: "2026-11-31" parses in some engines (as 1 December), so the day must round-trip. */
@@ -620,7 +650,7 @@ export class ModelCardMaker implements CardMaker {
     if (options.requestsOnly) {
       // The re-ask writes requests only: under half a card call's output (H2: 53 tokens an item against 118).
       const res = await model.chat({
-        messages: requestMessages(items, today),
+        messages: requestMessages(items, today, options.form),
         maxTokens: this.options.maxTokens ?? Math.max(INTENT_MAX_TOKENS, INTENT_TOKENS_PER_ITEM * items.length),
         json: true,
         signal,
@@ -698,6 +728,8 @@ export interface CardLimits {
    * for its requests only, under a reservation of its own.
    */
   requestsFix: boolean;
+  /** `cardsRequestsWide` (trial, F1; `wideRequests()` sets it): with `requestsFix`, the prompt's form 4. */
+  requestsWide: boolean;
   /** `cardsState` (F2, trial; `askState()` sets it): the prompt's form asks each card for its state. */
   state?: boolean;
   /**
@@ -721,6 +753,7 @@ export const DEFAULT_CARD_LIMITS: CardLimits = {
   leanDays: 0,
   order: false,
   requestsFix: false,
+  requestsWide: false,
   lanes: 1,
 };
 
@@ -987,6 +1020,11 @@ export class CardEnricher {
   /** `cardsRequestsFix` (D1060): the requests list shown in the first example, and a dropped list asked again. */
   showRequests(): void {
     this.limits = { ...this.limits, requestsFix: true };
+  }
+
+  /** `cardsRequestsWide` (trial, F1): the requests asked in varied forms (`CARD_FORM_WIDE`). */
+  wideRequests(): void {
+    this.limits = { ...this.limits, requestsWide: true };
   }
 
   /** `cardsState` (F2, trial): each card says whether its constraint is in force, lifted, met or superseded. */
@@ -1426,7 +1464,13 @@ export class CardEnricher {
 
   /** The prompt's form the maker is asked in (`cardsRequestsFix`: the one that shows the requests list). */
   private form(): CardMakeOptions {
-    const form = (this.limits.intent && this.limits.requestsFix ? CARD_FORM_REQUESTS : 0) + (this.limits.state ? CARD_FORM_STATE : 0);
+    const requests =
+      this.limits.intent && this.limits.requestsFix
+        ? this.limits.requestsWide
+          ? CARD_FORM_WIDE
+          : CARD_FORM_REQUESTS
+        : 0;
+    const form = requests + (this.limits.state ? CARD_FORM_STATE : 0);
     return form ? { form } : {};
   }
 
