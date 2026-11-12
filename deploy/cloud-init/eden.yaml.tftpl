@@ -31,6 +31,19 @@ write_files:
       # Eden is memory-bound: keep it in RAM, and let the kernel take what the cache freed back promptly.
       vm.swappiness=1
       net.core.somaxconn=4096
+%{ if role == "node" ~}
+  # Docker forwards a published port through its own chains, which ufw's rules never see (D1702): the bind to the
+  # private IP in compose is all that stands between Eden and a host that routes to that IP from elsewhere. ufw loads
+  # this block into DOCKER-USER at every boot, before Docker starts, and Docker keeps that chain: port 8790 answers
+  # only the private network.
+  - path: /etc/eden/docker-user.rules
+    content: |
+      # eden: DOCKER-USER (D1702)
+      *filter
+      :DOCKER-USER - [0:0]
+      -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 8790 --ctdir ORIGINAL ! -s ${private_cidr} -j DROP
+      COMMIT
+%{ endif ~}
   - path: /etc/systemd/system/eden.service
     content: |
       [Unit]
@@ -82,6 +95,8 @@ runcmd:
 %{ if role == "node" ~}
   # A node takes Eden's API only from the private network (the cluster router), never from the internet.
   - ufw allow from ${private_cidr} to any port 8790 proto tcp
+  # Once, so a second cloud-init run (bootstrap-dedicated.sh) does not add it twice; `ufw --force enable` loads it.
+  - "grep -q 'eden: DOCKER-USER' /etc/ufw/after.rules || cat /etc/eden/docker-user.rules >> /etc/ufw/after.rules"
 %{ else ~}
   - ufw allow 80/tcp
   - ufw allow 443/tcp
