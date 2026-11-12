@@ -9,7 +9,15 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
+import {
+  CHECK_SYSTEM,
+  checkKey,
+  checkMessages,
+  itemMark,
+  parseCompare,
+  parseRuledOut,
+  PushChecker,
+} from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
 // change what the agent should do; the candidates are those, in pool order; none named sends no packet; any failure
@@ -356,5 +364,64 @@ describe("the compare-first reply (N5, D527)", () => {
     // Repeats count once; at most five.
     const many = Array.from({ length: 8 }, (_, k) => e((k % 7) + 1, "its day", true)).join(",");
     expect(parseCompare(`{"items":[${many}]}`, 10)).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+describe("askHeedsCheck (G2, D1450): an ask leaves out what its request's push check turned down", () => {
+  /** Says yes to "Harlow venue", rules "Harlow deposit" out as a go-ahead, and leaves the rest unnamed. */
+  const model = () =>
+    new FakeModel((req) => {
+      const n = numbers(req);
+      return (
+        `{"items":[{"i":${n.get("Harlow venue")},"on":"Harlow payments","hits":"the Harlow deposit","act":true},` +
+        `{"i":${n.get("Harlow deposit")},"on":"deposit due Friday","hits":"the Harlow deposit","act":false}]}`
+      );
+    });
+  const asked = async (config: Record<string, unknown>, second?: string) => {
+    const { partner } = setup({ pushCheck: true, pushCandidates: 5, ...config }, model());
+    await handed(partner);
+    if (second) await handed(partner, ref, second);
+    const res = await partner.ask({ ...ref, question: "Harlow venue deposit invoice", maxItems: 5 });
+    return res.citations.map((c) => c.itemId);
+  };
+
+  test("parseRuledOut: a stated no (act false, or a link of none); never a yes, an unnamed item or a bad reply", () => {
+    const reply =
+      '{"items":[{"i":1,"on":"a","hits":"b","act":true},{"i":2,"on":"a","hits":"b","act":false},' +
+      '{"i":3,"on":"a","hits":"none - another venue","act":true},{"i":4,"on":"a"},{"i":9,"on":"a","act":false}]}';
+    expect(parseRuledOut(reply, 5)).toEqual([1, 2]);
+    expect(parseRuledOut("not json", 5)).toEqual([]);
+    expect(parseRuledOut('{"items":[]}', 5)).toEqual([]);
+  });
+
+  test("off (the default): the ask lists the item the check ruled out", async () => {
+    expect(DEFAULT_CONFIG.askHeedsCheck).toBe(0);
+    expect(await asked({})).toContain("mail:dated");
+  });
+
+  test("1: only the item the reply named and ruled out is left out; an unnamed one stays", async () => {
+    const got = await asked({ askHeedsCheck: 1 });
+    expect(got).not.toContain("mail:dated");
+    expect(got).toContain("mail:plain");
+  });
+
+  test("2: every item the check read and did not say yes to is left out", async () => {
+    const got = await asked({ askHeedsCheck: 2 });
+    expect(got).not.toContain("mail:dated");
+    expect(got).not.toContain("mail:plain");
+  });
+
+  test("a check made for an earlier request does not bind a later request's ask", async () => {
+    // The second request has no constraint-like pool of its own words, so no check of its own.
+    const got = await asked({ askHeedsCheck: 2 }, "Thanks, that is all for the lunch menu today.");
+    expect(got).toContain("mail:dated");
+  });
+
+  test("isolation: one user's check never trims another user's ask", async () => {
+    const { partner } = setup({ pushCheck: true, pushCandidates: 5, askHeedsCheck: 2 }, model());
+    await handed(partner);
+    const other = { tenantId: "t", userId: "u2", sessionId: "s1" };
+    const res = await partner.ask({ ...other, question: "Harlow venue deposit invoice", maxItems: 5 });
+    expect(res.citations.map((c) => c.itemId)).toContain("mail:dated");
   });
 });
