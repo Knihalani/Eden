@@ -370,8 +370,9 @@ describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check
     return [...(res.injection ? [res.injection] : []), ...taken].map((x) => x.reason.split(":")[0]);
   };
 
-  test("off by default here: the rule path's packet goes out though the check named nothing", async () => {
-    expect(await run({}, says([]))).toContain("fallback");
+  test("on in the default (D1450); off, the rule path's packet goes out though the check named nothing", async () => {
+    expect(DEFAULT_CONFIG.packetHeedsCheck).toBe(true);
+    expect(await run({ packetHeedsCheck: false }, says([]))).toContain("fallback");
   });
 
   test("on: the check read every item of the packet and said yes to none, so it is held back", async () => {

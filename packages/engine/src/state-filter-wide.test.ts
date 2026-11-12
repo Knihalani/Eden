@@ -47,6 +47,7 @@ async function setup(config: Record<string, unknown>) {
     },
   };
   const cards = new CardEnricher({ maker, budget: new Budget(), now: () => NOW - HOUR });
+  cards.askState();
   const all = [LIFTED, HOLD];
   cards.enqueue(scope, all);
   await cards.idle();
@@ -82,13 +83,14 @@ const listed = async (p: ContextPartner, at = ref) =>
   (await p.ask({ ...at, question: "Harlow venue deposit invoice", maxItems: 5 })).citations.map((c) => c.itemId);
 
 describe("stateFilterWide (G2, D1451)", () => {
-  test("a trial: off in the default, and it needs cards and their state", () => {
-    expect(DEFAULT_CONFIG.stateFilterWide).toBe(false);
-    expect(() => checkEngineConfig({ ...CORE_CONFIG, stateFilterWide: true }, "test")).toThrow();
+  test("on in the default (D1451), and it needs cards and their state", () => {
+    expect(DEFAULT_CONFIG.stateFilterWide).toBe(true);
+    expect(() => checkEngineConfig({ cards: false, stateFilterWide: true }, { deps: { cards: true } })).toThrow();
+    expect(() => checkEngineConfig({ cardsState: false, stateFilterWide: true }, { deps: { cards: true } })).toThrow();
   });
 
   test("off: the ask of a pushed request lists the lifted hold; on: it lists only what is in force", async () => {
-    const off = await setup({});
+    const off = await setup({ stateFilterWide: false });
     await said(off);
     expect(await listed(off)).toContain("mail:lifted");
     const on = await setup({ stateFilterWide: true });

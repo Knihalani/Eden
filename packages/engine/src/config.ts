@@ -545,7 +545,7 @@ export interface EngineConfig {
    */
   pushStateFilter: boolean;
   /**
-   * TRIAL (G2, D1451): `pushStateFilter`'s test on the two channels that go round the push: a proactive packet a
+   * On in the default (G2, D1451; docs/research/g2-decoys.md): `pushStateFilter`'s test on the two channels that go round the push: a proactive packet a
    * rule path makes (the no-model conflict test reads "hold lifted" as a hold) leaves out an item carded none whose
    * state says a constraint cleared, and so does an explicit ask's listing in a request the push started for. An
    * ask in any other request lists it (a question about the hold itself). No call: the card was made at ingest.
@@ -768,7 +768,7 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * G2 (D1450; docs/research/g2-decoys.md): with `pushCheck` and a checker, a proactive packet a rule path made for a
+   * On in the default (G2, D1450; docs/research/g2-decoys.md). With `pushCheck` and a checker, a proactive packet a rule path made for a
    * request (the no-model conflict and grounding tests, which queue before the check answers) is not handed out when
    * that request's push check read every item in it and said yes to none. The observe already waits for the push,
    * so no wait is added, and there is no call. A check that did not answer, read another copy of an item or was for
@@ -968,7 +968,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsRequestsFix: true,
   cardsState: true,
   pushStateFilter: true,
-  stateFilterWide: false,
+  stateFilterWide: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
@@ -1005,7 +1005,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  packetHeedsCheck: false,
+  packetHeedsCheck: true,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,
