@@ -729,6 +729,13 @@ export interface EngineConfig {
    */
   pushDaySeats: number;
   /**
+   * With `pushDaySeats` (G1, D1401, trial, off): a push that only the request's day started (no rule, or the gate's
+   * veto) is checked, and hands anything, only when one of its day seats is itself constraint-like (a card or
+   * constraint wording). At $0 on dev20 it keeps 55 of the 79 facts the starts and seats bring into a checked pool
+   * while check calls on neutral requests rise 2% instead of 27%.
+   */
+  pushDayStartSeated: boolean;
+  /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
    */
@@ -957,6 +964,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   pushDaySeats: 0,
+  pushDayStartSeated: false,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,

@@ -725,3 +725,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
 | D1155 | 2026-11-12 | Lab only: pi-ab and hermes-ab place the packet a tool result's observe hands out. | lab |
 | D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | trial |
+| D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | trial |

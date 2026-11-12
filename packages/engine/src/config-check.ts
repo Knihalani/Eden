@@ -186,6 +186,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
   pushDaySeats: [...PUSH, "pushCheck"],
+  pushDayStartSeated: [...PUSH, "pushCheck"],
   pushCheckSheet: [...PUSH, "pushCheck", "cards"],
   pushCheckSheetRefs: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],

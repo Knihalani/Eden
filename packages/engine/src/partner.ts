@@ -884,7 +884,7 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
+    const internal: { push: true; request?: number; turn?: number; open?: boolean; byDay?: boolean } = { push: true };
     // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list; with
     // `pushCheck` its pool is checked as a listed request's (D823, D828).
     // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
@@ -920,6 +920,7 @@ export class ContextPartner {
     if (!start && adds && verdict && verdict.kind !== "chatter" && this.config.pushDaySeats > 0) {
       if (this.namesComingDay(said, event.at, this.deps.cache.offsetOf(event)))
         start = { how: "opened" as const, request: said };
+      if (start) internal.byDay = true;
     }
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
@@ -2072,7 +2073,7 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored], internal.byDay === true) : null;
       // `pushCheck` (D500, D828): one budgeted call over the pool, only when the gate would hand candidates. With no
       // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
       const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
@@ -2517,9 +2518,10 @@ export class ContextPartner {
   /**
    * `pushCandidates` (D236): the push's pool and its constraint-like gate. The pool `readAsk` would read (the first
    * `askReaderPool` distinct items of `ranked`) in its own order; per item, `readerGate`'s constraint test, cards
-   * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none.
+   * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none. `byDay`: the
+   * push was started by the request's day alone (`pushDaySeats`).
    */
-  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
+  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[], byDay = false): PushGate {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
@@ -2550,7 +2552,12 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    const like = pool.map((x) => this.constraintLike(x, cards));
+    const all = pool.map((x) => this.constraintLike(x, cards));
+    // `pushDayStartSeated`: a push only the day started is checked (and hands anything) only when one of its seats is
+    // itself constraint-like: the day's own evidence, not a pool the request's words happened to fill.
+    const quiet =
+      byDay && this.config.pushDayStartSeated && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
+    const like = quiet ? all.map(() => false) : all;
     return seats.size > 0 ? { pool, like, seats } : { pool, like };
   }
 
@@ -6690,6 +6697,8 @@ interface AskInternal {
   turn?: number;
   /** `pushOpen` (D702): the push started on the message's shape (`isOpenRequest`), not on a listed verb. */
   open?: boolean;
+  /** `pushDaySeats`: only the request's day started this push (`namesComingDay`). */
+  byDay?: boolean;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
   /**

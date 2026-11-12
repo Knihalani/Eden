@@ -175,6 +175,28 @@ describe("pushDaySeats: a turn that names a coming day starts the push", () => {
     expect(ids).toContain("mail:lift");
   });
 
+  test("pushDayStartSeated: a day-started push is checked only when a seat is constraint-like", async () => {
+    // The goods lift's notice says nothing constraint-worded here; the pool's own "must not" item no longer counts.
+    const plain = ITEMS.map((x) =>
+      x.id === "mail:lift" ? { ...x, text: "Goods lift works: Fri 30 Oct to Fri 6 Nov." } : x,
+    );
+    const model = says(["Goods lift"]);
+    const pools: PushPoolReport[] = [];
+    const strict = { ...gated, pushDaySeats: 3, pushDayStartSeated: true };
+    expect(await handed(setup(strict, model, pools, plain), PLAN)).toEqual([]);
+    expect(model.calls.length).toBe(0);
+    // A seat that says what must not happen is constraint-like: checked and handed.
+    const must = ITEMS.map((x) =>
+      x.id === "mail:lift" ? { ...x, text: `${x.text} Deliveries must not be booked in this period.` } : x,
+    );
+    const worded = says(["Goods lift"]);
+    expect(await handed(setup(strict, worded, [], must), PLAN)).toContain("mail:lift");
+    expect(worded.calls.length).toBe(1);
+    // A push the rule starts is checked as before, whatever its seats.
+    const listed = says(["Sofa delivery"]);
+    expect(await handed(setup(strict, listed, [], plain), REQUEST)).toContain("mail:hold");
+  });
+
   test("on: chatter, a past day, a short turn and a turn with no day start none", async () => {
     for (const text of [
       "Thanks, see you on Saturday!",
