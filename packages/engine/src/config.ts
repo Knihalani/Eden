@@ -755,6 +755,12 @@ export interface EngineConfig {
    * 14:00-17:30 overlaps the request's 16:40)". No model and no call; fixed words, numbers and day names only.
    */
   packetWhy: boolean;
+  /**
+   * F3 (trial, off; `versions.ts`): Eden keeps, per user, what changed in each item at its source when a sync stored
+   * an edited copy (the differing words, redacted, bounded, in memory), and a packet or answer handing the item over
+   * says it: "(Eden: changed at its source on Thu 12 Nov: was '11:00–15:00', now '14:00–17:30')". No model, no call.
+   */
+  packetChanges: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -912,4 +918,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushGate: true,
   revisionDiff: true,
   packetWhy: false,
+  packetChanges: false,
 };

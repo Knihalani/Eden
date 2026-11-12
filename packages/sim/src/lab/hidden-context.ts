@@ -28,6 +28,12 @@ export interface HiddenTask {
    * suite's `+stale` option); harnesses report whether it was handed.
    */
   stale?: string;
+  /**
+   * F3 (D1123): a silent edit. The planted item as it read before it was edited at its source (same id, source and
+   * kind); the planted item is the edited version. Harnesses put this version at the source for the backfill, then
+   * swap in the edited one with no notice before the first request (`silent.ts`).
+   */
+  before?: { title: string; text: string; meta?: Record<string, string> };
 }
 
 interface Planted {

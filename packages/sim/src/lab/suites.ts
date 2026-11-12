@@ -39,6 +39,7 @@ import { plantTrain3 } from "./hidden-train3";
 import { plantTrain4 } from "./hidden-train4";
 import { plantTrain5 } from "./hidden-train5";
 import { withRevision } from "./revision";
+import { withSilent } from "./silent";
 import { plantTrain6 } from "./hidden-train6";
 import { formOf, rewordOf } from "./reword";
 import { plantSynth, readWorlds, SAMPLE_PATH, synthPath } from "./synth/suite";
@@ -322,6 +323,19 @@ function registerRevision(name: string): boolean {
   return true;
 }
 
+/** The hand-written suites `+silent` applies to (F3, D1123): train and its rewordings. */
+export const SILENT_BASES = [1, 2, 3, 4, 5, 6].flatMap((n) => [`train${n}`, `train${n}r`]);
+
+/** Registers `<suite>+silent` (silent.ts) for a base in SILENT_BASES on first use; the bases are unchanged. */
+function registerSilent(name: string): boolean {
+  if (name in SUITES) return true;
+  if (!name.endsWith("+silent")) return false;
+  const base = name.slice(0, -"+silent".length);
+  if (!SILENT_BASES.includes(base)) return false;
+  SUITES[name] = withSilent(name, SUITES[base]!);
+  return true;
+}
+
 /**
  * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
  * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's,
@@ -350,7 +364,7 @@ export function parseSuites(arg: string): string[] {
                     ? TRAIN_RW
                     : [name];
     for (const n of names) {
-      if (!registerSynth(n) && !registerRevision(n) && !(n in SUITES))
+      if (!registerSynth(n) && !registerRevision(n) && !registerSilent(n) && !(n in SUITES))
         throw new Error(
           `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, dev20, ` +
             "synth, synth-train, synth-val, synth-test, synth:<file>)",

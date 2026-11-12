@@ -125,6 +125,7 @@ import {
 import { flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
+import { applyEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
 import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
@@ -863,6 +864,8 @@ async function runSeed(
   // A `+revision` or `+stale` task's stale version is kept from the slot clearing too (D914).
   const keep = new Set([...plantedAll.map((it) => it.id), ...all.flatMap((t) => (t.stale ? [t.stale] : []))]);
   for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.slotText ?? task.text, keep);
+  // F3 (D1123): a task with a `before` starts with that version at its source; the edit lands after the backfill.
+  const silent = plantBefore(world, all, all.length === plantedAll.length ? plantedAll.map((it) => it.id) : []);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
     // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
@@ -1259,6 +1262,10 @@ async function runSeed(
       cards.enqueue(scope, synced);
       await cards.idle();
     }
+  }
+  // F3 (D1123): the silent edits land at their sources now, with no notice: Eden sees them only by polling.
+  if (silent.size > 0) {
+    for (const id of applyEdits(world, silent, clock)) for (const src of own) if (src.id === id) src.reindex();
   }
   for (const [i, task] of tasks.entries()) {
     let sinceConnectMs = 0;

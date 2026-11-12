@@ -13,6 +13,7 @@
 import type { ContextItem } from "@eden/protocol";
 import { startDay, type TimeWindow } from "./grounding";
 import { endMinutes, requestedSpan, startMinutes } from "./probes";
+import type { Change } from "./versions";
 
 const DAY = 86_400_000;
 /** The head of an item's text read for dates and times: where an event's or a notice's own when is written. */
@@ -83,7 +84,7 @@ export interface WhyInput {
 }
 
 const dayStart = (key: string) => Date.parse(`${key}T00:00:00Z`);
-const dayLabel = (ms: number) => {
+export const dayLabel = (ms: number) => {
   const d = new Date(ms);
   return `${WD_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MON_SHORT[d.getUTCMonth()]}`;
 };
@@ -269,4 +270,17 @@ export function whyNote(item: ContextItem, input: WhyInput): string | undefined 
     return `${when}; its ${theirs} overlaps the request's ${ours}`;
   }
   return when;
+}
+
+/**
+ * `packetChanges` (F3, trial): the change Eden saw at the item's source, said in Eden's words around the item's own
+ * (redacted, quoted, on one line): "changed at its source on Thu 12 Nov: was '11:00–15:00', now '14:00–17:30'". The
+ * quoted words are the item's, data like the rest of its line (D11); quotes and brackets in them become spaces.
+ */
+export function changeNote(change: Change, offset: number): string {
+  const q = (s: string) => `'${s.replace(/["'()|\[\]]/g, " ").trim()}'`;
+  const day = dayLabel(change.at + offset * 60_000);
+  if (!change.was) return `changed at its source on ${day}: added ${q(change.now)}`;
+  if (!change.now) return `changed at its source on ${day}: removed ${q(change.was)}`;
+  return `changed at its source on ${day}: was ${q(change.was)}, now ${q(change.now)}`;
 }

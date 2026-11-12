@@ -798,6 +798,7 @@ export class ItemCache {
   private readonly limits: CacheLimits;
   /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
   private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
+  private revised: ((scope: Scope, before: ContextItem, after: ContextItem, at: number) => void) | null = null;
   /** The last revision handed out: every user's revisions are drawn from it, so one never repeats. */
   private revisions = 0;
   /** The expiry timer (`expireEveryMs`), started by the first `put`; null before then and after `close`. */
@@ -1050,6 +1051,14 @@ export class ItemCache {
     this.dropped = fn;
   }
 
+  /**
+   * `packetChanges` (F3, trial): calls `fn` when a synced copy replaces a synced copy with other words (an edit at the
+   * source the sync read), after the old copy's drop hook ran. Both copies are redacted ones (D10).
+   */
+  onRevised(fn: (scope: Scope, before: ContextItem, after: ContextItem, at: number) => void): void {
+    this.revised = fn;
+  }
+
   /** The user's vocabulary (creating the user's cache if needed). */
   vocabOf(scope: Scope): Vocab {
     return this.touch(scope).vocab;
@@ -1120,6 +1129,8 @@ export class ItemCache {
       const item = sanitized ? raw : sanitizeItem(raw, this.limits.maxTextChars);
       if (held !== undefined && held.isGone(scope.userId, item.id, now)) continue;
       const old = u.items.get(item.id);
+      // `onRevised`: only a synced copy replacing a synced copy is an edit at the source (a lookup's snippet is not).
+      const wasSynced = old?.synced === true;
       if (old && synced && !old.synced) {
         unlink(u, old); // Out of the lookups' list into the sync's (re-placed below, refreshed or dropped).
         old.synced = true;
@@ -1159,6 +1170,9 @@ export class ItemCache {
         link(u, old);
         continue;
       }
+      // The copy it replaces, read before the drop lets its bytes go (`onRevised` only).
+      const prior =
+        old && this.revised && synced && wasSynced ? { ...old.item, title: old.item.title, text: old.item.text } : null;
       if (old) this.drop(u, old);
       tallyOffset(u, item, 1);
       tally(u, item, 1);
@@ -1186,6 +1200,7 @@ export class ItemCache {
       u.byDoc[doc] = entry;
       u.revision = ++this.revisions;
       changed.push(stored);
+      if (prior) this.revised!(scope, prior, item, now);
     }
     if (u.synced === 0) {
       while (u.items.size > this.limits.maxItemsPerUser) this.drop(u, u.items.values().next().value as Entry);

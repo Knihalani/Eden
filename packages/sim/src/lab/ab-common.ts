@@ -134,6 +134,8 @@ export interface Task {
    * sources, so a report can tell whether what Eden cited, or what a check's finding cited, was the planted item.
    */
   planted?: string;
+  /** F3 (D1123): the planted item's version before a silent edit (`HiddenTask.before`; `silent.ts`). */
+  before?: { title: string; text: string; meta?: Record<string, string> };
 }
 
 /** The tasks of one world, in session order: the first turn of each task that needs facts, and some off-world ones. */
@@ -219,6 +221,7 @@ export function worldOf(
     must: [{ id: h.template, detail: h.detail }],
     secrets,
     ...(plantedItems[i] ? { planted: plantedItems[i]!.id } : {}),
+    ...(h.before ? { before: h.before } : {}),
   }));
   return { seed, world, tasks };
 }

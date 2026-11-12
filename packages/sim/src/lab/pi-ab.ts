@@ -123,7 +123,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
-import type { World } from "../world";
+import type { World, WorldItem } from "../world";
 import {
   applyNotifyShare,
   connectorHeader,
@@ -192,6 +192,7 @@ import {
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
+import { applyEdits, plantBefore } from "./silent";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import {
   argvFields,
@@ -789,7 +790,16 @@ async function runWorld(
   if (connect) await Bun.sleep(Math.max(0, connect.startAt - performance.now()));
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
-  const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  // F3 (D1123): a silent edit changes the stream's world too (its planted item starts as `before`).
+  const silentOn = baseTasks.some((t) => t.before);
+  const world: World = DAYS_ON || silentOn ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  const silent = silentOn
+    ? plantBefore(
+        world,
+        baseTasks,
+        baseTasks.map((t) => t.planted),
+      )
+    : new Map<string, WorldItem>();
   // `--late`: the planted items are not at their sources until their requests are answered.
   const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
   let dayLate: { entry: LateEntry; r: RunResult }[] = [];
@@ -1042,6 +1052,10 @@ async function runWorld(
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
   if (cards && !connect) await cards.idle();
+  // F3 (D1123): the silent edits land at their sources now, with no notice: Eden sees them only by polling.
+  if (silent.size > 0) {
+    for (const id of applyEdits(world, silent, clock)) for (const src of sources) if (src.id === id) src.reindex();
+  }
   // What the backfill's enrichment cost before the first request (one-time per user, H16): the rest of the stream's
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
