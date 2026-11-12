@@ -194,3 +194,32 @@ agent's searches and turns. Per D814 both switches are deleted the same day; the
 49ce5972 for a re-test on the API (§1 and §2's rules stand as written for it). Kept: the findings (§3, §5, D1140),
 `packages/sim/lab/f7/levers.py`, `simstop.py`, `price.py`, `wall.py`, and the queue validator's fix for a stop that
 cuts JSON mid-object (`packages/sim/lab/subagent/batch.ts`), which the reader's stop needs too.
+
+## 8. The final comparison's cost and latency: the table to fill (prepared 09:20 UTC)
+
+Final main against 006b505c, both served by subagents (D1101), so every figure is **[EST]**: tokens estimated from
+the queue's request and answer sizes, priced at list, the path's wait from H3's fit.
+
+**How to run it.** Give each arm's command its own label and share one queue (the arms' identical prompts then replay):
+`EDEN_LAB_QUEUE=$Q EDEN_LAB_QUEUE_RUN=final …` and `EDEN_LAB_QUEUE_RUN=before …`, then
+`python3 -I packages/sim/lab/f7/price-queue.py $Q --arm final=final:TASKS --arm before=before:TASKS`. Since this branch
+`batch.ts put` keeps each answer's request and answer sizes (`size` in `done/<key>.json`) and the transport labels each
+call with `EDEN_LAB_QUEUE_RUN` (calls answered earlier carry no size and are reported as unpriced). Check on a ledger
+of real calls: the pricer's arithmetic on a push check of 4,740 + 5,300 characters in and 460 out gives $0.000216 a
+call against the API's measured $0.000210 (F7 §3).
+
+| role | before (006b505c): calls a task, $/1k, wait | final: calls a task, $/1k, wait | final − before |
+| --- | --- | --- | --- |
+| push check (`eden.check`) | | | |
+| cards (`eden.cards`, per task while working) | | | |
+| intent requests (in the card call since D1062; any re-ask `requestsOnly`) | | | |
+| reader (`eden.reader`; none on the default's push, D237) | | | |
+| agent (`agent`; `--agent-sim single` is one call a task: compare arms, never against the real loop) | | | |
+| **all roles** | | | |
+
+**Background cards a heavy user-month [EST]** (outside the per-task table; a new user's backfill plus the daily
+trickle): backfill calls × $ a card call + 30 × daily calls × $ a card call. Today's figures: F5's world-clock count
+of 16–17 calls a heavy new user (twice what COST-MODEL's D244 column used), the card call at about $0.0011 (CL3's
+measured $0.0088 for 8 calls), and about 1–2 calls a day for about 10 new items sent a day (CL3): about $0.018 +
+30 × $0.0011–0.0022 = **about $0.05–0.08 a heavy user-month** before the widened carding; replace the call count and
+the $ a call with the final arm's `eden.cards` line from `price-queue.py` and F8's re-recorded count.

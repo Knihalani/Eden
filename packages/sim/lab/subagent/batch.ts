@@ -174,10 +174,21 @@ if (cmd === "take") {
       renameSync(takenPath, join(dirs.pending, `${a.id}.json`));
       continue;
     }
+    // F7: the request's and answer's sizes in characters, kept for pricing ([EST] tokens at about 4 characters
+    // each): the stand-in reports no usage, and the request body itself is not kept.
+    const last = req.messages.at(-1)?.content ?? "";
+    const size = {
+      system: req.system.length,
+      messages: req.messages.reduce((n, m) => n + m.content.length, 0),
+      last: last.length,
+      tools: JSON.stringify(req.tools ?? []).length,
+      out: (answer.text ?? "").length + JSON.stringify(answer.toolCalls ?? []).length,
+    };
     writeAtomic(join(dirs.done, `${a.id}.json`), {
       id: a.id,
       role: req.role,
       model: req.model,
+      size,
       answer,
       transport: TRANSPORT,
       answeredAt: new Date().toISOString(),
