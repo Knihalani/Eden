@@ -748,3 +748,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | trial |
 | D1690 | 2026-11-12 | Adopted: model-call failures are counted by role and kind on `/metrics` (`eden_model_failures_total{role="reader"\|"check",kind="error"\|"unr…` | adopted |
 | D1600 | 2026-11-12 | The server image runs on Bun's distroless image. | adopted |
+| D1700 | 2026-11-12 | The server image leaves out the lab, tests and benches. | adopted |

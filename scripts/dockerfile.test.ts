@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The image copies files one by one, so a file every `bun` needs at startup can be left out with nothing failing until
@@ -47,7 +47,65 @@ test("the COPY parser sees a single file, a directory and flags", () => {
   expect(inImage("packages/server/src/main.ts", ["packages"])).toBe(true);
 });
 
-// D1310: the server runs on Bun's distroless image, which has no /bin/sh. A shell-form RUN, CMD or HEALTHCHECK in the
+// D1700: .dockerignore leaves the lab, tests and benches out of the image. A server importing one of them would start
+// only to fail on a missing module, so the servers' static imports are walked from their entry points (relative paths
+// and @eden/* packages; a package's own dependencies are not followed) and none may land on an excluded path.
+const ENTRIES = [
+  "packages/server/src/main.ts",
+  "packages/server/src/cli.ts",
+  "packages/server/src/mcp-stdio.ts",
+  "packages/server/src/doctor.ts",
+  "packages/server/src/digest.ts",
+  "packages/server/src/trace-report.ts",
+  "packages/proxy/src/main.ts",
+];
+const excludedFromImage = (path: string) =>
+  (path.startsWith("packages/sim/") && path !== "packages/sim/package.json") ||
+  path.endsWith(".test.ts") ||
+  /^packages\/[^/]+\/bench\//.test(path);
+
+function served(): Set<string> {
+  const transpiler = new Bun.Transpiler({ loader: "ts" });
+  const seen = new Set<string>();
+  const queue = [...ENTRIES];
+  while (queue.length > 0) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    // A shebang line (cli.ts) is not TypeScript to the scanner.
+    for (const { path: spec } of transpiler.scanImports(read(file).replace(/^#!.*/, ""))) {
+      let target: string | undefined;
+      if (spec.startsWith(".")) target = join(file, "..", spec);
+      else if (spec.startsWith("@eden/")) {
+        const [, name, ...rest] = spec.split("/");
+        const pkg = JSON.parse(read(`packages/${name}/package.json`)) as { exports?: Record<string, string> };
+        const sub = rest.length === 0 ? "." : `./${rest.join("/")}`;
+        target = join(`packages/${name}`, pkg.exports?.[sub] ?? `${sub}.ts`);
+      }
+      if (target === undefined) continue;
+      // Imports name a file without its extension, a .ts file, or a directory's index.
+      const found = [target, `${target}.ts`, join(target, "index.ts")].find(
+        (f) => f.endsWith(".ts") && existsSync(join(root, f)),
+      );
+      if (found !== undefined) queue.push(found);
+    }
+  }
+  return seen;
+}
+
+test("the .dockerignore excludes what the servers never import", () => {
+  const ignore = read(".dockerignore");
+  for (const line of ["packages/sim/**", "!packages/sim/package.json", "**/*.test.ts", "packages/*/bench"])
+    expect(ignore.split("\n")).toContain(line);
+  const files = served();
+  expect(files.size).toBeGreaterThan(50);
+  expect(files.has("packages/engine/src/index.ts")).toBe(true);
+  expect([...files].filter(excludedFromImage)).toEqual([]);
+  // The walk would see an import of the lab: it reaches @eden/sim's entry from a file that imports it.
+  expect(excludedFromImage("packages/sim/src/index.ts")).toBe(true);
+});
+
+// D1600: the server runs on Bun's distroless image, which has no /bin/sh. A shell-form RUN, CMD or HEALTHCHECK in the
 // final stage fails only when the container starts (or turns unhealthy), so the final stage is checked here. It runs
 // as uid 1000, the full image's `bun` user, so a volume an earlier image wrote stays writable.
 test("the final stage is distroless, runs as uid 1000, and needs no shell", () => {
