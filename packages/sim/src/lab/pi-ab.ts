@@ -2210,7 +2210,13 @@ if (checkers.length) {
     `CHECK (I3, ${CHECK_MODEL}): ${calls} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
       `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}; ` +
       `${calls ? (sum("inputTokens") / calls).toFixed(0) : 0} in (${calls ? (sum("cachedInputTokens") / calls).toFixed(0) : 0} ` +
-      `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
+      `cached, ${calls ? (sum("cacheWriteTokens") / calls).toFixed(0) : 0} written) / ` +
+      `${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call` +
+      // `pushCheckSheet` (F5): checks that read a rule sheet, its mean size, and the rules the replies named.
+      (sum("sheetChecks")
+        ? `; sheet on ${sum("sheetChecks")} calls, ${(sum("sheetCards") / sum("sheetChecks")).toFixed(1)} cards a ` +
+          `sheet, ${sum("sheetNamed")} rules named`
+        : ""),
   );
 }
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);

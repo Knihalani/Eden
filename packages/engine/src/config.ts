@@ -725,6 +725,20 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
+   * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
+   * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
+   * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
+   * reply names brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards
+   * (an end before the user's day), `none` and `preference` cards are left out, newest items first. A user with more
+   * active rules than this gets no sheet (D1183: a newest slice of a heavy user's rules speaks on neutral requests).
+   */
+  pushCheckSheet: number;
+  /**
+   * F5 (D1180, with `pushCheckSheet`): a pool item on the sheet is sent as its title and its rule's number instead of
+   * its text: the cached sheet line stands in for part of the uncached pool (cost).
+   */
+  pushCheckSheetRefs: boolean;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -911,6 +925,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
