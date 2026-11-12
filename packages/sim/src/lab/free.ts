@@ -25,6 +25,7 @@ import {
   type OpenRouterOptions,
 } from "@eden/llm";
 import { SpendLedger } from "./spend";
+import { installQueue, queueDir, queueDirFrom, withRole } from "./queue-transport";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
@@ -67,6 +68,10 @@ export function labAccess(args: string[], models: string[], pacing: { now?: () =
     const i = args.indexOf(`--${name}`);
     return i >= 0 ? args[i + 1] : undefined;
   };
+  // The queue transport (F9, D1101, queue-transport.ts): every Messages API call is answered through files by
+  // subagents, at $0. It is installed before any client is made, so every role of the run goes through it.
+  const queue = queueDirFrom(args);
+  if (queue) installQueue(queue);
   const allowLogging = args.includes("--allow-logging");
   const free = models.some(isFree);
   if (free && !allowLogging) {
@@ -88,8 +93,9 @@ export function labAccess(args: string[], models: string[], pacing: { now?: () =
   // Anthropic calls are capped in dollars, across every process of a campaign, by one ledger file (spend.ts).
   let ledger: SpendLedger | null = null;
   if (models.some(isAnthropic)) {
-    const path = opt("spend-ledger");
-    const cap = Number(opt("spend-cap"));
+    // Under the queue every call books $0, so a run without the spend flags gets a ledger in the queue's directory.
+    const path = opt("spend-ledger") ?? (queue ? `${queue}/ledger.jsonl` : undefined);
+    const cap = Number(opt("spend-cap") ?? (queue ? 1000 : NaN));
     if (!path || !Number.isFinite(cap) || cap <= 0) {
       throw new Error("a claude-* model needs --spend-ledger FILE and --spend-cap USD (the hard spend cap)");
     }
@@ -115,7 +121,8 @@ export function labModel(
     return new AnthropicModel({
       apiKey: keyFor(options.model),
       model: options.model,
-      fetch: access.fetch,
+      // Under the queue transport each request carries its role, so the queue keys and labels it by role.
+      fetch: queueDir() ? withRole(access.fetch, role) : access.fetch,
       timeoutMs: options.timeoutMs ?? 60_000,
       meter: access.ledger.meter(role),
       ...(anthropic.thinking ? { thinking: anthropic.thinking } : {}),
