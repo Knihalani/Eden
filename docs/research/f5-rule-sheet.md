@@ -328,3 +328,24 @@ of 10a, or 0 if none), the same three clauses on planted and decoy handed and ne
 F10's rule index selects a request's candidate cards (`ruleIndex.select`, `pushCheckSheetSelect` k); the check sees
 only those. The 300- and 500-card stress of §9b is re-run on the selected sheet once F10's selector exists; its
 rule is written then, before its calls.
+
+## 11. Results of §10
+
+### 11b. `cardsKeepOnly`, stage 1 ($0, no model, shipped coverage)
+
+`--jobs 1 -- --neutral`, main (B0) against `{"cardsKeepOnly":true}` (K); `.local/f5/k2/`.
+
+| run | hidden B0 → K | decoys B0 → K | neutral any packet B0 → K |
+|---|---|---|---|
+| dev20 41 | 70 → 70 | 53 → 54 | 98 → 100 |
+| dev20 42 | 72 → 73 | 52 → 52 | 100 → 102 |
+| dev20 43 | 78 → 78 | 56 → 55 | 92 → 97 |
+| dev20 44 | 72 → 72 | 55 → 55 | 95 → 96 |
+| train 41 | 158 → 160 | 151 → 150 | 189 → 190 |
+| train 42 | 160 → 161 | 148 → 148 | 189 → 189 |
+| **dev20 (640)** | **292 → 293** | **216 → 216** | **385 → 395 (+1.6 points)** |
+| **train (384)** | **318 → 321** | **299 → 298** | **378 → 379 (+0.3 points)** |
+
+Every clause passes (hidden not down, decoys not up, neutral packets up by less than 3 points), so stage 2 runs. The
+gain without a model is small: a kept card reaches the rule paths on few tasks. Its case is the check's view (the
+sheet and the card on a pool item), which stage 2 measures.
