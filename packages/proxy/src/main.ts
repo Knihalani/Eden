@@ -40,6 +40,12 @@ const edenUrl = process.env.EDEN_URL || "http://127.0.0.1:8790";
 const shownEden = redactUrls(edenUrl);
 const host = process.env.PROXY_HOST || "127.0.0.1";
 const proxyKey = process.env.EDEN_PROXY_KEY || undefined;
+// `speculate` (D1273) is on unless this says off; any other value is named, so a misspelt "off" is not silently on.
+const speculateEnv = (process.env.EDEN_PROXY_SPECULATE ?? "").trim().toLowerCase();
+const SPECULATE_OFF = ["0", "false", "off"].includes(speculateEnv);
+if (speculateEnv && !SPECULATE_OFF && !["1", "true", "on"].includes(speculateEnv)) {
+  console.error(`eden proxy: EDEN_PROXY_SPECULATE=${speculateEnv} is not 0/1 (or off/on): speculate stays on`);
+}
 // The proxy holds the tenant's Eden key and serves whichever user a caller names: beyond this machine, only callers
 // with the proxy's own key may (D9).
 if (!["127.0.0.1", "localhost", "::1"].includes(host) && (proxyKey?.length ?? 0) < 16) {
@@ -61,8 +67,9 @@ const server = Bun.serve({
     ...(process.env.EDEN_PROXY_KEEP_PACKETS === "0" ? { keepPackets: false } : {}),
     // Trial (D851): Eden's ask_context offered to the model and answered in the proxy.
     ...(process.env.EDEN_PROXY_ASK === "1" ? { askTool: true } : {}),
-    // F10 (trial, off): send the turn upstream during Eden's wait and keep the answer when Eden adds nothing new.
-    ...(process.env.EDEN_PROXY_SPECULATE === "1" ? { speculate: true } : {}),
+    // F10 (D1273, on by default; `EDEN_PROXY_SPECULATE=0`, `false` or `off` turns it off): send the turn upstream
+    // during Eden's wait and keep the answer when Eden adds nothing new.
+    ...(SPECULATE_OFF ? { speculate: false } : {}),
     ...(process.env.EDEN_PROXY_SHADOW === "1"
       ? { shadow: true, onShadow: (r) => console.log(JSON.stringify({ shadow: true, ...r })) }
       : {}),

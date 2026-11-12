@@ -207,6 +207,10 @@ not built, since the bar was set at 40%.
 
 ## 9. The check's wait off the critical path: speculate-and-hold in the proxy (trial `speculate`, built)
 
+**Status (2026-11-12, D1273):** promoted to the proxy's default by the integrator without the live pair this section
+asked for, on G4's modelled wall (`wall.py`) and F2's priced calls; the review added the provider-run-tools
+exclusion (`providerRunsTools`). The text below is the trial as built.
+
 The integrator's follow-up: the goal is the check's wait (about 0.8 s) against the agent alone, and a skip is one way.
 What is already measured: the pool's size barely moves the wait (D1050: p50 0.89 against 0.92 s), a shorter reply let
 look-alikes in (D822), and handing the packet after the agent's first call made the agent search and ask first

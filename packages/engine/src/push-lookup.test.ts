@@ -11,7 +11,7 @@ import { CORE_CONFIG } from "./parts";
 import { PushChecker } from "./push-check";
 import { CANDIDATES_LEAD, LOOKUP_HEAD_LEAD, LOOKUP_LEAD, LOOKUP_QUIET } from "./render";
 
-// `pushLookup` (F11, D1252, trial, off): a push the check left silent hands the pool's records that name the
+// `pushLookup` (F11, D1252; rejected, kept off): a push the check left silent hands the pool's records that name the
 // request's anchors, for reference, instead of nothing.
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");

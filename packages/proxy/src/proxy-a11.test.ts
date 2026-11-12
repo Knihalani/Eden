@@ -30,14 +30,24 @@ describe("audit A11: proxy (D280)", () => {
       },
     });
     servers.push(upstream, eden);
+    // Speculate off (D1273's default is on, tested below): no model call starts during Eden's wait.
     const proxy = Bun.serve({
+      port: 0,
+      fetch: createProxy({
+        upstream: `${upstream.url.href}v1`,
+        edenUrl: eden.url.href,
+        waitMs: 500,
+        speculate: false,
+      }),
+    });
+    const speculating = Bun.serve({
       port: 0,
       fetch: createProxy({ upstream: `${upstream.url.href}v1`, edenUrl: eden.url.href, waitMs: 500 }),
     });
-    servers.push(proxy);
-    const call = async (hangUpAfterMs: number) => {
+    servers.push(proxy, speculating);
+    const call = async (hangUpAfterMs: number, via = proxy) => {
       const ac = new AbortController();
-      const done = fetch(`${proxy.url.href}v1/chat/completions`, {
+      const done = fetch(`${via.url.href}v1/chat/completions`, {
         method: "POST",
         headers: { "x-eden-user-id": "u1", "content-type": "application/json" },
         body: JSON.stringify({ model: "m", messages: [{ role: "user", content: `hello ${hangUpAfterMs}` }] }),
@@ -56,6 +66,12 @@ describe("audit A11: proxy (D280)", () => {
     await Bun.sleep(300);
     expect(started).toBe(1);
     expect(aborted).toBe(1);
+    // With speculate (the default) the early call starts during Eden's wait, and an agent that hangs up then
+    // cancels it: started, and aborted, never run to the end.
+    await call(200, speculating);
+    await Bun.sleep(1_800);
+    expect(started).toBe(2);
+    expect(aborted).toBe(2);
   }, 15_000);
 
   test("a tool result or message past Eden's 1,000,000-character cap is reported cut, not dropped", async () => {

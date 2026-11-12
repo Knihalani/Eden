@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createProxy } from "./proxy";
 
-// `speculate` (F10, trial, off; docs/research/f10-rule-index.md §9): the turn goes upstream during Eden's wait, and the
-// held answer reaches the agent only when the request that would go after the wait is byte for byte the same.
+// `speculate` (F10, D1273, on by default; docs/research/f10-rule-index.md §9): the turn goes upstream during Eden's
+// wait, and the held answer reaches the agent only when the request that would go after the wait is byte for byte the
+// same.
 
 const KEY = "k_proxy_spec_0123456789abc";
 // A scripted Eden: a user message's text maps to the packet it returns (none if absent), after `EDEN_MS`.
@@ -27,7 +28,9 @@ const failed = new Set<string>();
 const upstream = Bun.serve({
   port: 0,
   async fetch(req) {
-    const call = { messages: (JSON.parse(await req.text()) as { messages: any[] }).messages, aborted: false };
+    // A Responses body carries `input` where chat and Anthropic carry `messages`.
+    const parsed = JSON.parse(await req.text()) as { messages?: any[]; input?: unknown };
+    const call = { messages: (parsed.messages ?? [parsed.input]) as any[], aborted: false };
     calls.push(call);
     req.signal.addEventListener("abort", () => (call.aborted = true));
     await Bun.sleep(UPSTREAM_MS);
@@ -164,4 +167,48 @@ describe("speculate (F10)", () => {
     expect(calls.length - before).toBe(1);
     expect(performance.now() - t0).toBeLessThan(EDEN_MS + UPSTREAM_MS - 100);
   });
+
+  test("never early when the provider runs tools itself, with `store: true`, or on the Responses route (review)", async () => {
+    // A packet turn: speculating would send two upstream calls (the early one, aborted, and the packet's).
+    const packetCalls = async (path: string, body: Record<string, unknown>, user: string) => {
+      script[`provider tools ${user}`] = `PKT-${user}`;
+      const before = calls.length;
+      const asked = path.endsWith("/responses")
+        ? { input: `provider tools ${user}` }
+        : { max_tokens: 10, messages: [u(`provider tools ${user}`)] };
+      const res = await proxyFor(true)(
+        new Request(`http://proxy${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-eden-user-id": user, "x-eden-session-id": `${user}-s` },
+          body: JSON.stringify({ model: "m", ...body, ...asked }),
+        }),
+      );
+      await res.text();
+      await Bun.sleep(50);
+      return calls.length - before;
+    };
+    // The control: a plain packet turn speculates, so two calls.
+    expect(await packetCalls("/v1/chat/completions", {}, "pt-plain")).toBe(2);
+    expect(
+      await packetCalls(
+        "/v1/messages",
+        { mcp_servers: [{ type: "url", url: "https://mcp.example", name: "x" }] },
+        "pt-mcp",
+      ),
+    ).toBe(1);
+    expect(
+      await packetCalls("/v1/messages", { tools: [{ type: "web_search_20250305", name: "web_search" }] }, "pt-ws"),
+    ).toBe(1);
+    expect(await packetCalls("/v1/messages", { container: "c-1" }, "pt-container")).toBe(1);
+    expect(await packetCalls("/v1/chat/completions", { web_search_options: {} }, "pt-chatws")).toBe(1);
+    expect(await packetCalls("/v1/chat/completions", { store: true }, "pt-store")).toBe(1);
+    expect(await packetCalls("/v1/responses", {}, "pt-resp")).toBe(1);
+    // Client tools still speculate: chat `function`, Anthropic untyped and `custom`.
+    const fn = { type: "function", function: { name: "f", parameters: {} } };
+    expect(await packetCalls("/v1/chat/completions", { tools: [fn] }, "pt-fn")).toBe(2);
+    expect(await packetCalls("/v1/messages", { tools: [{ name: "f", input_schema: {} }] }, "pt-anth-fn")).toBe(2);
+    expect(
+      await packetCalls("/v1/messages", { tools: [{ type: "custom", name: "f", input_schema: {} }] }, "pt-custom"),
+    ).toBe(2);
+  }, 30_000);
 });
