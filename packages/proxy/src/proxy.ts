@@ -77,8 +77,9 @@ export interface ProxyOptions {
    */
   maxKeptBytes?: number;
   /**
-   * Trial (F10, off; `EDEN_PROXY_SPECULATE=1`): at a new turn, send the request upstream at once, shaped as it would go
-   * if Eden had nothing new for the turn, while Eden works; hold its answer. When Eden's work lands and the request
+   * On by default (F10, D1273, promoted by the integrator; `false` or `EDEN_PROXY_SPECULATE=0` turns it off): at a
+   * new turn, send the request upstream at once, shaped as it would go if Eden had nothing new for the turn, while Eden
+   * works; hold its answer. When Eden's work lands and the request
    * that would go upstream is byte for byte the speculative one, the held answer goes to the agent (Eden's wait is
    * saved); otherwise the speculative call is aborted and the request goes as today. The agent sees exactly what it
    * would without the option. An aborted call is paid for: its input, and any output the provider wrote or bills after
@@ -226,6 +227,24 @@ function hashOf(m: Message): string {
 }
 
 type EventInput = Parameters<EdenClient["observe"]>[0];
+
+/**
+ * Whether a request asks the provider to run tools on its side (D1273's review): remote MCP servers (`mcp_servers`),
+ * chat's web search (`web_search_options`), a code-execution `container`, or any tool typed other than a client tool
+ * (`function` on chat, `custom` or untyped on Anthropic: `web_search_*`, `web_fetch_*`, `code_execution_*`, and the
+ * computer-use tools too, to be safe). `speculate` never sends such a request early: the provider would run its tools
+ * (which may write, and are billed per use) for the early call and again for the packet's request.
+ */
+export function providerRunsTools(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const b = body as Record<string, unknown>;
+  if (b.mcp_servers !== undefined || b.web_search_options !== undefined || b.container !== undefined) return true;
+  const tools = Array.isArray(b.tools) ? (b.tools as unknown[]) : [];
+  return tools.some((t) => {
+    const type = t && typeof t === "object" ? (t as { type?: unknown }).type : undefined;
+    return type !== undefined && type !== "function" && type !== "custom";
+  });
+}
 
 /** Eden events for one message; `tools` maps a tool call id to its tool's name, for the results that follow. */
 export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
@@ -589,11 +608,13 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     let body: unknown = null;
     // `speculate` (F10): the request sent before Eden's wait, its held answer, and the way to abort it.
     let spec: { sent: string; res: Promise<Response>; abort: AbortController } | null = null;
-    const speculating = !!options.speculate && !options.askTool && !options.shadow;
+    const speculating = (options.speculate ?? true) && !options.askTool && !options.shadow;
     const startSpec = (bodyText: string) => {
-      // Not with a provider-stored completion (`store: true`): an aborted call could leave a stored copy there.
+      // Not with a provider-stored completion (`store: true`): an aborted call could leave a stored copy there. Not
+      // when the provider runs tools itself (`providerRunsTools`): the early call would run them, and the packet's
+      // request again.
       if (!speculating || spec || req.signal.aborted) return;
-      if ((body as { store?: unknown } | null)?.store === true) return;
+      if ((body as { store?: unknown } | null)?.store === true || providerRunsTools(body)) return;
       const abort = new AbortController();
       req.signal.addEventListener("abort", () => abort.abort(), { once: true });
       const res = forward(req, path, bodyText, abort.signal);

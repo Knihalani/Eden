@@ -24,7 +24,7 @@ forwarded as is.
 | `src/proxy-anthropic.test.ts` | The Messages route (D653): injection as a text block with the rest byte for byte, `metadata.user_id` (this route only), a tool turn, text beside tool results not a turn, a later turn, isolation, fail open, `keepPackets` off, shadow, streaming, other `…/messages` routes untouched, error shape, `fromAnthropic`/`toAnthropic` alone                                                          |
 | `src/proxy-responses.test.ts` | The Responses route (D656): a string and a list input, a tool turn with a reasoning item, `user` and `conversation`, history held by the provider (a packet sent once; the same short reply after a different `previous_response_id` a new turn), a custom tool's call and output, streaming, fail open, other `…/responses` routes untouched, `fromResponses`/`toResponses` alone                 |
 | `src/proxy-a16.test.ts`       | `keepPackets` (D336): off and on, on by default, each request a prefix of the next, Eden down, isolation, shadow; with a scripted Eden: sliding windows, a repeated message in a new turn, an overtaken request, the byte budget, no user message                                                                                                                                                  |
-| `src/proxy-speculate.test.ts` | `speculate` (F10, D1273, trial, off): off runs Eden's wait and the model in a row; nothing new, one call made during the wait and the same answer; a packet, the speculative call aborted and the packet request's answer; never in shadow or with `askTool`                                                                                                                                       |
+| `src/proxy-speculate.test.ts` | `speculate` (F10, D1273, on by default): off runs Eden's wait and the model in a row; nothing new, one call made during the wait and the same answer; a packet, the speculative call aborted and the packet request's answer; never in shadow or with `askTool`                                                                                                                                       |
 | `src/proxy.test.ts`           | A fake upstream and the real Eden handler in process: injection, once-only reporting, compaction and sliding windows, isolation, eviction, keying, the deadline under a slow Eden, `proxyKey`, hop-by-hop headers, tool events, streaming, fail-open, 502, shadow                                                                                                                                  |
 
 ## Rules
@@ -88,7 +88,8 @@ forwarded as is.
   with no tool support), a later round's upstream error, a round that cannot be read or rewritten, or an answer still
   asking after the last round: the agent's own request goes upstream instead, without the tool (D14: never an unknown tool call or a trial-made error); `tool_choice` is never touched.
 
-- **`speculate` (F10, D1273, trial, off; `EDEN_PROXY_SPECULATE=1`).** At a new turn the request goes upstream before
+- **`speculate` (F10, D1273, on by default since the integrator's promotion; `speculate: false` or
+  `EDEN_PROXY_SPECULATE=0` turns it off).** At a new turn the request goes upstream before
   Eden's wait, shaped as it would be with no packet for the turn (`keptInPlace` with none); after the wait, a request
   byte for byte the same takes the held answer (unless it is a 429 or 5xx: then the request goes again), any other
   aborts it and goes as today. Chat and Anthropic routes only (not Responses); not with `askTool`, in shadow mode or

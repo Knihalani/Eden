@@ -1868,6 +1868,11 @@ if (NEUTRAL) {
     addNeutralRows(neutralOut.total, n);
     console.log(neutralLine(suite, n) + TAG + inertTag());
   }
+  // The neutral users' card calls still in flight finish before their counters are read: a drain that ends after the
+  // last task would otherwise count or not by the machine's load (a sharded run's `use.cards` read 24 calls and 57
+  // items carded against one process's 25 and 74 under the cold gate's four parallel test files). Under
+  // `--connect-at`, which skips the per-task wait, the block now also counts the cards made after the last task.
+  await Promise.all(cardLanes.slice(lanes.cards).map((c) => c.idle()));
   const after = counters();
   const delta = (a: Record<string, number>, b: Record<string, number>) =>
     Object.fromEntries(Object.keys(a).map((k) => [k, Number(((a[k] ?? 0) - (b[k] ?? 0)).toFixed(3))]));
