@@ -109,7 +109,7 @@ if (cmd === "queue") {
         complete = false;
         continue;
       }
-      const got = parseAnticipations(JSON.parse(readFileSync(f, "utf8")).text ?? "", rules, from, from + ANTICIPATE_CHUNK);
+      const got = parseAnticipations(JSON.parse(readFileSync(f, "utf8")).answer?.text ?? "", rules, from, from + ANTICIPATE_CHUNK);
       if (!got) unreadable++;
       ants.push(...(got ?? []));
     }

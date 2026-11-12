@@ -1,0 +1,14 @@
+{
+  "name": "@eden/encoder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eden/protocol": "workspace:*",
+    "onnxruntime-node": "1.20.1"
+  }
+}
