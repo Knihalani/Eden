@@ -140,8 +140,9 @@ model calls −0.22, hidden 20 → 20). LK5's days run was stopped by the subage
 Sonnet worker failed at about 11:00 UTC), so it is unmeasured.
 
 **Where it stands:** not passed as registered (hedges on seeds 41–44, connector calls −0.25 on LK5's rerun there, and
-LK5's days bar unmeasured). It stays a trial switch, off in the default, offered to F12's candidate profile as
-`{"pushLookup":3,"pushLookupAny":true,"pushLookupQuiet":true}`. All of these runs predate #315 (the harnesses now
+LK5's days bar unmeasured). It stays a trial switch, off in the default. On the integrator's call it is in F12's candidate profile as
+`{"pushLookup":3,"pushLookupAny":true,"pushLookupQuiet":true}`, and the final (heldout20, hedges and specific
+concerns graded) decides. All of these runs predate #315 (the harnesses now
 place the packet a tool result's observe hands out; before it both arms dropped it).
 
 ## Reproduce
