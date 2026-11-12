@@ -21,3 +21,13 @@ export const ASK_CONTEXT_DESCRIPTION_FIRST =
   "in milliseconds from a local index, with citations, and says which sources it searched. Call it first, before " +
   "any per-source search tool, whenever the request depends on the user's own data; one question can cover " +
   "several sources. Use a per-source search tool only for what its answer does not cover.";
+
+/**
+ * D1253 (F11, trial; the lab's `+askguide`): one line for a tenant's system prompt, beside the per-source search tools
+ * it already gives its agent. Measured (D1252's run): after a packet the agent answers without searching, but on a turn
+ * Eden stayed silent it searches its connectors and ignores `ask_context`, whatever the tool's description says. The
+ * line routes that lookup to Eden's local index first; connector tools stay for what the answer lacks.
+ */
+export const ASK_FIRST_GUIDE =
+  "To look up anything in the user's own data, call ask_context first: it searches all their connected sources at " +
+  "once, in milliseconds. Call a per-source search tool only for something its answer does not cover.";

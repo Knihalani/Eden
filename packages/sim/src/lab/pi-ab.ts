@@ -1519,6 +1519,7 @@ async function runWorld(
             pushed: hits,
             act,
             tenant: TENANT_PROMPT,
+            askGuide: cond.askGuide,
           }),
           // `--day`: the day's transcript so far (its earlier requests, tool calls and answers).
           ...(DAYS_ON && !startsDay ? { messages: dayMessages } : {}),

@@ -16,4 +16,4 @@ export {
   MAX_TEXT_CHARS,
   type Checked,
 } from "./validate";
-export { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_DESCRIPTION_FIRST } from "./describe";
+export { ASK_CONTEXT_DESCRIPTION, ASK_CONTEXT_DESCRIPTION_FIRST, ASK_FIRST_GUIDE } from "./describe";

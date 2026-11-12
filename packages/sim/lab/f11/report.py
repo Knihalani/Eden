@@ -124,11 +124,13 @@ def rows_of(stem, hit, check_usd, check_out):
                 begins[("ask", e.get("id"))] = e["t"]
             elif e["ev"] == "tool.ask_context" and e["ph"] == "E":
                 ask_ms += e["t"] - begins.get(("ask", e.get("id")), e["t"])
-            elif e["ev"] == "eden.decision":
-                checks += d.get("checkCalls", 0) or 0
-                # A check whose decision lands after the agent's first model call measured late injection.
-                if (d.get("checkCalls") or 0) > 0 and turns > 0:
+            elif e["ev"] == "eden.check" and e["ph"] == "B":
+                checks += 1
+            elif e["ev"] == "eden.check" and e["ph"] == "E":
+                # A check that ends after the agent's first model call began measured late injection, not the default.
+                if turns > 0:
                     late += 1
+            elif e["ev"] == "eden.decision":
                 eden_conn += d.get("sourceCalls", 0) or 0
         # The agent's measured connector wait: the union of its search spans (parallel calls overlap), at the
         # `direct` market profile's latency (--time-scale 1).

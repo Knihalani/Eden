@@ -160,6 +160,10 @@ describe("pi-ab conditions", () => {
     expect(parseCondition("both+ask", { config: ALL }).askFirst).toBe(false);
     // Without ask_context there is nothing to describe.
     for (const n of ["both+askfirst", "tools+askfirst"]) expect(() => parseCondition(n, { config: ALL })).toThrow();
+    // +askguide (D1253): the tenant's ask-first line, also a harness setting.
+    const g = parseCondition("both+ask+askfirst+askguide", { config: ALL, defaults });
+    expect([g.askGuide, g.askFirst, g.config]).toEqual([true, true, ALL]);
+    expect(() => parseCondition("tools+askguide", { config: ALL })).toThrow(/askguide/);
   });
   test("+ephemeral, +ephemeralBp: how earlier requests' packets are kept, a harness setting (D336)", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;

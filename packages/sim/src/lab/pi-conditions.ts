@@ -22,6 +22,8 @@
  *   and with a cache breakpoint on the request's user turn. Only multi-request sessions (`--day`, `--days`) differ;
  * - `+askfirst` (F11, D1252): also the harness's, on a base with `ask_context`: the tool is described as the agent's
  *   first, fast search (`ASK_CONTEXT_DESCRIPTION_FIRST`) in place of the shipped description;
+ * - `+askguide` (F11, D1253): also the harness's, on a base with `ask_context`: the tenant's system prompt gains
+ *   `ASK_FIRST_GUIDE` (call ask_context before any per-source search);
  * - `@w<ms>`: how long the first observe waits for Eden's slow path (default 3000, the client's `withContext`).
  *
  * An unknown base throws: a typo must not run Eden under another condition's name.
@@ -56,6 +58,8 @@ export interface Condition {
   hits: boolean;
   /** `+askfirst` (D1252): `ask_context` gets `ASK_CONTEXT_DESCRIPTION_FIRST`. */
   askFirst: boolean;
+  /** `+askguide` (D1253): `ASK_FIRST_GUIDE` in the agent's system prompt. */
+  askGuide: boolean;
 }
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
@@ -64,6 +68,8 @@ const ASK_FLAG = "ask";
 const NOKEY_FLAG = "nokey";
 /** The harness flag `+askfirst` (D1252): the ask-first description of `ask_context`, never sent to the engine. */
 const ASKFIRST_FLAG = "askfirst";
+/** The harness flag `+askguide` (D1253): the tenant's ask-first line in the system prompt, never sent to the engine. */
+const ASKGUIDE_FLAG = "askguide";
 /** The harness flags of D336's packet layouts, never sent to the engine. */
 const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];
 
@@ -125,8 +131,15 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   }
   const askFirst = allFlags.includes(ASKFIRST_FLAG);
   if (askFirst && !askTool) throw new Error(`condition ${name}: +askfirst describes ask_context, which it lacks`);
+  const askGuide = allFlags.includes(ASKGUIDE_FLAG);
+  if (askGuide && !askTool) throw new Error(`condition ${name}: +askguide points to ask_context, which it lacks`);
   const flags = allFlags.filter(
-    (f) => f !== ASK_FLAG && f !== NOKEY_FLAG && f !== ASKFIRST_FLAG && !(LAYOUT_FLAGS as string[]).includes(f),
+    (f) =>
+      f !== ASK_FLAG &&
+      f !== NOKEY_FLAG &&
+      f !== ASKFIRST_FLAG &&
+      f !== ASKGUIDE_FLAG &&
+      !(LAYOUT_FLAGS as string[]).includes(f),
   );
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
@@ -171,6 +184,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     packets: layouts[0] ?? "kept",
     hits: base === "hits",
     askFirst,
+    askGuide,
   };
 }
 
