@@ -45,7 +45,7 @@ def main():
     base_wait = mix_rate * wait(out)
     print(f"check per 1,000 tasks on the mix: ${base_1k:.4f}; mean wait a task {base_wait:.0f} ms")
 
-    # 1. A stop at the first no (F7's deleted pushCheckLeanStop, D1141), as simulated on the recorded replies (shipped order cut at the first no).
+    # 1. A stop at the first no (F7's deleted pushCheckLeanStop, D1191), as simulated on the recorded replies (shipped order cut at the first no).
     kept = defaultdict(lambda: [0, 0])
     lost_planted = 0
     named_planted = 0

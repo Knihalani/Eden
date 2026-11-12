@@ -7,8 +7,8 @@ lab figures**. Cap $40. No Modal. Numbers marked **[EST]** are arithmetic or jud
 a command in this note.
 
 **Outcome:** the account's API credit ran out after the first $0.23. The levers are priced from the tokens recorded
-before that (§3, §5, D1140). The two trial switches built here, `pushCheckLeanStop` and `pushCheckLeanLead`, could
-not be measured (§7) and are deleted (D1141; code and tests in commit 49ce5972). The screen of §6 was stopped before
+before that (§3, §5, D1190). The two trial switches built here, `pushCheckLeanStop` and `pushCheckLeanLead`, could
+not be measured (§7) and are deleted (D1191; code and tests in commit 49ce5972). The screen of §6 was stopped before
 its first batch was answered; nothing of it is read.
 
 ## 1. Pre-registration: the screen (committed before its paid calls)
@@ -184,14 +184,14 @@ W + 2, and neutral rows with a yes at most W + 2. The queue's validator (`batch.
 answer whose stop sequence cuts its JSON mid-object, as the lean stop and the reader's stop do (the whole answer must
 parse, or the part before the stop).
 
-## 7. Decision: both trials deleted unmeasured (D1141)
+## 7. Decision: both trials deleted unmeasured (D1191)
 
 No API credit, and the subagent stand-ins (D1101) write check replies about 40% shorter than the API's Haiku on the
 same prompts (§5's pilot: 42 against 68 output tokens a call), listing few of the rejections the stop would cut, and
 they judge differently (F2's finding). So neither the stop's saving nor its cost in facts (the 6 of 283 named planted
 facts that follow the first no on the shipped order) can be read through them, and the checked lead needs a live
 agent's searches and turns. Per D814 both switches are deleted the same day; the code and its tests are in commit
-49ce5972 for a re-test on the API (§1 and §2's rules stand as written for it). Kept: the findings (§3, §5, D1140),
+49ce5972 for a re-test on the API (§1 and §2's rules stand as written for it). Kept: the findings (§3, §5, D1190),
 `packages/sim/lab/f7/levers.py`, `simstop.py`, `price.py`, `wall.py`, and the queue validator's fix for a stop that
 cuts JSON mid-object (`packages/sim/lab/subagent/batch.ts`), which the reader's stop needs too.
 

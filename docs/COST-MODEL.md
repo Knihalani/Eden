@@ -674,7 +674,7 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
-### Where the check's cost and wait are, and what is left (F7, D1140, D1141; docs/research/f7-cost-latency.md)
+### Where the check's cost and wait are, and what is left (F7, D1190, D1191; docs/research/f7-cost-latency.md)
 
 Recorded on the real API (1,092 checks, train and reworded seed 43 with neutral, Anthropic direct, lab provider) and
 priced at Haiku 5.5's list prices **[EST]**: a check is 2,484 input tokens (1,067 read from the cache on average; 90%
@@ -685,7 +685,7 @@ instructions about 6%.
 
 | Lever | $ per 1,000 tasks | Wait a task | Status |
 | --- | --- | --- | --- |
-| Stop the reply at its first no, yeses first (`pushCheckLeanStop`) | −0.017 | −98 ms | built and deleted unmeasured (D1141; code in 49ce5972); 6 of 283 named planted facts follow the first no on the shipped order |
+| Stop the reply at its first no, yeses first (`pushCheckLeanStop`) | −0.017 | −98 ms | built and deleted unmeasured (D1191; code in 49ce5972); 6 of 283 named planted facts follow the first no on the shipped order |
 | Every call hitting the cache | −0.010 | 0 | the misses are the provider's |
 | An oracle skipping the 43% of calls that end silent (ceiling) | −0.083 | −277 ms | unreachable: D930, D931 |
 | The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
