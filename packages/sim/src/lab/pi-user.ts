@@ -203,6 +203,9 @@ export function userWorldOf(seed: number, plan: readonly (readonly UserPlanEntry
   const world = buildWorld({ seed: seed * 1_000 });
   const secrets = world.items.filter((i) => i.secret).map((i) => i.secret!);
   const suites = [...new Set(plan.flat().map((e) => e.suite))];
+  // heldout20 lives at its own present (D1080): beside another suite, one of the two would read the wrong "today".
+  if (suites.includes("heldout20") && suites.length > 1)
+    throw new Error("heldout20 has its own world time: plan its users on it alone, not with other suites");
   // The suites' own connectors and filler (rare-sources.ts) are part of the user's base world, in every variant.
   for (const suite of suites) prepareWorld(suite, world, seed);
   // Each suite planted once per variant in a scratch copy of the base world: a task and its item by template.
