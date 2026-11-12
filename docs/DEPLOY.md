@@ -32,7 +32,8 @@ figures and the commands); prices come from docs/research/d1-providers.md and **
 | Cluster router (§9 only) | one or two small boxes | none (it reads the nodes file) |
 | Shared store (§9 only) | S3-compatible bucket | each user's last written blob, encrypted, at most 7 days |
 
-Ports: Eden 8790 (loopback or the private network only), Caddy 80/443. Routes beyond the API: `/healthz`
+Ports: Eden 8790 (loopback or the private network only; on a node, a DOCKER-USER rule drops 8790 from outside the
+private range, since Docker's published ports bypass ufw, D1702), Caddy 80/443. Routes beyond the API: `/healthz`
 (liveness), `/readyz` (readiness, 503 while draining), `/metrics` (Prometheus text, counts only), `/internal/cluster`
 (the cluster router's membership, `EDEN_CLUSTER_KEY`). Caddy serves neither `/metrics` nor `/internal/*`.
 
@@ -341,6 +342,13 @@ PyPI) checks that every variable, local, resource and data source referenced exi
 call passes exactly the cloud-init template's variables; `deploy/scripts/check-monitoring.py` checks `config.alloy`'s
 component references and listed environment variables, and that every rule in `alerts.yaml` watches a metric Eden
 emits (semantics `promtool` does not know).
+
+Validated on 2026-11-12 for D1702 (network namespaces on one host, Docker 29.9.2, iptables 1.8.10 nf_tables): with
+Eden's port published on a "private" address only, a peer that routes to that address through another interface
+reached it (the gap); with the DOCKER-USER rule, that peer was dropped and the private peer still served; the rule
+survived a restart of dockerd when loaded before it (as ufw does at boot), and reloading the block twice left one rule.
+`scripts/deploy-kit.test.ts` renders every role's cloud-init, parses it as YAML and runs the block through
+`iptables-restore --test` where it can. Not validated: ufw itself loading `after.rules` on Ubuntu 24.04 at boot.
 
 Not validated: `tofu plan` and `tofu apply` against real accounts; cloud-init and `bootstrap-dedicated.sh` on a real
 machine, including the deploy key's clone of the private repository from a server; Hetzner Object Storage's lifecycle

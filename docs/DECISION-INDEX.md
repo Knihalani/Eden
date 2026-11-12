@@ -750,3 +750,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1600 | 2026-11-12 | The server image runs on Bun's distroless image. | adopted |
 | D1700 | 2026-11-12 | The server image leaves out the lab, tests and benches. | adopted |
 | D1701 | 2026-11-12 | Finding: every technical choice reviewed; two switches (D1600, D1700), the rest kept or left as candidates with what each needs. | finding |
+| D1702 | 2026-11-12 | A node drops port 8790 from outside the private range in DOCKER-USER. | adopted |
