@@ -1,7 +1,7 @@
 /**
  * The queue transport's batcher (F9, D1101; README.md here, ../../src/lab/queue-transport.ts). LAB ONLY, sim data.
  *
- *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--max-chars N]
+ *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--model PREFIX] [--max-chars N]
  *   bun packages/sim/lab/subagent/batch.ts prompt B.json [--recipe careful|fast]
  *   bun packages/sim/lab/subagent/batch.ts put --dir Q B.answers.json
  *   bun packages/sim/lab/subagent/batch.ts status --dir Q
@@ -11,7 +11,8 @@
  *
  * - `take` moves up to N pending requests into `taken/` (a rename, so two drivers never take the same one) and writes
  *   them as one batch: an array of {id, role, model, system, messages, tools, outputSpec}. `--role` takes only that
- *   role; `--max-chars` stops adding once the batch's prompts pass N characters (default 400,000).
+ *   role, `--model` only requests whose model starts with PREFIX (haiku workers and sonnet graders apart);
+ *   `--max-chars` stops adding once the batch's prompts pass N characters (default 400,000).
  * - `put` reads [{id, text?, toolCalls?}], checks each against its request's outputSpec (JSON: one parseable object;
  *   tools: known names, an object input with the schema's required keys; stop sequences cut as the API would) and
  *   writes valid ones to `done/` (the replay store). Invalid or missing answers go back to `pending/`.
@@ -140,6 +141,7 @@ if (cmd === "take") {
   const n = Number(opt("n", "20"));
   const out = opt("out");
   const role = opt("role");
+  const model = opt("model");
   const maxChars = Number(opt("max-chars", "400000"));
   if (!out) throw new Error("take needs --out FILE");
   // Oldest first, so a long-waiting request is not starved by newer ones.
@@ -157,6 +159,7 @@ if (cmd === "take") {
       continue;
     }
     if (role && req.role !== role) continue;
+    if (model && !req.model.startsWith(model)) continue;
     const size = req.system.length + req.messages.reduce((k, m) => k + m.content.length, 0);
     if (batch.length && chars + size > maxChars) break;
     try {
