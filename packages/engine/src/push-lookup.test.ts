@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget, FakeModel, type ChatRequest, type ChatResponse, type Model } from "@eden/llm";
+import { Budget, FakeModel, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import type { Source } from "@eden/sources";
 import { ItemCache } from "./cache";
@@ -37,18 +37,6 @@ const ref = { tenantId: "t", userId: "u1", sessionId: "s1" };
 /** A check that names nothing (`{"items":[]}`), or one whose reply does not parse (the check failed). */
 const silent = () => new FakeModel(() => `{"items":[]}`);
 const broken = () => new FakeModel(() => "not json");
-/** A check that names nothing, answering after `ms`: past a short `pushCheckWaitMs` it lands late. */
-const slowSilent = (ms: number): Model & { calls: ChatRequest[] } => {
-  const inner = silent();
-  return {
-    id: "slow",
-    calls: inner.calls,
-    chat: async (req: ChatRequest): Promise<ChatResponse> => {
-      await new Promise((r) => setTimeout(r, ms));
-      return inner.chat(req);
-    },
-  };
-};
 
 function partner(config: Record<string, unknown>, model: Model | null) {
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
@@ -121,29 +109,35 @@ describe("pushLookup (D1252)", () => {
     expect(got!.text).not.toContain(LOOKUP_LEAD);
   });
 
-  test("a check that landed late and is read again (no call this pass) still gives the lookup (review finding 1)", async () => {
-    // The first request's check is past the wait, so the push fails open to one unchecked candidate. The same request
-    // again reads the settled answer, which named nothing, with no new call (`called` false): the lookup must still
-    // hand the other record that names the request.
-    const model = slowSilent(150);
-    const p = partner({ pushLookup: 3, pushCheckWaitMs: 20, pushCandidates: 1 }, model);
-    const first = await taken(p);
-    expect(first!.text).toContain(CANDIDATES_LEAD);
-    await new Promise((r) => setTimeout(r, 250));
-    const got = await taken(p);
-    expect(model.calls.length).toBe(1);
-    expect(got).toBeDefined();
-    expect(got!.text).toContain(LOOKUP_LEAD);
-    expect(got!.citations.map((c) => c.itemId)).not.toContain(first!.citations[0]!.itemId);
+  test("an answer this pass did not pay for (a reused or late check, `called` false) still gives the lookup (review finding 1)", () => {
+    // `checkPush` returns `called: false` for a settled answer it reuses and for the second pass of `readerPushBehind`
+    // reading the first pass's late call; a non-null answer naming nothing is all the gate may ask for.
+    const p = partner({ pushLookup: 3 }, silent());
+    const scored = ITEMS.map((x) => ({ item: x, score: 1, matched: 1, sketch: null }));
+    const gate = { pool: scored, like: scored.map((x) => /hold|due/.test(x.item.text)) };
+    const cue = { entities: ["Harlow"], time: null, raw: REQUEST, offset: 0 };
+    const session = { id: "s1", requests: 1 };
+    const read = (called: boolean) =>
+      (
+        p as unknown as { candidatesOf: (...a: unknown[]) => { items: { item: ContextItem }[]; lookup?: string } }
+      ).candidatesOf(session, cue, gate, { yes: new Set<string>(), costUsd: 0, called, overBudget: false });
+    for (const called of [true, false]) {
+      const got = read(called);
+      expect(got.lookup).toBe("named");
+      expect(got.items.map((x) => x.item.id)).toEqual(["mail:thread"]);
+    }
   });
 
-  test("a record already handed is not handed again (the not-twice ledger)", async () => {
-    const p = partner({ pushLookup: 3 }, silent());
+  test("only on the session's first request: a later request in the session gets no lookup (D1252's days run)", async () => {
+    const p = partner({ pushLookup: 3, pushLookupAny: true }, silent());
     const first = await taken(p);
-    expect(first!.citations.length).toBeGreaterThan(0);
-    const again = await taken(p);
-    const repeated = (again?.citations ?? []).filter((c) => first!.citations.some((f) => f.itemId === c.itemId));
-    expect(repeated).toEqual([]);
+    expect(first!.text).toContain(LOOKUP_LEAD);
+    // The same session's next request: the check again names nothing, and nothing goes out.
+    expect(await taken(p, "Pay the Harlow venue deposit invoice tomorrow instead.")).toBeUndefined();
+    // Another session's first request still gets one.
+    const other = { ...ref, sessionId: "s2" };
+    await p.observe({ ...other, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 2_000 });
+    expect(p.takePending(other).find((x) => x.reason.startsWith("candidates:"))?.text ?? "").toContain(LOOKUP_LEAD);
   });
 
   test("on, nothing in the pool names the request's anchors: still silent", async () => {

@@ -2627,7 +2627,9 @@ export class ContextPartner {
     // `pushLookupAny` the pool's head when none does (`lookupHead`: its lead must not claim they name the request).
     let lookup = false;
     let lookupHead = false;
-    if (yes && yes.size === 0 && this.config.pushLookup > 0) {
+    // Only on the session's first request: later ones carry the session's own context, and there the records saved
+    // the agent almost no search but stayed in its transcript (D1252's days run: agent $ +0.015/1k, −0.08 calls).
+    if (yes && yes.size === 0 && this.config.pushLookup > 0 && s.requests <= 1) {
       const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       // Only plain records: a constraint-like item here is one the check read and judged not to change the request
       // (a look-alike), and handed as reference the agent raised it anyway (round 5: the ISA look-alike on 4 of 4
