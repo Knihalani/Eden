@@ -745,3 +745,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
 | D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
 | D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |
+| D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | trial |

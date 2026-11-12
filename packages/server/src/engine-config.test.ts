@@ -143,6 +143,24 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
   });
 
+  test("EDEN_MODEL_CACHE (D1196's trial): cache breakpoints only when set to on", () => {
+    const seen: Record<string, unknown>[] = [];
+    const make = (o: Record<string, unknown>) => {
+      seen.push(o);
+      return { id: "fake", chat: async () => ({}) } as never;
+    };
+    modelRolesFromEnv({ OPENROUTER_API_KEY: "k" }, make as never);
+    expect(seen.every((o) => o.anthropicCache === undefined)).toBe(true);
+    seen.length = 0;
+    modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "on" }, make as never);
+    expect(seen.length).toBe(3);
+    expect(seen.every((o) => o.anthropicCache === true)).toBe(true);
+    // A typo stops startup rather than reading as off.
+    expect(() => modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "ON" }, make as never)).toThrow(
+      /EDEN_MODEL_CACHE must be on or off/,
+    );
+  });
+
   test("an unknown key stops startup with an error naming it", () => {
     const path = file("typo.json", JSON.stringify({ probes: true, askReder: true }));
     expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/unknown key "askReder"/);
