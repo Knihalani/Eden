@@ -11,6 +11,18 @@ import {
   HELDOUT19_RARE,
   HELDOUT19_SILENT,
 } from "./hidden-heldout19";
+import {
+  heldout20Before,
+  HELDOUT20_ANCHORED,
+  HELDOUT20_INDIRECT,
+  HELDOUT20_NO_OVERLAP,
+  HELDOUT20_NON_ENGLISH,
+  HELDOUT20_NOW,
+  HELDOUT20_QUESTION,
+  HELDOUT20_RARE,
+  HELDOUT20_SILENT,
+} from "./hidden-heldout20";
+import { userWorldOf } from "./pi-user";
 import { supportsNeutral } from "./neutral";
 import { REWORDED } from "./reworded";
 import { parseSuites, preparedWorld, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
@@ -318,13 +330,104 @@ describe("heldout19 (P7, D870): format only, its templates' text is not read her
       }
     }
     expect(UNRUN_BLIND).toContain("heldout19");
-    expect(UNREAD_BLIND).toEqual(["heldout19"]);
+    // Read once by B19 (D1048).
+    expect(UNREAD_BLIND).not.toContain("heldout19");
     expect(supportsNeutral("heldout19")).toBe(true);
     expect(parseSuites("all")).not.toContain("heldout19");
   });
 
   test("a harness that skips prepareWorld fails loudly instead of misaligning planted items", () => {
     expect(() => SUITES.heldout19!(buildWorld({ seed: 41_000 }), 41, "hidden")).toThrow(/prepareWorld/);
+  });
+});
+
+describe("heldout20 (F4, D1080): format only, its templates' text is not read here", () => {
+  test("48 tasks per variant over the eight areas, neutral plants nothing, its own present, rare connectors", () => {
+    for (const seed of [41, 44]) {
+      const by = Object.fromEntries(
+        (["hidden", "control", "neutral"] as const).map((v) => {
+          const world = preparedWorld("heldout20", seed);
+          expect(world.now).toBe(HELDOUT20_NOW);
+          const before = world.items.length;
+          const tasks = SUITES.heldout20!(world, seed, v);
+          return [v, { tasks, items: world.items.slice(before), sources: Object.keys(world.sources) }];
+        }),
+      );
+      expect([by.hidden!.items.length, by.control!.items.length, by.neutral!.items.length]).toEqual([48, 48, 0]);
+      for (const v of ["hidden", "control", "neutral"]) {
+        expect(by[v]!.tasks.length).toBe(48);
+        expect(RARE_SOURCE_IDS.every((id) => by[v]!.sources.includes(id))).toBe(true);
+      }
+      const same = (t: { text: string; detail: string; template: string }) => [t.text, t.detail, t.template];
+      for (const v of ["control", "neutral"]) {
+        expect(by[v]!.tasks.map(same)).toEqual(by.hidden!.tasks.map(same));
+        expect(by[v]!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout20-${v}:`))).toBe(true);
+      }
+      expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:heldout20:`))).toBe(true);
+      const names: string[] = by.hidden!.tasks.map((t: { template: string }) => t.template);
+      expect(new Set(names).size).toBe(names.length);
+      // Refs of the base world's shape, equal in hidden and control, and no marker an agent could read.
+      const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
+      expect(refs("control")).toEqual(refs("hidden"));
+      for (const v of ["hidden", "control"]) {
+        for (const it of by[v]!.items as { ref: string; id: string; title: string; meta?: Record<string, string> }[]) {
+          expect(it.ref).toMatch(/^[a-z]+-\d+$/);
+          const seen = `${it.ref} ${it.id} ${it.title} ${Object.values(it.meta ?? {}).join(" ")}`.toLowerCase();
+          expect(names.filter((n) => seen.includes(n))).toEqual([]);
+          expect(/heldout|h20|planted|decoy/.test(seen)).toBe(false);
+        }
+        // Nothing planted after the suite's present.
+        expect((by[v]!.items as { updatedAt: number }[]).every((it) => it.updatedAt <= HELDOUT20_NOW)).toBe(true);
+      }
+      // The brief's categories (counts only): every list names templates of the suite, at about the asked count.
+      const lists: [readonly string[], number][] = [
+        [HELDOUT20_ANCHORED, 14],
+        [HELDOUT20_RARE, 12],
+        [HELDOUT20_SILENT, 10],
+        [HELDOUT20_NON_ENGLISH, 12],
+        [HELDOUT20_QUESTION, 10],
+        [HELDOUT20_INDIRECT, 16],
+        [HELDOUT20_NO_OVERLAP, 24],
+      ];
+      for (const [list, min] of lists) {
+        expect(list.length).toBeGreaterThanOrEqual(min);
+        expect(list.every((n) => names.includes(n))).toBe(true);
+        expect(new Set(list).size).toBe(list.length);
+      }
+      expect(HELDOUT20_QUESTION.filter((n) => HELDOUT20_INDIRECT.includes(n))).toEqual([]);
+      // Rare-source templates plant in a rare connector in both variants, covering all eight; the others do not.
+      for (const v of ["hidden", "control"]) {
+        const items = by[v]!.items as { sourceId: string }[];
+        names.forEach((n, i) =>
+          expect(RARE_SOURCE_IDS.includes(items[i]!.sourceId)).toBe(HELDOUT20_RARE.includes(n)),
+        );
+      }
+      const rareHidden = (by.hidden!.items as { sourceId: string }[]).filter((_, i) => HELDOUT20_RARE.includes(names[i]!));
+      expect(new Set(rareHidden.map((it) => it.sourceId)).size).toBe(RARE_SOURCE_IDS.length);
+      // Silent edits: one `before` per listed template, the same item (source, kind, title) as the planted one, older.
+      const befores = heldout20Before(preparedWorld("heldout20", seed), seed);
+      expect(befores.map((b) => b.template).sort()).toEqual([...HELDOUT20_SILENT].sort());
+      for (const b of befores) {
+        const it = by.hidden!.items[names.indexOf(b.template)] as {
+          sourceId: string;
+          kind: string;
+          title: string;
+          updatedAt: number;
+        };
+        expect([b.before.sourceId, b.before.kind, b.before.title]).toEqual([it.sourceId, it.kind, it.title]);
+        expect(b.before.updatedAt).toBeLessThan(it.updatedAt);
+      }
+    }
+    expect(UNRUN_BLIND).toContain("heldout20");
+    expect(UNREAD_BLIND).toEqual(["heldout20"]);
+    expect(supportsNeutral("heldout20")).toBe(true);
+    expect(parseSuites("all")).not.toContain("heldout20");
+  });
+
+  test("a harness that skips prepareWorld fails loudly; its own clock refuses a user mixed with another suite", () => {
+    expect(() => SUITES.heldout20!(buildWorld({ seed: 41_000 }), 41, "hidden")).toThrow(/prepareWorld/);
+    const mixed = [[{ suite: "heldout20", template: "x", variant: "hidden" }, { suite: "train1", template: "y", variant: "hidden" }]];
+    expect(() => userWorldOf(41, mixed as never)).toThrow(/own world time/);
   });
 });
 
