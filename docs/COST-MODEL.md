@@ -668,6 +668,25 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
+### Where the check's cost and wait are, and what is left (F7, D1140; docs/research/f7-cost-latency.md)
+
+Recorded on the real API (1,092 checks, train and reworded seed 43 with neutral, Anthropic direct, lab provider) and
+priced at Haiku 5.5's list prices **[EST]**: a check is 2,484 input tokens (1,067 read from the cache on average; 90%
+of calls hit it), 115 output tokens, $0.000210 a call; 0.93 calls a task on the 1:1:8 mix, **$0.196 per 1,000
+tasks**. Its wait, by H3's fit (596 ms + 2.93 ms an output token), is about 934 ms a call and **870 ms a task** on the
+request path. Of a call's dollars, the pool and the request uncached are about 65%, the output about 29%, the cached
+instructions about 6%.
+
+| Lever | $ per 1,000 tasks | Wait a task | Status |
+| --- | --- | --- | --- |
+| Stop the reply at its first no, yeses first (`pushCheckLeanStop`) | −0.017 | −98 ms | trial (F7); 6 of 283 named planted facts follow the first no on the shipped order |
+| Every call hitting the cache | −0.010 | 0 | the misses are the provider's |
+| An oracle skipping the 43% of calls that end silent (ceiling) | −0.083 | −277 ms | unreachable: D930, D931 |
+| The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
+
+`packages/sim/lab/f7/levers.py` recomputes the table from a ledger and `--check-dump` files; `f7/price.py` prices any
+ledger per role at list prices with the check's modelled wait, for runs whose model calls bill nothing real.
+
 ## The turn gate (`pushGate`, M13, in the default since D1014)
 
 No model call and no network call: a local model decides, on the fast path, whether a user turn starts the push.
