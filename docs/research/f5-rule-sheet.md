@@ -216,3 +216,11 @@ characters a check, of which pointers drop 768 (24%, 4.8 items a check on the sh
 $0.000019 a check. The sheet itself is about 6,900 characters (about 1,700 tokens): $0.000017 a check read from
 cache, $0.00021 when written. So with the sheet in cache, SR's check costs about what main's does (+$0.000017 −
 $0.000019); each cache write adds about $0.0002.
+
+**Amendment to §6 (before any dev20 check was asked).** The subagent budget runs two arms, not three: **B** and
+**SR**. SR is judged by S's pass rule against B (planted handed at least +8 of 160, decoy handed up by at most half
+that, neutral packets up by at most 5 of 160); S on its own is not run on dev20 (the pilots of §5a–5b found SR at
+least as good on every set). Coverage: dev20's shipped cards as F8 recorded them (served by subagents per item, D1102,
+world clock, ee34b1e9). Each arm's funnel runs twice through one queue: a first pass fills the queue (its checks fail
+open while unanswered), the subagents answer, and a second, identical pass replays every answer; only the second
+pass is read.
