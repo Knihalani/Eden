@@ -25,6 +25,18 @@ def spans(events):
     return out
 
 
+def spans_at(events):
+    """Each finished span's name with its start and end on the task's clock."""
+    open_, out = {}, []
+    for e in events:
+        if e.get("ph") == "B":
+            open_[e.get("id")] = e
+        elif e.get("ph") == "E" and e.get("id") in open_:
+            b = open_.pop(e["id"])
+            out.append((b.get("ev", ""), b["t"], e["t"]))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--agent-out", type=float, required=True)
@@ -45,10 +57,17 @@ def main():
                 d = json.loads(l)
                 lines[d.get("task") or d.get("id")] = d
         walls = []
+        late = 0
         for r in rows:
             d = lines.get(r["task"])
             if not d:
                 continue
+            # A check that ends after the first model request began left the first call without its packet: the arm
+            # then measures late injection, not the default (F7 §10's amendment).
+            ss = spans_at(d.get("events", []))
+            first = min((b for ev, b, _ in ss if ev == "model.request"), default=None)
+            if any(ev == "eden.check" and first is not None and e > first for ev, _, e in ss):
+                late += 1
             w = 0.0
             for ev, cat, lane, dur in spans(d.get("events", [])):
                 if lane != "path":
@@ -73,7 +92,7 @@ def main():
             f"{concerns}/{len(by('control')) + len(by('neutral'))}; modelled wall [EST] mean "
             f"{(statistics.mean(walls) / 1000 if walls else 0):.2f} s, "
             f"p50 {(statistics.median(walls) / 1000 if walls else 0):.2f} s "
-            f"({len(walls)} timelines)"
+            f"({len(walls)} timelines); checks landing after the first model call {late}"
         )
 
 
