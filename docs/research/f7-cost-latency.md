@@ -135,3 +135,36 @@ at the first no on the *shipped* order keeps 72% of the reply's characters (hidd
 loses 6 of 283 planted facts the check named, and 6 of 84 look-alikes. At about 115 output tokens a call that is
 about −32 tokens: −94 ms of modelled wait and −$0.000016 a call (−8% of the check) **[EST]**. The lean order is
 meant to keep those 6 facts; only a model answering the lean prompt can say whether it does.
+
+## 5. The levers in numbers (08:55 UTC; $0 from recorded tokens, and a subagent-simulated pilot)
+
+Every figure here is **[EST]**: tokens the lab recorded on the real API this morning (§3's 1,092 checks, train and
+reworded seed 43 with neutral), priced at Haiku 5.5's list prices, and the check's wait from H3's fit (596 ms + 2.93
+ms an output token). `python3 -I packages/sim/lab/f7/levers.py .local/f7/ledger.jsonl .local/f7/base-*-43.dump.jsonl`.
+
+**The base:** a check is 2,484 input tokens (1,067 of them cached on average; 90% of calls hit the cache), 115
+output tokens, $0.000210 and 934 ms of modelled wait. At 0.97 calls a hidden or control task and 0.92 a neutral one,
+it is **$0.196 per 1,000 tasks** on the 1:1:8 mix and **870 ms of wait a task** on the request path. (B19's ledger
+read $0.16: B19 was heldout19, this is train; same order.)
+
+| lever | $ per 1,000 tasks | wait a task | facts at risk | status |
+| --- | --- | --- | --- | --- |
+| `pushCheckLeanStop` (stop at the first no; output kept 69% on the mix: hidden 83%, control 63%, neutral 68%) | −0.017 (−9% of the check) | −98 ms (−105 ms a call) | on the shipped order 6 of 283 planted facts the check named come after its first no; the lean order is meant to keep them | built, trial |
+| every call hitting the prompt cache (10% miss today) | −0.010 (−5%) | 0 (latency is not input-bound, D241) | none | not controllable from Eden: the misses are the provider's |
+| skipping the check, ceiling: an oracle that skips exactly the calls that end silent (43% of calls) | −0.083 (−43%) | −277 ms | any real predictor errs: M7's ten pre-screens (D930) could not match Haiku's own repeat agreement (D931: 90.9% on speak or silent) | not reachable; the turn gate reads the request, not the pool |
+| smaller packets (agent side) | about −0.01 to −0.02 for the packets' whole cost (≈0.6 items a task on the mix, ≈100 tokens an item written to the agent's cache once and read after) | ≈0 | D258, D273: every lexical cut measured lost facts | not built |
+
+**What the pilot says** (`packages/sim/lab/f7/mkpilot.ts`, `pilot-score.ts`; **subagent-simulated**: 25 recorded
+prompts, 9 hidden where Haiku had named the planted fact, 8 control, 8 neutral with a non-empty reply; each asked once
+as shipped and once lean, by separate Haiku subagents, 23 pairs complete): planted named 9/9 in both, look-alike 0/7
+in both, neutral with a yes 1/7 (W) and 2/7 (Y); output tokens a call 42.4 (W) and 41.6 (Y). The subagents wrote far
+shorter replies than the API's Haiku on the same prompts (68 tokens a call recorded), listing few rejections, so the
+stop had little to cut: **the pilot cannot measure the lean stop's saving**, which lives in the rejections the API's
+Haiku writes, and it is too small to see a 2% loss of named facts. It does say the lean wording did not make the
+model drop a planted fact or name a look-alike on these 16 rows. Two subagents also tried a tool the brief did not
+give them (a session create, refused); their replies were written before it and are used.
+
+**Reading.** The check's own bill has little left in it: the largest lever that keeps every reply (the stop) is
+about 9% of the check, under 5% of Eden plus agent. The wait is the larger prize, and the stop is worth about 0.1 s a
+task. Only a model answering the lean prompt over a powered pool can say whether it keeps the 6 facts in 283 the
+shipped order would lose; that needs the API or F9's transport at volume, not 25 prompts.
