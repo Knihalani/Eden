@@ -515,6 +515,12 @@ user's background enrichment is a one-time backfill plus a daily trickle:
 | 30 days of use, estimate | ≈ $0.038 | ≈ $0.026 |
 | Per 1,000 tasks at 12–20 requests a day for 30 days, estimate | ≈ $0.06–0.10 | ≈ $0.04–0.07 |
 
+**Correction (F5's finding, relayed 2026-11-12; F8 re-recording):** the recorded coverage ran on the wall clock, not
+the sim world's, so `cardsLean`'s 7-day window skipped most of a world's items. A heavy world's backfill is about
+16–17 card calls a new user, not 7–9: about twice the "since D244" column's calls, so about $0.016–0.018 a new user
+and, over 30 days, about $0.034 rather than $0.026 **[EST: the measured $ a call times the corrected count; the
+daily trickle is unchanged]**. Re-read this table when F8's re-recording lands.
+
 Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
 is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
 −45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
@@ -667,6 +673,26 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 **[EST]**. Asking the check's question once per item at ingest (rejected, D526) cost $0.000053–0.000055 an item on
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
+
+### Where the check's cost and wait are, and what is left (F7, D1190, D1191; docs/research/f7-cost-latency.md)
+
+Recorded on the real API (1,092 checks, train and reworded seed 43 with neutral, Anthropic direct, lab provider) and
+priced at Haiku 5.5's list prices **[EST]**: a check is 2,484 input tokens (1,067 read from the cache on average; 90%
+of calls hit it), 115 output tokens, $0.000210 a call; 0.93 calls a task on the 1:1:8 mix, **$0.196 per 1,000
+tasks**. Its wait, by H3's fit (596 ms + 2.93 ms an output token), is about 934 ms a call and **870 ms a task** on the
+request path. Of a call's dollars, the pool and the request uncached are about 65%, the output about 29%, the cached
+instructions about 6%.
+
+| Lever | $ per 1,000 tasks | Wait a task | Status |
+| --- | --- | --- | --- |
+| Stop the reply at its first no, yeses first (`pushCheckLeanStop`) | −0.017 | −98 ms | built and deleted unmeasured (D1191; code in 49ce5972); 6 of 283 named planted facts follow the first no on the shipped order |
+| Every call hitting the cache | −0.010 | 0 | the misses are the provider's |
+| An oracle skipping the 43% of calls that end silent (ceiling) | −0.083 | −277 ms | unreachable: D930, D931 |
+| The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
+| Speculate the agent's first call, abort it on a yes (design, F7 §9) | +0.04–0.06 on Pi (aborted first calls) | −0.28 s | not built: cost up; needs the API to measure |
+
+`packages/sim/lab/f7/levers.py` recomputes the table from a ledger and `--check-dump` files; `f7/price.py` prices any
+ledger per role at list prices with the check's modelled wait, for runs whose model calls bill nothing real.
 
 ## The turn gate (`pushGate`, M13, in the default since D1014)
 

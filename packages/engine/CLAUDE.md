@@ -142,7 +142,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   so, or the single-lane timing moves. The lanes take from the queue synchronously and share `UserCards.flying` (the
   sentence keys in flight): a new await between taking a batch and the maker call would let two lanes send the same
   sentence. Re-run the default funnel after touching it (`--coverage full`: 315 / 276, card calls 382–392 by load;
-  the default, shipped coverage since D877: 295 / 268 since D1062, 281 / 264 before).
+  the default, shipped coverage since D877: 318 / 299 since D1102's world-clock re-record, 295 / 268 since D1062,
+  281 / 264 before).
 - **The card prompt shows the requests list in its first example (`cardsRequestsFix`, D1060, D1062, on in the
   default, parts `cards` and `intent`; docs/research/h2-requests-fix.md).** Before it, Haiku left the whole list out
   of about a quarter of its replies and every item of such a batch got no requests (D1053). A reply that still drops

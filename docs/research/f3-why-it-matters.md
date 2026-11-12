@@ -1,7 +1,15 @@
 # F3: saying why a handed item matters to this request
 
-Status: 2026-11-12. Trial `packetWhy` (D1120) rejected on its pre-registered rule and deleted (D1121; code and tests in
-dcf47d8d5).
+Status: 2026-11-12. Every lever here was rejected on its pre-registered rule and deleted:
+- `packetWhy`, the clash note (D1120 → D1121; then v2, D1122 → D1126);
+- `packetChanges`, the "changed at its source: was X, now Y" line (D1123 → D1126);
+- `freshenAgeMs` and `freshenBehind`, re-reading aged copies before handing them, or beside the delivery (D1127,
+  D1129 → D1130).
+
+The code is in dcf47d8d5 and bf3f577c1. The silent-edit lab harness stays (D1123, D1125): `HiddenTask.before`,
+`silent.ts`, `--noise-edits`, `<train>+silent`, and dev20's `before`. **Finding (D1126):** on silent edits the loss is
+freshness, not wording. A silently edited item in a source the request's lookup does not poll is handed over as its
+pre-edit copy, and that copy is never raised.
 
 ## The problem
 
@@ -122,7 +130,114 @@ Spend: $5.25 in all, the 400s included.
    - So the note said "dated Thu 31 Dec, a day the request names", which pointed at the item's line repeating Sam's own
      request, not at the overlapping leave. The agent followed the pointer.
 
+## Round 2: the change line and the clash note v2 on dev20's silent edits (D1122–D1126)
+
+**What was built** (all deleted by D1126; the code is in bf3f577c1):
+- `versions.ts`: a store of what changed in an item at its source.
+  - It records an edit when a synced copy replaces a synced copy (`ItemCache.onRevised`).
+  - It keeps the words the two versions differ by: a mail's header lines aside, cut where three words agree again.
+  - Bounds: per tenant and user, in memory, 64 items a user, 4,096 users; an item's change goes with the item, the
+    user or a `forget`.
+- The packet line it fed read "(Eden: changed at its source on Tue 27 Oct: was 'dep 08:31 ·', now 'dep 06:31 ·')".
+- The clash note v2 fixed both of D1121's parser misses, and stayed silent on an item that only repeats the request's
+  dates and on requests over more than three days.
+
+**The harness** (kept):
+- `HiddenTask.before` holds the planted item as it read before a silent edit.
+- `silent.ts` plants that version for the backfill, then swaps the edit in with no notice just before the first request.
+- dev20 takes `before` from F8's `dev20xBefore`; `<train>+silent` makes one with revision.ts's fixed rule.
+- `--noise-edits N` edits N unrelated items silently in every variant. Without it the concern guard would never see a
+  change line on an item that matters to no request.
+
+**The pilot.** Subagent-simulated, pre-registered in D1125; there was no API credit.
+- Eden's push packets came from the $0 funnel: dev20 seeds 41–44, the 40 silent-edit templates, `--noise-edits 16`,
+  coverage none (dev20's cards are not recorded).
+- The harness's own system prompt (data pushed, house rules) went with them to Haiku subagents for one answer each,
+  with no tools. Sonnet subagents graded the answers with the harness's grader prompt.
+- 1,440 arm-tasks, 265 distinct prompts each answered once, 394 grades. Identical prompts across arms differ by nothing.
+- Batches were split by arm, so no subagent saw two arms' versions of a task.
+- Tooling: `packages/sim/lab/f3/pilot-{build,grade}.ts` and `pilot-report.py`.
+
+| subagent-simulated pilot | base | CH (change line) | CW (change line + clash note) |
+| --- | ---: | ---: | ---: |
+| hidden raised | 15/160 | 14/160 | 16/160 |
+| hidden raised where the packet held the fact | 15/26 | 14/26 | 16/26 |
+| control concerns | 0/160 | 0/160 | 0/160 |
+| neutral concerns | 11/160 | 11/160 | 11/160 |
+| packet characters | 266,126 | 271,641 | 272,914 |
+
+- **CH − base**: −0.6 pts (−1.9..+0.0, template-clustered; 0 gained, 1 lost). The primary fails.
+- **CW − CH**: +1.2 pts (+0.0..+3.8; 2 gained, 0 lost). Its lower bound is not above 0, so the secondary fails too.
+- Concerns did not move.
+
+**What the pilot showed.** Of the 26 hidden tasks whose packet held the fact (CH's packets):
+
+| how the fact was handed | tasks | raised |
+| --- | ---: | ---: |
+| current version, with the change line | 14 | 13 |
+| pre-edit copy (drive 7, trips 4, and one more) | 12 | 0 |
+
+- **The change line meets a ceiling.** Where the agent reads the current copy, it raises the fact almost always, with
+  the line or without it. Base raised the current-copy facts too.
+- **The stale copy is the loss.** The request's lookup answered from the index for sources it did not poll on demand.
+  - Making the push wait for its poll (`syncPollBehind` off) still handed 12 stale copies.
+  - With `sourceYield` off, 11.
+  - Without on-demand polls at all, all 24 handed facts were stale.
+- **Caveat: this harness is the hardest case.** The edit lands just before the first request. dev20 dates its edits
+  days earlier, and a background tick would have stored those. So the share of stale hand-outs here is an upper
+  bound. But any edit inside a source's poll interval before a request takes this path, notice-less sources most of
+  all.
+
+## Round 3: packet freshness (D1127–D1130)
+
+**What was tried (both deleted by D1130; code in f1ec8b930):**
+- `freshenAgeMs`: with `verifyDelivery`, a cached copy no read had refreshed for 10 minutes was re-read by its ref before
+  it was handed over, through D126's re-read path. Sent messages (a mail's `From:` header, a chat stamp) were never
+  re-read, and a failed re-read handed the cached copy (fail open).
+- `freshenBehind`: the same re-read started beside the delivery instead of before it. The cached copy went at once, and
+  a changed copy followed as an "updated:" packet.
+
+**$0 screens.** On dev20's silent edits (`--noise-edits 16`, push only):
+- `freshenAgeMs`: stale hand-outs 8 → 0, current ones 15 → 25; push calls +16%.
+- Background-tick case (`--edit-lead-min 60` and `1440`, the sync ticking each minute between): the default still
+  handed 9 stale copies, and FR none.
+- `freshenBehind`: 11 handed facts followed by an update carrying the edit.
+
+On train, push calls rose +26%, and ×2.2 before the message filter.
+
+**Pilots** (subagent-simulated; single-shot Haiku answers, Sonnet grades, the harness's own prompts):
+
+| run | hidden raised, base → FR | difference (template-clustered) | concerns |
+| --- | --- | --- | --- |
+| dev20 silent templates, coverage none (D1127) | 15/160 → 23/160 | +5.0 pts (+0.0..+11.2), +8 −0 | 0 / 11 both |
+| train1–6 `+silent`, shipped coverage (D1128) | 127/768 → 131/768 | +0.5 pts (−0.9..+2.1), +15 −11 | control 0 → 2 |
+
+**The latency guard.** The push's wait went 11.4 → 285.1 ms a hidden task (funnel `--time 1 --jobs 1`, train seed 41,
+push only): the blocking re-read puts a connector round trip on the push.
+
+**Read.** On dev20 the stale detail is the fact (a flight moved, a dose doubled), and fixing it raised every handed fact.
+But coverage left so few facts handed that the bound could not clear 0. On train, the fixed edit rule mostly changes a
+detail the fact does not hinge on, so freshness changes little. Neither measurement shows the trade worth +26% calls
+and the wait.
+
+**What a fix needs:**
+- a suite whose silent edits change the fact itself, with recorded coverage (dev20 once its cards are recorded);
+- an agent that asks again (Pi, or a two-request pass), so a background re-read's update can land;
+- no connector round trip on the push.
+
 ## Recommendations
+
+- **Freshness for silently edited items (the lever D1126 points at; first attempts rejected, D1130, above).** Before a packet hands an item from a synced
+  source the request's lookup did not poll, re-read that item by id, or poll that source's newest page, inside the
+  push's existing deadline. This is the D126/D211 re-read path, applied to "not polled this request", not only to
+  "doubted".
+  - Measure it with `<suite>` and dev20 under `--noise-edits`, counting stale hand-outs at $0 first.
+  - Then a paired run, with latency and connector calls as its guards.
+- **Run the harness with a realistic gap as well.** Edits landing N minutes before the request, with background ticks
+  in between, would show how often a real sync already holds the edit.
+
+The earlier recommendations stand, below.
+
 
 - **Re-test only on a suite whose clashes the agent misses unaided.** F8's dev20 suites (silent edits, clashes) are
   the candidate. Re-test with both parser fixes:
