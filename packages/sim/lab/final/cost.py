@@ -11,8 +11,8 @@ prefix; a Haiku call's latency 596 ms + 2.93 ms an output token, H3's fit).
 - Quality (single-shot): hidden raised, control and neutral concerns.
 - Eden $/1k tasks: Eden's per-request roles (`eden.check`, `eden.reader`, `eden.judge`) in the single-shot arms.
 - Agent $/1k tasks: the agent's calls in the MULTI-TURN sample (single-shot is one call by construction).
-- Cards $/heavy user-month: one world's backfill card calls, priced; a heavy user's month (50 new items a day, about
-  1,500 items) is about one backfill's worth of items (docs/COST-MODEL.md), so it stands for both.
+- Cards: one world's backfill card calls, priced (one-time a user), plus the daily trickle of a heavy user's new items
+  (CL3, F7: about $0.0165 a user-month [EST]); the backfill is not a month's spend.
 - Push wait a task: `eden.check`'s modelled latency, summed per task (the agent waits for it before its first call).
 - Agent wall a task (multi-turn): the agent's calls' modelled latency plus the push wait.
 - Connector calls a task: Eden's (its streams' calls less their backfill) plus the agent's own tool calls (multi-turn).
@@ -28,6 +28,10 @@ SONNET = {"in": 1.00e-6, "cr": 0.10e-6, "cw": 1.25e-6, "out": 5.00e-6}
 CPT = 4.0
 HIT = 0.9
 EDEN_TASK_ROLES = {"eden.check", "eden.reader", "eden.judge"}
+# F7 (COST-MODEL §Hosting b): connector fees per 1,000 calls by plan, and CL3's card trickle a heavy user-month.
+CONNECTOR_FEES = {"first-party": 0.0, "Composio": 0.30, "Unified.to": 0.75, "Arcade": 10.0, "Pipedream": 12.0,
+                  "Zapier": 25.8}
+CARD_TRICKLE_MONTH = 0.0165
 
 
 def price(c, s):
@@ -125,8 +129,8 @@ def main():
         print(f"    quality: hidden raised {h[0]}/{h[1]} ({100 * h[0] / max(1, h[1]):.1f}%), control concerns "
               f"{c[0]}/{c[1]}, neutral concerns {ne[0]}/{ne[1]}")
         print(f"    cost: Eden ${eden:.4f}/1k tasks [EST]" + (
-            f"; cards ${cu / max(1, worlds):.5f} a world's backfill (~ a heavy user-month), {cc / max(1, worlds):.1f}"
-            f" calls a world [EST]" if worlds else "; cards: none (no Eden)"))
+            f"; cards ${cu / max(1, worlds):.5f} a world's backfill once ({cc / max(1, worlds):.1f} calls) + "
+            f"${CARD_TRICKLE_MONTH} a heavy user-month trickle [EST, CL3]" if worlds else "; cards: none (no Eden)"))
         print(f"    speed: push wait {push:.0f} ms a task [EST, H3 fit]; connector calls a task: Eden at request time "
               f"{conn[0]:.2f}, the single-shot tools {conn[2]:.2f}; Eden's backfill {conn[1]:.0f} a stream (once a user)")
         if ag:
@@ -137,6 +141,10 @@ def main():
                   f"calls, {ag['tok']:.0f} tokens a task; agent ${ag['usd']:.4f}/1k + Eden ${ag['eden_usd']:.4f}/1k "
                   f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task [EST]; connector "
                   f"calls {ag['conn']:.2f} a task (Eden's and the agent's tools)")
+            fees = ", ".join(f"{k} ${ag['conn'] * v:.2f}" for k, v in CONNECTOR_FEES.items())
+            print(f"    connector fees per 1,000 tasks by plan [EST]: {fees}")
+    print("\n  Production connector latency L s a call: walls here assume the direct profile (~0.45 s a call); add")
+    print("  0.72 x (L - 0.45) s a task on Pi and 0.78 x (L - 0.45) on Hermes [EST, F7].")
     if unsized:
         print(f"\n  calls with no sized answer (not priced): {dict(unsized)}")
 

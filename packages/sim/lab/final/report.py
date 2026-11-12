@@ -50,6 +50,10 @@ def load(run):
                 flag=any((r.get("facts") or {}).values()),
                 pushed=bool(planted) and planted in cited, asked=bool(planted) and planted in asked,
                 pooled=bool(planted) and any(planted in p.get("pool", []) for p in pools),
+                # F7: on the API a check later than pushCheckWaitMs fails open to the pool's unchecked head (the
+                # candidates, at most 5): would that head have held the planted item (fact or look-alike)?
+                in_head=bool(planted) and any(planted in p.get("pool", [])[:5] for p in pools),
+                checked_pool=any(p.get("check") == "yes" for p in pools),
                 handed=bool(planted) and any(planted in p.get("handed", []) for p in pools),
                 packets=len(t.get("cited") or []) > 0 if not isinstance(t.get("cited"), str) else t.get("cited") != "[]",
             )
@@ -193,6 +197,36 @@ def main():
         print(f"  {a:7} " + "; ".join(f"{s} {c[s]} ({100 * c[s] / n:.0f}%)" for s in
                                       ("raised", "reached, not raised", "dropped by the push check", "never retrieved"))
               + f"; uptake (raised | reached) {rate([r['flag'] for r in reached])}")
+    late_adjusted(rows)
+
+
+# F7 (f7-cost-latency.md §3): the API check's latency, p50 1.10 s and p90 1.80 s (1,092 calls), against the engine's
+# `pushCheckWaitMs` 1,500 ms, which binds on both harnesses (Pi and Hermes call the same engine). Lognormal through those
+# two points: sigma 0.384, P(latency > 1.5 s) = 0.21 [EST]. The queue transport waits for every check (go.sh), so the
+# run is the on-time case; this row says what the late fifth would change.
+P_LATE = 0.21
+
+
+def late_adjusted(rows):
+    """[EST] Hidden raised and look-alike exposure if a P_LATE share of checks were late and failed open."""
+    print(f"\n== late-check adjusted [EST: P(check later than 1.5 s on the API) = {P_LATE}, F7's p50/p90; Pi and Hermes]")
+    print("   A late check fails open to the pool's unchecked head (up to 5 candidates): a fact the check handed from")
+    print("   past the head is lost, a fact in the head the check dropped is handed, and a look-alike in the head is")
+    print("   handed where the check had withheld it (whether the agent then raises it is not known: exposure only).")
+    for a in ("before", "final"):
+        xs = [r for (arm, _), r in rows.items() if arm == a and r["graded"] and r["checked_pool"]]
+        if not xs:
+            continue
+        h = [r for r in xs if r["kind"] == "hidden"]
+        all_h = [r for (arm, _), r in rows.items() if arm == a and r["kind"] == "hidden" and r["graded"]]
+        raised = sum(r["flag"] for r in all_h)
+        lose = sum(1 for r in h if r["flag"] and r["pushed"] and not r["asked"] and not r["in_head"])
+        gain = sum(1 for r in h if not r["pushed"] and not r["asked"] and r["in_head"])
+        decoys = sum(1 for r in xs if r["kind"] == "control" and r["in_head"] and not r["pushed"])
+        adj = raised - P_LATE * lose
+        print(f"  {a:7} hidden raised {raised}/{len(all_h)} -> {adj:.1f} [EST] (facts handed only from past the head: "
+              f"{lose}; facts in the head the check dropped, which a late check would hand: {gain}, not counted); "
+              f"look-alikes a late check would hand: {decoys} x {P_LATE} = {P_LATE * decoys:.1f} more exposures [EST]")
 
 
 if __name__ == "__main__":
