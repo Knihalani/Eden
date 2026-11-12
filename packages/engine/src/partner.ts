@@ -67,7 +67,7 @@ import {
   type Verdict,
 } from "./conflict";
 import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
-import { glossOf } from "./gloss";
+import { glossOf, warmGlossary } from "./gloss";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -673,6 +673,8 @@ export class ContextPartner {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
+    // `requestGloss` (trial, F1): the glossary is read here too, once a process, not on the first request.
+    if (this.config.requestGloss) warmGlossary();
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;

@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { glossOf, languagesOf, loadGlossary, MAX_GLOSS_WORDS } from "./gloss";
+import { glossOf, languagesOf, loadGlossary, MAX_GLOSS_WORDS, warmGlossary } from "./gloss";
 
 const packed = {
   v: 1,
@@ -59,5 +59,47 @@ describe("glossOf", () => {
     expect(glossOf(text, loadGlossary(f)).split(" ").length).toBe(MAX_GLOSS_WORDS);
     expect(loadGlossary("/nonexistent/gloss.bin")).toBeNull();
     expect(glossOf("Voglio spostare il conto", null)).toBe("");
+  });
+});
+
+describe("glossOf on the shipped glossary", () => {
+  const shipped = warmGlossary();
+
+  test("loads", () => {
+    expect(shipped?.langs.size).toBeGreaterThanOrEqual(8);
+  });
+
+  // The review's probes (F1): English requests about foreign names, places and dishes stay English.
+  test.each([
+    "Email Jean-Pierre about the dinner at Café du Monde et la Gare on Friday.",
+    "Pay the van der Berg invoice for the extension and copy Pieter van den Heuvel.",
+    "Forward the Los Angeles del Mar contract to Maria dos Santos e Silva.",
+    "Ask Giuseppe di Napoli about la dolce vita catering for the launch.",
+    "Send the menu: coq au vin, pain au chocolat, crème brûlée to the chef for the Saturday wedding reception.",
+    "Book a table at Le Petit Bistro for Anna and Jens on Thursday.",
+  ])("an English request with foreign names is not glossed: %s", (text) => {
+    expect(glossOf(text, shipped)).toBe("");
+  });
+
+  test.each([
+    ["Domani voglio spostare 5.000 sterline dai risparmi al conto corrente.", "move"],
+    ["Preciso de um canalizador pela Fixhub para ver a fuga debaixo do lava-loiça da cozinha.", "plumber"],
+    ["Ich muss heute die Rechnung des Küchenbauers über £1,450 vom gemeinsamen Konto bezahlen.", "pay"],
+    ["Je voudrais annuler la réservation pour demain soir.", "reservation"],
+  ])("a non-English request is glossed: %s", (text, word) => {
+    expect(glossOf(text, shipped).split(" ")).toContain(word);
+  });
+
+  test("decomposed accents read as composed ones", () => {
+    const nfc = "Je voudrais annuler la réservation pour demain soir.";
+    expect(glossOf(nfc.normalize("NFD"), shipped)).toBe(glossOf(nfc, shipped));
+  });
+
+  test("a glossary that parses but reads wrong is no glossary", () => {
+    const f = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
+    writeFileSync(f, gzipSync(JSON.stringify({ v: 1, langs: { it: { fn: ["il"], tsv: 7 } } })));
+    expect(loadGlossary(f)).toBeNull();
+    writeFileSync(f, gzipSync(JSON.stringify({ v: 2, langs: {} })));
+    expect(loadGlossary(f)).toBeNull();
   });
 });

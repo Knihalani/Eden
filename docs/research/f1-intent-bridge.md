@@ -79,8 +79,22 @@ known words. Hindi in Latin script is not covered (no frequency list).
 holds those words as its keys, with Haiku's glosses. Whether that needs attribution or share-alike is the owner's
 call; the glossary can be rebuilt from another word list (or a model-written one) with `gloss-make.ts` for about $1.
 
+**After the review (REQUEST_CHANGES, fixed):** an English request about foreign names ("Pay the van der Berg invoice
+… Pieter van den Heuvel", "Ask Giuseppe di Napoli about la dolce vita catering") was glossed by the first rule (two
+function words of a language). The language is now told from the request's words outside names (a capitalised word
+past the first, and the word just before one, are left out) and must hold more words known to that language than
+words known to English (the glosses' own English words and the stopwords); `gloss.test.ts` holds the review's probes.
+The gloss is capped at 12 words (24 before) so a long request keeps cue room, input is NFC-normalised, a glossary that
+parses but reads wrong is refused at load, `glossOf` never throws, and the partner reads the glossary when it is built
+with the switch on. Reworded with these: hidden 581, decoys 523 (527 before), the same facts in view (+22 −2); train
+and longtail still identical.
+
+**dev20 (D1100; coverage none, so intent-inert: the lexical half only), seeds 41–44:** hidden surfaced 155 → 180 of
+640, decoys 125 → 147; facts in the check's view 157 → 181, handed 114 → 136; look-alikes in view 125 → 149. Every one
+of the 71 changed tasks a variant is a non-English request (Catalan is read through Spanish and French).
+
 **Cost.** No model call at request time. The glossary loads once a process, at the first glossed request: 29 ms,
-+9.1 MB RSS (+6.0 MB heap), +11.1 MB after six languages are read (a binary search over each language's sorted lines;
++9.1 MB RSS (+6.0 MB heap; measured before the review's English-word set, which adds about 1 MB), +11.1 MB after six languages are read (a binary search over each language's sorted lines;
 a Map per language cost +26 MB). 3.4 µs for an English request, 9.6 µs for a glossed one.
 
 **Funnel, reworded, seeds 41–44 (stub reader, shipped coverage):**
