@@ -9,6 +9,7 @@ import {
   CARD_FORM_STATE,
   CardEnricher,
   cardMessages,
+  couldClear,
   parseCards,
   type Card,
   type CardBatch,
@@ -150,13 +151,21 @@ describe("pushStateFilter", () => {
   const PAID = item("paid", "Harlow deposit", "Already paid: the Harlow venue deposit invoice went out on Friday.", 3);
   const HOLD = item("hold", "Harlow venue", "Payments to Harlow are on hold until the venue deposit dispute ends.", 4);
   const CARDS: Record<string, Card> = {
-    "mail:lifted": { kind: "none", actions: [], entities: [], statement: "hold lifted", state: "lifted" },
+    "mail:lifted": { kind: "none", actions: [], entities: ["Harlow"], statement: "hold lifted", state: "lifted" },
     // Already done, though it says a condition was met: the fact in force stays.
     "mail:paid": { kind: "already-done", actions: ["pay"], entities: ["Harlow"], statement: "paid", state: "met" },
     "mail:hold": { kind: "freeze", actions: ["pay"], entities: ["Harlow"], statement: "on hold", state: "in_force" },
+    // A hold on another payee: nothing the Harlow notice could lift.
+    "mail:other": { kind: "freeze", actions: ["pay"], entities: ["Brightside"], statement: "hold", state: "in_force" },
   };
+  const OTHER = item(
+    "other",
+    "Brightside venue",
+    "Payments to Brightside are on hold until their invoice is fixed.",
+    5,
+  );
 
-  async function handed(filter: boolean, pool = 15): Promise<string> {
+  async function handed(filter: boolean, pool = 15, all = [LIFTED, PAID, OTHER]): Promise<string> {
     const maker: CardMaker = {
       async make(items: ContextItem[]) {
         return { cards: items.map((it) => CARDS[it.id] ?? null), costUsd: 0 } as CardBatch;
@@ -165,7 +174,6 @@ describe("pushStateFilter", () => {
     const cards = new CardEnricher({ maker, budget: new Budget(), now: () => NOW - HOUR });
     // As the partner's `cardsState` would: a cleared none card is kept only by an enricher that asks for state.
     if (filter) cards.askState();
-    const all = [LIFTED, PAID, HOLD];
     cards.enqueue(scope, all);
     await cards.idle();
     const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => all };
@@ -206,16 +214,40 @@ describe("pushStateFilter", () => {
     const on = await handed(true);
     expect(on).not.toContain("is lifted");
     expect(on).toContain("Already paid");
-    expect(on).toContain("on hold until");
   });
 
   test("a seat the filter empties goes to the next ranked item", async () => {
-    // A pool of two: the lifted hold holds a seat when off, so one of the facts in force is out of it.
+    // A pool of two: the lifted hold holds a seat when off, so one of the others is out of it.
     const off = await handed(false, 2);
     expect(off).toContain("is lifted");
     const on = await handed(true, 2);
     expect(on).not.toContain("is lifted");
     expect(on).toContain("Already paid");
+    expect(on).toContain("Brightside");
+  });
+
+  test("the lift notice stays beside the hold it could lift: the hold is never handed without it (D1456)", async () => {
+    // A real mailbox holds both: the hold, carded in force when it arrived, and the later notice that lifts it.
+    const on = await handed(true, 15, [LIFTED, PAID, HOLD]);
     expect(on).toContain("on hold until");
+    expect(on).toContain("is lifted");
+  });
+
+  test("couldClear: by the cards' own entities, on letter boundaries, either way round", () => {
+    const lifted: Card = { kind: "none", actions: [], entities: ["Harlow"], statement: "hold lifted", state: "lifted" };
+    const hold = (entities: string[], statement = "payments on hold"): Card => ({
+      kind: "freeze",
+      actions: ["pay"],
+      entities,
+      statement,
+    });
+    expect(couldClear(lifted, hold(["Harlow"]))).toBe(true);
+    expect(couldClear(lifted, hold(["harlow venue"]))).toBe(true);
+    expect(couldClear(lifted, hold([], "Payments to Harlow are on hold"))).toBe(true);
+    expect(couldClear({ ...lifted, entities: [], statement: "Harlow hold lifted" }, hold(["Harlow"]))).toBe(true);
+    expect(couldClear(lifted, hold(["Harlowe"]))).toBe(false);
+    expect(couldClear(lifted, hold(["Brightside"]))).toBe(false);
+    // No entity on either side: nothing to link them by.
+    expect(couldClear({ ...lifted, entities: [] }, hold([]))).toBe(false);
   });
 });

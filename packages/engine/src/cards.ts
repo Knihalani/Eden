@@ -526,6 +526,30 @@ export function clearedNone(card: Card, item: ContextItem): boolean {
 }
 
 /**
+ * Whether a cleared card (`clearedNone`) could be the one that clears a constraint card: an entity of either (its
+ * person, organisation, account or thing, the card model's own field) is named in the other's entities or statement,
+ * on letter and number boundaries ("Harlow" is not "Harlowe"). The pair matters because a mailbox that holds a lift
+ * notice usually still holds the hold it lifts, carded in force when it arrived (D1456): the notice must then stay
+ * beside it. Two cards with no entity between them cannot be linked, and are not.
+ */
+export function couldClear(cleared: Card, constraint: Card): boolean {
+  const names = (who: Card, other: Card) => {
+    const hay = ` ${[...other.entities, other.statement].join(" \n ").toLowerCase().replace(/\s+/g, " ")} `;
+    return who.entities.some((e) => {
+      const w = e.toLowerCase().replace(/\s+/g, " ").trim();
+      if (w.length < 2) return false;
+      const at = hay.indexOf(w);
+      for (let k = at; k >= 0; k = hay.indexOf(w, k + 1)) {
+        const edge = /[\p{L}\p{N}]/u;
+        if (!edge.test(hay[k - 1] ?? " ") && !edge.test(hay[k + w.length] ?? " ")) return true;
+      }
+      return false;
+    });
+  };
+  return names(cleared, constraint) || names(constraint, cleared);
+}
+
+/**
  * Whether a card is about its item: its statement or entities share a word of four letters or more with the item's
  * title or own text. A model reading ten items at once can attach one item's card to another's index; such a card
  * shares nothing with the item it landed on.
