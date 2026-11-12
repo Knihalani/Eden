@@ -114,6 +114,11 @@ def score(pilot, arms):
         planted = sum((meta[i]["planted"] in got[i]) == (meta[i]["planted"] in api[i]) for i in key)
         print(f"  {arm:10} n {len(ids):>3}  speak/silent {speak / max(1, len(ids)):.3f}  same items "
               f"{same / max(1, len(ids)):.3f}  planted-or-look-alike call {planted / max(1, len(key)):.3f}")
+        silent = [i for i in ids if not api[i]]
+        spoke = [i for i in ids if api[i]]
+        print(f"  {'':10} API silent kept silent {sum(not got[i] for i in silent)}/{len(silent)}; API spoke, "
+              f"{arm} spoke {sum(bool(got[i]) for i in spoke)}/{len(spoke)}; items named API "
+              f"{sum(len(api[i]) for i in ids)}, {arm} {sum(len(got[i]) for i in ids)}")
 
 
 if __name__ == "__main__":

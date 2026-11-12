@@ -54,7 +54,7 @@ recorded check caches and F2's pools live in `.local/`, which is not pushed), so
 against Haiku on the same prompts. What was measured instead is the subagents' own repeat agreement, beside Haiku's
 (D931: the same prompt asked of Haiku again agrees on speak/silent 90.9%, names the same items 75.4–78.8%, keeps a
 silence 89.2–91.2%). The 64 train1 seed 41 check prompts of the first funnel run were answered a second time by four
-fresh haiku subagents (`check-agree.py`): speak/silent agreement 0.969 (62/64), same items 0.812, a silence kept
+fresh haiku subagents (`fidelity/check-agree.py`): speak/silent agreement 0.969 (62/64), same items 0.812, a silence kept
 24/26; 38 and 40 of 64 prompts spoke. The subagents repeat themselves at least as closely as Haiku does, which says
 the simulated check is stable, not that it matches Haiku's choices. A session with recorded check pools (F2) should
 answer them through the queue and report act/keep agreement with Haiku before reading small check effects.
@@ -72,9 +72,58 @@ judge than the API. On the cards, the only API replies this session holds, the r
 | fast, one request an agent (first 4 batches) | 1 | 0.855 (careful 0.909, fast in a batch 0.909) | 0.533 | 0.889 | 0.800 | 1,505 |
 
 The two fast runs differ from each other by as much as fast differs from careful (2 points of flag agreement). On
-cards, then, neither the recipe nor the batch size moves fidelity beyond run-to-run noise. The card call is
-long-form extraction where carefulness matters less than in the check's yes/no. The check needs F2's recorded rows
-(`check-fidelity.py`), which are not yet pushed.
+cards, then, neither the recipe nor the batch size moves fidelity beyond run-to-run noise.
+
+**The push check against the recorded API check (F2's rows, `claude/f2-pilot-data`).** Two samples, both scored by
+`fidelity/check-fidelity.py` with the shipped parser:
+
+1. F2's 120 pilot rows. These are stratified on the API's own answer: all 31 hidden rows where the API dropped the
+   planted fact, 29 where it kept it, 30 control and 30 neutral rows. Four recipes, each over all 120 rows:
+
+   | arm | API-dropped planted named | kept | look-alike named | neutral any yes | speak/silent with API | same items |
+   |---|---|---|---|---|---|---|
+   | API (recorded) | 0/31 | 29/29 | 10/30 | 8/30 | — | — |
+   | F2's subagents W, W2 (24 a batch) | 22, 23 | 28, 29 | 2, 5 | 6, 6 | 0.775, 0.825 | 0.483, 0.525 |
+   | careful, 24 a batch | 23 | 29 | 4 | 7 | 0.817 | 0.500 |
+   | fast, 24 a batch | 23 | 28 | 3 | 7 | 0.792 | 0.500 |
+
+   The recipe changes nothing: careful against fast and F2's own prompt are within one row of each other on every
+   stratum. The 31 dropped rows were chosen because the API erred there, and an API re-asked on its own errors
+   would also rescue many of them (D931: Haiku keeps its own recorded answer about 77–90% of the time). So this
+   sample overstates the gap.
+2. **A random 96 of the 2,267 recorded API rows** (`fidelity/random-rows.ts`, seed 7: 35 hidden, 24 control, 37
+   neutral; careful recipe, 24 a batch). This is the unbiased reading:
+
+   | | API (recorded) | subagents |
+   |---|---|---|
+   | planted named (hidden) | 29/35 | 32/35 |
+   | look-alike named (control) | 4/24 | 3/24 |
+   | neutral with any yes | 12/37 | 8/37 |
+   | items named in all | 116 | 81 |
+   | speak/silent agreement with the API | — | 0.823 (Haiku with itself, D931: 0.909) |
+   | same items as the API | — | 0.625 (Haiku with itself: 0.754–0.788) |
+   | API silent, subagent silent / API spoke, subagent spoke | — | 37/41, 42/55 |
+
+**Diagnosis.** The subagent is a stricter, better-aimed judge than Haiku on the API. It names 30% fewer items. It
+falls silent on a quarter of the pools where the API spoke (13 of 55), mostly by leaving out the items the API
+named with a loose `hits`. It still names the planted fact a little more often. Asking it to be fast and
+uncareful, giving it one prompt at a time (cards), or batching 24 changes none of this. The cause is the model
+behind it, not the procedure: a Claude Code subagent reads the whole prompt with the session's full attention and
+cannot be told into the API's thinking-off sloppiness. The residual gap is 9 points of speak/silent agreement and 13–16
+points of same-items agreement beyond Haiku's own repeat noise.
+
+**What it means for subagent-served numbers.**
+
+- **Levels are optimistic for Eden.** Against the API, the stand-in's check sends about a third fewer neutral packets
+  (8 against 12 of 37) and slightly more planted facts (+3 of 35). Read a queue run's neutral-packet and false-concern
+  rates as a lower bound and its hidden rate as an upper bound.
+- **Arm differences that do not change the check's prompt** (retrieval, ranking, packets, the agent's prompt) carry
+  over: both arms see the same stand-in check, and the content-hash cache gives paired arms the same verdict.
+- **Arm differences in the check's own prompt or rule** (F2's act-rule arms) do not carry over. The stand-in already
+  behaves like a stricter check, so an arm that makes the check stricter or looser moves it from a different start.
+  Those decisions need the API or a re-reading of the recorded API replies (F2's `offline.py`), not the queue.
+- Cards: flag agreement 0.93–0.95 and kind 0.87–0.90. A card-driven difference smaller than about 5% of flags
+  needs repeat samples.
 
 **How to read numbers from the queue.** Compare arms within one queue-served run. A difference between arms that is
 smaller than these disagreement rates (about 7% of card flags, 3% of check speak/silent decisions between two samples)
