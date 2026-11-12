@@ -790,6 +790,18 @@ default (eval 0.65 / 0.52 / 0), at $0.
   | Pipedream Connect ($12) | $16-40 | $3.6-14 |
   | Zapier MCP ($25.8) | $34-85 | $7.7-31 |
 
+- **The freshness floor (`syncActivePollMs`, D1131; a trial while this is written).** While a user is active, each
+  synced source that sends no change notifications gets a complete background poll once per floor: about one listing
+  call per such source per active user-hour at 60 minutes, half that at two hours (measured on dev20, 32 users of 13
+  sources; a poll that finds nothing changed is one call). For 20 connectors, 18 without notifications, about 220
+  active hours a month **[EST]**: about 2,000 calls a month at two hours (4,000 at 60 minutes) on top of the 300-1,200
+  above, less the request path's polls it replaces (on dev20 request-path calls fell 1,252 to 792 at two hours, 98 at
+  60 minutes). So about 2,000-3,000 calls a month with Eden at two hours: $0.60-0.90 on Composio, $20-30 on Arcade.dev,
+  $52-77 on Zapier MCP; within the agent-alone range at its upper end, above it at its lower end. On first-party APIs
+  it costs quota, not money: floor polls are background reads, under the tenant's pace and behind first pages and a
+  lookup's own polls (docs/research/s1-scale-1m.md §3, P1); a Gmail-scale tenant uses notifications, which the floor
+  skips.
+
 - **The agent's tokens.** Measured per 1,000 tasks on the lab's cached Pi agent (a3-cost-speed.md, p2-push-check.md):
   a Haiku 5.5 agent's own bill is about $0.18-0.25 per 1,000 requests, so $0.27-0.37 per heavy user-month; Eden's
   packets add $0.05-0.07 per 1,000 requests without a model key (+$0.08-0.10 a month). A Sonnet 5.5 agent is about
