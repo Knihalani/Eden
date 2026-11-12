@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@eden/primitives": "workspace:*",
-    "@eden/protocol": "workspace:*",
+    "@eden/protocol": "workspace:*"
+  },
+  "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.0.0"
   }

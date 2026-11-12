@@ -9,9 +9,7 @@
  * trusts (D7). A failed connect is retried after RETRY_AFTER_MS, not on every lookup.
  */
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { McpClient, type Tool, type Transport } from "./mcp";
 import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import {
   buildArgs,
@@ -92,25 +90,37 @@ const QUICK_CLOSE_MS = 5_000;
 /** Pages of `tools/list` read at most: a server that keeps returning cursors cannot hold a connect forever. */
 const MAX_TOOL_PAGES = 20;
 
-/** Every tool the server lists, across `tools/list` pages. */
-async function listAllTools(client: Client): Promise<Awaited<ReturnType<Client["listTools"]>>["tools"]> {
-  const tools: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
+/** Tools read across `tools/list` pages at most: past it the listing stops (each reply is capped at 4 MiB too). */
+const MAX_TOOLS_SEEN = 10_000;
+
+/**
+ * The first tool of each wanted name, across `tools/list` pages. Only those are kept: a server that pages
+ * descriptions without end held ~760 MB a connect when every tool was. The listing stops once every wanted name is
+ * found, on a cursor seen before, after `MAX_TOOL_PAGES` pages or `MAX_TOOLS_SEEN` tools. A name not found is then
+ * "server has no tool", as before; the read-only check runs on what is kept, unchanged (D7).
+ */
+async function listWantedTools(client: McpClient, wanted: ReadonlySet<string>): Promise<Tool[]> {
+  const found = new Map<string, Tool>();
+  const cursors = new Set<string>();
+  let seen = 0;
   let cursor: string | undefined;
   for (let page = 0; page < MAX_TOOL_PAGES; page++) {
     const res = await client.listTools(cursor ? { cursor } : undefined);
-    tools.push(...res.tools);
+    for (const t of res.tools) if (wanted.has(t.name) && !found.has(t.name)) found.set(t.name, t);
+    seen += res.tools.length;
     cursor = res.nextCursor;
-    if (!cursor) break;
+    if (!cursor || found.size === wanted.size || seen >= MAX_TOOLS_SEEN || cursors.has(cursor)) break;
+    cursors.add(cursor);
   }
-  return tools;
+  return [...found.values()];
 }
 
 export class McpSource implements Source {
   readonly kind = "mcp";
   readonly id: string;
   readonly description: string;
-  private client: Client | null = null;
-  private connecting: Promise<Client> | null = null;
+  private client: McpClient | null = null;
+  private connecting: Promise<McpClient> | null = null;
   /** After a failed connect, no retry until this time: a broken server must not cost a reconnect per lookup. */
   private retryAt = 0;
   private lastError: unknown = null;
@@ -134,22 +144,24 @@ export class McpSource implements Source {
   }
 
   /**
-   * `connect`, given up when `signal` aborts: the SDK's `connect` and `tools/list` take no signal and wait up to its
-   * own 60 s request timeout, so a server that never answers held a listing or re-read past the lookup's deadline
-   * (audit A5). The connect itself goes on, shared by the next call.
+   * `connect`, given up when `signal` aborts: `connect` and `tools/list` are sent with no signal and wait up to the
+   * client's 60 s request timeout (the SDK's, kept by D1704), so a server that never answers held a listing or
+   * re-read past the lookup's deadline (audit A5). The connect itself goes on, shared by the next call.
    */
-  private connectFor(signal?: AbortSignal): Promise<Client> {
+  private connectFor(signal?: AbortSignal): Promise<McpClient> {
     return signal ? untilAborted(this.connect(), signal) : this.connect();
   }
 
-  private async connect(): Promise<Client> {
+  private async connect(): Promise<McpClient> {
     if (this.client) return this.client;
     if (Date.now() < this.retryAt) throw this.lastError;
     this.connecting ??= (async () => {
-      const client = new Client({ name: "eden-partner", version: "0.0.0" });
+      const client = new McpClient({ name: "eden-partner", version: "0.0.0" });
       try {
         await client.connect(this.options.transport());
-        const tools = await listAllTools(client);
+        const o = this.options;
+        const wanted = new Set([o.searchTool.name, o.fetchTool?.name, o.listTool?.name].filter((n) => n !== undefined));
+        const tools = await listWantedTools(client, wanted);
         const tool = this.readTool(tools, this.options.searchTool.name);
         if (!this.options.searchTool.args) {
           const m = mapSearchArgs(tool.inputSchema as ToolSchema, this.options.searchTool.fixed);
@@ -236,7 +248,6 @@ export class McpSource implements Source {
           ? this.options.searchTool.args(query)
           : buildArgs(this.mapping!, query.text, query.limit, Date.now(), query.window),
       },
-      undefined,
       { signal },
     );
     if (result.isError) return [];
@@ -266,7 +277,7 @@ export class McpSource implements Source {
     const client = await this.connectFor(signal);
     const args = fetchTool.args ? fetchTool.args(ref) : buildFetchArgs(this.fetchMapping!, ref);
     if (!args) return null;
-    const result = await client.callTool({ name: fetchTool.name, arguments: args }, undefined, { signal });
+    const result = await client.callTool({ name: fetchTool.name, arguments: args }, { signal });
     // An error result says nothing about the record, and may pass: thrown, so it is never held as the item's state.
     if (result.isError) throw new FetchErrorResult(`${this.id}: ${fetchTool.name} returned an error`);
     // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
@@ -289,7 +300,7 @@ export class McpSource implements Source {
     const listTool = this.options.listTool!;
     const client = await this.connectFor(signal);
     const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
-    const result = await client.callTool({ name: listTool.name, arguments: args }, undefined, { signal });
+    const result = await client.callTool({ name: listTool.name, arguments: args }, { signal });
     if (result.isError) throw new Error(`${this.id}: ${listTool.name} returned an error`);
     // Only an offset page may be cut to `limit`: Eden's next offset counts the rows it returns. A server's own token
     // points past the whole page it sent, so rows cut from a token page (a tool with no page-size argument, or an

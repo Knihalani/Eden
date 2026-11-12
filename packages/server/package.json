@@ -14,14 +14,14 @@
     "@eden/primitives": "workspace:*",
     "@eden/protocol": "workspace:*",
     "@eden/redact": "workspace:*",
-    "@eden/sources": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.0.0"
+    "@eden/sources": "workspace:*"
   },
   "bin": {
     "eden": "src/cli.ts"
   },
   "devDependencies": {
-    "@eden/client": "workspace:*"
+    "@eden/client": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.0.0"
   }
 }
