@@ -401,3 +401,37 @@ the intent index and weaken the specific terms it was met by; the broad-kind req
 written for. Caveat: form 3 was answered per item (D1102) and form 4 per call of 20 items (D1101), so the transport
 differs; the rule named F8's coverage as the comparator. Two card answers in the queue are known to be faulty (one
 with its requests shifted by one item, one with a wrong request), out of about 600 calls.
+
+## 14. "Reached, not raised": a harness drop (D1155), then stale copies
+
+**The drop.** In F6's dev20 rehearsal (seed 41, served by subagents, D1101, single-shot), all 29 hidden facts
+"reached, not raised" came through the `ask_context` answer alone. In 18 of them the answer said "[source] Title: (shown
+above)" though no packet the agent received held the item. pi-ab's search tools (and hermes-ab's `tool()` hook)
+observed the tool result and dropped the injection it returned: the push's packet, still pending because its check came
+late, was handed out there (Eden marked its items shown) and never placed. Fixed in #315 (`observe-tool.ts`, D1155).
+
+**Re-measured** (dev20 seed 41, the Eden arm with go.sh's settings, `default`, old harness against the fixed one, one
+queue so unchanged prompts replayed; served by subagents, single-shot; 160 tasks a variant):
+
+| | old harness | fixed | |
+| --- | ---: | ---: | --- |
+| hidden raised | 43 | 77 (34 up, 0 down) | +21.2 points, template-clustered 95% [+15.0, +27.5] |
+| control concerns | 1 | 2 | +0.6 [+0.0, +1.9] |
+| neutral concerns | 30 | 35 (7 up, 2 down) | +3.1 [−0.6, +6.9] |
+| hidden tasks with a packet | 66 | 112 | |
+
+**What is left** (the fixed run's hidden stages: raised 77, reached and not raised 16, dropped by the check 2, never
+retrieved 65). The 16 were read against each template's ground truth by hand: 13 are stale copies (the agent was handed
+Eden's cached, pre-edit text of the planted item, and answered faithfully from it: a train's old departure, a flight's
+old landing time, a balance before an edit, a cut-off before it moved, a task shown open that is done), 2 need world
+knowledge (a Lifetime ISA's 25% charge; a 6-month passport rule) and 1 is an uptake miss (a payroll-date message in the
+ask answer). None is a cut snippet, an item the check left out or a grader miss, so the packet's order, lead and window
+have nothing left to win here.
+
+**`freshenHanded` (built, screened at $0, not run live).** The first N constraint-like items of the push gate's pool
+re-read beside the check (branch `claude/f1-freshen-handed`, not merged). At $0 (funnel, dev20 41–44, N 3): the planted
+item's line in every handed packet was identical in both arms (215 hidden, 158 control), because the funnel's on-demand
+poll already hands current copies, while connector calls rose 3.52 → 5.52 a request (+35% amortised). The stale copies
+appear in pi-ab's single-shot streams, where the push's decision landed at 63.7 s with the sync's freshen making no
+calls; that case was not measured (the account's subagent capacity ran out), and F3's #313 floor may cover it. Not
+handed on.
