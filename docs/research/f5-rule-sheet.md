@@ -364,3 +364,22 @@ The 95 dev20 seed 41 neutral checks of §9a with a sheet, three arms, each asked
 Bound max(3, D/2) = 4.5. **SR passes (−1.0) and S passes (+2.5); by §10a, SR passes §6 and goes forward.** Main's
 own prompt, asked twice, disagrees with itself on 9 of 95 neutral checks; §9a's +7 neutral packets for SR was within
 that noise. S names rules more often (7 and 11 against SR's 3 and 4), on neutral requests too.
+
+### 11b, stage 2. `cardsKeepOnly` through the queue (served by subagents, D1101): **fails; deleted**
+
+dev20 seed 41, SR (`pushCheckSheet` 80 + `pushCheckSheetRefs`, §10a's winner) against SR + `cardsKeepOnly` (SRK).
+Kept cards change every user's sheet, so all 306 of SRK's checks were new calls: 31 batches of 10 (one Haiku
+subagent each; a batch of 10 overran one subagent's context, so its 6 unanswered checks and 1 other were re-batched),
+pass 2 replayed every answer (306 of 306, 0 misses). `n2/compare.py`:
+
+| | SR | SRK | rule | |
+| --- | ---: | ---: | --- | --- |
+| planted handed | 72 / 160 | 63 / 160 (+4 −13) | not down | **fail** |
+| decoy handed | 14 / 160 | 13 / 160 (+7 −8) | up by at most half the gain | pass |
+| neutral given a packet | 29 / 160 | 28 / 160 | up by at most 3 points | pass |
+| hidden surfaced (packet or ask) | 89 / 160 | 90 / 160 (+6 −5) | — | |
+| decoys surfaced | 61 / 160 | 56 / 160 (+1 −6) | — | |
+
+By the pre-registered rule `cardsKeepOnly` is deleted (D814) with its code and tests. Reading: the planted-handed
+drop sits within the per-task churn of two fresh samples (+4 −13 handed against +6 −5 surfaced); stage 1's $0
+gain was +1 hidden on 640 dev20 tasks. Nothing here says kept cards help the check enough to pay for a re-test.

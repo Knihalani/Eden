@@ -673,12 +673,6 @@ export interface CardLimits {
    */
   requestsFix: boolean;
   /**
-   * `cardsKeepOnly` (F5, trial; `keepOnly()` sets it): an item read for its requests only (the prefilter found no
-   * constraint words in it) keeps the card the same call wrote for it, instead of `none`. No extra call: the prompt
-   * asks a card of every item it reads.
-   */
-  keepOnly?: boolean;
-  /**
    * `cardsLanes` (N4, D521, D522; `lanes()` sets it): how many model calls one user may have in flight. 1: one
    * batch at a time, as ever. More: while a full batch still waits behind a call in flight, another lane takes it, so
    * a new user's backfill is read in a fraction of the time for the same items a call.
@@ -965,11 +959,6 @@ export class CardEnricher {
   /** `cardsRequestsFix` (D1060): the requests list shown in the first example, and a dropped list asked again. */
   showRequests(): void {
     this.limits = { ...this.limits, requestsFix: true };
-  }
-
-  /** `cardsKeepOnly` (F5): a request-only item keeps the card its call wrote. */
-  keepOnly(): void {
-    this.limits = { ...this.limits, keepOnly: true };
   }
 
   /** `cardsLanes` (N4, D521, D522): up to `n` model calls in flight for one user. */
@@ -1267,15 +1256,9 @@ export class CardEnricher {
         const at = this.deps.now();
         batch.forEach((b, i) => {
           const asked = intent ? (requests?.[i] ?? null) : null;
-          // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote
-          // (`cardsKeepOnly`: the model's, when readable); with its requests unread it is uncovered.
-          const card = b.only
-            ? asked
-              ? this.limits.keepOnly
-                ? (cards[i] ?? NONE_CARD)
-                : NONE_CARD
-              : null
-            : cards[i];
+          // An item read for its requests only keeps the card the prefilter gave it (none), whatever the model wrote;
+          // with its requests unread it is uncovered.
+          const card = b.only ? (asked ? NONE_CARD : null) : cards[i];
           if (card === undefined || card === null) return; // Unreadable: uncovered, may be read again later.
           // A card that shares no word with its item was written for another one (a batch's indexes crossed):
           // uncovered rather than wrong, and so are the requests written beside it.

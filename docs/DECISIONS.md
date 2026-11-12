@@ -707,4 +707,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
-| F5's rule sheet (docs/research/f5-rule-sheet.md) | `pushCheckSheet` (cards on the sheet, 0 off), `pushCheckSheetAlways`, `pushCheckSheetRefs`, `cardsKeepOnly` | F5 (this session) | the day it opened, 2026-11-12 (D814) | §1, §6, §7 of the note: the dev20 screen (served by subagents) and the end-to-end single-shot run, each rule committed before its calls |
+| F5's rule sheet (docs/research/f5-rule-sheet.md) | `pushCheckSheet` (cards on the sheet, 0 off), `pushCheckSheetAlways`, `pushCheckSheetRefs`, `pushCheckSheetSelect` (`cardsKeepOnly` deleted, §11b) | F5 (this session) | the day it opened, 2026-11-12 (D814) | §1, §6, §7 of the note: the dev20 screen (served by subagents) and the end-to-end single-shot run, each rule committed before its calls |
