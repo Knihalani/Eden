@@ -247,6 +247,10 @@ describe("pushStateFilter", () => {
     expect(couldClear({ ...lifted, entities: [], statement: "Harlow hold lifted" }, hold(["Harlow"]))).toBe(true);
     expect(couldClear(lifted, hold(["Harlowe"]))).toBe(false);
     expect(couldClear(lifted, hold(["Brightside"]))).toBe(false);
+    // A name is matched within one field, never across the join of two.
+    expect(couldClear({ ...lifted, entities: ["Kew deposit"] }, hold(["Royal Kew"], "deposit on hold"))).toBe(false);
+    // One name in two Unicode forms is one name.
+    expect(couldClear({ ...lifted, entities: ["Zoe\u0308"] }, hold(["Zo\u00eb"]))).toBe(true);
     // No entity on either side: nothing to link them by.
     expect(couldClear({ ...lifted, entities: [] }, hold([]))).toBe(false);
   });

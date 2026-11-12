@@ -525,28 +525,47 @@ export function clearedNone(card: Card, item: ContextItem): boolean {
   return card.kind === "none" && !!card.state && CLEARED_STATES.has(card.state) && anchored(card, item);
 }
 
+/** A card's entities and its fields (each entity, and the statement), normalised once for `couldClear`. */
+export interface CardNames {
+  entities: string[];
+  fields: string[];
+}
+
+const nameForm = (text: string) => text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+const NAME_EDGE = /[\p{L}\p{N}]/u;
+
+/** `couldClear`'s reading of a card: made once a card, since a heavy user's cards are compared many at a time. */
+export function cardNames(card: Card): CardNames {
+  const entities = card.entities.map(nameForm).filter((e) => e.length >= 2);
+  return { entities, fields: [...entities, nameForm(card.statement)] };
+}
+
+/** An entity of `a` is named in a field of `b`, on letter and number boundaries ("Harlow" is not "Harlowe"). */
+function namedIn(a: CardNames, b: CardNames): boolean {
+  for (const w of a.entities) {
+    for (const field of b.fields) {
+      for (let k = field.indexOf(w); k >= 0; k = field.indexOf(w, k + 1)) {
+        const before = k > 0 ? field[k - 1]! : " ";
+        const after = k + w.length < field.length ? field[k + w.length]! : " ";
+        if (!NAME_EDGE.test(before) && !NAME_EDGE.test(after)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Whether a cleared card (`clearedNone`) could be the one that clears a constraint card: an entity of either (its
- * person, organisation, account or thing, the card model's own field) is named in the other's entities or statement,
- * on letter and number boundaries ("Harlow" is not "Harlowe"). The pair matters because a mailbox that holds a lift
- * notice usually still holds the hold it lifts, carded in force when it arrived (D1456): the notice must then stay
- * beside it. Two cards with no entity between them cannot be linked, and are not.
+ * person, organisation, account or thing, the card model's own field) is named in one of the other's entities or in
+ * its statement. The pair matters because a mailbox that holds a lift notice usually still holds the hold it lifts,
+ * carded in force when it arrived (D1456): the notice must then stay beside it. What it cannot link, it leaves
+ * unlinked: two cards with no entity between them, two forms of one name ("Harlow Ltd", "Harlow Events"), and a
+ * name inside running text in a script written without spaces (only an entity equal to an entity links there).
  */
-export function couldClear(cleared: Card, constraint: Card): boolean {
-  const names = (who: Card, other: Card) => {
-    const hay = ` ${[...other.entities, other.statement].join(" \n ").toLowerCase().replace(/\s+/g, " ")} `;
-    return who.entities.some((e) => {
-      const w = e.toLowerCase().replace(/\s+/g, " ").trim();
-      if (w.length < 2) return false;
-      const at = hay.indexOf(w);
-      for (let k = at; k >= 0; k = hay.indexOf(w, k + 1)) {
-        const edge = /[\p{L}\p{N}]/u;
-        if (!edge.test(hay[k - 1] ?? " ") && !edge.test(hay[k + w.length] ?? " ")) return true;
-      }
-      return false;
-    });
-  };
-  return names(cleared, constraint) || names(constraint, cleared);
+export function couldClear(cleared: Card | CardNames, constraint: Card | CardNames): boolean {
+  const a = "fields" in cleared ? cleared : cardNames(cleared);
+  const b = "fields" in constraint ? constraint : cardNames(constraint);
+  return namedIn(a, b) || namedIn(b, a);
 }
 
 /**
