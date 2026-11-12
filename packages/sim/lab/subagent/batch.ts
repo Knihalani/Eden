@@ -62,15 +62,21 @@ export function invalid(req: QueuedRequest, a: Answer): string | null {
   if (!text.trim() && !calls.length) return "empty answer";
   if (spec.kind === "json") {
     if (calls.length) return "tool calls on a JSON request";
-    // Text past a stop sequence is cut by the transport, so only the part before it must parse.
+    // Text past a stop sequence is cut by the transport. Either the whole answer or the part before the stop must
+    // parse: a stop placed inside the JSON (the reader's `"same":false`, the lean check's `"act":false`) cuts it
+    // mid-object, and its caller closes the cut reply itself (F7).
     let body = text;
     for (const s of spec.stop ?? []) if (body.includes(s)) body = body.slice(0, body.indexOf(s));
-    try {
-      const v = JSON.parse(unfence(body).trim());
-      if (v === null || typeof v !== "object") return "JSON is not an object or array";
-    } catch (e) {
-      return `JSON does not parse: ${(e as Error).message.slice(0, 80)}`;
-    }
+    const parses = (t: string): string | null => {
+      try {
+        const v = JSON.parse(unfence(t).trim());
+        return v === null || typeof v !== "object" ? "JSON is not an object or array" : null;
+      } catch (e) {
+        return `JSON does not parse: ${(e as Error).message.slice(0, 80)}`;
+      }
+    };
+    const cut = parses(body);
+    if (cut && (body === text || parses(text))) return cut;
   }
   if (spec.kind === "text" && calls.length) return "tool calls on a plain-text request";
   if (calls.length) {

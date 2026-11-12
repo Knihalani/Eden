@@ -168,3 +168,13 @@ give them (a session create, refused); their replies were written before it and 
 about 9% of the check, under 5% of Eden plus agent. The wait is the larger prize, and the stop is worth about 0.1 s a
 task. Only a model answering the lean prompt over a powered pool can say whether it keeps the 6 facts in 283 the
 shipped order would lose; that needs the API or F9's transport at volume, not 25 prompts.
+
+## 6. Pre-registration: the screen served by subagents (D1101), before its first call
+
+The screen of §1 runs through F9's queue transport (D1101) on every sixth readable recorded pool (158 rows:
+`.local/f7/sample6.dump.jsonl`), arms W and Y only. **Served by subagents (D1101)**; tokens and wait are [EST].
+Rule (§4's, with §1's bars scaled to the rows): Y passes if its output tokens a check (as the transport counts them)
+are at most 0.75 of W's, planted named on hidden rows at least W − 2, the look-alike named on control rows at most
+W + 2, and neutral rows with a yes at most W + 2. The queue's validator (`batch.ts`) is fixed first to accept an
+answer whose stop sequence cuts its JSON mid-object, as the lean stop and the reader's stop do (the whole answer must
+parse, or the part before the stop).
