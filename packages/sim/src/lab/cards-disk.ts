@@ -502,7 +502,8 @@ export class DiskCardMaker implements CardMaker {
             return;
           }
           made.set(h, c);
-          this.put(h, c.kind === "none" ? null : c, r);
+          // A none card is recorded only with a state (`cardsState`, D1193): the replay must filter as the run did.
+          this.put(h, c.kind === "none" && !c.state ? null : c, r);
         });
       } finally {
         // Settled whether or not the call worked: a card it did not make is uncovered for every waiter, and the next
