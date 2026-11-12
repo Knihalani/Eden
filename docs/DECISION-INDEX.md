@@ -693,3 +693,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1124 | 2026-11-12 | Lab only: the pre-registered rule for D1122 and D1123 | lab |
 | D1125 | 2026-11-12 | Lab only: D1124's run moves to subagents, with unrelated silent edits in every variant | lab |
 | D1126 | 2026-11-12 | Rejected (stopped on D1125's pre-registered rule): `packetChanges` (D1123) and `packetWhy` v2 (D1122, deleted by D1126); both deleted with… | rejected |
+| D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
+| D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
