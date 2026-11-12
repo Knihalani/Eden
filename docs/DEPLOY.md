@@ -7,7 +7,8 @@ figures and the commands); prices come from docs/research/d1-providers.md and **
 ## 0. In plain words
 
 - **Run it on one box first.** One machine with Docker, Eden behind Caddy (TLS), idle users persisted encrypted on
-  its disk (D991). The image builds and runs on amd64 and arm64 (D990).
+  its disk (D991). The image builds and runs on amd64 and arm64 (D990). It runs on Bun's distroless image (D1600):
+  no shell inside, so `docker exec <container> bun …` works and `docker exec <container> sh` does not.
 - **Users are bound by memory.** About 2-3.4 MB of RAM per user at the 3,000-item cap, measured. A heavy user
   (a daily agent, about 50 requests a day, 20 connectors) at the peak hour needs the most; plan with §6.
 - **Where:** Hetzner dedicated servers are the cheapest RAM measured (about $1.0-1.4 per GB-month, EU only, not
