@@ -945,7 +945,14 @@ export class ContextPartner {
     const live = this.sessions.get(sessionKey(event));
     if (live) this.checkPlans(live);
     const queued = (live?.pending.length ?? 0) > 0;
-    return { ...result, pending: result.pending || !settled || queued };
+    // `askHeedsCheck` (D1450): the reply's own packet (a rule path made it before the check answered) is held back
+    // when its request's check has since turned down every item in it. It stays marked delivered: silence, no repeat.
+    const kept = live && settled && result.injection && this.allCheckedOut(live, result.injection) ? null : undefined;
+    return {
+      ...result,
+      ...(kept === null ? { injection: null } : {}),
+      pending: result.pending || !settled || queued,
+    };
   }
 
   private async observeEvent(
@@ -1290,6 +1297,7 @@ export class ContextPartner {
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
     this.dropRemovedPending(s);
+    this.dropCheckedOut(s);
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
@@ -1306,6 +1314,34 @@ export class ContextPartner {
       s.pending.splice(k, 1);
       this.withdraw(s, packet);
     }
+  }
+
+  /**
+   * `askHeedsCheck` (G2, D1450): a queued packet of this request whose every item its push check turned down is not
+   * handed out (a rule path queued it before the check answered: the no-model conflict test reads "hold lifted" as
+   * a hold). It goes whole, as a removed item's packet does, and only when nothing else is in it. The candidates'
+   * own packet holds only what the check said yes to, and an update or a plan alert is about a copy already handed.
+   */
+  private dropCheckedOut(s: Session): void {
+    if (s.pending.length === 0) return;
+    const out = this.checkedOut(s);
+    if (!out) return;
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!this.allCheckedOut(s, packet, out)) continue;
+      s.pending.splice(k, 1);
+      this.withdraw(s, packet);
+    }
+  }
+
+  /** `askHeedsCheck` (D1450): a proactive packet whose every item this request's push check turned down. */
+  private allCheckedOut(s: Session, packet: Injection, out = this.checkedOut(s)): boolean {
+    if (!out || packet.mode !== "proactive" || packet.citations.length === 0) return false;
+    const now = this.now();
+    return packet.citations.every((c) => {
+      const item = this.deps.cache.get(s.scope, c.itemId, now);
+      return !!item && out(item);
+    });
   }
 
   /**
