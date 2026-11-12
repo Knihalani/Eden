@@ -69,8 +69,8 @@ after a result is read.
 | reworded 43 | 529 | 0.000219 | 2,615 / 1,136 / 120 | 1.08 / 1.64 | 0.52 |
 
 At Haiku 5.5's $0.10 / $0.01 (cache read) / $0.50 per million, a call of 2,500 input tokens with 1,185 read from the
-cache and 115 out is about $0.000131 of uncached input (the pool and the request: **about 60%**), $0.000012 of cache
-reads and $0.000058 of output (**about 27%**) **[EST: arithmetic on the table]**.
+cache and 115 out is about $0.000131 of uncached input (the pool and the request: **about 65%**), $0.000012 of cache
+reads and $0.000058 of output (**about 29%**) **[EST: arithmetic on the table]**.
 
 **Prompt caching is already on and mostly hits.** The fixed instructions (1,185 tokens) are the only stable prefix.
 983 of the 1,092 calls read them from the cache (90%), and no call reported a cache write (the prefix was warm from
