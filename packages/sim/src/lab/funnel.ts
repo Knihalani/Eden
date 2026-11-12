@@ -595,8 +595,8 @@ function merged(parts: (PartOut & { neutral?: NeutralOut })[]) {
   if (m.cards) console.log(`merged cards use (summed): ${JSON.stringify(m.cards)}`);
   if (m.reader) console.log(`merged reader replay (summed): ${JSON.stringify(m.reader)}`);
   console.log(
-    "(each process's own summary lines above, such as sync, cards, reader, overBudget and cpu, cover its block only; " +
-      "overBudget's reader and bridge counts are not summed here)",
+    "(each process's own summary lines above, such as sync, cards, reader, NEUTRAL, overBudget and cpu, cover its " +
+      "block only: quote the merged lines; overBudget's reader and bridge counts are not summed here)",
   );
   return {
     suite: suites.join(","),
