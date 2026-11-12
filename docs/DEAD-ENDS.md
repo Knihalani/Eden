@@ -72,6 +72,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1074 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | Hidden raised −0.2 points (−1.533..+1.271), 3,066 pairs over 384 templates (Haiku's own grade not read for… |
 | D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
 | D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
+| D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
 
 ## Reader
 
@@ -102,6 +103,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D345 | A complete poll after a change signal does not stand in for re-reading the doubted copies (`verifyByPoll`, A18): built as a trial… |  |
 | D346 | An ask does not re-read its likely citations beside its poll and live search (`askVerifyEarly`, A18): built as a trial, measured, deleted. |  |
 | D840 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | It costs more per recovered update than D606's poll in every form: a session holds about 11 due copies (up… |
+| D1127 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | killed by D1130: stopped on D1128's pre-registered rule |
+| D1129 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | killed by D1130: stopped on D1128's pre-registered rule |
 
 ## Cards and intent
 

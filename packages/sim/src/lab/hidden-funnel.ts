@@ -129,7 +129,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, setRealism, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -220,9 +220,11 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "realism",
         "notify-share",
         "noise-items",
         "noise-edits",
+        "edit-lead-min",
         "noise-vocab",
         "source-profile",
         "push",
@@ -271,6 +273,11 @@ const TIME = Number(opt("time", "0"));
  */
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
 /**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's, twenty connectors and about 400
+ * rule-like items that never apply, duplicated and forwarded threads, mail in five other languages. `off` (default).
+ */
+setRealism(opt("realism", "off"));
+/**
  * `--source-profile FILE|JSON`, `--push none|signals|payload`, `--push-rates` (A18, the live harnesses' connector
  * options, connector-options.ts): the market latency profiles and change notices pi-ab runs under, so the funnel at
  * `--time 1` times Eden's own path (observe, push, ask re-reads, search, poll) as the agent would wait on it, at $0.
@@ -286,6 +293,13 @@ const NOISE_ITEMS = Number(opt("noise-items", "20"));
 /** `--noise-edits N` (F3, D1125): N unrelated items edited silently in every variant (silent.ts `noiseEdits`). */
 const NOISE_EDITS = Number(opt("noise-edits", "0"));
 if (!Number.isInteger(NOISE_EDITS) || NOISE_EDITS < 0) throw new Error("--noise-edits takes a whole number");
+/**
+ * `--edit-lead-min N` (F3, D1127): the silent edits land N minutes before the first request, and the sync ticks once a
+ * simulated minute in between (as the servers' timer does), so a background poll may store them first. 0 (the default):
+ * they land just before the first request, the hardest case.
+ */
+const EDIT_LEAD_MIN = Number(opt("edit-lead-min", "0"));
+if (!Number.isInteger(EDIT_LEAD_MIN) || EDIT_LEAD_MIN < 0) throw new Error("--edit-lead-min takes a whole number");
 /** `--noise-vocab N` (O1): each noise connector gets N words of its own (`noiseSources`); 0, the shared words only. */
 const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
@@ -1280,7 +1294,17 @@ async function runSeed(
   }
   // F3 (D1123): the silent edits land at their sources now, with no notice: Eden sees them only by polling.
   if (silent.size > 0) {
+    const start = clock;
+    clock -= EDIT_LEAD_MIN * 60_000;
     for (const id of applyEdits(world, silent, clock)) for (const src of own) if (src.id === id) src.reindex();
+    if (sync && !CONNECT) {
+      for (let m = 0; m < EDIT_LEAD_MIN; m++) {
+        clock += 60_000;
+        syncUse.backfill += await sync.tick();
+      }
+      if (cards) await cards.idle();
+    }
+    clock = start;
   }
   for (const [i, task] of tasks.entries()) {
     let sinceConnectMs = 0;

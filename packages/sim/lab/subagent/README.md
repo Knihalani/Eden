@@ -49,7 +49,9 @@ anything else goes back to `pending/`, to be answered again. Run every `bun` her
 
 ## The driver procedure (any Claude Code session)
 
-Two ways; both measured in F9's first runs.
+Two ways; both measured in F9's first runs. For large runs (tens of thousands of requests across sessions) take
+20–30 requests a batch and keep about 10 agents running in each driving session; `take` is safe across sessions on
+one queue directory.
 
 **A. Batches (best for a burst of independent calls, e.g. the funnel's push checks).** In a loop:
 
@@ -91,6 +93,24 @@ search again after reading; the house prompt still describes tools the call does
 a fixed keyword query, so a world whose hidden fact needs another wording is not found by it. Use it to compare arms
 within one run, never against a real-loop number. It refuses `--day`, `--days`, `--act` and `--reuse-arms`, and the
 results file says `agentSim` and `transport`.
+
+## How far to trust it (docs/research/f9-subagent-transport.md)
+
+Measured against recorded API replies. On cards, constraint-flag agreement is 0.93–0.95. On the push check (a random
+96 of F2's 2,267 recorded API rows), speak/silent agreement is 0.823 where Haiku with itself reaches 0.909. The
+stand-in is a stricter judge: it names 30% fewer items, sends fewer neutral packets and names slightly more planted
+facts. Use the default (careful) prompt with 20–30 requests a batch: `--recipe fast` and one request an agent were
+tested and changed nothing. So:
+
+- read a queue run's levels as optimistic for Eden (false concerns and neutral packets a lower bound, hidden facts an
+  upper bound), and label them;
+- compare arms within one run: a difference outside the check's own prompt (retrieval, ranking, packets, the agent)
+  carries over, since both arms share the stand-in's verdicts through the cache;
+- do not decide changes to the check's prompt or rule on the queue: those need the API or the recorded API replies.
+
+The tools that measured it are in `fidelity/`: `check-fidelity.py` (recorded check rows, any batch size, scored
+against the API), `random-rows.ts` (a random sample of `--check-dump` rows), `cards-fidelity.py` and
+`check-agree.py`.
 
 ## Never
 

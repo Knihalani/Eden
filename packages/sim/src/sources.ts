@@ -17,6 +17,7 @@ import type { ContextItem, Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { Rng } from "./rng";
 import { RARE_SOURCES } from "./rare-sources";
+import { REALISM_SOURCES } from "./realism";
 import { DAY, type World, type WorldItem } from "./world";
 
 /**
@@ -610,7 +611,8 @@ const SYNTH_RARE = new Set(["sms", "files", "tickets", "household"]);
  * rare source that rare-sources.ts does not list (sms, files, tickets, household; D884) gets drive's profile.
  */
 export function profileFor(profiles: ProfileSet, id: string): SourceProfile {
-  const p = profiles[id] ?? profiles[RARE_SOURCES[id]?.like ?? ""] ?? (SYNTH_RARE.has(id) ? profiles.drive : undefined);
+  const like = RARE_SOURCES[id]?.like ?? REALISM_SOURCES[id]?.like ?? "";
+  const p = profiles[id] ?? profiles[like] ?? (SYNTH_RARE.has(id) ? profiles.drive : undefined);
   if (!p) throw new Error(`no source profile for "${id}"`);
   return p;
 }
