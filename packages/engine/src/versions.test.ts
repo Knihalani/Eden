@@ -9,9 +9,9 @@ import { CORE_CONFIG } from "./parts";
 import { changeNote } from "./why";
 import { changeOf, SIDE_CHARS, Versions } from "./versions";
 
-// F3 (`packetChanges`, trial; docs/research/f3-why-it-matters.md): Eden keeps what changed in an item at its source when
-// a sync stores an edited copy, and says it when it hands the item over. H19: 11 of 16 facts that reached the agent
-// unraised were silent edits, shown only as they now read.
+// F3 (`packetChanges`, trial; docs/research/f3-why-it-matters.md): Eden keeps what changed in an item at its source
+// when a sync stores an edited copy, and says it when it hands the item over. H19: 11 of 16 facts that reached the
+// agent unraised were silent edits, shown only as they now read.
 
 const MIN = 60_000;
 /** Thursday 12 November 2026, 09:00 UTC. */

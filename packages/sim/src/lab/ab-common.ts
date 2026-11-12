@@ -135,7 +135,7 @@ export interface Task {
    */
   planted?: string;
   /** F3 (D1123): the planted item's version before a silent edit (`HiddenTask.before`; `silent.ts`). */
-  before?: { title: string; text: string; meta?: Record<string, string> };
+  before?: { title: string; text: string; meta?: Record<string, string>; updatedAt?: number };
 }
 
 /** The tasks of one world, in session order: the first turn of each task that needs facts, and some off-world ones. */

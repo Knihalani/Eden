@@ -33,7 +33,7 @@ export interface HiddenTask {
    * kind); the planted item is the edited version. Harnesses put this version at the source for the backfill, then
    * swap in the edited one with no notice before the first request (`silent.ts`).
    */
-  before?: { title: string; text: string; meta?: Record<string, string> };
+  before?: { title: string; text: string; meta?: Record<string, string>; updatedAt?: number };
 }
 
 interface Planted {

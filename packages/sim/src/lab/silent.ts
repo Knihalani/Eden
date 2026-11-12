@@ -38,7 +38,8 @@ export function withSilent(name: string, plant: Plant): Plant {
 
 /**
  * Puts each task's `before` at its source in place of the planted item (`plantedIds[k]` is task k's), dressed as the
- * harnesses dress planted items and dated three days earlier. Returns the edited versions by id, for `applyEdits`.
+ * harnesses dress planted items and dated as `before` says (else three days earlier). Returns the edited versions by
+ * id, for `applyEdits`.
  * Call after the planted items are dressed and before the sources are built.
  */
 export function plantBefore(
@@ -57,7 +58,8 @@ export function plantBefore(
       ...edited,
       title: t.before.title,
       text: t.before.text,
-      updatedAt: edited.updatedAt - 3 * 86_400_000,
+      // Its own time when the suite gives one (dev20's `before` items do), else three days before the edit.
+      updatedAt: t.before.updatedAt ?? edited.updatedAt - 3 * 86_400_000,
     };
     if (t.before.meta) earlier.meta = t.before.meta;
     dress(world, earlier);
