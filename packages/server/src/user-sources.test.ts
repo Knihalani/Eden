@@ -328,7 +328,8 @@ describe("UserSources: per-user sources and connections (D108)", () => {
     const [a] = await us.resolver(alice);
     const [b] = await us.resolver(bob);
     expect(a!.callPriced).toBe(true);
-    expect(b!.callPriced).toBe(false);
+    // Unmarked: unknown (D1133), which the floor counts as priced.
+    expect(b!.callPriced).toBeUndefined();
     const bad = userSources(() => [{ ...mcpSpec(mail.transport), callPriced: "yes" } as never]);
     expect(await bad.resolver(alice)).toEqual([]);
     expect((await bad.status(alice)).error).toMatch(/callPriced must be true or false/);
