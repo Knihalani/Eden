@@ -111,3 +111,55 @@ the longer clause adds about 130 input tokens a call. At Haiku's 1:5 input:outpu
 standing in for the card call's own clause; the card call judges the item among nine others and also writes its card.
 No paid card call was made (no Anthropic credit). Before a promotion the recommended check is a re-card of dev20
 41–44 in form 3 + 16 through the queue, then the same screen.
+
+## 4. Review fixes, and arm 2 on current main
+
+The reviewer (REQUEST_CHANGES, five findings) found side effects the overlay numbers above carried. All five are fixed,
+with tests (`card-state.test.ts`, `plan-conflict.test.ts`):
+- a cleared none card counted as a carded seat in the intent index (`intentFinds`' `carded`, `carded()`);
+- plan alerts (`checkPlans`) built their pool without the filter (now one `pushPool` for both);
+- a cleared none card that shares no word with its item (crossed indexes) is not kept (`clearedNone`);
+- a constraint turned into none for want of an action drops its state;
+- `pushStateFilter` needs `cardsState`.
+
+After the fixes, and on main as of 2026-11-12 10:25 (F1's D1153 had moved the base), overlay arm 2 against a fresh base
+(`.local/f2s-base3` → `.local/f2s-run3`), handed decoys / facts:
+
+| suite | decoys | facts |
+|---|---|---|
+| train 41–42 | 276 → 199 | 296 → 294 |
+| reworded 41–42 | 262 → 192 | 287 → 285 |
+| longtail 41–42 | 22 → 18 | 32 → 32 |
+| dev20 41–44 | 186 → 175 | 244 → 241 |
+| pooled | 746 → 584 (−21.7%) | 859 → 852 (−0.8%) |
+
+## 5. The re-card: the card call's own state clause (the integrator's condition)
+
+The integrator promoted arm 2 on condition that a re-card in the state form holds on dev20 41–44: decoys handed fall at
+least 20% and facts handed at most 1%. dev20 41–44, every variant (48 worlds), was re-carded in form 19 through
+F8's per-item queue (D1102): `cold-start.ts --queue-dir` dumped 2,009 items, Haiku-model subagents answered them from
+the card call's own system prompt with the state clause (41 batches of 50; four keys left out were answered again),
+and a recording pass made 732 card calls with 0 failures and no new item pending (`--cards-out`, 1,929 lines keyed
+`:f19`). Served by subagents per item, world clock: not a model's own recording.
+
+States the card call gave (dev20, 1,929 items): cards of a constraint kind in force 834, superseded 49, met 10, no
+state 88; none cards with a state 75 (lifted 49, met 23, superseded 3).
+
+No-model funnel, dev20 41–44, the shipped replay plus the f19 lines (`.local/f2s-q`; the merged base reproduces
+the shipped base exactly), handed:
+
+| run | decoys | facts | surfaced decoys | surfaced facts | neutral any packet |
+|---|---|---|---|---|---|
+| base (shipped form 3) | 186 | 244 | 259 | 345 | 433/640 |
+| form 19, filter off | 160 | 255 | 239 | 373 | 432/640 |
+| form 19, filter on | 147 | 254 | 238 | 373 | 432/640 |
+
+**Against the condition:** decoys 186 → 147 (−21.0%; bar −20%: holds), facts 244 → 254 (+4.1%; bar ≤ −1%: holds).
+The filter alone (same cards, off → on) takes decoys 160 → 147 (−8.1%; kind a 48 → 34) for one fact. The rest is the
+re-card itself (form 3 → 19 with the filter off: decoys −26, facts +11), which mixes the state clause with fresh
+subagent answers against F8's (both per item): read it as noise of that size, not as the clause's effect.
+
+**Cost.** Over the 1,929 items, the card call's output (cards and requests as the call's JSON) is 9.4% larger in form
+19 than the same items' form-3 lines (cards alone +8.6%), measured from the two files; this too mixes in answer
+variation. The clause adds about 140 input tokens a call. At Haiku's prices that is about +7% a card call, within D1193's
+estimate.
