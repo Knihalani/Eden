@@ -630,8 +630,8 @@ Read these numbers in that run's shape:
 - The shipped-coverage cards were not recorded (the Haiku key had no credit), so every line says `[coverage: none]`
   and the planted items have no cards or intent requests. The note has the recording recipe; once it is recorded,
   the default becomes shipped coverage and this baseline must be re-recorded.
-- Quote NEUTRAL lines only from `--jobs 1`: under the default parallel `--jobs` they merge one shard and vary between
-  identical runs.
+- Under parallel `--jobs`, each process prints its own `NEUTRAL` lines for its block of seeds. The run's figures are
+  the `merged NEUTRAL` lines, which equal `--jobs 1`'s (313/640 here; funnel-flags.test.ts checks the JSON block).
 - Train in the same shape (`--cards none --intent none`) reads 456/768.
 
 ### 1h. A standing-constraint ledger over days users (M5, D910–D911; docs/research/m5-ledger.md)
