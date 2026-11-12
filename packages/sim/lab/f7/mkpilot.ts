@@ -1,15 +1,29 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { checkMessages, leanSystem, CHECK_SYSTEM } from "../../../engine/src/push-check";
-const rows = ["train", "reworded"].flatMap((s) =>
-  readFileSync(`.local/f7/base-${s}-43.dump.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l)),
-).filter((r) => r.yes !== null && r.reply);
+const rows = ["train", "reworded"]
+  .flatMap((s) =>
+    readFileSync(`.local/f7/base-${s}-43.dump.jsonl`, "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l)),
+  )
+  .filter((r) => r.yes !== null && r.reply);
 // Deterministic stratified pick: hidden rows where the shipped check named the planted fact, control rows, neutral
 // rows with a non-empty reply (where a stop could save something), 8 each, every k-th.
 const pick = (xs: any[], n: number) => xs.filter((_, i) => i % Math.floor(xs.length / n) === 0).slice(0, n);
 const sets = [
-  ...pick(rows.filter((r) => r.variant === "hidden" && r.yes.includes(r.planted)), 9),
-  ...pick(rows.filter((r) => r.variant === "control"), 8),
-  ...pick(rows.filter((r) => r.variant === "neutral" && r.reply.length > 20), 8),
+  ...pick(
+    rows.filter((r) => r.variant === "hidden" && r.yes.includes(r.planted)),
+    9,
+  ),
+  ...pick(
+    rows.filter((r) => r.variant === "control"),
+    8,
+  ),
+  ...pick(
+    rows.filter((r) => r.variant === "neutral" && r.reply.length > 20),
+    8,
+  ),
 ];
 const meta: any[] = [];
 sets.forEach((r, k) => {

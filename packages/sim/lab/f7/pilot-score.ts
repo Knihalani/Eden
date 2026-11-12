@@ -48,7 +48,10 @@ for (const m of meta) {
     const raw = readFileSync(files[arm === "W" ? 0 : 1]!, "utf8").trim();
     const text = arm === "Y" ? cut(raw) : raw;
     // What the model writes before the stop is what is billed and waited on; past the stop nothing is generated.
-    const written = arm === "Y" ? raw.slice(0, Math.min(...CHECK_LEAN_STOP.map((s) => (raw.indexOf(s) + 1 || raw.length + 1) - 1))) : raw;
+    const written =
+      arm === "Y"
+        ? raw.slice(0, Math.min(...CHECK_LEAN_STOP.map((s) => (raw.indexOf(s) + 1 || raw.length + 1) - 1)))
+        : raw;
     const at = parseCompare(text, m.ids.length);
     const yes = new Set((at ?? []).map((i) => m.ids[i]!));
     const t = tally[arm]!;
