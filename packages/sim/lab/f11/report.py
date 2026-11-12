@@ -89,6 +89,8 @@ def rows_of(stem, hit, check_usd, check_out):
         ev = sorted(tl.get((r["task"], r["condition"]), {}).get("events", []), key=lambda e: e["t"])
         turns, usd, model_ms, rounds, conn, asks, ask_ms, checks, eden_conn = 0, 0.0, 0.0, 0, 0, 0, 0.0, 0, 0
         searched_this_turn = False
+        tool_iv = []
+        late = 0
         begins = {}
         sized = 0
         for e in ev:
@@ -107,7 +109,12 @@ def rows_of(stem, hit, check_usd, check_out):
                     usd += (tin - prefix) * HAIKU["in"] + prefix * (hit * HAIKU["cr"] + (1 - hit) * HAIKU["cw"])
                     usd += o * HAIKU["out"]
                     model_ms += 596 + 2.93 * o
+            elif e["ev"].startswith("tool.search_") and e["ph"] == "E":
+                b = begins.get(("tool", e.get("id")))
+                if b is not None:
+                    tool_iv.append((b, e["t"]))
             elif e["ev"].startswith("tool.search_") and e["ph"] == "B":
+                begins[("tool", e.get("id"))] = e["t"]
                 conn += 1
                 if not searched_this_turn:
                     rounds += 1
@@ -119,7 +126,17 @@ def rows_of(stem, hit, check_usd, check_out):
                 ask_ms += e["t"] - begins.get(("ask", e.get("id")), e["t"])
             elif e["ev"] == "eden.decision":
                 checks += d.get("checkCalls", 0) or 0
+                # A check whose decision lands after the agent's first model call measured late injection.
+                if (d.get("checkCalls") or 0) > 0 and turns > 0:
+                    late += 1
                 eden_conn += d.get("sourceCalls", 0) or 0
+        # The agent's measured connector wait: the union of its search spans (parallel calls overlap), at the
+        # `direct` market profile's latency (--time-scale 1).
+        tool_ms, end = 0.0, -1.0
+        for a, b in sorted(tool_iv):
+            if b > end:
+                tool_ms += b - max(a, end)
+                end = b
         graded = r.get("facts") is not None and len(t.get("must") or []) > 0
         hit_fact = (1.0 if any(r["facts"].values()) else 0.0) if graded else None
         out.append(
@@ -138,7 +155,9 @@ def rows_of(stem, hit, check_usd, check_out):
                 "rounds": float(rounds),
                 "asks": float(asks),
                 "askMs": ask_ms,
+                "toolS": tool_ms / 1000,
                 "checks": float(checks),
+                "lateChecks": late,
                 "agentUsd": usd,
                 "checkUsd": checks * check_usd,
                 "modelS": model_ms / 1000,
@@ -154,11 +173,12 @@ def mean(xs):
 
 
 def derived(r, conn_s, conn_usd_1k):
-    """$ a task and seconds a task under one connector assumption."""
+    """$ a task and seconds a task under one connector assumption (conn_s None: the run's measured search time)."""
     eden = r["cond"] != "tools"
     usd = r["agentUsd"] + r["checkUsd"] + (CARDS_USD_1K / 1000 if eden else 0.0)
     usd += (r["agentConn"] + r["edenConn"]) * conn_usd_1k / 1000
-    wait = r["modelS"] + r["checkS"] + r["rounds"] * conn_s + r["askMs"] / 1000
+    conn = r["toolS"] if conn_s is None else r["rounds"] * conn_s
+    wait = r["modelS"] + r["checkS"] + conn + r["askMs"] / 1000
     return usd, wait
 
 
@@ -206,9 +226,11 @@ def main():
     row("connector rounds/task", lambda rs: mean([r["rounds"] for r in rs]))
     row("asks/task", lambda rs: mean([r["asks"] for r in rs]))
     row("ask ms/ask (measured)", lambda rs: sum(r["askMs"] for r in rs) / max(1, sum(r["asks"] for r in rs)), "{:.1f}")
+    row("checks landing after the first model call", lambda rs: sum(r["lateChecks"] for r in rs), "{}")
     row("check calls/task", lambda rs: mean([r["checks"] for r in rs]))
     row("agent $/1k [EST]", lambda rs: 1000 * mean([r["agentUsd"] for r in rs]))
     row("check $/1k [EST]", lambda rs: 1000 * mean([r["checkUsd"] for r in rs]))
+    row("wait s/task, measured searches (direct) [EST]", lambda rs: mean([derived(r, None, 0)[1] for r in rs]))
     for cs in CONN_S:
         row(f"wait s/task @ {cs}s a connector call [EST]", lambda rs, cs=cs: mean([derived(r, cs, 0)[1] for r in rs]))
     for plan, pu in CONN_USD.items():
@@ -227,6 +249,7 @@ def main():
         ("agent $/1k", lambda r: 1000 * r["agentUsd"]),
         ("all-in $/1k, first-party", lambda r: 1000 * derived(r, 0.8, 0.0)[0]),
         ("all-in $/1k, Composio", lambda r: 1000 * derived(r, 0.8, 0.30)[0]),
+        ("wait s measured", lambda r: derived(r, None, 0)[1]),
         ("wait s @0.3", lambda r: derived(r, 0.3, 0)[1]),
         ("wait s @0.8", lambda r: derived(r, 0.8, 0)[1]),
         ("wait s @2.0", lambda r: derived(r, 2.0, 0)[1]),
