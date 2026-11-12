@@ -533,6 +533,18 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
+   * Trial (F2; docs/research/f2-card-state.md), off. With `cards`: the card prompt asks each card for its `state`
+   * (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call, and keeps
+   * a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
+   */
+  cardsState: boolean;
+  /**
+   * Trial (F2), off. With `cards`: the push's pool (`pushGate`) leaves out an item carded none whose state says a
+   * constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state, or a card of another kind,
+   * stays.
+   */
+  pushStateFilter: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -869,6 +881,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
+  cardsState: false,
+  pushStateFilter: false,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

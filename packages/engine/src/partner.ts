@@ -66,7 +66,15 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import {
+  cardKey,
+  cardVerdict,
+  CLEARED_STATES,
+  requestActions,
+  STANDING_KINDS,
+  type Card,
+  type CardEnricher,
+} from "./cards";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -706,6 +714,8 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
+      // `cardsState` (F2, trial): each card says whether its constraint still holds.
+      if (this.config.cardsState) cards.askState();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -2479,19 +2489,35 @@ export class ContextPartner {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    const cardsOn = this.config.cards && this.deps.cards;
+    // `pushStateFilter` (F2, trial): an item carded none because a constraint was lifted, met or superseded leaves the
+    // pool, and the next ranked item takes its seat. Cards are read for the whole ranking then (one map lookup an item).
+    const states =
+      this.config.pushStateFilter && cardsOn && ranked.length > 0
+        ? this.deps.cards!.cardsOf(
+            s.scope,
+            ranked.map((x) => x.item.id),
+            cue.arrived ?? this.now(),
+          )
+        : null;
     for (const x of ranked) {
       if (pool.length >= cap) break;
       if (seen.has(x.item.id)) continue;
       seen.add(x.item.id);
+      // Only a none card: an item that announces the new state of affairs (a retimed flight, a claim already paid) is
+      // carded already-done or status-change and is the fact in force, though it says an earlier one was superseded.
+      const card = states?.get(x.item.id);
+      if (card?.kind === "none" && card.state && CLEARED_STATES.has(card.state)) continue;
       pool.push(x);
     }
     const cards =
-      pool.length > 0 && this.config.cards && this.deps.cards
-        ? this.deps.cards.cardsOf(
+      pool.length > 0 && cardsOn
+        ? (states ??
+          this.deps.cards!.cardsOf(
             s.scope,
             pool.map((x) => x.item.id),
             cue.arrived ?? this.now(),
-          )
+          ))
         : new Map<string, Card>();
     return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
   }
