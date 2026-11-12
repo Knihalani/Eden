@@ -223,3 +223,61 @@ trickle): backfill calls × $ a card call + 30 × daily calls × $ a card call. 
 $0.0088 for 8 calls), and CL3's daily trickle of about $0.0005–0.0006 (about 10 new items a day sent to the card model):
 about $0.018 + 30 × $0.00055 = **about $0.035 a heavy user-month** before the widened carding; replace the call count
 and the $ a call with the final arm's `eden.cards` line from `price-queue.py` and F8's re-recorded count.
+
+## 9. Design: the push check beside the agent's first model call (design only; not measurable without the API)
+
+**What D248 measured, and why it failed.** CL4 (cl-cl4.md, D248) sent the agent's first model request at once and
+re-sent it when a packet with items landed. Two shapes:
+- *Re-send when a packet lands:* Eden's path fell by about 1 s, but the task's wall only by −0.14 s (−0.52..+0.28),
+  for +$0.058 per 1,000 tasks: half the first calls were re-sent, and a re-send started after the first call's
+  answer was already being written, so its time was spent twice.
+- *Late injection only (a packet the second call sees):* the agent, with no packet before its first call, searched
+  and asked first (hidden asks 0.50 → 1.61 a task): +$0.118 per 1,000 tasks and +1.14 s of hidden wall. The packet
+  before the first call is what keeps the agent from asking (D98, D191).
+
+**Does an integration allow a late injection?** Yes, and that is the trap. Pi's harness takes Eden's queued packets
+before *every* model request (`transformContext` → `takePending`, pi-ab.ts), and the proxy injects on every request
+it forwards (packages/proxy/src/proxy.ts), so a packet that lands during the first call is in the second call's
+context, when there is a second call. But the first call, made without the packet, is the one that decides to search
+or ask, and Eden's packet cut the agent's tool calls from 2.76 to 1.55 a task (H19). A design that lets the first
+call run unpacketed and only injects later gives that back. Late injection alone is D248's second shape: not
+reopened.
+
+**The one shape left: speculate, and abort on a yes.** At the proxy (or a harness hook with a stream it can cancel):
+1. A user turn starts the push check as today, and the agent's first model request goes upstream at once, without
+   waiting.
+2. The response is streamed upstream but **held** at the proxy: nothing reaches the agent yet.
+3. When the check answers:
+   - silent (or no call: no constraint-like pool): release the held stream; the agent saw exactly what the default
+     gives it (no packet), sooner by the check's wait;
+   - a yes: abort the upstream call and send the request again with the packet, exactly as today. The agent sees
+     only the second response, so its behaviour is the default's, and its wait is today's plus nothing (the re-send
+     starts when the check lands, as the first request does now).
+   - the check is late (past `pushCheckWaitMs`): today's fail-open, the held stream released.
+4. A first call that finishes before the check lands is held whole until the check answers.
+
+Unlike D248's first shape, nothing the agent sees changes: no answer is ever shown and then re-written, and a yes
+costs no wall time. The price is the aborted calls.
+
+**Priced from the recorded tokens [EST]:**
+- The check ends silent on 43% of its calls on the 1:1:8 mix (§5) and makes 0.93 calls a task, so about 0.40 tasks
+  in each are sped up, each by its check's wait.
+- A silent reply is short, so it is about 650–750 ms (H3's fit at 20–60 output tokens). The saving is about **−0.28
+  s a task on the mix**, the same as §5's oracle-skip ceiling, because the same calls are skipped from the wait.
+- Aborts: 57% of calls end with a yes, so about 0.53 first agent calls a task are sent twice.
+- An aborted Pi first call is billed its input: about 2,600 tokens with the house rules cached (`--tenant-prompt`),
+  about 2,000 read from cache, about 600 uncached, and a cache write of the turn. Its output stops at the abort,
+  within about 0.5–0.9 s of the start.
+- That is about $0.00008–0.00012 a call [EST], so about **+$0.04–0.06 per 1,000 tasks**: about +9–12% of Pi's total
+  (B19: $0.26 agent + $0.25 Eden). On Hermes, whose prompt is about 3× Pi's, it is about +$0.10–0.15.
+- The wait on the request path drops from about 0.87 s a task to about 0.59 s: no lower bound, since the yes tasks
+  still wait for the check.
+
+**Verdict.** It buys about a third of the check's wait for about a tenth more spend, so it fails the brief's
+"cost and latency both lower". It is worth building only if the owner prices wall above about $0.15–0.20 per 1,000
+tasks per second [EST: 0.05 / 0.28]. It is measurable only on a real API, where the aborted call's billing and the
+held stream's wall are real; served by subagents (D1101) neither exists, so it is not built here. If built:
+- a proxy option, off;
+- a pre-registered Pi pair at time scale 1 against the default, read on wall p50 (upper bound below 0), total $ (the
+  aborts' cost, reported), hidden raised (lower bound above −1.5), and the share of first calls aborted;
+- Hermes too, since its prompt is the one that makes the aborts dear.

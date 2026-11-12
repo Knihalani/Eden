@@ -689,6 +689,7 @@ instructions about 6%.
 | Every call hitting the cache | −0.010 | 0 | the misses are the provider's |
 | An oracle skipping the 43% of calls that end silent (ceiling) | −0.083 | −277 ms | unreachable: D930, D931 |
 | The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
+| Speculate the agent's first call, abort it on a yes (design, F7 §9) | +0.04–0.06 on Pi (aborted first calls) | −0.28 s | not built: cost up; needs the API to measure |
 
 `packages/sim/lab/f7/levers.py` recomputes the table from a ledger and `--check-dump` files; `f7/price.py` prices any
 ledger per role at list prices with the check's modelled wait, for runs whose model calls bill nothing real.
