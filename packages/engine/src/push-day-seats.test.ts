@@ -10,9 +10,9 @@ import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { PushChecker } from "./push-check";
 
-// `pushDaySeats` (G1, D1400, in the default since D1402): a plan with a day is an action on that day. Items on a day the request names
-// take seats in the push's pool where the check reads them, whatever their words; a turn that names a coming day
-// starts the push; the request's days are read past `timeWindow`.
+// `pushDaySeats` (G1, D1400, in the default since D1402): a plan with a day is an action on that day. Items on a day
+// the request names take seats in the push's pool where the check reads them, whatever their words; a turn that
+// names a coming day starts the push; the request's days are read past `timeWindow`.
 
 // Tuesday 27 October 2026.
 const NOW = Date.parse("2026-10-27T09:00:00Z");

@@ -933,7 +933,9 @@ export class ContextPartner {
     // `pushDaySeats` (G1, D1400): a plan with a day is an action on that day. A turn that starts no push (the rule
     // has none, or the gate read a statement and vetoed it) starts an opened one when it names a coming day and the
     // gate does not read chatter. With no gate nothing is added: the rule decides alone, as before.
-    if (!start && adds && verdict && verdict.kind !== "chatter" && this.config.pushDaySeats > 0) {
+    // Only for a message the push could start for: a draft reads nothing, and must not thaw a frozen user (D325).
+    const sent = event.kind === "user_message" && event.draft !== true;
+    if (sent && !start && adds && verdict && verdict.kind !== "chatter" && this.config.pushDaySeats > 0) {
       if (this.namesComingDay(said, event.at, this.deps.cache.offsetOf(event)))
         start = { how: "opened" as const, request: said };
       if (start) internal.byDay = true;
