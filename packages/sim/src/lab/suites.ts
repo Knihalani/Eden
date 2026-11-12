@@ -31,6 +31,7 @@ import { dev20aBefore, plantDev20a } from "./hidden-dev20a";
 import { dev20bBefore, plantDev20b } from "./hidden-dev20b";
 import { dev20cBefore, plantDev20c } from "./hidden-dev20c";
 import { dev20dBefore, plantDev20d } from "./hidden-dev20d";
+import { plantHeldout20, shiftToHeldout20 } from "./hidden-heldout20";
 import { plantLongtail } from "./hidden-longtail";
 import { REWORDED } from "./reworded";
 import { plantTrain1 } from "./hidden-train1";
@@ -87,6 +88,12 @@ const withNeutral =
  */
 const PREPARE: Record<string, (world: World, seed: number) => void> = {
   heldout19: (w, s) => void addRareSources(w, s),
+  // heldout20 lives at its own present (HELDOUT20_NOW, D1080): the clock moves first, so the rare filler is dated
+  // from it.
+  heldout20: (w, s) => {
+    shiftToHeldout20(w);
+    addRareSources(w, s);
+  },
   longtail: (w, s) => void addRareSources(w, s),
   dev20a: (w, s) => void addRareSources(w, s),
   dev20b: (w, s) => void addRareSources(w, s),
@@ -244,6 +251,12 @@ export const SUITES: Record<string, Plant> = {
   // rare connectors (`prepareWorld`). Unread: nobody runs it (funnel or agent) before the parent's end-of-wave call;
   // never tune on it.
   heldout19: needsPrepared("heldout19", plantHeldout19),
+  // F4's blind suite (D1080, docs/research/f4-heldout20.md), the one fresh test of the F1–F3 fixes, made as heldout19
+  // was: an isolated author who saw only a format scaffold (helpers and planting function, no template), the
+  // HiddenTask interface, the sim world API and rare-sources.ts; with `neutral`; 48 templates, its own present
+  // (Thursday 19 November 2026, 17:30 UTC) and the HELDOUT20_* lists. Unread: nobody runs it (funnel or agent)
+  // before the parent's final call; never tune on it.
+  heldout20: needsPrepared("heldout20", plantHeldout20),
   // The broad tuning set: six suites written blind (each author saw only the world generator, the text helpers and
   // the HiddenTask interface), one life area each, so a change must generalise across authors to show up. Tune on them.
   train1: withNeutral("train1", plantTrain1),
@@ -289,8 +302,8 @@ const TRAIN_RW = TRAIN.map((n) => `${n}rw`);
  * Held-out suites kept out of `all` so a tuning command cannot spend them; held-out 9-13 have been read (D72, D80,
  * D85, D98, D112) and a blind round needs a new suite. Held-out 14 is RealUse-1's blind suite (run once for it);
  * held-out 15 was RealUse-2's (run once); held-out 16 was the CL wave's final check (RealUse-3); held-out 17 was the
- * end-of-day confirmation's (A29, run once). Held-out 18 was M6's (read by B18, D802); held-out 19 is P7's, unread
- * (D870). A run names them to measure on them (with `--blind`).
+ * end-of-day confirmation's (A29, run once). Held-out 18 was M6's (read by B18, D802); held-out 19 was P7's (read by
+ * B19, D1048); held-out 20 is F4's, unread (D1080). A run names them to measure on them (with `--blind`).
  */
 export const UNRUN_BLIND = [
   "heldout9",
@@ -304,11 +317,12 @@ export const UNRUN_BLIND = [
   "heldout17",
   "heldout18",
   "heldout19",
+  "heldout20",
 ];
 /** The UNRUN_BLIND suites nobody has read yet: the funnel's "read before" warning skips them (D350). Held-out 17 was
- * read by A29 (D399) and held-out 18 (M6, D465) by B18 (D802). Held-out 19 (P7, D870) is unread, for the end-of-wave
- * confirmation only. */
-export const UNREAD_BLIND: string[] = ["heldout19"];
+ * read by A29 (D399), held-out 18 (M6, D465) by B18 (D802) and held-out 19 (P7, D870) by B19 (D1048). Held-out 20
+ * (F4, D1080) is unread, for the final read of the F1–F3 fixes only. */
+export const UNREAD_BLIND: string[] = ["heldout20"];
 /**
  * P7's suites (D871, D873), P2's `train-rw` and F8's `dev20` (D1100) stay out of `all`, so `--suite all` measures
  * what it measured before them.
