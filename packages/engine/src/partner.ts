@@ -123,6 +123,7 @@ import {
   CANDIDATES_LEAD,
   citationsOf,
   LOOKUP_LEAD,
+  LOOKUP_QUIET,
   PLAN_LEAD,
   renderAnswer,
   renderPacket,
@@ -2809,7 +2810,11 @@ export class ContextPartner {
 
   /** `pushLookup` (D1252): the records a silent push hands, framed as reference and cut as candidates are. */
   private lookupFrame(): PacketFrame {
-    return { ...this.candidateFrame(), lead: LOOKUP_LEAD };
+    // `pushLookupQuiet`: the last sentence says the records are background, not a reason to warn.
+    const lead = this.config.pushLookupQuiet
+      ? LOOKUP_LEAD.replace("Use them for details the request needs.", LOOKUP_QUIET)
+      : LOOKUP_LEAD;
+    return { ...this.candidateFrame(), lead };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */

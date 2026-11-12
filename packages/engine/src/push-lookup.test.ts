@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { PushChecker } from "./push-check";
-import { CANDIDATES_LEAD, LOOKUP_LEAD } from "./render";
+import { CANDIDATES_LEAD, LOOKUP_LEAD, LOOKUP_QUIET } from "./render";
 
 // `pushLookup` (F11, D1252, trial, off): a push the check left silent hands the pool's records that name the
 // request's anchors, for reference, instead of nothing.
@@ -111,6 +111,14 @@ describe("pushLookup (D1252)", () => {
     expect(got!.citations.length).toBe(2);
     expect(() => checkEngineConfig({ ...DEFAULT_CONFIG, pushLookup: 3, pushLookupAny: true })).not.toThrow();
     expect(DEFAULT_CONFIG.pushLookupAny).toBe(false);
+  });
+
+  test("pushLookupQuiet: the lead closes on the background line, not the details line", async () => {
+    const got = await taken(partner({ pushLookup: 3, pushLookupQuiet: true }, silent()));
+    expect(got!.text).toContain(LOOKUP_QUIET);
+    expect(got!.text).not.toContain("Use them for details the request needs.");
+    expect(LOOKUP_LEAD).toContain("Use them for details the request needs.");
+    expect(DEFAULT_CONFIG.pushLookupQuiet).toBe(false);
   });
 
   test("on, no checker wired (no model key): no lookup packet, the push is as before", async () => {

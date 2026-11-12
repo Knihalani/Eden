@@ -702,6 +702,13 @@ export interface EngineConfig {
    */
   pushLookupAny: boolean;
   /**
+   * D1252's third arm (F11, trial, off; needs `pushLookup`): the lookup packet's lead also says the records are
+   * background for the request's details, not a reason to warn the user (`LOOKUP_QUIET`), since the check already
+   * found none that changes the request. For the hedges the reference records drew in round 4 ("check that the
+   * discount is approved, I found no record of it").
+   */
+  pushLookupQuiet: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -915,6 +922,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudgeDeep: true,
   pushLookup: 0,
   pushLookupAny: false,
+  pushLookupQuiet: false,
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,

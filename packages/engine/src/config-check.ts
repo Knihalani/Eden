@@ -172,6 +172,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushLookup: [...PUSH, "pushCheck"],
   // Its other parent is `pushLookup` > 0, a number this table cannot name.
   pushLookupAny: [...PUSH, "pushCheck"],
+  pushLookupQuiet: [...PUSH, "pushCheck"],
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
   pushIndirect: PUSH,

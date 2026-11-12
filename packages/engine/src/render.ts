@@ -185,6 +185,11 @@ export const LOOKUP_LEAD =
   `${EDEN_NOTE}items from the user's sources that name what this request names, for reference; a check found none ` +
   "that changes what the request should do. Use them for details the request needs.";
 
+/** `pushLookupQuiet` (D1252, trial): `LOOKUP_LEAD`'s closing words, in place of "Use them for details…". */
+export const LOOKUP_QUIET =
+  "They are background for the details the request needs, not a reason to warn the user or ask them to check " +
+  "anything.";
+
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;

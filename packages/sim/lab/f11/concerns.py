@@ -3,6 +3,8 @@
 state no concern). Lab tooling.
 
     python3 -I packages/sim/lab/f11/concerns.py dump OUT.json STEM [STEM …]   # flagged answers, one row each
+    python3 -I packages/sim/lab/f11/concerns.py dump-all OUT.json STEM [STEM …] [--arms A,B]  # every control and
+                                                                                 # neutral answer (hedge counts)
     python3 -I packages/sim/lab/f11/concerns.py count VERDICTS.json             # confirmed concerns by arm
 
 A verdicts file is [{"key", "claims": true|false, "why"}]: claims is true only if the answer itself asserts the
@@ -13,7 +15,7 @@ import json
 import sys
 
 
-def dump(out, stems):
+def dump(out, stems, every=False, arms=None):
     rows = []
     for stem in stems:
         r = json.load(open(stem + ".json"))
@@ -22,7 +24,9 @@ def dump(out, stems):
             t = tasks.get(x["task"])
             if not t or t["kind"] == "hidden" or x.get("error") or not x.get("facts"):
                 continue
-            if not any(x["facts"].values()):
+            if not every and not any(x["facts"].values()):
+                continue
+            if arms and x["condition"] not in arms:
                 continue
             rows.append(
                 {
@@ -32,6 +36,7 @@ def dump(out, stems):
                     "request": t["text"],
                     "concern": t["must"][0]["detail"],
                     "answer": x.get("answer", ""),
+                    "graded": any(x["facts"].values()),
                 }
             )
     json.dump(rows, open(out, "w"), indent=1, ensure_ascii=False)
@@ -41,14 +46,21 @@ def dump(out, stems):
 def count(path):
     v = json.load(open(path))
     by = collections.Counter()
-    for x in v:
-        arm = x["key"].split("|")[1]
-        by[(arm, bool(x["claims"]))] += 1
-    for arm in sorted({a for a, _ in by}):
-        print(f"{arm}: confirmed {by[(arm, True)]}, not confirmed {by[(arm, False)]}")
+    keys = ("claims", "specific", "hedge")
+    arms = sorted({x["key"].split("|")[1] for x in v})
+    for arm in arms:
+        rows = [x for x in v if x["key"].split("|")[1] == arm]
+        parts = [f"{k} {sum(1 for x in rows if x.get(k))}" for k in keys if any(k in x for x in rows)]
+        print(f"{arm}: {len(rows)} answers; " + ", ".join(parts))
 
 
-if sys.argv[1] == "dump":
-    dump(sys.argv[2], sys.argv[3:])
+if sys.argv[1] in ("dump", "dump-all"):
+    rest = sys.argv[3:]
+    arms = None
+    if "--arms" in rest:
+        i = rest.index("--arms")
+        arms = set(rest[i + 1].split(","))
+        rest = rest[:i] + rest[i + 2 :]
+    dump(sys.argv[2], rest, every=sys.argv[1] == "dump-all", arms=arms)
 else:
     count(sys.argv[2])
