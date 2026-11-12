@@ -117,13 +117,18 @@ import {
 import * as engineExports from "@eden/engine";
 // B19 (D1047): read so an older engine without it loads (packages/sim/lab/b19/compat.py).
 const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
+// The default's card prompt form (`cardForm`: the requests form, plus `cardsState`'s flag); an older engine has none.
+const DEFAULT_FORM =
+  (engineExports as { cardForm?: (c: typeof DEFAULT_CONFIG) => number }).cardForm?.(DEFAULT_CONFIG) ??
+  (DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0);
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
-import type { World } from "../world";
+import { observeToolResult } from "./observe-tool";
+import type { World, WorldItem } from "../world";
 import {
   applyNotifyShare,
   connectorHeader,
@@ -173,7 +178,7 @@ import {
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
-import { parseSuites } from "./suites";
+import { parseSuites, setRealism } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
@@ -191,7 +196,9 @@ import {
 } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
+import { queueDir, TRANSPORT } from "./queue-transport";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
+import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import {
   argvFields,
@@ -268,6 +275,51 @@ const TIME_SCALE = Number(opt("time-scale", "1"));
 // `--source-profile`, `--push`, `--push-rates` (connector-options.ts).
 const CONNECTORS = connectorOptions(opt);
 const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
+/**
+ * `--agent-sim single` (F9, D1101; packages/sim/lab/subagent/README.md): the agent answers in ONE model call, for runs
+ * served by the queue transport, where a multi-turn loop through subagents is too slow. Before that call the harness
+ * runs, with the request's own text as the argument, what the arm's tools would give: `ask_context` (an arm with it)
+ * and each search tool (the tools arms: the first search's top results, as if the agent searched the request). Those
+ * results go in as system messages beside Eden's packets, and the call has no tools. Not the real loop: the agent
+ * chooses no query, asks no second question and cannot decline to search; label the results so.
+ */
+const AGENT_SIM = opt("agent-sim", "loop");
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's (twenty connectors, rule-like items
+ * that never apply), as the funnel and cold-start.ts take it; set before any world is built. `off` (default).
+ */
+setRealism(opt("realism", "off"));
+/**
+ * `--split N` (final benchmark, lab only): one request a session only; each world's tasks run as N streams (round
+ * robin), each with its own partner, instead of one. Through the queue transport a stream waits minutes a call, so a
+ * world's tasks one after another take hours; N streams put N calls in the queue at once. Each stream's partner holds
+ * only its own tasks' sessions (cross-task state such as `sourceYield` sees fewer requests): compare arms run with
+ * the same N.
+ */
+const SPLIT = Number(opt("split", "1"));
+if (!Number.isInteger(SPLIT) || SPLIT < 1) throw new Error(`--split must be a whole number >= 1, not ${SPLIT}`);
+const SIM_STOP = new Set(
+  "a an the my me i to of in on at for from into this that these those with and or is are be by it its this our we you your please can could would will do does next week today tomorrow".split(
+    " ",
+  ),
+);
+/**
+ * The search query `--agent-sim single` sends for the agent: the request's two most telling words (names and
+ * numbers first, then the longest; the opening word's capital does not count), as an agent's keyword search would
+ * be. Several sources match every word (AND), so the whole request as a query would find nothing.
+ */
+function simQuery(text: string): string {
+  const words = [...new Set(text.match(/[\p{L}\p{N}£$€][\p{L}\p{N}'’.,-]*/gu) ?? [])]
+    .map((w) => w.replace(/[.,]+$/, ""))
+    .filter((w) => w.length > 2 && !SIM_STOP.has(w.toLowerCase()));
+  const first = text.trim().split(/\s+/)[0];
+  const score = (w: string) => (w !== first && /^\p{Lu}/u.test(w) ? 100 : 0) + (/\d/.test(w) ? 50 : 0) + w.length;
+  return words
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 2)
+    .join(" ");
+}
+if (AGENT_SIM !== "loop" && AGENT_SIM !== "single") throw new Error("--agent-sim must be loop or single");
 const LIMITS = { maxTasks: Number(opt("tasks", "30")), maxOffworld: Number(opt("offworld", "5")) };
 // The first N tasks of each world only: a plumbing check before a real run.
 const LIMIT = Number(opt("limit", "0"));
@@ -282,6 +334,9 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
 // `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
 const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+/** `--noise-edits N` (F3, D1125): N unrelated items edited silently in every variant (silent.ts `noiseEdits`). */
+const NOISE_EDITS = Number(opt("noise-edits", "0"));
+if (!Number.isInteger(NOISE_EDITS) || NOISE_EDITS < 0) throw new Error("--noise-edits takes a whole number");
 // `--noise-vocab N` (O1): each noise connector gets N words of its own, as the funnel's flag.
 const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
@@ -420,7 +475,7 @@ const COVERAGE = harnessCoverage({
   suites: SUITE_LIST,
   seeds: SEEDS,
   // The default's card prompt form (D1062): shipped coverage covers only the shards that hold its lines (D1063).
-  form: DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0,
+  form: DEFAULT_FORM,
 });
 const CARDS_FILE = COVERAGE.cards;
 /**
@@ -538,6 +593,14 @@ const graderReplay = REPLAY_DIR
  * reads them as F recorded them.
  */
 const REUSE_FILE = opt("reuse-arms", "");
+if (AGENT_SIM === "single" && (DAYS_ON || ACT || REUSE_FILE)) {
+  throw new Error("--agent-sim single runs one request a session: not with --day, --days, --act or --reuse-arms");
+}
+if (SPLIT > 1 && (DAYS_ON || CONNECT)) {
+  throw new Error("--split runs one request a session: not with --day, --days or --connect-at");
+}
+// The queue's files are read by subagents and kept on disk: never a pilot bundle's real data (D1101).
+if (WORLD_FILE && queueDir()) throw new Error("--world-file cannot run on the queue transport (EDEN_LAB_QUEUE)");
 if (REUSE_FILE && DAY > 0) throw new Error("--reuse-arms copies single-request arms: it cannot stand in for --day");
 if (REUSE_FILE && !existsSync(REUSE_FILE)) throw new Error(`--reuse-arms ${REUSE_FILE}: no such file`);
 
@@ -715,6 +778,11 @@ function ownedModel(inner: Model, owner: () => RunResult | null): Model {
 
 /** What a task records beside its result: its timeline and the per-request detail. */
 interface TaskRecord {
+  /**
+   * Each push pass's pool for this task (`onPushPool`, ids and flags only, D269): the final benchmark's stage
+   * attribution (never retrieved, dropped by the check, reached) reads it from the same run.
+   */
+  pushPools?: { pool: string[]; handed: string[]; constraintLike: boolean[]; checked?: boolean[]; check?: string }[];
   task: string;
   condition: string;
   suite: string;
@@ -789,7 +857,17 @@ async function runWorld(
   if (connect) await Bun.sleep(Math.max(0, connect.startAt - performance.now()));
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
-  const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  // F3 (D1123): a silent edit changes the stream's world too (its planted item starts as `before`).
+  const silentOn = baseTasks.some((t) => t.before) || NOISE_EDITS > 0;
+  const world: World = DAYS_ON || silentOn ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  const silent = silentOn
+    ? plantBefore(
+        world,
+        baseTasks,
+        baseTasks.map((t) => t.planted),
+      )
+    : new Map<string, WorldItem>();
+  noiseEdits(world, seed, NOISE_EDITS, new Set(baseTasks.flatMap((t) => (t.planted ? [t.planted] : []))), silent);
   // `--late`: the planted items are not at their sources until their requests are answered.
   const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
   let dayLate: { entry: LateEntry; r: RunResult }[] = [];
@@ -822,6 +900,8 @@ async function runWorld(
   // The task now running in this stream: Eden's source and model calls carry no session, so they go to its timeline.
   let current: Timeline | null = null;
   const bySession = new Map<string, { r: RunResult; tl: Timeline }>();
+  /** The task record each session's push pools are written to (`TaskRecord.pushPools`). */
+  const poolsOf = new Map<string, TaskRecord>();
   // Every connector call Eden makes in this stream, in a task's window or not (the backfill, the sync's ticks between
   // tasks): `Background.sourceCalls`, priced per connector plan by pi-cost-report.ts.
   let edenCalls = 0;
@@ -966,6 +1046,17 @@ async function runWorld(
         ...(cards ? { cards } : {}),
         ...(reader ? { reader } : {}),
         ...(checker ? { checker } : {}),
+        onPushPool: (p) => {
+          const rec = poolsOf.get(p.sessionId);
+          if (!rec) return;
+          (rec.pushPools ??= []).push({
+            pool: [...p.pool],
+            handed: [...p.handed],
+            constraintLike: [...p.constraintLike],
+            ...(p.checked ? { checked: [...p.checked] } : {}),
+            ...(p.check ? { check: p.check } : {}),
+          });
+        },
         // Charged to the task whose session the trace is from: a slow-path verdict can land after it ended.
         onTrace: (t) => {
           const owner = bySession.get(t.sessionId);
@@ -1042,6 +1133,10 @@ async function runWorld(
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
   if (cards && !connect) await cards.idle();
+  // F3 (D1123): the silent edits land at their sources now, with no notice: Eden sees them only by polling.
+  if (silent.size > 0) {
+    for (const id of applyEdits(world, silent, clock)) for (const src of sources) if (src.id === id) src.reindex();
+  }
   // What the backfill's enrichment cost before the first request (one-time per user, H16): the rest of the stream's
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
@@ -1292,12 +1387,25 @@ async function runWorld(
       dropped: 0,
       ...(task.planted ? { planted: task.planted } : {}),
     };
+    poolsOf.set(sessionId, record);
     activeTasks++;
     tl.point("task.start", { condition, kind: task.kind });
     // Eden's packets for this task, oldest first: each a system message before the user turn, as agent-ab places them.
     // With the ids each packet and `ask_context` answer cited, so the line tells delivery from uptake (uptake.ts).
     const uptake = new UptakeLog();
     const packets = uptake.packets;
+    /** An injection an observe returned, placed with the task's packets (as `takeEden` places the queued ones). */
+    const deliver = (i: Parameters<UptakeLog["packet"]>[0]) => {
+      if (!useEden) return;
+      r.injectedItems += i.citations.length;
+      r.injectedChars += i.text.length;
+      uptake.packet(i);
+      day?.packet(
+        i.citations.map((c) => c.itemId),
+        i.text,
+      );
+      tl.point("eden.inject", { items: i.citations.length, chars: i.text.length });
+    };
     const takeEden = () => {
       if (!partner || !useEden) return;
       for (const i of partner.takePending({ ...scope, sessionId })) {
@@ -1322,16 +1430,7 @@ async function runWorld(
         const o2 = tl.begin("eden.observe", "eden", "path", { event: task.event });
         const first = await partner.observe(ev({ kind: task.event, text: task.text, ...arriving }), { waitMs });
         tl.end(o2, { injected: first.injection?.citations.length ?? 0, pending: first.pending });
-        if (first.injection && useEden) {
-          r.injectedItems += first.injection.citations.length;
-          r.injectedChars += first.injection.text.length;
-          uptake.packet(first.injection);
-          day?.packet(
-            first.injection.citations.map((c) => c.itemId),
-            first.injection.text,
-          );
-          tl.point("eden.inject", { items: first.injection.citations.length, chars: first.injection.text.length });
-        }
+        if (first.injection) deliver(first.injection);
       }
       // `hits` (P3, lexical-hits.ts): no Eden; the request's top BM25 hits over the world as it is now, every request.
       if (hits) {
@@ -1373,8 +1472,13 @@ async function runWorld(
               // Eden sees what the agent fetched, so it does not deliver it again.
               if (partner) {
                 const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-                await partner.observe(ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }));
-                tl.end(o);
+                // A packet the observe hands out reaches the agent, as a client places it (`observe-tool.ts`).
+                const injected = await observeToolResult(
+                  partner,
+                  ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }),
+                  deliver,
+                );
+                tl.end(o, { injected });
               }
               return { content: [{ type: "text", text: result }], details: {} };
             },
@@ -1426,6 +1530,19 @@ async function runWorld(
           });
         }
       }
+      // `--agent-sim single`: the tools run once, up front, on the request's text; the agent gets their results and no
+      // tools.
+      const simContext: string[] = [];
+      if (AGENT_SIM === "single") {
+        for (const t of tools) {
+          const isAsk = t.name === "ask_context";
+          const arg = isAsk ? task.text : simQuery(task.text);
+          const out = await t.execute("agent-sim", (isAsk ? { question: arg } : { query: arg }) as never);
+          const text = out.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+          simContext.push(`Result of ${t.name}(${JSON.stringify(arg)}):\n${text}`);
+        }
+        tools.length = 0;
+      }
       let turns = 0;
       let request: {
         id: number;
@@ -1469,9 +1586,10 @@ async function runWorld(
             // `+ephemeral`, `+ephemeralBp` (D336): earlier requests' packets gone, as `withContext` and the proxy send.
             return placePackets(messages, earlierPackets(layout, dayPackets), packets, asSystem);
           }
-          if (!packets.length) return messages;
+          const placed = simContext.length ? [...packets, ...simContext] : packets;
+          if (!placed.length) return messages;
           const at = messages.map((m) => m.role).lastIndexOf("user");
-          const sys = packets.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
+          const sys = placed.map((text) => ({ role: "system" as const, content: text, timestamp: Date.now() }));
           return [...messages.slice(0, at), ...sys, ...messages.slice(at)];
         },
         streamFn: (model, context, options) => {
@@ -1489,7 +1607,17 @@ async function runWorld(
           }
           const at = performance.now();
           request = {
-            id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
+            // `inChars`/`lastChars` (F11): the request's size and its last message's (the rest is the cached
+            // prefix), so a run the queue transport answers (zero usage, D1101) can still be priced per arm ([EST],
+            // 4 characters a token).
+            id: tl.begin("model.request", "model", "path", {
+              turn: turns + 1,
+              inChars:
+                ((context as { systemPrompt?: string }).systemPrompt ?? "").length +
+                chars +
+                JSON.stringify((context as { tools?: unknown[] }).tools ?? []).length,
+              lastChars: JSON.stringify(context.messages.at(-1) ?? "").length,
+            }),
             at,
             first: null,
             in: 0,
@@ -1607,7 +1735,13 @@ async function runWorld(
           r.promptTokens += q.in;
           r.completionTokens += q.out;
           r.costUsd += cost;
-          tl.end(q.id, { in: q.in, out: q.out, cost, stop: e.message.stopReason });
+          tl.end(q.id, {
+            in: q.in,
+            out: q.out,
+            cost,
+            stop: e.message.stopReason,
+            outChars: JSON.stringify(e.message.content ?? "").length,
+          });
           record.requests.push({
             startMs: tl.at(q.at),
             firstTokenMs: q.first === null ? null : Math.round(q.first - q.at),
@@ -1781,7 +1915,7 @@ const intentCount =
         worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
         diskCards.requests,
         // Under the default's card prompt form (D1062, D1063), as the run's enrichment reads them.
-        (it) => diskCards.requestKey(it, DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0),
+        (it) => diskCards.requestKey(it, DEFAULT_FORM),
       )
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });
@@ -1962,7 +2096,24 @@ const streams = worlds.flatMap((w, wi) =>
           return connected(() => runWorld(w.world, w.seed, w.tasks, c, records, grading, undefined, who));
         }),
       )
-    : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes, undefined, wi)),
+    : SPLIT > 1
+      ? // `--split N`: a world's tasks round-robin over N streams, each with a partner of its own (see SPLIT).
+        live.flatMap((c) =>
+          Array.from({ length: Math.min(SPLIT, w.tasks.length) }, (_, k) =>
+            runWorld(
+              w.world,
+              w.seed,
+              w.tasks.filter((_, i) => i % SPLIT === k),
+              c,
+              records,
+              grading,
+              undefined,
+              undefined,
+              wi,
+            ),
+          ),
+        )
+      : live.map((c) => runWorld(w.world, w.seed, w.tasks, c, records, grading, w.daySizes, undefined, wi)),
 );
 for (const settled of await Promise.allSettled(streams)) {
   if (settled.status === "fulfilled") results.push(...settled.value);
@@ -1983,6 +2134,8 @@ writeFileSync(
       spent,
       harness: "pi",
       harnessVersion: HARNESS_VERSION,
+      ...(AGENT_SIM === "single" ? { agentSim: "single (one call, tools run up front; F9, D1101)" } : {}),
+      ...(queueDir() ? { transport: TRANSPORT } : {}),
       promptsHash: PROMPTS_HASH,
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
@@ -2086,7 +2239,13 @@ if (checkers.length) {
     `CHECK (I3, ${CHECK_MODEL}): ${calls} calls of ${sum("asked")} asked, ${sum("failures")} failed, ` +
       `${sum("overBudget")} over budget; $${sum("costUsd").toFixed(4)}; ` +
       `${calls ? (sum("inputTokens") / calls).toFixed(0) : 0} in (${calls ? (sum("cachedInputTokens") / calls).toFixed(0) : 0} ` +
-      `cached) / ${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call`,
+      `cached, ${calls ? (sum("cacheWriteTokens") / calls).toFixed(0) : 0} written) / ` +
+      `${calls ? (sum("outputTokens") / calls).toFixed(0) : 0} out a call` +
+      // `pushCheckSheet` (F5): checks that read a rule sheet, its mean size, and the rules the replies named.
+      (sum("sheetChecks")
+        ? `; sheet on ${sum("sheetChecks")} calls, ${(sum("sheetCards") / sum("sheetChecks")).toFixed(1)} cards a ` +
+          `sheet, ${sum("sheetNamed")} rules named`
+        : ""),
   );
 }
 const replayMisses = (readerReplay?.missed ?? 0) + (graderReplay?.missed ?? 0);

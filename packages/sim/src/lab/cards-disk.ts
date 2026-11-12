@@ -115,6 +115,8 @@ export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
 export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
 export const SHIPPED_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train,reworded,longtail,heldout19").map((s) => [s, ["41", "42", "43", "44"]])),
+  // F8's tuning suites (D1100): served by subagents per item on the world's clock (D1102), in both prompt forms.
+  ...Object.fromEntries(parseSuites("dev20").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
 /**
@@ -123,8 +125,16 @@ export const SHIPPED_COVERS: Record<string, string[]> = {
  * not read it cannot record them, and its harness records its own (B19).
  */
 export const SHIPPED_FORM_COVERS: Record<number, Record<string, string[]>> = {
-  3: Object.fromEntries(parseSuites("train,reworded,longtail").map((s) => [s, ["41", "42", "43", "44"]])),
+  3: Object.fromEntries(parseSuites("train,reworded,longtail,dev20").map((s) => [s, ["41", "42", "43", "44"]])),
+  // `cardsState` (F2, D1193): form 3 with the state flag, served by subagents per item on the world's clock (D1102).
+  19: Object.fromEntries(parseSuites("train,reworded,longtail,dev20").map((s) => [s, ["41", "42", "43", "44"]])),
 };
+
+/**
+ * A `<suite>+silent` run (F3, D1123) plants into its base's worlds: the same items, so the base's coverage. Only the
+ * earlier versions it puts at the source for the backfill are new text (carded live, or a replay miss in the funnel).
+ */
+const coverName = (s: string) => s.replace(/\+silent$/, "");
 
 /**
  * The suite × seed shards SHIPPED_FILE was not made for; with a prompt form (`form`), also those it holds no line of
@@ -132,7 +142,7 @@ export const SHIPPED_FORM_COVERS: Record<number, Record<string, string[]>> = {
  */
 export function shippedUncovered(suites: string[], seeds: (string | number)[], form = 0): string[] {
   const covers = (map: Record<string, string[]>, s: string, seed: string | number) =>
-    map[s]?.includes(String(Number(seed))) === true;
+    map[coverName(s)]?.includes(String(Number(seed))) === true;
   const formCovers = form ? (SHIPPED_FORM_COVERS[form] ?? {}) : null;
   return suites.flatMap((s) =>
     seeds
@@ -186,7 +196,9 @@ export function harnessCoverage(o: {
 /** The suite × seed shards INTENT_FILE was not made for. */
 export function intentUncovered(suites: string[], seeds: (string | number)[]): string[] {
   return suites.flatMap((s) =>
-    seeds.filter((seed) => !INTENT_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+    seeds
+      .filter((seed) => !INTENT_COVERS[coverName(s)]?.includes(String(Number(seed))))
+      .map((seed) => `${s} seed ${seed}`),
   );
 }
 
@@ -490,7 +502,8 @@ export class DiskCardMaker implements CardMaker {
             return;
           }
           made.set(h, c);
-          this.put(h, c.kind === "none" ? null : c, r);
+          // A none card is recorded only with a state (`cardsState`, D1193): the replay must filter as the run did.
+          this.put(h, c.kind === "none" && !c.state ? null : c, r);
         });
       } finally {
         // Settled whether or not the call worked: a card it did not make is uncovered for every waiter, and the next

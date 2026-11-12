@@ -44,12 +44,19 @@ export interface ConnectorPreset {
    * are delivered as held (D126). An operator who has checked that both tools return the same copy may add one.
    */
   noFetch?: string;
+  /**
+   * `Source.callPriced` for the preset's server: false for a first-party (quota-only) or self-hosted server, so the
+   * freshness floor polls it (D1133); an entry that sets its own `callPriced` (a per-call transport in front) wins.
+   */
+  callPriced: boolean;
 }
 
 export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
   gmail: {
     description: "The user's Gmail: mail threads, newest message of each",
     area: "mail",
+    // Google's hosted server: quota only.
+    callPriced: false,
     // THREAD_VIEW_SUMMARY: each thread's most recent message, since the latest word on a thread is what changes an
     // action (the default view shows its five oldest).
     searchTool: { name: "search_threads", fixed: { view: "THREAD_VIEW_SUMMARY" } },
@@ -66,6 +73,8 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
   "google-calendar": {
     description: "The user's Google Calendar: events on their primary calendar",
     area: "calendar",
+    // Google's hosted server: quota only.
+    callPriced: false,
     searchTool: { name: "search_events" },
     // No listing: list_events pages by start time, not by change (D57). So no sync and no sweep (D356 does not apply).
     verified: "Google's hosted Calendar MCP server: tools/list input schema of search_events, 2026-11-07",
@@ -78,6 +87,8 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
   caldav: {
     description: "The user's CalDAV calendar (iCloud, Fastmail, Nextcloud, Radicale)",
     area: "calendar",
+    // Self-hosted against the user's own CalDAV account: no per-call bill.
+    callPriced: false,
     searchTool: { name: "caldav_search_events" },
     // P4 (D842): the lab ran it over Radicale; the ref a search row gives is the event's uid, which the fetch takes,
     // and the fetched copy equals the searched one (both tools build one record from the iCal component). It looks
@@ -98,6 +109,8 @@ export const PRESETS: Readonly<Record<string, ConnectorPreset>> = {
   obsidian: {
     description: "The user's Obsidian-style notes vault",
     area: "notes",
+    // A local vault server: no per-call bill.
+    callPriced: false,
     searchTool: { name: "search_notes", fixed: { limit: 20 } },
     verified: "bitbonsai/mcpvault at adda860 (connector lab, packages/sim/lab/servers.json)",
     noFetch:
@@ -138,6 +151,7 @@ export function expandPreset(spec: Record<string, unknown>): Record<string, unkn
     searchTool: p.searchTool,
     ...(fetch ? { fetchTool: fetch } : {}),
     ...(p.listTool ? { listTool: p.listTool } : {}),
+    callPriced: p.callPriced,
     ...own,
   };
 }

@@ -73,6 +73,10 @@ import {
 import * as engineExports from "@eden/engine";
 // B19 (D1047): read so an older engine without it loads (packages/sim/lab/b19/compat.py).
 const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
+// The default's card prompt form (`cardForm`: the requests form, plus `cardsState`'s flag); an older engine has none.
+const DEFAULT_FORM =
+  (engineExports as { cardForm?: (c: typeof DEFAULT_CONFIG) => number }).cardForm?.(DEFAULT_CONFIG) ??
+  (DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0);
 import { SourceMap } from "@eden/graph";
 import { Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -100,6 +104,7 @@ import {
   type Task,
 } from "./ab-common";
 import { variantsFor } from "./neutral";
+import { observeToolResult } from "./observe-tool";
 import { DayLog, isRecap, poolDays, recapOf, shiftClocks, shiftMeta, type DaySummary } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import {
@@ -225,7 +230,7 @@ const COVERAGE = harnessCoverage({
   suites: SUITE_LIST,
   seeds: SEEDS,
   // The default's card prompt form (D1062): shipped coverage covers only the shards that hold its lines (D1063).
-  form: DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0,
+  form: DEFAULT_FORM,
 });
 const CARDS_FILE = COVERAGE.cards;
 const CARDS_OUT = opt("cards-out", `${OUT.replace(/\.json$/, "")}.cards.jsonl`);
@@ -879,6 +884,8 @@ async function runWorld(
         return items.map((i) => i.text).join("\n\n");
       };
       let observed = false;
+      /** Packets a tool result's observe handed out, placed at the next `pending` (`transform_tool_result`). */
+      const handed: Parameters<typeof deliver>[0] = [];
       const binding: TaskBinding = {
         token: crypto.randomUUID(),
         async observe() {
@@ -903,11 +910,14 @@ async function runWorld(
         async tool(tool, output) {
           if (!partner) return;
           const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-          await partner.observe(ev({ kind: "tool_result", tool, output }));
-          tl.end(o);
+          // A packet the observe hands out is kept for the next `pending`, which places it (`observe-tool.ts`).
+          const injected = await observeToolResult(partner, ev({ kind: "tool_result", tool, output }), (i) =>
+            handed.push(i),
+          );
+          tl.end(o, { injected });
         },
         pending() {
-          return partner ? deliver(partner.takePending({ ...scope, sessionId })) : "";
+          return partner ? deliver([...handed.splice(0), ...partner.takePending({ ...scope, sessionId })]) : "";
         },
       };
       task = { binding, tl, record, r, sessionId, uptake };
@@ -1101,7 +1111,7 @@ const intentCount =
         worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
         diskCards.requests,
         // Under the default's card prompt form (D1062, D1063), as the run's enrichment reads them.
-        (it) => diskCards.requestKey(it, DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0),
+        (it) => diskCards.requestKey(it, DEFAULT_FORM),
       )
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });

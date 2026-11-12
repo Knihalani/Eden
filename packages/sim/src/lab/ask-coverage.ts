@@ -29,6 +29,10 @@ export interface AskCoverage {
    * queued at the ask, or never drained, is here too (the lab cannot run `readForIntent`; see the header).
    */
   notSentPrefilterRejects: boolean;
+  /** F5: the shipped enricher's own rules on the item: the prefilter, an automated sender, the lean read for intent. */
+  prefilter?: boolean;
+  automated?: boolean;
+  forIntent?: boolean;
   /**
    * Requests the loaded intent replay holds for its content: -1 when the replay has no line for it (told apart from a
    * line with no requests, 0); null with no replay loaded.

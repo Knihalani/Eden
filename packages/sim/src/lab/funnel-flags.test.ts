@@ -99,6 +99,19 @@ const funnelTimed = async (jobs: string) => {
  * funnel.ts sharding `--ask-diag` over 2 processes, sent `signal` once a part file exists. Returns its exit status,
  * how many parts were seen, and the part files left a second after it exited (a late child write would show there).
  */
+/** funnel.ts with `--neutral` at `--time 0` (the default's process blocks, `groupShards`), into its own directory. */
+const funnelNeutral = (jobs: string) => {
+  const out = join(scratch(), "f.json");
+  return spawn(
+    [
+      join(lab, "funnel.ts"),
+      ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync)],
+      ...["--json", out, "--", "--limit", "2", "--neutral"],
+    ],
+    out,
+  );
+};
+
 const funnelSignalled = async (signal: "SIGTERM" | "SIGINT") => {
   const dir = scratch();
   const p = Bun.spawn(
@@ -126,6 +139,8 @@ let runs: {
   overlap: Promise<Run>;
   solo: Promise<Run & { dir: string }>;
   sharded: Promise<Run & { dir: string }>;
+  neutralSolo: Promise<Run>;
+  neutralSharded: Promise<Run>;
   missNoModel: Promise<Run>;
   missModel: Promise<Run>;
   soloWhy: Promise<Run>;
@@ -143,6 +158,8 @@ beforeAll(() => {
     overlap: funnel({ ...PRESETS["minus-reader"], ...PRESETS["minus-intent"], ...smallSync }, ["--overlap"], 3),
     solo: funnelTimed("1"),
     sharded: funnelTimed("2"),
+    neutralSolo: funnelNeutral("1"),
+    neutralSharded: funnelNeutral("2"),
     missNoModel: replay([]),
     missModel: replay(["--reader-model", "claude-haiku-5-5"]),
     signalled: funnelSignalled("SIGTERM"),
@@ -419,6 +436,31 @@ describe("funnel.ts flags", () => {
     expect(sharded.stderr).not.toContain("running one job");
     expect(sharded.stderr).toContain("2 at a time");
     expect(strip(sharded.rows)).toEqual(strip(solo.rows));
+  }, 120_000);
+
+  test("--neutral under --jobs: the merged neutral block equals one process's (F8, D1100's misread)", async () => {
+    // Each process prints its own NEUTRAL lines for its shards; only the `merged NEUTRAL` lines and the JSON's
+    // `neutral` block cover the run. Timing (any `…Ms` key, `ms`, `beforeModel`) is left out of the comparison.
+    const untimed = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(untimed)
+        : v && typeof v === "object"
+          ? Object.fromEntries(
+              Object.entries(v)
+                .filter(([k]) => k !== "ms" && k !== "beforeModel" && !k.endsWith("Ms"))
+                .map(([k, x]) => [k, untimed(x)]),
+            )
+          : v;
+    const neutralOf = async (run: Promise<Run>) => {
+      const r = await run;
+      expect(r.status).toBe(0);
+      const n = (JSON.parse(readFileSync(r.out, "utf8")) as { neutral: { total: { n: number } } }).neutral;
+      return { stdout: r.stdout, total: n.total.n, n: untimed(n) };
+    };
+    const [solo, sharded] = await Promise.all([neutralOf(runs.neutralSolo), neutralOf(runs.neutralSharded)]);
+    expect(solo.total).toBe(4);
+    expect(sharded.n).toEqual(solo.n);
+    expect(sharded.stdout).toContain("merged NEUTRAL train1: any packet 0/4");
   }, 120_000);
 
   test("--ask-diag and the other output files shard: same files as one process, no part left", async () => {

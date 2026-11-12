@@ -70,6 +70,17 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1000 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | deleted with its code |
 | D1073 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | stopped on its pre-registered Pi clause |
 | D1074 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | Hidden raised −0.2 points (−1.533..+1.271), 3,066 pairs over 384 templates (Haiku's own grade not read for… |
+| D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
+| D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
+| D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
+| D1181 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | F5, D814 |
+| D1182 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | The bar: on a user with 300 rule cards, the selection must bring back at least half of what a 300-card sheet… |
+| D1271 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | asked of the check it lost facts: planted handed 94 against main's 99 of 120 hidden rows (bar: ≥ 96)… |
+| D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
+| D1552 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). |  |
+| D1156 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | because the funnel's on-demand poll already hands current copies, while connector calls rose 3.52 → 5.52 a… |
+| D1451 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… |  |
+| D1452 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | every item it read and did not say yes to, 127 / 362 |
 
 ## Reader
 
@@ -100,6 +111,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D345 | A complete poll after a change signal does not stand in for re-reading the doubted copies (`verifyByPoll`, A18): built as a trial… |  |
 | D346 | An ask does not re-read its likely citations beside its poll and live search (`askVerifyEarly`, A18): built as a trial, measured, deleted. |  |
 | D840 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | It costs more per recovered update than D606's poll in every form: a session holds about 11 due copies (up… |
+| D1127 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | killed by D1130: stopped on D1128's pre-registered rule |
+| D1129 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | killed by D1130: stopped on D1128's pre-registered rule |
 
 ## Cards and intent
 
@@ -120,6 +133,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
 | D998 | part of: card state frozen with its user rejected | Merged with main (b99f0171), RSS a user after a thaw 8.61 / 8.60 → 7.31 / 7.46 MB (−13% to −15%; −20% to… |
 | D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
+| D1154 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | Form-4 cards recorded on the world's clock (D1102) through the queue for dev20 seeds 41–44, against the… |
 
 ## Check
 
@@ -127,6 +141,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 |---|---|---|
 | D528 | Rejected and deleted: thinking on I3's short reply, and a check that reads only stored-`act` items |  |
 | D815 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | The firewall flagged 0.070 of control tasks against D72's 0.05 bar and was never re-run |
+| D1160 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | the rule asked for a lower bound above 0. dev20 14/14 in every arm |
+| D1453 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | Not worth a prompt change for −8% |
 
 ## Sync, sources and scale
 
@@ -154,6 +170,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D940 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | killed by D948: the clause asked for a lower bound above −1.5, so it fails (half-width 1.3, minimum detectable effect 1.8… |
 | D943 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | killed by D949: The re-test (rule in acacab82: fresh seeds 89–112, held-out families) read steady calls 11.50 → 3.46 a… |
 | D1025 | Rejected: the recipes that did not help on the held-out sources. |  |
+| D1123 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | killed by D1126: stopped on D1125's pre-registered rule |
 
 ## Ask
 
@@ -171,6 +188,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D231 | Noting ask answers no reading checked (trial `askUnreadNote`) is rejected and deleted | Aimed at D230's finding: an answer with items no reader reading checked (an unread information question, a… |
 | D485 | Trial `askMulti`, opened and closed 2026-11-10: not promoted, deleted. | hidden −0.4 points (−2.8..+2.1, n 813) |
 | D518 | Trial `askReinvite`, opened and closed 2026-11-10: not promoted, deleted. | Same runs as D517. |
+| D1120 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | killed by D1121: stopped on its pre-registered rule, D1120 |
 
 ## Delivery and packet
 
@@ -183,6 +201,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D401 | Rejected at $0: moving the agent's cache mark off the first request's user turn so a one-call task pays 1x, not 1.25x, for the packet. |  |
 | D517 | Rejected: shortening earlier requests' packets in the transcript | hidden −16.0 points (−23.3..−8.1 by day) |
 | D920 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | stopped on its pre-registered rule, a3faa15a |
+| D1122 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | killed by D1126: stopped on D1125's pre-registered rule |
 
 ## Lab and eval
 
@@ -198,7 +217,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 |---|---|---|
 | D51 | A per-user standing-constraints register, behind `register`, off by default. | killed later: The sweep breaks the calls bar (8.66 per lookup) |
 | D58 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | killed by D225 |
-| D60 | Anticipation, behind `anticipate`, off by default. | killed by D227 |
+| D60 | Anticipation, behind `anticipate`, off by default. | killed by D1301: Fit on train at 2% neutral packets, the best arm (the pass's acts, cosine less the request's median rule… |
 | D89 | The request-time bridging query, `bridgeQuery` (`bridge.ts`, `PartnerDeps.bridge`: a `QueryBridge` with its own `BridgeMaker`, model and… | killed by D112: no measurement favoured them on |
 | D102 | `slowPathQueue`: a request that reaches the slow path while the session's slow path is busy is kept in a one-slot per-session queue (the… | killed by D228: The queued lookups' deliveries were almost all rule paths (hidden 23 → 2, decoys 67 → 4 by rule path), and… |
 | D107 | The knowledge graph (D58) costs less to hold and to build, with the same results. | killed by D225: hidden +0 |
@@ -208,6 +227,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D141 | part of: deleting the graph's code is rejected | because no switch exists yet |
 | D196 | Retiring rule paths (trial `rulesOff`) is rejected and deleted | hidden −2.3 (−6.6..+2.0) |
 | D216 | Rejected: ingest off the event loop. | hidden +0 |
+| D227 | Anticipation (`anticipate`, `anticipateCalls`, `anticipateSessionCalls`, `anticipateOff`; D60) is deleted with its code and tests |  |
 | D233 | Rejected: read at ingest, not per request. | It fails on the same wall: the match back to the request is lexical, and the model judging an item without… |
 | D238 | part of: trimming it by what cannot bind is rejected | a 160-character item window (`askReaderItemChars` 240 → 160) costs more |
 | D308 | `senderDomains` (a compacted From line keeping its address's domain) measured and deleted with its code and tests |  |
@@ -223,3 +243,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1002 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… |  |
 | D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |
 | D1076 | Rejected: a shutdown's flush writing the most recently used users first. | R1d, r1-release.md §Round 4 |
+| D1251 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. |  |

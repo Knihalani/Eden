@@ -41,6 +41,11 @@ export const NEUTRAL_SUITES: readonly string[] = [
   "train4rw",
   "train5rw",
   "train6rw",
+  // F8's tuning suites (D1070).
+  "dev20a",
+  "dev20b",
+  "dev20c",
+  "dev20d",
 ];
 
 /** Generated suites (`synth-*`, `synth:<file>`, D884) build `neutral` too: their planting function plants nothing. */

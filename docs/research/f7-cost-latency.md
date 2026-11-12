@@ -1,0 +1,606 @@
+# F7: the push check's cost and wait, leaner
+
+Status: 2026-11-12, branch `claude/f7-cost-latency` (from main 006b505c), session F7. Train, reworded and longtail
+only; heldout19 is never read or run, heldout20 never looked for. Paid calls go to Anthropic directly with
+`HAIKU_API_KEY` through the lab transport and its spend ledger (`.local/f7/ledger.jsonl`, D97): **Anthropic-direct
+lab figures**. Cap $40. No Modal. Numbers marked **[EST]** are arithmetic or judgement; every other number comes from
+a command in this note.
+
+**Outcome:** the account's API credit ran out after the first $0.23. The levers are priced from the tokens recorded
+before that (§3, §5, D1190). The two trial switches built here, `pushCheckLeanStop` and `pushCheckLeanLead`, could
+not be measured (§7) and are deleted (D1191; code and tests in commit 49ce5972). The screen of §6 was stopped before
+its first batch was answered; nothing of it is read.
+
+## 1. Pre-registration: the screen (committed before its paid calls)
+
+Base: the shipped default's live check on train and reworded seed 43 with neutral tasks
+(`bun run funnel --suite train|reworded --seeds 43 --jobs 1 -- --neutral --check live --check-dump …`; 1,092 recorded
+checks, $0.229). `packages/sim/lab/f7/screen.ts` (H3's split screen with a lean prefix) re-asks every recorded pool
+live under each arm, interleaved row by row in the same lanes:
+
+- **W**: the shipped check.
+- **Y**: `pushCheckLeanStop`: the same pool and instructions, one clause asking for every yes first, and the reply
+  stopped at its first `"act":false`.
+- **YD**: Y on the pool less same-source, same-title copies (H3's D, 15 items at most).
+
+**Rule.** An arm goes to the Pi pair if, against W in the same run: planted named on hidden rows at least W − 6,
+the look-alike named on control rows at most W + 6, neutral rows with any yes at most W + 6 (the bars are H3's ±4 on
+189 rows of a kind, scaled to about 360), and its output tokens a check at most 0.75 of W's. Of the arms that pass,
+Y goes if it passes (one change); YD only if Y fails. None passes: the switch and its code are deleted, findings kept.
+
+## 2. Pre-registration: the Pi run (committed before its paid calls)
+
+Two trial switches, each its own arm, against the shipped integrator shape `both+ask` in the same pi-ab processes
+(`packages/sim/lab/f7/pi.sh`; H3's recipe: Haiku 5.5 agent, grader, card, reader and check models, shipped card
+coverage replayed, `--tenant-prompt`, payload notices, the `direct` profile, time scale 1):
+
+- **Y** = `both+ask+pushCheckLeanStop`, only if it passes §1's screen (else the run has two arms, base and L);
+- **L** = `both+ask+pushCheckLeanLead`: a packet the check picked is framed as picked ("a quick read of this request
+  picked as likely to change what to do") rather than "nothing has checked them". The funnel cannot see wording, so
+  it has no screen.
+
+**Runs**, two processes at a time, in this order:
+1. Stage 1: `--suite train` and `--suite reworded`, seeds 41, 42, 43, 44 (`--seeds N`), `--variants
+   hidden,control,neutral` (8 runs).
+2. Stage 2: seeds 45, 46, 47, 48, `--variants hidden`: `train` with an empty cards file (`--cards
+   .local/f7/empty.cards.jsonl`, its cards recorded live and shared by the arms), then `reworded` replaying that run's
+   cards (`--cards .local/f7/pi/f7-train-N/out.cards.jsonl`) (8 runs).
+
+**Grading:** `i3-regrade.ts` (Sonnet 5.5) on every hidden answer and every concern the Haiku grader flagged, every arm.
+
+**Rule, per switch against base:** promote (D814) if all three hold, else delete with its code and tests.
+1. **Cheaper or faster:** total $ per 1,000 tasks (agent and Eden) on the 1:1:8 mix (`n5/mix.py --cluster template`,
+   stage 1) has its 95% upper bound below 0, **or** the wall p50 on the 1:1:8 mix (`f7/wall.py`, stage 1) has its
+   upper bound below 0.
+2. **Facts held:** hidden raised by Sonnet, the switch minus base (`p3/report.py --pair X:both+ask --cluster
+   template` over all 16 runs), has its 95% lower bound above −1.5 points.
+3. **No new false concerns:** Sonnet-confirmed concerns on control and neutral (stage 1) are not up (switch ≤ base).
+
+Reported beside, outside the rule: Eden's and the agent's $ per 1,000 tasks, mean wall, agent turns and tool calls,
+asks, the check's output tokens and p50/p90 (`h3/checks.py`). If both switches pass, both are promoted (each measured
+alone against the base; their combination is not measured here and is said so). Hermes is not run (installing the
+Hermes checkout's dependencies was refused in this container); any wall claim is Pi's. If the session's cap or the
+day would cut stage 2, the rule is read on the whole seeds (both suites) finished, the rest unrun; no seed is added
+after a result is read.
+
+## 3. Where the cost and the wait are, and the levers weighed at $0
+
+**The check's bill, measured on the base funnels** (`python3 -I packages/sim/lab/p2/calls.py .local/f7/ledger.jsonl`,
+1,092 calls, train and reworded seed 43 with neutral, two processes at once):
+
+| run | calls | $ a call | input / cached / output tokens | p50 / p90 s | time to first token p50 |
+| --- | ---: | ---: | --- | --- | ---: |
+| train 43 | 563 | 0.000201 | 2,361 / 1,002 / 110 | 1.11 / 1.83 | 0.52 |
+| reworded 43 | 529 | 0.000219 | 2,615 / 1,136 / 120 | 1.08 / 1.64 | 0.52 |
+
+At Haiku 5.5's $0.10 / $0.01 (cache read) / $0.50 per million, a call of 2,500 input tokens with 1,185 read from the
+cache and 115 out is about $0.000131 of uncached input (the pool and the request: **about 65%**), $0.000012 of cache
+reads and $0.000058 of output (**about 29%**) **[EST: arithmetic on the table]**.
+
+**Prompt caching is already on and mostly hits.** The fixed instructions (1,185 tokens) are the only stable prefix.
+983 of the 1,092 calls read them from the cache (90%), and no call reported a cache write (the prefix was warm from
+earlier calls on the account). A miss pays about $0.00011 more [EST], so the 10% that miss cost about 5% of the
+check's bill: nothing large to win. The pool is the request's own (its items, ranked for that request), so it has no
+prefix to cache across requests; one request a session never reads the same pool twice.
+
+**Levers weighed and not built (reasoned at $0):**
+
+- **Overlap the check with the agent's first model call.** D156 bounded it at 1.05–1.14x of task wall and D248
+  measured it: wall −0.14 s (−0.52..+0.28) for +$0.058/1k, because half the first calls had to be re-sent when the
+  packet landed, and re-sending only on an answer made the agent ask first. The push check makes it worse, not
+  better, for this lever: the check names nothing on most requests (silence), but on the requests where it names an
+  item the packet is what keeps the agent from searching (D98, D191), so a first call sent without it is the one
+  re-sent. Nothing measured since changes D248's arithmetic; not reopened.
+- **Skip the check when nothing in its pool could be handed** (every item already handed this session): the
+  candidates then send nothing anyway, so the skip would change no packet. One request a session never meets it, and
+  over a day the check reads 15 items of which a packet hands at most 5, so a pool with no fresh item is rare
+  [EST]. Not built.
+- **Skip the check when the turn gate is sure.** The gate decides whether a push starts, not whether its pool holds a
+  fact; H19 found the facts lost before the agent are lost in retrieval (31%) and in the check (9%), and a skip would
+  hand the unchecked candidates (the before arm's neutral packets: +17.5 points of neutral packets, B19) or stay
+  silent (a fact lost wherever the check would have said yes). Neither is cheaper overall: the agent's bill is about
+  twice Eden's.
+- **Shorter compare-first entries or an ids-only reply.** D822 measured a shorter reply letting look-alikes in, and
+  H3 found a line reply longer. Not reopened; the lean stop (Y) keeps every written entry's compare step whole.
+- **A cheaper model or route.** The check is already on the cheapest Claude model the lab uses (Haiku 5.5); the
+  shipped OpenRouter route sends no cache breakpoint (D145), about +$0.0001 a call [EST], which is a route decision
+  outside this lab (Anthropic only).
+- **Concurrent split calls, a line reply, a smaller pool.** Measured by H3 (D1072–D1074): no faster, or facts not
+  held.
+
+**Amendment before any paid call of §1 or §2 (08:35 UTC):** main now has the dev20 tuning suites (D1100). If the
+cap allows after stage 2, a stage 3 runs `--suite dev20` seed 41, `--variants hidden,control` (cards recorded live
+into an empty file), and its Sonnet-graded hidden raised and confirmed concerns are **reported beside the rule, not
+part of it**. The lean wording is now applied as a transform of the check's instructions (`leanSystem`), so a sibling
+switch that rewords the format's act sentence (F2's `pushCheckDone`) composes with it; when F5's rule sheet adds a
+second list to the reply, the stop is not sent.
+
+## 4. Re-pre-registration: no API credit, subagent-simulated runs (08:40 UTC, before any such run)
+
+The owner confirmed there will be no Anthropic API credit. Model calls go through F9's queue lab transport, answered
+by Haiku subagents, which measure neither real latency nor cache billing. So from here every model result is
+labelled **subagent-simulated**, and every $ and wall figure built from it is **[EST]**:
+
+- **Cost [EST]:** each call's input, cache-eligible input (the fixed instructions, 1,185 tokens on the check; 90% read
+  from the cache on the real API, §3) and output tokens, priced at Haiku 5.5's published rates (input $0.10, cache
+  read $0.01, cache write $0.125, output $0.50 per million), times calls a task, on the 1:1:8 mix.
+- **Check wait [EST]:** H3's fit, 596 ms + 2.93 ms an output token (time to first token about 450 ms whatever the
+  reply), per call; the wall claim is the check's modelled wait on the request path, not a measured wall.
+
+**Rule, replacing §1's output-token clause and §2's clause 1** (the facts and concerns clauses stand as written):
+- Screen: Y (else YD) goes on if its output tokens a check are at most 0.75 of W's in the same subagent-simulated
+  run, with §1's planted, look-alike and neutral bars.
+- Pi (or whatever harness the queue transport serves): clause 1 is met if the check's modelled wait a task on the
+  1:1:8 mix, or total $ [EST] a task, is lower with a template-clustered 95% upper bound below 0. Clauses 2 and 3 as
+  in §2, graded as the transport allows (said beside the result).
+- `pushCheckLeanLead` is judged on the agent's tokens and turns [EST] by the same clause 1, as it moves no check call.
+
+**$0 estimate already in hand** (`packages/sim/lab/f7/simstop.py` on the 943 readable recorded replies of §3): a stop
+at the first no on the *shipped* order keeps 72% of the reply's characters (hidden 83%, control 63%, neutral 68%) and
+loses 6 of 283 planted facts the check named, and 6 of 84 look-alikes. At about 115 output tokens a call that is
+about −32 tokens: −94 ms of modelled wait and −$0.000016 a call (−8% of the check) **[EST]**. The lean order is
+meant to keep those 6 facts; only a model answering the lean prompt can say whether it does.
+
+## 5. The levers in numbers (08:55 UTC; $0 from recorded tokens, and a subagent-simulated pilot)
+
+Every figure here is **[EST]**: tokens the lab recorded on the real API this morning (§3's 1,092 checks, train and
+reworded seed 43 with neutral), priced at Haiku 5.5's list prices, and the check's wait from H3's fit (596 ms + 2.93
+ms an output token). `python3 -I packages/sim/lab/f7/levers.py .local/f7/ledger.jsonl .local/f7/base-*-43.dump.jsonl`.
+
+**The base:** a check is 2,484 input tokens (1,067 of them cached on average; 90% of calls hit the cache), 115
+output tokens, $0.000210 and 934 ms of modelled wait. At 0.97 calls a hidden or control task and 0.92 a neutral one,
+it is **$0.196 per 1,000 tasks** on the 1:1:8 mix and **870 ms of wait a task** on the request path. (B19's ledger
+read $0.16: B19 was heldout19, this is train; same order.)
+
+| lever | $ per 1,000 tasks | wait a task | facts at risk | status |
+| --- | --- | --- | --- | --- |
+| `pushCheckLeanStop` (stop at the first no; output kept 69% on the mix: hidden 83%, control 63%, neutral 68%) | −0.017 (−9% of the check) | −98 ms (−105 ms a call) | on the shipped order 6 of 283 planted facts the check named come after its first no; the lean order is meant to keep them | built, trial |
+| every call hitting the prompt cache (10% miss today) | −0.010 (−5%) | 0 (latency is not input-bound, D241) | none | not controllable from Eden: the misses are the provider's |
+| skipping the check, ceiling: an oracle that skips exactly the calls that end silent (43% of calls) | −0.083 (−43%) | −277 ms | any real predictor errs: M7's ten pre-screens (D930) could not match Haiku's own repeat agreement (D931: 90.9% on speak or silent) | not reachable; the turn gate reads the request, not the pool |
+| smaller packets (agent side) | about −0.01 to −0.02 for the packets' whole cost (≈0.6 items a task on the mix, ≈100 tokens an item written to the agent's cache once and read after) | ≈0 | D258, D273: every lexical cut measured lost facts | not built |
+
+**What the pilot says** (`packages/sim/lab/f7/mkpilot.ts`, `pilot-score.ts`; **subagent-simulated**: 25 recorded
+prompts, 9 hidden where Haiku had named the planted fact, 8 control, 8 neutral with a non-empty reply; each asked once
+as shipped and once lean, by separate Haiku subagents, 23 pairs complete): planted named 9/9 in both, look-alike 0/7
+in both, neutral with a yes 1/7 (W) and 2/7 (Y); output tokens a call 42.4 (W) and 41.6 (Y). The subagents wrote far
+shorter replies than the API's Haiku on the same prompts (68 tokens a call recorded), listing few rejections, so the
+stop had little to cut: **the pilot cannot measure the lean stop's saving**, which lives in the rejections the API's
+Haiku writes, and it is too small to see a 2% loss of named facts. It does say the lean wording did not make the
+model drop a planted fact or name a look-alike on these 16 rows. Two subagents also tried a tool the brief did not
+give them (a session create, refused); their replies were written before it and are used.
+
+**Reading.** The check's own bill has little left in it: the largest lever that keeps every reply (the stop) is
+about 9% of the check, under 5% of Eden plus agent. The wait is the larger prize, and the stop is worth about 0.1 s a
+task. Only a model answering the lean prompt over a powered pool can say whether it keeps the 6 facts in 283 the
+shipped order would lose; that needs the API or F9's transport at volume, not 25 prompts.
+
+## 6. Pre-registration: the screen served by subagents (D1101), before its first call
+
+The screen of §1 runs through F9's queue transport (D1101) on every sixth readable recorded pool (158 rows:
+`.local/f7/sample6.dump.jsonl`), arms W and Y only. **Served by subagents (D1101)**; tokens and wait are [EST].
+Rule (§4's, with §1's bars scaled to the rows): Y passes if its output tokens a check (as the transport counts them)
+are at most 0.75 of W's, planted named on hidden rows at least W − 2, the look-alike named on control rows at most
+W + 2, and neutral rows with a yes at most W + 2. The queue's validator (`batch.ts`) is fixed first to accept an
+answer whose stop sequence cuts its JSON mid-object, as the lean stop and the reader's stop do (the whole answer must
+parse, or the part before the stop).
+
+## 7. Decision: both trials deleted unmeasured (D1191)
+
+No API credit, and the subagent stand-ins (D1101) write check replies about 40% shorter than the API's Haiku on the
+same prompts (§5's pilot: 42 against 68 output tokens a call), listing few of the rejections the stop would cut, and
+they judge differently (F2's finding). So neither the stop's saving nor its cost in facts (the 6 of 283 named planted
+facts that follow the first no on the shipped order) can be read through them, and the checked lead needs a live
+agent's searches and turns. Per D814 both switches are deleted the same day; the code and its tests are in commit
+49ce5972 for a re-test on the API (§1 and §2's rules stand as written for it). Kept: the findings (§3, §5, D1190),
+`packages/sim/lab/f7/levers.py`, `simstop.py`, `price.py`, `wall.py`, and the queue validator's fix for a stop that
+cuts JSON mid-object (`packages/sim/lab/subagent/batch.ts`), which the reader's stop needs too.
+
+## 8. The final comparison's cost and latency: the table to fill (prepared 09:20 UTC)
+
+Final main against 006b505c, both served by subagents (D1101), so every figure is **[EST]**: tokens estimated from
+the queue's request and answer sizes, priced at list, the path's wait from H3's fit.
+
+**How to run it.** Give each arm's command its own label and share one queue (the arms' identical prompts then replay):
+`EDEN_LAB_QUEUE=$Q EDEN_LAB_QUEUE_RUN=final …` and `EDEN_LAB_QUEUE_RUN=before …`, then
+`python3 -I packages/sim/lab/f7/price-queue.py $Q --arm final=final:TASKS --arm before=before:TASKS`. Since this branch
+`batch.ts put` keeps each answer's request and answer sizes (`size` in `done/<key>.json`) and the transport labels each
+call with `EDEN_LAB_QUEUE_RUN` (calls answered earlier carry no size and are reported as unpriced). Check on a ledger
+of real calls: the pricer's arithmetic on a push check of 4,740 + 5,300 characters in and 460 out gives $0.000216 a
+call against the API's measured $0.000210 (F7 §3).
+
+| role | before (006b505c): calls a task, $/1k, wait | final: calls a task, $/1k, wait | final − before |
+| --- | --- | --- | --- |
+| push check (`eden.check`) | | | |
+| cards (`eden.cards`, per task while working) | | | |
+| intent requests (in the card call since D1062; any re-ask `requestsOnly`) | | | |
+| reader (`eden.reader`; none on the default's push, D237) | | | |
+| agent (`agent`; `--agent-sim single` is one call a task: compare arms, never against the real loop) | | | |
+| **all roles** | | | |
+
+**Background cards a heavy user-month [EST]** (outside the per-task table; a new user's backfill plus the daily
+trickle): backfill calls × $ a card call + 30 × daily calls × $ a card call. Today's figures: F5's world-clock count of
+16–17 calls a heavy new user (twice what COST-MODEL's D244 column used), the card call at about $0.0011 (CL3's measured
+$0.0088 for 8 calls), and CL3's daily trickle of about $0.0005–0.0006 (about 10 new items a day sent to the card model):
+about $0.018 + 30 × $0.00055 = **about $0.035 a heavy user-month** before the widened carding; replace the call count
+and the $ a call with the final arm's `eden.cards` line from `price-queue.py` and F8's re-recorded count.
+
+## 9. Design: the push check beside the agent's first model call (design only; not measurable without the API)
+
+**What D248 measured, and why it failed.** CL4 (cl-cl4.md, D248) sent the agent's first model request at once and
+re-sent it when a packet with items landed. Two shapes:
+- *Re-send when a packet lands:* Eden's path fell by about 1 s, but the task's wall only by −0.14 s (−0.52..+0.28),
+  for +$0.058 per 1,000 tasks: half the first calls were re-sent, and a re-send started after the first call's
+  answer was already being written, so its time was spent twice.
+- *Late injection only (a packet the second call sees):* the agent, with no packet before its first call, searched
+  and asked first (hidden asks 0.50 → 1.61 a task): +$0.118 per 1,000 tasks and +1.14 s of hidden wall. The packet
+  before the first call is what keeps the agent from asking (D98, D191).
+
+**Does an integration allow a late injection?** Yes, and that is the trap. Pi's harness takes Eden's queued packets
+before *every* model request (`transformContext` → `takePending`, pi-ab.ts), and the proxy injects on every request
+it forwards (packages/proxy/src/proxy.ts), so a packet that lands during the first call is in the second call's
+context, when there is a second call. But the first call, made without the packet, is the one that decides to search
+or ask, and Eden's packet cut the agent's tool calls from 2.76 to 1.55 a task (H19). A design that lets the first
+call run unpacketed and only injects later gives that back. Late injection alone is D248's second shape: not
+reopened.
+
+**The one shape left: speculate, and abort on a yes.** At the proxy (or a harness hook with a stream it can cancel):
+1. A user turn starts the push check as today, and the agent's first model request goes upstream at once, without
+   waiting.
+2. The response is streamed upstream but **held** at the proxy: nothing reaches the agent yet.
+3. When the check answers:
+   - silent (or no call: no constraint-like pool): release the held stream; the agent saw exactly what the default
+     gives it (no packet), sooner by the check's wait;
+   - a yes: abort the upstream call and send the request again with the packet, exactly as today. The agent sees
+     only the second response, so its behaviour is the default's, and its wait is today's plus nothing (the re-send
+     starts when the check lands, as the first request does now).
+   - the check is late (past `pushCheckWaitMs`): today's fail-open, the held stream released.
+4. A first call that finishes before the check lands is held whole until the check answers.
+
+Unlike D248's first shape, nothing the agent sees changes: no answer is ever shown and then re-written, and a yes
+costs no wall time. The price is the aborted calls.
+
+**Priced from the recorded tokens [EST]:**
+- The check ends silent on 43% of its calls on the 1:1:8 mix (§5) and makes 0.93 calls a task, so about 0.40 tasks
+  in each are sped up, each by its check's wait.
+- A silent reply is short, so it is about 650–750 ms (H3's fit at 20–60 output tokens). The saving is about **−0.28
+  s a task on the mix**, the same as §5's oracle-skip ceiling, because the same calls are skipped from the wait.
+- Aborts: 57% of calls end with a yes, so about 0.53 first agent calls a task are sent twice.
+- An aborted Pi first call is billed its input: about 2,600 tokens with the house rules cached (`--tenant-prompt`),
+  about 2,000 read from cache, about 600 uncached, and a cache write of the turn. Its output stops at the abort,
+  within about 0.5–0.9 s of the start.
+- That is about $0.00008–0.00012 a call [EST], so about **+$0.04–0.06 per 1,000 tasks**: about +9–12% of Pi's total
+  (B19: $0.26 agent + $0.25 Eden). On Hermes, whose prompt is about 3× Pi's, it is about +$0.10–0.15.
+- The wait on the request path drops from about 0.87 s a task to about 0.59 s: no lower bound, since the yes tasks
+  still wait for the check.
+
+**Verdict.** It buys about a third of the check's wait for about a tenth more spend, so it fails the brief's
+"cost and latency both lower". It is worth building only if the owner prices wall above about $0.15–0.20 per 1,000
+tasks per second [EST: 0.05 / 0.28]. It is measurable only on a real API, where the aborted call's billing and the
+held stream's wall are real; served by subagents (D1101) neither exists, so it is not built here. If built:
+- a proxy option, off;
+- a pre-registered Pi pair at time scale 1 against the default, read on wall p50 (upper bound below 0), total $ (the
+  aborts' cost, reported), hidden raised (lower bound above −1.5), and the share of first calls aborted;
+- Hermes too, since its prompt is the one that makes the aborts dear.
+
+## 10. Target 3+4: Eden net cheaper and faster than the agent alone (new mandate, 09:30 UTC)
+
+The integrator's mandate: the agent with Eden must cost less and finish sooner than the agent alone. Today Eden adds
+about $0.24 per 1,000 tasks on Hermes, and wall time of about +0.1 s on Hermes and +0.4 s on Pi, mostly the push check
+on the request path. Everything is re-opened under this priority, D248 included.
+
+**Baseline run, pre-registered before its first call (report only, no rule).** Multi-turn Pi (the real loop, not
+`--agent-sim single`), **served by subagents (D1101)**:
+- Two processes sharing one queue (`.local/q-f7b`), labelled `EDEN_LAB_QUEUE_RUN=raw` and `final`: `--conditions
+  tools` and `--conditions both+ask`.
+- `--suite train --seeds 41 --variants hidden,control,neutral --limit 2` (36 tasks an arm).
+- Haiku 5.5 in every role, `--tenant-prompt`, `--push payload`, the `direct` profile, time scale 1, cards replayed.
+- `--config '{"pushCheckWaitMs":900000}'`, so the push waits for its subagent-served check as it would for the API's
+  (about 1 s). No other setting differs from the default.
+
+Reported per arm: agent model calls and tool calls a task; tokens a call by role; $ per 1,000 tasks and per task
+(`price-queue.py`) [EST]; and a modelled wall a task: H3's fit summed over the task's agent calls and the push check,
+plus the connector time the timeline measures [EST]. Measured walls are the subagents' and are not read.
+
+(The final arm runs as `both+ask@w900000`: the harness's 3,000 ms observe wait is lifted with the check's, so the
+packet waits for its subagent-served check as it would for the API's.)
+
+**Lever (a), pre-registered before its first call: `pushSearchedLead`.** A packet the push check picked says what
+Eden did: "Eden searched the user's mail, calendar, documents, CRM and chat for this request, and a quick read picked
+these items as likely to change what to do", followed by the shipped instruction to check each item. Today's lead
+says "nothing has checked them against it", which invites the agent to search again before it acts. Its own arm
+runs on the same 36 tasks and queue (`EDEN_LAB_QUEUE_RUN=searched`, `both+ask+pushSearchedLead@w900000`, the same
+config). **Rule (served by subagents, D1101; a screen on a small sample, said so):** keep it, and recommend
+promotion, if against the final arm: agent tool calls a task are at least 0.2 lower, agent model calls a task are not
+higher, hidden facts raised (the run's grader) fall by at most 1 of 12, and concerns on control and neutral are not
+up. Otherwise delete it the same day.
+
+**Amendment (10:05 UTC), after the first Eden arms finished, a harness defect.** In `final`, 21 of 36 push checks landed
+after the agent's first model request had started; in `searched`, 6 of 36. The observe's own cap
+(`readerPushWaitMs`, 60 s) is below a subagent's answer time, so the push went late: on those tasks the first call
+ran without the packet, D248's late-injection shape and not the default. Both Eden arms are void, and are re-run as
+`final2` and `searched2` with `readerPushWaitMs` lifted beside `pushCheckWaitMs` (both 900,000 ms; a lab setting that
+only removes the queue's wait, as the API's ~1 s check never meets either cap). Their checks mostly replay from the
+queue. The raw arm is unaffected and stands. The void arms' facts were seen before this amendment (final 8/12,
+searched 10/12 hidden raised). The re-run is decided by the defect (the late-check counts above), not by those
+readings, and the §10 rule is read on `final2` against `searched2` only.
+
+### 10a. The baseline, read (served by subagents, D1101; [EST] cost and wall)
+
+36 tasks an arm. No re-run has a check landing after the first model call (`mt.py`). Tools: `price-queue.py` (tokens
+from the queue's sizes) and `mt.py`. Sums are per task on the 1:1:8 mix; the modelled wall is the timeline's path
+with every model call and check swapped for H3's fit.
+
+| | raw (`tools`) | final2 (`both+ask`, the default) | searched2 (`+pushSearchedLead`) |
+| --- | ---: | ---: | ---: |
+| agent model calls a task (hidden / control / neutral) | 2.00 (2.00 / 2.00 / 2.00) | 1.69 (1.25 / 1.67 / 1.75) | 1.71 |
+| agent tool calls a task (mean of the three kinds) | 1.33 | 0.69 | 0.72 |
+| agent tokens a call: input (cacheable), output | 949 (898), 59 | 1,216 (1,077), 98 | 1,241 (1,089), 98 |
+| agent $ per 1,000 tasks [EST] | 0.108 | 0.146 | 0.150 |
+| push check $ per 1,000 tasks [EST] | 0 | 0.142 | 0.142 |
+| **agent + check $ per 1,000 tasks [EST]** | **0.108** | **0.288** | 0.292 |
+| cards (here 1.7 live calls a task: an 18-world backfill spread over 36 tasks; background, priced per user-month in §8) | 0 | 0.210 | 0.208 |
+| modelled wall a task [EST]: all / model / tools / Eden | 2.04 / 1.54 / 0.50 / 0 | 3.04 / 1.49 / 0.58 / 0.97 | 3.01 / 1.51 / 0.56 / 0.94 |
+| hidden raised (subagent grader) | 0/12 | 11/12 | 10/12 |
+| concerns on control and neutral (subagent grader) | 7/24 | 10/24 | 12/24 |
+
+What it says (direction only: 36 tasks, subagents for the agent and the grader):
+- **Eden does make the agent do less.** Model calls fall 2.00 → 1.69 a task (hidden 1.25: the packet answers it), and
+  tool calls 1.33 → 0.69.
+- **But each call costs more.** The packet adds about 270 input tokens a call. The agent also writes about 66% more
+  output (98 against 59 tokens) because it now has facts to state, so the agent's own bill rises (+$0.04 per 1,000
+  tasks) and its model time barely falls (1.54 → 1.49 s).
+- **The push check is the rest.** It adds $0.14 per 1,000 tasks, and Eden's path is 0.97 s a task: the check's 0.72
+  s and about 0.25 s of lookup before the check starts.
+- **So the agent alone is cheaper and faster here by about $0.18 per 1,000 tasks and 1.0 s a task.** The real-API
+  B19 reads the gap as smaller ($0.24 and +0.39 s on Pi, the agent level), because there the agent's searches cost
+  more than the subagents' short answers suggest. The subagents' agents search less, answer shorter and grade
+  differently, so the raw arm here is optimistic.
+- **The lead's wording moved nothing** (searched2 against final2): deleted, D1192.
+- **Concerns are high in every arm,** raw included (7/24). That is the subagent grader's leniency on control and
+  neutral; read them only between arms.
+
+**Hold-and-abort on final2's timelines** (`holdabort.py`, [EST]): wall −0.31 s a task on the mix, +$0.047 per 1,000
+tasks (0.57 first calls aborted a task: every hidden task, 8 of 12 control, 6 of 12 neutral). Facts are the
+default's by construction.
+
+### 10b. What it takes to beat the agent alone (arithmetic on B19's real-API Pi figures [EST])
+
+**B19, Pi, one request a session (real API, heldout19):**
+- raw: agent $0.26 per 1,000 tasks;
+- final: agent $0.26, plus Eden $0.25 (cards and intent $0.088, check $0.162);
+- wall: final − raw = +0.39 s a task; the check's wait is about 0.86 s.
+
+| lever | Eden $ per 1,000 | wall vs raw | who |
+| --- | ---: | ---: | --- |
+| today | +0.25 | +0.39 s | |
+| skip the check on a share *s* of pushes (F10's CPU index, uncertain band only) | −0.162 × *s* | −0.86 × *s* s | F10 |
+| hold-and-abort on the checks left (§9; Pi) | +0.05 × (1 − *s*) | −0.31 × (1 − *s*) s | F7, proxy |
+| cards and intent per task: a heavy user's month (§8, about $0.035) over about 480 requests | about 0.07 (floor) | 0 | background |
+| the agent's own bill (fewer searches and turns, smaller tool results) | needs −0.07 or more | its model time | F11 |
+
+- **Faster than the agent alone is reachable.**
+  - With *s* = 0.7, wall is +0.39 − 0.60 = −0.21 s.
+  - Hold-and-abort on the remaining 30% of checks takes it to about −0.30 s.
+  - At *s* = 0.5 with hold-and-abort, it is about −0.20 s.
+- **Cheaper than the agent alone is not reachable from Eden's side alone.**
+  - Even with no check at all (*s* = 1), the cards' floor of about $0.07 per 1,000 tasks stays.
+  - Today the agent's bill does not fall with Eden (B19: level).
+  - The agent must save at least about 30% of Pi's $0.26, or about 19% of Hermes' $0.42, which is F11's lever.
+  - Hold-and-abort works against this target: +$0.05 × (1 − *s*). Build it only once the wall target is the one left.
+
+### 10c. Targets 3 and 4 with the connectors counted (the integrator's correction; all [EST])
+
+The connectors do take time in the lab. pi-ab runs at time scale 1 on the `direct` market profile (medians: gmail 600
+ms, calendar 280, drive 700, crm 450, slack 550; `hosted.json` adds about 200 ms each), and the raw arm's tool spans
+here averaged 0.38 s a call. So B19's walls already include about 0.45 s a connector call. What they leave out is
+production latency above that, and the per-call fees.
+
+**The calls Eden saves.**
+- Agent tool calls a task fall from 2.77 to 2.05 on Pi (B19), 3.00 to 2.22 on Hermes (B19), and 1.33 to 0.69 in this
+  run.
+- Eden's own calls offset part of that: about 0.07–0.08 a task at the request (B19), plus its background listings
+  (backfill, polls and sweeps) amortised over a user's requests. COST-MODEL §Hosting (b) puts those, with Eden's
+  others, at 0.2–0.8 calls a request for 20 connectors; at about 1,000 sources it is 2.4 (O1).
+- Net, for 5–20 sources: **about −0.25 to −0.65 connector calls a task on Pi and −0.3 to −0.7 on Hermes**. The low end
+  takes the larger background share.
+
+**Cost: Eden − agent alone, $ per 1,000 tasks.**
+- Model spend from B19: Pi +$0.25 (Eden's roles, agent level); Hermes +$0.23 (Eden +$0.24, agent −$0.01).
+- Connector fees: plan prices from COST-MODEL §Hosting (b) (`CONNECTOR_PLANS`, assumed list prices, $ per 1,000
+  calls).
+
+| plan ($ per 1,000 calls) | Pi: fees saved | Pi: net | Hermes: fees saved | Hermes: net |
+| --- | ---: | ---: | ---: | ---: |
+| first-party APIs ($0) | 0 | **+0.25** | 0 | **+0.23** |
+| Composio ($0.30) | −0.08 to −0.20 | **+0.05 to +0.17** | −0.09 to −0.21 | **+0.02 to +0.14** |
+| Unified.to ($0.75) | −0.19 to −0.49 | **−0.24 to +0.06** | −0.23 to −0.53 | **−0.30 to +0.00** |
+| Arcade.dev ($10) | −2.5 to −6.5 | **−2.3 to −6.3** | −3.0 to −7.0 | **−2.8 to −6.8** |
+| Pipedream Connect ($12) | −3.0 to −7.8 | **−2.8 to −7.6** | −3.6 to −8.4 | **−3.4 to −8.2** |
+| Zapier MCP ($25.8) | −6.5 to −16.8 | **−6.2 to −16.5** | −7.7 to −18.1 | **−7.5 to −17.8** |
+
+So "cheaper" holds on Arcade, Pipedream and Zapier with room to spare, roughly breaks even on Unified.to, and fails on
+Composio and on first-party APIs. There, Eden's own model spend (the push check $0.16, cards $0.07–0.09) must fall:
+F10's skip, and the cards levers.
+
+**Wall: Eden − agent alone, s a task, by production latency L a connector call.** B19's walls are at about L₀ = 0.45 s;
+each call Eden saves on the path is worth L − L₀ more than they show. The agent's tool calls drop by 0.72 a task on
+Pi and 0.78 on Hermes. Eden's own calls at the request run behind the push (D405, D431) and are not added.
+- Pi: +0.39 − 0.72 × (L − 0.45).
+- Hermes: +0.09 − 0.78 × (L − 0.45).
+
+| L (s a call) | 0.3 | 0.6 | 1.0 | 1.5 | 2.0 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pi, today | +0.50 | +0.28 | −0.01 | −0.37 | −0.73 |
+| Pi + F10's skip at *s* = 0.7 (−0.60) | −0.10 | −0.32 | −0.61 | −0.97 | −1.33 |
+| Hermes, today | +0.21 | −0.03 | −0.34 | −0.73 | −1.12 |
+| Hermes + F10's skip at *s* = 0.7 | −0.39 | −0.63 | −0.94 | −1.33 | −1.72 |
+
+So "faster" is already met in production on Hermes at about 0.6 s or more a connector call, and on Pi at about 1.0 s
+or more. With F10 skipping 70% of checks, it is met at every latency from 0.3 s.
+
+**A compact packet.** The packet adds about 267 input tokens to each agent call. It is written to the agent's cache
+on the first call and read on later ones: about 267 × $0.10 + 0.7 × 267 × $0.01 per million, about $0.029 per 1,000
+tasks for the whole packet. Halving it would save about **$0.015 per 1,000 tasks** and no measurable wall (input is
+not what a call's wait is made of, D241), and every lexical cut so far lost facts (D258, D273). The agent's longer
+answers (+39 output tokens a call, about $0.02 per 1,000 tasks) are the facts being stated: not waste. **Not
+worth building:** the levers that move cost are the check (F10) and the cards.
+
+## 11. Cards on the world clock, and closing the first-party cost gap (10:10 UTC; [EST])
+
+**A heavy user's card backfill on the world clock.**
+- Run: `cold-start.ts --users user:41,user:42,train1:41` through the queue transport, served by subagents (D1101),
+  world clock (D1102).
+- Per new user (about 1,500 items at the sources): **13–14 card calls** (D244's wall-clock figure was 8). Of the
+  items, 256–270 are sent to the card model: 79–91 carded and 173–182 for intent requests only. 1,207–1,220 are
+  skipped by `cardsLean` and 1,389–1,399 prefiltered.
+- Priced two ways [EST]:
+  - from the queue's sizes (`price-queue.py`: 2,204 input tokens of which 999 cacheable, 817 output): $0.00055 a
+    call, **$0.0075 a backfill**;
+  - from H2's real-API per-item prices (D1052, D1053: $0.000073 a carded item, about $0.000040 a requests-only
+    item): 85 × $0.000073 + 178 × $0.000040, **$0.013 a backfill**.
+- A heavy user-month adds CL3's daily trickle, about $0.0165. That is **$0.024–0.030 in a user's first month** and
+  about $0.017 a month after. Per 1,000 requests at about 480 requests a month: **$0.05–0.06 in the first month, about
+  $0.034 after.**
+- The content-hash memo already skips re-carding unchanged items: a card is never read twice (`UserCards`, `null`
+  remembered), and items stating the same constraint sentence share one card (`sentenceReuse`).
+
+**Ranked levers for the first-party gap.** The gap is Eden's model spend with the agent's bill level: B19 Pi
++$0.25 per 1,000 tasks on the lab's cached figures. Each row gives $ per 1,000 tasks and the quality it costs.
+
+| lever | $ per 1,000 tasks | quality cost | $ saved per point lost | status |
+| --- | ---: | --- | ---: | --- |
+| `anthropicCache` on the shipped OpenRouter route (D817: off, never probed). The route sends no breakpoint, so the check's 1,185-token instructions are paid in full on every call: +$0.000107 a call, 0.93 a task. Cards pay 1.27× (D145). | **−0.10 (check) −0.01 (cards)**, on the shipped route only | 0 (the same request, cached) | ∞ | one OpenRouter probe, the owner's call |
+| F10's skip of the push check on a share *s* of pushes | −0.162 × *s* (−0.11 at *s* = 0.7) | F10's measurement | F10's | F10 |
+| the check reading the pool less same-titled copies, 10 items at most (H3's D1073/D1074) | −0.05 (−25% of the check; on the checks left after F10, −0.05 × (1 − *s*)) | −0.16 points (−1.53..+1.27) | about 0.3 per point | rejected on its −1.5 bar by 0.03; re-open only if the owner trades it |
+| cards: a compact reply, positional arrays, no key names (H2's D1052: −26.7% a card item) | −0.009 to −0.016 | none expected (the same content; unread live: H2 stopped at its −30% screen bar) | ∞ if it holds | a trial: parse test, funnel coverage, a live pair |
+| cards: batches of 40 (D1052) | 0 (the same $ an item) | — | — | nothing to gain |
+| cards: skip re-carding unchanged content | 0 (already done) | — | — | already in |
+| check pool 10 × 140 characters (D1050) | −0.04 | 20 fewer of 292 planted facts handed | about 0.02 per point | the worst ratio; no |
+| the agent's own bill (fewer searches and turns) | F11's | F11's | — | F11 |
+
+**What closes it [EST].**
+- With F10 at *s* = 0.7 and the compact card reply, Eden's model spend on Pi is about $0.25 − 0.11 − 0.01 ≈ **$0.13
+  per 1,000 tasks**.
+- Adding the de-duplicated pool trades about 0.2 points of hidden facts for −$0.015 more.
+- Against the agent alone:
+  - **Composio:** −$0.08 to −0.20 of connector fees saved, so about even to cheaper.
+  - **First-party APIs:** still about +$0.11–0.13. Nothing on Eden's side closes that without quality loss: the
+    cards' month of $0.03–0.06 is the floor once the check is mostly skipped.
+  - First-party can only close through the agent's own bill (F11), or by trading facts.
+- On the shipped OpenRouter route (rather than the lab's cached figures), add the `anthropicCache` row first: it is
+  worth more than any other lever at no quality cost.
+
+**Correction (10:30 UTC): F10's skip is not available.** D1270 (F10) finds that a CPU-only band cannot take the
+check off the request path without losing facts. Skipping the check on the half of neutral pushes that score lowest
+also skips 17% of hidden rows whose fact is in the pool. Every row above and in §10c that assumes F10 at *s* = 0.7
+is therefore a ceiling, not a plan. Without it, target 3 on model spend alone stays red. Target 4 rests on F11's
+`pushLookup`: −0.48 s of wait (−0.90..−0.11), served by subagents [EST], against F6's rehearsal gap of 0.4 s.
+
+## 12. The shipped route's prompt cache
+
+On `claude/f7-cache` (trial D1196, probe pending the owner): `EDEN_MODEL_CACHE=on` sets `anthropicCache` on all
+three model roles of the OpenRouter route, with tests that the cached prefix is byte-identical across calls.
+
+## 13. The compact card reply: dropped unrun (10:30 UTC)
+
+`cardsCompact` (form 4, H2's K20 positional reply) was built as a trial on `claude/f7-compact` and pre-registered,
+and its re-card ran through the queue. It is dropped before any reading, on the owner's call through the integrator:
+it is worth about $0.01 per 1,000 tasks (§11's row), which is noise against targets 3 and 4. The switch never reached
+main, so nothing is deleted from it. The branch keeps the code and tests for a later live pair.
+
+One lesson for the queue (D1101): a worker answering two requests in one batch can copy one request's reply format
+onto the other. By the time the run stopped, 25 of 132 answers were in the other arm's format, and every such keyed
+batch failed to parse. Any arm-versus-arm run that differs only in the reply format should batch one arm per take,
+or check each answer's shape against its own prompt before reading.
+## 14. The agent's own bill: where its tool calls go (no spend)
+
+**Sources:**
+- B19 (`b19-final.md`, real API) gives totals only. Its raw timelines are not committed.
+- F6's pilot (`f6-uptake`) records flags, not tool calls.
+- So the per-request split is read from §10's 36-task multi-turn run: raw against final2, served by subagents
+  (D1101). It is 12 templates × 3 kinds, direction only.
+
+**Totals, agent tool calls and input tokens a task:**
+
+| | raw | Eden (final) | change |
+| --- | ---: | ---: | ---: |
+| B19 Pi short: connector calls / agent tokens | 2.77 / 5,307 | 2.05 / 5,376 | −0.72 / +69 |
+| B19 Hermes short: connector calls / agent tokens | 3.00 / 10,065 | 2.22 / 10,023 | −0.78 / −42 |
+| §10 (subagents): tool calls / agent input tokens (calls × tokens a call) | 1.33 / 1,898 | 0.69 / 2,055 | −0.64 / +157 |
+
+Eden removes about 0.7 searches a task, but not tokens. The packet's ~270 tokens a call cancel what one fewer call
+saves.
+
+**By request (§10 run, agent tool calls summed over the three kinds of each template):**
+
+| request shape | templates | raw | Eden | Eden answered |
+| --- | --- | ---: | ---: | ---: |
+| check a booking or status before scheduling (calendar + mail) | dentist, rail strike, e-visa | 18 | 2 | 16 |
+| check a document or approval before acting (drive/CRM + mail) | screening hold, cert, NDA, discount, passport | 30 | 14 | 16 |
+| do it now (transfer, list, freeze, offer: raw does not search) | ISA, nursery, change freeze, offer band | 0 | 5 | −5 |
+
+- **Most removable agent calls are on "check before scheduling" requests.** The agent searches calendar and mail.
+  Eden's packet already holds the booking or hold, so 16 of 18 calls go.
+- **Document and approval checks keep half.** The agent still opens drive or CRM to confirm a document's state, which
+  is the `state` field F2 is adding.
+- **On "do it now" requests Eden adds calls.** The agent does not search raw, but an Eden packet leads it to search or
+  ask (offer-above-band +4, ISA +1 and 2 asks). There Eden's packet should be read as final, not as a prompt to
+  check.
+
+## 15. The rule sheet's cache (D1180), priced (10:55 UTC; [EST])
+
+D1180 put the user's rule sheet (up to 80 active cards) in the check as a cached block after its instructions. That
+grew the check's message from about 3,300 to 11,000–13,000 characters. `cost.py` priced every message as uncached
+input, so the sheet looked like 2.5–3x the check. Whether it is depends on how often the sheet is read from cache.
+
+`packages/sim/lab/f7/sheet-cache.py` models this per user-day; COST-MODEL ("The sheet's cache hit rate") has the
+tables. In short, for a heavy user (16 requests a day, 1–4 sheet changes a day, a sheet of 7,000–10,000 characters):
+- **1-hour TTL:** hit rate 0.75–0.80 under all three spacings. **+$0.08 to +0.12 per 1,000 tasks** (+$0.000081 to
+  +0.000124 a check, net of the pointers).
+- **5-minute TTL:** hit rate 0.00 at the lab's 10-minute gap, 0.16 at random spacing, 0.71 in bursts. At random
+  spacing it costs +$0.16 to +0.23, dearer than sending the sheet uncached (+$0.15 to +0.22). Break-even hit rates
+  are 0.22 for the 5-minute TTL and 0.53 for the 1-hour one.
+- **Today:** the lab transport sends 5-minute breakpoints. The shipped OpenRouter route sends none unless D1196 is on.
+
+`cost.py` now prices the sheet five ways (no sheet, uncached, all read, 1-hour mix at 0.75, 5-minute mix at 0.16)
+when the queue's done files carry `size.sheet`. G3's `batch.ts` change records that field. Without it, cost.py says
+the sheet was priced as uncached input.
+
+Against target 3 (F6's rehearsal gap, $0.09 per 1,000 tasks): the sheet adds $0.08–0.12 more at the 1-hour rate and
+$0.15–0.22 uncached on the shipped route. That is the price of D1180's +10 handed planted facts of 160 (served by
+subagents).
+
+## 16. Making the sheet cheap: the 1-hour TTL, an in-force-only sheet, a cap of 40 (11:40 UTC; [EST], $0)
+
+**1. The 1-hour TTL (D1197, built).** The sheet's message asks for it, and both Anthropic routes send it. Sheet
+sizes come from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
+- train seeds 41–42: 58.4 cards a user (p90 68, 759 worlds);
+- dev20 seeds 41–44: 59.4 cards a user (p90 67, 896 worlds);
+- about 8,200 characters either way.
+
+The sheet then costs **+$0.000098 a check, +$0.09 per 1,000 tasks** (`sheet-cache.py`, requests at random over
+active hours, hit rate 0.75). That compares with +$0.0002 a check (+$0.19 per 1,000 tasks) on the 5-minute TTL and +$0.00019 a check
+(+$0.17 per 1,000) uncached.
+
+**2. An in-force-only sheet: not taken.** F2's form-19 re-card of dev20 seeds 41–44 (1,929 items, states from the
+card call, served by subagents per item, D1102) gives these sheet-eligible cards: 834 in force, 88 with no state, 49
+superseded, 10 met, 0 lifted. Lifted only comes on `none` cards, which the sheet already drops.
+
+| rule | cards off the sheet | sheet size | $ per 1,000 tasks | planted facts off | decoys off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| sheet as built | 0 | 8,200 characters | +0.092 | 0 | 0 |
+| superseded and met off | 59 (6%) | about 7,700 | +0.085 | 13 | 29 |
+| no state also off | 147 (15%) | about 7,000 | +0.075 | 21 | 53 |
+
+Facts and decoys are counted in task occurrences. The saving is $0.007–0.017 per 1,000 tasks. The cost is 13–21
+planted facts: a superseded status-change is the new value, the fact itself (F2's arm 1). F2 recommends the rule
+"eligible and not (cleared state and kind none)", which changes nothing on the sheet, and so do I.
+
+**3. A cap of 40: not taken.** Every lab user's sheet holds more than 40 cards (all 1,655 worlds; the smallest has
+46). Under D1183's guard a cap of 40 turns the sheet off for every user, which deletes D1180's gain. The
+other reading, the newest 40, is the slice F5's §11d found speaking on neutral requests: a padded heavy user's newest
+slice took neutral yeses from 1 to 9 of 40. F5's 10d/11d ran 80 against no sheet, not 40, so no data supports 40.
+The cap stays at 80.
+
+**The per-check delta after 1 and 2:** +$0.000098 a check (+$0.09 per 1,000 tasks) on the 1-hour TTL. Step 2 adds
+nothing, since the in-force filter is not taken.

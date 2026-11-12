@@ -27,6 +27,10 @@ import { plantHeldout16 } from "./hidden-heldout16";
 import { plantHeldout17 } from "./hidden-heldout17";
 import { plantHeldout18 } from "./hidden-heldout18";
 import { plantHeldout19 } from "./hidden-heldout19";
+import { dev20aBefore, plantDev20a } from "./hidden-dev20a";
+import { dev20bBefore, plantDev20b } from "./hidden-dev20b";
+import { dev20cBefore, plantDev20c } from "./hidden-dev20c";
+import { dev20dBefore, plantDev20d } from "./hidden-dev20d";
 import { plantHeldout20, shiftToHeldout20 } from "./hidden-heldout20";
 import { plantLongtail } from "./hidden-longtail";
 import { REWORDED } from "./reworded";
@@ -36,9 +40,11 @@ import { plantTrain3 } from "./hidden-train3";
 import { plantTrain4 } from "./hidden-train4";
 import { plantTrain5 } from "./hidden-train5";
 import { withRevision } from "./revision";
+import { withSilent } from "./silent";
 import { plantTrain6 } from "./hidden-train6";
 import { formOf, rewordOf } from "./reword";
 import { plantSynth, readWorlds, SAMPLE_PATH, synthPath } from "./synth/suite";
+import { addRealism, REALISM_LEVELS, type RealismLevel } from "../realism";
 
 export type { HiddenTask };
 /** `neutral` (RealUse-1): the same requests, nothing planted; only suites in NEUTRAL_SUITES build it (neutral.ts). */
@@ -89,11 +95,30 @@ const PREPARE: Record<string, (world: World, seed: number) => void> = {
     addRareSources(w, s);
   },
   longtail: (w, s) => void addRareSources(w, s),
+  dev20a: (w, s) => void addRareSources(w, s),
+  dev20b: (w, s) => void addRareSources(w, s),
+  dev20c: (w, s) => void addRareSources(w, s),
+  dev20d: (w, s) => void addRareSources(w, s),
 };
+
+/**
+ * The lab's realism level (F8, D1103; `--realism heavy` in the funnel, `cold-start.ts`): a heavy user's twenty
+ * connectors and hundreds of rule-like items that do not apply (realism.ts), added to every suite's base world.
+ * Process-wide, set once by a harness before it builds a world; "off" (the default) leaves every world as it was.
+ */
+let REALISM: RealismLevel = "off";
+export function setRealism(level: string): void {
+  if (!(REALISM_LEVELS as readonly string[]).includes(level))
+    throw new Error(`--realism takes ${REALISM_LEVELS.join(" or ")}, not ${level}`);
+  REALISM = level as RealismLevel;
+}
+export const realism = (): RealismLevel => REALISM;
 
 /** Make `world` what `suite` plants into (a no-op for most suites). Call before taking `world.items.length`. */
 export function prepareWorld(suite: string, world: World, seed: number): void {
   PREPARE[suite]?.(world, seed);
+  // After the suite's own preparation: realism adds the rare sources itself, so it is the same whatever the suite.
+  if (REALISM !== "off") addRealism(world, seed, REALISM);
 }
 
 /** A seed's base world (`buildWorld({ seed: seed * 1_000 })`, as every harness builds it), prepared for `suite`. */
@@ -109,6 +134,26 @@ const needsPrepared =
     if (!RARE_SOURCE_IDS.every((id) => id in world.sources))
       throw new Error(`${name}: call prepareWorld("${name}", world, seed) before planting (suites.ts)`);
     return plant(world, seed, variant);
+  };
+
+/**
+ * F3 (D1123): a suite that gives each silent edit's earlier copy (F8's `dev20xBefore`) sets it as the hidden task's
+ * `before`, matched by template; the harnesses then plant it for the backfill and swap the edit in (silent.ts). Control
+ * and neutral tasks are unchanged.
+ */
+const withBefore =
+  (
+    plant: Plant,
+    befores: (world: World, seed: number) => { template: string; before: NonNullable<HiddenTask["before"]> }[],
+  ): Plant =>
+  (world, seed, variant) => {
+    const tasks = plant(world, seed, variant);
+    if (variant !== "hidden") return tasks;
+    const by = new Map(befores(world, seed).map((b) => [b.template, b.before]));
+    return tasks.map((t) => {
+      const b = by.get(t.template);
+      return b ? { ...t, before: b } : t;
+    });
   };
 
 /**
@@ -223,6 +268,14 @@ export const SUITES: Record<string, Plant> = {
   // The long-tail suite (P7, D873): every fact in a rarely used connector (rare-sources.ts), for pricing sweeps and
   // dormancy over days (`days-calls.ts --arrive-days`). Written by P7, not blind: tune on it.
   longtail: needsPrepared("longtail", plantLongtail),
+  // F8's tuning suites (D1100, `--suite dev20`): four sets of 40 templates, each by an isolated author given a format
+  // scaffold, the HiddenTask interface, the sim world API and a theme (work and admin; family and health; money and
+  // home; travel and social), weighted to the weak points: indirect plans, questions, non-English, no word overlap,
+  // silent edits, rare connectors, world knowledge (DEV20*_ lists). Not held out: tune on them. Not in `all`.
+  dev20a: needsPrepared("dev20a", withBefore(plantDev20a, dev20aBefore)),
+  dev20b: needsPrepared("dev20b", withBefore(plantDev20b, dev20bBefore)),
+  dev20c: needsPrepared("dev20c", withBefore(plantDev20c, dev20cBefore)),
+  dev20d: needsPrepared("dev20d", withBefore(plantDev20d, dev20dBefore)),
   // P2's reworded train (Q6): the same tasks, indirect wording. Tune on them as on train; not in `all`.
   ...Object.fromEntries(
     [plantTrain1, plantTrain2, plantTrain3, plantTrain4, plantTrain5, plantTrain6].map((p, i) => {
@@ -241,6 +294,8 @@ const HELDOUT_ALL = ["heldout", "heldout2", "heldout3", "heldout4"];
 const TRAIN = ["train1", "train2", "train3", "train4", "train5", "train6"];
 /** The train suites reworded (D871): `--suite reworded`. */
 const REWORDED_TRAIN = TRAIN.map((n) => `${n}r`);
+/** F8's tuning suites (D1100): `--suite dev20`. */
+const DEV20 = ["dev20a", "dev20b", "dev20c", "dev20d"];
 /** P2's reworded train (`train-rw`, `reword.ts`). */
 const TRAIN_RW = TRAIN.map((n) => `${n}rw`);
 /**
@@ -269,10 +324,10 @@ export const UNRUN_BLIND = [
  * (F4, D1080) is unread, for the final read of the F1–F3 fixes only. */
 export const UNREAD_BLIND: string[] = ["heldout20"];
 /**
- * P7's suites (D871, D873) and P2's `train-rw` stay out of `all`, so `--suite all` measures what it measured before
- * them.
+ * P7's suites (D871, D873), P2's `train-rw` and F8's `dev20` (D1100) stay out of `all`, so `--suite all` measures
+ * what it measured before them.
  */
-const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW];
+const NOT_IN_ALL = ["longtail", ...REWORDED_TRAIN, ...TRAIN_RW, ...DEV20];
 // Generated suites (D884) stay out of `all` too: their splits are not in git, and `all` means the hand-written suites.
 const ALL = SUITE_NAMES.filter((n) => !UNRUN_BLIND.includes(n) && !NOT_IN_ALL.includes(n) && !n.startsWith("synth"));
 const SYNTH_SPLITS = ["synth-train", "synth-val", "synth-test"];
@@ -318,10 +373,23 @@ function registerRevision(name: string): boolean {
   return true;
 }
 
+/** The hand-written suites `+silent` applies to (F3, D1123): train and its rewordings. */
+export const SILENT_BASES = [1, 2, 3, 4, 5, 6].flatMap((n) => [`train${n}`, `train${n}r`]);
+
+/** Registers `<suite>+silent` (silent.ts) for a base in SILENT_BASES on first use; the bases are unchanged. */
+function registerSilent(name: string): boolean {
+  if (name in SUITES) return true;
+  if (!name.endsWith("+silent")) return false;
+  const base = name.slice(0, -"+silent".length);
+  if (!SILENT_BASES.includes(base)) return false;
+  SUITES[name] = withSilent(name, SUITES[base]!);
+  return true;
+}
+
 /**
  * A `--suite` value: a comma list of suite names, `all` (every hand-written suite but those in UNRUN_BLIND and P7's),
  * `heldout-all`, `train` (the six broad tuning suites), `reworded` (P7's reworded train), `train-rw` (P2's,
- * `reword.ts`) or `synth` (the generated train and validation splits);
+ * `reword.ts`), `dev20` (F8's four tuning suites, D1100) or `synth` (the generated train and validation splits);
  * unknown names throw. Deduplicated.
  */
 export function parseSuites(arg: string): string[] {
@@ -338,16 +406,18 @@ export function parseSuites(arg: string): string[] {
             ? TRAIN
             : name === "reworded"
               ? REWORDED_TRAIN
-              : name === "synth"
-                ? ["synth-train", "synth-val"]
-                : name === "train-rw"
-                  ? TRAIN_RW
-                  : [name];
+              : name === "dev20"
+                ? DEV20
+                : name === "synth"
+                  ? ["synth-train", "synth-val"]
+                  : name === "train-rw"
+                    ? TRAIN_RW
+                    : [name];
     for (const n of names) {
-      if (!registerSynth(n) && !registerRevision(n) && !(n in SUITES))
+      if (!registerSynth(n) && !registerRevision(n) && !registerSilent(n) && !(n in SUITES))
         throw new Error(
-          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, synth, ` +
-            "synth-train, synth-val, synth-test, synth:<file>)",
+          `unknown suite "${n}" (known: ${SUITE_NAMES.join(", ")}, all, heldout-all, train, reworded, train-rw, dev20, ` +
+            "synth, synth-train, synth-val, synth-test, synth:<file>)",
         );
       if (!out.includes(n)) out.push(n);
     }

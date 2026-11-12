@@ -515,6 +515,17 @@ user's background enrichment is a one-time backfill plus a daily trickle:
 | 30 days of use, estimate | ≈ $0.038 | ≈ $0.026 |
 | Per 1,000 tasks at 12–20 requests a day for 30 days, estimate | ≈ $0.06–0.10 | ≈ $0.04–0.07 |
 
+**Correction (F5's finding, relayed 2026-11-12; F8 re-recording):** the recorded coverage ran on the wall clock, not
+the sim world's, so `cardsLean`'s 7-day window skipped most of a world's items. A heavy world's backfill is about
+16–17 card calls a new user, not 7–9: about twice the "since D244" column's calls, so about $0.016–0.018 a new user
+and, over 30 days, about $0.034 rather than $0.026 **[EST: the measured $ a call times the corrected count; the
+daily trickle is unchanged]**. Re-read this table when F8's re-recording lands.
+
+**The card's state (F2, D1193; docs/research/f2-card-state.md §5):** the default's card prompt is form 19, which asks
+each card for its state. About 140 more input tokens a call and about 9% more output over the same items (measured
+from the form-3 and form-19 replay files, answers served by subagents, so mixed with answer variation): about +7% a
+card call **[EST: the token deltas times Haiku's prices; no paid call was made]**. The number of calls is unchanged.
+
 Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
 is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
 −45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
@@ -668,6 +679,38 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
+### Where the check's cost and wait are, and what is left (F7, D1190, D1191; docs/research/f7-cost-latency.md)
+
+Recorded on the real API (1,092 checks, train and reworded seed 43 with neutral, Anthropic direct, lab provider) and
+priced at Haiku 5.5's list prices **[EST]**: a check is 2,484 input tokens (1,067 read from the cache on average; 90%
+of calls hit it), 115 output tokens, $0.000210 a call; 0.93 calls a task on the 1:1:8 mix, **$0.196 per 1,000
+tasks**. Its wait, by H3's fit (596 ms + 2.93 ms an output token), is about 934 ms a call and **870 ms a task** on the
+request path. Of a call's dollars, the pool and the request uncached are about 65%, the output about 29%, the cached
+instructions about 6%.
+
+| Lever | $ per 1,000 tasks | Wait a task | Status |
+| --- | --- | --- | --- |
+| Stop the reply at its first no, yeses first (`pushCheckLeanStop`) | −0.017 | −98 ms | built and deleted unmeasured (D1191; code in 49ce5972); 6 of 283 named planted facts follow the first no on the shipped order |
+| Every call hitting the cache | −0.010 | 0 | the misses are the provider's |
+| An oracle skipping the 43% of calls that end silent (ceiling) | −0.083 | −277 ms | unreachable: D930, D931 |
+| The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
+| Speculate the agent's first call, abort it on a yes (design, F7 §9) | +0.04–0.06 on Pi (aborted first calls) | −0.28 s | not built: cost up; needs the API to measure |
+
+**Eden against the agent alone, connectors counted (F7 §10c [EST]).** Model spend: Eden +$0.25 per 1,000 tasks on Pi
+and +$0.23 on Hermes (B19). Eden saves a net 0.25–0.65 connector calls a task (0.3–0.7 on Hermes). Net per 1,000
+tasks:
+- first-party APIs: +$0.25 (Pi), +$0.23 (Hermes);
+- Composio: +$0.05 to +0.17;
+- Unified.to: −$0.24 to +0.06;
+- Arcade.dev, Pipedream and Zapier: −$2.3 to −$17.
+
+Wall: B19's walls include about 0.45 s a connector call (the `direct` profile). At a production latency L a call,
+Eden − agent alone is about +0.39 − 0.72 × (L − 0.45) s on Pi and +0.09 − 0.78 × (L − 0.45) s on Hermes. That is
+faster from L ≈ 1.0 s on Pi and L ≈ 0.6 s on Hermes, and at every L ≥ 0.3 s if F10's skip removes 70% of checks.
+
+`packages/sim/lab/f7/levers.py` recomputes the table from a ledger and `--check-dump` files; `f7/price.py` prices any
+ledger per role at list prices with the check's modelled wait, for runs whose model calls bill nothing real.
+
 ## The turn gate (`pushGate`, M13, in the default since D1014)
 
 No model call and no network call: a local model decides, on the fast path, whether a user turn starts the push.
@@ -680,6 +723,82 @@ No model call and no network call: a local model decides, on the fast path, whet
 | Per 1,000 task runs, Haiku 5.5 agent (train and reworded, seeds 41–42) | $0.479 → $0.482 (agent and Eden per task); wall 4.14 → 4.12 s | `packages/sim/lab/p3/report.py` on `pi.sh`'s runs |
 
 A turn whose weights cannot be read is decided by `pushStart` alone, at its old cost.
+
+## The request glossary (`requestGloss`, F1, in the default since D1153)
+
+No model call: a non-English request is glossed into English words from a glossary held in memory, on the fast path.
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| CPU a request | 12.5 µs English (0 of 468 English requests glossed), 22.6 µs German | `bun` microbench in docs/research/f1-intent-bridge.md §3 |
+| Glossary and load | +29 MB RSS once a process; 118 ms to load when the partner is built | the same |
+| Paid calls it moves | push check calls +13% on non-English requests (343 → 389 over reworded's 36 non-English templates, seeds 41–44), still below the same templates in English (418); none on English | `packages/sim/lab/f1/gloss_score.py`, served by subagents (D1101) |
+
+A glossary that cannot be read leaves every request as written, at its old cost.
+
+## The rule sheet (`pushCheckSheet` 80 with `pushCheckSheetRefs`, F5, in the default since D1180)
+
+No new call: the push check's existing call reads the user's active constraint cards as a second cached block (one
+line a card, at most 80) and sends pool items on the sheet as pointers. **The one measured figure: $0.000281 a check
+against about $0.000231 on main (+22%), 73% of input tokens read from cache** (one API smoke, train1 s41, sheet 80,
+an earlier prompt format without pointers). The rest are Haiku 5.5 list prices from token counts **[EST]** (no credit
+for a paid comparison; D1180 owes it).
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| Sheet size | 32–53 cards a user on train (smoke), about 6,900 characters (about 1,700 tokens) | API smoke, train1 s41; 2,349 dumped checks |
+| Sheet read from cache | +$0.000017 a check | the same token counts [EST] |
+| Pointers (pool items on the sheet) | −768 of 3,188 pool characters a check (24%), about −$0.000019 | the same [EST] |
+| Cache write (sheet changed: a card landed or expired) | about +$0.0002 | the same [EST] |
+
+| Paid calls it moves | none added: the check runs on the same pushes (a pool with nothing constraint-like is still not checked) | `partner.ts` `checkPush` |
+| Added wait | the cached input only; no output added beyond a rule entry when one is named [EST] | H3's latency fit (D1072) |
+
+So with a warm cache the estimate puts the check near main's, but the one measurement read +22%; a user whose cards
+change, or whose carded items re-sync (the sheet is ordered by an item's update time), pays about $0.0002 more on the
+next check. A user with more than 80 active rules gets no sheet (D1183) and pays main's check; selection for them was rejected
+(D1182).
+
+**The sheet's cache hit rate (F7, `packages/sim/lab/f7/sheet-cache.py`, [EST]; no request timings from real users
+exist, so the spacing is assumed).** A check reads the sheet from cache only when the same sheet went out within the
+TTL. It writes the sheet again (1.25x input on the 5-minute TTL, 2x on the 1-hour one) after a longer gap, or when a
+card lands or ends, since the sheet lists newest first. The model assumes a heavy user with 16 requests a day (about
+480 a month) and 1–4 sheet changes a day. It tries three spacings: the lab's fixed 10 minutes (pi-ab `--days`),
+requests at random over about 7.3 active hours a day, and bursts of 2–5 requests a minute or two apart. Hit rates:
+
+| TTL | lab (10 min) | random over active hours | bursty |
+| --- | ---: | ---: | ---: |
+| 5 minutes | 0.00 | 0.15–0.16 | 0.71 |
+| 1 hour | 0.79 | 0.75 | 0.79–0.80 |
+
+Break-even against sending the sheet uncached is a hit rate of 0.22 on the 5-minute TTL and 0.53 on the 1-hour one.
+**The assumed rate is 0.75 on the 1-hour TTL** (the random spacing, the cautious case). Per check, for a sheet of
+7,000–10,000 characters (1,750–2,500 tokens) and net of the pointers' −$0.000019:
+
+| sheet sent as | $ a check | $ per 1,000 tasks (0.93 checks a task) |
+| --- | ---: | ---: |
+| 1-hour cache at the 0.75 hit rate (the assumed rate) | +0.000081 to +0.000124 | +0.08 to +0.12 |
+| 5-minute cache at 0.16 | +0.00017 to +0.00025 | +0.16 to +0.23 (dearer than uncached) |
+| uncached (the shipped OpenRouter route without `anthropicCache`, D1196; cost.py's old pricing) | +0.00016 to +0.00023 | +0.15 to +0.22 |
+| every check reading it | about 0 | about 0 |
+
+Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`):
+- The lab's Anthropic transport (`anthropic.ts`) sends every breakpoint of a check with a sheet at 1 hour, and prices
+  its writes at 2x.
+- The shipped OpenRouter route does the same under `anthropicCache` (D1196). That is a trial whose probe is pending
+  the owner, so production pays the uncached row today. Whether OpenRouter passes the 1-hour `ttl` through is
+  unverified.
+
+The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
+- 58.4 cards a user on train seeds 41–42 (p90 68, 759 worlds) and 59.4 on dev20 seeds 41–44 (p90 67, 896 worlds);
+- about 8,200 characters (2,050 tokens);
+- every world has more than 40.
+
+**At 8,200 characters on the 1-hour TTL with requests at random over active hours: +$0.000098 a check, +$0.09 per
+1,000 tasks [EST].** A cap of 40 would therefore turn the sheet off for every lab user under D1183's guard; the
+newest 40 instead is the slice D1183 found speaking on neutral requests. `packages/sim/lab/final/cost.py` prices the
+check's sheet block five ways when the queue's done files carry `size.sheet`: no sheet, uncached, all read, 1-hour
+mix, 5-minute mix.
 
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
@@ -763,6 +882,21 @@ default (eval 0.65 / 0.52 / 0), at $0.
   | Arcade.dev ($10) | $13-33 | $3-12 |
   | Pipedream Connect ($12) | $16-40 | $3.6-14 |
   | Zapier MCP ($25.8) | $34-85 | $7.7-31 |
+
+- **The freshness floor (`syncActivePollMs` 2 h with `syncActivePollBackoff`, D1131, D1132; in the default).** While a
+  user is active, each synced source that sends no change notifications and is marked first-party or flat-rate
+  (`callPriced: false`; the server's connector presets are) gets a complete background poll once per floor, its interval
+  doubling to 8 h while polls find nothing new. Measured on dev20 (32 users of 13 sources, 10% notifying): 730
+  background calls, about 0.2 a non-notifying source per active user-hour (1,554 without the backoff), and the request
+  path's polls fell 1,252 to 890; total calls +29% over no floor. For 20 connectors, 18 without notifications, about 220
+  active hours a month **[EST]**: about 800 floor calls a month, less the request path's polls it replaces, so about
+  1,100-2,000 calls a month with Eden against the 300-1,200 above: $0.33-0.60 on Composio, $11-20 on Arcade.dev, $28-52
+  on Zapier MCP, if they were polled. They are not: Composio, Unified.to, Arcade.dev, Pipedream Connect, Zapier MCP and
+  any per-call transport count as priced, and so does a source with no `callPriced` mark (D1133, fail safe), so on such
+  plans the floor is off unless the deployment opts in (`syncActivePollPriced`) and the figures above stand. On
+  first-party APIs it costs quota, not money: floor polls are background reads, under the tenant's pace and behind first
+  pages and a lookup's own polls (docs/research/s1-scale-1m.md §3, P1); a Gmail-scale tenant uses notifications, which
+  the floor skips.
 
 - **The agent's tokens.** Measured per 1,000 tasks on the lab's cached Pi agent (a3-cost-speed.md, p2-push-check.md):
   a Haiku 5.5 agent's own bill is about $0.18-0.25 per 1,000 requests, so $0.27-0.37 per heavy user-month; Eden's
