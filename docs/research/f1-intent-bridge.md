@@ -311,3 +311,28 @@ glossed request's neutral rate with its English twin's, but that is a new rule a
 
 **Verdict by the rule: fails on neutral.** The switch stays off. The decision, kept as a no-model fallback with an
 English-parity rule or deleted, is for the integrator.
+
+## 11. Re-screens on the world-clock shipped coverage (D1102)
+
+After main's re-recorded coverage (3de40f4a), both encoder sides were screened again at $0.
+
+- **The item encoder in the push check (§9).** dev20 seeds 41–44 at shipped coverage (main's baseline reproduced:
+  292/216 of 640). The check's view (the pool's first 15) plus at most 3 e5-small items at cosine ≥ 0.84 adds the
+  planted fact in 9 hidden tasks and the look-alike in 5 control tasks, and changes 149 neutral tasks: the same
+  counts as the pilot's, with 9 of its 10 hidden and control prompts identical. D1151 stands.
+- **The request encoder over the anticipated requests (§2), on the new requests.** e5-small with its `query:`
+  prefix, each request against every item's shipped requests (max cosine), top k at cosine ≥ τ, counted only where
+  the planted item was not already in the check's view (pool dumps at shipped coverage, seeds 41–44; train 645/597,
+  reworded 608/576, longtail 71/60):
+
+| tasks | k, τ | facts added | look-alikes added | neutral items a task |
+| --- | --- | ---: | ---: | ---: |
+| train (768) | 1, 0.84 | 16 | 15 | 0.6 |
+| train | 3, 0.84 | 19 | 23 | 1.3 |
+| reworded, English (624) | 3, 0.84 | 15 | 20 | 1.9 |
+| reworded, non-English (144) | 1, 0.84 | 9 | 16 | 0.6 |
+| reworded, non-English | 3, 0.84 | 14 | 21 | 1.4 |
+| longtail (96) | 3, 0.84 | 4 | 4 | 2.7 |
+
+  On the new coverage the request side still adds look-alikes as fast as facts or faster. This is §2's finding
+  again, so it is not built.
