@@ -747,3 +747,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |
 | D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | trial |
 | D1600 | 2026-11-12 | The server image runs on Bun's distroless image. | adopted |
+| D1700 | 2026-11-12 | The server image leaves out the lab, tests and benches. | adopted |

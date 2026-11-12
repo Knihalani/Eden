@@ -8,7 +8,7 @@
 # file names; it is re-read on change. A configuration mistake stops startup with an `eden:` line naming it (exit 2).
 # Set EDEN_PROCESSES to the container's CPU quota: a quota the container cannot see is not detected
 # (docs/INTEGRATION.md, "Processes and per-tenant caps").
-# Two stages (D1310): dependencies are installed on the full image, which has a shell; the server runs on Bun's
+# Two stages (D1600): dependencies are installed on the full image, which has a shell; the server runs on Bun's
 # distroless image of the same version (no shell, no package manager, about half the size), as uid 1000, the full
 # image's `bun` user, so a volume written by an earlier image stays writable.
 FROM oven/bun:1.4.4 AS build
