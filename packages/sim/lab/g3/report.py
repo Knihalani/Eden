@@ -238,14 +238,19 @@ def main():
 
     k = lambda kind: lambda rs: [r for r in rs if r["kind"] == kind]
     row("tasks", len, "{}")
-    row("hidden raised", lambda rs: f"{sum(r['raised'] or 0 for r in rs):.0f}/{sum(r['raised'] is not None for r in rs)}", "{}")
+    row(
+        "hidden raised",
+        lambda rs: f"{sum(r['raised'] or 0 for r in rs):.0f}/{sum(r['raised'] is not None for r in rs)}",
+        "{}",
+    )
     row("hidden raised %", lambda rs: 100 * mean([r["raised"] for r in rs]), "{:.1f}")
     for kind in ("control", "neutral"):
         row(f"{kind} concerns", lambda rs, kind=kind: f"{sum(r['concern'] or 0 for r in k(kind)(rs)):.0f}/"
             f"{sum(r['concern'] is not None for r in k(kind)(rs))}", "{}")
-    row("fact handed (hidden)", lambda rs: f"{sum(r['handed'] for r in k('hidden')(rs)):.0f}/{len(k('hidden')(rs))}", "{}")
+    handed = lambda kind: lambda rs: f"{sum(r['handed'] for r in k(kind)(rs)):.0f}/{len(k(kind)(rs))}"
+    row("fact handed (hidden)", handed("hidden"), "{}")
     row("  of which in a lookup packet", lambda rs: sum(r["handedLookup"] for r in k("hidden")(rs)), "{:.0f}")
-    row("decoy handed (control)", lambda rs: f"{sum(r['handed'] for r in k('control')(rs)):.0f}/{len(k('control')(rs))}", "{}")
+    row("decoy handed (control)", handed("control"), "{}")
     row("  of which in a lookup packet", lambda rs: sum(r["handedLookup"] for r in k("control")(rs)), "{:.0f}")
     row("packet share", lambda rs: mean([r["packet"] for r in rs]))
     row("packet chars/task", lambda rs: mean([r["packetChars"] for r in rs]), "{:.0f}")
@@ -276,7 +281,11 @@ def main():
 
         def breakeven(rs):
             t, c = mean([r["total"] for r in rs]), mean([r["turns"] for r in rs])
-            return float("nan") if rs is raw else (0.0 if t <= rt else (t - rt) / ((rc - c) * CACHED) if rc > c else float("inf"))
+            if rs is raw:
+                return float("nan")
+            if t <= rt:
+                return 0.0
+            return (t - rt) / ((rc - c) * CACHED) if rc > c else float("inf")
 
         row("break-even extra prompt tokens vs raw", breakeven, "{:.0f}")
     row("wait s/task (model + check + measured tools)", lambda rs: mean([r["wait"] for r in rs]))
@@ -299,9 +308,10 @@ def main():
         ("agent $/1k", lambda r: 1000 * r["agentUsd"]),
         ("TOTAL $/1k first-party short", lambda r: 1000 * r["total"]),
         ("TOTAL $/1k Composio", lambda r: 1000 * r["composio"]),
-    ] + [(f"TOTAL $/1k prompt +{x // 1000}k", lambda r, x=x: 1000 * (r["total"] + r["turns"] * x * CACHED)) for x in prods] + [
-        ("wait s", lambda r: r["wait"]),
     ]
+    for x in prods:
+        metrics.append((f"TOTAL $/1k prompt +{x // 1000}k", lambda r, x=x: 1000 * (r["total"] + r["turns"] * x * CACHED)))
+    metrics.append(("wait s", lambda r: r["wait"]))
     out = {"arms": {a: {l[0]: l[1 + i] for l in lines} for i, a in enumerate(arms)}, "pairs": {}}
     for a in arms:
         for b in dict.fromkeys(["raw", o["base"]]):
