@@ -685,13 +685,6 @@ export interface EngineConfig {
    */
   askNudgeDeep: boolean;
   /**
-   * D1250 (F11, trial, off): an ask answer whose chosen sources all answered ends with Eden's line naming them
-   * (`ASK_COVERAGE`: "Eden searched mail, calendar, …; every one answered, and these are its matches"), so an agent
-   * that asked first can tell the answer covers its own per-source searches and need not repeat them. Honest by
-   * construction: said only when no source failed, was cut, or is still being read (D127's statuses).
-   */
-  askCoverage: boolean;
-  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -903,7 +896,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   planConflict: true,
   askNudge: true,
   askNudgeDeep: true,
-  askCoverage: false,
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,

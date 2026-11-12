@@ -176,13 +176,6 @@ export const ASK_NUDGE =
   "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
   "those specifics, if you have it.";
 
-/**
- * `askCoverage` (D1250, trial): an ask answer's closing line when every chosen source answered: the sources by the
- * operator's ids (never source text), so the agent knows its own per-source searches would cover the same ground.
- */
-export const askCoverageLine = (ids: readonly string[]) =>
-  `${EDEN_NOTE}searched ${ids.join(", ")} for this; every one answered, and these are its matches.`;
-
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;

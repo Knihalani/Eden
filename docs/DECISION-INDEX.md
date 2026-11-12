@@ -700,3 +700,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
 | D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
 | D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |
+| D1250 | 2026-11-12 | Finding: with Eden the agent takes fewer turns and connector calls, and the calls it still makes are on the turns Eden stays silent. | finding |
+| D1251 | 2026-11-12 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. | rejected |

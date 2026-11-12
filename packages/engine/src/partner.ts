@@ -120,7 +120,6 @@ import { Ledger, type LedgerEntry } from "./ledger";
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
-  askCoverageLine,
   CANDIDATES_LEAD,
   citationsOf,
   PLAN_LEAD,
@@ -2177,7 +2176,6 @@ export class ContextPartner {
       searched.closed === true || s.closed,
       unconfirmed,
       unswept,
-      this.config.askCoverage,
     );
     if (rendering) spans!.close(rendering, { items: items.length });
     if (this.deps.onCandidates) {
@@ -6350,19 +6348,8 @@ function honestAnswer(
   closed = false,
   unconfirmed?: ReadonlyMap<string, number>,
   unswept?: ReadonlyMap<string, number>,
-  coverage = false,
 ): string {
   const told = reachAnswer(packet, sources, unresolved, closed);
-  // `askCoverage` (D1250): only an answer with items whose every chosen source answered, nothing left out.
-  const whole =
-    coverage &&
-    packet !== "" &&
-    told === packet &&
-    !unconfirmed?.size &&
-    !unswept?.size &&
-    (sources ?? []).length > 0 &&
-    (sources ?? []).every((x) => ANSWERED.has(x.status));
-  if (whole) return `${told}\n${askCoverageLine((sources ?? []).map((x) => x.sourceId))}`;
   const notes: string[] = [];
   const list = (m: ReadonlyMap<string, number>) => [...m].map(([id, n]) => `${id} (${n})`).join(", ");
   if (unconfirmed && unconfirmed.size > 0) {
