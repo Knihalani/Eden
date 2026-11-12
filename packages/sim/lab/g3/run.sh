@@ -5,8 +5,8 @@
 #
 #   PREFIX=r1 LIMIT=40 SEEDS=41 ARMS="raw D LK NC" bash packages/sim/lab/g3/run.sh
 #
-# Arms: raw (`tools`), D (the default), LK (F11's D1252 lookup: pushLookup 3, pushLookupAny, pushLookupQuiet; it needs a
-# tree with those trial switches, claude/f11-turns: on main, run ARMS="raw D NC"),
+# Arms: raw (`tools`), D (the default), LK (F11's D1252 lookup: pushLookup 3, pushLookupAny, pushLookupQuiet: trial
+# switches on main since #317),
 # NC (default minus the push check: the pre-D828 unchecked candidates). The session drives the queue
 # (packages/sim/lab/final/README.md "Driving the queue").
 set -euo pipefail

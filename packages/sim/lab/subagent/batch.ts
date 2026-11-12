@@ -1,8 +1,8 @@
 /**
  * The queue transport's batcher (F9, D1101; README.md here, ../../src/lab/queue-transport.ts). LAB ONLY, sim data.
  *
- *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--model PREFIX] [--single-arm]
- *     [--max-chars N]
+ *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--skip-role R] [--model PREFIX]
+ *     [--single-arm] [--max-chars N]
  *   bun packages/sim/lab/subagent/batch.ts prompt B.json [--recipe careful|fast]
  *   bun packages/sim/lab/subagent/batch.ts put --dir Q B.answers.json
  *   bun packages/sim/lab/subagent/batch.ts status --dir Q
@@ -158,6 +158,8 @@ if (cmd === "take") {
   const n = Number(opt("n", "20"));
   const out = opt("out");
   const role = opt("role");
+  // `--skip-role R` (F11): every role but R, so a Haiku worker leaves the Sonnet grader's calls to a Sonnet worker.
+  const skipRole = opt("skip-role");
   const model = opt("model");
   const singleArm = rest.includes("--single-arm");
   let arm: string | undefined;
@@ -178,6 +180,7 @@ if (cmd === "take") {
       continue;
     }
     if (role && req.role !== role) continue;
+    if (skipRole && req.role === skipRole) continue;
     if (model && !req.model.startsWith(model)) continue;
     const reqArm = `${req.run ?? ""}\u0000${req.role}`;
     if (singleArm && arm !== undefined && reqArm !== arm) continue;

@@ -132,6 +132,10 @@ import {
   ASK_NUDGE,
   CANDIDATES_LEAD,
   citationsOf,
+  LOOKUP_HEAD_LEAD,
+  LOOKUP_LEAD,
+  LOOKUP_QUIET,
+  LOOKUP_USE,
   PLAN_LEAD,
   renderAnswer,
   renderPacket,
@@ -265,6 +269,8 @@ export interface PushPoolReport {
    * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
+  /** `pushLookup` (D1252): `handed` is reference records naming the request's anchors, or (`head`) the pool's head. */
+  lookup?: "named" | "head";
   /** `pushCheckSheet` (F5): the item ids of the rule sheet the check read, in its order (ids only, for the lab). */
   sheet?: string[];
 }
@@ -2138,7 +2144,9 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                candidates.lookup
+                  ? this.lookupFrame(candidates.lookup)
+                  : this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2683,7 +2691,7 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
@@ -2699,11 +2707,31 @@ export class ContextPartner {
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
+    // `pushLookup` (D1252): the check answered and named nothing (a non-null empty answer: this pass's call, a reused
+    // or a late one read by `readerPushBehind`'s second pass; a failed, late-unread or unwired check is null), so the
+    // push would be silent; the pool's records that name the request's anchors go out for reference instead, or with
+    // `pushLookupAny` the pool's head when none does (`lookupHead`: its lead must not claim they name the request).
+    let lookup = false;
+    let lookupHead = false;
+    // Only on the session's first request: later ones carry the session's own context, and there the records saved
+    // the agent almost no search but stayed in its transcript (D1252's days run: agent $ +0.015/1k, −0.08 calls).
+    if (yes && yes.size === 0 && this.config.pushLookup > 0 && s.requests <= 1) {
+      const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      // Only plain records: a constraint-like item here is one the check read and judged not to change the request
+      // (a look-alike), and handed as reference the agent raised it anyway (round 5: the ISA look-alike on 4 of 4
+      // control seeds). What the agent looks up on a silent turn is the meeting, the contact, the thread.
+      const flagged = new Set(reported.filter((x, i) => like[i]).map((x) => x.item.id));
+      const plain = open.filter((x) => !flagged.has(x.item.id));
+      const named = plain.filter((x) => anchored(x.item, a));
+      lookupHead = named.length === 0 && this.config.pushLookupAny;
+      items = (lookupHead ? plain : named).slice(0, this.config.pushLookup);
+      lookup = items.length > 0;
+    }
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
-    if ((this.config.askNudge || fewer > 0) && items.length > 0) {
+    if ((this.config.askNudge || fewer > 0) && items.length > 0 && !lookup) {
       anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
@@ -2738,8 +2766,15 @@ export class ContextPartner {
             ...(check?.sheet ? { sheet: [...check.sheet] } : {}),
           }
         : {}),
+      // `pushLookup` (D1252): `handed` is reference records, not checked candidates.
+      ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    return {
+      items,
+      pool,
+      ...(unsettled ? { unsettled } : {}),
+      ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
+    };
   }
 
   /** `pushCheckSheet` (F5): the cached items a check's named rules stand for, not already in the pool, no bulk mail. */
@@ -2886,6 +2921,16 @@ export class ContextPartner {
         itemIds: packet.citations.map((c) => c.itemId),
       });
     }
+  }
+
+  /** `pushLookup` (D1252): the records a silent push hands, framed as reference and cut as candidates are. */
+  private lookupFrame(kind: "named" | "head"): PacketFrame {
+    const lead = kind === "head" ? LOOKUP_HEAD_LEAD : LOOKUP_LEAD;
+    // `pushLookupQuiet`: the last sentence says the records are background, not a reason to warn.
+    return {
+      ...this.candidateFrame(),
+      lead: this.config.pushLookupQuiet ? lead.replace(LOOKUP_USE, LOOKUP_QUIET) : lead,
+    };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
