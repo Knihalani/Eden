@@ -349,3 +349,18 @@ rule is written then, before its calls.
 Every clause passes (hidden not down, decoys not up, neutral packets up by less than 3 points), so stage 2 runs. The
 gain without a model is small: a kept card reaches the rule paths on few tasks. Its case is the check's view (the
 sheet and the card on a pool item), which stage 2 measures.
+
+### 11a. The neutral re-test (subagent-simulated, D1101)
+
+The 95 dev20 seed 41 neutral checks of §9a with a sheet, three arms, each asked twice by separate subagents
+(`.local/f5/pilot/n10a-1`, `n10a-2`; 285 prompts a sample, all answered, none unreadable):
+
+| arm | sample 1 any yes | sample 2 any yes | mean | − B | samples disagree on | any rule named (1 / 2) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| B (main) | 22 | 21 | 21.5 | — | **9** (D) | 0 / 0 |
+| SR (sheet + pointers) | 23 | 18 | 20.5 | −1.0 | 9 | 3 / 4 |
+| S (sheet, pool items in full) | 23 | 25 | 24.0 | +2.5 | 14 | 7 / 11 |
+
+Bound max(3, D/2) = 4.5. **SR passes (−1.0) and S passes (+2.5); by §10a, SR passes §6 and goes forward.** Main's
+own prompt, asked twice, disagrees with itself on 9 of 95 neutral checks; §9a's +7 neutral packets for SR was within
+that noise. S names rules more often (7 and 11 against SR's 3 and 4), on neutral requests too.
