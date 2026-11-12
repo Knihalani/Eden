@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatRequest, ChatResponse, Model, OpenRouterOptions } from "@eden/llm";
 import { StaticSource } from "@eden/sources";
-import { buildPartner, readerFailureLog } from "./build";
+import { buildPartner, modelFailures, readerFailureLog } from "./build";
 import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "./models";
 
 /**
@@ -92,6 +92,16 @@ describe("the reader's failures are logged once by the server, without the key",
     const leaky = readerFailureLog((l) => lines.push(l));
     leaky(new Error("openrouter 401: key AKIAIOSFODNN7EXAMPLE rejected"));
     expect(lines[1]).not.toContain("AKIAIOSFODNN7EXAMPLE");
+  });
+
+  test("every failure is counted by role for /metrics, though the line is written once", () => {
+    const before = { ...modelFailures };
+    const reader = readerFailureLog(() => {});
+    const check = readerFailureLog(() => {}, undefined, "check failed", "check");
+    for (let i = 0; i < 3; i++) reader(new Error("openrouter 403"));
+    check(new Error("openrouter 403"));
+    expect(modelFailures.reader - before.reader).toBe(3);
+    expect(modelFailures.check - before.check).toBe(1);
   });
 
   test("without a key there is no reader, so nothing to log", () => {

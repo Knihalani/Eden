@@ -374,6 +374,12 @@ without context meanwhile.
 answering`). Bring it back or replace it; when it answers it gets its users back. If the store is failing too
 (`EdenStoreFailing`), moved users re-sync: check the store's status page and credentials.
 
+**Incident: the model is failing** (`EdenModelFailing`, D1600): Eden is serving its no-model path. The first
+failure's `eden:` log line names the provider's error. A 401 is the key; a 402 or "credit" is the balance; a 403
+"violation of provider Terms Of Service" on `anthropic/*` is OpenRouter refusing that model for the account or the
+region the box calls from: check it from the box with one small call, ask OpenRouter, or set `EDEN_MODEL` to a model
+the account can reach until it is resolved (the quality numbers in docs/research were measured on Haiku).
+
 **Incident: a leak of a key.** A tenant key: rotate it. `EDEN_PERSIST_KEY` with the disk or store: rotate it, and
 start once with `EDEN_PERSIST_DISCARD=1` beside the new key (the old users are discarded and re-sync; without it Eden
 refuses to start, D1071), then remove it; treat the store's and disk's contents as exposed (redacted content, D10;

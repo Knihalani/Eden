@@ -98,6 +98,16 @@ export function tenantSpendFor(usdPerTenantDay: number, processes = 1): TenantSp
   return new TenantSpend(usdPerTenantDay / Math.max(1, processes));
 }
 
+/** The model roles whose failures are counted for `/metrics` (`eden_model_failures_total{role}`). */
+export type ModelRole = "reader" | "check";
+
+/**
+ * Model calls that failed in this process, by role, since it started. The log line above is written once; this keeps
+ * counting, so an account the provider refuses (an OpenRouter 403), a revoked key or an empty balance shows on
+ * `/metrics` and pages through the `EdenModelFailing` alert instead of reading as silence (Eden fails open, D41).
+ */
+export const modelFailures: Record<ModelRole, number> = { reader: 0, check: 0 };
+
 /** How much of a provider's error message is logged: OpenRouterModel already cuts the body at 300 characters. */
 const FAILURE_CHARS = 400;
 
@@ -112,9 +122,11 @@ export function readerFailureLog(
   log: (line: string) => void,
   scrub: (text: string) => string = (t) => t,
   what = "the reader's model call failed; asks and pushes fall back to the no-model path",
+  role: ModelRole = "reader",
 ) {
   let logged = false;
   return (error: unknown): void => {
+    modelFailures[role]++;
     if (logged) return;
     logged = true;
     const raw = error instanceof Error ? error.message : String(error);
@@ -160,6 +172,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
             options.log ?? console.error,
             models.scrub,
             "the push check's model call failed; pushes hand the default's candidates",
+            "check",
           ),
         })
       : undefined;
