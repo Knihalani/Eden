@@ -515,7 +515,7 @@ constraint card (any kind but `none`) counts from a lower coverage floor (`inten
 up to `intentCardHits` (4) such hits the `intentHits` cut left out (read 3x as deep) are kept after the others
 (`intentByKind`, D200, `keepIntents`).
 
-**The request glossary** (`requestGloss`, trial, off; F1, `gloss.ts`,
+**The request glossary** (`requestGloss`, in the default since D1153, part `gloss`; F1, `gloss.ts`,
 [research/f1-intent-bridge.md](research/f1-intent-bridge.md)). A request whose own words read as another language (more
 of its non-name words known to one of the glossary's languages than to English) is given, with no model, the English
 words those words mean, from a glossary written once by a model (`gloss.bin`, read once a process); the push's and an
