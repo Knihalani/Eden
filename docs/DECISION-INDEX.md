@@ -689,6 +689,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
 | D1102 | 2026-11-12 | Lab only: shipped coverage re-recorded on the world's clock, served by subagents per item; the old shipped baselines were pessimistic | lab |
 | D1103 | 2026-11-12 | Lab only: `--realism heavy`, a heavy real user's sources | lab |
+| D1104 | 2026-11-12 | Finding (lab): no subagent recipe gives an API-faithful read of a push-check prompt arm; check-prompt arms need the API | finding |
 | D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
 | D1122 | 2026-11-12 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | superseded (deleted by D1126) |
 | D1123 | 2026-11-12 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | superseded (deleted by D1126) |
