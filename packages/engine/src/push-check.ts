@@ -410,8 +410,7 @@ export class PushChecker {
     const items = input.items.slice(0, CHECK_MAX_ITEMS);
     const sheet = input.sheet?.slice(0, SHEET_MAX_CARDS) ?? [];
     const none = { yes: null, costUsd: 0, called: false, overBudget: false };
-    // With a sheet a pool with no item is still asked (`pushCheckSheetAlways`): the rules alone may apply.
-    if ((items.length === 0 && sheet.length === 0) || signal.aborted) return none;
+    if (items.length === 0 || signal.aborted) return none;
     // A sheet is up to `SHEET_MAX_CARDS` lines of about 50 tokens, written to the cache at 1.25x when it changes.
     const estimate = this.limits.estimateUsd + (sheet.length > 0 ? 0.001 : 0);
     const reservation = this.deps.budget.reserve(scopeKey(scope), session, estimate);

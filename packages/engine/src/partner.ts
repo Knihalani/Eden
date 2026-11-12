@@ -2534,13 +2534,11 @@ export class ContextPartner {
     const checker = this.deps.checker;
     if (!this.config.pushCheck || !checker) return null;
     const like = gate.like.some(Boolean);
-    // `pushCheckSheetAlways` (F5): a pool with nothing constraint-like is checked against the sheet alone.
-    if (!like && !(this.config.pushCheckSheetAlways && this.config.pushCheckSheet > 0)) return null;
+    if (!like) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const today = localDay(this.now(), this.deps.cache.offsetOf(s.scope));
     const sheet = await this.sheetOf(s, cue, today, request);
-    if (!like && sheet.length === 0) return null;
     const focus = readerFocus(cue.raw);
     const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {

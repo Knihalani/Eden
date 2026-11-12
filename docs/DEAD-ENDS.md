@@ -73,6 +73,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
 | D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
 | D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
+| D1181 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | F5, D814 |
 
 ## Reader
 

@@ -452,6 +452,11 @@ dependency (no model key: no checker, and the part is inert), waits at most `pus
 error or a refusal hands the unchecked candidates; a late answer is traced "check-late" and kept for a second pass),
 and costs about 1 s a call on the agent's path (docs/research/p2-push-check.md; COST-MODEL.md). A widened pool, an
 anchored gate and a never-silent form were measured and deleted (D828).
+**The rule sheet (`pushCheckSheet` 80, `pushCheckSheetRefs`; F5, D1180, part `sheet`)** gives that call the user's
+active constraint cards (at most 80, newest items first, expired and `none` cards left out, card text sanitised and
+fenced as data) as a second block cached per user, so the model can link a request to a rule no lookup reached; a
+rule it names brings that rule's item into the packet after the pool's named items, and a pool item on the sheet is
+sent as a pointer to its rule. It adds no call: a pool with nothing constraint-like is still not checked.
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search

@@ -193,9 +193,10 @@ function setup(config: Record<string, unknown>, model: FakeModel, ruleIndex?: Ru
 const REQUEST = "Pay the Harlow venue deposit invoice and get me a return to Edinburgh";
 
 describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
-  test("off in the default and the core: the prompt is main's, two messages", async () => {
-    expect(DEFAULT_CONFIG.pushCheckSheet).toBe(0);
-    expect(DEFAULT_CONFIG.pushCheckSheetAlways).toBe(false);
+  test("on in the default (D1180), off in the core (part `sheet`): there the prompt is main's, two messages", async () => {
+    expect(DEFAULT_CONFIG.pushCheckSheet).toBe(80);
+    expect(DEFAULT_CONFIG.pushCheckSheetRefs).toBe(true);
+    expect(CORE_CONFIG.pushCheckSheet).toBe(0);
     const model = naming("TravelPerk");
     const { warm, handed } = setup({}, model);
     await warm();
@@ -248,19 +249,19 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
     expect(prompt).not.toContain("TravelPerk");
   });
 
-  test("with the sheet alone (pushCheckSheetAlways) a pool with nothing constraint-like is checked too", async () => {
+  test("a pool with nothing constraint-like makes no call, whatever the sheet holds (as on main)", async () => {
     const quiet = "Get me a return to Edinburgh on the 17th";
-    for (const always of [false, true]) {
+    {
       const model = naming("TravelPerk");
-      const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetAlways: always }, model);
+      const { warm, handed } = setup({ pushCheckSheet: 80 }, model);
       // No item in this pool is constraint-like.
       POOL.splice(0, POOL.length, item("plain", "Harlow invoice", "Harlow invoice: the PDF is attached.", 3));
       try {
         await warm();
         const before = model.calls.length;
         const ids = await handed(quiet);
-        expect(model.calls.length - before).toBe(always ? 1 : 0);
-        expect(ids.includes(POLICY.id)).toBe(always);
+        expect(model.calls.length - before).toBe(0);
+        expect(ids.includes(POLICY.id)).toBe(false);
       } finally {
         POOL.splice(
           0,
@@ -298,9 +299,9 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
 
   test("the config checker knows the keys: the sheet needs cards and the check", () => {
     const deps = { deps: { checker: true, cards: true } };
-    expect(checkEngineConfig({ pushCheckSheet: 80 }, deps)).toEqual({ pushCheckSheet: 80 });
+    expect(checkEngineConfig({ pushCheckSheet: 40 }, deps)).toEqual({ pushCheckSheet: 40 });
     expect(() => checkEngineConfig({ pushCheckSheet: 500 }, deps)).toThrow();
-    expect(() => checkEngineConfig({ pushCheckSheet: 80 }, { deps: { cards: true } })).toThrow(/checker/);
+    expect(() => checkEngineConfig({ pushCheckSheet: 40 }, { deps: { cards: true } })).toThrow(/checker/);
   });
 });
 

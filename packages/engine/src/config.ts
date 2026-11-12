@@ -731,20 +731,15 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * Trial (F5, docs/research/f5-rule-sheet.md; trials table): the push check also reads the user's rule sheet, at
-   * most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its statement, kind,
-   * span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the reply names
-   * brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards (an end
-   * before the user's day) and `none` cards are left out; the newest items' cards are kept first.
+   * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
+   * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
+   * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
+   * reply names brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards
+   * (an end before the user's day) and `none` cards are left out; the newest items' cards are kept first.
    */
   pushCheckSheet: number;
   /**
-   * Trial (F5): with `pushCheckSheet`, a push whose pool holds no constraint-like item (or no item) is checked too,
-   * against the sheet and the pool, when the sheet has a card; without it such a push makes no call, as on main.
-   */
-  pushCheckSheetAlways: boolean;
-  /**
-   * Trial (F5): with `pushCheckSheet`, a pool item on the sheet is sent as its title and its rule's number instead of
+   * F5 (D1180, with `pushCheckSheet`): a pool item on the sheet is sent as its title and its rule's number instead of
    * its text: the cached sheet line stands in for part of the uncached pool (cost).
    */
   pushCheckSheetRefs: boolean;
@@ -943,9 +938,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushCheckSheet: 0,
-  pushCheckSheetAlways: false,
-  pushCheckSheetRefs: false,
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
   pushCheckSheetSelect: 0,
   pushOpen: true,
   pushIndirect: true,
