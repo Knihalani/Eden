@@ -199,3 +199,20 @@ tests:
 Cost and wall are not measurable through subagents: the check's cost is priced from token counts [EST], and its
 added wait from the H3 latency fit (596 ms + 2.93 ms an output token, D1072) with the extra input tokens read from
 cache [EST].
+
+### 5b. The pointer arm SR (subagent-simulated, the same sets and sampling, 16 subagents, 213 prompts, 0 unreadable)
+
+| set | S (§5a) | SR |
+| --- | ---: | ---: |
+| Th: fact named | 51 / 54 | 52 / 54 |
+| Tc: look-alike named | 5 / 39 | 5 / 39 |
+| Hh: fact named | 40 / 40 | 39 / 40 |
+| Hc: look-alike named | 7 / 40 | 3 / 40 |
+| N: any yes | 9 / 40 | 8 / 40 |
+
+A pool item on the sheet read as its title and its rule's line holds the facts and names fewer in-pool look-alikes.
+Cost, from the 2,349 dumped checks [EST: about 4 characters a token, Haiku 5.5 list prices]: the pool is 3,188
+characters a check, of which pointers drop 768 (24%, 4.8 items a check on the sheet), about 190 uncached tokens or
+$0.000019 a check. The sheet itself is about 6,900 characters (about 1,700 tokens): $0.000017 a check read from
+cache, $0.00021 when written. So with the sheet in cache, SR's check costs about what main's does (+$0.000017 −
+$0.000019); each cache write adds about $0.0002.
