@@ -20,6 +20,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { ContextPartner, SharedFrozenDisk } from "@eden/engine";
 import { childTable, OwnerTable } from "@eden/primitives";
 import { bucketOf, type Scope } from "@eden/protocol";
+import { modelFailures } from "./build";
 
 /** Routes timed by name; anything else is "other", so a scanner cannot grow the label set. */
 const ROUTES = new Set([
@@ -273,6 +274,10 @@ export class Ops {
           this.counts.set(`eden_store_${k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}_total`, v);
         }
       }
+    }
+    for (const [key, n] of Object.entries(modelFailures)) {
+      const [role, kind] = key.split(":");
+      this.counts.set(`eden_model_failures_total{kind="${kind}",role="${role}"}`, n);
     }
     let family = "";
     for (const [k, v] of [...this.counts].sort()) {

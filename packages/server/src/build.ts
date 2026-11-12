@@ -98,6 +98,27 @@ export function tenantSpendFor(usdPerTenantDay: number, processes = 1): TenantSp
   return new TenantSpend(usdPerTenantDay / Math.max(1, processes));
 }
 
+/** The model roles whose failures are counted for `/metrics` (`eden_model_failures_total{role,kind}`). */
+export type ModelRole = "reader" | "check";
+
+/**
+ * Model calls that failed in this process, by role and kind, since it started (D1690). The log line above is written
+ * once; this keeps counting, so an account the provider refuses (an OpenRouter 403), a revoked key or an empty balance
+ * shows on `/metrics` and pages through `EdenModelFailing` instead of reading as silence (Eden fails open, D41).
+ * `error` is a call that threw (the provider's status, a timeout); `unreadable` is a reply that came back but did not
+ * parse, which happens on about 2% of healthy checks (docs/research/n5-widen-check.md), so the alert reads `error`
+ * only. Card calls are not counted here: `CardEnricher` has no failure hook.
+ */
+export const modelFailures: Record<`${ModelRole}:${"error" | "unreadable"}`, number> = {
+  "reader:error": 0,
+  "reader:unreadable": 0,
+  "check:error": 0,
+  "check:unreadable": 0,
+};
+
+/** The engine's own wording for a reply that did not parse (`reader.ts`, `push-check.ts`). */
+const UNREADABLE = /reply unreadable/;
+
 /** How much of a provider's error message is logged: OpenRouterModel already cuts the body at 300 characters. */
 const FAILURE_CHARS = 400;
 
@@ -112,9 +133,12 @@ export function readerFailureLog(
   log: (line: string) => void,
   scrub: (text: string) => string = (t) => t,
   what = "the reader's model call failed; asks and pushes fall back to the no-model path",
+  role: ModelRole = "reader",
 ) {
   let logged = false;
   return (error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    modelFailures[`${role}:${UNREADABLE.test(message) ? "unreadable" : "error"}`]++;
     if (logged) return;
     logged = true;
     const raw = error instanceof Error ? error.message : String(error);
@@ -160,6 +184,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
             options.log ?? console.error,
             models.scrub,
             "the push check's model call failed; pushes hand the default's candidates",
+            "check",
           ),
         })
       : undefined;

@@ -4,8 +4,8 @@
 // It prints each call's prompt tokens, cached tokens and cost, never the key. Spend: well under a cent.
 //
 //   EDEN_ALLOW_OPENROUTER=1 bun packages/sim/lab/f7/cache-probe.ts
-import { checkMessages } from "@eden/engine/src/push-check";
-import { modelRolesFromEnv } from "@eden/server/src/models";
+import { checkMessages } from "@eden/engine";
+import { modelRolesFromEnv } from "@eden/server";
 
 if (!process.env.OPENROUTER_API_KEY) {
   console.error("cache-probe: OPENROUTER_API_KEY is not set");
