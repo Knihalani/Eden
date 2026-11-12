@@ -64,6 +64,23 @@ export interface SyncOptions {
   maxStaleMs: number;
   /** A user with an event this recently (ms) is active: sweeps run only for active users. */
   activeMs: number;
+  /**
+   * `syncActivePollMs` (D1131; 0 or absent: off): while the user is active, a tick runs a complete background poll of
+   * every warm source (not notifying, not billed per call unless `activePollPriced`) whose last complete poll is older
+   * than this, whatever its learned rate says. A quiet source is otherwise trusted for up to `maxStaleMs` (6 h), and an
+   * edit made at it silently (no notice) went out as the pre-edit copy (D1126). The request waits for none of it.
+   */
+  activePollMs?: number;
+  /**
+   * `syncActivePollBackoff` (D1131): a floor poll that stores nothing doubles that source's interval, up to
+   * `FLOOR_BACKOFF_LEVELS` doublings; anything new stored from the source (any poll, a notice's items) resets it.
+   */
+  activePollBackoff?: boolean;
+  /**
+   * `syncActivePollPriced` (D1132, D1133): the floor also polls sources not marked first-party or flat-rate
+   * (`Source.callPriced` true or absent).
+   */
+  activePollPriced?: boolean;
   /** A full re-listing, for deletes, this often per source (ms) while the user is active. */
   sweepMs: number;
   /** A user idle this long (ms) is no longer synced; their synced items are dropped. */
@@ -258,6 +275,10 @@ interface SourceSync {
   noticedMark: number;
   /** `notices` when the last complete poll began: the copy is behind while they differ. */
   noticesPolled: number;
+  /** `activePollBackoff`: the floor's doublings for this source (0: the floor itself), reset by anything stored. */
+  floorLevel: number;
+  /** Items stored new or changed from this source, ever (in memory): whether a floor poll found anything. */
+  storedCount: number;
   /** `notices` when the backfill's latest page began: what the backfill has read when it ends (`warmUp`). */
   noticesBackfill: number;
   /**
@@ -330,6 +351,9 @@ export interface SyncStats {
   /** Items dropped because their source no longer lists them. */
   deleted: number;
 }
+
+/** `activePollBackoff`: a quiet source's floor interval doubles at most this often (a 2 h floor waits up to 8 h). */
+const FLOOR_BACKOFF_LEVELS = 2;
 
 export class SyncManager {
   private readonly users = new Map<string, UserSync>();
@@ -1135,6 +1159,44 @@ export class SyncManager {
     const now = this.deps.now();
     const active = now - u.activeAt <= this.o.activeMs;
     if (!active) return;
+    // `activePollMs`: an active user's sources whose last complete poll is older than the floor are polled in the
+    // background, as a complete poll (read to the boundary, the change rate taught): a one-page read left the items
+    // it stored as a false boundary for the next poll, which then marked the source current short of what changed
+    // (D1131's review). Busy, backing off or out of budget: the next tick looks again.
+    const floor = this.o.activePollMs ?? 0;
+    if (floor > 0) {
+      // A source that notifies (`push`) is current until it says it changed: no floor poll. Nor for one not marked
+      // first-party or flat-rate (`callPriced` false): unknown counts as billed per call (D1133, fail safe), unless the
+      // deployment opted in.
+      const floorDue = (s: SourceSync, source: Source | undefined, share: number): source is Source =>
+        source !== undefined &&
+        !s.notifies &&
+        s.phase === "warm" &&
+        !s.busy &&
+        now >= s.retryAt &&
+        (source.callPriced === false || this.o.activePollPriced === true) &&
+        now - s.polledAt >= share * floor * 2 ** s.floorLevel;
+      // A poll stores into the cache: a frozen user is thawed first (`ready`, D325), as for a sweep. Once one source
+      // is due, those past half their interval go in the same thaw, so a user's sources do not each thaw them in turn
+      // (the review: users freeze warm after 2 minutes idle, D862, well inside `activeMs`).
+      if ([...u.sources.values()].some((s) => floorDue(s, byId.get(s.id), 1))) {
+        await this.deps.cache.ready(u.scope);
+        if (u.gone) return;
+        await Promise.all(
+          [...u.sources.values()].map(async (s) => {
+            const source = byId.get(s.id);
+            if (!floorDue(s, source, 0.5)) return;
+            const [polledAt, stored] = [s.polledAt, s.storedCount];
+            await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
+            // `activePollBackoff`: a complete floor poll that brought nothing new waits twice as long next time.
+            if (this.o.activePollBackoff && s.polledAt > polledAt && s.storedCount === stored) {
+              s.floorLevel = Math.min(s.floorLevel + 1, FLOOR_BACKOFF_LEVELS);
+            }
+          }),
+        );
+        if (u.gone) return;
+      }
+    }
     // A sweep reads the cache: a frozen user is thawed first (`ready`, D325).
     const long = (s: SourceSync) => (this.onLongSweep(s) ? Math.max(this.o.unusedSweepMs!, this.o.sweepMs) : 0);
     const longDue = (s: SourceSync) => now - s.sweptAt >= (long(s) || this.o.sweepMs);
@@ -1146,7 +1208,7 @@ export class SyncManager {
     await Promise.all(
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
-        if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
+        if (!source || s.notifies || s.phase !== "warm" || s.busy || now < s.retryAt) return;
         if (s.sweep !== null || longDue(s)) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),
@@ -1475,55 +1537,74 @@ export class SyncManager {
     const gaveUp = () => {
       if (demand) s.demandGaveUpAt = this.deps.now();
     };
-    for (let p = 0; adaptive ? asked < itemCap && p <= maxPages : p < maxPages; p++) {
-      if (u.gone) return;
-      if (signal?.aborted) return gaveUp();
-      if (this.budget.take(budgetKey(u, s)) > 0) return;
-      const topUp = this.o.pageSize - (asked % this.o.pageSize);
-      const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
-      asked += limit;
-      const readMark = this.marks;
-      // A lookup's tally counts the call when it is sent: the lookup may stop waiting before it answers (D283), and
-      // its trace must still hold the call the connector received (the review). A guard's skip, no call, is taken back.
-      if (tally) tally.calls++;
-      const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
-        timeoutMs: this.o.timeoutMs,
-        signal,
-        reserve: demand ? 0 : SERVING_HEADROOM,
-      });
-      if (u.gone) return;
-      if (typeof page === "string") {
-        if (page !== "limited" && page !== "busy") this.count(demand);
-        else if (tally) tally.calls--;
-        // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
+    // What this poll stored new or changed: if it stops before it completes (the call budget, a failed page, the
+    // lookup giving up), those items are not a boundary for the next poll, which would otherwise stop at them and mark
+    // the source current with the pages past them never read (D1131's second review). Pushed marks do that, and the
+    // next complete poll clears them (`polled`).
+    const storedHere = new Set<string>();
+    let complete = false;
+    try {
+      for (let p = 0; adaptive ? asked < itemCap && p <= maxPages : p < maxPages; p++) {
+        if (u.gone) return;
         if (signal?.aborted) return gaveUp();
-        this.failed(s, page);
-        return;
+        if (this.budget.take(budgetKey(u, s)) > 0) return;
+        const topUp = this.o.pageSize - (asked % this.o.pageSize);
+        const limit = !adaptive ? this.o.pageSize : p === 0 ? first : Math.min(topUp, itemCap - asked);
+        asked += limit;
+        const readMark = this.marks;
+        // A lookup's tally counts the call when it is sent: the lookup may stop waiting before it answers (D283), and
+        // its trace must still hold the call the connector received (the review). A guard's skip, no call, is taken
+        // back.
+        if (tally) tally.calls++;
+        const page = await this.list(demand ? "demand" : "poll", source, u.scope, cursor, limit, {
+          timeoutMs: this.o.timeoutMs,
+          signal,
+          reserve: demand ? 0 : SERVING_HEADROOM,
+        });
+        if (u.gone) return;
+        if (typeof page === "string") {
+          if (page !== "limited" && page !== "busy") this.count(demand);
+          else if (tally) tally.calls--;
+          // The lookup gave up (its deadline, the session ending): no evidence against the source, no back-off.
+          if (signal?.aborted) return gaveUp();
+          this.failed(s, page);
+          return;
+        }
+        this.count(demand);
+        if (demand) this.stats.demandItems += page.items.length;
+        else this.stats.backgroundItems += page.items.length;
+        s.failures = 0;
+        const stored = new Set<string>();
+        const fresh = this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
+        for (const id of stored) storedHere.add(id);
+        changed += fresh;
+        if (tally) tally.fresh += fresh;
+        // The listing has reached what was synced before: an item held unchanged that a notification did not bring.
+        // An item `keepCut` refused (older than the user's cut) counts too: listings run newest first, so what follows
+        // is older still, and the poll is done.
+        const boundary = page.items.some((it) => !stored.has(it.id) && !s.pushed.has(it.id));
+        if (boundary || page.next === null || page.items.length === 0) {
+          complete = true;
+          this.polled(s, started, changed, notices, pushSeq);
+          return;
+        }
+        cursor = page.next;
       }
-      this.count(demand);
-      if (demand) this.stats.demandItems += page.items.length;
-      else this.stats.backgroundItems += page.items.length;
-      s.failures = 0;
-      const stored = new Set<string>();
-      const fresh = this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
-      changed += fresh;
-      if (tally) tally.fresh += fresh;
-      // The listing has reached what was synced before: an item held unchanged that a notification did not bring.
-      // An item `keepCut` refused (older than the user's cut) counts too: listings run newest first, so what follows is
-      // older still, and the poll is done.
-      const boundary = page.items.some((it) => !stored.has(it.id) && !s.pushed.has(it.id));
-      if (boundary || page.next === null || page.items.length === 0) {
-        this.polled(s, started, changed, notices, pushSeq);
-        return;
+      // Not caught up in `maxPages`: a lookup goes on with the source stale; the rest is read in the background.
+      if (demand && !u.gone) {
+        const from: PollResume = { cursor, changed, started, notices, pushSeq };
+        void Promise.resolve().then(() =>
+          this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false, undefined, undefined, from)),
+        );
       }
-      cursor = page.next;
-    }
-    // Not caught up in `maxPages`: a lookup goes on with the source stale; the rest is read in the background.
-    if (demand && !u.gone) {
-      const from: PollResume = { cursor, changed, started, notices, pushSeq };
-      void Promise.resolve().then(() =>
-        this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false, undefined, undefined, from)),
-      );
+    } finally {
+      if (!complete && !u.gone && storedHere.size > 0) {
+        for (const id of storedHere) {
+          s.pushed.delete(id);
+          s.pushed.set(id, ++s.pushSeq);
+        }
+        while (s.pushed.size > MAX_PUSHED) s.pushed.delete(s.pushed.keys().next().value as string);
+      }
     }
   }
 
@@ -1739,7 +1820,12 @@ export class SyncManager {
       u.scope,
       own.map((it) => it.id),
     );
-    if (changed.length > 0) this.deps.onStored?.(u.scope, changed);
+    if (changed.length > 0) {
+      // Something new from the source, by any read: the freshness floor's interval is the floor again.
+      s.storedCount += changed.length;
+      s.floorLevel = 0;
+      this.deps.onStored?.(u.scope, changed);
+    }
     return changed.length;
   }
 
@@ -1947,6 +2033,8 @@ function newSourceSync(id: string): SourceSync {
     notices: 0,
     noticedMark: 0,
     noticesPolled: 0,
+    floorLevel: 0,
+    storedCount: 0,
     noticesBackfill: 0,
     pushed: new Map(),
     pushSeq: 0,

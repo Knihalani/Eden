@@ -370,6 +370,8 @@ export class SimSource implements Source {
   readonly kind = "sim";
   /** Whether the lab forwards this source's change notifications (`--push`, the engine's `syncPush`). */
   notifies = false;
+  /** The lab's sources stand for first-party ones (quota only): the freshness floor polls them (D1133). */
+  callPriced = false;
   /**
    * The world is the source: a ref it no longer has was deleted. The lab's `--fetch-gone false` (A18) sets it false, as
    * an MCP connector is (a null fetch proves nothing), for the re-read paths that depend on it (D126, D345).

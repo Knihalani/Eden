@@ -60,6 +60,8 @@ export const PARTS = {
     syncKeepCut: false,
     syncEngagedDeep: false,
     syncUnusedSweepMs: 0,
+    syncActivePollMs: 0,
+    syncActivePollBackoff: false,
     sourceYield: false,
     sourceYieldEarn: false,
     sourceYieldNames: 0,
@@ -174,6 +176,11 @@ export const PARTS = {
    * model; F1, D1153). Out, a request is searched only as written.
    */
   gloss: { requestGloss: false },
+  /**
+   * The push check also reads the user's rule sheet, their active constraint cards as a cached block, and a pool item
+   * on the sheet is sent as a pointer to its rule (F5, D1180). Out, the check reads the pool alone, as before.
+   */
+  sheet: { pushCheckSheet: 0, pushCheckSheetRefs: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

@@ -47,6 +47,7 @@ describe("connector options (--source-profile, --push)", () => {
   test("sourceFields keeps every field the engine reads off a source besides its calls", () => {
     const [s] = simSources(buildWorld({ seed: 41_000 }), REALISTIC, 0, 41);
     s!.notifies = true;
+    Object.assign(s!, { callPriced: true });
     const kept = sourceFields(s!);
     expect(kept).toEqual({
       id: s!.id,
@@ -54,11 +55,18 @@ describe("connector options (--source-profile, --push)", () => {
       description: s!.description,
       listsByTime: s!.listsByTime,
       notifies: true,
+      callPriced: true,
       fetchReportsGone: true,
       fetchesById: true,
     });
     // Every optional, non-call member of `Source` today: a new one must be added here and to `sourceFields`.
-    const optional: (keyof typeof kept)[] = ["listsByTime", "notifies", "fetchReportsGone", "fetchesById"];
+    const optional: (keyof typeof kept)[] = [
+      "listsByTime",
+      "notifies",
+      "callPriced",
+      "fetchReportsGone",
+      "fetchesById",
+    ];
     for (const k of optional) expect(k in kept).toBe(true);
   });
 });

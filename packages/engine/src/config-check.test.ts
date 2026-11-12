@@ -45,6 +45,22 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     });
   });
 
+  test("the freshness floor's backoff and price opt-in are refused with the floor at 0 (D1132)", () => {
+    expect(() => checkEngineConfig({ syncActivePollMs: 0, syncActivePollPriced: true })).toThrow(
+      /"syncActivePollPriced" acts only with "syncActivePollMs" above 0/,
+    );
+    expect(() => checkEngineConfig({ syncActivePollMs: 0, syncActivePollBackoff: true })).toThrow(
+      /"syncActivePollBackoff" acts only with "syncActivePollMs" above 0/,
+    );
+    // The floor alone off, or the part taken out (both at their core values), is fine.
+    expect(checkEngineConfig({ syncActivePollMs: 0 })).toEqual({ syncActivePollMs: 0 });
+    expect(checkEngineConfig({ syncActivePollMs: 0, syncActivePollBackoff: false })).toEqual({
+      syncActivePollMs: 0,
+      syncActivePollBackoff: false,
+    });
+    expect(checkEngineConfig({ syncActivePollPriced: true })).toEqual({ syncActivePollPriced: true });
+  });
+
   test("a child flag whose parent is off is refused; under a parent that is on it is accepted", () => {
     // The finding: a child set with its parent off runs byte-identical to the parent off. The default turns most
     // parents and their flag children on (D112), so the children here are set off their default with a parent off.
