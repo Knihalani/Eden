@@ -646,7 +646,8 @@ facts and time in the run above.
   client's contract: short timeouts (800 ms, plus the observe's `waitMs`), and every error is "no context", never an
   exception in the agent's loop.
 - **MCP:** `bun packages/server/src/mcp-stdio.ts` serves `ask_context` for one user over stdio; `createMcpServer`
-  attaches it to any MCP transport. Eden's push (observe) is not an MCP tool: an MCP-only agent gets answers, not the
+  attaches it to any MCP transport (Eden's own `Transport` shape, which the official SDK's transports fit, D1704), and
+  its `handle(message)` answers one JSON-RPC message without a transport. Eden's push (observe) is not an MCP tool: an MCP-only agent gets answers, not the
   unasked packet.
 
 ## Hosting

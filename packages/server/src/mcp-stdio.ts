@@ -10,7 +10,6 @@
  * EDEN_ENGINE_CONFIG (D103) work as for the HTTP server (config.ts). What the query planner
  * learns persists in a source map under $EDEN_HOME, one file per tenant/user (EDEN_SOURCE_MAP overrides it).
  */
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { isId, newId } from "@eden/protocol";
 import { buildPartner, openSourceMap } from "./build";
 import { warmGate } from "@eden/redact";
@@ -18,6 +17,7 @@ import { plannerMode, stdioSourceMapPath } from "./config";
 import { sourcesOrExit } from "./connectors";
 import { engineConfig } from "./engine-config";
 import { createMcpServer } from "./mcp";
+import { StdioServerTransport } from "./stdio-transport";
 import { modelRolesFromEnv } from "./models";
 
 const tenantId = process.env.EDEN_TENANT ?? "dev";

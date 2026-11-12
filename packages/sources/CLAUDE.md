@@ -10,6 +10,8 @@ anything is held).
 | File | Owns |
 |---|---|
 | `src/source.ts` | `Source` (search; optional `fetch` by id D35, `list` for sync D57, `listsByTime`, `notifies` for push sync D125, `fetchReportsGone` for freshness checks D126, `fetchesById`: a get tool is wired, D356), `SearchQuery` (with a day `window`, D44), `ListPage` |
+| `src/mcp/` | Eden's own MCP client side (D1704; no SDK in production): `types.ts` (JSON-RPC types, `Transport` shaped so the SDK's transports fit it, `asMessage`, `McpError`, versions), `client.ts` (`McpClient`: `initialize` with version negotiation, `listTools`, `callTool`, 60 s timeout, `notifications/cancelled` on abort, `ping` answered 16 at a time, other server requests dropped), `http.ts` (`StreamableHttpTransport`: JSON and SSE replies, session id, version header, per-POST deadline, 16 MiB reply cap (4 MiB for `tools/list` and per SSE event), a reply failed past 100 malformed messages or 100 server requests, same-origin redirects only, only the POSTed id's response taken, errors without bodies), `sse.ts` (one-pass byte parser, bounded; an unended line kept as parts, joined once), `json.ts` (`parseJsonBytes`: `bodyShapeUnder` before `JSON.parse`) |
+| `bench/mcp-client.bench.ts` | Eden's client against the SDK's on the same SDK server (JSON and SSE): per-call p50/p99 of `callTool` and `listTools`, RSS, connections used |
 | `src/mcp-source.ts` | `McpSource`: the read-only check (`readTool`: `readOnlyHint: true` or operator `trustedReadTools`, else `ReadOnlyViolation`), reconnects (re-checking read-only), paged `tools/list`, `toItems`; `fetch` takes a reply that is the record itself when its own id is the ref (`{id, messages: […]}`, a thread fetch's shape, D294) before looking in its rows |
 | `src/schema-args.ts` | Arguments built from a tool's JSON schema (search, fetch, list), deterministic; operator `fixed` values win |
 | `src/shapes.ts` | Query shapes (terms, entities, one call per entity…); `inert` strips search-syntax operators from untrusted text |
@@ -22,6 +24,10 @@ anything is held).
 
 ## Rules that apply here
 
+- **Own MCP code, SDK as reference (D1704).** Production code imports nothing from `@modelcontextprotocol/sdk`;
+  tests use its servers and transports as the reference implementation (`src/mcp/*.test.ts`, every `McpSource`
+  test). A change to `src/mcp/` keeps its bounds (deadline, reply cap, shape check, same-origin redirects, id match)
+  and re-runs `adversarial.test.ts` and the bench, reporting before/after numbers.
 - **Read-only (D7, D35).** Never call a tool that is not read-only, and never weaken `McpSource`'s check (CLAUDE.md).
   A new tool role (like fetch or list) goes through `readTool` and gets a test that a non-read-only tool throws.
 - **Redact before holding (D10).** `SourceFanout` requires a sanitizer and runs it before caching or returning; a
