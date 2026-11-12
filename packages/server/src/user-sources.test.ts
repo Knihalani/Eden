@@ -322,12 +322,20 @@ describe("UserSources: per-user sources and connections (D108)", () => {
   test("callPriced (D1132) reaches the leased source, per user; a non-boolean is refused", async () => {
     // The freshness floor skips a source billed per call: the field must survive the spec, McpSource and the lease.
     const mail = mailServer("alice");
+    const carol: Scope = { tenantId: "acme", userId: "carol" };
     const us = userSources((scope) =>
-      scope.userId === "alice" ? [{ ...mcpSpec(mail.transport), callPriced: true }] : [mcpSpec(mail.transport)],
+      scope.userId === "alice"
+        ? [{ ...mcpSpec(mail.transport), callPriced: true }]
+        : scope.userId === "carol"
+          ? [{ ...mcpSpec(mail.transport), callPriced: false }]
+          : [mcpSpec(mail.transport)],
     );
     const [a] = await us.resolver(alice);
     const [b] = await us.resolver(bob);
+    const [c] = await us.resolver(carol);
     expect(a!.callPriced).toBe(true);
+    // Marked first-party (what every preset sets, D1133): false reaches the source, so the floor polls it.
+    expect(c!.callPriced).toBe(false);
     // Unmarked: unknown (D1133), which the floor counts as priced.
     expect(b!.callPriced).toBeUndefined();
     const bad = userSources(() => [{ ...mcpSpec(mail.transport), callPriced: "yes" } as never]);
