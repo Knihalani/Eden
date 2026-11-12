@@ -1,6 +1,7 @@
 # F1: the intent bridge — matching requests that do not share the anticipated words
 
-Status: 2026-11-12, open. Trial `requestGloss` built and screened at $0; its pre-registered Pi pair (§4) is **not
+Status: 2026-11-12, open. §7 (the glossary rebuilt without outside lists) and §8 (an encoder feeding the push check,
+a subagent-simulated pilot that failed its rule) are the latest. Trial `requestGloss` built and screened at $0; its pre-registered Pi pair (§4) is **not
 run**: the Anthropic account ran out of credit during this session (every call returns "credit balance is too low").
 Tuning and selection used only train1–6, reworded (train1r–6r) and longtail, seeds 41–44, at shipped coverage.
 heldout19 was not read; heldout20 was not looked for.
@@ -169,4 +170,66 @@ It cannot be screened at $0: every replay file holds forms 0 and 3 only. The pre
 DECISIONS: re-made cards for dev20 and reworded (seeds 41–44) in form 4 against form 3, a $0 bar (hidden facts in the
 check's view +28 of 1,408 or more, card output tokens an item +15% or less) before a Pi pair, and the same Pi rule as
 `requestGloss`.
+
+## 7. The glossary rebuilt from the model's own vocabulary (no outside list)
+
+The integrator ruled out shipping CC-BY-SA content. With no API credit, Haiku subagents (one or more a language, the
+Agent tool, no API spend) wrote each language's vocabulary themselves: function words, then about 60–100 words for
+each of the 38 everyday topics in `gloss-make.ts`, each with up to three English words. 26 languages, 118,663 lines
+written; `gloss-pack.ts` (now skipping malformed lines) keeps single words, lowercases, merges duplicates and drops a
+word glossed as itself: 86,441 words, `gloss.bin` 0.58 MB. Known weak spots: European Portuguese ("canalizador" is
+missing, "encanador" is there), Vietnamese (806 syllables), Hindi in Latin letters (1,165).
+
+Screens with it (funnel, seeds 41–44, `--set '{"requestGloss":true}'`; the old frequency-list build in brackets):
+
+| suite | hidden | decoys | |
+| --- | --- | --- | --- |
+| reworded | 555 → 575 (581) | 499 → 511 (523) | non-English facts in view 80 → 100 of 144, handed 70 → 88 |
+| dev20 (intent-inert) | 155 → 179 (180) | 125 → 153 (147) | facts in view 157 → 178, handed 114 → 138 |
+| train, longtail | identical | identical | |
+
+Every changed dev20 task is a non-English one (0 English tasks changed of 640 a variant; 240 non-English rows). The
+review's English-with-foreign-names probes still pass. Language detection now counts function words first and
+searches the lexicons only for a language with one of them in the request: 12.5 µs for an English request, 22.6 µs
+for a German one (226 µs before the change). The glossary loads at partner construction: 118 ms, +29 MB RSS once a
+process.
+
+## 8. The encoder feeding the push check: a subagent-simulated pilot (failed its rule; not built)
+
+The owner's direction: matching by words breaks in production, so test meaning. The encoder's candidates go not to
+the agent but to the push check's pool, where Haiku's knowledge can drop the look-alikes.
+
+**$0 screen (item text).** multilingual-e5-small (int8 ONNX) over each item's title and head (`passage:`) against the
+request (`query:`), its top k items not already in the pool's first 15:
+
+| suite | k | facts newly in the check's view | look-alikes |
+| --- | --- | --- | --- |
+| dev20 (157 of 640 in view) | 5 | +37 | +26 |
+| dev20 | 10 | +58 | +30 |
+| train + reworded (1,250 of 1,536) | 5 | +54 | +56 |
+
+**Cost (measured, Python onnxruntime, one thread).** A request 5.2 ms (30 tokens); an item 15.3 ms (89 tokens), so a
+1,500-item user's backfill is about 23 s of CPU; the model session +143 MB and the Hugging Face tokenizer's 250k-word
+vocabulary +295 MB RSS a process. A TypeScript port would need onnxruntime-node (a new dependency) or a pure-TS int8
+forward.
+
+**Pilot (rule pre-registered in 1fdb625f before any answer was read).** dev20 seeds 41–44, the check's exact prompts
+(`checkMessages`, `readerItem`, the default's 200 characters an item) over the pool's first 15 plus the encoder's top
+5 not in it (20 items, the check's `CHECK_MAX_ITEMS`); every hidden and control task where the encoder added the
+planted item, and 143 neutral tasks with and without the extras (`f1-check-pilot.ts`). 354 prompts were answered by 15
+Haiku subagents (25 each, shuffled; base and extended answers of one task usually by different subagents). Label:
+**subagent-simulated**.
+
+| | result | bar | |
+| --- | --- | --- | --- |
+| hidden: the check names the added fact | 42 of 42 | ≥ 50% | pass |
+| control: the check names the added look-alike | 4 of 26 (15%) | ≤ 25% | pass |
+| neutral: any item named | 11 → 20 of 143 (+6.3 points; 11 up, 2 down) | ≤ +3 | **fail** |
+
+So no engine trial is built (the rule). What the neutral rise is: in 6 of the 11 the check named an encoder extra (for
+example "Coffee with Fatima, Thursday 09:30" against a request about being out all Thursday: a real clash in the
+neutral world, not a look-alike); the other 5 named items of the shared 15, so subagent-to-subagent variance is part
+of it. The facts side is strong: the check took every added fact and dropped 85% of the added look-alikes. A
+narrower variant (fewer extras, or a cosine floor) would need its own pre-registered rule and its own answers; the
+neutral measure needs repeated answers of the same prompt to separate the variance.
 

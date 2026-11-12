@@ -126,6 +126,9 @@ export function languagesOf(words: readonly string[], g: Glossary): string[] {
   let best = 0;
   let out: string[] = [];
   for (const [code, l] of g.langs) {
+    // A language none of whose function words the request holds is not it: set lookups first, so an English
+    // request never searches the lexicons.
+    if (!told.some((w) => l.fn.has(w) && !isStopword(w))) continue;
     let mine = 0;
     let english = 0;
     for (const w of told) {
