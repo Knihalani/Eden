@@ -181,3 +181,21 @@ handed and neutral given a packet (`n2/compare.py`'s fields), and the check's in
 that gain; neutral packets up by at most 5 of 160. **SR replaces S** if it passes too, with planted handed at least
 S's less 4. A passing arm goes to the integrator's final protocol as the candidate; none passing: the switches are
 deleted with their code and tests, the findings kept.
+
+## 7. End-to-end: pi-ab single-shot (pre-registered before any of its calls)
+
+Served by subagents (D1101), both arms in one run and one queue: `pi-ab --agent-sim single --time-scale 0`, every
+role `claude-haiku-5-5` through the queue except the grader `claude-sonnet-5-5` (Sonnet subagents), conditions
+`eden,eden~F` with F the arm the dev20 screen (§6) selects, train seed 41 and dev20 seed 41, variants hidden,
+control and neutral, cards replayed at each suite's coverage. Read with `packages/sim/lab/p3/report.py --pair
+eden~F:eden --cluster template`. **Promote** F into the default when all hold, else delete it with its code and
+tests:
+
+- hidden raised, F − eden, pooled over both suites: point estimate above 0 and the template-clustered 95% lower
+  bound above −1 point (the sample is one seed, so a bound above 0 is not asked of it);
+- concerns on control and neutral (Sonnet-graded): not up;
+- neutral given a packet: up by at most 3 points.
+
+Cost and wall are not measurable through subagents: the check's cost is priced from token counts [EST], and its
+added wait from the H3 latency fit (596 ms + 2.93 ms an output token, D1072) with the extra input tokens read from
+cache [EST].

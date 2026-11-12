@@ -43,12 +43,14 @@ function shuffled<T>(xs: T[], seed: number): T[] {
   return a;
 }
 
-const inputOf = (r: Row, sheet: boolean): PushCheckInput => ({
+const inputOf = (r: Row, sheet: boolean, refs = false): PushCheckInput => ({
   request: r.request,
   today: r.today,
   items: r.items.map((it, i) => ({ ...it, hash: r.hash?.[i] ?? "" })),
-  ...(sheet && r.sheet?.length ? { sheet: r.sheet } : {}),
+  ...(sheet && r.sheet?.length ? { sheet: r.sheet, ...(refs ? { sheetRefs: true } : {}) } : {}),
 });
+/** `--arms S,B` (default) or e.g. `R`: R is S with pool items on the sheet sent as pointers (`pushCheckSheetRefs`). */
+const ARMS = (process.env.PILOT_ARMS ?? "").split(",").filter(Boolean) as ("S" | "B" | "R")[];
 
 if (cmd === "build") {
   const rows: Row[] = [];
@@ -83,15 +85,16 @@ if (cmd === "build") {
     ).slice(0, 40),
   };
   // Which arms each set is asked in: T can only be named with the sheet.
-  const arms: Record<string, ("S" | "B")[]> = { Th: ["S"], Tc: ["S"], Hh: ["S", "B"], Hc: ["S", "B"], N: ["S", "B"] };
+  const base: Record<string, ("S" | "B" | "R")[]> = { Th: ["S"], Tc: ["S"], Hh: ["S", "B"], Hc: ["S", "B"], N: ["S", "B"] };
+  const arms = ARMS.length ? Object.fromEntries(Object.keys(base).map((k) => [k, ARMS])) : base;
   const key: Record<string, unknown>[] = [];
   const byFile = new Map<string, { sheet: string; prompts: string[] }>();
   for (const [set, rs] of Object.entries(sets))
     for (const r of rs)
       for (const arm of arms[set]!) {
         const id = `${set}.${arm}.${r.suite}.${r.seed}.${r.variant}.${r.template}`;
-        const msgs = checkMessages(inputOf(r, arm === "S"));
-        const sheetMsg = arm === "S" ? msgs[1]!.content : "";
+        const msgs = checkMessages(inputOf(r, arm !== "B", arm === "R"));
+        const sheetMsg = arm !== "B" ? msgs[1]!.content : "";
         const user = msgs.at(-1)!.content;
         const fileKey = `${arm}-${r.suite}-${r.seed}-${r.variant}`;
         const f = byFile.get(fileKey) ?? { sheet: sheetMsg, prompts: [] };
@@ -105,7 +108,7 @@ if (cmd === "build") {
           plantedItem: r.items.findIndex((it) => it.id === r.planted),
           plantedRule: r.sheet?.findIndex((c) => c.id === r.planted) ?? -1,
           items: r.items.length,
-          rules: arm === "S" ? (r.sheet?.length ?? 0) : 0,
+          rules: arm !== "B" ? (r.sheet?.length ?? 0) : 0,
         });
       }
   mkdirSync(`${out}/batches`, { recursive: true });
