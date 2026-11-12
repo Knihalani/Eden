@@ -98,11 +98,19 @@ export const CHECK_SYSTEM = [
 const LEAN_ORDER =
   'List only the items that touch the request\'s own subject, at most 6: first every item whose "act" is true, the ' +
   "most decisive first, then the others; leave every other item out.";
-export const CHECK_SYSTEM_LEAN = CHECK_SYSTEM.replace(
+/** The ordering clause the lean form replaces, as `CHECK_SYSTEM` (and any variant built on its format) says it. */
+const SHIPPED_ORDER =
   "List only the items that touch the request's own subject, the most decisive first, at most 6; leave every other " +
-    "item out.",
-  LEAN_ORDER,
-);
+  "item out.";
+/**
+ * The lean form of a check's instructions: the ordering clause replaced, the rest as given, so another switch's
+ * wording of the same format (another rule sentence) composes with it. A reply with a second list after its items
+ * (a rule sheet) must not be sent the stop, which would cut that list.
+ */
+export function leanSystem(system: string): string {
+  return system.replace(SHIPPED_ORDER, LEAN_ORDER);
+}
+export const CHECK_SYSTEM_LEAN = leanSystem(CHECK_SYSTEM);
 /** Where a lean reply stops: the first entry whose verdict is not a yes (both spacings Haiku writes). */
 export const CHECK_LEAN_STOP = ['"act":false', '"act": false'];
 
@@ -182,7 +190,7 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     );
   });
   return [
-    { role: "system", content: input.lean ? CHECK_SYSTEM_LEAN : CHECK_SYSTEM },
+    { role: "system", content: input.lean ? leanSystem(CHECK_SYSTEM) : CHECK_SYSTEM },
     {
       role: "user",
       content:

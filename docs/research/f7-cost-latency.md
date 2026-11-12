@@ -102,3 +102,10 @@ prefix to cache across requests; one request a session never reads the same pool
   outside this lab (Anthropic only).
 - **Concurrent split calls, a line reply, a smaller pool.** Measured by H3 (D1072–D1074): no faster, or facts not
   held.
+
+**Amendment before any paid call of §1 or §2 (08:35 UTC):** main now has the dev20 tuning suites (D1100). If the
+cap allows after stage 2, a stage 3 runs `--suite dev20` seed 41, `--variants hidden,control` (cards recorded live
+into an empty file), and its Sonnet-graded hidden raised and confirmed concerns are **reported beside the rule, not
+part of it**. The lean wording is now applied as a transform of the check's instructions (`leanSystem`), so a sibling
+switch that rewords the format's act sentence (F2's `pushCheckDone`) composes with it; when F5's rule sheet adds a
+second list to the reply, the stop is not sent.
