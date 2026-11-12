@@ -489,3 +489,60 @@ worth building:** the levers that move cost are the check (F10) and the cards.
   - First-party can only close through the agent's own bill (F11), or by trading facts.
 - On the shipped OpenRouter route (rather than the lab's cached figures), add the `anthropicCache` row first: it is
   worth more than any other lever at no quality cost.
+
+**Correction (10:30 UTC): F10's skip is not available.** D1270 (F10) finds that a CPU-only band cannot take the
+check off the request path without losing facts. Skipping the check on the half of neutral pushes that score lowest
+also skips 17% of hidden rows whose fact is in the pool. Every row above and in §10c that assumes F10 at *s* = 0.7
+is therefore a ceiling, not a plan. Without it, target 3 on model spend alone stays red. Target 4 rests on F11's
+`pushLookup`: −0.48 s of wait (−0.90..−0.11), served by subagents [EST], against F6's rehearsal gap of 0.4 s.
+
+## 12. The shipped route's prompt cache
+
+On `claude/f7-cache` (trial D1193, probe pending the owner): `EDEN_MODEL_CACHE=on` sets `anthropicCache` on all
+three model roles of the OpenRouter route, with tests that the cached prefix is byte-identical across calls.
+
+## 13. The compact card reply: dropped unrun (10:30 UTC)
+
+`cardsCompact` (form 4, H2's K20 positional reply) was built as a trial on `claude/f7-compact` and pre-registered,
+and its re-card ran through the queue. It is dropped before any reading, on the owner's call through the integrator:
+it is worth about $0.01 per 1,000 tasks (§11's row), which is noise against targets 3 and 4. The switch never reached
+main, so nothing is deleted from it. The branch keeps the code and tests for a later live pair.
+
+One lesson for the queue (D1101): a worker answering two requests in one batch can copy one request's reply format
+onto the other. By the time the run stopped, 25 of 132 answers were in the other arm's format, and every such keyed
+batch failed to parse. Any arm-versus-arm run that differs only in the reply format should batch one arm per take,
+or check each answer's shape against its own prompt before reading.
+## 14. The agent's own bill: where its tool calls go (no spend)
+
+**Sources:**
+- B19 (`b19-final.md`, real API) gives totals only. Its raw timelines are not committed.
+- F6's pilot (`f6-uptake`) records flags, not tool calls.
+- So the per-request split is read from §10's 36-task multi-turn run: raw against final2, served by subagents
+  (D1101). It is 12 templates × 3 kinds, direction only.
+
+**Totals, agent tool calls and input tokens a task:**
+
+| | raw | Eden (final) | change |
+| --- | ---: | ---: | ---: |
+| B19 Pi short: connector calls / agent tokens | 2.77 / 5,307 | 2.05 / 5,376 | −0.72 / +69 |
+| B19 Hermes short: connector calls / agent tokens | 3.00 / 10,065 | 2.22 / 10,023 | −0.78 / −42 |
+| §10 (subagents): tool calls / agent input tokens (calls × tokens a call) | 1.33 / 1,898 | 0.69 / 2,055 | −0.64 / +157 |
+
+Eden removes about 0.7 searches a task, but not tokens. The packet's ~270 tokens a call cancel what one fewer call
+saves.
+
+**By request (§10 run, agent tool calls summed over the three kinds of each template):**
+
+| request shape | templates | raw | Eden | Eden answered |
+| --- | --- | ---: | ---: | ---: |
+| check a booking or status before scheduling (calendar + mail) | dentist, rail strike, e-visa | 18 | 2 | 16 |
+| check a document or approval before acting (drive/CRM + mail) | screening hold, cert, NDA, discount, passport | 30 | 14 | 16 |
+| do it now (transfer, list, freeze, offer: raw does not search) | ISA, nursery, change freeze, offer band | 0 | 5 | −5 |
+
+- **Most removable agent calls are on "check before scheduling" requests.** The agent searches calendar and mail.
+  Eden's packet already holds the booking or hold, so 16 of 18 calls go.
+- **Document and approval checks keep half.** The agent still opens drive or CRM to confirm a document's state, which
+  is the `state` field F2 is adding.
+- **On "do it now" requests Eden adds calls.** The agent does not search raw, but an Eden packet leads it to search or
+  ask (offer-above-band +4, ISA +1 and 2 asks). There Eden's packet should be read as final, not as a prompt to
+  check.
