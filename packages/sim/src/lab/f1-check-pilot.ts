@@ -136,9 +136,6 @@ for (const suite of suites) {
   }
 }
 writeFileSync(opt("out"), JSON.stringify({ system, prompts: out }));
-console.log(
-  `${out.length} prompts -> ${opt("out")}`,
-  Object.entries(Object.groupBy(out, (o) => `${o.variant}/${o.arm}`))
-    .map(([k, v]) => `${k} ${v!.length}`)
-    .join(", "),
-);
+const counts = new Map<string, number>();
+for (const o of out) counts.set(`${o.variant}/${o.arm}`, (counts.get(`${o.variant}/${o.arm}`) ?? 0) + 1);
+console.log(`${out.length} prompts -> ${opt("out")}`, [...counts].map(([k, n]) => `${k} ${n}`).join(", "));

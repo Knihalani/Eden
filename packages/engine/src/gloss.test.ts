@@ -83,7 +83,7 @@ describe("glossOf on the shipped glossary", () => {
 
   test.each([
     ["Domani voglio spostare 5.000 sterline dai risparmi al conto corrente.", "move"],
-    ["Preciso de um canalizador pela Fixhub para ver a fuga debaixo do lava-loiça da cozinha.", "plumber"],
+    ["Preciso de um encanador pela Fixhub para ver a pia da cozinha.", "plumber"],
     ["Ich muss heute die Rechnung des Küchenbauers über £1,450 vom gemeinsamen Konto bezahlen.", "pay"],
     ["Je voudrais annuler la réservation pour demain soir.", "reservation"],
   ])("a non-English request is glossed: %s", (text, word) => {
