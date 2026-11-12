@@ -313,3 +313,13 @@ config). **Rule (served by subagents, D1101; a screen on a small sample, said so
 promotion, if against the final arm: agent tool calls a task are at least 0.2 lower, agent model calls a task are not
 higher, hidden facts raised (the run's grader) fall by at most 1 of 12, and concerns on control and neutral are not
 up. Otherwise delete it the same day.
+
+**Amendment (10:05 UTC), after the first Eden arms finished, a harness defect.** In `final`, 21 of 36 push checks landed
+after the agent's first model request had started; in `searched`, 6 of 36. The observe's own cap
+(`readerPushWaitMs`, 60 s) is below a subagent's answer time, so the push went late: on those tasks the first call
+ran without the packet, D248's late-injection shape and not the default. Both Eden arms are void, and are re-run as
+`final2` and `searched2` with `readerPushWaitMs` lifted beside `pushCheckWaitMs` (both 900,000 ms; a lab setting that
+only removes the queue's wait, as the API's ~1 s check never meets either cap). Their checks mostly replay from the
+queue. The raw arm is unaffected and stands. The void arms' facts were seen before this amendment (final 8/12,
+searched 10/12 hidden raised). The re-run is decided by the defect (the late-check counts above), not by those
+readings, and the §10 rule is read on `final2` against `searched2` only.
