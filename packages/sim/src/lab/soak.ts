@@ -123,6 +123,38 @@ const newWindow = (): Window => ({ event: [], message: [], ask: [], errors: 0, s
 
 /** When the load stops (wall clock): from `--end-at`, or the orchestrator's message once the backfill is done. */
 let endAt = Number(arg("end-at", "Infinity"));
+/** When the load started (wall clock): every user's sessions are a fixed schedule from it, the same across a restart. */
+let loadStart = Number(arg("load-start", "NaN"));
+const SEED = Number(arg("seed", "7"));
+/**
+ * `--burst P` (R1d): a session is followed by another within an exponential 2 minutes with probability P, else after a
+ * longer gap chosen so the mean stays `--session-min` (a user's follow-ups come in bursts, as a daily agent's do).
+ */
+const BURST = Number(arg("burst", "0"));
+
+/** mulberry32: a small seeded generator, so two runs with one `--seed` give every user the same schedule. */
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+/** User `u`'s session times (ms after the load's start), the same in every process and run with one seed. */
+function* schedule(u: number): Generator<number> {
+  const r = rng(Math.imul(SEED, 2_654_435_761) ^ (u * 40_503 + 1));
+  const exp = (meanMin: number) => -Math.log(1 - r()) * meanMin * 60_000;
+  const longMin = BURST > 0 ? (SESSION_MIN - BURST * 2) / (1 - BURST) : SESSION_MIN;
+  let t = r() * SESSION_MIN * 60_000;
+  for (;;) {
+    yield t;
+    t += BURST > 0 && r() < BURST ? exp(2) : exp(longMin);
+  }
+}
 
 async function child(index: number, dir: string, resume: boolean): Promise<void> {
   const send = (m: unknown) => process.send?.(m);
@@ -212,12 +244,23 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
     }
     w = newWindow();
   }
-  send({ kind: "loaded", index });
+  // R1d: at a resumed start, which users have a blob on disk (state the restart kept); each user's first request after
+  // the start is then counted as restored or not, by how long after the start it came.
+  const started = Date.now();
+  const onDisk = new Set(resume ? mine.filter(({ scope }) => disk.has(scope)).map(({ scope }) => scope.userId) : []);
+  const firsts: { dt: number; restored: boolean }[] = [];
+  const touched = new Set<string>();
+  send({ kind: "loaded", index, onDisk: onDisk.size });
 
   // The load: sessions at exponential intervals per user, until `endAt` (wall clock), once the orchestrator set it.
-  while (!Number.isFinite(endAt)) await Bun.sleep(100);
+  while (!Number.isFinite(endAt) || !Number.isFinite(loadStart)) await Bun.sleep(100);
   let seq = 0;
+  const askCoin = rng(SEED * 7 + index);
   const session = async ({ scope, key }: (typeof mine)[number]) => {
+    if (resume && !touched.has(scope.userId)) {
+      touched.add(scope.userId);
+      firsts.push({ dt: Date.now() - started, restored: onDisk.has(scope.userId) });
+    }
     const sid = `s${seq++}`;
     const who = { userId: scope.userId, sessionId: sid };
     await post(key, "/v1/events", { ...who, kind: "session_start" }, w.event);
@@ -234,18 +277,25 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
       { ...who, kind: "tool_result", tool: "search_mail", output: "3 messages: budget review moved to Friday" },
       w.event,
     );
-    if (Math.random() < 0.5) await post(key, "/v1/ask", { ...who, question: QUESTIONS[seq % QUESTIONS.length] }, w.ask);
+    if (askCoin() < 0.5) await post(key, "/v1/ask", { ...who, question: QUESTIONS[seq % QUESTIONS.length] }, w.ask);
     await post(key, "/v1/pending", who, w.event);
     await post(key, "/v1/events", { ...who, kind: "session_end" }, w.event);
   };
-  const next = () => -Math.log(1 - Math.random()) * SESSION_MIN * 60_000;
+  // Each user's fixed schedule from the load's start: sessions already past (before a restart) are skipped.
   for (const user of mine) {
+    const times = schedule(user.u);
+    const due = () => {
+      for (;;) {
+        const t = times.next().value as number;
+        if (loadStart + t >= Date.now()) return loadStart + t;
+      }
+    };
     const run = async () => {
       if (stopping || Date.now() >= endAt) return;
       await session(user);
-      setTimeout(run, next());
+      setTimeout(run, Math.max(0, due() - Date.now()));
     };
-    setTimeout(run, Math.random() * SESSION_MIN * 60_000);
+    setTimeout(run, Math.max(0, due() - Date.now()));
   }
   // Every 30 s: this window's latencies and counts, and the process's memory and cache state.
   setInterval(() => {
@@ -285,7 +335,12 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
   }
   setInterval(() => {
     if (Date.now() >= endAt + 5_000) {
-      if (process.send) process.send({ kind: "done", index }, () => process.exit(0));
+      const within = (min: number) => {
+        const f = firsts.filter((x) => x.dt <= min * 60_000);
+        return { touched: f.length, restored: f.filter((x) => x.restored).length };
+      };
+      const restore = resume ? { onDisk: onDisk.size, within5: within(5), all: within(Infinity) } : null;
+      if (process.send) process.send({ kind: "done", index, restore }, () => process.exit(0));
       else process.exit(0);
     }
   }, 1_000);
@@ -351,6 +406,7 @@ async function orchestrate(): Promise<void> {
   const events: Record<string, unknown>[] = [];
   let phase = "backfill";
   let orchestratorEnd = Number.POSITIVE_INFINITY;
+  let loadStartAt = Number.NaN;
   let procs: ReturnType<typeof Bun.spawn>[] = [];
   const start = (resume: boolean) =>
     new Promise<void>((resolve) => {
@@ -369,6 +425,8 @@ async function orchestrate(): Promise<void> {
             resume ? "1" : "0",
             "--end-at",
             String(orchestratorEnd),
+            "--load-start",
+            String(loadStartAt),
           ],
           {
             stdout: "inherit",
@@ -417,10 +475,11 @@ async function orchestrate(): Promise<void> {
   await start(false);
   phase = "load-1";
   const loadStart = Date.now();
+  loadStartAt = loadStart;
   orchestratorEnd = loadStart + MINUTES * 60_000;
   log(`backfill done in ${((loadStart - t0) / 60_000).toFixed(1)} min; load until ${MINUTES} min from now`);
   // The first processes were started before the end was known: they are told it now.
-  for (const p of procs) p.send({ kind: "end-at", endAt: orchestratorEnd });
+  for (const p of procs) p.send({ kind: "end-at", endAt: orchestratorEnd, loadStart });
   // `--restart-at` at or past `--minutes`: no restart (a steady run, e.g. with `--gc-every` for a leak check).
   let down = 0;
   if (RESTART_AT < MINUTES) {
@@ -450,6 +509,23 @@ async function orchestrate(): Promise<void> {
     sessionMin: SESSION_MIN,
     backfillMin: Math.round(((loadStart - t0) / 60_000) * 10) / 10,
     restartDownMs: down,
+    // R1d: users whose first request after the restart found their state on disk, in the first 5 minutes and overall.
+    restore: (() => {
+      const r = events
+        .filter((e) => e.kind === "done" && e.restore)
+        .map((e) => e.restore as { onDisk: number; within5: { touched: number; restored: number }; all: typeof e });
+      const sum = (f: (x: (typeof r)[number]) => number) => r.reduce((a, x) => a + f(x), 0);
+      return r.length
+        ? {
+            onDisk: sum((x) => x.onDisk),
+            within5: { touched: sum((x) => x.within5.touched), restored: sum((x) => x.within5.restored) },
+            all: {
+              touched: sum((x) => (x.all as unknown as { touched: number }).touched),
+              restored: sum((x) => (x.all as unknown as { restored: number }).restored),
+            },
+          }
+        : null;
+    })(),
     totals,
     latencyMs: {
       event: { n: all.event.length, p50: pct(all.event, 0.5), p99: pct(all.event, 0.99) },
@@ -470,6 +546,8 @@ if (args.includes("--child")) {
   const index = Number(arg("child", "0"));
   process.on("message", (m: { kind?: string; endAt?: number }) => {
     if (m?.kind === "end-at" && typeof m.endAt === "number") endAt = m.endAt;
+    if (m?.kind === "end-at" && typeof (m as { loadStart?: number }).loadStart === "number")
+      loadStart = (m as { loadStart: number }).loadStart;
   });
   await child(index, arg("dir", ""), arg("resume", "0") === "1").catch((e) => {
     console.error(`soak child ${index}: ${e instanceof Error ? e.stack : String(e)}`);
