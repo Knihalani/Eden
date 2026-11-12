@@ -35,9 +35,13 @@ if [ -n "${DEPLOY_KEY:-}" ]; then
     echo "bootstrap: DEPLOY_KEY=$DEPLOY_KEY is not a readable file" >&2
     exit 2
   fi
-  # cloud-init clones with no one at the keyboard: a key with a passphrase would fail there, so refuse it here.
-  ssh-keygen -y -P '' -f "$DEPLOY_KEY" >/dev/null 2>&1 ||
-    { echo "bootstrap: DEPLOY_KEY must be a private key without a passphrase" >&2; exit 2; }
+  command -v ssh-keygen >/dev/null || { echo "bootstrap: ssh-keygen is needed to check DEPLOY_KEY" >&2; exit 2; }
+  # cloud-init clones with no one at the keyboard: a key with a passphrase would fail there, so refuse it here, and
+  # say what ssh-keygen said (a key readable by others is refused too, for another reason).
+  if ! why=$(ssh-keygen -y -P '' -f "$DEPLOY_KEY" 2>&1 >/dev/null); then
+    echo "bootstrap: DEPLOY_KEY must be a private key without a passphrase (ssh-keygen: $why)" >&2
+    exit 2
+  fi
   case "$url" in
     git@github.com:* | ssh://git@github.com/*) ;;
     *) echo "bootstrap: warning: the deploy key is used by an SSH URL (git@github.com:...), not by $url" >&2 ;;
@@ -52,23 +56,25 @@ if [ -n "${DEPLOY_KEY:-}" ]; then
     want=SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU
     umask 077
     mkdir -p "$d"
-    cat > "$d/eden_deploy.tmp"
-    chmod 600 "$d/eden_deploy.tmp"
-    mv "$d/eden_deploy.tmp" "$d/eden_deploy"
-    touch "$d/config" "$d/known_hosts"
-    {
-      printf "# eden-deploy-key begin\nHost github.com\n  IdentityFile %s/eden_deploy\n  IdentitiesOnly yes\n" "$d"
-      printf "# eden-deploy-key end\n"
-      sed "/^# eden-deploy-key begin\$/,/^# eden-deploy-key end\$/d" "$d/config"
-    } > "$d/config.tmp"
-    mv "$d/config.tmp" "$d/config"
+    # The host key first: on a mismatch nothing is installed (the key on stdin is never read).
     ssh-keyscan -t ed25519 github.com 2>/dev/null > "$d/github.tmp" || true
     fp=$(ssh-keygen -lf "$d/github.tmp" 2>/dev/null | awk "{print \$2}")
     if [ "$fp" != "$want" ]; then
       rm -f "$d/github.tmp"
-      echo "bootstrap: github.com host key ${fp:-could not be scanned}, expected $want" >&2
+      echo "bootstrap: github.com host key ${fp:-could not be scanned}, expected $want; nothing installed" >&2
       exit 3
     fi
+    cat > "$d/eden_deploy.tmp"
+    chmod 600 "$d/eden_deploy.tmp"
+    mv "$d/eden_deploy.tmp" "$d/eden_deploy"
+    touch "$d/config" "$d/known_hosts"
+    # "Host *" closes the block, so global options an existing config starts with still apply to every host.
+    {
+      printf "# eden-deploy-key begin\nHost github.com\n  IdentityFile %s/eden_deploy\n  IdentitiesOnly yes\n" "$d"
+      printf "Host *\n# eden-deploy-key end\n"
+      sed "/^# eden-deploy-key begin\$/,/^# eden-deploy-key end\$/d" "$d/config"
+    } > "$d/config.tmp"
+    mv "$d/config.tmp" "$d/config"
     { grep -v "^github.com " "$d/known_hosts" || true; cat "$d/github.tmp"; } > "$d/known_hosts.tmp"
     mv "$d/known_hosts.tmp" "$d/known_hosts"
     rm -f "$d/github.tmp"
