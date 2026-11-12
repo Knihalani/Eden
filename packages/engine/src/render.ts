@@ -157,6 +157,16 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `pushCheckLeanLead` (F7, a trial): the candidates' lead when the push check read the pool and picked these items.
+ * The shipped lead says nothing has checked them, which is not so once the check answered; the agent is still asked
+ * to check each one and to say nothing of one that does not bear on the request.
+ */
+export const CHECKED_LEAD =
+  `${EDEN_NOTE}items from the user's sources that a quick read of this request picked as likely to change what to ` +
+  "do. Before using one, check it is about the same person, thing and date as the request and still current; if it " +
+  "is not, ignore it and do not mention it.";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

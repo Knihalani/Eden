@@ -121,6 +121,7 @@ import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
   CANDIDATES_LEAD,
+  CHECKED_LEAD,
   citationsOf,
   PLAN_LEAD,
   renderAnswer,
@@ -2111,7 +2112,10 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                this.candidateFrame(
+                  candidates.unsettled !== undefined,
+                  this.config.pushCheckLeanLead && !!check?.yes,
+                ),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2790,12 +2794,12 @@ export class ContextPartner {
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
-  private candidateFrame(nudge = false): PacketFrame {
+  private candidateFrame(nudge = false, checked = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
-      lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      lead: `${checked ? CHECKED_LEAD : CANDIDATES_LEAD}${nudge ? ` ${ASK_NUDGE}` : ""}`,
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

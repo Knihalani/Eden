@@ -25,7 +25,7 @@ export {
 export { SharedFrozenDisk, type BlobStore, type SharedDiskOptions } from "./persist-shared";
 export { GATE_MODULE, gateItem, pooledSanitizer } from "./gate";
 export { Ledger } from "./ledger";
-export { CANDIDATES_LEAD, inert, oneLine, renderAnswer, renderPacket } from "./render";
+export { CANDIDATES_LEAD, CHECKED_LEAD, inert, oneLine, renderAnswer, renderPacket } from "./render";
 export { safeBlock, safeLine } from "./line";
 export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";
