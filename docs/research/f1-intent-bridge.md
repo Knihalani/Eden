@@ -348,8 +348,12 @@ originals' plus 2 points.
 **The run.** `bun run funnel ... -- --templates <reworded's 36 non-English> --check live --neutral --ask`, seeds 41–44,
 three arms: reworded with the default, reworded with `requestGloss`, and train1–6 on the same templates (the English
 originals). The push check was served by subagents (D1101) through one queue; every check was answered (0 misses).
-The arms were then re-run with the checks replayed, and the glossed and English arms a third time on fresh caches so
-that every arm read its answers the same way: identical numbers.
+The first live-queue run is not used: the subagents' answers came after the push stopped waiting for its check
+(p50 95–108 s against `pushCheckWaitMs` 1,500 ms), so that run's packets went out unchecked (gloss: hidden 105,
+control 103, neutral 127; English: 113, 121, 138), and its base arm exited with an error. The numbers below are the
+replayed runs, whose checks land within the wait: every arm re-run with the answers replayed, and the glossed and
+English arms a third time on fresh caches (answers read from the queue's store), with identical numbers between the
+second and third runs.
 
 | | reworded, default | reworded, `requestGloss` | English originals |
 | --- | ---: | ---: | ---: |
@@ -367,7 +371,8 @@ not, for example "Payment sent: Aperture Labs" against a Polish request to escal
 Labs. With the gloss, the pool and the check read what the request means. D1152's neutral rise (17 → 26) was measured
 on the pre-D1102 coverage.
 
-**Cost, quality, speed.** Quality is above. Cost: +13% push check calls, on non-English requests only, and none on
-English (`bun run eval` identical: precision 0.65, recall 0.52, falseFireRate 0; acting 19 of 28 neutral, facts 10 of
-11, look-alikes 3 of 10). Speed: 12.5 µs an English request, 22.6 µs a German one. Memory: +29 MB RSS and 118 ms to
-load once a process, when the partner is built.
+**Cost, quality, speed.** Quality is above. Cost: +13% push check calls, on non-English requests only (389, still
+below the English originals' 418), and none on English as measured: 0 of 468 distinct English requests in train1–6,
+dev6a/b, the hidden suites and longtail are glossed, and `bun run eval` is identical (precision 0.65, recall 0.52,
+falseFireRate 0; acting 19 of 28 neutral, facts 10 of 11, look-alikes 3 of 10). Speed: 12.5 µs an English request,
+22.6 µs a German one. Memory: +29 MB RSS and 118 ms to load once a process, when the partner is built.

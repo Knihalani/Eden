@@ -704,4 +704,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1150 | 2026-11-12 | Finding (F1, subagent-simulated; rejected as built, no engine trial): an encoder's candidates added to the push check's pool. | finding |
 | D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
 | D1152 | 2026-11-12 | Finding (F1, served by subagents, D1101): the request glossary's queue pair fails its neutral bar. | finding |
-| D1153 | 2026-11-12 | Promoted (F1, D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
+| D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |

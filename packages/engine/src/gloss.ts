@@ -1,7 +1,8 @@
 /**
- * The request glossary (`requestGloss`, trial; F1, docs/research/f1-intent-bridge.md): a request written in another
- * language is given the English words its own words mean, with no model and no call, so the lexical search and the
- * intent index (whose requests the card model writes in English) can meet it.
+ * The request glossary (`requestGloss`, in the default since D1153, part `gloss`; F1,
+ * docs/research/f1-intent-bridge.md): a request written in another language is given the English words its own words
+ * mean, with no model and no call, so the lexical search and the intent index (whose requests the card model writes in
+ * English) can meet it.
  *
  * On heldout19 the non-English requests reached 0 of 16 planted facts in the funnel (h19-diagnosis.md): the card call
  * anticipated the right request ("move money out of the fixed saver") and the user wrote "spostare 5.000 sterline dai
@@ -9,8 +10,9 @@
  * matches words, not sentences.
  *
  * `gloss.bin` (beside this file, gzip of JSON) holds, per language, its function words and its glossed words with up
- * to three English words each, written once by Haiku in the lab (`packages/sim/src/lab/gloss-make.ts`,
- * `gloss-pack.ts`). It is read once a process (`warmGlossary`, or the first glossed request), and a language's line
+ * to three English words each, written once in the lab by Haiku subagents and packed by
+ * `packages/sim/src/lab/gloss-pack.ts`. It is read once a process (`warmGlossary`, when the partner is built), and a
+ * language's line
  * index is built the first time it is read. A file that cannot be read, or reads wrong, leaves every request as
  * written (fail open).
  */
