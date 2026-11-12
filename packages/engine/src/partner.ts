@@ -2112,10 +2112,7 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(
-                  candidates.unsettled !== undefined,
-                  this.config.pushCheckLeanLead && !!check?.yes,
-                ),
+                this.candidateFrame(candidates.unsettled !== undefined, this.config.pushCheckLeanLead && !!check?.yes),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;

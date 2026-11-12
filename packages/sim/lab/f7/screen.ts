@@ -127,12 +127,14 @@ await Promise.all(
         const t0 = performance.now();
         const reads = await Promise.all(
           parts(read.length, n).map(([a, b]) =>
-            checkers.get(named)!.check(
-              scope,
-              `s${k}${arm}`,
-              { request: r.request, today: r.today, items: read.slice(a, b), ...(lean ? { lean: true } : {}) },
-              new AbortController().signal,
-            ),
+            checkers
+              .get(named)!
+              .check(
+                scope,
+                `s${k}${arm}`,
+                { request: r.request, today: r.today, items: read.slice(a, b), ...(lean ? { lean: true } : {}) },
+                new AbortController().signal,
+              ),
           ),
         );
         const wall = performance.now() - t0;

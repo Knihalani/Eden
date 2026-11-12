@@ -96,7 +96,7 @@ export const CHECK_SYSTEM = [
  * neutral requests, the usual case). The compare step of each written entry is unchanged.
  */
 const LEAN_ORDER =
-  "List only the items that touch the request's own subject, at most 6: first every item whose \"act\" is true, the " +
+  'List only the items that touch the request\'s own subject, at most 6: first every item whose "act" is true, the ' +
   "most decisive first, then the others; leave every other item out.";
 export const CHECK_SYSTEM_LEAN = CHECK_SYSTEM.replace(
   "List only the items that touch the request's own subject, the most decisive first, at most 6; leave every other " +
