@@ -262,6 +262,9 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
             role: "user" as const,
             content: `${SHEET_HEAD}\n\n<rules count="${sheet.length}">\n${sheetText(sheet)}\n</rules>`,
             cache: true,
+            // A user's checks are often more than five minutes apart: on the 5-minute TTL most would write the sheet
+            // again at 1.25x, dearer than sending it uncached; an hour keeps about three in four as reads (D1197).
+            cacheTtl: "1h" as const,
           },
         ]
       : []),

@@ -100,3 +100,24 @@ test("the cards and the requests choose their replay form apart (a form-3 cards 
   expect(disk.requestKey(it1, CARD_FORM_REQUESTS)).toBe(cardKey(it1));
   expect(disk.cardKeyFor(it1, CARD_FORM_REQUESTS)).toBe(formKey(it1, CARD_FORM_REQUESTS));
 });
+
+test("a live form-19 none card with a state is recorded with it and replays with it (cardsState, D1193)", async () => {
+  const out = join(mkdtempSync(join(tmpdir(), "eden-form-")), "out.jsonl");
+  const writes = join(mkdtempSync(join(tmpdir(), "eden-form-")), "cards.jsonl");
+  // A file holding the form's lines (one for another item), so it is read under the form's keys.
+  writeFileSync(writes, `${JSON.stringify({ h: formKey(it2, CARD_FORM_REQUESTS + 16), c: null, r: ["x"] })}\n`);
+  const cleared = { kind: "none", actions: [], entities: [], statement: "fitters hold lifted", state: "lifted" };
+  const live: CardMaker = {
+    async make(items: ContextItem[]): Promise<CardBatch> {
+      return { cards: items.map(() => ({ ...cleared }) as never), costUsd: 0.0002 };
+    },
+  };
+  const form = CARD_FORM_REQUESTS + 16;
+  const made = await new DiskCardMaker(writes, live, { out }).make([it1], "2026-10-27", signal, false, false, { form });
+  expect(made.cards[0]).toMatchObject({ kind: "none", state: "lifted" });
+  const line = JSON.parse(readFileSync(out, "utf8").trim()) as { h: string; c: unknown };
+  expect(line.h).toBe(formKey(it1, form));
+  expect(line.c).toMatchObject({ kind: "none", state: "lifted" });
+  const replayed = await new DiskCardMaker(out).make([it1], "2026-10-27", signal, false, false, { form });
+  expect(replayed.cards[0]).toMatchObject({ kind: "none", state: "lifted" });
+});

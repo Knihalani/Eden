@@ -339,6 +339,17 @@ describe("the sheet's prompt and parser", () => {
   ];
   const input = { request: "Book drinks on Thursday", today: "2026-10-27", items: [] };
 
+  test("the sheet is its own cached block at a 1-hour TTL, byte-identical across requests (D1197)", () => {
+    const a = checkMessages({ ...input, sheet });
+    const b = checkMessages({ ...input, request: "Send the invoice to Ana", today: "2026-10-28", sheet });
+    expect(a[1]!.cache).toBe(true);
+    expect(a[1]!.cacheTtl).toBe("1h");
+    expect(a[0]!.content).toBe(b[0]!.content);
+    expect(a[1]!.content).toBe(b[1]!.content);
+    // No sheet, no 1-hour ask: main's prompt.
+    expect(checkMessages(input).some((m) => m.cacheTtl !== undefined)).toBe(false);
+  });
+
   test("card text is data: a fence in a statement cannot close the rule or open another", () => {
     const text = sheetText(sheet);
     expect(text.match(/<rule /g)!.length).toBe(1);

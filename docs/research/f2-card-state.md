@@ -163,3 +163,27 @@ subagent answers against F8's (both per item): read it as noise of that size, no
 19 than the same items' form-3 lines (cards alone +8.6%), measured from the two files; this too mixes in answer
 variation. The clause adds about 140 input tokens a call. At Haiku's prices that is about +7% a card call, within D1193's
 estimate.
+
+## 6. Train and longtail re-carded; the default flipped
+
+So that the default's lab runs stay on shipped coverage (the card prompt's form is now 19), train1–6 and longtail
+seeds 41–44, every variant (84 worlds), were re-carded the same way: 2,037 items served by Haiku-model subagents per
+item through the queue (D1102), then a recording pass of 1,253 card calls with 0 failures; 971 new `:f19` lines
+joined `cards-shipped.jsonl.gz` (the rest were base items already recorded from dev20's worlds), and
+`SHIPPED_FORM_COVERS[19]` covers train, reworded, longtail and dev20 41–44. heldout19 keeps its form-3 lines (left
+alone: measurement only); heldout20's final cards each arm in its own form (F6's pipeline).
+
+The default before and after the flip, on the same tree (main at c5d47c260 merged), no model, shipped coverage, stub
+reader (`.local/f2s-old` with both switches off, `.local/f2s-new` the new default), handed:
+
+| suite | decoys | facts | surfaced decoys | surfaced facts | neutral any packet |
+|---|---|---|---|---|---|
+| train 41–42 | 276 → 197 | 296 → 296 | 299 → 296 | 318 → 319 | 378 → 377 of 384 |
+| reworded 41–42 | 262 → 182 | 287 → 287 | 300 → 285 | 314 → 313 | 370 → 369 of 384 |
+| longtail 41–42 | 22 → 17 | 32 → 31 | 28 → 30 | 35 → 34 | |
+| dev20 41–44 | 186 → 147 | 244 → 254 | 259 → 238 | 346 → 372 | 433 → 432 of 640 |
+| pooled | 746 → 543 (−27.2%) | 859 → 868 (+1.0%) | | | |
+
+On train, reworded and longtail the "off" arm replays form 3 and the "on" arm form 19, both served by subagents per
+item, so each row mixes the filter with the re-card's own answer variation (§5 measured the filter alone on dev20:
+−13 decoys, −1 fact). `bun run eval` is unchanged (precision 0.65, recall 0.52, falseFireRate 0): it runs no cards.
