@@ -21,3 +21,10 @@ docs
 deploy
 **/.env
 **/.env.*
+# Not served (D1700): the lab (@eden/sim: its harnesses, suites and paid-run scripts; only its package.json stays, for
+# the workspace install), tests and benches. scripts/dockerfile.test.ts walks the servers' imports and fails if any of
+# them lands under one of these.
+packages/sim/**
+!packages/sim/package.json
+**/*.test.ts
+packages/*/bench
