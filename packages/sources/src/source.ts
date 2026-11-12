@@ -45,6 +45,13 @@ export interface Source {
    * whenever its learned change rate says it may have.
    */
   readonly notifies?: boolean;
+  /**
+   * Whether each call to this source is billed by the connector's transport (an Arcade.dev, Pipedream Connect or
+   * Zapier MCP class of plan, COST-MODEL §Hosting (b)), rather than metered by a quota or a flat rate. The engine's
+   * freshness floor (`syncActivePollMs`, D1131) does not poll such a source unless the deployment opts in
+   * (`syncActivePollPriced`). Absent: not billed per call.
+   */
+  readonly callPriced?: boolean;
   search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
   /**
    * Whether `fetch` returning null means the source no longer has the item (deleted), rather than "could not say":
