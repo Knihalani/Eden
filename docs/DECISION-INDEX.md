@@ -689,3 +689,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
 | D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
 | D1150 | 2026-11-12 | Finding (F1, subagent-simulated; rejected as built, no engine trial): an encoder's candidates added to the push check's pool. | finding |
+| D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
+| D1152 | 2026-11-12 | Finding (F1, served by subagents, D1101): the request glossary's queue pair fails its neutral bar. | finding |

@@ -1,9 +1,10 @@
 /**
- * F1 × F2's combined check-pool pilot (lab only; docs/research/f1-intent-bridge.md §9). The push check's exact prompts
- * for three arms over the same tasks: `base` (the engine's first 15, `--base`), `a` (F2's quota pool, `--q3`, the engine's
- * own views) and `b` (`a` plus up to `--k` encoder items above `--floor` not already in it, from `--extras`, the lab's
- * `extras.py` with scores). Arms whose items are the same share one prompt. Hidden and control tasks where `a` or `b`
- * holds the planted item and `base` does not are asked once; `--neutral N` neutral tasks where an arm differs from
+ * F1 × F2's combined check-pool pilot (lab only; docs/research/f1-intent-bridge.md §9). The push check's exact
+ * prompts for three arms over the same tasks: `base` (the engine's first 15, `--base`), `a` (F2's quota pool, `--q3`,
+ * the engine's own views; F2 withdrew it, so §9 passes the base views here) and `b` (`a` plus up to `--k` encoder
+ * items above `--floor` not already in it, from `--extras`, the lab's `extras.py` with scores). Arms whose items are
+ * the same share one prompt. Hidden and control tasks where `a` or `b` holds the planted item and `base` does not are
+ * asked once; `--neutral N` neutral tasks where an arm differs from
  * `base` are asked `--repeat` times each (subagent answers vary; the rule reads the majority).
  *
  *   bun packages/sim/src/lab/f1-combo-pilot.ts --suite dev20 --seeds 41-44 --base B.jsonl --q3 Q.jsonl \

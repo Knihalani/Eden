@@ -233,3 +233,81 @@ of it. The facts side is strong: the check took every added fact and dropped 85%
 narrower variant (fewer extras, or a cosine floor) would need its own pre-registered rule and its own answers; the
 neutral measure needs repeated answers of the same prompt to separate the variance.
 
+
+## 9. The narrow encoder variant in the push check (F1 alone; F2's arm withdrawn)
+
+**Design.** As the integrator asked after D1150: at most 3 encoder items (multilingual-e5-small over each item's title
+and head), each with cosine ≥ 0.84, appended to the check's view only when they are not already in it. k 3 and the
+0.84 floor were chosen on train and reworded only (the most facts added with at most 0.5 neutral extras a task). The
+pilot was first planned with F2 as three arms (cab88c8e). F2 then withdrew its Q3 views because of a bug: picks filled
+the first places on short pools. So the encoder arm was re-registered alone (2009f3b7): B' = the engine's own first
+15 plus the extras. Its rule is cab88c8e's as written. The task set is dev20 seeds 41–44, coverage none. Hidden and
+control tasks where B' adds the planted item were asked once. On 60 neutral tasks where B' differs from base, each
+distinct prompt was asked 3 times and the majority read. 373 of 374 prompts were answered: 325 by 13 Haiku subagents,
+49 reused from identical prompts of the withdrawn run. The one prompt not answered is a base prompt with no items.
+**Label: subagent-simulated (D1101).**
+
+| | result | bar | |
+| --- | --- | --- | --- |
+| hidden: the check names the added fact | 9 of 9 | ≥ 50% | pass |
+| control: the check names the added look-alike | 0 of 5 | ≤ 25% | pass |
+| neutral: any item named (majority of 3) | 10 → 12 of 60 (+3.3 points; 3 up, 1 down) | ≤ +3 | **fail** |
+
+The variant fails the rule by one task. Why the neutral tasks fire:
+
+- Both B'-only fires are one template, `early-standup-phased-return`, on seeds 42 and 44. The request is "move our
+  daily standup to 8:15". The base pool was empty, and the encoder added real messages from the world: "standup moved
+  to 10:15". That is arguably context worth giving, not a look-alike.
+- The third task up (a boiler timer) and the one task down (an invoice) named items both arms share. That is the
+  subagents' own variance.
+
+**Why it is not worth fixing with a floor.**
+
+- Every added fact, look-alike and standup message scores between 0.841 and 0.852. No floor separates them.
+- The gain is narrow: 8 of the 9 facts come where the lexical pool was empty, and all 9 are in four dev20c templates
+  (parents-parking, upvc-windows, jamie-cabin-share, friday-dinner-cancel). That is +9 facts in the check's reply of
+  640 hidden tasks, about +1.4 points.
+
+**Cost, quality, speed.**
+
+- Quality: +9 of 640 dev20 hidden facts named (subagent-simulated), 0 look-alikes added, neutral +3.3 points.
+- Cost: about 45 of 640 tasks a variant gain a check call they did not make (an empty pool now holds extras), about
+  +7% check calls. About 27% of check prompts carry about 2.3 extra items, roughly +460 characters each (estimate from
+  the extras file, not deduplicated against the view).
+- Speed: 4–5 ms a request on one thread (F2's onnxruntime-node figure; 5.2 ms in Python). Items are encoded in the
+  background at 15–25 ms each. RSS +131–155 MB for the model and +56 MB for F2's TypeScript tokenizer.
+
+**Verdict: not built (the rule).** It is the third measurement of the encoder in the check (D1150, this one, and the
+withdrawn three-arm run, where B over F2's pool also failed). The fact side is strong every time: the check takes
+almost every added fact and drops almost every added look-alike. The gain where facts are missing from the view is
+small and concentrated, and its price is a model in every process plus new check calls.
+
+## 10. The request glossary through the queue (rule 67a019b6)
+
+reworded's 36 non-English templates, seeds 41–44, the shipped default against `requestGloss`. The push check was
+answered through `EDEN_LAB_QUEUE` by Haiku subagents (D1101), with identical prompts answered once for both arms.
+`bun run funnel ... -- --check live --neutral --ask`, scored by `packages/sim/lab/f1/gloss_score.py`. The first
+complete run (09:12 UTC) finished while about 40 checks were still in the queue. Those checks failed open, which made
+many neutral tasks deliver in both arms. Both arms were run again once the queue was empty, with 336 of 337 and 377 of
+381 checks replayed and 0 missed. Those numbers are the result. **Label: served by subagents (D1101).**
+
+| | base | gloss | |
+| --- | --- | --- | --- |
+| hidden delivered (144) | 80 | 100 (22 up, 2 down; +13.9 points, template-clustered 95% [+2.8, +26.4]) | pass |
+| look-alike delivered (144) | 35 | 35 (1 up, 1 down) | pass |
+| neutral tasks with any delivery (144) | 17 | 26 (+6.2 points) | **fail** (≤ +2) |
+| check calls | 337 | 381 (+13%) | |
+
+The gloss is a pure CPU step: 12.5 µs on an English request, 22.6 µs on a German one, +29 MB RSS, 118 ms to load
+once. The cost it adds is the extra check calls (+13%) on non-English requests.
+
+**Why the neutral tasks fire (read from the pool dumps).** Of the 11 neutral tasks the gloss arm newly hands items
+to, 6 hand the "Expense policy" reminder ("travel over £500 needs approval") to a request to book flights. Others hand
+existing travel bookings to a request about a call next week. One hands lunch plans to an order for a team lunch.
+These are the same items an English request about the same thing reaches. Once a Spanish, Portuguese or Hinglish
+request is glossed, Eden behaves on it as it does on English; the base arm's low neutral rate on non-English requests
+(17 of 144) comes from not reading them. The rule as written counts that parity as harm. A fair bar compares a
+glossed request's neutral rate with its English twin's, but that is a new rule and needs its own run.
+
+**Verdict by the rule: fails on neutral.** The switch stays off. The decision, kept as a no-model fallback with an
+English-parity rule or deleted, is for the integrator.
