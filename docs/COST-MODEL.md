@@ -679,6 +679,10 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
+**The shipped route's cache (D1196, a trial pending the owner's probe).** Through OpenRouter the roles send no cache
+breakpoint, so the check's instructions are paid in full: about +$0.000107 a call, about +$0.10 per 1,000 tasks over
+the lab's cached figures, and cards about 1.27×. `EDEN_MODEL_CACHE=on` sends the breakpoints (off until probed).
+
 ### Where the check's cost and wait are, and what is left (F7, D1190, D1191; docs/research/f7-cost-latency.md)
 
 Recorded on the real API (1,092 checks, train and reworded seed 43 with neutral, Anthropic direct, lab provider) and
