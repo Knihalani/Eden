@@ -691,6 +691,18 @@ instructions about 6%.
 | The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
 | Speculate the agent's first call, abort it on a yes (design, F7 §9) | +0.04–0.06 on Pi (aborted first calls) | −0.28 s | not built: cost up; needs the API to measure |
 
+**Eden against the agent alone, connectors counted (F7 §10c [EST]).** Model spend: Eden +$0.25 per 1,000 tasks on Pi
+and +$0.23 on Hermes (B19). Eden saves a net 0.25–0.65 connector calls a task (0.3–0.7 on Hermes). Net per 1,000
+tasks:
+- first-party APIs: +$0.25 (Pi), +$0.23 (Hermes);
+- Composio: +$0.05 to +0.17;
+- Unified.to: −$0.24 to +0.06;
+- Arcade.dev, Pipedream and Zapier: −$2.3 to −$17.
+
+Wall: B19's walls include about 0.45 s a connector call (the `direct` profile). At a production latency L a call,
+Eden − agent alone is about +0.39 − 0.72 × (L − 0.45) s on Pi and +0.09 − 0.78 × (L − 0.45) s on Hermes. That is
+faster from L ≈ 1.0 s on Pi and L ≈ 0.6 s on Hermes, and at every L ≥ 0.3 s if F10's skip removes 70% of checks.
+
 `packages/sim/lab/f7/levers.py` recomputes the table from a ledger and `--check-dump` files; `f7/price.py` prices any
 ledger per role at list prices with the check's modelled wait, for runs whose model calls bill nothing real.
 
@@ -706,6 +718,41 @@ No model call and no network call: a local model decides, on the fast path, whet
 | Per 1,000 task runs, Haiku 5.5 agent (train and reworded, seeds 41–42) | $0.479 → $0.482 (agent and Eden per task); wall 4.14 → 4.12 s | `packages/sim/lab/p3/report.py` on `pi.sh`'s runs |
 
 A turn whose weights cannot be read is decided by `pushStart` alone, at its old cost.
+
+## The request glossary (`requestGloss`, F1, in the default since D1153)
+
+No model call: a non-English request is glossed into English words from a glossary held in memory, on the fast path.
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| CPU a request | 12.5 µs English (0 of 468 English requests glossed), 22.6 µs German | `bun` microbench in docs/research/f1-intent-bridge.md §3 |
+| Glossary and load | +29 MB RSS once a process; 118 ms to load when the partner is built | the same |
+| Paid calls it moves | push check calls +13% on non-English requests (343 → 389 over reworded's 36 non-English templates, seeds 41–44), still below the same templates in English (418); none on English | `packages/sim/lab/f1/gloss_score.py`, served by subagents (D1101) |
+
+A glossary that cannot be read leaves every request as written, at its old cost.
+
+## The rule sheet (`pushCheckSheet` 80 with `pushCheckSheetRefs`, F5, in the default since D1180)
+
+No new call: the push check's existing call reads the user's active constraint cards as a second cached block (one
+line a card, at most 80) and sends pool items on the sheet as pointers. **The one measured figure: $0.000281 a check
+against about $0.000231 on main (+22%), 73% of input tokens read from cache** (one API smoke, train1 s41, sheet 80,
+an earlier prompt format without pointers). The rest are Haiku 5.5 list prices from token counts **[EST]** (no credit
+for a paid comparison; D1180 owes it).
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| Sheet size | 32–53 cards a user on train (smoke), about 6,900 characters (about 1,700 tokens) | API smoke, train1 s41; 2,349 dumped checks |
+| Sheet read from cache | +$0.000017 a check | the same token counts [EST] |
+| Pointers (pool items on the sheet) | −768 of 3,188 pool characters a check (24%), about −$0.000019 | the same [EST] |
+| Cache write (sheet changed: a card landed or expired) | about +$0.0002 | the same [EST] |
+
+| Paid calls it moves | none added: the check runs on the same pushes (a pool with nothing constraint-like is still not checked) | `partner.ts` `checkPush` |
+| Added wait | the cached input only; no output added beyond a rule entry when one is named [EST] | H3's latency fit (D1072) |
+
+So with a warm cache the estimate puts the check near main's, but the one measurement read +22%; a user whose cards
+change, or whose carded items re-sync (the sheet is ordered by an item's update time), pays about $0.0002 more on the
+next check. A user with more than 80 active rules gets no sheet (D1183) and pays main's check; selection for them was rejected
+(D1182).
 
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 

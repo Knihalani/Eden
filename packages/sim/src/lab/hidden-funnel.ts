@@ -87,6 +87,7 @@ import {
   type CandidateDump,
   type CardMaker,
   automated,
+  readForIntent,
   type PushPoolReport,
   PushChecker,
   worthCarding,
@@ -129,7 +130,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, setRealism, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -220,6 +221,7 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "realism",
         "notify-share",
         "noise-items",
         "noise-edits",
@@ -271,6 +273,11 @@ const TIME = Number(opt("time", "0"));
  * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
  */
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's, twenty connectors and about 400
+ * rule-like items that never apply, duplicated and forwarded threads, mail in five other languages. `off` (default).
+ */
+setRealism(opt("realism", "off"));
 /**
  * `--source-profile FILE|JSON`, `--push none|signals|payload`, `--push-rates` (A18, the live harnesses' connector
  * options, connector-options.ts): the market latency profiles and change notices pi-ab runs under, so the funnel at
@@ -1222,6 +1229,9 @@ async function runSeed(
       cardRead,
       // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
       notSentPrefilterRejects: !cardRead && !prefilter,
+      prefilter,
+      automated: automated(item),
+      forIntent: readForIntent(item, askAt, RUN.cardsLeanDays),
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,
@@ -1589,6 +1599,10 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `pushCheckSheet` (F5): the planted item's place on the rule sheet the check read (-1: not on it).
+      ...(push?.sheet ? { pushSheetAt: push.sheet.indexOf(id) } : {}),
+      // With it, the planted item's card kind at the end of the task ("none": no card, a none card or expired).
+      ...(push?.sheet && cards ? { plantedCard: cards.cardsOf(scope, [id], clock).get(id)?.kind ?? "none" } : {}),
       // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
       // it was handed.
       ...(push && task.stale

@@ -561,6 +561,15 @@ export interface EngineConfig {
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
   /**
+   * F1 (docs/research/f1-intent-bridge.md; promoted by D1153): a request written in another language is given the
+   * English words its own words mean (`glossOf`, gloss.ts: a glossary written once by a model, read with no model and
+   * no call), and the push's and an ask's lookup search with them beside the request's own words, lexically and in the
+   * intent index. An English request is searched as written. reworded's 36 non-English templates, seeds 41–44 (push
+   * check served by subagents): hidden delivered 88 → 112 of 144, look-alikes 45 → 49, neutral 50 → 21 (English
+   * originals 53); +13% check calls on non-English requests, 12–23 µs a request, +29 MB RSS.
+   */
+  requestGloss: boolean;
+  /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
    * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
@@ -715,6 +724,20 @@ export interface EngineConfig {
    * those can be candidates.
    */
   pushCheckItems: number;
+  /**
+   * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
+   * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
+   * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
+   * reply names brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards
+   * (an end before the user's day), `none` and `preference` cards are left out, newest items first. A user with more
+   * active rules than this gets no sheet (D1183: a newest slice of a heavy user's rules speaks on neutral requests).
+   */
+  pushCheckSheet: number;
+  /**
+   * F5 (D1180, with `pushCheckSheet`): a pool item on the sheet is sent as its title and its rule's number instead of
+   * its text: the cached sheet line stands in for part of the uncached pool (cost).
+   */
+  pushCheckSheetRefs: boolean;
   /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
@@ -899,6 +922,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
+  requestGloss: true,
   askReader: true,
   askReaderPool: 15,
   askReaderWaitMs: 2_500,
@@ -923,6 +947,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,

@@ -46,6 +46,8 @@ export interface QueuedRequest {
   tools?: { name: string; description?: string; input_schema?: unknown }[];
   outputSpec: OutputSpec;
   createdAt: string;
+  /** `EDEN_LAB_QUEUE_RUN` of the process that queued it (the arm), so a batch can hold one arm's requests only. */
+  run?: string;
 }
 
 export interface Answer {
@@ -132,6 +134,7 @@ export function requestOf(id: string, role: string, body: Body): QueuedRequest {
     ...(n.tools.length ? { tools: n.tools } : {}),
     outputSpec: outputSpecOf(body),
     createdAt: new Date().toISOString(),
+    ...(process.env.EDEN_LAB_QUEUE_RUN ? { run: process.env.EDEN_LAB_QUEUE_RUN } : {}),
   };
 }
 

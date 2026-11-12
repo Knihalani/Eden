@@ -634,6 +634,17 @@ Read these numbers in that run's shape:
 - With no coverage (`--cards none --intent none`, D1100's first baseline) dev20 reads 155/125; train in that shape
   reads 456/768.
 
+### 1h3. A heavy real user's sources: `--realism heavy` (F8, D1103; docs/research/f8-realism.md)
+
+```bash
+bun run funnel --suite train --seeds 41,42 -- --neutral --realism heavy   # 318/299 → 311/288 (stub reader)
+```
+
+Every world gets twenty connectors and 600 items that never apply (rule-like items, forwarded threads, five
+languages). That means 333–350 rule cards a user instead of about 105. Their cards are in `cards-shipped.jsonl.gz`
+for seeds 41–44, served by subagents (D1102). Use it to screen anything that matches requests against rule cards, and
+quote both arms.
+
 ### 1h. A standing-constraint ledger over days users (M5, D910–D911; docs/research/m5-ledger.md)
 
 Stopped (D910); the recipe stays for a later variant. The shipped-coverage days baseline (M3's recipe), each user's
@@ -648,7 +659,6 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus
 python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus .local/m5/corpus.jsonl \
   --pool .local/m5/pool.jsonl --only fit
 ```
-
 
 ### 1i. The connector router (M8, D940–D949; rejected; docs/research/m8-router.md)
 
