@@ -9,6 +9,5 @@
   "cardsLanes": 1,
   "cardsRequestsFix": false,
   "cardsState": false,
-  "pushStateFilter": false,
-  "stateFilterWide": false
+  "pushStateFilter": false
 }

@@ -79,6 +79,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
 | D1552 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). |  |
 | D1156 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | because the funnel's on-demand poll already hands current copies, while connector calls rose 3.52 → 5.52 a… |
+| D1451 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… |  |
 | D1452 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | every item it read and did not say yes to, 127 / 362 |
 
 ## Reader

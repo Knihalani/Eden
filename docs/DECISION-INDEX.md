@@ -735,7 +735,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1193 | 2026-11-12 | Promoted (F2, the integrator's decision): `cardsState` + `pushStateFilter`, on in the default: the card says whether its constraint still… | adopted |
 | D1455 | 2026-11-12 | Finding: most look-alikes reach the agent round the push check, not through it. | finding |
 | D1450 | 2026-11-12 | Promoted: `packetHeedsCheck`, on in the default: a rule path's proactive packet is not handed when the request's push check read every… | adopted |
-| D1451 | 2026-11-12 | Promoted: `stateFilterWide`, on in the default: F2's cleared-state test (D1193: an item carded none whose state says a constraint was… | adopted |
+| D1451 | 2026-11-12 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… | rejected |
 | D1452 | 2026-11-12 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | rejected |
 | D1453 | 2026-11-12 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | rejected |
 | D1454 | 2026-11-12 | Finding: `pushCheckItemChars` 400 is not a facts lever. | finding |
