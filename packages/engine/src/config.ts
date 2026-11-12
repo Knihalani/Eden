@@ -706,7 +706,7 @@ export interface EngineConfig {
    */
   askNudgeDeep: boolean;
   /**
-   * D1252 (F11, trial, 0 = off): with `pushCheck`, a push the check left silent (it answered and named nothing) hands
+   * D1252 (F11; rejected, kept off; 0 = off): with `pushCheck`, a push the check left silent (it answered and named nothing) hands
    * up to this many items of its own pool (no bulk mail, pool order) that name one of the request's anchors (a person
    * or thing it names, or its day: `settle.ts`'s `anchored`), under `LOOKUP_LEAD`: for reference, a check found none
    * that changes the request. No new connector or model call. D1250 measured the agent searching its connectors on 28
@@ -716,14 +716,14 @@ export interface EngineConfig {
    */
   pushLookup: number;
   /**
-   * D1252's second arm (F11, trial, off; needs `pushLookup`): when no record in the silent push's pool names one of the
+   * D1252's second arm (F11; rejected, kept off; needs `pushLookup`): when no record in the silent push's pool names one of the
    * request's anchors, the pool's first `pushLookup` items (no bulk mail) go out under the same lead. Round 3 of
    * D1252: the lookup packet stopped the agent's search on 14 of 15 silent turns it reached, and the 17 it did not
    * reach (nothing anchored in the pool) all searched.
    */
   pushLookupAny: boolean;
   /**
-   * D1252's third arm (F11, trial, off; needs `pushLookup`): the lookup packet's lead also says the records are
+   * D1252's third arm (F11; rejected, kept off; needs `pushLookup`): the lookup packet's lead also says the records are
    * background for the request's details, not a reason to warn the user (`LOOKUP_QUIET`), since the check already
    * found none that changes the request. For the hedges the reference records drew in round 4 ("check that the
    * discount is approved, I found no record of it").

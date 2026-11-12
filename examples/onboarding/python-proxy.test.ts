@@ -104,17 +104,19 @@ print(json.dumps([chat("When is lunch with Priya Raman?", {"x-eden-user-id": "al
       expect(code).toBe(0);
       expect(JSON.parse(pout)).toEqual(["ok", "ok", "ok"]);
 
-      // Speculate is on by default (D1273): the first turn also went upstream during Eden's wait, as it would with no
-      // packet, and was aborted when Eden's packet came. The agent got the packet's answer; the user-id-less turns
-      // have no Eden wait and go once each.
+      // Speculate is on by default (D1273): the first turn may also have gone upstream during Eden's wait, as it would
+      // with no packet, and been aborted when Eden's packet came (whether it reached the mock before the abort is
+      // timing: 0 or 1 such call). The agent got the packet's answer; the user-id-less turns go once each.
       expect(seen.every((s) => s.path === "/v1/chat/completions")).toBe(true);
       const packeted = seen.filter((s) => s.messages[0]!.role === "system");
       expect(packeted.length).toBe(1);
       expect(packeted[0]!.messages.map((m) => m.role)).toEqual(["system", "user"]);
       expect(packeted[0]!.messages[0]!.content).toContain("Dishoom");
       const plain = seen.filter((s) => s.messages[0]!.role === "user").map((s) => s.messages[0]!.content);
-      expect(plain.filter((c) => c === "hello" || c === "hello again").sort()).toEqual(["hello", "hello again"]);
-      expect(plain.length).toBeLessThanOrEqual(3);
+      expect(plain.filter((c) => c === "hello").length).toBe(1);
+      expect(plain.filter((c) => c === "hello again").length).toBe(1);
+      expect(plain.filter((c) => c === "When is lunch with Priya Raman?").length).toBeLessThanOrEqual(1);
+      expect(plain.length).toBe(2 + plain.filter((c) => c === "When is lunch with Priya Raman?").length);
       // Two requests with no user id: one line saying so, naming the header, never the message.
       await err.until((t) => (t.includes("named no user") ? true : null));
       expect(err.text().match(/named no user/g)!.length).toBe(1);

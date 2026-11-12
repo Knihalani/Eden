@@ -180,7 +180,7 @@ export const ASK_NUDGE =
 export const LOOKUP_USE = "Use them for details the request needs.";
 
 /**
- * `pushLookup` (D1252, trial): the lead of the records a silent push hands. Fixed words (D11, D19). It says the check
+ * `pushLookup` (D1252; rejected, kept off): the lead of the records a silent push hands. Fixed words (D11, D19). It says the check
  * found nothing that changes the request (true: it answered and named nothing) and never that nothing else exists
  * (D257: that note made the agent skip the ask that finds what the push missed); the items are for the request's
  * details.
@@ -190,14 +190,14 @@ export const LOOKUP_LEAD =
   `that changes what the request should do. ${LOOKUP_USE}`;
 
 /**
- * `pushLookupAny` (D1252, trial): the lead when no record names the request's anchors and the pool's head goes out
+ * `pushLookupAny` (D1252; rejected, kept off): the lead when no record names the request's anchors and the pool's head goes out
  * instead; it says only what is true of them (Eden's search ranked them first), never that they name the request.
  */
 export const LOOKUP_HEAD_LEAD =
   `${EDEN_NOTE}items Eden's search of the user's sources ranked first for this request, for reference; a check found ` +
   `none that changes what the request should do. ${LOOKUP_USE}`;
 
-/** `pushLookupQuiet` (D1252, trial): the lookup leads' closing sentence in place of `LOOKUP_USE`. */
+/** `pushLookupQuiet` (D1252; rejected, kept off): the lookup leads' closing sentence in place of `LOOKUP_USE`. */
 export const LOOKUP_QUIET =
   "They are background for the details the request needs, not a reason to warn the user or ask them to check " +
   "anything.";

@@ -274,12 +274,12 @@ For common servers you can name a preset instead of working out which tools read
   "headers": { "Authorization": { "env": "U1_GOOGLE_TOKEN" } } }
 ```
 
-| Preset | Area | Read tools it names | Checked against |
-| --- | --- | --- | --- |
-| `gmail` | mail | `search_threads` (newest message of each thread), and as the sync's listing | Google's hosted Gmail MCP server's input schema, 2026-11-07 |
-| `google-calendar` | calendar | `search_events` (no listing: `list_events` pages by start time, not by change) | Google's hosted Calendar MCP server's input schema, 2026-11-07 |
-| `caldav` | calendar | `caldav_search_events`, and `caldav_get_event_by_uid` when you trust it too (both unannotated: list them in `trustedReadTools` after checking) | madbonez/caldav-mcp at 6db4975 (connector lab) |
-| `obsidian` | notes | `search_notes` (unannotated: list it in `trustedReadTools`; run the server `--read-only`) | bitbonsai/mcpvault at adda860 (connector lab) |
+| Preset            | Area     | Read tools it names                                                                                                                            | Checked against                                                |
+| ----------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `gmail`           | mail     | `search_threads` (newest message of each thread), and as the sync's listing                                                                    | Google's hosted Gmail MCP server's input schema, 2026-11-07    |
+| `google-calendar` | calendar | `search_events` (no listing: `list_events` pages by start time, not by change)                                                                 | Google's hosted Calendar MCP server's input schema, 2026-11-07 |
+| `caldav`          | calendar | `caldav_search_events`, and `caldav_get_event_by_uid` when you trust it too (both unannotated: list them in `trustedReadTools` after checking) | madbonez/caldav-mcp at 6db4975 (connector lab)                 |
+| `obsidian`        | notes    | `search_notes` (unannotated: list it in `trustedReadTools`; run the server `--read-only`)                                                      | bitbonsai/mcpvault at adda860 (connector lab)                  |
 
 A preset fills in only read tools and their fixed arguments; anything you write in the entry wins. It never adds
 `trustedReadTools`, so the read-only check (D7) runs as for a hand-written entry: a server that does not annotate a
@@ -402,12 +402,12 @@ mid-session, but a quiet calendar is seldom polled within a session (6–7 of 15
 every update did, D841, D842). Re-reading each held item by its id at every request was measured and rejected: it
 costs more connector calls per update found than the poll (D840). So, by source:
 
-| Your connector | What the agent gets after an edit |
-| --- | --- |
-| Notifies (items, refs or a signal), declared `"notifies": true` | The update before the next request (D205) |
-| No notices, a listing that shows the most recently changed first (mail, most chat) | The update at the next poll; a busy source is polled at nearly every request |
+| Your connector                                                                                         | What the agent gets after an edit                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Notifies (items, refs or a signal), declared `"notifies": true`                                        | The update before the next request (D205)                                                                                                                                                                                                      |
+| No notices, a listing that shows the most recently changed first (mail, most chat)                     | The update at the next poll; a busy source is polled at nearly every request                                                                                                                                                                   |
 | No notices, a listing by start time or no listing (a calendar, `google-calendar` and `caldav` presets) | A synced calendar: at its next poll, often not within the session. A preset with no listing is never synced: the new copy reaches the agent only if a later lookup's search finds it and delivers it. Forward notices for calendars if you can |
-| No get-by-id tool (`fetchesById` false) | Copies a signal put in doubt are delivered as held (D126) |
+| No get-by-id tool (`fetchesById` false)                                                                | Copies a signal put in doubt are delivered as held (D126)                                                                                                                                                                                      |
 
 ## The one-line integration: Eden in front of your model (`bun run proxy`, D280)
 
@@ -469,6 +469,15 @@ not as a line per request.
 - **Fails open.** Eden down, slow or refusing: the request goes upstream unchanged, after at most the wait plus
   800 ms of Eden's work. Only an unreachable upstream is an
   error (502). The upstream key is forwarded and never logged; only message text goes to Eden, as with the SDK.
+- **Speculate (on by default, D1273; `EDEN_PROXY_SPECULATE=0` turns it off).** At a new turn the proxy sends the
+  request upstream at once, as it would go with no packet, while Eden decides; when Eden adds nothing, that answer goes
+  to the agent and Eden's wait is saved. When Eden adds a packet, the early call is aborted and the packet's request
+  goes as usual, so the agent sees exactly what it would without the option. The price is on your upstream key: a
+  packet turn sends two requests, both billed their input, and the aborted one may be billed output too (always for a
+  non-streamed request); both count against your rate limit, and a 429 on the packet's request reaches the agent.
+  Never early with `store: true`, on the Responses route, with `EDEN_PROXY_ASK=1`, in shadow mode, or when the request
+  asks the provider to run tools itself (`mcp_servers`, `web_search_options`, a code-execution `container`, or any
+  non-client tool type), since those tools would run twice.
 - **Off this machine, set `EDEN_PROXY_KEY`.** The proxy holds your tenant's Eden key and serves whichever user a
   caller names, so with `PROXY_HOST` beyond loopback it refuses to start without its own key, which callers send as
   `x-eden-proxy-key`.
