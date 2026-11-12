@@ -749,18 +749,6 @@ export interface EngineConfig {
    * model, no call.
    */
   revisionDiff: boolean;
-  /**
-   * F3 (trial, off; `why.ts`): each item a packet or ask answer hands over gets Eden's own note on why it bears on the
-   * request, when its dates meet the days the request names: "(Eden: dated Thu 29 Oct, a day the request names; its
-   * 14:00-17:30 overlaps the request's 16:40)". No model and no call; fixed words, numbers and day names only.
-   */
-  packetWhy: boolean;
-  /**
-   * F3 (trial, off; `versions.ts`): Eden keeps, per user, what changed in each item at its source when a sync stored
-   * an edited copy (the differing words, redacted, bounded, in memory), and a packet or answer handing the item over
-   * says it: "(Eden: changed at its source on Thu 12 Nov: was '11:00–15:00', now '14:00–17:30')". No model, no call.
-   */
-  packetChanges: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -917,6 +905,4 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
-  packetWhy: false,
-  packetChanges: false,
 };

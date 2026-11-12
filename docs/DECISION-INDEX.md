@@ -685,7 +685,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1120 | 2026-11-12 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | superseded (deleted by D1121) |
 | D1121 | 2026-11-12 | Rejected (stopped on its pre-registered rule, D1120): `packetWhy`, Eden's no-model note on why an item bears on the request; deleted (code… | rejected |
 | D1100 | 2026-11-12 | Lab only: `dev20a`–`dev20d` (`--suite dev20`), four tuning suites on the weak points | lab |
-| D1122 | 2026-11-12 | Trial `packetWhy` v2 (F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser misses… | trial |
-| D1123 | 2026-11-12 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | trial |
+| D1122 | 2026-11-12 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | superseded (deleted by D1126) |
+| D1123 | 2026-11-12 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | superseded (deleted by D1126) |
 | D1124 | 2026-11-12 | Lab only: the pre-registered rule for D1122 and D1123 | lab |
 | D1125 | 2026-11-12 | Lab only: D1124's run moves to subagents, with unrelated silent edits in every variant | lab |
+| D1126 | 2026-11-12 | Rejected (stopped on D1125's pre-registered rule): `packetChanges` (D1123) and `packetWhy` v2 (D1122, deleted by D1126); both deleted with… | rejected |

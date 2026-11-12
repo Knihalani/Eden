@@ -154,6 +154,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D940 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | killed by D948: the clause asked for a lower bound above −1.5, so it fails (half-width 1.3, minimum detectable effect 1.8… |
 | D943 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | killed by D949: The re-test (rule in acacab82: fresh seeds 89–112, held-out families) read steady calls 11.50 → 3.46 a… |
 | D1025 | Rejected: the recipes that did not help on the held-out sources. |  |
+| D1123 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | killed by D1126: stopped on D1125's pre-registered rule |
 
 ## Ask
 
@@ -184,6 +185,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D401 | Rejected at $0: moving the agent's cache mark off the first request's user turn so a one-call task pays 1x, not 1.25x, for the packet. |  |
 | D517 | Rejected: shortening earlier requests' packets in the transcript | hidden −16.0 points (−23.3..−8.1 by day) |
 | D920 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | stopped on its pre-registered rule, a3faa15a |
+| D1122 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | killed by D1126: stopped on D1125's pre-registered rule |
 
 ## Lab and eval
 

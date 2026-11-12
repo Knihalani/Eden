@@ -127,8 +127,6 @@ import {
   renderPacket,
   shownText,
 } from "./render";
-import { Versions } from "./versions";
-import { changeNote, whyNote } from "./why";
 import {
   callParties,
   MAX_CHECKED,
@@ -656,8 +654,6 @@ export class ContextPartner {
   private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
   /** What each user's probes bring back (`probeFresh`, `probeYield`). */
   private readonly economy = new ProbeEconomy();
-  /** `packetChanges` (F3, trial): each user's items' last change at their source (`versions.ts`); null when off. */
-  private readonly versions: Versions | null;
   /** `sourceYield` (D505): each source's run of live reads with nothing used; null when off. */
   private readonly yields: SourceYield | null;
   /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
@@ -694,19 +690,9 @@ export class ContextPartner {
     // The card enrichment (`cards`) reports its background calls into the same spans.
     if (spans && deps.cards && this.config.cards) deps.cards.tracer = spans;
     // A card is held no longer than its item: an item leaving the cache (or the whole user) takes its card along.
-    this.versions = this.config.packetChanges ? new Versions() : null;
-    const versions = this.versions;
-    if (versions) deps.cache.onRevised((scope, before, after, at) => versions.note(scope, before, after, at));
-    // An item leaving the cache (or the whole user) takes its card and its change along.
-    const dropCards = deps.cards && this.config.cards ? deps.cards : null;
-    if (dropCards || versions) {
-      deps.cache.onDropped((scope, ids) => {
-        if (dropCards) ids ? dropCards.forgetItems(scope, ids) : dropCards.forget(scope);
-        versions?.drop(scope, ids);
-      });
-    }
     if (deps.cards && this.config.cards) {
       const cards = deps.cards;
+      deps.cache.onDropped((scope, ids) => (ids ? cards.forgetItems(scope, ids) : cards.forget(scope)));
       // Dates in an item resolve against the user's day, as the request's do (D44).
       cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
       if (this.config.cardsEconomy) cards.economize();
@@ -3131,8 +3117,6 @@ export class ContextPartner {
     this.fanout.forget(scope, sourceId);
     this.deps.planner?.forget(scope, sourceId);
     this.economy.forget(scope, sourceId);
-    // `packetChanges`: a forget, of the user or of one source, drops the user's changes (their words are content).
-    this.versions?.drop(scope, null);
     this.yields?.forget(scope, sourceId);
     this.sync?.forget(scope, sourceId);
     // A source's forget drops only what its items brought: the user's other items keep their cards.
@@ -5975,24 +5959,6 @@ export class ContextPartner {
         : {}),
       ...(shown ? { shownBefore: (item: ContextItem) => shown.get(shownKey(item)) } : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...this.whyOf(s, cue),
-    };
-  }
-
-  /** `packetWhy` (F3, trial): the render option that notes why each item bears on the request (`why.ts`). */
-  private whyOf(s: Session, cue: Cue): Pick<Parameters<typeof renderPacket>[1], "why"> {
-    const clash = this.config.packetWhy && cue.time;
-    const versions = this.versions;
-    if (!clash && !versions) return {};
-    const input = { time: cue.time, raw: cue.raw, offset: cue.offset, now: cue.at };
-    const scope = s.scope;
-    return {
-      why: (item: ContextItem) => {
-        // `packetChanges`: what changed at the source since Eden first held the item, then the clash, if any.
-        const change = versions?.get(scope, item.id);
-        const said = [change ? changeNote(change, cue.offset) : undefined, clash ? whyNote(item, input) : undefined];
-        return said.filter(Boolean).join("; ") || undefined;
-      },
     };
   }
 
@@ -6096,7 +6062,6 @@ export class ContextPartner {
           }
         : {}),
       ...(this.config.compactParts ? { split: true } : {}),
-      ...this.whyOf(s, cue),
     };
     const injection: Injection = {
       ...s.scope,
