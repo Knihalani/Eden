@@ -77,8 +77,9 @@ export interface ProxyOptions {
    */
   maxKeptBytes?: number;
   /**
-   * On by default (F10, D1273, promoted by the integrator; `false` or `EDEN_PROXY_SPECULATE=0` turns it off): at a new turn, send the request upstream at once, shaped as it would go
-   * if Eden had nothing new for the turn, while Eden works; hold its answer. When Eden's work lands and the request
+   * On by default (F10, D1273, promoted by the integrator; `false` or `EDEN_PROXY_SPECULATE=0` turns it off): at a
+   * new turn, send the request upstream at once, shaped as it would go if Eden had nothing new for the turn, while Eden
+   * works; hold its answer. When Eden's work lands and the request
    * that would go upstream is byte for byte the speculative one, the held answer goes to the agent (Eden's wait is
    * saved); otherwise the speculative call is aborted and the request goes as today. The agent sees exactly what it
    * would without the option. An aborted call is paid for: its input, and any output the provider wrote or bills after
