@@ -2618,7 +2618,9 @@ export class ContextPartner {
     // that name the request's anchors go out for reference instead.
     if (yes && yes.size === 0 && this.config.pushLookup > 0 && check?.called === true) {
       const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
-      const records = open.filter((x) => anchored(x.item, a)).slice(0, this.config.pushLookup);
+      const named = open.filter((x) => anchored(x.item, a));
+      // `pushLookupAny`: with nothing named, the pool's head (what Eden's own search ranked first for the request).
+      const records = (named.length > 0 || !this.config.pushLookupAny ? named : open).slice(0, this.config.pushLookup);
       if (records.length > 0) {
         this.deps.onPushPool?.({
           sessionId: s.id,

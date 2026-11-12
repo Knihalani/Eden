@@ -98,7 +98,19 @@ describe("pushLookup (D1252)", () => {
   });
 
   test("on, nothing in the pool names the request's anchors: still silent", async () => {
-    expect(await taken(partner({ pushLookup: 3 }, silent()), "Pay the Pellham catering bill today.")).toBeUndefined();
+    expect(await taken(partner({ pushLookup: 3 }, silent()), "Pay the venue deposit invoice today.")).toBeUndefined();
+  });
+
+  test("pushLookupAny: nothing named, so the pool's head goes out under the same lead", async () => {
+    const got = await taken(
+      partner({ pushLookup: 2, pushLookupAny: true }, silent()),
+      "Pay the venue deposit invoice today.",
+    );
+    expect(got).toBeDefined();
+    expect(got!.text).toContain(LOOKUP_LEAD);
+    expect(got!.citations.length).toBe(2);
+    expect(() => checkEngineConfig({ ...DEFAULT_CONFIG, pushLookup: 3, pushLookupAny: true })).not.toThrow();
+    expect(DEFAULT_CONFIG.pushLookupAny).toBe(false);
   });
 
   test("on, no checker wired (no model key): no lookup packet, the push is as before", async () => {

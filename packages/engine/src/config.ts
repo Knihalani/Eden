@@ -695,6 +695,13 @@ export interface EngineConfig {
    */
   pushLookup: number;
   /**
+   * D1252's second arm (F11, trial, off; needs `pushLookup`): when no record in the silent push's pool names one of the
+   * request's anchors, the pool's first `pushLookup` items (no bulk mail) go out under the same lead. Round 3 of
+   * D1252: the lookup packet stopped the agent's search on 14 of 15 silent turns it reached, and the 17 it did not
+   * reach (nothing anchored in the pool) all searched.
+   */
+  pushLookupAny: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -907,6 +914,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   askNudge: true,
   askNudgeDeep: true,
   pushLookup: 0,
+  pushLookupAny: false,
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,
