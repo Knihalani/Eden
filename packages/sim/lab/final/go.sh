@@ -158,10 +158,33 @@ for pid in $M1 $M2; do wait "$pid" || fail=1; done
 [ $fail -eq 0 ] || { log "go: a multi-turn arm failed (see $L/mt-*.log): stopped"; exit 1; }
 log "go: step 2b done"
 
+# 2c. Optional (REALISM=heavy): the same single-shot comparison, raw against final only, with every world as a heavy
+# real user's (`--realism heavy`, F8, D1103: twenty connectors, 600 rule-like noise items a world). Run after the main
+# arms and skipped unless asked, so a short day can drop it. The realism items' cards are in the shipped file (they
+# depend only on the seed); the planted items' are the final tree's own coverage.
+if [ "${REALISM:-off}" != off ]; then
+  log "go: step 2c realism=$REALISM (drive the queue now)"
+  arm "$TF" rh-raw tools "$L/cov-final.jsonl" default "${SINGLE[@]}" --realism "$REALISM" &
+  R1=$!
+  arm "$TF" rh-final "$EDEN_COND" "$L/cov-final.jsonl" "$FCFG" "${SINGLE[@]}" --realism "$REALISM" &
+  R2=$!
+  fail=0
+  for pid in $R1 $R2; do wait "$pid" || fail=1; done
+  [ $fail -eq 0 ] || { log "go: a realism arm failed (see $L/rh-*.log): stopped"; exit 1; }
+  log "go: step 2c done"
+fi
+
 # 3. The report: quality (report.py), then quality, cost and speed side by side (cost.py), then F7's per-role pricing.
 {
   bash packages/sim/lab/final/report.sh "$L" "$SUITE"
   echo
   python3 -I packages/sim/lab/final/cost.py "$L"
+  if [ -e "$L/rh-final.json" ]; then
+    echo
+    echo "== realism heavy (F8, D1103): raw against final, single-shot"
+    mkdir -p "$L/rh"
+    for a in raw final; do ln -sf "../rh-$a.json" "$L/rh/$a.json"; ln -sfn "../rh-$a.tl" "$L/rh/$a.tl"; done
+    python3 -I packages/sim/lab/final/report.py "$L/rh" | sed -n '/== per arm/,/== hidden raised by label/p'
+  fi
 } | tee "$L/report.txt"
 log "go: done"

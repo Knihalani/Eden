@@ -173,7 +173,7 @@ import {
 import { parseConditions, parseVariants, type Condition } from "./pi-conditions";
 import { effective, PRESETS } from "./presets";
 import { costAsMade, MISS_EXIT, overBudget, overBudgetLine, ReplayModel, type Budgeted } from "./reader-disk";
-import { parseSuites } from "./suites";
+import { parseSuites, setRealism } from "./suites";
 import { readBundle, worldFromPilot } from "../pilot/world";
 import { QUESTION_CHARS, UptakeLog } from "./uptake";
 import { earlierPackets, userTurnBreakpoint } from "./packet-layout";
@@ -279,6 +279,11 @@ const TOOL_EXEC = opt("tool-exec", "parallel") as "parallel" | "sequential";
  * chooses no query, asks no second question and cannot decline to search; label the results so.
  */
 const AGENT_SIM = opt("agent-sim", "loop");
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's (twenty connectors, rule-like items that
+ * never apply), as the funnel and cold-start.ts take it; set before any world is built. `off` (default).
+ */
+setRealism(opt("realism", "off"));
 /**
  * `--split N` (final benchmark, lab only): one request a session only; each world's tasks run as N streams (round
  * robin), each with its own partner, instead of one. Through the queue transport a stream waits minutes a call, so a

@@ -11,6 +11,38 @@ FINAL=<commit> SUITE=heldout20 bash packages/sim/lab/final/go.sh                
 FINAL=HEAD SUITE=dev20 SEEDS=41 PREFIX=reh bash packages/sim/lab/final/go.sh      # a rehearsal
 ```
 
+Optional settings:
+
+| variable | what it sets |
+| --- | --- |
+| `FINAL_CONFIG` | the final arm's configuration: a preset name or a JSON object of overrides (F12's candidate) |
+| `MT_LIMIT`, `MT_SEEDS` | the multi-turn sample's tasks a world (default 20) and seeds (default the first) |
+| `REALISM=heavy` | adds step 2c, raw against final under `--realism heavy` (F8, D1103), after the main arms |
+| `SPLIT` | streams a world (default 8) |
+
+The steps are:
+
+1. the two trees;
+2. per-tree coverage on the world clock;
+3. the three single-shot arms (raw, before, final);
+4. the multi-turn sample (raw against final, the real Pi loop: the agent's own turns, tools and tokens for the cost
+   and speed targets);
+5. optionally the realism stage;
+6. the report.
+
+The report holds:
+
+- quality with paired intervals, label splits and the stage of each hidden fact;
+- a late-check adjusted row [EST]: P(check later than 1.5 s on the API) = 0.21 from F7's p50/p90; a late check fails
+  open to the unchecked head of the pool;
+- F7's per-role pricing;
+- quality, cost and speed side by side (`cost.py`):
+  - Eden and agent $ per 1,000 tasks;
+  - card backfill a world plus CL3's trickle a heavy user-month;
+  - connector fees by plan;
+  - push wait;
+  - connector calls.
+
 Outputs go to `.local/final/<PREFIX>/`:
 
 - `go.log`;
@@ -32,6 +64,11 @@ worker is a background Agent, given the prompt `worker.md` with its placeholders
 | `QDIR` | `.local/final/<PREFIX>/q` |
 | `NBATCH` | requests a batch |
 | `MPREFIX` | `claude-haiku` or `claude-sonnet` |
+
+Spawn workers as `general-purpose` agents, the narrowest type available. `worker.md` tells them, in so many words, to
+use only Read, Write and Bash for batch.ts, and never an mcp__ or session tool. F5 saw a worker call create_session,
+and in the rehearsal one called interrupt_session: during the final, a worker that interrupts a session would cost the
+run.
 
 Use `model: "haiku"` for workers on `claude-haiku` (the agent, the push check, cards and intent). Use
 `model: "sonnet"` for workers on `claude-sonnet` (the grader). A worker stops after 12 batches ("rotate") or about
