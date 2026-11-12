@@ -31,7 +31,7 @@ BEFORE=${BEFORE:-006b505c}
 L=$PWD/.local/final/$P
 mkdir -p "$L"
 export EDEN_LAB_QUEUE=${EDEN_LAB_QUEUE:-$L/q}
-mkdir -p "$EDEN_LAB_QUEUE"
+mkdir -p "$EDEN_LAB_QUEUE" "$L/b" # b/: the workers' batch files (worker.md)
 HARNESS=$(git rev-parse --short=9 HEAD)
 B9=$(git rev-parse --short=9 "$BEFORE^{commit}")
 F9=$(git rev-parse --short=9 "$FINAL^{commit}")
