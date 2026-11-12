@@ -203,35 +203,46 @@ budget keeps are those likely back within minutes. Pre-registered in 6e71bc8d be
 rate (1,000 users, 2 processes, `--seed 7`, restart after 8 minutes of load, the 2-core 12 GB cgroup) it passes if the
 share of users whose first request in the 5 minutes after the restart finds their state restored goes up, with 0
 errors and ask p99 during the re-sync no worse; else oldest first stays. A bursty variant (`--burst 0.5`: half the
-sessions followed within ~2 minutes, the same 12-minute mean) reported beside it, not decided on. The soak gained
-per-user seeded schedules that continue across the restart (`schedule`), `--burst`, and the restored-on-first-touch
-count; the "before" arm ran main ce0e41eb with the same soak.ts.
+sessions followed within ~2 minutes, the same 12-minute mean) is reported beside it, not decided on. The soak gained
+per-user seeded schedules that continue across the restart (`schedule`), `--burst`, a per-user ask coin, the
+restored-on-first-touch count and an error for a process lost at its flush; the "before" arm runs this branch's
+engine (main's), the "after" arm the same tree with 6e71bc8d's `ItemCache.flush`.
 
-| | oldest first (main) | most recent first |
+**The first pair was confounded (the review).** Its schedules started each user's first session uniformly in the
+load's first 12 minutes, so with the restart at minute 8, users with no session before it were sure to come back soon
+after (336 of the 558 who returned within 5 minutes), and they were the least recently used: oldest first wrote exactly
+them. It read 299 of 557 restored oldest first against 138 most recent first; that difference is the ramp's, not the
+order's. The schedules now start two hours before the load (the process in its steady state, 324d74ee) and the pair
+was run again; only the second pair decides.
+
+| Steady-state schedules (324d74ee) | oldest first (main) | most recent first |
 | --- | --- | --- |
 | **Deciding: 1,000 users, the 12 GB box** | | |
-| Users written at SIGTERM (4.5 s) | 541 (267 + 274) | 406 (186 + 220) |
-| First request in the 5 min after: restored | **299 of 557 (53.7%)** | **138 of 557 (24.8%)** |
-| Errors in the 5 min after | 0 of 4,639 | 0 of 4,639 |
-| Ask p50 / p99 in the 5 min after (ms) | 11.2 / 249 | 70.2 / 287 |
-| User message p99 in the 5 min after (ms) | 17.1 | 13.0 |
+| Users written at SIGTERM (4.5 s) | 626 (310 + 316) | 498 (241 + 257) |
+| Write cost in the soak (4.5 s / users written) | 14.5 ms a user | 18.1 ms a user |
+| First request in the 5 min after: restored | **193 of 317 (60.9%)** | **157 of 317 (49.5%)** |
+| Restored per user written | 30.8% | 31.5% |
+| Errors in the 5 min after | 0 of 2,508 | 0 of 2,515 |
+| Ask p50 / p99 in the 5 min after (ms) | 9.8 / 222 | 12.3 / 195 |
 | **Information: bursty, 400 users, 2 cores, 4.5 GiB** | | |
-| Users written at SIGTERM | 386 | 282 |
-| First request in the 5 min after: restored | 224 of 231 (97%) | 117 of 231 (51%) |
-| Ask p99 in the 5 min after (ms) | 195 | 266 |
+| Users written at SIGTERM | 400 (all, in 3.3-3.7 s) | 372 |
+| First request in the 5 min after: restored | 116 of 116 | 112 of 117 |
+| Ask p99 in the 5 min after (ms) | 18 | 134 |
 
-**Rejected on its rule; oldest first restored (the engine is unchanged from main).** Two reasons, both measured. A
-live user costs about 35 ms to write (it is frozen first: serialising its index and items) against about 11 ms for a
-warm one (its blob is ready: 5.1 ms of `persistHooks.save`, the sync snapshot and source-map rows as ~530 KB of JSON a
-heavy user, and 5.4 ms to encrypt and write ~2.7 MB; `users.bench.ts 40 3000 --prose --sources=20 --persist`, one
-run), so most recent first, which starts with the live users, writes a quarter fewer users in the same 4.5 s. And the
-users it keeps were not the ones back first: under the soak's memoryless sessions a recent session does not make an
-early next one likelier, and even with bursts the cheaper users the old order writes cover more of those who return.
-The lever the data points at is the count written (the cost a user), not the order: a cheaper write, or a longer
-grace (D1075). The write's cost has no cheap fix: the snapshot's size is its format (a new `PERSIST_FORMAT`).
+**Rejected on its rule; oldest first stays (the engine is unchanged from main).** In the steady state the order makes
+no difference to who comes back (30.8% against 31.5% of the users written were among the 317 back within 5 minutes:
+under memoryless sessions a recent session does not make an early next one likelier); what it changes is how many are
+written. Most recent first starts with the live users, which are frozen before they are written: 18.1 ms a user
+against 14.5 in the soak, so 498 users fit the 4.5 s against 626. (A bench of warm users alone, `users.bench.ts 40
+3000 --prose --sources=20 --persist`, one run: 11.3 ms a user, of which 5.1 ms is `persistHooks.save`, the sync
+snapshot and source-map rows as ~530 KB of JSON, and 5.4 ms to encrypt and write ~2.7 MB; live users there, frozen
+first: 34.8 ms.) With bursts the users back soon are the recent ones, and both orders kept nearly all of them; oldest
+first wrote every user in 3.3-3.7 s. The lever is the count written: a longer grace (D1075) or a cheaper write. The
+write's cost has no cheap fix: the snapshot's size is its format (a new `PERSIST_FORMAT`).
 
-**A process killed by its cgroup during the flush.** A first pair ran each arm in a 7 GiB cgroup of its own (two at
+**A process killed by its cgroup during the flush.** A first attempt ran each arm in a 7 GiB cgroup of its own (two at
 once on the 16 GB host); in both, the kernel's OOM killer took one process during the shutdown's flush (3.8 GB of
-anonymous memory, the cgroup at its 7 GiB): freezing users to write them takes memory. Those runs were discarded and
-the pair re-run one at a time in the 12 GB box, where nothing was killed. A box sized to the edge of its RAM can lose a
-process at its shutdown: one more reason sizing.py keeps a quarter of RAM free.
+anonymous memory, the cgroup at its 7 GiB): freezing users to write them takes memory. Those runs were discarded (the
+harness now counts a process lost at its flush as an error), and the pairs ran in the 12 GB box, where nothing was
+killed. A box sized to the edge of its RAM can lose a process at its shutdown: one more reason sizing.py keeps a
+quarter of RAM free.
