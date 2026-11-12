@@ -712,3 +712,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
 | D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |
 | D1154 | 2026-11-12 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | rejected |
+| D1270 | 2026-11-12 | Finding: a CPU-only band on the push check (a semantic rule index) cannot take the model off the request path at facts in the 90s | finding |
+| D1271 | 2026-11-12 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | rejected |
+| D1272 | 2026-11-12 | Finding: a learned no-model skip of the push check reaches about 20% of calls at 1% of facts lost, not the 40% asked | finding |
+| D1273 | 2026-11-12 | Trial `speculate`: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte for byte… | trial |
+| D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
