@@ -111,6 +111,7 @@ export const PARTS = {
     askNudgeDeep: false,
     pushCandidatesSettled: 0,
     pushCheck: false,
+    packetHeedsCheck: false,
     pushIndirect: false,
     pushGate: false,
   },
@@ -125,6 +126,7 @@ export const PARTS = {
     pushCandidatesSettled: 0,
     pushOpen: false,
     pushCheck: false,
+    packetHeedsCheck: false,
     // The reader's own push then starts only where the old default's did: no paid read of indirect starts (D828), nor
     // of the turn gate's (D1014).
     pushIndirect: false,
@@ -155,7 +157,7 @@ export const PARTS = {
    * names none sends no packet: silence on most requests with nothing to add (D500, D527, D823, promoted by D828).
    * Inert with no model key (no checker wired).
    */
-  check: { pushCheck: false },
+  check: { pushCheck: false, packetHeedsCheck: false },
   /**
    * A request phrased as a need, a plan, a wish or a question about acting starts the push as its imperative, and the
    * open shape refuses log lines and chatter (D820, promoted by D828).

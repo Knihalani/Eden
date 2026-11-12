@@ -315,6 +315,18 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   push makes the agent ask more: measure any change to when the push is silent live, with wall, not on the funnel
   (the funnel wires no checker unless `--check`). `checkKey` keeps the "c" its replies were recorded under. Deleted
   (D828): I3's reply, the anchored gate (arm N), the never-silent rule and the widened pool; code in 572d1569.
+- **What the check turned down is not pushed by a rule path, and the ask is left alone (`packetHeedsCheck`, D1450,
+  on in the default; docs/research/g2-decoys.md).** Seven in eight look-alikes handed go round the check: the ask's
+  answer and the rule paths' packets (D1455). `checkedOut` is the test (this request's settled check read the
+  item's current copy, named fewer than five, and said yes to neither it nor its rule); `allCheckedOut` adds that
+  the packet is a rule path's (`RULE_PATHS`) made in this request (`Cue.request`, kept per packet in `madeFor`).
+  While a push runs, `observeEvent` does not `handOut` its reply's packet: `observe` does, after the push's wait, or
+  traces the hold-back; a packet dropped after `handOut` would leave it "shown" (the next ask says "(shown above)")
+  and outstanding (a false "unused" against its source). Queued packets are dropped in `takePending`. Do not filter
+  the ask: by the check's verdict it cut look-alikes 63% and lost five raised facts in 36 targeted tasks (D1452); by
+  a `why` field on the check's rejections it could not tell a go-ahead from "already done" (D1453); by a card's
+  cleared state it lists a hold without the notice that lifts it (D1451, deleted; `pushStateFilter` has the same
+  exposure in the pool). A new rule path adds its reason to `RULE_PATHS` or the check does not cover it.
 - **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
   `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
   requests are on none. With `pushCandidates`, `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark

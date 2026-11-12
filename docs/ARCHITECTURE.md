@@ -458,6 +458,14 @@ fenced as data) as a second block cached per user, so the model can link a reque
 rule it names brings that rule's item into the packet after the pool's named items, and a pool item on the sheet is
 sent as a pointer to its rule. It adds no call: a pool with nothing constraint-like is still not checked. A user with
 more than 80 active rules gets no sheet (D1183).
+**Rule-path packets heed the check (`packetHeedsCheck`, G2, D1450, part `check`).** The no-model rule paths queue
+their packet before the check answers. A rule path's proactive packet (`fallback`, `grounded-*`, `sources`) whose
+every item the check of the request it was made in read and did not say yes to is not handed: the reply's own is
+handed out only after the push's wait (`observe` waits for it anyway), a queued one is dropped at the take. No call
+and no wait; a check that did not answer, or named its most, holds nothing back, the candidates' own packet is never
+touched, and an explicit ask lists as before: filtering the ask by the check's verdict lost facts the agent raises
+(D1452), and filtering it by a card's cleared state hides a lift notice beside the hold it lifts (D1451;
+docs/research/g2-decoys.md).
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
