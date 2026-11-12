@@ -7,5 +7,5 @@ for l in open(f'{xdir}/worlds.jsonl'):
     w=json.loads(l); hs=list(dict.fromkeys(w['hashes'])); M=I[[hidx[h] for h in hs]]
     for t in w['tasks']:
         s=M@Q[ridx[t['request']]]; o=np.argsort(-s)[:k]
-        out[f"{w['suite']}|{w['seed']}|{w['variant']}|{t['template']}"]={'top':[hs[i] for i in o],'planted':t['planted']}
+        out[f"{w['suite']}|{w['seed']}|{w['variant']}|{t['template']}"]={'top':[hs[i] for i in o],'score':[round(float(s[i]),4) for i in o],'planted':t['planted']}
 json.dump(out,open(f'{xdir}/extras-{name}-k{k}.json','w')); print(len(out))
