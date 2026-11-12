@@ -67,6 +67,8 @@ describe("cardsRequestsWide", () => {
   });
 
   test("needs cardsRequestsFix", () => {
-    expect(() => checkEngineConfig({ cardsRequestsFix: false, cardsRequestsWide: true }, { cards: true })).toThrow();
+    const deps = { deps: { cards: true } };
+    expect(() => checkEngineConfig({ cardsRequestsFix: false, cardsRequestsWide: true }, deps)).toThrow();
+    expect(() => checkEngineConfig({ cardsRequestsWide: true }, deps)).not.toThrow();
   });
 });
