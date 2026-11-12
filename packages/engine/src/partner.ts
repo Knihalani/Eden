@@ -2502,7 +2502,7 @@ export class ContextPartner {
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     const cardsOn = this.config.cards && this.deps.cards;
     // `pushStateFilter` (F2, trial): an item carded none because a constraint was lifted, met or superseded leaves the
-    // pool, and the next ranked item takes its seat. Cards are read for the whole ranking then (one map lookup an item).
+    // pool, and the next ranked item takes its seat. Cards are then read for the whole ranking (one lookup an item).
     const states =
       this.config.pushStateFilter && cardsOn && ranked.length > 0
         ? this.deps.cards!.cardsOf(
