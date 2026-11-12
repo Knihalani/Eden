@@ -50,11 +50,15 @@ async function setup(
   syncActivePollMs: number,
   n = 5,
   notifies = false,
-  extra: { syncActivePollBackoff?: boolean; syncActivePollPriced?: boolean; callPriced?: boolean } = {},
+  extra: { syncActivePollBackoff?: boolean; syncActivePollPriced?: boolean; callPriced?: boolean | "unmarked" } = {},
 ) {
   const clock = { now: T0 };
   const src = { a: new Notes("notes"), b: new Notes("notes") };
-  for (const s of [src.a, src.b]) Object.assign(s, { notifies, callPriced: extra.callPriced === true });
+  // First-party unless the test says otherwise; "unmarked" leaves the field absent (unknown, D1133).
+  for (const s of [src.a, src.b]) {
+    Object.assign(s, { notifies });
+    if (extra.callPriced !== "unmarked") Object.assign(s, { callPriced: extra.callPriced === true });
+  }
   for (const s of [src.a, src.b])
     for (let k = 0; k < n; k++) s.docs.set(`n${k}`, { text: `note ${k} unchanged`, at: T0 - (k + 1) * 60 * MIN });
   const cache = new ItemCache();
@@ -198,5 +202,20 @@ describe("syncActivePollMs (D1131)", () => {
     t.src.a.failOnceAt = "10";
     await t.tick(240);
     for (let k = 0; k < 30; k++) expect(t.held(A, `new${k}`)).toBe(`new note ${k}`);
+  });
+
+  test("fail safe (D1133): a source with no price information is not floor-polled; marked first-party it is", async () => {
+    const unmarked = await setup(10 * MIN, 5, false, { callPriced: "unmarked" });
+    const marked = await setup(10 * MIN, 5, false, { callPriced: false });
+    expect("callPriced" in unmarked.src.a).toBe(false);
+    const [u0, m0] = [unmarked.src.a.lists, marked.src.a.lists];
+    unmarked.src.a.docs.set("n2", { text: "note 2 MOVED to Friday", at: unmarked.clock.now });
+    marked.src.a.docs.set("n2", { text: "note 2 MOVED to Friday", at: marked.clock.now });
+    await unmarked.tick(30);
+    await marked.tick(30);
+    expect(unmarked.src.a.lists - u0).toBe(0);
+    expect(unmarked.held(A, "n2")).toBe("note 2 unchanged");
+    expect(marked.src.a.lists - m0).toBeGreaterThanOrEqual(1);
+    expect(marked.held(A, "n2")).toBe("note 2 MOVED to Friday");
   });
 });

@@ -551,19 +551,20 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
   outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
   keep iteration off per-item paths.
-- **The freshness floor (`syncActivePollMs` 2 h, `syncActivePollBackoff`; D1131, in the default, part `sync`).** While
-  a user is active, `Sync.step` runs a complete background poll (`poll`, to the boundary, `polled` and the rate
-  taught) of each warm source not polled for the floor, doubling a quiet source's interval up to 8 h
-  (`SourceSync.floorLevel`, reset in `store` by anything new from any read). Never a partial page: one page left its
-  items as a false boundary, and the next poll marked the source current short of what changed (the review). For the
-  same reason any poll that stops before it completes (call budget, a failed page, a lookup giving up) marks what it
-  stored as pushed (`s.pushed`), so the next poll reads past it; the next complete poll clears the marks (the second
-  review). A source that notifies is skipped, and one with `Source.callPriced` unless `syncActivePollPriced` (the
-  deployment's opt-in, one for every tenant); a wrapper around a `Source` copies `callPriced` as it copies
-  `notifies`. A due floor poll thaws a frozen user through `cache.ready` (D325), and the sources past half their
-  interval go in the same thaw. The request path's polls mostly
-  stop (its sources are current), so look-alikes reach the push's pool more often on train (funnel delivered 123 →
-  145 of 192, seed 41); F2's structural filters are the planned answer. `active-poll.test.ts`.
+- **The freshness floor (`syncActivePollMs` 2 h, `syncActivePollBackoff`; D1131, in the default, part `sync`).** While a
+  user is active, `Sync.step` runs a complete background poll (`poll`, to the boundary, `polled` and the rate taught) of
+  each warm source not polled for the floor, doubling a quiet source's interval up to 8 h (`SourceSync.floorLevel`,
+  reset in `store` by anything new from any read). Never a partial page: one page left its items as a false boundary,
+  and the next poll marked the source current short of what changed (the review). For the same reason any poll that
+  stops before it completes (call budget, a failed page, a lookup giving up) marks what it stored as pushed
+  (`s.pushed`), so the next poll reads past it; the next complete poll clears the marks (the second review). A source
+  that notifies is skipped, and so is any source not marked `Source.callPriced: false` (first-party or flat-rate; absent
+  counts as priced, D1133, fail safe) unless `syncActivePollPriced` (the deployment's opt-in, one for every tenant); the
+  server's presets and the lab's `SimSource` are marked false. A wrapper around a `Source` copies `callPriced` as it
+  copies `notifies`. A due floor poll thaws a frozen user through `cache.ready` (D325), and the sources past half their
+  interval go in the same thaw. The request path's polls mostly stop (its sources are current), so look-alikes reach the
+  push's pool more often on train (funnel delivered 123 → 145 of 192, seed 41); F2's structural filters are the planned
+  answer. `active-poll.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
   skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
   daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
@@ -574,6 +575,18 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
+- **Plans with a day (`pushDaySeats` 3, G1, D1400–D1402, in the default, part `days`; `days.ts`,
+  docs/research/g1-facts.md).** Three things, no model: `ask` re-reads `cue.time` from `datedText` over the request
+  and its gloss (so the conflict test and the day grounds of a push or an ask see those days too: not measured
+  apart); `observe` starts an opened push for a turn nothing else started that names a coming day or period
+  (`namesComingDay`; never when the gate reads chatter, never without a gate) and marks it `internal.byDay`;
+  `pushGate` seats up to three of the day's items (`ItemCache.dated`) after the first `pushCandidates`. Two rules
+  hold the guards and were measured (served by subagents): a seat is handed only when the check names it
+  (`candidatesOf`: with no answer, seats are not candidates, so a no-key server hands what it handed before), and a
+  `byDay` push is checked only when a seat is itself constraint-like (without that rule neutral concerns rose 3.1
+  points and checked pushes 26%: the plain arm, deleted). `ItemCache.dated` scans the user's items and reads each
+  text: keep it off the fast path and behind a request that names at most three days. The funnel wires no checker,
+  so it sees the starts and the pool (`--pool-dump`, the `cl` flags) but hands no seat.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

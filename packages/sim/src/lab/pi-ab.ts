@@ -117,6 +117,10 @@ import {
 import * as engineExports from "@eden/engine";
 // B19 (D1047): read so an older engine without it loads (packages/sim/lab/b19/compat.py).
 const CARD_FORM_REQUESTS = (engineExports as { CARD_FORM_REQUESTS?: number }).CARD_FORM_REQUESTS ?? 0;
+// The default's card prompt form (`cardForm`: the requests form, plus `cardsState`'s flag); an older engine has none.
+const DEFAULT_FORM =
+  (engineExports as { cardForm?: (c: typeof DEFAULT_CONFIG) => number }).cardForm?.(DEFAULT_CONFIG) ??
+  (DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0);
 import { SourceMap } from "@eden/graph";
 import { anthropicCost, anthropicPrice, anthropicWorstCase, Budget, priceFor, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -471,7 +475,7 @@ const COVERAGE = harnessCoverage({
   suites: SUITE_LIST,
   seeds: SEEDS,
   // The default's card prompt form (D1062): shipped coverage covers only the shards that hold its lines (D1063).
-  form: DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0,
+  form: DEFAULT_FORM,
 });
 const CARDS_FILE = COVERAGE.cards;
 /**
@@ -1603,7 +1607,17 @@ async function runWorld(
           }
           const at = performance.now();
           request = {
-            id: tl.begin("model.request", "model", "path", { turn: turns + 1 }),
+            // `inChars`/`lastChars` (F11): the request's size and its last message's (the rest is the cached
+            // prefix), so a run the queue transport answers (zero usage, D1101) can still be priced per arm ([EST],
+            // 4 characters a token).
+            id: tl.begin("model.request", "model", "path", {
+              turn: turns + 1,
+              inChars:
+                ((context as { systemPrompt?: string }).systemPrompt ?? "").length +
+                chars +
+                JSON.stringify((context as { tools?: unknown[] }).tools ?? []).length,
+              lastChars: JSON.stringify(context.messages.at(-1) ?? "").length,
+            }),
             at,
             first: null,
             in: 0,
@@ -1721,7 +1735,13 @@ async function runWorld(
           r.promptTokens += q.in;
           r.completionTokens += q.out;
           r.costUsd += cost;
-          tl.end(q.id, { in: q.in, out: q.out, cost, stop: e.message.stopReason });
+          tl.end(q.id, {
+            in: q.in,
+            out: q.out,
+            cost,
+            stop: e.message.stopReason,
+            outChars: JSON.stringify(e.message.content ?? "").length,
+          });
           record.requests.push({
             startMs: tl.at(q.at),
             firstTokenMs: q.first === null ? null : Math.round(q.first - q.at),
@@ -1895,7 +1915,7 @@ const intentCount =
         worlds.map((w) => simSources(w.world, CONNECTORS.profiles, 0, w.seed).flatMap((s) => s.listAll())),
         diskCards.requests,
         // Under the default's card prompt form (D1062, D1063), as the run's enrichment reads them.
-        (it) => diskCards.requestKey(it, DEFAULT_CONFIG.cardsRequestsFix ? CARD_FORM_REQUESTS : 0),
+        (it) => diskCards.requestKey(it, DEFAULT_FORM),
       )
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });

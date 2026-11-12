@@ -521,6 +521,11 @@ the sim world's, so `cardsLean`'s 7-day window skipped most of a world's items. 
 and, over 30 days, about $0.034 rather than $0.026 **[EST: the measured $ a call times the corrected count; the
 daily trickle is unchanged]**. Re-read this table when F8's re-recording lands.
 
+**The card's state (F2, D1193; docs/research/f2-card-state.md §5):** the default's card prompt is form 19, which asks
+each card for its state. About 140 more input tokens a call and about 9% more output over the same items (measured
+from the form-3 and form-19 replay files, answers served by subagents, so mixed with answer variation): about +7% a
+card call **[EST: the token deltas times Haiku's prices; no paid call was made]**. The number of calls is unchanged.
+
 Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
 is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
 −45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
@@ -777,15 +782,21 @@ Break-even against sending the sheet uncached is a hit rate of 0.22 on the 5-min
 | uncached (the shipped OpenRouter route without `anthropicCache`, D1196; cost.py's old pricing) | +0.00016 to +0.00023 | +0.15 to +0.22 |
 | every check reading it | about 0 | about 0 |
 
-Where each route stands today:
-- The lab's Anthropic transport (`anthropic.ts`) sends the 5-minute TTL unless `cacheTtl: "1h"` is set. On the
-  random spacing, that is the dearest row.
-- The shipped OpenRouter route sends no breakpoint unless `anthropicCache` is on (D1196, a trial with its probe
-  pending the owner). So production pays the uncached row today.
-- Whether OpenRouter passes a 1-hour `ttl` through is unverified (no probe today).
+Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`):
+- The lab's Anthropic transport (`anthropic.ts`) sends every breakpoint of a check with a sheet at 1 hour, and prices
+  its writes at 2x.
+- The shipped OpenRouter route does the same under `anthropicCache` (D1196). That is a trial whose probe is pending
+  the owner, so production pays the uncached row today. Whether OpenRouter passes the 1-hour `ttl` through is
+  unverified.
 
-So the sheet is worth sending with the 1-hour TTL as its own breakpoint, or not cached at all. A 5-minute breakpoint
-on a user whose requests are tens of minutes apart costs more than none. `packages/sim/lab/final/cost.py` prices the
+The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
+- 58.4 cards a user on train seeds 41–42 (p90 68, 759 worlds) and 59.4 on dev20 seeds 41–44 (p90 67, 896 worlds);
+- about 8,200 characters (2,050 tokens);
+- every world has more than 40.
+
+**At 8,200 characters on the 1-hour TTL with requests at random over active hours: +$0.000098 a check, +$0.09 per
+1,000 tasks [EST].** A cap of 40 would therefore turn the sheet off for every lab user under D1183's guard; the
+newest 40 instead is the slice D1183 found speaking on neutral requests. `packages/sim/lab/final/cost.py` prices the
 check's sheet block five ways when the queue's done files carry `size.sheet`: no sheet, uncached, all read, 1-hour
 mix, 5-minute mix.
 
@@ -873,17 +884,19 @@ default (eval 0.65 / 0.52 / 0), at $0.
   | Zapier MCP ($25.8) | $34-85 | $7.7-31 |
 
 - **The freshness floor (`syncActivePollMs` 2 h with `syncActivePollBackoff`, D1131, D1132; in the default).** While a
-  user is active, each synced source that sends no change notifications and is not billed per call (`callPriced`,
-  unless the deployment opts in with `syncActivePollPriced`) gets a complete background poll once per floor, its interval
+  user is active, each synced source that sends no change notifications and is marked first-party or flat-rate
+  (`callPriced: false`; the server's connector presets are) gets a complete background poll once per floor, its interval
   doubling to 8 h while polls find nothing new. Measured on dev20 (32 users of 13 sources, 10% notifying): 730
   background calls, about 0.2 a non-notifying source per active user-hour (1,554 without the backoff), and the request
   path's polls fell 1,252 to 890; total calls +29% over no floor. For 20 connectors, 18 without notifications, about 220
   active hours a month **[EST]**: about 800 floor calls a month, less the request path's polls it replaces, so about
-  1,100-2,000 calls a month with Eden against the 300-1,200 above: $0.33-0.60 on Composio, $11-20 on Arcade.dev,
-  $28-52 on Zapier MCP (on such per-call plans the floor is off unless the deployment opts in, so they stay at the figures
-  above). On first-party APIs it costs quota, not money: floor polls are background reads, under the tenant's pace and
-  behind first pages and a lookup's own polls (docs/research/s1-scale-1m.md §3, P1); a Gmail-scale tenant uses
-  notifications, which the floor skips.
+  1,100-2,000 calls a month with Eden against the 300-1,200 above: $0.33-0.60 on Composio, $11-20 on Arcade.dev, $28-52
+  on Zapier MCP, if they were polled. They are not: Composio, Unified.to, Arcade.dev, Pipedream Connect, Zapier MCP and
+  any per-call transport count as priced, and so does a source with no `callPriced` mark (D1133, fail safe), so on such
+  plans the floor is off unless the deployment opts in (`syncActivePollPriced`) and the figures above stand. On
+  first-party APIs it costs quota, not money: floor polls are background reads, under the tenant's pace and behind first
+  pages and a lookup's own polls (docs/research/s1-scale-1m.md §3, P1); a Gmail-scale tenant uses notifications, which
+  the floor skips.
 
 - **The agent's tokens.** Measured per 1,000 tasks on the lab's cached Pi agent (a3-cost-speed.md, p2-push-check.md):
   a Haiku 5.5 agent's own bill is about $0.18-0.25 per 1,000 requests, so $0.27-0.37 per heavy user-month; Eden's
@@ -1033,6 +1046,17 @@ about $0.00040 (prompt v7) each; the rate is that of polls that find something n
 the static sim worlds do not show. In the stub screen (`funnel --preset NEWB` vs `NEWBB --suite train1,train2 --seeds
 41 -- --reader stub --time 1`, 2026-11-03) the reader was asked 119 times under NEWB and 117 under NEWBB; connectors
 received 430 and 424 calls.
+
+## Plans with a day (`pushDaySeats` 3, G1, in the default since D1402)
+
+No new model call of its own: it adds push checks, on requests that started none. Served by subagents, dev20 seeds
+41–42, single-shot (docs/research/g1-facts.md): tasks whose push was checked 661 → 706 of 960 (+7%; on neutral
+requests 213 → 214 of 320, on hidden 223 → 257, on control 225 → 235). At $0.00023 a check with the rule sheet
+[EST, F5's figure] that is about +$0.011 per 1,000 requests on dev20's mix and about +$0.001 per 1,000 on requests
+with nothing to add; at 0.8 s a check [EST, F7] about +40 ms a request on the mix. Not measured through the API. The
+seats add up to three items to a check that has room (at most `pushCheckItems` 15 in all). CPU: `ItemCache.dated`
+reads each of the user's items once per push that names a day, p50 14.5 ms and p99 21 ms at 1,593 items on an
+idle machine (`packages/sim/lab/g1/dated-bench.ts`), off the fast path.
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.

@@ -37,7 +37,10 @@ export interface McpSourceOptions {
   description: string;
   /** The integrator forwards this source's change notifications (`Source.notifies`; the engine's `syncPush`). */
   notifies?: boolean;
-  /** Each call is billed by the connector's transport (`Source.callPriced`; the engine's freshness floor skips it). */
+  /**
+   * `Source.callPriced`: true billed per call, false first-party or flat-rate, absent unknown (counted as priced, so
+   * the engine's freshness floor skips it, D1133).
+   */
   callPriced?: boolean;
   /** Builds the transport for this user's connection (stdio for local servers, streamable HTTP for remote ones). */
   transport: () => Transport;
@@ -117,7 +120,7 @@ export class McpSource implements Source {
   /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
   readonly list?: Source["list"];
   readonly notifies: boolean;
-  readonly callPriced: boolean;
+  readonly callPriced: boolean | undefined;
   /** A get tool is wired (`fetchTool`): without one `fetch` answers null to every ref (D356). */
   readonly fetchesById: boolean;
 
@@ -125,7 +128,7 @@ export class McpSource implements Source {
     this.id = options.id;
     this.description = options.description;
     this.notifies = options.notifies === true;
-    this.callPriced = options.callPriced === true;
+    this.callPriced = options.callPriced;
     this.fetchesById = options.fetchTool !== undefined;
     if (options.listTool) this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
   }

@@ -39,6 +39,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   syncKick: true,
   // D405, D406 (B1): the push answers a cut copy from the index and searches it live behind; D430, D431 (C4): the ask.
   pushCutBehind: true,
+  pushDaySeats: 3,
   askBehind: true,
   routeLocalHits: true,
   // D320–D323 (A13 scale): cards, the cap and routing for a user with many sources.
@@ -50,6 +51,9 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   // D521, D522 (N4): a new user's backfill is read by up to four card calls at once.
   cardsLanes: 4,
   cardsRequestsFix: true,
+  // D1193 (F2): the card says whether its constraint still holds; the push's pool leaves out what cleared.
+  cardsState: true,
+  pushStateFilter: true,
   // D328, D370 (A24): background pages stored one per loop turn; the card drain gathers them.
   syncIngestTurns: true,
   // D356 (A21): sources the user does not use are swept weekly; their unswept copies are re-read before delivery.
@@ -140,11 +144,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(79);
+    expect(differ.length).toBe(82);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(79);
+    expect(partKeys.size).toBe(82);
   });
 });
 

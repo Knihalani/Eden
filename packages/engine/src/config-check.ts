@@ -41,6 +41,8 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cardsLanes: "cards",
   cardsSourceAware: "cards",
   cardsRequestsFix: "cards",
+  cardsState: "cards",
+  pushStateFilter: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
@@ -99,6 +101,9 @@ const READER: Key[] = ["askReader"];
 const PUSH: Key[] = ["askReader", "readerPush"];
 /** Settings that act only while a number setting is above 0 (its off value), checked as `PARENTS` are. */
 export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
+  // D1252: they shape what `pushLookup` hands, so they act only with it above 0.
+  pushLookupAny: "pushLookup",
+  pushLookupQuiet: "pushLookup",
   syncActivePollBackoff: "syncActivePollMs",
   syncActivePollPriced: "syncActivePollMs",
 };
@@ -152,6 +157,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   cardsLanes: ["cards"],
   cardsSourceAware: ["cards", "sync"],
   cardsRequestsFix: ["cards", "intent"],
+  cardsState: ["cards"],
+  pushStateFilter: ["cards", "cardsState"],
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
@@ -177,6 +184,10 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   planConflict: [...PUSH, "sync"],
   askNudge: PUSH,
   askNudgeDeep: [...PUSH, "askNudge"],
+  pushLookup: [...PUSH, "pushCheck"],
+  // Their other parent is `pushLookup` > 0, a number this table cannot name: checked after the table (below).
+  pushLookupAny: [...PUSH, "pushCheck"],
+  pushLookupQuiet: [...PUSH, "pushCheck"],
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
   pushIndirect: PUSH,
@@ -186,7 +197,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
   pushDaySeats: [...PUSH, "pushCheck"],
-  pushDayStartSeated: [...PUSH, "pushCheck"],
   pushCheckSheet: [...PUSH, "pushCheck", "cards"],
   pushCheckSheetRefs: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
@@ -254,6 +264,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   intentSeats: COUNT,
   askReaderPool: COUNT,
   pushCandidates: { integer: true, max: 40 },
+  pushLookup: { integer: true, max: 40 },
   pushCandidatesSettled: { integer: true, max: 40 },
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },

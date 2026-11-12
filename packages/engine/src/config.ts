@@ -533,6 +533,18 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
+   * On in the default (F2, D1193; docs/research/f2-card-state.md). With `cards`: the card prompt asks each card for
+   * its `state` (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call,
+   * and keeps a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
+   */
+  cardsState: boolean;
+  /**
+   * On in the default (F2, D1193). With `cards` and `cardsState`: the push's pool (`pushGate`) leaves out an item
+   * carded none whose state says a constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state,
+   * or a card of another kind, stays.
+   */
+  pushStateFilter: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -694,6 +706,30 @@ export interface EngineConfig {
    */
   askNudgeDeep: boolean;
   /**
+   * D1252 (F11, trial, 0 = off): with `pushCheck`, a push the check left silent (it answered and named nothing) hands
+   * up to this many items of its own pool (no bulk mail, pool order) that name one of the request's anchors (a person
+   * or thing it names, or its day: `settle.ts`'s `anchored`), under `LOOKUP_LEAD`: for reference, a check found none
+   * that changes the request. No new connector or model call. D1250 measured the agent searching its connectors on 28
+   * of 32 silent turns and on 3 of 40 after a packet: this gives a silent turn the records the agent would look up.
+   * D300 (answer-ahead, rejected) was the same records beside every candidates packet, before the check made silence
+   * common.
+   */
+  pushLookup: number;
+  /**
+   * D1252's second arm (F11, trial, off; needs `pushLookup`): when no record in the silent push's pool names one of the
+   * request's anchors, the pool's first `pushLookup` items (no bulk mail) go out under the same lead. Round 3 of
+   * D1252: the lookup packet stopped the agent's search on 14 of 15 silent turns it reached, and the 17 it did not
+   * reach (nothing anchored in the pool) all searched.
+   */
+  pushLookupAny: boolean;
+  /**
+   * D1252's third arm (F11, trial, off; needs `pushLookup`): the lookup packet's lead also says the records are
+   * background for the request's details, not a reason to warn the user (`LOOKUP_QUIET`), since the check already
+   * found none that changes the request. For the hedges the reference records drew in round 4 ("check that the
+   * discount is approved, I found no record of it").
+   */
+  pushLookupQuiet: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -720,21 +756,19 @@ export interface EngineConfig {
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
-   * `pushDaySeats` (G1, D1400, trial, 0 = off): up to this many items on a day the request names take seats in the
-   * push's pool right after the first `pushCandidates`, where the push check reads them: events starting that day,
-   * items whose text spans it ("26 Oct – 6 Nov", "until 2 November") and items that write the date, bulk mail out.
-   * The request's days are read past `timeWindow` (`days.ts`): a bare day of the month ("on the 20th", "Monday the
-   * 9th") and, through the glossary, a weekday in another language. A seat is handed only when the check names it:
-   * with no check the push hands what it handed before. Windows of more than three days get no seats.
+   * `pushDaySeats` (G1, D1400–D1402; 3 in the default, part `days`; 0 = off): a plan with a day is an action on that
+   * day, with no model. (1) The request's days are read past `timeWindow` (`days.ts`): a bare day of the month ("on
+   * the 20th", "Monday the 9th") and, through the glossary, a weekday in another language. (2) A turn that starts no
+   * push, that the turn gate does not read as chatter, and that names a coming day or period starts an opened one;
+   * such a push is checked, and hands anything, only when one of its day seats is itself constraint-like. (3) Up to
+   * this many items on a day the request names take seats in the push's pool right after the first `pushCandidates`,
+   * where the push check reads them: events starting that day, items whose text spans it ("26 Oct – 6 Nov", "until
+   * 2 November") and items that write the date, bulk mail out; windows of more than three days get none. A seat is
+   * handed only when the check names it: with no check the push hands what it handed before. Served by subagents,
+   * dev20 seeds 41–42, single-shot: hidden raised +2.5 points (+0.3..+5.0), look-alikes handed and neutral concerns
+   * within their intervals, checked pushes +7% (docs/research/g1-facts.md).
    */
   pushDaySeats: number;
-  /**
-   * With `pushDaySeats` (G1, D1401, trial, off): a push that only the request's day started (no rule, or the gate's
-   * veto) is checked, and hands anything, only when one of its day seats is itself constraint-like (a card or
-   * constraint wording). At $0 on dev20 it keeps 55 of the 79 facts the starts and seats bring into a checked pool
-   * while check calls on neutral requests rise 2% instead of 27%.
-   */
-  pushDayStartSeated: boolean;
   /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
@@ -794,7 +828,8 @@ export interface EngineConfig {
    * its learned rate says. A quiet source is otherwise trusted for up to `syncMaxStaleMs` (6 h), so a silent edit
    * there went out as the pre-edit copy (D1126). No request waits for it, and the request path's own polls mostly
    * stop (its sources are current); its price is connector calls per active user-hour (COST-MODEL §Hosting (b)). A
-   * source that notifies (`syncPush`) is never polled by it, nor one billed per call unless `syncActivePollPriced`.
+   * source that notifies (`syncPush`) is never polled by it, nor one not marked first-party or flat-rate
+   * (`Source.callPriced` false; absent counts as priced, D1133) unless `syncActivePollPriced`.
    */
   syncActivePollMs: number;
   /**
@@ -805,9 +840,9 @@ export interface EngineConfig {
    */
   syncActivePollBackoff: boolean;
   /**
-   * D1132, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one for
-   * every tenant the server runs) to floor polls of sources whose calls are billed by the connector's transport
-   * (`Source.callPriced`). Off: those sources keep their learned rate, as without the floor.
+   * D1132, D1133, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one
+   * for every tenant the server runs) to floor polls of sources not marked first-party or flat-rate
+   * (`Source.callPriced` true, or absent: unknown counts as priced). Off: those sources keep their learned rate.
    */
   syncActivePollPriced: boolean;
 }
@@ -930,6 +965,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
+  cardsState: true,
+  pushStateFilter: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
@@ -958,13 +995,15 @@ export const DEFAULT_CONFIG: EngineConfig = {
   planConflict: true,
   askNudge: true,
   askNudgeDeep: true,
+  pushLookup: 0,
+  pushLookupAny: false,
+  pushLookupQuiet: false,
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushDaySeats: 0,
-  pushDayStartSeated: false,
+  pushDaySeats: 3,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,

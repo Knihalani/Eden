@@ -66,7 +66,15 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import {
+  cardKey,
+  cardVerdict,
+  CLEARED_STATES,
+  requestActions,
+  STANDING_KINDS,
+  type Card,
+  type CardEnricher,
+} from "./cards";
 import { glossOf, warmGlossary } from "./gloss";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
@@ -132,6 +140,10 @@ import {
   ASK_NUDGE,
   CANDIDATES_LEAD,
   citationsOf,
+  LOOKUP_HEAD_LEAD,
+  LOOKUP_LEAD,
+  LOOKUP_QUIET,
+  LOOKUP_USE,
   PLAN_LEAD,
   renderAnswer,
   renderPacket,
@@ -266,6 +278,8 @@ export interface PushPoolReport {
    * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
+  /** `pushLookup` (D1252): `handed` is reference records naming the request's anchors, or (`head`) the pool's head. */
+  lookup?: "named" | "head";
   /** `pushCheckSheet` (F5): the item ids of the rule sheet the check read, in its order (ids only, for the lab). */
   sheet?: string[];
 }
@@ -723,6 +737,8 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
+      // `cardsState` (F2, D1193): each card says whether its constraint still holds.
+      if (this.config.cardsState) cards.askState();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -2156,7 +2172,9 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                candidates.lookup
+                  ? this.lookupFrame(candidates.lookup)
+                  : this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2522,43 +2540,78 @@ export class ContextPartner {
    * push was started by the request's day alone (`pushDaySeats`).
    */
   private pushGate(s: Session, cue: Cue, ranked: readonly Scored[], byDay = false): PushGate {
-    const pool: Scored[] = [];
-    const seen = new Set<string>();
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
-    for (const x of ranked) {
-      if (pool.length >= cap) break;
-      if (seen.has(x.item.id)) continue;
-      seen.add(x.item.id);
-      pool.push(x);
-    }
-    // `pushDaySeats` (G1, D1400): items on a day the request names, whatever their words, seated after the first
-    // `pushCandidates` so the check reads them. They are handed only when the check names them (`candidatesOf`): a push
-    // with no check hands the pool's other items, as before.
-    // Seats go to the best of the day's items outside the first `pushCandidates`, those the pool's tail already
-    // holds included: they move up rather than being pushed past the cap by the others.
+    const before = cue.arrived ?? this.now();
+    const { pool, cards } = this.pushPool(s, ranked, before);
+    // `pushDaySeats` (G1, D1400, D1402): items on a day the request names, whatever their words, seated after the
+    // first `pushCandidates` so the check reads them. They are handed only when the check names them
+    // (`candidatesOf`): a push with no check hands the pool's other items, as before. Seats go to the best of the
+    // day's items outside the first `pushCandidates`, those the pool's tail already holds included: they move up
+    // rather than being pushed past the cap by the others.
     const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
     const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
     const seats = new Set(seated.map((x) => x.item.id));
     if (seated.length > 0) {
+      const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
       const rest = pool.slice(head).filter((x) => !seats.has(x.item.id));
       pool.splice(head, pool.length - head, ...seated, ...rest);
       pool.length = Math.min(pool.length, cap);
+      // The cards of the items seated from outside the pool (one lookup an item, as the pool's own).
+      const fresh = seated.filter((x) => !cards.has(x.item.id)).map((x) => x.item.id);
+      const enricher = this.config.cards ? this.deps.cards : undefined;
+      if (enricher && fresh.length > 0)
+        for (const [id, c] of enricher.cardsOf(s.scope, fresh, before)) cards.set(id, c);
     }
-    const cards =
-      pool.length > 0 && this.config.cards && this.deps.cards
-        ? this.deps.cards.cardsOf(
-            s.scope,
-            pool.map((x) => x.item.id),
-            cue.arrived ?? this.now(),
-          )
-        : new Map<string, Card>();
     const all = pool.map((x) => this.constraintLike(x, cards));
-    // `pushDayStartSeated`: a push only the day started is checked (and hands anything) only when one of its seats is
-    // itself constraint-like: the day's own evidence, not a pool the request's words happened to fill.
-    const quiet =
-      byDay && this.config.pushDayStartSeated && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
+    // A push only the day started (`namesComingDay`) is checked, and hands anything, only when one of its seats is
+    // itself constraint-like: the day's own evidence, not a pool the request's words happened to fill (D1401).
+    const quiet = byDay && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
     const like = quiet ? all.map(() => false) : all;
     return seats.size > 0 ? { pool, like, seats } : { pool, like };
+  }
+
+  /**
+   * The push's pool: the ranking's first `askReaderPool` distinct items, and their cards. `pushGate` and the plan
+   * alerts (`checkPlans`) share it. `pushStateFilter` (F2, trial): an item carded none because a constraint was
+   * lifted, met or superseded leaves the pool, and the next ranked item takes its seat; cards are then read for the
+   * whole ranking (one lookup an item).
+   */
+  private pushPool(
+    s: Session,
+    ranked: readonly Scored[],
+    before: number,
+  ): { pool: Scored[]; cards: Map<string, Card> } {
+    const pool: Scored[] = [];
+    const seen = new Set<string>();
+    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    const enricher = this.config.cards ? this.deps.cards : undefined;
+    const states =
+      enricher && this.config.pushStateFilter && ranked.length > 0
+        ? enricher.cardsOf(
+            s.scope,
+            ranked.map((x) => x.item.id),
+            before,
+          )
+        : null;
+    for (const x of ranked) {
+      if (pool.length >= cap) break;
+      if (seen.has(x.item.id)) continue;
+      seen.add(x.item.id);
+      // Only a none card: an item that announces the new state of affairs (a retimed flight, a claim already paid) is
+      // carded already-done or status-change and is the fact in force, though it says an earlier one was superseded.
+      const card = states?.get(x.item.id);
+      if (card?.kind === "none" && card.state && CLEARED_STATES.has(card.state)) continue;
+      pool.push(x);
+    }
+    const cards =
+      states ??
+      (enricher && pool.length > 0
+        ? enricher.cardsOf(
+            s.scope,
+            pool.map((x) => x.item.id),
+            before,
+          )
+        : new Map<string, Card>());
+    return { pool, cards };
   }
 
   /**
@@ -2755,7 +2808,7 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
@@ -2772,11 +2825,31 @@ export class ContextPartner {
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
+    // `pushLookup` (D1252): the check answered and named nothing (a non-null empty answer: this pass's call, a reused
+    // or a late one read by `readerPushBehind`'s second pass; a failed, late-unread or unwired check is null), so the
+    // push would be silent; the pool's records that name the request's anchors go out for reference instead, or with
+    // `pushLookupAny` the pool's head when none does (`lookupHead`: its lead must not claim they name the request).
+    let lookup = false;
+    let lookupHead = false;
+    // Only on the session's first request: later ones carry the session's own context, and there the records saved
+    // the agent almost no search but stayed in its transcript (D1252's days run: agent $ +0.015/1k, −0.08 calls).
+    if (yes && yes.size === 0 && this.config.pushLookup > 0 && s.requests <= 1) {
+      const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      // Only plain records: a constraint-like item here is one the check read and judged not to change the request
+      // (a look-alike), and handed as reference the agent raised it anyway (round 5: the ISA look-alike on 4 of 4
+      // control seeds). What the agent looks up on a silent turn is the meeting, the contact, the thread.
+      const flagged = new Set(reported.filter((x, i) => like[i]).map((x) => x.item.id));
+      const plain = open.filter((x) => !flagged.has(x.item.id));
+      const named = plain.filter((x) => anchored(x.item, a));
+      lookupHead = named.length === 0 && this.config.pushLookupAny;
+      items = (lookupHead ? plain : named).slice(0, this.config.pushLookup);
+      lookup = items.length > 0;
+    }
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
-    if ((this.config.askNudge || fewer > 0) && items.length > 0) {
+    if ((this.config.askNudge || fewer > 0) && items.length > 0 && !lookup) {
       anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
@@ -2811,8 +2884,15 @@ export class ContextPartner {
             ...(check?.sheet ? { sheet: [...check.sheet] } : {}),
           }
         : {}),
+      // `pushLookup` (D1252): `handed` is reference records, not checked candidates.
+      ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    return {
+      items,
+      pool,
+      ...(unsettled ? { unsettled } : {}),
+      ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
+    };
   }
 
   /** `pushCheckSheet` (F5): the cached items a check's named rules stand for, not already in the pool, no bulk mail. */
@@ -2906,30 +2986,15 @@ export class ContextPartner {
     waiting.clear();
     for (const id of later) waiting.add(id);
     if (fresh.size === 0) return;
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     const said = new Set<string>();
     for (const cue of s.acted) {
-      const pool: Scored[] = [];
-      const seen = new Set<string>();
-      for (const x of this.rank(s, cue, { ignoreLedger: true })) {
-        if (pool.length >= cap) break;
-        if (seen.has(x.item.id)) continue;
-        seen.add(x.item.id);
-        pool.push(x);
-      }
+      // The push's own pool (`pushPool`, with `pushStateFilter`): a clearance that arrives late is no alert either.
+      const { pool, cards } = this.pushPool(s, this.rank(s, cue, { ignoreLedger: true }), now);
       // The candidates' rule (`candidatesOf`): the pool holds something that could constrain the request, and the new
       // item is among its first `pushCandidates` (bulk mail out), as it would have been had it been there then.
       const top = pool.filter((x) => !bulkMail(x.item)).slice(0, Math.max(1, this.config.pushCandidates));
       const hits = top.filter((x) => fresh.has(x.item.id) && !said.has(x.item.id));
       if (hits.length === 0) continue;
-      const cards =
-        this.config.cards && this.deps.cards
-          ? this.deps.cards.cardsOf(
-              s.scope,
-              pool.map((x) => x.item.id),
-              now,
-            )
-          : new Map<string, Card>();
       if (!pool.some((x) => this.constraintLike(x, cards))) continue;
       const bearing = hits;
       for (const x of bearing) {
@@ -2959,6 +3024,16 @@ export class ContextPartner {
         itemIds: packet.citations.map((c) => c.itemId),
       });
     }
+  }
+
+  /** `pushLookup` (D1252): the records a silent push hands, framed as reference and cut as candidates are. */
+  private lookupFrame(kind: "named" | "head"): PacketFrame {
+    const lead = kind === "head" ? LOOKUP_HEAD_LEAD : LOOKUP_LEAD;
+    // `pushLookupQuiet`: the last sentence says the records are background, not a reason to warn.
+    return {
+      ...this.candidateFrame(),
+      lead: this.config.pushLookupQuiet ? lead.replace(LOOKUP_USE, LOOKUP_QUIET) : lead,
+    };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */

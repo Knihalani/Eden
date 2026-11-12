@@ -106,8 +106,15 @@ const BETWEEN = new RegExp(
 const UNTIL = new RegExp(
   String.raw`\b(?:until|till|through|thru|up to|to)\s+(?:at least\s+)?(?:and including\s+)?(?:${WEEKDAY}\.?,?\s+)?(?:the\s+)?$`,
 );
-/** What every span `coversDay` reads holds: a dash or arrow, or a word that opens or joins a range. */
-const SPAN_HINT = /[–—→-]|\b(?:to|until|till|through|thru)\b/;
+/**
+ * What every span `coversDay` reads holds: a month followed by a range's connector ("26 Oct – 6 Nov", "30 Oct to
+ * Fri 6 Nov"), or an open range's lead followed by a day ("until Monday 2 November"). Most dated texts (a mail's
+ * `Date:` line, an event's start) hold neither and end here, before any date is parsed.
+ */
+const SPAN_HINT = new RegExp(
+  String.raw`${MONTH}(?:,?\s+\d{4})?\s*(?:[–—→-]|(?:to|until|till|through|thru)\b)` +
+    String.raw`|\b(?:until|till|through|thru|up to|to)\s+(?:at least\s+)?(?:and including\s+)?(?:${WEEKDAY}\.?,?\s+)?(?:the\s+)?\d{1,2}\b`,
+);
 /** The longest span read as one: a term, a course of medicine, a closure. Longer ones name two separate dates. */
 const MAX_SPAN_DAYS = 62;
 
@@ -139,7 +146,6 @@ function ahead(a: number, b: number): number {
 export function coversDay(text: string, days: ReadonlySet<string>, updatedAt?: number): boolean {
   if (days.size === 0 || !/\d/.test(text)) return false;
   const lower = text.slice(0, 4000).toLowerCase();
-  // A range needs a connector or an "until": most dated texts end here, before any date is parsed.
   if (!SPAN_HINT.test(lower)) return false;
   const dates = datesOf(lower);
   if (dates.length === 0) return false;

@@ -94,10 +94,9 @@ with no time ("I'll send Jamie £95 for the cabin").
 ### Cost of the scan
 
 `ItemCache.dated` reads each of the user's items' text once per push that names a day (`packages/sim/lab/g1/
-dated-bench.ts`, one dev20 world, 1,593 items): p50 16 ms, p99 27 ms on a machine busy with the live run [to be
-re-measured idle]. Decoding the stored text is about 7 ms of it, the range test 5 ms. It runs on the push's path
-(behind the user's message), never on the fast path, and a user's items are capped (`maxItemsPerUser`,
-`maxSyncedPerUser`).
+dated-bench.ts`, one dev20 world, 1,593 items, idle machine): p50 14.5 ms, p99 21 ms, the same whether or not the
+day has items. Decoding the stored text is about half of it. It runs on the push's path (behind the user's
+message), never on the fast path, and a user's items are capped (`maxItemsPerUser`, `maxSyncedPerUser`).
 
 ## 3. The pre-registered pair (served by subagents, single-shot)
 
@@ -136,7 +135,8 @@ base seats strict --seeds 41,42`. Differences are paired by task, 95% intervals 
 | cost of the extra checks [EST, $0.00023 a check, F5's sheet price] | — | about +$0.04 per 1,000 | about +$0.01 per 1,000 |
 | wait of the extra checks [EST, 0.8 s a check, F7] | — | about +140 ms a request | about +40 ms a request |
 
-**Verdict: both arms fail the rule; neither is promoted and nothing goes to the final's candidate.**
+**Verdict: both arms fail G1's rule. The integrator promoted the strict arm anyway, as a strict gain (D1402); the
+plain arm is deleted.**
 
 - The headline (55%) is not reached: 53.1% and 51.6%.
 - The ship rule (+5 points with decoys and neutral not up) is not met. The plain arm reads +4.1 points and raises
@@ -152,22 +152,52 @@ that start no push are requests where the single-shot agent asks, and the ask's 
 +3.1 points of facts newly reached the agent, and +4.1 were newly raised. On the fixed harness (D1155) the ask path
 carries more than the $0 funnel's pool counts show, so a lever that starts more pushes buys less than its pool gain.
 
-## 4. What is kept, and what is open
+## 4. The decision (D1402), and what is open
 
-Deleted with their code and tests (D1402; the code is in commit f0a6fd4b): `pushDaySeats`, `pushDayStartSeated`,
-`days.ts`, `ItemCache.dated`, the seats in `pushGate`, the day-plan start.
+By D1401's own rule both arms would have been deleted. The integrator (the parent session; D814: where a trade
+remains, the session recommends and the parent decides that day) decided otherwise for the strict arm: +2.5 points
+of hidden raised (+0.3..+5.0) in the owner's main target, with look-alikes handed (+0.6, −0.6..+1.9), control
+concerns (8 → 7) and neutral concerns (+1.2, −0.6..+3.1) inside their intervals, about +$0.01 per 1,000 requests
+and +40 ms a request [EST]. It is recorded as **below G1's ship rule of +5; promoted by the integrator as a strict
+gain**. `pushDaySeats` is 3 in `DEFAULT_CONFIG` (part `days`), with the strict rule as its only behaviour
+(`pushDayStartSeated` is not a key). The plain arm's behaviour (a day-started push checked on any constraint-like
+pool) is deleted; its code is in commit f0a6fd4b.
 
-Kept:
+What the promotion rests on, and what it does not:
 
-- the finding that 183 of 640 dev20 hidden requests start no push (§1), and `packages/sim/lab/g1/start.ts`, which
-  reads any suite's requests as `observe` does;
-- `packages/sim/lab/g1/labels.ts` (pool misses by the suites' own labels), `go.sh` (two Eden arms on one tree, one
-  process an arm a seed: four seeds in one process held 8.7 GB) and `report.py` (any arms, paired);
-- the date-reading gaps (§1): "the 20th", "Monday the 9th", weekdays in other languages. They also feed the
-  conflict test and the day grounds, where they were not measured: a fix there is its own trial.
+- two seeds of dev20 (41, 42), single-shot, served by subagents (D1140: more diligent than the API's Haiku);
+- the pair ran on tree f0a6fd4b, before F2's card state (D1193) reached main; the promoted tree was not run through
+  the queue (the account's subagent capacity), only re-screened at $0 (§5);
+- neutral tasks with a packet rose (99 → 106, +2.2, interval above 0), though neutral concerns did not clearly;
+- cost and wait are estimates from check counts, not measurements;
+- not measured: the real Pi loop, a user's days, heldout suites, the day reading's effect on the conflict test and
+  the day grounds outside the push.
+
+Kept besides: `packages/sim/lab/g1/start.ts` (any suite's requests read as `observe` reads them), `labels.ts` (pool
+misses by the suites' own labels), `go.sh` (two Eden arms on one tree, one process an arm a seed: four seeds in one
+process held 8.7 GB), `report.py` (any arms, paired), `dated-bench.ts`.
 
 Open:
 
-- The neutral concerns the plain arm added came with the packets (99 → 116 neutral tasks with one). A day-started
-  push that hands only to an agent that then asks nothing more was not separated from the ask path here.
+- 121 of 320 hidden facts never reach the agent in the default arm (66 with a push that does not pool them, 50 with
+  no push, 5 dropped by the check); with the plain arm the no-push group fell to 19 but the facts moved to "pushed,
+  not in the pool": starting a push does not retrieve a fact that shares neither words nor a day with the request.
+  That core is F13's world-knowledge class (D1302).
 - A request in a language whose day words the glossary lacks still starts no push (17 of 160 templates).
+- The scan (`ItemCache.dated`) reads every item's text; a per-user index by day would make it constant.
+
+## 5. The promoted tree at $0 (after merging main with D1193)
+
+`bun run funnel --suite dev20 --seeds 41,42,43,44 [--set '{"pushDaySeats":0}'] -- --neutral --pool-dump P` (no check
+wired), the part out against the default:
+
+| dev20, seeds 41–44 | part out | default |
+| --- | ---: | ---: |
+| planted fact in a pool the check would read | 308 | 368 |
+| look-alike in a pool the check would read | 207 | 229 |
+| check calls that would be made: hidden / control / neutral | 448 / 441 / 419 | 510 / 476 / 425 |
+| funnel score (surfaced): hidden / decoys | 372 / 238 | 390 / 258 |
+
+Train (`bun run funnel`, seeds 41–42): 319 / 296 with the part out, 322 / 294 in the default. The no-model eval is
+unchanged (precision 0.65, recall 0.52, falseFireRate 0; acting 19 of 28, 1.18 items, 10 of 11, 3 of 10): it wires
+no checker, so no seat is handed there.

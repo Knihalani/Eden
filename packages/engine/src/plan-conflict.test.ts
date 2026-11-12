@@ -4,6 +4,7 @@ import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Injection, type Scope } from "@eden/protocol";
 import type { SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
+import { CardEnricher, type CardBatch, type CardMaker } from "./cards";
 import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
@@ -64,7 +65,7 @@ const CANCEL = {
 };
 const UNRELATED = { ref: "u1", title: "Garden centre", text: "Seed potatoes are back in stock at the garden centre." };
 
-async function setup(config: Record<string, unknown> = {}, scopes: Scope[] = [scope]) {
+async function setup(config: Record<string, unknown> = {}, scopes: Scope[] = [scope], cards?: CardEnricher) {
   let clock = T0;
   const srcs = new Map<string, Listed>();
   for (const sc of scopes) {
@@ -79,6 +80,7 @@ async function setup(config: Record<string, unknown> = {}, scopes: Scope[] = [sc
     budget: new Budget(),
     model: null,
     now: () => clock,
+    ...(cards ? { cards } : {}),
     config: {
       ...CORE_CONFIG,
       sync: true,
@@ -142,6 +144,41 @@ describe("planConflict (A9): a new item that bears on an earlier acting request 
     expect(text).toContain(PLAN_LEAD);
     expect(text).toContain("Book my flights to Lisbon");
     expect(text).toContain("cancelled");
+  });
+
+  test("pushStateFilter (F2): a late item carded none because a constraint cleared is no alert", async () => {
+    // The cancellation stands in for a clearance here: its card says none, lifted, about its item.
+    const maker: CardMaker = {
+      async make(items: ContextItem[]) {
+        return {
+          cards: items.map((it) =>
+            it.id === CANCEL_ID
+              ? { kind: "none", actions: [], entities: [], statement: "quarterly offsite cancelled", state: "lifted" }
+              : null,
+          ),
+          costUsd: 0,
+        } as CardBatch;
+      },
+    };
+    const run = async (filter: boolean) => {
+      const cards = new CardEnricher({ maker, budget: new Budget(), now: () => T0 });
+      cards.askState();
+      // Carded before it arrives (cards are keyed by content), so the alert's check can read its state.
+      cards.enqueue(scope, [{ id: CANCEL_ID, sourceId: "notes", ref: "c1", title: CANCEL.title, text: CANCEL.text }]);
+      await cards.idle();
+      const t = await setup(
+        { planConflict: true, cards: true, cardsState: filter, pushStateFilter: filter },
+        [scope],
+        cards,
+      );
+      await say(t.partner, BOOK, "s1", t.now());
+      t.advance(30 * MIN);
+      await t.arrive(CANCEL);
+      t.advance(30 * MIN);
+      return plans(await say(t.partner, LATER, "s1", t.now())).length;
+    };
+    expect(await run(false)).toBe(1);
+    expect(await run(true)).toBe(0);
   });
 
   test("a message that starts no push still reports the packet as pending", async () => {

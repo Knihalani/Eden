@@ -228,13 +228,14 @@ const worker = async () => {
       batch.forEach(([h, it], i) => {
         const c = got.cards[i];
         if (!INTENT) {
-          if (c) disk.put(h, c.kind === "none" ? null : c);
+          // A none card with a state (`cardsState`, D1193) is kept, as the enricher keeps it.
+          if (c) disk.put(h, c.kind === "none" && !c.state ? null : c);
           return;
         }
         // Unread requests: left out, so the next run asks again.
         const r = got.requests?.[i];
         if (!r) return;
-        const line = { h, r, c: c ? (c.kind === "none" ? null : c) : undefined, p: pass(it) };
+        const line = { h, r, c: c ? (c.kind === "none" && !c.state ? null : c) : undefined, p: pass(it) };
         appendFileSync(INTENT_FILE, `${JSON.stringify(line)}\n`);
         intentDone++;
       });

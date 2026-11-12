@@ -126,6 +126,8 @@ export const SHIPPED_COVERS: Record<string, string[]> = {
  */
 export const SHIPPED_FORM_COVERS: Record<number, Record<string, string[]>> = {
   3: Object.fromEntries(parseSuites("train,reworded,longtail,dev20").map((s) => [s, ["41", "42", "43", "44"]])),
+  // `cardsState` (F2, D1193): form 3 with the state flag, served by subagents per item on the world's clock (D1102).
+  19: Object.fromEntries(parseSuites("train,reworded,longtail,dev20").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
 /**
@@ -500,7 +502,8 @@ export class DiskCardMaker implements CardMaker {
             return;
           }
           made.set(h, c);
-          this.put(h, c.kind === "none" ? null : c, r);
+          // A none card is recorded only with a state (`cardsState`, D1193): the replay must filter as the run did.
+          this.put(h, c.kind === "none" && !c.state ? null : c, r);
         });
       } finally {
         // Settled whether or not the call worked: a card it did not make is uncovered for every waiter, and the next
