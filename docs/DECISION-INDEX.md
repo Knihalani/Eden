@@ -687,3 +687,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1100 | 2026-11-12 | Lab only: `dev20a`–`dev20d` (`--suite dev20`), four tuning suites on the weak points | lab |
 | D1140 | 2026-11-12 | Finding (F2, train, reworded and longtail seeds 41–42; Anthropic-direct lab $1.00 before the credit ran out, then a subagent-simulated… | finding |
 | D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
+| D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
