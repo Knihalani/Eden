@@ -1935,7 +1935,9 @@ export class ContextPartner {
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
     ];
     const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
-    let chosen = order.slice(0, limit);
+    // `askHeedsCheck` (D1450): what this request's push check read and turned down is not listed by its ask.
+    const heeded = !internal.push && internal.late === undefined ? this.checkedOut(s) : null;
+    let chosen = (heeded ? order.filter((x) => !heeded(x.item)) : order).slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
@@ -1975,7 +1977,7 @@ export class ContextPartner {
         if (extra.length >= seats) break;
         if (have.has(id)) continue;
         const item = this.deps.cache.get(s.scope, id, this.now());
-        if (item && !bulkMail(item) && anchored(item, anchors))
+        if (item && !bulkMail(item) && anchored(item, anchors) && !heeded?.(item))
           extra.push({ item, score: 0, matched: 0, sketch: null });
       }
       chosen = [...chosen.slice(0, Math.max(0, limit - extra.length)), ...extra];
@@ -2042,7 +2044,10 @@ export class ContextPartner {
       const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
       // `pushCheck` (D500, D828): one budgeted call over the pool, only when the gate would hand candidates. With no
       // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
-      const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
+      const check =
+        gate && this.config.pushCheck && this.deps.checker
+          ? await this.checkPush(s, cue, gate, internal.request)
+          : null;
       if (check && s.closed) {
         // The session closed while the check ran: its call was paid for, so it is traced on its own.
         if (check?.called) this.traceCheck(s, check, t0);
@@ -2513,7 +2518,7 @@ export class ContextPartner {
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
    * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
-  private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
+  private async checkPush(s: Session, cue: Cue, gate: PushGate, forRequest?: number): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
     if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
     const request = sanitizeForStore(cue.raw);
@@ -2549,6 +2554,7 @@ export class ContextPartner {
     if (!kept) {
       const entry: KeptCheck = {
         asked,
+        ...(forRequest !== undefined ? { request: forRequest } : {}),
         marks: new Map(items.map((it) => [it.id, itemMark(it)])),
         read: checker.check(s.scope, s.key, input, s.abort.signal),
       };
@@ -2579,6 +2585,27 @@ export class ContextPartner {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * `askHeedsCheck` (G2, D1450): the test of whether this request's push check turned an item down, or null when no
+   * settled check of this request did. An item counts only as the copy the check read (`itemMark`'s id and content
+   * hash): a changed copy is read afresh by the agent.
+   */
+  private checkedOut(s: Session): ((item: ContextItem) => boolean) | null {
+    const mode = this.config.askHeedsCheck;
+    if (mode <= 0 || !s.pushChecks) return null;
+    const out = new Map<string, string>();
+    for (const kept of s.pushChecks.values()) {
+      const read = kept.settled;
+      if (kept.request !== s.requests || !read?.yes) continue;
+      for (const [id, mark] of kept.marks) {
+        if (read.yes.has(id)) out.delete(id);
+        else if (mode >= 2 || read.ruledOut?.has(id)) out.set(id, mark);
+      }
+    }
+    if (out.size === 0) return null;
+    return (item) => out.get(item.id)?.startsWith(`${item.id}\t${cardKey(item)}\t`) === true;
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -6716,6 +6743,8 @@ const CHECK_KEPT = 4;
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {
   asked: string;
+  /** The user request (`Session.requests`) the check was made for (`askHeedsCheck`). */
+  request?: number;
   /** Per item read, `itemMark`: id, content hash, date and sender. */
   marks: Map<string, string>;
   read: Promise<PushCheckRead>;

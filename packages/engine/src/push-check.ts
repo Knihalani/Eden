@@ -101,6 +101,8 @@ export interface PushCheckInput {
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
 export interface PushCheckRead {
   yes: ReadonlySet<string> | null;
+  /** `askHeedsCheck` (D1450): the item ids the reply named and ruled out (`parseRuledOut`); absent with no answer. */
+  ruledOut?: ReadonlySet<string>;
   costUsd: number;
   /** Whether this read made a (budgeted) model call. */
   called: boolean;
@@ -195,6 +197,29 @@ export function parseCompare(text: string, count: number): number[] | null {
   return out;
 }
 
+/**
+ * `askHeedsCheck` (G2, D1450): the 0-based indexes a compare-first reply names and rules out: an entry whose `act` is
+ * false or whose `hits` is none. The check listed the item as touching the request's subject and then said it leaves
+ * the request alone (a go-ahead, another one of the same kind, background). An item the reply leaves out is not here:
+ * the check gave no reading of it. Empty when the reply is unreadable or names an item it does not hold.
+ */
+export function parseRuledOut(text: string, count: number): number[] {
+  if (parseCompare(text, count) === null) return [];
+  const entries = (JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { items: unknown[] }).items;
+  const out: number[] = [];
+  for (const e of entries.slice(0, COMPARE_MAX_ENTRIES * 2)) {
+    const { i, hits, act } = e as { i?: unknown; hits?: unknown; act?: unknown };
+    const yes = (act === true || act === "true") && typeof hits === "string" && !NO_HIT.test(hits);
+    if (yes) continue;
+    // Only a stated no: an entry with no verdict at all is not one.
+    if (act !== false && act !== "false" && !(typeof hits === "string" && NO_HIT.test(hits))) continue;
+    const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) continue;
+    if (!out.includes(n - 1)) out.push(n - 1);
+  }
+  return out;
+}
+
 export interface PushCheckLimits {
   /**
    * The estimate a call is reserved at (docs/COST-MODEL.md): about 2,500 tokens in for 15 items of 400 characters
@@ -275,7 +300,14 @@ export class PushChecker {
         this.failed(new Error("push check reply unreadable (cut off at the token cap, or not the expected JSON)"));
         return { yes: null, costUsd: res.costUsd, called: true, overBudget: false };
       }
-      return { yes: new Set(at.map((i) => items[i]!.id)), costUsd: res.costUsd, called: true, overBudget: false };
+      const yes = new Set(at.map((i) => items[i]!.id));
+      // A yes wins over a second entry that rules the same item out.
+      const ruledOut = new Set(
+        parseRuledOut(res.text, items.length)
+          .map((i) => items[i]!.id)
+          .filter((id) => !yes.has(id)),
+      );
+      return { yes, ruledOut, costUsd: res.costUsd, called: true, overBudget: false };
     } catch (err) {
       this.deps.budget.settle(reservation, 0);
       this.stats.failures++;

@@ -731,6 +731,13 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
+   * TRIAL (G2, D1450): an explicit ask in the request a push check answered leaves out the items that check read and
+   * did not name: 1, only those its reply named and ruled out (`parseRuledOut`: a go-ahead, another one of the same
+   * kind); 2, every item it read and did not say yes to. No call of its own, and nothing is left out when the check
+   * did not answer, read another copy of the item, or was for another request. 0: off.
+   */
+  askHeedsCheck: number;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -918,6 +925,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  askHeedsCheck: 0,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
