@@ -24,6 +24,11 @@
  * (`cards-shipped.jsonl.gz`, cards-disk.ts): the cards and requests a deployment would hold for those users, not
  * `cards-enrich.ts --intent`'s every-item index (D714).
  *
+ * `--clock world|wall` (F8, from F5's check): the partner's clock. `world` (the default) starts at the world's own
+ * `now` (27 October 2026) and advances in real time, so lean carding's recent-days window (`cardsLean`) reads the
+ * world as the funnel and pi-ab do. `wall` is the wall clock every recording before it used (the D872 caches): weeks
+ * past the worlds' date, so the window skipped almost every past item (train1:41: 36 request-only reads against 179).
+ *
  * `--set JSON`: engine settings over the default (e.g. `{"cardsLeanDays":30}`, CL3's comparison with D244). The
  * deleted trial `cardsBatch` (D242) added `--bulk` here: commit 4e072585.
  */
@@ -73,6 +78,8 @@ const userWorld = (seed: number) => {
   return userWorldOf(seed, planUser(seed, suiteTemplates(seed, suites), { days, size, mix })).world;
 };
 const ACCESS = labAccess(args, [MODEL]);
+const CLOCK = opt("clock", "world");
+if (CLOCK !== "world" && CLOCK !== "wall") throw new Error(`--clock takes world or wall, not ${CLOCK}`);
 
 interface Row {
   user: string;
@@ -131,7 +138,11 @@ for (const { suite, seed, variant } of USERS) {
     },
   });
   const counted = count(model);
+  // The world's clock advances in real time from its own `now` (warmAll waits on ticks, so it must move).
+  const start = Date.now();
+  const now = CLOCK === "world" ? () => world.now + (Date.now() - start) : () => Date.now();
   const partner = buildPartner({
+    now,
     sources: async () => sources,
     sourceMapPath: ":memory:",
     queryPlanner: "off",
@@ -151,7 +162,7 @@ for (const { suite, seed, variant } of USERS) {
   if (CARDS_OUT) record(cards, CARDS_OUT);
   const scope = { tenantId: "cold", userId: `${suite}-${seed}` };
   const t0 = performance.now();
-  await partner.observe({ ...scope, sessionId: "s0", at: Date.now(), kind: "session_start", agent: "cold-start" });
+  await partner.observe({ ...scope, sessionId: "s0", at: now(), kind: "session_start", agent: "cold-start" });
   const warm = await warmAll(partner.sync!, [scope], 2_000);
   const syncMs = performance.now() - t0;
   await cards.idle();
@@ -176,7 +187,7 @@ for (const { suite, seed, variant } of USERS) {
   };
   console.error(JSON.stringify(row));
   rows.push(row);
-  await partner.observe({ ...scope, sessionId: "s0", at: Date.now(), kind: "session_end" });
+  await partner.observe({ ...scope, sessionId: "s0", at: now(), kind: "session_end" });
 }
 const mean = (k: "usd" | "cardCalls" | "itemsAtSources") => rows.reduce((n, r) => n + r[k], 0) / rows.length;
 const out = {
