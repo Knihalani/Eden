@@ -6,6 +6,12 @@ export interface ChatMessage {
    * prefix here (Anthropic: a `cache_control` breakpoint). Others ignore it.
    */
   cache?: boolean;
+  /**
+   * With `cache`: keep this prefix an hour, not five minutes (Anthropic's 1-hour TTL: a write costs 2x input, not
+   * 1.25x; a read 0.1x either way). For a block re-sent tens of minutes apart, such as a user's rule sheet (D1197).
+   * Anthropic wants a longer TTL before a shorter one, so every breakpoint of a request with one is sent at 1 hour.
+   */
+  cacheTtl?: "1h";
 }
 
 export interface ChatRequest {

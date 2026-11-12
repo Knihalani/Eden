@@ -291,6 +291,34 @@ describe("OpenRouterModel", () => {
     expect(sent[0].provider).toEqual({ data_collection: "deny", zdr: true, allow_fallbacks: true });
   });
 
+  test("an anthropic/* request with a message asking a 1-hour TTL sends every breakpoint at 1 hour (D1197)", async () => {
+    const { sent, fake } = capture();
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    const hourly = {
+      ...cachedRequest,
+      messages: cachedRequest.messages.map((m) => (m.cache ? { ...m, cacheTtl: "1h" as const } : m)),
+    };
+    await model.chat(hourly);
+    const hour = { type: "ephemeral", ttl: "1h" };
+    expect(sent[0].messages).toEqual([
+      { role: "system", content: "rules" },
+      { role: "system", content: [{ type: "text", text: "more rules", cache_control: hour }] },
+      { role: "user", content: [{ type: "text", text: "standing prefix", cache_control: hour }] },
+      { role: "user", content: "the request" },
+    ]);
+    // The cached prefix's bytes do not depend on the TTL ask or on the request after it.
+    await model.chat({ ...hourly, messages: [...hourly.messages.slice(0, 3), { role: "user", content: "another" }] });
+    expect(JSON.stringify(sent[1].messages.slice(0, 3))).toBe(JSON.stringify(sent[0].messages.slice(0, 3)));
+    // Without anthropicCache, nothing of it reaches the wire.
+    await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake }).chat(hourly);
+    expect(JSON.stringify(sent[2].messages)).not.toContain("cache_control");
+  });
+
   test("an anthropic/* request has at most 4 breakpoints: the last system message, then the latest marked", async () => {
     const { sent, fake } = capture();
     const marked = (i: number) => ({ role: "user" as const, content: `prefix ${i}`, cache: true });
