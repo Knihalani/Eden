@@ -124,13 +124,23 @@ interface SystemBlock {
 
 const JSON_INSTRUCTION = "Reply with one JSON object only: no prose, no code fence.";
 
+/**
+ * The TTL a request's cache breakpoints are sent and priced at: the model's `cacheTtl`, or 1 hour when any message
+ * marked `cache` asks for it (`ChatMessage.cacheTtl`, D1197). One TTL a request: Anthropic orders longer TTLs first.
+ */
+export function requestTtl(options: AnthropicOptions, request: ChatRequest): "5m" | "1h" {
+  return options.cacheTtl === "1h" || request.messages.some((m) => m.cache && m.cacheTtl === "1h") ? "1h" : "5m";
+}
+
 /** Builds the Messages API body: system blocks (last one cached), then the turns, merged by role. */
 export function anthropicBody(options: AnthropicOptions, request: ChatRequest, stream: boolean) {
+  const control = (): { type: "ephemeral"; ttl?: "1h" } =>
+    requestTtl(options, request) === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
   const systemTexts = request.messages.filter((m) => m.role === "system").map((m) => m.content);
   if (request.json) systemTexts.push(JSON_INSTRUCTION);
   const system: SystemBlock[] = systemTexts.map((text) => ({ type: "text", text }));
   const last = system.at(-1);
-  if (last) last.cache_control = options.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
+  if (last) last.cache_control = control();
   // The API wants alternating turns starting with a user turn: consecutive same-role messages are joined. When a
   // message is marked `cache`, each keeps its own text block, so the cached prefix ends at that block.
   const blocks = request.messages.some((m) => m.cache && m.role !== "system");
@@ -144,8 +154,7 @@ export function anthropicBody(options: AnthropicOptions, request: ChatRequest, s
       continue;
     }
     const block: SystemBlock = { type: "text", text: m.content };
-    if (m.cache)
-      block.cache_control = options.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
+    if (m.cache) block.cache_control = control();
     if (prev && prev.role === m.role && Array.isArray(prev.content)) prev.content.push(block);
     else messages.push({ role: m.role, content: [block] });
   }
@@ -222,6 +231,7 @@ export class AnthropicModel implements Model {
   async chat(request: ChatRequest): Promise<ChatResponse> {
     const t0 = performance.now();
     const body = anthropicBody(this.options, request, true);
+    const ttl = requestTtl(this.options, request);
     const promptChars = request.messages.reduce((n, m) => n + m.content.length, 0);
     this.options.meter?.reserve(anthropicWorstCase(this.id, promptChars, request.maxTokens));
     const timeout = AbortSignal.timeout(this.options.timeoutMs ?? 60_000);
@@ -250,19 +260,19 @@ export class AnthropicModel implements Model {
       });
     } catch (e) {
       // Nothing was billed, but the reservation is released by booking the call at $0.
-      this.book(state, t0, 0);
+      this.book(state, t0, ttl, 0);
       throw e;
     }
     if (!res.ok || !res.body) {
       const detail = (await res.text().catch(() => "")).slice(0, 300);
-      this.book(state, t0, res.status);
+      this.book(state, t0, ttl, res.status);
       throw new Error(`anthropic ${res.status}: ${detail}`);
     }
     try {
       await readSse(res.body, (event) => applyStreamEvent(state, event, performance.now()));
     } finally {
       // Whatever arrived is booked, a stream cut short included: the tokens were billed.
-      this.book(state, t0);
+      this.book(state, t0, ttl);
     }
     // A complete stream always reports why it stopped; one cut short (a dropped connection) is an error, not a reply:
     // its text could pass for a reply the stop sequence ended (D240's `closeStopped`) and drop the entries after it.
@@ -271,7 +281,7 @@ export class AnthropicModel implements Model {
     return {
       text: request.json ? unfence(state.text) : state.text,
       usage,
-      costUsd: anthropicCost(usage, anthropicPrice(this.id), this.options.cacheTtl),
+      costUsd: anthropicCost(usage, anthropicPrice(this.id), ttl),
       model: this.id,
       provider: "anthropic",
       latencyMs: Math.round(performance.now() - t0),
@@ -281,12 +291,12 @@ export class AnthropicModel implements Model {
     };
   }
 
-  private book(state: StreamState, t0: number, status?: number): void {
+  private book(state: StreamState, t0: number, ttl: "5m" | "1h", status?: number): void {
     const usage = usageOf(state);
     this.options.meter?.book({
       model: this.id,
       usage,
-      costUsd: anthropicCost(usage, anthropicPrice(this.id), this.options.cacheTtl),
+      costUsd: anthropicCost(usage, anthropicPrice(this.id), ttl),
       latencyMs: Math.round(performance.now() - t0),
       ttftMs: state.firstTokenAt === null ? null : Math.round(state.firstTokenAt - t0),
       stopReason: state.stopReason,
