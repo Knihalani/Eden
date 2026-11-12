@@ -17,8 +17,9 @@ Packages: `protocol`, `primitives`, `redact`, `sources`, `graph`, `llm`, `engine
 `proxy`, `eval`, `sim`;
 examples in `examples/`. Hot-path code uses `@eden/primitives` (one tokenizer, typed-array structures) and follows its
 README's measured rules; a change to a primitive re-runs its benchmark and reports before/after numbers.
-Dependencies are deliberately few (the MCP SDK, zod, and re2js for the secret gate, D24); justify any new one in the
-PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeScript), not product code: nothing in
+Dependencies are deliberately few: re2js for the secret gate (D24) is the only production one, since Eden speaks MCP
+through its own client and server (D1704; the MCP SDK and zod are devDependencies, for interop tests and the lab).
+Justify any new one in the PR. `native/` is the measured Rust experiment behind D22 (hot kernels stay TypeScript), not product code: nothing in
 `packages/` imports it.
 
 ## Where things are
