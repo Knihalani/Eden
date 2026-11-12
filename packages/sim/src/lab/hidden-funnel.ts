@@ -76,7 +76,6 @@ import {
   AskReader,
   CardEnricher,
   CARD_FORM_REQUESTS,
-  CARD_FORM_WIDE,
   cardKey,
   intentCut,
   intentReach,
@@ -482,8 +481,7 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
-const CARD_FORM =
-  RUN.cards && RUN.intent && RUN.cardsRequestsFix ? (RUN.cardsRequestsWide ? CARD_FORM_WIDE : CARD_FORM_REQUESTS) : 0;
+const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
   INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */

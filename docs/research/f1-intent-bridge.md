@@ -157,7 +157,7 @@ Committed before any paid run, in the commit that adds the switch:
   the English facts rewording loses are pushes that never start ("I want a morning flight…": `pushStart` is null), the
   push gate's matter rather than retrieval's.
 
-## 6. Lever (b) built: `cardsRequestsWide` (trial, off; waits for credit)
+## 6. Lever (b) built: `cardsRequestsWide` (rejected and deleted, D1154, §13)
 
 The card prompt's form 4 (`CARD_FORM_WIDE`): form 3 with one sentence added to the intent instructions, asking for the
 same four requests in the forms users word one intent in: a plain request, a plan or need ("I want to …", "thinking of
@@ -376,3 +376,25 @@ below the English originals' 418), and none on English as measured: 0 of 468 dis
 dev6a/b, the hidden suites and longtail are glossed, and `bun run eval` is identical (precision 0.65, recall 0.52,
 falseFireRate 0; acting 19 of 28 neutral, facts 10 of 11, look-alikes 3 of 10). Speed: 12.5 µs an English request,
 22.6 µs a German one. Memory: +29 MB RSS and 118 ms to load once a process, when the partner is built.
+
+## 13. `cardsRequestsWide` screened on the world-clock coverage: rejected and deleted (D1154)
+
+Form-4 cards (§6) were recorded with `cold-start.ts --clock world --set '{"cardsRequestsWide":true}'` through the
+queue (served by subagents, D1101) for dev20 seeds 41–44, every variant. They were compared with F8's shipped form 3
+(D1102), both replayed through the same `bun run funnel --cards F --intent F` path (the shipped file, and the shipped
+file plus the form-4 lines), with pool dumps:
+
+| dev20, 640 tasks a variant | form 3 (shipped) | form 4 |
+| --- | ---: | ---: |
+| hidden facts in the check's view | 314 | 283 (21 up, 52 down) |
+| look-alikes in view | 256 | 239 |
+| delivered with the stub reader, hidden / decoys | 345 / 259 | 325 / 251 |
+| the requests' characters an item | 87.7 | 123.8 (+41%) |
+
+The rule (606571ee, re-registered in 89d98a27) needed +28 facts in view over dev20 and reworded's 1,408 hidden tasks
+with request characters up at most 15%. dev20 alone is −31 and +41%, so reworded was not recorded to the end and the
+switch is deleted with its code and tests (D814). Varied, more general requests lengthen each item's request text in
+the intent index and weaken the specific terms it was met by; the broad-kind request did not reach the requests it was
+written for. Caveat: form 3 was answered per item (D1102) and form 4 per call of 20 items (D1101), so the transport
+differs; the rule named F8's coverage as the comparator. Two card answers in the queue are known to be faulty (one
+with its requests shifted by one item, one with a wrong request), out of about 600 calls.
