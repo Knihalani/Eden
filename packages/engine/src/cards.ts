@@ -100,7 +100,10 @@ export interface Card {
   /** An amount the action must stay at or under, in `unit` ("£", "$", "€", "%", or "" when unstated). */
   limit?: number;
   unit?: string;
-  /** One line, for traces and research only. */
+  /**
+   * One line: traces, research, and the push check's rule sheet (D1180), where it is sent to a model, sanitised and
+   * fenced as data.
+   */
   statement: string;
 }
 

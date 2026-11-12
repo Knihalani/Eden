@@ -525,7 +525,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D811 | 2026-11-11 | The merge gate runs its three steps at once, runs the tests that wait on real time in a tail after the rest, bounds work in CPU time, and… | adopted |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
 | D813 | 2026-11-11 | Lab only: paid lab runs write each finished unit as it lands and resume without paying for it again | lab |
-| D814 | 2026-11-11 | A trial is decided in the branch or session that opened it, as soon as its evidence is in. | adopted |
+| D814 | 2026-11-11 | A trial is decided in the branch or session that opened it, as soon as its evidence is in. | adopted (by D1180) |
 | D815 | 2026-11-11 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | rejected |
 | D816 | 2026-11-11 | tsgo is the merge gate's checker: `scripts/typecheck.sh` defaults to tsgo (TypeScript 7's native preview, pinned), `TYPECHECK=tsc` and… | adopted |
 | D817 | 2026-11-11 | Deleted: `syncSweepSpread` (D604), `EDEN_SPEND_LEASES` (D327) and `EDEN_PERSIST_DISK_ONLY` (D652); `anthropicCache` (D145) is a… | rejected |
@@ -708,6 +708,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
 | D1152 | 2026-11-12 | Finding (F1, served by subagents, D1101): the request glossary's queue pair fails its neutral bar. | finding |
 | D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
+| D1180 | 2026-11-12 | Promoted on subagent evidence; the API confirmation is owed when credit returns (F5, D814, the integrator's decision): the rule sheet… | adopted |
+| D1181 | 2026-11-12 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | rejected |
+| D1182 | 2026-11-12 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | rejected |
+| D1183 | 2026-11-12 | Guard on D1180 (F5, the integrator's question): a user with more active rule cards than `pushCheckSheet` (80) gets no rule sheet. | adopted |
 | D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
 | D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
 | D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |

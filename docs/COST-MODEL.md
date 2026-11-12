@@ -731,6 +731,29 @@ No model call: a non-English request is glossed into English words from a glossa
 
 A glossary that cannot be read leaves every request as written, at its old cost.
 
+## The rule sheet (`pushCheckSheet` 80 with `pushCheckSheetRefs`, F5, in the default since D1180)
+
+No new call: the push check's existing call reads the user's active constraint cards as a second cached block (one
+line a card, at most 80) and sends pool items on the sheet as pointers. **The one measured figure: $0.000281 a check
+against about $0.000231 on main (+22%), 73% of input tokens read from cache** (one API smoke, train1 s41, sheet 80,
+an earlier prompt format without pointers). The rest are Haiku 5.5 list prices from token counts **[EST]** (no credit
+for a paid comparison; D1180 owes it).
+
+| What | Figure | Measured by |
+| --- | --- | --- |
+| Sheet size | 32–53 cards a user on train (smoke), about 6,900 characters (about 1,700 tokens) | API smoke, train1 s41; 2,349 dumped checks |
+| Sheet read from cache | +$0.000017 a check | the same token counts [EST] |
+| Pointers (pool items on the sheet) | −768 of 3,188 pool characters a check (24%), about −$0.000019 | the same [EST] |
+| Cache write (sheet changed: a card landed or expired) | about +$0.0002 | the same [EST] |
+
+| Paid calls it moves | none added: the check runs on the same pushes (a pool with nothing constraint-like is still not checked) | `partner.ts` `checkPush` |
+| Added wait | the cached input only; no output added beyond a rule entry when one is named [EST] | H3's latency fit (D1072) |
+
+So with a warm cache the estimate puts the check near main's, but the one measurement read +22%; a user whose cards
+change, or whose carded items re-sync (the sheet is ordered by an item's update time), pays about $0.0002 more on the
+next check. A user with more than 80 active rules gets no sheet (D1183) and pays main's check; selection for them was rejected
+(D1182).
+
 ## Connector calls at about 1,000 sources and the earn rule (O1, D603)
 
 No model call. With `sourceYieldEarn`, `sourceYieldNames` and `sourceYieldEngage` in the default (Pi, train, 995
