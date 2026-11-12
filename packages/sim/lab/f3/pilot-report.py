@@ -1,6 +1,6 @@
 """F3 (D1125): the subagent-simulated pilot's readout. Lab tooling; sim data only.
 
-    python3 -I packages/sim/lab/f3/pilot-report.py .local/f3/pilot/graded.jsonl
+    python3 -I packages/sim/lab/f3/pilot-report.py .local/f3/pilot/graded.jsonl [A:B …]   # default CH:base CW:CH CW:base
 
 Per arm: hidden facts raised on the silent-edit hidden tasks, concerns on control and neutral. Pairs (CH − base,
 CW − CH): the difference on the tasks both arms graded, with a 95% interval from 5,000 bootstrap draws (seed 1), tasks
@@ -34,7 +34,9 @@ def boot(pairs):
     return est, draws[124], draws[4874]
 
 
-for arm in ("base", "CH", "CW"):
+ARMS = sorted({r["arm"] for r in rows}, key=lambda a: (a != "base", a))
+PAIRS = [tuple(p.split(":")) for p in sys.argv[2:]] or [("CH", "base"), ("CW", "CH"), ("CW", "base")]
+for arm in ARMS:
     out = []
     for kind in ("hidden", "control", "neutral"):
         xs = [d[arm] for k, d in by.items() if k[2] == kind and arm in d]
@@ -46,7 +48,7 @@ for arm in ("base", "CH", "CW"):
     lines = sum(d[arm]["changeLines"] for d in by.values() if arm in d)
     print(f"{arm:5s} " + "  ".join(out) + f"  packet chars {chars}  change lines {lines}")
 
-for a, b in (("CH", "base"), ("CW", "CH"), ("CW", "base")):
+for a, b in PAIRS:
     for kind in ("hidden", "control+neutral"):
         kinds = ("hidden",) if kind == "hidden" else ("control", "neutral")
         pairs = [(k, float(d[a]["raised"]) - float(d[b]["raised"])) for k, d in by.items() if k[2] in kinds and a in d and b in d]
