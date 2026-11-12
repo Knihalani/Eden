@@ -68,8 +68,8 @@ Batch sizes that worked in the rehearsal:
 
 ## Rehearsal (dev20, seed 41, 2026-11-12; FINAL = HEAD, so before and final run identical product code)
 
-The run had 480 tasks an arm: 160 each of hidden, control and neutral, over dev20a–d. heldout20 at seeds 41–44 is
-the same size.
+The run had 480 tasks an arm: 160 each of hidden, control and neutral, over dev20a–d. heldout20 at seeds 41–44 is the
+same size if it has 40 templates, as heldout19 did (not checked: heldout20 stays unread).
 
 What it took:
 
