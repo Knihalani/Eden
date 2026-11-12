@@ -10,7 +10,7 @@
  * `QUEUE_DIR/done/<key>.json`. A run on that queue then gets the API's own answer wherever its check prompt is one the
  * API answered, and goes to the subagents only for the rest (`calls.jsonl` says which: `hit`). So an arm that leaves
  * the check's prompt alone reads the API exactly on those prompts; an arm that changes the check's prompt or rule
- * misses them all (D1104: such arms need the calibrated recipe, or the API).
+ * misses them all (D1104: no subagent recipe reads such arms faithfully; they need the API).
  *
  * `--half` keeps the rows of one half of a fixed split (by the row's `key`): the recipe is tuned on `tune` and
  * measured on `test`, so a measurement never reads the replies it was tuned on.
