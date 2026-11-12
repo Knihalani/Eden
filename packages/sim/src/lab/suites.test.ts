@@ -11,6 +11,10 @@ import {
   HELDOUT19_RARE,
   HELDOUT19_SILENT,
 } from "./hidden-heldout19";
+import * as dev20a from "./hidden-dev20a";
+import * as dev20b from "./hidden-dev20b";
+import * as dev20c from "./hidden-dev20c";
+import * as dev20d from "./hidden-dev20d";
 import { supportsNeutral } from "./neutral";
 import { REWORDED } from "./reworded";
 import { parseSuites, preparedWorld, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
@@ -325,6 +329,94 @@ describe("heldout19 (P7, D870): format only, its templates' text is not read her
 
   test("a harness that skips prepareWorld fails loudly instead of misaligning planted items", () => {
     expect(() => SUITES.heldout19!(buildWorld({ seed: 41_000 }), 41, "hidden")).toThrow(/prepareWorld/);
+  });
+});
+
+describe("dev20a-d (F8, D1100): tuning suites in the hidden-context format", () => {
+  // Each module's lists and `before` function, by the suite's letter.
+  const mods: Record<string, Record<string, unknown>> = { dev20a, dev20b, dev20c, dev20d };
+  const lists = (x: string, k: string) => mods[`dev20${x}`]![`DEV20${x.toUpperCase()}_${k}`] as readonly string[];
+  test.each(["a", "b", "c", "d"])("dev20%s: 40 tasks a variant, the brief's mix, refs and befores", (x) => {
+    const suite = `dev20${x}`;
+    for (const seed of [41, 44]) {
+      const by = Object.fromEntries(
+        (["hidden", "control", "neutral"] as const).map((v) => {
+          const world = preparedWorld(suite, seed);
+          const before = world.items.length;
+          const tasks = SUITES[suite]!(world, seed, v);
+          return [v, { tasks, items: world.items.slice(before) }];
+        }),
+      );
+      expect([by.hidden!.items.length, by.control!.items.length, by.neutral!.items.length]).toEqual([40, 40, 0]);
+      const same = (t: { text: string; detail: string; template: string }) => [t.text, t.detail, t.template];
+      for (const v of ["control", "neutral"]) {
+        expect(by[v]!.tasks.map(same)).toEqual(by.hidden!.tasks.map(same));
+        expect(by[v]!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:${suite}-${v}:`))).toBe(true);
+      }
+      expect(by.hidden!.tasks.every((t: { id: string }) => t.id.startsWith(`w${seed}:${suite}:`))).toBe(true);
+      const names: string[] = by.hidden!.tasks.map((t: { template: string }) => t.template);
+      expect(new Set(names).size).toBe(40);
+      const refs = (v: string) => by[v]!.items.map((it: { ref: string }) => it.ref);
+      expect(refs("control")).toEqual(refs("hidden"));
+      for (const v of ["hidden", "control"]) {
+        for (const it of by[v]!.items as { ref: string; id: string; title: string; meta?: Record<string, string> }[]) {
+          expect(it.ref).toMatch(/^[a-z]+-\d+$/);
+          const seen = `${it.ref} ${it.id} ${it.title} ${Object.values(it.meta ?? {}).join(" ")}`.toLowerCase();
+          expect(names.filter((n) => seen.includes(n))).toEqual([]);
+          expect(/dev20|heldout|planted|decoy/.test(seen)).toBe(false);
+        }
+      }
+      // The brief's mix (counts from each template's labelled comment, listed by the author).
+      const exact: [string, number][] = [
+        ["ANCHORED", 14],
+        ["RARE", 12],
+        ["SILENT", 10],
+        ["NON_ENGLISH", 10],
+      ];
+      for (const [k, n] of exact) expect([k, lists(x, k).length]).toEqual([k, n]);
+      for (const k of ["ANCHORED", "RARE", "SILENT", "NON_ENGLISH", "INDIRECT", "QUESTION", "KNOWLEDGE", "NO_OVERLAP"])
+        expect(lists(x, k).filter((n) => !names.includes(n))).toEqual([]);
+      expect(lists(x, "INDIRECT").length).toBeGreaterThanOrEqual(27);
+      expect(lists(x, "QUESTION").length).toBeGreaterThanOrEqual(9);
+      expect(lists(x, "QUESTION").every((n) => lists(x, "INDIRECT").includes(n))).toBe(true);
+      expect(lists(x, "NO_OVERLAP").length).toBeGreaterThanOrEqual(24);
+      expect(lists(x, "KNOWLEDGE").length).toBeGreaterThanOrEqual(5);
+      const words = (t: { text: string }) => t.text.split(/\s+/).filter(Boolean).length;
+      const anchored = by.hidden!.tasks.filter((t: { template: string }) => lists(x, "ANCHORED").includes(t.template));
+      expect(anchored.every((t: { text: string }) => words(t) <= 12)).toBe(true);
+      // Rare-source templates plant in a rare connector in both variants, all eight used; no other template does.
+      for (const v of ["hidden", "control"]) {
+        const items = by[v]!.items as { sourceId: string }[];
+        const rare = names.map((n, i) => [lists(x, "RARE").includes(n), RARE_SOURCE_IDS.includes(items[i]!.sourceId)]);
+        expect(rare.every(([listed, inRare]) => listed === inRare)).toBe(true);
+      }
+      const rareUsed = (by.hidden!.items as { sourceId: string }[]).filter((it) =>
+        RARE_SOURCE_IDS.includes(it.sourceId),
+      );
+      expect(new Set(rareUsed.map((it) => it.sourceId)).size).toBe(RARE_SOURCE_IDS.length);
+      // Silent edits: one `before` per listed template, the same item (source, kind, title) as the planted one, older.
+      const befores = (mods[suite]![`${suite}Before`] as typeof heldout19Before)(preparedWorld(suite, seed), seed);
+      expect(befores.map((b) => b.template).sort()).toEqual([...lists(x, "SILENT")].sort());
+      for (const b of befores) {
+        const it = by.hidden!.items[names.indexOf(b.template)] as {
+          sourceId: string;
+          kind: string;
+          title: string;
+          updatedAt: number;
+        };
+        expect([b.before.sourceId, b.before.kind, b.before.title]).toEqual([it.sourceId, it.kind, it.title]);
+        expect(b.before.updatedAt).toBeLessThan(it.updatedAt);
+      }
+    }
+    expect(supportsNeutral(suite)).toBe(true);
+    expect(UNRUN_BLIND).not.toContain(suite);
+    expect(UNREAD_BLIND).not.toContain(suite);
+  });
+
+  test("`--suite dev20` names the four, none in `all` or `train`", () => {
+    expect(parseSuites("dev20")).toEqual(["dev20a", "dev20b", "dev20c", "dev20d"]);
+    for (const s of ["all", "train"]) expect(parseSuites(s).filter((n) => n.startsWith("dev20"))).toEqual([]);
+    expect(() => SUITES.dev20a!(buildWorld({ seed: 41_000 }), 41, "hidden")).toThrow(/prepareWorld/);
   });
 });
 
