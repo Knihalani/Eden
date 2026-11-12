@@ -179,6 +179,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
+  pushDaySeats: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -245,6 +246,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
+  pushDaySeats: { integer: true, max: 5 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
 };

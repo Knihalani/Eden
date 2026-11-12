@@ -139,6 +139,7 @@ import {
   type Party,
 } from "./parties";
 import { safeLine } from "./line";
+import { datedText } from "./days";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -884,7 +885,7 @@ export class ContextPartner {
     // reader's own push never pays for a gate-only start). The rule's request text (a lead-in's imperative) is kept.
     // No gate, or one that fails, and the rule decides alone (fail open).
     const said = event.kind === "user_message" ? event.text : "";
-    let verdict: { needs: boolean } | null = null;
+    let verdict: { needs: boolean; kind?: string } | null = null;
     if (this.gate && event.kind === "user_message")
       try {
         verdict = this.gate.read(said, { how: ruled?.how ?? "none", rest: ruled !== null && ruled.request !== said });
@@ -892,11 +893,18 @@ export class ContextPartner {
         verdict = null;
       }
     const adds = this.config.pushOpen && this.config.pushCandidates > 0;
-    const start = !verdict
+    let start = !verdict
       ? ruled
       : !verdict.needs
         ? null
         : (ruled ?? (adds ? { how: "opened" as const, request: said } : null));
+    // `pushDaySeats` (G1, D1400): a plan with a day is an action on that day. A turn that starts no push (the rule
+    // has none, or the gate read a statement and vetoed it) starts an opened one when it names a coming day and the
+    // gate does not read chatter. With no gate nothing is added: the rule decides alone, as before.
+    if (!start && adds && verdict && verdict.kind !== "chatter" && this.config.pushDaySeats > 0) {
+      if (this.namesComingDay(said, event.at, this.deps.cache.offsetOf(event)))
+        start = { how: "opened" as const, request: said };
+    }
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
     // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can
@@ -1866,6 +1874,15 @@ export class ContextPartner {
       this.config.probes,
     );
     if (gloss) cue.gloss = gloss;
+    // `pushDaySeats` (G1, D1400): the request's days read past `timeWindow`: a bare day of the month given its month
+    // (`datedText`), and the glossary's English beside the request, so a weekday in another language is a day too.
+    if (this.config.pushDaySeats > 0) {
+      cue.time = timeWindow(
+        datedText(gloss ? `${question}\n${gloss}` : question, cue.at, cue.offset),
+        cue.at,
+        cue.offset,
+      );
+    }
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
@@ -2496,6 +2513,19 @@ export class ContextPartner {
       seen.add(x.item.id);
       pool.push(x);
     }
+    // `pushDaySeats` (G1, D1400): items on a day the request names, whatever their words, seated after the first
+    // `pushCandidates` so the check reads them. They are handed only when the check names them (`candidatesOf`): a push
+    // with no check hands the pool's other items, as before.
+    // Seats go to the best of the day's items outside the first `pushCandidates`, those the pool's tail already
+    // holds included: they move up rather than being pushed past the cap by the others.
+    const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
+    const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
+    const seats = new Set(seated.map((x) => x.item.id));
+    if (seated.length > 0) {
+      const rest = pool.slice(head).filter((x) => !seats.has(x.item.id));
+      pool.splice(head, pool.length - head, ...seated, ...rest);
+      pool.length = Math.min(pool.length, cap);
+    }
     const cards =
       pool.length > 0 && this.config.cards && this.deps.cards
         ? this.deps.cards.cardsOf(
@@ -2504,7 +2534,42 @@ export class ContextPartner {
             cue.arrived ?? this.now(),
           )
         : new Map<string, Card>();
-    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+    const like = pool.map((x) => this.constraintLike(x, cards));
+    return seats.size > 0 ? { pool, like, seats } : { pool, like };
+  }
+
+  /**
+   * `pushDaySeats` (G1, D1400): whether a turn of at least `DAY_START_WORDS` words names a day from today on, within
+   * `DAY_START_AHEAD` days, in a window of at most a week: read as the push's lookup reads it (`datedText`, the
+   * glossary's English beside the turn). Bounded input.
+   */
+  private namesComingDay(said: string, at: number, offset: number): boolean {
+    const text = sanitizeForStore(head(said, MAX_QUESTION_CHARS));
+    if (text.trim().split(/\s+/).length < DAY_START_WORDS) return false;
+    const gloss = this.config.requestGloss ? glossOf(text) : "";
+    const read = gloss ? `${text}\n${gloss}` : text;
+    const days = timeWindow(datedText(read, at, offset), at, offset)?.days;
+    // A coming period with no day ("in January", "over Christmas", "next month") is a plan's time too.
+    if (!days || days.size === 0) return COMING_PERIOD.test(read);
+    if (days.size > 7) return false;
+    const today = new Date(at + offset * 60_000).toISOString().slice(0, 10);
+    const last = new Date(at + offset * 60_000 + DAY_START_AHEAD * 86_400_000).toISOString().slice(0, 10);
+    for (const d of days) if (d >= today && d <= last) return true;
+    return false;
+  }
+
+  /**
+   * `pushDaySeats` (G1, D1400): the items on a day the request names that the pool does not hold yet, bulk mail out,
+   * at most `pushDaySeats`. None for a request that names no day or a window of more than three (a week's listing
+   * is not a seat), or with the switch off.
+   */
+  private daySeats(s: Session, cue: Cue, have: ReadonlySet<string>): Scored[] {
+    const k = this.config.pushDaySeats;
+    const days = cue.time?.days;
+    if (k <= 0 || !days || days.size === 0 || days.size > DAY_SEAT_DAYS) return [];
+    return this.deps.cache
+      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset)
+      .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc }));
   }
 
   /**
@@ -2618,7 +2683,8 @@ export class ContextPartner {
     const pool = gate.pool;
     const reported = pool;
     if (reported.length === 0) return { items: [], pool };
-    const open = reported.filter((x) => !bulkMail(x.item));
+    // `pushDaySeats`: a seat is the check's to name; with no answer it is not a candidate.
+    const open = reported.filter((x) => !bulkMail(x.item) && (yes !== null || !gate.seats?.has(x.item.id)));
     let items = yes
       ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
       : like.some(Boolean)
@@ -6726,7 +6792,18 @@ interface KeptCheck {
 interface PushGate {
   pool: Scored[];
   like: boolean[];
+  /** `pushDaySeats`: the pool's items seated for the request's day; handed only when the check names them. */
+  seats?: Set<string>;
 }
+
+/** `pushDaySeats`: a period ahead that a plan names without a day: a month, a season's holiday, "next month". */
+const COMING_PERIOD =
+  /\b(?:in|over|during|before|after|until|by|for|this|next|early|late|mid)\s+(?:the\s+)?(?:january|february|march|april|june|july|august|september|october|november|december|christmas|xmas|new\s+year|easter|half[- ]term|month|year|summer|winter|spring|autumn|holidays)\b/i;
+/** `pushDaySeats`: the fewest words of a turn that starts the push by its day, and how far ahead that day may be. */
+const DAY_START_WORDS = 4;
+const DAY_START_AHEAD = 62;
+/** `pushDaySeats`: the longest window of days (the request's) whose items are seated. */
+const DAY_SEAT_DAYS = 3;
 
 /** What a re-read found (`verifyDelivery`). */
 /**

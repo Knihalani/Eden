@@ -726,6 +726,15 @@ export interface EngineConfig {
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
+   * `pushDaySeats` (G1, D1400, trial, 0 = off): up to this many items on a day the request names take seats in the
+   * push's pool right after the first `pushCandidates`, where the push check reads them: events starting that day,
+   * items whose text spans it ("26 Oct – 6 Nov", "until 2 November") and items that write the date, bulk mail out.
+   * The request's days are read past `timeWindow` (`days.ts`): a bare day of the month ("on the 20th", "Monday the
+   * 9th") and, through the glossary, a weekday in another language. A seat is handed only when the check names it:
+   * with no check the push hands what it handed before. Windows of more than three days get no seats.
+   */
+  pushDaySeats: number;
+  /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
    */
@@ -918,6 +927,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  pushDaySeats: 0,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
