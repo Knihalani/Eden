@@ -491,8 +491,12 @@ export function parseCards(text: string, count: number): (Card | null)[] {
     }
     if (typeof c.state === "string" && (CARD_STATES as readonly string[]).includes(c.state))
       card.state = c.state as CardState;
-    // A constraint that bears on no action of the vocabulary is none: nothing could match it.
-    if (card.kind !== "none" && card.actions.length === 0) card.kind = "none";
+    // A constraint that bears on no action of the vocabulary is none: nothing could match it. Its state goes with it:
+    // only a none the model wrote itself says a constraint cleared (`cardsState`), not a change it could not place.
+    if (card.kind !== "none" && card.actions.length === 0) {
+      card.kind = "none";
+      delete card.state;
+    }
     out[i] = card;
   }
   return out;
@@ -523,6 +527,11 @@ export function parseRequests(text: string, count: number): (string[] | null)[] 
     out[i] = cleanRequests(r.q);
   }
   return out;
+}
+
+/** A none card that says a constraint cleared (`cardsState`) and is about its item (`anchored`): kept as a card. */
+export function clearedNone(card: Card, item: ContextItem): boolean {
+  return card.kind === "none" && !!card.state && CLEARED_STATES.has(card.state) && anchored(card, item);
 }
 
 /**
@@ -1348,8 +1357,9 @@ export class CardEnricher {
           if (!b.only) this.stats.carded++;
           if (asked?.length) this.stats.requested++;
           this.keep(u, b.hash, {
-            // A none card is kept only when it says why (`cardsState`: a constraint lifted, met or superseded).
-            card: card.kind === "none" && !(card.state && CLEARED_STATES.has(card.state)) ? null : card,
+            // A none card is kept only when it says why (`cardsState`: a constraint lifted, met or superseded), and
+            // only when it is about its item: kept, it takes the item out of the push's pool (`pushStateFilter`).
+            card: card.kind === "none" && !clearedNone(card, b.item) ? null : card,
             at,
             seenAt: at,
             ...(asked?.length ? { requests: asked, seq: b.seq } : {}),
@@ -1520,7 +1530,8 @@ export class CardEnricher {
 
   /**
    * The cards of the user's items made before `before` (ms, the partner's clock): item id → card, for the ids given
-   * (the items still cached). Only constraints: an item with no card or a `none` card is not returned.
+   * (the items still cached). Constraints, and a `none` card only when it says a constraint cleared (`cardsState`,
+   * `clearedNone`); an item with no card or any other `none` card is not returned.
    */
   cardsOf(scope: Scope, ids: Iterable<string>, before: number): Map<string, Card> {
     const out = new Map<string, Card>();
@@ -1567,8 +1578,9 @@ export class CardEnricher {
       }
       const ids = holdersOf(u, hit.hash).filter(accept);
       if (ids.length === 0) continue;
-      // `carded`: the content holds a constraint card (a `none` card is held as no card), for `intentByKind`.
-      out.push({ ids, hit, carded: !!s.card });
+      // `carded`: the content holds a constraint card, for `intentByKind`. A `none` card held because it says a
+      // constraint cleared (`cardsState`) is no constraint.
+      out.push({ ids, hit, carded: !!s.card && s.card.kind !== "none" });
       if (out.length >= k) break;
     }
     return out;
@@ -1603,7 +1615,10 @@ export class CardEnricher {
     const u = this.users.get(scopeKey(scope));
     if (!u) return [];
     const out: string[] = [];
-    for (const [id, hash] of u.byItem) if (u.byHash.get(hash)?.card) out.push(id);
+    for (const [id, hash] of u.byItem) {
+      const card = u.byHash.get(hash)?.card;
+      if (card && card.kind !== "none") out.push(id);
+    }
     return out;
   }
 

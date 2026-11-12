@@ -486,9 +486,11 @@ if (CARD_STATES && cardMaker) {
       if (!state || !(CARD_STATES_ALL as readonly string[]).includes(state)) return;
       stateUse.stated++;
       const card = got.cards[k];
-      if (card) card.state = state;
+      // A none card's statement says what cleared, as the state clause asks; the item's title stands in for it, so the
+      // enricher's anchor check (`clearedNone`) reads it as about its item.
+      if (card && card.kind !== "none") card.state = state;
       else if (CLEARED_STATES.has(state)) {
-        got.cards[k] = { kind: "none", actions: [], entities: [], statement: "", state };
+        got.cards[k] = { kind: "none", actions: [], entities: [], statement: it.title.slice(0, 160), state };
         stateUse.noneKept++;
       }
     });
