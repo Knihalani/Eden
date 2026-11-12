@@ -398,11 +398,11 @@ describe("heldout20 (F4, D1080): format only, its templates' text is not read he
       // Rare-source templates plant in a rare connector in both variants, covering all eight; the others do not.
       for (const v of ["hidden", "control"]) {
         const items = by[v]!.items as { sourceId: string }[];
-        names.forEach((n, i) =>
-          expect(RARE_SOURCE_IDS.includes(items[i]!.sourceId)).toBe(HELDOUT20_RARE.includes(n)),
-        );
+        names.forEach((n, i) => expect(RARE_SOURCE_IDS.includes(items[i]!.sourceId)).toBe(HELDOUT20_RARE.includes(n)));
       }
-      const rareHidden = (by.hidden!.items as { sourceId: string }[]).filter((_, i) => HELDOUT20_RARE.includes(names[i]!));
+      const rareHidden = (by.hidden!.items as { sourceId: string }[]).filter((_, i) =>
+        HELDOUT20_RARE.includes(names[i]!),
+      );
       expect(new Set(rareHidden.map((it) => it.sourceId)).size).toBe(RARE_SOURCE_IDS.length);
       // Silent edits: one `before` per listed template, the same item (source, kind, title) as the planted one, older.
       const befores = heldout20Before(preparedWorld("heldout20", seed), seed);
@@ -426,7 +426,12 @@ describe("heldout20 (F4, D1080): format only, its templates' text is not read he
 
   test("a harness that skips prepareWorld fails loudly; its own clock refuses a user mixed with another suite", () => {
     expect(() => SUITES.heldout20!(buildWorld({ seed: 41_000 }), 41, "hidden")).toThrow(/prepareWorld/);
-    const mixed = [[{ suite: "heldout20", template: "x", variant: "hidden" }, { suite: "train1", template: "y", variant: "hidden" }]];
+    const mixed = [
+      [
+        { suite: "heldout20", template: "x", variant: "hidden" },
+        { suite: "train1", template: "y", variant: "hidden" },
+      ],
+    ];
     expect(() => userWorldOf(41, mixed as never)).toThrow(/own world time/);
   });
 });
