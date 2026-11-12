@@ -84,7 +84,7 @@ describe("AnthropicModel", () => {
       maxTokens: 100,
     };
     const body = anthropicBody({ apiKey: "k" }, request, false);
-    const hour = { type: "ephemeral", ttl: "1h" };
+    const hour = { type: "ephemeral" as const, ttl: "1h" as const };
     // Anthropic wants a longer TTL before a shorter one: the system breakpoint goes at an hour too.
     expect(body.system?.[0]?.cache_control).toEqual(hour);
     expect(body.messages).toEqual([
