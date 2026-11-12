@@ -115,6 +115,8 @@ export const SHIPPED_FILE = "cards-shipped.jsonl.gz";
 export const SHIPPED_PATH = join(import.meta.dir, "..", "..", "lab", "distilled", SHIPPED_FILE);
 export const SHIPPED_COVERS: Record<string, string[]> = {
   ...Object.fromEntries(parseSuites("train,reworded,longtail,heldout19").map((s) => [s, ["41", "42", "43", "44"]])),
+  // F8's tuning suites (D1100): served by subagents per item on the world's clock (D1102), in both prompt forms.
+  ...Object.fromEntries(parseSuites("dev20").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
 /**
@@ -123,7 +125,7 @@ export const SHIPPED_COVERS: Record<string, string[]> = {
  * not read it cannot record them, and its harness records its own (B19).
  */
 export const SHIPPED_FORM_COVERS: Record<number, Record<string, string[]>> = {
-  3: Object.fromEntries(parseSuites("train,reworded,longtail").map((s) => [s, ["41", "42", "43", "44"]])),
+  3: Object.fromEntries(parseSuites("train,reworded,longtail,dev20").map((s) => [s, ["41", "42", "43", "44"]])),
 };
 
 /**
