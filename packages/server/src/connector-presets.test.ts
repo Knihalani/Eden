@@ -84,6 +84,13 @@ describe("connector presets (D294)", () => {
     expect([fetchUsable(event), buildFetchArgs(event, "e1")]).toEqual([true, { eventId: "e1" }]);
   });
 
+  test("every preset is marked first-party or flat-rate for the freshness floor; an entry's own mark wins (D1133)", () => {
+    for (const name of Object.keys(PRESETS)) {
+      expect(expandPreset({ preset: name, id: "x" }).callPriced).toBe(false);
+      expect(expandPreset({ preset: name, id: "x", callPriced: true }).callPriced).toBe(true);
+    }
+  });
+
   test("expansion: explicit fields win, no write tool and no trustedReadTools are ever added", () => {
     const [spec] = checkSpecs([{ kind: "mcp", preset: "gmail", id: "mail", url: "https://mail.example/mcp" }], "t");
     expect(spec).toMatchObject({
