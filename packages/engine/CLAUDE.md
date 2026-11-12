@@ -326,7 +326,13 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   the ask: by the check's verdict it cut look-alikes 63% and lost five raised facts in 36 targeted tasks (D1452); by
   a `why` field on the check's rejections it could not tell a go-ahead from "already done" (D1453); by a card's
   cleared state it lists a hold without the notice that lifts it (D1451, deleted; `pushStateFilter` has the same
-  exposure in the pool). A new rule path adds its reason to `RULE_PATHS` or the check does not cover it.
+  exposure in the pool, fixed by D1456). A new rule path adds its reason to `RULE_PATHS` or the check does not
+  cover it.
+- **A lift notice stays beside the hold it could lift (`pushStateFilter`, D1193, D1456; `couldClear`).** The filter
+  takes an item carded none with a cleared state out of the push's pool only when none of the user's constraint
+  cards shares an entity with it; otherwise the check would read the hold (carded in force when it arrived) without
+  its lift. The lab's worlds never hold both, so the funnel cannot see a regression here: `card-state.test.ts` pins
+  it. Any new filter on cleared items (the ask, a rule path, the sheet) needs the same guard.
 - **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
   `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
   requests are on none. With `pushCandidates`, `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark

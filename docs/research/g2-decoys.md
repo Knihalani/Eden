@@ -148,6 +148,28 @@ exactly that outcome. The same exposure exists in `pushStateFilter`'s pool (the 
 lift); it was reported to F2 and the integrator. What would fix it is the card of the hold learning that it was
 lifted (resolution across items), which nothing does today.
 
+### The same exposure in the push's pool, fixed (D1456)
+
+`pushStateFilter` (D1193) took the lift notice out of the push's pool, so with both items in a mailbox the check
+read the hold alone. The filter now keeps a cleared item whenever one of the user's constraint cards is one it could
+clear: an entity of either card is named in the other's entities or statement (`couldClear`, the card model's own
+fields, on letter and number boundaries). The check then reads the hold and its lift side by side, as before D1193.
+
+Funnel at $0 (no check wired), seeds 41–44, look-alikes the push hands:
+
+| suite | filter off | main's filter | with the fix |
+| --- | ---: | ---: | ---: |
+| dev20 | 160 | 147 | 148 |
+| train | 548 | 385 | 406 |
+| reworded | 492 | 344 | 361 |
+| longtail | 51 | 38 | 38 |
+| pooled | 1,251 | 914 (−26.9%) | 953 (−23.8%) |
+
+298 of the 337 look-alikes D1193 cut stay cut; hidden facts the push hands read 1,431, 1,428 and 1,429. The 39 that
+come back are cleared notices that share an entity with some other constraint of the same user (the same client,
+the same policy tool): the safe side of the error. No lab world holds a hold and its lift together, so the pair is
+pinned by a unit test (`card-state.test.ts`), not by a suite.
+
 ## 6. What this leaves
 
 - **The ask is the open channel.** With `packetHeedsCheck` on, 45 of the 63 look-alikes handed (seed 41) are in

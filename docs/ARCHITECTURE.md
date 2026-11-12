@@ -466,6 +466,10 @@ and no wait; a check that did not answer, or named its most, holds nothing back,
 touched, and an explicit ask lists as before: filtering the ask by the check's verdict lost facts the agent raises
 (D1452), and filtering it by a card's cleared state hides a lift notice beside the hold it lifts (D1451;
 docs/research/g2-decoys.md).
+**The cleared-state filter (`pushStateFilter`, F2, D1193, part `cards`)** takes an item carded none whose state says
+a constraint was lifted, met or superseded out of the push's pool, unless one of the user's constraint cards shares
+an entity with it (`couldClear`, D1456): a lift notice stays beside the hold it could lift, so the check never reads
+the hold alone.
 `pushCandidates: 0` (the part `candidates` out) restores the reader's push and asks described here. Its question
 is the message's first 10,000 characters (an ask's cap), and its read is traced as decision "reader-push" with its model
 call and cost, and its lookup's `sourceCalls`. A trace's `sourceCalls` count only calls a connector received: a search
