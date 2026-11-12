@@ -668,3 +668,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1024 | 2026-11-11 | Adopted (lab data, M14): a length-debiased M2 (`m2lb`), the M2 slice a micro model is screened on. | lab |
 | D1025 | 2026-11-11 | Rejected: the recipes that did not help on the held-out sources. | rejected |
 | D1071 | 2026-11-11 | A persistence key that opens none of the persisted users stops the start (the parent's decision on R1's finding; amends D425 and D991). | adopted |
+| D1072 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | finding |
+| D1073 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | rejected |
+| D1074 | 2026-11-12 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | rejected |
