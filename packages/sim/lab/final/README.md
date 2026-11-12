@@ -9,7 +9,11 @@ the API's Haiku (D1140), so levels read high.
 ```bash
 FINAL=<commit> SUITE=heldout20 bash packages/sim/lab/final/go.sh                 # the final read, once
 FINAL=HEAD SUITE=dev20 SEEDS=41 PREFIX=reh bash packages/sim/lab/final/go.sh      # a rehearsal
+DRY_ONLY=1 FINAL=<commit> SUITE=heldout20 PREFIX=dry bash packages/sim/lab/final/go.sh  # start-up check, ~15 s
 ```
+
+`DRY_ONLY=1` builds the trees, checks the task hashes and dry-starts every arm (no model call, nothing queued), then
+stops. Run it at the freeze. On dev20 it took 13 s.
 
 Optional settings:
 
