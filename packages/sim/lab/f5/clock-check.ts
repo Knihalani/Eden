@@ -16,16 +16,19 @@ const reply = (n: number) =>
     cards: Array.from({ length: n }, (_, i) => ({ i, kind: "none" })),
     requests: Array.from({ length: n }, (_, i) => ({ i, r: ["do the thing"] })),
   });
+console.log("start");
 for (const u of process.argv.slice(2)) {
   const [suite, seed] = u.split(":");
   for (const clockName of ["wall", "world"] as const) {
+    console.log("world");
     const { world } = worldOf(Number(seed), suite!, "hidden", { maxTasks: 30, maxOffworld: 5 });
     const sources = simSources(world, REALISTIC, 0, Number(seed));
     const model = new FakeModel((req) => {
       const n = (req.messages.at(-1)!.content.match(/<item /g) ?? []).length || 20;
       return reply(n);
     });
-    const now = clockName === "world" ? () => world.now : undefined;
+    const t0 = Date.now();
+    const now = clockName === "world" ? () => world.now + (Date.now() - t0) : undefined;
     const partner = buildPartner({
       sources: async () => sources,
       sourceMapPath: ":memory:",
@@ -35,10 +38,13 @@ for (const u of process.argv.slice(2)) {
     });
     partner.stopSync();
     const cards = (partner as unknown as { deps: { cards?: CardEnricher } }).deps.cards!;
+    console.log("built");
     const scope = { tenantId: "cold", userId: `${suite}-${seed}` };
     const at = now ? now() : Date.now();
     await partner.observe({ ...scope, sessionId: "s0", at, kind: "session_start", agent: "clock-check" });
+    console.log(`${u} ${clockName}: warming`);
     await warmAll(partner.sync!, [scope], 2_000);
+    console.log(`${u} ${clockName}: warm, ${cards.stats.enqueued} enqueued; draining`);
     await cards.idle();
     const s = cards.stats;
     console.log(

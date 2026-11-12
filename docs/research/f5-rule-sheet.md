@@ -99,3 +99,35 @@ that are not have no constraint card at shipped coverage: 18 of 29 on train and 
 leaves out. So on train the sheet can reach at most about a third of the facts retrieval misses; the rest needs
 cards first. heldout19's 42 of 50 carded (h19-diagnosis.md) was measured with the final enricher's own lines, not
 shipped replay coverage, so the ceiling in the lab is lower than in that diagnosis [EST: the coverage differs].
+
+## 4. Why the missed facts have no card, and a clock bug in shipped coverage ($0)
+
+`--ask-diag` with the shipped card rules per planted item (`prefilter`, `automated`, `forIntent`; train and
+reworded, seeds 41–42, the default, no check). Of 56 hidden facts on train missing from the push's pool, 30 carry a
+card of some kind, 7 a `none` card from a full card read, and **26 fail the economy prefilter** (`worthCardingStrict`:
+no DEONTIC word in their own text; e.g. "The front-door lock box was replaced on 23 October; the old code no longer
+works" passes, but the planted chat or note wording often does not). 22 of those 26 pass `readForIntent`, so the
+shipped enricher should read them for requests, yet shipped coverage has no line for them (reworded: 25 of 29).
+
+The reason is a lab bug. `cold-start.ts`, which records shipped coverage (D872), builds the partner with no `now`, so
+the partner runs on the wall clock (11 November at recording) while the sim worlds are dated 27 October
+(`world.ts` `NOW`). `cardsLean`'s 7-day window then skips almost every past item the prefilter rejects.
+`packages/sim/lab/f5/clock-check.ts` runs the shipped `buildPartner` on one world with a fake card model ($0):
+
+| world | clock | request-only reads | items sent | card calls | lean-skipped |
+| --- | --- | ---: | ---: | ---: | ---: |
+| train1:41 | wall (as recorded) | 36 | 127 | 9 | 1,363 |
+| train1:41 | the world's | 179 | 270 | 17 | 1,220 |
+| train3:42 | wall | 36 | 122 | 8 | 1,369 |
+| train3:42 | the world's | 198 | 284 | 16 | 1,207 |
+
+So shipped coverage lacks most of the intent requests a deployment would hold for prefilter-rejected items, and a
+new user's real card bill is about twice cold-start's (16–17 calls a world, not 8–9) [EST from these call counts;
+the token cost of a request-only item is lower than a carded one's]. Fix: give `buildPartner` the world's clock
+(advancing, or `warmAll` waits forever) and re-record. Reported to the integrator and F8 before dev20's recording.
+
+**`cardsKeepOnly`** (trial, built): a request-only read keeps the card its call wrote (today it is set to `none`
+whatever the model wrote; no extra call). At shipped coverage it changes almost nothing, because those items were
+never read when the coverage was recorded (train, reworded, longtail seeds 41–42, no-model funnel, `--jobs 1`):
+hidden surfaced 602 → 602 of 816, decoys 538 → 536, planted handed 551 → 551, neutral packets 765 → 770. It can only
+be judged on coverage recorded on the right clock.
