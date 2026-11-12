@@ -691,6 +691,18 @@ instructions about 6%.
 | The packets' whole agent-side cost | about 0.01–0.02 | ≈0 | no cut keeps facts (D258, D273) |
 | Speculate the agent's first call, abort it on a yes (design, F7 §9) | +0.04–0.06 on Pi (aborted first calls) | −0.28 s | not built: cost up; needs the API to measure |
 
+**Eden against the agent alone, connectors counted (F7 §10c [EST]).** Model spend: Eden +$0.25 per 1,000 tasks on Pi
+and +$0.23 on Hermes (B19). Eden saves a net 0.25–0.65 connector calls a task (0.3–0.7 on Hermes). Net per 1,000
+tasks:
+- first-party APIs: +$0.25 (Pi), +$0.23 (Hermes);
+- Composio: +$0.05 to +0.17;
+- Unified.to: −$0.24 to +0.06;
+- Arcade.dev, Pipedream and Zapier: −$2.3 to −$17.
+
+Wall: B19's walls include about 0.45 s a connector call (the `direct` profile). At a production latency L a call,
+Eden − agent alone is about +0.39 − 0.72 × (L − 0.45) s on Pi and +0.09 − 0.78 × (L − 0.45) s on Hermes. That is
+faster from L ≈ 1.0 s on Pi and L ≈ 0.6 s on Hermes, and at every L ≥ 0.3 s if F10's skip removes 70% of checks.
+
 `packages/sim/lab/f7/levers.py` recomputes the table from a ledger and `--check-dump` files; `f7/price.py` prices any
 ledger per role at list prices with the check's modelled wait, for runs whose model calls bill nothing real.
 
