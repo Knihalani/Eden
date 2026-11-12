@@ -41,7 +41,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cardsLanes: "cards",
   cardsSourceAware: "cards",
   cardsRequestsFix: "cards",
-  cardsRequestsWide: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
@@ -69,6 +68,8 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckWaitMs: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
+  pushCheckSheet: "checker",
+  pushCheckSheetRefs: "checker",
 };
 
 /**
@@ -145,7 +146,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   cardsLanes: ["cards"],
   cardsSourceAware: ["cards", "sync"],
   cardsRequestsFix: ["cards", "intent"],
-  cardsRequestsWide: ["cards", "intent", "cardsRequestsFix"],
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
@@ -180,6 +180,8 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
   pushDaySeats: [...PUSH, "pushCheck"],
+  pushCheckSheet: [...PUSH, "pushCheck", "cards"],
+  pushCheckSheetRefs: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
 };
 
@@ -247,6 +249,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
   pushDaySeats: { integer: true, max: 5 },
+  pushCheckSheet: { integer: true, min: 0, max: 120 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
 };

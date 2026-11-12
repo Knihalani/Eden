@@ -80,7 +80,16 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
-import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
+import {
+  CHECK_MAX_ITEMS,
+  checkKey,
+  itemMark,
+  SHEET_MAX_CARDS,
+  sheetText,
+  type PushCheckRead,
+  type PushChecker,
+  type SheetCard,
+} from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -257,6 +266,8 @@ export interface PushPoolReport {
    * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
+  /** `pushCheckSheet` (F5): the item ids of the rule sheet the check read, in its order (ids only, for the lab). */
+  sheet?: string[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -712,8 +723,6 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
-      // `cardsRequestsWide` (trial, F1): the requests asked in varied forms (prompt form 4).
-      if (this.config.intent && this.config.cardsRequestsFix && this.config.cardsRequestsWide) cards.wideRequests();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -2580,19 +2589,30 @@ export class ContextPartner {
    */
   private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    if (!this.config.pushCheck || !checker) return null;
+    const like = gate.like.some(Boolean);
+    if (!like) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
+    const today = localDay(this.now(), this.deps.cache.offsetOf(s.scope));
+    const sheet = this.sheetOf(s, cue, today);
     const focus = readerFocus(cue.raw);
     const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
-      today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      today,
+      ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
     };
     const key = checkKey(input);
-    const asked = `${input.today}\n${request}`;
+    const ids = sheet.map((c) => c.id);
+    const withSheet = (r: PushCheckRead): PushCheckRead => (ids.length > 0 ? { ...r, sheet: ids } : r);
+    // A kept answer read this sheet too: a card landing or expiring between passes asks again.
+    const asked =
+      sheet.length > 0
+        ? `${input.today}\n${request}\n${createHash("sha256").update(sheetText(sheet)).digest("hex").slice(0, 16)}`
+        : `${input.today}\n${request}`;
     const checks: Map<string, KeptCheck> = (s.pushChecks ??= new Map());
     // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
     // pass (`readerPushBehind`) often only reorders the pool or drops an item.
@@ -2602,12 +2622,13 @@ export class ContextPartner {
       if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
       // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
-      return {
+      return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
         costUsd: 0,
         called: false,
         overBudget: false,
-      };
+      });
     }
     let kept = checks.get(key);
     const fresh = !kept;
@@ -2630,7 +2651,7 @@ export class ContextPartner {
     try {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
-      if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
+      if (got) return withSheet(fresh ? got : { ...got, costUsd: 0, called: false });
       // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
@@ -2640,10 +2661,55 @@ export class ContextPartner {
           () => undefined,
         );
       }
-      return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
+      return withSheet({ yes: null, costUsd: 0, called: false, overBudget: false, late: true });
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * `pushCheckSheet` (F5): the user's rule sheet, at most `pushCheckSheet` of their constraint cards made before the
+   * request (no `none` or `preference` card, none whose span ended before `today`), one a statement (the newest
+   * item's), newest items first; only items still cached, no bulk mail. No model call and no source call: the card
+   * store and the cache, both the user's own.
+   */
+  private sheetOf(s: Session, cue: Cue, today: string): SheetCard[] {
+    const n = Math.min(this.config.pushCheckSheet, SHEET_MAX_CARDS);
+    const cards = this.deps.cards;
+    if (n <= 0 || !this.config.cards || !cards) return [];
+    const ids = cards.carded(s.scope);
+    if (ids.length === 0) return [];
+    const now = this.now();
+    const rows: { id: string; card: Card; item: ContextItem; at: number }[] = [];
+    for (const [id, card] of cards.cardsOf(s.scope, ids, cue.arrived ?? now)) {
+      if (card.kind === "none" || card.kind === "preference") continue;
+      if (card.end !== undefined && card.end < today) continue;
+      const item = this.deps.cache.get(s.scope, id, now);
+      if (!item || bulkMail(item)) continue;
+      rows.push({ id, card, item, at: item.updatedAt ?? 0 });
+    }
+    rows.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const out: SheetCard[] = [];
+    const said = new Set<string>();
+    for (const { id, card, item } of rows) {
+      const statement = sanitizeForStore(card.statement);
+      const key = statement.toLowerCase().replace(/\s+/g, " ").trim();
+      if (!key || said.has(key)) continue;
+      said.add(key);
+      // A heavy user's rules do not fit: the newest `n` of them speak on neutral requests more than main does
+      // (F5 §11d, D1183), so the check reads the pool alone, as without a sheet.
+      if (out.length >= n) return [];
+      out.push({
+        id,
+        kind: card.kind,
+        statement,
+        title: sanitizeForStore(item.title),
+        source: sanitizeForStore(item.sourceId),
+        ...(card.start ? { start: card.start } : {}),
+        ...(card.end ? { end: card.end } : {}),
+      });
+    }
+    return out;
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2682,11 +2748,13 @@ export class ContextPartner {
     const yes = check?.yes ?? null;
     const pool = gate.pool;
     const reported = pool;
-    if (reported.length === 0) return { items: [], pool };
+    // `pushCheckSheet` (F5): the items of the sheet's rules the check named, after the pool's (current copies only).
+    const ruled = yes && check?.rules?.size ? this.ruledItems(s, check.rules, pool) : [];
+    if (reported.length === 0 && ruled.length === 0) return { items: [], pool };
     // `pushDaySeats`: a seat is the check's to name; with no answer it is not a candidate.
     const open = reported.filter((x) => !bulkMail(x.item) && (yes !== null || !gate.seats?.has(x.item.id)));
     let items = yes
-      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
+      ? [...open.filter((x) => yes.has(x.item.id)), ...ruled].slice(0, this.config.pushCandidates)
       : like.some(Boolean)
         ? open.slice(0, this.config.pushCandidates)
         : [];
@@ -2726,10 +2794,24 @@ export class ContextPartner {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
             ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
+            ...(check?.sheet ? { sheet: [...check.sheet] } : {}),
           }
         : {}),
     });
     return { items, pool, ...(unsettled ? { unsettled } : {}) };
+  }
+
+  /** `pushCheckSheet` (F5): the cached items a check's named rules stand for, not already in the pool, no bulk mail. */
+  private ruledItems(s: Session, ids: ReadonlySet<string>, pool: readonly Scored[]): Scored[] {
+    const inPool = new Set(pool.map((x) => x.item.id));
+    const now = this.now();
+    const out: Scored[] = [];
+    for (const id of ids) {
+      if (inPool.has(id)) continue;
+      const item = this.deps.cache.get(s.scope, id, now);
+      if (item && !bulkMail(item)) out.push({ item, score: 0, matched: 0, sketch: null });
+    }
+    return out;
   }
 
   /**

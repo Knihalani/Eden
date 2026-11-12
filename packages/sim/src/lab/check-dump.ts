@@ -72,6 +72,10 @@ export class DumpingChecker extends PushChecker {
         text: it.text,
         full: this.fullOf(it.id),
       })),
+      // `pushCheckSheet` (F5): the rule sheet as read (its cards' item ids, kinds and lines), and whether pool items on
+      // it were sent as pointers; the prompt is `checkMessages` of this row's input.
+      ...(input.sheet?.length ? { sheet: input.sheet, ...(input.sheetRefs ? { sheetRefs: true } : {}) } : {}),
+      hash: input.items.map((it) => it.hash),
       yes: read.yes ? [...read.yes] : null,
       reply: this.replies.get(checkMessages(input).find((m) => m.role === "user")?.content ?? "") ?? null,
       called: read.called,

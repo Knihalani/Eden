@@ -44,6 +44,21 @@ def price(c, s):
     return usd, 596 + 2.93 * out, total_in + out
 
 
+def calls(q):
+    """The queue's call log less every process an arm restarted from (G4's finding: a restart replays its calls and
+    logs them again). An arm is one pi-ab process, so only its last process (by first call) made the results; coverage
+    runs (`-cov-`) are one process a world, all kept."""
+    rows = [json.loads(line) for line in open(os.path.join(q, "calls.jsonl")) if line.strip()]
+    first = {}
+    for c in rows:
+        first.setdefault((c.get("run"), c.get("pid")), c.get("at", ""))
+    last = {}
+    for (run, pid), at in first.items():
+        if run and "-cov-" not in run and (run not in last or at > first[(run, last[run])]):
+            last[run] = pid
+    return [c for c in rows if c.get("run") not in last or c.get("pid") == last[c.get("run")]]
+
+
 def main():
     run = sys.argv[1]
     q = os.path.join(run, "q")
@@ -58,8 +73,7 @@ def main():
             sizes[d["id"]] = d["size"]
     by = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0.0, 0.0, 0.0]))  # run -> role -> n,$,ms,tok
     unsized = collections.Counter()
-    for line in open(os.path.join(q, "calls.jsonl")):
-        c = json.loads(line)
+    for c in calls(q):
         s = sizes.get(c.get("key"))
         if not s:
             unsized[c.get("run")] += 1
@@ -139,15 +153,54 @@ def main():
                   f"neutral concerns {mn[0]}/{mn[1]}")
             print(f"    multi-turn sample ({ag['n']} tasks): agent {ag['calls']:.2f} model calls, {ag['tools']:.2f} tool "
                   f"calls, {ag['tok']:.0f} tokens a task; agent ${ag['usd']:.4f}/1k + Eden ${ag['eden_usd']:.4f}/1k "
-                  f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task [EST]; connector "
+                  f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task model calls and "
+                  f"push only, {ag['wall'] + 450 * ag['tools']:.0f} with 0.45 s a tool round [EST]; connector "
                   f"calls {ag['conn']:.2f} a task (Eden's and the agent's tools)")
             fees = ", ".join(f"{k} ${ag['conn'] * v:.2f}" for k, v in CONNECTOR_FEES.items())
             print(f"    connector fees per 1,000 tasks by plan [EST]: {fees}")
     print("\n  Production connector latency L s a call: walls here assume the direct profile (~0.45 s a call); add")
     print("  0.72 x (L - 0.45) s a task on Pi and 0.78 x (L - 0.45) on Hermes [EST, F7].")
+    speculate(run, by, P)
     if unsized:
         print(f"\n  calls with no sized answer (not priced): {dict(unsized)}")
 
 
+def speculate(run, by, P):
+    """[EST] F10's `speculate` proxy option (D1273), modelled from this run: the agent's first call goes out while the
+    push check runs and is aborted when a packet arrives. A silent push (the check named nothing, no packet) saves
+    the push wait; a speaking one pays for the aborted call. Pi does not go through the proxy, so this is arithmetic
+    on the final arm's own silent share and push wait (single-shot) and the multi-turn sample's agent call price,
+    not a measurement. F10's own estimate: about -0.41 s a task for +$0.037 per 1,000."""
+    tl = os.path.join(run, "final.tl", "tasks.jsonl")
+    if not os.path.exists(tl):
+        return
+    pushed = spoke = 0
+    for line in open(tl):
+        t = json.loads(line)
+        pools = t.get("pushPools") or []
+        if not any(p.get("check") for p in pools):
+            continue
+        pushed += 1
+        spoke += any(p.get("handed") for p in pools)
+    if not pushed:
+        return
+    silent = 1 - spoke / pushed
+    roles = by.get(f"{P}-final", {})
+    check = roles.get("eden.check", [0, 0.0, 0.0, 0.0])
+    wait_a_check = check[2] / max(1, check[0])
+    agent = by.get(f"{P}-mt-final", {}).get("agent") or roles.get("agent") or [0, 0.0, 0.0, 0.0]
+    call_usd = agent[1] / max(1, agent[0])
+    print(f"\n== speculate (F10, D1273; proxy only) [EST, modelled]: of {pushed} checked pushes {100 * silent:.1f}% "
+          f"were silent; a silent push saves its check's wait ({wait_a_check:.0f} ms), a speaking one aborts a call "
+          f"(${call_usd:.6f})")
+    print(f"   wall {-silent * wait_a_check / 1000:+.2f} s a checked task; cost {+1000 * (1 - silent) * call_usd:+.4f} $ "
+          f"per 1,000 checked tasks (F10's estimate: -0.41 s, +$0.037)")
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["--dedupe-calls"]:
+        # report.sh: the deduplicated call log, for F7's price-queue.py
+        for c in calls(sys.argv[2]):
+            print(json.dumps(c))
+    else:
+        main()

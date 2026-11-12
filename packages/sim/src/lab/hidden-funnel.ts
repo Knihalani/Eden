@@ -76,7 +76,6 @@ import {
   AskReader,
   CardEnricher,
   CARD_FORM_REQUESTS,
-  CARD_FORM_WIDE,
   cardKey,
   intentCut,
   intentReach,
@@ -88,6 +87,7 @@ import {
   type CandidateDump,
   type CardMaker,
   automated,
+  readForIntent,
   type PushPoolReport,
   PushChecker,
   worthCarding,
@@ -482,8 +482,7 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
-const CARD_FORM =
-  RUN.cards && RUN.intent && RUN.cardsRequestsFix ? (RUN.cardsRequestsWide ? CARD_FORM_WIDE : CARD_FORM_REQUESTS) : 0;
+const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
   INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
@@ -1230,6 +1229,9 @@ async function runSeed(
       cardRead,
       // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
       notSentPrefilterRejects: !cardRead && !prefilter,
+      prefilter,
+      automated: automated(item),
+      forIntent: readForIntent(item, askAt, RUN.cardsLeanDays),
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,
@@ -1597,6 +1599,10 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `pushCheckSheet` (F5): the planted item's place on the rule sheet the check read (-1: not on it).
+      ...(push?.sheet ? { pushSheetAt: push.sheet.indexOf(id) } : {}),
+      // With it, the planted item's card kind at the end of the task ("none": no card, a none card or expired).
+      ...(push?.sheet && cards ? { plantedCard: cards.cardsOf(scope, [id], clock).get(id)?.kind ?? "none" } : {}),
       // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
       // it was handed.
       ...(push && task.stale
