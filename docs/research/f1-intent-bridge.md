@@ -171,6 +171,9 @@ DECISIONS: re-made cards for dev20 and reworded (seeds 41–44) in form 4 agains
 check's view +28 of 1,408 or more, card output tokens an item +15% or less) before a Pi pair, and the same Pi rule as
 `requestGloss`.
 
+The test and the trials row were deleted with the switch (D1154). The rule applied is 89d98a27's re-registration, which
+measured the requests' characters an item in place of card output tokens (§13).
+
 ## 7. The glossary rebuilt from the model's own vocabulary (no outside list)
 
 The integrator ruled out shipping CC-BY-SA content. With no API credit, Haiku subagents (one or more a language, the
