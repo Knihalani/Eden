@@ -688,3 +688,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| The request glossary (F1, docs/research/f1-intent-bridge.md) | `requestGloss` | F1 session | the day its Pi pair runs (blocked: no Anthropic credit on 2026-11-12) | The pre-registered Pi pair (f1-intent-bridge.md §4): reworded's 36 non-English templates, seeds 41–48, hidden, control and neutral, `both+ask` against `both+ask~gloss`, Sonnet-graded; promoted if hidden raised has a template-clustered lower bound above 0 points, confirmed concerns do not rise and neutral packets rise by no more than 2 points, else deleted with `gloss.ts`, `gloss.bin` and their tests |

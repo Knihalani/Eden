@@ -561,6 +561,13 @@ export interface EngineConfig {
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
   /**
+   * Trial (F1, docs/research/f1-intent-bridge.md; off): a request written in another language is given the English
+   * words its own words mean (`glossOf`, gloss.ts: a glossary written once by a model, read with no model and no call),
+   * and the push's and an ask's lookup search with them beside the request's own words, lexically and in the intent
+   * index. An English request is searched as written.
+   */
+  requestGloss: boolean;
+  /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
    * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
@@ -877,6 +884,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
+  requestGloss: false,
   askReader: true,
   askReaderPool: 15,
   askReaderWaitMs: 2_500,
