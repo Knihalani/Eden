@@ -661,6 +661,16 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
 | D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
 | D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
+| D1020 | 2026-11-11 | Adopted (lab tooling, M14): two more task generators on M2's schema and labels, G2 and G3. | lab |
+| D1021 | 2026-11-11 | Adopted (lab tooling, M14): the leave-one-generator-out screen is the standard transfer check for a micro model. | lab |
+| D1022 | 2026-11-11 | Finding: M2's fact-versus-twin separation is mostly length. | finding |
+| D1023 | 2026-11-11 | Finding: no transfer recipe closes the gap to the sim's hand-written families; mixing generators does not beat M2 alone. | finding |
+| D1024 | 2026-11-11 | Adopted (lab data, M14): a length-debiased M2 (`m2lb`), the M2 slice a micro model is screened on. | lab |
+| D1025 | 2026-11-11 | Rejected: the recipes that did not help on the held-out sources. | rejected |
+| D1071 | 2026-11-11 | A persistence key that opens none of the persisted users stops the start (the parent's decision on R1's finding; amends D425 and D991). | adopted |
+| D1072 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | finding |
+| D1073 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | rejected |
+| D1074 | 2026-11-12 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | rejected |
 | D1040 | 2026-11-11 | Adopted (lab tooling, B19): an Eden arm at any commit beside a pinned harness. | lab |
 | D1041 | 2026-11-11 | Lab only: pi-ab loads P3's `hits` helper (`lexical-hits.ts`) only for the `hits` arm | lab |
 | D1042 | 2026-11-11 | Lab fix: hermes-ab wires the push check | adopted |

@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { ContextPartner, ItemCache } from "@eden/engine";
-import { clusterKeyMatches, Ops, sumMetrics } from "./ops";
+import { turnGateNotice } from "./build";
+import { clusterKeyMatches, Ops, serveError, sumMetrics } from "./ops";
 
 const KEY = "cluster-key-0123456789abcdef";
 
@@ -121,4 +122,19 @@ test("a release that finishes after a newer drop does not put its older table ba
   // Epoch 6 says machine "a" owns nothing.
   expect(o.machineOwns(0)).toBe(false);
   expect(o.machineOwns(1234)).toBe(false);
+});
+
+test("every server's error handler is the 503, never Bun's default 500 (R1)", async () => {
+  const r = serveError();
+  expect(r.status).toBe(503);
+  expect(await r.json()).toEqual({ error: "temporarily unable to serve context" });
+  // main.ts passes it to Bun.serve (an entry point, so read, not imported).
+  const main = await Bun.file(new URL("./main.ts", import.meta.url)).text();
+  expect(main).toMatch(/Bun\.serve\(\{[\s\S]*?error: serveError,/);
+});
+
+test("the turn gate's startup notice: said only when the gate is on and its weights could not be read (R1)", () => {
+  expect(turnGateNotice(true, null)).toContain("turn-gate.bin could not be read");
+  expect(turnGateNotice(true, {})).toBeNull();
+  expect(turnGateNotice(false, null)).toBeNull();
 });

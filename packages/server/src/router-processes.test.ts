@@ -526,3 +526,25 @@ describe("a machine router in a cluster (R1)", () => {
     30_000,
   );
 });
+
+describe("a child that ignores SIGTERM (R1)", () => {
+  test.concurrent("is killed 1.25x the shutdown grace after it, not at the grace its drain fills", async () => {
+    const dir = tempDir("eden-router-kill-");
+    // Listens, reports its port as main.ts does, and ignores SIGTERM: only the router's SIGKILL ends it.
+    const entry = join(dir, "stubborn.ts");
+    writeFileSync(
+      entry,
+      'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("ok") });\n' +
+        'process.on("SIGTERM", () => {});\nprocess.send?.({ edenListening: s.port });\n',
+    );
+    const env = { ...process.env, EDEN_HOME: dir, EDEN_DEV: "1" };
+    const config = { ...loadConfig(env), port: 0, processes: 1, shutdownGraceMs: 400 };
+    const router = await startRouter({ config, env, entry, log: () => {}, onOutput: () => {} });
+    const pid = router.children[0]!.pid;
+    const t0 = performance.now();
+    await router.stop();
+    // A lower bound only: a loaded machine makes it later, never earlier. At the grace itself it took ~400 ms.
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(480);
+    expect(await exited(pid)).toBe(true);
+  });
+});
