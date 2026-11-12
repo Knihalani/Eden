@@ -184,4 +184,7 @@ Source: [r1-release.md](r1-release.md) §Round 3. The harness, `packages/sim/src
   25,035 requests and 0 errors.
 - **The restart finding.** Within its shutdown budget (0.3 × the 15 s grace, oldest users first), a full box writes
   about 23% of its users. The rest re-sync from their sources: about 13 minutes at the soak's rate, with 0 errors and
-  an ask p99 of about 300 ms meanwhile. A follow-up writes the most recently used users first (R1 round 4).
+  an ask p99 of about 300 ms meanwhile. Writing the most recently used users first was tried and rejected on its pre-registered rule (R1 round 4, #280,
+  D1076): live users must be frozen before they are written, so it wrote 498 users in the budget against 626 and
+  restored 157 of 317 returning users against 193. The levers that remain are a longer `EDEN_SHUTDOWN_GRACE_MS` (about
+  65 s for 750 heavy users a process, with the listener closed meanwhile) or a cheaper persisted format later.
