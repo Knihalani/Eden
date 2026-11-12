@@ -1047,6 +1047,17 @@ the static sim worlds do not show. In the stub screen (`funnel --preset NEWB` vs
 41 -- --reader stub --time 1`, 2026-11-03) the reader was asked 119 times under NEWB and 117 under NEWBB; connectors
 received 430 and 424 calls.
 
+## Plans with a day (`pushDaySeats` 3, G1, in the default since D1402)
+
+No new model call of its own: it adds push checks, on requests that started none. Served by subagents, dev20 seeds
+41–42, single-shot (docs/research/g1-facts.md): tasks whose push was checked 661 → 706 of 960 (+7%; on neutral
+requests 213 → 214 of 320, on hidden 223 → 257, on control 225 → 235). At $0.00023 a check with the rule sheet
+[EST, F5's figure] that is about +$0.011 per 1,000 requests on dev20's mix and about +$0.001 per 1,000 on requests
+with nothing to add; at 0.8 s a check [EST, F7] about +40 ms a request on the mix. Not measured through the API. The
+seats add up to three items to a check that has room (at most `pushCheckItems` 15 in all). CPU: `ItemCache.dated`
+reads each of the user's items once per push that names a day, p50 14.5 ms and p99 21 ms at 1,593 items on an
+idle machine (`packages/sim/lab/g1/dated-bench.ts`), off the fast path.
+
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.
 After its iterations it makes 1.36–1.47x planner-off's source calls per lookup in the simulation at time 0 and

@@ -740,3 +740,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1453 | 2026-11-12 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | rejected |
 | D1454 | 2026-11-12 | Finding: `pushCheckItemChars` 400 is not a facts lever. | finding |
 | D1456 | 2026-11-12 | Adopted: `pushStateFilter` keeps a lift notice in the push's pool when the user has a constraint card it could clear. | adopted |
+| D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
+| D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
+| D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |

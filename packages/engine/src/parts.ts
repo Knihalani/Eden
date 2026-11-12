@@ -183,6 +183,12 @@ export const PARTS = {
    * on the sheet is sent as a pointer to its rule (F5, D1180). Out, the check reads the pool alone, as before.
    */
   sheet: { pushCheckSheet: 0, pushCheckSheetRefs: false },
+  /**
+   * A plan with a day is an action on that day (G1, D1402): the request's days read further (a bare day of the month,
+   * a weekday in another language), a turn that names a coming day starts the push, and items on that day take seats
+   * where the push check reads them. Out, days are read by `timeWindow` alone and no seat is given.
+   */
+  days: { pushDaySeats: 0 },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;
