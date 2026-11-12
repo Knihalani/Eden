@@ -708,3 +708,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| D1252 `pushLookup` (F11) | `pushLookup` (engine, 0 = off; 3 in the run) | F11 | 2026-11-12 | D1250's harness, train1–6 seeds 41–44 h/c/n `--limit 1` (72 tasks an arm): `tools`, `both+ask` (B) and `both~LK+ask` (LK: `pushLookup` 3), Eden arms `@w900000` with `pushCheckWaitMs` and `readerPushWaitMs` 900000. Promoted if, against B: connector calls a task fall by at least 0.3, agent model calls a task do not rise, hidden raised is not lower by more than 1 task, Sonnet-regraded control plus neutral concerns rise by at most 1, and [EST] wait at measured search time does not rise; else deleted |

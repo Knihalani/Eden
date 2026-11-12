@@ -176,6 +176,15 @@ export const ASK_NUDGE =
   "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
   "those specifics, if you have it.";
 
+/**
+ * `pushLookup` (D1252, trial): the lead of the records a silent push hands. Fixed words (D11, D19). It says the check
+ * found nothing that changes the request (true: it answered and named nothing) and never that nothing else exists
+ * (D257); the items are for the details the request needs.
+ */
+export const LOOKUP_LEAD =
+  `${EDEN_NOTE}items from the user's sources that name what this request names, for reference; a check found none ` +
+  "that changes what the request should do. Use them for details the request needs.";
+
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
