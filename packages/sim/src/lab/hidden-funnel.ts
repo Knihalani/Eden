@@ -75,8 +75,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
-  CARD_FORM_REQUESTS,
-  CARD_FORM_WIDE,
+  cardForm,
   cardKey,
   intentCut,
   intentReach,
@@ -522,8 +521,8 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
-const CARD_FORM =
-  RUN.cards && RUN.intent && RUN.cardsRequestsFix ? (RUN.cardsRequestsWide ? CARD_FORM_WIDE : CARD_FORM_REQUESTS) : 0;
+// The enricher's form (`cardForm`); under `--card-states` the replay answers in its own form, the state flag taken off.
+const CARD_FORM = cardForm(RUN) & (CARD_STATES ? ~CARD_FORM_STATE : ~0);
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
   INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */

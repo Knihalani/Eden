@@ -360,6 +360,23 @@ export const CARD_FORM_WIDE = 4;
  */
 export const CARD_FORM_STATE = 16;
 
+/**
+ * The card prompt's form a configuration's enricher asks in (`CardEnricher.form()`): 3 with `cardsRequestsFix` (4
+ * with `cardsRequestsWide`), plus `CARD_FORM_STATE` with `cardsState`; 0 without cards. The lab keys its replay files
+ * by it, so a recording and a run that ask in different forms never answer each other.
+ */
+export function cardForm(c: {
+  cards?: boolean;
+  intent?: boolean;
+  cardsRequestsFix?: boolean;
+  cardsRequestsWide?: boolean;
+  cardsState?: boolean;
+}): number {
+  if (!c.cards) return 0;
+  const requests = c.intent && c.cardsRequestsFix ? (c.cardsRequestsWide ? CARD_FORM_WIDE : CARD_FORM_REQUESTS) : 0;
+  return requests + (c.cardsState ? CARD_FORM_STATE : 0);
+}
+
 /** `cardsState`'s clause: the model judges the state from the item's meaning (no word lists anywhere). */
 const STATE_INSTRUCTIONS =
   'Give each card a "state": in_force (the constraint holds now or ahead), lifted (the item says a constraint was ' +
