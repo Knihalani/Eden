@@ -11,6 +11,7 @@
  * `score.py` reads the rows.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { requestActions } from "../../../engine/src/cards";
 import { timeWindow } from "../../../engine/src/grounding";
 import { Encoder } from "../../../encoder/src/index";
 
@@ -87,6 +88,9 @@ for (const w of sheets) {
   const got = ants.get(`${w.suite}|${w.seed}|${w.variant}`);
   if (!got) continue;
   const list = got;
+  // The card's actions (verb classes), for the `act` ground: the request must do one of them (D1270's advice: the
+  // instance, not the topic). A card with none is not held to it.
+  const acts = new Map<string, string[]>(w.sheet.map((x: { id: string; c: { actions?: string[] } }) => [x.id, x.c.actions ?? []]));
   const actVecs = await vecs(list.flatMap((a) => a.acts));
   for (const t of w.tasks) {
     const r0 = performance.now();
@@ -103,11 +107,13 @@ for (const w of sheets) {
     // reads high everywhere, so the margin over this is the `margin` arm's score (score.py).
     const med = scored.length ? scored[Math.floor(scored.length / 2)]!.best : 0;
     const days = timeWindow(t.request, NOW)?.days;
+    const does = requestActions(t.request);
     const top = scored.slice(0, 5).map(({ a, best }) => ({
       id: a.id,
       s: Number(best.toFixed(4)),
       day: !(days && days.size && a.on && ![...days].some((d) => d >= a.on![0] && d <= a.on![1])),
       who: a.who.length === 0 || a.who.some((x) => mentions(t.request, x)),
+      act: (acts.get(a.id) ?? []).length === 0 || (acts.get(a.id) ?? []).some((x) => does.has(x as never)),
     }));
     reqMs += performance.now() - r0;
     reqs++;

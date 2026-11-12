@@ -21,7 +21,12 @@ def group(suite):
     return "reworded" if suite.endswith("r") else "train"
 
 
-MODES = {"none": lambda r: True, "day": lambda r: r["day"], "day+who": lambda r: r["day"] and r["who"]}
+MODES = {
+    "none": lambda r: True,
+    "day": lambda r: r["day"],
+    "day+who": lambda r: r["day"] and r["who"],
+    "day+who+act": lambda r: r["day"] and r["who"] and r.get("act", True),
+}
 
 
 MARGIN = False
