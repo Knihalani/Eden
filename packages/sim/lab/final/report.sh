@@ -18,4 +18,9 @@ ARGS=()
 for a in raw before final; do
   [ -e "$RUN/$a.json" ] && ARGS+=(--arm "$a=$P-$a:$(count "$RUN/$a.json")")
 done
-python3 -I packages/sim/lab/f7/price-queue.py "$RUN/q" "${ARGS[@]}"
+# The call log less the processes an arm restarted from (cost.py's `calls`), beside the same done/ answers.
+DQ=$(mktemp -d)
+ln -s "$(realpath "$RUN/q/done")" "$DQ/done"
+python3 -I packages/sim/lab/final/cost.py --dedupe-calls "$RUN/q" >"$DQ/calls.jsonl"
+python3 -I packages/sim/lab/f7/price-queue.py "$DQ" "${ARGS[@]}"
+rm -rf "$DQ"

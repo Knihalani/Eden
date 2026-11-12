@@ -100,6 +100,7 @@ import {
   type Task,
 } from "./ab-common";
 import { variantsFor } from "./neutral";
+import { observeToolResult } from "./observe-tool";
 import { DayLog, isRecap, poolDays, recapOf, shiftClocks, shiftMeta, type DaySummary } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import {
@@ -879,6 +880,8 @@ async function runWorld(
         return items.map((i) => i.text).join("\n\n");
       };
       let observed = false;
+      /** Packets a tool result's observe handed out, placed at the next `pending` (`transform_tool_result`). */
+      const handed: Parameters<typeof deliver>[0] = [];
       const binding: TaskBinding = {
         token: crypto.randomUUID(),
         async observe() {
@@ -903,11 +906,14 @@ async function runWorld(
         async tool(tool, output) {
           if (!partner) return;
           const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-          await partner.observe(ev({ kind: "tool_result", tool, output }));
-          tl.end(o);
+          // A packet the observe hands out is kept for the next `pending`, which places it (`observe-tool.ts`).
+          const injected = await observeToolResult(partner, ev({ kind: "tool_result", tool, output }), (i) =>
+            handed.push(i),
+          );
+          tl.end(o, { injected });
         },
         pending() {
-          return partner ? deliver(partner.takePending({ ...scope, sessionId })) : "";
+          return partner ? deliver([...handed.splice(0), ...partner.takePending({ ...scope, sessionId })]) : "";
         },
       };
       task = { binding, tl, record, r, sessionId, uptake };

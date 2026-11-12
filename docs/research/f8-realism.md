@@ -81,3 +81,17 @@ What it says:
 
 The reader and the push check are not in this screen (stub reader, no checker), so it does not show what the paid
 path would reject.
+
+## heldout20's realism items (for the final's secondary arm)
+
+heldout20 lives at its own present (19 November 2026), so its realism items are dated differently from train's and
+need their own cards. They were made from heldout20's **neutral** worlds only, seeds 41–44: a neutral world plants
+nothing, so no template of the blind suite was read.
+
+- The worlds were built on F4's branch merged with main, locally, without pushing.
+- The items pending in the queue were the realism items plus that world's base items. The base items were answered
+  too, so the card calls that mixed both could complete; only the realism items' lines were kept.
+- Coverage: 2,075 realism item keys; 1,476 got a form-3 line, 952 of them rule cards. Both forms, 216 calls, 0
+  failures, served by subagents per item (D1102) on heldout20's clock.
+- The 2,952 lines are at the head of `cards-shipped.jsonl.gz`. Their keys appear in no other suite's world, so no
+  other run reads them (train 41–42 still reads 318/299).

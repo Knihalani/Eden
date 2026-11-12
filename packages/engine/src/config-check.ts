@@ -41,7 +41,6 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   cardsLanes: "cards",
   cardsSourceAware: "cards",
   cardsRequestsFix: "cards",
-  cardsRequestsWide: "cards",
   intentHits: "cards",
   intentMinCoverage: "cards",
   intentMinMatched: "cards",
@@ -69,6 +68,8 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckWaitMs: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
+  pushCheckSheet: "checker",
+  pushCheckSheetRefs: "checker",
 };
 
 /**
@@ -96,6 +97,12 @@ const SYNC: Key[] = ["sync"];
 const POLL_BEHIND: Key[] = ["sync", "syncOnDemand", "syncPollBehind"];
 const READER: Key[] = ["askReader"];
 const PUSH: Key[] = ["askReader", "readerPush"];
+/** Settings that act only while a number setting is above 0 (its off value), checked as `PARENTS` are. */
+export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
+  syncActivePollBackoff: "syncActivePollMs",
+  syncActivePollPriced: "syncActivePollMs",
+};
+
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncMaxItems: SYNC,
   syncPageSize: SYNC,
@@ -145,7 +152,6 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   cardsLanes: ["cards"],
   cardsSourceAware: ["cards", "sync"],
   cardsRequestsFix: ["cards", "intent"],
-  cardsRequestsWide: ["cards", "intent", "cardsRequestsFix"],
   intentHits: ["cards", "intent"],
   intentMinCoverage: ["cards", "intent"],
   intentMinMatched: ["cards", "intent"],
@@ -179,7 +185,12 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
+  pushCheckSheet: [...PUSH, "pushCheck", "cards"],
+  pushCheckSheetRefs: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
+  syncActivePollMs: ["sync"],
+  syncActivePollBackoff: ["sync"],
+  syncActivePollPriced: ["sync"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -245,6 +256,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   pushCheckWaitMs: COUNT,
   pushCheckItemChars: { integer: true, min: 40, max: 400 },
   pushCheckItems: { integer: true, min: 1, max: 20 },
+  pushCheckSheet: { integer: true, min: 0, max: 120 },
   sourceYieldRare: { integer: true, max: 2 },
   sourceYieldNames: COUNT,
 };
@@ -314,6 +326,14 @@ export function checkEngineConfig(value: unknown, options: ConfigCheckOptions = 
             `configuration has ${off.map((p) => `"${p}"`).join(" and ")} off: it would do nothing`,
         );
       }
+    }
+    // A child whose parent is a number (0 = off) rather than a flag (D1132's review).
+    for (const key of Object.keys(out) as Key[]) {
+      const parent = NUMBER_PARENTS[key];
+      if (!parent || isCore(key, merged[key]) || merged[parent] !== 0) continue;
+      throw new Error(
+        `${where}: "${key}" acts only with "${parent}" above 0, and this configuration has it 0: it would do nothing`,
+      );
     }
   }
   return out as Partial<EngineConfig>;

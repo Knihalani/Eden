@@ -15,6 +15,8 @@ prefix; a Haiku call's latency 596 ms + 2.93 ms an output token, H3's fit).
   (CL3, F7: about $0.0165 a user-month [EST]); the backfill is not a month's spend.
 - Push wait a task: `eden.check`'s modelled latency, summed per task (the agent waits for it before its first call).
 - Agent wall a task (multi-turn): the agent's calls' modelled latency plus the push wait.
+- The check's rule sheet (D1180), when done files carry `size.sheet`: Eden $ with the sheet priced five ways (F7,
+  COST-MODEL "The sheet's cache hit rate").
 - Connector calls a task: Eden's (its streams' calls less their backfill) plus the agent's own tool calls (multi-turn).
 """
 
@@ -32,6 +34,17 @@ EDEN_TASK_ROLES = {"eden.check", "eden.reader", "eden.judge"}
 CONNECTOR_FEES = {"first-party": 0.0, "Composio": 0.30, "Unified.to": 0.75, "Arcade": 10.0, "Pipedream": 12.0,
                   "Zapier": 25.8}
 CARD_TRICKLE_MONTH = 0.0165
+# F7 (D1180's rule sheet, COST-MODEL "The rule sheet's cache"): the check's sheet is its own cached block. The queue
+# drops cache markers, so a done file's `size.sheet` (the sheet message's characters, G3's batch.ts) is the only way
+# to price it apart; without it the sheet is uncached input like the rest of the message. Rates are input multiples:
+# a read 0.1x, a 1-hour write 2x, and the realistic mix at `sheet-cache.py`'s 1-hour hit rate for a heavy user
+# (0.75-0.79 at 16 requests a day, 1-4 sheet changes a day) and its 5-minute rate with requests at random over the
+# active hours (0.16; a 1.25x write). "no sheet" drops the block only: without the sheet the pool's pointers would be
+# items again (D1180: about $0.000019 a check), so it understates a sheetless check slightly.
+SHEET_HIT_1H, SHEET_HIT_5M = 0.75, 0.16
+SHEET_RATES = {"no sheet": 0.0, "uncached": 1.0, "all read": 0.1,
+               "1h mix": SHEET_HIT_1H * 0.1 + (1 - SHEET_HIT_1H) * 2.0,
+               "5m mix": SHEET_HIT_5M * 0.1 + (1 - SHEET_HIT_5M) * 1.25}
 
 
 def price(c, s):
@@ -42,6 +55,26 @@ def price(c, s):
     out = s["out"] / CPT
     usd = (total_in - prefix) * p["in"] + prefix * (HIT * p["cr"] + (1 - HIT) * p["cw"]) + out * p["out"]
     return usd, 596 + 2.93 * out, total_in + out
+
+
+def sheet_tokens(c, s):
+    """The check's rule-sheet tokens in this call (priced above as uncached input), 0 when unknown or absent."""
+    return s.get("sheet", 0) / CPT if (c.get("role") == "eden.check") else 0.0
+
+
+def calls(q):
+    """The queue's call log less every process an arm restarted from (G4's finding: a restart replays its calls and
+    logs them again). An arm is one pi-ab process, so only its last process (by first call) made the results; coverage
+    runs (`-cov-`) are one process a world, all kept."""
+    rows = [json.loads(line) for line in open(os.path.join(q, "calls.jsonl")) if line.strip()]
+    first = {}
+    for c in rows:
+        first.setdefault((c.get("run"), c.get("pid")), c.get("at", ""))
+    last = {}
+    for (run, pid), at in first.items():
+        if run and "-cov-" not in run and (run not in last or at > first[(run, last[run])]):
+            last[run] = pid
+    return [c for c in rows if c.get("run") not in last or c.get("pid") == last[c.get("run")]]
 
 
 def main():
@@ -58,8 +91,8 @@ def main():
             sizes[d["id"]] = d["size"]
     by = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0.0, 0.0, 0.0]))  # run -> role -> n,$,ms,tok
     unsized = collections.Counter()
-    for line in open(os.path.join(q, "calls.jsonl")):
-        c = json.loads(line)
+    sheet = collections.defaultdict(float)  # run -> the checks' sheet tokens, priced as uncached input
+    for c in calls(q):
         s = sizes.get(c.get("key"))
         if not s:
             unsized[c.get("run")] += 1
@@ -70,6 +103,7 @@ def main():
         d[1] += usd
         d[2] += ms
         d[3] += tok
+        sheet[c.get("run")] += sheet_tokens(c, s)
 
     def results(name):
         f = os.path.join(run, f"{name}.json")
@@ -131,6 +165,12 @@ def main():
         print(f"    cost: Eden ${eden:.4f}/1k tasks [EST]" + (
             f"; cards ${cu / max(1, worlds):.5f} a world's backfill once ({cc / max(1, worlds):.1f} calls) + "
             f"${CARD_TRICKLE_MONTH} a heavy user-month trickle [EST, CL3]" if worlds else "; cards: none (no Eden)"))
+        st = sheet.get(f"{P}-{arm}", 0.0) / max(1, n)
+        if st:
+            ways = ", ".join(f"{k} ${eden + 1000 * st * HAIKU['in'] * (r - 1.0):.4f}" for k, r in SHEET_RATES.items())
+            print(f"    Eden $/1k with the check's rule sheet ({st:.0f} tokens a task) priced as: {ways} [EST]")
+        elif arm != "raw":
+            print("    rule sheet: no size.sheet in the queue's done files, so priced as uncached input [EST]")
         print(f"    speed: push wait {push:.0f} ms a task [EST, H3 fit]; connector calls a task: Eden at request time "
               f"{conn[0]:.2f}, the single-shot tools {conn[2]:.2f}; Eden's backfill {conn[1]:.0f} a stream (once a user)")
         if ag:
@@ -139,15 +179,59 @@ def main():
                   f"neutral concerns {mn[0]}/{mn[1]}")
             print(f"    multi-turn sample ({ag['n']} tasks): agent {ag['calls']:.2f} model calls, {ag['tools']:.2f} tool "
                   f"calls, {ag['tok']:.0f} tokens a task; agent ${ag['usd']:.4f}/1k + Eden ${ag['eden_usd']:.4f}/1k "
-                  f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task [EST]; connector "
+                  f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task model calls and "
+                  f"push only, {ag['wall'] + 450 * ag['tools']:.0f} with 0.45 s a tool round [EST]; connector "
                   f"calls {ag['conn']:.2f} a task (Eden's and the agent's tools)")
+            mst = sheet.get(f"{P}-mt-{arm}", 0.0) / max(1, ag["n"])
+            if mst:
+                ways = ", ".join(f"{k} ${ag['usd'] + ag['eden_usd'] + 1000 * mst * HAIKU['in'] * (r - 1.0):.4f}"
+                                 for k, r in SHEET_RATES.items())
+                print(f"    agent + Eden $/1k with the rule sheet priced as: {ways} [EST]")
             fees = ", ".join(f"{k} ${ag['conn'] * v:.2f}" for k, v in CONNECTOR_FEES.items())
             print(f"    connector fees per 1,000 tasks by plan [EST]: {fees}")
     print("\n  Production connector latency L s a call: walls here assume the direct profile (~0.45 s a call); add")
     print("  0.72 x (L - 0.45) s a task on Pi and 0.78 x (L - 0.45) on Hermes [EST, F7].")
+    speculate(run, by, P)
     if unsized:
         print(f"\n  calls with no sized answer (not priced): {dict(unsized)}")
 
 
+def speculate(run, by, P):
+    """[EST] F10's `speculate` proxy option (D1273), modelled from this run: the agent's first call goes out while the
+    push check runs and is aborted when a packet arrives. A silent push (the check named nothing, no packet) saves
+    the push wait; a speaking one pays for the aborted call. Pi does not go through the proxy, so this is arithmetic
+    on the final arm's own silent share and push wait (single-shot) and the multi-turn sample's agent call price,
+    not a measurement. F10's own estimate: about -0.41 s a task for +$0.037 per 1,000."""
+    tl = os.path.join(run, "final.tl", "tasks.jsonl")
+    if not os.path.exists(tl):
+        return
+    pushed = spoke = 0
+    for line in open(tl):
+        t = json.loads(line)
+        pools = t.get("pushPools") or []
+        if not any(p.get("check") for p in pools):
+            continue
+        pushed += 1
+        spoke += any(p.get("handed") for p in pools)
+    if not pushed:
+        return
+    silent = 1 - spoke / pushed
+    roles = by.get(f"{P}-final", {})
+    check = roles.get("eden.check", [0, 0.0, 0.0, 0.0])
+    wait_a_check = check[2] / max(1, check[0])
+    agent = by.get(f"{P}-mt-final", {}).get("agent") or roles.get("agent") or [0, 0.0, 0.0, 0.0]
+    call_usd = agent[1] / max(1, agent[0])
+    print(f"\n== speculate (F10, D1273; proxy only) [EST, modelled]: of {pushed} checked pushes {100 * silent:.1f}% "
+          f"were silent; a silent push saves its check's wait ({wait_a_check:.0f} ms), a speaking one aborts a call "
+          f"(${call_usd:.6f})")
+    print(f"   wall {-silent * wait_a_check / 1000:+.2f} s a checked task; cost {+1000 * (1 - silent) * call_usd:+.4f} $ "
+          f"per 1,000 checked tasks (F10's estimate: -0.41 s, +$0.037)")
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["--dedupe-calls"]:
+        # report.sh: the deduplicated call log, for F7's price-queue.py
+        for c in calls(sys.argv[2]):
+            print(json.dumps(c))
+    else:
+        main()
