@@ -76,7 +76,10 @@ class TableMaker implements CardMaker {
 /** The rules (1-based) the prompt's sheet gave each statement, read back from the sheet block. */
 function rules(req: ChatRequest): Map<string, number> {
   const out = new Map<string, number>();
-  for (const m of req.messages.map((x) => x.content).join("\n").matchAll(/<rule n="(\d+)"[^>]*>[^:]*: ([^<]*)</g))
+  for (const m of req.messages
+    .map((x) => x.content)
+    .join("\n")
+    .matchAll(/<rule n="(\d+)"[^>]*>[^:]*: ([^<]*)</g))
     out.set(m[2]!, Number(m[1]));
   return out;
 }
@@ -293,8 +296,6 @@ describe("the sheet's prompt and parser", () => {
     // With no sheet a "rules" list is not read.
     expect(parseCompare(`{"items":[],"rules":[${yes("1")}]}`, 0)).toEqual([]);
     // At most `SHEET_MAX_NAMED` rules.
-    expect(parseCompareSheet(reply([1, 2, 3, 4].map((k) => yes(String(k))).join(",")), 0, 4)!.rules).toEqual([
-      0, 1, 2,
-    ]);
+    expect(parseCompareSheet(reply([1, 2, 3, 4].map((k) => yes(String(k))).join(",")), 0, 4)!.rules).toEqual([0, 1, 2]);
   });
 });

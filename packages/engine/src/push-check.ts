@@ -299,9 +299,10 @@ export function parseCompareSheet(
   }
   if (!Array.isArray(entries)) return null;
   if (listed !== undefined && !Array.isArray(listed)) return null;
+  let all: unknown[] = entries;
   if (Array.isArray(listed)) {
     // Rule entries are read after the items' own, whatever list holds them.
-    entries = [
+    all = [
       ...entries.slice(0, COMPARE_MAX_ENTRIES * 2),
       ...listed.slice(0, SHEET_MAX_NAMED * 2).map((e) => (e && typeof e === "object" && !("r" in e) ? null : e)),
     ];
@@ -309,7 +310,7 @@ export function parseCompareSheet(
   const out: number[] = [];
   const named: number[] = [];
   const max = rules > 0 ? COMPARE_MAX_ENTRIES * 2 + SHEET_MAX_NAMED * 2 : COMPARE_MAX_ENTRIES * 2;
-  for (const e of entries.slice(0, max)) {
+  for (const e of all.slice(0, max)) {
     if (!e || typeof e !== "object") return null;
     const { i, r, hits, act } = e as { i?: unknown; r?: unknown; hits?: unknown; act?: unknown };
     if (act !== true && act !== "true") continue;
@@ -350,6 +351,8 @@ export interface PushCheckStats {
   costUsd: number;
   inputTokens: number;
   cachedInputTokens: number;
+  /** Input tokens written to the provider's prompt cache, when it reports them (Anthropic). */
+  cacheWriteTokens: number;
   outputTokens: number;
   /** `pushCheckSheet` (F5): checks sent with a sheet, its cards summed, and the rules replies named. */
   sheetChecks: number;
@@ -371,6 +374,7 @@ export class PushChecker {
     costUsd: 0,
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     sheetChecks: 0,
     sheetCards: 0,
@@ -447,6 +451,7 @@ export class PushChecker {
     this.stats.costUsd += costUsd;
     this.stats.inputTokens += usage?.inputTokens ?? 0;
     this.stats.cachedInputTokens += usage?.cachedInputTokens ?? 0;
+    this.stats.cacheWriteTokens += usage?.cacheWriteTokens ?? 0;
     this.stats.outputTokens += usage?.outputTokens ?? 0;
   }
 
