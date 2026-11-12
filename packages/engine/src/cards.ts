@@ -1342,7 +1342,7 @@ export class CardEnricher {
           this.keep(u, b.hash, {
             // A none card is kept only when it says why (`cardsState`: a constraint lifted, met or superseded), and
             // only when it is about its item: kept, it takes the item out of the push's pool (`pushStateFilter`).
-            card: card.kind === "none" && !clearedNone(card, b.item) ? null : card,
+            card: card.kind === "none" && !(this.limits.state && clearedNone(card, b.item)) ? null : card,
             at,
             seenAt: at,
             ...(asked?.length ? { requests: asked, seq: b.seq } : {}),

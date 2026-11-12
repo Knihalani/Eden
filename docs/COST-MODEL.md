@@ -521,6 +521,11 @@ the sim world's, so `cardsLean`'s 7-day window skipped most of a world's items. 
 and, over 30 days, about $0.034 rather than $0.026 **[EST: the measured $ a call times the corrected count; the
 daily trickle is unchanged]**. Re-read this table when F8's re-recording lands.
 
+**The card's state (F2, D1193; docs/research/f2-card-state.md §5):** the default's card prompt is form 19, which asks
+each card for its state. About 140 more input tokens a call and about 9% more output over the same items (measured
+from the form-3 and form-19 replay files, answers served by subagents, so mixed with answer variation): about +7% a
+card call **[EST: the token deltas times Haiku's prices; no paid call was made]**. The number of calls is unchanged.
+
 Short-horizon benchmarks that spread one user's backfill over that user's run overstate it: one user over 128 Pi tasks
 is $0.162 per 1,000 tasks before D244 and $0.069 after. Not taken: the Message Batches API for the backlog (D242:
 −45% of what is left, about $0.004 per user, at a 17–22 minute wait without cards, the state that costs most recall)
