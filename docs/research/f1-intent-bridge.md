@@ -97,7 +97,9 @@ and longtail still identical.
 
 **dev20 (D1100; coverage none, so intent-inert: the lexical half only), seeds 41–44:** hidden surfaced 155 → 180 of
 640, decoys 125 → 147; facts in the check's view 157 → 181, handed 114 → 136; look-alikes in view 125 → 149. Every one
-of the 71 changed tasks a variant is a non-English request (Catalan is read through Spanish and French).
+of the 71 changed tasks a variant is a non-English request (Catalan is read through Spanish and French). By the suites' own labels (facts in view, default → gloss, seed × template): non-English 16 → 40 of 160, no word
+overlap 12 → 36, indirect 79 → 95, questions 31 → 43, world knowledge 18 → 22, rare sources 44 → 44, silent edits
+38 → 42. Intent-inert, so these are the lexical half only; dev20's cards wait for credit (credit.sh).
 
 **Cost.** No model call at request time. The glossary loads once a process, at the first glossed request: 29 ms,
 +9.1 MB RSS (+6.0 MB heap; measured before the review's English-word set, which adds about 1 MB), +11.1 MB after six languages are read (a binary search over each language's sorted lines;
