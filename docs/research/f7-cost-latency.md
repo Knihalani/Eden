@@ -220,6 +220,5 @@ call against the API's measured $0.000210 (F7 §3).
 **Background cards a heavy user-month [EST]** (outside the per-task table; a new user's backfill plus the daily
 trickle): backfill calls × $ a card call + 30 × daily calls × $ a card call. Today's figures: F5's world-clock count
 of 16–17 calls a heavy new user (twice what COST-MODEL's D244 column used), the card call at about $0.0011 (CL3's
-measured $0.0088 for 8 calls), and about 1–2 calls a day for about 10 new items sent a day (CL3): about $0.018 +
-30 × $0.0011–0.0022 = **about $0.05–0.08 a heavy user-month** before the widened carding; replace the call count and
+measured $0.0088 for 8 calls), and CL3's daily trickle of about $0.0005–0.0006 (about 10 new items a day sent to the card model): about $0.018 + 30 × $0.00055 = **about $0.035 a heavy user-month** before the widened carding; replace the call count and
 the $ a call with the final arm's `eden.cards` line from `price-queue.py` and F8's re-recorded count.
