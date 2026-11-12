@@ -21,18 +21,18 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isId, scopeKey, type Scope } from "@eden/protocol";
 import { expandPreset } from "./connector-presets";
 import {
   McpSource,
   StaticSource,
+  StreamableHttpTransport,
   type McpSourceOptions,
   type SearchQuery,
   type Source,
   type SourceResolver,
   type StaticDoc,
+  type Transport,
 } from "@eden/sources";
 
 /** A header's value: the literal, or the name of an environment variable holding it (keeps tokens out of files). */
@@ -390,7 +390,7 @@ function build(spec: SourceSpec): Source {
     const url = new URL(spec.url!);
     // Read here, per user and per build: one user's headers never reach another user's transport.
     const headers = resolveHeaders(spec.headers ?? {}, spec.id);
-    transport = () => new StreamableHTTPClientTransport(url, { requestInit: { headers } });
+    transport = () => new StreamableHttpTransport(url, { headers });
   }
   return new McpSource({
     id: spec.id,
