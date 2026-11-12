@@ -44,7 +44,9 @@ def rows(path):
             continue
         t = tasks[tid]
         suite = base_suite(t.get("suite", ""))
-        key = (suite, int(t.get("seed", 0)), t.get("type", ""))
+        # The seed is the world's, in the task id ("w41:train2:template").
+        seed = int(t["seed"]) if "seed" in t else int(tid.split(":", 1)[0].lstrip("w"))
+        key = (suite, seed, t.get("type", ""))
         out.append(
             {
                 "kind": t["kind"],
