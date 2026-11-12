@@ -26,7 +26,8 @@ const opt = (k: string, d: string) => {
   return i >= 0 ? args[i + 1]! : d;
 };
 const suites = parseSuites(opt("suites", "train"));
-if (suites.some((s) => s.includes("heldout19"))) throw new Error("heldout19 is never read (M11's brief)");
+// heldout19 by M11's brief; heldout20 is unread (D1080).
+if (suites.some((s) => /heldout(19|20)/.test(s))) throw new Error("heldout19 and heldout20 are never read here");
 const seedArg = opt("seeds", "41-44");
 const seeds = seedArg.includes("-")
   ? (() => {

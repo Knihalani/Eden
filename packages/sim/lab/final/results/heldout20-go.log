@@ -1,0 +1,17 @@
+2026-11-12T13:01:32Z go: suite=heldout20 seeds=41,42,43,44 before=006b505c3 final=fd895e10b harness=fd895e10b split=8 queue=/home/user/Eden/.local/final/final/q
+{"eden":"006b505c3","harness":"fd895e10b","product":"engine graph llm primitives protocol redact sources server client","productHash":"0880314d57c8bbfa"}
+{"eden":"fd895e10b","harness":"fd895e10b","product":"engine graph llm primitives protocol redact sources server client","productHash":"954e2790a97b3e5d"}
+2026-11-12T13:01:38Z go: before coverage only (drive the queue now)
+2026-11-12T13:18:07Z go: before coverage done (/home/user/Eden/.local/final/final/cov-before.jsonl)
+2026-11-12T13:32:51Z go: suite=heldout20 seeds=41,42,43,44 before=006b505c3 final=bbd84a1bf harness=bbd84a1bf split=8 queue=/home/user/Eden/.local/final/final/q
+2026-11-12T13:32:53Z go: step 1 final coverage (drive the queue now)
+2026-11-12T13:33:05Z go: suite=heldout20 seeds=41,42,43,44 before=006b505c3 final=bbd84a1bf harness=bbd84a1bf split=8 queue=/home/user/Eden/.local/final/final/q
+2026-11-12T13:33:07Z go: step 1 final coverage (drive the queue now)
+2026-11-12T13:40:04Z go: step 1 done
+2026-11-12T13:40:06Z go: step 2 single-shot raw and final (drive the queue now)
+2026-11-12T14:23:19Z go: step 2 done
+2026-11-12T14:23:19Z go: step 2b multi-turn sample (drive the queue now)
+2026-11-12T14:35:12Z go: step 2b done
+2026-11-12T14:35:12Z go: step 2b' before coverage and arm (drive the queue now)
+2026-11-12T14:59:27Z go: step 2b' done
+2026-11-12T14:59:31Z go: done

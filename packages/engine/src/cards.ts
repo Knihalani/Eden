@@ -100,9 +100,23 @@ export interface Card {
   /** An amount the action must stay at or under, in `unit` ("£", "$", "€", "%", or "" when unstated). */
   limit?: number;
   unit?: string;
-  /** One line, for traces and research only. */
+  /**
+   * One line: traces, research, and the push check's rule sheet (D1180), where it is sent to a model, sanitised and
+   * fenced as data.
+   */
   statement: string;
+  /**
+   * `cardsState` (F2, trial; docs/research/f2-card-state.md): whether what the item says is in force, or says a
+   * constraint was lifted, a condition met, or an earlier one superseded. Absent: unknown (no filter acts on it).
+   */
+  state?: CardState;
 }
+
+/** A card's state (`cardsState`): judged by the card model from the item; "unknown" is stored as no state. */
+export const CARD_STATES = ["in_force", "lifted", "met", "superseded"] as const;
+export type CardState = (typeof CARD_STATES)[number];
+/** States that say an item no longer constrains: what `pushStateFilter` takes out of the push's pool. */
+export const CLEARED_STATES: ReadonlySet<CardState> = new Set<CardState>(["lifted", "met", "superseded"]);
 
 /** Bounds on what a card may hold: a model's output is untrusted and bounded like any input. */
 const MAX_ENTITIES = 6;
@@ -321,8 +335,10 @@ export function cardMessages(items: ContextItem[], today: string, intent = false
         '"start":"2026-11-04","end":"2026-11-09","limit":null,"unit":"","statement":"production change freeze 4-9 ' +
         // `cardsRequestsFix` (D1060): with intent, the first example reply shows the requests list too. Shown only
         // in the paragraph after it, the list was left out of about a quarter of replies (D1053).
-        (intent && form >= CARD_FORM_REQUESTS ? 'Nov"}],"requests":[...]}. ' : 'Nov"}]}. ') +
-        "One card per item at most, for the most important constraint; leave out items whose kind is none." +
+        (intent && form % CARD_FORM_STATE >= CARD_FORM_REQUESTS ? 'Nov"}],"requests":[...]}. ' : 'Nov"}]}. ') +
+        (form & CARD_FORM_STATE
+          ? STATE_INSTRUCTIONS
+          : "One card per item at most, for the most important constraint; leave out items whose kind is none.") +
         (intent ? INTENT_INSTRUCTIONS : ""),
     },
     { role: "user", content: `<items>\n${list.join("\n")}\n</items>` },
@@ -334,6 +350,35 @@ export function cardMessages(items: ContextItem[], today: string, intent = false
  * lab's replay caches keep each form's output apart (a card or request made by one form never answers the other).
  */
 export const CARD_FORM_REQUESTS = 3;
+/**
+ * `cardsState` (F2, D1193; docs/research/f2-card-state.md): a flag added to the prompt's form (3 + 16 = 19). The
+ * prompt asks each card for its `state`, and asks for a none card when the item says a constraint was lifted, met or
+ * superseded.
+ */
+export const CARD_FORM_STATE = 16;
+
+/**
+ * The card prompt's form a configuration's enricher asks in (`CardEnricher.form()`): 3 with `cardsRequestsFix`, plus
+ * `CARD_FORM_STATE` with `cardsState`; 0 without cards. The lab keys its replay files by it, so a recording and a run
+ * that ask in different forms never answer each other.
+ */
+export function cardForm(c: {
+  cards?: boolean;
+  intent?: boolean;
+  cardsRequestsFix?: boolean;
+  cardsState?: boolean;
+}): number {
+  if (!c.cards) return 0;
+  return (c.intent && c.cardsRequestsFix ? CARD_FORM_REQUESTS : 0) + (c.cardsState ? CARD_FORM_STATE : 0);
+}
+
+/** `cardsState`'s clause: the model judges the state from the item's meaning (no word lists anywhere). */
+const STATE_INSTRUCTIONS =
+  'Give each card a "state": in_force (the constraint holds now or ahead), lifted (the item says a constraint was ' +
+  "lifted, cancelled, reopened or cleared), met (a condition, approval or payment it needed has now happened), " +
+  "superseded (it replaces or corrects an earlier constraint, which no longer holds), or leave it out when unclear. " +
+  "One card per item at most, for the most important constraint. Leave out items whose kind is none, except an item " +
+  "saying a constraint was lifted, met or superseded: give it a card of kind none with that state.";
 
 /** How a maker is asked (`CardMaker.make`): the prompt's form, and a requests-only re-ask. */
 export interface CardMakeOptions {
@@ -435,8 +480,14 @@ export function parseCards(text: string, count: number): (Card | null)[] {
       card.limit = limit;
       card.unit = typeof c.unit === "string" && /^[£$€%]?$/.test(c.unit.trim()) ? c.unit.trim() : "";
     }
-    // A constraint that bears on no action of the vocabulary is none: nothing could match it.
-    if (card.kind !== "none" && card.actions.length === 0) card.kind = "none";
+    if (typeof c.state === "string" && (CARD_STATES as readonly string[]).includes(c.state))
+      card.state = c.state as CardState;
+    // A constraint that bears on no action of the vocabulary is none: nothing could match it. Its state goes with it:
+    // only a none the model wrote itself says a constraint cleared (`cardsState`), not a change it could not place.
+    if (card.kind !== "none" && card.actions.length === 0) {
+      card.kind = "none";
+      delete card.state;
+    }
     out[i] = card;
   }
   return out;
@@ -467,6 +518,54 @@ export function parseRequests(text: string, count: number): (string[] | null)[] 
     out[i] = cleanRequests(r.q);
   }
   return out;
+}
+
+/** A none card that says a constraint cleared (`cardsState`) and is about its item (`anchored`): kept as a card. */
+export function clearedNone(card: Card, item: ContextItem): boolean {
+  return card.kind === "none" && !!card.state && CLEARED_STATES.has(card.state) && anchored(card, item);
+}
+
+/** A card's entities and its fields (each entity, and the statement), normalised once for `couldClear`. */
+export interface CardNames {
+  entities: string[];
+  fields: string[];
+}
+
+const nameForm = (text: string) => text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+const NAME_EDGE = /[\p{L}\p{N}]/u;
+
+/** `couldClear`'s reading of a card: made once a card, since a heavy user's cards are compared many at a time. */
+export function cardNames(card: Card): CardNames {
+  const entities = card.entities.map(nameForm).filter((e) => e.length >= 2);
+  return { entities, fields: [...entities, nameForm(card.statement)] };
+}
+
+/** An entity of `a` is named in a field of `b`, on letter and number boundaries ("Harlow" is not "Harlowe"). */
+function namedIn(a: CardNames, b: CardNames): boolean {
+  for (const w of a.entities) {
+    for (const field of b.fields) {
+      for (let k = field.indexOf(w); k >= 0; k = field.indexOf(w, k + 1)) {
+        const before = k > 0 ? field[k - 1]! : " ";
+        const after = k + w.length < field.length ? field[k + w.length]! : " ";
+        if (!NAME_EDGE.test(before) && !NAME_EDGE.test(after)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a cleared card (`clearedNone`) could be the one that clears a constraint card: an entity of either (its
+ * person, organisation, account or thing, the card model's own field) is named in one of the other's entities or in
+ * its statement. The pair matters because a mailbox that holds a lift notice usually still holds the hold it lifts,
+ * carded in force when it arrived (D1456): the notice must then stay beside it. What it cannot link, it leaves
+ * unlinked: two cards with no entity between them, two forms of one name ("Harlow Ltd", "Harlow Events"), and a
+ * name inside running text in a script written without spaces (only an entity equal to an entity links there).
+ */
+export function couldClear(cleared: Card | CardNames, constraint: Card | CardNames): boolean {
+  const a = "fields" in cleared ? cleared : cardNames(cleared);
+  const b = "fields" in constraint ? constraint : cardNames(constraint);
+  return namedIn(a, b) || namedIn(b, a);
 }
 
 /**
@@ -672,6 +771,8 @@ export interface CardLimits {
    * for its requests only, under a reservation of its own.
    */
   requestsFix: boolean;
+  /** `cardsState` (F2, D1193; `askState()` sets it): the prompt's form asks each card for its state. */
+  state?: boolean;
   /**
    * `cardsLanes` (N4, D521, D522; `lanes()` sets it): how many model calls one user may have in flight. 1: one
    * batch at a time, as ever. More: while a full batch still waits behind a call in flight, another lane takes it, so
@@ -959,6 +1060,11 @@ export class CardEnricher {
   /** `cardsRequestsFix` (D1060): the requests list shown in the first example, and a dropped list asked again. */
   showRequests(): void {
     this.limits = { ...this.limits, requestsFix: true };
+  }
+
+  /** `cardsState` (F2, D1193): each card says whether its constraint is in force, lifted, met or superseded. */
+  askState(): void {
+    this.limits = { ...this.limits, state: true };
   }
 
   /** `cardsLanes` (N4, D521, D522): up to `n` model calls in flight for one user. */
@@ -1277,7 +1383,9 @@ export class CardEnricher {
           if (!b.only) this.stats.carded++;
           if (asked?.length) this.stats.requested++;
           this.keep(u, b.hash, {
-            card: card.kind === "none" ? null : card,
+            // A none card is kept only when it says why (`cardsState`: a constraint lifted, met or superseded), and
+            // only when it is about its item: kept, it takes the item out of the push's pool (`pushStateFilter`).
+            card: card.kind === "none" && !(this.limits.state && clearedNone(card, b.item)) ? null : card,
             at,
             seenAt: at,
             ...(asked?.length ? { requests: asked, seq: b.seq } : {}),
@@ -1392,7 +1500,10 @@ export class CardEnricher {
 
   /** The prompt's form the maker is asked in (`cardsRequestsFix`: the one that shows the requests list). */
   private form(): CardMakeOptions {
-    return this.limits.intent && this.limits.requestsFix ? { form: CARD_FORM_REQUESTS } : {};
+    const form =
+      (this.limits.intent && this.limits.requestsFix ? CARD_FORM_REQUESTS : 0) +
+      (this.limits.state ? CARD_FORM_STATE : 0);
+    return form ? { form } : {};
   }
 
   /**
@@ -1441,7 +1552,8 @@ export class CardEnricher {
 
   /**
    * The cards of the user's items made before `before` (ms, the partner's clock): item id → card, for the ids given
-   * (the items still cached). Only constraints: an item with no card or a `none` card is not returned.
+   * (the items still cached). Constraints, and a `none` card only when it says a constraint cleared (`cardsState`,
+   * `clearedNone`); an item with no card or any other `none` card is not returned.
    */
   cardsOf(scope: Scope, ids: Iterable<string>, before: number): Map<string, Card> {
     const out = new Map<string, Card>();
@@ -1488,8 +1600,9 @@ export class CardEnricher {
       }
       const ids = holdersOf(u, hit.hash).filter(accept);
       if (ids.length === 0) continue;
-      // `carded`: the content holds a constraint card (a `none` card is held as no card), for `intentByKind`.
-      out.push({ ids, hit, carded: !!s.card });
+      // `carded`: the content holds a constraint card, for `intentByKind`. A `none` card held because it says a
+      // constraint cleared (`cardsState`) is no constraint.
+      out.push({ ids, hit, carded: !!s.card && s.card.kind !== "none" });
       if (out.length >= k) break;
     }
     return out;
@@ -1524,7 +1637,10 @@ export class CardEnricher {
     const u = this.users.get(scopeKey(scope));
     if (!u) return [];
     const out: string[] = [];
-    for (const [id, hash] of u.byItem) if (u.byHash.get(hash)?.card) out.push(id);
+    for (const [id, hash] of u.byItem) {
+      const card = u.byHash.get(hash)?.card;
+      if (card && card.kind !== "none") out.push(id);
+    }
     return out;
   }
 

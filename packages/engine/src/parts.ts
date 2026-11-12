@@ -60,6 +60,8 @@ export const PARTS = {
     syncKeepCut: false,
     syncEngagedDeep: false,
     syncUnusedSweepMs: 0,
+    syncActivePollMs: 0,
+    syncActivePollBackoff: false,
     sourceYield: false,
     sourceYieldEarn: false,
     sourceYieldNames: 0,
@@ -86,6 +88,8 @@ export const PARTS = {
     cardsOrder: false,
     cardsLanes: 1,
     cardsRequestsFix: false,
+    cardsState: false,
+    pushStateFilter: false,
   },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
   intent: { intent: false, cardsLean: false, intentByKind: false, cardsRequestsFix: false },
@@ -107,6 +111,7 @@ export const PARTS = {
     askNudgeDeep: false,
     pushCandidatesSettled: 0,
     pushCheck: false,
+    packetHeedsCheck: false,
     pushIndirect: false,
     pushGate: false,
   },
@@ -121,6 +126,7 @@ export const PARTS = {
     pushCandidatesSettled: 0,
     pushOpen: false,
     pushCheck: false,
+    packetHeedsCheck: false,
     // The reader's own push then starts only where the old default's did: no paid read of indirect starts (D828), nor
     // of the turn gate's (D1014).
     pushIndirect: false,
@@ -151,7 +157,7 @@ export const PARTS = {
    * names none sends no packet: silence on most requests with nothing to add (D500, D527, D823, promoted by D828).
    * Inert with no model key (no checker wired).
    */
-  check: { pushCheck: false },
+  check: { pushCheck: false, packetHeedsCheck: false },
   /**
    * A request phrased as a need, a plan, a wish or a question about acting starts the push as its imperative, and the
    * open shape refuses log lines and chatter (D820, promoted by D828).
@@ -167,6 +173,22 @@ export const PARTS = {
    * request or correspondence (D375, D376).
    */
   parties: { partyCheck: false },
+  /**
+   * A request in another language also searches with the English its words mean (`glossOf`, a glossary read with no
+   * model; F1, D1153). Out, a request is searched only as written.
+   */
+  gloss: { requestGloss: false },
+  /**
+   * The push check also reads the user's rule sheet, their active constraint cards as a cached block, and a pool item
+   * on the sheet is sent as a pointer to its rule (F5, D1180). Out, the check reads the pool alone, as before.
+   */
+  sheet: { pushCheckSheet: 0, pushCheckSheetRefs: false },
+  /**
+   * A plan with a day is an action on that day (G1, D1402): the request's days read further (a bare day of the month,
+   * a weekday in another language), a turn that names a coming day starts the push, and items on that day take seats
+   * where the push check reads them. Out, days are read by `timeWindow` alone and no seat is given.
+   */
+  days: { pushDaySeats: 0 },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

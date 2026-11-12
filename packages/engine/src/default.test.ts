@@ -39,6 +39,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   syncKick: true,
   // D405, D406 (B1): the push answers a cut copy from the index and searches it live behind; D430, D431 (C4): the ask.
   pushCutBehind: true,
+  pushDaySeats: 3,
   askBehind: true,
   routeLocalHits: true,
   // D320–D323 (A13 scale): cards, the cap and routing for a user with many sources.
@@ -50,10 +51,15 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   // D521, D522 (N4): a new user's backfill is read by up to four card calls at once.
   cardsLanes: 4,
   cardsRequestsFix: true,
+  // D1193 (F2): the card says whether its constraint still holds; the push's pool leaves out what cleared.
+  cardsState: true,
+  pushStateFilter: true,
   // D328, D370 (A24): background pages stored one per loop turn; the card drain gathers them.
   syncIngestTurns: true,
   // D356 (A21): sources the user does not use are swept weekly; their unswept copies are re-read before delivery.
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
+  syncActivePollMs: 7_200_000,
+  syncActivePollBackoff: true,
   // D505, D509 (N1): a source whose live reads go unused is not read live again (its own run).
   sourceYield: true,
   // D600, D601, D603 (O1): a source with nothing used is read live only on a name or a rare word; a name many
@@ -96,6 +102,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   // D710 (O3): the candidates' push also starts for a request that opens like an instruction on an unlisted verb.
   pushOpen: true,
   pushCheck: true,
+  // D1450 (G2): a rule path's packet the request's check turned down is not handed.
+  packetHeedsCheck: true,
   pushIndirect: true,
   // D1014 (M13): the turn gate decides the push's start beside `pushStart`, in any language.
   pushGate: true,
@@ -103,6 +111,10 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   revisionDiff: true,
   // D376 (A25): checkAction holds a party only Eden's packets showed.
   partyCheck: true,
+  requestGloss: true,
+  // D1180 (F5): the push check reads the user's rule sheet, pool items on it sent as pointers.
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -134,11 +146,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(74);
+    expect(differ.length).toBe(83);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(74);
+    expect(partKeys.size).toBe(83);
   });
 });
 

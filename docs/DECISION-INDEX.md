@@ -76,7 +76,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D57 | 2026-10-31 | Background connector sync behind `sync`, off by default: `Source.list` (recent-first pages; `McpSource.listTool` passes D7's read-only… | adopted |
 | D58 | 2026-10-31 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | superseded (deleted by D225) |
 | D59 | 2026-10-31 | Implication cards behind `cards`, off by default: items entering a user's cache that pass a no-model deontic prefilter are read in the… | adopted |
-| D60 | 2026-10-31 | Anticipation, behind `anticipate`, off by default. | superseded (deleted by D227) |
+| D60 | 2026-10-31 | Anticipation, behind `anticipate`, off by default. | superseded (deleted by D1301) |
 | D61 | 2026-10-31 | Live agent results come from the Pi harness: `pi-ab.ts` runs pi-agent-core's loop (`@earendil-works/pi-agent-core` and `pi-ai` 1.3.0… | adopted |
 | D62 | 2026-10-31 | D56–D61 are merged on one tree, every flag off by default, telemetry's spans the one span design (Pi's harness reads them; sync, graph… | adopted |
 | D63 | 2026-10-31 | Fixes from the review of `moon/combined`; where they depart from D57, D59, D60 or D8 this records it. | adopted |
@@ -525,7 +525,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D811 | 2026-11-11 | The merge gate runs its three steps at once, runs the tests that wait on real time in a tail after the rest, bounds work in CPU time, and… | adopted |
 | D812 | 2026-11-11 | The decision log gets a generated way in: `bun run decisions:index` (`scripts/decision-index.ts`) writes docs/DECISION-INDEX.md and… | adopted |
 | D813 | 2026-11-11 | Lab only: paid lab runs write each finished unit as it lands and resume without paying for it again | lab |
-| D814 | 2026-11-11 | A trial is decided in the branch or session that opened it, as soon as its evidence is in. | adopted |
+| D814 | 2026-11-11 | A trial is decided in the branch or session that opened it, as soon as its evidence is in. | adopted (by D1180) |
 | D815 | 2026-11-11 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | rejected |
 | D816 | 2026-11-11 | tsgo is the merge gate's checker: `scripts/typecheck.sh` defaults to tsgo (TypeScript 7's native preview, pinned), `TYPECHECK=tsc` and… | adopted |
 | D817 | 2026-11-11 | Deleted: `syncSweepSpread` (D604), `EDEN_SPEND_LEASES` (D327) and `EDEN_PERSIST_DISK_ONLY` (D652); `anthropicCache` (D145) is a… | rejected |
@@ -682,12 +682,15 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1048 | 2026-11-12 | Finding (B19, blind heldout19, read once): the night's wave raised hidden facts on both harnesses with no confirmed concern. | finding |
 | D1075 | 2026-11-12 | Finding: the smallest recommended box holds its sizing; a restart of a full box keeps only the users its shutdown budget writes. | finding |
 | D1076 | 2026-11-12 | Rejected: a shutdown's flush writing the most recently used users first. | rejected |
+| D1080 | 2026-11-12 | Lab only: `heldout20` is the blind suite for the F1–F3 fixes, registered unread | lab |
 | D1120 | 2026-11-12 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | superseded (deleted by D1121) |
 | D1121 | 2026-11-12 | Rejected (stopped on its pre-registered rule, D1120): `packetWhy`, Eden's no-model note on why an item bears on the request; deleted (code… | rejected |
 | D1100 | 2026-11-12 | Lab only: `dev20a`–`dev20d` (`--suite dev20`), four tuning suites on the weak points | lab |
 | D1140 | 2026-11-12 | Finding (F2, train, reworded and longtail seeds 41–42; Anthropic-direct lab $1.00 before the credit ran out, then a subagent-simulated… | finding |
 | D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
 | D1102 | 2026-11-12 | Lab only: shipped coverage re-recorded on the world's clock, served by subagents per item; the old shipped baselines were pessimistic | lab |
+| D1103 | 2026-11-12 | Lab only: `--realism heavy`, a heavy real user's sources | lab |
+| D1104 | 2026-11-12 | Finding (lab): no subagent recipe gives an API-faithful read of a push-check prompt arm; check-prompt arms need the API | finding |
 | D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
 | D1122 | 2026-11-12 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | superseded (deleted by D1126) |
 | D1123 | 2026-11-12 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | superseded (deleted by D1126) |
@@ -698,8 +701,48 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1128 | 2026-11-12 | Lab only: D1127's pilot read out under its rule, and a powered re-test is pre-registered (before any of its answers is made). | lab |
 | D1129 | 2026-11-12 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | superseded (deleted by D1130) |
 | D1130 | 2026-11-12 | Rejected (stopped on D1128's pre-registered rule): `freshenAgeMs` (D1127, deleted by D1130) and `freshenBehind` (D1129, deleted by D1130)… | rejected |
+| D1131 | 2026-11-12 | Trial `syncActivePollMs`: a background poll floor for active users, so a silent edit is stored before the request that needs it and no… | adopted |
+| D1132 | 2026-11-12 | Promoted: the freshness floor (`syncActivePollMs` 2 h, D1131) into the default, with two cost guards: `syncActivePollBackoff` (on in the… | adopted |
+| D1133 | 2026-11-12 | Amends D1132 (the parent's fail-safe condition): the freshness floor polls only a source marked first-party or flat-rate… | adopted |
 | D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
 | D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
 | D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |
+| D1250 | 2026-11-12 | Finding: with Eden the agent takes fewer turns and connector calls, and the calls it still makes are on the turns Eden stays silent. | finding |
+| D1251 | 2026-11-12 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. | rejected |
+| D1252 | 2026-11-12 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | rejected |
 | D1192 | 2026-11-12 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | rejected |
+| D1150 | 2026-11-12 | Finding (F1, subagent-simulated; rejected as built, no engine trial): an encoder's candidates added to the push check's pool. | finding |
+| D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
+| D1152 | 2026-11-12 | Finding (F1, served by subagents, D1101): the request glossary's queue pair fails its neutral bar. | finding |
+| D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
+| D1180 | 2026-11-12 | Promoted on subagent evidence; the API confirmation is owed when credit returns (F5, D814, the integrator's decision): the rule sheet… | adopted |
+| D1181 | 2026-11-12 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | rejected |
+| D1182 | 2026-11-12 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | rejected |
+| D1183 | 2026-11-12 | Guard on D1180 (F5, the integrator's question): a user with more active rule cards than `pushCheckSheet` (80) gets no rule sheet. | adopted |
+| D1197 | 2026-11-12 | Adopted (F7; the integrator's decision to keep the rule sheet and make it as cheap as it can be): the push check's rule sheet (D1180) is… | adopted |
+| D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
+| D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
+| D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |
+| D1154 | 2026-11-12 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | rejected |
+| D1270 | 2026-11-12 | Finding: a CPU-only band on the push check (a semantic rule index) cannot take the model off the request path at facts in the 90s | finding |
+| D1271 | 2026-11-12 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | rejected |
+| D1272 | 2026-11-12 | Finding: a learned no-model skip of the push check reaches about 20% of calls at 1% of facts lost, not the 40% asked | finding |
+| D1273 | 2026-11-12 | Promoted by the integrator: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte… | adopted |
+| D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
+| D1550 | 2026-11-12 | Finding: the agent's wait, read task by task, puts the default level with the agent alone at the lab's connector latency and slower at 0.3… | finding |
+| D1552 | 2026-11-12 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). | rejected |
+| D1155 | 2026-11-12 | Lab only: pi-ab and hermes-ab place the packet a tool result's observe hands out. | lab |
+| D1500 | 2026-11-12 | Finding (G3, served by subagents, D1101; every $ and second [EST]): no lever makes agent + Eden no dearer than the agent alone at the… | finding |
+| D1156 | 2026-11-12 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | rejected |
+| D1193 | 2026-11-12 | Promoted (F2, the integrator's decision): `cardsState` + `pushStateFilter`, on in the default: the card says whether its constraint still… | adopted |
+| D1455 | 2026-11-12 | Finding: most look-alikes reach the agent round the push check, not through it. | finding |
+| D1450 | 2026-11-12 | Promoted: `packetHeedsCheck`, on in the default: a rule path's proactive packet is not handed when the request's push check read every… | adopted |
+| D1451 | 2026-11-12 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… | rejected |
+| D1452 | 2026-11-12 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | rejected |
+| D1453 | 2026-11-12 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | rejected |
+| D1454 | 2026-11-12 | Finding: `pushCheckItemChars` 400 is not a facts lever. | finding |
+| D1456 | 2026-11-12 | Adopted: `pushStateFilter` keeps a lift notice in the push's pool when the user has a constraint card it could clear. | adopted |
+| D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
+| D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
+| D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |
 | D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | trial |

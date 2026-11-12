@@ -35,6 +35,7 @@ per suite for train1–6 and held-out 10–12.
 | `heldout17`                                                                                             | Blind, the end-of-day confirmation's (a19-heldout17.md, D350); 32 new templates over the same 8 areas, with `neutral`; 8 late-arrival templates (`HELDOUT17_LATE`, for `--late`)                                                                                                                                                                                                                                                  | **Read** (A29 Pi, 2026-11-07, a29-heldout17.md): no longer blind; cards and intent cached for seeds 41–44                   |
 | `heldout18`                                                                                             | Blind, M6's (m6-heldout18.md, D465); 32 new templates over the same 8 areas, with `neutral`; 8 late arrivals (`HELDOUT18_LATE`); 13 short anchored requests (`HELDOUT18_ANCHORED`, D466)                                                                                                                                                                                                                                          | Run once and read by B18, 2026-11-11 (b18-heldout18.md, D802); cards and intent cached, 41–44                               |
 | `heldout19`                                                                                             | Blind, P7's for the end-of-wave confirmation (p7-benchmarks.md, D870); 40 templates over the 8 areas, with `neutral`; indirect, question and non-English requests (`HELDOUT19_INDIRECT`, `HELDOUT19_NON_ENGLISH`), anchored requests, facts in rarely used connectors (`HELDOUT19_RARE`) and silent edits (`HELDOUT19_SILENT`, with `heldout19Before`)                                                                            | **Unread** (`UNREAD_BLIND`): nobody runs it before the parent's end-of-wave call; cards and intent only at shipped coverage |
+| `heldout20`                                                                                             | Blind, F4's for the final read of F1–F3 (f4-heldout20.md, D1080); 48 templates over the 8 areas, with `neutral`; its own present (Thu 19 Nov 2026, 17:30 UTC, `prepareWorld` moves `world.now`); indirect, question, 12-language, no-overlap, anchored, rare-connector and silent-edit requests (`HELDOUT20_*` lists, `heldout20Before`)                                                                                          | **Unread** (`UNREAD_BLIND`): nobody runs it before the parent's final read; shipped coverage not yet recorded (`packages/sim/lab/f4/record-coverage.sh`) |
 | `train1r`–`train6r` (`--suite reworded`)                                                                | Train with every request reworded as a need, a plan or a question, 6 of 32 a suite in another language (reworded.ts, D871); same worlds, so train's caches replay                                                                                                                                                                                                                                                                 | Tuning set (Q6); out of `all`                                                                                               |
 | `longtail`                                                                                              | 24 templates, every fact and decoy in one of eight rarely used connectors (rare-sources.ts, D873); with `neutral`                                                                                                                                                                                                                                                                                                                 | Tuning and measurement, not blind; out of `all`; pair with `days-calls.ts --arrive-days`                                    |
 | `synth-sample`, `synth-train`, `synth-val`, `synth-test`, `synth:<file>`, `synth` (= train + val), `@K` | M2's generated worlds (m2-synth.md, D884): seed `s` plants world `s mod N` into the base world, one task a family; `@K` plants K worlds a seed (for `--days`); `synth-test` is M1's and M3's test split; `+stale` before `@K` (M3, D913: `synth-val+stale@4`, `synth:<file>+stale`) keeps a hidden silent-change task's earlier revision as a background item beside the fact, and the funnel reports `stalePoolAt`/`staleHanded` | Data on the Modal Volume `eden-synth` (packages/sim/lab/synth/README.md); not in `all`; no cached cards or intent           |
@@ -634,6 +635,17 @@ Read these numbers in that run's shape:
 - With no coverage (`--cards none --intent none`, D1100's first baseline) dev20 reads 155/125; train in that shape
   reads 456/768.
 
+### 1h3. A heavy real user's sources: `--realism heavy` (F8, D1103; docs/research/f8-realism.md)
+
+```bash
+bun run funnel --suite train --seeds 41,42 -- --neutral --realism heavy   # 318/299 → 311/288 (stub reader)
+```
+
+Every world gets twenty connectors and 600 items that never apply (rule-like items, forwarded threads, five
+languages). That means 333–350 rule cards a user instead of about 105. Their cards are in `cards-shipped.jsonl.gz`
+for seeds 41–44, served by subagents (D1102). Use it to screen anything that matches requests against rule cards, and
+quote both arms.
+
 ### 1h. A standing-constraint ledger over days users (M5, D910–D911; docs/research/m5-ledger.md)
 
 Stopped (D910); the recipe stays for a later variant. The shipped-coverage days baseline (M3's recipe), each user's
@@ -648,7 +660,6 @@ env -u OPENROUTER_API_KEY bun packages/sim/src/lab/m5-ledger.ts extract --corpus
 python3 -I packages/sim/lab/m5/m5_match.py --ledger .local/m5/led.jsonl --corpus .local/m5/corpus.jsonl \
   --pool .local/m5/pool.jsonl --only fit
 ```
-
 
 ### 1i. The connector router (M8, D940–D949; rejected; docs/research/m8-router.md)
 

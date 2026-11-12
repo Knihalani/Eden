@@ -66,7 +66,19 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import {
+  cardKey,
+  cardVerdict,
+  cardNames,
+  CLEARED_STATES,
+  couldClear,
+  type CardNames,
+  requestActions,
+  STANDING_KINDS,
+  type Card,
+  type CardEnricher,
+} from "./cards";
+import { glossOf, warmGlossary } from "./gloss";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
   READER_MAX_ITEMS,
@@ -79,7 +91,16 @@ import {
   type ReaderKind,
   type ReaderVerdict,
 } from "./reader";
-import { CHECK_MAX_ITEMS, checkKey, itemMark, type PushCheckRead, type PushChecker } from "./push-check";
+import {
+  CHECK_MAX_ITEMS,
+  checkKey,
+  itemMark,
+  SHEET_MAX_CARDS,
+  sheetText,
+  type PushCheckRead,
+  type PushChecker,
+  type SheetCard,
+} from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -122,6 +143,10 @@ import {
   ASK_NUDGE,
   CANDIDATES_LEAD,
   citationsOf,
+  LOOKUP_HEAD_LEAD,
+  LOOKUP_LEAD,
+  LOOKUP_QUIET,
+  LOOKUP_USE,
   PLAN_LEAD,
   renderAnswer,
   renderPacket,
@@ -138,6 +163,7 @@ import {
   type Party,
 } from "./parties";
 import { safeLine } from "./line";
+import { datedText } from "./days";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
@@ -255,6 +281,10 @@ export interface PushPoolReport {
    * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
+  /** `pushLookup` (D1252): `handed` is reference records naming the request's anchors, or (`head`) the pool's head. */
+  lookup?: "named" | "head";
+  /** `pushCheckSheet` (F5): the item ids of the rule sheet the check read, in its order (ids only, for the lab). */
+  sheet?: string[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -406,6 +436,8 @@ interface Cue {
   key: string;
   /** A content-free id for the cue, for traces and injection reasons. */
   id: string;
+  /** `packetHeedsCheck` (D1450): the user request (`Session.requests`) an observed event's cue was made in. */
+  request?: number;
   /** The days the request names, resolved against the event's clock (D44); null when it names no time. */
   time: TimeWindow | null;
   /** When the triggering event happened (ms): "the next one" is the first at or after this. */
@@ -438,6 +470,8 @@ interface Cue {
    * records each cut copy's outcome here as it settles, so the ask can tell which sources answered in time.
    */
   cutStatus?: Map<string, string>;
+  /** `requestGloss`: the English words a request in another language means (`glossOf`), searched beside it. */
+  gloss?: string;
 }
 
 /**
@@ -620,6 +654,8 @@ export class ContextPartner {
    * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
    */
   private readonly undoable = new WeakMap<Injection, Undo>();
+  /** `packetHeedsCheck` (D1450): the user request each rule-path packet was made for (its cue's). */
+  private readonly madeFor = new WeakMap<Injection, number>();
   /** Tenant → user scope key → injection id → outcome; both inner maps least recently recorded first. */
   private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
   private readonly now: () => number;
@@ -670,6 +706,8 @@ export class ContextPartner {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
+    // `requestGloss` (F1, D1153): the glossary is read here too, once a process, not on the first request.
+    if (this.config.requestGloss) warmGlossary();
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
     const stats = this.config.spans ? new SpanStats() : null;
@@ -706,6 +744,8 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
+      // `cardsState` (F2, D1193): each card says whether its constraint still holds.
+      if (this.config.cardsState) cards.askState();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -758,6 +798,13 @@ export class ContextPartner {
             pollPageSize: c.syncPollPageSize,
             staleChance: c.syncStaleChance,
             maxStaleMs: c.syncMaxStaleMs,
+            ...(c.syncActivePollMs > 0
+              ? {
+                  activePollMs: c.syncActivePollMs,
+                  activePollBackoff: c.syncActivePollBackoff,
+                  activePollPriced: c.syncActivePollPriced,
+                }
+              : {}),
             activeMs: c.syncActiveMs,
             sweepMs: c.syncSweepMs,
             dropMs: c.syncDropMs,
@@ -860,7 +907,7 @@ export class ContextPartner {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number; turn?: number; open?: boolean } = { push: true };
+    const internal: { push: true; request?: number; turn?: number; open?: boolean; byDay?: boolean } = { push: true };
     // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list; with
     // `pushCheck` its pool is checked as a listed request's (D823, D828).
     // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
@@ -877,7 +924,7 @@ export class ContextPartner {
     // reader's own push never pays for a gate-only start). The rule's request text (a lead-in's imperative) is kept.
     // No gate, or one that fails, and the rule decides alone (fail open).
     const said = event.kind === "user_message" ? event.text : "";
-    let verdict: { needs: boolean } | null = null;
+    let verdict: { needs: boolean; kind?: string } | null = null;
     if (this.gate && event.kind === "user_message")
       try {
         verdict = this.gate.read(said, { how: ruled?.how ?? "none", rest: ruled !== null && ruled.request !== said });
@@ -885,11 +932,21 @@ export class ContextPartner {
         verdict = null;
       }
     const adds = this.config.pushOpen && this.config.pushCandidates > 0;
-    const start = !verdict
+    let start = !verdict
       ? ruled
       : !verdict.needs
         ? null
         : (ruled ?? (adds ? { how: "opened" as const, request: said } : null));
+    // `pushDaySeats` (G1, D1400): a plan with a day is an action on that day. A turn that starts no push (the rule
+    // has none, or the gate read a statement and vetoed it) starts an opened one when it names a coming day and the
+    // gate does not read chatter. With no gate nothing is added: the rule decides alone, as before.
+    // Only for a message the push could start for: a draft reads nothing, and must not thaw a frozen user (D325).
+    const sent = event.kind === "user_message" && event.draft !== true;
+    if (sent && !start && adds && verdict && verdict.kind !== "chatter" && this.config.pushDaySeats > 0) {
+      if (this.namesComingDay(said, event.at, this.deps.cache.offsetOf(event)))
+        start = { how: "opened" as const, request: said };
+      if (start) internal.byDay = true;
+    }
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";
     // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can
@@ -911,7 +968,8 @@ export class ContextPartner {
           )
         : null;
     const t0 = performance.now();
-    const observing = this.observeEvent(event, options);
+    // With a push running, the reply's packet is handed out below, once the push's check has had its say (D1450).
+    const observing = this.observeEvent(event, options, push !== null);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
     // Its turn too: the push's trace names its request's turn, as a lookup's does, not the one current when it settles.
     if (push) {
@@ -938,12 +996,24 @@ export class ContextPartner {
     const live = this.sessions.get(sessionKey(event));
     if (live) this.checkPlans(live);
     const queued = (live?.pending.length ?? 0) > 0;
-    return { ...result, pending: result.pending || !settled || queued };
+    // `packetHeedsCheck` (D1450): the reply's packet (a rule path made it before the check answered) is not handed
+    // when its request's check has since read every item in it and said yes to none. Nothing was noted as shown or
+    // outstanding for it (`handOut` was held for this); its items stay marked in the ledger: silence, no repeat.
+    let injection = result.injection;
+    if (injection && live && !options.shadow) {
+      if (settled && this.allCheckedOut(live, injection)) {
+        this.traceHeld(live, injection);
+        injection = null;
+      } else this.handOut(live, injection);
+    }
+    return { ...result, injection, pending: result.pending || !settled || queued };
   }
 
   private async observeEvent(
     event: AgentEvent,
     options: { waitMs?: number; shadow?: boolean } = {},
+    /** The caller hands the reply's packet out itself (`observe`, while a push runs: `packetHeedsCheck`). */
+    held = false,
   ): Promise<ObserveResult> {
     const t0 = performance.now();
     const spans = this.spans;
@@ -999,7 +1069,7 @@ export class ContextPartner {
       });
     };
     const reply = (injection: Injection | null): ObserveResult => {
-      if (injection && !options.shadow) this.handOut(s, injection);
+      if (injection && !options.shadow && !held) this.handOut(s, injection);
       if (root) {
         spans!.close(root, {
           session: s.id,
@@ -1023,6 +1093,7 @@ export class ContextPartner {
     const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
+    cue.request = s.requests;
     if (root) cue.span = root.id;
     // `askReader`: the request's own cue, kept so an ask reads what its frame already holds.
     if (event.kind === "user_message" && this.config.askReader) {
@@ -1283,6 +1354,7 @@ export class ContextPartner {
     // replaced goes before the packets that render current copies, and an update made stale by a packet of the batch
     // that renders the current copy is dropped. Queue order holds otherwise.
     this.dropRemovedPending(s);
+    this.dropCheckedOut(s);
     const out = this.currentLast(s, this.withoutCoveredUpdates(s.pending.splice(0)));
     if (!options.shadow) for (const injection of out) this.handOut(s, injection);
     return out;
@@ -1299,6 +1371,56 @@ export class ContextPartner {
       s.pending.splice(k, 1);
       this.withdraw(s, packet);
     }
+  }
+
+  /**
+   * `packetHeedsCheck` (G2, D1450): a queued rule-path packet of this request whose every item its push check read
+   * and said yes to none of is not handed out (the rule path queued it before the check answered: the no-model
+   * conflict test reads "hold lifted" as a hold). It goes whole, as a removed item's packet does, and only when
+   * nothing else is in it; what its delivery marked stays marked (silence over a repeat).
+   */
+  private dropCheckedOut(s: Session): void {
+    if (s.pending.length === 0) return;
+    const out = this.checkedOut(s);
+    if (!out) return;
+    for (let k = s.pending.length - 1; k >= 0; k--) {
+      const packet = s.pending[k]!;
+      if (!this.allCheckedOut(s, packet, out)) continue;
+      s.pending.splice(k, 1);
+      this.traceHeld(s, packet);
+    }
+  }
+
+  /**
+   * `packetHeedsCheck` (D1450): a rule path's packet (`RULE_PATHS`), made for the session's current request, whose
+   * every item that request's push check turned down. Never the candidates' own packet (a check that failed open or
+   * came late left them), an update, a plan alert, an ask's follow-up or the fast path's.
+   */
+  private allCheckedOut(s: Session, packet: Injection, out = this.checkedOut(s)): boolean {
+    if (!out || packet.mode !== "proactive" || packet.citations.length === 0) return false;
+    if (!RULE_PATHS.some((prefix) => packet.reason.startsWith(prefix))) return false;
+    if (this.madeFor.get(packet) !== s.requests) return false;
+    const now = this.now();
+    return packet.citations.every((c) => {
+      const item = this.deps.cache.get(s.scope, c.itemId, now);
+      return !!item && out(item);
+    });
+  }
+
+  /** `packetHeedsCheck` (D1450): the decision not to hand a packet, traced (ids only), so `explain` says why. */
+  private traceHeld(s: Session, packet: Injection): void {
+    this.trace(s, {
+      sessionId: s.id,
+      turn: s.turn,
+      event: "user_message",
+      decision: "silent",
+      reason: "push check turned it down",
+      latencyMs: 0,
+      sourceCalls: 0,
+      modelCalls: 0,
+      costUsd: 0,
+      itemIds: packet.citations.map((c) => c.itemId),
+    });
   }
 
   /**
@@ -1847,14 +1969,27 @@ export class ContextPartner {
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
+    // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
+    // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
+    const gloss = this.config.requestGloss ? glossOf(question) : "";
     const cue = buildCue(
       question,
-      distinctTermIds(question, s.vocab),
+      distinctTermIds(gloss ? `${gloss}\n${question}` : question, s.vocab),
       s.vocab,
       this.now(),
       this.deps.cache.offsetOf(s.scope),
       this.config.probes,
     );
+    if (gloss) cue.gloss = gloss;
+    // `pushDaySeats` (G1, D1400): the request's days read past `timeWindow`: a bare day of the month given its month
+    // (`datedText`), and the glossary's English beside the request, so a weekday in another language is a day too.
+    if (this.config.pushDaySeats > 0) {
+      cue.time = timeWindow(
+        datedText(gloss ? `${question}\n${gloss}` : question, cue.at, cue.offset),
+        cue.at,
+        cue.offset,
+      );
+    }
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
@@ -2028,10 +2163,13 @@ export class ContextPartner {
       // `readerPushKinds`: only the kinds pushed unasked (a "changes" bearing is the reader's least precise).
       const pushes = new Set<string>(this.config.readerPushKinds);
       // `pushCandidates` (D236): the pool's top, for the agent to judge, in place of the reader's flags.
-      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored]) : null;
+      const gate = candidating ? this.pushGate(s, cue, [...order, ...scored], internal.byDay === true) : null;
       // `pushCheck` (D500, D828): one budgeted call over the pool, only when the gate would hand candidates. With no
       // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
-      const check = gate && this.config.pushCheck && this.deps.checker ? await this.checkPush(s, cue, gate) : null;
+      const check =
+        gate && this.config.pushCheck && this.deps.checker
+          ? await this.checkPush(s, cue, gate, internal.request)
+          : null;
       if (check && s.closed) {
         // The session closed while the check ran: its call was paid for, so it is traced on its own.
         if (check?.called) this.traceCheck(s, check, t0);
@@ -2111,7 +2249,9 @@ export class ContextPartner {
                 `candidates:${cue.id}`,
                 cue,
                 undefined,
-                this.candidateFrame(candidates.unsettled !== undefined),
+                candidates.lookup
+                  ? this.lookupFrame(candidates.lookup)
+                  : this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -2473,27 +2613,149 @@ export class ContextPartner {
   /**
    * `pushCandidates` (D236): the push's pool and its constraint-like gate. The pool `readAsk` would read (the first
    * `askReaderPool` distinct items of `ranked`) in its own order; per item, `readerGate`'s constraint test, cards
-   * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none.
+   * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none. `byDay`: the
+   * push was started by the request's day alone (`pushDaySeats`).
    */
-  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
+  private pushGate(s: Session, cue: Cue, ranked: readonly Scored[], byDay = false): PushGate {
+    const at = cue.arrived ?? this.now();
+    const { pool, cards } = this.pushPool(s, ranked, at);
+    // `pushDaySeats` (G1, D1400, D1402): items on a day the request names, whatever their words, seated after the
+    // first `pushCandidates` so the check reads them. They are handed only when the check names them
+    // (`candidatesOf`): a push with no check hands the pool's other items, as before. Seats go to the best of the
+    // day's items outside the first `pushCandidates`, those the pool's tail already holds included: they move up
+    // rather than being pushed past the cap by the others.
+    const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
+    const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
+    if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+    // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
+    // opens a hand-out no model judged. A push only the day started has no such hand-out at all.
+    const before = pool.slice();
+    const unchecked = !byDay && before.some((x) => this.constraintLike(x, cards));
+    const seats = new Set(seated.map((x) => x.item.id));
+    if (seated.length > 0) {
+      const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+      const rest = pool.slice(head).filter((x) => !seats.has(x.item.id));
+      pool.splice(head, pool.length - head, ...seated, ...rest);
+      pool.length = Math.min(pool.length, cap);
+      // The cards of the items seated from outside the pool (one lookup an item, as the pool's own).
+      const fresh = seated.filter((x) => !cards.has(x.item.id)).map((x) => x.item.id);
+      const enricher = this.config.cards ? this.deps.cards : undefined;
+      if (enricher && fresh.length > 0) for (const [id, c] of enricher.cardsOf(s.scope, fresh, at)) cards.set(id, c);
+    }
+    const all = pool.map((x) => this.constraintLike(x, cards));
+    // A push only the day started (`namesComingDay`) is checked only when one of its seats is itself
+    // constraint-like: the day's own evidence, not a pool the request's words happened to fill (D1401).
+    const quiet = byDay && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
+    const like = quiet ? all.map(() => false) : all;
+    return { pool, like, seats, before, unchecked };
+  }
+
+  /**
+   * `pushStateFilter` (D1456): the user's constraint cards that may still be in force, as `couldClear` reads them:
+   * every card made before `before` that is neither `none`, a `preference`, nor itself cleared (at most the
+   * enricher's cap a user). Read, and normalised once, only when the ranking holds a cleared item. No model call and
+   * no source call. An expired or bulk item's card is kept: it can only keep a notice in the pool, the safe side.
+   */
+  private inForce(s: Session, before: number): CardNames[] {
+    const enricher = this.config.cards ? this.deps.cards : undefined;
+    if (!enricher) return [];
+    const out: CardNames[] = [];
+    for (const card of enricher.cardsOf(s.scope, enricher.carded(s.scope), before).values()) {
+      if (card.kind === "none" || card.kind === "preference") continue;
+      if (card.state && CLEARED_STATES.has(card.state)) continue;
+      const names = cardNames(card);
+      if (names.entities.length > 0 || names.fields.length > 0) out.push(names);
+    }
+    return out;
+  }
+
+  /**
+   * The push's pool: the ranking's first `askReaderPool` distinct items, and their cards. `pushGate` and the plan
+   * alerts (`checkPlans`) share it. `pushStateFilter` (F2, trial): an item carded none because a constraint was
+   * lifted, met or superseded leaves the pool, and the next ranked item takes its seat; cards are then read for the
+   * whole ranking (one lookup an item). It stays when one of the user's constraint cards is one it could clear
+   * (`couldClear`, D1456).
+   */
+  private pushPool(
+    s: Session,
+    ranked: readonly Scored[],
+    before: number,
+  ): { pool: Scored[]; cards: Map<string, Card> } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    const enricher = this.config.cards ? this.deps.cards : undefined;
+    const states =
+      enricher && this.config.pushStateFilter && ranked.length > 0
+        ? enricher.cardsOf(
+            s.scope,
+            ranked.map((x) => x.item.id),
+            before,
+          )
+        : null;
+    let inForce: CardNames[] | undefined;
     for (const x of ranked) {
       if (pool.length >= cap) break;
       if (seen.has(x.item.id)) continue;
       seen.add(x.item.id);
+      // Only a none card: an item that announces the new state of affairs (a retimed flight, a claim already paid) is
+      // carded already-done or status-change and is the fact in force, though it says an earlier one was superseded.
+      const card = states?.get(x.item.id);
+      // A lift notice stays beside the hold it could lift (D1456): without it the check would read the hold alone.
+      if (card?.kind === "none" && card.state && CLEARED_STATES.has(card.state)) {
+        inForce ??= this.inForce(s, before);
+        const names = cardNames(card);
+        if (!inForce.some((c) => couldClear(names, c))) continue;
+      }
       pool.push(x);
     }
     const cards =
-      pool.length > 0 && this.config.cards && this.deps.cards
-        ? this.deps.cards.cardsOf(
+      states ??
+      (enricher && pool.length > 0
+        ? enricher.cardsOf(
             s.scope,
             pool.map((x) => x.item.id),
-            cue.arrived ?? this.now(),
+            before,
           )
-        : new Map<string, Card>();
-    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+        : new Map<string, Card>());
+    return { pool, cards };
+  }
+
+  /**
+   * `pushDaySeats` (G1, D1400): whether a turn of at least `DAY_START_WORDS` words names a day from today on, within
+   * `DAY_START_AHEAD` days, in a window the seats take (`DAY_SEAT_DAYS`): read as the push's lookup reads it
+   * (`datedText`, the glossary's English beside the turn). Bounded input; nothing is stored, so the turn is read as
+   * written. The word count comes first: most turns end there.
+   */
+  private namesComingDay(said: string, at: number, offset: number): boolean {
+    const text = head(said, MAX_QUESTION_CHARS);
+    let words = 0;
+    for (const m of text.matchAll(/\S+/g)) if (m && ++words >= DAY_START_WORDS) break;
+    if (words < DAY_START_WORDS) return false;
+    const gloss = this.config.requestGloss ? glossOf(text) : "";
+    const read = gloss ? `${text}\n${gloss}` : text;
+    const days = timeWindow(datedText(read, at, offset), at, offset)?.days;
+    // Only a window whose items can be seated: a longer one, or a period with no day, would start a push that by
+    // construction hands nothing.
+    if (!days || days.size === 0 || days.size > DAY_SEAT_DAYS) return false;
+    const today = new Date(at + offset * 60_000).toISOString().slice(0, 10);
+    const last = new Date(at + offset * 60_000 + DAY_START_AHEAD * 86_400_000).toISOString().slice(0, 10);
+    for (const d of days) if (d >= today && d <= last) return true;
+    return false;
+  }
+
+  /**
+   * `pushDaySeats` (G1, D1400): the items on a day the request names that the pool does not hold yet, bulk mail out,
+   * at most `pushDaySeats`. None for a request that names no day or a window of more than three (a week's listing
+   * is not a seat), or with the switch off.
+   */
+  private daySeats(s: Session, cue: Cue, have: ReadonlySet<string>): Scored[] {
+    const k = this.config.pushDaySeats;
+    const days = cue.time?.days;
+    if (k <= 0 || !days || days.size === 0 || days.size > DAY_SEAT_DAYS) return [];
+    return this.deps.cache
+      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset)
+      .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc }));
   }
 
   /**
@@ -2502,21 +2764,32 @@ export class ContextPartner {
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
    * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
-  private async checkPush(s: Session, cue: Cue, gate: PushGate): Promise<PushCheckRead | null> {
+  private async checkPush(s: Session, cue: Cue, gate: PushGate, forRequest?: number): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
-    if (!this.config.pushCheck || !checker || !gate.like.some(Boolean)) return null;
+    if (!this.config.pushCheck || !checker) return null;
+    const like = gate.like.some(Boolean);
+    if (!like) return null;
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
+    const today = localDay(this.now(), this.deps.cache.offsetOf(s.scope));
+    const sheet = this.sheetOf(s, cue, today);
     const focus = readerFocus(cue.raw);
     const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
-      today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
+      today,
+      ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
     };
     const key = checkKey(input);
-    const asked = `${input.today}\n${request}`;
+    const ids = sheet.map((c) => c.id);
+    const withSheet = (r: PushCheckRead): PushCheckRead => (ids.length > 0 ? { ...r, sheet: ids } : r);
+    // A kept answer read this sheet too: a card landing or expiring between passes asks again.
+    const asked =
+      sheet.length > 0
+        ? `${input.today}\n${request}\n${createHash("sha256").update(sheetText(sheet)).digest("hex").slice(0, 16)}`
+        : `${input.today}\n${request}`;
     const checks: Map<string, KeptCheck> = (s.pushChecks ??= new Map());
     // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
     // pass (`readerPushBehind`) often only reorders the pool or drops an item.
@@ -2526,18 +2799,20 @@ export class ContextPartner {
       if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
       // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
-      return {
+      return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
         costUsd: 0,
         called: false,
         overBudget: false,
-      };
+      });
     }
     let kept = checks.get(key);
     const fresh = !kept;
     if (!kept) {
       const entry: KeptCheck = {
         asked,
+        ...(forRequest !== undefined ? { request: forRequest } : {}),
         marks: new Map(items.map((it) => [it.id, itemMark(it)])),
         read: checker.check(s.scope, s.key, input, s.abort.signal),
       };
@@ -2554,7 +2829,7 @@ export class ContextPartner {
     try {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
-      if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
+      if (got) return withSheet(fresh ? got : { ...got, costUsd: 0, called: false });
       // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
@@ -2564,10 +2839,78 @@ export class ContextPartner {
           () => undefined,
         );
       }
-      return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
+      return withSheet({ yes: null, costUsd: 0, called: false, overBudget: false, late: true });
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * `packetHeedsCheck` (G2, D1450): the test of whether this request's push check read an item and did not say yes
+   * to it, or null when no settled check of this request did. An item counts only as the copy the check read
+   * (`itemMark`'s id and content hash): a changed copy is not the one it turned down.
+   */
+  private checkedOut(s: Session): ((item: ContextItem) => boolean) | null {
+    if (!this.config.packetHeedsCheck || !s.pushChecks) return null;
+    const out = new Map<string, string>();
+    for (const kept of s.pushChecks.values()) {
+      const read = kept.settled;
+      if (kept.request !== s.requests || !read?.yes) continue;
+      // A reply that named its most (5) may have left out items it would have named: it turned nothing down.
+      if (read.yes.size + (read.rules?.size ?? 0) >= 5) continue;
+      // A rule the reply named brings its item in too (`pushCheckSheet`): that is a yes.
+      for (const [id, mark] of kept.marks) {
+        if (read.yes.has(id) || read.rules?.has(id)) out.delete(id);
+        else out.set(id, mark);
+      }
+    }
+    if (out.size === 0) return null;
+    return (item) => out.get(item.id)?.startsWith(`${item.id}\t${cardKey(item)}\t`) === true;
+  }
+
+  /**
+   * `pushCheckSheet` (F5): the user's rule sheet, at most `pushCheckSheet` of their constraint cards made before the
+   * request (no `none` or `preference` card, none whose span ended before `today`), one a statement (the newest
+   * item's), newest items first; only items still cached, no bulk mail. No model call and no source call: the card
+   * store and the cache, both the user's own.
+   */
+  private sheetOf(s: Session, cue: Cue, today: string): SheetCard[] {
+    const n = Math.min(this.config.pushCheckSheet, SHEET_MAX_CARDS);
+    const cards = this.deps.cards;
+    if (n <= 0 || !this.config.cards || !cards) return [];
+    const ids = cards.carded(s.scope);
+    if (ids.length === 0) return [];
+    const now = this.now();
+    const rows: { id: string; card: Card; item: ContextItem; at: number }[] = [];
+    for (const [id, card] of cards.cardsOf(s.scope, ids, cue.arrived ?? now)) {
+      if (card.kind === "none" || card.kind === "preference") continue;
+      if (card.end !== undefined && card.end < today) continue;
+      const item = this.deps.cache.get(s.scope, id, now);
+      if (!item || bulkMail(item)) continue;
+      rows.push({ id, card, item, at: item.updatedAt ?? 0 });
+    }
+    rows.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const out: SheetCard[] = [];
+    const said = new Set<string>();
+    for (const { id, card, item } of rows) {
+      const statement = sanitizeForStore(card.statement);
+      const key = statement.toLowerCase().replace(/\s+/g, " ").trim();
+      if (!key || said.has(key)) continue;
+      said.add(key);
+      // A heavy user's rules do not fit: the newest `n` of them speak on neutral requests more than main does
+      // (F5 §11d, D1183), so the check reads the pool alone, as without a sheet.
+      if (out.length >= n) return [];
+      out.push({
+        id,
+        kind: card.kind,
+        statement,
+        title: sanitizeForStore(item.title),
+        source: sanitizeForStore(item.sourceId),
+        ...(card.start ? { start: card.start } : {}),
+        ...(card.end ? { end: card.end } : {}),
+      });
+    }
+    return out;
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -2599,25 +2942,50 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
     const yes = check?.yes ?? null;
     const pool = gate.pool;
     const reported = pool;
-    if (reported.length === 0) return { items: [], pool };
-    const open = reported.filter((x) => !bulkMail(x.item));
+    // `pushCheckSheet` (F5): the items of the sheet's rules the check named, after the pool's (current copies only).
+    const ruled = yes && check?.rules?.size ? this.ruledItems(s, check.rules, pool) : [];
+    if (reported.length === 0 && ruled.length === 0) return { items: [], pool };
+    // `pushDaySeats`: a seat is the check's to name. With no answer (no checker, a late or failed check) the push
+    // hands what it would have handed with no seats: the pool as it stood, behind that pool's own gate.
+    const open = (yes === null && gate.before ? gate.before : reported).filter((x) => !bulkMail(x.item));
+    const gated = gate.unchecked ?? like.some(Boolean);
     let items = yes
-      ? open.filter((x) => yes.has(x.item.id)).slice(0, this.config.pushCandidates)
-      : like.some(Boolean)
+      ? [...open.filter((x) => yes.has(x.item.id)), ...ruled].slice(0, this.config.pushCandidates)
+      : gated
         ? open.slice(0, this.config.pushCandidates)
         : [];
+    // `pushLookup` (D1252): the check answered and named nothing (a non-null empty answer: this pass's call, a reused
+    // or a late one read by `readerPushBehind`'s second pass; a failed, late-unread or unwired check is null), so the
+    // push would be silent; the pool's records that name the request's anchors go out for reference instead, or with
+    // `pushLookupAny` the pool's head when none does (`lookupHead`: its lead must not claim they name the request).
+    let lookup = false;
+    let lookupHead = false;
+    // Only on the session's first request: later ones carry the session's own context, and there the records saved
+    // the agent almost no search but stayed in its transcript (D1252's days run: agent $ +0.015/1k, −0.08 calls).
+    if (yes && yes.size === 0 && this.config.pushLookup > 0 && s.requests <= 1) {
+      const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      // Only plain records: a constraint-like item here is one the check read and judged not to change the request
+      // (a look-alike), and handed as reference the agent raised it anyway (round 5: the ISA look-alike on 4 of 4
+      // control seeds). What the agent looks up on a silent turn is the meeting, the contact, the thread.
+      const flagged = new Set(reported.filter((x, i) => like[i]).map((x) => x.item.id));
+      const plain = open.filter((x) => !flagged.has(x.item.id));
+      const named = plain.filter((x) => anchored(x.item, a));
+      lookupHead = named.length === 0 && this.config.pushLookupAny;
+      items = (lookupHead ? plain : named).slice(0, this.config.pushLookup);
+      lookup = items.length > 0;
+    }
     // `askNudge` (D316): the handed items hold none that names every kind of anchor the request has.
     let unsettled: Anchors | undefined;
     let anchors: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
-    if ((this.config.askNudge || fewer > 0) && items.length > 0) {
+    if ((this.config.askNudge || fewer > 0) && items.length > 0 && !lookup) {
       anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
@@ -2649,10 +3017,31 @@ export class ContextPartner {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
             ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
+            ...(check?.sheet ? { sheet: [...check.sheet] } : {}),
           }
         : {}),
+      // `pushLookup` (D1252): `handed` is reference records, not checked candidates.
+      ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
     });
-    return { items, pool, ...(unsettled ? { unsettled } : {}) };
+    return {
+      items,
+      pool,
+      ...(unsettled ? { unsettled } : {}),
+      ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
+    };
+  }
+
+  /** `pushCheckSheet` (F5): the cached items a check's named rules stand for, not already in the pool, no bulk mail. */
+  private ruledItems(s: Session, ids: ReadonlySet<string>, pool: readonly Scored[]): Scored[] {
+    const inPool = new Set(pool.map((x) => x.item.id));
+    const now = this.now();
+    const out: Scored[] = [];
+    for (const id of ids) {
+      if (inPool.has(id)) continue;
+      const item = this.deps.cache.get(s.scope, id, now);
+      if (item && !bulkMail(item)) out.push({ item, score: 0, matched: 0, sketch: null });
+    }
+    return out;
   }
 
   /**
@@ -2733,30 +3122,15 @@ export class ContextPartner {
     waiting.clear();
     for (const id of later) waiting.add(id);
     if (fresh.size === 0) return;
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     const said = new Set<string>();
     for (const cue of s.acted) {
-      const pool: Scored[] = [];
-      const seen = new Set<string>();
-      for (const x of this.rank(s, cue, { ignoreLedger: true })) {
-        if (pool.length >= cap) break;
-        if (seen.has(x.item.id)) continue;
-        seen.add(x.item.id);
-        pool.push(x);
-      }
+      // The push's own pool (`pushPool`, with `pushStateFilter`): a clearance that arrives late is no alert either.
+      const { pool, cards } = this.pushPool(s, this.rank(s, cue, { ignoreLedger: true }), now);
       // The candidates' rule (`candidatesOf`): the pool holds something that could constrain the request, and the new
       // item is among its first `pushCandidates` (bulk mail out), as it would have been had it been there then.
       const top = pool.filter((x) => !bulkMail(x.item)).slice(0, Math.max(1, this.config.pushCandidates));
       const hits = top.filter((x) => fresh.has(x.item.id) && !said.has(x.item.id));
       if (hits.length === 0) continue;
-      const cards =
-        this.config.cards && this.deps.cards
-          ? this.deps.cards.cardsOf(
-              s.scope,
-              pool.map((x) => x.item.id),
-              now,
-            )
-          : new Map<string, Card>();
       if (!pool.some((x) => this.constraintLike(x, cards))) continue;
       const bearing = hits;
       for (const x of bearing) {
@@ -2786,6 +3160,16 @@ export class ContextPartner {
         itemIds: packet.citations.map((c) => c.itemId),
       });
     }
+  }
+
+  /** `pushLookup` (D1252): the records a silent push hands, framed as reference and cut as candidates are. */
+  private lookupFrame(kind: "named" | "head"): PacketFrame {
+    const lead = kind === "head" ? LOOKUP_HEAD_LEAD : LOOKUP_LEAD;
+    // `pushLookupQuiet`: the last sentence says the records are background, not a reason to warn.
+    return {
+      ...this.candidateFrame(),
+      lead: this.config.pushLookupQuiet ? lead.replace(LOOKUP_USE, LOOKUP_QUIET) : lead,
+    };
   }
 
   /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
@@ -5853,7 +6237,7 @@ export class ContextPartner {
     // The request as written (redacted), not its content terms: the requests the model wrote are whole sentences in
     // the user's words, verbs included ("approve", "book"), which the cue's terms may leave out.
     const cut = intentCut(c);
-    const text = cue.raw.slice(0, INTENT_QUERY_CHARS);
+    const text = intentQuery(cue);
     const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
     const found = enricher.intentFinds(s.scope, text, cue.arrived ?? now, c.intentHits, accept);
     // `intentByKind`: a second, deeper search for the carded pass only (`intentReach`, intent.ts, says why apart).
@@ -5879,8 +6263,7 @@ export class ContextPartner {
     const before = cue.arrived ?? this.now();
     const cards = enricher.cardsOf(s.scope, found.keys(), before);
     const rare = new Set<string>();
-    for (const w of cue.raw
-      .slice(0, INTENT_QUERY_CHARS)
+    for (const w of intentQuery(cue)
       .toLowerCase()
       .match(/[\p{L}\p{N}]+/gu) ?? []) {
       if (w.length < 3 || isStopword(w)) continue;
@@ -6004,6 +6387,7 @@ export class ContextPartner {
     const spans = this.spans;
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
     const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, frame);
+    if (cue.request !== undefined) this.madeFor.set(injection, cue.request);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;
   }
@@ -6118,6 +6502,7 @@ export class ContextPartner {
       description: source.description,
       ...(source.listsByTime !== undefined ? { listsByTime: source.listsByTime } : {}),
       ...(source.notifies !== undefined ? { notifies: source.notifies } : {}),
+      ...(source.callPriced !== undefined ? { callPriced: source.callPriced } : {}),
       ...(source.fetchReportsGone !== undefined ? { fetchReportsGone: source.fetchReportsGone } : {}),
       ...(source.fetchesById !== undefined ? { fetchesById: source.fetchesById } : {}),
       // A listing (the sync, D57) is traced by the sync itself (`sync.list`): passed through as it is.
@@ -6524,6 +6909,8 @@ interface AskInternal {
   turn?: number;
   /** `pushOpen` (D702): the push started on the message's shape (`isOpenRequest`), not on a listed verb. */
   open?: boolean;
+  /** `pushDaySeats`: only the request's day started this push (`namesComingDay`). */
+  byDay?: boolean;
   /** `readerPushBehind`'s second reading: the first one's search, and the packet it queued. */
   again?: { searched: SearchedLive; prev: Injection | null };
   /**
@@ -6579,6 +6966,10 @@ function onlyTime(cue: Cue): boolean {
     (cue.time?.days.size ?? 0) > 0 && cue.entities.length === 0 && cue.text.split(" ").every((w) => TIME_WORD.test(w))
   );
 }
+
+/** The text the intent index is searched with: the request's head, after its gloss when it has one (`requestGloss`). */
+const intentQuery = (cue: Cue) =>
+  cue.gloss ? `${cue.gloss}\n${cue.raw.slice(0, INTENT_QUERY_CHARS)}` : cue.raw.slice(0, INTENT_QUERY_CHARS);
 
 /** The cue's time on the user's wall clock, read as UTC: its ISO day is the user's day. */
 const localNow = (cue: Cue) => cue.at + cue.offset * 60_000;
@@ -6699,9 +7090,14 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 /** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
 const CHECK_KEPT = 4;
 
+/** `packetHeedsCheck` (D1450): the reasons of the packets the no-model rule paths make for a request. */
+const RULE_PATHS = ["fallback:", "grounded-", "sources:"];
+
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {
   asked: string;
+  /** The user request (`Session.requests`) the check was made for (`packetHeedsCheck`). */
+  request?: number;
   /** Per item read, `itemMark`: id, content hash, date and sender. */
   marks: Map<string, string>;
   read: Promise<PushCheckRead>;
@@ -6712,7 +7108,18 @@ interface KeptCheck {
 interface PushGate {
   pool: Scored[];
   like: boolean[];
+  /** `pushDaySeats`: the pool's items seated for the request's day; handed only when the check names them. */
+  seats?: Set<string>;
+  /** `pushDaySeats`: the pool before the seats, and whether a push with no check answer hands its candidates. */
+  before?: Scored[];
+  unchecked?: boolean;
 }
+
+/** `pushDaySeats`: the fewest words of a turn that starts the push by its day, and how far ahead that day may be. */
+const DAY_START_WORDS = 4;
+const DAY_START_AHEAD = 62;
+/** `pushDaySeats`: the longest window of days (the request's) whose items are seated. */
+const DAY_SEAT_DAYS = 3;
 
 /** What a re-read found (`verifyDelivery`). */
 /**

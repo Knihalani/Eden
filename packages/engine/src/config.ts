@@ -533,6 +533,18 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
+   * On in the default (F2, D1193; docs/research/f2-card-state.md). With `cards`: the card prompt asks each card for
+   * its `state` (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call,
+   * and keeps a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
+   */
+  cardsState: boolean;
+  /**
+   * On in the default (F2, D1193). With `cards` and `cardsState`: the push's pool (`pushGate`) leaves out an item
+   * carded none whose state says a constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state,
+   * or a card of another kind, stays.
+   */
+  pushStateFilter: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -560,6 +572,15 @@ export interface EngineConfig {
   intentWeight: number;
   /** Judge seats kept for intent hits the lexical ranking did not seat (with a model). */
   intentSeats: number;
+  /**
+   * F1 (docs/research/f1-intent-bridge.md; promoted by D1153): a request written in another language is given the
+   * English words its own words mean (`glossOf`, gloss.ts: a glossary written once by a model, read with no model and
+   * no call), and the push's and an ask's lookup search with them beside the request's own words, lexically and in the
+   * intent index. An English request is searched as written. reworded's 36 non-English templates, seeds 41–44 (push
+   * check served by subagents): hidden delivered 88 → 112 of 144, look-alikes 45 → 49, neutral 50 → 21 (English
+   * originals 53); +13% check calls on non-English requests, 12–23 µs a request, +29 MB RSS.
+   */
+  requestGloss: boolean;
   /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
@@ -685,6 +706,30 @@ export interface EngineConfig {
    */
   askNudgeDeep: boolean;
   /**
+   * D1252 (F11; rejected, kept off; 0 = off): with `pushCheck`, a push the check left silent (it answered and named
+   * nothing) hands up to this many items of its own pool (no bulk mail, pool order) that name one of the request's
+   * anchors (a person or thing it names, or its day: `settle.ts`'s `anchored`), under `LOOKUP_LEAD`: for reference, a
+   * check found none that changes the request. No new connector or model call. D1250 measured the agent searching its
+   * connectors on 28 of 32 silent turns and on 3 of 40 after a packet: this gives a silent turn the records the agent
+   * would look up. D300 (answer-ahead, rejected) was the same records beside every candidates packet, before the check
+   * made silence common.
+   */
+  pushLookup: number;
+  /**
+   * D1252's second arm (F11; rejected, kept off; needs `pushLookup`): when no record in the silent push's pool names
+   * one of the request's anchors, the pool's first `pushLookup` items (no bulk mail) go out under the same lead. Round
+   * 3 of D1252: the lookup packet stopped the agent's search on 14 of 15 silent turns it reached, and the 17 it did not
+   * reach (nothing anchored in the pool) all searched.
+   */
+  pushLookupAny: boolean;
+  /**
+   * D1252's third arm (F11; rejected, kept off; needs `pushLookup`): the lookup packet's lead also says the records are
+   * background for the request's details, not a reason to warn the user (`LOOKUP_QUIET`), since the check already
+   * found none that changes the request. For the hedges the reference records drew in round 4 ("check that the
+   * discount is approved, I found no record of it").
+   */
+  pushLookupQuiet: boolean;
+  /**
    * D400 (A30, docs/research/a30-token-gap.md; promoted by D404: 2 in the default, part `fewer`; 0 = off): with
    * `pushCandidates`, when the request names an anchor (a person, thing or day) and the handed candidates settle it
    * (`settle.ts`, `askNudge`'s test), the push hands only the first `pushCandidatesSettled` of them, extended through
@@ -711,10 +756,47 @@ export interface EngineConfig {
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
+   * `pushDaySeats` (G1, D1400–D1402; 3 in the default, part `days`; 0 = off): a plan with a day is an action on that
+   * day, with no model. (1) The request's days are read past `timeWindow` (`days.ts`): a bare day of the month ("on
+   * the 20th", "Monday the 9th") and, through the glossary, a weekday in another language. (2) A turn that starts no
+   * push, that the turn gate does not read as chatter, and that names a coming day (a window of at most three)
+   * starts an opened one; such a push is checked only when one of its day seats is itself constraint-like. (3) Up to
+   * this many items on a day the request names take seats in the push's pool right after the first `pushCandidates`,
+   * where the push check reads them: events starting that day, items whose text spans it ("26 Oct – 6 Nov", "until
+   * 2 November") and items that write the date, bulk mail out; windows of more than three days get none. A seat is
+   * handed only when the check names it: with no answer the push hands the pool as it stood before the seats, and a
+   * day-started push hands nothing. Served by subagents,
+   * dev20 seeds 41–42, single-shot: hidden raised +2.5 points (+0.3..+5.0), look-alikes handed and neutral concerns
+   * within their intervals, checked pushes +7% (docs/research/g1-facts.md).
+   */
+  pushDaySeats: number;
+  /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
    */
   pushCheckItems: number;
+  /**
+   * On in the default (G2, D1450; docs/research/g2-decoys.md). With `pushCheck` and a checker, a proactive packet a
+   * rule path made for a request (the no-model conflict and grounding tests, which queue before the check answers)
+   * is not handed out when that request's push check read every item in it and said yes to none. The observe
+   * already waits for the push, so no wait is added, and there is no call. A check that did not answer, read another
+   * copy of an item or was for another request holds nothing back; an explicit ask lists as before (D1452).
+   */
+  packetHeedsCheck: boolean;
+  /**
+   * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
+   * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
+   * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
+   * reply names brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards
+   * (an end before the user's day), `none` and `preference` cards are left out, newest items first. A user with more
+   * active rules than this gets no sheet (D1183: a newest slice of a heavy user's rules speaks on neutral requests).
+   */
+  pushCheckSheet: number;
+  /**
+   * F5 (D1180, with `pushCheckSheet`): a pool item on the sheet is sent as its title and its rule's number instead of
+   * its text: the cached sheet line stands in for part of the uncached pool (cost).
+   */
+  pushCheckSheetRefs: boolean;
   /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
@@ -749,6 +831,29 @@ export interface EngineConfig {
    * model, no call.
    */
   revisionDiff: boolean;
+  /**
+   * F3 (D1131, in the default at 2 h; 0 = off): while a user is active (`syncActiveMs`), the sync's tick runs a
+   * complete background poll of each warm synced source whose last complete poll is older than this (ms), whatever
+   * its learned rate says. A quiet source is otherwise trusted for up to `syncMaxStaleMs` (6 h), so a silent edit
+   * there went out as the pre-edit copy (D1126). No request waits for it, and the request path's own polls mostly
+   * stop (its sources are current); its price is connector calls per active user-hour (COST-MODEL §Hosting (b)). A
+   * source that notifies (`syncPush`) is never polled by it, nor one not marked first-party or flat-rate
+   * (`Source.callPriced` false; absent counts as priced, D1133) unless `syncActivePollPriced`.
+   */
+  syncActivePollMs: number;
+  /**
+   * F3 (D1132, in the default), with `syncActivePollMs`: a floor poll of a source that brings in nothing new doubles
+   * that source's interval, up to four times the floor (2 h to 8 h); anything new stored from the source, by any
+   * read, sets it back to the floor. A quiet source is then polled about a quarter as often, one that changes as
+   * before.
+   */
+  syncActivePollBackoff: boolean;
+  /**
+   * D1132, D1133, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one
+   * for every tenant the server runs) to floor polls of sources not marked first-party or flat-rate
+   * (`Source.callPriced` true, or absent: unknown counts as priced). Off: those sources keep their learned rate.
+   */
+  syncActivePollPriced: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -869,6 +974,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
+  cardsState: true,
+  pushStateFilter: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
@@ -877,6 +984,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentCardHits: 4,
   intentWeight: 1,
   intentSeats: 1,
+  requestGloss: true,
   askReader: true,
   askReaderPool: 15,
   askReaderWaitMs: 2_500,
@@ -896,13 +1004,23 @@ export const DEFAULT_CONFIG: EngineConfig = {
   planConflict: true,
   askNudge: true,
   askNudgeDeep: true,
+  pushLookup: 0,
+  pushLookupAny: false,
+  pushLookupQuiet: false,
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  packetHeedsCheck: true,
+  pushDaySeats: 3,
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
+  syncActivePollMs: 7_200_000,
+  syncActivePollBackoff: true,
+  syncActivePollPriced: false,
 };

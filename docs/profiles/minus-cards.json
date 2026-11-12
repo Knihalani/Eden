@@ -7,5 +7,7 @@
   "cardsSourceAware": false,
   "cardsOrder": false,
   "cardsLanes": 1,
-  "cardsRequestsFix": false
+  "cardsRequestsFix": false,
+  "cardsState": false,
+  "pushStateFilter": false
 }

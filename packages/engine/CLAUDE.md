@@ -23,6 +23,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
+| `gloss.ts`, `gloss.bin`                                                    | The request glossary (`requestGloss`, in the default since D1153; part `gloss`; F1): a non-English request's words glossed into English with no model, from a 26-language glossary written by Haiku subagents (`gloss.bin`, packed by the lab's `gloss-pack.ts`), loaded once a process when the partner is built (118 ms, +29 MB RSS); an English request is searched as written |
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
 | `source-yield.ts`                                                          | `SourceYield` (`sourceYield`, D505, D509, D603, on in the default): per (user, source) a run of live reads with nothing used and whether an item of it was ever used; the partner's `spentSources` skips live reads by the run and by the earn rule |
 | `reader.ts`                                                                | Ask-time reader (D95, D96): a budgeted model call wired by the embedder                                                                                                                                                       |
@@ -314,6 +315,24 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   push makes the agent ask more: measure any change to when the push is silent live, with wall, not on the funnel
   (the funnel wires no checker unless `--check`). `checkKey` keeps the "c" its replies were recorded under. Deleted
   (D828): I3's reply, the anchored gate (arm N), the never-silent rule and the widened pool; code in 572d1569.
+- **What the check turned down is not pushed by a rule path, and the ask is left alone (`packetHeedsCheck`, D1450,
+  on in the default; docs/research/g2-decoys.md).** Seven in eight look-alikes handed go round the check: the ask's
+  answer and the rule paths' packets (D1455). `checkedOut` is the test (this request's settled check read the
+  item's current copy, named fewer than five, and said yes to neither it nor its rule); `allCheckedOut` adds that
+  the packet is a rule path's (`RULE_PATHS`) made in this request (`Cue.request`, kept per packet in `madeFor`).
+  While a push runs, `observeEvent` does not `handOut` its reply's packet: `observe` does, after the push's wait, or
+  traces the hold-back; a packet dropped after `handOut` would leave it "shown" (the next ask says "(shown above)")
+  and outstanding (a false "unused" against its source). Queued packets are dropped in `takePending`. Do not filter
+  the ask: by the check's verdict it cut look-alikes 63% and lost five raised facts in 36 targeted tasks (D1452); by
+  a `why` field on the check's rejections it could not tell a go-ahead from "already done" (D1453); by a card's
+  cleared state it lists a hold without the notice that lifts it (D1451, deleted; `pushStateFilter` has the same
+  exposure in the pool, fixed by D1456). A new rule path adds its reason to `RULE_PATHS` or the check does not
+  cover it.
+- **A lift notice stays beside the hold it could lift (`pushStateFilter`, D1193, D1456; `couldClear`).** The filter
+  takes an item carded none with a cleared state out of the push's pool only when none of the user's constraint
+  cards shares an entity with it; otherwise the check would read the hold (carded in force when it arrived) without
+  its lift. The lab's worlds never hold both, so the funnel cannot see a regression here: `card-state.test.ts` pins
+  it. Any new filter on cleared items (the ask, a rule path, the sheet) needs the same guard.
 - **The push starts on a verb list or on the request's shape (`pushOpen`, O3, D702, in the default since D710; part
   `open`).** `isImperative` knows a closed list of verbs (a gate from the reader's paid push); 132 of 768 hidden train
   requests are on none. With `pushCandidates`, `isOpenRequest` (probes.ts: four words or more; not a remark, question or statement opener; a question mark
@@ -550,6 +569,20 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
 - **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
   outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
   keep iteration off per-item paths.
+- **The freshness floor (`syncActivePollMs` 2 h, `syncActivePollBackoff`; D1131, in the default, part `sync`).** While a
+  user is active, `Sync.step` runs a complete background poll (`poll`, to the boundary, `polled` and the rate taught) of
+  each warm source not polled for the floor, doubling a quiet source's interval up to 8 h (`SourceSync.floorLevel`,
+  reset in `store` by anything new from any read). Never a partial page: one page left its items as a false boundary,
+  and the next poll marked the source current short of what changed (the review). For the same reason any poll that
+  stops before it completes (call budget, a failed page, a lookup giving up) marks what it stored as pushed
+  (`s.pushed`), so the next poll reads past it; the next complete poll clears the marks (the second review). A source
+  that notifies is skipped, and so is any source not marked `Source.callPriced: false` (first-party or flat-rate; absent
+  counts as priced, D1133, fail safe) unless `syncActivePollPriced` (the deployment's opt-in, one for every tenant); the
+  server's presets and the lab's `SimSource` are marked false. A wrapper around a `Source` copies `callPriced` as it
+  copies `notifies`. A due floor poll thaws a frozen user through `cache.ready` (D325), and the sources past half their
+  interval go in the same thaw. The request path's polls mostly stop (its sources are current), so look-alikes reach the
+  push's pool more often on train (funnel delivered 123 → 145 of 192, seed 41); F2's structural filters are the planned
+  answer. `active-poll.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
   skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
   daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
@@ -560,6 +593,24 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `doubted`/`verifyItems` would hand over items the weekly sweep has not checked; a source that cannot find an item by
   ref (`Source.fetchesById` false: an `McpSource` with no `fetchTool` still has a `fetch` that answers null) must stay
   on the daily sweep (`onLongSweep`); a wrapper around a `Source` must copy `fetchesById` (as `notifies`).
+- **Plans with a day (`pushDaySeats` 3, G1, D1400–D1402, in the default, part `days`; `days.ts`,
+  docs/research/g1-facts.md).** Three things, no model: `ask` re-reads `cue.time` from `datedText` over the request
+  and its gloss (so the conflict test and the day grounds of a push or an ask see those days too: not measured
+  apart); `observe` starts an opened push for a turn nothing else started that names a coming day in a window the seats
+  take (`namesComingDay`; never when the gate reads chatter, never without a gate, never for a draft: reading the
+  user's offset would thaw a frozen user, D325) and marks it `internal.byDay`;
+  `pushGate` seats up to three of the day's items (`ItemCache.dated`) after the first `pushCandidates`. Two rules
+  hold the guards and were measured (served by subagents): a seat is handed only when the check names it
+  (`candidatesOf`: with no answer it hands `gate.before`, the pool as it stood, behind that pool's own gate
+  `gate.unchecked`, so a constraint-like seat never opens a hand-out no model judged, and a `byDay` push hands
+  nothing; the review's finding), and a
+  `byDay` push is checked only when a seat is itself constraint-like (without that rule neutral concerns rose 3.1
+  points and checked pushes 26%: the plain arm, deleted). `ItemCache.dated` scans the user's items and reads each
+  text: keep it off the fast path and behind a request that names at most three days. `datedText` rewrites an ordinal only where it reads as a date (a
+  preposition, "the" or a weekday before; the clause's end or a time word after; no past tense before): widening it
+  invents days for "the 3rd party vendor" or "what happened on the 9th", which then pull that day's events into the
+  lookup and the conflict grounds. The funnel wires no checker,
+  so it sees the starts and the pool (`--pool-dump`, the `cl` flags) but hands no seat.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

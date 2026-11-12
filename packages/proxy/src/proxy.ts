@@ -77,6 +77,18 @@ export interface ProxyOptions {
    */
   maxKeptBytes?: number;
   /**
+   * On by default (F10, D1273, promoted by the integrator; `false` or `EDEN_PROXY_SPECULATE=0` turns it off): at a
+   * new turn, send the request upstream at once, shaped as it would go if Eden had nothing new for the turn, while Eden
+   * works; hold its answer. When Eden's work lands and the request
+   * that would go upstream is byte for byte the speculative one, the held answer goes to the agent (Eden's wait is
+   * saved); otherwise the speculative call is aborted and the request goes as today. The agent sees exactly what it
+   * would without the option. An aborted call is paid for: its input, and any output the provider wrote or bills after
+   * the abort (a non-streamed request may be finished and billed anyway). A 429 or 5xx on the early call is not passed
+   * on (the request goes again as today). Chat and Anthropic routes only: not the Responses route, not with
+   * `askTool`, in shadow mode or with `store: true` (F7 §9's design, docs/research/f10-rule-index.md §9).
+   */
+  speculate?: boolean;
+  /**
    * Opt-in (D851, D857; `EDEN_PROXY_ASK=1`): add Eden's `ask_context` to each request's tools and answer the model's
    * calls to it in the proxy (`ask.ts`), so a proxy user gets the tool D70 measured at +11.9 points on the SDK. Not
    * measured through the proxy. Never in shadow mode.
@@ -216,6 +228,24 @@ function hashOf(m: Message): string {
 
 type EventInput = Parameters<EdenClient["observe"]>[0];
 
+/**
+ * Whether a request asks the provider to run tools on its side (D1273's review): remote MCP servers (`mcp_servers`),
+ * chat's web search (`web_search_options`), a code-execution `container`, or any tool typed other than a client tool
+ * (`function` on chat, `custom` or untyped on Anthropic: `web_search_*`, `web_fetch_*`, `code_execution_*`, and the
+ * computer-use tools too, to be safe). `speculate` never sends such a request early: the provider would run its tools
+ * (which may write, and are billed per use) for the early call and again for the packet's request.
+ */
+export function providerRunsTools(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const b = body as Record<string, unknown>;
+  if (b.mcp_servers !== undefined || b.web_search_options !== undefined || b.container !== undefined) return true;
+  const tools = Array.isArray(b.tools) ? (b.tools as unknown[]) : [];
+  return tools.some((t) => {
+    const type = t && typeof t === "object" ? (t as { type?: unknown }).type : undefined;
+    return type !== undefined && type !== "function" && type !== "custom";
+  });
+}
+
 /** Eden events for one message; `tools` maps a tool call id to its tool's name, for the results that follow. */
 export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
   const text = capped(textOf(m.content));
@@ -262,7 +292,12 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     }
   };
 
-  const forward = (req: Request, path: string, body: string | ArrayBuffer | null): Promise<Response> => {
+  const forward = (
+    req: Request,
+    path: string,
+    body: string | ArrayBuffer | null,
+    signal: AbortSignal = req.signal,
+  ): Promise<Response> => {
     const headers = new Headers(req.headers);
     // Headers the client's own Connection header names are for this hop only, like the fixed list.
     for (const h of (req.headers.get("connection") ?? "").split(",")) if (h.trim()) headers.delete(h.trim());
@@ -270,7 +305,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     for (const h of [...headers.keys()]) if (h.startsWith("x-eden-")) headers.delete(h);
     // The caller's signal: an agent that hangs up cancels the model call, which would otherwise run (and be billed) to
     // the end for an answer nobody reads (audit A11).
-    return doFetch(`${upstream}${path}`, { method: req.method, headers, body, signal: req.signal }).then((res) => {
+    return doFetch(`${upstream}${path}`, { method: req.method, headers, body, signal }).then((res) => {
       const out = new Headers(res.headers);
       for (const h of DROP_FROM_UPSTREAM) out.delete(h);
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out });
@@ -290,6 +325,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
      * what the input follows, folded into the retry check: "yes" after a different response is a new turn.
      */
     held?: string,
+    /**
+     * `speculate` (F10): called once, before Eden's wait at a new turn, with the messages as they would go if the turn
+     * got no packet (null: as the caller sent them).
+     */
+    onSpeculate?: (placed: Message[] | null) => void,
   ): Promise<Message[] | null> => {
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) return null;
@@ -408,6 +448,18 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     })().catch(report);
     // One deadline for all of Eden's work in this request: past it the request goes upstream with what is in hand,
     // and what lands later stays for the turn's next model call (D14: a slow Eden never holds the agent long).
+    if (onSpeculate && lastUser >= 0 && held === undefined && !options.shadow) {
+      // With no packet for this turn: earlier turns' packets in place (`keptInPlace` with none changes nothing).
+      try {
+        onSpeculate(
+          keepPackets && conv.placed?.size
+            ? keptInPlace(conv, messages as Message[], [], turn, options.maxKeptBytes ?? MAX_KEPT_BYTES)
+            : null,
+        );
+      } catch (e) {
+        report(e);
+      }
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const budget = (options.waitMs ?? DEFAULT_WAIT_MS) + EDEN_SLACK_MS;
     await Promise.race([work, new Promise((r) => (timer = setTimeout(r, budget)))]);
@@ -554,6 +606,22 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     }
     let sent = raw;
     let body: unknown = null;
+    // `speculate` (F10): the request sent before Eden's wait, its held answer, and the way to abort it.
+    let spec: { sent: string; res: Promise<Response>; abort: AbortController } | null = null;
+    const speculating = (options.speculate ?? true) && !options.askTool && !options.shadow;
+    const startSpec = (bodyText: string) => {
+      // Not with a provider-stored completion (`store: true`): an aborted call could leave a stored copy there. Not
+      // when the provider runs tools itself (`providerRunsTools`): the early call would run them, and the packet's
+      // request again.
+      if (!speculating || spec || req.signal.aborted) return;
+      if ((body as { store?: unknown } | null)?.store === true || providerRunsTools(body)) return;
+      const abort = new AbortController();
+      req.signal.addEventListener("abort", () => abort.abort(), { once: true });
+      const res = forward(req, path, bodyText, abort.signal);
+      // A failed speculative call is replaced by the ordinary one below; never an unhandled rejection.
+      res.catch(() => undefined);
+      spec = { sent: bodyText, res, abort };
+    };
     try {
       body = JSON.parse(raw);
     } catch {
@@ -566,7 +634,17 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
           // The same work on the conversation read as chat messages; the context then goes back in as a text block.
           const theirs = (body as { messages?: unknown }).messages;
           const view = Array.isArray(theirs) ? fromAnthropic(theirs) : null;
-          const placed = view && (await withEden(req, { ...(body as object), messages: view.messages }, true));
+          const render = (placed: Message[] | null) => {
+            const out = placed ? toAnthropic(theirs as unknown[], view!, placed) : null;
+            return out
+              ? (withMessages(raw, out, "messages") ?? JSON.stringify({ ...(body as object), messages: out }))
+              : raw;
+          };
+          const placed =
+            view &&
+            (await withEden(req, { ...(body as object), messages: view.messages }, true, undefined, undefined, (p) =>
+              startSpec(render(p)),
+            ));
           messages = placed ? toAnthropic(theirs as unknown[], view!, placed) : null;
         } else if (responses) {
           const view = fromResponses((body as { input?: unknown }).input);
@@ -593,7 +671,12 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
               held,
             ));
           messages = placed ? toResponses(view!, placed) : null;
-        } else messages = await withEden(req, body as Record<string, unknown>);
+        } else
+          messages = await withEden(req, body as Record<string, unknown>, false, undefined, undefined, (p) =>
+            startSpec(
+              p ? (withMessages(raw, p, "messages") ?? JSON.stringify({ ...(body as object), messages: p })) : raw,
+            ),
+          );
         const key = responses ? "input" : "messages";
         if (messages)
           sent = withMessages(raw, messages, key) ?? JSON.stringify({ ...(body as object), [key]: messages });
@@ -621,6 +704,22 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       } catch (e) {
         report(e);
       }
+    }
+    const held_ = spec as { sent: string; res: Promise<Response>; abort: AbortController } | null;
+    if (held_) {
+      if (held_.sent === sent && !req.signal.aborted) {
+        // Eden added nothing new for the turn: the answer already on its way is exactly the one the agent would get.
+        // A rate limit or a server error on that early call is not passed on: the request goes again as it would have
+        // gone without the option (the review: an early 429 must not become the agent's answer).
+        try {
+          const res = await held_.res;
+          if (res.status !== 429 && res.status < 500) return res;
+          held_.abort.abort();
+        } catch (e) {
+          if (req.signal.aborted) return fail(499, "eden proxy: the caller closed the request");
+          report(e);
+        }
+      } else held_.abort.abort();
     }
     try {
       if (eden && asking !== null) return await askRounds(req, path, asking, sent, route, eden);

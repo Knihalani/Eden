@@ -445,7 +445,166 @@ not what a call's wait is made of, D241), and every lexical cut so far lost fact
 answers (+39 output tokens a call, about $0.02 per 1,000 tasks) are the facts being stated: not waste. **Not
 worth building:** the levers that move cost are the check (F10) and the cards.
 
-## 12. The shipped route's cache (D1196; a trial pending the owner's probe)
+## 11. Cards on the world clock, and closing the first-party cost gap (10:10 UTC; [EST])
+
+**A heavy user's card backfill on the world clock.**
+- Run: `cold-start.ts --users user:41,user:42,train1:41` through the queue transport, served by subagents (D1101),
+  world clock (D1102).
+- Per new user (about 1,500 items at the sources): **13–14 card calls** (D244's wall-clock figure was 8). Of the
+  items, 256–270 are sent to the card model: 79–91 carded and 173–182 for intent requests only. 1,207–1,220 are
+  skipped by `cardsLean` and 1,389–1,399 prefiltered.
+- Priced two ways [EST]:
+  - from the queue's sizes (`price-queue.py`: 2,204 input tokens of which 999 cacheable, 817 output): $0.00055 a
+    call, **$0.0075 a backfill**;
+  - from H2's real-API per-item prices (D1052, D1053: $0.000073 a carded item, about $0.000040 a requests-only
+    item): 85 × $0.000073 + 178 × $0.000040, **$0.013 a backfill**.
+- A heavy user-month adds CL3's daily trickle, about $0.0165. That is **$0.024–0.030 in a user's first month** and
+  about $0.017 a month after. Per 1,000 requests at about 480 requests a month: **$0.05–0.06 in the first month, about
+  $0.034 after.**
+- The content-hash memo already skips re-carding unchanged items: a card is never read twice (`UserCards`, `null`
+  remembered), and items stating the same constraint sentence share one card (`sentenceReuse`).
+
+**Ranked levers for the first-party gap.** The gap is Eden's model spend with the agent's bill level: B19 Pi
++$0.25 per 1,000 tasks on the lab's cached figures. Each row gives $ per 1,000 tasks and the quality it costs.
+
+| lever | $ per 1,000 tasks | quality cost | $ saved per point lost | status |
+| --- | ---: | --- | ---: | --- |
+| `anthropicCache` on the shipped OpenRouter route (D817: off, never probed). The route sends no breakpoint, so the check's 1,185-token instructions are paid in full on every call: +$0.000107 a call, 0.93 a task. Cards pay 1.27× (D145). | **−0.10 (check) −0.01 (cards)**, on the shipped route only | 0 (the same request, cached) | ∞ | one OpenRouter probe, the owner's call |
+| F10's skip of the push check on a share *s* of pushes | −0.162 × *s* (−0.11 at *s* = 0.7) | F10's measurement | F10's | F10 |
+| the check reading the pool less same-titled copies, 10 items at most (H3's D1073/D1074) | −0.05 (−25% of the check; on the checks left after F10, −0.05 × (1 − *s*)) | −0.16 points (−1.53..+1.27) | about 0.3 per point | rejected on its −1.5 bar by 0.03; re-open only if the owner trades it |
+| cards: a compact reply, positional arrays, no key names (H2's D1052: −26.7% a card item) | −0.009 to −0.016 | none expected (the same content; unread live: H2 stopped at its −30% screen bar) | ∞ if it holds | a trial: parse test, funnel coverage, a live pair |
+| cards: batches of 40 (D1052) | 0 (the same $ an item) | — | — | nothing to gain |
+| cards: skip re-carding unchanged content | 0 (already done) | — | — | already in |
+| check pool 10 × 140 characters (D1050) | −0.04 | 20 fewer of 292 planted facts handed | about 0.02 per point | the worst ratio; no |
+| the agent's own bill (fewer searches and turns) | F11's | F11's | — | F11 |
+
+**What closes it [EST].**
+- With F10 at *s* = 0.7 and the compact card reply, Eden's model spend on Pi is about $0.25 − 0.11 − 0.01 ≈ **$0.13
+  per 1,000 tasks**.
+- Adding the de-duplicated pool trades about 0.2 points of hidden facts for −$0.015 more.
+- Against the agent alone:
+  - **Composio:** −$0.08 to −0.20 of connector fees saved, so about even to cheaper.
+  - **First-party APIs:** still about +$0.11–0.13. Nothing on Eden's side closes that without quality loss: the
+    cards' month of $0.03–0.06 is the floor once the check is mostly skipped.
+  - First-party can only close through the agent's own bill (F11), or by trading facts.
+- On the shipped OpenRouter route (rather than the lab's cached figures), add the `anthropicCache` row first: it is
+  worth more than any other lever at no quality cost.
+
+**Correction (10:30 UTC): F10's skip is not available.** D1270 (F10) finds that a CPU-only band cannot take the
+check off the request path without losing facts. Skipping the check on the half of neutral pushes that score lowest
+also skips 17% of hidden rows whose fact is in the pool. Every row above and in §10c that assumes F10 at *s* = 0.7
+is therefore a ceiling, not a plan. Without it, target 3 on model spend alone stays red. Target 4 rests on F11's
+`pushLookup`: −0.48 s of wait (−0.90..−0.11), served by subagents [EST], against F6's rehearsal gap of 0.4 s.
+
+## 12. The shipped route's prompt cache
+
+On `claude/f7-cache` (trial D1196, probe pending the owner): `EDEN_MODEL_CACHE=on` sets `anthropicCache` on all
+three model roles of the OpenRouter route, with tests that the cached prefix is byte-identical across calls.
+
+## 13. The compact card reply: dropped unrun (10:30 UTC)
+
+`cardsCompact` (form 4, H2's K20 positional reply) was built as a trial on `claude/f7-compact` and pre-registered,
+and its re-card ran through the queue. It is dropped before any reading, on the owner's call through the integrator:
+it is worth about $0.01 per 1,000 tasks (§11's row), which is noise against targets 3 and 4. The switch never reached
+main, so nothing is deleted from it. The branch keeps the code and tests for a later live pair.
+
+One lesson for the queue (D1101): a worker answering two requests in one batch can copy one request's reply format
+onto the other. By the time the run stopped, 25 of 132 answers were in the other arm's format, and every such keyed
+batch failed to parse. Any arm-versus-arm run that differs only in the reply format should batch one arm per take,
+or check each answer's shape against its own prompt before reading.
+## 14. The agent's own bill: where its tool calls go (no spend)
+
+**Sources:**
+- B19 (`b19-final.md`, real API) gives totals only. Its raw timelines are not committed.
+- F6's pilot (`f6-uptake`) records flags, not tool calls.
+- So the per-request split is read from §10's 36-task multi-turn run: raw against final2, served by subagents
+  (D1101). It is 12 templates × 3 kinds, direction only.
+
+**Totals, agent tool calls and input tokens a task:**
+
+| | raw | Eden (final) | change |
+| --- | ---: | ---: | ---: |
+| B19 Pi short: connector calls / agent tokens | 2.77 / 5,307 | 2.05 / 5,376 | −0.72 / +69 |
+| B19 Hermes short: connector calls / agent tokens | 3.00 / 10,065 | 2.22 / 10,023 | −0.78 / −42 |
+| §10 (subagents): tool calls / agent input tokens (calls × tokens a call) | 1.33 / 1,898 | 0.69 / 2,055 | −0.64 / +157 |
+
+Eden removes about 0.7 searches a task, but not tokens. The packet's ~270 tokens a call cancel what one fewer call
+saves.
+
+**By request (§10 run, agent tool calls summed over the three kinds of each template):**
+
+| request shape | templates | raw | Eden | Eden answered |
+| --- | --- | ---: | ---: | ---: |
+| check a booking or status before scheduling (calendar + mail) | dentist, rail strike, e-visa | 18 | 2 | 16 |
+| check a document or approval before acting (drive/CRM + mail) | screening hold, cert, NDA, discount, passport | 30 | 14 | 16 |
+| do it now (transfer, list, freeze, offer: raw does not search) | ISA, nursery, change freeze, offer band | 0 | 5 | −5 |
+
+- **Most removable agent calls are on "check before scheduling" requests.** The agent searches calendar and mail.
+  Eden's packet already holds the booking or hold, so 16 of 18 calls go.
+- **Document and approval checks keep half.** The agent still opens drive or CRM to confirm a document's state, which
+  is the `state` field F2 is adding.
+- **On "do it now" requests Eden adds calls.** The agent does not search raw, but an Eden packet leads it to search or
+  ask (offer-above-band +4, ISA +1 and 2 asks). There Eden's packet should be read as final, not as a prompt to
+  check.
+
+## 15. The rule sheet's cache (D1180), priced (10:55 UTC; [EST])
+
+D1180 put the user's rule sheet (up to 80 active cards) in the check as a cached block after its instructions. That
+grew the check's message from about 3,300 to 11,000–13,000 characters. `cost.py` priced every message as uncached
+input, so the sheet looked like 2.5–3x the check. Whether it is depends on how often the sheet is read from cache.
+
+`packages/sim/lab/f7/sheet-cache.py` models this per user-day; COST-MODEL ("The sheet's cache hit rate") has the
+tables. In short, for a heavy user (16 requests a day, 1–4 sheet changes a day, a sheet of 7,000–10,000 characters):
+- **1-hour TTL:** hit rate 0.75–0.80 under all three spacings. **+$0.08 to +0.12 per 1,000 tasks** (+$0.000081 to
+  +0.000124 a check, net of the pointers).
+- **5-minute TTL:** hit rate 0.00 at the lab's 10-minute gap, 0.16 at random spacing, 0.71 in bursts. At random
+  spacing it costs +$0.16 to +0.23, dearer than sending the sheet uncached (+$0.15 to +0.22). Break-even hit rates
+  are 0.22 for the 5-minute TTL and 0.53 for the 1-hour one.
+- **Today:** the lab transport sends 5-minute breakpoints. The shipped OpenRouter route sends none unless D1196 is on.
+
+`cost.py` now prices the sheet five ways (no sheet, uncached, all read, 1-hour mix at 0.75, 5-minute mix at 0.16)
+when the queue's done files carry `size.sheet`. G3's `batch.ts` change records that field. Without it, cost.py says
+the sheet was priced as uncached input.
+
+Against target 3 (F6's rehearsal gap, $0.09 per 1,000 tasks): the sheet adds $0.08–0.12 more at the 1-hour rate and
+$0.15–0.22 uncached on the shipped route. That is the price of D1180's +10 handed planted facts of 160 (served by
+subagents).
+
+## 16. Making the sheet cheap: the 1-hour TTL, an in-force-only sheet, a cap of 40 (11:40 UTC; [EST], $0)
+
+**1. The 1-hour TTL (D1197, built).** The sheet's message asks for it, and both Anthropic routes send it. Sheet
+sizes come from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
+- train seeds 41–42: 58.4 cards a user (p90 68, 759 worlds);
+- dev20 seeds 41–44: 59.4 cards a user (p90 67, 896 worlds);
+- about 8,200 characters either way.
+
+The sheet then costs **+$0.000098 a check, +$0.09 per 1,000 tasks** (`sheet-cache.py`, requests at random over
+active hours, hit rate 0.75). That compares with +$0.0002 a check (+$0.19 per 1,000 tasks) on the 5-minute TTL and +$0.00019 a check
+(+$0.17 per 1,000) uncached.
+
+**2. An in-force-only sheet: not taken.** F2's form-19 re-card of dev20 seeds 41–44 (1,929 items, states from the
+card call, served by subagents per item, D1102) gives these sheet-eligible cards: 834 in force, 88 with no state, 49
+superseded, 10 met, 0 lifted. Lifted only comes on `none` cards, which the sheet already drops.
+
+| rule | cards off the sheet | sheet size | $ per 1,000 tasks | planted facts off | decoys off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| sheet as built | 0 | 8,200 characters | +0.092 | 0 | 0 |
+| superseded and met off | 59 (6%) | about 7,700 | +0.085 | 13 | 29 |
+| no state also off | 147 (15%) | about 7,000 | +0.075 | 21 | 53 |
+
+Facts and decoys are counted in task occurrences. The saving is $0.007–0.017 per 1,000 tasks. The cost is 13–21
+planted facts: a superseded status-change is the new value, the fact itself (F2's arm 1). F2 recommends the rule
+"eligible and not (cleared state and kind none)", which changes nothing on the sheet, and so do I.
+
+**3. A cap of 40: not taken.** Every lab user's sheet holds more than 40 cards (all 1,655 worlds; the smallest has
+46). Under D1183's guard a cap of 40 turns the sheet off for every user, which deletes D1180's gain. The
+other reading, the newest 40, is the slice F5's §11d found speaking on neutral requests: a padded heavy user's newest
+slice took neutral yeses from 1 to 9 of 40. F5's 10d/11d ran 80 against no sheet, not 40, so no data supports 40.
+The cap stays at 80.
+
+**The per-check delta after 1 and 2:** +$0.000098 a check (+$0.09 per 1,000 tasks) on the 1-hour TTL. Step 2 adds
+nothing, since the in-force filter is not taken.
+## 17. The shipped route's cache (D1196; a trial pending the owner's probe)
 
 The servers reach Haiku 5.5 through OpenRouter and send no cache breakpoint (`anthropicCache` off since D145 and
 D817), so in production every push check pays its 1,185-token instructions in full. That is about $0.000107 a call

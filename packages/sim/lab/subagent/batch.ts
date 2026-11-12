@@ -1,7 +1,8 @@
 /**
  * The queue transport's batcher (F9, D1101; README.md here, ../../src/lab/queue-transport.ts). LAB ONLY, sim data.
  *
- *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--max-chars N]
+ *   bun packages/sim/lab/subagent/batch.ts take --dir Q --n 20 --out B.json [--role R] [--skip-role R] [--model PREFIX]
+ *     [--single-arm] [--max-chars N]
  *   bun packages/sim/lab/subagent/batch.ts prompt B.json [--recipe careful|fast]
  *   bun packages/sim/lab/subagent/batch.ts put --dir Q B.answers.json
  *   bun packages/sim/lab/subagent/batch.ts status --dir Q
@@ -11,14 +12,19 @@
  *
  * - `take` moves up to N pending requests into `taken/` (a rename, so two drivers never take the same one) and writes
  *   them as one batch: an array of {id, role, model, system, messages, tools, outputSpec}. `--role` takes only that
- *   role; `--max-chars` stops adding once the batch's prompts pass N characters (default 400,000).
+ *   role, `--model` only requests whose model starts with PREFIX (haiku workers and sonnet graders apart);
+ *   `--single-arm` (F7 §13: a worker answering two arms' requests in one batch copied one's reply format onto the
+ *   other) fills the batch only with requests of the first one's run (`EDEN_LAB_QUEUE_RUN`) and role;
+ *   `--max-chars` stops adding once the batch's prompts pass N characters (default 400,000).
  * - `put` reads [{id, text?, toolCalls?}], checks each against its request's outputSpec (JSON: one parseable object;
  *   tools: known names, an object input with the schema's required keys; stop sequences cut as the API would) and
  *   writes valid ones to `done/` (the replay store). Invalid or missing answers go back to `pending/`.
  * - `requeue` moves requests taken more than `--older-min` minutes ago back to `pending/` (a driver that died).
  */
 import {
+  appendFileSync,
   existsSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -27,7 +33,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   ensureQueue,
   queueDirs,
@@ -93,11 +99,22 @@ export function invalid(req: QueuedRequest, a: Answer): string | null {
 }
 
 /**
+ * The first line of every subagent prompt (F9, D1101): F5 saw batch workers call remote-session tools (they created
+ * sessions). A worker reads one file and writes one file; nothing else.
+ */
+export const WORKER_TOOLS_LINE =
+  "TOOLS: use only Read and Write (and Bash only to run the batch.ts command your task names). Never call any " +
+  "mcp__ tool, never create, message, interrupt or archive a session, never spawn an agent, never push or edit " +
+  "any other file.";
+
+/**
  * `prompt --recipe fast` (F9, D1101): the subagent replays a small model with thinking off, answering each request
  * in isolation from its first reading. Measured against recorded API replies in docs/research/f9-subagent-transport.md.
  */
 export function fastPrompt(batch: string, answers: string): string {
-  return `You are a raw model endpoint replaying a small, fast language model that runs with thinking disabled. Read \
+  return `${WORKER_TOOLS_LINE}
+
+You are a raw model endpoint replaying a small, fast language model that runs with thinking disabled. Read \
 the file ${batch} (use the Read tool; it is a JSON array). Each element is one model request: {id, role, model, \
 system, messages, tools?, outputSpec}.
 
@@ -118,7 +135,9 @@ Write the answers with the Write tool to ${answers} as a JSON array [{"id": "<id
 
 /** The prompt a driver gives the subagent that answers `batch` into `answers`. */
 export function driverPrompt(batch: string, answers: string): string {
-  return `You are standing in for a language model API. Read the file ${batch} (use the Read tool; it is a JSON array). \
+  return `${WORKER_TOOLS_LINE}
+
+You are standing in for a language model API. Read the file ${batch} (use the Read tool; it is a JSON array). \
 Each element is one model request: {id, role, model, system, messages, tools?, outputSpec}.
 
 For EACH request, produce exactly the reply the model named in \`model\` would give: follow its \`system\` prompt and the \
@@ -140,8 +159,16 @@ if (cmd === "take") {
   const n = Number(opt("n", "20"));
   const out = opt("out");
   const role = opt("role");
+  // `--skip-role R` (F11): every role but R, so a Haiku worker leaves the Sonnet grader's calls to a Sonnet worker.
+  const skipRole = opt("skip-role");
+  const model = opt("model");
+  const singleArm = rest.includes("--single-arm");
+  let arm: string | undefined;
   const maxChars = Number(opt("max-chars", "400000"));
   if (!out) throw new Error("take needs --out FILE");
+  // Made before any request moves to taken/: a missing directory used to fail the write after the moves, stranding the
+  // batch in taken/ until a requeue.
+  mkdirSync(dirname(out), { recursive: true });
   // Oldest first, so a long-waiting request is not starved by newer ones.
   const files = list(dirs.pending)
     .map((f) => ({ f, t: statSync(join(dirs.pending, f)).mtimeMs }))
@@ -157,6 +184,10 @@ if (cmd === "take") {
       continue;
     }
     if (role && req.role !== role) continue;
+    if (skipRole && req.role === skipRole) continue;
+    if (model && !req.model.startsWith(model)) continue;
+    const reqArm = `${req.run ?? ""}\u0000${req.role}`;
+    if (singleArm && arm !== undefined && reqArm !== arm) continue;
     const size = req.system.length + req.messages.reduce((k, m) => k + m.content.length, 0);
     if (batch.length && chars + size > maxChars) break;
     try {
@@ -171,6 +202,7 @@ if (cmd === "take") {
     }
     batch.push(req);
     chars += size;
+    arm ??= `${req.run ?? ""}\u0000${req.role}`;
   }
   writeFileSync(out, JSON.stringify(batch, null, 1));
   console.log(JSON.stringify({ taken: batch.length, chars, out, pendingLeft: list(dirs.pending).length }));
@@ -196,6 +228,11 @@ if (cmd === "take") {
     const why = invalid(req, answer);
     if (why) {
       bad.push({ id: a.id, why });
+      // Every rejected answer, by arm and role, for the final report's format-failure count (F7 §13).
+      appendFileSync(
+        join(DIR, "invalid.jsonl"),
+        `${JSON.stringify({ id: a.id, run: req.run ?? null, role: req.role, why, at: new Date().toISOString() })}\n`,
+      );
       renameSync(takenPath, join(dirs.pending, `${a.id}.json`));
       continue;
     }
@@ -208,6 +245,9 @@ if (cmd === "take") {
       last: last.length,
       tools: JSON.stringify(req.tools ?? []).length,
       out: (answer.text ?? "").length + JSON.stringify(answer.toolCalls ?? []).length,
+      // G3: the push check's rule sheet (D1180) is its own cached block ahead of `<today>`; the transport joins it
+      // to the request's message, so its size is kept apart for pricing (cached, or written by a cold user).
+      ...(req.role === "eden.check" && last.indexOf("\n<today>") > 0 ? { sheet: last.indexOf("\n<today>") } : {}),
     };
     writeAtomic(join(dirs.done, `${a.id}.json`), {
       id: a.id,

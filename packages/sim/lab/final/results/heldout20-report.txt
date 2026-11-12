@@ -1,0 +1,120 @@
+Served by subagents (D1101), single-shot agent (pi-ab --agent-sim single): compare arms within this run only.
+run /home/user/Eden/.local/final/final; arms raw, before, final
+
+== per arm (graded tasks)
+  raw      hidden raised 8/192 (4.2%)  control concerns 0/192 (0.0%)  neutral concerns 46/192 (24.0%)  ungraded 0
+  before   hidden raised 99/192 (51.6%)  control concerns 3/192 (1.6%)  neutral concerns 40/192 (20.8%)  ungraded 0
+  final    hidden raised 141/192 (73.4%)  control concerns 2/192 (1.0%)  neutral concerns 38/192 (19.8%)  ungraded 0
+
+== paired differences (points; 95% CI, templates resampled; pairs, templates, up/down)
+  final - before  hidden    +21.9 (+9.9..+33.9)  n 192, 48 templates, 50 up / 8 down
+  final - before  control    -0.5 (-3.6..+2.1)  n 192, 48 templates, 2 up / 3 down
+  final - before  neutral    -1.0 (-9.9..+7.3)  n 192, 48 templates, 20 up / 22 down
+  final - raw     hidden    +69.3 (+56.8..+80.7)  n 192, 48 templates, 133 up / 0 down
+  final - raw     control    +1.0 (+0.0..+2.6)  n 192, 48 templates, 2 up / 0 down
+  final - raw     neutral    -4.2 (-17.7..+8.9)  n 192, 48 templates, 30 up / 38 down
+  before - raw     hidden    +47.4 (+34.4..+60.4)  n 192, 48 templates, 91 up / 0 down
+  before - raw     control    +1.6 (+0.0..+4.2)  n 192, 48 templates, 3 up / 0 down
+  before - raw     neutral    -3.1 (-16.7..+10.4)  n 192, 48 templates, 32 up / 38 down
+
+== hidden raised by label (graded hidden tasks; arms side by side)
+  -- area
+    admin                              raw     0/24 (0.0%)  before    8/24 (33.3%)  final   16/24 (66.7%)
+    family                             raw     0/24 (0.0%)  before   12/24 (50.0%)  final   14/24 (58.3%)
+    health                             raw     0/24 (0.0%)  before   10/24 (41.7%)  final   20/24 (83.3%)
+    home                               raw     0/24 (0.0%)  before   14/24 (58.3%)  final   16/24 (66.7%)
+    money                              raw     0/24 (0.0%)  before    8/24 (33.3%)  final   14/24 (58.3%)
+    social                             raw    4/24 (16.7%)  before   20/24 (83.3%)  final   22/24 (91.7%)
+    travel                             raw    4/24 (16.7%)  before   13/24 (54.2%)  final   20/24 (83.3%)
+    work                               raw     0/24 (0.0%)  before   14/24 (58.3%)  final   19/24 (79.2%)
+  -- source
+    ?                                  raw    8/184 (4.3%)  before  99/184 (53.8%)  final 135/184 (73.4%)
+    calendar. Anchored ("the client me raw      0/4 (0.0%)  before      0/4 (0.0%)  final     2/4 (50.0%)
+    residents (rare). Rare, silent (th raw      0/4 (0.0%)  before      0/4 (0.0%)  final    4/4 (100.0%)
+
+== stage of each hidden fact (Eden arms, graded hidden tasks)
+  before  raised 99 (52%); reached, not raised 2 (1%); dropped by the push check 0 (0%); never retrieved 91 (47%); uptake (raised | reached) 97/99 (98.0%)
+  final   raised 141 (73%); reached, not raised 0 (0%); dropped by the push check 8 (4%); never retrieved 43 (22%); uptake (raised | reached) 141/141 (100.0%)
+
+== late-check adjusted [EST: P(check later than 1.5 s on the API) = 0.21, F7's p50/p90; Pi and Hermes]
+   A late check fails open to the pool's unchecked head (up to 5 candidates): a fact the check handed from
+   past the head is lost, a fact in the head the check dropped is handed, and a look-alike in the head is
+   handed where the check had withheld it (whether the agent then raises it is not known: exposure only).
+  before  hidden raised 99/192 -> 96.3 [EST] (facts handed only from past the head: 13; facts in the head the check dropped, which a late check would hand: 0, not counted); look-alikes a late check would hand: 36 x 0.21 = 7.6 more exposures [EST]
+  final   hidden raised 141/192 -> 133.0 [EST] (facts handed only from past the head: 38; facts in the head the check dropped, which a late check would hand: 0, not counted); look-alikes a late check would hand: 56 x 0.21 = 11.8 more exposures [EST]
+
+== cost and wait [EST] (F7 price-queue.py: tokens from sizes, Haiku list prices; per arm and role)
+raw (run final-raw, 576 tasks) [EST; served by subagents (D1101)]
+  agent: 576 calls, 1.000 a task; a call 795 in (780 cacheable), 85 out, $0.000061; $0.0607 per 1,000 tasks; modelled wait 844 ms a task
+  grader: 576 calls, 1.000 a task; a call 322 in (161 cacheable), 3 out, $0.000213; $0.2129 per 1,000 tasks
+  all roles: $0.2735 per 1,000 tasks; path roles' modelled wait 844 ms a task
+before (run final-before, 576 tasks) [EST; served by subagents (D1101)]
+  agent: 576 calls, 1.000 a task; a call 1051 in (855 cacheable), 91 out, $0.000083; $0.0833 per 1,000 tasks; modelled wait 862 ms a task
+  eden.check: 334 calls, 0.580 a task; a call 1692 in (980 cacheable), 24 out, $0.000104; $0.0604 per 1,000 tasks; modelled wait 386 ms a task
+  grader: 576 calls, 1.000 a task; a call 328 in (161 cacheable), 3 out, $0.000219; $0.2187 per 1,000 tasks
+  all roles: $0.3625 per 1,000 tasks; path roles' modelled wait 1248 ms a task
+final (run final-final, 576 tasks) [EST; served by subagents (D1101)]
+  agent: 576 calls, 1.000 a task; a call 1113 in (884 cacheable), 99 out, $0.000092; $0.0916 per 1,000 tasks; modelled wait 887 ms a task
+  eden.check: 453 calls, 0.786 a task; a call 3458 in (980 cacheable), 40 out, $0.000289; $0.2274 per 1,000 tasks; modelled wait 562 ms a task
+  grader: 576 calls, 1.000 a task; a call 337 in (161 cacheable), 3 out, $0.000227; $0.2273 per 1,000 tasks
+  all roles: $0.5463 per 1,000 tasks; path roles' modelled wait 1449 ms a task
+
+== quality, cost and speed side by side [EST; served by subagents (D1101)]
+   quality: single-shot arms; agent cost, turns and wall: the multi-turn sample (mt-*); see cost.py's header
+
+  raw (576 single-shot tasks)
+    quality: hidden raised 8/192 (4.2%), control concerns 0/192, neutral concerns 46/192
+    cost: Eden $0.0000/1k tasks [EST]; cards: none (no Eden)
+    speed: push wait 0 ms a task [EST, H3 fit]; connector calls a task: Eden at request time 0.00, the single-shot tools 0.00; Eden's backfill 0 a stream (once a user)
+    multi-turn sample quality: hidden raised 2/40, control concerns 0/40, neutral concerns 5/40
+    multi-turn sample (120 tasks): agent 1.77 model calls, 1.48 tool calls, 2671 tokens a task; agent $0.1051/1k + Eden $0.0000/1k = $0.1051/1k [EST]; wall 1328 ms a task model calls and push only, 1991 with 0.45 s a tool round [EST]; connector calls 1.48 a task (Eden's and the agent's tools)
+    connector fees per 1,000 tasks by plan [EST]: first-party $0.00, Composio $0.44, Unified.to $1.11, Arcade $14.75, Pipedream $17.70, Zapier $38.06
+
+  before (576 single-shot tasks)
+    quality: hidden raised 99/192 (51.6%), control concerns 3/192, neutral concerns 40/192
+    cost: Eden $0.0604/1k tasks [EST]; cards $0.00378 a world's backfill once (6.0 calls) + $0.0165 a heavy user-month trickle [EST, CL3]
+    rule sheet: no size.sheet in the queue's done files, so priced as uncached input [EST]
+    speed: push wait 386 ms a task [EST, H3 fit]; connector calls a task: Eden at request time 0.00, the single-shot tools 0.00; Eden's backfill 26 a stream (once a user)
+
+  final (576 single-shot tasks)
+    quality: hidden raised 141/192 (73.4%), control concerns 2/192, neutral concerns 38/192
+    cost: Eden $0.2274/1k tasks [EST]; cards $0.00396 a world's backfill once (6.0 calls) + $0.0165 a heavy user-month trickle [EST, CL3]
+    Eden $/1k with the check's rule sheet (1411 tokens a task) priced as: no sheet $0.0863, uncached $0.2274, all read $0.1004, 1h mix $0.1674, 5m mix $0.2367 [EST]
+    speed: push wait 562 ms a task [EST, H3 fit]; connector calls a task: Eden at request time 0.00, the single-shot tools 0.00; Eden's backfill 26 a stream (once a user)
+    multi-turn sample quality: hidden raised 27/40, control concerns 1/40, neutral concerns 3/40
+    multi-turn sample (120 tasks): agent 1.48 model calls, 0.78 tool calls, 2510 tokens a task; agent $0.1102/1k + Eden $0.2212/1k = $0.3315/1k [EST]; wall 1722 ms a task model calls and push only, 2071 with 0.45 s a tool round [EST]; connector calls 0.78 a task (Eden's and the agent's tools)
+    agent + Eden $/1k with the rule sheet priced as: no sheet $0.1957, uncached $0.3315, all read $0.2093, 1h mix $0.2738, 5m mix $0.3404 [EST]
+    connector fees per 1,000 tasks by plan [EST]: first-party $0.00, Composio $0.23, Unified.to $0.58, Arcade $7.75, Pipedream $9.30, Zapier $20.00
+
+  Production connector latency L s a call: walls here assume the direct profile (~0.45 s a call); add
+  0.72 x (L - 0.45) s a task on Pi and 0.78 x (L - 0.45) on Hermes [EST, F7].
+
+== speculate (F10, D1273; proxy only) [EST, modelled]: of 512 checked pushes 52.3% were silent; a silent push saves its check's wait (714 ms), a speaking one aborts a call ($0.000075)
+   wall -0.37 s a checked task; cost +0.0356 $ per 1,000 checked tasks (F10's estimate: -0.41 s, +$0.037)
+
+== wall time a task, from each task's timeline [EST; served by subagents (D1101)] (wall.py)
+   model calls by H3's fit; connector rounds measured, or L s a round; a check counts only where it blocks
+
+  mt-final against mt-raw, 120 paired tasks; a check 720 ms (42 output tokens)
+    mt-raw    model calls 1.77 (1384 ms), connector calls 1.48 in 0.78 rounds (597 ms measured), ask_context 0 ms, blocking checks 0.00 (0 ms), Eden's other path time 0 ms; late checks 0
+    mt-final  model calls 1.48 (1186 ms), connector calls 0.70 in 0.40 rounds (260 ms measured), ask_context 1 ms, blocking checks 0.78 (558 ms), Eden's other path time 22 ms; late checks 0
+    measured connector latency: mt-raw 1982 ms, mt-final 2026 ms, +2.2% (-9.9..+17.2)
+    0.3 s a connector round: mt-raw 1617 ms, mt-final 1886 ms, +16.7% (+6.7..+28.1)
+    0.8 s a connector round: mt-raw 2004 ms, mt-final 2086 ms, +4.1% (-6.4..+16.8)
+    2 s a connector round: mt-raw 2934 ms, mt-final 2566 ms, -12.5% (-23.8..+1.8)
+    by kind, measured latency: hidden 1982 -> 1727 (40), control 1983 -> 2147 (40), neutral 1981 -> 2205 (40); on the 1:1:8 mix 1981 -> 2151 ms (+8.6%)
+    speculate (D1273): the first call sent with no packet: 38 of 120 tasks released early, 55 first calls aborted and sent again (0.46 a task)
+    speculate: measured connector latency: mt-raw 1982 ms, mt-final 1800 ms, -9.2% (-20.6..+5.5)
+    speculate: 0.3 s a connector round: mt-raw 1617 ms, mt-final 1660 ms, +2.7% (-7.1..+14.2)
+    speculate: 0.8 s a connector round: mt-raw 2004 ms, mt-final 1860 ms, -7.2% (-17.4..+5.5)
+    speculate: 2 s a connector round: mt-raw 2934 ms, mt-final 2340 ms, -20.2% (-31.2..-6.0)
+    speculate: by kind, measured latency: hidden 1982 -> 1656 (40), control 1983 -> 1933 (40), neutral 1981 -> 1811 (40); on the 1:1:8 mix 1981 -> 1808 ms (-8.8%)
+    speculate with the silent packet ahead (D1551): 49 of 120 tasks released early, 44 first calls aborted and sent again (0.37 a task)
+    ahead: measured connector latency: mt-raw 1982 ms, mt-final 1734 ms, -12.5% (-23.8..+2.1)
+    ahead: 0.3 s a connector round: mt-raw 1617 ms, mt-final 1595 ms, -1.4% (-11.0..+10.0)
+    ahead: 0.8 s a connector round: mt-raw 2004 ms, mt-final 1795 ms, -10.5% (-20.8..+2.1)
+    ahead: 2 s a connector round: mt-raw 2934 ms, mt-final 2275 ms, -22.5% (-33.5..-8.5)
+    ahead: by kind, measured latency: hidden 1982 -> 1602 (40), control 1983 -> 1825 (40), neutral 1981 -> 1775 (40); on the 1:1:8 mix 1981 -> 1763 ms (-11.0%)
+
+== answers rejected by batch.ts put (format failures, re-queued and answered again; F7 §13), by arm and role
+  none

@@ -72,6 +72,13 @@ export interface McpSpec {
    * with `syncPush`, its synced copy is polled when told it changed rather than on a guess.
    */
   notifies?: boolean;
+  /**
+   * `true`: each call is billed by the connector's transport (Composio, Unified.to, Arcade.dev, Pipedream Connect,
+   * Zapier MCP, any per-call plan). `false`: first-party (quota only) or flat-rate; the connector presets set it.
+   * Absent: unknown, counted as priced (D1133): the freshness floor (`syncActivePollMs`) leaves the source to its
+   * learned rate unless the deployment opts in (`syncActivePollPriced`).
+   */
+  callPriced?: boolean;
 }
 
 export type SourceSpec = StaticSpec | McpSpec;
@@ -344,6 +351,10 @@ class Lease implements Source {
     return this.inner.notifies === true;
   }
 
+  get callPriced(): boolean | undefined {
+    return this.inner.callPriced;
+  }
+
   get fetchReportsGone(): boolean {
     return this.inner.fetchReportsGone === true;
   }
@@ -390,6 +401,7 @@ function build(spec: SourceSpec): Source {
     listTool: spec.listTool,
     trustedReadTools: spec.trustedReadTools,
     ...(spec.notifies === true ? { notifies: true } : {}),
+    ...(spec.callPriced !== undefined ? { callPriced: spec.callPriced } : {}),
   });
 }
 
@@ -500,6 +512,9 @@ export function checkSpecs(input: unknown, where: string): SourceSpec[] {
     }
     if (s.notifies !== undefined && typeof s.notifies !== "boolean") {
       throw new SourceConfigError(`${at}.notifies must be true or false`);
+    }
+    if (s.callPriced !== undefined && typeof s.callPriced !== "boolean") {
+      throw new SourceConfigError(`${at}.callPriced must be true or false`);
     }
   });
   return raw as unknown as SourceSpec[];

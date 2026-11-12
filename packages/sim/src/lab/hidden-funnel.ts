@@ -71,7 +71,7 @@
  * planted) and prints a NEUTRAL line per suite (any packet delivered, items, bytes, ask items, calls, ms per task); its
  * rows go to the JSON's `neutral` block, never to `rows`, `total` or `perTask`.
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
@@ -87,6 +87,7 @@ import {
   type CandidateDump,
   type CardMaker,
   automated,
+  readForIntent,
   type PushPoolReport,
   PushChecker,
   worthCarding,
@@ -97,7 +98,19 @@ import {
   sanitizeItem,
   renderPacket,
   isStopword,
+  type CardState,
 } from "@eden/engine";
+import * as engineNs from "@eden/engine";
+// `cardsState`'s names (F2, D1193), read off the namespace: the BEFORE tree's engine has none, and a named import of a
+// missing export fails at load.
+const STATE_NS = engineNs as {
+  CARD_FORM_STATE?: number;
+  CARD_STATES?: readonly string[];
+  CLEARED_STATES?: ReadonlySet<string>;
+};
+const CARD_FORM_STATE = STATE_NS.CARD_FORM_STATE ?? 16;
+const CARD_STATES_ALL: readonly string[] = STATE_NS.CARD_STATES ?? ["in_force", "lifted", "met", "superseded"];
+const CLEARED_STATES: ReadonlySet<string> = STATE_NS.CLEARED_STATES ?? new Set(["lifted", "met", "superseded"]);
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -129,7 +142,7 @@ import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
-import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
+import { parseSuites, preparedWorld, prepareWorld, setRealism, SUITES, type HiddenTask } from "./suites";
 import {
   beforeModelLine,
   CountingReader,
@@ -191,6 +204,7 @@ const cli = flags(
         "cards-endpoint-model",
         "intent",
         "card-log",
+        "card-states",
         "card-limits",
         "planted-age-days",
         "lead-in",
@@ -220,6 +234,7 @@ const cli = flags(
         "run-label",
         "distill",
         "noise-sources",
+        "realism",
         "notify-share",
         "noise-items",
         "noise-edits",
@@ -271,6 +286,11 @@ const TIME = Number(opt("time", "0"));
  * (default 20; `noise-sources.ts`), so the screen runs a user with ~1,000 sources. 0 (the default): none.
  */
 const NOISE_SOURCES = Number(opt("noise-sources", "0"));
+/**
+ * `--realism heavy` (F8, D1103; realism.ts): every world as a heavy real user's, twenty connectors and about 400
+ * rule-like items that never apply, duplicated and forwarded threads, mail in five other languages. `off` (default).
+ */
+setRealism(opt("realism", "off"));
 /**
  * `--source-profile FILE|JSON`, `--push none|signals|payload`, `--push-rates` (A18, the live harnesses' connector
  * options, connector-options.ts): the market latency profiles and change notices pi-ab runs under, so the funnel at
@@ -452,6 +472,41 @@ if (CARD_LOG && cardMaker) {
   };
 }
 /**
+ * `--card-states F` (F2, docs/research/f2-card-state.md): a JSON map of card hash → state (in_force, lifted, met,
+ * superseded), judged per item by subagents standing in for the card model's `cardsState` clause. The replay answers
+ * in its own form (the state flag taken off the key), and each item it carded gets its state from the map: a card
+ * gains the state, and a none item with a cleared state becomes a none card carrying it, as `cardsState` keeps it.
+ */
+const CARD_STATES = opt("card-states", "");
+const stateUse = { carded: 0, stated: 0, noneKept: 0 };
+if (CARD_STATES && cardMaker) {
+  const states = new Map(Object.entries(JSON.parse(readFileSync(CARD_STATES, "utf8")) as Record<string, CardState>));
+  const make = cardMaker.make.bind(cardMaker);
+  cardMaker.make = async (items, today, signal, retry, intent, options) => {
+    const form = (options?.form ?? 0) & ~CARD_FORM_STATE;
+    const asked = { ...options, ...(form ? { form } : { form: undefined }) };
+    const got = await make(items, today, signal, retry, intent, asked);
+    if (options?.requestsOnly) return got;
+    items.forEach((it, k) => {
+      if (!cardMaker.cards.has(cardMaker.cardKeyFor(it, asked.form))) return;
+      stateUse.carded++;
+      const state = states.get(cardKey(it));
+      if (!state || !(CARD_STATES_ALL as readonly string[]).includes(state)) return;
+      stateUse.stated++;
+      const card = got.cards[k];
+      // A none card's statement says what cleared, as the state clause asks; the item's title stands in for it, so the
+      // enricher's anchor check (`clearedNone`) reads it as about its item.
+      if (card && card.kind !== "none") card.state = state;
+      else if (CLEARED_STATES.has(state)) {
+        got.cards[k] = { kind: "none", actions: [], entities: [], statement: it.title.slice(0, 160), state };
+        stateUse.noneKept++;
+      }
+    });
+    return got;
+  };
+  process.on("exit", () => console.error(`card states: ${JSON.stringify(stateUse)}`));
+}
+/**
  * Items the intent index asked the replay about, and those it found requests for: with intent on and none found the
  * index is inert (no `--intent F`, or a file for other items), and every TOTAL and pool line and the JSON say so.
  */
@@ -475,7 +530,11 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
-const CARD_FORM = RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0;
+// The enricher's form (`cardForm`; the BEFORE tree's engine has none); under `--card-states` the replay answers in its
+// own form, the state flag taken off.
+const CARD_FORM =
+  ((engineNs as { cardForm?: (c: typeof RUN) => number }).cardForm?.(RUN) ??
+    (RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0)) & (CARD_STATES ? ~CARD_FORM_STATE : ~0);
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
   INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
@@ -896,10 +955,11 @@ async function runSeed(
     const rows = simSources(world, REALISTIC, 0, seed).flatMap((s) => s.listAll());
     const items = rows.map((raw) => {
       const it = sanitizeItem(raw);
-      return { id: raw.id, h: cardKey(it), title: it.title, text: it.text.slice(0, 1_200) };
+      // `at` and the world's `now` (F2): an item's date (packages/sim/lab/f2-state/build.py).
+      return { id: raw.id, h: cardKey(it), title: it.title, text: it.text.slice(0, 1_200), at: raw.updatedAt };
     });
     const asks = tasks.map((t, i) => ({ template: t.template, request: t.text, planted: planted[i]?.id ?? "" }));
-    appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, tasks: asks, items })}\n`);
+    appendFileSync(CORPUS_DUMP, `${JSON.stringify({ suite, seed, variant, now: world.now, tasks: asks, items })}\n`);
   }
   const own = simSources(world, CONNECTORS.profiles, TIME, seed);
   const notify = pushNotifier(own, CONNECTORS, seed, world.now);
@@ -1222,6 +1282,9 @@ async function runSeed(
       cardRead,
       // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
       notSentPrefilterRejects: !cardRead && !prefilter,
+      prefilter,
+      automated: automated(item),
+      forIntent: readForIntent(item, askAt, RUN.cardsLeanDays),
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,
@@ -1589,6 +1652,10 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `pushCheckSheet` (F5): the planted item's place on the rule sheet the check read (-1: not on it).
+      ...(push?.sheet ? { pushSheetAt: push.sheet.indexOf(id) } : {}),
+      // With it, the planted item's card kind at the end of the task ("none": no card, a none card or expired).
+      ...(push?.sheet && cards ? { plantedCard: cards.cardsOf(scope, [id], clock).get(id)?.kind ?? "none" } : {}),
       // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
       // it was handed.
       ...(push && task.stale
@@ -1801,6 +1868,11 @@ if (NEUTRAL) {
     addNeutralRows(neutralOut.total, n);
     console.log(neutralLine(suite, n) + TAG + inertTag());
   }
+  // The neutral users' card calls still in flight finish before their counters are read: a drain that ends after the
+  // last task would otherwise count or not by the machine's load (a sharded run's `use.cards` read 24 calls and 57
+  // items carded against one process's 25 and 74 under the cold gate's four parallel test files). Under
+  // `--connect-at`, which skips the per-task wait, the block now also counts the cards made after the last task.
+  await Promise.all(cardLanes.slice(lanes.cards).map((c) => c.idle()));
   const after = counters();
   const delta = (a: Record<string, number>, b: Record<string, number>) =>
     Object.fromEntries(Object.keys(a).map((k) => [k, Number(((a[k] ?? 0) - (b[k] ?? 0)).toFixed(3))]));
