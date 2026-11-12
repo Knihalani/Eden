@@ -69,7 +69,7 @@ worker is a background Agent, given the prompt `worker.md` with its placeholders
 | `NBATCH` | requests a batch |
 | `MPREFIX` | `claude-haiku` or `claude-sonnet` |
 
-Spawn workers as `general-purpose` agents, the narrowest type available. `worker.md` tells them, in so many words, to
+Spawn workers as `queue-worker` agents (Read, Write and Bash only). `worker.md` tells them, in so many words, to
 use only Read, Write and Bash for batch.ts, and never an mcp__ or session tool. F5 saw a worker call create_session,
 and in the rehearsal one called interrupt_session: during the final, a worker that interrupts a session would cost the
 run.
@@ -170,6 +170,10 @@ Answers already in `q/done/` replay at once.
 - A $1 spend cap refused calls. The ledger reserves estimates even at $0, so the cap is now 100000.
 - One cold-start process for all users took hours; it is now one process a world.
 - `readerPushWaitMs` capped the push at 60 s. It is lifted now, and `check-order.py` asserts the order.
+
+**One arm a batch (F7 §13).** `worker.md` takes with `--single-arm`, so a batch holds one arm's requests of one role
+(the arm is `EDEN_LAB_QUEUE_RUN`, set per arm by go.sh) and a mixed-up answer cannot land in another arm. Every answer
+`put` rejects for its shape goes back to pending and is logged in `q/invalid.jsonl`; report.txt counts them by arm.
 
 **Pitfall not caught by any check.** In D1160's hand-driven pilot a worker swapped two answers between ids. `put`
 validates an answer's format, not whether it answers its own request, so read a sample of answers if a number
