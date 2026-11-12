@@ -688,5 +688,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1140 | 2026-11-12 | Finding (F2, train, reworded and longtail seeds 41–42; Anthropic-direct lab $1.00 before the credit ran out, then a subagent-simulated… | finding |
 | D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
 | D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
-| D1140 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
-| D1141 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
+| D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
+| D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
