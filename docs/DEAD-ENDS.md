@@ -239,3 +239,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1002 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… |  |
 | D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |
 | D1076 | Rejected: a shutdown's flush writing the most recently used users first. | R1d, r1-release.md §Round 4 |
+| D1251 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. |  |
