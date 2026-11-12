@@ -680,3 +680,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1046 | 2026-11-11 | Lab only: B19's coverage when the final default keys its cards apart | lab |
 | D1047 | 2026-11-11 | Lab only: B19's harnesses load against an older engine through `compat.py`, and `go.sh` checks it before spending. | lab |
 | D1048 | 2026-11-12 | Finding (B19, blind heldout19, read once): the night's wave raised hidden facts on both harnesses with no confirmed concern. | finding |
+| D1075 | 2026-11-12 | Finding: the smallest recommended box holds its sizing; a restart of a full box keeps only the users its shutdown budget writes. | finding |
