@@ -533,6 +533,18 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
+   * On in the default (F2, D1193; docs/research/f2-card-state.md). With `cards`: the card prompt asks each card for
+   * its `state` (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call,
+   * and keeps a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
+   */
+  cardsState: boolean;
+  /**
+   * On in the default (F2, D1193). With `cards` and `cardsState`: the push's pool (`pushGate`) leaves out an item
+   * carded none whose state says a constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state,
+   * or a card of another kind, stays.
+   */
+  pushStateFilter: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -787,7 +799,8 @@ export interface EngineConfig {
    * its learned rate says. A quiet source is otherwise trusted for up to `syncMaxStaleMs` (6 h), so a silent edit
    * there went out as the pre-edit copy (D1126). No request waits for it, and the request path's own polls mostly
    * stop (its sources are current); its price is connector calls per active user-hour (COST-MODEL §Hosting (b)). A
-   * source that notifies (`syncPush`) is never polled by it, nor one billed per call unless `syncActivePollPriced`.
+   * source that notifies (`syncPush`) is never polled by it, nor one not marked first-party or flat-rate
+   * (`Source.callPriced` false; absent counts as priced, D1133) unless `syncActivePollPriced`.
    */
   syncActivePollMs: number;
   /**
@@ -798,9 +811,9 @@ export interface EngineConfig {
    */
   syncActivePollBackoff: boolean;
   /**
-   * D1132, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one for
-   * every tenant the server runs) to floor polls of sources whose calls are billed by the connector's transport
-   * (`Source.callPriced`). Off: those sources keep their learned rate, as without the floor.
+   * D1132, D1133, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one
+   * for every tenant the server runs) to floor polls of sources not marked first-party or flat-rate
+   * (`Source.callPriced` true, or absent: unknown counts as priced). Off: those sources keep their learned rate.
    */
   syncActivePollPriced: boolean;
 }
@@ -923,6 +936,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
+  cardsState: true,
+  pushStateFilter: true,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,

@@ -88,6 +88,8 @@ export const PARTS = {
     cardsOrder: false,
     cardsLanes: 1,
     cardsRequestsFix: false,
+    cardsState: false,
+    pushStateFilter: false,
   },
   /** The intent index (D87, D109), what it reads (`cardsLean`, D125) and its carded cut (`intentByKind`, D200). */
   intent: { intent: false, cardsLean: false, intentByKind: false, cardsRequestsFix: false },

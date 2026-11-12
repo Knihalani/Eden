@@ -62,6 +62,8 @@ function prosePieces(): string[] {
 /** A connector whose items are made on each listing (instant; nothing held between calls but the shared pools). */
 class GenSource implements Source {
   readonly kind = "soak";
+  /** First-party, as the lab's sim sources are: the freshness floor polls it (D1133). */
+  readonly callPriced = false;
   readonly description = "soak";
   constructor(
     readonly id: string,

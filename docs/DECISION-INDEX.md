@@ -702,6 +702,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1130 | 2026-11-12 | Rejected (stopped on D1128's pre-registered rule): `freshenAgeMs` (D1127, deleted by D1130) and `freshenBehind` (D1129, deleted by D1130)… | rejected |
 | D1131 | 2026-11-12 | Trial `syncActivePollMs`: a background poll floor for active users, so a silent edit is stored before the request that needs it and no… | adopted |
 | D1132 | 2026-11-12 | Promoted: the freshness floor (`syncActivePollMs` 2 h, D1131) into the default, with two cost guards: `syncActivePollBackoff` (on in the… | adopted |
+| D1133 | 2026-11-12 | Amends D1132 (the parent's fail-safe condition): the freshness floor polls only a source marked first-party or flat-rate… | adopted |
 | D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
 | D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
 | D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |
@@ -724,3 +725,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1273 | 2026-11-12 | Trial `speculate`: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte for byte… | trial |
 | D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
 | D1155 | 2026-11-12 | Lab only: pi-ab and hermes-ab place the packet a tool result's observe hands out. | lab |
+| D1193 | 2026-11-12 | Promoted (F2, the integrator's decision): `cardsState` + `pushStateFilter`, on in the default: the card says whether its constraint still… | adopted |

@@ -66,7 +66,15 @@ import {
   type Frame,
   type Verdict,
 } from "./conflict";
-import { cardKey, cardVerdict, requestActions, STANDING_KINDS, type Card, type CardEnricher } from "./cards";
+import {
+  cardKey,
+  cardVerdict,
+  CLEARED_STATES,
+  requestActions,
+  STANDING_KINDS,
+  type Card,
+  type CardEnricher,
+} from "./cards";
 import { glossOf, warmGlossary } from "./gloss";
 import { intentCut, intentReach, intentTerms, keepIntents, stemWord } from "./intent";
 import {
@@ -723,6 +731,8 @@ export class ContextPartner {
       if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
       // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
       if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
+      // `cardsState` (F2, D1193): each card says whether its constraint still holds.
+      if (this.config.cardsState) cards.askState();
     }
     this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
     this.fanout = new SourceFanout({
@@ -2545,24 +2555,53 @@ export class ContextPartner {
    * included. A pool with no constraint-like item gives no candidates, as `readerGate` would read none.
    */
   private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
+    const { pool, cards } = this.pushPool(s, ranked, cue.arrived ?? this.now());
+    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+  }
+
+  /**
+   * The push's pool: the ranking's first `askReaderPool` distinct items, and their cards. `pushGate` and the plan
+   * alerts (`checkPlans`) share it. `pushStateFilter` (F2, trial): an item carded none because a constraint was
+   * lifted, met or superseded leaves the pool, and the next ranked item takes its seat; cards are then read for the
+   * whole ranking (one lookup an item).
+   */
+  private pushPool(
+    s: Session,
+    ranked: readonly Scored[],
+    before: number,
+  ): { pool: Scored[]; cards: Map<string, Card> } {
     const pool: Scored[] = [];
     const seen = new Set<string>();
     const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
+    const enricher = this.config.cards ? this.deps.cards : undefined;
+    const states =
+      enricher && this.config.pushStateFilter && ranked.length > 0
+        ? enricher.cardsOf(
+            s.scope,
+            ranked.map((x) => x.item.id),
+            before,
+          )
+        : null;
     for (const x of ranked) {
       if (pool.length >= cap) break;
       if (seen.has(x.item.id)) continue;
       seen.add(x.item.id);
+      // Only a none card: an item that announces the new state of affairs (a retimed flight, a claim already paid) is
+      // carded already-done or status-change and is the fact in force, though it says an earlier one was superseded.
+      const card = states?.get(x.item.id);
+      if (card?.kind === "none" && card.state && CLEARED_STATES.has(card.state)) continue;
       pool.push(x);
     }
     const cards =
-      pool.length > 0 && this.config.cards && this.deps.cards
-        ? this.deps.cards.cardsOf(
+      states ??
+      (enricher && pool.length > 0
+        ? enricher.cardsOf(
             s.scope,
             pool.map((x) => x.item.id),
-            cue.arrived ?? this.now(),
+            before,
           )
-        : new Map<string, Card>();
-    return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+        : new Map<string, Card>());
+    return { pool, cards };
   }
 
   /**
@@ -2914,30 +2953,15 @@ export class ContextPartner {
     waiting.clear();
     for (const id of later) waiting.add(id);
     if (fresh.size === 0) return;
-    const cap = Math.max(0, Math.min(this.config.askReaderPool, READER_POOL_CAP));
     const said = new Set<string>();
     for (const cue of s.acted) {
-      const pool: Scored[] = [];
-      const seen = new Set<string>();
-      for (const x of this.rank(s, cue, { ignoreLedger: true })) {
-        if (pool.length >= cap) break;
-        if (seen.has(x.item.id)) continue;
-        seen.add(x.item.id);
-        pool.push(x);
-      }
+      // The push's own pool (`pushPool`, with `pushStateFilter`): a clearance that arrives late is no alert either.
+      const { pool, cards } = this.pushPool(s, this.rank(s, cue, { ignoreLedger: true }), now);
       // The candidates' rule (`candidatesOf`): the pool holds something that could constrain the request, and the new
       // item is among its first `pushCandidates` (bulk mail out), as it would have been had it been there then.
       const top = pool.filter((x) => !bulkMail(x.item)).slice(0, Math.max(1, this.config.pushCandidates));
       const hits = top.filter((x) => fresh.has(x.item.id) && !said.has(x.item.id));
       if (hits.length === 0) continue;
-      const cards =
-        this.config.cards && this.deps.cards
-          ? this.deps.cards.cardsOf(
-              s.scope,
-              pool.map((x) => x.item.id),
-              now,
-            )
-          : new Map<string, Card>();
       if (!pool.some((x) => this.constraintLike(x, cards))) continue;
       const bearing = hits;
       for (const x of bearing) {

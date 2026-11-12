@@ -59,7 +59,8 @@ export function composeReply(
 ): string {
   const cards = items.flatMap(({ i, key }) => {
     const card = answers.get(key)?.card;
-    return card && card.kind !== "none" ? [{ i, ...card }] : [];
+    // A none card is written only with a state (`cardsState`, F2: a constraint lifted, met or superseded).
+    return card && (card.kind !== "none" || typeof card.state === "string") ? [{ i, ...card }] : [];
   });
   const requests = items.map(({ i, key }) => ({ i, q: answers.get(key)?.q ?? [] }));
   if (shape.requestsOnly) return JSON.stringify({ requests });
