@@ -57,7 +57,11 @@ if (cmd === "build") {
       if (line.trim()) {
         const r = JSON.parse(line) as Row;
         // The task's first check (a second pass re-reads the same request).
-        if (!rows.some((x) => x.suite === r.suite && x.seed === r.seed && x.variant === r.variant && x.template === r.template))
+        if (
+          !rows.some(
+            (x) => x.suite === r.suite && x.seed === r.seed && x.variant === r.variant && x.template === r.template,
+          )
+        )
           rows.push(r);
       }
   const inPool = (r: Row) => r.items.some((it) => it.id === r.planted);
@@ -65,9 +69,18 @@ if (cmd === "build") {
   const sets: Record<string, Row[]> = {
     Th: rows.filter((r) => r.variant === "hidden" && !inPool(r) && onSheet(r)),
     Tc: rows.filter((r) => r.variant === "control" && !inPool(r) && onSheet(r)),
-    Hh: shuffled(rows.filter((r) => r.variant === "hidden" && inPool(r) && r.sheet?.length), 1).slice(0, 40),
-    Hc: shuffled(rows.filter((r) => r.variant === "control" && inPool(r) && r.sheet?.length), 2).slice(0, 40),
-    N: shuffled(rows.filter((r) => r.variant === "neutral" && r.sheet?.length), 3).slice(0, 40),
+    Hh: shuffled(
+      rows.filter((r) => r.variant === "hidden" && inPool(r) && r.sheet?.length),
+      1,
+    ).slice(0, 40),
+    Hc: shuffled(
+      rows.filter((r) => r.variant === "control" && inPool(r) && r.sheet?.length),
+      2,
+    ).slice(0, 40),
+    N: shuffled(
+      rows.filter((r) => r.variant === "neutral" && r.sheet?.length),
+      3,
+    ).slice(0, 40),
   };
   // Which arms each set is asked in: T can only be named with the sheet.
   const arms: Record<string, ("S" | "B")[]> = { Th: ["S"], Tc: ["S"], Hh: ["S", "B"], Hc: ["S", "B"], N: ["S", "B"] };
@@ -140,7 +153,10 @@ if (cmd === "build") {
         // A line the subagent broke is a missing answer.
       }
     }
-  const table = new Map<string, { n: number; answered: number; unreadable: number; named: number; anyYes: number; ruleYes: number }>();
+  const table = new Map<
+    string,
+    { n: number; answered: number; unreadable: number; named: number; anyYes: number; ruleYes: number }
+  >();
   for (const k of key) {
     const t = table.get(`${k.set}.${k.arm}`) ?? { n: 0, answered: 0, unreadable: 0, named: 0, anyYes: 0, ruleYes: 0 };
     table.set(`${k.set}.${k.arm}`, t);
