@@ -1,7 +1,8 @@
 /**
  * F13: the CPU match of each task's request against its world's anticipations ($0; LAB ONLY, sim data).
  *
- *   bun packages/sim/lab/f13/match.ts SHEETS.jsonl ANTS.jsonl MODEL_DIR OUT.jsonl [--arm pass|cards]
+ *   F13_ENCODER=<encoder src/index.ts> bun packages/sim/lab/f13/match.ts SHEETS.jsonl ANTS.jsonl MODEL_DIR OUT.jsonl
+ *     [--arm pass|union|cards]
  *
  * `pass`: the anticipation pass's acts, days and names (`pass.ts read`). `cards`: the free baseline, each sheet
  * card's own anticipated requests (the intent index's) with the card's span and entities. For every task, the five
@@ -13,7 +14,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { requestActions } from "../../../engine/src/cards";
 import { timeWindow } from "../../../engine/src/grounding";
-import { Encoder } from "../../../encoder/src/index";
 
 const NOW = Date.UTC(2026, 9, 27, 9);
 const [sheetsPath, antsPath, modelDir, outPath] = process.argv.slice(2);
@@ -57,7 +57,9 @@ if (arm === "cards" || arm === "union") {
   }
 }
 
-const enc = await Encoder.load(modelDir!);
+// F2's `@eden/encoder` (claude/f2-semantic-pool, b5b9b7a10; not on main): its source directory in F13_ENCODER.
+const { Encoder } = await import(process.env.F13_ENCODER ?? "../../../encoder/src/index.ts");
+const enc: { embed(t: string[]): Promise<Float32Array[]> } = await Encoder.load(modelDir!);
 const memo = new Map<string, Float32Array>();
 async function vecs(texts: string[]): Promise<Float32Array[]> {
   const need = [...new Set(texts.filter((t) => !memo.has(t)))];

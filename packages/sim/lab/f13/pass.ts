@@ -17,7 +17,7 @@ import {
   anticipateMessages,
   parseAnticipations,
   type SheetRule,
-} from "../../../engine/src/anticipate";
+} from "./anticipate";
 import { ensureQueue, keyOf, queueDirs, requestOf, writeAtomic } from "../../src/lab/queue-transport";
 
 const TODAY = "Tuesday 27 October 2026";
