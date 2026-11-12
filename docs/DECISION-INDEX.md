@@ -685,3 +685,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1120 | 2026-11-12 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | superseded (deleted by D1121) |
 | D1121 | 2026-11-12 | Rejected (stopped on its pre-registered rule, D1120): `packetWhy`, Eden's no-model note on why an item bears on the request; deleted (code… | rejected |
 | D1100 | 2026-11-12 | Lab only: `dev20a`–`dev20d` (`--suite dev20`), four tuning suites on the weak points | lab |
+| D1140 | 2026-11-12 | Finding (F2, train, reworded and longtail seeds 41–42; Anthropic-direct lab $1.00 before the credit ran out, then a subagent-simulated… | finding |
+| D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
+| D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
+| D1150 | 2026-11-12 | Finding (F1, subagent-simulated; rejected as built, no engine trial): an encoder's candidates added to the push check's pool. | finding |
