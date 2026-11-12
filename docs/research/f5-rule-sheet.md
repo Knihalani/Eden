@@ -249,3 +249,55 @@ characters a token, about 80 output tokens an item]: shipped about $0.0033 in + 
 facts were outside the lean read (§4), so reading everything buys little of the missed facts for its 5x;
 `cardsKeepOnly` is the lever. A heavy user's month [EST: 3,000 new items, the shipped read rate of about 18%]: about
 540 items read, 27 calls, about $0.03 a user-month with or without `cardsKeepOnly`; reading everything about $0.16.
+
+## 9. Results: dev20 (served by subagents, D1101) and the realism stress test
+
+### 9a. dev20, seed 41, B against SR (the §6 rule as amended)
+
+Pass 2 replayed every pass-1 answer (303 checks an arm, 0 misses, 0 failed; 598 queue answers by about 25 Haiku
+worker subagents in batches of 8). `n2/compare.py` over the two runs:
+
+| | B (main) | SR (`pushCheckSheet` 80 + `pushCheckSheetRefs`) | rule | |
+| --- | ---: | ---: | --- | --- |
+| planted handed | 61 / 160 | 72 / 160 (+12 −1) | ≥ +8 | pass |
+| decoy handed | 12 / 160 | 14 / 160 (+4 −2) | ≤ half the gain (5.5) | pass |
+| neutral given a packet | 22 / 160 | 29 / 160 (+9 −2) | ≤ +5 | **fail** |
+| hidden surfaced (packet or ask) | 79 / 160 | 89 / 160 (+11 −1) | — | |
+| decoys surfaced | 56 / 160 | 61 / 160 (+5 −0) | — | |
+
+**Verdict by the pre-registered rule: SR fails on dev20's neutral clause.** Reading: of the 9 neutral tasks SR sent a
+packet that B did not, 1 came from a rule (a heating rule named on a weekend-away request), 8 from pool items SR's
+check named and B's did not: pointers change how pool items read, and two subagent samples of the same check
+disagree on speak/silent about 3% of the time (D1101's fidelity note: 0.969), about ±5 of 160 neutral tasks. The
+fact gain (+11 net handed, +6.9 points of dev20's hidden) is two to three times that noise.
+
+No-model reach on dev20 (SR pass 1's rows; F9's reading rule asks for it): 109 hidden tasks pushed; the planted item
+was in the pool on 67 and missing on 42; of the 42, 20 carried a constraint card and 18 were on the sheet. The
+look-alike was missing from the pool on 56 control tasks, 16 of them on the sheet.
+
+### 9b. Realism: the sheet's size (subagent-simulated, SR prompts, one padded sheet per user)
+
+Each user's sheet padded to 300 cards with other users' constraint cards (no card planted for any of the user's own
+templates; seeded per user), §5's sets:
+
+| set | native sheet (32–53 cards, §5b) | padded to 300 |
+| --- | ---: | ---: |
+| Th: fact named | 52 / 54 | **26 / 54** |
+| Tc: look-alike named | 5 / 39 | 0 / 39 |
+| Hc: look-alike in the pool named | 3 / 40 | 7 / 40 |
+| N: any yes | 8 / 40 | 12 / 40 |
+
+**The plain sheet does not scale**: at 300 cards the check finds half the facts it found at 50 and speaks more on
+neutral requests. A request-independent cap does not save it either: by recency, with a heavier user's other cards
+spread through time, a cap of 120 keeps the planted card 400 of 497 times at 150 cards, 192 at 300 and 164 at 500
+(`PILOT_STATS`, $0). So past about 100 cards the sheet needs selection by meaning per request (F10's rule index:
+an encoder picks a user's candidate rules and the sheet is the check's input for those), not a longer prompt.
+Cost at 300 cards [EST]: about 10,000 tokens, $0.0001 a check read from cache (+43% of main's check), $0.0013 a
+write. A first build of this stress test seeded the padding per template, so a batch file's sheet did not match
+most of its prompts; its numbers were discarded and the file layout now keys on the sheet's hash.
+
+### 9c. Staleness
+
+`push-check-sheet.test.ts` ("staleness"): an item edited at its source leaves the sheet as soon as its new copy is
+stored (its old card is no longer the item's), and its new card joins once made (`cardsOf` reads the item's current
+content hash).
