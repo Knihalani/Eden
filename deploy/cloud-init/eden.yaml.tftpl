@@ -73,6 +73,8 @@ runcmd:
   - sysctl --system
   - systemctl restart docker
   # The code at a pinned ref: the image is built on the box (nothing is pulled from a registry we publish).
+  # The repository is private: an SSH URL clones with the read-only deploy key that bootstrap-dedicated.sh installs
+  # over SSH before this runs (DEPLOY_KEY). The key is never in this file.
   - git clone --depth 1 --branch ${eden_ref} ${eden_git_url} /opt/eden
   - ufw default deny incoming
   - ufw default allow outgoing

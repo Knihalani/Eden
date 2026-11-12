@@ -12,9 +12,18 @@ control, and one Ubuntu 24.04 server you can SSH into as root (a Hetzner dedicat
 Oracle A1 instance, or any VPS with 2+ cores and 8+ GB).
 
 ```bash
-git clone https://github.com/KaiavN/Eden.git && cd Eden
+git clone git@github.com:Knihalani/Eden.git && cd Eden
 mkdir -p secrets && chmod 700 secrets      # .env files live here; never commit them
+ssh-keygen -t ed25519 -N '' -C eden-deploy -f secrets/eden_deploy   # the servers' read-only deploy key
 ```
+
+The repository is private, so each server clones it (and fetches it at every upgrade) with a **read-only deploy
+key**. Make it once with the `ssh-keygen` line above: no passphrase, since the server clones with no one at the
+keyboard. In GitHub open the repository's Settings → Deploy keys → Add deploy key, paste `secrets/eden_deploy.pub`,
+and leave "Allow write access" off. `bootstrap-dedicated.sh` installs the private half on each server when
+`DEPLOY_KEY` names it (as `/root/.ssh/eden_deploy`, with a `Host github.com` entry and GitHub's host key checked
+against its published fingerprint); it is never put in user data. Without `DEPLOY_KEY` the script behaves as before
+and needs a URL the server can clone anonymously, such as a public mirror.
 
 ## Part 1: one box (about 15 minutes)
 
@@ -25,10 +34,12 @@ DOMAIN=eden.example.com                     # its DNS A record must point at SER
 EMAIL=ops@example.com                       # for Let's Encrypt
 ADMIN=$(curl -s https://api.ipify.org)/32   # where SSH will be allowed from (this machine)
 REF=main                                    # the git tag or branch to run
+URL=git@github.com:Knihalani/Eden.git       # the SSH URL: the deploy key clones it
 
 # 2. Set the machine up (Docker, firewall, upgrades, Eden's code and its systemd unit). Skip on an Oracle instance
-#    created with deploy/tofu/oci, which did this through its user data.
-deploy/scripts/bootstrap-dedicated.sh root@$SERVER single $REF https://github.com/KaiavN/Eden.git $ADMIN
+#    created with deploy/tofu/oci from a public mirror, which did this through its user data (from the private
+#    repository its clone failed without the key: run this step on it too).
+DEPLOY_KEY=secrets/eden_deploy deploy/scripts/bootstrap-dedicated.sh root@$SERVER single $REF $URL $ADMIN
 
 # 3. Secrets: a tenant key, the persistence key (make it once; keep a copy in your password manager). Eden refuses
 #    to start if the key opens none of the users it persisted (a mistyped key, D1071); EDEN_PERSIST_DISCARD=1 for
@@ -64,12 +75,13 @@ a private network between them, and an S3-compatible bucket.
 N1=203.0.113.11; N2=203.0.113.12; N3=203.0.113.13; ROUTER=203.0.113.20    # public IPs, for SSH
 P1=10.0.1.11; P2=10.0.1.12; P3=10.0.1.13                                  # private IPs
 DOMAIN=eden.example.com; EMAIL=ops@example.com; ADMIN=$(curl -s https://api.ipify.org)/32; REF=main
-URL=https://github.com/KaiavN/Eden.git
+URL=git@github.com:Knihalani/Eden.git
 # The store: a bucket (say eden-frozen) and an access key scoped to it, made in the provider's console, with a
 # lifecycle rule deleting objects under frozen/ after 8 days. Hetzner Object Storage (no request fees):
 S3_ENDPOINT=https://fsn1.your-objectstorage.com; S3_REGION=fsn1; S3_KEY=...; S3_SECRET=...
 
 # 2. Set the machines up.
+export DEPLOY_KEY=secrets/eden_deploy
 for host in $N1 $N2 $N3; do deploy/scripts/bootstrap-dedicated.sh root@$host node $REF $URL $ADMIN 10.0.1.0/24; done
 deploy/scripts/bootstrap-dedicated.sh root@$ROUTER router $REF $URL $ADMIN
 
@@ -123,5 +135,7 @@ next upgrade. **Upgrade a cluster:** `deploy/scripts/rolling-upgrade.sh` (DEPLOY
 
 **On Oracle instead** of dedicated servers: `cd deploy/tofu/oci && cp terraform.tfvars.example terraform.tfvars`,
 edit it (`node_count = 3`, `router_count = 1`), `tofu init && tofu apply`, then steps 3-5 with the IPs it prints
-(`tofu output`); skip step 2 (the instances ran the cloud-init at boot). Oracle Object Storage's S3 endpoint is
+(`tofu output`). Step 2 still runs, with `DEPLOY_KEY`, on each instance: the cloud-init they ran at boot could not
+clone the private repository, since the key is never put in user data (with `eden_git_url` set to a public mirror
+instead, skip step 2). Oracle Object Storage's S3 endpoint is
 `https://<namespace>.compat.objectstorage.<region>.oraclecloud.com` with a Customer Secret Key.

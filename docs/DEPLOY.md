@@ -42,7 +42,7 @@ Any Ubuntu 24.04 machine with 2+ cores and 8+ GB. Every machine is set up by one
 
 | Host | Role in the plan | How the machine is made |
 | --- | --- | --- |
-| **Hetzner dedicated (AX41/AX42, AX102 class)** | **Primary**: the cheapest RAM measured ($1.0-1.4 per GB-month), unmetered traffic, Hetzner Object Storage with no request fees for the cluster's store | Order in the Robot console (setup fee, monthly, EU only), `installimage` Ubuntu 24.04, then `deploy/scripts/bootstrap-dedicated.sh root@<ip> <role> <ref> <git url> <admin cidr>`: it renders the cloud-init (`render-cloud-init.py`) and runs it with cloud-init's NoCloud source over SSH. No Terraform provider exists for dedicated servers |
+| **Hetzner dedicated (AX41/AX42, AX102 class)** | **Primary**: the cheapest RAM measured ($1.0-1.4 per GB-month), unmetered traffic, Hetzner Object Storage with no request fees for the cluster's store | Order in the Robot console (setup fee, monthly, EU only), `installimage` Ubuntu 24.04, then `DEPLOY_KEY=<key> deploy/scripts/bootstrap-dedicated.sh root@<ip> <role> <ref> git@github.com:Knihalani/Eden.git <admin cidr>`: it installs the read-only deploy key, renders the cloud-init (`render-cloud-init.py`) and runs it with cloud-init's NoCloud source over SSH. No Terraform provider exists for dedicated servers |
 | **Oracle Cloud A1.Flex** | **Fallback**: the cheapest RAM rented by the hour ($1.10 per GB plus $7.30 a core), EU and US regions (Hetzner dedicated is EU only), ARM verified here (D990), a free tier for the pilot; E4 (x86) when A1 is short | `deploy/tofu/oci` (A1.Flex, the VCN, the security list, the same cloud-init as user data) |
 | OVHcloud | Second fallback if both fail on stock: $3.03 per GB on a 12-month plan, free object-storage requests | by hand, with the rendered cloud-init as user data |
 | Hetzner Cloud | Routers and the load balancer of a cluster (small, hourly), and Eden machines when its stock returns | `deploy/tofu/hetzner` |
@@ -56,6 +56,21 @@ advantage, free store requests, matters only at 100k users on a per-request stor
    `~/.oci/config`), `tofu init && tofu plan && tofu apply`. Cloud-init installs Docker (Ubuntu's archive),
    opens 22 (your admin range), 80 and 443, enables unattended security upgrades, clones Eden at `eden_ref` into
    `/opt/eden`, and installs `eden.service` and the daily backup timer. It holds no secret.
+
+   **Cloning the private repository.** `Knihalani/Eden` is private, so an anonymous `git clone` fails. Each server
+   uses a read-only GitHub deploy key: make one with `ssh-keygen -t ed25519 -N '' -C eden-deploy -f
+   secrets/eden_deploy` (no passphrase: the clone runs unattended) and add `secrets/eden_deploy.pub` under the
+   repository's Settings → Deploy keys with write access off. `DEPLOY_KEY=secrets/eden_deploy
+   bootstrap-dedicated.sh … git@github.com:Knihalani/Eden.git …` copies the private key over SSH to
+   `/root/.ssh/eden_deploy` (0600), puts a `Host github.com` entry (`IdentityFile`, `IdentitiesOnly yes`) first in
+   `/root/.ssh/config`, and adds github.com's ed25519 host key to `/root/.ssh/known_hosts` after `ssh-keyscan` on the
+   server and a check against GitHub's published fingerprint; then the cloud-init clones over SSH, and every later
+   `upgrade.sh` fetches the same way. The key never goes into user data, which the provider keeps and any process on
+   the box can read through the metadata service, so a machine made with `deploy/tofu/*` boots without it and its
+   clone fails: after `tofu apply`, run `bootstrap-dedicated.sh` with `DEPLOY_KEY` on each machine (it runs the same
+   cloud-init again, now with the key), or set `eden_git_url` to a public mirror. Without `DEPLOY_KEY` the script
+   installs nothing, as before. A box first cloned over HTTPS moves to the key with the bootstrap step's key install
+   and `git -C /opt/eden remote set-url origin git@github.com:Knihalani/Eden.git`.
 3. **Secrets** (§4). On your machine: `cp deploy/compose/single/.env.example secrets/single.env`, fill it in, then
    `deploy/scripts/push-secrets.sh root@<ip> single secrets/single.env`: the file goes over SSH (mode 600) and Eden
    starts (`docker compose up -d --build`: the image is built on the box; nothing is pulled from a registry of ours).
@@ -301,19 +316,32 @@ suite.
 Also validated: the cloud-init file rendered for each role (`render-cloud-init.py`) passes `cloud-init schema`
 (cloud-init 26.2 from Ubuntu's archive).
 
-Checked statically (D997), since neither OpenTofu, Terraform's official image nor Alloy's could be run in the
-session: `deploy/scripts/check-tf.py` (python-hcl2 from PyPI) parses every `.tf` file and checks that every
-variable, local, resource and data source referenced exists and that each `templatefile` call passes exactly the
-cloud-init template's variables (both configs pass; a misspelt variable and a renamed template variable are caught);
-`deploy/scripts/check-monitoring.py` checks `config.alloy`'s braces, quotes, component references and listed
-environment variables, and that every rule in `alerts.yaml` is complete and watches a metric Eden emits (passes; a
-misspelt metric and a dangling reference are caught).
+Validated on 2026-11-12 with the real tools (release binaries from GitHub, x86-64 host):
 
-Not validated: **the OpenTofu configs against the providers' schemas** (run `tofu init && tofu validate && tofu
-plan` before the first apply); cloud-init and
-`bootstrap-dedicated.sh` on a real machine; Hetzner Object Storage's lifecycle rule
-(S3-compatible per its docs; unverified); Alloy's and PromQL's semantics (`alloy fmt` and `promtool check rules` first); a real network between
-machines; real Ampere hardware (the arm64 run was emulated, so no arm64 timings are quoted).
+- **OpenTofu v1.10.6**: `tofu init -backend=false && tofu validate` in `deploy/tofu/hetzner` (providers
+  hetznercloud/hcloud 1.70.2 and hashicorp/aws 5.100.0, as `versions.tf` resolved them that day) and
+  `deploy/tofu/oci` (oracle/oci 7.32.0): "Success! The configuration is valid." in both; `tofu fmt -check` clean in
+  both. This checks the configs against the providers' schemas; it does not run `tofu plan`, which needs credentials.
+- **promtool 3.5.0** (Prometheus 3.5.0): `promtool check rules deploy/monitoring/alerts.yaml`: "SUCCESS: 10 rules
+  found".
+- **Alloy v1.11.3**: `alloy fmt deploy/monitoring/config.alloy` parses the file (exit 0); its output differs from the
+  file only in whitespace (tabs for indentation, a blank line before nested blocks).
+- **ShellCheck 0.10.0** on `deploy/scripts/*.sh`: no warnings or errors (`-S warning`); five SC2029 notes (info) on
+  `push-secrets.sh` and `rolling-upgrade.sh`, where expanding on the client is intended. `scripts/deploy-kit.test.ts`
+  runs `bash -n` on every deploy script, shellcheck where it is installed, and `bootstrap-dedicated.sh` against
+  stand-ins for ssh (with and without `DEPLOY_KEY`, a wrong github.com host key, a key with a passphrase).
+
+The static checks (D997) remain for a machine without those tools: `deploy/scripts/check-tf.py` (python-hcl2 from
+PyPI) checks that every variable, local, resource and data source referenced exists and that each `templatefile`
+call passes exactly the cloud-init template's variables; `deploy/scripts/check-monitoring.py` checks `config.alloy`'s
+component references and listed environment variables, and that every rule in `alerts.yaml` watches a metric Eden
+emits (semantics `promtool` does not know).
+
+Not validated: `tofu plan` and `tofu apply` against real accounts; cloud-init and `bootstrap-dedicated.sh` on a real
+machine, including the deploy key's clone of the private repository from a server; Hetzner Object Storage's lifecycle
+rule (S3-compatible per its docs; unverified); Alloy's runtime behaviour (`alloy fmt` checks syntax only) and the
+alert rules firing on real data; a real network between machines; real Ampere hardware (the arm64 run was emulated,
+so no arm64 timings are quoted).
 
 ## 13. Runbook
 
