@@ -262,6 +262,25 @@ async function child(index: number, dir: string, resume: boolean): Promise<void>
     });
     w = newWindow();
   }, 30_000);
+  // `--gc-every S` (a leak check, not a latency run: each reading pauses the process): a full collection, then the
+  // heap and RSS, so a slope over time is the retained state's and not the collector's sawtooth.
+  const gcEvery = Number(arg("gc-every", "0"));
+  if (gcEvery > 0) {
+    setInterval(() => {
+      Bun.gc(true);
+      const m = process.memoryUsage();
+      send({
+        kind: "gc",
+        index,
+        at: Date.now(),
+        heapMB: m.heapUsed / 1_048_576,
+        rssMB: m.rss / 1_048_576,
+        users: cache.userCount,
+        frozen: cache.frozenCount,
+        warm: cache.warmCount,
+      });
+    }, gcEvery * 1_000);
+  }
   setInterval(() => {
     if (Date.now() >= endAt + 5_000) {
       send({ kind: "done", index });
@@ -400,20 +419,24 @@ async function orchestrate(): Promise<void> {
   log(`backfill done in ${((loadStart - t0) / 60_000).toFixed(1)} min; load until ${MINUTES} min from now`);
   // The first processes were started before the end was known: they are told it now.
   for (const p of procs) p.send({ kind: "end-at", endAt: orchestratorEnd });
-  await Bun.sleep(RESTART_AT * 60_000);
-  phase = "restart";
-  log("SIGTERM to every process (they write their live users)");
-  const r0 = Date.now();
-  await Promise.all(
-    procs.map((p) => {
-      p.kill("SIGTERM");
-      return p.exited;
-    }),
-  );
-  const down = Date.now() - r0;
-  await start(true);
-  log(`restarted: down ${down} ms, up again in ${Date.now() - r0} ms`);
-  phase = "load-2";
+  // `--restart-at` at or past `--minutes`: no restart (a steady run, e.g. with `--gc-every` for a leak check).
+  let down = 0;
+  if (RESTART_AT < MINUTES) {
+    await Bun.sleep(RESTART_AT * 60_000);
+    phase = "restart";
+    log("SIGTERM to every process (they write their live users)");
+    const r0 = Date.now();
+    await Promise.all(
+      procs.map((p) => {
+        p.kill("SIGTERM");
+        return p.exited;
+      }),
+    );
+    down = Date.now() - r0;
+    await start(true);
+    log(`restarted: down ${down} ms, up again in ${Date.now() - r0} ms`);
+    phase = "load-2";
+  }
   await Promise.all(procs.map((p) => p.exited));
   clearInterval(sampler);
 
