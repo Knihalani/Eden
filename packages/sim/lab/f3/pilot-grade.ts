@@ -29,6 +29,11 @@ const tasks = readFileSync(`${dir}/tasks.jsonl`, "utf8")
   .map((l) => JSON.parse(l));
 const gradeKey = (t: { prompt: string; variant: string; detail: string }) =>
   createHash("sha256").update(`${t.prompt}\u0000${t.variant}\u0000${t.detail}`).digest("hex").slice(0, 12);
+// Grades already on file (`g*.out.txt`, e.g. carried over from an earlier pilot for the same prompt, variant and fact).
+const graded = new Set<string>();
+for (const f of readdirSync(dir).filter((f) => /^g\d+\.out\.txt$/.test(f))) {
+  for (const k of blocks(`${dir}/${f}`).keys()) graded.add(k);
+}
 if (mode === "build") {
   const seen = new Map<string, { id: string; system: string; user: string; arm: string }>();
   let missing = 0;
@@ -39,7 +44,7 @@ if (mode === "build") {
       continue;
     }
     const id = gradeKey(t);
-    if (seen.has(id)) continue;
+    if (seen.has(id) || graded.has(id)) continue;
     const task = { kind: t.variant, text: t.request, must: [{ id: t.template, detail: t.detail }] } as unknown as Task;
     const [sys, user] = gradeMessages(task, answer);
     seen.set(id, { id, system: String(sys!.content), user: String(user!.content), arm: t.arm });
@@ -47,7 +52,14 @@ if (mode === "build") {
   // Batches by the arm a grade first appears in, so no grader sees two arms' answers to one task.
   const byArm = new Map<string, { id: string; system: string; user: string }[]>();
   for (const g of seen.values()) byArm.set(g.arm, [...(byArm.get(g.arm) ?? []), g]);
-  let n = 0;
+  // New batches are numbered after any on file.
+  let n =
+    Math.max(
+      -1,
+      ...readdirSync(dir)
+        .flatMap((f) => /^g(\d+)\.(in|out)\./.exec(f)?.[1] ?? [])
+        .map(Number),
+    ) + 1;
   for (const [, gs] of byArm) {
     for (let i = 0; i < gs.length; i += 30) {
       const name = `g${String(n++).padStart(2, "0")}`;
@@ -60,7 +72,7 @@ if (mode === "build") {
       );
     }
   }
-  console.log(`${seen.size} grades in ${n} batches; ${missing} arm-tasks without an answer`);
+  console.log(`${seen.size} new grades (${graded.size} on file); ${missing} arm-tasks without an answer`);
 } else {
   const verdicts = new Map<string, boolean>();
   for (const f of readdirSync(dir).filter((f) => /^g\d+\.out\.txt$/.test(f))) {
