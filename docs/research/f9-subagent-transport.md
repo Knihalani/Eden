@@ -59,6 +59,23 @@ fresh haiku subagents (`check-agree.py`): speak/silent agreement 0.969 (62/64), 
 the simulated check is stable, not that it matches Haiku's choices. A session with recorded check pools (F2) should
 answer them through the queue and report act/keep agreement with Haiku before reading small check effects.
 
+**Recipes on the cards (F9 round 2).** The integrator relayed F2's finding: on 120 recorded check rows, subagents kept
+22 of the 31 planted facts the API check dropped, and named 2 look-alikes where the API named 10. F7 adds that
+subagent replies run shorter (42 output tokens a call against 68). Together these say the stand-in is a more careful
+judge than the API. On the cards, the only API replies this session holds, the recipes compare as follows. The same
+16 held-out batches (191 items) were scored against Haiku's recorded cards:
+
+| recipe | runs | flag agreement | flag precision | flag recall | kind | chars a reply (Haiku 1,688) |
+|---|---|---|---|---|---|---|
+| careful (the v1 prompt), batches of 8 | 1 | 0.932 | 0.657 | 0.958 | 0.869 | 1,427 |
+| fast (`--recipe fast`), batches of 8 | 2 | 0.953, 0.932 | 0.742, 0.667 | 0.958, 0.917 | 0.895, 0.890 | 950, 1,003 |
+| fast, one request an agent (first 4 batches) | 1 | 0.855 (careful 0.909, fast in a batch 0.909) | 0.533 | 0.889 | 0.800 | 1,505 |
+
+The two fast runs differ from each other by as much as fast differs from careful (2 points of flag agreement). On
+cards, then, neither the recipe nor the batch size moves fidelity beyond run-to-run noise. The card call is
+long-form extraction where carefulness matters less than in the check's yes/no. The check needs F2's recorded rows
+(`check-fidelity.py`), which are not yet pushed.
+
 **How to read numbers from the queue.** Compare arms within one queue-served run. A difference between arms that is
 smaller than these disagreement rates (about 7% of card flags, 3% of check speak/silent decisions between two samples)
 needs repeat samples; a level (hidden raised, false concerns) is the subagents' level, not Haiku's.
