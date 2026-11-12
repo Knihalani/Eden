@@ -63,6 +63,7 @@ export {
   cardKey,
   cardMessages,
   CARD_FORM_REQUESTS,
+  CARD_FORM_WIDE,
   type CardMakeOptions,
   requestMessages,
   cardVerdict,

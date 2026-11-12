@@ -533,6 +533,12 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
+   * Trial (F1, docs/research/f1-intent-bridge.md; off; needs `cardsRequestsFix`): the card prompt asks for the same
+   * number of requests in varied forms: a plain request, a plan or need, the broad kind of action the item bears on in
+   * general words, and a question (`CARD_FORM_WIDE`). Its replies are a form of their own in the lab's replay files.
+   */
+  cardsRequestsWide: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -876,6 +882,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
+  cardsRequestsWide: false,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
