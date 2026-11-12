@@ -44,6 +44,21 @@ def price(c, s):
     return usd, 596 + 2.93 * out, total_in + out
 
 
+def calls(q):
+    """The queue's call log less every process an arm restarted from (G4's finding: a restart replays its calls and
+    logs them again). An arm is one pi-ab process, so only its last process (by first call) made the results; coverage
+    runs (`-cov-`) are one process a world, all kept."""
+    rows = [json.loads(line) for line in open(os.path.join(q, "calls.jsonl")) if line.strip()]
+    first = {}
+    for c in rows:
+        first.setdefault((c.get("run"), c.get("pid")), c.get("at", ""))
+    last = {}
+    for (run, pid), at in first.items():
+        if run and "-cov-" not in run and (run not in last or at > first[(run, last[run])]):
+            last[run] = pid
+    return [c for c in rows if c.get("run") not in last or c.get("pid") == last[c.get("run")]]
+
+
 def main():
     run = sys.argv[1]
     q = os.path.join(run, "q")
@@ -58,8 +73,7 @@ def main():
             sizes[d["id"]] = d["size"]
     by = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0.0, 0.0, 0.0]))  # run -> role -> n,$,ms,tok
     unsized = collections.Counter()
-    for line in open(os.path.join(q, "calls.jsonl")):
-        c = json.loads(line)
+    for c in calls(q):
         s = sizes.get(c.get("key"))
         if not s:
             unsized[c.get("run")] += 1
@@ -139,7 +153,8 @@ def main():
                   f"neutral concerns {mn[0]}/{mn[1]}")
             print(f"    multi-turn sample ({ag['n']} tasks): agent {ag['calls']:.2f} model calls, {ag['tools']:.2f} tool "
                   f"calls, {ag['tok']:.0f} tokens a task; agent ${ag['usd']:.4f}/1k + Eden ${ag['eden_usd']:.4f}/1k "
-                  f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task [EST]; connector "
+                  f"= ${ag['usd'] + ag['eden_usd']:.4f}/1k [EST]; wall {ag['wall']:.0f} ms a task model calls and "
+                  f"push only, {ag['wall'] + 450 * ag['tools']:.0f} with 0.45 s a tool round [EST]; connector "
                   f"calls {ag['conn']:.2f} a task (Eden's and the agent's tools)")
             fees = ", ".join(f"{k} ${ag['conn'] * v:.2f}" for k, v in CONNECTOR_FEES.items())
             print(f"    connector fees per 1,000 tasks by plan [EST]: {fees}")
@@ -183,4 +198,9 @@ def speculate(run, by, P):
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["--dedupe-calls"]:
+        # report.sh: the deduplicated call log, for F7's price-queue.py
+        for c in calls(sys.argv[2]):
+            print(json.dumps(c))
+    else:
+        main()
