@@ -71,7 +71,9 @@ the Write tool: one JSON object per line, one line per item, in the batch's orde
 if (cmd === "batch") {
   const n = Number(nArg ?? "25");
   const answered = readAnswers(dir);
-  const taken = new Set(batches().flatMap(batchKeys));
+  // Taken: in a batch still waiting for its answers. A key its batch's answers left out is offered again.
+  const waiting = batches().filter((f) => !existsSync(join(answerDir, f.replace(/\.json$/, ".jsonl"))));
+  const taken = new Set(waiting.flatMap(batchKeys));
   const todo = pending().filter((p) => !answered.has(p.key) && !taken.has(p.key));
   const system = readFileSync(join(dir, "system-cards-intent.txt"), "utf8");
   writeFileSync(join(dir, "brief.md"), BRIEF(system));

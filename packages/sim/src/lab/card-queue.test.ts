@@ -24,7 +24,7 @@ describe("card-queue (F8, D1102): the subagent card transport", () => {
     expect(pending.sort()).toEqual(keys.map((k) => `${k}.json`).sort());
     // The key is the item's block (index dropped) and the day: the same item in another batch position matches.
     const swapped = { ...req, messages: cardMessages([items[1]!, items[0]!], "2026-10-27", true, CARD_FORM_REQUESTS) };
-    expect(promptItems(swapped).map((p) => p.key)).toEqual([keys[1], keys[0]]);
+    expect(promptItems(swapped).map((p) => p.key)).toEqual([keys[1]!, keys[0]!]);
     mkdirSync(join(dir, "answers"), { recursive: true });
     const card = { kind: "deadline", actions: ["pay"], entities: ["council tax"], end: "2026-11-02", statement: "due" };
     writeFileSync(
