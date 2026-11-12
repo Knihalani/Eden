@@ -139,4 +139,12 @@ export {
   type PushCheckStats,
 } from "./push-check";
 export { mayConstrain } from "./conflict";
-export { ruleTexts, topRules, type RuleCandidate, type RuleIndex } from "./rule-index";
+export {
+  RULE_DAY_PENALTY,
+  RULE_TOP_TEXTS,
+  ruleScore,
+  ruleTexts,
+  topRules,
+  type RuleCandidate,
+  type RuleIndex,
+} from "./rule-index";

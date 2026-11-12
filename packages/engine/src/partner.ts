@@ -2646,8 +2646,9 @@ export class ContextPartner {
         ...(card.end ? { end: card.end } : {}),
       });
     }
-    if (k <= 0 || all.length <= k) return all.slice(0, n);
-    const picked = await this.selectRules(s, request, all, k, before);
+    // A small sheet is read whole: it is the user's cached prefix, cheaper than a per-request pick.
+    if (k <= 0 || all.length <= Math.max(k, SHEET_SELECT_FROM)) return all.slice(0, n);
+    const picked = await this.selectRules(s, request, all, k, before, [...(cue.time?.days ?? [])].sort());
     if (!picked) return all.slice(0, n);
     const byId = new Map(all.map((c) => [c.id, c]));
     const out: SheetCard[] = [];
@@ -2669,6 +2670,7 @@ export class ContextPartner {
     all: readonly SheetCard[],
     k: number,
     before: number,
+    days: readonly string[],
   ): Promise<readonly string[] | null> {
     const index = this.deps.ruleIndex;
     const cards = this.deps.cards;
@@ -2686,7 +2688,7 @@ export class ContextPartner {
         timer = setTimeout(() => done(null), RULE_SELECT_WAIT_MS);
       });
       const got = await Promise.race([
-        index.select(s.scope, request, candidates, k, stop.signal).catch(() => null),
+        index.select(s.scope, request, candidates, k, stop.signal, days).catch(() => null),
         late,
       ]);
       return got && got.length > 0 ? got : null;
@@ -6847,6 +6849,8 @@ const CHECK_KEPT = 4;
  * falls back to the newest cards, and the most candidates it is given (bounds its work on a heavy user). */
 const RULE_SELECT_WAIT_MS = 100;
 const SHEET_SELECT_MAX = 1000;
+/** Up to this many active cards the whole (cached) sheet is read; above it the index picks (F10's cost note). */
+const SHEET_SELECT_FROM = 60;
 
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {

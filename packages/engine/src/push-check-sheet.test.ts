@@ -68,6 +68,17 @@ const CARDS: Record<string, Card> = {
   },
 };
 
+// Seventy more rules (`pushCheckSheetSelect` picks only above 60 cards), found by a question about site rules.
+const SITE = Array.from({ length: 70 }, (_, i) =>
+  item(`site-${i}`, `Site rule ${i}`, `Visitors are not allowed past gate ${i} without signing in.`, 50 + i),
+);
+const SITE_CARDS = new Map<string, Card>(
+  SITE.map((x, i) => [
+    x.title,
+    { kind: "prohibition", actions: ["attend"], entities: [`gate ${i}`], statement: `sign in at gate ${i} first` },
+  ]),
+);
+
 // The revised policy (edited at its source): its own card, made only once `release` is called.
 const REVISED_CARD: Card = {
   kind: "status-change",
@@ -80,7 +91,9 @@ class TableMaker implements CardMaker {
   async make(items: ContextItem[]) {
     if (items.some((i) => i.text.includes("no longer"))) await new Promise<void>((r) => (release = r));
     return {
-      cards: items.map((i) => (i.text.includes("no longer") ? REVISED_CARD : (CARDS[i.title] ?? NONE))),
+      cards: items.map((i) =>
+        i.text.includes("no longer") ? REVISED_CARD : (CARDS[i.title] ?? SITE_CARDS.get(i.title) ?? NONE),
+      ),
       costUsd: 0,
     };
   }
@@ -118,10 +131,11 @@ function setup(config: Record<string, unknown>, model: FakeModel, ruleIndex?: Ru
   };
   const cards = new CardEnricher({ maker: new TableMaker(), budget: new Budget(), now: () => clock });
   const checker = new PushChecker({ model, budget: new Budget() });
+  const cache = new ItemCache();
   const partner = new ContextPartner({
     sources: async () => [source],
     sourceMap: new SourceMap(),
-    cache: new ItemCache(),
+    cache,
     budget: new Budget(),
     model: null,
     now: () => clock,
@@ -166,7 +180,14 @@ function setup(config: Record<string, unknown>, model: FakeModel, ruleIndex?: Ru
     const got = partner.takePending(at).find((x) => x.reason.startsWith("candidates:"));
     return got ? got.citations.map((c) => c.itemId) : [];
   };
-  return { partner, checker, warm, handed, revise, cards };
+  // The seventy site rules land in the user's cache (as a sync would bring them) and are carded.
+  const site = async (userId = "u1") => {
+    const scope = { tenantId: "t", userId };
+    cards.enqueue(scope, cache.put(scope, SITE, clock));
+    await cards.idle();
+    clock += HOUR;
+  };
+  return { partner, checker, warm, handed, revise, cards, site };
 }
 
 const REQUEST = "Pay the Harlow venue deposit invoice and get me a return to Edinburgh";
@@ -369,23 +390,32 @@ describe("pushCheckSheetSelect (F5 with F10): the rule index picks the sheet per
     };
     return { ri, seen };
   };
-  // Two active cards: the travel policy (30 h old) and the Harlow hold (2 h old, the newer).
-  const twoCards = async (warm: (u?: string, idle?: boolean, text?: string) => Promise<void>, userId = "u1") => {
+  // 72 active cards: the travel policy, the Harlow hold and the seventy site rules (all older than the hold).
+  const twoCards = async (
+    {
+      warm,
+      site,
+    }: { warm: (u?: string, idle?: boolean, text?: string) => Promise<void>; site: (u?: string) => Promise<void> },
+    userId = "u1",
+  ) => {
     await warm(userId);
     await warm(userId, true, "What is going on with the Harlow venue?");
+    await site(userId);
   };
 
   test("off in the default; on, the check reads only the index's pick", async () => {
     expect(DEFAULT_CONFIG.pushCheckSheetSelect).toBe(0);
     const model = naming("TravelPerk");
     const { ri, seen } = index(async () => [POLICY.id]);
-    const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await twoCards(warm);
+    const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
+    await twoCards(t);
+    const { handed } = t;
     expect(await handed(REQUEST)).toContain(POLICY.id);
     const sheet = rules(model.calls.at(-1)!);
     expect([...sheet.keys()]).toEqual(["train and flight bookings only through TravelPerk"]);
     expect(seen.at(-1)!.k).toBe(1);
-    expect(seen.at(-1)!.ids.sort()).toEqual([POLICY.id, POOL[0]!.id].sort());
+    expect(seen.at(-1)!.ids).toContain(POLICY.id);
+    expect(seen.at(-1)!.ids.length).toBe(72);
     expect(seen.at(-1)!.request).toBe(REQUEST);
   });
 
@@ -400,29 +430,43 @@ describe("pushCheckSheetSelect (F5 with F10): the rule index picks the sheet per
     for (const answer of answers) {
       const model = naming("nothing");
       const { ri } = index(answer);
-      const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-      await twoCards(warm);
+      const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
+      await twoCards(t);
+      const { handed } = t;
       const t0 = performance.now();
       await handed(REQUEST);
       expect(performance.now() - t0).toBeLessThan(1_500);
-      expect(rules(model.calls.at(-1)!).size).toBe(2);
+      expect(rules(model.calls.at(-1)!).size).toBe(72);
     }
   });
 
   test("an id the index makes up is dropped; with nothing left the newest-first sheet is read", async () => {
     const model = naming("nothing");
     const { ri } = index(async () => ["mail:not-a-card"]);
-    const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await twoCards(warm);
+    const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
+    await twoCards(t);
+    const { handed } = t;
     await handed(REQUEST);
+    expect(rules(model.calls.at(-1)!).size).toBe(72);
+  });
+
+  test("at 60 cards or fewer the whole sheet is read (cached) and the index is not asked", async () => {
+    const model = naming("nothing");
+    const { ri, seen } = index(async () => [POLICY.id]);
+    const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
+    await warm();
+    await warm("u1", true, "What is going on with the Harlow venue?");
+    await handed(REQUEST);
+    expect(seen.length).toBe(0);
     expect(rules(model.calls.at(-1)!).size).toBe(2);
   });
 
   test("isolation: the index is given only the asking user's cards", async () => {
     const model = naming("nothing");
     const { ri, seen } = index(async (c) => c.slice(0, 1).map((x) => x.id));
-    const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await twoCards(warm, "u1");
+    const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
+    await twoCards(t, "u1");
+    const { warm, handed } = t;
     await warm("u2", true, "What is going on with the Harlow venue?");
     await handed(REQUEST, "u2");
     const last = seen.at(-1);

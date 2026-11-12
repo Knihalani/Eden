@@ -1,14 +1,14 @@
 /**
  * F10: the lab's rule index (`RuleIndex`, packages/engine/src/rule-index.ts), replaying e5 vectors computed offline
  * (`packages/sim/lab/f10/embed.py`, multilingual-e5-small int8 on CPU; `export-vecs.py` writes the file). A card
- * scores its best cosine to the request over `ruleTexts`. A request with no vector answers null (the caller's
+ * scores `ruleScore` over its `ruleTexts`' cosines to the request. A request with no vector answers null (the caller's
  * unselected sheet); a card with no vector for any of its texts is not selected. Sim data only: the vectors are
  * content hashes' and shared by every user, which only a lab replay may do (a server's index keeps its own per user).
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { ruleTexts, topRules, type RuleCandidate, type RuleIndex } from "@eden/engine";
+import { ruleScore, ruleTexts, topRules, type RuleCandidate, type RuleIndex } from "@eden/engine";
 
 const key = (t: string) => createHash("sha1").update(t.replace(/\n/g, " ")).digest("hex");
 
@@ -33,29 +33,41 @@ export class ReplayRuleIndex implements RuleIndex {
     }
   }
 
-  /** Each candidate's best cosine to the request, or null when the request has no vector. */
-  scores(request: string, candidates: readonly RuleCandidate[]): Map<string, number> | null {
+  /** Each candidate's `ruleScore`, or null when the request has no vector. */
+  scores(
+    request: string,
+    candidates: readonly RuleCandidate[],
+    days: readonly string[] = [],
+  ): Map<string, number> | null {
     const q = this.vecs.get(key(`query: ${request}`));
     if (!q) return null;
     const out = new Map<string, number>();
     for (const c of candidates) {
       const { passages, queries } = ruleTexts(c);
-      let best = -Infinity;
+      const sims: number[] = [];
       for (const t of [...passages.map((p) => `passage: ${p}`), ...queries.map((x) => `query: ${x}`)]) {
         const v = this.vecs.get(key(t));
         if (!v) continue;
         let s = 0;
         for (let i = 0; i < v.length; i++) s += v[i]! * q[i]!;
-        if (s > best) best = s;
+        sims.push(s);
       }
-      if (Number.isFinite(best)) out.set(c.id, best);
+      const score = ruleScore(sims, c, days);
+      if (Number.isFinite(score)) out.set(c.id, score);
     }
     return out;
   }
 
-  async select(_scope: unknown, request: string, candidates: readonly RuleCandidate[], k: number) {
+  async select(
+    _scope: unknown,
+    request: string,
+    candidates: readonly RuleCandidate[],
+    k: number,
+    _signal?: AbortSignal,
+    days: readonly string[] = [],
+  ) {
     this.asked++;
-    const scores = this.scores(request, candidates);
+    const scores = this.scores(request, candidates, days);
     if (!scores) {
       this.misses++;
       return null;
