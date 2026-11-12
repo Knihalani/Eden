@@ -89,19 +89,6 @@ export const CHECK_SYSTEM = [
     'Reply {"items":[]} when no item touches the request\'s subject; that is the usual answer.',
 ].join("\n\n");
 
-/**
- * `askHeedsCheck` (G2, D1450): the same instructions, with one more field on an entry the check rules out. `why` says
- * what kind of no it is, written after the verdict so the verdict is decided as before: "clear" (the item itself is a
- * go-ahead for the request's own), "other" (another one of the same kind) or "background". The ask leaves out only
- * the first two: a background item may still matter in a way the check did not see.
- */
-export const CHECK_SYSTEM_WHY =
-  CHECK_SYSTEM +
-  ' Only in an entry whose "act" is false, add a last field "why": "clear" when the item itself is a go-ahead for ' +
-  "the request's own (it says the hold, rule, booking or problem it is about is over, lifted, cancelled, approved, " +
-  'paid or done, or that what it requires is already in place); "other" when its point is about another person, ' +
-  'thing, place, date or time than the request\'s own; "background" for anything else. For example ' +
-  '{"i":4,"on":"lake house repairs finished","hits":"the lake house booking","act":false,"why":"clear"}.';
 /** The most cards a rule sheet may hold (`pushCheckSheet`'s cap): bounded input. */
 export const SHEET_MAX_CARDS = 120;
 /** The most characters of a sheet card's statement and of its item's title. */
@@ -156,8 +143,6 @@ export interface PushCheckInput {
   request: string;
   items: ReaderItem[];
   today: string;
-  /** `askHeedsCheck` (D1450): ask each ruled-out entry for its `why` (`CHECK_SYSTEM_WHY`). */
-  why?: boolean;
   /** `pushCheckSheet` (F5): the user's active constraint cards, in the order the sheet lists them. */
   sheet?: readonly SheetCard[];
   /**
@@ -172,8 +157,6 @@ export interface PushCheckInput {
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
 export interface PushCheckRead {
   yes: ReadonlySet<string> | null;
-  /** `askHeedsCheck` (D1450): the items the reply named and ruled out, with the kind of no (`parseRuledOut`). */
-  ruledOut?: ReadonlyMap<string, "clear" | "other" | "">;
   /** `pushCheckSheet` (F5): the items whose sheet cards the reply named (empty with no sheet; null with `yes`). */
   rules?: ReadonlySet<string>;
   /** `pushCheckSheet` (F5): the sheet's item ids as read, set by the partner for the lab's pool report. */
@@ -195,7 +178,7 @@ const head = (text: string) =>
 /** The key a session's check is cached under: the request as read, the day and the pool's items in order. */
 export function checkKey(input: PushCheckInput): string {
   // "c": the compare-first reply's key since D527, kept so the lab's recorded replies still replay.
-  const form = input.why ? "cw" : "c";
+  const form = "c";
   const h = createHash("sha256").update(
     `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
@@ -272,7 +255,7 @@ export function checkMessages(input: PushCheckInput): ChatMessage[] {
     return `${opening}>${inert(it.title)}: ${inert(it.text)}</item>`;
   });
   return [
-    { role: "system", content: input.why ? CHECK_SYSTEM_WHY : CHECK_SYSTEM },
+    { role: "system", content: CHECK_SYSTEM },
     ...(sheet.length > 0
       ? [
           {
@@ -371,38 +354,6 @@ export function parseCompareSheet(
     if (!out.includes(n - 1) && out.length < 5) out.push(n - 1);
   }
   return { items: out, rules: named };
-}
-
-/**
- * `askHeedsCheck` (G2, D1450): the items a compare-first reply names and rules out, by 0-based index, each with the
- * kind of no the reply gave it: "other" for a `hits` of none or a `why` of other (another one of the same kind),
- * "clear" for a `why` of clear (the item is a go-ahead), "" for any other stated no. The check listed the item as
- * touching the request's subject and then said it leaves the request alone. An item the reply leaves out is not
- * here: the check gave no reading of it. Empty when the reply is unreadable; an entry naming no item is skipped.
- */
-export function parseRuledOut(text: string, count: number): Map<number, "clear" | "other" | ""> {
-  const out = new Map<number, "clear" | "other" | "">();
-  if (!OPENING.test(text)) return out;
-  let entries: unknown;
-  try {
-    entries = (JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { items?: unknown }).items;
-  } catch {
-    return out;
-  }
-  if (!Array.isArray(entries)) return out;
-  for (const e of entries.slice(0, COMPARE_MAX_ENTRIES * 2)) {
-    if (!e || typeof e !== "object") continue;
-    const { i, hits, act, why } = e as { i?: unknown; hits?: unknown; act?: unknown; why?: unknown };
-    const none = typeof hits === "string" && NO_HIT.test(hits);
-    if ((act === true || act === "true") && typeof hits === "string" && !none) continue;
-    // Only a stated no: an entry with no verdict at all is not one.
-    if (act !== false && act !== "false" && !none) continue;
-    const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
-    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count || out.has(n - 1)) continue;
-    const said = typeof why === "string" ? why.trim().toLowerCase() : "";
-    out.set(n - 1, said === "clear" ? "clear" : none || said === "other" ? "other" : "");
-  }
-  return out;
 }
 
 export interface PushCheckLimits {
@@ -504,14 +455,8 @@ export class PushChecker {
         return { yes: null, costUsd: res.costUsd, called: true, overBudget: false };
       }
       if (at.rules.length > 0) this.stats.sheetNamed += at.rules.length;
-      const yes = new Set(at.items.map((i) => items[i]!.id));
-      // A yes wins over a second entry that rules the same item out.
-      const ruledOut = new Map<string, "clear" | "other" | "">();
-      for (const [k, why] of parseRuledOut(res.text, items.length))
-        if (!yes.has(items[k]!.id)) ruledOut.set(items[k]!.id, why);
       return {
-        yes,
-        ruledOut,
+        yes: new Set(at.items.map((i) => items[i]!.id)),
         ...(sheet.length > 0 ? { rules: new Set(at.rules.map((k) => sheet[k]!.id)) } : {}),
         costUsd: res.costUsd,
         called: true,

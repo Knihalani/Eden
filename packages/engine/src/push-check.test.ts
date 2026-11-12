@@ -9,15 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import {
-  CHECK_SYSTEM,
-  checkKey,
-  checkMessages,
-  itemMark,
-  parseCompare,
-  parseRuledOut,
-  PushChecker,
-} from "./push-check";
+import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
 // change what the agent should do; the candidates are those, in pool order; none named sends no packet; any failure
@@ -60,13 +52,8 @@ function says(yes: string[], extra = "") {
   });
 }
 
-function setup(
-  config: Record<string, unknown>,
-  model: Model | null,
-  pools: PushPoolReport[] = [],
-  items: ContextItem[] = ITEMS,
-) {
-  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
+function setup(config: Record<string, unknown>, model: Model | null, pools: PushPoolReport[] = []) {
+  const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
     sources: async () => [source],
@@ -372,92 +359,46 @@ describe("the compare-first reply (N5, D527)", () => {
   });
 });
 
-describe("askHeedsCheck (G2, D1450): an ask leaves out what its request's push check turned down", () => {
-  /** Says yes to "Harlow venue", rules "Harlow deposit" out as a go-ahead, and leaves the rest unnamed. */
-  const model = () =>
-    new FakeModel((req) => {
-      const n = numbers(req);
-      return (
-        `{"items":[{"i":${n.get("Harlow venue")},"on":"Harlow payments","hits":"the Harlow deposit","act":true},` +
-        `{"i":${n.get("Harlow deposit")},"on":"deposit due Friday","hits":"the Harlow deposit","act":false,"why":"clear"},` +
-        `{"i":${n.get("Harlow invoice")},"on":"the invoice PDF","hits":"the Harlow invoice","act":false,"why":"background"}]}`
-      );
+describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check turned down is not handed", () => {
+  /** A fallback packet (the no-model rule path) for the request, and whatever the push queued beside it. */
+  const run = async (config: Record<string, unknown>, model: Model, at = ref) => {
+    const { partner } = setup({ pushCheck: true, fallbackMatchedTerms: 2, ...config }, model);
+    const res = await partner.observe({ ...at, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
     });
-  const asked = async (config: Record<string, unknown>, second?: string) => {
-    const { partner } = setup({ pushCheck: true, pushCandidates: 5, ...config }, model());
-    await handed(partner);
-    if (second) await handed(partner, ref, second);
-    const res = await partner.ask({ ...ref, question: "Harlow venue deposit invoice", maxItems: 5 });
-    return res.citations.map((c) => c.itemId);
+    const taken = partner.takePending(at);
+    return [...(res.injection ? [res.injection] : []), ...taken].map((x) => x.reason.split(":")[0]);
   };
 
-  test("parseRuledOut: a stated no with its kind; never a yes, an unnamed item or a bad reply", () => {
-    const reply =
-      '{"items":[{"i":1,"on":"a","hits":"b","act":true},{"i":2,"on":"a","hits":"b","act":false,"why":"clear"},' +
-      '{"i":3,"on":"a","hits":"none - another venue","act":true},{"i":4,"on":"a"},{"i":9,"on":"a","act":false},' +
-      '{"i":5,"on":"a","hits":"b","act":false,"why":"background"}]}';
-    expect([...parseRuledOut(reply, 5)]).toEqual([
-      [1, "clear"],
-      [2, "other"],
-      [4, ""],
-    ]);
-    expect(parseRuledOut("not json", 5).size).toBe(0);
-    expect(parseRuledOut('{"items":[]}', 5).size).toBe(0);
+  test("off by default here: the rule path's packet goes out though the check named nothing", async () => {
+    expect(await run({}, says([]))).toContain("fallback");
   });
 
-  test("1 asks the check for the kind of no; 0 and 2 send the instructions as they were", () => {
-    const input = { request: REQUEST, items: [], today: "2026-10-27" };
-    expect(checkMessages(input)[0]!.content).toBe(CHECK_SYSTEM);
-    expect(checkMessages({ ...input, why: true })[0]!.content).toContain('"why"');
-    expect(checkKey({ ...input, why: true })).not.toBe(checkKey(input));
+  test("on: the check read every item of the packet and said yes to none, so it is held back", async () => {
+    expect(await run({ packetHeedsCheck: true }, says([]))).not.toContain("fallback");
   });
 
-  test("off (the default): the ask lists the item the check ruled out", async () => {
-    expect(DEFAULT_CONFIG.askHeedsCheck).toBe(0);
-    expect(await asked({})).toContain("mail:dated");
+  test("on: a packet with an item the check said yes to goes out", async () => {
+    const got = await run({ packetHeedsCheck: true }, says(["Harlow venue", "Harlow invoice", "Harlow deposit"]));
+    expect(got).toContain("fallback");
   });
 
-  test("1: only the item ruled out as a go-ahead is left out; one ruled out as background stays", async () => {
-    const got = await asked({ askHeedsCheck: 1 });
-    expect(got).not.toContain("mail:dated");
-    expect(got).toContain("mail:plain");
+  test("on: a check that did not answer (unreadable) holds nothing back", async () => {
+    expect(await run({ packetHeedsCheck: true }, new FakeModel(() => "not json"))).toContain("fallback");
   });
 
-  test("1: a go-ahead the check read from a cut excerpt stays (the rest of the item may say otherwise)", async () => {
-    const filler = [
-      "parking behind the hall",
-      "catering for forty",
-      "the room layout",
-      "the stage lights",
-      "coat racks",
-    ]
-      .map((x, i) => `Note ${i + 1} from the Harlow venue team covers ${x} and who to call about it on the day.`)
-      .join(" ");
-    const long = item("dated", "Harlow deposit", `The Harlow venue deposit is due on Friday 30 October. ${filler}`, 4);
-    const items = ITEMS.map((x) => (x.id === long.id ? long : x));
-    const { partner } = setup({ pushCheck: true, pushCandidates: 5, askHeedsCheck: 1 }, model(), [], items);
-    await handed(partner);
-    const res = await partner.ask({ ...ref, question: "Harlow venue deposit invoice", maxItems: 5 });
-    expect(res.citations.map((c) => c.itemId)).toContain("mail:dated");
-  });
-
-  test("2: every item the check read and did not say yes to is left out", async () => {
-    const got = await asked({ askHeedsCheck: 2 });
-    expect(got).not.toContain("mail:dated");
-    expect(got).not.toContain("mail:plain");
-  });
-
-  test("a check made for an earlier request does not bind a later request's ask", async () => {
-    // The second request has no constraint-like pool of its own words, so no check of its own.
-    const got = await asked({ askHeedsCheck: 2 }, "Thanks, that is all for the lunch menu today.");
-    expect(got).toContain("mail:dated");
-  });
-
-  test("isolation: one user's check never trims another user's ask", async () => {
-    const { partner } = setup({ pushCheck: true, pushCandidates: 5, askHeedsCheck: 2 }, model());
-    await handed(partner);
-    const other = { tenantId: "t", userId: "u2", sessionId: "s1" };
-    const res = await partner.ask({ ...other, question: "Harlow venue deposit invoice", maxItems: 5 });
-    expect(res.citations.map((c) => c.itemId)).toContain("mail:dated");
+  test("isolation: one user's check never holds back another user's packet", async () => {
+    // The first call names nothing; the second is unreadable, so the second user's check turned nothing down.
+    let calls = 0;
+    const model = new FakeModel(() => (calls++ === 0 ? '{"items":[]}' : "not json"));
+    const { partner } = setup({ pushCheck: true, fallbackMatchedTerms: 2, packetHeedsCheck: true }, model);
+    const reasons = async (at: typeof ref) => {
+      const res = await partner.observe({ ...at, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+        waitMs: 2_000,
+      });
+      return [...(res.injection ? [res.injection] : []), ...partner.takePending(at)].map((x) => x.reason.split(":")[0]);
+    };
+    expect(await reasons(ref)).not.toContain("fallback");
+    expect(await reasons({ tenantId: "t", userId: "u2", sessionId: "s1" })).toContain("fallback");
   });
 });

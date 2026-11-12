@@ -744,14 +744,13 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * TRIAL (G2, D1450): an explicit ask in the request a push check answered leaves out items that check turned down.
-   * 1: the check's reply says what kind of no each ruled-out item is (`CHECK_SYSTEM_WHY`), and the ask leaves out
-   * those it called a go-ahead ("clear") or another one of the same kind ("other", or a `hits` of none); an item
-   * ruled out as background, or left unnamed, stays. 2: every item the check read and did not say yes to (the reply
-   * as it is). No call of its own, and nothing is left out when the check did not answer, read another copy of the
-   * item, or was for another request. 0: off.
+   * G2 (D1450; docs/research/g2-decoys.md): with `pushCheck` and a checker, a proactive packet a rule path made for a
+   * request (the no-model conflict and grounding tests, which queue before the check answers) is not handed out when
+   * that request's push check read every item in it and said yes to none. The observe already waits for the push,
+   * so no wait is added, and there is no call. A check that did not answer, read another copy of an item or was for
+   * another request holds nothing back; an explicit ask lists as before.
    */
-  askHeedsCheck: number;
+  packetHeedsCheck: boolean;
   /**
    * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
    * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
@@ -979,7 +978,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  askHeedsCheck: 0,
+  packetHeedsCheck: false,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,

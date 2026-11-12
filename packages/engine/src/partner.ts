@@ -81,7 +81,6 @@ import {
   READER_MAX_ITEMS,
   readerFocus,
   readerItem,
-  relevantText,
   readerNote,
   type AskReader,
   type ReaderInput,
@@ -974,7 +973,7 @@ export class ContextPartner {
     const live = this.sessions.get(sessionKey(event));
     if (live) this.checkPlans(live);
     const queued = (live?.pending.length ?? 0) > 0;
-    // `askHeedsCheck` (D1450): the reply's own packet (a rule path made it before the check answered) is held back
+    // `packetHeedsCheck` (D1450): the reply's own packet (a rule path made it before the check answered) is held back
     // when its request's check has since turned down every item in it. It stays marked delivered: silence, no repeat.
     const kept = live && settled && result.injection && this.allCheckedOut(live, result.injection) ? null : undefined;
     return {
@@ -1346,7 +1345,7 @@ export class ContextPartner {
   }
 
   /**
-   * `askHeedsCheck` (G2, D1450): a queued packet of this request whose every item its push check turned down is not
+   * `packetHeedsCheck` (G2, D1450): a queued packet of this request whose every item its push check turned down is not
    * handed out (a rule path queued it before the check answered: the no-model conflict test reads "hold lifted" as
    * a hold). It goes whole, as a removed item's packet does, and only when nothing else is in it. The candidates'
    * own packet holds only what the check said yes to, and an update or a plan alert is about a copy already handed.
@@ -1363,7 +1362,7 @@ export class ContextPartner {
     }
   }
 
-  /** `askHeedsCheck` (D1450): a proactive packet whose every item this request's push check turned down. */
+  /** `packetHeedsCheck` (D1450): a proactive packet whose every item this request's push check turned down. */
   private allCheckedOut(s: Session, packet: Injection, out = this.checkedOut(s)): boolean {
     if (!out || packet.mode !== "proactive" || packet.citations.length === 0) return false;
     const now = this.now();
@@ -2000,15 +1999,13 @@ export class ContextPartner {
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
     ];
     const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
-    // `askHeedsCheck` (D1450): what this request's push check read and turned down is not listed by its ask.
-    const heeded = !internal.push && internal.late === undefined ? this.checkedOut(s) : null;
     if (internal.push && internal.request !== undefined) s.pushedFor = internal.request;
     // `stateFilterWide` (D1451): an ask in a request the push started for lists nothing a card says cleared.
     const listed =
       !internal.push && internal.late === undefined && s.pushedFor === s.requests
         ? this.withoutCleared(s, order, cue.arrived ?? this.now())
         : order;
-    let chosen = (heeded ? listed.filter((x) => !heeded(x.item)) : listed).slice(0, limit);
+    let chosen = listed.slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
@@ -2048,7 +2045,7 @@ export class ContextPartner {
         if (extra.length >= seats) break;
         if (have.has(id)) continue;
         const item = this.deps.cache.get(s.scope, id, this.now());
-        if (item && !bulkMail(item) && anchored(item, anchors) && !heeded?.(item))
+        if (item && !bulkMail(item) && anchored(item, anchors))
           extra.push({ item, score: 0, matched: 0, sketch: null });
       }
       chosen = [...chosen.slice(0, Math.max(0, limit - extra.length)), ...extra];
@@ -2654,8 +2651,6 @@ export class ContextPartner {
       today,
       ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
-      // `askHeedsCheck` 1 (D1450): the check says what kind of no each ruled-out item is.
-      ...(this.config.askHeedsCheck === 1 ? { why: true } : {}),
     };
     const key = checkKey(input);
     const ids = sheet.map((c) => c.id);
@@ -2688,21 +2683,6 @@ export class ContextPartner {
       const entry: KeptCheck = {
         asked,
         ...(forRequest !== undefined ? { request: forRequest } : {}),
-        // What the check read of an item is its excerpt: whole only when the room took every part of it. An item
-        // sent as a pointer to its rule (`pushCheckSheetRefs`) was read as its card's line, not as itself.
-        ...(input.why
-          ? {
-              whole: new Set(
-                read
-                  .filter(
-                    (x, i) =>
-                      !(this.config.pushCheckSheetRefs && sheet.some((c) => c.id === x.item.id)) &&
-                      items[i]?.text === relevantText(x.item.text, focus, WHOLE_ITEM_CHARS),
-                  )
-                  .map((x) => x.item.id),
-              ),
-            }
-          : {}),
         marks: new Map(items.map((it) => [it.id, itemMark(it)])),
         read: checker.check(s.scope, s.key, input, s.abort.signal),
       };
@@ -2736,20 +2716,20 @@ export class ContextPartner {
   }
 
   /**
-   * `askHeedsCheck` (G2, D1450): the test of whether this request's push check turned an item down, or null when no
-   * settled check of this request did. An item counts only as the copy the check read (`itemMark`'s id and content
-   * hash): a changed copy is read afresh by the agent.
+   * `packetHeedsCheck` (G2, D1450): the test of whether this request's push check read an item and did not say yes
+   * to it, or null when no settled check of this request did. An item counts only as the copy the check read
+   * (`itemMark`'s id and content hash): a changed copy is not the one it turned down.
    */
   private checkedOut(s: Session): ((item: ContextItem) => boolean) | null {
-    const mode = this.config.askHeedsCheck;
-    if (mode <= 0 || !s.pushChecks) return null;
+    if (!this.config.packetHeedsCheck || !s.pushChecks) return null;
     const out = new Map<string, string>();
     for (const kept of s.pushChecks.values()) {
       const read = kept.settled;
       if (kept.request !== s.requests || !read?.yes) continue;
+      // A rule the reply named brings its item in too (`pushCheckSheet`): that is a yes.
       for (const [id, mark] of kept.marks) {
-        if (read.yes.has(id)) out.delete(id);
-        else if (mode >= 2 || (read.ruledOut?.get(id) === "clear" && kept.whole?.has(id))) out.set(id, mark);
+        if (read.yes.has(id) || read.rules?.has(id)) out.delete(id);
+        else out.set(id, mark);
       }
     }
     if (out.size === 0) return null;
@@ -6938,16 +6918,11 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 /** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
 const CHECK_KEPT = 4;
 
-/** `askHeedsCheck` (D1450): room enough for any item's every part (`relevantText` reads at most 8,000 characters). */
-const WHOLE_ITEM_CHARS = 8_000;
-
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {
   asked: string;
-  /** The user request (`Session.requests`) the check was made for (`askHeedsCheck`). */
+  /** The user request (`Session.requests`) the check was made for (`packetHeedsCheck`). */
   request?: number;
-  /** `askHeedsCheck` 1: the items the check read whole (its excerpt left no part of the item out). */
-  whole?: Set<string>;
   /** Per item read, `itemMark`: id, content hash, date and sender. */
   marks: Map<string, string>;
   read: Promise<PushCheckRead>;
