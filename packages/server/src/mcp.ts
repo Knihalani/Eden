@@ -190,7 +190,13 @@ export function createMcpServer(
     }
     // Notifications (initialized, cancelled) and responses to requests this server never sends need no answer.
     if (!isRequest(m)) return null;
-    return answer(m);
+    try {
+      return await answer(m);
+    } catch {
+      // `callTool` turns a failed ask into a tool result; anything else that throws is ours: an error, not silence,
+      // so the client does not wait out its timeout (the SDK answers InternalError too).
+      return { jsonrpc: "2.0", id: m.id, error: { code: ErrorCode.InternalError, message: "Internal error" } };
+    }
   };
 
   let transport: Transport | null = null;

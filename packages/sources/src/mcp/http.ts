@@ -22,7 +22,7 @@
  */
 import { parseJsonBytes } from "./json";
 import { SseParser } from "./sse";
-import { asMessage, isRequest, type JsonRpcId, type JsonRpcMessage, type Transport } from "./types";
+import { answers, asMessage, isRequest, type JsonRpcId, type JsonRpcMessage, type Transport } from "./types";
 
 export interface StreamableHttpOptions {
   /** Sent on every request, over the protocol's own headers of the same name: the user's credentials. */
@@ -123,14 +123,16 @@ export class StreamableHttpTransport implements Transport {
     flight.timer = setTimeout(() => cut(flight, new StreamableHttpError(-1, "Request timed out")), this.timeoutMs);
     this.flights.add(flight);
     if (id !== undefined) this.byId.set(id, flight);
+    // A cancelled request's POST is cut first, whatever becomes of the notification's own POST: a server that hangs
+    // every request must not hold the cancelled one's connection until its deadline.
+    if ("method" in message && message.method === "notifications/cancelled") {
+      const target = message.params?.requestId;
+      const f = typeof target === "string" || typeof target === "number" ? this.byId.get(target) : undefined;
+      if (f) this.land(f, true);
+    }
     let draining = false;
     try {
       draining = await this.post(message, id, flight);
-      if ("method" in message && message.method === "notifications/cancelled") {
-        const target = message.params?.requestId;
-        const f = typeof target === "string" || typeof target === "number" ? this.byId.get(target) : undefined;
-        if (f) this.land(f, true);
-      }
     } catch (e) {
       const reason = flight.abort.signal.reason;
       const error = reason instanceof StreamableHttpError ? reason : e instanceof Error ? e : new Error(String(e));
@@ -177,12 +179,15 @@ export class StreamableHttpTransport implements Transport {
       } else this.onerror?.(new StreamableHttpError(-1, "Server sent a session id that is not visible ASCII"));
     }
     if (!res.ok) {
+      // The status, Retry-After and fixed words only: the body is the server's text, and may quote what was sent.
+      // D212 reads a 429 and its delay from this message; a 403 or 503 whose text says it is a rate limit (GitHub's
+      // way) is marked so too, from the body's first bytes, without quoting them.
+      const limited = res.status !== 429 && RATE_LIMIT_TEXT.test(await headText(res, 512, flight));
       await res.body?.cancel().catch(() => {});
-      // The status and Retry-After only: the body is the server's text, and may quote what was sent (D212 reads a
-      // 429 and its delay from this message).
       const retry = res.headers.get("retry-after");
       const hint = retry && /^\d{1,6}$/.test(retry.trim()) ? `, retry after ${retry.trim()}` : "";
-      const error = new StreamableHttpError(res.status, `Error POSTing to endpoint (HTTP ${res.status}${hint})`);
+      const why = `HTTP ${res.status}${limited ? ", rate limited" : ""}${hint}`;
+      const error = new StreamableHttpError(res.status, `Error POSTing to endpoint (${why})`);
       if (res.status === 404 && heldSession) setTimeout(() => void this.close(), 0); // after the request has failed
       throw error;
     }
@@ -301,7 +306,7 @@ export class StreamableHttpTransport implements Transport {
       this.onerror?.(new StreamableHttpError(-1, "Server sent a message that is not JSON-RPC 2.0"));
       return false;
     }
-    if (!("method" in m) && m.id !== id) {
+    if (!("method" in m) && !answers(m.id, id)) {
       this.onerror?.(new StreamableHttpError(-1, "Server answered a request it was not sent on this reply"));
       return false;
     }
@@ -317,6 +322,29 @@ function mediaType(contentType: string | null): string {
   if (!contentType) return "";
   const semi = contentType.indexOf(";");
   return (semi < 0 ? contentType : contentType.slice(0, semi)).trim().toLowerCase();
+}
+
+/** The phrases the fan-out reads as a connector's rate limit (`guarded.ts`, D212). */
+const RATE_LIMIT_TEXT = /rate.?limit|too many requests/i;
+
+/** At most the first `max` bytes of a body, decoded; "" when there is none or it cannot be read. */
+async function headText(res: Response, max: number, flight: Flight): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  flight.reader = reader;
+  let text = "";
+  const decoder = new TextDecoder();
+  try {
+    while (text.length < max) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value.subarray(0, max), { stream: true });
+    }
+  } catch {
+    // An error reply that cannot be read says nothing more than its status.
+  }
+  void reader.cancel().catch(() => {});
+  return text.slice(0, max);
 }
 
 /** The body's bytes, or null once it passes `max` (the read is cancelled there). */

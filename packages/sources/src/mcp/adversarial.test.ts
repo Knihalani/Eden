@@ -12,7 +12,11 @@ import { asMessage, ErrorCode, McpError, type JsonRpcMessage } from "./types";
 const URL_ = new URL("http://mcp.test/mcp");
 const INIT = { protocolVersion: "2025-11-25", capabilities: {}, serverInfo: { name: "s", version: "1" } };
 
-type Reply = (msg: { id?: number; method?: string }, posted: unknown[]) => Response | Promise<Response>;
+type Reply = (
+  msg: { id?: number; method?: string },
+  posted: unknown[],
+  signal?: AbortSignal,
+) => Response | Promise<Response>;
 
 /** A transport over a fake server: `initialize` answered in JSON, every other request by `reply`. */
 function over(reply: Reply, opts: { maxResponseBytes?: number; timeoutMs?: number } = {}) {
@@ -22,7 +26,7 @@ function over(reply: Reply, opts: { maxResponseBytes?: number; timeoutMs?: numbe
     posted.push(msg);
     if (msg.method === "initialize") return json({ jsonrpc: "2.0", id: msg.id, result: INIT });
     if (msg.id === undefined || !msg.method) return new Response(null, { status: 202 });
-    return reply(msg, posted);
+    return reply(msg, posted, init?.signal ?? undefined);
   }) as typeof fetch;
   const transport = new StreamableHttpTransport(URL_, { fetch: fetchFn, ...opts });
   const errors: Error[] = [];
@@ -161,6 +165,54 @@ describe("event streams", () => {
 });
 
 describe("ids, hangs and errors", () => {
+  test("an id echoed as a numeric string answers its request, as the SDK accepts; another string does not", async () => {
+    const { c } = await client((m) => json({ jsonrpc: "2.0", id: String(m.id), result: { content: [] } }));
+    expect(await c.callTool({ name: "x" })).toEqual({ content: [] });
+    const other = await client(() => json({ jsonrpc: "2.0", id: "x1", result: { content: [] } }));
+    await expect(other.c.callTool({ name: "x" })).rejects.toThrow("Reply did not answer the request");
+  });
+
+  test("a cancelled call's POST is cut at once, even when the cancellation's own POST hangs", async () => {
+    let cut = 0;
+    const hang = (_m: unknown, _p: unknown, signal?: AbortSignal) =>
+      new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => {
+          cut++;
+          reject(new Error("aborted"));
+        });
+      });
+    const o = over((m, p, signal) => hang(m, p, signal));
+    // The notification's POST hangs too: `over` answers notifications itself, so route them to the hang here.
+    const fetchFn = (o.transport as unknown as { fetchFn: typeof fetch }).fetchFn;
+    (o.transport as unknown as { fetchFn: typeof fetch }).fetchFn = ((url: URL, init?: RequestInit) => {
+      const msg = JSON.parse(String(init?.body)) as { method?: string };
+      if (msg.method === "notifications/cancelled") return hang(msg, [], init?.signal ?? undefined);
+      return fetchFn(url, init);
+    }) as typeof fetch;
+    const c = new McpClient({ name: "eden", version: "0" });
+    await c.connect(o.transport);
+    const ac = new AbortController();
+    const call = c.callTool({ name: "x" }, { signal: ac.signal });
+    await new Promise((r) => setTimeout(r, 5));
+    ac.abort(new Error("deadline"));
+    await expect(call).rejects.toThrow("deadline");
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cut).toBe(1); // the call's POST; the hanging notification is left to its own deadline
+    await c.close();
+  });
+
+  test("a rate limit said in a 403's text is marked in fixed words, never quoted", async () => {
+    const o = over(() => new Response("API rate limit exceeded for sk-user-token", { status: 403 }));
+    const c = new McpClient({ name: "eden", version: "0" });
+    await c.connect(o.transport);
+    const err = (await c.callTool({ name: "x" }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toBe("Streamable HTTP error: Error POSTing to endpoint (HTTP 403, rate limited)");
+    const plain = over(() => new Response("forbidden", { status: 403 }));
+    const c2 = new McpClient({ name: "eden", version: "0" });
+    await c2.connect(plain.transport);
+    await expect(c2.callTool({ name: "x" })).rejects.toThrow(/\(HTTP 403\)$/);
+  });
+
   test("a response to another id is dropped; the call is not answered by it", async () => {
     const { c, errors } = await client(() => json(result(99)));
     await expect(c.callTool({ name: "x" })).rejects.toThrow("Reply did not answer the request");
@@ -184,26 +236,20 @@ describe("ids, hangs and errors", () => {
   test("a hanging server: the call times out, the POST is aborted, nothing stays in flight", async () => {
     let aborted = false;
     const { c, transport } = await client(
-      (_m) =>
+      (_m, _posted, signal) =>
         new Promise<Response>((_resolve, reject) => {
-          // Only the transport's own abort ends this fetch.
-          (globalThis as { lastSignal?: AbortSignal }).lastSignal?.addEventListener("abort", () => {
+          // Never answered: only the transport's own abort ends this fetch.
+          signal?.addEventListener("abort", () => {
             aborted = true;
             reject(new Error("aborted"));
           });
         }),
     );
-    const realFetch = (transport as unknown as { fetchFn: typeof fetch }).fetchFn;
-    (transport as unknown as { fetchFn: typeof fetch }).fetchFn = ((url: URL, init?: RequestInit) => {
-      (globalThis as { lastSignal?: AbortSignal }).lastSignal = init?.signal ?? undefined;
-      return realFetch(url, init);
-    }) as typeof fetch;
     const err = await c.callTool({ name: "x" }, { timeoutMs: 30 }).catch((e: unknown) => e);
     expect((err as McpError).code).toBe(ErrorCode.RequestTimeout);
     await new Promise((r) => setTimeout(r, 20));
     expect(aborted).toBe(true);
     expect((transport as unknown as { flights: Set<unknown> }).flights.size).toBe(0);
-    delete (globalThis as { lastSignal?: AbortSignal }).lastSignal;
   });
 
   test("the transport's own deadline ends a POST whose body never finishes", async () => {

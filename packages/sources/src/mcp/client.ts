@@ -159,7 +159,9 @@ export class McpClient {
 
   private receive(m: JsonRpcMessage): void {
     if (isResponse(m)) {
-      const handler = typeof m.id === "number" ? this.pending.get(m.id) : undefined;
+      // Our ids are numbers; a server that echoes one as a numeric string still answers it (`answers`).
+      const id = typeof m.id === "number" ? m.id : typeof m.id === "string" && /^\d{1,15}$/.test(m.id) ? +m.id : -1;
+      const handler = this.pending.get(id);
       if (!handler) return; // a late answer to a request already given up
       if ("error" in m) handler(new McpError(m.error.code, m.error.message, m.error.data));
       else handler({ result: m.result });
