@@ -540,6 +540,19 @@ words those words mean, from a glossary written once by a model (`gloss.bin`, re
 ask's lookup search with them ahead of the request's own words, lexically and in the intent index. The request text the
 rules and the push check read is unchanged.
 
+**Plans with a day** (`pushDaySeats` 3, in the default since D1402, part `days`; G1, `days.ts`,
+[research/g1-facts.md](research/g1-facts.md)). No model, no source call. The push's and an ask's lookup read the
+request's days past `timeWindow`: a bare day of the month that reads as a date is given its month ("the 20th", "Monday the 9th", "den
+12:e"; `datedText`: never a count such as "the 3rd party", never after a past tense), and the glossary's English is read beside the request, so a weekday in another language is a
+day. A user turn that starts no push (no rule, or the turn gate's veto of a statement), that the gate does not read as
+chatter, of four words or more, and that names a coming day in a window of at most three days ("Tomorrow I'm doing the Ben Nevis hike") starts an
+opened push (`namesComingDay`); such a push is checked, and hands anything, only when one of its
+day seats is itself constraint-like. Up to three items on a day the request names (`ItemCache.dated`: events starting
+that day, items whose text spans it, items that write the date; bulk mail out; windows of at most three days) take
+seats in the push's pool after the first `pushCandidates`, where the push check reads them; a seat is handed only when
+the check names it: with no answer (no checker, a late or failed check) the push hands the pool as it stood before the
+seats, behind that pool's own gate, and a day-started push hands nothing.
+
 **Deleted by D112:** guarded asks and answer-shaped packets (`askGuard`, `packetBearing`, D88)
 and the ALL5 preset (D92) with every other named preset; the lab's presets are only `default`,
 `minus-<part>` and `minus-all`.
