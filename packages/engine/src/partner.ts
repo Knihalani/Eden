@@ -90,7 +90,6 @@ import {
   type PushChecker,
   type SheetCard,
 } from "./push-check";
-import type { RuleCandidate, RuleIndex } from "./rule-index";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
@@ -235,11 +234,6 @@ export interface PartnerDeps {
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
   checker?: PushChecker;
-  /**
-   * `pushCheckSheetSelect` (F5 with F10): picks the rule sheet's cards by meaning per request (F10's `RuleIndex`).
-   * Absent, or null, late or throwing, the sheet is the user's newest cards (fail open).
-   */
-  ruleIndex?: RuleIndex;
 }
 
 /** One `pushCandidates` pass (`PartnerDeps.onPushPool`): no content, no model call. */
@@ -2538,7 +2532,7 @@ export class ContextPartner {
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const today = localDay(this.now(), this.deps.cache.offsetOf(s.scope));
-    const sheet = await this.sheetOf(s, cue, today, request);
+    const sheet = this.sheetOf(s, cue, today);
     const focus = readerFocus(cue.raw);
     const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
@@ -2616,16 +2610,15 @@ export class ContextPartner {
    * item's), newest items first; only items still cached, no bulk mail. No model call and no source call: the card
    * store and the cache, both the user's own.
    */
-  private async sheetOf(s: Session, cue: Cue, today: string, request: string): Promise<SheetCard[]> {
+  private sheetOf(s: Session, cue: Cue, today: string): SheetCard[] {
     const n = Math.min(this.config.pushCheckSheet, SHEET_MAX_CARDS);
     const cards = this.deps.cards;
     if (n <= 0 || !this.config.cards || !cards) return [];
     const ids = cards.carded(s.scope);
     if (ids.length === 0) return [];
     const now = this.now();
-    const before = cue.arrived ?? now;
     const rows: { id: string; card: Card; item: ContextItem; at: number }[] = [];
-    for (const [id, card] of cards.cardsOf(s.scope, ids, before)) {
+    for (const [id, card] of cards.cardsOf(s.scope, ids, cue.arrived ?? now)) {
       if (card.kind === "none" || card.kind === "preference") continue;
       if (card.end !== undefined && card.end < today) continue;
       const item = this.deps.cache.get(s.scope, id, now);
@@ -2633,17 +2626,15 @@ export class ContextPartner {
       rows.push({ id, card, item, at: item.updatedAt ?? 0 });
     }
     rows.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    // Every active card is a candidate for selection (bounded); without it the newest `n` are the sheet.
-    const k = this.deps.ruleIndex ? Math.min(this.config.pushCheckSheetSelect, SHEET_MAX_CARDS) : 0;
-    const all: SheetCard[] = [];
+    const out: SheetCard[] = [];
     const said = new Set<string>();
     for (const { id, card, item } of rows) {
-      if (all.length >= (k > 0 ? SHEET_SELECT_MAX : n)) break;
+      if (out.length >= n) break;
       const statement = sanitizeForStore(card.statement);
       const key = statement.toLowerCase().replace(/\s+/g, " ").trim();
       if (!key || said.has(key)) continue;
       said.add(key);
-      all.push({
+      out.push({
         id,
         kind: card.kind,
         statement,
@@ -2653,59 +2644,7 @@ export class ContextPartner {
         ...(card.end ? { end: card.end } : {}),
       });
     }
-    // A small sheet is read whole: it is the user's cached prefix, cheaper than a per-request pick.
-    if (k <= 0 || all.length <= Math.max(k, SHEET_SELECT_FROM)) return all.slice(0, n);
-    const picked = await this.selectRules(s, request, all, k, before, [...(cue.time?.days ?? [])].sort());
-    if (!picked) return all.slice(0, n);
-    const byId = new Map(all.map((c) => [c.id, c]));
-    const out: SheetCard[] = [];
-    for (const id of picked) {
-      const c = byId.get(id);
-      if (c && out.length < k) out.push(c);
-    }
-    return out.length > 0 ? out : all.slice(0, n);
-  }
-
-  /**
-   * `pushCheckSheetSelect` (F5 with F10): the rule index's pick of `k` sheet cards for this request, or null (no
-   * answer within `RULE_SELECT_WAIT_MS`, a throw, or the index cannot say), so the caller reads its newest-first
-   * sheet. Each candidate carries its card's anticipated requests (redacted), the index's main signal.
-   */
-  private async selectRules(
-    s: Session,
-    request: string,
-    all: readonly SheetCard[],
-    k: number,
-    before: number,
-    days: readonly string[],
-  ): Promise<readonly string[] | null> {
-    const index = this.deps.ruleIndex;
-    const cards = this.deps.cards;
-    if (!index || !cards) return null;
-    const candidates: RuleCandidate[] = all.map((c) => {
-      const requests = cards.requestsOf(s.scope, c.id, before).map((r) => sanitizeForStore(r));
-      return requests.length > 0 ? { ...c, requests } : { ...c };
-    });
-    const stop = new AbortController();
-    const onAbort = () => stop.abort();
-    s.abort.signal.addEventListener("abort", onAbort, { once: true });
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const late = new Promise<null>((done) => {
-        timer = setTimeout(() => done(null), RULE_SELECT_WAIT_MS);
-      });
-      const got = await Promise.race([
-        index.select(s.scope, request, candidates, k, stop.signal, days).catch(() => null),
-        late,
-      ]);
-      return got && got.length > 0 ? got : null;
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timer);
-      stop.abort();
-      s.abort.signal.removeEventListener("abort", onAbort);
-    }
+    return out;
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
@@ -6855,12 +6794,6 @@ function refTryAgain(got: { why: string; guard?: string; pushedBack?: boolean })
 const READER_POOL_CAP = READER_MAX_ITEMS;
 /** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
 const CHECK_KEPT = 4;
-/** `pushCheckSheetSelect` (F5 with F10): how long the rule index may take (an embedding is ~5 ms) before the sheet
- * falls back to the newest cards, and the most candidates it is given (bounds its work on a heavy user). */
-const RULE_SELECT_WAIT_MS = 100;
-const SHEET_SELECT_MAX = 1000;
-/** Up to this many active cards the whole (cached) sheet is read; above it the index picks (F10's cost note). */
-const SHEET_SELECT_FROM = 60;
 
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {

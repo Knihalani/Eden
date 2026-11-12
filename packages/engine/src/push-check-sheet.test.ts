@@ -24,7 +24,6 @@ import {
   sheetText,
   type SheetCard,
 } from "./push-check";
-import type { RuleCandidate, RuleIndex } from "./rule-index";
 
 /** Tuesday 27 October 2026, 09:00 UTC. */
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -68,7 +67,7 @@ const CARDS: Record<string, Card> = {
   },
 };
 
-// Seventy more rules (`pushCheckSheetSelect` picks only above 60 cards), found by a question about site rules.
+// Seventy more rules, for a heavy user's sheet (the newest `pushCheckSheet` of them are read).
 const SITE = Array.from({ length: 70 }, (_, i) =>
   item(`site-${i}`, `Site rule ${i}`, `Visitors are not allowed past gate ${i} without signing in.`, 50 + i),
 );
@@ -119,7 +118,7 @@ const naming = (word: string) =>
     return `{"items":[${entries.join(",")}]}`;
   });
 
-function setup(config: Record<string, unknown>, model: FakeModel, ruleIndex?: RuleIndex) {
+function setup(config: Record<string, unknown>, model: FakeModel) {
   let clock = NOW;
   // The policy as its source holds it now (`revise` edits it).
   let policy = POLICY;
@@ -153,7 +152,6 @@ function setup(config: Record<string, unknown>, model: FakeModel, ruleIndex?: Ru
     },
     cards,
     checker,
-    ...(ruleIndex ? { ruleIndex } : {}),
   });
   const revise = (text: string) => {
     policy = { ...POLICY, text, updatedAt: clock };
@@ -376,111 +374,5 @@ describe("the sheet's prompt and parser", () => {
     expect(parseCompare(`{"items":[],"rules":[${yes("1")}]}`, 0)).toEqual([]);
     // At most `SHEET_MAX_NAMED` rules.
     expect(parseCompareSheet(reply([1, 2, 3, 4].map((k) => yes(String(k))).join(",")), 0, 4)!.rules).toEqual([0, 1, 2]);
-  });
-});
-
-describe("pushCheckSheetSelect (F5 with F10): the rule index picks the sheet per request", () => {
-  /** An index that answers `pick(candidates)` and records what it was given. */
-  const index = (pick: (c: readonly RuleCandidate[]) => Promise<readonly string[] | null>) => {
-    const seen: { userId: string; request: string; ids: string[]; k: number }[] = [];
-    const ri: RuleIndex = {
-      select: (scope, request, candidates, k) => {
-        seen.push({ userId: scope.userId, request, ids: candidates.map((c) => c.id), k });
-        return pick(candidates);
-      },
-    };
-    return { ri, seen };
-  };
-  // 72 active cards: the travel policy, the Harlow hold and the seventy site rules (all older than the hold).
-  const twoCards = async (
-    {
-      warm,
-      site,
-    }: { warm: (u?: string, idle?: boolean, text?: string) => Promise<void>; site: (u?: string) => Promise<void> },
-    userId = "u1",
-  ) => {
-    await warm(userId);
-    await warm(userId, true, "What is going on with the Harlow venue?");
-    await site(userId);
-  };
-
-  test("off in the default; on, the check reads only the index's pick", async () => {
-    expect(DEFAULT_CONFIG.pushCheckSheetSelect).toBe(0);
-    const model = naming("TravelPerk");
-    const { ri, seen } = index(async () => [POLICY.id]);
-    const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await twoCards(t);
-    const { handed } = t;
-    expect(await handed(REQUEST)).toContain(POLICY.id);
-    const sheet = rules(model.calls.at(-1)!);
-    expect([...sheet.keys()]).toEqual(["train and flight bookings only through TravelPerk"]);
-    expect(seen.at(-1)!.k).toBe(1);
-    expect(seen.at(-1)!.ids).toContain(POLICY.id);
-    expect(seen.at(-1)!.ids.length).toBe(72);
-    expect(seen.at(-1)!.request).toBe(REQUEST);
-  });
-
-  test("fails open: null, a throw or a late answer reads the newest-first sheet", async () => {
-    const answers: (() => Promise<readonly string[] | null>)[] = [
-      async () => null,
-      async () => {
-        throw new Error("index down");
-      },
-      () => new Promise(() => undefined),
-    ];
-    for (const answer of answers) {
-      const model = naming("nothing");
-      const { ri } = index(answer);
-      const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-      await twoCards(t);
-      const { handed } = t;
-      const t0 = performance.now();
-      await handed(REQUEST);
-      expect(performance.now() - t0).toBeLessThan(1_500);
-      expect(rules(model.calls.at(-1)!).size).toBe(72);
-    }
-  });
-
-  test("an id the index makes up is dropped; with nothing left the newest-first sheet is read", async () => {
-    const model = naming("nothing");
-    const { ri } = index(async () => ["mail:not-a-card"]);
-    const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await twoCards(t);
-    const { handed } = t;
-    await handed(REQUEST);
-    expect(rules(model.calls.at(-1)!).size).toBe(72);
-  });
-
-  test("at 60 cards or fewer the whole sheet is read (cached) and the index is not asked", async () => {
-    const model = naming("nothing");
-    const { ri, seen } = index(async () => [POLICY.id]);
-    const { warm, handed } = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await warm();
-    await warm("u1", true, "What is going on with the Harlow venue?");
-    await handed(REQUEST);
-    expect(seen.length).toBe(0);
-    expect(rules(model.calls.at(-1)!).size).toBe(2);
-  });
-
-  test("isolation: the index is given only the asking user's cards", async () => {
-    const model = naming("nothing");
-    const { ri, seen } = index(async (c) => c.slice(0, 1).map((x) => x.id));
-    const t = setup({ pushCheckSheet: 80, pushCheckSheetSelect: 1 }, model, ri);
-    await twoCards(t, "u1");
-    const { warm, handed } = t;
-    await warm("u2", true, "What is going on with the Harlow venue?");
-    await handed(REQUEST, "u2");
-    const last = seen.at(-1);
-    // u2 holds one card, so no selection is needed and the index is not asked for u2.
-    expect(seen.every((x) => x.userId === "u1")).toBe(true);
-    expect(last === undefined || !last.ids.includes(POLICY.id) || last.userId === "u1").toBe(true);
-  });
-
-  test("the config checker knows it (a size, 0 to 120, with the checker and cards)", () => {
-    const on = { pushCheckSheet: 80, pushCheckSheetSelect: 20 };
-    expect(checkEngineConfig(on, { deps: { checker: true, cards: true } })).toEqual(on);
-    expect(() =>
-      checkEngineConfig({ ...on, pushCheckSheetSelect: 500 }, { deps: { checker: true, cards: true } }),
-    ).toThrow();
   });
 });

@@ -744,13 +744,6 @@ export interface EngineConfig {
    */
   pushCheckSheetRefs: boolean;
   /**
-   * Trial (F5 with F10): with `pushCheckSheet` and a rule index wired (`PartnerDeps.ruleIndex`), the sheet is the
-   * index's nearest this many of the user's active constraint cards to the request (by meaning: statement, title and
-   * the card's anticipated requests), not the newest; 0 off. The index answers within `RULE_SELECT_WAIT_MS` or the
-   * newest-first sheet is read (fail open). A selected sheet differs per request, so it is not a cached prefix.
-   */
-  pushCheckSheetSelect: number;
-  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -940,7 +933,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
-  pushCheckSheetSelect: 0,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,

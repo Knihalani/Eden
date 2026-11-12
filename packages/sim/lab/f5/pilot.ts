@@ -12,10 +12,8 @@
  * A batch file holds one user's prompts (suite, seed, variant), so the system message and the sheet are written once
  * a file; each prompt's user turn follows in full. Prompts are sim data only.
  */
-import { ReplayRuleIndex } from "../../src/lab/rule-index-replay";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
-import { CHECK_SYSTEM, checkMessages, parseCompareSheet, timeWindow, type PushCheckInput } from "@eden/engine";
+import { CHECK_SYSTEM, checkMessages, parseCompareSheet, type PushCheckInput } from "@eden/engine";
 
 interface Row {
   suite: string;
@@ -135,28 +133,6 @@ if (cmd === "build") {
               .join(", "),
         );
     }
-    // §10c: how often F10's selection keeps the planted card (or the look-alike), same padding ($0).
-    if (process.env.PILOT_VECS || process.env.PILOT_SELECT) {
-      const index = new ReplayRuleIndex(process.env.PILOT_VECS ?? "packages/sim/lab/f10/vecs-e5s.json.gz");
-      const scope = { tenantId: "lab", userId: "lab" };
-      for (const variant of ["hidden", "control"]) {
-        const on = rows.filter((r) => r.variant === variant && r.sheet?.some((c) => c.id === r.planted));
-        for (const pad of [0, 150, 300, 500]) {
-          const parts: string[] = [];
-          for (const k of [10, 20, 30]) {
-            let kept = 0;
-            for (const r of on) {
-              const got = await index.select(scope, r.request, padded(r, pad, 0)!, k);
-              // No vector for the request: the newest-first sheet at the default cap stands in (fail open).
-              if (got ? got.includes(r.planted) : padded(r, pad, 80)!.some((c) => c.id === r.planted)) kept++;
-            }
-            parts.push(`select ${k} keeps ${kept}`);
-          }
-          console.log(`${variant} on own sheet ${on.length}; padded to ${pad || "none"}: ${parts.join(", ")}`);
-        }
-      }
-      console.log(`index: ${index.asked} asked, ${index.misses} with no vector`);
-    }
     process.exit(0);
   }
   if (PAD > 0 || CAP > 0) for (const r of rows) if (r.sheet?.length) r.sheet = padded(r, PAD, CAP);
@@ -191,64 +167,6 @@ if (cmd === "build") {
   };
   const only = (process.env.PILOT_SETS ?? "").split(",").filter(Boolean);
   for (const k of Object.keys(sets)) if (only.length && !only.includes(k)) delete sets[k];
-  // §10c: the selected sheet (`pushCheckSheetSelect`): F10's rule index (offline e5 vectors, the lab's replay) keeps
-  // the PILOT_SELECT cards nearest each request, nearest first; a request with no vector keeps its sheet (fail open).
-  const SELECT = Number(process.env.PILOT_SELECT ?? 0);
-  if (SELECT > 0) {
-    const index = new ReplayRuleIndex(process.env.PILOT_VECS ?? "packages/sim/lab/f10/vecs-e5s.json.gz");
-    const scope = { tenantId: "lab", userId: "lab" };
-    // Each card's anticipated requests (the index's main signal; the engine passes `requestsOf`), from the shipped
-    // coverage the dumps were made with, matched by statement (the dumps carry the sheet's fields only).
-    const asked = new Map<string, string[]>();
-    const shipped = process.env.PILOT_INTENT ?? "packages/sim/lab/distilled/cards-shipped.jsonl.gz";
-    for (const line of gunzipSync(readFileSync(shipped)).toString("utf8").split("\n")) {
-      if (!line.trim()) continue;
-      const j = JSON.parse(line) as { c?: { statement?: string }; r?: string[] };
-      if (j.c?.statement && j.r?.length) asked.set(j.c.statement.toLowerCase(), j.r);
-    }
-    let withRequests = 0;
-    const candidatesOf = (sheet: NonNullable<Row["sheet"]>) =>
-      sheet.map((c) => {
-        const requests = asked.get(c.statement.toLowerCase());
-        if (requests) withRequests++;
-        return requests ? { ...c, requests } : c;
-      });
-    // After the sets are drawn (on the padded sheet), so a fact the selection drops counts as missed, not skipped.
-    // The engine selects only above 60 cards (`SHEET_SELECT_FROM`); a smaller sheet is kept whole.
-    for (const r of new Set(Object.values(sets).flat())) {
-      if (!r.sheet?.length || r.sheet.length <= 60) continue;
-      // The request's named days, as the engine passes them (its clock: noon of the dump's day, UTC).
-      const days = [...(timeWindow(r.request, Date.parse(`${r.today}T12:00:00Z`))?.days ?? [])].sort();
-      const got = await index.select(
-        scope,
-        r.request,
-        candidatesOf(r.sheet),
-        SELECT,
-        new AbortController().signal,
-        days,
-      );
-      if (process.env.PILOT_RANKS && r.sheet.some((c) => c.id === r.planted)) {
-        const all = await index.select(
-          scope,
-          r.request,
-          candidatesOf(r.sheet),
-          1000,
-          new AbortController().signal,
-          days,
-        );
-        console.error(
-          `rank ${r.variant} ${r.suite} ${r.template}: ${all ? all.indexOf(r.planted) : "?"} of ${all?.length}`,
-        );
-      }
-      if (!got) continue;
-      const byId = new Map(r.sheet.map((c) => [c.id, c]));
-      r.sheet = got.map((id) => byId.get(id)!).filter(Boolean);
-    }
-    console.error(
-      `select ${SELECT}: ${index.asked} asked, ${index.misses} with no vector (kept their sheet); ` +
-        `${withRequests} candidates with requests`,
-    );
-  }
   const arms = ARMS.length ? Object.fromEntries(Object.keys(base).map((k) => [k, ARMS])) : base;
   const key: Record<string, unknown>[] = [];
   const byFile = new Map<string, { sheet: string; prompts: string[] }>();

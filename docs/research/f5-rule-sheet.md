@@ -415,3 +415,8 @@ sheet (as §9b; Th and Tc are named only through the sheet, so main names none).
 prompts: Hh (fact in the pool) named ≥ B − 2 of 40; Hc (look-alike in the pool) named ≤ B + 3 of 40; N (neutral) any
 yes ≤ B + 4.5 of 40 (10a's bound). Else SR gets a guard before the freeze: the sheet off above a card count chosen on
 these runs' $0 statistics, re-checked the same way.
+
+F10's ceiling on the same subset with card requests (its dumps, world-clock coverage; 115 rows: hidden, planted item
+not in the pool, card on the sheet), 300 cards: top 20 61%, top 30 66%, top 60 79% (150 cards: 72%, 79%, 83%; 500:
+top 30 65 of 115). About 33 and 36 of 54 at k 20 and 30: below 40. **`pushCheckSheetSelect` is deleted (D1182)**; its
+code is in commit debfb22e.

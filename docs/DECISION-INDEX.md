@@ -709,3 +709,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
 | D1180 | 2026-11-12 | Promoted on subagent evidence; the API confirmation is owed when credit returns (F5, D814, the integrator's decision): the rule sheet… | adopted |
 | D1181 | 2026-11-12 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | rejected |
+| D1182 | 2026-11-12 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | rejected |

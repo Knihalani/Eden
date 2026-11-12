@@ -74,6 +74,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
 | D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
 | D1181 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | F5, D814 |
+| D1182 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | The bar: on a user with 300 rule cards, the selection must bring back at least half of what a 300-card sheet… |
 
 ## Reader
 
