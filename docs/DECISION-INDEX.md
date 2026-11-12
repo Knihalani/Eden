@@ -76,7 +76,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D57 | 2026-10-31 | Background connector sync behind `sync`, off by default: `Source.list` (recent-first pages; `McpSource.listTool` passes D7's read-only… | adopted |
 | D58 | 2026-10-31 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | superseded (deleted by D225) |
 | D59 | 2026-10-31 | Implication cards behind `cards`, off by default: items entering a user's cache that pass a no-model deontic prefilter are read in the… | adopted |
-| D60 | 2026-10-31 | Anticipation, behind `anticipate`, off by default. | superseded (deleted by D227) |
+| D60 | 2026-10-31 | Anticipation, behind `anticipate`, off by default. | superseded (deleted by D1301) |
 | D61 | 2026-10-31 | Live agent results come from the Pi harness: `pi-ab.ts` runs pi-agent-core's loop (`@earendil-works/pi-agent-core` and `pi-ai` 1.3.0… | adopted |
 | D62 | 2026-10-31 | D56–D61 are merged on one tree, every flag off by default, telemetry's spans the one span design (Pi's harness reads them; sync, graph… | adopted |
 | D63 | 2026-10-31 | Fixes from the review of `moon/combined`; where they depart from D57, D59, D60 or D8 this records it. | adopted |
@@ -707,3 +707,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
 | D1152 | 2026-11-12 | Finding (F1, served by subagents, D1101): the request glossary's queue pair fails its neutral bar. | finding |
 | D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
+| D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
+| D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
