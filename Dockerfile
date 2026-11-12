@@ -8,7 +8,10 @@
 # file names; it is re-read on change. A configuration mistake stops startup with an `eden:` line naming it (exit 2).
 # Set EDEN_PROCESSES to the container's CPU quota: a quota the container cannot see is not detected
 # (docs/INTEGRATION.md, "Processes and per-tenant caps").
-FROM oven/bun:1.4.4
+# Two stages (D1310): dependencies are installed on the full image, which has a shell; the server runs on Bun's
+# distroless image of the same version (no shell, no package manager, about half the size), as uid 1000, the full
+# image's `bun` user, so a volume written by an earlier image stays writable.
+FROM oven/bun:1.4.4 AS build
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml tsconfig.json tsconfig.base.json ./
 # bunfig.toml preloads this into every `bun` started here, the server included: without it nothing starts
@@ -24,15 +27,21 @@ COPY docs/profiles ./docs/profiles
 RUN --mount=type=secret,id=ca,required=false \
   if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
   bun install --frozen-lockfile --production
+RUN mkdir -p /data
+FROM oven/bun:1.4.4-distroless
+WORKDIR /app
+COPY --from=build --chown=1000:1000 /app /app
 # The source map (entity names and counts, never content, D8) persists in EDEN_HOME; item text stays in memory.
 # Idle users are kept across restarts, encrypted in /data/frozen (D991): pass -e EDEN_PERSIST_KEY=<32 bytes, made once
 # with openssl rand -hex 32 and kept in a secret store>, or -e EDEN_PERSIST=off; without either the server refuses to
 # start (docs/INTEGRATION.md, "Restarts without a full re-sync").
 ENV HOST=0.0.0.0 PORT=8790 EDEN_HOME=/data NODE_ENV=production
-RUN mkdir -p /data && chown bun:bun /data
+COPY --from=build --chown=1000:1000 /data /data
 VOLUME /data
-USER bun
+USER 1000:1000
 EXPOSE 8790
+# Exec form: the image has no /bin/sh.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --start-interval=2s \
-  CMD bun -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8790) + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+  CMD ["bun", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 8790) + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+ENTRYPOINT []
 CMD ["bun", "packages/server/src/main.ts"]
