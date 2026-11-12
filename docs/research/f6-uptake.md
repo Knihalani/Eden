@@ -56,6 +56,12 @@ if uptake, P(raised | planted in a pushed packet), rises with its 95% template-c
 mean packet bytes rise at most 10%. Otherwise it is deleted. `packages/sim/lab/f6/run.sh` runs it and
 `packages/sim/lab/f6/report.py` reads it.
 
+**Amendment (pre-registered in the commit adding this paragraph, after the merge of dev20 and before any paid
+call):** the same four arms also run on `dev20` (dev20a–d, seeds 41–44, hidden, control and neutral, cards made live
+since shipped coverage is not recorded; `run.sh dv dev20 41,42,43,44 hidden,control,neutral`). The train rule above
+decides; a lever that passes it is promoted only if its dev20 uptake difference has a point estimate ≥ 0 and its
+dev20 Sonnet-confirmed concerns are not up. dev20 uptake is reported with its own clustered interval.
+
 ## What happened
 
 - The first run (four processes, one a seed, four arms each) started at 08:06 UTC. Seeds 41 and 43 "finished" in
