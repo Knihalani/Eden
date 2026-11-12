@@ -109,11 +109,18 @@ if (cmd === "queue") {
         complete = false;
         continue;
       }
-      const got = parseAnticipations(JSON.parse(readFileSync(f, "utf8")).answer?.text ?? "", rules, from, from + ANTICIPATE_CHUNK);
+      const got = parseAnticipations(
+        JSON.parse(readFileSync(f, "utf8")).answer?.text ?? "",
+        rules,
+        from,
+        from + ANTICIPATE_CHUNK,
+      );
       if (!got) unreadable++;
       ants.push(...(got ?? []));
     }
-    lines.push(JSON.stringify({ suite: w.suite, seed: w.seed, variant: w.variant, complete, rules: rules.length, ants }));
+    lines.push(
+      JSON.stringify({ suite: w.suite, seed: w.seed, variant: w.variant, complete, rules: rules.length, ants }),
+    );
   }
   writeFileSync(outPath!, `${lines.join("\n")}\n`);
   console.log(JSON.stringify({ worlds: worlds.length, missing, unreadable }));

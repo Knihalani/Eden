@@ -36,7 +36,7 @@ export interface Anticipation {
   acts: string[];
   /** The first and last day (YYYY-MM-DD) the rule bears on; absent when it holds whatever the day. */
   on?: [string, string];
-  /** Names, organisations or references a request must concern for the rule to apply; empty: any request of the kind. */
+  /** Names, organisations or references a request must concern for the rule to apply; empty: any of the kind. */
   who: string[];
   /** One line the agent must know before acting. */
   warn: string;

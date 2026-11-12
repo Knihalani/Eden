@@ -20,7 +20,10 @@ const [sheetsPath, antsPath, modelDir, outPath] = process.argv.slice(2);
 const arm = process.argv.includes("--arm") ? process.argv[process.argv.indexOf("--arm") + 1]! : "pass";
 
 type Ant = { id: string; acts: string[]; on?: [string, string]; who: string[]; warn: string };
-const sheets = readFileSync(sheetsPath!, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const sheets = readFileSync(sheetsPath!, "utf8")
+  .split("\n")
+  .filter(Boolean)
+  .map((l) => JSON.parse(l));
 const ants = new Map<string, Ant[]>();
 if (arm === "pass" || arm === "union") {
   for (const l of readFileSync(antsPath!, "utf8").split("\n").filter(Boolean)) {
@@ -52,7 +55,10 @@ if (arm === "cards" || arm === "union") {
     // rule the pass left out stays out (the pass judged it changes no action).
     ants.set(
       key,
-      [...had.values()].map((a) => ({ ...a, acts: [...a.acts, ...(fromCards.find((c) => c.id === a.id)?.acts ?? [])] })),
+      [...had.values()].map((a) => ({
+        ...a,
+        acts: [...a.acts, ...(fromCards.find((c) => c.id === a.id)?.acts ?? [])],
+      })),
     );
   }
 }
@@ -79,7 +85,11 @@ const dot = (a: Float32Array, b: Float32Array) => {
 function mentions(request: string, who: string): boolean {
   const r = request.toLowerCase();
   const words = who.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
-  return words.some((w) => (w.length >= 3 || /\d/.test(w)) && new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "u").test(r));
+  return words.some(
+    (w) =>
+      (w.length >= 3 || /\d/.test(w)) &&
+      new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "u").test(r),
+  );
 }
 
 const out: string[] = [];
@@ -92,7 +102,9 @@ for (const w of sheets) {
   const list = got;
   // The card's actions (verb classes), for the `act` ground: the request must do one of them (D1270's advice: the
   // instance, not the topic). A card with none is not held to it.
-  const acts = new Map<string, string[]>(w.sheet.map((x: { id: string; c: { actions?: string[] } }) => [x.id, x.c.actions ?? []]));
+  const acts = new Map<string, string[]>(
+    w.sheet.map((x: { id: string; c: { actions?: string[] } }) => [x.id, x.c.actions ?? []]),
+  );
   const actVecs = await vecs(list.flatMap((a) => a.acts));
   for (const t of w.tasks) {
     const r0 = performance.now();
