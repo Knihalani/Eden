@@ -410,6 +410,8 @@ interface Session {
    * it read every one of (same request, same day, same content). Dropped with the session (a forget closes it).
    */
   pushChecks?: Map<string, KeptCheck>;
+  /** `stateFilterWide` (D1451): the user request (`requests`) the push last started for. */
+  pushedFor?: number;
   /** `planConflict` (D301): the session's last `PLAN_REQUESTS` acting requests (the push's cues), oldest first. */
   acted?: Cue[];
   /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
@@ -2000,7 +2002,13 @@ export class ContextPartner {
     const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
     // `askHeedsCheck` (D1450): what this request's push check read and turned down is not listed by its ask.
     const heeded = !internal.push && internal.late === undefined ? this.checkedOut(s) : null;
-    let chosen = (heeded ? order.filter((x) => !heeded(x.item)) : order).slice(0, limit);
+    if (internal.push && internal.request !== undefined) s.pushedFor = internal.request;
+    // `stateFilterWide` (D1451): an ask in a request the push started for lists nothing a card says cleared.
+    const listed =
+      !internal.push && internal.late === undefined && s.pushedFor === s.requests
+        ? this.withoutCleared(s, order, cue.arrived ?? this.now())
+        : order;
+    let chosen = (heeded ? listed.filter((x) => !heeded(x.item)) : listed).slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
     // it stops waiting at `readerPushWaitMs`), bounded by the reader's call and the session's close.
@@ -2557,6 +2565,25 @@ export class ContextPartner {
   private pushGate(s: Session, cue: Cue, ranked: readonly Scored[]): PushGate {
     const { pool, cards } = this.pushPool(s, ranked, cue.arrived ?? this.now());
     return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+  }
+
+  /**
+   * `stateFilterWide` (G2, D1451): the items of `scored` without those carded none whose state says a constraint
+   * cleared (`pushStateFilter`'s test), by the cards made before `before`. No model call and no source call.
+   */
+  private withoutCleared(s: Session, scored: Scored[], before: number): Scored[] {
+    const enricher = this.config.cards ? this.deps.cards : undefined;
+    if (!this.config.stateFilterWide || !enricher || scored.length === 0) return scored;
+    const cards = enricher.cardsOf(
+      s.scope,
+      scored.map((x) => x.item.id),
+      before,
+    );
+    const cleared = (x: Scored) => {
+      const card = cards.get(x.item.id);
+      return card?.kind === "none" && card.state !== undefined && CLEARED_STATES.has(card.state);
+    };
+    return scored.some(cleared) ? scored.filter((x) => !cleared(x)) : scored;
   }
 
   /**
@@ -5522,6 +5549,9 @@ export class ContextPartner {
     // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
     // whose ledger entry changed over the await is left out (audit A11's fuzz, default seed 2577; core seed 704). An
     // entry gone meanwhile was swept (past the cooldown, or past `MAX_LEDGER_ITEMS`), not handed out: kept (review).
+    // `stateFilterWide` (D1451): nothing is volunteered that its own card says cleared a constraint.
+    if (mode === "proactive") scored = this.withoutCleared(s, scored, cue.arrived ?? this.now());
+    if (scored.length === 0) return null;
     const was = new Map(scored.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
     const verified = await this.verifyItems(s, scored, cue);
     const kept = verified.filter((x) => {

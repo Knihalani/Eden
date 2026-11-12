@@ -545,6 +545,13 @@ export interface EngineConfig {
    */
   pushStateFilter: boolean;
   /**
+   * TRIAL (G2, D1451): `pushStateFilter`'s test on the two channels that go round the push: a proactive packet a
+   * rule path makes (the no-model conflict test reads "hold lifted" as a hold) leaves out an item carded none whose
+   * state says a constraint cleared, and so does an explicit ask's listing in a request the push started for. An
+   * ask in any other request lists it (a question about the hold itself). No call: the card was made at ingest.
+   */
+  stateFilterWide: boolean;
+  /**
    * Items the intent index may add to a request's candidates, best first. The default's 12/0.2/1 (with the two
    * below) is D159's arm, promoted by D179 on a Pi held-out 13 pair with intent replayed
    * (docs/research/edge-intent.md).
@@ -938,6 +945,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsRequestsFix: true,
   cardsState: true,
   pushStateFilter: true,
+  stateFilterWide: false,
   intentHits: 12,
   intentMinCoverage: 0.2,
   intentMinMatched: 1,
