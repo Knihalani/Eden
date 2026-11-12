@@ -5,8 +5,9 @@
   4 characters a token), priced at Haiku 5.5 list ($0.10 in, $0.01 cache read, $0.125 cache write, $0.50 out per
   million), everything before the last message read from cache on --hit of calls (as f7/price-queue.py);
 - a model call waits 596 ms + 2.93 ms an output token (H3's fit; the agent's calls were never fitted);
-- the push check is priced per call from the queue's own sized answers of role eden.check (price-queue.py's way) and
-  waits as a model call;
+- the push check is priced per call at F7's real-API figures (D1190: $0.000210 a call, 68 output tokens, so 795 ms
+  by H3's fit): the subagents write shorter check replies (45 tokens), which would understate it (`--check-from-queue`
+  prices it from the queue's sized answers instead);
 - each round of the agent's connector searches (the calls one model turn asks for, run in parallel) waits --conn-s
   (0.3, 0.8, 2.0 s: the stated assumption for a production MCP or API call), and each call costs --conn-usd per
   1,000 calls on a paid connector plan (COST-MODEL.md's CONNECTOR_PLANS list prices);
@@ -30,11 +31,15 @@ CPT = 4.0
 
 
 def args():
-    o = {"stem": [], "queue": None, "base": "both+ask", "hit": 0.9, "json": None, "draws": 2000}
+    o = {"stem": [], "queue": None, "base": "both+ask", "hit": 0.9, "json": None, "draws": 2000, "fromQueue": False}
     a = sys.argv[1:]
     i = 0
     while i < len(a):
         k = a[i].lstrip("-")
+        if k == "check-from-queue":
+            o["fromQueue"] = True
+            i += 1
+            continue
         if k == "stem":
             o["stem"].append(a[i + 1])
         elif k in ("queue", "base", "json"):
@@ -174,6 +179,12 @@ def mean(xs):
     return sum(xs) / len(xs) if xs else float("nan")
 
 
+def bigger_prompt(r, extra_tokens, hit):
+    """$ a task with `extra_tokens` more cached prefix on every agent model call (a production agent's longer system
+    prompt, tools and history), read from cache on `hit` of calls and written on the rest [EST]."""
+    return r["turns"] * extra_tokens * (hit * HAIKU["cr"] + (1 - hit) * HAIKU["cw"])
+
+
 def derived(r, conn_s, conn_usd_1k):
     """$ a task and seconds a task under one connector assumption (conn_s None: the run's measured search time)."""
     eden = r["cond"] != "tools"
@@ -206,6 +217,8 @@ def boot(pairs, draws, seed=1):
 def main():
     o = args()
     check_usd, check_out, nchk = check_call_cost(o["queue"], o["hit"])
+    if not o["fromQueue"]:
+        check_usd, check_out = 0.000210, 68.0
     rows = [r for s in o["stem"] for r in rows_of(s, o["hit"], check_usd, check_out)]
     conds = sorted({r["cond"] for r in rows}, key=lambda c: (c != "tools", c != o["base"], c))
     print(f"[EST; served by subagents (D1101)] check call ${check_usd*1000:.3f}/1k calls, {check_out:.0f} out tok "
@@ -235,6 +248,11 @@ def main():
     row("wait s/task, measured searches (direct) [EST]", lambda rs: mean([derived(r, None, 0)[1] for r in rs]))
     for cs in CONN_S:
         row(f"wait s/task @ {cs}s a connector call [EST]", lambda rs, cs=cs: mean([derived(r, cs, 0)[1] for r in rs]))
+    for extra in (10_000, 30_000):
+        row(
+            f"all-in $/1k first-party, prompt +{extra // 1000}k tok [EST]",
+            lambda rs, extra=extra: 1000 * mean([derived(r, 0.8, 0)[0] + bigger_prompt(r, extra, o["hit"]) for r in rs]),
+        )
     for plan, pu in CONN_USD.items():
         row(f"all-in $/1k, {plan} plan [EST]", lambda rs, pu=pu: 1000 * mean([derived(r, 0.8, pu)[0] for r in rs]))
     w = max(len(l[0]) for l in lines + [hdr])
@@ -251,6 +269,8 @@ def main():
         ("agent $/1k", lambda r: 1000 * r["agentUsd"]),
         ("all-in $/1k, first-party", lambda r: 1000 * derived(r, 0.8, 0.0)[0]),
         ("all-in $/1k, Composio", lambda r: 1000 * derived(r, 0.8, 0.30)[0]),
+        ("all-in $/1k, first-party, prompt +10k", lambda r: 1000 * (derived(r, 0.8, 0)[0] + bigger_prompt(r, 1e4, o["hit"]))),
+        ("all-in $/1k, first-party, prompt +30k", lambda r: 1000 * (derived(r, 0.8, 0)[0] + bigger_prompt(r, 3e4, o["hit"]))),
         ("wait s measured", lambda r: derived(r, None, 0)[1]),
         ("wait s @0.3", lambda r: derived(r, 0.3, 0)[1]),
         ("wait s @0.8", lambda r: derived(r, 0.8, 0)[1]),
