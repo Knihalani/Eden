@@ -1551,6 +1551,8 @@ async function runSeed(
       ...(push ? { pushHandedN: push.handed.length } : {}),
       // `pushCheckSheet` (F5): the planted item's place on the rule sheet the check read (-1: not on it).
       ...(push?.sheet ? { pushSheetAt: push.sheet.indexOf(id) } : {}),
+      // With it, the planted item's card kind at the end of the task ("none": no card, a none card or expired).
+      ...(push?.sheet && cards ? { plantedCard: cards.cardsOf(scope, [id], clock).get(id)?.kind ?? "none" } : {}),
       // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
       // it was handed.
       ...(push && task.stale
