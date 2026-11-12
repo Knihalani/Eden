@@ -156,6 +156,32 @@ Modal: $125.00 of $1,000 (M1's guard, 00:13 UTC on 12 Nov). Anthropic, lab-provi
 
 No OpenRouter calls. heldout19 was read once, by B19.
 
-## Addendum: R1's capacity soak
+## Addendum: R1's capacity soak (#278, D1075)
 
-Pending at this writing; it lands here when R1 reports (due 04:00 UTC, 12 Nov).
+Source: [r1-release.md](r1-release.md) §Round 3. The harness, `packages/sim/src/lab/soak.ts`, sends heavy users
+(3,000 items over 20 connectors) through the real handler. Setup:
+
+- the encrypted disk, one process per core;
+- a 2-core 12 GiB cgroup;
+- no model key;
+- sessions arrive at exponential intervals with a 12-minute mean.
+
+- **1,500 heavy users for 30 minutes, with a restart at 15:**
+  - 33,382 requests and 0 errors.
+  - Latency at load:
+
+    | | p50 | p99 |
+    | --- | --- | --- |
+    | event | 0.46 ms | 96 ms |
+    | user message | 4.9 ms | 15 ms |
+    | ask | 9.5 ms | 272 ms |
+
+    The ask p99 was 21 ms before the restart.
+- **Sizing holds.** RSS works out to 4.51 MB a heavy user, against sizing.py's 4.71: 1,927 users on the 2/12 box
+  against the 1,845 claimed (+4%), or 1,612 on the p95 GC sawtooth (−13%). Both are within 15%, so the table stands.
+  GC peaks sit about 22% above the settled figure; DEPLOY.md says so.
+- **No leak.** 1,000 users ran for 40 minutes with forced GCs: the heap slope was about −3 MB/min a process, with
+  25,035 requests and 0 errors.
+- **The restart finding.** Within its shutdown budget (0.3 × the 15 s grace, oldest users first), a full box writes
+  about 23% of its users. The rest re-sync from their sources: about 13 minutes at the soak's rate, with 0 errors and
+  an ask p99 of about 300 ms meanwhile. A follow-up writes the most recently used users first (R1 round 4).
