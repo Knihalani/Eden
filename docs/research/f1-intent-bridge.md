@@ -336,3 +336,38 @@ After main's re-recorded coverage (3de40f4a), both encoder sides were screened a
 
   On the new coverage the request side still adds look-alikes as fast as facts or faster. This is §2's finding
   again, so it is not built.
+
+## 12. The glossary against English twins, on the world-clock coverage: promoted (D1153)
+
+**The rule.** The integrator agreed that D1152's bar counted parity with English as harm, so the rule was
+re-registered before any run (cfc0656d). It was amended in b5b6b58b, still before any run, so that all three arms run
+on main's world-clock coverage (D1102). The rule: promote iff hidden delivered with the gloss has a template-clustered
+95% lower bound above 0, look-alikes rise no more than facts, and the glossed neutral rate is at most the English
+originals' plus 2 points.
+
+**The run.** `bun run funnel ... -- --templates <reworded's 36 non-English> --check live --neutral --ask`, seeds 41–44,
+three arms: reworded with the default, reworded with `requestGloss`, and train1–6 on the same templates (the English
+originals). The push check was served by subagents (D1101) through one queue; every check was answered (0 misses).
+The arms were then re-run with the checks replayed, and the glossed and English arms a third time on fresh caches so
+that every arm read its answers the same way: identical numbers.
+
+| | reworded, default | reworded, `requestGloss` | English originals |
+| --- | ---: | ---: | ---: |
+| hidden delivered (144) | 88 | **112** (24 up, 0 down) | 119 |
+| look-alikes delivered (144) | 45 | 49 (10 up, 6 down) | 76 |
+| neutral tasks with any delivery (144) | 50 | **21** | 53 |
+| push check calls | 343 | 389 | 418 |
+
+Hidden +16.7 points, template-clustered 95% [+6.2, +28.5]; look-alikes +4 against facts +24; neutral 21 against a bar
+of 55. **Pass: promoted into the default (D1153).**
+
+Why the neutral rate falls: without the gloss, a non-English request's pool holds only what its names match, and the
+check passes some of those by name alone. In 39 neutral tasks the default handed an item that the glossed arm did
+not, for example "Payment sent: Aperture Labs" against a Polish request to escalate a support case with Aperture
+Labs. With the gloss, the pool and the check read what the request means. D1152's neutral rise (17 → 26) was measured
+on the pre-D1102 coverage.
+
+**Cost, quality, speed.** Quality is above. Cost: +13% push check calls, on non-English requests only, and none on
+English (`bun run eval` identical: precision 0.65, recall 0.52, falseFireRate 0; acting 19 of 28 neutral, facts 10 of
+11, look-alikes 3 of 10). Speed: 12.5 µs an English request, 22.6 µs a German one. Memory: +29 MB RSS and 118 ms to
+load once a process, when the partner is built.

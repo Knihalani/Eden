@@ -673,7 +673,7 @@ export class ContextPartner {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
-    // `requestGloss` (trial, F1): the glossary is read here too, once a process, not on the first request.
+    // `requestGloss` (F1, D1153): the glossary is read here too, once a process, not on the first request.
     if (this.config.requestGloss) warmGlossary();
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
@@ -1854,7 +1854,7 @@ export class ContextPartner {
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
-    // `requestGloss` (trial, F1): a request in another language also searches with the English its words mean, ahead
+    // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
     // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
     const gloss = this.config.requestGloss ? glossOf(question) : "";
     const cue = buildCue(
