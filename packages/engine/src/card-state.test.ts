@@ -163,6 +163,8 @@ describe("pushStateFilter", () => {
       },
     };
     const cards = new CardEnricher({ maker, budget: new Budget(), now: () => NOW - HOUR });
+    // As the partner's `cardsState` would: a cleared none card is kept only by an enricher that asks for state.
+    if (filter) cards.askState();
     const all = [LIFTED, PAID, HOLD];
     cards.enqueue(scope, all);
     await cards.idle();
