@@ -40,9 +40,10 @@ const A: Scope = { tenantId: "t", userId: "a" };
 const B: Scope = { tenantId: "t", userId: "b" };
 
 /** Two users, each with their own notes source of `n` items, both synced warm on a clock the test moves. */
-async function setup(syncActivePollMs: number, n = 5) {
+async function setup(syncActivePollMs: number, n = 5, notifies = false) {
   const clock = { now: T0 };
   const src = { a: new Notes("notes"), b: new Notes("notes") };
+  for (const s of [src.a, src.b]) (s as { notifies?: boolean }).notifies = notifies;
   for (const s of [src.a, src.b])
     for (let k = 0; k < n; k++) s.docs.set(`n${k}`, { text: `note ${k} unchanged`, at: T0 - (k + 1) * 60 * MIN });
   const cache = new ItemCache();
@@ -53,7 +54,7 @@ async function setup(syncActivePollMs: number, n = 5) {
     budget: new Budget(),
     model: null,
     now: () => clock.now,
-    config: { ...CORE_CONFIG, sync: true, syncPageSize: 10, syncActivePollMs },
+    config: { ...CORE_CONFIG, sync: true, syncPush: notifies, syncPageSize: 10, syncActivePollMs },
   });
   const sync = partner.sync!;
   for (const scope of [A, B]) sync.track(scope, clock.now);
@@ -109,5 +110,12 @@ describe("syncActivePollMs (D1131)", () => {
     await t.tick(15);
     expect(t.held(B, "n3")).toBe("note 3 for b only");
     expect(t.held(A, "n3")).toBe("note 3 unchanged");
+  });
+
+  test("a source that notifies is not polled by the floor: its notices keep it current", async () => {
+    const t = await setup(10 * MIN, 5, true);
+    const lists = t.src.a.lists;
+    await t.tick(30);
+    expect(t.src.a.lists - lists).toBe(0);
   });
 });

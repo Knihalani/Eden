@@ -264,7 +264,30 @@ Run on dev20's silent templates, seeds 41–44, base against 3,600,000:
   standup moved to 10:15) and never mention the returning colleague or their hours. They are grader errors on reading,
   so the difference read is 0. As graded, +2 is over the rule's limit of 1.
 
-Recommendation: promote. The parent decides on the call price and on the reading of the two concerns.
+**Notifying sources and the price.** The parent's condition: a source that sends change notifications (`syncPush`;
+Gmail push, calendar watch) is current until it says it changed, so the floor skips it. dev20, `--push signals
+--notify-share 0.1` (about 90% of connectors send nothing, the owner's estimate):
+
+| floor | stale / current handed | hidden delivered | control delivered | request calls | background calls | total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| off | 14 / 20 | 42 / 160 | 49 / 160 | 1,252 | 0 | 1,252 |
+| 60 min | 5 / 45 | 54 / 160 | 49 / 160 | 98 | 3,832 | 3,930 |
+| 2 h | 5 / 45 | 54 / 160 | 49 / 160 | 792 | 1,554 | 2,346 |
+| 3 h | 5 / 41 | 48 / 160 | 49 / 160 | 889 | 872 | 1,761 |
+
+In the sim a silent edit sends no notice even from a notifying source, so a skipped source's edits stay stale here
+(at a 50% share: 11 stale against 5). A real notifying source would announce the edit.
+
+Cost **[EST]**: about one call per non-notifying source per active user-hour at 60 minutes, half that at two hours. A
+heavy user with 20 connectors, 18 not notifying, about 220 active hours a month: about 4,000 calls a month at 60
+minutes, about 2,000 at two hours. COST-MODEL §Hosting (b) has 300–1,200 a month with Eden today and 1,300–3,300 for
+the agent alone. So the floor is the largest connector line Eden would have; on per-call plans it can make Eden plus
+the agent dearer in connector calls than the agent alone. Against S1 (docs/research/s1-scale-1m.md): floor polls are
+background reads, below a new user's first page and a lookup's own poll in P1's value order, and the tenant's pace
+bounds them. A Gmail-scale tenant uses notifications, which the floor skips.
+
+Recommendation: promote at two hours, the cheapest floor at the full gain here. The parent decides on the call price
+and on the reading of the two concerns.
 
 ## Recommendations
 

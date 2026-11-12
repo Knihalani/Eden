@@ -1151,7 +1151,9 @@ export class SyncManager {
       await Promise.all(
         [...u.sources.values()].map(async (s) => {
           const source = byId.get(s.id);
-          if (!source || s.phase !== "warm" || s.busy || now < s.retryAt || now - s.polledAt < floor) return;
+          // A source that notifies (`push`) is current until it says it changed: no floor poll.
+          if (!source || s.notifies || s.phase !== "warm" || s.busy || now < s.retryAt) return;
+          if (now - s.polledAt < floor) return;
           await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
         }),
       );
@@ -1168,7 +1170,7 @@ export class SyncManager {
     await Promise.all(
       [...u.sources.values()].map(async (s) => {
         const source = byId.get(s.id);
-        if (!source || s.phase !== "warm" || s.busy || now < s.retryAt) return;
+        if (!source || s.notifies || s.phase !== "warm" || s.busy || now < s.retryAt) return;
         if (s.sweep !== null || longDue(s)) await this.run(s, () => this.sweep(u, s, source));
         else if (now - s.sweptAt >= this.o.sweepMs) s.skipped = true;
       }),

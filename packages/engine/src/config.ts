@@ -753,7 +753,7 @@ export interface EngineConfig {
    * F3 (trial, 0 = off; D1131): while a user is active (`syncActiveMs`), the sync's tick polls one page of each warm
    * synced source whose last poll is older than this (ms), in the background. A quiet source is otherwise trusted for
    * up to `syncMaxStaleMs` (6 h), so a silent edit there goes out as the pre-edit copy (D1126). No request waits for
-   * it; its price is connector calls per active user-hour.
+   * it; its price is connector calls per active user-hour. A source that notifies (`syncPush`) is never polled by it.
    */
   syncActivePollMs: number;
 }
