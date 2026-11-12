@@ -180,18 +180,19 @@ export const ASK_NUDGE =
 export const LOOKUP_USE = "Use them for details the request needs.";
 
 /**
- * `pushLookup` (D1252; rejected, kept off): the lead of the records a silent push hands. Fixed words (D11, D19). It says the check
- * found nothing that changes the request (true: it answered and named nothing) and never that nothing else exists
- * (D257: that note made the agent skip the ask that finds what the push missed); the items are for the request's
- * details.
+ * `pushLookup` (D1252; rejected, kept off): the lead of the records a silent push hands. Fixed words (D11, D19). It
+ * says the check found nothing that changes the request (true: it answered and named nothing) and never that nothing
+ * else exists (D257: that note made the agent skip the ask that finds what the push missed); the items are for the
+ * request's details.
  */
 export const LOOKUP_LEAD =
   `${EDEN_NOTE}items from the user's sources that name what this request names, for reference; a check found none ` +
   `that changes what the request should do. ${LOOKUP_USE}`;
 
 /**
- * `pushLookupAny` (D1252; rejected, kept off): the lead when no record names the request's anchors and the pool's head goes out
- * instead; it says only what is true of them (Eden's search ranked them first), never that they name the request.
+ * `pushLookupAny` (D1252; rejected, kept off): the lead when no record names the request's anchors and the pool's head
+ * goes out instead; it says only what is true of them (Eden's search ranked them first), never that they name the
+ * request.
  */
 export const LOOKUP_HEAD_LEAD =
   `${EDEN_NOTE}items Eden's search of the user's sources ranked first for this request, for reference; a check found ` +
