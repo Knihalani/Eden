@@ -128,3 +128,60 @@ points of same-items agreement beyond Haiku's own repeat noise.
 **How to read numbers from the queue.** Compare arms within one queue-served run. A difference between arms that is
 smaller than these disagreement rates (about 7% of card flags, 3% of check speak/silent decisions between two samples)
 needs repeat samples; a level (hidden raised, false concerns) is the subagents' level, not Haiku's.
+
+## API-faithful check replay (D1104)
+
+The integrator asked for a way to read push-check *prompt* arms (F5's sheet, F10's band) despite the stand-in's gap:
+speak/silent agreement of at least 0.90 and same items of at least 0.75, Haiku-against-itself level. All numbers below
+come from F2's recorded Haiku-API check rows (`claude/f2-pilot-data`: `base-dumps-4142.jsonl.gz`, 2,267 answered
+rows; `screen-rows.jsonl.gz`, the API under the shipped prompt W and arms A and R on the same rows).
+
+**1. Exact replay** (`packages/sim/src/lab/check-api-replay.ts`, tested). It rebuilds each recorded row's Messages API
+body as the shipped check sends it (`checkMessages`, 500 tokens, JSON, thinking off) and writes the API's raw reply
+under the queue key. A queue run then reads the API's own answer on every check prompt the API answered. The
+rebuilt prompt matches the shipped one byte for byte (system and user turn checked on a live funnel request). On
+current main, though, a train1 seed 41 funnel matched none: F8's world-clock coverage (D1102) changed which items
+reach the pool. It serves runs whose pools match the recording (the same coverage and commit range) and arms that
+leave the check's prompt alone. A changed check prompt never hits.
+
+**2. A calibrated recipe** (`fidelity/recipes/`). It was tuned on the `tune` half of a fixed split (`halfOf`: md5 of
+the row) and measured on a seeded 96 rows of the `test` half (`fidelity/random-rows.ts --half`):
+
+| recipe | half | speak/silent | same items | items named (API) |
+|---|---|---|---|---|
+| careful (default prompt), random 96 of all rows | both | 0.823 | 0.625 | 81 (116) |
+| L1: the API's habits (policies count, names loose, list generously) | tune 72 | 0.833 | 0.458 | 138 (102) |
+| L2: base rates plus 12 recorded API examples (tune half, outside the sample) | tune 72 | 0.931 | 0.625 | 62 (102) |
+| L3: L2 asking for 2–3 items when speaking | tune 72 | 0.889 | 0.611 | 77 (102) |
+| **L2 on the held-out half** | test 96 | **0.844** | **0.656** | 72 (84) |
+| API with itself (D931; F2's twice-asked W rows) | — | 0.909–0.917 | 0.754–0.781 | — |
+
+L2's tune score was a small-sample high. On the held-out half it sits within noise of the plain prompt, short of
+both targets.
+
+**3. Paired delta** (`fidelity/paired-delta.py`). This estimates the API's answer under an arm as its recorded
+shipped-prompt answer, changed only where the subagent's own answer changes between the shipped prompt and the arm.
+It was run on 96 of the 277 rows where the API answered W, A and R (52 hidden, 44 control; F2's screen had no neutral
+rows), with subagents on all three prompts:
+
+| | speak/silent vs the API under the arm | same items | planted named (hidden), effect | look-alike named (control), effect |
+|---|---|---|---|---|
+| API, W asked twice (noise floor) | 0.917 | 0.781 | — | — |
+| arm A: the API's real effect | — | — | 45 → 48 (+3) | 12 → 11 (−1) |
+| A: subagent alone | 0.875 | 0.552 | −1 | −1 |
+| A: "no change" (the API's W answer) | 0.927 | 0.667 | 0 | 0 |
+| A: paired delta | 0.917 | 0.594 | −1 | −1 |
+| arm R: the API's real effect | — | — | 45 → 48 (+3) | 12 → 13 (+1) |
+| R: subagent alone | 0.844 | 0.458 | −1 | +3 |
+| R: "no change" | 0.875 | 0.552 | 0 | 0 |
+| R: paired delta | 0.885 | 0.552 | −1 | 0 |
+
+The API's own effects (+3 of 52) are about the size of its disagreement with itself on the same prompt (8% of
+speak/silent calls). The subagents move the other way on planted facts (−1), so the paired delta inherits the wrong
+sign. Assuming "no change" agrees with the API's arm answers as well as the API agrees with itself.
+
+**Conclusion.** No lever measured here reads a check-prompt arm faithfully. Subagents do not respond to a change in
+the check's wording the way the API does, and the effects these arms aim at are as small as the API's own noise. A
+check-prompt arm can be decided only on the API: with credit, or by a structural re-reading of recorded replies
+(F2's `offline.py` for parse-rule arms). What remains usable: exact replay for prompts the API answered, and the
+D1101 reading rules for everything else.
