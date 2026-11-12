@@ -38,6 +38,11 @@ export function renderPacket(
      */
     note?: (item: ContextItem) => string | undefined;
     /**
+     * `packetWhy` (F3, trial; `why.ts`): Eden's own note on why the item bears on the request (its dates against the
+     * request's), said before its title in brackets after `WHY_TAG`. Fixed words, numbers and day names only.
+     */
+    why?: (item: ContextItem) => string | undefined;
+    /**
      * `pushCandidates` (D236): a line of Eden's own (`EDEN_NOTE`, fixed words) after the header, framing the
      * items as candidates the agent checks against the request. Never source text; the one event text a lead
      * carries is `planConflict`'s quote of the user's own earlier request (D301: redacted, one line, double quotes
@@ -102,7 +107,9 @@ export function renderPacket(
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
     const named = safeLine(item.title);
-    const title = said + (named ? `${named}: ` : "");
+    const why = options.why?.(item);
+    const reason = why ? `(${WHY_TAG}${safeLine(why).replace(/[()|]/g, " ")}) ` : "";
+    const title = said + reason + (named ? `${named}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
@@ -125,7 +132,12 @@ export function shownText(rendered: string): string {
   return rendered
     .split("\n")
     .filter((line) => line !== HEADER && line !== "</context>" && !line.startsWith(EDEN_NOTE))
-    .map((line) => line.replace(/^- \[[^\]]*\] /, "").replace(READER_PREFIX, ""))
+    .map((line) =>
+      line
+        .replace(/^- \[[^\]]*\] /, "")
+        .replace(READER_PREFIX, "")
+        .replace(WHY_PREFIX, ""),
+    )
     .join("\n");
 }
 
@@ -179,6 +191,10 @@ export const ASK_NUDGE =
 /** How the reader's bearing on an item starts (`askReader`, D95); `shownText` drops it. */
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
+
+/** How Eden's note on why an item bears on the request starts (`packetWhy`); `shownText` drops it. */
+export const WHY_TAG = "Eden: ";
+const WHY_PREFIX = /^\(Eden: [^()\n]*\) /;
 
 /** What an item shown before says in its place when it has nothing new (`askDedup`): its title and source stay. */
 export const SHOWN = "(shown above)";
