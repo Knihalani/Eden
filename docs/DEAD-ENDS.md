@@ -103,6 +103,8 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D345 | A complete poll after a change signal does not stand in for re-reading the doubted copies (`verifyByPoll`, A18): built as a trial… |  |
 | D346 | An ask does not re-read its likely citations beside its poll and live search (`askVerifyEarly`, A18): built as a trial, measured, deleted. |  |
 | D840 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | It costs more per recovered update than D606's poll in every form: a session holds about 11 due copies (up… |
+| D1127 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | killed by D1130: stopped on D1128's pre-registered rule |
+| D1129 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | killed by D1130: stopped on D1128's pre-registered rule |
 
 ## Cards and intent
 
@@ -130,6 +132,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 |---|---|---|
 | D528 | Rejected and deleted: thinking on I3's short reply, and a check that reads only stored-`act` items |  |
 | D815 | Deleted: the action firewall (`actionCheck`, D69, D72), the packet guard line (`guardLine`, D306) and the instruction quarantine… | The firewall flagged 0.070 of control tasks against D72's 0.05 bar and was never re-run |
+| D1160 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | the rule asked for a lower bound above 0. dev20 14/14 in every arm |
 
 ## Sync, sources and scale
 
@@ -157,6 +160,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D940 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | killed by D948: the clause asked for a lower bound above −1.5, so it fails (half-width 1.3, minimum detectable effect 1.8… |
 | D943 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | killed by D949: The re-test (rule in acacab82: fresh seeds 89–112, held-out families) read steady calls 11.50 → 3.46 a… |
 | D1025 | Rejected: the recipes that did not help on the held-out sources. |  |
+| D1123 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | killed by D1126: stopped on D1125's pre-registered rule |
 
 ## Ask
 
@@ -187,6 +191,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D401 | Rejected at $0: moving the agent's cache mark off the first request's user turn so a one-call task pays 1x, not 1.25x, for the packet. |  |
 | D517 | Rejected: shortening earlier requests' packets in the transcript | hidden −16.0 points (−23.3..−8.1 by day) |
 | D920 | Rejected (stopped on its pre-registered rule, a3faa15a): `packetTrim`, a learned packet trimmer | stopped on its pre-registered rule, a3faa15a |
+| D1122 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | killed by D1126: stopped on D1125's pre-registered rule |
 
 ## Lab and eval
 

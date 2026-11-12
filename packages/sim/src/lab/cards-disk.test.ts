@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { cardKey, type Card, type CardMaker } from "@eden/engine";
+import { CARD_FORM_REQUESTS, cardKey, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
 import { REALISTIC, simSources } from "../sources";
 import { buildWorld, type World } from "../world";
@@ -401,6 +401,7 @@ describe("the harnesses' intent replay (D158)", () => {
 describe("shipped coverage (D872)", () => {
   test("covers train, reworded, longtail and heldout19 on seeds 41-44, and nothing else", () => {
     expect(shippedUncovered(["train1", "train6r", "longtail", "heldout19"], [41, 42, 43, 44])).toEqual([]);
+    expect(shippedUncovered(["dev20a", "dev20d"], [41, 42, 43, 44], CARD_FORM_REQUESTS)).toEqual([]);
     expect(shippedUncovered(["heldout18"], [41])).toEqual(["heldout18 seed 41"]);
     expect(shippedUncovered(["train1"], [45])).toEqual(["train1 seed 45"]);
     expect(existsSync(SHIPPED_PATH)).toBe(true);

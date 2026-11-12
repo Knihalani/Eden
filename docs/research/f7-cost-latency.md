@@ -281,6 +281,7 @@ held stream's wall are real; served by subagents (D1101) neither exists, so it i
 - a pre-registered Pi pair at time scale 1 against the default, read on wall p50 (upper bound below 0), total $ (the
   aborts' cost, reported), hidden raised (lower bound above −1.5), and the share of first calls aborted;
 - Hermes too, since its prompt is the one that makes the aborts dear.
+<<<<<<< HEAD
 
 ## 10. Target 3+4: Eden net cheaper and faster than the agent alone (new mandate, 09:30 UTC)
 
@@ -444,3 +445,5 @@ tasks for the whole packet. Halving it would save about **$0.015 per 1,000 tasks
 not what a call's wait is made of, D241), and every lexical cut so far lost facts (D258, D273). The agent's longer
 answers (+39 output tokens a call, about $0.02 per 1,000 tasks) are the facts being stated: not waste. **Not
 worth building:** the levers that move cost are the check (F10) and the cards.
+=======
+>>>>>>> origin/main
