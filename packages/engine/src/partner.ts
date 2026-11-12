@@ -73,6 +73,7 @@ import {
   READER_MAX_ITEMS,
   readerFocus,
   readerItem,
+  relevantText,
   readerNote,
   type AskReader,
   type ReaderInput,
@@ -2567,7 +2568,7 @@ export class ContextPartner {
       today: localDay(this.now(), this.deps.cache.offsetOf(s.scope)),
       cacheKey: userCacheKey(s.scope),
       // `askHeedsCheck` 1 (D1450): the check says what kind of no each ruled-out item is.
-      ...(this.config.askHeedsCheck === 1 ? { why: true } : {}),
+      ...(this.config.askHeedsCheck === 1 || this.config.askHeedsCheck === 3 ? { why: true } : {}),
     };
     const key = checkKey(input);
     const asked = `${input.today}\n${request}`;
@@ -2593,6 +2594,16 @@ export class ContextPartner {
       const entry: KeptCheck = {
         asked,
         ...(forRequest !== undefined ? { request: forRequest } : {}),
+        // What the check read of an item is its excerpt: whole only when the room took every part of it.
+        ...(input.why
+          ? {
+              whole: new Set(
+                read
+                  .filter((x, i) => items[i]?.text === relevantText(x.item.text, focus, WHOLE_ITEM_CHARS))
+                  .map((x) => x.item.id),
+              ),
+            }
+          : {}),
         marks: new Map(items.map((it) => [it.id, itemMark(it)])),
         read: checker.check(s.scope, s.key, input, s.abort.signal),
       };
@@ -2632,14 +2643,14 @@ export class ContextPartner {
    */
   private checkedOut(s: Session): ((item: ContextItem) => boolean) | null {
     const mode = this.config.askHeedsCheck;
-    if (mode <= 0 || !s.pushChecks) return null;
+    if (mode <= 0 || mode === 3 || !s.pushChecks) return null; // LAB-TEMP 3: the why prompt, nothing left out
     const out = new Map<string, string>();
     for (const kept of s.pushChecks.values()) {
       const read = kept.settled;
       if (kept.request !== s.requests || !read?.yes) continue;
       for (const [id, mark] of kept.marks) {
         if (read.yes.has(id)) out.delete(id);
-        else if (mode >= 2 || read.ruledOut?.get(id)) out.set(id, mark);
+        else if (mode >= 2 || (read.ruledOut?.get(id) === "clear" && kept.whole?.has(id))) out.set(id, mark);
       }
     }
     if (out.size === 0) return null;
@@ -6778,11 +6789,16 @@ const READER_POOL_CAP = READER_MAX_ITEMS;
 /** `pushCheck` (D500): the push checks a session keeps (a request's first and second pass, and a few before). */
 const CHECK_KEPT = 4;
 
+/** `askHeedsCheck` (D1450): room enough for any item's every part (`relevantText` reads at most 8,000 characters). */
+const WHOLE_ITEM_CHARS = 8_000;
+
 /** `pushCheck` (D500): one kept check: the request and day it read, its items as read (`itemMark`), its answer. */
 interface KeptCheck {
   asked: string;
   /** The user request (`Session.requests`) the check was made for (`askHeedsCheck`). */
   request?: number;
+  /** `askHeedsCheck` 1: the items the check read whole (its excerpt left no part of the item out). */
+  whole?: Set<string>;
   /** Per item read, `itemMark`: id, content hash, date and sender. */
   marks: Map<string, string>;
   read: Promise<PushCheckRead>;
