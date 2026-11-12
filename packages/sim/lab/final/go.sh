@@ -60,19 +60,30 @@ SUITE_LIST=$(env -u OPENROUTER_API_KEY bun -e \
   "$SUITE")
 USERS=$(for x in $SUITE_LIST; do for s in "${SEED_ARR[@]}"; do printf '%s:%s,%s:%s:control,%s:%s:neutral,' \
   "$x" "$s" "$x" "$s" "$x" "$s"; done; done)
+# One cold-start process a world: a process cards its users one after another and a user's card calls mostly one at a
+# time, so through the queue (minutes a call) one process would take hours; worlds side by side put their calls in the
+# queue together, and identical card prompts (the same base world under several suites and variants) are answered once.
 coverage() { # TREE NAME
-  local out="$L/cov-$2"
+  local out="$L/cov-$2" pids=() u fail=0
   [ -e "$out.jsonl" ] && return 0
-  (cd "$1" && EDEN_LAB_QUEUE_RUN="$P-cov-$2" env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cold-start.ts \
-    --users "${USERS%,}" --suite "$SUITE" --clock world --cards-out "$out.part.jsonl" \
-    --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 1 --run-label "$P-cov-$2" --out "$out.json") \
-    >"$L/cov-$2.log" 2>&1
-  if grep -Eq '"cardCalls": 0,' "$out.json"; then
-    log "go: a $2 world made no card call (see $out.json): stopped"
+  mkdir -p "$out.d"
+  for u in ${USERS//,/ }; do
+    [ -e "$out.d/$u.done" ] && continue
+    (cd "$1" && EDEN_LAB_QUEUE_RUN="$P-cov-$2" env -u OPENROUTER_API_KEY bun packages/sim/src/lab/cold-start.ts \
+      --users "$u" --suite "$SUITE" --clock world --cards-out "$out.d/$u.jsonl" \
+      --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 100000 --spend-headroom 0 --run-label "$P-cov-$2" \
+      --out "$out.d/$u.json" \
+      >"$out.d/$u.log" 2>&1 && touch "$out.d/$u.done") &
+    pids+=($!)
+  done
+  for pid in "${pids[@]}"; do wait "$pid" || fail=1; done
+  [ $fail -eq 0 ] || { log "go: a $2 coverage world failed (see $out.d/*.log)"; return 1; }
+  if grep -Eq '"cardCalls": 0,' "$out".d/*.json; then
+    log "go: a $2 world made no card call (see $out.d/*.json): stopped"
     return 1
   fi
   gunzip -c packages/sim/lab/distilled/cards-shipped.jsonl.gz >"$out.jsonl.tmp"
-  cat "$out.part.jsonl" >>"$out.jsonl.tmp"
+  cat "$out".d/*.jsonl >>"$out.jsonl.tmp"
   mv "$out.jsonl.tmp" "$out.jsonl"
 }
 log "go: step 1 coverage (drive the queue now)"
@@ -89,7 +100,7 @@ COMMON=(--agent-sim single --model claude-haiku-5-5 --grader claude-sonnet-5-5 -
   --reader-model claude-haiku-5-5 --time-scale 1 --tenant-prompt --push payload
   --source-profile packages/sim/lab/before-after/market-profiles/direct.json --suite "$SUITE" --seeds "$SEEDS"
   --variants hidden,control,neutral --split "$SPLIT" --budget 5 --config "{\"pushCheckWaitMs\":$WAIT}"
-  --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 1)
+  --spend-ledger "$EDEN_LAB_QUEUE/ledger.jsonl" --spend-cap 100000 --spend-headroom 0)
 arm() { # TREE ARM CONDITION COVERAGE
   local out="$L/$2"
   [ -e "$out.json" ] && return 0
