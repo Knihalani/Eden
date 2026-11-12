@@ -56,7 +56,10 @@ class Quiet implements Source {
 const OLD = "Pepper's meds: Felimazole 2.5 mg once a day in the morning feed.";
 const NEW = "Pepper's meds: Felimazole 2.5 mg twice a day, 8am and 8pm, by hand.";
 
-async function run(freshenAgeMs: number, opts: { fail?: boolean; mail?: boolean; ageMin?: number } = {}) {
+async function run(
+  freshenAgeMs: number,
+  opts: { fail?: boolean; mail?: boolean; ageMin?: number; behind?: boolean } = {},
+) {
   let clock = T0;
   const src = new Quiet("notes");
   const text = (t: string) => (opts.mail ? `From: Vet <vet@x.com>\nDate: Mon, 2 Nov 2026 08:00\n\n${t}` : t);
@@ -78,6 +81,7 @@ async function run(freshenAgeMs: number, opts: { fail?: boolean; mail?: boolean;
       syncOnDemand: false,
       verifyDelivery: true,
       freshenAgeMs,
+      ...(opts.behind ? { freshenBehind: true, revisionNotice: true } : {}),
     },
   });
   partner.sync!.track(scope, clock);
@@ -96,10 +100,19 @@ async function run(freshenAgeMs: number, opts: { fail?: boolean; mail?: boolean;
     } as AgentEvent,
     { waitMs: 2_000 },
   );
+  const first = r.injection?.text ?? "";
   const got = [r.injection, ...partner.takePending({ ...scope, sessionId: "s1" })].filter(
     (x): x is Injection => x !== null,
   );
-  return { text: got.map((g) => g.text).join("\n"), fetches: src.fetches.length };
+  // What reaches the agent's next take, once the re-reads started beside the delivery have landed.
+  await Bun.sleep(20);
+  const later = partner.takePending({ ...scope, sessionId: "s1" });
+  return {
+    text: got.map((g) => g.text).join("\n"),
+    first,
+    later: later.map((g) => `${g.reason} ${g.text}`).join("\n"),
+    fetches: src.fetches.length,
+  };
 }
 
 describe("freshenAgeMs (D1127)", () => {
@@ -131,5 +144,13 @@ describe("freshenAgeMs (D1127)", () => {
     const { text, fetches } = await run(10 * MIN, { fail: true });
     expect(fetches).toBeGreaterThanOrEqual(1);
     expect(text).toContain("once a day");
+  });
+
+  test("behind (D1129): the cached copy goes at once, and the edit follows as an update at the next take", async () => {
+    const r = await run(10 * MIN, { behind: true });
+    expect(r.first).toContain("once a day");
+    expect(r.fetches).toBe(1);
+    expect(`${r.text}\n${r.later}`).toContain("updated:");
+    expect(`${r.text}\n${r.later}`).toContain("twice a day");
   });
 });

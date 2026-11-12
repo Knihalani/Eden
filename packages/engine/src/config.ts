@@ -756,6 +756,13 @@ export interface EngineConfig {
    * fetch an aged item handed, inside the delivery's re-read deadline.
    */
   freshenAgeMs: number;
+  /**
+   * F3 (trial, off; D1129): with `freshenAgeMs`, the aged copies' re-reads run beside the delivery instead of before
+   * it: the cached copy is handed at once, and a re-read that finds the item changed queues an "updated:" packet for the
+   * agent's next take (`revisionNotice`, D205). The push waits for no connector; the update reaches an agent that makes
+   * another model request.
+   */
+  freshenBehind: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -913,4 +920,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushGate: true,
   revisionDiff: true,
   freshenAgeMs: 0,
+  freshenBehind: false,
 };

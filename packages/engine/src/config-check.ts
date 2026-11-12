@@ -179,6 +179,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheckItems: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],
   freshenAgeMs: ["verifyDelivery"],
+  freshenBehind: ["verifyDelivery", "revisionNotice"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */

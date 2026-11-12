@@ -692,3 +692,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1126 | 2026-11-12 | Rejected (stopped on D1125's pre-registered rule): `packetChanges` (D1123) and `packetWhy` v2 (D1122, deleted by D1126); both deleted with… | rejected |
 | D1127 | 2026-11-12 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | trial |
 | D1128 | 2026-11-12 | Lab only: D1127's pilot read out under its rule, and a powered re-test is pre-registered (before any of its answers is made). | lab |
+| D1129 | 2026-11-12 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | trial |
