@@ -1549,6 +1549,8 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `pushCheckSheet` (F5): the planted item's place on the rule sheet the check read (-1: not on it).
+      ...(push?.sheet ? { pushSheetAt: push.sheet.indexOf(id) } : {}),
       // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
       // it was handed.
       ...(push && task.stale

@@ -264,6 +264,8 @@ export interface PushPoolReport {
    * or whose call ran past `pushCheckWaitMs` (traced "check-late" when it lands).
    */
   checkCalled?: boolean;
+  /** `pushCheckSheet` (F5): the item ids of the rule sheet the check read, in its order (ids only, for the lab). */
+  sheet?: string[];
 }
 export type PushPoolSink = (report: PushPoolReport) => void;
 
@@ -2532,6 +2534,8 @@ export class ContextPartner {
       cacheKey: userCacheKey(s.scope),
     };
     const key = checkKey(input);
+    const ids = sheet.map((c) => c.id);
+    const withSheet = (r: PushCheckRead): PushCheckRead => (ids.length > 0 ? { ...r, sheet: ids } : r);
     // A kept answer read this sheet too: a card landing or expiring between passes asks again.
     const asked =
       sheet.length > 0
@@ -2546,13 +2550,13 @@ export class ContextPartner {
       if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
       // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
-      return {
+      return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
         ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
         costUsd: 0,
         called: false,
         overBudget: false,
-      };
+      });
     }
     let kept = checks.get(key);
     const fresh = !kept;
@@ -2575,7 +2579,7 @@ export class ContextPartner {
     try {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
-      if (got) return fresh ? got : { ...got, costUsd: 0, called: false };
+      if (got) return withSheet(fresh ? got : { ...got, costUsd: 0, called: false });
       // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
@@ -2585,7 +2589,7 @@ export class ContextPartner {
           () => undefined,
         );
       }
-      return { yes: null, costUsd: 0, called: false, overBudget: false, late: true };
+      return withSheet({ yes: null, costUsd: 0, called: false, overBudget: false, late: true });
     } finally {
       clearTimeout(timer);
     }
@@ -2715,6 +2719,7 @@ export class ContextPartner {
             check: yes ? "yes" : !check ? "none" : check.late ? "late" : "failed",
             ...(yes ? { checked: reported.map((x) => yes.has(x.item.id)) } : {}),
             ...(check?.called ? { checkCalled: true } : {}),
+            ...(check?.sheet ? { sheet: [...check.sheet] } : {}),
           }
         : {}),
     });

@@ -154,6 +154,8 @@ export interface PushCheckRead {
   yes: ReadonlySet<string> | null;
   /** `pushCheckSheet` (F5): the items whose sheet cards the reply named (empty with no sheet; null with `yes`). */
   rules?: ReadonlySet<string>;
+  /** `pushCheckSheet` (F5): the sheet's item ids as read, set by the partner for the lab's pool report. */
+  sheet?: readonly string[];
   costUsd: number;
   /** Whether this read made a (budgeted) model call. */
   called: boolean;
