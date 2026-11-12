@@ -134,10 +134,13 @@ also on rule-path packets and on an explicit ask in a request the push started f
 | --- | ---: | ---: | ---: |
 | new base at $0, no check wired, off (4 seeds) | 238 | 372 | 432 of 640 |
 | the same, on | 218 (−8%) | 371 | 432 |
+| train seeds 41–42 at $0, no check wired, off | 296 of 384 | 319 of 384 | not read |
+| the same, on | 214 (−28%) | 318 | not read |
 | new base, check live, `packetHeedsCheck` on (seed 41) | 63 | 105 | 26 of 160 |
 | the same with `stateFilterWide` | 59 (−6%) | 104 | 26 |
 
-Deleted on the reviewer's finding, for a harm these numbers cannot show. The lab's worlds hold the fact or its
+On train, where more look-alikes are lifted or expired notices, the cut is large. Deleted all the same, on the
+reviewer's finding, for a harm these numbers cannot show. The lab's worlds hold the fact or its
 look-alike, never both. A real mailbox holds the hold and, later, the notice that lifts it; the hold was carded "in
 force" when it arrived and stays so. Leaving the lift notice out of an ask while the hold is still listed tells the
 agent the hold stands, and the agent then refuses something that is allowed. The branch's own unit test asserted
