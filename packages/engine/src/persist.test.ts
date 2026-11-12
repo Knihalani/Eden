@@ -263,6 +263,31 @@ describe("frozen users on disk (D425)", () => {
     expect(d.size).toBeLessThanOrEqual(2_000);
   });
 
+  test("a shutdown's flush writes the most recently used users first (D1076)", () => {
+    // Its deadline (0.3 of the grace) cuts a full box's flush short: the users written are those most likely back.
+    const dir = tempDir();
+    const c = new ItemCache({ freezeIdleMs: 24 * HOUR, warmIdleMs: 12 * HOUR });
+    c.close();
+    const { d } = disk(dir);
+    c.persist(d);
+    const order: string[] = [];
+    const write = d.write.bind(d);
+    d.write = (scope, user, now) => {
+      order.push(`${scope.tenantId}/${scope.userId}`);
+      return write(scope, user, now);
+    };
+    c.put(alice, items("alice", 3), T0);
+    c.expireIdle(T0);
+    c.put(bob, items("bob", 3), T0);
+    c.expireIdle(T0);
+    c.put(carol, items("carol", 3), T0);
+    // Alice is used again (a read: her place in the eviction order stays, her last use moves to now).
+    expect(find(c, alice, "budget review", T0).length).toBeGreaterThan(0);
+    expect(c.flush()).toBe(3);
+    // Last used at the same tick, the later-written first: carol (tenant u), then alice; bob, used a tick earlier, last.
+    expect(order).toEqual(["u/alice", "t/alice", "t/bob"]);
+  });
+
   test("flush writes live users at shutdown; the expiry tick sweeps blobs nobody came back for", () => {
     const dir = tempDir();
     const a = freezing();
