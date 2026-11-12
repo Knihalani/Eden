@@ -721,3 +721,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1272 | 2026-11-12 | Finding: a learned no-model skip of the push check reaches about 20% of calls at 1% of facts lost, not the 40% asked | finding |
 | D1273 | 2026-11-12 | Trial `speculate`: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte for byte… | trial |
 | D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
+| D1155 | 2026-11-12 | Lab only: pi-ab and hermes-ab place the packet a tool result's observe hands out. | lab |

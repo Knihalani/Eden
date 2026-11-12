@@ -123,6 +123,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
+import { observeToolResult } from "./observe-tool";
 import type { World, WorldItem } from "../world";
 import {
   applyNotifyShare,
@@ -1467,14 +1468,13 @@ async function runWorld(
               // Eden sees what the agent fetched, so it does not deliver it again.
               if (partner) {
                 const o = tl.begin("eden.observe", "eden", "path", { event: "tool_result" });
-                const seen = await partner.observe(
+                // A packet the observe hands out reaches the agent, as a client places it (`observe-tool.ts`).
+                const injected = await observeToolResult(
+                  partner,
                   ev({ kind: "tool_result", tool: `search_${source.id}`, output: result }),
+                  deliver,
                 );
-                tl.end(o, { injected: seen.injection?.citations.length ?? 0 });
-                // The observe hands out a packet queued since the last one (the push's, when its check came late):
-                // Eden marks its items shown, so it reaches the agent here, as a client places an observe's
-                // injection. Dropped, a later ask answer says "(shown above)" for items the agent never read.
-                if (seen.injection) deliver(seen.injection);
+                tl.end(o, { injected });
               }
               return { content: [{ type: "text", text: result }], details: {} };
             },
