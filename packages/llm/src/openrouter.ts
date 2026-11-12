@@ -157,10 +157,12 @@ function anthropicCacheMessages(messages: ChatMessage[]) {
   for (let i = messages.length - 1; i >= 0 && marked.size < MAX_BREAKPOINTS; i--) {
     if (messages[i]!.cache && filled(messages[i]!)) marked.add(i);
   }
+  // One TTL a request, as anthropic.ts (`requestTtl`): an hour when a marked message asks for it (D1197), else five
+  // minutes. Whether OpenRouter passes the hour through is unverified (D1196's probe is pending).
+  const hour = messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
+  const control = hour ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
   return messages.map(({ role, content }, i) =>
-    marked.has(i)
-      ? { role, content: [{ type: "text", text: content, cache_control: { type: "ephemeral" } }] }
-      : { role, content },
+    marked.has(i) ? { role, content: [{ type: "text", text: content, cache_control: control }] } : { role, content },
   );
 }
 

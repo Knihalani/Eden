@@ -714,6 +714,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1181 | 2026-11-12 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | rejected |
 | D1182 | 2026-11-12 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | rejected |
 | D1183 | 2026-11-12 | Guard on D1180 (F5, the integrator's question): a user with more active rule cards than `pushCheckSheet` (80) gets no rule sheet. | adopted |
+| D1197 | 2026-11-12 | Adopted (F7; the integrator's decision to keep the rule sheet and make it as cheap as it can be): the push check's rule sheet (D1180) is… | adopted |
 | D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
 | D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
 | D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |

@@ -4,6 +4,7 @@ import {
   anthropicBody,
   anthropicCost,
   anthropicPrice,
+  requestTtl,
   type AnthropicCallRecord,
   type AnthropicMeter,
 } from "./anthropic";
@@ -71,6 +72,39 @@ describe("AnthropicModel", () => {
     expect(body.messages).toEqual([{ role: "user", content: "a\n\nb" }]);
     expect("temperature" in body).toBe(false);
     expect(body.thinking).toEqual({ type: "disabled" });
+  });
+
+  test("a message asking a 1-hour TTL sends every breakpoint of the request at 1 hour, and prices writes at 2x", () => {
+    const request = {
+      messages: [
+        { role: "system" as const, content: "fixed instructions" },
+        { role: "user" as const, content: "the user's rule sheet", cache: true, cacheTtl: "1h" as const },
+        { role: "user" as const, content: "the request" },
+      ],
+      maxTokens: 100,
+    };
+    const body = anthropicBody({ apiKey: "k" }, request, false);
+    const hour = { type: "ephemeral", ttl: "1h" };
+    // Anthropic wants a longer TTL before a shorter one: the system breakpoint goes at an hour too.
+    expect(body.system?.[0]?.cache_control).toEqual(hour);
+    expect(body.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "the user's rule sheet", cache_control: hour },
+          { type: "text", text: "the request" },
+        ],
+      },
+    ]);
+    expect(requestTtl({ apiKey: "k" }, request)).toBe("1h");
+    // Without the ask, the 5-minute TTL as before; the model-wide option still wins.
+    const plain = { ...request, messages: request.messages.map(({ cacheTtl: _, ...m }) => m) };
+    expect(requestTtl({ apiKey: "k" }, plain)).toBe("5m");
+    expect(anthropicBody({ apiKey: "k" }, plain, false).system?.[0]?.cache_control).toEqual({ type: "ephemeral" });
+    expect(requestTtl({ apiKey: "k", cacheTtl: "1h" }, plain)).toBe("1h");
+    // An uncached message's ask is ignored: it ends no prefix.
+    const loose = { ...request, messages: [{ role: "user" as const, content: "x", cacheTtl: "1h" as const }] };
+    expect(requestTtl({ apiKey: "k" }, loose)).toBe("5m");
   });
 
   test("reports a reply its stop sequence ended; a stream cut with no stop reason is an error", async () => {
