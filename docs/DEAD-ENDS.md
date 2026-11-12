@@ -69,6 +69,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
 | D1000 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | deleted with its code |
 | D1073 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | stopped on its pre-registered Pi clause |
+| D1074 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | Hidden raised −0.2 points (−1.533..+1.271), 3,066 pairs over 384 templates (Haiku's own grade not read for… |
 
 ## Reader
 

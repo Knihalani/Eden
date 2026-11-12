@@ -2508,10 +2508,7 @@ export class ContextPartner {
     const request = sanitizeForStore(cue.raw);
     if (!request.trim()) return null;
     const focus = readerFocus(cue.raw);
-    const head = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
-    // `pushCheckDedupe` (H3, trial): an item whose source and title an earlier one has is not read, and at most that
-    // many of the rest are; an item not read is never a candidate when the check answers.
-    const read = this.config.pushCheckDedupe > 0 ? distinctTitles(head).slice(0, this.config.pushCheckDedupe) : head;
+    const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
       request,
       items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
@@ -6756,17 +6753,6 @@ function localDay(at: number, offsetMin: number): string {
  * Whether an item looks like bulk mail. Such items are never pushed without a model: their words overlap with real
  * work, and one arriving says nothing about the user's need. The judge still sees them, and an ask still finds them.
  */
-/** `pushCheckDedupe` (H3): the pool less items whose source and case-folded title an earlier item already has. */
-function distinctTitles(pool: readonly Scored[]): Scored[] {
-  const seen = new Set<string>();
-  return pool.filter((x) => {
-    const key = `${x.item.sourceId}\n${x.item.title.trim().toLowerCase()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function bulkMail(item: ContextItem): boolean {
   const category = item.meta?.category;
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);

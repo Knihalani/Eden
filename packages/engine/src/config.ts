@@ -716,13 +716,6 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
-   * H3 (trial, off at 0; docs/research/h3-pushcheck-lean.md): the check reads the pool's first `pushCheckItems` less
-   * any item whose source and title (case folded) an earlier one already has, and at most this many of the rest. A
-   * pool's same-titled items are mostly a recurring event's copies or one thread's notices (15% of the items the check
-   * read on train seed 42, the planted fact none of them); the check's price is the items it reads (D1050).
-   */
-  pushCheckDedupe: number;
-  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -908,7 +901,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
-  pushCheckDedupe: 0,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,

@@ -8,7 +8,8 @@ or judgement; every other number comes from a command in this note.
 Goal (the parent's brief): cut the push check's paid cost per 1,000 tasks, or its added latency, by at least 20%,
 with quality held.
 
-**Verdict: rejected (D1073).** Reading the pool less its same-titled copies, ten items at most
+**Verdict: rejected twice (D1073, and D1074 on the powered re-test of §6–§7: hidden −0.2 points, −1.533..+1.271,
+missing the −1.5 bar by 0.03; the cost cut replicated at −25%).** Reading the pool less its same-titled copies, ten items at most
 (`pushCheckDedupe` 10), cut the push check's cost per 1,000 tasks by 27% on Pi with the same call rate, and facts were
 level at the point estimate, but the Sonnet-graded interval's lower bound (−2.3 points) missed the pre-registered
 −1.5. The switch, its code and its tests are deleted (the code is in commit 7e528b60); the lab kit and the findings
@@ -212,3 +213,29 @@ reads both arms' hidden answers (about $0.00058 each), so 4,608 pairs would cost
 runs made so far (ledger $16.04, the stopped runs included) the plan no longer fits the $24 cap. The hidden-only
 seeds stop at **49–52**: about 3,050 hidden pairs (2× the first pair's), with the full seeds 45–48 for concerns.
 Runs for seeds 53–56 are stopped before they finish and are not read.
+
+## 7. The re-test's result
+
+16 runs at d956ac44's code (seeds 45–48 `hidden,control,neutral`, 49–52 `hidden`, train and reworded; `r-train-45`
+was cut by its per-process cap at 1,132 of 1,152 task runs). Sonnet 5.5 regraded every hidden answer and every
+flagged concern in eight batches, 0 failed. `report.py --pair eden~D:eden --cluster template` over the 16 runs:
+
+| | `eden` | `eden~D` |
+| --- | --- | --- |
+| Hidden raised (Sonnet) | 2,037 / 3,066 (66.4%) | 2,035 / 3,072 (66.2%) |
+| Planted handed at its request; raised given handed | 2,460 (80%); 82.8% | 2,446 (80%); 83.2% |
+| Control concerns, Haiku; Sonnet-confirmed | 18; 1 | 13; 1 |
+| Neutral concerns, Haiku; Sonnet-confirmed | 12; 0 | 12; 0 |
+| Neutral given a packet; items a packet | 739 (48%); 2.1 | 742 (48%); 1.8 |
+
+**Hidden raised, D − default: −0.163 points (−1.533..+1.271)**, 3,066 pairs over 384 template clusters (the report's
+one-decimal print reads −0.2, −1.5..+1.3; the bar is read on the unrounded bound). Confirmed concerns level.
+
+Cost and wait, seeds 45–48 (`checks.py`, `n5/mix.py`, 4,590 pairs): the check's $ per 1,000 tasks on the 1:1:8 mix
+0.2032 → 0.1515 (**−25.4%**), $ a call 0.000231 → 0.000177, input 2,735 → 2,257 tokens, output 128 → 116, calls a
+task 0.951 both, p50 0.86 → 0.84 s, p90 1.30 → 1.23 s; Eden $/1k −0.052 (−0.055..−0.048), total −0.049
+(−0.054..−0.044), wall −0.018 s (−0.050..+0.013).
+
+**Decision (D1074): fail, by 0.03 points on the lower bound.** The switch is deleted again (code in 7e528b60).
+Reported only, outside the rule: the first pair and the re-test pooled read −0.239 (−1.346..+0.848) over 4,602
+pairs. Spend: the re-test $13.70 (runs, the stopped runs and the regrade), the session $21.64 of the $24 cap.
