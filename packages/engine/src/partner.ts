@@ -69,7 +69,10 @@ import {
 import {
   cardKey,
   cardVerdict,
+  cardNames,
   CLEARED_STATES,
+  couldClear,
+  type CardNames,
   requestActions,
   STANDING_KINDS,
   type Card,
@@ -2598,10 +2601,30 @@ export class ContextPartner {
   }
 
   /**
+   * `pushStateFilter` (D1456): the user's constraint cards that may still be in force, as `couldClear` reads them:
+   * every card made before `before` that is neither `none`, a `preference`, nor itself cleared (at most the
+   * enricher's cap a user). Read, and normalised once, only when the ranking holds a cleared item. No model call and
+   * no source call. An expired or bulk item's card is kept: it can only keep a notice in the pool, the safe side.
+   */
+  private inForce(s: Session, before: number): CardNames[] {
+    const enricher = this.config.cards ? this.deps.cards : undefined;
+    if (!enricher) return [];
+    const out: CardNames[] = [];
+    for (const card of enricher.cardsOf(s.scope, enricher.carded(s.scope), before).values()) {
+      if (card.kind === "none" || card.kind === "preference") continue;
+      if (card.state && CLEARED_STATES.has(card.state)) continue;
+      const names = cardNames(card);
+      if (names.entities.length > 0 || names.fields.length > 0) out.push(names);
+    }
+    return out;
+  }
+
+  /**
    * The push's pool: the ranking's first `askReaderPool` distinct items, and their cards. `pushGate` and the plan
    * alerts (`checkPlans`) share it. `pushStateFilter` (F2, trial): an item carded none because a constraint was
    * lifted, met or superseded leaves the pool, and the next ranked item takes its seat; cards are then read for the
-   * whole ranking (one lookup an item).
+   * whole ranking (one lookup an item). It stays when one of the user's constraint cards is one it could clear
+   * (`couldClear`, D1456).
    */
   private pushPool(
     s: Session,
@@ -2620,6 +2643,7 @@ export class ContextPartner {
             before,
           )
         : null;
+    let inForce: CardNames[] | undefined;
     for (const x of ranked) {
       if (pool.length >= cap) break;
       if (seen.has(x.item.id)) continue;
@@ -2627,7 +2651,12 @@ export class ContextPartner {
       // Only a none card: an item that announces the new state of affairs (a retimed flight, a claim already paid) is
       // carded already-done or status-change and is the fact in force, though it says an earlier one was superseded.
       const card = states?.get(x.item.id);
-      if (card?.kind === "none" && card.state && CLEARED_STATES.has(card.state)) continue;
+      // A lift notice stays beside the hold it could lift (D1456): without it the check would read the hold alone.
+      if (card?.kind === "none" && card.state && CLEARED_STATES.has(card.state)) {
+        inForce ??= this.inForce(s, before);
+        const names = cardNames(card);
+        if (!inForce.some((c) => couldClear(names, c))) continue;
+      }
       pool.push(x);
     }
     const cards =
