@@ -120,7 +120,7 @@ Not done: `bun run eval --live` (no engine scoring, threshold or delivery change
   comment) is fixed in d7d4d9c6. Not done: a ranged GET for the sample's headers (8 whole blobs at most, once, only
   for a store with no marker yet).
 
-## Round 3: a capacity soak on the smallest recommended box (D1072)
+## Round 3: a capacity soak on the smallest recommended box (D1075)
 
 The question (the parent's): does a 2-core 12 GB box hold what docs/DEPLOY.md §6 and `deploy/scripts/sizing.py` say
 (a heavy user 4.71 MB at the peak hour; 1,845 of them on 2 OCPU / 12 GB), over a half hour of real work with a

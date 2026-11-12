@@ -629,6 +629,44 @@ commit d42d30b9; the Python trainers stay in `packages/sim/lab/m8/` (README ther
 `eden-m8`. Kept in the tree: `days-calls.ts --pool-diag` rows carry the planted item's `source`, arrival `lag` and
 whether it was `held` after its request (D946's stage table).
 
+### 1l. Transfer: the leave-one-generator-out screen (M14, D1020–D1025; docs/research/m14-transfer.md)
+
+Every micro model that looked strong on M2's synthetic worlds failed on the sim's hand-written families (D908, D909,
+D914, D920). The LOGO screen is the standard check before any wiring: train on all but one **source** (a generator of
+tasks) and grade on the held-out one. A model is ready for a wiring rule only if its held-out numbers hold on every
+source, length-controlled included.
+
+- **Sources** (one row per task, `packages/sim/src/lab/m14/logo-export.ts`): `m2` (M2 v2's Haiku worlds, its own
+  train/test split), `sim` (the train1–6 templates over seeds, split by template; the train suites only, never a
+  held-out one), `g2` (Sonnet, one call a world, eight format packs: forwarded chains, chat, iCalendar, CRM, PDF
+  text, app alerts, other languages, short items; `m14/g2.ts`), `g3` (programmatic templates and formats with OCR
+  noise, $0; `m14/g3.ts`). Splits within a source keep a template or family whole.
+- **Numbers** (`logo_core.grade`): `twin` (fact beats its look-alike, item alone: the D908/D909 measurement),
+  `twin_hard` (the same where the twin is at least as long as the fact: **read this one**, since M2's facts are longer
+  than their twins in 94% of tasks and length alone scores 0.943 there), `twin_req` (fact beats twin for the
+  request), `fact_at1` (the fact ranks first among the task's items and 24 unrelated ones, per request), `relevance`
+  (AUC, own items against unrelated). `--model lengthcue` is the length-only reference.
+- **Modes:** `logo` (all other sources, each capped at `--cap` rows), `in` (the held-out source's own train rows: the
+  ceiling) and `from:S` (one source alone, e.g. `from:m2`, today's practice).
+- **Your model:** a module with `make(cfg)` returning an object with `fit(rows)` and `score(rows)` (shapes in
+  `logo_core.grade`), passed as `--model`; or `folds` to write each fold's files for a trainer elsewhere (Modal) and
+  `grade` to read its scores back. `hashnet.py` is the reference model (hashed n-grams, item and pair heads) and
+  carries the transfer recipes (`--recipe`, D1023).
+
+```bash
+# Data: M2 slices from the side branch claude/m-synth-data, G2/G3/LOGO rows from claude/m14-data (never merge either)
+L=.local/m14/logo; PY=.local/m14/venv/bin/python   # a venv with torch (CPU) for hashnet; logo_core is stdlib only
+$PY -I packages/sim/lab/m14/logo.py run --model lengthcue --source m2=$L/m2-train.jsonl:$L/m2-test.jsonl \
+  --source sim=$L/sim.jsonl --source g2=$L/g2.jsonl --source g3=$L/g3.jsonl --modes logo --seeds 1
+$PY -I packages/sim/lab/m14/logo.py run --model hashnet --recipe balance,lenbal,noise,norm --source ... \
+  --modes logo,in,from:m2 --seeds 1,2 --out .local/m14/r.json            # about 2 min a fold and seed on 4 cores
+$PY -I packages/sim/lab/m14/logo.py folds --source ... --out .local/m14/folds   # for a trainer elsewhere
+$PY -I packages/sim/lab/m14/logo.py grade --rows .local/m14/folds/g2/test.jsonl --scores my-scores.jsonl
+```
+
+Regenerate: `bun packages/sim/src/lab/m14/g3.ts --n 400` ($0); G2 is `m14/g2.ts gen --n 300` then `assemble` (Sonnet
+5.5, about $0.067 a world; spend ledger `.local/m14/ledger.jsonl`); `logo-export.ts synth|sim` writes the rows.
+
 ### 2. The same with Eden's reader live (NEW)
 
 ```bash
@@ -1121,6 +1159,12 @@ no ask_context"). Hermes' prompt is
 about 3× Pi's input tokens per request; on free models tasks after a stream's first averaged 22–26 s, and the full
 nine-suite bench was estimated at 2.6 h at concurrency 6 if the rate limit does not bind, 7.6 h at 18 requests a
 minute on free models (hermes-lab.md, estimates).
+
+`--days D --day-size N` (D1044) runs pi-ab's user days on Hermes: one stream a user, the day's Hermes transcript
+held by the runner and sent with each request, pi-ab's recap; every hermes-ab run journals its units and takes
+`--resume` (and `--resume-biased` for an Eden arm under `--days`) as pi-ab does. Before D1042 hermes-ab wired no push
+check, so Hermes figures from D828 to B19 measured the default minus `check`. An Eden arm at another commit:
+`packages/sim/lab/b19/arm-tree.sh` and `run.sh` (D1040).
 
 `hermes-eden` (A16) gives Hermes Eden's `ask_context` and plugin with no `search_<source>` tools, as Pi's `eden` arm
 has none: `hermes+eden` keeps them (Pi's `both+ask`), so a "Hermes keeps searching" comparison against Pi's `eden`

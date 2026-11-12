@@ -166,7 +166,7 @@ CPU is not the limit at these counts (estimate: 14,000 heavy users at 50 request
 average; a request costs tens of milliseconds); a cold start without persisted users is (14,000 users x 3,000 items
 x 0.35 ms of ingest each is about 4 hours of one core), which is why persistence is on (D991).
 
-**A half-hour soak on the 2-core 12 GB box (D1072, r1-release.md §Round 3):** 1,500 heavy users through the server's
+**A half-hour soak on the 2-core 12 GB box (D1075, r1-release.md §Round 3):** 1,500 heavy users through the server's
 wiring with persistence, sessions every ~12 minutes, a restart halfway: 33,382 requests, 0 errors, RSS 4.51 MB a user
 on the mean (the table's 4.71 holds; the collector's peaks reach ~22% above it, so at the table's 1,845 users little
 of the 25% headroom is left); user message p99 15 ms, `ask_context` p99 272 ms; no leak over 40 minutes. **A full

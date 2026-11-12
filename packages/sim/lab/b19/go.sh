@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# B19's final run (pre-registered in docs/research/b19-final-bench.md §2, D1043, amended by D1045): heldout19, read
+# once, three arms on Hermes (short and days: the headline) and Pi (short and days: the secondary readout). Run only on
+# the parent's go, from this branch after merging the final main:
+#
+#   FINAL=<final main commit> bash packages/sim/lab/b19/go.sh
+#
+# A rehearsal on train runs the same script with SUITE, SEEDS (comma list), PREFIX (the labels' prefix) and EXTRA
+# (flags for the short runs, e.g. "--limit 1"): SUITE=train1 SEEDS=41 PREFIX=reh EXTRA="--limit 1" FINAL=HEAD.
+#
+# HARNESS is this checkout's HEAD (the final main's lab code with B19's tooling merged in). The ledger's hard cap is
+# what the dry runs spent plus $25, never above the session's $40. Every process runs once (run.sh refuses a finished
+# label); the three arms of a step run side by side, so their wall times share one load.
+set -euo pipefail
+cd "$(dirname "$0")/../../../.."
+unset OPENROUTER_API_KEY
+: "${FINAL:?the final main commit}"
+export FINAL BEFORE=5026ba512 HARNESS
+HARNESS=$(git rev-parse --short=9 HEAD)
+if ! git merge-base --is-ancestor "$FINAL" HEAD; then
+  echo "go.sh: HEAD does not contain $FINAL: merge it first" >&2
+  exit 2
+fi
+L=.local/b19
+SPENT=$(python3 -I -c "import json;print(sum(json.loads(l).get('costUsd',0) for l in open('$L/ledger.jsonl')))")
+export CAP
+CAP=$(python3 -I -c "print(round(min(40.0, $SPENT + 25.0), 2))")
+echo "$(date -u +%FT%TZ) go: final=$FINAL harness=$HARNESS spent=$SPENT cap=$CAP" | tee -a $L/starts.log
+# A step's arms run side by side; if any of them fails, the run stops before the next step spends anything.
+PIDS=()
+step_done() {
+  local fail=0
+  for pid in "${PIDS[@]}"; do wait "$pid" || fail=1; done
+  PIDS=()
+  if [ $fail -ne 0 ]; then
+    echo "$(date -u +%FT%TZ) go: an arm of step $1 failed (see its log): stopped" | tee -a $L/starts.log >&2
+    exit 1
+  fi
+}
+MARKET=(--source-profile packages/sim/lab/before-after/market-profiles/direct.json --push payload)
+SUITE=${SUITE:-heldout19}
+IFS=, read -r -a SEEDS <<<"${SEEDS:-41,42,43,44}"
+SEEDLIST=$(IFS=,; echo "${SEEDS[*]}")
+P=${PREFIX:-h19}
+read -r -a EXTRA <<<"${EXTRA:-}"
+
+# 0. Both trees, and the proof they run identical tasks, worlds and prompts (hashes and counts only, no task text).
+TREES=${B19_TREES:-$(dirname "$PWD")/b19/trees}
+for e in "$BEFORE" "$FINAL"; do
+  e=$(git rev-parse --short=9 "$e^{commit}")
+  [ -d "$TREES/$e-on-$HARNESS" ] || bash packages/sim/lab/b19/arm-tree.sh "$e" "$TREES/$e-on-$HARNESS" "$HARNESS"
+  (cd "$TREES/$e-on-$HARNESS" && env -u OPENROUTER_API_KEY bun "$OLDPWD/packages/sim/lab/b19/tasks-hash.ts" \
+    "$SUITE" "$SEEDLIST" 2 20) >"$L/tasks-hash-$e.txt"
+done
+B9=$(git rev-parse --short=9 "$BEFORE^{commit}")
+F9=$(git rev-parse --short=9 "$FINAL^{commit}")
+if ! cmp -s "$L/tasks-hash-$B9.txt" "$L/tasks-hash-$F9.txt"; then
+  echo "go.sh: the before and final trees do not run identical $SUITE tasks; nothing was spent" >&2
+  exit 2
+fi
+
+# 0a. Every arm's harness loads against its own Eden (D1047): compat.py has nothing left to rewrite, and each arm of
+# each step passes a `--dry` start (modules, worlds, coverage; no call, no spend). A failure stops here.
+if [ -n "$(python3 -I packages/sim/lab/b19/compat.py)" ]; then
+  echo "go.sh: compat.py rewrote imports: review and commit them, then start again" >&2
+  exit 2
+fi
+for k in hermes pi; do
+  for a in raw before final; do
+    KIND=$k bash packages/sim/lab/b19/run.sh $a $P-dry-$k-$a --suite "$SUITE" --seeds "${SEEDS[0]}" --dry \
+      >"$L/$P-dry-$k-$a.log" 2>&1 || {
+      echo "go.sh: the $k $a arm does not start (see $L/$P-dry-$k-$a.log); nothing was spent" >&2
+      exit 2
+    }
+  done
+done
+
+# 0b. Shipped coverage for the final default (D1046). A card prompt the final main changed keys its cards apart (H2's
+# `cardsRequestsFix`, D1060: `<hash>:f3`), and the shipped file holds no such lines for this suite. Then the final
+# tree's own enricher records them over the suite's worlds and users (`cold-start.ts --cards-out`, as P7 made the
+# shipped file), and every arm replays the same file: the shipped lines plus those (`--coverage full`). The before
+# arm's keys are the shipped file's, so each arm finds what its own enricher would have written.
+# RECORD_COVERAGE=auto (the default) records only when the final default has that switch on; yes or no forces it.
+F_TREE="$TREES/$F9-on-$HARNESS"
+REC=${RECORD_COVERAGE:-auto}
+if [ "$REC" = auto ]; then
+  ON='import { DEFAULT_CONFIG as C } from "./packages/engine/src/index.ts"; console.log(!!(C as any).cardsRequestsFix'
+  REC=$(cd "$F_TREE" && env -u OPENROUTER_API_KEY bun -e "$ON ? \"yes\" : \"no\")")
+fi
+COV=()
+if [ "$REC" = yes ]; then
+  ROOT=$PWD
+  USERS=$(for s in "${SEEDS[@]}"; do printf '%s:%s,%s:%s:control,%s:%s:neutral,user:%s,' \
+    "$SUITE" "$s" "$SUITE" "$s" "$SUITE" "$s" "$s"; done)
+  [ -e "$L/$P-coverage-final.jsonl" ] || (cd "$F_TREE" && env -u OPENROUTER_API_KEY bun \
+    packages/sim/src/lab/cold-start.ts --users "${USERS%,}" --suite "$SUITE" --days 2 --day-size 20 \
+    --cards-out "$ROOT/$L/$P-coverage-final.part.jsonl" --spend-ledger "$ROOT/$L/ledger.jsonl" --spend-cap "$CAP" \
+    --spend-headroom 0.2 --run-label "$P-coverage" --out "$ROOT/$L/$P-coverage-final.json" \
+    && mv "$ROOT/$L/$P-coverage-final.part.jsonl" "$ROOT/$L/$P-coverage-final.jsonl")
+  gunzip -c packages/sim/lab/distilled/cards-shipped.jsonl.gz >"$L/$P-coverage.jsonl"
+  cat "$L/$P-coverage-final.jsonl" >>"$L/$P-coverage.jsonl"
+  COV=(--coverage full --cards "$ROOT/$L/$P-coverage.jsonl" --intent "$ROOT/$L/$P-coverage.jsonl")
+fi
+echo "$(date -u +%FT%TZ) go: coverage ${COV[*]:-shipped}" | tee -a $L/starts.log
+MARKET+=(${COV[@]+"${COV[@]}"})
+
+# 1. Hermes, one request a session: all four seeds in one process an arm, four workers each.
+for a in raw before final; do
+  KIND=hermes HC=4 bash packages/sim/lab/b19/run.sh $a $P-h-$a --suite "$SUITE" --seeds "$SEEDLIST" \
+    --variants hidden,control,neutral --budget 6 "${MARKET[@]}" ${EXTRA[@]+"${EXTRA[@]}"} >$L/$P-h-$a.log 2>&1 &
+  PIDS+=($!)
+done
+step_done 1
+# 2. Hermes over a user's days: all four users in one process an arm (one stream a user), two days of 20 requests
+# (heldout19's 40 templates bound a user), the day's transcript kept (D1044).
+for a in raw before final; do
+  KIND=hermes HC=4 bash packages/sim/lab/b19/run.sh $a $P-hd-$a --suite "$SUITE" --seeds "$SEEDLIST" --days 2 \
+    --day-size 20 --budget 4 "${MARKET[@]}" >$L/$P-hd-$a.log 2>&1 &
+  PIDS+=($!)
+done
+step_done 2
+# 3. Pi, one request a session: one seed a process (memory), the three arms of a seed side by side.
+for s in "${SEEDS[@]}"; do
+  for a in raw before final; do
+    KIND=pi bash packages/sim/lab/b19/run.sh $a $P-ps-$a-$s --suite "$SUITE" --seeds $s \
+      --variants hidden,control,neutral \
+      --budget 2 --tenant-prompt "${MARKET[@]}" ${EXTRA[@]+"${EXTRA[@]}"} >$L/$P-ps-$a-$s.log 2>&1 &
+    PIDS+=($!)
+  done
+  step_done 3
+done
+# 4. Pi over a user's days: one user a process, two days of 20 requests (heldout19's 40 templates bound a user).
+for s in "${SEEDS[@]}"; do
+  for a in raw before final; do
+    KIND=pi bash packages/sim/lab/b19/run.sh $a $P-pd-$a-$s --suite "$SUITE" --seeds $s --days 2 --day-size 20 \
+      --budget 2 --tenant-prompt "${MARKET[@]}" >$L/$P-pd-$a-$s.log 2>&1 &
+    PIDS+=($!)
+  done
+  step_done 4
+done
+echo "$(date -u +%FT%TZ) go: done" | tee -a $L/starts.log
