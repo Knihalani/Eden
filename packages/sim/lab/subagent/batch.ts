@@ -62,15 +62,21 @@ export function invalid(req: QueuedRequest, a: Answer): string | null {
   if (!text.trim() && !calls.length) return "empty answer";
   if (spec.kind === "json") {
     if (calls.length) return "tool calls on a JSON request";
-    // Text past a stop sequence is cut by the transport, so only the part before it must parse.
+    // Text past a stop sequence is cut by the transport. Either the whole answer or the part before the stop must
+    // parse: a stop placed inside the JSON (the reader's `"same":false`, the lean check's `"act":false`) cuts it
+    // mid-object, and its caller closes the cut reply itself (F7).
     let body = text;
     for (const s of spec.stop ?? []) if (body.includes(s)) body = body.slice(0, body.indexOf(s));
-    try {
-      const v = JSON.parse(unfence(body).trim());
-      if (v === null || typeof v !== "object") return "JSON is not an object or array";
-    } catch (e) {
-      return `JSON does not parse: ${(e as Error).message.slice(0, 80)}`;
-    }
+    const parses = (t: string): string | null => {
+      try {
+        const v = JSON.parse(unfence(t).trim());
+        return v === null || typeof v !== "object" ? "JSON is not an object or array" : null;
+      } catch (e) {
+        return `JSON does not parse: ${(e as Error).message.slice(0, 80)}`;
+      }
+    };
+    const cut = parses(body);
+    if (cut && (body === text || parses(text))) return cut;
   }
   if (spec.kind === "text" && calls.length) return "tool calls on a plain-text request";
   if (calls.length) {
@@ -168,10 +174,21 @@ if (cmd === "take") {
       renameSync(takenPath, join(dirs.pending, `${a.id}.json`));
       continue;
     }
+    // F7: the request's and answer's sizes in characters, kept for pricing ([EST] tokens at about 4 characters
+    // each): the stand-in reports no usage, and the request body itself is not kept.
+    const last = req.messages.at(-1)?.content ?? "";
+    const size = {
+      system: req.system.length,
+      messages: req.messages.reduce((n, m) => n + m.content.length, 0),
+      last: last.length,
+      tools: JSON.stringify(req.tools ?? []).length,
+      out: (answer.text ?? "").length + JSON.stringify(answer.toolCalls ?? []).length,
+    };
     writeAtomic(join(dirs.done, `${a.id}.json`), {
       id: a.id,
       role: req.role,
       model: req.model,
+      size,
       answer,
       transport: TRANSPORT,
       answeredAt: new Date().toISOString(),

@@ -127,12 +127,18 @@ export const SHIPPED_FORM_COVERS: Record<number, Record<string, string[]>> = {
 };
 
 /**
+ * A `<suite>+silent` run (F3, D1123) plants into its base's worlds: the same items, so the base's coverage. Only the
+ * earlier versions it puts at the source for the backfill are new text (carded live, or a replay miss in the funnel).
+ */
+const coverName = (s: string) => s.replace(/\+silent$/, "");
+
+/**
  * The suite × seed shards SHIPPED_FILE was not made for; with a prompt form (`form`), also those it holds no line of
  * that form for (replayed under the form they would have no card and no requests: a silent hole, so not covered).
  */
 export function shippedUncovered(suites: string[], seeds: (string | number)[], form = 0): string[] {
   const covers = (map: Record<string, string[]>, s: string, seed: string | number) =>
-    map[s]?.includes(String(Number(seed))) === true;
+    map[coverName(s)]?.includes(String(Number(seed))) === true;
   const formCovers = form ? (SHIPPED_FORM_COVERS[form] ?? {}) : null;
   return suites.flatMap((s) =>
     seeds
@@ -186,7 +192,9 @@ export function harnessCoverage(o: {
 /** The suite × seed shards INTENT_FILE was not made for. */
 export function intentUncovered(suites: string[], seeds: (string | number)[]): string[] {
   return suites.flatMap((s) =>
-    seeds.filter((seed) => !INTENT_COVERS[s]?.includes(String(Number(seed)))).map((seed) => `${s} seed ${seed}`),
+    seeds
+      .filter((seed) => !INTENT_COVERS[coverName(s)]?.includes(String(Number(seed))))
+      .map((seed) => `${s} seed ${seed}`),
   );
 }
 

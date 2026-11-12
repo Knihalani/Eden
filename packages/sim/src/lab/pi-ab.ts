@@ -123,7 +123,7 @@ import type { AgentEvent, ContextItem } from "@eden/protocol";
 import { QueryPlanner, type ListPage, type Source } from "@eden/sources";
 import { simSources, type SimSource } from "../sources";
 import { noiseSources } from "./noise-sources";
-import type { World } from "../world";
+import type { World, WorldItem } from "../world";
 import {
   applyNotifyShare,
   connectorHeader,
@@ -193,6 +193,7 @@ import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayR
 import { sanitizeForStore } from "@eden/redact";
 import { queueDir, TRANSPORT } from "./queue-transport";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
+import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import {
   argvFields,
@@ -314,6 +315,9 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
 // `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
 const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+/** `--noise-edits N` (F3, D1125): N unrelated items edited silently in every variant (silent.ts `noiseEdits`). */
+const NOISE_EDITS = Number(opt("noise-edits", "0"));
+if (!Number.isInteger(NOISE_EDITS) || NOISE_EDITS < 0) throw new Error("--noise-edits takes a whole number");
 // `--noise-vocab N` (O1): each noise connector gets N words of its own, as the funnel's flag.
 const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
@@ -826,7 +830,17 @@ async function runWorld(
   if (connect) await Bun.sleep(Math.max(0, connect.startAt - performance.now()));
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
-  const world: World = DAYS_ON ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  // F3 (D1123): a silent edit changes the stream's world too (its planted item starts as `before`).
+  const silentOn = baseTasks.some((t) => t.before) || NOISE_EDITS > 0;
+  const world: World = DAYS_ON || silentOn ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
+  const silent = silentOn
+    ? plantBefore(
+        world,
+        baseTasks,
+        baseTasks.map((t) => t.planted),
+      )
+    : new Map<string, WorldItem>();
+  noiseEdits(world, seed, NOISE_EDITS, new Set(baseTasks.flatMap((t) => (t.planted ? [t.planted] : []))), silent);
   // `--late`: the planted items are not at their sources until their requests are answered.
   const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
   let dayLate: { entry: LateEntry; r: RunResult }[] = [];
@@ -1079,6 +1093,10 @@ async function runWorld(
       throw new Error(`sync never warmed for ${scope.userId}: a run without it is not this config`);
   }
   if (cards && !connect) await cards.idle();
+  // F3 (D1123): the silent edits land at their sources now, with no notice: Eden sees them only by polling.
+  if (silent.size > 0) {
+    for (const id of applyEdits(world, silent, clock)) for (const src of sources) if (src.id === id) src.reindex();
+  }
   // What the backfill's enrichment cost before the first request (one-time per user, H16): the rest of the stream's
   // background spend is made while the user works (new and changed items).
   bg.setupUsd = bg.cardsUsd;
