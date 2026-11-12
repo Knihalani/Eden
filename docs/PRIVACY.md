@@ -59,7 +59,7 @@ and a statement on training (none).
 
 ## Controls in code
 
-- **Provider prompt cache (D1193, a trial, off: `EDEN_MODEL_CACHE=on`).** With it on, the roles' Anthropic calls
+- **Provider prompt cache (D1196, a trial, off: `EDEN_MODEL_CACHE=on`).** With it on, the roles' Anthropic calls
   through OpenRouter carry `cache_control` breakpoints, and the provider holds the marked prefix in its prompt cache
   for 5 minutes. For the push check and the card call that prefix is the system message only: Eden's fixed
   instructions (the card call's adds the user's day). It holds no user content. The ask-time reader (not called by

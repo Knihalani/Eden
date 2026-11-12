@@ -445,7 +445,7 @@ not what a call's wait is made of, D241), and every lexical cut so far lost fact
 answers (+39 output tokens a call, about $0.02 per 1,000 tasks) are the facts being stated: not waste. **Not
 worth building:** the levers that move cost are the check (F10) and the cards.
 
-## 12. The shipped route's cache (D1193; a trial pending the owner's probe)
+## 12. The shipped route's cache (D1196; a trial pending the owner's probe)
 
 The servers reach Haiku 5.5 through OpenRouter and send no cache breakpoint (`anthropicCache` off since D145 and
 D817), so in production every push check pays its 1,185-token instructions in full. That is about $0.000107 a call

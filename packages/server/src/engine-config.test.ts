@@ -143,7 +143,7 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
   });
 
-  test("EDEN_MODEL_CACHE (D1193's trial): cache breakpoints only when set to on", () => {
+  test("EDEN_MODEL_CACHE (D1196's trial): cache breakpoints only when set to on", () => {
     const seen: Record<string, unknown>[] = [];
     const make = (o: Record<string, unknown>) => {
       seen.push(o);

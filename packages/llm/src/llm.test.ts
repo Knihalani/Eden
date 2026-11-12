@@ -258,7 +258,7 @@ describe("OpenRouterModel", () => {
     );
   });
 
-  test("the cached prefix is byte-identical across calls whose requests differ (D1193's trial)", async () => {
+  test("the cached prefix is byte-identical across calls whose requests differ (D1196's trial)", async () => {
     const { sent, fake } = capture();
     const model = new OpenRouterModel({
       apiKey: "k",

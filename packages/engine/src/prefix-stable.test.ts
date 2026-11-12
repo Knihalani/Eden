@@ -3,7 +3,7 @@ import type { ContextItem } from "@eden/protocol";
 import { cardMessages } from "./cards";
 import { checkMessages } from "./push-check";
 
-// D1193's trial (`EDEN_MODEL_CACHE`): a provider caches only an identical prefix. The push check's and the card call's
+// D1196's trial (`EDEN_MODEL_CACHE`): a provider caches only an identical prefix. The push check's and the card call's
 // first message, the part a cache breakpoint covers, must not change with the user, the day, the request or the items.
 
 const item = (id: string, text: string): ContextItem => ({
