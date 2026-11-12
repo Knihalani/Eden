@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The subagent card transport's files (F8, D1101; `card-queue.ts`):
+ * The subagent card transport's files (F8, D1102; `card-queue.ts`):
  *
  *   bun packages/sim/src/lab/card-queue-cli.ts batch D N    # D/batches/b-<n>.json: the pending items not yet
  *                                                           # answered or batched, N to a file, and the brief

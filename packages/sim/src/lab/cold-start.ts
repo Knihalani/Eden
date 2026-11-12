@@ -29,7 +29,7 @@
  * world as the funnel and pi-ab do. `wall` is the wall clock every recording before it used (the D872 caches): weeks
  * past the worlds' date, so the window skipped almost every past item (train1:41: 36 request-only reads against 179).
  *
- * `--queue-dir D` (F8, D1101): no API call; the card role is `card-queue.ts`'s queue model, answered per item from
+ * `--queue-dir D` (F8, D1102): no API call; the card role is `card-queue.ts`'s queue model, answered per item from
  * `D/answers/*.jsonl` by subagents (`card-queue-cli.ts`), unanswered items written to `D/pending` and their call
  * failed. Run until nothing is pending; coverage made so is "subagent-simulated", never a model's own recording.
  *

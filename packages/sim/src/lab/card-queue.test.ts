@@ -13,7 +13,7 @@ const items = [
   item("b", "Lunch?", "Fancy lunch on Friday?"),
 ];
 
-describe("card-queue (F8, D1101): the subagent card transport", () => {
+describe("card-queue (F8, D1102): the subagent card transport", () => {
   test("a miss writes each item pending and fails; answered, the reply parses as the model's would", async () => {
     const dir = mkdtempSync(join(tmpdir(), "card-queue-"));
     const req = { messages: cardMessages(items, "2026-10-27", true, CARD_FORM_REQUESTS), maxTokens: 3000 };

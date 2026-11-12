@@ -1,5 +1,5 @@
 /**
- * The subagent card transport (F8, D1101): stands in for the card model when no API credit is available. The shipped
+ * The subagent card transport (F8, D1102): stands in for the card model when no API credit is available. The shipped
  * enricher runs as usual (`cold-start.ts --queue-dir D`); each card call it makes is answered item by item from
  * `D/answers/*.jsonl` when every item of the batch has an answer, and otherwise each unanswered item is written to
  * `D/pending/<key>.json` and the call fails (the enricher counts a failure, as for a 400). Subagents answer the
