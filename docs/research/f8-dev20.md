@@ -113,8 +113,8 @@ names NEUTRAL.
 
 ### At shipped coverage (D1102)
 
-`bun run funnel --suite dev20 --seeds 41,42,43,44 -- --neutral`, default preset, stub reader: hidden 293/640, decoys
-216/640 (dev20a 66/48, dev20b 79/58, dev20c 77/44, dev20d 71/66), neutral any packet 385/640. The enricher never
+`bun run funnel --suite dev20 --seeds 41,42,43,44 -- --neutral`, default preset, stub reader: hidden 292/640, decoys
+216/640 (dev20a 66/48, dev20b 79/58, dev20c 76/44, dev20d 71/66), neutral any packet 385/640. The enricher never
 reads 54 hidden and 123 decoy planted items at shipped coverage, as for the other suites.
 
 The re-record moved every shipped baseline (old file, then new; default preset, stub reader):

@@ -615,14 +615,14 @@ These are four tuning suites of 40 templates each, weighted to the weak points: 
 non-English requests a suite, no word overlap, silent edits, rare connectors and world knowledge. They are not in
 `all`.
 
-Baseline at shipped coverage, measured 2026-11-12 with the default preset and the stub reader: hidden **293/640**,
+Baseline at shipped coverage, measured 2026-11-12 with the default preset and the stub reader: hidden **292/640**,
 decoys **216/640**, neutral any packet 385/640 (the `merged NEUTRAL` line).
 
 | Suite  | Hidden | Decoys |
 | ------ | ------ | ------ |
 | dev20a | 66     | 48     |
 | dev20b | 79     | 58     |
-| dev20c | 77     | 44     |
+| dev20c | 76     | 44     |
 | dev20d | 71     | 66     |
 
 Read these numbers in that run's shape:
