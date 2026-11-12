@@ -144,3 +144,50 @@ test("every deploy script parses (bash -n), and passes shellcheck at warning lev
   const p = Bun.spawnSync(["shellcheck", "-S", "warning", ...scripts]);
   expect(p.stdout.toString()).toBe("");
 });
+
+// The cloud-init each role gets, rendered as an operator would (render-cloud-init.py) and parsed as YAML. A runcmd
+// entry with ": " in it parses as a mapping and cloud-init skips it: every entry must be a string. On a node, ufw
+// loads the DOCKER-USER block (D1702), since Docker's published ports never pass ufw's own rules.
+function rendered(role: string): { runcmd: unknown[]; write_files: { path: string; content: string }[] } {
+  const p = Bun.spawnSync([
+    "python3",
+    "-I",
+    join(root, "deploy/scripts/render-cloud-init.py"),
+    "--role",
+    role,
+    "--ref",
+    "main",
+    "--git-url",
+    URL,
+    "--admin-cidr",
+    "198.51.100.7/32",
+    "--private-cidr",
+    "10.0.1.0/24",
+  ]);
+  expect(p.stderr.toString()).toBe("");
+  return Bun.YAML.parse(p.stdout.toString()) as ReturnType<typeof rendered>;
+}
+
+test("cloud-init: every runcmd entry is a string; only a node filters port 8790 in DOCKER-USER", () => {
+  for (const role of ["single", "node", "router"]) {
+    const c = rendered(role);
+    expect(c.runcmd.filter((x) => typeof x !== "string")).toEqual([]);
+    const rules = c.write_files.find((f) => f.path === "/etc/eden/docker-user.rules");
+    if (role !== "node") {
+      expect(rules).toBeUndefined();
+      continue;
+    }
+    expect(rules!.content).toContain(":DOCKER-USER - [0:0]");
+    expect(rules!.content).toContain("--ctorigdstport 8790 --ctdir ORIGINAL ! -s 10.0.1.0/24 -j DROP");
+    const runcmd = c.runcmd as string[];
+    const append = runcmd.findIndex((x) => x.includes("docker-user.rules >> /etc/ufw/after.rules"));
+    // Appended once (a second cloud-init run finds its marker), and before ufw is enabled, which loads it.
+    expect(runcmd[append]).toContain("grep -q 'eden: DOCKER-USER' /etc/ufw/after.rules ||");
+    expect(append).toBeLessThan(runcmd.indexOf("ufw --force enable"));
+    // The block parses for iptables-restore where the test can run it (root, iptables installed); nothing is loaded.
+    if (process.getuid?.() === 0 && Bun.which("iptables-restore")) {
+      const t = Bun.spawnSync(["iptables-restore", "--noflush", "--test"], { stdin: Buffer.from(rules!.content) });
+      expect({ code: t.exitCode, err: t.stderr.toString() }).toEqual({ code: 0, err: "" });
+    }
+  }
+});
