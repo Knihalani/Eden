@@ -533,21 +533,15 @@ export interface EngineConfig {
    */
   cardsRequestsFix: boolean;
   /**
-   * Trial (F1, docs/research/f1-intent-bridge.md; off; needs `cardsRequestsFix`): the card prompt asks for the same
-   * number of requests in varied forms: a plain request, a plan or need, the broad kind of action the item bears on in
-   * general words, and a question (`CARD_FORM_WIDE`). Its replies are a form of their own in the lab's replay files.
-   */
-  cardsRequestsWide: boolean;
-  /**
-   * On in the default (F2, D1193; docs/research/f2-card-state.md). With `cards`: the card prompt asks each card for its `state`
-   * (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call, and keeps
-   * a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
+   * On in the default (F2, D1193; docs/research/f2-card-state.md). With `cards`: the card prompt asks each card for
+   * its `state` (in force, lifted, met or superseded; `CARD_FORM_STATE`), judged by the card model in the same call,
+   * and keeps a none card that says a constraint was lifted, met or superseded. Old cards have no state (unknown).
    */
   cardsState: boolean;
   /**
-   * On in the default (F2, D1193). With `cards` and `cardsState`: the push's pool (`pushGate`) leaves out an item carded none whose state says a
-   * constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state, or a card of another kind,
-   * stays.
+   * On in the default (F2, D1193). With `cards` and `cardsState`: the push's pool (`pushGate`) leaves out an item
+   * carded none whose state says a constraint was lifted, met or superseded (`CLEARED_STATES`). An item with no state,
+   * or a card of another kind, stays.
    */
   pushStateFilter: boolean;
   /**
@@ -743,6 +737,20 @@ export interface EngineConfig {
    */
   pushCheckItems: number;
   /**
+   * F5 (D1180, promoted on subagent evidence; docs/research/f5-rule-sheet.md): the push check also reads the user's
+   * rule sheet, at most this many of their active constraint cards (`SHEET_MAX_CARDS` at most; 0 off), each its
+   * statement, kind, span, source and item title, as a cached block after the instructions (`SHEET_HEAD`). A rule the
+   * reply names brings its item into the packet after the pool's named items, within `pushCandidates`. Expired cards
+   * (an end before the user's day), `none` and `preference` cards are left out, newest items first. A user with more
+   * active rules than this gets no sheet (D1183: a newest slice of a heavy user's rules speaks on neutral requests).
+   */
+  pushCheckSheet: number;
+  /**
+   * F5 (D1180, with `pushCheckSheet`): a pool item on the sheet is sent as its title and its rule's number instead of
+   * its text: the cached sheet line stands in for part of the uncached pool (cost).
+   */
+  pushCheckSheetRefs: boolean;
+  /**
    * O3 (D702, promoted by D710; docs/research/o3-push-open.md, o3-pointer.md): with `pushCandidates`, the push also
    * runs for a message whose verb is on no list but which does not open as a question, a
    * remark or a statement (`isOpenRequest`). The candidates make no model call, so the verb lists (`isImperative`,
@@ -776,6 +784,29 @@ export interface EngineConfig {
    * model, no call.
    */
   revisionDiff: boolean;
+  /**
+   * F3 (D1131, in the default at 2 h; 0 = off): while a user is active (`syncActiveMs`), the sync's tick runs a
+   * complete background poll of each warm synced source whose last complete poll is older than this (ms), whatever
+   * its learned rate says. A quiet source is otherwise trusted for up to `syncMaxStaleMs` (6 h), so a silent edit
+   * there went out as the pre-edit copy (D1126). No request waits for it, and the request path's own polls mostly
+   * stop (its sources are current); its price is connector calls per active user-hour (COST-MODEL §Hosting (b)). A
+   * source that notifies (`syncPush`) is never polled by it, nor one not marked first-party or flat-rate
+   * (`Source.callPriced` false; absent counts as priced, D1133) unless `syncActivePollPriced`.
+   */
+  syncActivePollMs: number;
+  /**
+   * F3 (D1132, in the default), with `syncActivePollMs`: a floor poll of a source that brings in nothing new doubles
+   * that source's interval, up to four times the floor (2 h to 8 h); anything new stored from the source, by any
+   * read, sets it back to the floor. A quiet source is then polled about a quarter as often, one that changes as
+   * before.
+   */
+  syncActivePollBackoff: boolean;
+  /**
+   * D1132, D1133, with `syncActivePollMs`: the deployment's opt-in (an operator setting in `EDEN_ENGINE_CONFIG`, one
+   * for every tenant the server runs) to floor polls of sources not marked first-party or flat-rate
+   * (`Source.callPriced` true, or absent: unknown counts as priced). Off: those sources keep their learned rate.
+   */
+  syncActivePollPriced: boolean;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -896,7 +927,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   cardsLanes: 4,
   cardsSourceAware: true,
   cardsRequestsFix: true,
-  cardsRequestsWide: false,
   cardsState: true,
   pushStateFilter: true,
   intentHits: 12,
@@ -932,8 +962,13 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
   revisionDiff: true,
+  syncActivePollMs: 7_200_000,
+  syncActivePollBackoff: true,
+  syncActivePollPriced: false,
 };

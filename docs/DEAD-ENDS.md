@@ -73,6 +73,10 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
 | D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
 | D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
+| D1181 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | F5, D814 |
+| D1182 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | The bar: on a user with 300 rule cards, the selection must bring back at least half of what a 300-card sheet… |
+| D1271 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | asked of the check it lost facts: planted handed 94 against main's 99 of 120 hidden rows (bar: ≥ 96)… |
+| D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
 
 ## Reader
 
@@ -125,6 +129,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D970 | Rejected (stopped on its pre-registered rule, ee079a30, amended before selection by 61f5130b and 4539fab1): `intentMicro`, an intent… | mode 2 (only where Haiku wrote none) read 234 and 232 (+2.5 and +1.9 points, against a bar of +5.0), with… |
 | D998 | part of: card state frozen with its user rejected | Merged with main (b99f0171), RSS a user after a thaw 8.61 / 8.60 → 7.31 / 7.46 MB (−13% to −15%; −20% to… |
 | D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
+| D1154 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | Form-4 cards recorded on the world's clock (D1102) through the queue for dev20 seeds 41–44, against the… |
 
 ## Check
 
@@ -207,7 +212,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 |---|---|---|
 | D51 | A per-user standing-constraints register, behind `register`, off by default. | killed later: The sweep breaks the calls bar (8.66 per lookup) |
 | D58 | A per-user knowledge graph over every cached item, with graph-walk retrieval and no model, behind `graph` and `graphMerge`, off by default. | killed by D225 |
-| D60 | Anticipation, behind `anticipate`, off by default. | killed by D227 |
+| D60 | Anticipation, behind `anticipate`, off by default. | killed by D1301: Fit on train at 2% neutral packets, the best arm (the pass's acts, cosine less the request's median rule… |
 | D89 | The request-time bridging query, `bridgeQuery` (`bridge.ts`, `PartnerDeps.bridge`: a `QueryBridge` with its own `BridgeMaker`, model and… | killed by D112: no measurement favoured them on |
 | D102 | `slowPathQueue`: a request that reaches the slow path while the session's slow path is busy is kept in a one-slot per-session queue (the… | killed by D228: The queued lookups' deliveries were almost all rule paths (hidden 23 → 2, decoys 67 → 4 by rule path), and… |
 | D107 | The knowledge graph (D58) costs less to hold and to build, with the same results. | killed by D225: hidden +0 |
@@ -217,6 +222,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D141 | part of: deleting the graph's code is rejected | because no switch exists yet |
 | D196 | Retiring rule paths (trial `rulesOff`) is rejected and deleted | hidden −2.3 (−6.6..+2.0) |
 | D216 | Rejected: ingest off the event loop. | hidden +0 |
+| D227 | Anticipation (`anticipate`, `anticipateCalls`, `anticipateSessionCalls`, `anticipateOff`; D60) is deleted with its code and tests |  |
 | D233 | Rejected: read at ingest, not per request. | It fails on the same wall: the match back to the request is lexical, and the model judging an item without… |
 | D238 | part of: trimming it by what cannot bind is rejected | a 160-character item window (`askReaderItemChars` 240 → 160) costs more |
 | D308 | `senderDomains` (a compacted From line keeping its address's domain) measured and deleted with its code and tests |  |

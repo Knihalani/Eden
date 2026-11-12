@@ -57,6 +57,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   syncIngestTurns: true,
   // D356 (A21): sources the user does not use are swept weekly; their unswept copies are re-read before delivery.
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
+  syncActivePollMs: 7_200_000,
+  syncActivePollBackoff: true,
   // D505, D509 (N1): a source whose live reads go unused is not read live again (its own run).
   sourceYield: true,
   // D600, D601, D603 (O1): a source with nothing used is read live only on a name or a rare word; a name many
@@ -107,6 +109,9 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   // D376 (A25): checkAction holds a party only Eden's packets showed.
   partyCheck: true,
   requestGloss: true,
+  // D1180 (F5): the push check reads the user's rule sheet, pool items on it sent as pointers.
+  pushCheckSheet: 80,
+  pushCheckSheetRefs: true,
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -138,11 +143,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(77);
+    expect(differ.length).toBe(81);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(77);
+    expect(partKeys.size).toBe(81);
   });
 });
 

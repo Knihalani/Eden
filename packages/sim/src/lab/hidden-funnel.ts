@@ -75,7 +75,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
   AskReader,
   CardEnricher,
-  cardForm,
+  CARD_FORM_REQUESTS,
   cardKey,
   intentCut,
   intentReach,
@@ -87,6 +87,7 @@ import {
   type CandidateDump,
   type CardMaker,
   automated,
+  readForIntent,
   type PushPoolReport,
   PushChecker,
   worthCarding,
@@ -97,11 +98,19 @@ import {
   sanitizeItem,
   renderPacket,
   isStopword,
-  CARD_FORM_STATE,
-  CARD_STATES as CARD_STATES_ALL,
-  CLEARED_STATES,
   type CardState,
 } from "@eden/engine";
+import * as engineNs from "@eden/engine";
+// `cardsState`'s names (F2, D1193), read off the namespace: the BEFORE tree's engine has none, and a named import of a
+// missing export fails at load.
+const STATE_NS = engineNs as {
+  CARD_FORM_STATE?: number;
+  CARD_STATES?: readonly string[];
+  CLEARED_STATES?: ReadonlySet<string>;
+};
+const CARD_FORM_STATE = STATE_NS.CARD_FORM_STATE ?? 16;
+const CARD_STATES_ALL: readonly string[] = STATE_NS.CARD_STATES ?? ["in_force", "lifted", "met", "superseded"];
+const CLEARED_STATES: ReadonlySet<string> = STATE_NS.CLEARED_STATES ?? new Set(["lifted", "met", "superseded"]);
 import { SourceMap } from "@eden/graph";
 import { Budget, type Model } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
@@ -521,8 +530,11 @@ const intentNow = () => intentState(RUN, intentUse);
  * planted item without one runs with no requests in every intent screen (D173: printed as planted coverage). Read on
  * the cached item, whose content is what the card model would be sent.
  */
-// The enricher's form (`cardForm`); under `--card-states` the replay answers in its own form, the state flag taken off.
-const CARD_FORM = cardForm(RUN) & (CARD_STATES ? ~CARD_FORM_STATE : ~0);
+// The enricher's form (`cardForm`; the BEFORE tree's engine has none); under `--card-states` the replay answers in its
+// own form, the state flag taken off.
+const CARD_FORM =
+  ((engineNs as { cardForm?: (c: typeof RUN) => number }).cardForm?.(RUN) ??
+    (RUN.cards && RUN.intent && RUN.cardsRequestsFix ? CARD_FORM_REQUESTS : 0)) & (CARD_STATES ? ~CARD_FORM_STATE : ~0);
 const inReplay = (item: Parameters<typeof cardKey>[0]): boolean | null =>
   INTENT_FILES.length && cardMaker ? cardMaker.requests.has(cardMaker.requestKey(item, CARD_FORM)) : null;
 /** The inert mark for a line, read when the line is printed (the replay's hits so far). */
@@ -1270,6 +1282,9 @@ async function runSeed(
       cardRead,
       // Not `cardsLean` itself: an item still queued at the ask is here too (ask-coverage.ts says why).
       notSentPrefilterRejects: !cardRead && !prefilter,
+      prefilter,
+      automated: automated(item),
+      forIntent: readForIntent(item, askAt, RUN.cardsLeanDays),
       // -1: the replay has no line for its content ("not in replay", told apart from a line with no requests).
       replayRequests: replay === null ? null : replay ? (cardMaker!.requests.get(hash)?.length ?? 0) : -1,
       heldRequests: held,
@@ -1637,6 +1652,10 @@ async function runSeed(
       ...(push ? { pushPoolAt: push.pool.indexOf(id), pushHanded: push.handed.includes(id) } : {}),
       // How many candidates that pass handed (0: no candidates packet; I1's compare.py counts neutral tasks given one).
       ...(push ? { pushHandedN: push.handed.length } : {}),
+      // `pushCheckSheet` (F5): the planted item's place on the rule sheet the check read (-1: not on it).
+      ...(push?.sheet ? { pushSheetAt: push.sheet.indexOf(id) } : {}),
+      // With it, the planted item's card kind at the end of the task ("none": no card, a none card or expired).
+      ...(push?.sheet && cards ? { plantedCard: cards.cardsOf(scope, [id], clock).get(id)?.kind ?? "none" } : {}),
       // `+stale` synth and `+revision` suites (D908 rule 1, D914): the stale version's place in that pool, and whether
       // it was handed.
       ...(push && task.stale

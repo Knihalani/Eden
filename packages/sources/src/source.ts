@@ -45,6 +45,14 @@ export interface Source {
    * whenever its learned change rate says it may have.
    */
   readonly notifies?: boolean;
+  /**
+   * Whether each call to this source is billed by the connector's transport. True: billed per call (Composio,
+   * Unified.to, Arcade.dev, Pipedream Connect, Zapier MCP, any per-call plan, COST-MODEL §Hosting (b)). False:
+   * first-party (quota only) or flat-rate, as the server's connector presets and the lab's sim sources are. Absent:
+   * unknown, which counts as priced (D1133, fail safe): the engine's freshness floor (`syncActivePollMs`) polls only a
+   * source marked false, unless the deployment opts in (`syncActivePollPriced`).
+   */
+  readonly callPriced?: boolean;
   search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]>;
   /**
    * Whether `fetch` returning null means the source no longer has the item (deleted), rather than "could not say":

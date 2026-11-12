@@ -387,7 +387,15 @@ Receiving notifications has its own cost, which Eden does not see: a platform ma
 carries only a history id that your code turns into items with a `history.list` call.
 
 **A source you cannot forward notices for** is polled on Eden's own schedule: before a lookup when its learned rate
-of new items says it has probably gained one, and at most `syncMaxStaleMs` (6 hours) apart. An edit to an item the
+of new items says it has probably gained one, at most `syncMaxStaleMs` (6 hours) apart, and, while its user is active,
+in the background at least every 2 hours (the freshness floor, `syncActivePollMs`, D1131, D1132; a source whose polls
+find nothing waits up to 8 hours). The floor stores a silent edit before the request that needs it, and no request waits
+for it. Its price is connector calls: about 800 a heavy user-month **[EST]** (docs/COST-MODEL.md §Hosting). The floor
+polls only a source marked first-party (quota only) or flat-rate: `"callPriced": false` in its spec (or `callPriced:
+false` on a `Source` you build); the connector presets (`gmail`, `google-calendar`, `caldav`, `obsidian`) are marked so.
+A source billed per call (Composio, Unified.to, Arcade.dev, Pipedream Connect, Zapier MCP, any per-call transport,
+`"callPriced": true`) and a source with no mark are left to their learned rate (D1133: unknown counts as priced),
+unless your engine config turns `syncActivePollPriced` on. An edit to an item the
 agent was already handed (a moved meeting, a changed document) reaches the agent at the next poll that lists it. In
 the simulation, with no notices, about 93% of such updates arrive before the session ends when the change lands
 mid-session, but a quiet calendar is seldom polled within a session (6–7 of 15 calendar updates arrived; with notices
