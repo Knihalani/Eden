@@ -62,7 +62,7 @@ export interface Condition {
 const ASK_FLAG = "ask";
 /** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
 const NOKEY_FLAG = "nokey";
-/** The harness flag `+guide` (F6): the integrator's system-prompt line about Eden's context, never sent to the engine. */
+/** The harness flag `+guide` (F6): the integrator's system-prompt line on Eden's context, never sent to the engine. */
 const GUIDE_FLAG = "guide";
 /** The harness flags of D336's packet layouts, never sent to the engine. */
 const LAYOUT_FLAGS: readonly PacketLayout[] = ["ephemeral", "ephemeralBp"];

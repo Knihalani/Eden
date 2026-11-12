@@ -164,9 +164,9 @@ export const CANDIDATES_LEAD =
  * About as long as `CANDIDATES_LEAD`, so the packet's bytes stay level.
  */
 export const CHECKED_LEAD =
-  `${EDEN_NOTE}a check found these items from the user's sources may change this request. Compare each with the ` +
-  "request's people, dates and times; tell the user every one that applies and what it changes, before acting. " +
-  "Ignore one that does not apply; do not mention it.";
+  `${EDEN_NOTE}a check found these items may change this request. Compare each with the request's people, ` +
+  "dates and times; tell the user each one that applies and what it changes, before acting. Ignore one that is " +
+  "out of date or does not apply; say nothing of it.";
 
 /**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
@@ -322,7 +322,7 @@ function withoutEcho(part: string, title: string[]): string {
     [prev, cur] = [cur, prev];
   }
   // From the end: a run ending at word i covers words i-run+1..i; take it whole and continue before it.
-  for (let i = words.length - 1; i >= 0; ) {
+  for (let i = words.length - 1; i >= 0;) {
     const run = best[i]!;
     if (run >= ECHO_RUN) {
       const a = words[i - run + 1]!;

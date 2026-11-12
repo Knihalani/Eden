@@ -1463,7 +1463,7 @@ export class ContextPartner {
       if (p.reason.startsWith(UPDATED) && p.citations.every((c) => ids.has(c.itemId))) s.pending.splice(k, 1);
     }
     // As many packets as the size cut needs: an item cut from one is said in the next, never promised unsaid.
-    for (let rest = changed; rest.length > 0; ) {
+    for (let rest = changed; rest.length > 0;) {
       const { injection, items: said } = this.buildUpdate(s, rest);
       rest = rest.slice(said.length);
       // Promised now: a second store of the same version, before the agent takes this, queues nothing more.
@@ -2527,8 +2527,10 @@ export class ContextPartner {
       if (!yes || kept.asked !== asked || !items.every((it) => kept.marks.get(it.id) === itemMark(it))) continue;
       // An answer that named its most (5) may have left out items a fresh read of a smaller pool would name.
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
+      // Kept in the reply's order (`checkedLead` hands them so); membership is all the default reads.
+      const present = new Set(items.map((it) => it.id));
       return {
-        yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        yes: new Set([...yes].filter((id) => present.has(id))),
         costUsd: 0,
         called: false,
         overBudget: false,
@@ -4656,7 +4658,7 @@ export class ContextPartner {
     const windows: SearchQuery["window"][] = [];
     if (!off.has("day") && !listed && days.length > 0 && days.length <= 7 && isScheduling(cue.raw)) {
       const next = (d: string) => new Date(Date.parse(d) + 86_400_000).toISOString().slice(0, 10);
-      for (let i = 0; i < days.length; ) {
+      for (let i = 0; i < days.length;) {
         let j = i;
         while (j + 1 < days.length && days[j + 1] === next(days[j]!)) j++;
         windows.push({ start: days[i]!, end: next(days[j]!), offsetMinutes: cue.offset });

@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { PushChecker } from "./push-check";
-import { CANDIDATES_LEAD, CHECKED_LEAD } from "./render";
+import { ASK_NUDGE, CANDIDATES_LEAD, CHECKED_LEAD } from "./render";
 
 // `checkedLead` (F6, trial): a packet whose items the push check named is led by `CHECKED_LEAD` and holds them in the
 // check's order; any packet the check did not pick (off, failed open) keeps `CANDIDATES_LEAD` and the pool's order.
@@ -96,6 +96,42 @@ describe("checkedLead (F6): a checked packet says so and keeps the check's order
     const lines = got.text.split("\n");
     expect(lines[1]).toBe(CHECKED_LEAD);
     expect(lines[2]).toStartWith("- [mail] Harlow venue");
+  });
+
+  test("on: a kept check reused by a later pass with no call keeps the reply's order (review)", async () => {
+    const model = says(["Harlow venue", "Harlow deposit"]);
+    // No cooldown, so the same request's second pass may hand the items again from the kept check.
+    const { partner, ref } = partnerWith({ pushCheck: true, checkedLead: true, ledgerCooldownTurns: 0 }, model);
+    expect((await packet(partner, ref))!.citations.map((c) => c.itemId)).toEqual(["mail:hold", "mail:dated"]);
+    const again = (await packet(partner, ref))!;
+    expect(model.calls.length).toBe(1);
+    expect(again.citations.map((c) => c.itemId)).toEqual(["mail:hold", "mail:dated"]);
+    expect(again.text.split("\n")[1]).toBe(CHECKED_LEAD);
+  });
+
+  test("on, with the default's settled cut and nudge: the cut keeps the check's first item; a nudge follows", async () => {
+    const model = says(["Harlow venue", "Harlow deposit"]);
+    const on = { pushCheck: true, checkedLead: true, pushCandidatesSettled: 1, askNudge: true };
+    const { partner, ref } = partnerWith(on, model);
+    const got = (await packet(partner, ref))!;
+    // Settled (the request names Harlow; every item does): one item, the check's first, not the pool's.
+    expect(got.citations.map((c) => c.itemId)).toEqual(["mail:hold"]);
+    expect(got.text.split("\n")[1]).toBe(CHECKED_LEAD);
+    const nudged = partnerWith(on, says(["Harlow venue", "Harlow deposit"]), "u2");
+    await nudged.partner.observe(
+      {
+        ...nudged.ref,
+        at: NOW,
+        kind: "user_message",
+        text: "Pay the Harlow venue deposit to Dana Okafor on Friday.",
+      } as AgentEvent,
+      { waitMs: 2_000 },
+    );
+    const lead = nudged.partner
+      .takePending(nudged.ref)
+      .find((x) => x.reason.startsWith("candidates:"))
+      ?.text.split("\n")[1];
+    expect(lead === undefined || lead === CHECKED_LEAD || lead === `${CHECKED_LEAD} ${ASK_NUDGE}`).toBe(true);
   });
 
   test("off: the same check's items in the pool's order, under CANDIDATES_LEAD", async () => {

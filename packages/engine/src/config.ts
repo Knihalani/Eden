@@ -688,7 +688,9 @@ export interface EngineConfig {
    * F6 (trial, docs/research/f6-uptake.md): when the push check named the packet's items (`pushCheck`), the packet
    * is led by `CHECKED_LEAD` (a check found they may change the request; tell the user every one that applies)
    * instead of `CANDIDATES_LEAD` ("nothing has checked them"), and the items go in the check's order (its reply
-   * lists the most decisive first) rather than the pool's. No model call, no new item; about the same bytes.
+   * lists the most decisive first) rather than the pool's, a kept check reused by a second pass too. So
+   * `pushCandidatesSettled`'s cut keeps the check's first items, not the pool's. No model call, no new item; about
+   * the same bytes.
    */
   checkedLead: boolean;
   /**
