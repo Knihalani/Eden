@@ -133,3 +133,44 @@ For the final read, with before ≠ final and four base worlds:
   cards 400–700).
 - That is about 550–600 batches.
 - Plan 60–90 min with about 20 workers at once (this session's cap is 20 concurrent subagents).
+
+## Driving tips and pitfalls (from the rehearsal)
+
+**Roles and batches.**
+
+- Keep roles apart with `take --model PREFIX`, not `--role`. `claude-haiku` covers `agent`, `eden.check`,
+  `eden.cards` and `eden.reader`; `claude-sonnet` is the grader alone.
+- `queue-worker` defaults to haiku: spawn graders with model `sonnet` and MPREFIX `claude-sonnet`.
+- Batch sizes that worked:
+  - cards, 4 a batch (each about 20 items), with `--max-chars 120000`;
+  - checks and agent calls, 8;
+  - grades, 10.
+
+  F9 found checks equally faithful at 20–30 a batch.
+
+**Phases.**
+
+1. Coverage asks only for `eden.cards`.
+2. Single-shot asks for `agent` and `eden.check`, then a wave of `grader`. When only `grader` is pending, give most
+   slots to sonnet workers.
+3. Multi-turn sends each task's agent calls one after another; `--split 8` keeps about a hundred in flight.
+
+**Workers.** A worker stops after 12 batches or about five idle minutes: start another while work is pending.
+Requests left in `taken/` by a worker that died go back with `batch.ts requeue --dir Q --older-min 5`.
+
+**Resume.** Re-running the same command skips every output that exists: a world's `.done` marker, an arm's `.json`.
+Answers already in `q/done/` replay at once.
+
+- An arm that crashed midway: delete its `<arm>.*` files and run again. Without that, pi-ab's `.partial.jsonl` journal
+  refuses a run that lacks `--resume`.
+- Do not time a run on a queue another FINAL already filled: its replays take no time.
+
+**Pitfalls already fixed in go.sh.**
+
+- A $1 spend cap refused calls. The ledger reserves estimates even at $0, so the cap is now 100000.
+- One cold-start process for all users took hours; it is now one process a world.
+- `readerPushWaitMs` capped the push at 60 s. It is lifted now, and `check-order.py` asserts the order.
+
+**Pitfall not caught by any check.** In D1160's hand-driven pilot a worker swapped two answers between ids. `put`
+validates an answer's format, not whether it answers its own request, so read a sample of answers if a number
+looks odd.
