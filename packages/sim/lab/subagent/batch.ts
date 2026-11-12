@@ -24,6 +24,7 @@
 import {
   appendFileSync,
   existsSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -32,7 +33,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   ensureQueue,
   queueDirs,
@@ -165,6 +166,9 @@ if (cmd === "take") {
   let arm: string | undefined;
   const maxChars = Number(opt("max-chars", "400000"));
   if (!out) throw new Error("take needs --out FILE");
+  // Made before any request moves to taken/: a missing directory used to fail the write after the moves, stranding the
+  // batch in taken/ until a requeue.
+  mkdirSync(dirname(out), { recursive: true });
   // Oldest first, so a long-waiting request is not starved by newer ones.
   const files = list(dirs.pending)
     .map((f) => ({ f, t: statSync(join(dirs.pending, f)).mtimeMs }))
