@@ -300,3 +300,16 @@ on the request path. Everything is re-opened under this priority, D248 included.
 Reported per arm: agent model calls and tool calls a task; tokens a call by role; $ per 1,000 tasks and per task
 (`price-queue.py`) [EST]; and a modelled wall a task: H3's fit summed over the task's agent calls and the push check,
 plus the connector time the timeline measures [EST]. Measured walls are the subagents' and are not read.
+
+(The final arm runs as `both+ask@w900000`: the harness's 3,000 ms observe wait is lifted with the check's, so the
+packet waits for its subagent-served check as it would for the API's.)
+
+**Lever (a), pre-registered before its first call: `pushSearchedLead`.** A packet the push check picked says what
+Eden did: "Eden searched the user's mail, calendar, documents, CRM and chat for this request, and a quick read picked
+these items as likely to change what to do", followed by the shipped instruction to check each item. Today's lead
+says "nothing has checked them against it", which invites the agent to search again before it acts. Its own arm
+runs on the same 36 tasks and queue (`EDEN_LAB_QUEUE_RUN=searched`, `both+ask+pushSearchedLead@w900000`, the same
+config). **Rule (served by subagents, D1101; a screen on a small sample, said so):** keep it, and recommend
+promotion, if against the final arm: agent tool calls a task are at least 0.2 lower, agent model calls a task are not
+higher, hidden facts raised (the run's grader) fall by at most 1 of 12, and concerns on control and neutral are not
+up. Otherwise delete it the same day.

@@ -157,6 +157,18 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `pushSearchedLead` (F7, a trial; docs/research/f7-cost-latency.md §10): the candidates' lead when the push check
+ * read the pool and picked these items. It says what Eden did (searched the user's sources for this request and read
+ * the matches) so the agent need not repeat that search before acting; the shipped lead says nothing has checked the
+ * items, which is not so once the check answered. The agent is still asked to check each item and to say nothing of
+ * one that does not bear on the request.
+ */
+export const SEARCHED_LEAD =
+  `${EDEN_NOTE}Eden searched the user's mail, calendar, documents, CRM and chat for this request, and a quick read ` +
+  "picked these items as likely to change what to do. Before using one, check it is about the same person, thing " +
+  "and date as the request and still current; if it is not, ignore it and do not mention it.";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

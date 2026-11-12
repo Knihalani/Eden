@@ -696,3 +696,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| F7 searched lead | `pushSearchedLead` | F7 | decided this session (D814) | docs/research/f7-cost-latency.md §10: on the subagent-served multi-turn Pi run, agent tool calls a task at least 0.2 under the default's, agent model calls not up, hidden raised not down by more than 1 of 12, concerns not up |
