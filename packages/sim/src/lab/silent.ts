@@ -8,6 +8,7 @@
  * date two days off, a clock time an hour earlier, an amount 25% up, a count one up, else a draft), so the edit is
  * one detail and mechanical, tuned to no model. Suites written with their own `before` (F8's dev20) need nothing.
  */
+import { Rng } from "../rng";
 import type { World, WorldItem } from "../world";
 import { dress, type HiddenTask } from "./hidden-context";
 import { stale } from "./revision";
@@ -67,6 +68,49 @@ export function plantBefore(
     held.set(id, edited);
   });
   return held;
+}
+
+/** Sources whose items people edit in place (an event moved, a doc or note reworded, a task or booking changed). */
+const EDITABLE = new Set(["calendar", "drive", "notes", "tasks", "trips", "residents", "school"]);
+
+/**
+ * `--noise-edits N` (F3, D1125): N items no task is about, edited silently in every variant by the same fixed rule
+ * (revision.ts's `stale`, never its "draft" fallback): their earlier version is at the source for the backfill and the
+ * edit lands with the planted ones. So a hidden, control and neutral world alike hold edits that matter to no request,
+ * and a change line on one of them shows up where false concerns are graded. Chosen by the seed alone from items in
+ * editable sources that are not planted, noise filler or secrets; added to `held` (for `applyEdits`).
+ */
+export function noiseEdits(
+  world: World,
+  seed: number,
+  n: number,
+  avoid: ReadonlySet<string>,
+  held: Map<string, WorldItem>,
+) {
+  if (n <= 0) return;
+  const pool = world.items
+    .map((it, i) => ({ it, i }))
+    .filter(({ it }) => EDITABLE.has(it.sourceId) && !avoid.has(it.id) && !held.has(it.id) && !it.noise && !it.secret)
+    .sort((a, b) => (a.it.id < b.it.id ? -1 : a.it.id > b.it.id ? 1 : 0));
+  const rng = new Rng(seed * 7_907 + 5);
+  let picked = 0;
+  while (picked < n && pool.length > 0) {
+    const { it, i } = pool.splice(rng.int(0, pool.length - 1), 1)[0]!;
+    const s = stale(it.title, it.text);
+    if (s.rule === "draft" || (s.title === it.title && s.text === it.text)) continue;
+    const meta = it.meta?.start
+      ? { ...it.meta, start: new Date(Date.parse(it.meta.start) + s.days * 86_400_000).toISOString() }
+      : it.meta;
+    world.items[i] = {
+      ...it,
+      title: s.title,
+      text: s.text,
+      updatedAt: it.updatedAt - 3 * 86_400_000,
+      ...(meta ? { meta } : {}),
+    };
+    held.set(it.id, it);
+    picked++;
+  }
 }
 
 /**

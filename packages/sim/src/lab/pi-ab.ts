@@ -192,7 +192,7 @@ import {
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { sanitizeForStore } from "@eden/redact";
 import { piName, spanRouter, Timeline } from "./pi-timeline";
-import { applyEdits, plantBefore } from "./silent";
+import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { holdPlanted, laterText, release, type LateEntry } from "./pi-late";
 import {
   argvFields,
@@ -283,6 +283,9 @@ const NOISE_SOURCES = Number(opt("noise-sources", "0"));
 // `--notify-share P` (N1, `applyNotifyShare`): the share of connectors that send change notifications.
 const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+/** `--noise-edits N` (F3, D1125): N unrelated items edited silently in every variant (silent.ts `noiseEdits`). */
+const NOISE_EDITS = Number(opt("noise-edits", "0"));
+if (!Number.isInteger(NOISE_EDITS) || NOISE_EDITS < 0) throw new Error("--noise-edits takes a whole number");
 // `--noise-vocab N` (O1): each noise connector gets N words of its own, as the funnel's flag.
 const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 if (!Number.isInteger(NOISE_SOURCES) || NOISE_SOURCES < 0 || !Number.isInteger(NOISE_ITEMS) || NOISE_ITEMS < 1)
@@ -791,7 +794,7 @@ async function runWorld(
   // `--day` changes items during the run: each stream gets its own copy of them, since every condition's stream reads
   // the same world concurrently.
   // F3 (D1123): a silent edit changes the stream's world too (its planted item starts as `before`).
-  const silentOn = baseTasks.some((t) => t.before);
+  const silentOn = baseTasks.some((t) => t.before) || NOISE_EDITS > 0;
   const world: World = DAYS_ON || silentOn ? { ...shared, items: shared.items.map((i) => ({ ...i })) } : shared;
   const silent = silentOn
     ? plantBefore(
@@ -800,6 +803,7 @@ async function runWorld(
         baseTasks.map((t) => t.planted),
       )
     : new Map<string, WorldItem>();
+  noiseEdits(world, seed, NOISE_EDITS, new Set(baseTasks.flatMap((t) => (t.planted ? [t.planted] : []))), silent);
   // `--late`: the planted items are not at their sources until their requests are answered.
   const lateHeld = LATE ? holdPlanted(world, baseTasks) : null;
   let dayLate: { entry: LateEntry; r: RunResult }[] = [];

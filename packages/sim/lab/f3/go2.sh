@@ -16,7 +16,7 @@ COMMON=(--config default --model claude-haiku-5-5 --grader claude-sonnet-5-5 --c
   --coverage full --cards $D/shipped.jsonl --intent $D/shipped.jsonl
   --conditions both+ask,both~CH+ask,both~CW+ask
   --variant-config '{"CH":{"packetChanges":true},"CW":{"packetChanges":true,"packetWhy":true}}'
-  --variants hidden,control,neutral --templates "$T" --suite dev20a,dev20b,dev20c,dev20d)
+  --variants hidden,control,neutral --templates "$T" --suite dev20a,dev20b,dev20c,dev20d --noise-edits 16)
 P=()
 for s in 41 42 43 44; do
   n=dev20-$s

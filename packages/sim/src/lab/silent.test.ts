@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildWorld } from "../world";
-import { applyEdits, plantBefore } from "./silent";
+import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { parseSuites, SUITES } from "./suites";
 
 // F3 (D1123): silent edits. A hidden task's planted item starts at its source as `before`; the edit lands, with no
@@ -71,5 +71,30 @@ describe("plantBefore and applyEdits", () => {
     const items = w.items.map((i) => ({ ...i }));
     expect(plantBefore(w, [{}, { before: { title: "x", text: "y" } }], [w.items[0]!.id, undefined]).size).toBe(0);
     expect(w.items).toEqual(items);
+  });
+});
+
+describe("noiseEdits (D1125)", () => {
+  test("N unrelated items start one detail earlier, the same picks for a seed in every variant, never a planted one", () => {
+    const pick = (variant: "hidden" | "control") => {
+      const w = buildWorld({ seed: 41_000 });
+      const n0 = w.items.length;
+      SUITES.train5!(w, 41, variant);
+      const planted = new Set(w.items.slice(n0).map((x) => x.id));
+      const held = new Map();
+      noiseEdits(w, 41, 6, planted, held);
+      for (const id of held.keys()) expect(planted.has(id)).toBe(false);
+      return { w, held: held as Map<string, { id: string; text: string; title: string }> };
+    };
+    const h = pick("hidden");
+    const c = pick("control");
+    expect(h.held.size).toBe(6);
+    expect([...h.held.keys()]).toEqual([...c.held.keys()]);
+    for (const [id, edited] of h.held) {
+      const now = h.w.items.find((x) => x.id === id)!;
+      expect(`${now.title}\n${now.text}`).not.toBe(`${edited.title}\n${edited.text}`);
+    }
+    applyEdits(h.w, h.held as never, h.w.now);
+    expect(h.held.size).toBe(0);
   });
 });

@@ -125,7 +125,7 @@ import {
 import { flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
-import { applyEdits, plantBefore } from "./silent";
+import { applyEdits, noiseEdits, plantBefore } from "./silent";
 import { record, tidy } from "./ledger";
 import { Timeline } from "./timeline";
 import { parseSuites, preparedWorld, prepareWorld, SUITES, type HiddenTask } from "./suites";
@@ -221,6 +221,7 @@ const cli = flags(
         "noise-sources",
         "notify-share",
         "noise-items",
+        "noise-edits",
         "noise-vocab",
         "source-profile",
         "push",
@@ -281,6 +282,9 @@ const NOTIFY_SHARE = parseNotifyShare(opt("notify-share", ""));
 /** `--fetch-gone false`: the sources' fetch null proves nothing, as an MCP connector's (A18; default true). */
 const FETCH_GONE = opt("fetch-gone", "true") !== "false";
 const NOISE_ITEMS = Number(opt("noise-items", "20"));
+/** `--noise-edits N` (F3, D1125): N unrelated items edited silently in every variant (silent.ts `noiseEdits`). */
+const NOISE_EDITS = Number(opt("noise-edits", "0"));
+if (!Number.isInteger(NOISE_EDITS) || NOISE_EDITS < 0) throw new Error("--noise-edits takes a whole number");
 /** `--noise-vocab N` (O1): each noise connector gets N words of its own (`noiseSources`); 0, the shared words only. */
 const NOISE_VOCAB = Number(opt("noise-vocab", "0"));
 /** `--config`: engine settings, checked whole (checkEngineConfig); a typo or a child whose parent is off exits 2. */
@@ -866,6 +870,7 @@ async function runSeed(
   for (const task of LIMIT > 0 ? tasks : all) clearSlot(world, task.slotText ?? task.text, keep);
   // F3 (D1123): a task with a `before` starts with that version at its source; the edit lands after the backfill.
   const silent = plantBefore(world, all, all.length === plantedAll.length ? plantedAll.map((it) => it.id) : []);
+  noiseEdits(world, seed, NOISE_EDITS, keep, silent);
   if (CORPUS_DUMP) {
     // `--corpus-dump` (A2): the world's items as its sources hold them, with the tasks and their planted ids.
     // Each item as its source lists it (a separate, unmetered set of sources), and `h`: the card key of the copy the
