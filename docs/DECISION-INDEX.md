@@ -762,4 +762,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1723 | 2026-11-13 | Adopted (a profiling survey's third lever): the conflict test's analysis tests each sentence against one union of its mark lists first… | adopted |
 | D1730 | 2026-11-13 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | rejected |
 | D1740 | 2026-11-13 | Adopted (the inference and tokens survey): `readSse` (`packages/llm/src/anthropic.ts`, the lab's Anthropic transport and… | adopted |
-| D1745 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
+| D1770 | 2026-11-13 | Finding: on train (seeds 41–42, shipped coverage) the default leaves 62 of 384 hidden facts unsurfaced: 29 never reach the push's pool and… | finding |
+| D1771 | 2026-11-13 | Rejected at $0 on train: seating constraint cards in the push's and the ask's order. | rejected |
+| D1772 | 2026-11-13 | Rejected at $0 on train for this bar: day seats ordered constraint-carded first, and day ranges read whole. | rejected |
+| D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
