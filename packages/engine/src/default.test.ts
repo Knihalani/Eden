@@ -60,6 +60,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   syncUnusedSweepMs: 7 * 24 * 3_600_000,
   syncActivePollMs: 7_200_000,
   syncActivePollBackoff: true,
+  syncActivePollCap: 40,
   // D505, D509 (N1): a source whose live reads go unused is not read live again (its own run).
   sourceYield: true,
   // D600, D601, D603 (O1): a source with nothing used is read live only on a name or a rare word; a name many
@@ -146,11 +147,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(83);
+    expect(differ.length).toBe(84);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(83);
+    expect(partKeys.size).toBe(84);
   });
 });
 

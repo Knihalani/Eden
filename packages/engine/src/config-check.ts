@@ -107,6 +107,7 @@ export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
   pushLookupQuiet: "pushLookup",
   syncActivePollBackoff: "syncActivePollMs",
   syncActivePollPriced: "syncActivePollMs",
+  syncActivePollCap: "syncActivePollMs",
 };
 
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
@@ -205,6 +206,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   syncActivePollMs: ["sync"],
   syncActivePollBackoff: ["sync"],
   syncActivePollPriced: ["sync"],
+  syncActivePollCap: ["sync"],
 };
 
 /** A numeric key's legal values beyond "finite, ≥ 0" (every number's floor): whole, at least `min`, at most `max`. */
@@ -236,6 +238,7 @@ const RANGES: Partial<Record<Key, Range>> = {
   maxCues: COUNT,
   maxSessionTerms: COUNT,
   probeCalls: COUNT,
+  syncActivePollCap: COUNT,
   probePeopleSources: COUNT,
   probeTopicSources: COUNT,
   probeFreshFloor: SHARE,
