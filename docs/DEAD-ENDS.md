@@ -173,6 +173,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D943 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | killed by D949: The re-test (rule in acacab82: fresh seeds 89–112, held-out families) read steady calls 11.50 → 3.46 a… |
 | D1025 | Rejected: the recipes that did not help on the held-out sources. |  |
 | D1123 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | killed by D1126: stopped on D1125's pre-registered rule |
+| D1720 | Rejected: a specialised store for the source map (an in-memory map per user with an append-only log and compaction) in place of… | measured first, docs only; docs/research/source-map-store.md |
 
 ## Ask
 
