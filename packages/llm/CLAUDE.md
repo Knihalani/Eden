@@ -11,7 +11,7 @@ No dependencies (plain `fetch`).
 | File | Owns |
 |---|---|
 | `src/types.ts` | `Model`, `ChatMessage` (`cache`, `cacheTtl` "1h": D1197, every breakpoint of the request at 1 hour), `ChatRequest` (with `reasoning`, D45; `signal`; `stop` sequences, D240: Anthropic `stop_sequences`, OpenRouter `stop`, sent only when set), `ChatResponse` (usage, cost, `truncated`) |
-| `src/openrouter.ts` | `OpenRouterModel`: `provider.data_collection: "deny"` and ZDR by default (D12); `fromEnv` (`OPENROUTER_API_KEY`, `EDEN_MODEL`, `EDEN_MODEL_ZDR`); `sort` routing (D66); lab-only `allowLogging` (D91) |
+| `src/openrouter.ts` | `OpenRouterModel`: `provider.data_collection: "deny"` and ZDR by default (D12); `fromEnv` (`OPENROUTER_API_KEY`, `EDEN_MODEL`, `EDEN_MODEL_ZDR`); `sort` routing (D66); lab-only `allowLogging` (D91); `anthropicCache` (D817; the servers' default since D1790): breakpoints on `anthropic/*` models, a 400 to a cached request sent again with less (`cacheLevel`: the hour's breakpoints dropped, then none), lowered for good after two such calls in a row |
 | `src/budget.ts` | `Budget`: calls and USD per session and per user-day (`DEFAULT_LIMITS` 20 calls, $0.02/session, $0.25/user-day); `reserve` before, `settle` after; `TenantSpend`: one USD cap per tenant per UTC day shared by every `Budget` built with it (the servers' model roles, D112) |
 | `src/pricing.ts` | `PRICES` (incl. `anthropic/claude-haiku-5.5` through OpenRouter, D112), `priceFor` (`EDEN_MODEL_PRICE` override), `costOf`: estimates for budgeting; OpenRouter's reported cost wins |
 | `src/pacing.ts` | `Pacer` (lab): per-minute limit, request cap (`RequestCapReached`), 429/5xx backoff honouring Retry-After |

@@ -43,15 +43,19 @@ export interface OpenRouterOptions {
 }
 
 /**
- * How much of D817's caching a model still sends: 2, every breakpoint with its asked TTL; 1, the breakpoints at the
- * provider's default 5-minute TTL (an hour's TTL is the newer field, the likelier to be refused); 0, none.
+ * How much of D817's caching a model still sends: 2, every breakpoint with its asked TTL; 1, only the breakpoints that
+ * ask for no hour (the system prefix), since an hour's TTL is the newer field, the likelier to be refused, and a
+ * breakpoint that asked for an hour costs more than none at five minutes (D1197: a user's checks are often more than
+ * five minutes apart, so most would write again); 0, none.
  */
 type CacheLevel = 0 | 1 | 2;
 
 export class OpenRouterModel implements Model {
   readonly id: string;
-  /** Lowered for good by a refused request (D1790); read by tests and reported once on the log. */
+  /** Lowered for good by refused requests (D1790); read by tests and reported once on the log. */
   cacheLevel: CacheLevel;
+  /** Calls in a row a lower level answered after a 400: two lower `cacheLevel`, so one stray 400 does not. */
+  private refusals = 0;
 
   constructor(private readonly options: OpenRouterOptions) {
     this.id = options.model;
@@ -77,18 +81,26 @@ export class OpenRouterModel implements Model {
     for (;;) {
       const res = await this.post(request, level, signal);
       if (res.ok) {
-        // Kept for good only once a lower level has answered: a 400 for another reason (one that fails at every
-        // level) leaves the caching as it was.
-        if (level < first && level < this.cacheLevel) {
-          console.warn(`eden: openrouter refused a cached request (400); cache level ${this.cacheLevel} -> ${level}`);
-          this.cacheLevel = level;
+        // Lowered for good only after two calls in a row that a lower level answered: a 400 for another reason (one
+        // that fails at every level) leaves the caching as it was, and so does a single stray one.
+        if (level < first) {
+          this.refusals++;
+          if (this.refusals >= 2 && level < this.cacheLevel) {
+            console.warn(`eden: openrouter refused cached requests (400); cache level ${this.cacheLevel} -> ${level}`);
+            this.cacheLevel = level;
+            this.refusals = 0;
+          }
+        } else if (level > 0) {
+          this.refusals = 0;
         }
         return this.read(res, t0);
       }
       const text = (await res.text()).slice(0, 300);
       // A refusal of the cache fields must not cost the call: send again with less (at most twice a call).
-      if (res.status === 400 && level > 0 && sentBreakpoint(request.messages)) {
-        level = (level === 2 && asksHour(request.messages) ? 1 : 0) as CacheLevel;
+      if (res.status === 400 && breakpoints(request.messages, level).size > 0) {
+        level = (
+          level === 2 && breakpoints(request.messages, 1).size > 0 && asksHour(request.messages) ? 1 : 0
+        ) as CacheLevel;
         continue;
       }
       throw new Error(`openrouter ${res.status}: ${text}`);
@@ -100,7 +112,7 @@ export class OpenRouterModel implements Model {
       model: this.options.model,
       messages:
         level > 0
-          ? anthropicCacheMessages(request.messages, level === 2)
+          ? anthropicCacheMessages(request.messages, level)
           : request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxTokens,
       ...(request.stop?.length ? { stop: request.stop } : {}),
@@ -179,30 +191,29 @@ const MAX_BREAKPOINTS = 4;
  * or blank message never gets one. Whether OpenRouter's ZDR Anthropic endpoints honour the breakpoint is unverified
  * (no live call was made), so the saving is an estimate; a refusal falls back to less (`chat`, D1790).
  */
-function anthropicCacheMessages(messages: ChatMessage[], withTtl: boolean) {
-  const marked = breakpoints(messages);
-  // One TTL a request, as anthropic.ts (`requestTtl`): an hour when a marked message asks for it (D1197) and the
-  // model still sends TTLs (D1790's level 2), else the provider's five minutes.
-  const hour = withTtl && messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
+function anthropicCacheMessages(messages: ChatMessage[], level: CacheLevel) {
+  const marked = breakpoints(messages, level);
+  // One TTL a request, as anthropic.ts (`requestTtl`): an hour when a marked message asks for it (D1197); at level 1
+  // no such message is marked, so the provider's five minutes.
+  const hour = messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
   const control = hour ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
   return messages.map(({ role, content }, i) =>
     marked.has(i) ? { role, content: [{ type: "text", text: content, cache_control: control }] } : { role, content },
   );
 }
 
-/** Whether a request gets any breakpoint at all (a 400 to one with none is not about caching). */
-function sentBreakpoint(messages: ChatMessage[]): boolean {
-  return breakpoints(messages).size > 0;
-}
-
 /** Whether a breakpoint of the request asks for the hour's TTL. */
 function asksHour(messages: ChatMessage[]): boolean {
-  const marked = breakpoints(messages);
+  const marked = breakpoints(messages, 2);
   return messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
 }
 
-/** The messages that carry a breakpoint (`anthropicCacheMessages`' rules). */
-function breakpoints(messages: ChatMessage[]): Set<number> {
+/**
+ * The messages that carry a breakpoint at a level (`anthropicCacheMessages`' rules; at level 1 none that asks for an
+ * hour, at 0 none). A 400 to a request that had none is not about caching and is never retried.
+ */
+function breakpoints(messages: ChatMessage[], level: CacheLevel): Set<number> {
+  if (level === 0) return new Set();
   const filled = (m: ChatMessage) => m.content.trim() !== "";
   let lastSystem = -1;
   messages.forEach((m, i) => {
@@ -212,6 +223,7 @@ function breakpoints(messages: ChatMessage[]): Set<number> {
   for (let i = messages.length - 1; i >= 0 && marked.size < MAX_BREAKPOINTS; i--) {
     if (messages[i]!.cache && filled(messages[i]!)) marked.add(i);
   }
+  if (level === 1) for (const i of marked) if (messages[i]!.cacheTtl === "1h") marked.delete(i);
   return marked;
 }
 
