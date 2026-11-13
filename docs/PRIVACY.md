@@ -68,8 +68,9 @@ and a statement on training (none).
   (`sanitizeForStore`, fenced as data), on the hour's TTL (D1197), and since D1800 only for a user whose recent checks
   usually came within the hour of each other: anyone else's sheet is sent plain, as before D1790, and the provider
   keeps nothing of it. To decide, each server process holds per tenant/user the time of the user's last check, a
-  16-hex hash of its sheet and two numbers (no text; at most 50,000 users, dropped on `forget`, never written to
-  disk). The ask-time reader (not called by the default's
+  16-hex hash of its sheet and two numbers (no text; about 230 bytes a user, at most 50,000 users, dropped on
+  `forget`, never written to disk), and per tenant the time of the tenant's last check and two numbers, which choose
+  the fixed instructions' TTL (no user, no content; at most 10,000 tenants). The ask-time reader (not called by the default's
   push, D237) also marks its `<standing>` block, which is redacted item text. The same text was always sent; the
   breakpoint only asks the provider to keep the prefix for reuse. A cache hit needs the whole marked block byte for
   byte, so another tenant cannot read a user's sheet without already holding it; the cached-token count could in
