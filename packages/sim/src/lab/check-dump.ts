@@ -28,7 +28,9 @@ export function replyKeeping(model: Model): { model: Model; replies: Map<string,
       id: model.id,
       chat: async (request) => {
         const res = await model.chat(request);
-        const user = request.messages.find((m) => m.role === "user")?.content ?? "";
+        // The last user message: the request and the pool. With a rule sheet the first is the sheet, the same for
+        // every check of a user, so replies keyed by it crossed between that user's checks.
+        const user = request.messages.findLast((m) => m.role === "user")?.content ?? "";
         replies.set(user, res.text);
         while (replies.size > 256) replies.delete(replies.keys().next().value as string);
         return res;
@@ -77,7 +79,7 @@ export class DumpingChecker extends PushChecker {
       ...(input.sheet?.length ? { sheet: input.sheet, ...(input.sheetRefs ? { sheetRefs: true } : {}) } : {}),
       hash: input.items.map((it) => it.hash),
       yes: read.yes ? [...read.yes] : null,
-      reply: this.replies.get(checkMessages(input).find((m) => m.role === "user")?.content ?? "") ?? null,
+      reply: this.replies.get(checkMessages(input).findLast((m) => m.role === "user")?.content ?? "") ?? null,
       called: read.called,
     };
     appendFileSync(this.file, `${JSON.stringify(row)}\n`);

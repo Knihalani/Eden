@@ -679,9 +679,10 @@ Through OpenRouter with no cache breakpoint (D145) the instructions are paid in 
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
 
-**The shipped route's cache (D1196, a trial pending the owner's probe).** Through OpenRouter the roles send no cache
-breakpoint, so the check's instructions are paid in full: about +$0.000107 a call, about +$0.10 per 1,000 tasks over
-the lab's cached figures, and cards about 1.27×. `EDEN_MODEL_CACHE=on` sends the breakpoints (off until probed).
+**The shipped route's cache (D1196, on by default since D1790).** Through OpenRouter the roles send `cache_control`
+breakpoints. Before D1790 they sent none, and the check's instructions were paid in full: about +$0.000107 a call,
+about +$0.10 per 1,000 tasks over the lab's cached figures, and cards about 1.27×. Whether the ZDR route honours them
+is unprobed **[EST]**: read the roles' `cachedInputTokens`; a route that refuses them gets requests without them.
 
 ### Where the check's cost and wait are, and what is left (F7, D1190, D1191; docs/research/f7-cost-latency.md)
 
@@ -791,9 +792,9 @@ Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`)
 
 - The lab's Anthropic transport (`anthropic.ts`) sends every breakpoint of a check with a sheet at 1 hour, and prices
   its writes at 2x.
-- The shipped OpenRouter route does the same under `anthropicCache` (D1196). That is a trial whose probe is pending
-  the owner, so production pays the uncached row today. Whether OpenRouter passes the 1-hour `ttl` through is
-  unverified.
+- The shipped OpenRouter route does the same under `anthropicCache`, on by default since D1790 (D1196's probe was
+  never run). Whether OpenRouter passes the 1-hour `ttl` through is unverified: a refusal drops it to five minutes,
+  then to no breakpoint (`OpenRouterModel.cacheLevel`), so the worst case is the uncached row.
 
 The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
 

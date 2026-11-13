@@ -33,20 +33,29 @@ export interface OpenRouterOptions {
    */
   allowLogging?: boolean;
   /**
-   * A documented, untested opt-in (D817; was the trial D145): send Anthropic `cache_control` breakpoints (content
-   * blocks) to an `anthropic/*` model. Default off, and nothing in the servers sets it (`modelRolesFromEnv`): whether
-   * OpenRouter's ZDR Anthropic endpoints accept and honour them has never been probed, and this repository makes no
-   * paid OpenRouter call to find out. An embedder that turns it on should check its reported cached tokens first.
-   * Every other model ignores it; its unit tests cover only the request it builds (`llm.test.ts`).
+   * Send Anthropic `cache_control` breakpoints (content blocks) to an `anthropic/*` model (D817; the servers' default
+   * since D1790, `modelRolesFromEnv`). Every other model ignores it. OpenRouter documents per-block breakpoints for
+   * Anthropic models, but no live call from this repository has confirmed its ZDR route accepts them, so a refusal
+   * never fails a call: a 400 to a request that carried breakpoints is sent again with less (`cacheLevel`), and the
+   * model keeps the lower level for its life. Caching changes the price of a prefix, never the reply.
    */
   anthropicCache?: boolean;
 }
 
+/**
+ * How much of D817's caching a model still sends: 2, every breakpoint with its asked TTL; 1, the breakpoints at the
+ * provider's default 5-minute TTL (an hour's TTL is the newer field, the likelier to be refused); 0, none.
+ */
+type CacheLevel = 0 | 1 | 2;
+
 export class OpenRouterModel implements Model {
   readonly id: string;
+  /** Lowered for good by a refused request (D1790); read by tests and reported once on the log. */
+  cacheLevel: CacheLevel;
 
   constructor(private readonly options: OpenRouterOptions) {
     this.id = options.model;
+    this.cacheLevel = options.anthropicCache && options.model.startsWith("anthropic/") ? 2 : 0;
   }
 
   static fromEnv(env = process.env): OpenRouterModel | null {
@@ -63,11 +72,35 @@ export class OpenRouterModel implements Model {
     const t0 = performance.now();
     const timeout = AbortSignal.timeout(this.options.timeoutMs ?? 20_000);
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
+    const first = this.cacheLevel;
+    let level = first;
+    for (;;) {
+      const res = await this.post(request, level, signal);
+      if (res.ok) {
+        // Kept for good only once a lower level has answered: a 400 for another reason (one that fails at every
+        // level) leaves the caching as it was.
+        if (level < first && level < this.cacheLevel) {
+          console.warn(`eden: openrouter refused a cached request (400); cache level ${this.cacheLevel} -> ${level}`);
+          this.cacheLevel = level;
+        }
+        return this.read(res, t0);
+      }
+      const text = (await res.text()).slice(0, 300);
+      // A refusal of the cache fields must not cost the call: send again with less (at most twice a call).
+      if (res.status === 400 && level > 0 && sentBreakpoint(request.messages)) {
+        level = (level === 2 && asksHour(request.messages) ? 1 : 0) as CacheLevel;
+        continue;
+      }
+      throw new Error(`openrouter ${res.status}: ${text}`);
+    }
+  }
+
+  private post(request: ChatRequest, level: CacheLevel, signal: AbortSignal): Promise<Response> {
     const body = {
       model: this.options.model,
       messages:
-        this.options.anthropicCache && this.options.model.startsWith("anthropic/")
-          ? anthropicCacheMessages(request.messages)
+        level > 0
+          ? anthropicCacheMessages(request.messages, level === 2)
           : request.messages.map(({ role, content }) => ({ role, content })),
       max_tokens: request.maxTokens,
       ...(request.stop?.length ? { stop: request.stop } : {}),
@@ -91,16 +124,15 @@ export class OpenRouterModel implements Model {
       // (docs/research/fast-primitives-notes/latency_and_prompt_caching.md).
       ...(request.cacheKey ? { session_id: request.cacheKey.slice(0, 256) } : {}),
     };
-    const res = await (this.options.fetch ?? fetch)(
-      `${this.options.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`,
-      {
-        method: "POST",
-        headers: { authorization: `Bearer ${this.options.apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify(body),
-        signal,
-      },
-    );
-    if (!res.ok) throw new Error(`openrouter ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    return (this.options.fetch ?? fetch)(`${this.options.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.options.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+  }
+
+  private async read(res: Response, t0: number): Promise<ChatResponse> {
     const data = (await res.json()) as OpenRouterResponse;
     const reasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens;
     const usage: Usage = {
@@ -145,9 +177,32 @@ const MAX_BREAKPOINTS = 4;
  * other message keeps plain string content. Anthropic allows at most 4 breakpoints and rejects cache_control on empty
  * text, so the last non-empty system message comes first, then the latest marked messages up to the cap, and an empty
  * or blank message never gets one. Whether OpenRouter's ZDR Anthropic endpoints honour the breakpoint is unverified
- * (no live call was made), so no saving is claimed for it.
+ * (no live call was made), so the saving is an estimate; a refusal falls back to less (`chat`, D1790).
  */
-function anthropicCacheMessages(messages: ChatMessage[]) {
+function anthropicCacheMessages(messages: ChatMessage[], withTtl: boolean) {
+  const marked = breakpoints(messages);
+  // One TTL a request, as anthropic.ts (`requestTtl`): an hour when a marked message asks for it (D1197) and the
+  // model still sends TTLs (D1790's level 2), else the provider's five minutes.
+  const hour = withTtl && messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
+  const control = hour ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
+  return messages.map(({ role, content }, i) =>
+    marked.has(i) ? { role, content: [{ type: "text", text: content, cache_control: control }] } : { role, content },
+  );
+}
+
+/** Whether a request gets any breakpoint at all (a 400 to one with none is not about caching). */
+function sentBreakpoint(messages: ChatMessage[]): boolean {
+  return breakpoints(messages).size > 0;
+}
+
+/** Whether a breakpoint of the request asks for the hour's TTL. */
+function asksHour(messages: ChatMessage[]): boolean {
+  const marked = breakpoints(messages);
+  return messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
+}
+
+/** The messages that carry a breakpoint (`anthropicCacheMessages`' rules). */
+function breakpoints(messages: ChatMessage[]): Set<number> {
   const filled = (m: ChatMessage) => m.content.trim() !== "";
   let lastSystem = -1;
   messages.forEach((m, i) => {
@@ -157,13 +212,7 @@ function anthropicCacheMessages(messages: ChatMessage[]) {
   for (let i = messages.length - 1; i >= 0 && marked.size < MAX_BREAKPOINTS; i--) {
     if (messages[i]!.cache && filled(messages[i]!)) marked.add(i);
   }
-  // One TTL a request, as anthropic.ts (`requestTtl`): an hour when a marked message asks for it (D1197), else five
-  // minutes. Whether OpenRouter passes the hour through is unverified (D1196's probe is pending).
-  const hour = messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
-  const control = hour ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
-  return messages.map(({ role, content }, i) =>
-    marked.has(i) ? { role, content: [{ type: "text", text: content, cache_control: control }] } : { role, content },
-  );
+  return marked;
 }
 
 interface OpenRouterResponse {
