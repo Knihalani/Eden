@@ -20,10 +20,12 @@
  * file's disk writes about 4x on the pipeline bench (each commit rewrites every B-tree page it touches into the WAL).
  * Reads of mentions (`sourcesFor`, so `route`) add the pending counts to what the file holds instead of flushing, or
  * every lookup's route would commit the last lookup's mentions and batch nothing; `exportUser`, `importUser`, `forget`
- * and `close` flush first. A crash (SIGKILL, power) loses at most the last second's mentions, never a committed row:
- * they are routing evidence, learned again from the next lookups that find the same names. A process that exits
- * normally flushes them (`process.on("exit")`), and another process on the same file (D15) sees them up to a second
- * late.
+ * and `close` flush first. What is lost when a process dies: never a committed row (a batch is one transaction), at
+ * most the mentions not yet written: the last second's, plus a batch a locked or full file refused, held for a retry
+ * up to `MENTION_RETAIN_ROWS`. A process that exits normally writes them (`process.on("exit")`); SIGKILL, a power cut,
+ * and a terminating signal in a process with no handler for it do not run that listener, so the servers close the map
+ * on SIGTERM, SIGINT and SIGHUP (main.ts, mcp-stdio.ts). Mentions are routing evidence, learned again from the next
+ * lookups that find the same names. Another process on the same file (D15) sees them up to a second late.
  *
  * Learning is a Beta-Bernoulli estimate per (user, situation, source): `shown` counts injections that cited the
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
@@ -74,6 +76,12 @@ const OUTCOME_FLUSH_ROWS = 256;
 const MENTION_FLUSH_MS = 1_000;
 /** Distinct pending (user, entity, source) rows that flush at once: bounds the buffer to about a megabyte. */
 const MENTION_FLUSH_ROWS = 4_096;
+/**
+ * The most pending rows held while writes fail (SQLITE_BUSY past the busy timeout, a full disk): a refused batch is
+ * put back for the next flush unless that would hold more than this, and is then dropped and counted
+ * (`droppedMentionRows`), so a lock that never clears cannot grow memory without bound.
+ */
+const MENTION_RETAIN_ROWS = 4 * MENTION_FLUSH_ROWS;
 /** How long a statement waits for another process's write lock on the same file before SQLITE_BUSY. */
 const BUSY_TIMEOUT_MS = 2_000;
 
@@ -85,6 +93,8 @@ export class SourceMap {
   private mentions = new Map<string, Map<string, Map<string, [count: number, lastSeen: number]>>>();
   private mentionRows = 0;
   private mentionTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A write of mentions failed and its rows wait: the buffer may pass `MENTION_FLUSH_ROWS` until the timer retries. */
+  private mentionRetrying = false;
   private closed = false;
   /** This map's entry in `OPEN` (file-backed maps only). */
   private ref: WeakRef<SourceMap> | undefined;
@@ -122,7 +132,10 @@ export class SourceMap {
         PRIMARY KEY (scope, source_id, bucket, shape)
       );
     `);
-    if (path !== ":memory:" && path !== "") OPEN.add((this.ref = new WeakRef(this)));
+    if (path !== ":memory:" && path !== "") {
+      OPEN.add((this.ref = new WeakRef(this)));
+      CLOSED_BY_GC.register(this, this.ref, this.ref);
+    }
   }
 
   /**
@@ -157,15 +170,25 @@ export class SourceMap {
         }
       }
     }
-    if (this.mentionRows >= MENTION_FLUSH_ROWS) this.flushMentions();
-    else if (this.mentionRows > 0 && this.mentionTimer === undefined) {
-      this.mentionTimer = setTimeout(() => this.flushMentionsInBackground(), this.mentionFlushMs);
-      // A pending batch never holds a process open: a normal exit flushes it (`OPEN`), a crash loses it (D1780).
-      this.mentionTimer.unref?.();
-    }
+    // A full buffer is written by the lookup that filled it, through the background path: a refused write is logged,
+    // counted and kept for the timer's retry, never thrown into the lookup. While a retry is due the buffer may grow
+    // to `MENTION_RETAIN_ROWS` before a lookup tries again, so a held lock does not cost every lookup a busy wait.
+    if (this.mentionRows >= (this.mentionRetrying ? MENTION_RETAIN_ROWS : MENTION_FLUSH_ROWS)) {
+      this.flushMentionsInBackground();
+    } else this.armMentionTimer();
   }
 
-  /** The timer's mention flush: as `flushInBackground`, nothing may throw out of a timer. */
+  private armMentionTimer(): void {
+    if (this.mentionRows === 0 || this.mentionTimer !== undefined || this.closed) return;
+    this.mentionTimer = setTimeout(() => this.flushMentionsInBackground(), this.mentionFlushMs);
+    // A pending batch never holds a process open: a normal exit flushes it (`OPEN`), a crash loses it (D1780).
+    this.mentionTimer.unref?.();
+  }
+
+  /** Mention rows dropped because writes kept failing past `MENTION_RETAIN_ROWS` (content-free count). */
+  droppedMentionRows = 0;
+
+  /** The timer's (and a full buffer's) mention flush: as `flushInBackground`, nothing may throw out of it. */
   private flushMentionsInBackground(): void {
     try {
       this.flushMentions();
@@ -177,14 +200,15 @@ export class SourceMap {
   }
 
   /**
-   * Writes buffered mentions now, in one transaction. A failed write loses the batch, as a failed outcome batch is
-   * lost: keeping it to retry at the next read would put SQLITE_BUSY's wait on the request path again and again.
+   * Writes buffered mentions now, in one transaction. A refused write puts its rows back (`putBack`) for the timer to
+   * try again, then throws to its caller: the background path logs it, `flush`'s callers see it as before.
    */
   private flushMentions(): void {
     if (this.mentionTimer !== undefined) clearTimeout(this.mentionTimer);
     this.mentionTimer = undefined;
     if (this.mentionRows === 0) return;
     const pending = this.mentions;
+    const rows = this.mentionRows;
     this.mentions = new Map();
     this.mentionRows = 0;
     // `count + excluded.count` and the last mention's time: the row one upsert a mention would have left.
@@ -192,13 +216,52 @@ export class SourceMap {
       INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + excluded.count, last_seen = excluded.last_seen
     `);
-    this.db.transaction(() => {
-      for (const [key, byEntity] of pending) {
-        for (const [entity, bySource] of byEntity) {
-          for (const [sourceId, [count, lastSeen]] of bySource) upsert.run(key, entity, sourceId, count, lastSeen);
+    try {
+      this.db.transaction(() => {
+        for (const [key, byEntity] of pending) {
+          for (const [entity, bySource] of byEntity) {
+            for (const [sourceId, [count, lastSeen]] of bySource) upsert.run(key, entity, sourceId, count, lastSeen);
+          }
+        }
+      })();
+    } catch (e) {
+      this.putBack(pending, rows);
+      throw e;
+    }
+    this.mentionRetrying = false;
+  }
+
+  /**
+   * A refused batch back into the buffer (counts added, the later time kept), unless the buffer would then pass
+   * `MENTION_RETAIN_ROWS`: then it is dropped and counted. The timer is armed for the retry.
+   */
+  private putBack(batch: Map<string, Map<string, Map<string, [number, number]>>>, rows: number): void {
+    if (this.closed) return;
+    if (this.mentionRows + rows > MENTION_RETAIN_ROWS) {
+      this.droppedMentionRows += rows;
+      this.mentionRetrying = false;
+      return;
+    }
+    for (const [key, byEntity] of batch) {
+      let into = this.mentions.get(key);
+      if (!into) this.mentions.set(key, (into = new Map()));
+      for (const [entity, bySource] of byEntity) {
+        let sources = into.get(entity);
+        if (!sources) into.set(entity, (sources = new Map()));
+        for (const [sourceId, [count, lastSeen]] of bySource) {
+          const held = sources.get(sourceId);
+          if (held) {
+            held[0] += count;
+            held[1] = Math.max(held[1], lastSeen);
+          } else {
+            sources.set(sourceId, [count, lastSeen]);
+            this.mentionRows++;
+          }
         }
       }
-    })();
+    }
+    this.mentionRetrying = true;
+    this.armMentionTimer();
   }
 
   /** Records whether an injection citing `sourceId` was used, in this situation. */
@@ -430,8 +493,16 @@ export class SourceMap {
     if (this.closed) return;
     this.flush();
     this.closed = true;
-    if (this.ref) OPEN.delete(this.ref);
+    if (this.ref) {
+      OPEN.delete(this.ref);
+      CLOSED_BY_GC.unregister(this.ref);
+    }
     this.db.close();
+  }
+
+  /** How many file-backed maps the exit listener would flush (tests: dead ones leave through `CLOSED_BY_GC`). */
+  static openCount(): number {
+    return OPEN.size;
   }
 
   /** At a normal process exit: what every open map holds buffered is written (synchronously, as `exit` needs). */
@@ -463,6 +534,8 @@ const NONE = { shown: 0, used: 0 } as const;
  * until the timer writes them.
  */
 const OPEN = new Set<WeakRef<SourceMap>>();
+/** Takes a collected map's dead `WeakRef` out of `OPEN`, so a process that drops maps does not keep their entries. */
+const CLOSED_BY_GC = new FinalizationRegistry<WeakRef<SourceMap>>((ref) => OPEN.delete(ref));
 process.on("exit", () => SourceMap.flushAllOpen());
 
 export function normalizeEntity(e: string): string {

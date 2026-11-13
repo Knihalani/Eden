@@ -148,7 +148,7 @@ describe("SourceMap mentions written behind (D1780)", () => {
     slow.close();
   });
 
-  test("a write the timer cannot make is counted and logged, never thrown, and the next batch is written", async () => {
+  test("a write the timer cannot make is counted and logged, never thrown, kept and retried until it lands", async () => {
     const map = new SourceMap(":memory:", { explore: false, mentionFlushMs: 5 });
     const db = (map as unknown as { db: { transaction: (f: () => void) => () => void } }).db;
     const real = db.transaction.bind(db);
@@ -165,12 +165,15 @@ describe("SourceMap mentions written behind (D1780)", () => {
       console.error = log;
       db.transaction = real;
     }
-    expect(map.failedFlushes).toBe(1);
+    // Retried at the timer's interval while the lock held: every try failed and was counted.
+    expect(map.failedFlushes).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(logged)).not.toContain("alice");
     expect(JSON.stringify(logged)).not.toContain("dana");
+    // The lock cleared: the kept mention and a new one are written together.
     map.recordMentions(alice, "crm", ["Dana Lee"]);
     map.flush();
-    expect(map.sourcesFor(alice, "Dana Lee")).toEqual([{ sourceId: "crm", count: 1 }]);
+    expect(map.exportUser(alice).mention.map((r) => r.slice(0, 3))).toEqual([["dana lee", "crm", 2]]);
+    expect(map.droppedMentionRows).toBe(0);
   });
 
   test("killed with a batch pending: the written rows survive whole, the pending batch alone is lost", async () => {
@@ -228,8 +231,10 @@ describe("SourceMap mentions written behind (D1780)", () => {
     expect(counts[0]!.count).toBeGreaterThanOrEqual(20);
   });
 
-  test("maps never closed are not kept alive by the exit registry (the lab builds one a task)", () => {
+  test("maps never closed are collected, and their entries leave the exit registry", async () => {
+    const before = SourceMap.openCount();
     const refs: WeakRef<SourceMap>[] = [];
+    // In a function of its own, so no local of this frame holds a map when the collector runs.
     const make = () => {
       for (let i = 0; i < 20; i++) {
         const map = new SourceMap(i % 2 ? ":memory:" : fileOf(), { explore: false });
@@ -238,9 +243,83 @@ describe("SourceMap mentions written behind (D1780)", () => {
       }
     };
     make();
-    Bun.gc(true);
-    Bun.gc(true);
-    expect(refs.filter((r) => r.deref() !== undefined).length).toBeLessThan(refs.length);
+    // Only the ten file-backed maps are registered (an in-memory map loses nothing at exit).
+    expect(SourceMap.openCount()).toBe(before + 10);
+    // Collection and the registry's callbacks run later than `gc()` returns: a few rounds, with turns between.
+    for (let round = 0; round < 20 && SourceMap.openCount() > before; round++) {
+      Bun.gc(true);
+      await Bun.sleep(5);
+    }
+    expect(refs.filter((r) => r.deref() === undefined).length).toBeGreaterThanOrEqual(18);
+    expect(SourceMap.openCount()).toBeLessThanOrEqual(before + 2);
+    // A closed map leaves at once.
+    const closed = new SourceMap(fileOf(), { explore: false });
+    expect(SourceMap.openCount()).toBeGreaterThan(0);
+    const now = SourceMap.openCount();
+    closed.close();
+    expect(SourceMap.openCount()).toBe(now - 1);
+  });
+
+  test("a full buffer the file refuses is kept for the retry, never thrown into the lookup (D1780's review)", () => {
+    // probes/cap-busy.ts: the 4,096-row write threw SQLITE_BUSY into the caller's lookup and lost every user's rows.
+    const map = new SourceMap(":memory:", { explore: false, mentionFlushMs: 60_000 });
+    map.recordMentions(bob, "crm", ["Dana Lee"], 1);
+    const db = (map as unknown as { db: { transaction: (f: () => void) => () => void } }).db;
+    const real = db.transaction.bind(db);
+    db.transaction = () => () => {
+      throw new Error("SQLITE_BUSY: database is locked");
+    };
+    const log = console.error;
+    const logged: unknown[][] = [];
+    console.error = (...args: unknown[]) => logged.push(args);
+    const names = Array.from({ length: 4_095 }, (_, i) => `n${i}`);
+    try {
+      expect(() => map.recordMentionsMany(alice, [{ sourceId: "crm", entities: names }], 2)).not.toThrow();
+      expect(map.failedFlushes).toBe(1);
+      // Kept, and read as before: bob's row and alice's, none written.
+      expect(map.sourcesFor(bob, "Dana Lee")).toEqual([{ sourceId: "crm", count: 1 }]);
+      expect(map.sourcesFor(alice, "n7")).toEqual([{ sourceId: "crm", count: 1 }]);
+      // Further lookups do not each try the locked file again (the retry is the timer's) until the buffer reaches
+      // the retention bound.
+      map.recordMentionsMany(alice, [{ sourceId: "mail", entities: names.slice(0, 100) }], 3);
+      expect(map.failedFlushes).toBe(1);
+    } finally {
+      console.error = log;
+      db.transaction = real;
+    }
+    expect(JSON.stringify(logged)).not.toContain("alice");
+    expect(JSON.stringify(logged)).not.toContain("dana");
+    // The lock clears: the next flush writes every row kept, with its count.
+    map.flush();
+    expect(map.exportUser(bob).mention).toEqual([["dana lee", "crm", 1, 1]]);
+    expect(map.exportUser(alice).mention.length).toBe(4_095 + 100);
+    expect(map.droppedMentionRows).toBe(0);
+  });
+
+  test("a lock that never clears drops batches past the retention bound, counted, and memory stays bounded", () => {
+    const map = new SourceMap(":memory:", { explore: false, mentionFlushMs: 60_000 });
+    const db = (map as unknown as { db: { transaction: (f: () => void) => () => void } }).db;
+    db.transaction = () => () => {
+      throw new Error("SQLITE_BUSY: database is locked");
+    };
+    const log = console.error;
+    console.error = () => {};
+    try {
+      for (let lookup = 0; lookup < 40; lookup++) {
+        const names = Array.from({ length: 1_000 }, (_, i) => `l${lookup}-${i}`);
+        map.recordMentionsMany(alice, [{ sourceId: "crm", entities: names }], lookup);
+        const held = (map as unknown as { mentionRows: number }).mentionRows;
+        // 4 x 4,096 retained at most, plus the one lookup's rows that pushed it over.
+        expect(held).toBeLessThanOrEqual(4 * 4_096 + 1_000);
+      }
+    } finally {
+      console.error = log;
+    }
+    expect(map.droppedMentionRows).toBeGreaterThan(0);
+    expect(map.failedFlushes).toBeGreaterThan(1);
+    // Nothing is counted twice: every row recorded is held or dropped.
+    const held = (map as unknown as { mentionRows: number }).mentionRows;
+    expect(held + map.droppedMentionRows).toBe(40 * 1_000);
   });
 
   test("a process that exits without close writes its pending mentions", async () => {

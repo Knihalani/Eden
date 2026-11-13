@@ -220,6 +220,8 @@ async function serve(config: ServerConfig): Promise<void> {
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
+  // A closed terminal (or a supervisor that sends it) would otherwise kill the process with its batches unwritten.
+  process.on("SIGHUP", shutdown);
   const startupMs = Math.round(performance.now() - started);
   const keys = Object.keys(engine);
   console.log(
