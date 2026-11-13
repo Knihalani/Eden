@@ -757,3 +757,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1710 | 2026-11-13 | Adopted: the request glossary is answered from its file's bytes, and a process reads its lexicons only when a request could be read as… | adopted |
 | D1715 | 2026-11-13 | Rejected: a binary layout specialised to a frozen user's structures, in place of the compact form's zstd JSON and the warm form's ("EDF2")… | rejected |
 | D1720 | 2026-11-13 | Rejected: a specialised store for the source map (an in-memory map per user with an append-only log and compaction) in place of… | rejected |
+| D1730 | 2026-11-13 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | rejected |
