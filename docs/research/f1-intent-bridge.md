@@ -181,7 +181,8 @@ Agent tool, no API spend) wrote each language's vocabulary themselves: function 
 each of the 38 everyday topics in `gloss-make.ts`, each with up to three English words. 26 languages, 118,663 lines
 written; `gloss-pack.ts` (now skipping malformed lines) keeps single words, lowercases, merges duplicates and drops a
 word glossed as itself: 86,441 words, `gloss.bin` 0.58 MB. Known weak spots: European Portuguese ("canalizador" is
-missing, "encanador" is there), Vietnamese (806 syllables), Hindi in Latin letters (1,165).
+missing, "encanador" is there), Vietnamese (806 syllables), Hindi in Latin letters (1,165). Since D1710 the same words
+are packed for lookup in place (2.36 MB, not gzipped; `gloss.ts`).
 
 Screens with it (funnel, seeds 41–44, `--set '{"requestGloss":true}'`; the old frequency-list build in brackets):
 

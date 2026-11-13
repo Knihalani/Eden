@@ -753,3 +753,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1702 | 2026-11-12 | A node drops port 8790 from outside the private range in DOCKER-USER. | adopted |
 | D1703 | 2026-11-12 | Finding: every file and every product design choice reviewed; no further switch clears the bar. | finding |
 | D1704 | 2026-11-12 | Adopted: Eden speaks MCP through its own minimal client, streamable HTTP transport and `ask_context` server; `@modelcontextprotocol/sdk`… | adopted |
+| D1710 | 2026-11-13 | Adopted: the request glossary is answered from its file's bytes, and a process reads its lexicons only when a request needs them. | adopted |
