@@ -98,6 +98,8 @@ with no time ("I'll send Jamie £95 for the cabin").
 dated-bench.ts`, one dev20 world, 1,593 items, idle machine): p50 14.5 ms, p99 21 ms, the same whether or not the
 day has items. Decoding the stored text is about half of it. It runs on the push's path (behind the user's
 message), never on the fast path, and a user's items are capped (`maxItemsPerUser`, `maxSyncedPerUser`).
+Since D1721 the scan reads each item's date facts (`day-facts.ts`), read from its text the first time a scan meets
+it, so only that first scan pays for the text (a repeated one: p50 26-34 ms to 0.05-0.16 ms on a sim world).
 
 ## 3. The pre-registered pair (served by subagents, single-shot)
 
@@ -185,7 +187,8 @@ Open:
   not in the pool": starting a push does not retrieve a fact that shares neither words nor a day with the request.
   That core is F13's world-knowledge class (D1302).
 - A request in a language whose day words the glossary lacks still starts no push (17 of 160 templates).
-- The scan (`ItemCache.dated`) reads every item's text; a per-user index by day would make it constant.
+- The scan (`ItemCache.dated`) reads every item's text; a per-user index by day would make it constant. (D1721:
+  it now reads per-item date facts read once from the text; still a scan of every item, but no text past the first.)
 
 ## 5. The promoted tree at $0 (after merging main with D1193)
 
