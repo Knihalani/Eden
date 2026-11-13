@@ -906,8 +906,10 @@ default (eval 0.65 / 0.52 / 0), at $0.
   the floor skips. **At many sources (D1747):** the floor polls a user's unused sources from an allowance of 40 a floor
   interval (`syncActivePollCap`); used ones keep it. Measured at $0 with 995 first-party noise connectors (D1746's call
   table): without the allowance the floor was about 1,000 calls an active user-day, 85% of the user's calls; with it
-  calls a user-day fell 1,186-1,253 → 273-285 (`days-calls.ts`, 8 users, 8 days, no notices) and the funnel's
-  282.6 → 89.9 a task, facts and look-alikes level. A user with up to 40 such sources is unaffected.
+  calls a user-day fell 1,186-1,253 → 264-276 (`days-calls.ts`, 8 users, 8 days, no notices) and the funnel's
+  282.6 → 88.9 a task, facts and look-alikes level. A user with up to 40 such sources is unaffected. The price is
+  freshness: an unused source's floor poll comes about 24 h apart instead of 8 h (the weekly sweep past the
+  allowance).
 
 - **The agent's tokens.** Measured per 1,000 tasks on the lab's cached Pi agent (a3-cost-speed.md, p2-push-check.md):
   a Haiku 5.5 agent's own bill is about $0.18-0.25 per 1,000 requests, so $0.27-0.37 per heavy user-month; Eden's
