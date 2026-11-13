@@ -410,6 +410,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   details (`sameDetails`) leaves `Entry.item` as it was, so per-object memos (`analyse`, `ownText`, the card order's
   heads) keep answering. Never use an item object's identity as its version (hash its words, `versionOf`), and never
   add a process-wide memo keyed by an item's content in place of these: it is cross-tenant state (D9).
+- **The conflict analysis reads a sentence's marks only when one union regex of its lists matches (D1723).** A new
+  mark list (or one moved between vocabularies) joins `MARK_LISTS` in `conflict.ts`, or its marks are silently never
+  read on sentences no other list matches; `conflict-memo.test.ts` checks the union against the lists.
 - **Ingest off the event loop was built and rejected (D216).** A worker that redacted each source page and read it for
   the cache (terms with hash lanes, graph reading, mentions, deflated text; the cache applying the reading with the
   same stored state) cut a synced item's main-thread cost 3.5x and the concurrent bench's cold-start stall from about
