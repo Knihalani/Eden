@@ -495,7 +495,7 @@ audit's 90 s target for the sum was not reached on this shared machine: the sum 
 these changes save (the per-test differences above). The one failure seen in these runs (after, load 9.0) was
 `cards.test.ts`'s "linear on hostile input", a 50 ms wall bound outside this change.
 
-## The cold gate at 20% faster: not reachable with the listed levers (D1747, 2026-11-13, 4 cores shared, Bun 1.4.4)
+## The cold gate at 20% faster: not reachable with the listed levers (D1782, 2026-11-13, 4 cores shared, Bun 1.4.4)
 
 The ask: `CHECK_COLD=1 bun run check` at least 20% faster (interleaved medians of 3), every test file still run, no
 assertion weakened. Measured first, on a machine two other agents kept at load 8-30.
