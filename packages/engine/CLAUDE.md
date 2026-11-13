@@ -605,7 +605,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   with `days-calls.ts --noise-sources 995 --noise-vocab 1000 --call-causes`. An unused copy re-listed less often lapses
   past the synced TTL (7 days) until its weekly sweep; the D356 re-read covers its deliveries. Ordering every due source
   by chance (used ones too) let noise connectors take the world's crm and drive polls: keep used sources outside the
-  allowance. `active-poll-cap.test.ts`.
+  allowance, and let no unused source open the block (and its thaw, D325) once the allowance is spent.
+  `active-poll-cap.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
   skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
   daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
