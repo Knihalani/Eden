@@ -258,7 +258,7 @@ describe("OpenRouterModel", () => {
     );
   });
 
-  test("the cached prefix is byte-identical across calls whose requests differ (D1196's trial)", async () => {
+  test("the cached prefix is byte-identical across calls whose requests differ (D1196, D1790)", async () => {
     const { sent, fake } = capture();
     const model = new OpenRouterModel({
       apiKey: "k",
@@ -406,6 +406,120 @@ describe("OpenRouterModel", () => {
     });
     expect(sent[0].messages).toEqual([{ role: "user", content: "hi" }]);
     expect(sent[0].session_id).toBeUndefined();
+  });
+
+  // A route that refuses `cache_control` (or its hour TTL) answers 400; D1790 turns the caching on by default, so a
+  // refusal must cost no call. `refuse` says which bodies the fake route rejects.
+  const refusing = (refuse: (body: any) => boolean) => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      sent.push(body);
+      if (refuse(body)) return new Response('{"error":"bad cache_control"}', { status: 400 });
+      return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    return { sent, fake };
+  };
+  const hasControl = (body: any) => JSON.stringify(body.messages).includes("cache_control");
+  const hasHour = (body: any) => JSON.stringify(body.messages).includes('"ttl":"1h"');
+  const hourRequest = {
+    messages: [
+      { role: "system" as const, content: "rules" },
+      { role: "user" as const, content: "sheet", cache: true, cacheTtl: "1h" as const },
+      { role: "user" as const, content: "the request" },
+    ],
+    maxTokens: 5,
+  };
+
+  test("D1790: a route refusing cache_control gets every call, and after two refusals the model stops sending it", async () => {
+    const { sent, fake } = refusing(hasControl);
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    expect((await model.chat(cachedRequest)).text).toBe("ok");
+    expect(sent.map(hasControl)).toEqual([true, false]);
+    // One refusal is not enough: a stray 400 must not turn the caching off for the process.
+    expect(model.cacheLevel).toBe(2);
+    expect((await model.chat(cachedRequest)).text).toBe("ok");
+    expect(sent.map(hasControl)).toEqual([true, false, true, false]);
+    expect(model.cacheLevel).toBe(0);
+    await model.chat(cachedRequest);
+    expect(sent.length).toBe(5);
+    expect(hasControl(sent[4])).toBe(false);
+  });
+
+  test("D1790: a call answered at its own level resets the count of refusals", async () => {
+    let refuse = true;
+    const { sent, fake } = refusing((body) => refuse && hasControl(body));
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    await model.chat(cachedRequest);
+    refuse = false;
+    await model.chat(cachedRequest);
+    refuse = true;
+    await model.chat(cachedRequest);
+    expect(sent.length).toBe(5);
+    expect(model.cacheLevel).toBe(2);
+  });
+
+  test("D1790: a route refusing only the hour's TTL keeps the system prefix's breakpoint and drops the hour's", async () => {
+    const { sent, fake } = refusing(hasHour);
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    expect((await model.chat(hourRequest)).text).toBe("ok");
+    expect(sent.map(hasHour)).toEqual([true, false]);
+    // Level 1: the system message keeps its five-minute breakpoint; the sheet (which asked for an hour) has none, since
+    // at five minutes it would cost more than sending it plain (D1197).
+    expect(sent[1].messages[0].content[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(sent[1].messages[1]).toEqual({ role: "user", content: "sheet" });
+    await model.chat(hourRequest);
+    expect(model.cacheLevel).toBe(1);
+  });
+
+  test("D1790: a 400 for another reason throws and leaves the caching as it was", async () => {
+    const { sent, fake } = refusing(() => true);
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    await expect(model.chat(hourRequest)).rejects.toThrow(/openrouter 400/);
+    // Tried at each level once: hour TTL, five minutes, none.
+    expect(sent.length).toBe(3);
+    expect(model.cacheLevel).toBe(2);
+    // A request with no breakpoint is never retried.
+    const plain = new OpenRouterModel({ apiKey: "k", model: "z-ai/glm-5.3-flash", fetch: fake, anthropicCache: true });
+    await expect(plain.chat(cachedRequest)).rejects.toThrow(/openrouter 400/);
+    expect(sent.length).toBe(4);
+  });
+
+  test("D1790: an error other than 400 is never retried", async () => {
+    let calls = 0;
+    const fake = (async () => {
+      calls++;
+      return new Response("busy", { status: 503 });
+    }) as unknown as typeof fetch;
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    await expect(model.chat(cachedRequest)).rejects.toThrow(/openrouter 503/);
+    expect(calls).toBe(1);
+    expect(model.cacheLevel).toBe(2);
   });
 
   test("asks for low reasoning effort when told, and reports a reply cut off at the cap (D45)", async () => {

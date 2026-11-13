@@ -745,7 +745,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
 | D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
 | D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |
-| D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | trial |
+| D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | adopted |
 | D1690 | 2026-11-12 | Adopted: model-call failures are counted by role and kind on `/metrics` (`eden_model_failures_total{role="reader"\|"check",kind="error"\|"unr…` | adopted |
 | D1600 | 2026-11-12 | The server image runs on Bun's distroless image. | adopted |
 | D1700 | 2026-11-12 | The server image leaves out the lab, tests and benches. | adopted |
@@ -762,6 +762,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1723 | 2026-11-13 | Adopted (a profiling survey's third lever): the conflict test's analysis tests each sentence against one union of its mark lists first… | adopted |
 | D1730 | 2026-11-13 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | rejected |
 | D1740 | 2026-11-13 | Adopted (the inference and tokens survey): `readSse` (`packages/llm/src/anthropic.ts`, the lab's Anthropic transport and… | adopted |
+| D1741 | 2026-11-13 | Rejected: `pushCheckSheetAppend`, the push check's rule sheet in the order its cards were made, one text block a rule, the breakpoint on… | rejected |
+| D1742 | 2026-11-13 | Finding: no output-invariant cut of 10% or more is left in any model role; the push check's price is its rule sheet's cache writes, its… | finding |
 | D1746 | 2026-11-13 | Finding, with a lab instrument: connector calls by cause. | finding |
 | D1747 | 2026-11-13 | Promoted (opened and decided the same session, D814): `syncActivePollCap` 40, a per-user allowance on the freshness floor's polls of… | adopted |
 | D1748 | 2026-11-13 | Finding: no lever decidable at $0 cuts the push's modelled wait by 15% with outputs identical; the wait is the check, and under bare… | finding |
@@ -771,4 +773,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1773 | 2026-11-13 | Adopted (a correctness fix, D1772's finding): `timeWindow` reads a day range whole. | adopted |
 | D1781 | 2026-11-13 | Finding: no lever lowers a server process's memory floor by the bar (10 MB or 15% a process, first request within noise); kept as it is. | finding |
 | D1782 | 2026-11-13 | Finding: the cold gate cannot be made 20% faster by the listed levers (fuzz counts behind a deep switch, serial bottlenecks in… | finding |
+| D1790 | 2026-11-13 | Adopted: the servers send Anthropic `cache_control` breakpoints on the roles' stable prefix through OpenRouter by default… | adopted |
 | D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
