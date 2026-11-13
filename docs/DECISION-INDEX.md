@@ -768,3 +768,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1773 | 2026-11-13 | Adopted (a correctness fix, D1772's finding): `timeWindow` reads a day range whole. | adopted |
 | D1781 | 2026-11-13 | Finding: no lever lowers a server process's memory floor by the bar (10 MB or 15% a process, first request within noise); kept as it is. | finding |
 | D1782 | 2026-11-13 | Finding: the cold gate cannot be made 20% faster by the listed levers (fuzz counts behind a deep switch, serial bottlenecks in… | finding |
+| D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
