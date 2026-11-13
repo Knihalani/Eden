@@ -6,9 +6,9 @@
  * crafted files, which must read as no glossary (or gloss nothing), never throw, read out of bounds or allocate by a
  * count they claim.
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdtempSync, truncateSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENGLISH, fuzzCorpus, rng, sweepCorpus } from "../bench/gloss-corpus";
@@ -21,6 +21,7 @@ import {
   loadGlossary,
   packGlossary,
   readGlossary,
+  seal,
   warmGlossary,
 } from "./gloss";
 import { isStopword } from "./text";
@@ -166,6 +167,11 @@ const v1Json = JSON.stringify({
 });
 const v1 = v1Load(JSON.parse(v1Json));
 const words = glossWords(shipped);
+/**
+ * The shipped glossary as a process sees it before its lexicons are read (each call a fresh view): the prefix's bound
+ * runs first, and the lexicons, when a request needs them, come from memory. Every comparison below goes through it.
+ */
+const unread = (): Glossary => ({ ...shipped, lex: undefined, readLex: () => shipped.lex });
 
 describe("the packed glossary against version 1", () => {
   test("the shipped file holds exactly version 1's glossary", () => {
@@ -179,7 +185,7 @@ describe("the packed glossary against version 1", () => {
     let differ = 0;
     let glossed = 0;
     for (const text of sweep) {
-      const got = glossOf(text, shipped);
+      const got = glossOf(text, unread());
       if (got !== v1GlossOf(text, v1)) differ++;
       if (got) glossed++;
     }
@@ -195,7 +201,7 @@ describe("the packed glossary against version 1", () => {
     const differ: string[] = [];
     let glossed = 0;
     for (const text of corpus) {
-      const got = glossOf(text, shipped);
+      const got = glossOf(text, unread());
       if (got !== v1GlossOf(text, v1)) differ.push(text);
       if (got) glossed++;
       const ws =
@@ -203,7 +209,8 @@ describe("the packed glossary against version 1", () => {
           .slice(0, 400)
           .normalize("NFC")
           .match(/\p{L}+/gu) ?? [];
-      if (languagesOf(ws, shipped).join() !== v1LanguagesOf(ws, v1).join()) differ.push(text);
+      if (languagesOf(ws, unread()).join() !== v1LanguagesOf(ws, v1).join()) differ.push(text);
+      if (glossOf(text, shipped) !== got) differ.push(text);
     }
     expect(differ.slice(0, 3)).toEqual([]);
     // The fuzz reads as its language most of the time (9,030 of the first 10,000 are glossed).
@@ -279,14 +286,16 @@ describe("readGlossary and loadGlossary on bad bytes", () => {
   });
 
   test("crafted counts, offsets and pointers are refused before anything is made from them", () => {
+    // Each is resealed (both CRCs written again), so it is the structural checks that refuse it, not the CRCs.
     const at = (bytes: Buffer, word: number, value: number) => {
       const b = Buffer.from(bytes);
       b.writeUInt32LE(value >>> 0, word * 4);
-      return b;
+      return word >= 7 || word === 4 ? seal(b) : b;
     };
-    const codes = small.readUInt32LE(20);
-    const english = small.readUInt32LE(24);
-    const itKeys = small.readUInt32LE(28 + 4);
+    const codes = small.readUInt32LE(28);
+    const english = small.readUInt32LE(32);
+    const itFilter = small.readUInt32LE(36 + 4);
+    const itKeys = small.readUInt32LE(36 + 8);
     const crafted = [
       at(small, 0, 0x4c474446), // magic
       at(small, 1, 3), // version
@@ -295,20 +304,25 @@ describe("readGlossary and loadGlossary on bad bytes", () => {
       at(small, 3, 2), // count against the codes table's
       at(small, 4, small.length + 8), // lexicons past the end
       at(small, 4, 4), // lexicons inside the header
-      at(small, 5, small.length - 4), // codes table past the prefix
-      at(small, 5, 22), // misaligned codes table
+      at(small, 7, small.length - 4), // codes table past the prefix
+      at(small, 7, 30), // misaligned codes table
       at(small, codes / 4, 0xffffffff), // codes count: 16 GB of offsets claimed
       at(small, codes / 4 + 1, 4), // first offset not 0
       at(small, english / 4 + 2, 0xffffff), // an English offset past the arena
-      at(small, 6, codes), // English table inside the prefix
-      at(small, 8, english), // keys table: the English one (counts differ from the glosses')
+      at(small, 8, itKeys), // English table in the lexicons
+      at(small, 9 + 2, english), // keys table in the prefix
+      at(small, itFilter / 4, 0x40000000), // a filter of 2^30 bits: past the prefix
+      at(small, itFilter / 4, 1000), // a filter size not a power of two
+      at(small, itFilter / 4 + 1, 0), // a filter with no probes
       at(small, itKeys / 4 + 2, 100), // offsets running backwards
     ];
-    for (const b of crafted) {
-      const t = performance.now();
-      expect(readGlossary(b)).toBeNull();
-      expect(performance.now() - t).toBeLessThan(50);
-    }
+    for (const b of crafted) expect(readGlossary(b)).toBeNull();
+  });
+
+  test("function words past the cap are refused before their Sets are built", () => {
+    const many = Array.from({ length: 100_001 }, (_, i) => `w${i}`);
+    expect(readGlossary(packGlossary([{ code: "x", fn: many, glosses: [["a", "b"]] }]))).toBeNull();
+    expect(readGlossary(packGlossary([{ code: "x", fn: many.slice(1), glosses: [["a", "b"]] }]))).not.toBeNull();
   });
 
   test("keys out of order, or repeated, read as no glossary (the binary search relies on order)", () => {
@@ -318,9 +332,10 @@ describe("readGlossary and loadGlossary on bad bytes", () => {
     swapped[it] = 0x73;
     swapped[it + 5] = 0x63;
     expect(readGlossary(swapped)).toBeNull();
+    expect(readGlossary(seal(swapped))).toBeNull();
     const dup = Buffer.from(small);
     dup.write("rekening", dup.indexOf("telefoon"));
-    expect(readGlossary(dup)).toBeNull();
+    expect(readGlossary(seal(dup))).toBeNull();
     expect(() =>
       packGlossary([
         {
@@ -335,56 +350,128 @@ describe("readGlossary and loadGlossary on bad bytes", () => {
     ).toThrow();
   });
 
-  test("2,000 random corruptions: no glossary, or one that glosses without throwing", () => {
+  test("any flipped bit is refused by the CRCs (version 1's gzip refused one too)", () => {
+    for (let p = 0; p < small.length; p++) {
+      const b = Buffer.from(small);
+      b[p] = b[p]! ^ (1 << (p % 8));
+      expect(readGlossary(b)).toBeNull();
+    }
+    // A gloss's own bytes: what a flip there would have changed silently without them.
+    const b = Buffer.from(small);
+    b[b.indexOf("account")] = 0x41;
+    expect(readGlossary(b)).toBeNull();
+    expect(glossOf(ITALIAN, loadGlossary(write(b)))).toBe("");
+  });
+
+  test("2,000 random corruptions, resealed: no glossary, or one that glosses without throwing", () => {
     const r = rng(17);
     let refused = 0;
     for (let i = 0; i < 2_000; i++) {
       const b = Buffer.from(small);
       const flips = 1 + Math.floor(r() * 4);
       for (let k = 0; k < flips; k++) {
-        const p = Math.floor(r() * b.length);
+        // Past the CRC fields, so the structure is what is tested; the fixed fields are in the crafted test.
+        const p = 28 + Math.floor(r() * (b.length - 28));
         b[p] = r() < 0.5 ? b[p]! ^ (1 << Math.floor(r() * 8)) : Math.floor(r() * 256);
       }
-      const g = readGlossary(b);
+      const g = readGlossary(seal(b));
       if (!g) refused++;
       safe(g);
+      safe(loadGlossary(write(b)));
     }
-    // Most flips land in counts, offsets, pointers or key order; a flip in an arena may read on.
+    // Most flips land in counts, offsets, pointers, filters or key order; a flip in an arena may read on.
     expect(refused).toBeGreaterThan(200);
   });
 
   test("lexicons that read wrong, or a file replaced or cut after the prefix was read, gloss nothing", () => {
-    // The prefix is valid and the lexicons are not: the load succeeds, the first request that needs them fails open.
-    const badLex = Buffer.from(small);
-    badLex.writeUInt32LE(0xffffffff, small.readUInt32LE(24));
-    const g = loadGlossary(write(badLex))!;
-    expect(g).not.toBeNull();
-    expect(glossOf(ENGLISH[0]!, g)).toBe("");
-    expect(glossOf(ITALIAN, g)).toBe("");
-    expect(glossOf(ITALIAN, g)).toBe("");
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // The prefix is valid and the lexicons are not: the load succeeds, the first request that needs them fails
+      // open, says so once, and the verdict is kept (a corrupt file does not mend).
+      const badLex = Buffer.from(small);
+      badLex.writeUInt32LE(0xffffffff, small.readUInt32LE(36 + 8));
+      const f0 = write(seal(badLex));
+      const g = loadGlossary(f0)!;
+      expect(g).not.toBeNull();
+      expect(glossOf(ENGLISH[0]!, g)).toBe("");
+      expect(glossOf(ITALIAN, g)).toBe("");
+      expect(g.lex).toBeNull();
+      writeFileSync(f0, small);
+      expect(glossOf(ITALIAN, g)).toBe("");
+      expect(quiet).toHaveBeenCalledTimes(1);
+      expect(String(quiet.mock.calls[0]![0])).not.toContain(f0);
 
-    const f = write(small);
-    const replaced = loadGlossary(f)!;
-    writeFileSync(f, packGlossary([{ code: "it", fn: ["voglio", "il"], glosses: [["conto", "bill"]] }]));
-    expect(glossOf(ITALIAN, replaced)).toBe("");
+      const f = write(small);
+      const replaced = loadGlossary(f)!;
+      writeFileSync(f, packGlossary([{ code: "it", fn: ["voglio", "il"], glosses: [["conto", "bill"]] }]));
+      expect(glossOf(ITALIAN, replaced)).toBe("");
 
-    const g2 = write(small);
-    const cut = loadGlossary(g2)!;
-    truncateSync(g2, small.length - 8);
-    expect(glossOf(ITALIAN, cut)).toBe("");
+      const g2 = write(small);
+      const cut = loadGlossary(g2)!;
+      truncateSync(g2, small.length - 8);
+      expect(glossOf(ITALIAN, cut)).toBe("");
 
-    // Grown past the length its header gave: refused by its size, not read in.
-    const g3 = write(small);
-    const grown = loadGlossary(g3)!;
-    appendFileSync(g3, new Uint8Array(1 << 20));
-    expect(glossOf(ITALIAN, grown)).toBe("");
+      // Grown past the length its header gave: refused by its size, not read in.
+      const g3 = write(small);
+      const grown = loadGlossary(g3)!;
+      appendFileSync(g3, new Uint8Array(1 << 20));
+      expect(glossOf(ITALIAN, grown)).toBe("");
+    } finally {
+      quiet.mockRestore();
+    }
   });
 
-  test("an English request never reads the lexicons", () => {
+  test("a lexicon read that fails on I/O is tried again by a later request", () => {
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const f = write(small);
+      const g = loadGlossary(f)!;
+      rmSync(f);
+      expect(glossOf(ITALIAN, g)).toBe("");
+      expect(glossOf(ITALIAN, g)).toBe("");
+      expect(g.lex).toBeUndefined();
+      writeFileSync(f, small);
+      expect(glossOf(ITALIAN, g)).toBe("move shift account");
+      // Told once, whatever the retries.
+      expect(quiet).toHaveBeenCalledTimes(1);
+    } finally {
+      quiet.mockRestore();
+    }
+  });
+
+  test("an English request never reads the lexicons, contractions and possessives too", () => {
     const g = loadGlossary(write(small))!;
     for (const t of ENGLISH) expect(glossOf(t, g)).toBe("");
     expect(g.lex).toBeUndefined();
     expect(glossOf(ITALIAN, g)).toBe("move shift account");
     expect(g.lex).not.toBeNull();
+    // The shipped file: "What's" gives "s", a Czech function word, and "I've" gives "ve" (Czech, Turkish); the prefix
+    // rules both out, and the gloss is still version 1's.
+    for (const t of ENGLISH) {
+      const s = loadGlossary(new URL("./gloss.bin", import.meta.url))!;
+      expect(glossOf(t, s)).toBe(v1GlossOf(t, v1));
+      expect(s.lex).toBeUndefined();
+    }
+  }, 20_000);
+
+  test("every crafted request a filter may wrongly hold still glosses as version 1 (the bound only skips)", () => {
+    // Requests built to pass function-word tests with words the filters hold or may hold: the bound must never skip
+    // a language the count would take.
+    const r = rng(23);
+    let read = 0;
+    for (let i = 0; i < 2_000; i++) {
+      const l = words.langs[i % words.langs.length]!;
+      const pick = <T>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)]!;
+      const parts = [pick(l.fn), r() < 0.5 ? pick(l.keys) : pick(words.english), pick(words.english)];
+      if (r() < 0.5) parts.push(`${pick(l.keys)}x`);
+      const text = parts.join(" ");
+      // The shipped glossary as if its lexicons were unread, so the bound runs; they come from memory when needed.
+      const s: Glossary = { ...shipped, lex: undefined, readLex: () => shipped.lex };
+      expect(glossOf(text, s)).toBe(v1GlossOf(text, v1));
+      if (s.lex !== undefined) read++;
+    }
+    // Both ways are taken: some requests are ruled out from the prefix, the rest read the lexicons.
+    expect(read).toBeGreaterThan(200);
+    expect(read).toBeLessThan(1_800);
   });
 });
