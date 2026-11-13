@@ -35,6 +35,18 @@ export const ENGLISH = [
   "Schedule a call with the plumber from Fixhub to look at the kitchen sink.",
   "Forward the Los Angeles del Mar contract to Maria dos Santos e Silva.",
   "I need to send the signed lease back to the letting agent by Monday.",
+  // Contractions and possessives: `\p{L}+` splits "What's" into "what" and "s", and such clitics are function words
+  // in other languages ("s" in Czech, "ve" in Czech and Turkish). D1710's review: they must not read the lexicons.
+  "What's the plan for Friday's dinner with Tom's parents?",
+  "I've booked the dentist, but I'll need to move Sarah's appointment.",
+  "Don't forget we're meeting at the client's office; they'd like the slides.",
+  "Can't find Mum's email about the flight, it's from last week.",
+  "Who's picking up the kids' bikes from Dave's garage?",
+  "I'm not sure the landlord's reply covers what we'd agreed.",
+  "She'd said the invoice isn't due until next month, hasn't she?",
+  "Let's check if the bank's transfer went through, I haven't seen it.",
+  "You're right, the team's offsite moved; we'll need new train tickets.",
+  "Where's the receipt for the boiler's repair? I'd filed it somewhere.",
 ];
 
 const PUNCT = [" ", " ", " ", " ", ", ", ". ", "? ", "! ", " - ", ": ", " (", ") ", ' "', '" '];

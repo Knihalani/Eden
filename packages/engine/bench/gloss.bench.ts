@@ -9,7 +9,9 @@
  * version 1 reader for a before/after.
  *
  * RSS is read before the load (after a full GC) and 1.5 s after it (after another), as the tech audit measured it:
- * after `warmGlossary` (`rssLoadMB`), after 2,000 English requests (`rssEnglishMB`), and after the first request in
+ * after `warmGlossary` (`rssLoadMB`), after 2,000 English requests (`rssEnglishMB`: an English-only process; the
+ * `ENGLISH` set has contractions and possessives, and `lexAfterEnglish` says whether they read the lexicons), and after
+ * the first request in
  * another language (`rssWholeMB`: the whole glossary held; `firstOtherMs` is that request's time, the lexicons' read
  * since D1710). `rssAfterMB` is after the fuzzed corpus, which it holds too.
  * Latency: every request timed alone (Bun.nanoseconds), after a warm-up pass; English is `ENGLISH` repeated, the rest
@@ -69,6 +71,9 @@ if (args[0] === "--child") {
   await Bun.sleep(1_500);
   Bun.gc(true);
   const rssEnglish = process.memoryUsage().rss - rss0;
+  // Whether English traffic (contractions and possessives included) read the lexicons: 1 or 0; -1 for a reader with
+  // no lazy part (version 1).
+  const lexAfterEnglish = typeof g?.readLex === "function" ? (g.lex !== undefined ? 1 : 0) : -1;
   // The first request in another language: since D1710 it reads the lexicons.
   const t1 = performance.now();
   glossOf("Domani voglio spostare 5.000 sterline dai risparmi al conto corrente.", g);
@@ -95,6 +100,7 @@ if (args[0] === "--child") {
       rssLoadMB: rssLoad / 2 ** 20,
       anonLoadMB: anonLoad,
       rssEnglishMB: rssEnglish / 2 ** 20,
+      lexAfterEnglish,
       firstOtherMs,
       rssWholeMB: rssWhole / 2 ** 20,
       anonWholeMB: anonWhole,
