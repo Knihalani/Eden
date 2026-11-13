@@ -43,7 +43,8 @@ dependency. Every text Eden stores, indexes, logs or sends to a model passes `sa
 ## Test
 
 ```bash
-bun run test:pkg redact          # 14 files, ~6 s wall cold; own-matchers.test.ts and linear.test.ts lead
+bun run test:pkg redact          # 14 files, ~12 s wall cold (2026-11-13, 4 at once): linear.test.ts ~10 s,
+                                 # own-matchers.test.ts ~8 s, own-matchers-linear.test.ts ~7 s, redos* 4-6 s each
 bun packages/redact/src/differential.ts 50000   # the full fuzz: 50,000 texts per matcher, ~5 min
 ```
 
