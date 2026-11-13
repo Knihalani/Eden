@@ -41,7 +41,8 @@ card maker for the memory benches' `--cards`), `ingest.bench.ts` (memory per syn
 user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
 D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
 item and per user, put/search latency, D111), `segment-screen` (O4's screens of varint postings, columns and text
-blocks, D750), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user, ~1,000 connectors, a session)
+blocks, D750), `index-axes` (the index at 1,000-100,000 items on every axis, and a compact thaw split into its
+parts, D1730), `concurrent`, `put`, `churn`, `workload.ts`; `many-sources` (one user, ~1,000 connectors, a session)
 and `source-days` (the same over whole days with changing sources: listing and card calls per user per day, D324);
 `gloss.bench.ts` (the glossary's RSS a process, load and `glossOf` latency, D1710; `GLOSS_MODULE=` measures another
 copy) and `gloss-corpus.ts` (its sweep and seeded fuzzed requests, shared with `gloss-packed.test.ts`).
