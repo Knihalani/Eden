@@ -4,7 +4,7 @@
  * values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { backtrackingEngine, linearEngine, RE2_RULES, rulesWith, sanitizeForStore, secretRules } from "./secrets";
+import { backtrackingEngine, GATE_ENGINES, LINEAR_RULES, rulesWith, sanitizeForStore, secretRules } from "./secrets";
 import { CEILING_MS, costMs, craftedInputs, SHARDS, shardRules, slowOn } from "./redos-sweep";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
@@ -16,7 +16,7 @@ const cpuMs = () => {
 
 // The crafted-input sweep is split by rule index over this file (shard 0) and redos-{1,2,3}.test.ts (redos-sweep.ts).
 describe("rules left on JavaScript's engine stay cheap on crafted input", () => {
-  test("shard 0 of every gitleaks rule outside RE2_RULES, and every Eden rule", () => {
+  test("shard 0 of every gitleaks rule outside LINEAR_RULES, and every Eden rule", () => {
     expect(shardRules(0).length).toBeGreaterThan(0);
     expect(slowOn(0)).toEqual([]);
   }, 60_000);
@@ -24,17 +24,18 @@ describe("rules left on JavaScript's engine stay cheap on crafted input", () => 
   test("the shards together are every rule on JavaScript's engine, each once", () => {
     const ids = Array.from({ length: SHARDS }, (_, k) => shardRules(k).map((r) => r.id)).flat();
     const all = secretRules()
-      .filter((rule) => !RE2_RULES.has(rule.id))
+      .filter((rule) => !LINEAR_RULES.has(rule.id))
       .map((r) => r.id);
     expect(ids.sort()).toEqual(all.sort());
   });
 
   test("the sweep's cost (the lesser of wall and CPU time) still flags a rule that backtracks", () => {
-    // curl-auth-header is on RE2 because JavaScript's engine backtracks on it: about 78 ms on its "curl:" run here,
-    // on either clock (the cheapest of the seven to show; with every rule on JavaScript the sweep flags all seven).
-    const js = rulesWith({ rule: () => backtrackingEngine, allowlist: linearEngine });
+    // curl-auth-header has its own matcher because JavaScript's engine backtracks on it: about 78 ms on its "curl:"
+    // run here, on either clock (the cheapest of the seven to show; with every rule on JavaScript the sweep flags all
+    // seven).
+    const js = rulesWith({ rule: () => backtrackingEngine, allowlist: GATE_ENGINES.allowlist });
     const rule = js.find((r) => r.id === "curl-auth-header")!;
-    expect(RE2_RULES.has(rule.id)).toBe(true);
+    expect(LINEAR_RULES.has(rule.id)).toBe(true);
     // Twice the crafted run: backtracking is super-linear, so on a fast CPU the single run read 35-39 ms, under the
     // ceiling (RealUse-1 fix sessions); doubled it stays well above it while the linear engine stays far below.
     const text = [...craftedInputs(rule)].find((t) => t.startsWith("curl:curl:"))!.repeat(2);

@@ -1,21 +1,15 @@
 /**
  * The secret gate three ways, end to end through `sanitizeForStore`: every gitleaks regex on JavaScript's
- * backtracking RegExp (before D24), every one on RE2 (re2js), and the gate since D24 (RE2 for RE2_RULES and the
- * allowlists, JavaScript for the rest). Typical texts with the harness, then inputs built against the rules that
+ * backtracking RegExp (before D24), the gate D24 shipped (re2js for the seven rules that backtrack and for every
+ * allowlist, JavaScript for the rest), and the gate since D1705 (those seven on their own matchers, the allowlists on
+ * the allowlist automaton, no re2js). Typical texts with the harness, then inputs built against the rules that
  * backtrack, one call each at growing sizes (a curve stops once a call takes over 4 s). All three share the
  * prefilter, Eden's own rules and redact().
  *
  *   bun packages/primitives/bench/gate-engine.bench.ts
  */
-import {
-  backtrackingEngine,
-  everywhere,
-  GATE_ENGINES,
-  gateOf,
-  linearEngine,
-  rulesWith,
-  secretRules,
-} from "../../redact/src/secrets";
+import { D24_ENGINES } from "../../redact/src/re2-oracle";
+import { backtrackingEngine, everywhere, GATE_ENGINES, gateOf, rulesWith, secretRules } from "../../redact/src/secrets";
 import { bench, corpus } from "./harness";
 
 const KEYWORD_DENSE =
@@ -32,8 +26,8 @@ const SECRETS =
 const gates = (
   [
     ["all JavaScript", everywhere(backtrackingEngine)],
-    ["all RE2", everywhere(linearEngine)],
-    ["D24 (targeted RE2)", GATE_ENGINES],
+    ["D24 (re2js)", D24_ENGINES],
+    ["D1705 (own matchers)", GATE_ENGINES],
   ] as const
 ).map(([name, choice]) => {
   const t0 = performance.now();

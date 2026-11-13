@@ -1,19 +1,13 @@
 /**
- * D24: the gitleaks rules run on RE2 (re2js), linear in the text, with results identical to JavaScript's own
- * backtracking engine on the gate's inputs. That no input makes the gate super-linear is tested in redos.test.ts.
- * Secret-shaped values are assembled from parts, so no literal in this file is one.
+ * D24: the gitleaks rules on RE2 (re2js, the gate's engine then and its tests' oracle since D1705) give results
+ * identical to JavaScript's own backtracking engine on the gate's inputs; own-matchers.test.ts holds the gate's own
+ * matchers to re2js. That no input makes the gate super-linear is tested in redos.test.ts and
+ * own-matchers-linear.test.ts. Secret-shaped values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
-import {
-  backtrackingEngine,
-  everywhere,
-  linearEngine,
-  re2Source,
-  rulesWith,
-  secretRules,
-  URL_USERINFO,
-} from "./secrets";
+import { linearEngine, re2Source } from "./re2-oracle";
+import { backtrackingEngine, everywhere, rulesWith, secretRules, URL_USERINFO } from "./secrets";
 
 /** mulberry32: a seeded generator, so a failure names a reproducible text. */
 function prng(seed: number): () => number {

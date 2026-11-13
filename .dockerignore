@@ -28,3 +28,6 @@ packages/sim/**
 !packages/sim/package.json
 **/*.test.ts
 packages/*/bench
+# The secret gate's test support (D1705): it imports re2js, a devDependency the production install leaves out.
+packages/redact/src/re2-oracle.ts
+packages/redact/src/differential.ts

@@ -1,24 +1,24 @@
 /**
  * Heap kept by the secret gate after realistic and crafted input, per engine choice: re2js keeps a lazy DFA cache
- * per pattern (budgeted at 8 MB of its own accounting each), JavaScript's RegExp keeps none. One choice per process
- * so the numbers do not mix:
+ * per pattern (budgeted at 8 MB of its own accounting each), JavaScript's RegExp keeps none, the allowlist automaton
+ * (D1705) at most 2,000 states a pattern. One choice per process so the numbers do not mix: `js` (every regex on
+ * JavaScript), `re2` (every regex on re2js), `d24` (the gate D24 shipped) or `own` (the gate since D1705):
  *
- *   bun packages/primitives/bench/gate-memory.bench.ts js|re2|d23
+ *   bun packages/primitives/bench/gate-memory.bench.ts js|re2|d24|own
  */
-import {
-  backtrackingEngine,
-  everywhere,
-  GATE_ENGINES,
-  gateOf,
-  linearEngine,
-  rulesWith,
-  secretRules,
-} from "../../redact/src/secrets";
+import { D24_ENGINES, linearEngine } from "../../redact/src/re2-oracle";
+import { backtrackingEngine, everywhere, GATE_ENGINES, gateOf, rulesWith, secretRules } from "../../redact/src/secrets";
 import { corpus } from "./harness";
 
-const which = process.argv[2] ?? "d23";
-const choice =
-  which === "js" ? everywhere(backtrackingEngine) : which === "re2" ? everywhere(linearEngine) : GATE_ENGINES;
+const which = process.argv[2] ?? "own";
+const choices = {
+  js: everywhere(backtrackingEngine),
+  re2: everywhere(linearEngine),
+  d24: D24_ENGINES,
+  own: GATE_ENGINES,
+};
+const choice = choices[which as keyof typeof choices];
+if (!choice) throw new Error(`unknown choice ${which}: js, re2, d24 or own`);
 const mb = (n: number) => `${(n / 1_048_576).toFixed(1)} MB`;
 const heap = () => {
   Bun.gc(true);
