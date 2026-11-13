@@ -127,6 +127,8 @@
       "version": "0.0.0",
       "dependencies": {
         "@eden/primitives": "workspace:*",
+      },
+      "devDependencies": {
         "re2js": "2.9.0",
       },
     },
