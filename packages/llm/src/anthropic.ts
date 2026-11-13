@@ -327,14 +327,34 @@ export async function readSse(body: ReadableStream<Uint8Array>, onEvent: (e: Rec
       onEvent(JSON.parse(data) as Record<string, unknown>);
     }
   };
+  // Linear in the stream (D1740): only each new chunk is searched for an event's end, and an event's earlier chunks
+  // are held as a list joined once, when it ends, so an event spread over many chunks is not scanned or copied again
+  // at every chunk.
+  const held: string[] = [];
+  let lastNewline = false;
   for await (const part of body as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(part, { stream: true });
-    let cut: number;
-    while ((cut = buffer.indexOf("\n\n")) >= 0) {
-      flush(buffer.slice(0, cut));
-      buffer = buffer.slice(cut + 2);
+    const s = decoder.decode(part, { stream: true });
+    if (!s) continue;
+    let start = 0;
+    // A "\n\n" that straddles the chunk boundary ends the held event on its last "\n".
+    if (lastNewline && s[0] === "\n") {
+      const event = held.join("");
+      held.length = 0;
+      flush(event.slice(0, -1));
+      start = 1;
     }
+    let cut: number;
+    while ((cut = s.indexOf("\n\n", start)) >= 0) {
+      const head = s.slice(start, cut);
+      flush(held.length > 0 ? held.join("") + head : head);
+      held.length = 0;
+      start = cut + 2;
+    }
+    if (start < s.length) held.push(s.slice(start));
+    // Only text still held can begin an end that straddles the next boundary.
+    lastNewline = start < s.length && s.endsWith("\n");
   }
+  buffer = held.join("");
   buffer += decoder.decode();
   if (buffer.trim()) flush(buffer);
 }

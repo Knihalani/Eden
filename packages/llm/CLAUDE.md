@@ -15,7 +15,7 @@ No dependencies (plain `fetch`).
 | `src/budget.ts` | `Budget`: calls and USD per session and per user-day (`DEFAULT_LIMITS` 20 calls, $0.02/session, $0.25/user-day); `reserve` before, `settle` after; `TenantSpend`: one USD cap per tenant per UTC day shared by every `Budget` built with it (the servers' model roles, D112) |
 | `src/pricing.ts` | `PRICES` (incl. `anthropic/claude-haiku-5.5` through OpenRouter, D112), `priceFor` (`EDEN_MODEL_PRICE` override), `costOf`: estimates for budgeting; OpenRouter's reported cost wins |
 | `src/pacing.ts` | `Pacer` (lab): per-minute limit, request cap (`RequestCapReached`), 429/5xx backoff honouring Retry-After |
-| `src/anthropic.ts` | `AnthropicModel` (lab only, D97): Messages API, prompt caching, streaming TTFT, cost from usage, a `meter` hook the spend ledger uses |
+| `src/anthropic.ts` | `AnthropicModel` (lab only, D97): Messages API, prompt caching, streaming TTFT, cost from usage, a `meter` hook the spend ledger uses; `readSse`, linear in the stream (D1740; `sse.test.ts` keeps the old reader as its oracle) |
 | `src/fake.ts`, `src/tokens.ts` | `FakeModel` (scripted replies, records calls); `estimateTokens` |
 
 ## Rules that apply here
