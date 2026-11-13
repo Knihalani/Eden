@@ -57,6 +57,7 @@ import { isRecap, recapOf, shiftClocks, shiftMeta, UPDATED_MARK, type ClockMove 
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
 import { argvFields, argvFiles, codeVersion, envFields, JournalRefused, partialPath, RunJournal } from "./run-journal";
 import { parseSuites } from "./suites";
+import { CallCauses } from "./call-causes";
 
 export type Phase = "backfill" | "tick" | "notice" | "request";
 /** `${phase} ${source} ${op}` → calls. */
@@ -73,6 +74,8 @@ export type MovedFate = "unhanded" | "updated" | "unpolled" | "unseen" | "undeli
 export interface DaysCallsOptions {
   days: number;
   push: PushMode;
+  /** `--call-causes` (D1746): book every connector call by its cause (`call-causes.ts`), in the user's `causes`. */
+  callCauses?: boolean;
   /** One `ask` per request after its push (the eden arm's agent asks about once a request one at a time). */
   ask?: boolean;
   /** pi-ab's recap before D272: a bare signal whatever `push` says. */
@@ -170,6 +173,8 @@ export interface DaysCallsUser {
   requests: number;
   days: number;
   counts: Counts;
+  /** `--call-causes` (D1746): the user's connector calls by cause. */
+  causes?: Record<string, number>;
   /** `verifyDelivery`'s outcomes over the requests. */
   freshness: Record<string, number>;
   /** Distinct items re-read at request time, and those re-read more than once. */
@@ -262,6 +267,8 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
   const fetched = new Map<string, number>();
   let phase: Phase = "backfill";
   const eden = sources.map((s) => counted(s, () => phase, counts, fetched));
+  const causes = o.callCauses ? new CallCauses() : null;
+  if (causes) for (const s of eden) causes.watchSource(s);
   let clock = world.now;
   /** The current request's candidates pass, when it ran (`onPlanted`). */
   let pooled: PushPoolReport | null = null;
@@ -286,6 +293,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     const s = table.get(`${scope.tenantId}/${scope.userId}#${id}`);
     return !!(s?.inflight || s?.behind);
   };
+  causes?.watchPartner(partner);
   const sync = partner.sync;
   if (!sync) throw new Error("days-calls needs the sync (it is in the default)");
   // As pi-ab: the backfill from half an hour before the first request, a minute a tick.
@@ -565,6 +573,7 @@ export async function daysCalls(seed: number, o: DaysCallsOptions): Promise<Days
     requests,
     days: dayNo + 1,
     counts,
+    ...(causes ? { causes: causes.toJSON() } : {}),
     freshness,
     fetchedItems: fetched.size,
     refetched: [...fetched.values()].filter((n) => n > 1).length,
@@ -688,6 +697,7 @@ export async function main(
     days: Number(opt("days", "8")),
     push,
     ask: argv.includes("--ask"),
+    callCauses: argv.includes("--call-causes"),
     recapSignal: recap === "signal",
     recapSilent: recap === "none",
     moveAfter: Number(opt("move-after", "0")),
@@ -847,6 +857,13 @@ export async function main(
     return (c / Math.max(1, r)).toFixed(1);
   });
   log(`request-time calls a request, by day: ${byDay.join(" ")}`);
+  if (o.callCauses) {
+    const all = new CallCauses();
+    for (const u of users) all.add(u.causes ?? {});
+    log(all.table(days, "user-day"));
+    log(all.detail(days, "user-day"));
+    log(`  (${(all.total() / Math.max(1, requests)).toFixed(3)} a request over ${requests} requests)`);
+  }
   for (const u of users)
     log(
       `  w${u.seed}: verify ${JSON.stringify(u.freshness)}; items re-read ${u.fetchedItems}, more than once ` +

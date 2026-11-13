@@ -167,6 +167,7 @@ import {
 } from "./neutral";
 import { DistilledReaderMaker, loadModel, parseDistill } from "./distilled-reader";
 import { effective } from "./presets";
+import { CallCauses } from "./call-causes";
 import {
   coverageLines,
   intentPlace,
@@ -254,6 +255,7 @@ const cli = flags(
         "connect-tick-s",
         "connect-stagger-s",
         "cards-ms",
+        "call-causes",
       ].map((k) => [k, V]),
     ),
     ...Object.fromEntries(
@@ -391,6 +393,10 @@ const callCheck = { received: 0, listed: 0, traced: 0 };
 const CALL_SPLIT = cli.has("call-split");
 const callSplit = { worldSearch: 0, worldList: 0, noiseSearch: 0, noiseList: 0, tasks: 0, distinct: 0, repeats: 0 };
 const callsByTrace = new Map<string, number>();
+/** `--call-causes FILE` (D1746): every connector call booked by its cause, one JSON line a process appended to FILE. */
+const CALL_CAUSES = opt("call-causes", "");
+const callCauses = CALL_CAUSES ? new CallCauses() : null;
+let causeTasks = 0;
 const CARDS = opt("cards", "");
 /**
  * `--intent FILE[,FILE]` (with `"intent": true` in `--config`): the requests `cards-enrich.ts --intent` wrote, replayed
@@ -1197,6 +1203,10 @@ async function runSeed(
       list.push(r);
     },
   });
+  if (callCauses) {
+    callCauses.watchPartner(partner);
+    for (const x of sources) callCauses.watchSource(x);
+  }
   // The harness may read the engine's session table (as `quality.ts` `settle` does; product code may not): whether a
   // session's lookup or work its lookup left running (`behind`: `syncPollBehind`'s poll and follow-up, the
   // reader push's second reading) is still running.
@@ -1609,6 +1619,7 @@ async function runSeed(
     }
     // The task's window closes here: the reply, everything it left running (the slow path, the push, probes past
     // their grace: `busy`) and the ask have finished.
+    causeTasks++;
     const taskListed = listed() - listedBefore;
     const taskCalls = received() - receivedBefore;
     if (splitBefore) {
@@ -1940,6 +1951,10 @@ console.log(
   `calls: connectors received ${callCheck.received} in the tasks' windows (${callCheck.listed} of them on-demand ` +
     `listings); traces summed ${callCheck.traced} (cross-check, fetches included)`,
 );
+if (callCauses) {
+  appendFileSync(CALL_CAUSES, `${JSON.stringify({ tasks: causeTasks, counts: callCauses.toJSON() })}\n`);
+  console.log(callCauses.table(causeTasks, "task"));
+}
 if (CALL_SPLIT) {
   const per = (n: number) => (n / Math.max(1, callSplit.tasks)).toFixed(2);
   console.log(
