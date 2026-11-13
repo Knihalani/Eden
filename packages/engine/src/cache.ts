@@ -2521,7 +2521,7 @@ function sameFields(held: ContextItem, item: ContextItem): boolean {
   const b = item as unknown as Record<string, unknown>;
   for (const k of keys) {
     if (k === "text" || k === "title" || k === "meta") continue; // compared already (`put`, `sameDetails`)
-    if (!(k in a) || a[k] !== b[k]) return false;
+    if (!Object.hasOwn(a, k) || !Object.is(a[k], b[k])) return false;
   }
   return true;
 }
