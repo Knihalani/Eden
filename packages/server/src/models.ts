@@ -13,8 +13,10 @@
  * EDEN_MODEL_CACHE=off           turns off Anthropic `cache_control` breakpoints on the roles' stable prefix
  *                                (`anthropicCache`, on by default since D1790, which promoted D1196's trial without its
  *                                probe): the push check's and the card call's fixed instructions and the rule sheet are
- *                                read from the provider's cache at 0.1x. A route that refuses the fields falls back to
- *                                sending none (`OpenRouterModel.cacheLevel`), so the default cannot fail a call.
+ *                                read from the provider's cache at 0.1x (the sheet only for a user whose checks usually
+ *                                reuse it within the hour, D1800). A route that refuses the fields falls back to
+ *                                sending none (`OpenRouterModel.cacheLevel`), so the default cannot fail a call; one
+ *                                that never serves a read stops getting them after 50 calls that should have read.
  *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */

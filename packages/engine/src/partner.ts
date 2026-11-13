@@ -1801,6 +1801,7 @@ export class ContextPartner {
     this.sync?.forget(scope);
     this.deps.cards?.forget(scope);
     this.deps.reader?.forget(scope);
+    this.deps.checker?.forget(scope);
     return written;
   }
 
@@ -3509,6 +3510,8 @@ export class ContextPartner {
     this.deps.cards?.forget(scope, sourceId);
     // The reader's bearings are made from the items' text: any forget, of the user or of one source, drops them.
     this.deps.reader?.forget(scope);
+    // The check's sheet cache state (D1800) is content-free, but it is the user's: dropped with the rest.
+    this.deps.checker?.forget(scope);
   }
 
   /** Users held and their states, for an operator's metrics (D992's `/metrics`): counts only. */

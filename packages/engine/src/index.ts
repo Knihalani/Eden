@@ -144,4 +144,5 @@ export {
   type PushCheckRead,
   type PushCheckStats,
 } from "./push-check";
+export { SheetCachePolicy, SHEET_CACHE_USERS, SHEET_REUSE_MARK, SHEET_REUSE_WEIGHT, SHEET_TTL_MS } from "./sheet-cache";
 export { mayConstrain } from "./conflict";

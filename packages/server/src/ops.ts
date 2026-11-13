@@ -20,7 +20,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { ContextPartner, SharedFrozenDisk } from "@eden/engine";
 import { childTable, OwnerTable } from "@eden/primitives";
 import { bucketOf, type Scope } from "@eden/protocol";
-import { modelFailures } from "./build";
+import { modelCache, modelFailures } from "./build";
 
 /** Routes timed by name; anything else is "other", so a scanner cannot grow the label set. */
 const ROUTES = new Set([
@@ -278,6 +278,14 @@ export class Ops {
     for (const [key, n] of Object.entries(modelFailures)) {
       const [role, kind] = key.split(":");
       this.counts.set(`eden_model_failures_total{kind="${kind}",role="${role}"}`, n);
+    }
+    // D1800: calls with a cache breakpoint against the cached tokens they read (docs/DEPLOY.md, "Prompt cache").
+    for (const [role, c] of Object.entries(modelCache)) {
+      this.counts.set(`eden_model_calls_total{role="${role}"}`, c.calls);
+      this.counts.set(`eden_model_cache_breakpoint_calls_total{role="${role}"}`, c.breakpointCalls);
+      this.counts.set(`eden_model_input_tokens_total{role="${role}"}`, c.inputTokens);
+      this.counts.set(`eden_model_cache_read_tokens_total{role="${role}"}`, c.cacheReadTokens);
+      this.counts.set(`eden_model_cache_write_tokens_total{role="${role}"}`, c.cacheWriteTokens);
     }
     let family = "";
     for (const [k, v] of [...this.counts].sort()) {
