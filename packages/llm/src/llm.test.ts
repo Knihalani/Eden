@@ -258,7 +258,7 @@ describe("OpenRouterModel", () => {
     );
   });
 
-  test("the cached prefix is byte-identical across calls whose requests differ (D1196's trial)", async () => {
+  test("the cached prefix is byte-identical across calls whose requests differ (D1196, D1790)", async () => {
     const { sent, fake } = capture();
     const model = new OpenRouterModel({
       apiKey: "k",
@@ -431,7 +431,7 @@ describe("OpenRouterModel", () => {
     maxTokens: 5,
   };
 
-  test("D1790: a route refusing cache_control gets the call without it, and the model stops sending it", async () => {
+  test("D1790: a route refusing cache_control gets every call, and after two refusals the model stops sending it", async () => {
     const { sent, fake } = refusing(hasControl);
     const model = new OpenRouterModel({
       apiKey: "k",
@@ -441,13 +441,35 @@ describe("OpenRouterModel", () => {
     });
     expect((await model.chat(cachedRequest)).text).toBe("ok");
     expect(sent.map(hasControl)).toEqual([true, false]);
+    // One refusal is not enough: a stray 400 must not turn the caching off for the process.
+    expect(model.cacheLevel).toBe(2);
+    expect((await model.chat(cachedRequest)).text).toBe("ok");
+    expect(sent.map(hasControl)).toEqual([true, false, true, false]);
     expect(model.cacheLevel).toBe(0);
     await model.chat(cachedRequest);
-    expect(sent.length).toBe(3);
-    expect(hasControl(sent[2])).toBe(false);
+    expect(sent.length).toBe(5);
+    expect(hasControl(sent[4])).toBe(false);
   });
 
-  test("D1790: a route refusing only the hour's TTL keeps the breakpoints at five minutes", async () => {
+  test("D1790: a call answered at its own level resets the count of refusals", async () => {
+    let refuse = true;
+    const { sent, fake } = refusing((body) => refuse && hasControl(body));
+    const model = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/claude-haiku-5.5",
+      fetch: fake,
+      anthropicCache: true,
+    });
+    await model.chat(cachedRequest);
+    refuse = false;
+    await model.chat(cachedRequest);
+    refuse = true;
+    await model.chat(cachedRequest);
+    expect(sent.length).toBe(5);
+    expect(model.cacheLevel).toBe(2);
+  });
+
+  test("D1790: a route refusing only the hour's TTL keeps the system prefix's breakpoint and drops the hour's", async () => {
     const { sent, fake } = refusing(hasHour);
     const model = new OpenRouterModel({
       apiKey: "k",
@@ -457,7 +479,11 @@ describe("OpenRouterModel", () => {
     });
     expect((await model.chat(hourRequest)).text).toBe("ok");
     expect(sent.map(hasHour)).toEqual([true, false]);
-    expect(hasControl(sent[1])).toBe(true);
+    // Level 1: the system message keeps its five-minute breakpoint; the sheet (which asked for an hour) has none, since
+    // at five minutes it would cost more than sending it plain (D1197).
+    expect(sent[1].messages[0].content[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(sent[1].messages[1]).toEqual({ role: "user", content: "sheet" });
+    await model.chat(hourRequest);
     expect(model.cacheLevel).toBe(1);
   });
 

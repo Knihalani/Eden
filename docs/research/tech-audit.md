@@ -138,7 +138,7 @@ instead of being built.
 | No reasoning sent by the reader, cards or check | keep (D144, D149, D155) |
 | Reader's stop sequence | keep (D240) |
 | Budgets per session and user-day, and one tenant cap a UTC day shared by every role | keep (D5, D112, D163, D993) |
-| Anthropic cache breakpoints on the stable system prefix | trial, open (D1196): the owner's one OpenRouter probe decides it |
+| Anthropic cache breakpoints on the stable system prefix | trial, open (D1196): the owner's one OpenRouter probe decides it; on by default since D1790, unprobed |
 | `speculate` in the proxy: the turn goes upstream during Eden's wait | keep (D1273) |
 | A distilled open model for cards | finding only (D445, D447): cheaper than Haiku only as a busy shared service |
 

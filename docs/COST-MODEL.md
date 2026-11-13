@@ -150,8 +150,8 @@ endpoints, with very different reasoning lengths:
 **Every Haiku 5.5 reader and card figure in this file is "lab provider, cached" (D145)** unless it says otherwise: it
 was measured on the lab's `AnthropicModel` (Anthropic directly, thinking off, the system prompt always read from the
 prompt cache after the first call), not on the path the servers ship, which reaches `anthropic/claude-haiku-5.5`
-through OpenRouter and sends no cache breakpoint (`anthropicCache` is a documented, untested opt-in, off and set by
-nothing in the servers, D817). Re-priced with no cache, the lab
+through OpenRouter and, before D1790, sent no cache breakpoint (`anthropicCache`, D817, on in the servers since
+D1790). Re-priced with no cache, the lab
 ledger's `eden.reader` rows cost 1.32x and its `eden.cards` rows 1.27x what they did (D145; the gap at lab traffic
 density, an upper bound for sparser traffic). The OpenRouter path's cost and latency are **unmeasured**: this
 audit's runs could call Anthropic only.
@@ -625,7 +625,7 @@ pushes the default hands candidates on; a second pass reuses the first's answer)
 tokens of which 894 read from the cache, 71 output), p50 886 ms and p90 1,190 ms as made. So **about $0.17 per
 1,000 tasks** on the train mix **[EST: calls × price]**, before any change in the agent's own spend (fewer packets on
 neutral and control requests: 309 → 110 and 318 → 220 of 384 in that screen). Through OpenRouter (the servers'
-route) no cache breakpoint is sent (D145), so the instructions are paid in full: about +$0.00008 a call **[EST]**,
+route) no cache breakpoint was sent before D1790 (D145), so the instructions were paid in full: about +$0.00008 a call **[EST]**,
 about $0.23 per 1,000 tasks. **Live (Pi, train seeds 41–48, D503, lab provider, cached):** 0.82–0.83 calls a task,
 $0.0002 a call, Eden's check $0.161–0.164 per 1,000 tasks; total steady state on a 1:1:8 user over 8 days $0.247 →
 $0.359 (+$0.112; the agent itself −$0.030 from smaller packets), one request at a time $0.252 → $0.406; and +0.7 to
@@ -674,7 +674,7 @@ $0.242 → $0.198 per 1,000 tasks; the same tokens priced at Sonnet's rates **[E
 
 The agent's own spend is flat to lower with the check (−$0.01 to −$0.05 per 1,000 tasks over days: smaller packets
 in the day's transcript); a silent push adds agent turns one request a session (`ask_context` +0.30 a task, D532).
-Through OpenRouter with no cache breakpoint (D145) the instructions are paid in full: about +$0.0001 a call
+Through OpenRouter with no cache breakpoint (D145, before D1790) the instructions were paid in full: about +$0.0001 a call
 **[EST]**. Asking the check's question once per item at ingest (rejected, D526) cost $0.000053–0.000055 an item on
 Haiku 5.5 at effort low, 12 items a call: about $0.12 per 1,000 tasks at 36 new items and 16 requests a day
 **[EST]**, half by Message Batches. Thinking at effort low on I3's short reply: $0.00036 and 2.0 s a call (D528).
@@ -793,8 +793,16 @@ Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`)
 - The lab's Anthropic transport (`anthropic.ts`) sends every breakpoint of a check with a sheet at 1 hour, and prices
   its writes at 2x.
 - The shipped OpenRouter route does the same under `anthropicCache`, on by default since D1790 (D1196's probe was
-  never run). Whether OpenRouter passes the 1-hour `ttl` through is unverified: a refusal drops it to five minutes,
-  then to no breakpoint (`OpenRouterModel.cacheLevel`), so the worst case is the uncached row.
+  never run). Whether OpenRouter honours the breakpoints, and passes the 1-hour `ttl` through, is unverified. A
+  refusal is answered by sending less (`OpenRouterModel.cacheLevel`: the hour's breakpoint dropped, then none); a
+  route that accepts the fields and ignores them costs nothing more. The worst case is not the uncached row: a cached
+  prefix that is never read again is written at 1.25x (five minutes) or 2x (an hour), so a user whose checks are
+  more than an hour apart pays the sheet and instructions at 2x on every check, up to about +49% a check over the
+  uncached row [EST] (the sheet and instructions are about half a check, D1742). The saving needs D1197's hit rate:
+  the hour pays from about 0.53 reads a write, and D1197 modelled about 0.75 for an active user (random spacing, 1–4
+  sheet changes a day). The fixed instructions are the same bytes for every user, so at a server's traffic they are
+  read far more often than any one user's sheet. Read the roles' `cachedInputTokens` against their cost to see which
+  case production is in.
 
 The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
 

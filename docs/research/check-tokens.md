@@ -57,7 +57,7 @@ four characters a token; at Haiku 5.5's measured 3.31 for prose and about 2.6 fo
 | Lever                                                                     | $ a check                     | Status                                                                 |
 | ------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------- |
 | Shipped route before D1790 (OpenRouter, no breakpoints)                   | ≈ 0.00060 (all input uncached) | breakpoints on by default since D1790, with a fallback                |
-| Lab transport / D1196 promoted (the table above)                          | ≈ 0.00037 (−39%)              | trial, the owner's OpenRouter probe                                    |
+| Lab transport / D1196 promoted (the table above)                          | ≈ 0.00037 (−39%)              | the shipped default since D1790 (unprobed; needs D1197's hit rate)     |
 | Sheet appended, one block a rule (`pushCheckSheetAppend`, D1741)          | ≈ 0.00032 (−14% more)         | rejected unscreened (D1741); code on `claude/check-sheet-append`       |
 | Every sheet read from cache (ceiling)                                     | ≈ 0.00021                     | not reachable: a user's first check of a day is always a write         |
 | An oracle skipping the 43% of calls that end silent (D930, D931)          | −43% of calls                 | unreachable without the model (D1272, D1274)                           |
