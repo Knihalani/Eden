@@ -631,6 +631,11 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   invents days for "the 3rd party vendor" or "what happened on the 9th", which then pull that day's events into the
   lookup and the conflict grounds. The funnel wires no checker,
   so it sees the starts and the pool (`--pool-dump`, the `cl` flags) but hands no seat.
+- **A day range is every day in it (D1773, `timeWindow`'s `dayRanges`).** "12–14 November" and "30 November to 4
+  December" are their days up to `RANGE_MAX_DAYS` (14), a longer range its two ends; scores, times, identifiers and
+  "may" with no preposition are not ranges (`day-ranges.test.ts`). Every reader of `cue.time.days` (grounding, timed
+  items, `frameOf`, `anchorsOf`, the day seats) sees the wider set: a new reader that must not take a fortnight of days
+  needs its own limit, as the day seats have (`DAY_SEAT_DAYS`).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
