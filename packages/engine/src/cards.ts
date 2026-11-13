@@ -1602,12 +1602,7 @@ export class CardEnricher {
       if (ids.length === 0) continue;
       // `carded`: the content holds a constraint card, for `intentByKind`. A `none` card held because it says a
       // constraint cleared (`cardsState`) is no constraint.
-      const strict = process.env.EDEN_IK_STRICT
-        ? !!s.card &&
-          ["prohibition", "freeze", "limit", "dependency", "absence"].includes(s.card.kind) &&
-          !(s.card.state && CLEARED_STATES.has(s.card.state))
-        : true;
-      out.push({ ids, hit, carded: !!s.card && s.card.kind !== "none" && strict });
+      out.push({ ids, hit, carded: !!s.card && s.card.kind !== "none" });
       if (out.length >= k) break;
     }
     return out;

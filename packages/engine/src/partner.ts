@@ -15,7 +15,6 @@
  * work, and every step after an await checks the session is still live, so nothing is cached, learned, charged or
  * queued for a session (or a user) that is gone.
  */
-import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import type { SourceMap, UserRows } from "@eden/graph";
 import type { Budget, Model, Reservation } from "@eden/llm";
@@ -2032,9 +2031,7 @@ export class ContextPartner {
     const { calls: sourceCalls, plans, probed, local, syncCalls } = searched;
     // `intent`: what the question would change, by the requests written for each item (no model, no call).
     const intentFound = this.intentFinds(s, cue);
-    const seatFinds = this.config.cardSeats > 0 ? this.cardSeatFinds(s, cue) : [];
-    if (CS_DUMP && internal.push) this.csDump(s, cue);
-    const extra = [...intentFound.keys(), ...seatFinds];
+    const extra = [...intentFound.keys()];
     const ranking = spans?.open("rank", cue.span);
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
@@ -2062,8 +2059,7 @@ export class ContextPartner {
       ...grounded,
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
     ];
-    const fusedOrder = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
-    const order = seatFinds.length > 0 ? seatCards(fusedOrder, scored, seatFinds, CS_AT) : fusedOrder;
+    const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
     let chosen = order.slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
@@ -2758,17 +2754,9 @@ export class ContextPartner {
     const k = this.config.pushDaySeats;
     const days = cue.time?.days;
     if (k <= 0 || !days || days.size === 0 || days.size > DAY_SEAT_DAYS) return [];
-    const wide = DS_WIDE > 0 ? k * DS_WIDE : k;
-    let hits = this.deps.cache.dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), wide, cue.offset);
-    if (DS_WIDE > 0 && hits.length > k && this.deps.cards) {
-      const cards = this.deps.cards.cardsOf(s.scope, hits.map((h) => h.item.id), cue.arrived ?? this.now());
-      const force = (id: string) => {
-        const c = cards.get(id);
-        return !!c && DS_KINDS.has(c.kind) && !(c.state && CLEARED_STATES.has(c.state));
-      };
-      hits = [...hits.filter((h) => force(h.item.id)), ...hits.filter((h) => !force(h.item.id))];
-    }
-    return hits.slice(0, k).map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc }));
+    return this.deps.cache
+      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset)
+      .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc }));
   }
 
   /**
@@ -6217,55 +6205,6 @@ export class ContextPartner {
    * enrichment runs in the background, so a card made during this lookup lands at a later one (D4). No model, no call:
    * a classification by fixed lexicons and a pass over the user's carded items (at most `maxCardsPerUser` twice).
    */
-  private csDump(s: Session, cue: Cue): void {
-    const enricher = this.deps.cards;
-    if (!enricher) return;
-    const now = this.now();
-    const at = cue.arrived ?? now;
-    const accept = (id: string) => this.deps.cache.get(s.scope, id, now) !== null;
-    const rows = enricher.intentFinds(s.scope, intentQuery(cue), at, 200, accept);
-    const ir = new Map<string, [number, number, number]>();
-    rows.forEach((r, i) => {
-      for (const id of r.ids) if (!ir.has(id)) ir.set(id, [i, r.hit.coverage, r.hit.matched]);
-    });
-    const actions = requestActions(cue.raw);
-    const frame = this.frame(cue);
-    const ids = enricher.carded(s.scope).filter((id) => this.deps.cache.get(s.scope, id, now) !== null);
-    const out: unknown[] = [];
-    for (const [id, card] of enricher.cardsOf(s.scope, ids, at)) {
-      const m = cardVerdict(card, frame, actions);
-      const act = card.actions.some((a) => actions.has(a));
-      out.push({ id, k: card.kind, st: card.state, a: card.actions, act, v: m?.violated, t: m?.tied, i: ir.get(id) });
-    }
-    for (const [id, v] of ir) if (!out.some((o) => (o as { id: string }).id === id)) out.push({ id, i: v });
-    appendFileSync(CS_DUMP!, JSON.stringify({ req: cue.raw, acts: [...actions], scope: s.scope.userId, items: out }) + "\n");
-  }
-
-  private cardSeatFinds(s: Session, cue: Cue): string[] {
-    const enricher = this.deps.cards;
-    if (!this.config.cards || !enricher) return [];
-    const actions = requestActions(cue.raw);
-    if (actions.size === 0) return [];
-    const now = this.now();
-    const ids = enricher.carded(s.scope).filter((id) => this.deps.cache.get(s.scope, id, now) !== null);
-    const frame = this.frame(cue);
-    const out: [string, CardFind][] = [];
-    for (const [id, card] of enricher.cardsOf(s.scope, ids, cue.arrived ?? now)) {
-      if (card.state && CLEARED_STATES.has(card.state)) continue;
-      if (CS_KINDS && !CS_KINDS.has(card.kind)) continue;
-      const m = cardVerdict(card, frame, actions);
-      if (!m) continue;
-      if (CS_MODE.includes("violated") && !m.violated) continue;
-      if (CS_MODE.includes("tied") && !m.tied) continue;
-      if (CS_MODE.includes("name") && m.tied !== "name") continue;
-      out.push([id, { ...m, spanDays: spanDays(card) }]);
-    }
-    return out
-      .sort((a, b) => cardRank(b[1]) - cardRank(a[1]))
-      .slice(0, this.config.cardSeats)
-      .map(([id]) => id);
-  }
-
   private cardFinds(s: Session, cue: Cue): Map<string, CardFind> {
     const out = new Map<string, CardFind>();
     const enricher = this.deps.cards;
@@ -6904,29 +6843,6 @@ function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
   const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), ms)));
   p.catch(() => {}).finally(() => clearTimeout(timer));
   return Promise.race([p, late]);
-}
-
-const CS_DUMP = process.env.EDEN_CS_DUMP;
-const DS_WIDE = Number(process.env.EDEN_DS_WIDE ?? 0);
-const DS_KINDS = new Set(
-  (process.env.EDEN_DS_KINDS ?? "prohibition,freeze,limit,dependency,absence,preference,already-done,status-change,deadline").split(","),
-);
-const CS_MODE = process.env.EDEN_CS_MODE ?? "violated";
-const CS_AT = Number(process.env.EDEN_CS_AT ?? 3);
-const CS_KINDS = process.env.EDEN_CS_KINDS ? new Set(process.env.EDEN_CS_KINDS.split(",")) : null;
-function seatCards(order: Scored[], scored: readonly Scored[], ids: readonly string[], at: number): Scored[] {
-  const head = order.slice(0, at);
-  const have = new Set(head.map((x) => x.item.id));
-  const byId = new Map<string, Scored>();
-  for (const x of [...order, ...scored]) if (!byId.has(x.item.id)) byId.set(x.item.id, x);
-  const seats: Scored[] = [];
-  for (const id of ids) {
-    const x = byId.get(id);
-    if (x && !have.has(id)) seats.push(x);
-  }
-  if (seats.length === 0) return order;
-  const moved = new Set(seats);
-  return [...head, ...seats, ...order.slice(at).filter((x) => !moved.has(x))];
 }
 
 /** Card finds a lookup ranks at most (`cards`). */

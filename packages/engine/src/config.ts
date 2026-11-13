@@ -770,8 +770,6 @@ export interface EngineConfig {
    * within their intervals, checked pushes +7% (docs/research/g1-facts.md).
    */
   pushDaySeats: number;
-  /** PROTOTYPE (bridge retrieval): violated constraint cards seated in an ask's order. 0 = off. */
-  cardSeats: number;
   /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
@@ -1016,7 +1014,6 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   packetHeedsCheck: true,
   pushDaySeats: 3,
-  cardSeats: 0,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,

@@ -227,7 +227,7 @@ export function intentCut(
  * threshold ranks low by BM25, behind uncarded hits that fill the first `intentHits`. On train, 1x `intentHits` raw
  * hits found 6 of the 9 hidden facts 3x found, at 2 decoys in pool more for 3x (fix-s3a-intent.md).
  */
-const CARD_REACH = Number(process.env.EDEN_IK_REACH ?? 3);
+const CARD_REACH = 3;
 
 /**
  * How many raw hits the carded pass asks the store for under `cut` (0: no carded pass). The shared pass always reads
