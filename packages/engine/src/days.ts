@@ -35,6 +35,10 @@ const WEEKDAY = String.raw`(?:sun|mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur
  */
 const AFTER_DAY =
   /^\s*(?:$|[,.;:!?)\]–—-]|(?:at|in|on|by|for|to|from|and|or|but|so|then|if|when|is|was|works|would|will|please|morning|afternoon|evening|night|after|before|until|till|instead|rather|around|about|next|this|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b)/;
+/** What follows a range's first day: a separator and a dated day ("–14th November", "to 16th of November"). */
+const RANGE_ON = new RegExp(
+  String.raw`^\s*(?:–|—|-|to|through|thru|until|till|and)\s*(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+${MONTH}\b`,
+);
 /** What must stand before a bare day of the month: a date's preposition or "the", a weekday, or both. */
 const BEFORE_DAY = new RegExp(
   String.raw`(?:\b(?:on|by|for|until|till|before|after|from|of|to)\s+(?:the\s+)?|\bthe\s+|\b${WEEKDAY},?\s+(?:the\s+)?)$`,
@@ -76,6 +80,9 @@ export function datedText(text: string, now: number, offsetMinutes = 0): string 
     // Already a date: "20th of November", "November 20th".
     if (new RegExp(String.raw`^(?:\s+of)?\s+${MONTH}\b`).test(after)) continue;
     if (new RegExp(String.raw`\b${MONTH}\s+(?:the\s+)?$`).test(before)) continue;
+    // A range's first day ("the 12th–14th November", "the 10th to 16th of November"): `timeWindow` reads the range
+    // with its month (D1773); given the next 12th's month here, its end would fall in another year.
+    if (RANGE_ON.test(lower.slice(end, end + 48))) continue;
     if (english && (!BEFORE_DAY.test(before) || !AFTER_DAY.test(after))) continue;
     if (PAST.test(lower.slice(Math.max(0, at - 80), at))) continue;
     const wd = new RegExp(String.raw`\b(${WEEKDAY}),?\s+(?:the\s+)?$`).exec(before);
