@@ -73,21 +73,26 @@ function runOf(text: string, at: number, is: (c: number) => boolean, cap = Infin
   return end - at;
 }
 
-/** A match: its span and its groups' spans (index 0 unused, `undefined` for a group that took no part). */
-interface Found {
-  start: number;
-  end: number;
-  groups: (Span | undefined)[];
-}
+/**
+ * A match: `[start, end)`, plus, for the first match only (`groups` reads no other), its groups' spans (index 0
+ * unused, `undefined` for a group that took no part). One small array a match: on match-dense text, a match object
+ * and its groups per match held several times re2js's memory.
+ */
+type Found = [start: number, end: number, groups?: (Span | undefined)[]];
 
 /** A Pattern from a scan that finds every match (or only the first), leftmost-first and non-overlapping. */
 function patternOf(scan: (text: string, first: boolean) => Found[]): Pattern {
   return {
     test: (text) => scan(text, true).length > 0,
-    matches: (text) => scan(text, false).map((found): Span => [found.start, found.end]),
+    // Without `first` every match is a bare `[start, end]`.
+    matches: (text) => scan(text, false) as Span[],
     groups(text) {
       const found = scan(text, true)[0];
-      return found ? [[found.start, found.end], ...found.groups.slice(1)] : null;
+      if (!found) return null;
+      // The groups array is the scan's own, made for this call: slot 0 takes the match.
+      const groups = found[2]!;
+      groups[0] = [found[0], found[1]];
+      return groups;
     },
   };
 }
@@ -205,6 +210,38 @@ const ASSIGNMENT_RULES: AssignmentRule[] = [
 const NONE = -1;
 
 /**
+ * A fixed-size, direct-mapped memo of non-negative integer keys to results: a key lives in slot `key % size`, and a
+ * newer key in the same slot replaces it (a later read recomputes). The scanners read their memos only near where the
+ * scan is, which moves forward, so a few thousand slots keep nearly every hit; memory is fixed and nothing is
+ * allocated per entry (a Map cleared at a bound left tens of MB of garbage on 16 MB of crafted text).
+ */
+/** Slots in a memo: enough that the few hundred positions a scan reads again never collide. */
+const MEMO_SLOTS = 4_096;
+/**
+ * The shortest text a scan keeps memos for. Below it the work a memo saves is a few lines' worth, and the gate
+ * re-matches every match on its own short text: typed arrays allocated per re-match (300,000 on 16 MB of curl text)
+ * live outside the collected heap until a collection and showed in peak memory.
+ */
+const MEMO_FROM = 4_096;
+class Memo {
+  private readonly keys: Float64Array;
+  private readonly values: Int32Array;
+  constructor(private readonly size: number) {
+    this.keys = new Float64Array(size).fill(-1);
+    this.values = new Int32Array(size);
+  }
+  get(key: number): number | undefined {
+    const slot = key % this.size;
+    return this.keys[slot] === key ? this.values[slot] : undefined;
+  }
+  set(key: number, value: number): void {
+    const slot = key % this.size;
+    this.keys[slot] = key;
+    this.values[slot] = value;
+  }
+}
+
+/**
  * The length of the keyword occurrence `finder` found ending at `end`: the length at which the same regex, anchored
  * (`sticky`), matches through `end`. One of them does, as the finder's match is one of them.
  */
@@ -239,17 +276,18 @@ function assignmentPattern(rule: AssignmentRule): Pattern {
       return NONE;
     };
     /**
-     * Memo of `operator` by position, as found + 2 (0: not yet worked out). Several keywords can reach one operator,
-     * and a keyword is looked at again when a match ends within 100 characters of it; with the memo each operator
-     * position costs one evaluation.
+     * Memo of `operator` by position. Several keywords can reach one operator, and a keyword is looked at again when
+     * a match ends within 100 characters of it; with the memo each operator position costs one evaluation. Those
+     * reads all fall within about 130 characters of the scan, far inside the memo's 4,096 slots.
      */
-    let operators: Int32Array | undefined;
+    let operators: Memo | undefined;
     /** OP's alternatives in order, then the rest: the secret's start, or NONE. */
     const operator = (at: number): number => {
       const c = text.charCodeAt(at);
       if (c !== 61 && c !== 62 && c !== 58 && c !== 124 && c !== 63 && c !== 44) return NONE;
-      operators ??= new Int32Array(length + 1);
-      if (operators[at] !== 0) return operators[at]! - 2;
+      if (length >= MEMO_FROM) operators ??= new Memo(MEMO_SLOTS);
+      const known = operators?.get(at);
+      if (known !== undefined) return known;
       const next = text.charCodeAt(at + 1);
       let found = NONE;
       if (c === 61 /* = */ || c === 62 /* > */) found = beforeSecret(at + 1);
@@ -264,7 +302,7 @@ function assignmentPattern(rule: AssignmentRule): Pattern {
       if (found === NONE && c === 61 && next === 62) found = beforeSecret(at + 2); // =>
       if (found === NONE && c === 63 && next === 61) found = beforeSecret(at + 2); // ?=
       if (found === NONE && c === 44) found = beforeSecret(at + 1); // ,
-      operators[at] = found + 2;
+      operators?.set(at, found);
       return found;
     };
     /**
@@ -338,12 +376,11 @@ function assignmentPattern(rule: AssignmentRule): Pattern {
       }
       if (bestStart === NONE) break;
       const end = secretEnd(bestSecret);
-      out.push({
-        start: bestStart,
-        end,
-        groups: [undefined, [bestSecret, bestSecret + rule.secret(text, bestSecret)]],
-      });
-      if (first) break;
+      if (first) {
+        out.push([bestStart, end, [undefined, [bestSecret, bestSecret + rule.secret(text, bestSecret)]]]);
+        break;
+      }
+      out.push([bestStart, end]);
       from = end;
     }
     return out;
@@ -371,10 +408,8 @@ const isCrLf = (c: number) => c === 10 || c === 13;
 const isSpaceTab = (c: number) => c === 32 || c === 9;
 const isOptionSpace = (c: number) => c === 32 || c === 9 || c === 10 || c === 13;
 
-interface Rest {
-  end: number;
-  groups: (Span | undefined)[];
-}
+/** A curl rule's groups, filled by `rest` only when asked (index 0 unused). */
+type Groups = (Span | undefined)[];
 
 interface CurlRule {
   id: string;
@@ -383,8 +418,12 @@ interface CurlRule {
   lazy: boolean;
   options: [string, string];
   groupCount: number;
-  /** R(q) from the option's first character `at` (just past the `[ \t\n\r]`), or null. */
-  rest(text: string, at: number): Rest | null;
+  /**
+   * R(q) from the option's first character `at` (just past the `[ \t\n\r]`): where its match ends, or NONE. Fills
+   * `groups` when given; the scan asks for them only for the one match `groups()` reads, so evaluating the many
+   * options of crafted text allocates nothing.
+   */
+  rest(text: string, at: number, groups: Groups | null): number;
 }
 
 /** After `-u`/`-H` (at `at`): `(?:=|[ \t]{0,5})`. Where the value starts, or NONE when no value can follow. */
@@ -424,13 +463,15 @@ function quoted(text: string, at: number): number {
   return close >= 0 && atLeastCodePoints(text, at + 1, close, 3) ? close + 1 : NONE;
 }
 
-function userRest(text: string, at: number): Rest | null {
+const startsUser = (c: number) => c === QUOTE || c === APOSTROPHE || isUserChar(c);
+
+function userRest(text: string, at: number, groups: Groups | null): number {
   let option: number;
   if (wordAt(text, at, "-u")) option = at + 2;
   else if (wordAt(text, at, "--user")) option = at + 6;
-  else return null;
-  const start = valueStart(text, option, (c) => c === QUOTE || c === APOSTROPHE || isUserChar(c));
-  if (start === NONE) return null;
+  else return NONE;
+  const start = valueStart(text, option, startsUser);
+  if (start === NONE) return NONE;
   const open = text.charCodeAt(start);
   if (open === QUOTE) {
     // `"(:[^"]{3,}|[^:"]{3,}:|[^:"]{3,}:[^"]{3,})"`: all three end at the next quote.
@@ -444,7 +485,10 @@ function userRest(text: string, at: number): Rest | null {
           atLeastCodePoints(text, inner, colon, 3) &&
           (colon === close - 1 || atLeastCodePoints(text, colon + 1, close, 3)));
       const end = valid ? spaceOrEnd(text, close + 1) : NONE;
-      if (end !== NONE) return { end, groups: [undefined, [start, close + 1], [inner, close], undefined, undefined] };
+      if (end !== NONE) {
+        if (groups) groups.push(undefined, [start, close + 1], [inner, close], undefined, undefined);
+        return end;
+      }
     }
   } else if (open === APOSTROPHE) {
     // `'([^:']{3,}:[^']{3,})'`.
@@ -455,20 +499,23 @@ function userRest(text: string, at: number): Rest | null {
       const valid =
         colon !== NONE && atLeastCodePoints(text, inner, colon, 3) && atLeastCodePoints(text, colon + 1, close, 3);
       const end = valid ? spaceOrEnd(text, close + 1) : NONE;
-      if (end !== NONE) return { end, groups: [undefined, [start, close + 1], undefined, [inner, close], undefined] };
+      if (end !== NONE) {
+        if (groups) groups.push(undefined, [start, close + 1], undefined, [inner, close], undefined);
+        return end;
+      }
     }
   }
   // `(?:"[^"]{3,}"|'[^']{3,}'|[\w$@.-]+):(?:"[^"]{3,}"|'[^']{3,}'|[\w${}@.-]+)`.
   const userEnd = open === QUOTE || open === APOSTROPHE ? quoted(text, start) : start + runOf(text, start, isUserChar);
-  if (userEnd === NONE || userEnd === start || text.charCodeAt(userEnd) !== 58) return null;
+  if (userEnd === NONE || userEnd === start || text.charCodeAt(userEnd) !== 58) return NONE;
   const password = userEnd + 1;
   const first = text.charCodeAt(password);
   const passwordEnd =
     first === QUOTE || first === APOSTROPHE ? quoted(text, password) : password + runOf(text, password, isPasswordChar);
-  if (passwordEnd === NONE || passwordEnd === password) return null;
+  if (passwordEnd === NONE || passwordEnd === password) return NONE;
   const end = spaceOrEnd(text, passwordEnd);
-  if (end === NONE) return null;
-  return { end, groups: [undefined, [start, passwordEnd], undefined, undefined, [start, passwordEnd]] };
+  if (end !== NONE && groups) groups.push(undefined, [start, passwordEnd], undefined, undefined, [start, passwordEnd]);
+  return end;
 }
 
 // curl-auth-header's value: `(?:"(?i)(?:A)"|'(?i)(?:A)')(?:\B|\s|\z)` with A =
@@ -517,23 +564,34 @@ function isKeyHeader(text: string, from: number, to: number): boolean {
   return false;
 }
 
-function headerRest(text: string, at: number): Rest | null {
+const isQuote = (c: number) => c === QUOTE || c === APOSTROPHE;
+const isPad = (c: number) => c === 61;
+const isNameChar = (c: number) => isFoldedLetter(c) || c === 45;
+
+/**
+ * After the closing quote at `close`: where the match ends (`\B`, so no word character may follow), or NONE; fills
+ * `groups` (9 entries, `group` of quote branch `base`) when given.
+ */
+function headerDone(text: string, close: number, group: number, from: number, base: number, groups: Groups | null) {
+  const after = close + 1;
+  if (after < text.length && isWord(text.charCodeAt(after))) return NONE;
+  if (groups) {
+    for (let i = 0; i < 9; i++) groups.push(undefined);
+    groups[base + group] = [from, close];
+  }
+  return after;
+}
+
+function headerRest(text: string, at: number, groups: Groups | null): number {
   let option: number;
   if (wordAt(text, at, "-H")) option = at + 2;
   else if (wordAt(text, at, "--header")) option = at + 8;
-  else return null;
-  const open = valueStart(text, option, (c) => c === QUOTE || c === APOSTROPHE);
-  if (open === NONE) return null;
+  else return NONE;
+  const open = valueStart(text, option, isQuote);
+  if (open === NONE) return NONE;
   const quote = text.charCodeAt(open);
   const base = quote === QUOTE ? 0 : 4; // groups 1–4 or 5–8
   const inner = open + 1;
-  const done = (close: number, group: number, from: number): Rest | null => {
-    const after = close + 1;
-    if (after < text.length && isWord(text.charCodeAt(after))) return null;
-    const groups: (Span | undefined)[] = new Array(9).fill(undefined);
-    groups[base + group] = [from, close];
-    return { end: after, groups };
-  };
   if (foldedAt(text, inner, "authorization:")) {
     const spaces = runOf(text, inner + 14, isSpaceTab);
     const value = inner + 14 + spaces;
@@ -542,10 +600,10 @@ function headerRest(text: string, at: number): Rest | null {
       if (foldedAt(text, value, "basic") && isSpaceTab(text.charCodeAt(value + 5))) {
         const from = value + 6;
         const run = runOf(text, from, isBase64);
-        const pads = runOf(text, from + run, (c) => c === 61);
+        const pads = runOf(text, from + run, isPad);
         if (run >= 8 && pads <= 3 && text.charCodeAt(from + run + pads) === quote) {
-          const found = done(from + run + pads, 1, from);
-          if (found) return found;
+          const end = headerDone(text, from + run + pads, 1, from, base, groups);
+          if (end !== NONE) return end;
         }
       }
       // (?:Bearer|(?:Api-)?Token)[ \t](TOKEN): at most one of the three words starts here.
@@ -559,27 +617,27 @@ function headerRest(text: string, at: number): Rest | null {
       if (word > 0 && isSpaceTab(text.charCodeAt(value + word))) {
         const close = tokenThenQuote(text, value + word + 1, quote);
         if (close !== NONE) {
-          const found = done(close, 2, value + word + 1);
-          if (found) return found;
+          const end = headerDone(text, close, 2, value + word + 1, base, groups);
+          if (end !== NONE) return end;
         }
       }
       const close = tokenThenQuote(text, value, quote);
       if (close !== NONE) {
-        const found = done(close, 3, value);
-        if (found) return found;
+        const end = headerDone(text, close, 3, value, base, groups);
+        if (end !== NONE) return end;
       }
     }
   }
   // The key-header alternative: the name is the run of letters and `-` up to a `:` (it holds neither `:` nor
   // anything else, so it is that whole run or nothing).
-  const nameEnd = inner + runOf(text, inner, (c) => isFoldedLetter(c) || c === 45);
-  if (text.charCodeAt(nameEnd) !== 58) return null;
-  if (!isKeyHeader(text, inner, nameEnd)) return null;
+  const nameEnd = inner + runOf(text, inner, isNameChar);
+  if (text.charCodeAt(nameEnd) !== 58) return NONE;
+  if (!isKeyHeader(text, inner, nameEnd)) return NONE;
   const spaces = runOf(text, nameEnd + 1, isSpaceTab);
-  if (spaces > 5) return null;
+  if (spaces > 5) return NONE;
   const from = nameEnd + 1 + spaces;
   const close = tokenThenQuote(text, from, quote);
-  return close === NONE ? null : done(close, 4, from);
+  return close === NONE ? NONE : headerDone(text, close, 4, from, base, groups);
 }
 
 const CURL_RULES: CurlRule[] = [
@@ -604,102 +662,177 @@ const CURL_RULES: CurlRule[] = [
 /** The deepest line the second alternative reaches: `{1,5}`. */
 const MAX_LINES = 5;
 
+/**
+ * The curl scans' per-option arrays. Up to SHARED_OPTIONS options they are shared: a scan runs to completion before
+ * another starts, and the gate calls a pattern once per match (`groups` on each match's text), so fresh arrays per
+ * call were most of the scans' garbage on match-dense text. A text with more options gets its own, exactly sized,
+ * freed with the scan, so nothing large outlives it.
+ */
+const SHARED_OPTIONS = 4_096;
+const shared = { options: new Int32Array(SHARED_OPTIONS), oks: new Int32Array(SHARED_OPTIONS) };
+function optionBuffers(count: number) {
+  if (count <= SHARED_OPTIONS) return shared;
+  return { options: new Int32Array(count), oks: new Int32Array(count) };
+}
+
+/** The option positions in `text` (a `[ \t\n\r]` followed by either option), visited in order. */
+function countOptions(text: string, rule: CurlRule, into: Int32Array | null): number {
+  let count = 0;
+  for (let dash = text.indexOf("-", 1); dash >= 0; dash = text.indexOf("-", dash + 1)) {
+    if (!isOptionSpace(text.charCodeAt(dash - 1))) continue;
+    if (wordAt(text, dash, rule.options[0]) || wordAt(text, dash, rule.options[1])) {
+      if (into) into[count] = dash - 1;
+      count++;
+    }
+  }
+  return count;
+}
+
+const UNKNOWN = -2;
+
+/**
+ * One scan of a curl rule over one text. A class rather than closures: the gate re-matches every match on its own
+ * text, so on match-dense text a scan's set-up runs hundreds of thousands of times, and a dozen closures each time
+ * was garbage enough to show in peak memory.
+ */
+class CurlScan {
+  private readonly length: number;
+  private readonly count: number;
+  private readonly options: Int32Array;
+  /**
+   * For the lazy rule, the first option at or after i whose rest matches (count: none); for the greedy one, the last
+   * at or before i (-1). Each walk to the first known or matching option points every option it passed there, so
+   * each option's rest is worked out once (where a match ends is worked out again for the option it takes).
+   */
+  private readonly oks: Int32Array;
+  /** The line the last `lineEnd` read: no break in `[knownFrom, knownEnd)`. */
+  private knownFrom = 0;
+  private knownEnd = -1;
+  /**
+   * Memo of `walk` by line break and depth. A walk reaches at most five lines past its curl's line and curls come in
+   * order, so only recent entries are read again (an entry per break and depth for the whole text held 150 MB on 16 MB
+   * of crafted text). An entry lost to a newer one costs a recomputation, which a walk bounds anyway: five lines, two
+   * ways to read each break.
+   */
+  private walks: Memo | undefined;
+
+  constructor(
+    private readonly rule: CurlRule,
+    private readonly text: string,
+    count: number,
+  ) {
+    this.length = text.length;
+    this.count = count;
+    const buffers = optionBuffers(count);
+    this.options = buffers.options;
+    this.oks = buffers.oks;
+    countOptions(text, rule, this.options);
+    this.oks.fill(UNKNOWN, 0, count);
+  }
+
+  private restAt(i: number): boolean {
+    return this.rule.rest(this.text, this.options[i]! + 1, null) !== NONE;
+  }
+
+  private firstOk(i: number): number {
+    const { oks, count } = this;
+    let stop = i;
+    while (stop < count && oks[stop] === UNKNOWN && !this.restAt(stop)) stop++;
+    const found = stop === count ? count : oks[stop] === UNKNOWN ? stop : oks[stop]!;
+    for (let w = i; w <= stop && w < count; w++) oks[w] = found;
+    return found;
+  }
+
+  private lastOk(i: number): number {
+    const { oks } = this;
+    let stop = i;
+    while (stop >= 0 && oks[stop] === UNKNOWN && !this.restAt(stop)) stop--;
+    const found = stop < 0 ? -1 : oks[stop] === UNKNOWN ? stop : oks[stop]!;
+    for (let w = i; w >= stop && w >= 0; w--) oks[w] = found;
+    return found;
+  }
+
+  /** The index of the first option at or after `position`. */
+  lowerBound(position: number): number {
+    let lo = 0;
+    let hi = this.count;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.options[mid]! < position) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  /** The first (lazy) or last (greedy) option in `[lo, hi]` whose rest matches, or NONE. */
+  pick(lo: number, hi: number): number {
+    if (hi < lo) return NONE;
+    if (this.rule.lazy) {
+      const j = this.firstOk(this.lowerBound(lo));
+      return j < this.count && this.options[j]! <= hi ? this.options[j]! : NONE;
+    }
+    const i = this.lowerBound(hi + 1) - 1;
+    if (i < 0) return NONE;
+    const j = this.lastOk(i);
+    return j >= 0 && this.options[j]! >= lo ? this.options[j]! : NONE;
+  }
+
+  /** The line break that ends the line holding `at` (a `.` stops there), or the text's length. */
+  lineEnd(at: number): number {
+    if (at >= this.knownFrom && at <= this.knownEnd) return this.knownEnd;
+    let end = at;
+    while (end < this.length && !isLineBreak(this.text.charCodeAt(end))) end++;
+    this.knownFrom = at;
+    this.knownEnd = end;
+    return end;
+  }
+
+  /** Whether any option at or after `at` has a matching rest. */
+  private anyOkFrom(at: number): boolean {
+    const i = this.lowerBound(at);
+    return this.rule.lazy ? this.firstOk(i) < this.count : this.lastOk(this.count - 1) >= i;
+  }
+
+  /** The option the second alternative reaches from the line break at `at`, through line `depth`, or NONE. */
+  walk(at: number, depth: number): number {
+    // Every option it could reach lies after `at`: none whose rest matches, nothing to walk.
+    if (!this.anyOkFrom(at)) return NONE;
+    const { text, length } = this;
+    const key = at * MAX_LINES + depth - 1;
+    // A short text (the gate's re-match of one match) needs no memo: its walks are a few lines at most.
+    if (length >= MEMO_FROM) this.walks ??= new Memo(MEMO_SLOTS);
+    const known = this.walks?.get(key);
+    if (known !== undefined) return known;
+    let found = NONE;
+    // `[\r\n]{1,2}`: two first.
+    for (let breakLength = isCrLf(text.charCodeAt(at + 1)) ? 2 : 1; breakLength >= 1; breakLength--) {
+      const lineStart = at + breakLength;
+      const end = this.lineEnd(lineStart);
+      const deeper = depth < MAX_LINES && end < length && isCrLf(text.charCodeAt(end));
+      if (this.rule.lazy) {
+        found = this.pick(lineStart, end - 1);
+        if (found === NONE && deeper) found = this.walk(end, depth + 1);
+        if (found === NONE) found = this.pick(end, end);
+      } else {
+        if (deeper) found = this.walk(end, depth + 1);
+        if (found === NONE) found = this.pick(lineStart, end);
+      }
+      if (found !== NONE) break;
+    }
+    this.walks?.set(key, found);
+    return found;
+  }
+}
+
 function curlPattern(rule: CurlRule): Pattern {
   return patternOf((text, first) => {
     const length = text.length;
     if (text.indexOf("curl") < 0) return [];
-    // Option positions: a `[ \t\n\r]` followed by either option, in order.
-    const options: number[] = [];
-    for (let dash = text.indexOf("-", 1); dash >= 0; dash = text.indexOf("-", dash + 1)) {
-      if (!isOptionSpace(text.charCodeAt(dash - 1))) continue;
-      if (wordAt(text, dash, rule.options[0]) || wordAt(text, dash, rule.options[1])) options.push(dash - 1);
-    }
-    if (options.length === 0) return [];
-    const count = options.length;
-    const rests: (Rest | null | undefined)[] = new Array(count);
-    const restAt = (i: number): Rest | null => (rests[i] ??= rule.rest(text, options[i]! + 1));
-    // nextOk[i]: the first option at or after i whose rest matches (count: none); prevOk the last at or before (-1).
-    const UNKNOWN = -2;
-    const nextOk = new Int32Array(count).fill(UNKNOWN);
-    const prevOk = new Int32Array(count).fill(UNKNOWN);
-    // Each walks to the first known or matching option, then points every option it passed there.
-    const firstOk = (i: number): number => {
-      let stop = i;
-      while (stop < count && nextOk[stop] === UNKNOWN && !restAt(stop)) stop++;
-      const found = stop === count ? count : nextOk[stop] === UNKNOWN ? stop : nextOk[stop]!;
-      for (let w = i; w <= stop && w < count; w++) nextOk[w] = found;
-      return found;
-    };
-    const lastOk = (i: number): number => {
-      let stop = i;
-      while (stop >= 0 && prevOk[stop] === UNKNOWN && !restAt(stop)) stop--;
-      const found = stop < 0 ? -1 : prevOk[stop] === UNKNOWN ? stop : prevOk[stop]!;
-      for (let w = i; w >= stop && w >= 0; w--) prevOk[w] = found;
-      return found;
-    };
-    /** The index of the first option at or after `position`. */
-    const lowerBound = (position: number): number => {
-      let lo = 0;
-      let hi = count;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (options[mid]! < position) lo = mid + 1;
-        else hi = mid;
-      }
-      return lo;
-    };
-    /** The first (lazy) or last (greedy) option in `[lo, hi]` whose rest matches, or NONE. */
-    const pick = (lo: number, hi: number): number => {
-      if (hi < lo) return NONE;
-      if (rule.lazy) {
-        const j = firstOk(lowerBound(lo));
-        return j < count && options[j]! <= hi ? options[j]! : NONE;
-      }
-      const i = lowerBound(hi + 1) - 1;
-      if (i < 0) return NONE;
-      const j = lastOk(i);
-      return j >= 0 && options[j]! >= lo ? options[j]! : NONE;
-    };
-    /** The line break that ends the line holding `at` (a `.` stops there), or the text's length. */
-    let knownFrom = 0;
-    let knownEnd = -1;
-    const lineEnd = (at: number): number => {
-      if (at >= knownFrom && at <= knownEnd) return knownEnd;
-      let end = at;
-      while (end < length && !isLineBreak(text.charCodeAt(end))) end++;
-      knownFrom = at;
-      knownEnd = end;
-      return end;
-    };
-    /** Memo of `walk` by line break and depth, as found + 2 (0: not yet worked out). */
-    let walks: Int32Array | undefined;
-    /** The option the second alternative reaches from the line break at `at`, through line `depth`, or NONE. */
-    const walk = (at: number, depth: number): number => {
-      // Every option it could reach lies after `at`: none whose rest matches, nothing to walk.
-      if (firstOk(lowerBound(at)) >= count) return NONE;
-      walks ??= new Int32Array(length * MAX_LINES);
-      const key = at * MAX_LINES + depth - 1;
-      if (walks[key] !== 0) return walks[key]! - 2;
-      let found = NONE;
-      // `[\r\n]{1,2}`: two first.
-      for (const breakLength of isCrLf(text.charCodeAt(at + 1)) ? [2, 1] : [1]) {
-        const lineStart = at + breakLength;
-        const end = lineEnd(lineStart);
-        const deeper = depth < MAX_LINES && end < length && isCrLf(text.charCodeAt(end));
-        if (rule.lazy) {
-          found = pick(lineStart, end - 1);
-          if (found === NONE && deeper) found = walk(end, depth + 1);
-          if (found === NONE) found = pick(end, end);
-        } else {
-          if (deeper) found = walk(end, depth + 1);
-          if (found === NONE) found = pick(lineStart, end);
-        }
-        if (found !== NONE) break;
-      }
-      walks[key] = found + 2;
-      return found;
-    };
-
+    // Two passes, counting then filling, so options sit in typed arrays (4 bytes each) and never in a growing JS
+    // array: options are as dense as one per few characters in crafted text.
+    const count = countOptions(text, rule, null);
+    if (count === 0) return [];
+    const scan = new CurlScan(rule, text, count);
     const out: Found[] = [];
     let from = 0;
     for (let curl = text.indexOf("curl"); curl >= 0; curl = text.indexOf("curl", curl + 1)) {
@@ -707,15 +840,19 @@ function curlPattern(rule: CurlRule): Pattern {
       if (curl > 0 && isWord(text.charCodeAt(curl - 1))) continue;
       if (curl + 4 < length && isWord(text.charCodeAt(curl + 4))) continue;
       const after = curl + 4;
-      const end = lineEnd(after);
-      let q = pick(after, end);
-      if (q === NONE && end < length && isCrLf(text.charCodeAt(end))) q = walk(end, 1);
+      const end = scan.lineEnd(after);
+      let q = scan.pick(after, end);
+      if (q === NONE && end < length && isCrLf(text.charCodeAt(end))) q = scan.walk(end, 1);
       if (q === NONE) continue;
-      const rest = restAt(lowerBound(q))!;
-      const groups = rest.groups.slice(0, rule.groupCount + 1);
-      out.push({ start: curl, end: rest.end, groups });
-      if (first) break;
-      from = rest.end;
+      if (first) {
+        // The groups, worked out again for this one match: `rest` fills exactly the rule's groupCount + 1 slots.
+        const groups: Groups = [];
+        out.push([curl, rule.rest(text, q + 1, groups), groups]);
+        break;
+      }
+      const matchEnd = rule.rest(text, q + 1, null);
+      out.push([curl, matchEnd]);
+      from = matchEnd;
     }
     return out;
   });

@@ -114,7 +114,7 @@ export type RegexNode =
   | { t: "set"; ranges: Ranges }
   | { t: "cat"; xs: RegexNode[] }
   | { t: "alt"; xs: RegexNode[] }
-  | { t: "rep"; x: RegexNode; min: number; max: number }
+  | { t: "rep"; x: RegexNode; min: number; max: number; counted: boolean }
   | { t: "assert"; kind: Assertion }
   | { t: "empty" };
 
@@ -258,6 +258,7 @@ class Parser {
     const char = this.peek();
     let min: number;
     let max: number;
+    let counted = false;
     if (char === 42) [min, max] = [0, -1];
     else if (char === 43) [min, max] = [1, -1];
     else if (char === 63) [min, max] = [0, 1];
@@ -265,6 +266,7 @@ class Parser {
       const spec = this.repeatSpec(this.at);
       if (!spec) return node; // a `{` that does not open a repeat is a literal (RE2), read by `atom`
       [min, max] = [spec.min, spec.max];
+      counted = true;
       this.at = spec.end - 1;
     } else return node;
     this.at++;
@@ -273,7 +275,9 @@ class Parser {
     if (next === 42 || next === 43 || next === 63 || (next === 123 && this.repeatSpec(this.at))) {
       this.fail("nested repetition operator");
     }
-    return { t: "rep", x: node, min, max };
+    const repeat: RegexNode = { t: "rep", x: node, min, max, counted };
+    if (!repeatIsValid(repeat, MAX_REPEAT)) this.fail("bad repetition count: nested repeats over 1000");
+    return repeat;
   }
 
   /** `{n}`, `{n,}` or `{n,m}` at `start`, with the index after it; undefined when it is not one. */
@@ -322,7 +326,9 @@ class Parser {
         digits = String.fromCodePoint(...this.cps.slice(this.at + 1, close));
         this.at = close + 1;
       } else {
+        // Without braces RE2 takes exactly two hex digits.
         digits = String.fromCodePoint(...this.cps.slice(this.at, this.at + 2));
+        if (!/^[0-9A-Fa-f]{2}$/.test(digits)) this.fail("bad \\x escape");
         this.at += 2;
       }
       if (!/^[0-9A-Fa-f]{1,6}$/.test(digits) || parseInt(digits, 16) > MAX_CP) this.fail("bad \\x escape");
@@ -389,6 +395,21 @@ class Parser {
 function perlFolded(perl: { negated: boolean; base: Ranges }): Ranges {
   const folded = fold(perl.base);
   return perl.negated ? negate(folded) : folded;
+}
+
+/**
+ * Go's `repeatIsValid`: counted repeats nested inside one another may not multiply past `limit` (RE2 refuses
+ * `(a{1,100}){1,100}`); `*`, `+` and `?` do not count.
+ */
+function repeatIsValid(node: RegexNode, limit: number): boolean {
+  if (node.t === "rep" && node.counted) {
+    const m = node.max < 0 ? node.min : node.max;
+    if (m === 0) return true;
+    if (m > limit) return false;
+    if (m > 0) limit = Math.floor(limit / m);
+  }
+  const subs = node.t === "cat" || node.t === "alt" ? node.xs : node.t === "rep" ? [node.x] : [];
+  return subs.every((sub) => repeatIsValid(sub, limit));
 }
 
 function literal(cp: number, foldCase: boolean): RegexNode {

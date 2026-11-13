@@ -28,7 +28,7 @@
  *   prefixes), so the gate is never looser than it was.
  */
 import { MultiMatcher } from "@eden/primitives";
-import { compileAllowlistRegex, type Tester } from "./automaton";
+import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton";
 import { assignmentSpans, redact, REDACTED } from "./redact";
 import { SCANNERS } from "./scanners";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
@@ -574,6 +574,17 @@ function checkScanners(rules: GitleaksRule[]): void {
   }
 }
 
+/**
+ * Throws unless every rule's own allowlist regexes parse in the allowlist automaton's subset. Those compile only when
+ * their rule first runs, so without this an unsupported one (`(?m)…`) would throw on the first text that rule finds
+ * something in, not when the gate is built.
+ */
+function checkAllowlists(rules: GitleaksRule[]): void {
+  for (const rule of rules) {
+    for (const list of rule.allowlists ?? []) for (const regex of list.regexes ?? []) parseRegex(regex);
+  }
+}
+
 let compiled: SecretRule[] | undefined;
 
 /** Every rule: gitleaks' (those with a regex) and Eden's (`eden-…`), engines as `GATE_ENGINES` chooses. */
@@ -589,6 +600,7 @@ export function secretRules(): SecretRule[] {
 export function rulesWith(choice: EngineChoice): SecretRule[] {
   const config = gitleaks as GitleaksConfig;
   checkScanners(config.rules);
+  checkAllowlists(config.rules);
   const global = compileAllowlist(config.allowlist, choice.allowlist);
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
   return [

@@ -38,6 +38,43 @@ describe("the scanned rules", () => {
     expect(() => scannerEngine("not-a-rule")(regex)).toThrow("no matcher");
   });
 
+  test("a vendored config the gate cannot run exactly stops it building (the review)", () => {
+    type Rule = { id: string; regex?: string; allowlists?: { regexes?: string[] }[] };
+    const rules = (gitleaks as { rules: Rule[] }).rules;
+    /** Changes one field of the vendored config for the length of `check`, then puts it back. */
+    const mutated = (change: () => () => void, check: () => void) => {
+      const restore = change();
+      try {
+        check();
+      } finally {
+        restore();
+      }
+    };
+    // A scanned rule's regex changed by a gitleaks update.
+    const curl = rules.find((rule) => rule.id === "curl-auth-user")!;
+    mutated(
+      () => {
+        const was = curl.regex;
+        curl.regex = was!.replace("{3,}", "{2,}");
+        return () => (curl.regex = was);
+      },
+      () => expect(() => rulesWith(GATE_ENGINES)).toThrow("curl-auth-user changed"),
+    );
+    // One rule's own allowlist regex in syntax the automaton lacks: refused when the gate is built, not when the
+    // rule first finds something.
+    const aws = rules.find((rule) => rule.id === "aws-access-token")!;
+    const list = aws.allowlists![0]!.regexes!;
+    mutated(
+      () => {
+        const was = list[0]!;
+        list[0] = "(?m).+EXAMPLE$";
+        return () => (list[0] = was);
+      },
+      () => expect(() => rulesWith(GATE_ENGINES)).toThrow("not supported"),
+    );
+    expect(() => rulesWith(GATE_ENGINES)).not.toThrow();
+  });
+
   test("every character class a scanner tests is RE2's, on every code point", () => {
     for (const [source, own] of Object.entries(SCANNER_CLASSES)) {
       const oracle = linearEngine(`^${source}$`);
@@ -95,6 +132,37 @@ describe("the allowlist automaton", () => {
     ]) {
       expect(() => compileAllowlistRegex(source)).toThrow();
     }
+  });
+
+  test("refuses what RE2 refuses: a short \\x escape, nested repeats over 1,000 (the review)", () => {
+    const sources = [
+      String.raw`a\x4`,
+      String.raw`a\x4g`,
+      String.raw`a\x41`,
+      "(a{1,100}){1,100}",
+      "(a{1,10}){1,100}",
+      "((a{2}){10}){50}",
+      "((a{2}){10}){51}",
+      "(a{2,}){500}",
+      "(a{2,}){501}",
+      "(a*){1000}",
+      "(a{0}){1000}",
+      "a{1001}",
+    ];
+    const throws = (compile: () => unknown) => {
+      try {
+        compile();
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    for (const source of sources) {
+      const oracle = throws(() => linearEngine(source));
+      expect([source, throws(() => compileAllowlistRegex(source))]).toEqual([source, oracle]);
+    }
+    expect(throws(() => compileAllowlistRegex(String.raw`a\x4`))).toBe(true);
+    expect(throws(() => compileAllowlistRegex("(a{1,100}){1,100}"))).toBe(true);
   });
 
   test("reads classes, escapes and case folding as re2js does, on every code point", () => {
