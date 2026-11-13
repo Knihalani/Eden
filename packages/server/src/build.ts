@@ -116,6 +116,49 @@ export const modelFailures: Record<`${ModelRole}:${"error" | "unreadable"}`, num
   "check:unreadable": 0,
 };
 
+/** The model roles whose prompt-cache use is counted for `/metrics` (D1800): the card role's calls too. */
+export type CacheRole = ModelRole | "cards";
+
+/** One role's calls and their prompt-cache tokens, summed over the process's life (`modelCache`). */
+export interface CacheCounts {
+  /** Calls answered, and those whose request carried a cache breakpoint (`ChatResponse.cacheBreakpoints`). */
+  calls: number;
+  breakpointCalls: number;
+  /** Input tokens, those read from the provider's cache, and those written to it (counted only when reported). */
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+/**
+ * The roles' prompt-cache use in this process since it started (D1800), for `/metrics`
+ * (`eden_model_cache_*_total{role}`): whether the route honours D1790's breakpoints shows only here, as reads against
+ * calls that carried one. Counts only, no content. The push check and the reader share one model, told apart here by
+ * the role that called it (`countedModel`).
+ */
+export const modelCache: Record<CacheRole, CacheCounts> = {
+  reader: { calls: 0, breakpointCalls: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  check: { calls: 0, breakpointCalls: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  cards: { calls: 0, breakpointCalls: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+};
+
+/** A role's model with its answered calls counted into `modelCache`; the request and the reply pass through as is. */
+export function countedModel(model: Model, role: CacheRole): Model {
+  return {
+    id: model.id,
+    chat: async (request) => {
+      const res = await model.chat(request);
+      const c = modelCache[role];
+      c.calls++;
+      if ((res.cacheBreakpoints ?? 0) > 0) c.breakpointCalls++;
+      c.inputTokens += res.usage.inputTokens;
+      c.cacheReadTokens += res.usage.cachedInputTokens;
+      c.cacheWriteTokens += res.usage.cacheWriteTokens ?? 0;
+      return res;
+    },
+  };
+}
+
 /** The engine's own wording for a reply that did not parse (`reader.ts`, `push-check.ts`). */
 const UNREADABLE = /reply unreadable/;
 
@@ -160,7 +203,10 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   const cards =
     models.cards && config.cards
       ? new CardEnricher({
-          maker: new ModelCardMaker(models.cards, models.cardsRetry ? { retry: models.cardsRetry } : {}),
+          maker: new ModelCardMaker(
+            countedModel(models.cards, "cards"),
+            models.cardsRetry ? { retry: countedModel(models.cardsRetry, "cards") } : {},
+          ),
           budget: budget(),
           now,
         })
@@ -168,7 +214,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   const reader =
     models.reader && config.askReader
       ? new AskReader({
-          maker: new ModelReaderMaker(models.reader),
+          maker: new ModelReaderMaker(countedModel(models.reader, "reader")),
           budget: budget(),
           now,
           onFailure: readerFailureLog(options.log ?? console.error, models.scrub),
@@ -178,7 +224,7 @@ export function buildPartner(options: BuildOptions): ContextPartner {
   const checker =
     models.reader && config.pushCheck
       ? new PushChecker({
-          model: models.reader,
+          model: countedModel(models.reader, "check"),
           budget: budget(),
           onFailure: readerFailureLog(
             options.log ?? console.error,

@@ -775,3 +775,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1782 | 2026-11-13 | Finding: the cold gate cannot be made 20% faster by the listed levers (fuzz counts behind a deep switch, serial bottlenecks in… | finding |
 | D1790 | 2026-11-13 | Adopted: the servers send Anthropic `cache_control` breakpoints on the roles' stable prefix through OpenRouter by default… | adopted |
 | D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
+| D1800 | 2026-11-13 | Adopted: the push check's rule sheet carries its 1-hour cache breakpoint only when caching it is likely to pay for that user… | adopted |
