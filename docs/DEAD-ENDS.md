@@ -248,3 +248,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1076 | Rejected: a shutdown's flush writing the most recently used users first. | R1d, r1-release.md §Round 4 |
 | D1251 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. |  |
 | D1715 | Rejected: a binary layout specialised to a frozen user's structures, in place of the compact form's zstd JSON and the warm form's ("EDF2")… | measured, docs only; docs/research/frozen-binary.md |
+| D1730 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | measured, docs only; docs/research/index-axes.md |

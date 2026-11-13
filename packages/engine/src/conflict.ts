@@ -190,6 +190,20 @@ const CLEARS = new RegExp(
 const REAFFIRMS =
   /\b(?:stands|holds|still (?:on|valid|good|works|active|in place)|remains?|stays? (?:the same|active|on|open|valid|at|in place|unchanged)|active)\b/gi;
 
+/**
+ * Every list a statement's marks are read from (`analysis`), without and with `conflictVocab`, as one regex each
+ * (D1723): a sentence none of them matches has no mark of any kind, so its ten or so `matchAll` passes are skipped.
+ * Built from the lists themselves, so they cannot drift apart; `conflict-memo.test.ts` checks the union against them.
+ */
+export const MARK_LISTS: readonly [readonly RegExp[], readonly RegExp[]] = [
+  [BLOCKS, MOVES, CLEARS, REAFFIRMS, DONE, STANDING],
+  [BLOCKS, BLOCKS_MORE, BLOCKS_OBJECT, MOVES, CLEARS, CLEARS_MORE, REAFFIRMS, DONE, STANDING, STANDING_MORE],
+];
+/** `MARK_LISTS` as one case-insensitive, non-global test each (no `lastIndex` to carry between sentences). */
+const MARKED = MARK_LISTS.map((res) => new RegExp(res.map((re) => `(?:${re.source})`).join("|"), "i"));
+/** Whether a statement (lower-cased) holds a word of any mark list (`MARKED`); exported for tests. */
+export const anyMark = (s: string, vocab: boolean): boolean => MARKED[vocab ? 1 : 0]!.test(s);
+
 /** Words before a mark that negate it ("not approved", "no longer active"). */
 const NEGATION = /(?:\b(?:not|no|never|without|nothing)|n't)\s+(?:[a-z]+\s+)?$/;
 
@@ -565,8 +579,19 @@ export function analyse(item: ContextItem, vocab: boolean): Analysis {
   return (e.views[k] ??= analysis(item, vocab, e.views[1 - k]));
 }
 
-/** `analyse`'s work: `other` is the item's analysis for the other vocabulary, whose item-only parts are shared. */
-function analysis(item: ContextItem, V: boolean, other: Analysis | undefined): Analysis {
+/**
+ * `analyse` without its memo or the marks' prefilter (`MARKED`): every list read on every sentence, as before D1723.
+ * For tests only (the differential test in `conflict-memo.test.ts`).
+ */
+export function analyseUnfiltered(item: ContextItem, vocab: boolean): Analysis {
+  return analysis(item, vocab, undefined, false);
+}
+
+/**
+ * `analyse`'s work: `other` is the item's analysis for the other vocabulary, whose item-only parts are shared.
+ * `prefilter` skips the mark lists on a sentence that none of them matches (`MARKED`, D1723).
+ */
+function analysis(item: ContextItem, V: boolean, other: Analysis | undefined, prefilter = true): Analysis {
   const blocks = V ? [BLOCKS, BLOCKS_MORE] : [BLOCKS];
   const clears = V ? [CLEARS, CLEARS_MORE] : [CLEARS];
   const standing = V ? [STANDING, STANDING_MORE] : [STANDING];
@@ -592,15 +617,17 @@ function analysis(item: ContextItem, V: boolean, other: Analysis | undefined): A
       continue;
     }
     if (V) s = s.replace(IDIOMS, (m) => " ".repeat(m.length));
+    // Most sentences hold no mark word at all: one test of every list at once, and none of their passes.
+    const marked = !prefilter || anyMark(s, V);
     statements.push({
       s,
       skip: false,
-      blocked: kept(marksOf(s, blocks, true)),
-      objectBlocks: V ? kept(marks(s, BLOCKS_OBJECT, true)) : EMPTY_MARKS,
-      moves: kept(marks(s, MOVES, true)),
-      clears: kept(marksOf(s, clears, false)),
-      reaffirms: kept(marks(s, REAFFIRMS, false)),
-      lastDone: Math.max(-1, ...marks(s, DONE, true), ...marksOf(s, standing, true)),
+      blocked: marked ? kept(marksOf(s, blocks, true)) : EMPTY_MARKS,
+      objectBlocks: V && marked ? kept(marks(s, BLOCKS_OBJECT, true)) : EMPTY_MARKS,
+      moves: marked ? kept(marks(s, MOVES, true)) : EMPTY_MARKS,
+      clears: marked ? kept(marksOf(s, clears, false)) : EMPTY_MARKS,
+      reaffirms: marked ? kept(marks(s, REAFFIRMS, false)) : EMPTY_MARKS,
+      lastDone: marked ? Math.max(-1, ...marks(s, DONE, true), ...marksOf(s, standing, true)) : -1,
       // `search` ignores the shared list's global `lastIndex`.
       dated: /\d/.test(s) || (V && s.search(WEEKDAY_END) >= 0),
     });

@@ -757,3 +757,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1710 | 2026-11-13 | Adopted: the request glossary is answered from its file's bytes, and a process reads its lexicons only when a request could be read as… | adopted |
 | D1715 | 2026-11-13 | Rejected: a binary layout specialised to a frozen user's structures, in place of the compact form's zstd JSON and the warm form's ("EDF2")… | rejected |
 | D1720 | 2026-11-13 | Rejected: a specialised store for the source map (an in-memory map per user with an append-only log and compaction) in place of… | rejected |
+| D1721 | 2026-11-13 | Adopted (a profiling survey's first lever): `ItemCache.dated` reads each item's date facts, not its text, on every request that names a day. | adopted |
+| D1722 | 2026-11-13 | Adopted (a profiling survey's second lever): a re-stored copy equal in every field keeps the object the cache holds, so the conflict… | adopted |
+| D1723 | 2026-11-13 | Adopted (a profiling survey's third lever): the conflict test's analysis tests each sentence against one union of its mark lists first… | adopted |
+| D1730 | 2026-11-13 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | rejected |
