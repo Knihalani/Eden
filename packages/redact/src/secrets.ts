@@ -28,8 +28,9 @@
  *   prefixes), so the gate is never looser than it was.
  */
 import { MultiMatcher } from "@eden/primitives";
-import { RE2JS } from "re2js";
+import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton";
 import { assignmentSpans, redact, REDACTED } from "./redact";
+import { SCANNERS } from "./scanners";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 interface Allowlist {
@@ -57,7 +58,7 @@ interface GitleaksConfig {
 interface CompiledAllowlist {
   target: "secret" | "match" | "line";
   and: boolean;
-  regexes: Pattern[];
+  regexes: Tester[];
   stopwords: string[];
   /** Path conditions never hold for text, so they only matter to an AND list (which they then fail). */
   hasPaths: boolean;
@@ -302,13 +303,11 @@ function shannon(text: string): number {
 }
 
 /**
- * A compiled rule or allowlist regex. Two engines implement it: `linearEngine` (RE2 semantics through re2js, linear
- * in the text whatever the input) and `backtrackingEngine` (JavaScript's own RegExp via `goRegex`). The gate runs
- * `RE2_RULES` and every allowlist on the first and the other rules on the second (`GATE_ENGINES`, D24).
+ * A compiled rule regex. The gate runs `LINEAR_RULES` on their own linear matchers (`scanners.ts`, D1705) and the
+ * other rules on `backtrackingEngine` (JavaScript's own RegExp via `goRegex`); tests compare both with re2js
+ * (`linearEngine` in re2-oracle.ts, the gate D24 shipped).
  */
-export interface Pattern {
-  /** Whether `text` holds a match. */
-  test(text: string): boolean;
+export interface Pattern extends Tester {
   /** Every match, leftmost-first and non-overlapping, as `[start, end)`. */
   matches(text: string): Span[];
   /** The group spans of the first match in `text` (0: the whole match), undefined for a group that took no part. */
@@ -316,85 +315,8 @@ export interface Pattern {
 }
 
 export type Engine = (goPattern: string) => Pattern;
-
-/** JavaScript's `\s` set (WhiteSpace and LineTerminator), in RE2 class syntax. */
-const JS_SPACE = String.raw`\t\n\x{0B}\f\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}`;
-/** JavaScript's `.` without the `s` flag: anything but a line terminator. */
-const JS_DOT = String.raw`[^\n\r\x{2028}\x{2029}]`;
-
-/**
- * A Go pattern rewritten so RE2 matches what its `goRegex` translation matches in JavaScript: Go's `\s` is ASCII
- * and its `.` excludes only `\n`, JavaScript's `\s` adds Unicode spaces (NBSP, U+2028, …) and its `.` also excludes
- * `\r`, U+2028 and U+2029. What remains different: RE2's `(?i)` folds by Unicode simple case folding (`s` also
- * matches U+017F, `k` U+212A), and RE2 reads text by code point where JavaScript reads UTF-16 units. On 10,000
- * texts sprinkled with such characters and lone surrogates, every rule on RE2 fired as often or more, and kept every
- * character JavaScript's engine redacted (docs/research/architecture-alternatives.md); linear.test.ts pins equal
- * spans on ordinary text.
- */
-export function re2Source(pattern: string): string {
-  // `[\S]` is the only class with a lone `\S` in the rules; outside a class it becomes the complement below.
-  const source = pattern.replaceAll(String.raw`[\S]`, String.raw`\S`);
-  let out = "";
-  let inClass = false;
-  for (let at = 0; at < source.length; at++) {
-    const char = source[at]!;
-    if (char === "\\") {
-      const next = source[at + 1] ?? "";
-      if (next === "s") out += inClass ? JS_SPACE : `[${JS_SPACE}]`;
-      else if (next === "S") {
-        // In a class only `[\s\S…]` (any character, in both dialects) is exact; refuse anything else.
-        if (inClass && !/\\s/.test(source.slice(source.lastIndexOf("[", at), source.indexOf("]", at)))) {
-          throw new Error(`\\S alone in a class: ${pattern}`);
-        }
-        out += inClass ? char + next : `[^${JS_SPACE}]`;
-      } else out += char + next;
-      at++;
-    } else if (inClass) {
-      if (source.startsWith("[:", at)) {
-        const end = source.indexOf(":]", at) + 2;
-        out += source.slice(at, end);
-        at = end - 1;
-      } else {
-        if (char === "]") inClass = false;
-        out += char;
-      }
-    } else if (char === "[") {
-      inClass = true;
-      out += char;
-      if (source[at + 1] === "^") out += source[++at];
-      if (source[at + 1] === "]") out += source[++at];
-    } else out += char === "." ? JS_DOT : char;
-  }
-  return out;
-}
-
-/**
- * RE2 through re2js: time linear in the text for every pattern, so no input can make a rule backtrack (D24). A
- * capture-free DFA `test` runs first, since most candidate rules find nothing and the capturing search costs more.
- */
-export const linearEngine: Engine = (goPattern) => {
-  const pattern = RE2JS.compile(re2Source(goPattern));
-  return {
-    test: (text) => pattern.test(text),
-    matches(text) {
-      const out: Span[] = [];
-      if (!pattern.test(text)) return out;
-      const matcher = pattern.matcher(text);
-      while (matcher.find()) out.push([matcher.start(), matcher.end()]);
-      return out;
-    },
-    groups(text) {
-      const matcher = pattern.matcher(text);
-      if (!matcher.find()) return null;
-      const out: (Span | undefined)[] = [];
-      for (let group = 0; group <= matcher.groupCount(); group++) {
-        const start = matcher.start(group);
-        out.push(start < 0 ? undefined : [start, matcher.end(group)]);
-      }
-      return out;
-    },
-  };
-};
+/** Compiles an allowlist regex: allowlists only ask whether a regex occurs. */
+export type AllowlistEngine = (goPattern: string) => Tester;
 
 /** JavaScript's backtracking RegExp, via `goRegex`: the reference for tests and benchmarks. */
 export const backtrackingEngine: Engine = (goPattern) => {
@@ -408,11 +330,11 @@ export const backtrackingEngine: Engine = (goPattern) => {
   };
 };
 
-function compileAllowlist(list: Allowlist, engine: Engine): CompiledAllowlist {
+function compileAllowlist(list: Allowlist, engine: AllowlistEngine): CompiledAllowlist {
   return {
     target: list.regexTarget ?? "secret",
     and: list.condition === "AND",
-    regexes: (list.regexes ?? []).map(engine),
+    regexes: (list.regexes ?? []).map((regex) => engine(regex)),
     stopwords: (list.stopwords ?? []).map((word) => word.toLowerCase()),
     hasPaths: (list.paths ?? []).length > 0,
   };
@@ -470,7 +392,7 @@ function gitleaksRule(
   rule: GitleaksRule & { regex: string },
   global: CompiledAllowlist,
   engine: Engine,
-  allowlistEngine: Engine,
+  allowlistEngine: AllowlistEngine,
 ): SecretRule {
   let compiled: { pattern: Pattern; own: CompiledAllowlist[] } | undefined;
   const compile = () => ({
@@ -513,7 +435,7 @@ function gitleaksRule(
     warm() {
       const { pattern, own } = (compiled ??= compile());
       // One match on the empty text makes the engine build its matcher too (JavaScriptCore compiles a RegExp on its
-      // first run, re2js its first DFA states), so the first real text pays for neither.
+      // first run, an allowlist automaton its first states), so the first real text pays for neither.
       pattern.test("");
       for (const list of [global, ...own]) for (const regex of list.regexes) regex.test("");
     },
@@ -605,40 +527,63 @@ const SHAPE_LITERALS: Record<string, string[]> = {
  * The gitleaks rules whose regexes backtrack badly in JavaScript, found by searching every rule for super-linear
  * inputs (bench/redos.scan.ts in @eden/primitives; docs/research/architecture-alternatives.md): quadratic
  * (`curl-*`: a lazy `.*?` before a required option) or ~60 µs a character (`[\w.-]{0,50}?(?i:[\w.-]{0,50}?…)`: two
- * nested optional runs). On RE2 their worst measured input costs ~2 µs a character (re2js pays per match for the
- * capture groups), against up to ~60 µs and growing on JavaScript's engine.
+ * nested optional runs). Each runs on a hand-written matcher (`SCANNERS`, scanners.ts) that is linear in the text and
+ * reports what RE2 reports for its regex (D1705; D24 ran them on re2js).
  *
- * Every other rule stays on JavaScript's engine, which is as fast or faster on typical text, keeps no per-pattern DFA
- * cache (with every rule on RE2, re2js's caches held ~240 MB after crafted input) and is cheaper per match
- * (generic-api-key: ~1 µs a character at worst on JavaScript, ~5 on RE2, whose program for it is large).
- * linear.test.ts keeps those rules under a cost ceiling on crafted input, so a gitleaks update that adds a
- * backtracking rule fails a test rather than shipping.
+ * Every other rule stays on JavaScript's engine, which is fast on typical text and keeps no per-pattern cache.
+ * The redos tests keep those rules under a cost ceiling on crafted input, so a gitleaks update that adds a
+ * backtracking rule fails a test rather than shipping; one that changes a scanned rule's regex fails `rulesWith`.
  */
-export const RE2_RULES: ReadonlySet<string> = new Set([
-  "cisco-meraki-api-key",
-  "cohere-api-token",
-  "curl-auth-header",
-  "curl-auth-user",
-  "okta-access-token",
-  "privateai-api-token",
-  "sumologic-access-id",
-]);
+export const LINEAR_RULES: ReadonlySet<string> = new Set(SCANNERS.keys());
 
 /** Which engine runs a gitleaks rule's regex, and which runs allowlist regexes. */
 export interface EngineChoice {
   rule(id: string): Engine;
-  allowlist: Engine;
+  allowlist: AllowlistEngine;
+}
+
+/** A scanned rule's matcher, for the regex it was written for; any other regex throws. */
+export function scannerEngine(id: string): Engine {
+  return (goPattern) => {
+    const scanner = SCANNERS.get(id);
+    if (!scanner || scanner.regex !== goPattern) throw new Error(`no matcher for ${id}'s regex: ${goPattern}`);
+    return scanner.pattern;
+  };
 }
 
 /**
- * The gate's choice (D24): RE2 for `RE2_RULES` and for every allowlist regex (they run only on findings, but on
- * a whole line or match, and several are quadratic there in JavaScript: `.+EXAMPLE$`, `[^:]+:…`), JavaScript for
- * the rest.
+ * The gate's choice (D1705): the scanned rules on their matchers, every allowlist regex on the allowlist automaton
+ * (automaton.ts: allowlists run on a whole line or match, and several are quadratic there in JavaScript:
+ * `.+EXAMPLE$`, `[^:]+:…`), JavaScript for the rest. No production dependency: re2js is the tests' oracle.
  */
 export const GATE_ENGINES: EngineChoice = {
-  rule: (id) => (RE2_RULES.has(id) ? linearEngine : backtrackingEngine),
-  allowlist: linearEngine,
+  rule: (id) => (LINEAR_RULES.has(id) ? scannerEngine(id) : backtrackingEngine),
+  allowlist: compileAllowlistRegex,
 };
+
+/**
+ * Throws unless every scanned rule is in the vendored config with exactly the regex its matcher implements: a
+ * gitleaks update that changes one must fail loudly, never run a matcher written for another regex.
+ */
+function checkScanners(rules: GitleaksRule[]): void {
+  for (const [id, scanner] of SCANNERS) {
+    const rule = rules.find((r) => r.id === id);
+    if (!rule || rule.regex !== scanner.regex) {
+      throw new Error(`gitleaks rule ${id} changed: update its matcher in scanners.ts (D1705) before vendoring`);
+    }
+  }
+}
+
+/**
+ * Throws unless every rule's own allowlist regexes parse in the allowlist automaton's subset. Those compile only when
+ * their rule first runs, so without this an unsupported one (`(?m)…`) would throw on the first text that rule finds
+ * something in, not when the gate is built.
+ */
+function checkAllowlists(rules: GitleaksRule[]): void {
+  for (const rule of rules) {
+    for (const list of rule.allowlists ?? []) for (const regex of list.regexes ?? []) parseRegex(regex);
+  }
+}
 
 let compiled: SecretRule[] | undefined;
 
@@ -654,6 +599,8 @@ export function secretRules(): SecretRule[] {
  */
 export function rulesWith(choice: EngineChoice): SecretRule[] {
   const config = gitleaks as GitleaksConfig;
+  checkScanners(config.rules);
+  checkAllowlists(config.rules);
   const global = compileAllowlist(config.allowlist, choice.allowlist);
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
   return [

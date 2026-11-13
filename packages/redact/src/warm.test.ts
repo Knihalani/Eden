@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gateOf, rulesWith, GATE_ENGINES, type Engine, type EngineChoice } from "./secrets";
+import { gateOf, rulesWith, GATE_ENGINES, type AllowlistEngine, type Engine, type EngineChoice } from "./secrets";
 import { sanitizeForStore, secretRules, warmGate } from "./index";
 
 // Secret-shaped values are assembled from parts so no literal in the repo is one (packages/redact/CLAUDE.md).
@@ -16,28 +16,40 @@ const keywords = "heroku twilio sendgrid gitlab npm pypi stripe slack jwt bearer
  */
 function countingEngines() {
   const work = { phase: "warm" as "warm" | "use", compiled: 0, firstRunInUse: 0, runsInUse: 0 };
+  /** Notes a pattern's runs: the first one in the "use" phase counts as a cold run. */
+  const runs = () => {
+    let ran = false;
+    return () => {
+      if (work.phase === "use") {
+        work.runsInUse++;
+        if (!ran) work.firstRunInUse++;
+      }
+      ran = true;
+    };
+  };
   const counted =
     (engine: Engine): Engine =>
     (source) => {
       work.compiled++;
       const pattern = engine(source);
-      let ran = false;
-      const run = () => {
-        if (work.phase === "use") {
-          work.runsInUse++;
-          if (!ran) work.firstRunInUse++;
-        }
-        ran = true;
-      };
+      const run = runs();
       return {
         test: (text) => (run(), pattern.test(text)),
         matches: (text) => (run(), pattern.matches(text)),
         groups: (text) => (run(), pattern.groups(text)),
       };
     };
+  const countedAllowlist =
+    (engine: AllowlistEngine): AllowlistEngine =>
+    (source) => {
+      work.compiled++;
+      const tester = engine(source);
+      const run = runs();
+      return { test: (text) => (run(), tester.test(text)) };
+    };
   const choice: EngineChoice = {
     rule: (id) => counted(GATE_ENGINES.rule(id)),
-    allowlist: counted(GATE_ENGINES.allowlist),
+    allowlist: countedAllowlist(GATE_ENGINES.allowlist),
   };
   return { work, choice };
 }
