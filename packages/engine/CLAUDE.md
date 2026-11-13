@@ -406,6 +406,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   spreads and `JSON` see the text, but a memo that keeps `item.text` keeps a decoded copy. Decode Latin-1 bytes with
   `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
   1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
+- **An equal re-put keeps the held object (D1722).** A lookup re-stores what it finds; a copy equal in words and
+  details (`sameDetails`) leaves `Entry.item` as it was, so per-object memos (`analyse`, `ownText`, the card order's
+  heads) keep answering. Never use an item object's identity as its version (hash its words, `versionOf`), and never
+  add a process-wide memo keyed by an item's content in place of these: it is cross-tenant state (D9).
 - **Ingest off the event loop was built and rejected (D216).** A worker that redacted each source page and read it for
   the cache (terms with hash lanes, graph reading, mentions, deflated text; the cache applying the reading with the
   same stored state) cut a synced item's main-thread cost 3.5x and the concurrent bench's cold-start stall from about

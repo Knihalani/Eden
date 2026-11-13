@@ -1148,11 +1148,14 @@ export class ItemCache {
       if (old && old.item.text === item.text && old.item.title === item.title) {
         // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
         // people are counted again: its meta may name others.
-        if (!sameDetails(old.item, item)) u.revision = ++this.revisions;
+        const same = sameDetails(old.item, item);
+        if (!same) u.revision = ++this.revisions;
         tally(u, old.item, -1);
         tallyOffset(u, old.item, -1);
-        // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate).
-        const fresh = this.limits.packText ? repackLike(item, old.item) : item;
+        // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate). A
+        // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
+        // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
+        const fresh = same ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
         old.item = fresh;
         tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
