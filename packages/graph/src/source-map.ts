@@ -15,6 +15,16 @@
  * ~2 µs instead of ~190 µs (an fsync per commit, on the event loop); a crash loses at most the last few milliseconds
  * of counts, which learning shrugs off (docs/research/primitives.md).
  *
+ * Mentions are written behind too (D1745): a lookup's mentions are summed in memory per (user, entity, source) and
+ * written in one transaction within `MENTION_FLUSH_MS` (1 s, or at `MENTION_FLUSH_ROWS` distinct rows), which cut the
+ * file's disk writes about 4x on the pipeline bench (each commit rewrites every B-tree page it touches into the WAL).
+ * Reads of mentions (`sourcesFor`, so `route`) add the pending counts to what the file holds instead of flushing, or
+ * every lookup's route would commit the last lookup's mentions and batch nothing; `exportUser`, `importUser`, `forget`
+ * and `close` flush first. A crash (SIGKILL, power) loses at most the last second's mentions, never a committed row:
+ * they are routing evidence, learned again from the next lookups that find the same names. A process that exits
+ * normally flushes them (`process.on("exit")`), and another process on the same file (D15) sees them up to a second
+ * late.
+ *
  * Learning is a Beta-Bernoulli estimate per (user, situation, source): `shown` counts injections that cited the
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
  */
@@ -55,10 +65,15 @@ export interface SourceMapOptions {
    */
   explore?: boolean;
   seed?: number;
+  /** How long mentions wait in memory before their transaction (D1745; default 1 s). Tests shorten it. */
+  mentionFlushMs?: number;
 }
 
 const OUTCOME_FLUSH_MS = 10;
 const OUTCOME_FLUSH_ROWS = 256;
+const MENTION_FLUSH_MS = 1_000;
+/** Distinct pending (user, entity, source) rows that flush at once: bounds the buffer to about a megabyte. */
+const MENTION_FLUSH_ROWS = 4_096;
 /** How long a statement waits for another process's write lock on the same file before SQLITE_BUSY. */
 const BUSY_TIMEOUT_MS = 2_000;
 
@@ -66,12 +81,21 @@ export class SourceMap {
   private readonly db: Database;
   private pending: [scope: string, situation: string, sourceId: string, used: number][] = [];
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Mentions not yet written (D1745): scope key → entity → source id → [count to add, last seen]. */
+  private mentions = new Map<string, Map<string, Map<string, [count: number, lastSeen: number]>>>();
+  private mentionRows = 0;
+  private mentionTimer: ReturnType<typeof setTimeout> | undefined;
+  private closed = false;
+  /** This map's entry in `OPEN` (file-backed maps only). */
+  private ref: WeakRef<SourceMap> | undefined;
+  private readonly mentionFlushMs: number;
 
   private readonly explore: boolean;
   private readonly rng: Xoshiro128;
 
   constructor(path = ":memory:", options: SourceMapOptions = {}) {
     this.explore = options.explore ?? true;
+    this.mentionFlushMs = options.mentionFlushMs ?? MENTION_FLUSH_MS;
     this.rng = new Xoshiro128(options.seed ?? (Math.random() * 2 ** 32) >>> 0);
     this.db = new Database(path, { create: true });
     // First, so the WAL switch and the schema below wait too: two processes on one file (two MCP clients launching
@@ -98,6 +122,7 @@ export class SourceMap {
         PRIMARY KEY (scope, source_id, bucket, shape)
       );
     `);
+    if (path !== ":memory:" && path !== "") OPEN.add((this.ref = new WeakRef(this)));
   }
 
   /**
@@ -109,18 +134,69 @@ export class SourceMap {
   }
 
   /**
-   * As `recordMentions` for many items in one transaction: a lookup's results are recorded together (one transaction
-   * per item cost ~43 µs each; packages/engine/bench/pipeline.bench.ts).
+   * As `recordMentions` for many items: a lookup's results are recorded together. Since D1745 they are summed in
+   * memory and written with every other mention of the next second in one transaction (one transaction a lookup cost
+   * 0.47-0.53 ms and about 1.4 KB of disk writes a mention; packages/graph/CLAUDE.md).
    */
   recordMentionsMany(scope: Scope, rows: { sourceId: string; entities: string[] }[], now = Date.now()): void {
-    const upsert = this.db.query(`
-      INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, 1, ?)
-      ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen
-    `);
     const key = scopeKey(scope);
+    let byEntity = this.mentions.get(key);
+    for (const row of rows) {
+      for (const e of new Set(row.entities.map(normalizeEntity))) {
+        if (!e) continue;
+        if (!byEntity) this.mentions.set(key, (byEntity = new Map()));
+        let bySource = byEntity.get(e);
+        if (!bySource) byEntity.set(e, (bySource = new Map()));
+        const held = bySource.get(row.sourceId);
+        if (held) {
+          held[0]++;
+          held[1] = now;
+        } else {
+          bySource.set(row.sourceId, [1, now]);
+          this.mentionRows++;
+        }
+      }
+    }
+    if (this.mentionRows >= MENTION_FLUSH_ROWS) this.flushMentions();
+    else if (this.mentionRows > 0 && this.mentionTimer === undefined) {
+      this.mentionTimer = setTimeout(() => this.flushMentionsInBackground(), this.mentionFlushMs);
+      // A pending batch never holds a process open: a normal exit flushes it (`OPEN`), a crash loses it (D1745).
+      this.mentionTimer.unref?.();
+    }
+  }
+
+  /** The timer's mention flush: as `flushInBackground`, nothing may throw out of a timer. */
+  private flushMentionsInBackground(): void {
+    try {
+      this.flushMentions();
+    } catch (e) {
+      this.failedFlushes++;
+      // The error only: never the rows, which hold user ids and entity names.
+      console.error("eden: source-map mention write failed", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /**
+   * Writes buffered mentions now, in one transaction. A failed write loses the batch, as a failed outcome batch is
+   * lost: keeping it to retry at the next read would put SQLITE_BUSY's wait on the request path again and again.
+   */
+  private flushMentions(): void {
+    if (this.mentionTimer !== undefined) clearTimeout(this.mentionTimer);
+    this.mentionTimer = undefined;
+    if (this.mentionRows === 0) return;
+    const pending = this.mentions;
+    this.mentions = new Map();
+    this.mentionRows = 0;
+    // `count + excluded.count` and the last mention's time: the row one upsert a mention would have left.
+    const upsert = this.db.query(`
+      INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + excluded.count, last_seen = excluded.last_seen
+    `);
     this.db.transaction(() => {
-      for (const row of rows) {
-        for (const e of new Set(row.entities.map(normalizeEntity))) if (e) upsert.run(key, e, row.sourceId, now);
+      for (const [key, byEntity] of pending) {
+        for (const [entity, bySource] of byEntity) {
+          for (const [sourceId, [count, lastSeen]] of bySource) upsert.run(key, entity, sourceId, count, lastSeen);
+        }
       }
     })();
   }
@@ -128,17 +204,17 @@ export class SourceMap {
   /** Records whether an injection citing `sourceId` was used, in this situation. */
   recordOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
     this.pending.push([scopeKey(scope), situation, sourceId, used ? 1 : 0]);
-    if (this.pending.length >= OUTCOME_FLUSH_ROWS) this.flush();
+    if (this.pending.length >= OUTCOME_FLUSH_ROWS) this.flushOutcomes();
     else this.flushTimer ??= setTimeout(() => this.flushInBackground(), OUTCOME_FLUSH_MS);
   }
 
-  /** Outcome batches the timer could not write (SQLITE_BUSY, a full disk); they are lost, learning goes on. */
+  /** Batches a timer could not write (SQLITE_BUSY, a full disk); they are lost, learning goes on. */
   failedFlushes = 0;
 
   /** The timer's flush: nothing may throw out of a timer (it would take the process down). */
   private flushInBackground(): void {
     try {
-      this.flush();
+      this.flushOutcomes();
     } catch (e) {
       this.failedFlushes++;
       // The error only: never the rows, which hold user and source ids.
@@ -146,8 +222,14 @@ export class SourceMap {
     }
   }
 
-  /** Writes buffered outcomes now, in one transaction. Reads call it first. */
+  /** Writes everything buffered (outcomes and mentions) now. */
   flush(): void {
+    this.flushOutcomes();
+    this.flushMentions();
+  }
+
+  /** Writes buffered outcomes now, in one transaction. Reads of outcomes call it first. */
+  private flushOutcomes(): void {
     if (this.flushTimer !== undefined) clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
     if (this.pending.length === 0) return;
@@ -164,7 +246,7 @@ export class SourceMap {
 
   /** Corrects an outcome recorded earlier (explicit feedback overriding an inferred one). Counts never go negative. */
   correctOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
-    this.flush();
+    this.flushOutcomes();
     const delta = used ? 1 : -1;
     this.db
       .query(
@@ -180,7 +262,7 @@ export class SourceMap {
   }
 
   private outcomes(scope: Scope, situation: string, sourceId: string): { shown: number; used: number } {
-    this.flush();
+    this.flushOutcomes();
     const row = this.db
       .query("SELECT shown, used FROM utility WHERE scope = ? AND situation = ? AND source_id = ?")
       .get(scopeKey(scope), situation, sourceId) as { shown: number; used: number } | null;
@@ -189,18 +271,39 @@ export class SourceMap {
 
   /** Every source's outcomes in a situation for a user, by source id (sources with none are absent). */
   private outcomesIn(scope: Scope, situation: string): Map<string, { shown: number; used: number }> {
-    this.flush();
+    this.flushOutcomes();
     const rows = this.db
       .query("SELECT source_id AS sourceId, shown, used FROM utility WHERE scope = ? AND situation = ?")
       .all(scopeKey(scope), situation) as { sourceId: string; shown: number; used: number }[];
     return new Map(rows.map((r) => [r.sourceId, { shown: r.shown, used: r.used }]));
   }
 
-  /** Which sources have mentioned an entity, most often first. */
+  /**
+   * Which sources have mentioned an entity, most often first (ties by source id). Pending mentions (D1745) are added
+   * to the file's counts, so a read sees every mention recorded, written yet or not.
+   */
   sourcesFor(scope: Scope, entity: string): { sourceId: string; count: number }[] {
-    return this.db
-      .query("SELECT source_id AS sourceId, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC")
-      .all(scopeKey(scope), normalizeEntity(entity)) as { sourceId: string; count: number }[];
+    const key = scopeKey(scope);
+    const e = normalizeEntity(entity);
+    const rows = this.db
+      .query(
+        "SELECT source_id AS sourceId, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC, source_id",
+      )
+      .all(key, e) as { sourceId: string; count: number }[];
+    const pending = this.mentions.get(key)?.get(e);
+    if (!pending) return rows;
+    const added = new Map(pending);
+    for (const row of rows) {
+      const held = added.get(row.sourceId);
+      if (held) {
+        row.count += held[0];
+        added.delete(row.sourceId);
+      }
+    }
+    for (const [sourceId, [count]] of added) rows.push({ sourceId, count });
+    // SQLite's text order is by bytes; `<` on JS strings is by UTF-16 units, the same order for any id without
+    // characters past U+FFFF, which ids (`isId`) never hold.
+    return rows.sort((a, b) => b.count - a.count || (a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0));
   }
 
   /**
@@ -324,8 +427,22 @@ export class SourceMap {
   }
 
   close(): void {
+    if (this.closed) return;
     this.flush();
+    this.closed = true;
+    if (this.ref) OPEN.delete(this.ref);
     this.db.close();
+  }
+
+  /** At a normal process exit: what every open map holds buffered is written (synchronously, as `exit` needs). */
+  static flushAllOpen(): void {
+    for (const ref of OPEN) {
+      try {
+        ref.deref()?.flush();
+      } catch (e) {
+        console.error("eden: source-map write at exit failed", e instanceof Error ? e.message : String(e));
+      }
+    }
   }
 }
 
@@ -337,6 +454,16 @@ export interface UserRows {
 }
 
 const NONE = { shown: 0, used: 0 } as const;
+
+/**
+ * File-backed maps not yet closed, flushed at a normal exit (D1745: an mcp-stdio process ends when its client closes
+ * stdin and never calls `close`). One listener for the module, not one a map. Held weakly: the lab builds an
+ * in-memory map a task and never closes it, and a strong set would keep every one alive (in-memory maps are not
+ * registered at all: nothing outlives the process). A map dropped with mentions pending is still held by its timer
+ * until the timer writes them.
+ */
+const OPEN = new Set<WeakRef<SourceMap>>();
+process.on("exit", () => SourceMap.flushAllOpen());
 
 export function normalizeEntity(e: string): string {
   return e.trim().toLowerCase().replace(/\s+/g, " ");
