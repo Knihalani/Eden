@@ -407,9 +407,10 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
   1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
 - **An equal re-put keeps the held object (D1722).** A lookup re-stores what it finds; a copy equal in words and
-  details (`sameDetails`) leaves `Entry.item` as it was, so per-object memos (`analyse`, `ownText`, the card order's
-  heads) keep answering. Never use an item object's identity as its version (hash its words, `versionOf`), and never
-  add a process-wide memo keyed by an item's content in place of these: it is cross-tenant state (D9).
+  details (`sameDetails`, `sameFields`) leaves `Entry.item` as it was, so per-object memos (`analyse`, `ownText`,
+  the card order's heads) keep answering. Never use an item object's identity as its version (hash its words,
+  `versionOf`), and never add a process-wide memo keyed by an item's content in place of these: it is cross-tenant
+  state (D9).
 - **The conflict analysis reads a sentence's marks only when one union regex of its lists matches (D1723).** A new
   mark list (or one moved between vocabularies) joins `MARK_LISTS` in `conflict.ts`, or its marks are silently never
   read on sentences no other list matches; `conflict-memo.test.ts` checks the union against the lists.

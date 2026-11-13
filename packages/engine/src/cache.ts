@@ -1155,7 +1155,8 @@ export class ItemCache {
         // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate). A
         // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
         // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
-        const fresh = same ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
+        const fresh =
+          same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
         old.item = fresh;
         tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
@@ -2506,6 +2507,23 @@ function sameDetails(a: ContextItem, b: ContextItem): boolean {
   if (a.url !== b.url || a.updatedAt !== b.updatedAt) return false;
   if (a.meta === b.meta) return true;
   return a.meta !== undefined && b.meta !== undefined && JSON.stringify(a.meta) === JSON.stringify(b.meta);
+}
+
+/**
+ * Whether two copies with the same words and details (`sameDetails`) hold the same own fields besides those: the same
+ * keys, and the same id, source, ref and any field a connector added (a listed item's extra fields are kept by
+ * `sanitizeItem`'s spread). Then the held copy is the new one in every field anyone can read (D1722).
+ */
+function sameFields(held: ContextItem, item: ContextItem): boolean {
+  const keys = Object.keys(item);
+  if (keys.length !== Object.keys(held).length) return false;
+  const a = held as unknown as Record<string, unknown>;
+  const b = item as unknown as Record<string, unknown>;
+  for (const k of keys) {
+    if (k === "text" || k === "title" || k === "meta") continue; // compared already (`put`, `sameDetails`)
+    if (!(k in a) || a[k] !== b[k]) return false;
+  }
+  return true;
 }
 
 /** The entry's sketch, computed on first use and kept (`Entry.sketch`). */

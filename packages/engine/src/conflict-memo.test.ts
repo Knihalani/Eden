@@ -115,6 +115,21 @@ describe("an equal copy keeps the held object (D1722)", () => {
     }
   });
 
+  test("a field a connector added, or one key more or less, is a new object too (review finding)", () => {
+    const cache = new ItemCache();
+    const extra = (v: unknown) => ({ ...item("a", LONG, { updatedAt: NOW - 1 }), kind: v }) as ContextItem;
+    cache.put(alice, [extra("mail")], NOW);
+    const held = cache.get(alice, "mail:a", NOW)!;
+    cache.put(alice, [extra("mail")], NOW);
+    expect(cache.get(alice, "mail:a", NOW)).toBe(held);
+    cache.put(alice, [extra("chat")], NOW);
+    const changed = cache.get(alice, "mail:a", NOW)! as ContextItem & { kind?: string };
+    expect(changed).not.toBe(held);
+    expect(changed.kind).toBe("chat");
+    cache.put(alice, [item("a", LONG, { updatedAt: NOW - 1 })], NOW);
+    expect("kind" in cache.get(alice, "mail:a", NOW)!).toBe(false);
+  });
+
   test("isolation: an equal copy keeps only the putting user's own object", () => {
     const cache = new ItemCache();
     const bob = { tenantId: "t", userId: "bob" };
