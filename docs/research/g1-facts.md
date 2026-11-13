@@ -99,7 +99,7 @@ dated-bench.ts`, one dev20 world, 1,593 items, idle machine): p50 14.5 ms, p99 2
 day has items. Decoding the stored text is about half of it. It runs on the push's path (behind the user's
 message), never on the fast path, and a user's items are capped (`maxItemsPerUser`, `maxSyncedPerUser`).
 Since D1721 the scan reads each item's date facts (`day-facts.ts`), read from its text the first time a scan meets
-it, so only that first scan pays for the text (a repeated one: p50 26-34 ms to 0.05-0.16 ms on a sim world).
+it, so only that first scan pays for the text (a repeated one: p50 26-35 ms to 0.05-0.14 ms on a sim world).
 
 ## 3. The pre-registered pair (served by subagents, single-shot)
 
