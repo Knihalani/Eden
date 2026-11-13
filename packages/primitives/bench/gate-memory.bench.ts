@@ -25,6 +25,36 @@ const heap = () => {
   return process.memoryUsage().heapUsed;
 };
 
+/**
+ * `dense user|header`: one call on 4 MB of match-dense curl text, the input that made the first version of D1705's
+ * curl matcher hold 1 GB on 16 MB (a memo per position and depth). Peak RSS growth over the call (VmHWM, Linux), one
+ * input a process so nothing earlier set the peak:
+ *
+ *   bun packages/primitives/bench/gate-memory.bench.ts d24|own dense user|header
+ */
+if (process.argv[3] === "dense") {
+  const denseGate = gateOf(rulesWith(choice));
+  const peak = () => {
+    const status = require("node:fs").readFileSync("/proc/self/status", "utf8") as string;
+    return Number(/VmHWM:\s+(\d+)/.exec(status)?.[1] ?? 0) * 1024;
+  };
+  const unit =
+    process.argv[4] === "header" ? "curl x\r\n -H 'Token: abcdefghij'\r\n" : "curl x\r\n -u bad\r\n -u a:bcd \n";
+  {
+    const text = unit.repeat(Math.ceil(4_194_304 / unit.length)).slice(0, 4_194_304);
+    denseGate.sanitizeForStore(unit);
+    Bun.gc(true);
+    const before = Math.max(peak(), process.memoryUsage().rss);
+    const t0 = performance.now();
+    denseGate.sanitizeForStore(text);
+    console.log(
+      `${which} dense ${JSON.stringify(unit)} × 4 MB: peak RSS +${mb(peak() - before)}, ` +
+        `${((performance.now() - t0) / 1_000).toFixed(1)} s`,
+    );
+  }
+  process.exit(0);
+}
+
 const h0 = heap();
 const gate = gateOf(rulesWith(choice));
 const KEYWORDS = [...new Set(secretRules().flatMap((rule) => rule.keywords))];
