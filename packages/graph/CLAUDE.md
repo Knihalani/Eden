@@ -25,6 +25,10 @@ it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One fil
   (`packages/engine/bench/pipeline.bench.ts`).
 - Exploration (Thompson draws) decides which sources are queried, never whether anything is injected (D23).
 - Explicit feedback corrects a recorded outcome (`correctOutcome`, D18).
+- **SQLite stays (D1720, docs/research/source-map-store.md).** A specialised store (a resident map per user with an
+  append log) was measured and rejected: the map is 3.2-3.7% of the event path, SQLite holds 64-66 KB a user
+  against 1.47 MB resident, and the disk-write gain a log would bring (35-40x) is mostly available by batching
+  mentions as outcomes are (4x, screened, not done).
 
 ## Test
 
