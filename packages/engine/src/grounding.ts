@@ -144,110 +144,232 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
  */
 export const RANGE_MAX_DAYS = 14;
 
-const ORDINAL = String.raw`(?:st|nd|rd|th)?`;
+const ORDINAL = String.raw`(st|nd|rd|th)?`;
 /** A weekday written before a range's date ("Monday 30 November to Friday 4 December"), long or short. */
 const RANGE_WEEKDAY = String.raw`(?:(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(?:day|nesday|rsday|urday|sday)?\.?,?\s+)?`;
-/** A range's separator; "and" only after "between" (checked where it matches). */
-const RANGE_SEP = String.raw`\s*(?:–|—|-|to|through|thru|until|till|and)\s*`;
-/** Not inside a word, a number or an identifier ("INV-12-14", "v2-14"): a range starts on its own. */
-const RANGE_START = String.raw`(?<![\p{L}\p{N}_-])`;
-const RANGE_LEAD = String.raw`(from |between |for |on )?`;
+/** A range's separator: a dash, or a word ("and" only after "between", checked where it matches). */
+const RANGE_SEP = String.raw`\s*(–|—|-|to|through|thru|until|till|and)\s*`;
+/**
+ * Not inside a word, a number, an identifier or an amount ("INV-12-14", "v2-14", "1.12-14", "£12-14", "$10-20"): a
+ * range starts on its own.
+ */
+const RANGE_START = String.raw`(?<![\p{L}\p{N}_.:/£$€¥-])`;
+const RANGE_LEAD = String.raw`(from |between |for |on |by )?`;
 const RANGE_YEAR = String.raw`(?:,?\s+(\d{4}))?`;
-/** The four shapes, most specific first: two months day first, two months month first, one month either way. */
-const RANGES: readonly { re: RegExp; read: (m: RegExpMatchArray) => RangeParts }[] = [
-  {
-    re: new RegExp(
-      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}(\d{1,2})${ORDINAL}(?:\s+of)?\s+${MONTH}${RANGE_YEAR}` +
-        String.raw`(${RANGE_SEP})${RANGE_WEEKDAY}(?:the\s+)?(\d{1,2})${ORDINAL}(?:\s+of)?\s+${MONTH}\b${RANGE_YEAR}`,
-      "gu",
-    ),
-    read: (m) => ({ lead: m[1], d1: m[2]!, m1: m[3]!, y1: m[4], sep: m[5]!, d2: m[6]!, m2: m[7]!, y2: m[8] }),
-  },
-  {
-    re: new RegExp(
-      String.raw`${RANGE_START}${RANGE_LEAD}${MONTH}\s+(\d{1,2})${ORDINAL}${RANGE_YEAR}(${RANGE_SEP})` +
-        String.raw`${MONTH}\s+(\d{1,2})${ORDINAL}\b${RANGE_YEAR}`,
-      "gu",
-    ),
-    read: (m) => ({ lead: m[1], m1: m[2]!, d1: m[3]!, y1: m[4], sep: m[5]!, m2: m[6]!, d2: m[7]!, y2: m[8] }),
-  },
-  {
-    re: new RegExp(
-      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}(\d{1,2})${ORDINAL}(${RANGE_SEP})${RANGE_WEEKDAY}` +
-        String.raw`(?:the\s+)?(\d{1,2})${ORDINAL}(?:\s+of)?\s+${MONTH}\b${RANGE_YEAR}`,
-      "gu",
-    ),
-    read: (m) => ({ lead: m[1], d1: m[2]!, sep: m[3]!, d2: m[4]!, m1: m[5]!, m2: m[5]!, y2: m[6] }),
-  },
-  {
-    re: new RegExp(
-      String.raw`${RANGE_START}${RANGE_LEAD}${MONTH}\s+(\d{1,2})${ORDINAL}(${RANGE_SEP})(\d{1,2})${ORDINAL}` +
-        String.raw`(?![\p{L}\p{N}:])${RANGE_YEAR}`,
-      "gu",
-    ),
-    read: (m) => ({ lead: m[1], m1: m[2]!, d1: m[3]!, sep: m[4]!, d2: m[5]!, m2: m[2]!, y2: m[6] }),
-  },
-];
+/** A day that is an hour ("Nov 10-11 am", "Nov 3 to 5 pm", "3-4h", "10:00", "3.30"): no range. */
+const NOT_TIME = String.raw`(?!\s*(?:[ap]\.?m\b|h\b|hrs?\b|:|\.\d))`;
+const DAY_NUM = String.raw`(\d{1,2})(?!\d)${ORDINAL}${NOT_TIME}`;
+/** A move governs "from … to": "move my dentist from 10 to 12 November" names two days, not the days between. */
+const MOVED =
+  /\b(?:move[sd]?|moving|reschedul(?:e[sd]?|ing)|push(?:e[sd]|ing)?|shift(?:s|ed|ing)?|chang(?:e[sd]?|ing)|postpon(?:e[sd]?|ing)|br(?:ing|ought|ings) forward)\b[^.;!?\n]{0,60}$/;
+/** Leads that make a lone date firm (the single-date reader's `on`/`by`/`from`/`until`; "for" and "between" do not). */
+const FIRM_LEADS = new Set(["from", "on", "by"]);
 
+/** One range as a shape read it: each end's day, month and year (as written), the lead, separator, ordinals. */
 interface RangeParts {
-  lead: string | undefined;
+  lead: string;
   d1: string;
+  o1: boolean;
   m1: string;
   y1?: string | undefined;
   sep: string;
   d2: string;
+  o2: boolean;
   m2: string;
   y2?: string | undefined;
+  /** "of" between a day and its month ("the 10th to 16th of November"). */
+  of: boolean;
+  /** The first day stands bare, before a separator (the one-month day-first shape): it could be a count or version. */
+  bare: boolean;
+  /** Which end is written day first (for the short-month rule): the first, the second, both. */
+  dayFirst: [boolean, boolean];
 }
 
 /**
- * The day ranges a lower-cased request writes, each as its first day (ms, UTC midnight) and its length in days.
- * Bounded input (the caller's text), linear regexes. A span whose end is before its start, or whose day does not
- * exist, is no range (its dates are read one by one, as before); "May" and "March" need a preposition before the
- * range, as a lone date does ("pages 2-3 may be late" names no date). With no year, a range whose end falls before
- * its start in the calendar crosses into the next year ("28 December to 3 January"). A shape that matched blanks
- * its text, so a later, looser shape cannot read part of it again; `rest` is the text with every range blanked.
+ * The four shapes, most specific first: two months day first ("30 November to 4 December"), two months month first
+ * ("Nov 30 to Dec 2"), one month day first ("12–14 November", "the 10th to 16th of November"), one month month first
+ * ("November 12–14"). The mixed order ("Nov 12 to 14 December") is none of them: its dates are read one by one.
  */
-function dayRanges(text: string, today: number): { ranges: { start: number; n: number }[]; rest: string } {
-  const out: { start: number; n: number }[] = [];
-  let t = text;
-  for (const shape of RANGES) {
-    for (const m of t.matchAll(shape.re)) {
-      const r = shape.read(m);
-      const sep = r.sep.trim();
-      if (sep === "and" && r.lead?.trim() !== "between") continue;
-      if ((VERB_MONTHS.has(r.m1) || VERB_MONTHS.has(r.m2)) && !r.lead) continue;
-      const at = rangeOf(r, today);
-      if (!at) continue;
-      out.push(at);
-      t = t.slice(0, m.index!) + " ".repeat(m[0].length) + t.slice(m.index! + m[0].length);
-    }
+const RANGES: readonly { re: RegExp; read: (m: RegExpMatchArray) => RangeParts }[] = [
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}(?:the\s+)?${DAY_NUM}(\s+of)?\s+${MONTH}\b${RANGE_YEAR}` +
+        String.raw`${RANGE_SEP}${RANGE_WEEKDAY}(?:the\s+)?${DAY_NUM}(\s+of)?\s+${MONTH}\b${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({
+      lead: (m[1] ?? "").trim(),
+      d1: m[2]!,
+      o1: !!m[3],
+      m1: m[5]!,
+      y1: m[6],
+      sep: m[7]!,
+      d2: m[8]!,
+      o2: !!m[9],
+      m2: m[11]!,
+      y2: m[12],
+      of: !!(m[4] || m[10]),
+      bare: false,
+      dayFirst: [true, true],
+    }),
+  },
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}${MONTH}\s+${DAY_NUM}${RANGE_YEAR}${RANGE_SEP}` +
+        String.raw`${RANGE_WEEKDAY}${MONTH}\s+${DAY_NUM}${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({
+      lead: (m[1] ?? "").trim(),
+      m1: m[2]!,
+      d1: m[3]!,
+      o1: !!m[4],
+      y1: m[5],
+      sep: m[6]!,
+      m2: m[7]!,
+      d2: m[8]!,
+      o2: !!m[9],
+      y2: m[10],
+      of: false,
+      bare: false,
+      dayFirst: [false, false],
+    }),
+  },
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}(?:the\s+)?${DAY_NUM}${RANGE_SEP}${RANGE_WEEKDAY}` +
+        String.raw`(?:the\s+)?${DAY_NUM}(\s+of)?\s+${MONTH}\b${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({
+      lead: (m[1] ?? "").trim(),
+      d1: m[2]!,
+      o1: !!m[3],
+      sep: m[4]!,
+      d2: m[5]!,
+      o2: !!m[6],
+      m1: m[8]!,
+      m2: m[8]!,
+      y2: m[9],
+      of: !!m[7],
+      bare: true,
+      dayFirst: [true, true],
+    }),
+  },
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}${MONTH}\s+${DAY_NUM}${RANGE_SEP}(\d{1,2})(?!\d)${ORDINAL}` +
+        String.raw`${NOT_TIME}(?!\s*${MONTH}\b)(?![\p{L}\p{N}])${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({
+      lead: (m[1] ?? "").trim(),
+      m1: m[2]!,
+      d1: m[3]!,
+      o1: !!m[4],
+      sep: m[5]!,
+      d2: m[6]!,
+      o2: !!m[7],
+      m2: m[2]!,
+      // m[8] is the month the lookahead refused (a lookahead's group is numbered too).
+      y2: m[9],
+      of: false,
+      bare: true,
+      dayFirst: [false, false],
+    }),
+  },
+];
+
+const AFTER_MONTH_DAY = /^,?\s+\d{1,2}(?!\d)/;
+const BEFORE_MONTH = new RegExp(String.raw`\b${MONTH}\.?\s*$`);
+const short = (month: string) => month.length <= 4 && month !== "june" && month !== "july";
+
+/** Whether a shape's match reads as a range of days (the rules `dayRanges` lists), before its dates are checked. */
+function readsAsRange(r: RangeParts, text: string, at: number, end: number): boolean {
+  const word = /^[a-z]/.test(r.sep);
+  if (r.sep === "and" && r.lead !== "between") return false;
+  // A bare first number before a word ("Postgres 12 to 14 November", "node 18 to 20 November") is a version or a
+  // count unless a lead or an ordinal says it is a day.
+  if (word && r.bare && !r.lead && !r.o1) return false;
+  // As a lone date: "May" and "March" need a firm cue anywhere, a short month after its day needs one too ("2-3 dec
+  // ideas", "plan for 3-5 may change"): an ordinal, "of", or a firm lead.
+  const firm = r.o1 || r.o2 || r.of || FIRM_LEADS.has(r.lead);
+  if ((VERB_MONTHS.has(r.m1) || VERB_MONTHS.has(r.m2)) && !firm) return false;
+  if (((r.dayFirst[0] && short(r.m1)) || (r.dayFirst[1] && short(r.m2))) && !firm) return false;
+  // The one-month day-first shape must not start right after a month ("Nov 12 to 14 December").
+  if (r.bare && r.dayFirst[0] && BEFORE_MONTH.test(text.slice(Math.max(0, at - 12), at))) return false;
+  // A day-first month followed by a day number is a month-first date ("1-2 Nov 12", "£12-14 November 20").
+  if (r.dayFirst[1] && !r.y2 && AFTER_MONTH_DAY.test(text.slice(end, end + 8))) return false;
+  // A reschedule names its two days, not the days between.
+  if (r.lead === "from" || word) {
+    const clause = text.slice(Math.max(0, at - 80), at);
+    if (MOVED.test(clause)) return false;
   }
-  return { ranges: out, rest: t };
+  return true;
 }
 
-/** A range's first day and length, or null when it is no range (see `dayRanges`). */
+/**
+ * The day ranges a lower-cased request writes, each as its first day (ms, UTC midnight) and its length in days, and
+ * the text with every range blanked (`rest`), for the single-date reader. Bounded input (the caller's text); each
+ * shape is one linear pass, and the blanked text is built once a shape. Not ranges, read as before: a separator word
+ * after a bare number with no lead or ordinal (versions, counts), "and" without "between", "May"/"March" or a short
+ * month after its day without a firm cue, a number before or after the range that makes it part of something else
+ * (an amount, an identifier, a month-first date, an hour), a mixed order ("Nov 12 to 14 December"), a reschedule
+ * ("move it from 10 to 12 November"), and a span whose end is not after its start or whose day does not exist.
+ */
+function dayRanges(text: string, today: number): { ranges: { start: number; n: number }[]; rest: string } {
+  const ranges: { start: number; n: number }[] = [];
+  let t = text;
+  for (const shape of RANGES) {
+    const parts: string[] = [];
+    let last = 0;
+    for (const m of t.matchAll(shape.re)) {
+      const at = m.index!;
+      const end = at + m[0].length;
+      const r = shape.read(m);
+      if (!readsAsRange(r, t, at, end)) continue;
+      const span = rangeOf(r, today);
+      if (!span) continue;
+      ranges.push(span);
+      parts.push(t.slice(last, at), " ".repeat(m[0].length));
+      last = end;
+    }
+    if (last > 0) t = parts.join("") + t.slice(last);
+  }
+  return { ranges, rest: t };
+}
+
+/**
+ * A range's first day and length, or null when it is no range. The year: as said; with none, the end's nearest year
+ * (this year's, unless more than half a year gone, as a lone date reads) and the start's that year or the one before
+ * when its month comes later ("28 December to 3 January", said on 2 January, is the days just gone and tomorrow).
+ * A range that crosses a year only by that rule and is longer than `RANGE_MAX_DAYS` is no range: its days are read
+ * one by one.
+ */
 function rangeOf(r: RangeParts, today: number): { start: number; n: number } | null {
   const m1 = MONTHS.indexOf(r.m1.slice(0, 3));
   const m2 = MONTHS.indexOf(r.m2.slice(0, 3));
   const d1 = Number(r.d1);
   const d2 = Number(r.d2);
   if (m1 < 0 || m2 < 0) return null;
-  const valid = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).getUTCDate() === d;
-  // The year said (either end's, the end's for both when only it is said), else the start's nearest year: this
-  // year's, unless more than half a year gone, as a lone date reads.
+  const said1 = r.y1 ? Number(r.y1) : undefined;
   const said2 = r.y2 ? Number(r.y2) : undefined;
-  const said1 = r.y1 ? Number(r.y1) : m1 === m2 ? said2 : undefined;
-  let y1 = said1 ?? new Date(today).getUTCFullYear();
-  if (said1 === undefined && Date.UTC(y1, m1, d1) < today - 182 * DAY) y1 += 1;
-  let y2 = said2 ?? y1;
-  if (said2 === undefined && Date.UTC(y2, m2, d2) < Date.UTC(y1, m1, d1)) y2 += 1;
+  let y2: number;
+  if (said2 !== undefined) y2 = said2;
+  else if (said1 !== undefined) y2 = said1 + (m2 < m1 ? 1 : 0);
+  else {
+    y2 = new Date(today).getUTCFullYear();
+    if (Date.UTC(y2, m2, d2) < today - 182 * DAY) y2 += 1;
+  }
+  const y1 = said1 ?? (m1 > m2 ? y2 - 1 : y2);
+  const valid = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).getUTCDate() === d;
   if (!valid(y1, m1, d1) || !valid(y2, m2, d2)) return null;
   const start = Date.UTC(y1, m1, d1);
   const end = Date.UTC(y2, m2, d2);
-  // Within one month the second day must follow the first: "14–12 November" is no span.
-  if (end <= start || (m1 === m2 && said2 === undefined && y2 !== y1)) return null;
-  return { start, n: Math.round((end - start) / DAY) + 1 };
+  if (end <= start) return null;
+  const n = Math.round((end - start) / DAY) + 1;
+  if (said1 === undefined && said2 === undefined && y1 !== y2 && n > RANGE_MAX_DAYS) return null;
+  return { start, n };
 }
 
 /**

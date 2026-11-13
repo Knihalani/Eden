@@ -26,7 +26,8 @@ describe("timeWindow reads a range whole (D1773)", () => {
     expect(days("the course runs 2 November through 6 November")).toEqual(span("2026-11-02", 5));
     expect(days("from 2 November until 9 November")).toEqual(span("2026-11-02", 8));
     expect(days("from Mon 2 Nov till Wed 4 Nov")).toEqual(span("2026-11-02", 3));
-    expect(days("cover 9 to 11 November please")).toEqual(span("2026-11-09", 3));
+    expect(days("cover from 9 to 11 November please")).toEqual(span("2026-11-09", 3));
+    expect(days("cover the 10th to 16th of November")).toEqual(span("2026-11-10", 7));
     expect(days("leave between 3 and 5 December")).toEqual(span("2026-12-03", 3));
   });
 
@@ -66,9 +67,69 @@ describe("timeWindow reads a range whole (D1773)", () => {
     expect(days("pages 2-3 may be late")).toEqual([]);
     expect(days("14–12 November")).toEqual(["2026-11-12"]);
     expect(days("31 November to 2 December")).toEqual(["2026-12-02"]);
-    // "May" and "March" are verbs too: a range in them needs a preposition before it, as a single date does.
+    // "May" and "March" are verbs too: a range in them needs a firm cue, as a single date does.
     expect(days("3–5 May")).toEqual([]);
-    expect(days("for 3–5 May")).toEqual(span("2026-05-03", 3));
+    expect(days("from 3rd to 5th May")).toEqual(span("2026-05-03", 3));
+  });
+
+  // The review of D1773 (REQUEST_CHANGES): each input it found misread, as main reads it or as the range it is.
+  test("review 1: a mixed order across months is read date by date, as main reads it", () => {
+    expect(days("from Nov 12 to 14 December")).toEqual(["2026-11-12", "2026-12-14"]);
+    expect(days("Nov 2 - 4 Dec")).toEqual(["2026-11-02"]);
+    expect(days("between Nov 12 and 14 December")).toEqual(["2026-11-12", "2026-12-14"]);
+  });
+
+  test("review 2: an ordinal range through datedText stays in its own month and year", () => {
+    const read = (text: string) => [...(timeWindow(datedText(text, NOW), NOW)?.days ?? [])].sort();
+    expect(read("Book a room for the 12th–14th November")).toEqual(span("2026-11-12", 3));
+    expect(read("cover the 10th to 16th of November")).toEqual(span("2026-11-10", 7));
+    expect(read("for 12th–14th Nov")).toEqual(span("2026-11-12", 3));
+    // A bare ordinal not followed by a dated day is still given its month.
+    expect(read("book it for the 12th")).toEqual(["2026-11-12"]);
+  });
+
+  test("review 3: amounts, scores and chapters before a date are no range, and the date survives", () => {
+    expect(days("budget $10-20 Nov 12")).toEqual(["2026-11-12"]);
+    expect(days("tickets £12-14 November 20")).toEqual(["2026-11-14", "2026-11-20"]);
+    expect(days("we drew 1-2 Nov 12")).toEqual(["2026-11-12"]);
+    expect(days("lost 1–3 Nov 12")).toEqual(["2026-11-12"]);
+    expect(days("chapters 5-6 Nov 12")).toEqual(["2026-11-12"]);
+    expect(days("costs €5-8 November 3")).toEqual(["2026-11-03", "2026-11-08"]);
+  });
+
+  test("review 4: hours after a month-first day are no range", () => {
+    expect(days("Nov 10-11 am")).toEqual(["2026-11-10"]);
+    expect(days("Nov 3 to 5 pm")).toEqual(["2026-11-03"]);
+    expect(days("Nov 3 until 5 pm")).toEqual(["2026-11-03"]);
+    expect(days("Nov 3 - 5h")).toEqual(["2026-11-03"]);
+  });
+
+  test("review 5: a version or a count before a separator word is no range", () => {
+    expect(days("upgrade Postgres 12 to 14 November")).toEqual(["2026-11-14"]);
+    expect(days("bump node 18 to 20 November")).toEqual(["2026-11-20"]);
+    expect(days("PostgreSQL 13 to 30 November")).toEqual(["2026-11-30"]);
+  });
+
+  test("review 6: 'for' and 'between' are no firm cue for May, March or a short month after its day", () => {
+    expect(days("Plan for 3-5 may change")).toEqual([]);
+    expect(days("sections 3-4 dec ideas")).toEqual([]);
+    expect(days("between 3 and 5 dec")).toEqual([]);
+  });
+
+  test("review 7: a New Year range said in early January is the days just gone and tomorrow", () => {
+    const jan = Date.parse("2027-01-02T12:00:00Z");
+    const read = (text: string) => [...(timeWindow(text, jan)?.days ?? [])].sort();
+    expect(read("off 28 December to 3 January")).toEqual(span("2026-12-28", 7));
+    // As a lone date reads in January: this year's November.
+    expect(read("12–14 November")).toEqual(span("2027-11-12", 3));
+  });
+
+  test("review 8: a reschedule names its two days, not the days between", () => {
+    expect(days("Move my dentist from 10 to 12 November")).toEqual(["2026-11-12"]);
+    expect(days("Reschedule the review from 10 November to 12 November")).toEqual(["2026-11-10", "2026-11-12"]);
+    expect(days("push the offsite from Nov 10 to Nov 12")).toEqual(["2026-11-10", "2026-11-12"]);
+    // Not a move: the range is read.
+    expect(days("I'm away from 10 to 12 November")).toEqual(span("2026-11-10", 3));
   });
 
   test("datedText leaves a range for timeWindow to read", () => {
