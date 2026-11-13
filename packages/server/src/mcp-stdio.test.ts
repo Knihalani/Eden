@@ -2,8 +2,9 @@
  * MCP over stdio (D1704): the line transport on its own, then `mcp-stdio.ts` as a subprocess driven by the official
  * SDK's stdio client, one full round trip.
  */
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -119,3 +120,61 @@ test("mcp-stdio.ts as a subprocess: the SDK's stdio client initializes, lists an
     await client.close();
   }
 }, 30_000);
+
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  test(`mcp-stdio.ts stopped by ${signal} after an ask writes the mentions it learned (D1780's review)`, async () => {
+    // Mentions are written behind, within a second; a signal's default action skips the `exit` listener that would
+    // write them, so mcp-stdio closes the map on each signal. Before, this file held 0 mention rows after the ask.
+    const dir = mkdtempSync(join(tmpdir(), "eden-stdio-sig-"));
+    const sources = join(dir, "sources.json");
+    const doc = (ref: string, title: string, text: string) => ({ ref, title, text });
+    writeFileSync(
+      sources,
+      JSON.stringify({
+        sources: [
+          {
+            id: "calendar",
+            description: "events",
+            docs: [doc("e1", "Dentist with Dana Lee", "Friday 9am, Acme Corp")],
+          },
+          { id: "mail", description: "mail", docs: [doc("m1", "Note from Dana Lee", "Acme Corp project Phoenix")] },
+        ],
+      }),
+    );
+    const proc = Bun.spawn([process.execPath, join(import.meta.dir, "mcp-stdio.ts")], {
+      cwd: join(import.meta.dir, "../../.."),
+      env: { PATH: process.env.PATH ?? "", HOME: dir, EDEN_HOME: dir, EDEN_USER: "u1", EDEN_SOURCES_FILE: sources },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const send = (m: object) => proc.stdin.write(`${JSON.stringify(m)}\n`);
+    const replies = proc.stdout.getReader();
+    let buffered = "";
+    const reply = async (id: number): Promise<unknown> => {
+      for (;;) {
+        for (const line of buffered.split("\n")) {
+          if (line.trim() && (JSON.parse(line) as { id?: number }).id === id) return JSON.parse(line);
+        }
+        const { value, done } = await replies.read();
+        if (done) throw new Error("mcp-stdio closed its output");
+        buffered += new TextDecoder().decode(value);
+      }
+    };
+    send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
+    await reply(1);
+    send({ jsonrpc: "2.0", method: "notifications/initialized" });
+    const question = "when do I see Dana Lee from Acme Corp?";
+    send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "ask_context", arguments: { question } } });
+    expect(JSON.stringify(await reply(2))).toContain("Dana Lee");
+    proc.kill(signal);
+    expect(await proc.exited).toBe(0);
+    const file = readdirSync(join(dir, "mcp-stdio")).find((n) => n.endsWith(".db"))!;
+    const db = new Database(join(dir, "mcp-stdio", file), { readonly: true });
+    try {
+      expect((db.query("SELECT COUNT(*) AS n FROM mention").get() as { n: number }).n).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  }, 30_000);
+}

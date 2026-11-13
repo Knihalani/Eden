@@ -27,6 +27,7 @@ packages/server/src/http.test.ts
 packages/server/src/router-processes.test.ts
 packages/server/src/router.test.ts
 packages/server/src/user-sources.test.ts
+packages/sim/src/lab/card-queue.test.ts
 packages/sources/src/deadline-unwatched.test.ts
 packages/sources/src/guarded.test.ts
 packages/sources/src/list.test.ts

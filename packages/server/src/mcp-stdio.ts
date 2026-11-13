@@ -29,11 +29,24 @@ if (!isId(tenantId) || !isId(userId)) {
 // EDEN_USER_SOURCES_FILE (D108) works here too: only this process's user's entry is read and checked. A bad file
 // exits 2 with one line on stderr (stdout is the MCP channel).
 const sources = sourcesOrExit(process.env, { tenantId, userId });
+// Fails open to an in-memory map (logged to stderr) when the file cannot be opened, rather than not starting.
+const sourceMap = openSourceMap(() => stdioSourceMapPath(tenantId, userId));
+// An MCP client stops this process with a signal as often as by closing stdin. A signal's default action skips the
+// `exit` listener that writes the map's buffered mentions and outcomes (D1780), so each closes the map and exits.
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(signal, () => {
+    try {
+      sourceMap.close();
+    } catch (e) {
+      console.error(`eden: source map not closed cleanly: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    process.exit(0);
+  });
+}
 // The query planner as in the HTTP server (D33): on unless EDEN_QUERY_PLANNER=0, learning into this user's source map.
 const partner = buildPartner({
   sources: sources.resolver,
-  // Fails open to an in-memory map (logged to stderr) when the file cannot be opened, rather than not starting.
-  sourceMap: openSourceMap(() => stdioSourceMapPath(tenantId, userId)),
+  sourceMap,
   queryPlanner: plannerMode(process.env.EDEN_QUERY_PLANNER),
   engine: engineConfig(),
   // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112), as in the HTTP server.
