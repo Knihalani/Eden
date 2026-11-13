@@ -516,7 +516,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   either form by its magic. A warm freeze writes nothing to disk (D425): `flush` writes warm users at a shutdown. No
   warm freeze without `releaseTerms` (the blob carries the vocabulary) or with `freezeIdleMs` 0. A new per-user
   field of `UserCache` must be carried by both forms, and a test that counts thaws or freezes with the default limits
-  now sees warm ones.
+  now sees warm ones. A binary layout of either blob (string tables, columns, varints) was measured and rejected
+  (D1715, docs/research/frozen-binary.md): the compact thaw is re-indexing (zstd and JSON 7-10% of it) and the warm
+  blob is its deflated texts (68-80%); the best layout saved 11% of a compact blob.
 - **Card state stays live while its user is frozen.** A user's `UserCards` is not frozen with the cache: with a card
   and two requests an item it is about 3.7 MB of heap a heavy user, more than the frozen cache. Freezing it with the
   user was built and rejected on its pre-registered rule (D998, C6: frozen RSS -18.9%, short of -20%, and +4% after
