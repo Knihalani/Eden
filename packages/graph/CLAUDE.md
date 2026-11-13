@@ -19,6 +19,13 @@ it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One fil
 - **Fast path may write here** (D4): outcomes are written behind (buffered, one transaction within
   `OUTCOME_FLUSH_MS` or at 256 rows; every read flushes first) with WAL and synchronous=NORMAL, about 2 µs per outcome
   instead of an fsync per commit. Keep new writes on that path; do not add a synchronous commit per event.
+- **Mentions are written behind too (D1745):** summed in memory per (user, entity, source), one transaction within
+  1 s (`MENTION_FLUSH_MS`) or at 4,096 distinct rows. Reads of mentions (`sourcesFor`, `route`) add the pending
+  counts and must not flush (a flush a route would batch nothing); `exportUser`, `importUser`, `forget` and `close`
+  flush first, and an `exit` listener writes every open map at a normal exit. A crash loses at most a second of
+  mentions, never a written row (`source-map-batch.test.ts` kills a writer). A new read of the `mention` table
+  either merges `this.mentions` or flushes first. Disk writes on the pipeline workload: 3.6x less (7.6-8.3 MB →
+  2.2-2.3 MB). A test of two processes contending must call `flush()` itself, or nothing is written until exit.
 - `busy_timeout` is 2 s: two processes may share a file (mcp-stdio launched by two MCP clients for one user), and
   without it one failed in the constructor with SQLITE_BUSY (`source-map.test.ts`, the two-process test).
 - Statements go through `db.query` (prepared-statement cache): re-preparing per call was 5% of end-to-end CPU
@@ -28,7 +35,7 @@ it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One fil
 - **SQLite stays (D1720, docs/research/source-map-store.md).** A specialised store (a resident map per user with an
   append log) was measured and rejected: the map is 3.2-3.7% of the event path, SQLite holds 64-66 KB a user
   against 1.47 MB resident, and the disk-write gain a log would bring (35-40x) is mostly available by batching
-  mentions as outcomes are (4x, screened, not done).
+  mentions as outcomes are (done in D1745).
 
 ## Test
 
