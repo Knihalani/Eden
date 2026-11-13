@@ -854,6 +854,14 @@ export interface EngineConfig {
    * (`Source.callPriced` true, or absent: unknown counts as priced). Off: those sources keep their learned rate.
    */
   syncActivePollPriced: boolean;
+  /**
+   * D1747 (in the default at 40; 0 = no cap), with `syncActivePollMs`: the most floor polls a user's unused sources
+   * (not `engage`d) get per floor interval, a refilling allowance; past it the due ones likeliest to have changed by
+   * their learned rate go first and the rest wait for a later tick. Used sources keep the floor as before. A user with
+   * up to 40 connectors never reaches it; at a thousand first-party connectors the floor alone made about a thousand
+   * calls an active user-day (call-causes, D1746), and 83-93 with the cap.
+   */
+  syncActivePollCap: number;
 }
 
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -1023,4 +1031,5 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncActivePollMs: 7_200_000,
   syncActivePollBackoff: true,
   syncActivePollPriced: false,
+  syncActivePollCap: 40,
 };

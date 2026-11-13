@@ -62,6 +62,7 @@ export const PARTS = {
     syncUnusedSweepMs: 0,
     syncActivePollMs: 0,
     syncActivePollBackoff: false,
+    syncActivePollCap: 0,
     sourceYield: false,
     sourceYieldEarn: false,
     sourceYieldNames: 0,
