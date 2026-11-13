@@ -1,4 +1,4 @@
-# The per-process memory floor (2026-11-13, D1746: finding, nothing shipped)
+# The per-process memory floor (2026-11-13, D1781: finding, nothing shipped)
 
 The router runs one Bun child per core (D113, D163), so whatever one server process holds before it has any user is
 paid N times. The question: can a child's floor drop by at least 10 MB or 15% (lazy loading of rarely used parts,
