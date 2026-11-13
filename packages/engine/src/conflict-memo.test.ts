@@ -130,6 +130,16 @@ describe("an equal copy keeps the held object (D1722)", () => {
     expect("kind" in cache.get(alice, "mail:a", NOW)!).toBe(false);
   });
 
+  test("a key the held copy has only through its prototype is a new object (second review)", () => {
+    const cache = new ItemCache();
+    const base = item("a", LONG, { updatedAt: NOW - 1 });
+    cache.put(alice, [{ ...base, z: 1 } as ContextItem], NOW);
+    const held = cache.get(alice, "mail:a", NOW)!;
+    // `in` sees Object.prototype's `constructor`; an own-key test does not.
+    cache.put(alice, [{ ...base, constructor: Object } as unknown as ContextItem], NOW);
+    expect(cache.get(alice, "mail:a", NOW)).not.toBe(held);
+  });
+
   test("isolation: an equal copy keeps only the putting user's own object", () => {
     const cache = new ItemCache();
     const bob = { tenantId: "t", userId: "bob" };
