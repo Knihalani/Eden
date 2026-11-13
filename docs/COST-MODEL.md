@@ -802,7 +802,54 @@ Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`)
   the hour pays from about 0.53 reads a write, and D1197 modelled about 0.75 for an active user (random spacing, 1–4
   sheet changes a day). The fixed instructions are the same bytes for every user, so at a server's traffic they are
   read far more often than any one user's sheet. Read the roles' `cachedInputTokens` against their cost to see which
-  case production is in.
+  case production is in. Since D1800 `/metrics` counts them per role (`eden_model_cache_read_tokens_total`,
+  docs/DEPLOY.md §8), and the sheet is cached only where it pays (below).
+
+**The sheet's breakpoint (D1800, `SheetCachePolicy`; `packages/sim/lab/f7/sheet-adaptive.ts`, [EST], $0).** Since
+D1800 the sheet carries its breakpoint only when caching it is likely to pay for that user: when it is in the cache
+(the last check sent it marked, unchanged, within the hour: a read at 0.1x), or when the share of the user's checks
+that came within the hour of the one before with the same sheet is at least 0.55. The cost model: a write at the hour
+is +1.0x over plain and a read saves 0.9x, so a write pays when it earns more than about 1.1 reads, a chance above
+about 0.53 that the next check reuses it. The script runs the shipped class over 400 users x 30 days a cell, with the
+provider's cache modelled exactly, an 8,200-character sheet (2,050 tokens, $0.000205 plain at Haiku 5.5's list) and
+1–4 sheet changes a day. The sheet's price a check, $ (x plain):
+
+| user (checks a day)           | spacing        |            always (D1790) |       never (plain) |                  adaptive | marked | adaptive vs the better |
+| ----------------------------- | -------------- | ------------------------: | ------------------: | ------------------------: | -----: | ---------------------: |
+| light (2)                     | fixed 10 min   |         0.000410 (2.00)   |    0.000205 (1.00)  |         0.000205 (1.00)   |     0% |                  +0.0% |
+| light (2)                     | random         |         0.000377 (1.84)   |    0.000205 (1.00)  |         0.000206 (1.00)   |     0% |                  +0.3% |
+| light (2)                     | bursty         |         0.000223 (1.09)   |    0.000205 (1.00)  |         0.000207 (1.01)   |    15% |                  +1.0% |
+| light (2)                     | 30–90 min gaps |         0.000410 (2.00)   |    0.000205 (1.00)  |         0.000205 (1.00)   |     0% |                  +0.0% |
+| typical (6)                   | fixed 10 min   |         0.000219 (1.07)   |    0.000205 (1.00)  |         0.000210 (1.02)   |    19% |                  +2.3% |
+| typical (6)                   | random         |         0.000251 (1.22)   |    0.000205 (1.00)  |         0.000207 (1.01)   |     3% |                  +0.9% |
+| typical (6)                   | bursty         |         0.000149 (0.73)   |    0.000205 (1.00)  |         0.000150 (0.73)   |    99% |                  +1.1% |
+| typical (6)                   | 30–90 min gaps |         0.000302 (1.47)   |    0.000205 (1.00)  |         0.000206 (1.00)   |     1% |                  +0.4% |
+| heavy (16)                    | fixed 10 min   |         0.000102 (0.50)   |    0.000205 (1.00)  |         0.000103 (0.50)   |    99% |                  +0.7% |
+| heavy (16)                    | random         |         0.000116 (0.57)   |    0.000205 (1.00)  |         0.000117 (0.57)   |    99% |                  +0.6% |
+| heavy (16)                    | bursty         |         0.000100 (0.49)   |    0.000205 (1.00)  |         0.000101 (0.49)   |   100% |                  +0.6% |
+| heavy (16)                    | 30–90 min gaps |         0.000250 (1.22)   |    0.000205 (1.00)  |         0.000206 (1.00)   |     2% |                  +0.4% |
+| very heavy (40)               | fixed 10 min   |         0.000054 (0.26)   |    0.000205 (1.00)  |         0.000054 (0.26)   |   100% |                  +0.5% |
+| very heavy (40)               | random         |         0.000054 (0.26)   |    0.000205 (1.00)  |         0.000054 (0.26)   |   100% |                  +0.5% |
+| very heavy (40)               | bursty         |         0.000059 (0.29)   |    0.000205 (1.00)  |         0.000060 (0.29)   |   100% |                  +0.5% |
+| very heavy (40)               | 30–90 min gaps |         0.000219 (1.07)   |    0.000205 (1.00)  |         0.000206 (1.01)   |     7% |                  +0.5% |
+| shifting (16 or 2, weekly)    | fixed 10 min   |         0.000132 (0.65)   |    0.000205 (1.00)  |         0.000137 (0.67)   |    93% |                  +3.5% |
+| shifting (16 or 2, weekly)    | random         |         0.000142 (0.70)   |    0.000205 (1.00)  |         0.000147 (0.72)   |    92% |                  +2.9% |
+| shifting (16 or 2, weekly)    | bursty         |         0.000112 (0.55)   |    0.000205 (1.00)  |         0.000113 (0.55)   |    99% |                  +1.0% |
+| shifting (16 or 2, weekly)    | 30–90 min gaps |         0.000266 (1.30)   |    0.000205 (1.00)  |         0.000206 (1.01)   |     2% |                  +0.5% |
+
+The rule costs at most +3.5% over the better of always and never in any cell (a user whose habits change weekly; the
+average lags), and +2.3% at most for a user with fixed habits; at 0–1 and 3–8 sheet changes a day the worst fixed-habit
+cells are +1.7% and +1.2%. Against D1790's always, it removes the up-to-2x write for light users (the "+49% a check"
+case above, on the sheet's part) and keeps the heavy user's 0.26–0.57x. The weight (1/32) and the bar (0.55) were
+chosen by sweeping these cells (weights 1/32 to 1/2, bars 0.45 to 0.85): the spacings are assumed, as in F7, and no
+real check timings exist. When the sheet goes plain, the request's one breakpoint (the fixed instructions) asks for the
+provider's five minutes, written at 1.25x, not 2x; those instructions are the same bytes for every user, so on a busy
+server they are read, not written.
+
+**A route that never reads (D1800).** `OpenRouterModel` counts calls that should have read the cache (a marked prefix
+of at least 512 estimated tokens, sent within its TTL after the same model answered it) and, after 50 with no cached
+token served, stops sending breakpoints for its life. Its cost is bounded: at most 50 extra writes of a 1,000–3,000
+token prefix, under $0.015 at Haiku 5.5's price [EST].
 
 The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
 

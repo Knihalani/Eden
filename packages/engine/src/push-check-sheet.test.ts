@@ -204,7 +204,7 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
     expect(JSON.stringify(last.messages)).not.toContain("<rules");
   });
 
-  test("on: the sheet is its own cached block after the instructions; a named rule's item joins the packet", async () => {
+  test("on: the sheet is its own block after the instructions; a named rule's item joins the packet", async () => {
     const model = naming("TravelPerk");
     const { warm, handed, checker } = setup({ pushCheckSheet: 80 }, model);
     await warm();
@@ -212,7 +212,8 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
     expect(ids).toContain(POLICY.id);
     const last = model.calls.at(-1)!;
     expect(last.messages[0]).toEqual({ role: "system", content: CHECK_SYSTEM });
-    expect(last.messages[1]!.cache).toBe(true);
+    // A user's first check sends the sheet plain: nothing yet says caching it would pay (D1800, sheet-cache.test.ts).
+    expect(last.messages[1]!.cache).toBeUndefined();
     expect(last.messages[1]!.content.startsWith(SHEET_HEAD)).toBe(true);
     expect(last.messages[2]!.content).toContain("<request>");
     expect(checker.stats.sheetChecks).toBeGreaterThan(0);

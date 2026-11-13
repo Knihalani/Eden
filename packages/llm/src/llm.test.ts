@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Budget, TenantSpend } from "./budget";
-import { OpenRouterModel } from "./openrouter";
+import { CACHE_TRIP_CALLS, MIN_CACHE_TOKENS, OpenRouterModel } from "./openrouter";
 import { costOf, priceFor } from "./pricing";
 
 describe("pricing", () => {
@@ -557,5 +557,151 @@ describe("OpenRouterModel", () => {
       expect("reasoningTokens" in silent.usage).toBe(false);
       expect(silent.usage.outputTokens).toBe(190);
     }
+  });
+});
+
+// D1800: a route that bills cache writes and never serves a read is stopped after CACHE_TRIP_CALLS calls that should
+// have read; a cold start, low traffic or a short prefix never counts.
+describe("OpenRouterModel's read watch (D1800)", () => {
+  const LONG = "x".repeat(MIN_CACHE_TOKENS * 4 + 400);
+  const request = (system = LONG, sheet?: string) => ({
+    messages: [
+      { role: "system" as const, content: system },
+      ...(sheet ? [{ role: "user" as const, content: sheet, cache: true, cacheTtl: "1h" as const }] : []),
+      { role: "user" as const, content: "the request" },
+    ],
+    maxTokens: 5,
+  });
+  const route = (cached: () => number, write?: number) => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      const details = { cached_tokens: cached(), ...(write === undefined ? {} : { cache_write_tokens: write }) };
+      return Response.json({
+        choices: [{ message: { content: "ok" } }],
+        usage: { prompt_tokens: 900, prompt_tokens_details: details },
+      });
+    }) as unknown as typeof fetch;
+    return { sent, fake };
+  };
+  const model = (fake: typeof fetch, now: () => number) =>
+    new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake, anthropicCache: true, now });
+  const hasControl = (body: any) => JSON.stringify(body.messages).includes("cache_control");
+
+  test("trips after CACHE_TRIP_CALLS calls that should have read and read nothing, and logs one line", async () => {
+    const { sent, fake } = route(() => 0);
+    let now = 0;
+    const m = model(fake, () => now);
+    const warn = console.warn;
+    const lines: string[] = [];
+    console.warn = (line: string) => lines.push(line);
+    try {
+      // The first call writes; each later one, a minute after, should read it.
+      for (let i = 0; i <= CACHE_TRIP_CALLS; i++, now += 60_000) await m.chat(request());
+      expect(m.cacheLevel).toBe(0);
+      expect(m.readsMissed).toBe(CACHE_TRIP_CALLS);
+      expect(sent.every(hasControl)).toBe(true);
+      const res = await m.chat(request());
+      expect(hasControl(sent.at(-1))).toBe(false);
+      expect(res.cacheBreakpoints).toBeUndefined();
+    } finally {
+      console.warn = warn;
+    }
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("cache level 2 -> 0");
+    // Content-free: no prompt text in the line.
+    expect(lines[0]).not.toContain("xxxx");
+  });
+
+  test("one call short of it does not trip", async () => {
+    const { fake } = route(() => 0);
+    let now = 0;
+    const m = model(fake, () => now);
+    for (let i = 0; i < CACHE_TRIP_CALLS; i++, now += 60_000) await m.chat(request());
+    expect(m.readsMissed).toBe(CACHE_TRIP_CALLS - 1);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("low traffic: calls further apart than the TTL never count", async () => {
+    const { fake } = route(() => 0);
+    let now = 0;
+    const m = model(fake, () => now);
+    for (let i = 0; i < 3 * CACHE_TRIP_CALLS; i++, now += 6 * 60_000) await m.chat(request());
+    expect(m.readsMissed).toBe(0);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("an hour's breakpoint is watched on the hour: checks 30 minutes apart count", async () => {
+    const { fake } = route(() => 0);
+    let now = 0;
+    const m = model(fake, () => now);
+    for (let i = 0; i < 3; i++, now += 30 * 60_000) await m.chat(request(LONG, "the user's sheet"));
+    expect(m.readsMissed).toBe(2);
+  });
+
+  test("a prefix too short to cache never counts", async () => {
+    const { fake } = route(() => 0);
+    let now = 0;
+    const m = model(fake, () => now);
+    for (let i = 0; i < 2 * CACHE_TRIP_CALLS; i++, now += 60_000) await m.chat(request("short rules"));
+    expect(m.readsMissed).toBe(0);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("a cold start does not count: every call a new prefix", async () => {
+    const { fake } = route(() => 0);
+    let now = 0;
+    const m = model(fake, () => now);
+    for (let i = 0; i < 2 * CACHE_TRIP_CALLS; i++, now += 60_000) await m.chat(request(`${LONG}${i}`));
+    expect(m.readsMissed).toBe(0);
+  });
+
+  test("calls in flight together do not count: the second was sent before the first was answered", async () => {
+    const { fake } = route(() => 0);
+    // A clock that moves on each reading: every call is sent before the first is answered.
+    let tick = 0;
+    const m = model(fake, () => tick++);
+    await Promise.all(Array.from({ length: 2 * CACHE_TRIP_CALLS }, () => m.chat(request())));
+    expect(m.readsMissed).toBe(0);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("one read ends the watch for good", async () => {
+    let n = 0;
+    const { fake } = route(() => (n++ === 3 ? 600 : 0));
+    let now = 0;
+    const m = model(fake, () => now);
+    for (let i = 0; i < 3 * CACHE_TRIP_CALLS; i++, now += 60_000) await m.chat(request());
+    expect(m.readsSeen).toBe(true);
+    expect(m.readsMissed).toBe(2);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("the response says how many breakpoints it carried, and the cache writes when the route reports them", async () => {
+    const { fake } = route(() => 0, 700);
+    const res = await model(fake, () => 0).chat(request(LONG, "the user's sheet"));
+    expect(res.cacheBreakpoints).toBe(2);
+    expect(res.usage.cacheWriteTokens).toBe(700);
+    const plain = route(() => 0);
+    const off = await new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: plain.fake }).chat(
+      request(),
+    );
+    expect(off.cacheBreakpoints).toBeUndefined();
+    // Not reported: unset, not zero.
+    expect(off.usage.cacheWriteTokens).toBeUndefined();
+  });
+
+  test("the bytes the model reads are the same with and without the sheet's breakpoint (D1800)", async () => {
+    const { sent, fake } = route(() => 0);
+    const m = model(fake, () => 0);
+    const marked = request(LONG, "the user's sheet");
+    const plain = { ...marked, messages: marked.messages.map(({ cache: _c, cacheTtl: _t, ...rest }: any) => rest) };
+    await m.chat(marked);
+    await m.chat(plain);
+    const texts = (body: any) =>
+      body.messages.map((x: any) => [x.role, typeof x.content === "string" ? x.content : x.content[0].text]);
+    expect(texts(sent[0])).toEqual(texts(sent[1]));
+    expect(JSON.stringify(sent[0].messages[1])).toContain("cache_control");
+    expect(JSON.stringify(sent[1].messages[1])).not.toContain("cache_control");
   });
 });

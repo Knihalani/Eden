@@ -70,6 +70,11 @@ export interface ChatResponse {
    * dropped stream is not one the stop ended.
    */
   stopped?: boolean;
+  /**
+   * How many cache breakpoints the request that answered carried (`OpenRouterModel` under `anthropicCache`; unset
+   * when none): the servers' `/metrics` count calls with breakpoints against the cached tokens they read (D1800).
+   */
+  cacheBreakpoints?: number;
 }
 
 /** The one interface the engine sees. Tests use `FakeModel`; production uses `OpenRouterModel`. */

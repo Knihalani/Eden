@@ -1,5 +1,5 @@
 export type { ChatMessage, ChatRequest, ChatResponse, Model, Usage } from "./types";
-export { OpenRouterModel, type OpenRouterOptions } from "./openrouter";
+export { CACHE_TRIP_CALLS, MIN_CACHE_TOKENS, OpenRouterModel, type OpenRouterOptions } from "./openrouter";
 export { PRICES, priceFor, costOf, type Price } from "./pricing";
 export { Budget, DEFAULT_LIMITS, TenantSpend, type BudgetLimits, type Reservation } from "./budget";
 export { FakeModel } from "./fake";

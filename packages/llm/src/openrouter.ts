@@ -10,7 +10,9 @@
  * `allowLogging` lifts both, for the lab's runs on free models only (free endpoints log prompts and none is ZDR;
  * docs/research/edge-freelab.md). Nothing reads it from the environment: `fromEnv`, and so the server, never sets it.
  */
+import { createHash } from "node:crypto";
 import { costOf, priceFor } from "./pricing";
+import { estimateTokens } from "./tokens";
 import type { ChatMessage, ChatRequest, ChatResponse, Model, Usage } from "./types";
 
 export interface OpenRouterOptions {
@@ -40,7 +42,27 @@ export interface OpenRouterOptions {
    * model keeps the lower level for its life. Caching changes the price of a prefix, never the reply.
    */
   anthropicCache?: boolean;
+  /** The wall clock for `anthropicCache`'s read watch (tests pass their own). */
+  now?: () => number;
 }
+
+/**
+ * Calls that should have read the cache (D1800, `watchReads`) after which a route that has served no cached token is
+ * taken to never read, and the model stops sending breakpoints. A call counts only when a prefix it marked, long enough
+ * to cache, was answered by this model within that prefix's TTL before the call was sent, so a cold start or low
+ * traffic (no prefix repeated in time) counts nothing. A route that reads at all is caught long before: at a one in
+ * ten chance of a read a counted call, 50 misses in a row come about once in 190 (0.9^50, 0.5%). Bounded cost: a route
+ * that bills writes and never reads costs at most 50 such writes, under +1.0x of a 1,000-3,000 token prefix each,
+ * under $0.015 at Haiku 5.5's $0.10 a million [EST].
+ */
+export const CACHE_TRIP_CALLS = 50;
+/**
+ * Anthropic's smallest cacheable prefix on Haiku 5.5, in tokens (D1196). Another model's is larger (up to 4,096): a
+ * prefix between the two is then neither written nor read, so tripping on it costs nothing either way.
+ */
+export const MIN_CACHE_TOKENS = 512;
+/** Prefixes the read watch remembers (the check's and card call's few fixed prefixes, and per-user sheets). */
+const WATCHED_PREFIXES = 512;
 
 /**
  * How much of D817's caching a model still sends: 2, every breakpoint with its asked TTL; 1, only the breakpoints that
@@ -56,6 +78,13 @@ export class OpenRouterModel implements Model {
   cacheLevel: CacheLevel;
   /** Calls in a row a lower level answered after a 400: two lower `cacheLevel`, so one stray 400 does not. */
   private refusals = 0;
+  /**
+   * The read watch (D1800, `CACHE_TRIP_CALLS`): when each marked prefix (by hash) was last answered and its TTL; the
+   * calls that should have read one and did not; whether any call has read the cache (then the watch stops).
+   */
+  private readonly prefixes = new Map<string, { at: number; ttlMs: number }>();
+  readsMissed = 0;
+  readsSeen = false;
 
   constructor(private readonly options: OpenRouterOptions) {
     this.id = options.model;
@@ -77,6 +106,7 @@ export class OpenRouterModel implements Model {
     const timeout = AbortSignal.timeout(this.options.timeoutMs ?? 20_000);
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
     const first = this.cacheLevel;
+    const sentAt = (this.options.now ?? Date.now)();
     let level = first;
     for (;;) {
       const res = await this.post(request, level, signal);
@@ -93,7 +123,11 @@ export class OpenRouterModel implements Model {
         } else if (level > 0) {
           this.refusals = 0;
         }
-        return this.read(res, t0);
+        const out = await this.read(res, t0);
+        const marks = breakpoints(request.messages, level);
+        if (marks.size === 0) return out;
+        this.watchReads(request.messages, marks, out.usage.cachedInputTokens, sentAt);
+        return { ...out, cacheBreakpoints: marks.size };
       }
       const text = (await res.text()).slice(0, 300);
       // A refusal of the cache fields must not cost the call: send again with less (at most twice a call).
@@ -104,6 +138,46 @@ export class OpenRouterModel implements Model {
         continue;
       }
       throw new Error(`openrouter ${res.status}: ${text}`);
+    }
+  }
+
+  /**
+   * D1800: a route that bills cache writes and never serves a read costs more than no caching at all. Counts the calls
+   * that should have read (`CACHE_TRIP_CALLS`) and, at that many with no cached token ever served, drops to level 0
+   * for the model's life with one content-free line on the log. Any read ends the watch for good.
+   */
+  private watchReads(messages: ChatMessage[], marks: Set<number>, cached: number, sentAt: number): void {
+    if (this.readsSeen || this.cacheLevel === 0) return;
+    if (cached > 0) {
+      this.readsSeen = true;
+      this.prefixes.clear();
+      return;
+    }
+    const doneAt = (this.options.now ?? Date.now)();
+    // The request's one TTL (`anthropicCacheMessages`); a read is expected up to a minute short of it.
+    const ttlMs = messages.some((m, i) => marks.has(i) && m.cacheTtl === "1h") ? 3_600_000 : 300_000;
+    let expected = false;
+    const hash = createHash("sha256");
+    const text: string[] = [];
+    for (let i = 0; i <= Math.max(...marks); i++) {
+      const m = messages[i]!;
+      hash.update(`${m.role}\n${m.content}\u0000`);
+      text.push(m.content);
+      if (!marks.has(i) || estimateTokens(text.join("")) < MIN_CACHE_TOKENS) continue;
+      const key = hash.copy().digest("hex").slice(0, 32);
+      const prev = this.prefixes.get(key);
+      if (prev && sentAt >= prev.at && sentAt - prev.at <= prev.ttlMs - 60_000) expected = true;
+      this.prefixes.delete(key);
+      this.prefixes.set(key, { at: doneAt, ttlMs });
+      while (this.prefixes.size > WATCHED_PREFIXES) this.prefixes.delete(this.prefixes.keys().next().value as string);
+    }
+    if (expected && ++this.readsMissed >= CACHE_TRIP_CALLS) {
+      console.warn(
+        `eden: openrouter served no cached tokens on ${this.readsMissed} calls that should have read the cache; ` +
+          `cache level ${this.cacheLevel} -> 0`,
+      );
+      this.cacheLevel = 0;
+      this.prefixes.clear();
     }
   }
 
@@ -147,10 +221,13 @@ export class OpenRouterModel implements Model {
   private async read(res: Response, t0: number): Promise<ChatResponse> {
     const data = (await res.json()) as OpenRouterResponse;
     const reasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens;
+    const cacheWrite = data.usage?.prompt_tokens_details?.cache_write_tokens;
     const usage: Usage = {
       inputTokens: data.usage?.prompt_tokens ?? 0,
       outputTokens: data.usage?.completion_tokens ?? 0,
       cachedInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      // Written to the cache, when the route reports it (`OpenRouterResponse`); absent is not reported, not zero.
+      ...(typeof cacheWrite === "number" ? { cacheWriteTokens: cacheWrite } : {}),
       // The reasoning is excluded from the reply but billed as output: its share is only visible here.
       ...(typeof reasoningTokens === "number" ? { reasoningTokens } : {}),
     };
@@ -235,7 +312,12 @@ interface OpenRouterResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     cost?: number;
-    prompt_tokens_details?: { cached_tokens?: number };
+    /**
+     * `cache_write_tokens`: named on OpenRouter's prompt-caching page as summarised in
+     * docs/research/fast-primitives-notes/latency_and_prompt_caching.md; no live call has shown it, so it is read only
+     * when it is a number.
+     */
+    prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
     completion_tokens_details?: { reasoning_tokens?: number };
   };
 }
