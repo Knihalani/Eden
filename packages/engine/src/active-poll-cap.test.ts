@@ -8,7 +8,7 @@ import { checkEngineConfig } from "./config-check";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 
-// `syncActivePollCap` (D1747, trial): the freshness floor (D1131) polls every first-party source of an active user;
+// `syncActivePollCap` (D1747): the freshness floor (D1131) polls every first-party source of an active user;
 // at a thousand connectors that was about a thousand calls an active day (call-causes, D1746). With the cap the used
 // sources keep the floor and the others share an allowance of `cap` floor polls an interval, likeliest first.
 
@@ -138,13 +138,33 @@ describe("syncActivePollCap (D1747)", () => {
     expect(t.since(t.src.a, before).every((x) => x >= 1)).toBe(true);
   });
 
-  test("a due unused source with the allowance spent does not thaw the user (D325)", async () => {
-    const t = await setup(1, 30);
-    await t.tick(30, [A]);
-    const thaws = t.thaws.n;
-    await t.tick(60, [A]);
-    // Six refills of one poll in an hour: a couple of thaws each, not every tick (the first form asked 120).
-    expect(t.thaws.n - thaws).toBeLessThanOrEqual(15);
+  test("the floor thaws a many-source user about as often as without the allowance (D325)", async () => {
+    // 30 quiet unused sources, an allowance of 4 (refilled at one poll every 2.5 minutes): an unused source opens the
+    // block only once half the allowance is back, so a thaw takes a batch. The first form thawed every few minutes.
+    const off = await setup(0, 30);
+    const on = await setup(4, 30);
+    await off.tick(30, [A]);
+    await on.tick(30, [A]);
+    const [t0, t1] = [off.thaws.n, on.thaws.n];
+    await off.tick(120, [A]);
+    await on.tick(120, [A]);
+    const base = off.thaws.n - t0;
+    expect(on.thaws.n - t1).toBeLessThanOrEqual(2 * Math.max(base, 2));
+  });
+
+  test("no source starves behind busy ones: a dormant source is polled once it is overdue", async () => {
+    // 20 sources with a new item every five minutes take every turn of an allowance of 2 by change chance; the
+    // dormant one (month-old items) is polled once it has had no complete poll for 12 floors (2 h at this 10-minute
+    // floor), ahead of them.
+    const t = await setup(2, 21, (k) => (k < 20 ? 0 : 24 * 30));
+    const before = t.lists(t.src.a);
+    for (let m = 0; m < 6 * 60; m += 5) {
+      for (let k = 0; k < 20; k++) t.src.a[k]!.docs.set(`b${m}`, { text: `busy ${m}`, at: t.clock.now });
+      await t.tick(5, [A]);
+    }
+    const made = t.since(t.src.a, before);
+    expect(made[20]).toBeGreaterThanOrEqual(2);
+    expect(made[20]).toBeLessThanOrEqual(4);
   });
 
   test("isolation: one user's spent allowance does not hold back another's floor", async () => {

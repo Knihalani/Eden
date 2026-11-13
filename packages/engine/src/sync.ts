@@ -365,6 +365,12 @@ export interface SyncStats {
 /** `activePollBackoff`: a quiet source's floor interval doubles at most this often (a 2 h floor waits up to 8 h). */
 const FLOOR_BACKOFF_LEVELS = 2;
 
+/**
+ * `activePollCap` (D1747): an unused source with no complete poll for this many floor intervals (24 h at the 2 h floor)
+ * goes ahead of the change-rate order, so busy sources cannot keep a dormant one from its floor poll for ever.
+ */
+const OVERDUE_FLOORS = 12;
+
 /** The chance, by the source's learned change rate, that something changed since its last complete poll. */
 function changeChance(s: SourceSync, now: number): number {
   const rate = s.alpha / s.beta; // items per hour
@@ -1196,8 +1202,10 @@ export class SyncManager {
       // is due, those past half their interval go in the same thaw, so a user's sources do not each thaw them in turn
       // (the review: users freeze warm after 2 minutes idle, D862, well inside `activeMs`).
       // `activePollCap` (D1747): the user's used sources (`engage`) are polled as without it; the others share an
-      // allowance of `cap` a floor interval, refilled continuously, the likeliest to have changed by their learned
-      // rate first. An unused source due with the allowance spent does not open the floor's block (no thaw for it).
+      // allowance of `cap` a floor interval, refilled continuously: overdue ones first (no complete poll for
+      // `OVERDUE_FLOORS` floors, so none starves), then the likeliest to have changed by their learned rate. An unused
+      // source opens the floor's block (and its thaw, D325) only once half the allowance has refilled: a batch a thaw,
+      // not one poll every few minutes (the review: 1,401 thaws in 72 h against main's 36).
       const cap = this.o.activePollCap ?? 0;
       if (cap > 0) {
         const since = now - (u.floorRefilledAt ?? now);
@@ -1205,7 +1213,7 @@ export class SyncManager {
         u.floorRefilledAt = now;
       }
       const opens = (s: SourceSync) =>
-        floorDue(s, byId.get(s.id), 1) && (cap === 0 || s.engaged || (u.floorAllowance ?? 0) >= 1);
+        floorDue(s, byId.get(s.id), 1) && (cap === 0 || s.engaged || (u.floorAllowance ?? 0) >= Math.max(1, cap / 2));
       if ([...u.sources.values()].some(opens)) {
         await this.deps.cache.ready(u.scope);
         if (u.gone) return;
@@ -1214,7 +1222,8 @@ export class SyncManager {
           const allowance = Math.floor(u.floorAllowance ?? 0);
           const unused = due.filter((s) => !s.engaged);
           if (unused.length > allowance) {
-            const chance = new Map(unused.map((s) => [s, changeChance(s, now)] as const));
+            const overdue = (s: SourceSync) => (now - s.polledAt >= OVERDUE_FLOORS * floor ? 1 : 0);
+            const chance = new Map(unused.map((s) => [s, changeChance(s, now) + overdue(s)] as const));
             const taken = new Set(unused.sort((a, b) => chance.get(b)! - chance.get(a)!).slice(0, allowance));
             due = due.filter((s) => s.engaged || taken.has(s));
           }

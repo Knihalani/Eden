@@ -530,6 +530,13 @@ estimate is that ~90% of connectors send none: `--notify-share 0.05`). `days-cal
 `--days` user with the noise connectors and prints the planted items that reached the agent and the request-time
 calls by day, so a rule that learns over days can be screened at $0 (about 15 s a user).
 
+**Every call by its cause (D1746, docs/research/calls-and-wait.md):** `-- --call-causes FILE` (funnel; one JSON line
+a process, merged by `bun packages/sim/src/lab/call-causes.ts FILE`) and `days-calls.ts --call-causes` (per user-day)
+book each call a connector received to what made it: backfill, floor poll, catch-up, on-demand poll by push, ask or
+slow-path lookup, live search, probe, cut-behind search, re-read by kind, revision poll, sweep; with what each cause's
+listings stored new or changed, and the same by source (the noise connectors as one). Read a lever's calls from it
+before and after; the funnel's rows are identical with and without the flag.
+
 **Give the noise connectors words of their own: `--noise-vocab 1000`** (O1, docs/research/o1-earn.md §2b; funnel,
 pi-ab, days-calls). Without it the 995 share 45 sketchable words, so their vocabulary sketches set the same bits and
 any rule that reads sketches across sources looks better than it is: a review found about 27 false holders a
