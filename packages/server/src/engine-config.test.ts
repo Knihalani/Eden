@@ -143,19 +143,22 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
   });
 
-  test("EDEN_MODEL_CACHE (D1196's trial): cache breakpoints only when set to on", () => {
+  test("EDEN_MODEL_CACHE (D1790): cache breakpoints by default, none when set to off", () => {
     const seen: Record<string, unknown>[] = [];
     const make = (o: Record<string, unknown>) => {
       seen.push(o);
       return { id: "fake", chat: async () => ({}) } as never;
     };
-    modelRolesFromEnv({ OPENROUTER_API_KEY: "k" }, make as never);
-    expect(seen.every((o) => o.anthropicCache === undefined)).toBe(true);
+    for (const value of [undefined, "", "on"]) {
+      seen.length = 0;
+      modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: value }, make as never);
+      expect(seen.length).toBe(3);
+      expect(seen.every((o) => o.anthropicCache === true)).toBe(true);
+    }
     seen.length = 0;
-    modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "on" }, make as never);
-    expect(seen.length).toBe(3);
-    expect(seen.every((o) => o.anthropicCache === true)).toBe(true);
-    // A typo stops startup rather than reading as off.
+    modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "off" }, make as never);
+    expect(seen.every((o) => o.anthropicCache === undefined)).toBe(true);
+    // A typo stops startup rather than reading as either.
     expect(() => modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "ON" }, make as never)).toThrow(
       /EDEN_MODEL_CACHE must be on or off/,
     );

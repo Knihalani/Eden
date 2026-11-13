@@ -83,6 +83,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1451 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… |  |
 | D1452 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | every item it read and did not say yes to, 127 / 362 |
 | D1400 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | killed by D1402: Pre-registered rule (the owner's bar for G1, fixed before any live run): on dev20 seeds 41–44, hidden… |
+| D1741 | Rejected: `pushCheckSheetAppend`, the push check's rule sheet in the order its cards were made, one text block a rule, the breakpoint on… |  |
 | D1771 | Rejected at $0 on train: seating constraint cards in the push's and the ask's order. | The bar (+8 hidden retrieved or surfaced, decoys surfaced not up) is not met by any arm |
 
 ## Reader
