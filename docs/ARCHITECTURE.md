@@ -536,7 +536,8 @@ up to `intentCardHits` (4) such hits the `intentHits` cut left out (read 3x as d
 **The request glossary** (`requestGloss`, in the default since D1153, part `gloss`; F1, `gloss.ts`,
 [research/f1-intent-bridge.md](research/f1-intent-bridge.md)). A request whose own words read as another language (more
 of its non-name words known to one of the glossary's languages than to English) is given, with no model, the English
-words those words mean, from a glossary written once by a model (`gloss.bin`, read once a process); the push's and an
+words those words mean, from a glossary written once by a model (`gloss.bin`, answered from its bytes: the function
+words read when the partner is built, the lexicons on the first request that needs them, D1710); the push's and an
 ask's lookup search with them ahead of the request's own words, lexically and in the intent index. The request text the
 rules and the push check read is unchanged.
 

@@ -29,6 +29,7 @@ export { CANDIDATES_LEAD, inert, oneLine, renderAnswer, renderPacket } from "./r
 export { safeBlock, safeLine } from "./line";
 export { callParties, partiesIn, type Party } from "./parties";
 export { classifySituation, type Situation } from "./situation";
+export { packGlossary, type GlossLang } from "./gloss";
 export {
   contentTerms,
   distinctTermIds,
