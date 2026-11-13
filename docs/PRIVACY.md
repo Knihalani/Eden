@@ -59,12 +59,15 @@ and a statement on training (none).
 
 ## Controls in code
 
-- **Provider prompt cache (D1196, a trial, off: `EDEN_MODEL_CACHE=on`).** With it on, the roles' Anthropic calls
-  through OpenRouter carry `cache_control` breakpoints, and the provider holds the marked prefix in its prompt cache
-  for 5 minutes. For the push check and the card call that prefix is the system message only: Eden's fixed
-  instructions (the card call's adds the user's day). It holds no user content. The ask-time reader (not called by
-  the default's push, D237) also marks its `<standing>` block, which is redacted item text. OpenRouter documents
-  explicit caching as not data retention under ZDR. Off until the owner's probe decides it.
+- **Provider prompt cache (D1790, on by default; `EDEN_MODEL_CACHE=off` turns it off).** The roles' Anthropic
+  calls through OpenRouter carry `cache_control` breakpoints, and the provider holds the marked prefix in its prompt
+  cache for 5 minutes, or an hour where a breakpoint asks for it. For the card call the prefix is the system message
+  only: Eden's fixed instructions and the user's day, no user content. For the push check it is the fixed
+  instructions and, when the user has rules, the rule sheet (D1180): the user's own constraint cards as one redacted
+  line each (`sanitizeForStore`, fenced as data), held for up to an hour (D1197). The ask-time reader (not called by
+  the default's push, D237) also marks its `<standing>` block, which is redacted item text. The same text was always
+  sent; the breakpoint only asks the provider to keep the prefix for reuse. OpenRouter documents explicit caching as
+  not data retention under ZDR. A route that refuses the fields gets requests without them (`OpenRouterModel`).
 
 - **Isolation:** tenant from the API key; per-user partitioning of every cache, map row and budget (D9).
 - **Redaction:** `sanitizeForStore` on all stored, indexed, logged or model-bound text (D10).
