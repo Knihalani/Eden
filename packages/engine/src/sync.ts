@@ -1195,26 +1195,30 @@ export class SyncManager {
       // A poll stores into the cache: a frozen user is thawed first (`ready`, D325), as for a sweep. Once one source
       // is due, those past half their interval go in the same thaw, so a user's sources do not each thaw them in turn
       // (the review: users freeze warm after 2 minutes idle, D862, well inside `activeMs`).
-      if ([...u.sources.values()].some((s) => floorDue(s, byId.get(s.id), 1))) {
+      // `activePollCap` (D1747): the user's used sources (`engage`) are polled as without it; the others share an
+      // allowance of `cap` a floor interval, refilled continuously, the likeliest to have changed by their learned
+      // rate first. An unused source due with the allowance spent does not open the floor's block (no thaw for it).
+      const cap = this.o.activePollCap ?? 0;
+      if (cap > 0) {
+        const since = now - (u.floorRefilledAt ?? now);
+        u.floorAllowance = Math.min(cap, (u.floorAllowance ?? cap) + (cap * since) / floor);
+        u.floorRefilledAt = now;
+      }
+      const opens = (s: SourceSync) =>
+        floorDue(s, byId.get(s.id), 1) && (cap === 0 || s.engaged || (u.floorAllowance ?? 0) >= 1);
+      if ([...u.sources.values()].some(opens)) {
         await this.deps.cache.ready(u.scope);
         if (u.gone) return;
         let due = [...u.sources.values()].filter((s) => floorDue(s, byId.get(s.id), 0.5));
-        // `activePollCap` (D1747): the user's used sources (`engage`) are polled as without it; the others share an
-        // allowance of `cap` a floor interval, the likeliest to have changed by their learned rate first.
-        const cap = this.o.activePollCap ?? 0;
         if (cap > 0) {
-          const since = now - (u.floorRefilledAt ?? now);
-          u.floorAllowance = Math.min(cap, (u.floorAllowance ?? cap) + (cap * since) / floor);
-          u.floorRefilledAt = now;
+          const allowance = Math.floor(u.floorAllowance ?? 0);
           const unused = due.filter((s) => !s.engaged);
-          if (unused.length > u.floorAllowance) {
+          if (unused.length > allowance) {
             const chance = new Map(unused.map((s) => [s, changeChance(s, now)] as const));
-            const taken = new Set(
-              unused.sort((a, b) => chance.get(b)! - chance.get(a)!).slice(0, Math.floor(u.floorAllowance)),
-            );
+            const taken = new Set(unused.sort((a, b) => chance.get(b)! - chance.get(a)!).slice(0, allowance));
             due = due.filter((s) => s.engaged || taken.has(s));
           }
-          u.floorAllowance = Math.max(0, u.floorAllowance - due.filter((s) => !s.engaged).length);
+          u.floorAllowance = Math.max(0, (u.floorAllowance ?? 0) - due.filter((s) => !s.engaged).length);
         }
         await Promise.all(
           due.map(async (s) => {

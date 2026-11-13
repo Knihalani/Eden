@@ -54,6 +54,10 @@ async function setup(cap: number, n: number, ageH: (k: number) => number = () =>
     });
   const src = { a: mk(), b: mk() };
   const cache = new ItemCache();
+  // Thaws the floor asks for (`ready`): one a tick a due source opens the floor's block.
+  const thaws = { n: 0 };
+  const ready = cache.ready.bind(cache);
+  cache.ready = (scope: Scope) => (thaws.n++, ready(scope));
   const partner = new ContextPartner({
     sources: async (scope) => (scope.userId === "a" ? src.a : src.b),
     sourceMap: new SourceMap(":memory:", { seed: 1 }),
@@ -82,7 +86,7 @@ async function setup(cap: number, n: number, ageH: (k: number) => number = () =>
   const lists = (xs: Notes[]) => xs.map((x) => x.lists);
   const since = (xs: Notes[], before: number[]) => xs.map((x, k) => x.lists - before[k]!);
   const held = (scope: Scope, k: number, ref: string) => cache.get(scope, itemId(`notes-${k}`, ref), clock.now)?.text;
-  return { clock, src, sync, tick, lists, since, held };
+  return { clock, src, sync, tick, lists, since, held, thaws };
 }
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -132,6 +136,15 @@ describe("syncActivePollCap (D1747)", () => {
     const before = t.lists(t.src.a);
     await t.tick(24 * 60);
     expect(t.since(t.src.a, before).every((x) => x >= 1)).toBe(true);
+  });
+
+  test("a due unused source with the allowance spent does not thaw the user (D325)", async () => {
+    const t = await setup(1, 30);
+    await t.tick(30, [A]);
+    const thaws = t.thaws.n;
+    await t.tick(60, [A]);
+    // Six refills of one poll in an hour: a couple of thaws each, not every tick (the first form asked 120).
+    expect(t.thaws.n - thaws).toBeLessThanOrEqual(15);
   });
 
   test("isolation: one user's spent allowance does not hold back another's floor", async () => {
