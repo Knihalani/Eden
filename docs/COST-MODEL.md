@@ -903,7 +903,11 @@ default (eval 0.65 / 0.52 / 0), at $0.
   plans the floor is off unless the deployment opts in (`syncActivePollPriced`) and the figures above stand. On
   first-party APIs it costs quota, not money: floor polls are background reads, under the tenant's pace and behind first
   pages and a lookup's own polls (docs/research/s1-scale-1m.md §3, P1); a Gmail-scale tenant uses notifications, which
-  the floor skips.
+  the floor skips. **At many sources (D1747):** the floor polls a user's unused sources from an allowance of 40 a floor
+  interval (`syncActivePollCap`); used ones keep it. Measured at $0 with 995 first-party noise connectors (D1746's call
+  table): without the allowance the floor was about 1,000 calls an active user-day, 85% of the user's calls; with it
+  calls a user-day fell 1,186-1,253 → 273-285 (`days-calls.ts`, 8 users, 8 days, no notices) and the funnel's
+  282.6 → 89.9 a task, facts and look-alikes level. A user with up to 40 such sources is unaffected.
 
 - **The agent's tokens.** Measured per 1,000 tasks on the lab's cached Pi agent (a3-cost-speed.md, p2-push-check.md):
   a Haiku 5.5 agent's own bill is about $0.18-0.25 per 1,000 requests, so $0.27-0.37 per heavy user-month; Eden's

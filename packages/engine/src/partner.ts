@@ -804,6 +804,7 @@ export class ContextPartner {
                   activePollMs: c.syncActivePollMs,
                   activePollBackoff: c.syncActivePollBackoff,
                   activePollPriced: c.syncActivePollPriced,
+                  activePollCap: c.syncActivePollCap,
                 }
               : {}),
             activeMs: c.syncActiveMs,

@@ -597,6 +597,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   interval go in the same thaw. The request path's polls mostly stop (its sources are current), so look-alikes reach the
   push's pool more often on train (funnel delivered 123 → 145 of 192, seed 41); F2's structural filters are the planned
   answer. `active-poll.test.ts`.
+- **The floor's allowance for unused sources (`syncActivePollCap` 40, D1747, in the default).** Used sources (`engaged`)
+  keep the floor; the others share `UserSync.floorAllowance`, 40 floor polls a floor interval refilled continuously, and
+  when more are due the likeliest to have changed (`changeChance`, the learned rate over the age) go first. Without it
+  a user with a thousand first-party connectors made about 1,000 floor calls an active day (85% of their calls, D1746).
+  With up to 40 unused due sources nothing changes, so the five- and thirteen-source screens cannot see it: screen it
+  with `days-calls.ts --noise-sources 995 --noise-vocab 1000 --call-causes`. An unused copy re-listed less often lapses
+  past the synced TTL (7 days) until its weekly sweep; the D356 re-read covers its deliveries. Ordering every due source
+  by chance (used ones too) let noise connectors take the world's crm and drive polls: keep used sources outside the
+  allowance. `active-poll-cap.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
   skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
   daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle
