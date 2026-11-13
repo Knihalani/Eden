@@ -121,36 +121,9 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
     if (new Date(at).getUTCDate() !== day) continue; // "31st of February" is no date
     add(at);
   }
-  if (process.env.EDEN_RANGE) for (const r of dayRanges(t, today)) add(r.start, r.n);
   const asksNext = NEXT_EVENT.test(t);
   if (days.size === 0 && !asksNext) return null;
   return { days, next: asksNext };
-}
-
-const ORD = String.raw`(?:st|nd|rd|th)?`;
-const WD = String.raw`(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day,?\s+)?`;
-/** Day ranges a request writes: "12–14 November", "30 November to 4 December" (at most 14 days). */
-function dayRanges(t: string, today: number): { start: number; n: number }[] {
-  const out: { start: number; n: number }[] = [];
-  const dateOf = (day: string, month: string) => {
-    const m = MONTHS.indexOf(month.slice(0, 3));
-    const year = new Date(today).getUTCFullYear();
-    let at = Date.UTC(year, m, Number(day));
-    if (at < today - 182 * DAY) at = Date.UTC(year + 1, m, Number(day));
-    return at;
-  };
-  const push = (a: number, b: number) => {
-    if (b < a) b = Date.UTC(new Date(b).getUTCFullYear() + 1, new Date(b).getUTCMonth(), new Date(b).getUTCDate());
-    const n = Math.round((b - a) / DAY) + 1;
-    if (n >= 2 && n <= 14) out.push({ start: a, n });
-  };
-  const SEP = String.raw`\s*(?:–|-|to|until|till)\s*`;
-  for (const m of t.matchAll(new RegExp(String.raw`\b(\d{1,2})${ORD}${SEP}(\d{1,2})${ORD}\s+${MONTH}\b`, "g"))) {
-    push(dateOf(m[1]!, m[3]!), dateOf(m[2]!, m[3]!));
-  }
-  const two = String.raw`\b(\d{1,2})${ORD}\s+${MONTH}${SEP}${WD}(\d{1,2})${ORD}\s+${MONTH}\b`;
-  for (const m of t.matchAll(new RegExp(two, "g"))) push(dateOf(m[1]!, m[2]!), dateOf(m[3]!, m[4]!));
-  return out;
 }
 
 /**
