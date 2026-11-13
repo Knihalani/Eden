@@ -59,10 +59,16 @@ const ENTRIES = [
   "packages/server/src/trace-report.ts",
   "packages/proxy/src/main.ts",
 ];
+/** The secret gate's test support (D1705): re2js, its oracle, is a devDependency, so it is not installed there. */
+const GATE_TEST_SUPPORT = ["packages/redact/src/re2-oracle.ts", "packages/redact/src/differential.ts"];
 const excludedFromImage = (path: string) =>
   (path.startsWith("packages/sim/") && path !== "packages/sim/package.json") ||
   path.endsWith(".test.ts") ||
-  /^packages\/[^/]+\/bench\//.test(path);
+  /^packages\/[^/]+\/bench\//.test(path) ||
+  GATE_TEST_SUPPORT.includes(path);
+
+/** Bare module names (not relative, `@eden/*`, `node:` or `bun:`) the served files import: npm packages. */
+const npmImports = new Set<string>();
 
 function served(): Set<string> {
   const transpiler = new Bun.Transpiler({ loader: "ts" });
@@ -75,6 +81,7 @@ function served(): Set<string> {
     // A shebang line (cli.ts) is not TypeScript to the scanner.
     for (const { path: spec } of transpiler.scanImports(read(file).replace(/^#!.*/, ""))) {
       let target: string | undefined;
+      if (!/^(\.|@eden\/|node:|bun:|bun$)/.test(spec)) npmImports.add(spec);
       if (spec.startsWith(".")) target = join(file, "..", spec);
       else if (spec.startsWith("@eden/")) {
         const [, name, ...rest] = spec.split("/");
@@ -95,7 +102,13 @@ function served(): Set<string> {
 
 test("the .dockerignore excludes what the servers never import", () => {
   const ignore = read(".dockerignore");
-  for (const line of ["packages/sim/**", "!packages/sim/package.json", "**/*.test.ts", "packages/*/bench"])
+  for (const line of [
+    "packages/sim/**",
+    "!packages/sim/package.json",
+    "**/*.test.ts",
+    "packages/*/bench",
+    ...GATE_TEST_SUPPORT,
+  ])
     expect(ignore.split("\n")).toContain(line);
   const files = served();
   expect(files.size).toBeGreaterThan(50);
@@ -103,6 +116,13 @@ test("the .dockerignore excludes what the servers never import", () => {
   expect([...files].filter(excludedFromImage)).toEqual([]);
   // The walk would see an import of the lab: it reaches @eden/sim's entry from a file that imports it.
   expect(excludedFromImage("packages/sim/src/index.ts")).toBe(true);
+});
+
+// D1705: Eden ships with no production npm dependency (`bun install --production` installs none). The servers import
+// no npm package; the secret gate's oracle, re2js, is a devDependency its tests alone load.
+test("the servers import no npm package", () => {
+  served();
+  expect([...npmImports]).toEqual([]);
 });
 
 // D1600: the server runs on Bun's distroless image, which has no /bin/sh. A shell-form RUN, CMD or HEALTHCHECK in the

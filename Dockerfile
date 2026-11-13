@@ -21,7 +21,8 @@ COPY packages ./packages
 COPY examples ./examples
 # The "default minus a part" profiles, for EDEN_ENGINE_CONFIG=docs/profiles/minus-<part>.json.
 COPY docs/profiles ./docs/profiles
-# Only the server's runtime dependencies (re2js; Eden's own MCP code since D1704); no lab, no dev tools.
+# The production install: no npm package since D1705 (Eden's own MCP code, D1704, and secret matchers, D1705), only
+# the workspace links; no lab, no dev tools.
 # Behind a TLS-inspecting proxy, pass its CA for this step only (never baked into the image):
 #   docker build --secret id=ca,src=/path/to/ca.pem -t eden .
 RUN --mount=type=secret,id=ca,required=false \

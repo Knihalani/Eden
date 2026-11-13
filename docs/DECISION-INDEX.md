@@ -753,6 +753,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1702 | 2026-11-12 | A node drops port 8790 from outside the private range in DOCKER-USER. | adopted |
 | D1703 | 2026-11-12 | Finding: every file and every product design choice reviewed; no further switch clears the bar. | finding |
 | D1704 | 2026-11-12 | Adopted: Eden speaks MCP through its own minimal client, streamable HTTP transport and `ask_context` server; `@modelcontextprotocol/sdk`… | adopted |
+| D1705 | 2026-11-13 | Adopted: Eden has no production npm dependency. The seven gitleaks rules that backtrack in JavaScript run on hand-written linear matchers… | adopted |
 | D1710 | 2026-11-13 | Adopted: the request glossary is answered from its file's bytes, and a process reads its lexicons only when a request could be read as… | adopted |
 | D1715 | 2026-11-13 | Rejected: a binary layout specialised to a frozen user's structures, in place of the compact form's zstd JSON and the warm form's ("EDF2")… | rejected |
 | D1720 | 2026-11-13 | Rejected: a specialised store for the source map (an in-memory map per user with an append-only log and compaction) in place of… | rejected |

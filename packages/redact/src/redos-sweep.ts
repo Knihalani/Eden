@@ -3,11 +3,11 @@
  * takes about 6 s, so it is split by rule index over four files that a parallel test run (`scripts/test.sh`) runs at
  * once; together they cover every rule (rule i is in shard i % SHARDS). Not exported from index.ts.
  */
-import { RE2_RULES, secretRules, type SecretRule } from "./secrets";
+import { LINEAR_RULES, secretRules, type SecretRule } from "./secrets";
 
 export const SHARDS = 4;
 
-// A reduced form of the search that found RE2_RULES: each rule's first keyword, then runs of characters its classes
+// A reduced form of the search that found LINEAR_RULES: each rule's first keyword, then runs of characters its classes
 // take, at 8 KB. Measured once: the rules left on JavaScript took at most 13 ms here, while with every rule on
 // JavaScript the seven slow ones took 81–755 ms (curl-*: ~80 ms; sumologic-, okta-, cohere-: 560–760 ms). So a
 // gitleaks update that adds a backtracking rule fails here; the ceiling leaves room for a GC pause.
@@ -15,10 +15,10 @@ const UNITS = ["a", "0", "f", "-", ".", "_", " ", "=", "/", ":", "\n", "'", "@",
 export const CEILING_MS = 40;
 const SIZE = 8_192;
 
-/** The rules on JavaScript's engine (every gitleaks rule outside RE2_RULES, and every Eden rule) in shard `shard`. */
+/** The rules on JavaScript's engine (each gitleaks rule outside LINEAR_RULES, and each Eden rule) in shard `shard`. */
 export function shardRules(shard: number): SecretRule[] {
   return secretRules()
-    .filter((rule) => !RE2_RULES.has(rule.id))
+    .filter((rule) => !LINEAR_RULES.has(rule.id))
     .filter((_, i) => i % SHARDS === shard);
 }
 
