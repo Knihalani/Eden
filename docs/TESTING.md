@@ -495,6 +495,41 @@ audit's 90 s target for the sum was not reached on this shared machine: the sum 
 these changes save (the per-test differences above). The one failure seen in these runs (after, load 9.0) was
 `cards.test.ts`'s "linear on hostile input", a 50 ms wall bound outside this change.
 
+## The cold gate at 20% faster: not reachable with the listed levers (D1747, 2026-11-13, 4 cores shared, Bun 1.4.4)
+
+The ask: `CHECK_COLD=1 bun run check` at least 20% faster (interleaved medians of 3), every test file still run, no
+assertion weakened. Measured first, on a machine two other agents kept at load 8-30.
+
+**Profile** (each of the 294 files alone, `TIMEFORMAT='%R %U %S'; time bun test ./file`, CPU = user + sys, children
+included; scratch script): 287.7 s of wall and 268.5 s of CPU in all. The main run's 268 files are 249.3 s of CPU
+(34.0 s of it waiting: wall past CPU), the tail's 26 files 19.2 s of CPU in 67.9 s of wall. 224 files take under
+0.6 s of CPU (46.7 s in all, median 0.18 s: start-up, the preload and imports). By CPU: `funnel-flags` 23.8 s,
+`pi-ab-resume` 15.7, `days-calls` 11.4, `suites` 11.0, `sim.test` 8.5, `router-processes` 7.7, `client-package` 7.5,
+`gloss-packed` 6.3, `reader-stub` 5.8, `test-cache` 5.7, `own-matchers` 5.2, `injection-suite` 5.2: the end-to-end
+simulation files hold about 100 s of the 268, and D819 already slimmed them. On four cores the tests cannot go under
+about 62 s of CPU-bound wall, and the tail (8 at a time) follows.
+
+**The levers, each measured:**
+
+| Lever | Measured | What it could save of the gate |
+|---|---|---|
+| Fuzz counts behind `TEST_DEEP=1` (gloss 10,000 → 3,000, day-facts 40,000 → 10,000, conflict-memo 60,000/3,000/3,000 → 15,000/1,000/1,000, linear 400 → 150 texts) | those tests 3.18 → 1.02 s, 2.08 → 0.48, 2.32 → 0.74, 3.53 → 2.56 (linear's time is mostly building both rule sets) | about 6.3 s of CPU, under 2 s of wall (2%) |
+| `proxy-speculate.test.ts`: its ten independent turns at once, each counting its own user's upstream calls (kept) | the file 13.0 s → 7.0-7.1 s alone (3 runs each) | none: the tail is bound by its throughput at 8 jobs, not by one file (tail alone, interleaved: 14.4, 14.5, 13.2 s before; 13.7, 14.3, 13.9 after, load 17-19) |
+| `card-queue.test.ts` to the tail (kept: 8.7 s of wall, 1.5 of CPU, D811's rule) | frees about 7 s of a main-run worker | under 2 s of wall |
+| `cluster.test.ts` to the tail (8.4 s of wall, 0.55 of CPU) | its three machines' start-up in the tail; a router-processes deadline test failed beside it at load 30 | reverted |
+| The tail at 16 or 32 jobs | 11.3-11.8 s and 10.8-13.1 s against 13.6-14.3 s at 8 (load 17-26, 3 rounds each), with 1 and 2-4 deadline tests failing a run at 16 and 32, and 0-1 at 8 | not taken: D811 made the tail for exactly these flakes |
+
+Together the zero-coverage levers save about 2 s of a 65-100 s gate, and the fuzz cuts about 2 s more at a quarter of
+the inputs: far from 20%, so the fuzz counts are left as they were. Interleaved cold gates (base, then the first
+candidate with every lever above) read 197.5, 138.7, 152.2 s on the base and 193.3, 91.9, 184.8 s on the candidate
+at load 8-30: the load moved each run by more than any lever could, and the candidate run had a fault of its own (a
+constant out of scope in `conflict-memo.test.ts`, caught by its typecheck), so those runs decide nothing. The base's
+own runs failed `funnel-flags`'s `--neutral` merge and `http.test.ts`'s D100 timing test under that load, as other
+sessions' gates did.
+
+What would reach 20%: fewer, cheaper end-to-end processes (`funnel-flags` starts thirteen, `pi-ab-resume` four), a
+shared module graph across files (`--no-isolate`, which D811 declined), or more cores. Each is a decision of its own.
+
 ## The slowest files (each alone, `bun test <file>`, wall incl. ~70 ms start-up)
 
 | File | ms | Where the time goes | Proposal |
