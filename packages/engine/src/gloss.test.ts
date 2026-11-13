@@ -2,11 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gzipSync } from "node:zlib";
-import { glossOf, languagesOf, loadGlossary, MAX_GLOSS_WORDS, warmGlossary } from "./gloss";
+import { glossOf, languagesOf, loadGlossary, MAX_GLOSS_WORDS, packGlossary, warmGlossary } from "./gloss";
+
+/** The packed file for languages written as version 1 wrote them (function words, `word\tgloss` lines). */
+const pack = (langs: Record<string, { fn: string[]; tsv: string }>) =>
+  packGlossary(
+    Object.entries(langs).map(([code, l]) => ({
+      code,
+      fn: l.fn,
+      glosses: l.tsv.split("\n").map((line) => line.split("\t") as [string, string]),
+    })),
+  );
 
 const packed = {
-  v: 1,
   langs: {
     it: {
       fn: ["voglio", "dai", "al", "il", "di"],
@@ -19,7 +27,7 @@ const packed = {
   },
 };
 const file = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
-writeFileSync(file, gzipSync(JSON.stringify(packed)));
+writeFileSync(file, pack(packed.langs));
 const langs = loadGlossary(file)!;
 
 describe("glossOf", () => {
@@ -45,7 +53,6 @@ describe("glossOf", () => {
 
   test("bounded, and fails open with no glossary", () => {
     const many = {
-      v: 1,
       langs: {
         it: {
           fn: ["il", "di"],
@@ -54,7 +61,7 @@ describe("glossOf", () => {
       },
     };
     const f = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
-    writeFileSync(f, gzipSync(JSON.stringify(many)));
+    writeFileSync(f, pack(many.langs));
     const text = `il di ${Array.from({ length: 40 }, (_, i) => `w${"a".repeat(i + 1)}`).join(" ")}`;
     expect(glossOf(text, loadGlossary(f)).split(" ").length).toBe(MAX_GLOSS_WORDS);
     expect(loadGlossary("/nonexistent/gloss.bin")).toBeNull();
@@ -95,11 +102,9 @@ describe("glossOf on the shipped glossary", () => {
     expect(glossOf(nfc.normalize("NFD"), shipped)).toBe(glossOf(nfc, shipped));
   });
 
-  test("a glossary that parses but reads wrong is no glossary", () => {
+  test("a version 1 file (gzip of JSON) is no glossary", () => {
     const f = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
-    writeFileSync(f, gzipSync(JSON.stringify({ v: 1, langs: { it: { fn: ["il"], tsv: 7 } } })));
-    expect(loadGlossary(f)).toBeNull();
-    writeFileSync(f, gzipSync(JSON.stringify({ v: 2, langs: {} })));
+    writeFileSync(f, Bun.gzipSync(JSON.stringify({ v: 1, langs: packed.langs })));
     expect(loadGlossary(f)).toBeNull();
   });
 });

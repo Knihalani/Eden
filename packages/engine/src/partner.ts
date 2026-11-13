@@ -706,7 +706,8 @@ export class ContextPartner {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
-    // `requestGloss` (F1, D1153): the glossary is read here too, once a process, not on the first request.
+    // `requestGloss` (F1, D1153): the glossary's prefix is read here too, once a process (D1710: function words,
+    // English words, the keys' filters); its lexicons only when a request could be read as another language.
     if (this.config.requestGloss) warmGlossary();
     this.now = deps.now ?? Date.now;
     const maxText = deps.cache.maxTextChars;
