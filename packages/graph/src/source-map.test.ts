@@ -182,7 +182,7 @@ describe("Thompson routing", () => {
       const scope = { tenantId: "t", userId: "u" };
       const end = Date.now() + 400;
       while (map && Date.now() < end) {
-        // flush() each time: mentions are written behind (D1745), and this test is of the writes contending.
+        // flush() each time: mentions are written behind (D1780), and this test is of the writes contending.
         try { map.recordMentionsMany(scope, [{ sourceId: "p" + process.pid, entities: ["shared"] }]); map.flush(); writes++; }
         catch { errors++; }
       }

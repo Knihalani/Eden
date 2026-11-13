@@ -44,7 +44,7 @@ them again), leaving a 250 KB database and a 4.2 MB WAL. An append-only log of t
 source, two numbers, framing) would write about 270 KB, some 35-40x less. This is the one measure where a specialised
 store clears 1.5x. It is not taken, for three reasons:
 
-- **The same lever exists inside SQLite (built in D1745).** Buffering the mentions as the outcomes already are (one transaction a
+- **The same lever exists inside SQLite (built in D1780).** Buffering the mentions as the outcomes already are (one transaction a
   second; screened by wrapping `recordMentionsMany`) wrote 2.27 MB for the run, about 4x less, with no new store, no
   new recovery code and the same crash bound D4 accepted for outcomes. It is a candidate, not done here: its reads
   must flush first as `outcomes` does, and it changes when a mention becomes visible to another process.
@@ -61,9 +61,9 @@ Keep `bun:sqlite` (D4, D8, D15). Request latency cannot gain more than 1.04x; a 
 per user; the disk-write gain is real but most of it is available inside SQLite by batching mentions, which is the
 place to start if write volume ever matters.
 
-## Built (D1745)
+## Built (D1780)
 
 Mentions are now written behind, one transaction within a second, with reads adding the pending counts. Measured on
 the same workload (a scratch harness, interleaved, 3 runs each): 7.58-8.26 MB written on main against 2.21-2.29 MB,
 3.6x less in all and 3.8-3.9x per mention upsert (1,330-1,404 B against 356-357 B); `recordMentionsMany` 0.47-0.53 ms
-a call → 0.10-0.11 ms. Funnel and eval unchanged. The crash bound and the tests are in D1745.
+a call → 0.10-0.11 ms. Funnel and eval unchanged. The crash bound and the tests are in D1780.

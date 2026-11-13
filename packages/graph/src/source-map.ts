@@ -15,7 +15,7 @@
  * ~2 µs instead of ~190 µs (an fsync per commit, on the event loop); a crash loses at most the last few milliseconds
  * of counts, which learning shrugs off (docs/research/primitives.md).
  *
- * Mentions are written behind too (D1745): a lookup's mentions are summed in memory per (user, entity, source) and
+ * Mentions are written behind too (D1780): a lookup's mentions are summed in memory per (user, entity, source) and
  * written in one transaction within `MENTION_FLUSH_MS` (1 s, or at `MENTION_FLUSH_ROWS` distinct rows), which cut the
  * file's disk writes about 4x on the pipeline bench (each commit rewrites every B-tree page it touches into the WAL).
  * Reads of mentions (`sourcesFor`, so `route`) add the pending counts to what the file holds instead of flushing, or
@@ -65,7 +65,7 @@ export interface SourceMapOptions {
    */
   explore?: boolean;
   seed?: number;
-  /** How long mentions wait in memory before their transaction (D1745; default 1 s). Tests shorten it. */
+  /** How long mentions wait in memory before their transaction (D1780; default 1 s). Tests shorten it. */
   mentionFlushMs?: number;
 }
 
@@ -81,7 +81,7 @@ export class SourceMap {
   private readonly db: Database;
   private pending: [scope: string, situation: string, sourceId: string, used: number][] = [];
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Mentions not yet written (D1745): scope key → entity → source id → [count to add, last seen]. */
+  /** Mentions not yet written (D1780): scope key → entity → source id → [count to add, last seen]. */
   private mentions = new Map<string, Map<string, Map<string, [count: number, lastSeen: number]>>>();
   private mentionRows = 0;
   private mentionTimer: ReturnType<typeof setTimeout> | undefined;
@@ -134,7 +134,7 @@ export class SourceMap {
   }
 
   /**
-   * As `recordMentions` for many items: a lookup's results are recorded together. Since D1745 they are summed in
+   * As `recordMentions` for many items: a lookup's results are recorded together. Since D1780 they are summed in
    * memory and written with every other mention of the next second in one transaction (one transaction a lookup cost
    * 0.47-0.53 ms and about 1.4 KB of disk writes a mention; packages/graph/CLAUDE.md).
    */
@@ -160,7 +160,7 @@ export class SourceMap {
     if (this.mentionRows >= MENTION_FLUSH_ROWS) this.flushMentions();
     else if (this.mentionRows > 0 && this.mentionTimer === undefined) {
       this.mentionTimer = setTimeout(() => this.flushMentionsInBackground(), this.mentionFlushMs);
-      // A pending batch never holds a process open: a normal exit flushes it (`OPEN`), a crash loses it (D1745).
+      // A pending batch never holds a process open: a normal exit flushes it (`OPEN`), a crash loses it (D1780).
       this.mentionTimer.unref?.();
     }
   }
@@ -279,7 +279,7 @@ export class SourceMap {
   }
 
   /**
-   * Which sources have mentioned an entity, most often first (ties by source id). Pending mentions (D1745) are added
+   * Which sources have mentioned an entity, most often first (ties by source id). Pending mentions (D1780) are added
    * to the file's counts, so a read sees every mention recorded, written yet or not.
    */
   sourcesFor(scope: Scope, entity: string): { sourceId: string; count: number }[] {
@@ -456,7 +456,7 @@ export interface UserRows {
 const NONE = { shown: 0, used: 0 } as const;
 
 /**
- * File-backed maps not yet closed, flushed at a normal exit (D1745: an mcp-stdio process ends when its client closes
+ * File-backed maps not yet closed, flushed at a normal exit (D1780: an mcp-stdio process ends when its client closes
  * stdin and never calls `close`). One listener for the module, not one a map. Held weakly: the lab builds an
  * in-memory map a task and never closes it, and a strong set would keep every one alive (in-memory maps are not
  * registered at all: nothing outlives the process). A map dropped with mentions pending is still held by its timer

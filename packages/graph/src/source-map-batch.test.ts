@@ -1,5 +1,5 @@
 /**
- * D1745: mentions are written behind, in one transaction a second. Reads see them before they are written, a crash
+ * D1780: mentions are written behind, in one transaction a second. Reads see them before they are written, a crash
  * loses at most the pending batch and never a written row, and a normal exit or `close` writes them.
  */
 import { Database } from "bun:sqlite";
@@ -32,7 +32,7 @@ const onDisk = (path: string) => {
   }
 };
 
-describe("SourceMap mentions written behind (D1745)", () => {
+describe("SourceMap mentions written behind (D1780)", () => {
   test("a read right after a write sees it, summed with what the file holds, per user and tenant", () => {
     const path = fileOf();
     const map = new SourceMap(path, { explore: false });
