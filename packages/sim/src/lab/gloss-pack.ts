@@ -1,5 +1,6 @@
 /**
- * F1: packs `gloss-make.ts`'s output into the engine's `gloss.bin` (gzip of JSON, version 1; gloss.ts reads it). Per
+ * F1: packs `gloss-make.ts`'s output into the engine's `gloss.bin` (the packed layout, version 2, D1710:
+ * `packGlossary`, which gloss.ts reads; version 1 was gzip of JSON). Per
  * language: its function words (`fn` lines, less any an English request also uses: an English stopword or a word the
  * glosses use, so "die" or "has" never tells German or Dutch from English) and its glossed words (one word each, NFC,
  * its glosses from every topic merged, at most three English words; a word whose gloss is itself is left out:
@@ -9,8 +10,7 @@
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { gzipSync } from "node:zlib";
-import { isStopword } from "@eden/engine";
+import { type GlossLang, isStopword, packGlossary } from "@eden/engine";
 
 const argv = process.argv.slice(2);
 const opt = (k: string) => {
@@ -62,18 +62,17 @@ for (const f of files) {
   }
   tables.set(f.slice(0, -6), { fn, g });
 }
-const langs: Record<string, { fn: string[]; tsv: string }> = {};
+const langs: GlossLang[] = [];
 let words = 0;
 for (const [lang, { fn, g }] of tables) {
   const fns = [...fn].filter((w) => !isStopword(w) && !english.has(w)).sort();
-  const lines = [...g]
+  const glosses = [...g]
     .filter(([w, e]) => e.length > 0 && !(e.length === 1 && e[0] === w) && !fn.has(w))
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([w, e]) => `${w}\t${e.join(" ")}`);
-  words += lines.length;
-  langs[lang] = { fn: fns, tsv: lines.join("\n") };
-  console.log(`${lang}: ${fns.length} function words, ${lines.length} glossed`);
+    .map(([w, e]): [string, string] => [w, e.join(" ")]);
+  words += glosses.length;
+  langs.push({ code: lang, fn: fns, glosses });
+  console.log(`${lang}: ${fns.length} function words, ${glosses.length} glossed`);
 }
-const bin = gzipSync(JSON.stringify({ v: 1, langs }), { level: 9 });
+const bin = packGlossary(langs);
 writeFileSync(opt("out"), bin);
-console.log(`${Object.keys(langs).length} languages, ${words} words, ${bin.length} bytes -> ${opt("out")}`);
+console.log(`${langs.length} languages, ${words} words, ${bin.length} bytes -> ${opt("out")}`);
