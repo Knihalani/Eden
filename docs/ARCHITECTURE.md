@@ -112,7 +112,8 @@ cut off at its token cap (D45),
 Eden first grounds the request in the items' structure (D44, `grounding.ts`): who takes part (`meta.people`, from
 attendees, senders and recipients) and when it starts (`meta.start`). A full name the request acts on matches a
 participant by identity; a request about meeting someone takes only an event with them, any other one also needs a word
-of its topic; days the request names ("this Sunday", "next week", "12 November"), resolved at the user's own UTC offset
+of its topic; days the request names ("this Sunday", "next week", "12 November"; a range such as "12–14 November" is
+every day in it, up to two weeks, and a longer one its two ends, D1773), resolved at the user's own UTC offset
 (the one most of their events carry), select the events on them (an event's day is the date its start was written
 with, except that a start in UTC at a user with another offset is read at theirs: 23:30Z on the 6th is the 7th at
 +01:00), and "the next X" (an event: "the next call") the earliest upcoming. A question about nothing but a time is sent as a listing of those days (`SearchQuery.window`, no
