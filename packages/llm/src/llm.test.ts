@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Budget, TenantSpend } from "./budget";
-import { CACHE_TRIP_CALLS, MIN_CACHE_TOKENS, OpenRouterModel } from "./openrouter";
+import { CACHE_TRIP_CALLS, minCacheTokens, OpenRouterModel } from "./openrouter";
 import { costOf, priceFor } from "./pricing";
 
 describe("pricing", () => {
@@ -563,7 +563,7 @@ describe("OpenRouterModel", () => {
 // D1800: a route that bills cache writes and never serves a read is stopped after CACHE_TRIP_CALLS calls that should
 // have read; a cold start, low traffic or a short prefix never counts.
 describe("OpenRouterModel's read watch (D1800)", () => {
-  const LONG = "x".repeat(MIN_CACHE_TOKENS * 4 + 400);
+  const LONG = "x".repeat(minCacheTokens("anthropic/claude-haiku-5.5") * 4 + 400);
   const request = (system = LONG, sheet?: string) => ({
     messages: [
       { role: "system" as const, content: system },
@@ -703,5 +703,102 @@ describe("OpenRouterModel's read watch (D1800)", () => {
     expect(texts(sent[0])).toEqual(texts(sent[1]));
     expect(JSON.stringify(sent[0].messages[1])).toContain("cache_control");
     expect(JSON.stringify(sent[1].messages[1])).not.toContain("cache_control");
+  });
+});
+
+// D1800 (review): each breakpoint gets its own TTL, longer before shorter; hour refusals are counted apart; the read
+// watch's minimum prefix is the model's own.
+describe("OpenRouterModel's TTLs and refusals (D1800)", () => {
+  const ok = () => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      sent.push(body);
+      if (JSON.stringify(body.messages).includes('"ttl":"1h"') && refuseHour) {
+        return new Response('{"error":"bad ttl"}', { status: 400 });
+      }
+      return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    return { sent, fake };
+  };
+  let refuseHour = false;
+  const model = (fake: typeof fetch, name = "anthropic/claude-haiku-5.5", now?: () => number) =>
+    new OpenRouterModel({ apiKey: "k", model: name, fetch: fake, anthropicCache: true, ...(now ? { now } : {}) });
+  const control = (body: any) =>
+    body.messages.map((m: any) => (Array.isArray(m.content) ? m.content[0].cache_control : null));
+  const hour = { type: "ephemeral", ttl: "1h" };
+  const five = { type: "ephemeral" };
+  const sys = (ttl?: "1h") => ({
+    role: "system" as const,
+    content: "rules",
+    ...(ttl ? { cache: true, cacheTtl: ttl } : {}),
+  });
+  const sheet = (ttl?: "1h") => ({
+    role: "user" as const,
+    content: "sheet",
+    ...(ttl ? { cache: true, cacheTtl: ttl } : {}),
+  });
+  const ask = { role: "user" as const, content: "the request" };
+
+  test("the instructions can ask the hour alone; a later hour carries every earlier breakpoint with it", async () => {
+    refuseHour = false;
+    const { sent, fake } = ok();
+    const m = model(fake);
+    await m.chat({ messages: [sys("1h"), sheet(), ask], maxTokens: 5 });
+    expect(control(sent[0])).toEqual([hour, null, null]);
+    await m.chat({ messages: [sys(), sheet("1h"), ask], maxTokens: 5 });
+    expect(control(sent[1])).toEqual([hour, hour, null]);
+    // An hour first and five minutes after it is Anthropic's order; never five minutes before an hour.
+    const late = { role: "user" as const, content: "late", cache: true };
+    await m.chat({ messages: [sys("1h"), late, ask], maxTokens: 5 });
+    expect(control(sent[2])).toEqual([hour, five, null]);
+    await m.chat({ messages: [sys(), sheet(), ask], maxTokens: 5 });
+    expect(control(sent[3])).toEqual([five, null, null]);
+  });
+
+  test("a refused hour keeps the instructions' breakpoint at five minutes (level 1)", async () => {
+    refuseHour = true;
+    const { sent, fake } = ok();
+    const m = model(fake);
+    expect((await m.chat({ messages: [sys("1h"), ask], maxTokens: 5 })).text).toBe("ok");
+    expect(control(sent[0])).toEqual([hour, null]);
+    expect(control(sent[1])).toEqual([five, null]);
+    refuseHour = false;
+  });
+
+  test("hour refusals are counted apart: interleaved with hour-free requests, two lower the level to 1", async () => {
+    refuseHour = true;
+    const { sent, fake } = ok();
+    const m = model(fake);
+    for (let i = 0; i < 40; i++) {
+      await m.chat({ messages: i % 2 === 0 ? [sys(), sheet("1h"), ask] : [sys(), ask], maxTokens: 5 });
+    }
+    expect(m.cacheLevel).toBe(1);
+    // Two refused hours (two POSTs each), then one POST a call: the hour is no longer sent.
+    expect(sent.length).toBe(42);
+    expect(sent.slice(-10).some((b) => JSON.stringify(b.messages).includes('"ttl":"1h"'))).toBe(false);
+    refuseHour = false;
+  });
+
+  test("the read watch counts only prefixes the model can cache: an unlisted model's minimum is 4,096", async () => {
+    expect(minCacheTokens("anthropic/claude-haiku-5.5")).toBe(512);
+    expect(minCacheTokens("anthropic/claude-some-other")).toBe(4_096);
+    const fake = (async () =>
+      Response.json({
+        choices: [{ message: { content: "ok" } }],
+        usage: { prompt_tokens_details: { cached_tokens: 0 } },
+      })) as unknown as typeof fetch;
+    let now = 0;
+    const mid = "x".repeat(1_000 * 4);
+    const other = model(fake, "anthropic/claude-some-other", () => now);
+    const haiku = model(fake, "anthropic/claude-haiku-5.5", () => now);
+    for (let i = 0; i < 2 * CACHE_TRIP_CALLS; i++, now += 60_000) {
+      await other.chat({ messages: [{ role: "system", content: mid }, ask], maxTokens: 5 });
+      await haiku.chat({ messages: [{ role: "system", content: mid }, ask], maxTokens: 5 });
+    }
+    expect(other.readsMissed).toBe(0);
+    expect(other.cacheLevel).toBe(2);
+    // The same 1,000-token prefix is cacheable on Haiku 5.5: there it counts, and trips.
+    expect(haiku.cacheLevel).toBe(0);
   });
 });

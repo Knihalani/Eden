@@ -57,10 +57,17 @@ export interface OpenRouterOptions {
  */
 export const CACHE_TRIP_CALLS = 50;
 /**
- * Anthropic's smallest cacheable prefix on Haiku 5.5, in tokens (D1196). Another model's is larger (up to 4,096): a
- * prefix between the two is then neither written nor read, so tripping on it costs nothing either way.
+ * Anthropic's smallest cacheable prefix by model, in tokens: Haiku 5.5's 512 (D1196, OpenRouter's prompt-caching page).
+ * A model not listed is held to `MIN_CACHE_TOKENS_UNKNOWN`, the largest minimum Anthropic documents (512-4,096), so a
+ * prefix the model would never cache (and so never read) is never counted as a miss on an `EDEN_MODEL` override.
  */
-export const MIN_CACHE_TOKENS = 512;
+const MIN_CACHE_TOKENS: Record<string, number> = { "anthropic/claude-haiku-5.5": 512 };
+export const MIN_CACHE_TOKENS_UNKNOWN = 4_096;
+
+/** The smallest prefix, in estimated tokens, the read watch counts for a model. */
+export function minCacheTokens(model: string): number {
+  return MIN_CACHE_TOKENS[model] ?? MIN_CACHE_TOKENS_UNKNOWN;
+}
 /** Prefixes the read watch remembers (the check's and card call's few fixed prefixes, and per-user sheets). */
 const WATCHED_PREFIXES = 512;
 
@@ -76,8 +83,12 @@ export class OpenRouterModel implements Model {
   readonly id: string;
   /** Lowered for good by refused requests (D1790); read by tests and reported once on the log. */
   cacheLevel: CacheLevel;
-  /** Calls in a row a lower level answered after a 400: two lower `cacheLevel`, so one stray 400 does not. */
+  /**
+   * Calls in a row answered with no breakpoint after a 400 to their hour-free ones, and calls asking an hour answered
+   * without it: two of either lower `cacheLevel` (`noteLevel`), so one stray 400 does not.
+   */
   private refusals = 0;
+  private hourRefusals = 0;
   /**
    * The read watch (D1800, `CACHE_TRIP_CALLS`): when each marked prefix (by hash) was last answered and its TTL; the
    * calls that should have read one and did not; whether any call has read the cache (then the watch stops).
@@ -111,22 +122,11 @@ export class OpenRouterModel implements Model {
     for (;;) {
       const res = await this.post(request, level, signal);
       if (res.ok) {
-        // Lowered for good only after two calls in a row that a lower level answered: a 400 for another reason (one
-        // that fails at every level) leaves the caching as it was, and so does a single stray one.
-        if (level < first) {
-          this.refusals++;
-          if (this.refusals >= 2 && level < this.cacheLevel) {
-            console.warn(`eden: openrouter refused cached requests (400); cache level ${this.cacheLevel} -> ${level}`);
-            this.cacheLevel = level;
-            this.refusals = 0;
-          }
-        } else if (level > 0) {
-          this.refusals = 0;
-        }
+        this.noteLevel(request.messages, first, level);
         const out = await this.read(res, t0);
         const marks = breakpoints(request.messages, level);
         if (marks.size === 0) return out;
-        this.watchReads(request.messages, marks, out.usage.cachedInputTokens, sentAt);
+        this.watchReads(request.messages, marks, level, out.usage.cachedInputTokens, sentAt);
         return { ...out, cacheBreakpoints: marks.size };
       }
       const text = (await res.text()).slice(0, 300);
@@ -142,11 +142,41 @@ export class OpenRouterModel implements Model {
   }
 
   /**
+   * Lowers `cacheLevel` for good only after two refusals of the same kind in a row: a 400 for another reason (one that
+   * fails at every level) leaves the caching as it was, and so does a single stray one. The hour and the breakpoints
+   * themselves are counted apart (D1800): a route that refuses only `ttl: "1h"` answers every request that asks no hour
+   * at level 2, which must not reset the count of hour refusals, or interleaved requests would never lower it.
+   */
+  private noteLevel(messages: ChatMessage[], first: CacheLevel, level: CacheLevel): void {
+    if (first >= 1 && breakpoints(messages, 1).size > 0) {
+      if (level >= 1) this.refusals = 0;
+      else if (++this.refusals >= 2 && this.cacheLevel > 0) this.lower(0);
+    }
+    if (first === 2 && this.cacheLevel === 2 && asksHour(messages)) {
+      if (level === 2) this.hourRefusals = 0;
+      else if (++this.hourRefusals >= 2) this.lower(1);
+    }
+  }
+
+  private lower(to: CacheLevel): void {
+    console.warn(`eden: openrouter refused cached requests (400); cache level ${this.cacheLevel} -> ${to}`);
+    this.cacheLevel = to;
+    this.refusals = 0;
+    this.hourRefusals = 0;
+  }
+
+  /**
    * D1800: a route that bills cache writes and never serves a read costs more than no caching at all. Counts the calls
    * that should have read (`CACHE_TRIP_CALLS`) and, at that many with no cached token ever served, drops to level 0
    * for the model's life with one content-free line on the log. Any read ends the watch for good.
    */
-  private watchReads(messages: ChatMessage[], marks: Set<number>, cached: number, sentAt: number): void {
+  private watchReads(
+    messages: ChatMessage[],
+    marks: Set<number>,
+    level: CacheLevel,
+    cached: number,
+    sentAt: number,
+  ): void {
     if (this.readsSeen || this.cacheLevel === 0) return;
     if (cached > 0) {
       this.readsSeen = true;
@@ -154,8 +184,9 @@ export class OpenRouterModel implements Model {
       return;
     }
     const doneAt = (this.options.now ?? Date.now)();
-    // The request's one TTL (`anthropicCacheMessages`); a read is expected up to a minute short of it.
-    const ttlMs = messages.some((m, i) => marks.has(i) && m.cacheTtl === "1h") ? 3_600_000 : 300_000;
+    // Each breakpoint's own TTL (`hourThrough`); a read is expected up to a minute short of it.
+    const hourTo = hourThrough(messages, marks, level);
+    const least = minCacheTokens(this.options.model);
     let expected = false;
     const hash = createHash("sha256");
     const text: string[] = [];
@@ -163,7 +194,8 @@ export class OpenRouterModel implements Model {
       const m = messages[i]!;
       hash.update(`${m.role}\n${m.content}\u0000`);
       text.push(m.content);
-      if (!marks.has(i) || estimateTokens(text.join("")) < MIN_CACHE_TOKENS) continue;
+      if (!marks.has(i) || estimateTokens(text.join("")) < least) continue;
+      const ttlMs = i <= hourTo ? 3_600_000 : 300_000;
       const key = hash.copy().digest("hex").slice(0, 32);
       const prev = this.prefixes.get(key);
       if (prev && sentAt >= prev.at && sentAt - prev.at <= prev.ttlMs - 60_000) expected = true;
@@ -270,13 +302,27 @@ const MAX_BREAKPOINTS = 4;
  */
 function anthropicCacheMessages(messages: ChatMessage[], level: CacheLevel) {
   const marked = breakpoints(messages, level);
-  // One TTL a request, as anthropic.ts (`requestTtl`): an hour when a marked message asks for it (D1197); at level 1
-  // no such message is marked, so the provider's five minutes.
-  const hour = messages.some((m, i) => marked.has(i) && m.cacheTtl === "1h");
-  const control = hour ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
+  const hourTo = hourThrough(messages, marked, level);
+  const hour = { type: "ephemeral", ttl: "1h" };
+  const five = { type: "ephemeral" };
   return messages.map(({ role, content }, i) =>
-    marked.has(i) ? { role, content: [{ type: "text", text: content, cache_control: control }] } : { role, content },
+    marked.has(i)
+      ? { role, content: [{ type: "text", text: content, cache_control: i <= hourTo ? hour : five }] }
+      : { role, content },
   );
+}
+
+/**
+ * The last breakpoint sent at the hour's TTL: every breakpoint up to it goes at an hour, those after it at five
+ * minutes. Anthropic wants a longer TTL before a shorter one, so a breakpoint asking the hour (D1197's sheet) carries
+ * every earlier one with it, and one that asks it alone (D1800's fixed instructions) leaves the later ones at five
+ * minutes. At level 1 nothing goes at the hour (-1): the hour is what that level drops.
+ */
+function hourThrough(messages: ChatMessage[], marked: Set<number>, level: CacheLevel): number {
+  if (level !== 2) return -1;
+  let last = -1;
+  for (const i of marked) if (messages[i]!.cacheTtl === "1h" && i > last) last = i;
+  return last;
 }
 
 /** Whether a breakpoint of the request asks for the hour's TTL. */
@@ -286,8 +332,10 @@ function asksHour(messages: ChatMessage[]): boolean {
 }
 
 /**
- * The messages that carry a breakpoint at a level (`anthropicCacheMessages`' rules; at level 1 none that asks for an
- * hour, at 0 none). A 400 to a request that had none is not about caching and is never retried.
+ * The messages that carry a breakpoint at a level (`anthropicCacheMessages`' rules; at 0 none). At level 1 a message
+ * that asks for an hour loses its breakpoint (at five minutes a user's sheet costs more than plain, D1197), except the
+ * last system message, which keeps its breakpoint at five minutes (the fixed instructions, D1800). A 400 to a request
+ * that had none is not about caching and is never retried.
  */
 function breakpoints(messages: ChatMessage[], level: CacheLevel): Set<number> {
   if (level === 0) return new Set();
@@ -300,7 +348,7 @@ function breakpoints(messages: ChatMessage[], level: CacheLevel): Set<number> {
   for (let i = messages.length - 1; i >= 0 && marked.size < MAX_BREAKPOINTS; i--) {
     if (messages[i]!.cache && filled(messages[i]!)) marked.add(i);
   }
-  if (level === 1) for (const i of marked) if (messages[i]!.cacheTtl === "1h") marked.delete(i);
+  if (level === 1) for (const i of marked) if (messages[i]!.cacheTtl === "1h" && i !== lastSystem) marked.delete(i);
   return marked;
 }
 

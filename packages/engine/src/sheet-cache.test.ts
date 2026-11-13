@@ -5,7 +5,7 @@ import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { checkMessages, PushChecker, type PushCheckInput, type SheetCard } from "./push-check";
-import { SHEET_REUSE_WEIGHT, SHEET_TTL_MS, SheetCachePolicy } from "./sheet-cache";
+import { SHEET_REUSE_WEIGHT, SHEET_TTL_MS, SheetCachePolicy, SystemTtlPolicy } from "./sheet-cache";
 
 // D1800: the rule sheet carries its 1-hour cache breakpoint only when caching it is likely to pay for that user. The
 // bytes the model reads never change with it.
@@ -199,5 +199,57 @@ describe("PushChecker follows the policy per user (D1800)", () => {
     expect(checker.sheetUsers).toBe(1);
     partner.release(u2, false);
     expect(checker.sheetUsers).toBe(0);
+  });
+});
+
+describe("SystemTtlPolicy: the instructions' TTL under a plain sheet (D1800)", () => {
+  const notes = (p: SystemTtlPolicy, tenant: string, n: number, gapMin: number, start = T0) => {
+    for (let i = 0; i < n; i++) p.note(tenant, start + i * gapMin * MIN);
+  };
+
+  test("a tenant whose checks come minutes apart gets the hour; one whose checks are hours apart, five minutes", () => {
+    const p = new SystemTtlPolicy();
+    expect(p.hour("busy", T0)).toBe(false);
+    notes(p, "busy", 2, 10);
+    expect(p.hour("busy", T0)).toBe(true);
+    notes(p, "quiet", 20, 120);
+    expect(p.hour("quiet", T0)).toBe(false);
+    // Checks a minute or two apart read either TTL: no reason to pay the hour's write, and none against it.
+    notes(p, "constant", 20, 1);
+    expect(p.hour("constant", T0)).toBe(false);
+  });
+
+  test("isolation: per tenant; bounded, least recently checked first", () => {
+    const p = new SystemTtlPolicy(2);
+    notes(p, "a", 3, 10);
+    expect(p.hour("b", T0)).toBe(false);
+    notes(p, "b", 1, 10);
+    notes(p, "c", 1, 10);
+    expect(p.size).toBe(2);
+    expect(p.hour("a", T0)).toBe(false);
+  });
+
+  test("PushChecker asks the hour for the instructions alone, for a tenant whose checks come often", async () => {
+    const model = new FakeModel(() => '{"items":[]}');
+    let now = T0;
+    const checker = new PushChecker({ model, budget: new Budget(), now: () => now });
+    const plain = { ...INPUT, sheet: [] };
+    const u = { tenantId: "t", userId: "u1" };
+    for (let i = 0; i < 3; i++, now += 10 * MIN) await checker.check(u, "s1", plain, new AbortController().signal);
+    expect(model.calls[0]!.messages[0]!.cacheTtl).toBeUndefined();
+    expect(model.calls[2]!.messages[0]).toMatchObject({ cache: true, cacheTtl: "1h" });
+    // Another tenant starts at five minutes.
+    await checker.check({ tenantId: "t2", userId: "u1" }, "s2", plain, new AbortController().signal);
+    expect(model.calls[3]!.messages[0]!.cacheTtl).toBeUndefined();
+    // The text is the same either way.
+    expect(new Set(model.calls.map((c) => c.messages[0]!.content)).size).toBe(1);
+  });
+
+  test("checkMessages with and without the instructions' hour: the same roles and text", () => {
+    const on = checkMessages(INPUT, { sheetCache: false, systemHour: true });
+    const off = checkMessages(INPUT, { sheetCache: false });
+    expect(on.map((m) => [m.role, m.content])).toEqual(off.map((m) => [m.role, m.content]));
+    expect(on[0]).toMatchObject({ cache: true, cacheTtl: "1h" });
+    expect(off[0]!.cacheTtl).toBeUndefined();
   });
 });

@@ -240,7 +240,8 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
     enough to cache) and logs `eden: openrouter served no cached tokens on 50 calls ...` once; a restart starts the
     count again.
   - a quiet box (a check every few minutes or less) reads little and writes little: the rule sheet is sent plain to
-    a user whose checks are not usually within the hour (D1800), and only the fixed instructions are written.
+    a user whose checks are not usually within the hour (D1800), and only the fixed instructions are written (at the
+    hour when the tenant's checks usually come within it, else five minutes).
   - set `EDEN_MODEL_CACHE=off` (and restart) when OpenRouter's activity page shows cache writes costing more than
     the reads save over a few days, when the log line above appears on every restart, or when the account's data
     rules forbid a provider keeping any prompt for reuse (docs/PRIVACY.md). It changes no reply, only the price.

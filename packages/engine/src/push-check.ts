@@ -25,7 +25,7 @@ import { scopeKey, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { READER_REQUEST_CHARS, type ReaderItem } from "./reader";
 import { inert } from "./render";
-import { SheetCachePolicy } from "./sheet-cache";
+import { SheetCachePolicy, SystemTtlPolicy } from "./sheet-cache";
 
 /** The prompt's version: a lab replay cache made by another prompt is not this one's. */
 export const CHECK_VERSION = 1;
@@ -243,11 +243,12 @@ export function inItems(sheet: readonly SheetCard[], items: readonly ReaderItem[
  * The prompt: the fixed instructions (cached), then (`pushCheckSheet`) the user's rule sheet as its own block, then the
  * day, the request and the items, each fenced as data. `sheetCache` (true unless said) puts the sheet's 1-hour cache
  * breakpoint on it; `PushChecker` asks for it only when caching is likely to pay for that user (D1800,
- * `SheetCachePolicy`). Either way the messages' text is the same bytes: only the provider's price moves.
+ * `SheetCachePolicy`). `systemHour` asks the hour for the instructions' own breakpoint (`SystemTtlPolicy`). Either
+ * way the messages' text is the same bytes: only the provider's price moves.
  */
 export function checkMessages(
   input: PushCheckInput,
-  { sheetCache = true }: { sheetCache?: boolean } = {},
+  { sheetCache = true, systemHour = false }: { sheetCache?: boolean; systemHour?: boolean } = {},
 ): ChatMessage[] {
   const sheet = sheetOfInput(input);
   const ruleOf = new Map<string, number>(input.sheetRefs ? sheet.map((c, k) => [c.id, k + 1] as const) : []);
@@ -261,7 +262,8 @@ export function checkMessages(
     return `${opening}>${inert(it.title)}: ${inert(it.text)}</item>`;
   });
   return [
-    { role: "system", content: CHECK_SYSTEM },
+    // `systemHour` (D1800): the instructions ask the hour on their own; a marked sheet carries them to it anyway.
+    { role: "system", content: CHECK_SYSTEM, ...(systemHour ? { cache: true, cacheTtl: "1h" as const } : {}) },
     ...(sheet.length > 0
       ? [
           {
@@ -416,6 +418,8 @@ export class PushChecker {
 
   /** When each user's sheet carries its cache breakpoint (D1800): per tenant/user, content-free, dropped on forget. */
   private readonly sheetPolicy = new SheetCachePolicy();
+  /** The instructions' TTL under a plain sheet (D1800): per tenant, check times only. */
+  private readonly systemPolicy = new SystemTtlPolicy();
 
   constructor(
     private readonly deps: {
@@ -457,9 +461,10 @@ export class PushChecker {
     const sent = (this.deps.now ?? Date.now)();
     const sheetHash = sheet.length > 0 ? createHash("sha256").update(sheetText(sheet)).digest("hex").slice(0, 16) : "";
     const sheetCache = sheet.length > 0 && this.sheetPolicy.mark(user, sheetHash, sent);
+    const systemHour = !sheetCache && this.systemPolicy.hour(scope.tenantId, sent);
     try {
       const res = await this.deps.model.chat({
-        messages: checkMessages({ ...input, items, sheet }, { sheetCache }),
+        messages: checkMessages({ ...input, items, sheet }, { sheetCache, systemHour }),
         // A sheet's rule entries are about 35 tokens each, past the items' cap.
         maxTokens: sheet.length > 0 ? COMPARE_MAX_TOKENS + 40 * SHEET_MAX_NAMED : COMPARE_MAX_TOKENS,
         json: true,
@@ -471,7 +476,10 @@ export class PushChecker {
       this.count(res.costUsd, res.usage);
       // An answered call reached the provider: its sheet was written or read if marked. A failed one is not noted,
       // nor one whose session ended while it ran (a `forget` aborts it: nothing is kept for a forgotten user).
-      if (sheet.length > 0 && !signal.aborted) this.sheetPolicy.note(user, sheetHash, sent, sheetCache);
+      if (!signal.aborted) {
+        if (sheet.length > 0) this.sheetPolicy.note(user, sheetHash, sent, sheetCache);
+        this.systemPolicy.note(scope.tenantId, sent);
+      }
       const at = res.truncated ? null : parseCompareSheet(res.text, items.length, sheet.length);
       if (!at) {
         this.stats.failures++;

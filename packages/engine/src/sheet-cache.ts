@@ -34,7 +34,10 @@ const TTL_MARGIN_MS = 60_000;
 export const SHEET_REUSE_WEIGHT = 1 / 32;
 /** The `reuse` a write needs: p / (1 - p) reads at 0.9 saved each pay for a write's +1.0 from p = 0.53. */
 export const SHEET_REUSE_MARK = 0.55;
-/** Users whose sheet state is held: about 150 bytes each, so about 8 MB at the cap. */
+/**
+ * Users whose sheet state is held: 232 bytes each measured (35-character keys, `bun:jsc` heap after a full GC,
+ * three runs), so about 11.6 MB at the cap.
+ */
 export const SHEET_CACHE_USERS = 50_000;
 
 interface SheetState {
@@ -94,4 +97,57 @@ export class SheetCachePolicy {
 /** Whether a check of `hash` at `now` comes within the hour of the user's last, with the same sheet. */
 function reuses(st: SheetState, hash: string, now: number): 0 | 1 {
   return st.hash === hash && now - st.at >= 0 && now - st.at <= SHEET_TTL_MS - TTL_MARGIN_MS ? 1 : 0;
+}
+
+/** The fixed instructions' cache TTL when no hour-asking sheet follows them: five minutes, or the hour (D1800). */
+export const SYSTEM_TTL_FIVE_MS = 5 * 60_000;
+/** Tenants whose check timing `SystemTtlPolicy` holds: 168 bytes each measured, so about 1.7 MB at the cap. */
+export const SYSTEM_TTL_TENANTS = 10_000;
+
+/**
+ * The TTL of the push check's fixed instructions (`CHECK_SYSTEM`) when the sheet after them goes plain (D1800). A
+ * marked sheet asks the hour, which carries the instructions with it (Anthropic wants a longer TTL first); a plain
+ * one leaves them free. They are the same bytes for every user, so what decides is how far apart checks come, not
+ * one user's: at a gap g between checks, the hour costs 0.1 if g is within it and 2.0 (a write) if not, five minutes
+ * 0.1 within five minutes and 1.25 if not. `cost` is the running mean of (hour - five) over the gaps seen (a plain mean
+ * over the first 32, then a weight of 1/32, as `SheetCachePolicy`); the hour is asked while it is below 0.
+ *
+ * Kept per tenant, not per process: a timing average across tenants would be state one tenant's traffic moves for
+ * another's (D9), and a tenant's own checks are the conservative view of the provider's entry, which every tenant's
+ * checks keep warm. Holds a time and two numbers a tenant (no user, no content), at most `SYSTEM_TTL_TENANTS`.
+ */
+export class SystemTtlPolicy {
+  private readonly tenants = new Map<string, { at: number; cost: number; seen: number }>();
+
+  constructor(
+    private readonly limit = SYSTEM_TTL_TENANTS,
+    private readonly weight = SHEET_REUSE_WEIGHT,
+  ) {}
+
+  /** Whether a check sent at `now` with a plain sheet (or none) should ask the hour for the instructions. */
+  hour(tenant: string, _now: number): boolean {
+    const st = this.tenants.get(tenant);
+    return st !== undefined && st.seen > 0 && st.cost < 0;
+  }
+
+  /** Records a check sent at `now` (every check, with a sheet or without). */
+  note(tenant: string, now: number): void {
+    const st = this.tenants.get(tenant);
+    let cost = 0;
+    let seen = 0;
+    if (st) {
+      const gap = now - st.at;
+      const hour = gap >= 0 && gap <= SHEET_TTL_MS - TTL_MARGIN_MS ? 0.1 : 2.0;
+      const five = gap >= 0 && gap <= SYSTEM_TTL_FIVE_MS - TTL_MARGIN_MS ? 0.1 : 1.25;
+      seen = Math.min(st.seen + 1, 1 / this.weight);
+      cost = st.cost + (hour - five - st.cost) / seen;
+    }
+    this.tenants.delete(tenant);
+    this.tenants.set(tenant, { at: now, cost, seen });
+    while (this.tenants.size > this.limit) this.tenants.delete(this.tenants.keys().next().value as string);
+  }
+
+  get size(): number {
+    return this.tenants.size;
+  }
 }

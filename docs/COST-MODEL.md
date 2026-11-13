@@ -805,51 +805,81 @@ Since D1197 the sheet's message asks for the 1-hour TTL (`ChatMessage.cacheTtl`)
   case production is in. Since D1800 `/metrics` counts them per role (`eden_model_cache_read_tokens_total`,
   docs/DEPLOY.md §8), and the sheet is cached only where it pays (below).
 
-**The sheet's breakpoint (D1800, `SheetCachePolicy`; `packages/sim/lab/f7/sheet-adaptive.ts`, [EST], $0).** Since
-D1800 the sheet carries its breakpoint only when caching it is likely to pay for that user: when it is in the cache
-(the last check sent it marked, unchanged, within the hour: a read at 0.1x), or when the share of the user's checks
-that came within the hour of the one before with the same sheet is at least 0.55. The cost model: a write at the hour
-is +1.0x over plain and a read saves 0.9x, so a write pays when it earns more than about 1.1 reads, a chance above
-about 0.53 that the next check reuses it. The script runs the shipped class over 400 users x 30 days a cell, with the
-provider's cache modelled exactly, an 8,200-character sheet (2,050 tokens, $0.000205 plain at Haiku 5.5's list) and
-1–4 sheet changes a day. The sheet's price a check, $ (x plain):
+**The check's cached prefix (D1800, `SheetCachePolicy`, `SystemTtlPolicy`; `packages/sim/lab/f7/sheet-adaptive.ts`,
+[EST], $0; worst cell +2.9% quiet, +2.0% busy, the sheet rule's two settings tuned on these modelled cells).** Since
+D1800 the sheet carries its breakpoint only when caching it is likely to pay for that user: when it is in the cache (the
+last check sent it marked, unchanged, within the hour: a read at 0.1x), or when the share of the user's checks that came
+within the hour of the one before with the same sheet is at least 0.55. The cost model: a write at the hour is +1.0x
+over plain and a read saves 0.9x, so a write pays when it earns more than about 1.1 reads, a chance above about 0.53
+that the next check reuses it. A marked sheet asks the hour, which carries the fixed instructions before it (Anthropic
+wants a longer TTL first). Under a plain sheet the instructions' TTL is chosen on its own (`SystemTtlPolicy`, per
+tenant): from the gaps between the tenant's checks, the hour costs 0.1 within an hour and 2.0 past it, five minutes 0.1
+within five and 1.25 past; the hour is asked while its running mean is lower. The instructions are the same bytes for
+every user, so what keeps them warm is the box's traffic: the table prices a quiet box (this user's checks alone) and a
+busy one (another check before each of this user's). The script runs the shipped classes over 400 users x 30 days a
+cell, with the provider's cache modelled per prefix (an entry lives the request's TTL from its last send: whether a
+five-minute read shortens an hour's entry is not documented), the instructions' 965 tokens and an 8,200-character sheet
+(2,050 tokens; $0.000302 the two plain at Haiku 5.5's list), and 1–4 sheet changes a day at random over the whole day.
+"Sheet only" is D1800's first rule (the instructions at the hour only with a marked sheet): the review's probe on this
+script's first version (sheet changes drawn between checks) had it at up to +20% on a quiet box. $ a check for the prefix (x plain):
 
-| user (checks a day)           | spacing        |            always (D1790) |       never (plain) |                  adaptive | marked | adaptive vs the better |
-| ----------------------------- | -------------- | ------------------------: | ------------------: | ------------------------: | -----: | ---------------------: |
-| light (2)                     | fixed 10 min   |         0.000410 (2.00)   |    0.000205 (1.00)  |         0.000205 (1.00)   |     0% |                  +0.0% |
-| light (2)                     | random         |         0.000377 (1.84)   |    0.000205 (1.00)  |         0.000206 (1.00)   |     0% |                  +0.3% |
-| light (2)                     | bursty         |         0.000223 (1.09)   |    0.000205 (1.00)  |         0.000207 (1.01)   |    15% |                  +1.0% |
-| light (2)                     | 30–90 min gaps |         0.000410 (2.00)   |    0.000205 (1.00)  |         0.000205 (1.00)   |     0% |                  +0.0% |
-| typical (6)                   | fixed 10 min   |         0.000219 (1.07)   |    0.000205 (1.00)  |         0.000210 (1.02)   |    19% |                  +2.3% |
-| typical (6)                   | random         |         0.000251 (1.22)   |    0.000205 (1.00)  |         0.000207 (1.01)   |     3% |                  +0.9% |
-| typical (6)                   | bursty         |         0.000149 (0.73)   |    0.000205 (1.00)  |         0.000150 (0.73)   |    99% |                  +1.1% |
-| typical (6)                   | 30–90 min gaps |         0.000302 (1.47)   |    0.000205 (1.00)  |         0.000206 (1.00)   |     1% |                  +0.4% |
-| heavy (16)                    | fixed 10 min   |         0.000102 (0.50)   |    0.000205 (1.00)  |         0.000103 (0.50)   |    99% |                  +0.7% |
-| heavy (16)                    | random         |         0.000116 (0.57)   |    0.000205 (1.00)  |         0.000117 (0.57)   |    99% |                  +0.6% |
-| heavy (16)                    | bursty         |         0.000100 (0.49)   |    0.000205 (1.00)  |         0.000101 (0.49)   |   100% |                  +0.6% |
-| heavy (16)                    | 30–90 min gaps |         0.000250 (1.22)   |    0.000205 (1.00)  |         0.000206 (1.00)   |     2% |                  +0.4% |
-| very heavy (40)               | fixed 10 min   |         0.000054 (0.26)   |    0.000205 (1.00)  |         0.000054 (0.26)   |   100% |                  +0.5% |
-| very heavy (40)               | random         |         0.000054 (0.26)   |    0.000205 (1.00)  |         0.000054 (0.26)   |   100% |                  +0.5% |
-| very heavy (40)               | bursty         |         0.000059 (0.29)   |    0.000205 (1.00)  |         0.000060 (0.29)   |   100% |                  +0.5% |
-| very heavy (40)               | 30–90 min gaps |         0.000219 (1.07)   |    0.000205 (1.00)  |         0.000206 (1.01)   |     7% |                  +0.5% |
-| shifting (16 or 2, weekly)    | fixed 10 min   |         0.000132 (0.65)   |    0.000205 (1.00)  |         0.000137 (0.67)   |    93% |                  +3.5% |
-| shifting (16 or 2, weekly)    | random         |         0.000142 (0.70)   |    0.000205 (1.00)  |         0.000147 (0.72)   |    92% |                  +2.9% |
-| shifting (16 or 2, weekly)    | bursty         |         0.000112 (0.55)   |    0.000205 (1.00)  |         0.000113 (0.55)   |    99% |                  +1.0% |
-| shifting (16 or 2, weekly)    | 30–90 min gaps |         0.000266 (1.30)   |    0.000205 (1.00)  |         0.000206 (1.01)   |     2% |                  +0.5% |
+| box | user (checks a day) | spacing | always (D1790) | never | sheet only | adaptive (shipped) | adaptive vs the better of always and never |
+|---|---|---|--:|--:|--:|--:|--:|
+| quiet | light (2/day) | fixed 10 min | 0.000320 (1.06) | 0.000326 (1.08) | 0.000324 (1.08) | 0.000309 (1.02) | -3.5% |
+| quiet | light (2/day) | random | 0.000533 (1.77) | 0.000324 (1.08) | 0.000326 (1.08) | 0.000326 (1.08) | +0.5% |
+| quiet | light (2/day) | bursty | 0.000317 (1.05) | 0.000270 (0.90) | 0.000278 (0.92) | 0.000278 (0.92) | +2.9% |
+| quiet | light (2/day) | 30–90 min gaps | 0.000466 (1.55) | 0.000326 (1.08) | 0.000327 (1.09) | 0.000329 (1.09) | +0.9% |
+| quiet | typical (6/day) | fixed 10 min | 0.000131 (0.43) | 0.000326 (1.08) | 0.000134 (0.45) | 0.000134 (0.45) | +2.5% |
+| quiet | typical (6/day) | random | 0.000333 (1.10) | 0.000320 (1.06) | 0.000323 (1.07) | 0.000315 (1.05) | -1.3% |
+| quiet | typical (6/day) | bursty | 0.000207 (0.69) | 0.000254 (0.84) | 0.000208 (0.69) | 0.000208 (0.69) | +0.6% |
+| quiet | typical (6/day) | 30–90 min gaps | 0.000377 (1.25) | 0.000326 (1.08) | 0.000327 (1.09) | 0.000327 (1.08) | +0.4% |
+| quiet | heavy (16/day) | fixed 10 min | 0.000072 (0.24) | 0.000326 (1.08) | 0.000074 (0.24) | 0.000074 (0.24) | +1.7% |
+| quiet | heavy (16/day) | random | 0.000129 (0.43) | 0.000308 (1.02) | 0.000130 (0.43) | 0.000130 (0.43) | +0.8% |
+| quiet | heavy (16/day) | bursty | 0.000134 (0.45) | 0.000247 (0.82) | 0.000135 (0.45) | 0.000135 (0.45) | +0.4% |
+| quiet | heavy (16/day) | 30–90 min gaps | 0.000348 (1.16) | 0.000326 (1.08) | 0.000327 (1.08) | 0.000317 (1.05) | -2.6% |
+| quiet | very heavy (40/day) | fixed 10 min | 0.000051 (0.17) | 0.000326 (1.08) | 0.000052 (0.17) | 0.000052 (0.17) | +1.0% |
+| quiet | very heavy (40/day) | random | 0.000053 (0.18) | 0.000286 (0.95) | 0.000053 (0.18) | 0.000053 (0.18) | +0.7% |
+| quiet | very heavy (40/day) | bursty | 0.000073 (0.24) | 0.000242 (0.80) | 0.000073 (0.24) | 0.000073 (0.24) | +0.3% |
+| quiet | very heavy (40/day) | 30–90 min gaps | 0.000318 (1.06) | 0.000323 (1.07) | 0.000323 (1.07) | 0.000308 (1.02) | -3.3% |
+| quiet | shifting (16 or 2/day, weekly) | fixed 10 min | 0.000097 (0.32) | 0.000326 (1.08) | 0.000099 (0.33) | 0.000099 (0.33) | +2.1% |
+| quiet | shifting (16 or 2/day, weekly) | random | 0.000168 (0.56) | 0.000310 (1.03) | 0.000172 (0.57) | 0.000171 (0.57) | +1.8% |
+| quiet | shifting (16 or 2/day, weekly) | bursty | 0.000152 (0.50) | 0.000249 (0.83) | 0.000153 (0.51) | 0.000153 (0.51) | +0.6% |
+| quiet | shifting (16 or 2/day, weekly) | 30–90 min gaps | 0.000361 (1.20) | 0.000326 (1.08) | 0.000327 (1.08) | 0.000322 (1.07) | -1.2% |
+| busy | light (2/day) | fixed 10 min | 0.000228 (0.76) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.9% |
+| busy | light (2/day) | random | 0.000373 (1.24) | 0.000215 (0.71) | 0.000216 (0.71) | 0.000216 (0.71) | +0.4% |
+| busy | light (2/day) | bursty | 0.000225 (0.75) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.8% |
+| busy | light (2/day) | 30–90 min gaps | 0.000329 (1.09) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.7% |
+| busy | typical (6/day) | fixed 10 min | 0.000100 (0.33) | 0.000215 (0.71) | 0.000102 (0.34) | 0.000102 (0.34) | +2.0% |
+| busy | typical (6/day) | random | 0.000239 (0.79) | 0.000215 (0.71) | 0.000218 (0.72) | 0.000218 (0.72) | +1.5% |
+| busy | typical (6/day) | bursty | 0.000151 (0.50) | 0.000215 (0.71) | 0.000152 (0.51) | 0.000152 (0.51) | +1.1% |
+| busy | typical (6/day) | 30–90 min gaps | 0.000270 (0.89) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.7% |
+| busy | heavy (16/day) | fixed 10 min | 0.000061 (0.20) | 0.000215 (0.71) | 0.000062 (0.20) | 0.000062 (0.20) | +1.2% |
+| busy | heavy (16/day) | random | 0.000101 (0.33) | 0.000215 (0.71) | 0.000101 (0.34) | 0.000101 (0.34) | +0.7% |
+| busy | heavy (16/day) | bursty | 0.000102 (0.34) | 0.000215 (0.71) | 0.000102 (0.34) | 0.000102 (0.34) | +0.7% |
+| busy | heavy (16/day) | 30–90 min gaps | 0.000251 (0.83) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.6% |
+| busy | very heavy (40/day) | fixed 10 min | 0.000046 (0.15) | 0.000215 (0.71) | 0.000047 (0.16) | 0.000047 (0.16) | +0.7% |
+| busy | very heavy (40/day) | random | 0.000048 (0.16) | 0.000215 (0.71) | 0.000048 (0.16) | 0.000048 (0.16) | +0.6% |
+| busy | very heavy (40/day) | bursty | 0.000060 (0.20) | 0.000215 (0.71) | 0.000061 (0.20) | 0.000061 (0.20) | +0.5% |
+| busy | very heavy (40/day) | 30–90 min gaps | 0.000229 (0.76) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.5% |
+| busy | shifting (16 or 2/day, weekly) | fixed 10 min | 0.000077 (0.26) | 0.000215 (0.71) | 0.000078 (0.26) | 0.000078 (0.26) | +1.7% |
+| busy | shifting (16 or 2/day, weekly) | random | 0.000127 (0.42) | 0.000215 (0.71) | 0.000130 (0.43) | 0.000130 (0.43) | +1.9% |
+| busy | shifting (16 or 2/day, weekly) | bursty | 0.000114 (0.38) | 0.000215 (0.71) | 0.000115 (0.38) | 0.000115 (0.38) | +1.0% |
+| busy | shifting (16 or 2/day, weekly) | 30–90 min gaps | 0.000259 (0.86) | 0.000215 (0.71) | 0.000216 (0.72) | 0.000216 (0.72) | +0.7% |
 
-The rule costs at most +3.5% over the better of always and never in any cell (a user whose habits change weekly; the
-average lags), and +2.3% at most for a user with fixed habits; at 0–1 and 3–8 sheet changes a day the worst fixed-habit
-cells are +1.7% and +1.2%. Against D1790's always, it removes the up-to-2x write for light users (the "+49% a check"
-case above, on the sheet's part) and keeps the heavy user's 0.26–0.57x. The weight (1/32) and the bar (0.55) were
-chosen by sweeping these cells (weights 1/32 to 1/2, bars 0.45 to 0.85): the spacings are assumed, as in F7, and no
-real check timings exist. When the sheet goes plain, the request's one breakpoint (the fixed instructions) asks for the
-provider's five minutes, written at 1.25x, not 2x; those instructions are the same bytes for every user, so on a busy
-server they are read, not written.
+The shipped rule costs at most +2.9% over the better of always and never in any quiet-box cell and +2.0% in any busy
+one, and is cheaper than both in five quiet cells (light users at a fixed 10 minutes, typical users at random, and three
+of the 30–90-minute gap cells, where the instructions' own hour pays). Against D1790's always it removes the hour's
+writes for users whose checks are hours apart (up to 1.77x plain) and keeps heavy users' 0.16–0.45x where their checks
+come within the hour. **In sample:** the sheet rule's weight (1/32) and bar (0.55) were chosen by sweeping these cells'
+spacings on the first version of this script (weights 1/32 to 1/2, bars 0.45 to 0.85). Checked out of that sweep: a
+second seed set (`--seed 9001`: worst +2.8% quiet, +2.0% busy) and other change rates (0–1 a day +2.9% quiet; 3–8 a day
++2.8% quiet, +2.4% busy). The spacings are still assumed, as in F7: no real check timings exist.
 
-**A route that never reads (D1800).** `OpenRouterModel` counts calls that should have read the cache (a marked prefix
-of at least 512 estimated tokens, sent within its TTL after the same model answered it) and, after 50 with no cached
-token served, stops sending breakpoints for its life. Its cost is bounded: at most 50 extra writes of a 1,000–3,000
-token prefix, under $0.015 at Haiku 5.5's price [EST].
+**A route that never reads (D1800).** `OpenRouterModel` counts calls that should have read the cache (a marked prefix at
+least the model's own minimum, `minCacheTokens`: 512 estimated tokens on Haiku 5.5, 4,096 on a model it does not list;
+sent within its TTL after the same model answered it) and, after 50 with no cached token served, stops sending
+breakpoints for its life. Its cost is bounded: at most 50 extra writes of a 1,000–3,000 token prefix, under $0.015 at
+Haiku 5.5's price [EST].
 
 The sheet's measured size, from the funnel's dumped checks at shipped coverage (`--check replay --check-dump`, $0):
 
