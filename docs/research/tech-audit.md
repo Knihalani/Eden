@@ -106,7 +106,7 @@ instead of being built.
 | Choice | Verdict |
 |---|---|
 | Item content in memory, per user, with a TTL and a size bound; only content-free metadata in SQLite | keep (D8; D4) |
-| Idle users frozen into one zstd blob, warm after 2 min and compact after 30, thawed exactly on next use | keep (D325, D860, D862); `--smol` measured as no help |
+| Idle users frozen into one zstd blob, warm after 2 min and compact after 30, thawed exactly on next use | keep (D325, D860, D862); `--smol` measured as no help; a binary layout of the blob measured and rejected (D1715: at most 11% smaller, the compact thaw is indexing) |
 | Frozen users persisted encrypted on disk by default; a key that opens none stops the start | keep (D425, D991, D1071). Async writes are a candidate (above) |
 | One process per core behind a local router, placed by jump hash over 65,536 buckets, per-tenant caps divided by N | keep (D113, D163, D172, D178): 3.2x events/s at a fixed p99 on 4 cores |
 | Cluster: rendezvous placement of buckets over nodes, the S3 store as the hand-off, epoch fencing, the whole tenant rate at the cluster router | keep (D992-D995, D1070) |
@@ -229,9 +229,9 @@ Verdict words:
 | primitives | Fused tokenizer with interning into `Uint32Array`; FNV-1a, murmur3, native xxHash32; Aho–Corasick DFA; typed-array top-k heap; S3-FIFO cache; GCRA; breaker; AIMD; log-linear histograms; packed CSR BM25F index; SimHash/MinHash/LSH; xoshiro128; Thompson bandit; Bun `WorkerPool` | decided: D20, D22, D25. Each has a benchmark, and `bench/compare/*` ran head-to-heads against npm libraries |
 | redact | Gitleaks rules vendored byte for byte; the seven backtracking rules on `re2js` (D24); structural JSON redaction | decided: D24. `re2js` bump is a candidate |
 | sources | `McpSource` on Eden's own MCP client (D1704; read-only check, D7); arguments from JSON schema; Thompson-sampled query planner; per-(user, source) breaker, AIMD, GCRA and singleflight; `StaticSource` inverted index | switched: D1704 (was the MCP SDK's client) |
-| graph | Source map on `bun:sqlite`, WAL, `synchronous=NORMAL`, busy timeout | decided: D4, D8, D15 |
+| graph | Source map on `bun:sqlite`, WAL, `synchronous=NORMAL`, busy timeout | decided: D4, D8, D15; a specialised store measured and rejected (D1720) |
 | llm | `fetch` to OpenRouter (ZDR, `data_collection: deny`, D12) with `sort` routing (D66); `Budget` and `TenantSpend`; lab-only `AnthropicModel` (D97); `Pacer` | keep. The direct route is a candidate |
-| engine | Per-user BM25F `ItemCache` on primitives; item text deflated (`packed-text.ts`); frozen users as zstd-3 JSON blobs, warm form "EDF2" (D325, D860, D862); `EncryptedFrozenDisk`: AES-256-GCM, HKDF-derived keys, HMAC file names, atomic temp-file rename (D425, D991); `SharedFrozenDisk` to S3 (D992); turn gate as a `.bin` hashed n-gram table (D1014), gloss as a `.bin` of sorted UTF-8 string tables searched in place (D1153, D1710); redaction in Bun workers (D25, D26); spans and traces content-free | decided by the decisions named. GCM's write bound is under Findings |
+| engine | Per-user BM25F `ItemCache` on primitives; item text deflated (`packed-text.ts`); frozen users as zstd-3 JSON blobs, warm form "EDF2" (D325, D860, D862; a binary layout rejected, D1715); `EncryptedFrozenDisk`: AES-256-GCM, HKDF-derived keys, HMAC file names, atomic temp-file rename (D425, D991); `SharedFrozenDisk` to S3 (D992); turn gate as a `.bin` hashed n-gram table (D1014), gloss as a `.bin` of sorted UTF-8 string tables searched in place (D1153, D1710); redaction in Bun workers (D25, D26); spans and traces content-free | decided by the decisions named. GCM's write bound is under Findings |
 | server | `Bun.serve`; GCRA per tenant; multi-process router over `Bun.spawn` children with jump-hash placement (D113, D163, D178); cluster router with rendezvous placement and epoch fencing (D992-D995); `/metrics` as hand-written Prometheus text (D994); Bun's built-in `S3Client` (D992, no dependency); MCP `ask_context` on a hand-written JSON-RPC handler and stdio transport (D1704; was the SDK's `McpServer` with zod); config validated at startup with exit 2 (D365) | switched: D1704 for MCP (zod went with the SDK) |
 | client (TS) | `fetch`, fail open, 800 ms default (D14); `pack.ts` bundles one ESM file plus declarations | keep |
 | client-python | Standard library only (`urllib`), no redirects (D278, D313); setuptools ≥ 77 build backend | keep: zero dependencies is the right floor |
@@ -337,7 +337,7 @@ One line per file, from the second pass (method above). Columns:
 | `packages/engine/src/usage.ts` | 52 | Did the agent use what it was given? Inferred, without a model, from what it does next: an injection | typed arrays | keep (D13, D18) |
 | `packages/graph/package.json` | 15 | - | - | keep |
 | `packages/graph/src/index.ts` | 2 | export { SourceMap, normalizeEntity, type RankedSource, type RouteRequest, type UserRows } from "./s | - | keep |
-| `packages/graph/src/source-map.ts` | 344 | The source map: the first layer of the knowledge graph. It records, per user, which sources have men | bun:sqlite; SQLite; timers | keep (D4, D8, D15): bun:sqlite, WAL, synchronous=NORMAL |
+| `packages/graph/src/source-map.ts` | 344 | The source map: the first layer of the knowledge graph. It records, per user, which sources have men | bun:sqlite; SQLite; timers | keep (D4, D8, D15): bun:sqlite, WAL, synchronous=NORMAL; a specialised store (resident map, append log) measured and rejected (D1720) |
 | `packages/llm/package.json` | 9 | - | - | keep |
 | `packages/llm/src/anthropic.ts` | 341 | Anthropic's Messages API over plain 'fetch' (no SDK: the repo keeps dependencies few). LAB ONLY for  | typed arrays | keep (D12, D95, D97, D240, D470, D1197) |
 | `packages/llm/src/budget.ts` | 170 | The model is the expensive, slow part, so it is rationed. A budget caps calls and spend per session  | - | keep (D112) |
