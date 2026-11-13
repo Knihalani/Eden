@@ -148,35 +148,70 @@ function ahead(a: number, b: number): number {
   return d < 0 ? d + 365 : d;
 }
 
+/** The spans a text writes, as `coversDay` reads them: closed ranges (pairs of keys) and open "until" ends (keys). */
+export interface SpanFacts {
+  /** Each range's two dates in turn: from, to, from, to, ... */
+  closed: ArrayLike<number>;
+  open: ArrayLike<number>;
+}
+
 /**
- * Whether `text` spans one of `days` ("YYYY-MM-DD") without writing it: between the two dates of a range, or between
- * the item's own day (`updatedAt`, ms; none: no open range) and the date an "until" names. Spans of at most
- * `MAX_SPAN_DAYS`; a day the text writes itself is `namesDay`'s to find, not this.
+ * The spans `text` writes, whatever day is asked (`coversDay`'s reading of the text, kept per item by `day-facts.ts`,
+ * D1721): null when it writes none. Reads the first 4,000 characters, lower-cased.
  */
-export function coversDay(text: string, days: ReadonlySet<string>, updatedAt?: number): boolean {
-  if (days.size === 0 || !/\d/.test(text)) return false;
+export function spanFactsOf(text: string): SpanFacts | null {
+  if (!/\d/.test(text)) return null;
   const lower = text.slice(0, 4000).toLowerCase();
-  if (!SPAN_HINT.test(lower)) return false;
+  if (!SPAN_HINT.test(lower)) return null;
   const dates = datesOf(lower);
-  if (dates.length === 0) return false;
-  const want: number[] = [];
+  if (dates.length === 0) return null;
+  const closed: number[] = [];
+  const open: number[] = [];
+  // Whether dates i - 1 and i are a closed range's two ends, by what stands between them.
+  const joined = (i: number) =>
+    i > 0 && dates[i]!.at - dates[i - 1]!.end <= 24 && BETWEEN.test(lower.slice(dates[i - 1]!.end, dates[i]!.at));
+  for (let i = 0; i < dates.length; i++) {
+    const d = dates[i]!;
+    if (joined(i)) closed.push(dates[i - 1]!.key, d.key);
+    // An open range, not the second date of a closed one (read above).
+    else if (UNTIL.test(lower.slice(Math.max(0, d.at - 40), d.at))) open.push(d.key);
+  }
+  return closed.length === 0 && open.length === 0 ? null : { closed, open };
+}
+
+/** `days` ("YYYY-MM-DD") as keys, `month * 32 + day`. */
+export function dayKeys(days: ReadonlySet<string>): number[] {
+  const out: number[] = [];
   for (const d of days) {
     const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(d);
-    if (m) want.push((Number(m[1]) - 1) * 32 + Number(m[2]));
+    if (m) out.push((Number(m[1]) - 1) * 32 + Number(m[2]));
   }
-  const inside = (from: number, to: number) => {
-    const len = ahead(from, to);
-    if (len < 1 || len > MAX_SPAN_DAYS) return false;
-    return want.some((w) => {
-      const off = ahead(from, w);
-      return off > 0 && off < len;
-    });
-  };
-  for (let i = 0; i + 1 < dates.length; i++) {
-    const a = dates[i]!;
-    const b = dates[i + 1]!;
-    if (b.at - a.end <= 24 && BETWEEN.test(lower.slice(a.end, b.at)) && inside(a.key, b.key)) return true;
-  }
+  return out;
+}
+
+/** Whether a wanted day (`want`, keys) lies strictly inside the span from `from` to `to`, of 1-`MAX_SPAN_DAYS` days. */
+function inside(from: number, to: number, want: readonly number[]): boolean {
+  const len = ahead(from, to);
+  if (len < 1 || len > MAX_SPAN_DAYS) return false;
+  return want.some((w) => {
+    const off = ahead(from, w);
+    return off > 0 && off < len;
+  });
+}
+
+/**
+ * `coversDay` over a text's spans (`spanFactsOf`): `want` is `dayKeys(days)`, `updatedAt` the item's own day (ms).
+ */
+export function coversSpans(
+  spans: SpanFacts | null,
+  days: ReadonlySet<string>,
+  want: readonly number[],
+  updatedAt?: number,
+): boolean {
+  if (spans === null || days.size === 0) return false;
+  const { closed, open } = spans;
+  for (let i = 0; i + 1 < closed.length; i += 2) if (inside(closed[i]!, closed[i + 1]!, want)) return true;
+  if (open.length === 0) return false;
   // An open range runs from the item's own day, so only an item written within the span's reach of a wanted day
   // (last year's "closed until 2 November" covers nothing now).
   const near =
@@ -186,15 +221,19 @@ export function coversDay(text: string, days: ReadonlySet<string>, updatedAt?: n
       const gap = Date.parse(d) - updatedAt;
       return gap > -DAY && gap <= (MAX_SPAN_DAYS + 1) * DAY;
     });
-  if (near) {
-    const u = new Date(updatedAt!);
-    const from = u.getUTCMonth() * 32 + u.getUTCDate();
-    for (let i = 0; i < dates.length; i++) {
-      const d = dates[i]!;
-      // An open range, not the second date of a closed one (read above).
-      if (i > 0 && d.at - dates[i - 1]!.end <= 24 && BETWEEN.test(lower.slice(dates[i - 1]!.end, d.at))) continue;
-      if (UNTIL.test(lower.slice(Math.max(0, d.at - 40), d.at)) && inside(from, d.key)) return true;
-    }
-  }
+  if (!near) return false;
+  const u = new Date(updatedAt!);
+  const from = u.getUTCMonth() * 32 + u.getUTCDate();
+  for (let i = 0; i < open.length; i++) if (inside(from, open[i]!, want)) return true;
   return false;
+}
+
+/**
+ * Whether `text` spans one of `days` ("YYYY-MM-DD") without writing it: between the two dates of a range, or between
+ * the item's own day (`updatedAt`, ms; none: no open range) and the date an "until" names. Spans of at most
+ * `MAX_SPAN_DAYS`; a day the text writes itself is `namesDay`'s to find, not this.
+ */
+export function coversDay(text: string, days: ReadonlySet<string>, updatedAt?: number): boolean {
+  if (days.size === 0) return false;
+  return coversSpans(spanFactsOf(text), days, dayKeys(days), updatedAt);
 }

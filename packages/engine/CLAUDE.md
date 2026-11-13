@@ -22,6 +22,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
 | `settle.ts`                                                                | `askNudge`'s no-model test of whether the candidates settle a request's people, things and days (D316, D317)                                                                                                                  |
+| `days.ts`, `day-facts.ts`                                                  | `pushDaySeats` (D1400): `datedText`, `coversDay` (spans, `spanFactsOf` + `coversSpans`); an item's date facts for `ItemCache.dated` (D1721), read once a cache entry |
 | `cards.ts`, `intent.ts`, `sync.ts`, `sketch.ts`                            | Moonshot tracks (D56–D63, D87): implication cards, intent index, background sync; a source's vocabulary sketch (D322)                                                                                                         |
 | `gloss.ts`, `gloss.bin`                                                    | The request glossary (`requestGloss`, in the default since D1153; part `gloss`; F1): a non-English request's words glossed into English with no model, from a 26-language glossary written by Haiku subagents (`gloss.bin`, packed by the lab's `gloss-pack.ts` through `packGlossary`); answered from the file's bytes since D1710 (sorted UTF-8 keys, binary search, no strings for a miss, two CRC-32s): the prefix (function words, English words, a Bloom filter of each language's keys, 297 KB) is read when the partner is built (4 ms), the lexicons (2.2 MB) only when a request could be read as another language (the filters bound the count exactly, so English with contractions such as "What's" or "I've" reads none; about 7 ms once a process), so an English-only process holds +0.8 MB, one that has read them +3.1 MB (`bench/gloss.bench.ts --served`); an I/O failure at that read is tried again by a later request, a file that reads wrong glosses nothing, each told once; an English request is searched as written; `gloss-packed.test.ts` holds version 1's reader for the differential test |
 | `rare-terms.ts`                                                            | `RareTerms` (`sourceYieldEarn`, D600, D603, on in the default): one table a user of which few of their sources hold each listed word (4 bytes a word, at most 1 MB), filled in `Sync.store`, read by `Sync.rareHolders` |
@@ -609,8 +610,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `gate.unchecked`, so a constraint-like seat never opens a hand-out no model judged, and a `byDay` push hands
   nothing; the review's finding), and a
   `byDay` push is checked only when a seat is itself constraint-like (without that rule neutral concerns rose 3.1
-  points and checked pushes 26%: the plain arm, deleted). `ItemCache.dated` scans the user's items and reads each
-  text: keep it off the fast path and behind a request that names at most three days. `datedText` rewrites an ordinal only where it reads as a date (a
+  points and checked pushes 26%: the plain arm, deleted). `ItemCache.dated` scans the user's items: keep it off the
+  fast path and behind a request that names at most three days. Since D1721 it reads each item's date facts
+  (`day-facts.ts`: a number, or a small `Uint16Array` for a text with a span or three named days, on `Entry.dates`),
+  read from the text the first time a scan meets the entry, not the text itself. A change to `coversDay` or
+  `dayPattern` must change the facts the same way: `day-facts.test.ts` holds the old functions as its oracle and
+  fuzzes against them (update the oracle only with the change it mirrors). The facts are never frozen: a new
+  `FrozenEntry`/`FastEntry` field for them would bump `PERSIST_FORMAT`; an entry whose words change must be a new
+  entry (or clear `dates`), as `put` does. `datedText` rewrites an ordinal only where it reads as a date (a
   preposition, "the" or a weekday before; the clause's end or a time word after; no past tense before): widening it
   invents days for "the 3rd party vendor" or "what happened on the 9th", which then pull that day's events into the
   lookup and the conflict grounds. The funnel wires no checker,
