@@ -598,6 +598,20 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   interval go in the same thaw. The request path's polls mostly stop (its sources are current), so look-alikes reach the
   push's pool more often on train (funnel delivered 123 → 145 of 192, seed 41); F2's structural filters are the planned
   answer. `active-poll.test.ts`.
+- **The floor's allowance for unused sources (`syncActivePollCap` 40, D1747, in the default).** Used sources (`engaged`)
+  keep the floor; the others share `UserSync.floorAllowance`, 40 floor polls a floor interval refilled continuously, and
+  when more are due the overdue go first (no complete poll for `OVERDUE_FLOORS`, 12 floors: 24 h), then the likeliest
+  to have changed (`changeChance`, the learned rate over the age). The staleness bound for an unused first-party source
+  is so about 24 h while overdue sources fit the allowance (about 20 an active hour), the weekly sweep (D356) past
+  that, against 8 h without the cap; busy unused sources took every turn before the overdue tier (the review: a
+  dormant source got 0 floor polls in 72 h). An unused source opens the floor's block (and its thaw, D325) only once
+  half the allowance has refilled: opening it at one poll thawed a many-source user about every 3 minutes. Without it
+  a user with a thousand first-party connectors made about 1,000 floor calls an active day (85% of their calls, D1746).
+  With up to 40 unused due sources nothing changes, so the five- and thirteen-source screens cannot see it: screen it
+  with `days-calls.ts --noise-sources 995 --noise-vocab 1000 --call-causes`. An unused copy re-listed less often lapses
+  past the synced TTL (7 days) until its weekly sweep; the D356 re-read covers its deliveries. Ordering every due source
+  by chance (used ones too) let noise connectors take the world's crm and drive polls: keep used sources outside the
+  allowance. `active-poll-cap.test.ts`.
 - **Unused sources are swept weekly (D356, `syncUnusedSweepMs`, docs/research/a21-scale.md).** Safe only because a
   skipped sweep's copies are re-read at delivery: `doubted` is true for a copy older than `syncSweepMs` whose source's
   daily sweep the trial skipped (`Sync.sweepLapsed`, which reads `SourceSync.skipped`, not the sweep's age: an idle

@@ -81,6 +81,13 @@ export interface SyncOptions {
    * (`Source.callPriced` true or absent).
    */
   activePollPriced?: boolean;
+  /**
+   * `syncActivePollCap` (D1747; 0 or absent: no cap): the most floor polls a user's unused sources (not `engaged`) get
+   * per `activePollMs`, a refilling allowance; past it the due ones likeliest to have changed (`changeChance`) go
+   * first and the rest wait for a later tick. Used sources keep the floor. A user with a few connectors never reaches
+   * it; one with a thousand first-party ones was floor-polled about a thousand times an active day (D1746).
+   */
+  activePollCap?: number;
   /** A full re-listing, for deletes, this often per source (ms) while the user is active. */
   sweepMs: number;
   /** A user idle this long (ms) is no longer synced; their synced items are dropped. */
@@ -338,6 +345,9 @@ interface UserSync {
   queued?: boolean;
   /** A tick's step is running for the user (`kick` waits for it). */
   ticking?: boolean;
+  /** `activePollCap` (D1747): floor polls the user may still make, and when that allowance was last refilled. */
+  floorAllowance?: number;
+  floorRefilledAt?: number;
 }
 
 export interface SyncStats {
@@ -354,6 +364,18 @@ export interface SyncStats {
 
 /** `activePollBackoff`: a quiet source's floor interval doubles at most this often (a 2 h floor waits up to 8 h). */
 const FLOOR_BACKOFF_LEVELS = 2;
+
+/**
+ * `activePollCap` (D1747): an unused source with no complete poll for this many floor intervals (24 h at the 2 h floor)
+ * goes ahead of the change-rate order, so busy sources cannot keep a dormant one from its floor poll for ever.
+ */
+const OVERDUE_FLOORS = 12;
+
+/** The chance, by the source's learned change rate, that something changed since its last complete poll. */
+function changeChance(s: SourceSync, now: number): number {
+  const rate = s.alpha / s.beta; // items per hour
+  return 1 - Math.exp((-rate * Math.max(0, now - s.polledAt)) / HOUR);
+}
 
 export class SyncManager {
   private readonly users = new Map<string, UserSync>();
@@ -1179,13 +1201,37 @@ export class SyncManager {
       // A poll stores into the cache: a frozen user is thawed first (`ready`, D325), as for a sweep. Once one source
       // is due, those past half their interval go in the same thaw, so a user's sources do not each thaw them in turn
       // (the review: users freeze warm after 2 minutes idle, D862, well inside `activeMs`).
-      if ([...u.sources.values()].some((s) => floorDue(s, byId.get(s.id), 1))) {
+      // `activePollCap` (D1747): the user's used sources (`engage`) are polled as without it; the others share an
+      // allowance of `cap` a floor interval, refilled continuously: overdue ones first (no complete poll for
+      // `OVERDUE_FLOORS` floors, so none starves), then the likeliest to have changed by their learned rate. An unused
+      // source opens the floor's block (and its thaw, D325) only once half the allowance has refilled: a batch a thaw,
+      // not one poll every few minutes (the review: 1,401 thaws in 72 h against main's 36).
+      const cap = this.o.activePollCap ?? 0;
+      if (cap > 0) {
+        const since = now - (u.floorRefilledAt ?? now);
+        u.floorAllowance = Math.min(cap, (u.floorAllowance ?? cap) + (cap * since) / floor);
+        u.floorRefilledAt = now;
+      }
+      const opens = (s: SourceSync) =>
+        floorDue(s, byId.get(s.id), 1) && (cap === 0 || s.engaged || (u.floorAllowance ?? 0) >= Math.max(1, cap / 2));
+      if ([...u.sources.values()].some(opens)) {
         await this.deps.cache.ready(u.scope);
         if (u.gone) return;
+        let due = [...u.sources.values()].filter((s) => floorDue(s, byId.get(s.id), 0.5));
+        if (cap > 0) {
+          const allowance = Math.floor(u.floorAllowance ?? 0);
+          const unused = due.filter((s) => !s.engaged);
+          if (unused.length > allowance) {
+            const overdue = (s: SourceSync) => (now - s.polledAt >= OVERDUE_FLOORS * floor ? 1 : 0);
+            const chance = new Map(unused.map((s) => [s, changeChance(s, now) + overdue(s)] as const));
+            const taken = new Set(unused.sort((a, b) => chance.get(b)! - chance.get(a)!).slice(0, allowance));
+            due = due.filter((s) => s.engaged || taken.has(s));
+          }
+          u.floorAllowance = Math.max(0, (u.floorAllowance ?? 0) - due.filter((s) => !s.engaged).length);
+        }
         await Promise.all(
-          [...u.sources.values()].map(async (s) => {
-            const source = byId.get(s.id);
-            if (!floorDue(s, source, 0.5)) return;
+          due.map(async (s) => {
+            const source = byId.get(s.id)!;
             const [polledAt, stored] = [s.polledAt, s.storedCount];
             await this.run(s, () => this.poll(u, s, source, MAX_POLL_PAGES, false));
             // `activePollBackoff`: a complete floor poll that brought nothing new waits twice as long next time.
