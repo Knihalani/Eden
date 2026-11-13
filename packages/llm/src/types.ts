@@ -9,7 +9,9 @@ export interface ChatMessage {
   /**
    * With `cache`: keep this prefix an hour, not five minutes (Anthropic's 1-hour TTL: a write costs 2x input, not
    * 1.25x; a read 0.1x either way). For a block re-sent tens of minutes apart, such as a user's rule sheet (D1197).
-   * Anthropic wants a longer TTL before a shorter one, so every breakpoint of a request with one is sent at 1 hour.
+   * Anthropic wants a longer TTL before a shorter one: `OpenRouterModel` sends every breakpoint up to the last one that
+   * asks the hour at 1 hour and those after it at five minutes (D1800); the lab's `AnthropicModel` sends one TTL a
+   * request, the hour when any marked message asks it. On a system message it asks the hour for that breakpoint.
    */
   cacheTtl?: "1h";
 }
@@ -70,6 +72,11 @@ export interface ChatResponse {
    * dropped stream is not one the stop ended.
    */
   stopped?: boolean;
+  /**
+   * How many cache breakpoints the request that answered carried (`OpenRouterModel` under `anthropicCache`; unset
+   * when none): the servers' `/metrics` count calls with breakpoints against the cached tokens they read (D1800).
+   */
+  cacheBreakpoints?: number;
 }
 
 /** The one interface the engine sees. Tests use `FakeModel`; production uses `OpenRouterModel`. */

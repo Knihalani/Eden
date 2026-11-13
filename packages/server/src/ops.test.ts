@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
-import { Budget } from "@eden/llm";
+import { Budget, type ChatResponse, type Model } from "@eden/llm";
 import { ContextPartner, ItemCache } from "@eden/engine";
-import { modelFailures, readerFailureLog, turnGateNotice } from "./build";
+import { countedModel, modelCache, modelFailures, readerFailureLog, turnGateNotice } from "./build";
 import { clusterKeyMatches, Ops, serveError, sumMetrics } from "./ops";
 
 const KEY = "cluster-key-0123456789abcdef";
@@ -149,4 +149,43 @@ test("the turn gate's startup notice: said only when the gate is on and its weig
   expect(turnGateNotice(true, null)).toContain("turn-gate.bin could not be read");
   expect(turnGateNotice(true, {})).toBeNull();
   expect(turnGateNotice(false, null)).toBeNull();
+});
+
+test("the roles' prompt-cache use reaches /metrics by role, counted through the model they call (D1800)", async () => {
+  const o = ops();
+  const handler = o.wrap(() => new Response("api"));
+  const before = { ...modelCache.check };
+  const reply = (cacheBreakpoints?: number, write?: number): ChatResponse => ({
+    text: "{}",
+    usage: {
+      inputTokens: 1_000,
+      outputTokens: 5,
+      cachedInputTokens: 600,
+      ...(write ? { cacheWriteTokens: write } : {}),
+    },
+    costUsd: 0,
+    model: "m",
+    latencyMs: 0,
+    ...(cacheBreakpoints ? { cacheBreakpoints } : {}),
+  });
+  const replies = [reply(2, 300), reply()];
+  const inner: Model = { id: "m", chat: async () => replies.shift()! };
+  const counted = countedModel(inner, "check");
+  expect(counted.id).toBe("m");
+  const request = { messages: [{ role: "user" as const, content: "x" }], maxTokens: 1 };
+  expect((await counted.chat(request)).cacheBreakpoints).toBe(2);
+  await counted.chat(request);
+  const c = modelCache.check;
+  expect(c.calls - before.calls).toBe(2);
+  expect(c.breakpointCalls - before.breakpointCalls).toBe(1);
+  expect(c.inputTokens - before.inputTokens).toBe(2_000);
+  expect(c.cacheReadTokens - before.cacheReadTokens).toBe(1_200);
+  expect(c.cacheWriteTokens - before.cacheWriteTokens).toBe(300);
+  const text = await (await handler(new Request("http://x/metrics"))).text();
+  expect(text).toContain(`eden_model_cache_breakpoint_calls_total{role="check"} ${c.breakpointCalls}`);
+  expect(text).toContain(`eden_model_cache_read_tokens_total{role="check"} ${c.cacheReadTokens}`);
+  for (const role of ["reader", "check", "cards"])
+    for (const name of ["calls", "cache_breakpoint_calls", "input_tokens", "cache_read_tokens", "cache_write_tokens"])
+      expect(text).toMatch(new RegExp(`^eden_model_${name}_total\\{role="${role}"\\} \\d+$`, "m"));
+  expect(sumMetrics([text, text])).toContain(`eden_model_calls_total{role="check"} ${2 * c.calls}`);
 });

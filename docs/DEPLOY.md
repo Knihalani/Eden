@@ -226,6 +226,25 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
 - **Alerts:** `deploy/monitoring/alerts.yaml`: down, a process or node down, 5xx over 1%, `/v1/events` p99 over
   500 ms, memory over 75% (plan a box) and 90% (act), store failures and backlog, disk over 80%, model calls failing
   (`EdenModelFailing`: thrown errors, not unreadable replies; D1690).
+- **Prompt cache (D1790, D1800):** the model roles (`role="check"`, `"cards"`, `"reader"`) report, per process since
+  it started, `eden_model_calls_total`, `eden_model_cache_breakpoint_calls_total` (calls whose request carried a
+  `cache_control` breakpoint), `eden_model_input_tokens_total`, `eden_model_cache_read_tokens_total` and
+  `eden_model_cache_write_tokens_total` (0 unless OpenRouter's usage reports `cache_write_tokens`: unverified, so
+  read the cost instead). How to read them, after a day of traffic:
+  - read tokens over input tokens on `role="check"` is the share of the check's input served at 0.1x. The fixed
+    instructions are about 1,200 of a check's 3,000-5,000 input tokens and the same for every user, so a box with
+    more than a few checks every five minutes should show about 0.2 or more [EST]; active users' rule sheets add to
+    it.
+  - breakpoint calls with read tokens flat at 0: the route accepts the fields and serves no reads. Each process
+    stops sending breakpoints by itself after 50 calls that should have read (a prefix it sent within its TTL, long
+    enough to cache) and logs `eden: openrouter served no cached tokens on 50 calls ...` once; a restart starts the
+    count again.
+  - a quiet box (a check every few minutes or less) reads little and writes little: the rule sheet is sent plain to
+    a user whose checks are not usually within the hour (D1800), and only the fixed instructions are written (at the
+    hour when the tenant's checks usually come within it, else five minutes).
+  - set `EDEN_MODEL_CACHE=off` (and restart) when OpenRouter's activity page shows cache writes costing more than
+    the reads save over a few days, when the log line above appears on every restart, or when the account's data
+    rules forbid a provider keeping any prompt for reuse (docs/PRIVACY.md). It changes no reply, only the price.
 - **Logs:** Docker's `json-file`, 5 x 20 MB per container; journald capped at 1 GB. Eden's logs are content-free by
   rule (D56); Alloy can ship them (Loki, free tier).
 - **Uptime from outside:** any free HTTP monitor on `https://<name>/readyz` (UptimeRobot's free plan: 50 monitors
