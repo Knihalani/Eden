@@ -169,10 +169,12 @@ describe("speculate (F10)", () => {
   });
 
   test("never early when the provider runs tools itself, with `store: true`, or on the Responses route (review)", async () => {
-    // A packet turn: speculating would send two upstream calls (the early one, aborted, and the packet's).
+    // A packet turn: speculating would send two upstream calls (the early one, aborted, and the packet's). The turns
+    // run at once (each waits on Eden and the upstream, about 0.6 s; one after another they took 6.5 s): each counts
+    // the upstream calls that carry its own user's message.
     const packetCalls = async (path: string, body: Record<string, unknown>, user: string) => {
       script[`provider tools ${user}`] = `PKT-${user}`;
-      const before = calls.length;
+      const mine = () => calls.filter((c) => JSON.stringify(c.messages).includes(`"provider tools ${user}"`)).length;
       const asked = path.endsWith("/responses")
         ? { input: `provider tools ${user}` }
         : { max_tokens: 10, messages: [u(`provider tools ${user}`)] };
@@ -185,30 +187,23 @@ describe("speculate (F10)", () => {
       );
       await res.text();
       await Bun.sleep(50);
-      return calls.length - before;
+      return mine();
     };
-    // The control: a plain packet turn speculates, so two calls.
-    expect(await packetCalls("/v1/chat/completions", {}, "pt-plain")).toBe(2);
-    expect(
-      await packetCalls(
-        "/v1/messages",
-        { mcp_servers: [{ type: "url", url: "https://mcp.example", name: "x" }] },
-        "pt-mcp",
-      ),
-    ).toBe(1);
-    expect(
-      await packetCalls("/v1/messages", { tools: [{ type: "web_search_20250305", name: "web_search" }] }, "pt-ws"),
-    ).toBe(1);
-    expect(await packetCalls("/v1/messages", { container: "c-1" }, "pt-container")).toBe(1);
-    expect(await packetCalls("/v1/chat/completions", { web_search_options: {} }, "pt-chatws")).toBe(1);
-    expect(await packetCalls("/v1/chat/completions", { store: true }, "pt-store")).toBe(1);
-    expect(await packetCalls("/v1/responses", {}, "pt-resp")).toBe(1);
-    // Client tools still speculate: chat `function`, Anthropic untyped and `custom`.
     const fn = { type: "function", function: { name: "f", parameters: {} } };
-    expect(await packetCalls("/v1/chat/completions", { tools: [fn] }, "pt-fn")).toBe(2);
-    expect(await packetCalls("/v1/messages", { tools: [{ name: "f", input_schema: {} }] }, "pt-anth-fn")).toBe(2);
-    expect(
-      await packetCalls("/v1/messages", { tools: [{ type: "custom", name: "f", input_schema: {} }] }, "pt-custom"),
-    ).toBe(2);
+    const counts = await Promise.all([
+      // The control: a plain packet turn speculates, so two calls.
+      packetCalls("/v1/chat/completions", {}, "pt-plain"),
+      packetCalls("/v1/messages", { mcp_servers: [{ type: "url", url: "https://mcp.example", name: "x" }] }, "pt-mcp"),
+      packetCalls("/v1/messages", { tools: [{ type: "web_search_20250305", name: "web_search" }] }, "pt-ws"),
+      packetCalls("/v1/messages", { container: "c-1" }, "pt-container"),
+      packetCalls("/v1/chat/completions", { web_search_options: {} }, "pt-chatws"),
+      packetCalls("/v1/chat/completions", { store: true }, "pt-store"),
+      packetCalls("/v1/responses", {}, "pt-resp"),
+      // Client tools still speculate: chat `function`, Anthropic untyped and `custom`.
+      packetCalls("/v1/chat/completions", { tools: [fn] }, "pt-fn"),
+      packetCalls("/v1/messages", { tools: [{ name: "f", input_schema: {} }] }, "pt-anth-fn"),
+      packetCalls("/v1/messages", { tools: [{ type: "custom", name: "f", input_schema: {} }] }, "pt-custom"),
+    ]);
+    expect(counts).toEqual([2, 1, 1, 1, 1, 1, 1, 2, 2, 2]);
   }, 30_000);
 });
