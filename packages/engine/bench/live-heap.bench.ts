@@ -7,8 +7,9 @@
  * size); a typed array's buffer is counted once. The walk's total is set beside the measured heap and RSS a user, so
  * what it misses shows.
  *
- * Run: `bun packages/engine/bench/live-heap.bench.ts [users=12] [itemsPerUser=3000] [--sources=20] [--world]`
- * (`--prose` is the default here; `--world` takes the sim's own text). No model, no network.
+ * Run: `bun packages/engine/bench/live-heap.bench.ts [users=12] [itemsPerUser=3000] [--sources=20] [--world] [--dated]`
+ * (`--prose` is the default here; `--world` takes the sim's own text). `--dated`: one day-naming scan a user
+ * (`ItemCache.dated`) before the measure, so every entry holds its date facts (D1721). No model, no network.
  */
 import { estimateShallowMemoryUsageOf as shallow } from "bun:jsc";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -137,6 +138,10 @@ if (process.argv.includes("--thaw")) {
     cache.search(scope, q.ids, q.n, 10, clock);
   }
 }
+if (process.argv.includes("--dated")) {
+  // Every entry's date facts read (D1721): what a user holds once a request has named a day.
+  for (const { scope } of users) cache.dated(scope, new Set(["2026-11-05"]), () => false, clock, 3, 0);
+}
 const m1 = await mem();
 
 // The walk. `seen` is shared by every part of every user, so a shared object (an interned string, a prototype's
@@ -227,6 +232,7 @@ for (const [key, u] of cacheUsers) {
       else itemsStrings += b;
     }
     add("cache: entry sketches", walk(e.sketch));
+    add("cache: entry date facts", walk(e.dates));
   }
   add("cache: vocab", walk(u.vocab));
   add(
