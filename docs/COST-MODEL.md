@@ -1063,7 +1063,9 @@ requests 213 → 214 of 320, on hidden 223 → 257, on control 225 → 235). At 
 with nothing to add; at 0.8 s a check [EST, F7] about +40 ms a request on the mix. Not measured through the API. The
 seats add up to three items to a check that has room (at most `pushCheckItems` 15 in all). CPU: `ItemCache.dated`
 reads each of the user's items once per push that names a day, p50 14.5 ms and p99 21 ms at 1,593 items on an
-idle machine (`packages/sim/lab/g1/dated-bench.ts`), off the fast path.
+idle machine (`packages/sim/lab/g1/dated-bench.ts`), off the fast path. Since D1721 it reads each item's date facts,
+read from the text once an entry: a repeated scan p50 0.05-0.14 ms (1,503 and 15,030 sim items, against 26-35 ms
+before on the same machine); the first scan, and the first after a thaw, about an old scan (47-59 ms at 15,030).
 
 The non-model costs (source API calls, hosting) are not modelled yet. Source calls may dominate for some connectors;
 measure them per connector in M2. The query planner (D28), on by default in the server since D33, adds no model call.

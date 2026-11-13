@@ -36,19 +36,18 @@ import {
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
-import { coversDay } from "./days";
+import { dayKeys } from "./days";
+import { dayFactsClass, dayFactsOf, type DayFacts } from "./day-facts";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
 import type { FrozenDisk } from "./persist";
-import { dayNamer, type NamedDay } from "./settle";
 import { head, termIds } from "./text";
 import { orgLabel } from "./parties";
 
 const NO_TERMS = new Uint32Array(0);
 
-/** `ItemCache.dated`: the most items whose text one scan reads, and the characters of each it reads. */
+/** `ItemCache.dated`: the most items one scan reads (their date facts, `day-facts.ts`, read from the text once). */
 const DATED_SCAN = 20_000;
-const DATED_CHARS = 4_000;
 
 interface Entry {
   item: ContextItem;
@@ -85,6 +84,12 @@ interface Entry {
    * feeds candidates in insertion order), and the thawed user answers exactly as before.
    */
   seq: number;
+  /**
+   * The item's date facts (`day-facts.ts`, D1721), read from its title and text on the first `dated` scan that reads
+   * it: undefined until then. Never frozen or persisted (a thawed entry reads them again); an entry whose item's
+   * words change is a new entry, and a new copy with the same words (`put`) keeps them, as it keeps the index.
+   */
+  dates: DayFacts | undefined;
 }
 
 /**
@@ -1148,11 +1153,15 @@ export class ItemCache {
       if (old && old.item.text === item.text && old.item.title === item.title) {
         // Same words, so the index and sketch stand; the rest (url, meta, updatedAt) is taken from the new copy. Its
         // people are counted again: its meta may name others.
-        if (!sameDetails(old.item, item)) u.revision = ++this.revisions;
+        const same = sameDetails(old.item, item);
+        if (!same) u.revision = ++this.revisions;
         tally(u, old.item, -1);
         tallyOffset(u, old.item, -1);
-        // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate).
-        const fresh = this.limits.packText ? repackLike(item, old.item) : item;
+        // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate). A
+        // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
+        // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
+        const fresh =
+          same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
         old.item = fresh;
         tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
@@ -1182,6 +1191,7 @@ export class ItemCache {
         next: null,
         raw: from,
         seq: ++this.seqs,
+        dates: undefined,
       };
       if (isSynced) {
         entry.synced = true;
@@ -1345,9 +1355,9 @@ export class ItemCache {
     u.seen = old.seen;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
-      const { item, fetchedAt, readMark, sketch, raw } = e;
+      const { item, fetchedAt, readMark, sketch, raw, dates } = e;
       const seq = ++this.seqs; // The new index's insertion order.
-      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw, seq };
+      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw, seq, dates };
       if (e.synced) entry.synced = true;
       u.items.set(e.item.id, entry);
       link(u, entry); // In `items` order, so each class's list keeps its order.
@@ -1536,8 +1546,9 @@ export class ItemCache {
    * `pushDaySeats` (G1, D1400): fresh cached items on one of `days` whatever their words, at most `limit`: events
    * starting that day first (soonest first), then items whose text spans the day (`coversDay`), then items that write
    * the date (`namesDay`), each newest first. `skip` leaves an item out before its text is read (bulk mail, what the
-   * pool already holds). A scan of the user's items that reads each one's text (at most `DATED_SCAN` texts,
-   * `DATED_CHARS` of each): run only for a request that names a day, off the fast path.
+   * pool already holds). A scan of the user's items (at most `DATED_SCAN` past the events) that checks each one's date
+   * facts (`day-facts.ts`, D1721), read from its text the first time a scan meets it and kept on its entry: run only
+   * for a request that names a day, off the fast path.
    */
   dated(
     scope: Scope,
@@ -1550,12 +1561,7 @@ export class ItemCache {
     const u = this.peek(scope);
     if (!u || days.size === 0 || limit <= 0) return [];
     offset ??= this.offsetOf(scope);
-    const named: NamedDay[] = [];
-    for (const d of days) {
-      const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(d);
-      if (m) named.push({ day: Number(m[2]), month: Number(m[1]) - 1 });
-    }
-    const names = dayNamer(named);
+    const want = dayKeys(days);
     let read = 0;
     const found: { e: Entry; cls: number; at: number }[] = [];
     for (const e of u.items.values()) {
@@ -1566,12 +1572,10 @@ export class ItemCache {
         found.push({ e, cls: 0, at: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t });
         continue;
       }
-      // Past the cap no more text is read; events (told by their start alone) are still found.
+      // Past the cap no more items are read; events (told by their start alone) are still found.
       if (++read > DATED_SCAN) continue;
-      const text = `${e.item.title}\n${e.item.text}`.slice(0, DATED_CHARS).toLowerCase();
-      // No digit, no date: most chat lines and short notes end here.
-      if (!/\d/.test(text)) continue;
-      const cls = coversDay(text, days, e.item.updatedAt) ? 1 : names(text) ? 2 : -1;
+      e.dates ??= dayFactsOf(e.item.title, e.item.text);
+      const cls = dayFactsClass(e.dates, days, want, e.item.updatedAt);
       if (cls > 0) found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
     }
     found.sort((a, b) => a.cls - b.cls || a.at - b.at || a.e.doc - b.e.doc);
@@ -2209,6 +2213,7 @@ export class ItemCache {
         next: null,
         raw: r.r,
         seq: r.q,
+        dates: undefined,
       };
       if (r.s === 1) {
         entry.synced = true;
@@ -2370,6 +2375,7 @@ export class ItemCache {
         next: null,
         raw: r.r,
         seq: r.q,
+        dates: undefined,
       };
       if (r.s === 1) {
         entry.synced = true;
@@ -2503,6 +2509,23 @@ function sameDetails(a: ContextItem, b: ContextItem): boolean {
   if (a.url !== b.url || a.updatedAt !== b.updatedAt) return false;
   if (a.meta === b.meta) return true;
   return a.meta !== undefined && b.meta !== undefined && JSON.stringify(a.meta) === JSON.stringify(b.meta);
+}
+
+/**
+ * Whether two copies with the same words and details (`sameDetails`) hold the same own fields besides those: the same
+ * keys, and the same id, source, ref and any field a connector added (a listed item's extra fields are kept by
+ * `sanitizeItem`'s spread). Then the held copy is the new one in every field anyone can read (D1722).
+ */
+function sameFields(held: ContextItem, item: ContextItem): boolean {
+  const keys = Object.keys(item);
+  if (keys.length !== Object.keys(held).length) return false;
+  const a = held as unknown as Record<string, unknown>;
+  const b = item as unknown as Record<string, unknown>;
+  for (const k of keys) {
+    if (k === "text" || k === "title" || k === "meta") continue; // compared already (`put`, `sameDetails`)
+    if (!Object.hasOwn(a, k) || !Object.is(a[k], b[k])) return false;
+  }
+  return true;
 }
 
 /** The entry's sketch, computed on first use and kept (`Entry.sketch`). */
