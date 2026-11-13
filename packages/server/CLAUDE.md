@@ -91,7 +91,8 @@ its model roles.
   (`connectors.test.ts`, the example's `agent.test.ts`, the bench's single arm); otherwise each start spawns a child
   per core. Each process costs memory: idle, one process was 67.0-67.5 MB RSS against 325 MB summed over the router
   (55 MB) and its 4 children (66.6-68.1 MB each), two runs each (`ps -o rss` 3 s after `listening`, `EDEN_DEV=1`, no
-  sources; shared pages are counted in each). Above
+  sources; shared pages are counted in each). Re-measured for D1746 (docs/research/process-memory.md): a child idles
+  at 55.9-56.5 MB, about 34 of it Bun's executable shared by every child; no lever found lowers it by 10 MB. Above
   1, a user's state lives only on the child `childFor` names, so anything new that is per user must stay keyed so
   (never routed by session or at random), and any new per-tenant cap must be divided by N in the child, as the rate,
   burst (`loadConfig`) and spend cap (`buildPartner`'s `processes`) are, or N children raise it N-fold. Each child

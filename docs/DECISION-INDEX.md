@@ -762,3 +762,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1723 | 2026-11-13 | Adopted (a profiling survey's third lever): the conflict test's analysis tests each sentence against one union of its mark lists first… | adopted |
 | D1730 | 2026-11-13 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | rejected |
 | D1740 | 2026-11-13 | Adopted (the inference and tokens survey): `readSse` (`packages/llm/src/anthropic.ts`, the lab's Anthropic transport and… | adopted |
+| D1746 | 2026-11-13 | Finding: no lever lowers a server process's memory floor by the bar (10 MB or 15% a process, first request within noise); kept as it is. | finding |
