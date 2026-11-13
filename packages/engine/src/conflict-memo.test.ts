@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache, sanitizeItem } from "./cache";
-import { analyse } from "./conflict";
+import { analyse, analyseUnfiltered, anyMark, MARK_LISTS } from "./conflict";
 
 /*
  * D1722: a lookup re-stores every item it finds, and `put` replaced the held object even when the copy was equal in
@@ -125,5 +126,106 @@ describe("an equal copy keeps the held object (D1722)", () => {
     expect(cache.get(bob, "mail:a", NOW + 1)).toBe(held[1]!);
     expect(cache.get(alice, "mail:a", NOW + 1)).toBe(held[0]!);
     expect(cache.get(other, "mail:a", NOW + 1)).toBe(held[2]!);
+  });
+});
+
+/*
+ * D1723: `analysis` tests each sentence against one union of every mark list (`anyMark`) and skips the lists' passes
+ * on a sentence it does not match. Identical outputs need exactly: the union matches a sentence when, and only when,
+ * one of the lists does. Checked on the eval's item texts and on fuzzed sentences built from the lists' own words.
+ */
+
+/** Every item (an object with a string title and text) in the eval's scenarios. */
+function scenarioItems(): ContextItem[] {
+  const dir = new URL("../../eval/scenarios/", import.meta.url).pathname;
+  const out: ContextItem[] = [];
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) for (const x of v) walk(x);
+    else if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      if (typeof o.title === "string" && typeof o.text === "string") {
+        out.push({
+          id: String(o.id ?? "x"),
+          sourceId: "s",
+          ref: "r",
+          title: o.title,
+          text: o.text,
+          ...(typeof o.updatedAt === "number" ? { updatedAt: o.updatedAt } : {}),
+        });
+      }
+      for (const x of Object.values(o)) walk(x);
+    }
+  };
+  for (const f of new Bun.Glob("**/*.json").scanSync(dir)) walk(JSON.parse(readFileSync(`${dir}${f}`, "utf8")));
+  return out;
+}
+
+/** The literal words of the mark lists' sources, so fuzzed sentences hit them, their negations and their edges. */
+const LIST_WORDS = [
+  ...new Set(
+    MARK_LISTS[1]
+      .flatMap((re) => re.source.replace(/\\[bsdw]|\(\?<?[=!:]/g, " ").split(/[^a-z'-]+/))
+      .filter((w) => w.length > 1),
+  ),
+];
+const FILLER = (
+  "the a we our booking freeze hold order team not no never don't until unless if when before is was has been " +
+  "on off for to from by 6 nov 2026 friday sam lunch invoice approved released released. payment it's i'm"
+).split(" ");
+
+function fuzzSentence(r: () => number): string {
+  const n = 1 + Math.floor(r() * 12);
+  const words: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const pool = r() < 0.45 ? LIST_WORDS : FILLER;
+    let w = pool[Math.floor(r() * pool.length)]!;
+    // Near misses: a word cut short, run on, capitalised or hyphenated.
+    const k = r();
+    if (k < 0.05) w = w.slice(0, Math.max(1, w.length - 1));
+    else if (k < 0.1) w = `${w}x`;
+    else if (k < 0.14) w = w.toUpperCase();
+    else if (k < 0.17) w = `-${w}`;
+    words.push(w);
+  }
+  return words.join(r() < 0.1 ? "  " : " ");
+}
+
+describe("the mark lists' union (D1723)", () => {
+  const listsMatch = (s: string, vocab: boolean) =>
+    MARK_LISTS[vocab ? 1 : 0].some((re) => new RegExp(re.source, re.flags.replace("g", "")).test(s));
+
+  test("the union matches a sentence exactly when one of the lists does: eval sentences and 60,000 fuzzed", () => {
+    const sentences = scenarioItems().flatMap((x) =>
+      `${x.title}. ${x.text}`.toLowerCase().split(/[.!?;\n]+\s|\n+|,? but /),
+    );
+    expect(sentences.length).toBeGreaterThan(500);
+    const r = rng(1723);
+    for (let i = 0; i < 60_000; i++) sentences.push(fuzzSentence(r));
+    let hits = 0;
+    for (const s of sentences) {
+      for (const vocab of [false, true]) {
+        const want = listsMatch(s, vocab);
+        if (anyMark(s, vocab) !== want) throw new Error(`union differs (vocab ${vocab}) on ${JSON.stringify(s)}`);
+        if (want) hits++;
+      }
+    }
+    // Both sides are exercised: many sentences hold a mark, many do not.
+    expect(hits).toBeGreaterThan(20_000);
+    expect(hits).toBeLessThan(sentences.length * 2 - 20_000);
+  });
+
+  test("analyses with the prefilter equal analyses without it: every eval item and fuzzed texts", () => {
+    const items = scenarioItems();
+    const r = rng(17230);
+    for (let i = 0; i < 3_000; i++) {
+      const text = Array.from({ length: 1 + Math.floor(r() * 6) }, () => fuzzSentence(r)).join(r() < 0.5 ? ". " : "\n");
+      items.push({ id: `f${i}`, sourceId: "s", ref: "r", title: fuzzSentence(r), text, updatedAt: NOW - i * 60_000 });
+    }
+    expect(items.length).toBeGreaterThan(3_100);
+    for (const it of items) {
+      for (const vocab of [false, true]) {
+        expect(analyse(structuredClone(it), vocab)).toEqual(analyseUnfiltered(it, vocab));
+      }
+    }
   });
 });
