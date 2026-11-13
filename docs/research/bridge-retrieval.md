@@ -125,7 +125,8 @@ decoy. Why each falls short:
   in-force card for a user with at most 80 (D1183); a user with more gets no sheet. Retrieval cannot do better
   without a model; a no-model pre-selection of the sheet was rejected (D1182). So the open lever is on the check's
   side (a sheet for heavy users), not retrieval's, and outside this session's scope.
-- E (day ranges) is worth its own small change with its own screen: it fixes a reading the conflict test, the
+- E (day ranges) was fixed as its own change after this note (D1773: train and reworded hidden +1, dev20 level,
+  decoys level on all three). It was worth its own small change with its own screen: it fixes a reading the conflict test, the
   grounding and the day seats all share. It needs `bun run eval` and the train funnel (+1 hidden surfaced, decoys in
   pool −2 here), then dev20 and reworded at $0, since the gain is too small for train alone to show it.
 - A paid Pi run would need to show, for any future lever here, that the agent raises the added facts (D266's lesson:

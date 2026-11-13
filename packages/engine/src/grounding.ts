@@ -9,7 +9,9 @@
  *   person as a phrase counts too ("Robin Hale and Dana Lee"): calendar titles name the other party.
  * - Time: relative and explicit dates in the request ("this Sunday", "tomorrow", "next week", "12 November", "last
  *   Friday") resolve against the event's clock, in the user's own UTC offset, to a set of days; an item whose
- *   `meta.start` falls on one of them is in the window. "The next X" asks for the earliest upcoming one.
+ *   `meta.start` falls on one of them is in the window. "The next X" asks for the earliest upcoming one. A range
+ *   ("12–14 November", "30 November to 4 December", "from 2 Nov until 9 Nov") is every day in it, up to
+ *   `RANGE_MAX_DAYS`; a longer one is its two ends (D1773).
  *
  * Dates are compared as calendar days: an item's day is the date in its own start timestamp (its own offset), the
  * request's days are days at the user's offset (`userOffset`: the offset most of their events carry). A start in UTC
@@ -95,16 +97,25 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
     if (ahead === 0 && m[1] === "next") ahead = 7;
     add(today + ahead * DAY);
   }
+  // Ranges first (D1773): every day of "12–14 November", not the 14th alone. Their text is blanked for the dates
+  // below, so a range's end is not read again on its own with another year ("12 November 2027 to 14 November").
+  const { ranges, rest } = dayRanges(t, today);
+  for (const r of ranges) {
+    if (r.n <= RANGE_MAX_DAYS) add(r.start, r.n);
+    else for (const at of [r.start, r.start + (r.n - 1) * DAY]) add(at);
+  }
   // Dates in either order, with an optional year: "12 November", "the 3rd of January 2027", "Nov 5th".
   const YEAR = String.raw`(?:,?\s+(\d{4}))?`;
   const explicit = [
     ...[
-      ...t.matchAll(
+      ...rest.matchAll(
         new RegExp(String.raw`\b(on |by |from |until )?(\d{1,2})(st|nd|rd|th)?(\s+of)?\s+${MONTH}\b${YEAR}`, "g"),
       ),
     ].map((m) => ({ day: m[2]!, month: m[5]!, year: m[6], firm: !!(m[1] || m[3] || m[4]), dayFirst: true })),
     ...[
-      ...t.matchAll(new RegExp(String.raw`\b(on |by |from |until )?${MONTH}\s+(\d{1,2})(st|nd|rd|th)?\b${YEAR}`, "g")),
+      ...rest.matchAll(
+        new RegExp(String.raw`\b(on |by |from |until )?${MONTH}\s+(\d{1,2})(st|nd|rd|th)?\b${YEAR}`, "g"),
+      ),
     ].map((m) => ({ day: m[3]!, month: m[2]!, year: m[5], firm: !!(m[1] || m[4]), dayFirst: false })),
   ];
   for (const e of explicit) {
@@ -124,6 +135,119 @@ export function timeWindow(text: string, now: number, offsetMinutes = 0): TimeWi
   const asksNext = NEXT_EVENT.test(t);
   if (days.size === 0 && !asksNext) return null;
   return { days, next: asksNext };
+}
+
+/**
+ * The longest range a request's days take whole (D1773): two weeks, the window's own span cap (`add`). A longer range
+ * ("approve leave 1–31 December") is read as its two ends, so a month's leave never puts a month of days into the
+ * lookup's timed items, the conflict frame or the day seats (which take at most `DAY_SEAT_DAYS` days, D1402).
+ */
+export const RANGE_MAX_DAYS = 14;
+
+const ORDINAL = String.raw`(?:st|nd|rd|th)?`;
+/** A weekday written before a range's date ("Monday 30 November to Friday 4 December"), long or short. */
+const RANGE_WEEKDAY = String.raw`(?:(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(?:day|nesday|rsday|urday|sday)?\.?,?\s+)?`;
+/** A range's separator; "and" only after "between" (checked where it matches). */
+const RANGE_SEP = String.raw`\s*(?:–|—|-|to|through|thru|until|till|and)\s*`;
+/** Not inside a word, a number or an identifier ("INV-12-14", "v2-14"): a range starts on its own. */
+const RANGE_START = String.raw`(?<![\p{L}\p{N}_-])`;
+const RANGE_LEAD = String.raw`(from |between |for |on )?`;
+const RANGE_YEAR = String.raw`(?:,?\s+(\d{4}))?`;
+/** The four shapes, most specific first: two months day first, two months month first, one month either way. */
+const RANGES: readonly { re: RegExp; read: (m: RegExpMatchArray) => RangeParts }[] = [
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}(\d{1,2})${ORDINAL}(?:\s+of)?\s+${MONTH}${RANGE_YEAR}` +
+        String.raw`(${RANGE_SEP})${RANGE_WEEKDAY}(?:the\s+)?(\d{1,2})${ORDINAL}(?:\s+of)?\s+${MONTH}\b${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({ lead: m[1], d1: m[2]!, m1: m[3]!, y1: m[4], sep: m[5]!, d2: m[6]!, m2: m[7]!, y2: m[8] }),
+  },
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${MONTH}\s+(\d{1,2})${ORDINAL}${RANGE_YEAR}(${RANGE_SEP})` +
+        String.raw`${MONTH}\s+(\d{1,2})${ORDINAL}\b${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({ lead: m[1], m1: m[2]!, d1: m[3]!, y1: m[4], sep: m[5]!, m2: m[6]!, d2: m[7]!, y2: m[8] }),
+  },
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${RANGE_WEEKDAY}(\d{1,2})${ORDINAL}(${RANGE_SEP})${RANGE_WEEKDAY}` +
+        String.raw`(?:the\s+)?(\d{1,2})${ORDINAL}(?:\s+of)?\s+${MONTH}\b${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({ lead: m[1], d1: m[2]!, sep: m[3]!, d2: m[4]!, m1: m[5]!, m2: m[5]!, y2: m[6] }),
+  },
+  {
+    re: new RegExp(
+      String.raw`${RANGE_START}${RANGE_LEAD}${MONTH}\s+(\d{1,2})${ORDINAL}(${RANGE_SEP})(\d{1,2})${ORDINAL}` +
+        String.raw`(?![\p{L}\p{N}:])${RANGE_YEAR}`,
+      "gu",
+    ),
+    read: (m) => ({ lead: m[1], m1: m[2]!, d1: m[3]!, sep: m[4]!, d2: m[5]!, m2: m[2]!, y2: m[6] }),
+  },
+];
+
+interface RangeParts {
+  lead: string | undefined;
+  d1: string;
+  m1: string;
+  y1?: string | undefined;
+  sep: string;
+  d2: string;
+  m2: string;
+  y2?: string | undefined;
+}
+
+/**
+ * The day ranges a lower-cased request writes, each as its first day (ms, UTC midnight) and its length in days.
+ * Bounded input (the caller's text), linear regexes. A span whose end is before its start, or whose day does not
+ * exist, is no range (its dates are read one by one, as before); "May" and "March" need a preposition before the
+ * range, as a lone date does ("pages 2-3 may be late" names no date). With no year, a range whose end falls before
+ * its start in the calendar crosses into the next year ("28 December to 3 January"). A shape that matched blanks
+ * its text, so a later, looser shape cannot read part of it again; `rest` is the text with every range blanked.
+ */
+function dayRanges(text: string, today: number): { ranges: { start: number; n: number }[]; rest: string } {
+  const out: { start: number; n: number }[] = [];
+  let t = text;
+  for (const shape of RANGES) {
+    for (const m of t.matchAll(shape.re)) {
+      const r = shape.read(m);
+      const sep = r.sep.trim();
+      if (sep === "and" && r.lead?.trim() !== "between") continue;
+      if ((VERB_MONTHS.has(r.m1) || VERB_MONTHS.has(r.m2)) && !r.lead) continue;
+      const at = rangeOf(r, today);
+      if (!at) continue;
+      out.push(at);
+      t = t.slice(0, m.index!) + " ".repeat(m[0].length) + t.slice(m.index! + m[0].length);
+    }
+  }
+  return { ranges: out, rest: t };
+}
+
+/** A range's first day and length, or null when it is no range (see `dayRanges`). */
+function rangeOf(r: RangeParts, today: number): { start: number; n: number } | null {
+  const m1 = MONTHS.indexOf(r.m1.slice(0, 3));
+  const m2 = MONTHS.indexOf(r.m2.slice(0, 3));
+  const d1 = Number(r.d1);
+  const d2 = Number(r.d2);
+  if (m1 < 0 || m2 < 0) return null;
+  const valid = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).getUTCDate() === d;
+  // The year said (either end's, the end's for both when only it is said), else the start's nearest year: this
+  // year's, unless more than half a year gone, as a lone date reads.
+  const said2 = r.y2 ? Number(r.y2) : undefined;
+  const said1 = r.y1 ? Number(r.y1) : m1 === m2 ? said2 : undefined;
+  let y1 = said1 ?? new Date(today).getUTCFullYear();
+  if (said1 === undefined && Date.UTC(y1, m1, d1) < today - 182 * DAY) y1 += 1;
+  let y2 = said2 ?? y1;
+  if (said2 === undefined && Date.UTC(y2, m2, d2) < Date.UTC(y1, m1, d1)) y2 += 1;
+  if (!valid(y1, m1, d1) || !valid(y2, m2, d2)) return null;
+  const start = Date.UTC(y1, m1, d1);
+  const end = Date.UTC(y2, m2, d2);
+  // Within one month the second day must follow the first: "14–12 November" is no span.
+  if (end <= start || (m1 === m2 && said2 === undefined && y2 !== y1)) return null;
+  return { start, n: Math.round((end - start) / DAY) + 1 };
 }
 
 /**
