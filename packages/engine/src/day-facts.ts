@@ -32,8 +32,9 @@ const K2 = 2 ** 40;
  * each form. Each is the per-day regex with `{day}` read as a run of digits and `{month}` as the three-letter name;
  * a capture is kept only when it is how that form writes the day: `String(day)` (no leading zero) for the first four,
  * two digits for `dd.mm`, and the ordinal's own suffix for the third. The two figure forms can overlap ("5/03/04"
- * names 5 March and 3 April), so they match in a lookahead: every position is tried, nothing consumed. The other
- * three cannot overlap themselves: each match starts on a digit run or a month at a word boundary and ends at one.
+ * names 5 March and 3 April), so their month is read in a lookahead and only the day and its "/" or "." are consumed:
+ * the next search starts on the month's digits. The other three cannot overlap themselves: each match starts on a
+ * digit run or a month at a word boundary and ends at one.
  */
 /** "5 March", "5th of mar", "5 marketing" (`{month}[a-z]*` takes any word on the month's three letters). */
 const DAY_MONTH = new RegExp(String.raw`\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+${MONTH3}[a-z]*\b`, "g");
@@ -42,9 +43,9 @@ const MONTH_DAY = new RegExp(String.raw`\b${MONTH3}[a-z]*\s+(\d{1,2})(?:st|nd|rd
 /** "5th", "21st": the day alone, with its own ordinal suffix. */
 const ORDINAL_DAY = /\b(\d{1,2})(st|nd|rd|th)\b/g;
 /** "5/03", "05/03", "010/11": `\b0?{day}/{mm}\b`. */
-const SLASH = /(?=\b(0?)(\d{1,2})\/(\d{2})\b)/g;
+const SLASH = /\b(0?)(\d{1,2})\/(?=(\d{2})\b)/g;
 /** "05.03": `\b{dd}\.{mm}\b`. */
-const DOTTED = /(?=\b(\d{2})\.(\d{2})\b)/g;
+const DOTTED = /\b(\d{2})\.(?=(\d{2})\b)/g;
 
 const ordinal = (d: number) =>
   d % 10 === 1 && d !== 11 ? "st" : d % 10 === 2 && d !== 12 ? "nd" : d % 10 === 3 && d !== 13 ? "rd" : "th";
