@@ -301,7 +301,8 @@ export class StreamableHttpTransport implements Transport {
     const reader = res.body.getReader();
     flight.reader = reader;
     let answered = false;
-    // The reader hands out a new array each read and none is changed after: the parser keeps views, not copies.
+    // Bun's fetch hands out a new array each read and changes none after: the parser keeps views of them, not copies.
+    // A caller's own fetch may reuse one buffer for every chunk, so its chunks are copied as before.
     const parser = new SseParser(
       Math.min(cap, MAX_EVENT_BYTES),
       (data) => {
@@ -312,7 +313,7 @@ export class StreamableHttpTransport implements Transport {
         } else answered = this.deliver(m, id, tally);
         return answered || tally.failed !== null;
       },
-      true,
+      this.options.fetch === undefined,
     );
     let read = 0;
     try {

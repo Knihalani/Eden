@@ -95,7 +95,7 @@ SDK's client (1.29) on the same server:
 - the time to the first call (process start, imports, `initialize`, one call) is about 21 ms against the SDK's
   110-125 ms;
 - small calls (1 KB) cost 0.6-0.9x the SDK's CPU (`tools/list` 0.4-1.1x), and replies in server-sent events
-  0.4-0.9x at every size to 4 MB, at 1, 16 and 256 calls in flight;
+  0.6-0.9x (`tools/list` 0.5-0.75x) at every size to 4 MB, at 1, 16 and 256 calls in flight;
 - JSON replies of 64 KB and more cost 1.2-2.2x the SDK's CPU: the reply is read through its stream in capped
   chunks and joined, where the SDK reads it natively in one piece with no cap.
 

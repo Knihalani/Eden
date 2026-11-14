@@ -231,6 +231,30 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
     expect(refused).toBeGreaterThan(400);
     expect(refused).toBeLessThan(5_000);
   });
+  // D1840: the string scan's searches each move only forward. A version that searched for the next quote again on
+  // every 32-byte run passed every test above and took over 60 s on a 1 MiB body of escapes (an independent review's
+  // mutant); this guards the server and the router (D100), so each crafted 8 MiB body is bounded in CPU time.
+  test("escape-heavy bodies stay linear: 8 MiB each under ~200 ms of CPU", () => {
+    const size = 8 * 1024 * 1024;
+    const fill = (unit: string, head = "", tail = "") => {
+      const n = Math.floor((size - head.length - tail.length) / unit.length);
+      return new TextEncoder().encode(head + unit.repeat(n) + tail);
+    };
+    const string35 = `"${"a".repeat(34)}\\n${"b".repeat(3)}",`; // 41 bytes and a comma; its escape at byte 35
+    const bodies = {
+      "a quote, then only backslashes": fill("\\", '"'),
+      "escaped quotes and backslashes": fill('\\\\\\"', '"'),
+      "an escape every 33 bytes, closed at the end": fill(`${"x".repeat(31)}\\n`, '"', '"'),
+      "33-40-byte strings with an escape at byte 35": fill(string35, "["),
+    };
+    for (const [name, body] of Object.entries(bodies)) {
+      expect(body.length).toBeGreaterThan(size - 64);
+      const t0 = cpuMs();
+      bodyShapeUnder(body);
+      const ms = cpuMs() - t0;
+      expect({ name, slow: ms > 200 }).toEqual({ name, slow: false });
+    }
+  });
 });
 
 describe("checkSourceItems", () => {

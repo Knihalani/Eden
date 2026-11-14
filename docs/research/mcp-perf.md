@@ -56,7 +56,10 @@ chunks about 220 µs a MB.
 2. **The SSE parser finds line ends with `indexOf`** (the next LF and the next CR, each searched once and again only
    after it is passed), keeps an event's one data line as a view instead of copying it into the event buffer, and
    copies only what it must keep past `push` (a line's unended tail, an event not yet dispatched); the transport
-   tells it that `fetch`'s reader hands out a new array each read, so it keeps views of those too.
+   tells it when the body comes from Bun's own `fetch`, whose reader hands out a new array each read, so it keeps
+   views of those too. A caller's own `fetch` (the transport's `fetch` option) may reuse one buffer for every chunk
+   (an independent review's probe: such a stream failed with "Event stream ended before the response" when its
+   chunks were kept as views), so its chunks are copied, as before.
 3. **One timer for every MCP deadline** (`deadlines.ts`): each request's timeout and each POST's deadline go in one
    heap with one `setTimeout` armed for the earliest; a cancel sets a flag, cancelled entries are compacted past
    half the heap, and with none pending the timer is cleared. Ties fire in the order added, so a request's timeout
@@ -150,7 +153,11 @@ it stays because it is no slower and halves the timers a call arms.
 plain text outside strings 25.0 / 22.2 ms, a string of only escapes 14.2 / 15.7, an escape every 33 bytes 27.0 /
 24.2, 4M two-character strings 54.3 / 37.0, 33-byte strings 31.3 / 26.8, 8M numbers 45.5 / 33.2, rows of JSON as
 text (escaped quotes every ~20 bytes) 28.9 / 8.3. Linear in every case; the string of escapes is the one case
-slower, within its noise.
+slower, within its noise. `validate.test.ts` holds this in CPU time (`cpuMs`, so it stays in the main run, not the
+tail): four 8 MiB bodies (a quote then only backslashes; `\\\"` repeated; an escape every 33 bytes, closed at the
+end; 41-byte strings with an escape at byte 35) each under 200 ms. They take 1-45 ms; the quadratic first version
+(the quote searched again on every 32-byte run), which passed every other test and took over 60 s on a 1 MiB body of
+escapes in an independent review, fails it.
 
 ## Interop and equivalence
 
@@ -194,10 +201,11 @@ slower, within its noise.
 - **The stdio server** (`packages/server/bench/mcp-stdio.bench.ts`, this tree against D1704's stdio transport and
   shape check, 20,000 messages of each kind, 3 rounds, two runs): CPU per message 8.5 / 9.3 against 8.8 / 10.2 µs
   for `ping`, 8.5 / 7.6 against 8.4 / 7.4 for `tools/list`, 16.1 / 15.1 against 15.7 / 19.0 for an `ask_context` of
-  1 KB, 180 / 189 against 202 / 186 for an answer of 64 KB: the same within noise. A CPU profile of the ask shows `JSON.stringify` of the answer and `JSON.parse` of
-  the request first; the framing (`indexOf` on bytes, one decode per line) and the handler are a few percent. The
-  line is already cut from bytes with the native `indexOf` and joined once; writing the answer and its newline as
-  one string costs one rope flatten, cheaper than a second write. Nothing was changed there.
+  1 KB, 180 / 189 against 202 / 186 for an answer of 64 KB: the same within noise. A CPU profile of the ask shows
+  `JSON.stringify` of the answer and `JSON.parse` of the request first; the framing (`indexOf` on bytes, one decode
+  per line) and the handler are a few percent. The line is already cut from bytes with the native `indexOf` and
+  joined once; writing the answer and its newline as one string costs one rope flatten, cheaper than a second write.
+  Nothing was changed there.
 
 ## What the client does not support
 
