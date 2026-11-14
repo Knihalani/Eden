@@ -21,6 +21,7 @@ import type { ContextPartner, SharedFrozenDisk } from "@eden/engine";
 import { childTable, OwnerTable } from "@eden/primitives";
 import { bucketOf, type Scope } from "@eden/protocol";
 import { modelCache, modelFailures } from "./build";
+import { pathOf } from "./http";
 
 /** Routes timed by name; anything else is "other", so a scanner cannot grow the label set. */
 const ROUTES = new Set([
@@ -90,6 +91,7 @@ export class Ops {
   private readonly started = Date.now();
   private readonly counts = new Map<string, number>();
   private readonly hist = new Map<string, Float64Array>();
+  private readonly requestNames = new Map<string, Map<number, string>>();
   /** The machine-level owner of each bucket, once a cluster router said (null: not in a cluster yet). */
   private table: OwnerTable | null = null;
   private self = "";
@@ -140,7 +142,7 @@ export class Ops {
 
   private serve(handler: (req: Request) => Promise<Response> | Response): (req: Request) => Promise<Response> {
     return async (req) => {
-      const path = new URL(req.url).pathname;
+      const path = pathOf(req.url);
       if (req.method === "GET" && path === "/readyz") {
         return this.draining
           ? Response.json({ ready: false, error: "draining" }, { status: 503 })
@@ -238,7 +240,12 @@ export class Ops {
   }
 
   observe(route: string, status: number, seconds: number): void {
-    this.add(`eden_requests_total{route="${route}",status="${status}"}`, 1);
+    // The counter's name kept per route and status (both bounded), not built a request (D1892).
+    let names = this.requestNames.get(route);
+    if (!names) this.requestNames.set(route, (names = new Map()));
+    let name = names.get(status);
+    if (name === undefined) names.set(status, (name = `eden_requests_total{route="${route}",status="${status}"}`));
+    this.add(name, 1);
     let h = this.hist.get(route);
     if (!h) this.hist.set(route, (h = new Float64Array(LE.length + 2)));
     for (let i = 0; i < LE.length; i++) if (seconds <= LE[i]!) h[i]!++;
