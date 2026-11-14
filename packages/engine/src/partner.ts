@@ -56,16 +56,7 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
-import {
-  arrangedVisit,
-  assess,
-  mayConstrain,
-  frameOf,
-  namesRef,
-  unmeasuredLimit,
-  type Frame,
-  type Verdict,
-} from "./conflict";
+import { assess, frameOf, gateOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
 import {
   cardKey,
   cardVerdict,
@@ -3198,8 +3189,7 @@ export class ContextPartner {
     if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
       return true;
     }
-    const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
-    return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
+    return gateOf(x.item, this.config.readerGateVisits);
   }
 
   /**
