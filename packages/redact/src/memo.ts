@@ -14,11 +14,11 @@ const live: { clear(): void }[] = [];
 /** How many entry points are running (one calls another): the memos are emptied when the outermost returns. */
 let depth = 0;
 
-/** Runs `f` as an entry point: every memo is empty once the outermost one returns. */
-export function withMemos<T>(f: () => T): T {
+/** Runs `f(a)` as an entry point: every memo is empty once the outermost one returns. */
+export function withMemos<T, A = undefined>(f: (a: A) => T, a?: A): T {
   depth++;
   try {
-    return f();
+    return f(a as A);
   } finally {
     if (--depth === 0) {
       for (const memo of live) memo.clear();
@@ -27,17 +27,24 @@ export function withMemos<T>(f: () => T): T {
   }
 }
 
-/** The answer for the last key asked, within one entry point. */
+/**
+ * The answer for the last key asked, within one entry point. A call site asks `has(key)`, then reads `value` or
+ * stores its own answer with `set`: no callback, so each call site stays monomorphic (a `get(key, compute)` called
+ * with a different `compute` per memo cost 25 µs a 16 KB text in calls the engine could not inline).
+ */
 export class Last<V> {
   private key: string | undefined = undefined;
-  private value: V | undefined = undefined;
+  value: V | undefined = undefined;
   private holding = false;
 
-  /** `compute(key)`, or the answer kept for `key` when it was the last key asked in this call. */
-  get(key: string, compute: (key: string) => V): V {
-    if (depth === 0) return compute(key);
-    if (this.holding && key === this.key) return this.value as V;
-    const value = compute(key);
+  /** Whether `key` was the last key set in this call (never outside an entry point). */
+  has(key: string): boolean {
+    return this.holding && key === this.key;
+  }
+
+  /** Keeps `value` for `key` until the entry point returns (nothing outside one); returns `value`. */
+  set(key: string, value: V): V {
+    if (depth === 0) return value;
     this.key = key;
     this.value = value;
     if (!this.holding) {
@@ -57,7 +64,8 @@ export class Last<V> {
 /** The answers for up to `limit` keys (then it starts again), the last one first, within one entry point. */
 export class Answers<V> {
   private readonly map = new Map<string, V>();
-  private readonly last = new Last<V>();
+  private lastKey: string | undefined = undefined;
+  private lastValue: V | undefined = undefined;
   private holding = false;
   private readonly limit: number;
 
@@ -65,25 +73,28 @@ export class Answers<V> {
     this.limit = limit;
   }
 
-  get(key: string, compute: (key: string) => V): V {
-    if (depth === 0) return compute(key);
-    return this.last.get(key, () => {
-      let value = this.map.get(key);
-      if (value === undefined) {
-        if (this.map.size >= this.limit) this.map.clear();
-        value = compute(key);
-        this.map.set(key, value);
-        if (!this.holding) {
-          this.holding = true;
-          live.push(this);
-        }
-      }
-      return value;
-    });
+  get<A>(key: string, compute: (key: string, a: A) => V, a?: A): V {
+    if (depth === 0) return compute(key, a as A);
+    if (this.holding && key === this.lastKey) return this.lastValue as V;
+    let value = this.map.get(key);
+    if (value === undefined) {
+      if (this.map.size >= this.limit) this.map.clear();
+      value = compute(key, a as A);
+      this.map.set(key, value);
+    }
+    if (!this.holding) {
+      this.holding = true;
+      live.push(this);
+    }
+    this.lastKey = key;
+    this.lastValue = value;
+    return value;
   }
 
   clear(): void {
     this.holding = false;
     this.map.clear();
+    this.lastKey = undefined;
+    this.lastValue = undefined;
   }
 }
