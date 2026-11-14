@@ -151,6 +151,7 @@ export {
   SHEET_REUSE_WEIGHT,
   SHEET_TTL_MS,
   SystemTtlPolicy,
+  type SystemTtl,
   SYSTEM_TTL_TENANTS,
 } from "./sheet-cache";
 export { mayConstrain } from "./conflict";
