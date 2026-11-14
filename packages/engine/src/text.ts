@@ -19,6 +19,22 @@ export function isStopword(term: string): boolean {
   return STOPWORDS.has(term);
 }
 
+/**
+ * The stopwords by length and first code unit (all are ASCII and at most 8 letters), for `stopwordAt`: two or three
+ * candidates a word, compared in place.
+ */
+const STOP_BUCKETS: string[][] = Array.from({ length: 9 * 128 }, () => []);
+for (const w of STOPWORDS) STOP_BUCKETS[w.length * 128 + w.charCodeAt(0)]!.push(w);
+
+/** `isStopword(s.slice(start, end))`, with no string made (D1887). */
+export function stopwordAt(s: string, start: number, end: number): boolean {
+  const len = end - start;
+  const c = s.charCodeAt(start);
+  if (len > 8 || c >= 128) return false;
+  for (const w of STOP_BUCKETS[len * 128 + c]!) if (s.startsWith(w, start)) return true;
+  return false;
+}
+
 /** One code unit of `[\p{L}\p{N}]`: read alone, a unit outside the surrogates is the code point it is. */
 const WORD_CHAR = /^[\p{L}\p{N}]$/u;
 
