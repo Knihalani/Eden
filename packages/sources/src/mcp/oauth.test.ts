@@ -361,6 +361,24 @@ describe("adversarial", () => {
   });
 });
 
+describe("the core's imports", () => {
+  test("index.ts reaches neither oauth.ts nor the other opt-in entry points, whatever it imports in turn", () => {
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const seen = new Set<string>();
+    const walk = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const text = readFileSync(new URL(`./${file}.ts`, import.meta.url), "utf8");
+      for (const m of text.matchAll(/^(?:import|export)[^;]*?from "\.\/([a-z-]+)";/gms)) {
+        if (!/^import type|^export type/.test(m[0])) walk(m[1]!);
+      }
+    };
+    walk("index");
+    expect(seen.has("http")).toBe(true);
+    for (const optIn of ["oauth", "stdio", "extras"]) expect(seen.has(optIn)).toBe(false);
+  });
+});
+
 describe("parseChallenge", () => {
   test("reads the Bearer scheme's parameters among others, quoted or not", () => {
     expect(
