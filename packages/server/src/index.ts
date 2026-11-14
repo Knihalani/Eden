@@ -4,6 +4,7 @@ export { buildPartner, readerFailureLog, startGatePool, type BuildOptions } from
 export {
   DEFAULT_ROLE_MODEL,
   DEFAULT_USD_PER_TENANT_DAY,
+  keyScrubber,
   modelRolesFromEnv,
   NO_MODELS,
   type MakeRoleModel,

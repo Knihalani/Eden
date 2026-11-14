@@ -43,6 +43,12 @@ const smallSync = { syncMaxItems: 100, pushCandidates: 0, syncLocalComplete: fal
 // is searched live, which changes a task's calls and finds between two runs (D842: once the sim's calendar stopped
 // changing in the future, its poll came due and raced the deadline in about half the pairs under the cold gate).
 const timedSync = { ...smallSync, syncStaleChance: 1 };
+// The pairs below that compare two runs also lift the card drain's 250 ms wall-clock gather cut (`gatherMs`,
+// `CardEnricher.gather`): under load the cut fell at another store, and a run's card calls and items carded moved
+// (the neutral block's `use.cards` read 25 calls and 74 carded against 24 and 57, in 3 of 8 runs on a loaded machine).
+// Without the cut a batch holds what the stores bring, as on an idle machine, so the counts are the items', not the
+// load's, and the comparison stays exact.
+const noGatherCut = ["--card-limits", JSON.stringify({ gatherMs: null })];
 
 type Run = { status: number | null; stdout: string; stderr: string; out: string };
 /** `bun args…` in a child process without blocking this one, so the runs below can go out together. */
@@ -87,7 +93,7 @@ const funnelTimed = async (jobs: string) => {
       ...["--json", join(dir, "f.json")],
       // One task per variant and seed. Not a smaller --time: at 0.005 the sleeps are as short as a loaded machine's
       // scheduling jitter, and a task's call counts then changed between the two runs (seen once in three runs).
-      ...["--", "--time", "0.05", "--limit", "1"],
+      ...["--", "--time", "0.05", "--limit", "1", ...noGatherCut],
       ...OUTPUT_FLAGS.flatMap((f) => [`--${f}`, join(dir, `${f}.jsonl`)]),
     ],
     join(dir, "f.json"),
@@ -106,7 +112,7 @@ const funnelNeutral = (jobs: string) => {
     [
       join(lab, "funnel.ts"),
       ...["--suite", "train1", "--seeds", "41,42", "--jobs", jobs, "--set", JSON.stringify(smallSync)],
-      ...["--json", out, "--", "--limit", "2", "--neutral"],
+      ...["--json", out, "--", "--limit", "2", "--neutral", ...noGatherCut],
     ],
     out,
   );

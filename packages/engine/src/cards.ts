@@ -779,6 +779,13 @@ export interface CardLimits {
    * a new user's backfill is read in a fraction of the time for the same items a call.
    */
   lanes: number;
+  /**
+   * How long (ms, wall time) a drain with less than a batch queued waits for stores still waiting their turn
+   * (`CardEnricher.gather`, D370); `GATHER_MS` when unset. A lab hook, never set by the partner: `Infinity` waits
+   * until a batch is queued or nothing waits, so the batches follow the items and not the machine's load (the
+   * funnel's sharding checks compare card calls between two runs, which the 250 ms cut made flaky under load).
+   */
+  gatherMs?: number;
 }
 
 export const DEFAULT_CARD_LIMITS: CardLimits = {
@@ -1016,6 +1023,11 @@ export class CardEnricher {
     private readonly given: Partial<CardLimits> = {},
   ) {
     this.limits = { ...DEFAULT_CARD_LIMITS, ...given };
+    // NaN or a non-number would act as no cut at all (`performance.now() >= NaN` is never true).
+    const ms = given.gatherMs;
+    if (ms !== undefined && !(typeof ms === "number" && ms > 0)) {
+      throw new Error(`CardLimits.gatherMs must be a positive number of ms (Infinity: no cut), got ${String(ms)}`);
+    }
   }
 
   /**
@@ -1428,7 +1440,8 @@ export class CardEnricher {
    * `GATHER_MS` of wall time: a storm's queue of turns does not empty for minutes, and cards must still flow.
    */
   private async gathered(u: UserCards, first: Promise<void>): Promise<void> {
-    const until = performance.now() + GATHER_MS;
+    const ms = this.limits.gatherMs ?? GATHER_MS;
+    const until = performance.now() + ms;
     let waiting: Promise<void> | null = first;
     // The queue of turns is the process's, not the user's: in a storm its tail can be seconds away, so the wait is
     // cut at `until` whatever it is waiting on.
@@ -1436,8 +1449,11 @@ export class CardEnricher {
     let stop: (() => void) | undefined;
     // A forgotten or dropped user's drain stops waiting at once (review of A24), as at the deadline.
     const deadline = new Promise<"late">((r) => {
-      timer = setTimeout(() => r("late"), GATHER_MS);
-      timer.unref?.();
+      // `gatherMs` Infinity: no wall-clock cut (a timer that long would fire at once).
+      if (Number.isFinite(ms)) {
+        timer = setTimeout(() => r("late"), ms);
+        timer.unref?.();
+      }
       stop = () => r("late");
       u.abort.signal.addEventListener("abort", stop, { once: true });
     });

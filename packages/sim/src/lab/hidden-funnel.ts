@@ -44,7 +44,8 @@
  * `"cards": true` in `--config`.
  * `--card-limits` sets the enricher's `CardLimits` (one economy setting at a time; `"cardsEconomy": true` in
  * `--config` applies the whole preset, docs/research/econ-background.md); the run prints the enrichment's counters
- * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users.
+ * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users. `"gatherMs": null` there
+ * lifts the drain's 250 ms wall-clock gather cut (`CardEnricher.gather`), so a run's card calls do not depend on load.
  * `--planted-age-days N` dates every planted item (hidden and decoy) N days before the present instead of one: a
  * stress test for rules that read an item by its age (docs/research/econ-background.md): every suite plants a
  * day-old item.
@@ -136,7 +137,7 @@ import {
   SubsetReplay,
   systemHash,
 } from "./reader-disk";
-import { flags, labConfig, parseJson } from "./flags";
+import { cardLimits, flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
@@ -155,7 +156,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
-import { DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
+import { checkLogging, DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -550,7 +551,16 @@ const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
-const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
+// `"gatherMs": null`: no wall-clock cut on the drain's gather (JSON has no Infinity), so its batches do not move with
+// the machine's load; the sharding checks in funnel-flags.test.ts compare card calls between two runs.
+const CARD_LIMITS = (() => {
+  try {
+    return cardLimits(opt("card-limits", "{}"));
+  } catch (error) {
+    console.error(`hidden-funnel: ${(error as Error).message}`);
+    process.exit(2);
+  }
+})();
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
@@ -658,30 +668,14 @@ const checkModel =
           : null,
         CHECK_MODEL,
       );
-/** `--check-log FILE` (N5): each check call's prompt (request and items as read) and reply, sim data only. */
+/**
+ * `--check-log FILE` (N5): each check call's prompt (the rule sheet, when there is one, then the request and items as
+ * read) and reply, sim data only (`checkLogging`).
+ */
 const CHECK_LOG = opt("check-log", "");
 if (CHECK_LOG) writeFileSync(CHECK_LOG, "");
 const loggedCheck = (tag: Record<string, unknown>): Model | null =>
-  checkModel && CHECK_LOG
-    ? {
-        id: checkModel.id,
-        chat: async (request) => {
-          const prompt = request.messages.find((m) => m.role === "user")?.content ?? "";
-          let res;
-          try {
-            res = await checkModel.chat(request);
-          } catch (e) {
-            // F6: a replay miss is logged with its replay key, so the prompt can be answered elsewhere (a subagent)
-            // and written to the cache under that key; the check then fails open, as any failed call does.
-            const k = promptKey(checkModel.id, request);
-            appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, k, prompt, reply: null })}\n`);
-            throw e;
-          }
-          appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, prompt, reply: res.text })}\n`);
-          return res;
-        },
-      }
-    : checkModel;
+  checkModel && CHECK_LOG ? checkLogging(checkModel, CHECK_LOG, tag) : checkModel;
 const checkLanes: PushChecker[] = [];
 /** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
 const CHECK_DUMP = opt("check-dump", "");
