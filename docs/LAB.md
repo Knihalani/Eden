@@ -558,7 +558,9 @@ of a live search: read "hidden surfaced" (`TOTAL hidden`), not it. Figures for t
 The default has the check on; the funnel wires a checker only with `-- --check live|replay --check-cache F` (without it
 the part is inert and the funnel is the no-model screen). A live check keeps the funnel to one process: run one seed a
 process and merge the JSONs (about $0.13 and 8 minutes a seed with neutral tasks). `-- --check-log F` writes each
-call's prompt and reply; each row's `pushCheckCalled` gives the call rate by variant;
+call's prompt (every user message: the rule sheet when there is one, then the request and pool; `sheetHash` groups a
+user's checks; before 2026-11-14 a row with a sheet held the sheet alone) and reply; each row's `pushCheckCalled`
+gives the call rate by variant;
 `python3 -I packages/sim/lab/p2/calls.py LEDGER` reads a ledger's check calls (tokens, p50, time to first token). `--
 --check-dump F` (D932) writes each call as a training row: the pool exactly as the check read it, each item's cached
 text, the verdict, the raw reply and the task's labels; one process and one file a seed.
