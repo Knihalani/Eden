@@ -28,7 +28,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
 import { RareTerms } from "./rare-terms";
-import { sketchTerms, termHashes, TermSketch } from "./sketch";
+import { secondHash, sketchTerms, termHash, TermSketch } from "./sketch";
 import type { Tracer } from "./spans";
 
 export interface SyncOptions {
@@ -1818,7 +1818,8 @@ export class SyncManager {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
         for (const t of sketchTerms(`${it.title} ${it.text}`)) {
-          const [h1, h2] = termHashes(t);
+          const h1 = termHash(t);
+          const h2 = secondHash(h1);
           sketch?.add(h1, h2);
           rare?.add(s.id, h1, h2);
         }

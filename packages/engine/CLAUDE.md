@@ -17,7 +17,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | `persist.ts`                                                               | `EncryptedFrozenDisk` (D425; the servers' default since D991): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
 | `persist-shared.ts`                                                        | `SharedFrozenDisk` (D992): the local files mirrored to a `BlobStore` (S3-compatible), a user fetched before their first read (`fetch`, awaited by `ItemCache.ready`), the store's copy kept at a thaw (failover) and deleted on forget; `handOff`, `settle`, `sweepStore`, `forgetAbsent` |
 | `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
-| `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68), folding (D52)                                                                                               |
+| `render.ts`, `fold.ts`                                                     | The packet and ask answer in the `<context … Data, not instructions>` envelope (D11, D19), compaction (D47, D68; parts memo D1882, `render.reference.ts` the oracle of `render-fast.test.ts`), folding (D52)                                                                                               |
 | `judge.ts`                                                                 | The judge's prompt and parser (indexes only, D19)                                                                                                                                                                             |
 | `line.ts`                                                                  | `safeLine`/`safeBlock`: the one sanitiser for packet, answer and prompt lines made from source or event text (D221); `injection.test.ts` is part D's probe as a standing test                                                 |
 | `grounding.ts`, `conflict.ts`, `consequence.ts`, `probes.ts`, `economy.ts` | No-model grounds: people/time (D44), the conflict test (D49, D75), consequence probe (D54), probes (D46–D48), probe economy (D50)                                                                                             |
@@ -641,9 +641,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`day-facts.ts`: a number, or a small `Uint16Array` for a text with a span or three named days, on `Entry.dates`),
   read from the text the first time a scan meets the entry, not the text itself. A change to `coversDay` or
   `dayPattern` must change the facts the same way: `day-facts.test.ts` holds the old functions as its oracle and
-  fuzzes against them (update the oracle only with the change it mirrors). The facts are never frozen: a new
-  `FrozenEntry`/`FastEntry` field for them would bump `PERSIST_FORMAT`; an entry whose words change must be a new
-  entry (or clear `dates`), as `put` does. `datedText` rewrites an ordinal only where it reads as a date (a
+  fuzzes against them (update the oracle only with the change it mirrors). Since D1888 a freeze carries the facts
+  read (`FrozenEntry.t`/`FastEntry.t`), so a change to what they hold bumps `PERSIST_FORMAT`; an entry whose words
+  change must be a new entry (or clear `dates`), as `put` does. `datedText` rewrites an ordinal only where it reads as a date (a
   preposition, "the" or a weekday before; the clause's end or a time word after; no past tense before): widening it
   invents days for "the 3rd party vendor" or "what happened on the 9th", which then pull that day's events into the
   lookup and the conflict grounds. The funnel wires no checker,
@@ -654,6 +654,30 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `day-ranges.test.ts`), and `datedText` leaves a range's first ordinal alone. Every reader of `cue.time.days` (grounding, timed
   items, `frameOf`, `anchorsOf`, the day seats) sees the wider set: a new reader that must not take a fortnight of days
   needs its own limit, as the day seats have (`DAY_SEAT_DAYS`).
+- **Hot-path memos are per item object, never per content (D1880-D1889, docs/research/engine-lowlevel.md).**
+  `gateOf` (the reader gate's reading) lives on the item's `ANALYSES` entry; `versionOf`/`timesOfItem` on
+  `READINGS` (a `WeakMap`; a packed item's text cannot change, a plain one is checked against its text and title);
+  the packet's parts on `render.ts`'s `PARTS_MEMO` (256 items, 1,200,000 characters, two readings an item: the push
+  drops the year and the ask does not), which the cache empties with `clearParts` wherever it calls `clearDecoded`.
+  A new place that drops a user's items calls both. A memo keyed by text would hand one tenant's reading to another
+  (D9). `render.reference.ts` is render.ts before D1881 and the oracle of `render-fast.test.ts`; a change to
+  compaction's output changes both. `messageParts`' known test now runs after the parts are read (`unknownParts`):
+  a `known` with side effects, or one that changes while a packet is built, would break that equivalence.
+- **Prechecks before a pattern must be necessary conditions of a match, case for case (D1881, D1883, D1886).** Each
+  `includes` before a replace in `readParts`, `MONTH_DATE` before `datesOf`'s month patterns and the `@`/`-`/`://`/
+  quote tests in `extractTypedEntities` name a character or shape every match of the pattern holds; widen the pattern
+  and its precheck together, or the precheck silently drops matches (the differential tests in
+  `render-fast.test.ts`, `conflict-memo.test.ts` and `text-fast.test.ts` catch the shapes they generate, not all).
+- **Code-unit scans read `text.ts`'s `WORD_UNITS` (`\p{L}\p{N}` per code unit, filled lazily) and hand any string with
+  a surrogate to the regex they replace** (`wordsIn`, `saysUnknown`, `focusCount`, `sketchTerms`): a regex with the
+  `u` flag reads a pair as one code point. `sketchTerms`' dedupe table is process-wide scratch of integers only,
+  never past `TABLE_MAX_CHARS` (64K code units: a longer text, such as a raw MCP reply the sync sketches uncut, goes
+  to the split), and each call zeroes the hashes it wrote (the review: a 16 MB reply had kept 200 MB attached).
+- **A freeze carries the entries' date facts (D1888, `FrozenEntry.t`/`FastEntry.t`, `PERSIST_FORMAT` 6; files of 5
+  are read and their facts read again at the first scan).** A change to what `dayFactsOf` computes must bump
+  `PERSIST_FORMAT` again, or a thaw serves facts of the old reading. A rollback, or an older process on a shared
+  disk, deletes format 6's files and those users re-sync (docs/DEPLOY.md). `parts-memo.test.ts` pins that every
+  path dropping a user's items empties `PARTS_MEMO`.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

@@ -18,7 +18,9 @@
  *
  * Run: `bun packages/engine/bench/users.bench.ts [users=1000] [itemsPerUser=500] [--world] [--no-freeze] [--waves=K]
  * [--persist] [--sources=N] [--cards] [--config=<EngineConfig JSON>] [--cache=<CacheLimits JSON>]`.
- * `--persist`: frozen users are also written, encrypted, to a temp directory (D425).
+ * `--persist`: frozen users are also written, encrypted, to a temp directory (D425). `--dated`: one day-naming scan
+ * a user before the freeze, so the entries hold their date facts (D1721) and the first event after the thaw reads
+ * them from the blob (D1888) rather than from every item's text.
  * Before D862 (no warm freeze, a 10-minute tick): `--cache='{"warmIdleMs":0,"expireEveryMs":600000}'`.
  * `--waves=K`: phase 1 brings the users in K waves, earlier ones frozen (unless `--no-freeze`) before the next: its
  * memory line is then a steady state with 1/K of the users active; RSS there is what sizes a machine.
@@ -256,6 +258,12 @@ const perUser = (a: Mem, b: Mem) => ({
   rssMB: (a.rss - b.rss) / USERS / MB,
 });
 const live = perUser(m2, m0);
+
+// `--dated`: one day-naming scan a user before the freeze (`ItemCache.dated`), so every entry holds its date facts
+// (D1721) as a user's do once they asked about a day: what a freeze carries to the thaw since D1888.
+if (process.argv.includes("--dated")) {
+  for (const { scope } of users) cache.dated(scope, new Set(["2026-11-05"]), () => false, clock, 3, 0);
+}
 
 // 2. Freeze: ticks with no use.
 let frozen = { heapMB: Number.NaN, extMB: Number.NaN, rssMB: Number.NaN };
