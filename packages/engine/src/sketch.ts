@@ -137,6 +137,9 @@ export function sketchTerms(text: string): string[] {
   // and ones with a figure too, and tested each by a regex and a set; this tests a word where it lies (its hash for
   // repeats, `stopwordAt` for stopwords) and makes a string only of a new one it keeps (D1887). A text with a
   // surrogate is read by the split, whose `u` flag reads a pair as one code point.
+  // A text past `TABLE_MAX_CHARS` (an MCP reply can be megabytes: the sync sketches what it listed, uncut) is read by
+  // the split, so the module's tables never grow past the cap (the review: a 16 MB reply had kept 200 MB attached).
+  if (text.length > TABLE_MAX_CHARS) return sketchTermsSplit(text);
   const lower = text.toLowerCase();
   const out: string[] = [];
   // At most one word every two code units: the table stays under half full.
@@ -152,7 +155,10 @@ export function sketchTerms(text: string): string[] {
   for (let i = 0; i <= lower.length; i++) {
     const c = i < lower.length ? lower.charCodeAt(i) : 32;
     let k = WORD_UNITS[c]!;
-    if (k === 0 && (k = readWordUnit(c)) === 0) return sketchTermsSplit(text);
+    if (k === 0 && (k = readWordUnit(c)) === 0) {
+      hashes.fill(0, 0, size);
+      return sketchTermsSplit(text);
+    }
     if (k === 1) {
       if (start < 0) {
         start = i;
@@ -186,13 +192,28 @@ export function sketchTerms(text: string): string[] {
       start = -1;
     }
   }
+  // No hash of this text's words stays behind it (the stamps and places say nothing of its words).
+  hashes.fill(0, 0, size);
   return out;
+}
+
+/** The longest text `sketchTerms` reads with its table (code units); a longer one is read by the split. */
+export const TABLE_MAX_CHARS = 65_536;
+
+/** The slots `sketchTerms`' table holds now (for tests: never past `TABLE_MAX_CHARS`). */
+export function sketchTableSlots(): number {
+  return stamps.length;
+}
+
+/** Whether every hash slot of the table is empty (for tests: a call leaves none of its words' hashes). */
+export function sketchTableClear(): boolean {
+  return hashes.every((h) => h === 0);
 }
 
 /**
  * `sketchTerms`' table of the words a text has given (D1887): per slot the stamp of the call that filled it, the
  * word's hash and its place in the output. Process-wide scratch of integers only, sized to the longest text read (a
- * slot per code unit): no word outlives its call, and a new stamp empties it.
+ * slot per code unit, at most `TABLE_MAX_CHARS`): a new stamp empties it, and each call zeroes the hashes it wrote.
  */
 let stamps = new Uint32Array(1_024);
 let hashes = new Int32Array(1_024);

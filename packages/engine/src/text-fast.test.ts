@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { sketchTerms, sketchTermsSplit } from "./sketch";
+import { sketchTableClear, sketchTableSlots, sketchTerms, sketchTermsSplit, TABLE_MAX_CHARS } from "./sketch";
 import { extractTypedEntities, isCalendar, isCalendarByPattern, isStopword, stopwordAt, type Entity } from "./text";
 
 /*
@@ -167,9 +167,28 @@ describe("the sync's readings by code unit (D1886) against their references", ()
       expect(sketchTerms(long)).toEqual(sketchTermsSplit(long));
     }
     const letters = (k: number) => [...String(k)].map((d) => String.fromCharCode(97 + Number(d))).join("");
-    const distinct = Array.from({ length: 30_000 }, (_, k) => `w${letters(k)}q`).join(" ");
+    const distinct = Array.from({ length: 7_000 }, (_, k) => `w${letters(k)}q`).join(" ");
     expect(sketchTerms(distinct)).toEqual(sketchTermsSplit(distinct));
-    expect(sketchTerms(distinct).length).toBe(30_000);
+    expect(distinct.length).toBeLessThan(TABLE_MAX_CHARS);
+    expect(sketchTerms(distinct).length).toBe(7_000);
+  });
+
+  test("a 16M-character text leaves the module's table at or under its cap, and no call leaves a hash behind", () => {
+    const r = rng(18873);
+    const huge = Array.from({ length: 400 }, () => sentence(r))
+      .join(" ")
+      .repeat(64)
+      .padEnd(16_000_000, " filler words");
+    expect(huge.length).toBeGreaterThanOrEqual(16_000_000);
+    expect(sketchTerms(huge)).toEqual(sketchTermsSplit(huge));
+    expect(sketchTableSlots()).toBeLessThanOrEqual(TABLE_MAX_CHARS);
+    const atCap = sentence(r).repeat(TABLE_MAX_CHARS).slice(0, TABLE_MAX_CHARS);
+    expect(sketchTerms(atCap)).toEqual(sketchTermsSplit(atCap));
+    expect(sketchTableSlots()).toBeLessThanOrEqual(TABLE_MAX_CHARS);
+    expect(sketchTableClear()).toBe(true);
+    // A text with a surrogate leaves the split to read it, and its hashes cleared too.
+    sketchTerms(`${sentence(r)} 🎉 ${sentence(r)}`);
+    expect(sketchTableClear()).toBe(true);
   });
 
   test("stopwordAt is isStopword on a word in place", () => {
