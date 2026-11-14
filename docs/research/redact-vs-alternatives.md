@@ -162,7 +162,8 @@ generates all three shapes. Before these, the gate removed 466 of the 480 plante
 
 - `bun packages/redact/src/gate-differential.ts 250000 <seed>`, seeds 101, 202, 303, 404 at once: 1,000,000 texts,
   623,406 with a finding, no difference in rule ids, spans, stored text or `redact` (153–159 s a shard). The corpus
-  (`--corpus`, 4,925 texts, 256 B to 1 MB): no difference. Run again on the final commit (below).
+  (`--corpus`, 4,925 texts, 256 B to 1 MB): no difference. Both again on the final commit (after the occurrence
+  window, the last code change): no difference (101–103 s a shard).
 - `gate-differential.test.ts`: every one of the 96 lazy-prefix rules against `matchAll` on 61 texts each (samples of
   its own regex, its keywords, prefix and operator characters), with the prefilter's occurrences, without them, and
   dense past the limit (1,200 keywords, so the window moves); the JavaScript prefix table on all 65,536 code units,
@@ -170,9 +171,12 @@ generates all three shapes. Before these, the gate removed 466 of the 480 plante
   those worked out now. Planted faults caught: the start's floor taken without the scan's position (the test fails),
   the window's shift not applied (the test hangs). Preferring the later of two keywords with the same start was not
   caught, and is not a fault: both reach the same operator, so the match is the same.
-- `bun run eval`: precision 0.65, recall 0.52, falseFireRate 0; acting: packets on 19 of 28 neutral turns (1.18 items
+- `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check`: passed in 88 s (2,767 tests in 277 files, 1
+  skipped, and 482 in the 28-file tail); `bun test ./packages/redact ./packages/primitives` in one process: 469 pass,
+  1 skip (the Node comparison, Node 22 on the PATH; with `REDACT_NODE` at Node 24 it passes).
+- `bun run eval` (final tree): precision 0.65, recall 0.52, falseFireRate 0; acting: packets on 19 of 28 neutral turns (1.18 items
   each), facts handed 10 of 11, a look-alike handed on 3 of 10 owed turns: main's numbers.
-- `bun run funnel` on origin/main's redact and primitives, then this branch with `--baseline`: hidden 323/384,
+- `bun run funnel` on origin/main's redact and primitives, then this branch (and its final tree) with `--baseline`: hidden 323/384,
   decoys 294/384 both, "hidden +0 −0, decoys +0 −0".
 
 Typical text did not move: the corpus at 2 KB, 16 KB and 1 MB, main against now, interleaved medians: 0.80–1.56x a
