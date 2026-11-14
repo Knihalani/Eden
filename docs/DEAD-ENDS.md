@@ -85,6 +85,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1400 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | killed by D1402: Pre-registered rule (the owner's bar for G1, fixed before any live run): on dev20 seeds 41–44, hidden… |
 | D1741 | Rejected: `pushCheckSheetAppend`, the push check's rule sheet in the order its cards were made, one text block a rule, the breakpoint on… |  |
 | D1771 | Rejected at $0 on train: seating constraint cards in the push's and the ask's order. | The bar (+8 hidden retrieved or surfaced, decoys surfaced not up) is not met by any arm |
+| D1810 | Rejected: the push check's fixed instructions sent with no cache breakpoint at all, as a third choice of `SystemTtlPolicy` beside the hour… | because a per-tenant policy cannot see the other tenant (D9) and a plain request reads nothing |
 
 ## Reader
 

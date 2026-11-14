@@ -75,7 +75,6 @@ export class SheetCachePolicy {
     const st = this.users.get(user);
     let reuse = 0;
     let seen = 0;
-    let plain = false;
     if (st) {
       seen = Math.min(st.seen + 1, 1 / this.weight);
       reuse = st.reuse + (reuses(st, hash, now) - st.reuse) / seen;
@@ -102,93 +101,52 @@ function reuses(st: SheetState, hash: string, now: number): 0 | 1 {
 
 /** The fixed instructions' cache TTL when no hour-asking sheet follows them: five minutes, or the hour (D1800). */
 export const SYSTEM_TTL_FIVE_MS = 5 * 60_000;
-/** Tenants whose check timing `SystemTtlPolicy` holds: MEASURED bytes each measured, so about MB at the cap. */
+/** Tenants whose check timing `SystemTtlPolicy` holds: 168 bytes each measured, so about 1.7 MB at the cap. */
 export const SYSTEM_TTL_TENANTS = 10_000;
 
 /**
- * How the push check's fixed instructions go out under a plain sheet: their breakpoint at the hour, at five minutes,
- * or no breakpoint at all, sent plain (D1810).
- */
-export type SystemTtl = "1h" | "5m" | "none";
-
-/** The instructions sent plain under a plain sheet cost their plain price, whatever the gap (D1810). */
-const PLAIN_COST = 1.0;
-/**
- * How far below the cheaper breakpoint's running mean none must fall before the instructions go plain, and above it
- * before they are marked again (D1810). Without it a tenant near the line flips at every check (a light user's checks
- * ten minutes apart: the hour asked before the long gap, none before the short one, the dearer of both; +3.5% in
- * D1810's sim). 0.1 is above the largest step one check gives a mean after the first 32 (1.9/32, about 0.06).
- */
-const PLAIN_MARGIN = 0.1;
-
-/**
- * How the push check's fixed instructions (`CHECK_SYSTEM`) go out when the sheet after them goes plain (D1800, D1810).
- * A marked sheet asks the hour, which carries the instructions with it (Anthropic wants a longer TTL first, and the
- * sheet's prefix is written with the instructions' tokens in it whether they are marked or not); a plain one leaves
- * them free. They are the same bytes for every user, so what decides is how far apart checks come, not one user's.
- * Each choice is priced at every gap g between the tenant's checks, as a multiple of the instructions' plain price:
- * - the hour: 0.1 if g is within it, else 2.0 (a write);
- * - five minutes: 0.1 if g is within five minutes, else 1.25;
- * - none (D1810): 1.0 under a plain sheet. Under a marked one the instructions are in the sheet's hour-long prefix
- *   either way, and with none before it nothing kept them: 0.1 only when the check before also marked its sheet
- *   within the hour, else 2.0. Without that a tenant whose plain checks are each followed within the hour by a marked
- *   one reads none as 1.0 where it costs a write (D1810's sim: +1.5% on a quiet box's light users).
- * The first two are D1800's estimator as shipped (it prices a marked check as a plain one, which never moved its
- * choice between them). Each is a running mean over the gaps seen (a plain mean over the first 32, then a weight of
- * 1/32, as `SheetCachePolicy`); the cheapest is sent: the hour while it is below five minutes (D1800's rule), none once
- * it is `PLAIN_MARGIN` below both, and a breakpoint again once the cheaper one is that far below none. A new tenant
- * starts at five minutes (D1790's shape).
+ * The TTL of the push check's fixed instructions (`CHECK_SYSTEM`) when the sheet after them goes plain (D1800). A
+ * marked sheet asks the hour, which carries the instructions with it (Anthropic wants a longer TTL first); a plain
+ * one leaves them free. They are the same bytes for every user, so what decides is how far apart checks come, not
+ * one user's: at a gap g between checks, the hour costs 0.1 if g is within it and 2.0 (a write) if not, five minutes
+ * 0.1 within five minutes and 1.25 if not. `cost` is the running mean of (hour - five) over the gaps seen (a plain mean
+ * over the first 32, then a weight of 1/32, as `SheetCachePolicy`); the hour is asked while it is below 0.
  *
  * Kept per tenant, not per process: a timing average across tenants would be state one tenant's traffic moves for
- * another's (D9). A tenant's own checks are the conservative view of the provider's entry for either breakpoint, which
- * other tenants' checks may also keep warm; for none they are not (an entry another tenant warmed is read only by a
- * request that marks it): D1810 prices that case apart. Holds a time, two flags and four numbers a tenant (no user, no
- * content), at most `SYSTEM_TTL_TENANTS`.
+ * another's (D9), and a tenant's own checks are the conservative view of the provider's entry, which every tenant's
+ * checks keep warm. Holds a time and two numbers a tenant (no user, no content), at most `SYSTEM_TTL_TENANTS`.
+ *
+ * No third choice of no breakpoint at all (D1810, rejected): a tenant whose own checks are hours apart cannot tell a
+ * quiet box from one another tenant keeps warm, and there a plain request pays 1.0 for what five minutes reads at 0.1.
  */
 export class SystemTtlPolicy {
-  private readonly tenants = new Map<
-    string,
-    { at: number; marked: boolean; plain: boolean; hour: number; five: number; none: number; seen: number }
-  >();
+  private readonly tenants = new Map<string, { at: number; cost: number; seen: number }>();
 
   constructor(
     private readonly limit = SYSTEM_TTL_TENANTS,
     private readonly weight = SHEET_REUSE_WEIGHT,
-    /** The lab only (`sheet-adaptive.ts` prices D1800's rule, which never sends none): false never chooses none. */
-    private readonly plain = true,
   ) {}
 
-  /** How a check sent at `now` with a plain sheet (or none) should send the instructions. */
-  ttl(tenant: string, _now: number): SystemTtl {
+  /** Whether a check sent at `now` with a plain sheet (or none) should ask the hour for the instructions. */
+  hour(tenant: string, _now: number): boolean {
     const st = this.tenants.get(tenant);
-    if (st === undefined || st.seen === 0) return "5m";
-    if (st.plain) return "none";
-    return st.hour < st.five ? "1h" : "5m";
+    return st !== undefined && st.seen > 0 && st.cost < 0;
   }
 
-  /**
-   * Records a check sent at `now` (every check, with a sheet or without, whatever it sent); `marked`, whether it sent
-   * its sheet marked (so the instructions went at the hour with it).
-   */
-  note(tenant: string, now: number, marked = false): void {
+  /** Records a check sent at `now` (every check, with a sheet or without). */
+  note(tenant: string, now: number): void {
     const st = this.tenants.get(tenant);
-    let hour = 0;
-    let five = 0;
-    let none = 0;
+    let cost = 0;
     let seen = 0;
-    let plain = false;
     if (st) {
       const gap = now - st.at;
-      const inHour = gap >= 0 && gap <= SHEET_TTL_MS - TTL_MARGIN_MS;
+      const hour = gap >= 0 && gap <= SHEET_TTL_MS - TTL_MARGIN_MS ? 0.1 : 2.0;
+      const five = gap >= 0 && gap <= SYSTEM_TTL_FIVE_MS - TTL_MARGIN_MS ? 0.1 : 1.25;
       seen = Math.min(st.seen + 1, 1 / this.weight);
-      hour = st.hour + ((inHour ? 0.1 : 2.0) - st.hour) / seen;
-      five = st.five + ((gap >= 0 && gap <= SYSTEM_TTL_FIVE_MS - TTL_MARGIN_MS ? 0.1 : 1.25) - st.five) / seen;
-      none = st.none + ((!marked ? PLAIN_COST : st.marked && inHour ? 0.1 : 2.0) - st.none) / seen;
-      const cached = Math.min(hour, five);
-      plain = this.plain && (st.plain ? none <= cached + PLAIN_MARGIN : none < cached - PLAIN_MARGIN);
+      cost = st.cost + (hour - five - st.cost) / seen;
     }
     this.tenants.delete(tenant);
-    this.tenants.set(tenant, { at: now, marked, plain, hour, five, none, seen });
+    this.tenants.set(tenant, { at: now, cost, seen });
     while (this.tenants.size > this.limit) this.tenants.delete(this.tenants.keys().next().value as string);
   }
 
