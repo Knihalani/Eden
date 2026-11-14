@@ -114,13 +114,16 @@ export interface SecretRule {
  * D13's keyword rule, case-insensitive (env lines spell it `PASSWORD=`), with `is` read as a word and the value in
  * group 1. A value already redacted is no secret. A quoted value is taken whole, up to 256 characters (audit A5:
  * `\S{6,}` took `"correct` of `my password is "correct horse battery staple"` and left the rest), in double, single or
- * typographic quotes (audit A20: prose quotes a passphrase in any of them).
+ * typographic quotes (audit A20: prose quotes a passphrase in any of them). A value that is an auth scheme
+ * (`token is Bearer …`) is taken with the credential after it (D1850: `\S{6,}` took `Bearer` alone and left the
+ * token in clear).
  */
 const KEYWORD_RULE = new RegExp(
-  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])("[^"\n]{4,256}"|'[^'\n]{4,256}'|“[^”\n]{4,256}”|‘[^’\n]{4,256}’|\S{6,})`,
+  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])("[^"\n]{4,256}"|'[^'\n]{4,256}'|“[^”\n]{4,256}”|‘[^’\n]{4,256}’|(?:bearer|basic)[ \t]+[^\s\[]\S*|\S{6,})`,
   "dgi",
 );
-const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;
+/** Rule (d)'s secret words; `api key` may be spelled with a space, as prose spells it (D1850). */
+const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential)/i;
 /**
  * URL userinfo, with the password in group 1: the user and host stay, as they say where the secret is for. The
  * scheme is a lookbehind rather than the match's start: written as `\b[a-z][a-z0-9+.-]*:\/\/…`, every word start in
@@ -155,6 +158,9 @@ const PROVIDER_SHAPES: [string, RegExp][] = [
   // A New Relic user API key (D220). gitleaks' rule wants "new relic" within reach of it, so a key pasted alone
   // (a chat message, a runbook line) passed. The prefix and the exact length make the bare shape specific enough.
   ["eden-new-relic", /\bNRAK-[A-Z0-9]{27}\b/gi],
+  // An Azure storage account key in a connection string (D1850): 64 random bytes, base64. gitleaks has no rule for
+  // it, and its generic rule misses one that starts with `/` or `+` (its value class must start alphanumeric).
+  ["eden-azure-storage-key", /\bAccountKey=([A-Za-z0-9+/]{86}==)/gi],
 ];
 /**
  * A presigned or signed object URL (S3 SigV4, GCS V4) is a bearer capability until it expires, up to 7 days: anyone
@@ -703,6 +709,7 @@ const SHAPE_LITERALS: Record<string, string[]> = {
   "eden-aws-key-id": ["a3t", "akia", "asia", "abia", "acca"],
   "eden-discord-webhook": ["discord"],
   "eden-new-relic": ["nrak-"],
+  "eden-azure-storage-key": ["accountkey="],
   "eden-presigned-url": ["x-amz-", "x-goog-"],
 };
 
