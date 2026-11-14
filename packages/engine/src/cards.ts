@@ -297,30 +297,6 @@ export function sentenceKey(item: ContextItem, own = strictOwnText(item)): strin
     .slice(0, 32);
 }
 
-/** `worthCardingStrict` as it read before D1915 (its own text from a spread copy), for its differential test. */
-export function worthCardingStrictBefore(item: ContextItem): boolean {
-  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") });
-  const title = REPLY_TITLE.test(item.title) ? "" : item.title.slice(0, 200);
-  return DEONTIC.test(`${title}\n${own}`);
-}
-
-/** `sentenceKey` as it read before D1915, for its differential test. */
-export function sentenceKeyBefore(item: ContextItem): string | undefined {
-  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") }).toLowerCase();
-  const held = own
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((x) => x.replace(GREETING, "").trim())
-    .filter((x) => x.length > 0 && DEONTIC.test(x));
-  if (held.length === 0 || held.some((x) => RELATIVE.test(x))) return undefined;
-  let title = item.title.slice(0, 200);
-  while (REPLY_TITLE.test(title)) title = title.replace(REPLY_TITLE, "");
-  if (RELATIVE.test(title)) return undefined;
-  return createHash("sha256")
-    .update([title.trim().replace(/\s+/g, " ").toLowerCase(), ...[...new Set(held)].sort()].join("\n"))
-    .digest("hex")
-    .slice(0, 32);
-}
-
 // ---------------------------------------------------------------------------------------------------------------
 // The model's side: prompt and parse.
 

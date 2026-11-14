@@ -1,16 +1,51 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
-import { sentenceKey, sentenceKeyBefore, strictOwnText, worthCardingStrict, worthCardingStrictBefore } from "./cards";
+import { createHash } from "node:crypto";
+import { DEONTIC, ownText, sentenceKey, strictOwnText, worthCardingStrict } from "./cards";
 import { packItem } from "./packed-text";
 
 /*
  * D1915: the card queue's strict prefilter and sentence key read the item's own text once (`strictOwnText`, passed to
  * both by `enqueue`), where each made it from a spread copy of the item. `worthCardingStrictBefore` and
- * `sentenceKeyBefore` are the functions before; every answer here must be theirs, given the text read once or not, on
+ * `sentenceKeyBefore` below are the functions before, verbatim, with cards.ts's patterns they read copied beside them
+ * (`DEONTIC` imported); every answer here must be theirs, given the text read once or not, on
  * the eval's items, fuzzed mail (footers, greetings, replies, relative days, constraint words, long texts past the
  * 2,700-character read) and packed copies.
  */
+
+const READ_CHARS = 900;
+const FOOTER =
+  /(?:confidentiality notice|this (?:e-?mail|message) and any attachments?|if you (?:are not|have received this) (?:the )?(?:intended|in error)|notification (?:preferences|settings)|manage (?:your )?(?:notifications|email preferences|subscriptions?)|to (?:stop|change what you) receiv)(?:[^\n]|\n(?![ \t]*\n))*/gi;
+const REPLY_TITLE = /^\s*(?:re|fwd?|aw|sv)\s*:/i;
+const GREETING =
+  /^(?:hi|hello|hey|hiya|dear|morning|good (?:morning|afternoon|evening)|all)\b[^,.!?:;\n]{0,40}[,!:–—-]\s*/;
+const RELATIVE =
+  /\b(?:today|tonight|tomorrow|yesterday|next|this (?:week|weekend|month|morning|afternoon|evening)|last|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?|in \d+ (?:days?|weeks?|months?)|end of (?:the )?(?:day|week|month)|eod|eow|asap|soon|later)\b/i;
+
+/** `worthCardingStrict` as it read before D1915 (its own text from a spread copy), for its differential test. */
+function worthCardingStrictBefore(item: ContextItem): boolean {
+  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") });
+  const title = REPLY_TITLE.test(item.title) ? "" : item.title.slice(0, 200);
+  return DEONTIC.test(`${title}\n${own}`);
+}
+
+/** `sentenceKey` as it read before D1915, for its differential test. */
+function sentenceKeyBefore(item: ContextItem): string | undefined {
+  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") }).toLowerCase();
+  const held = own
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((x) => x.replace(GREETING, "").trim())
+    .filter((x) => x.length > 0 && DEONTIC.test(x));
+  if (held.length === 0 || held.some((x) => RELATIVE.test(x))) return undefined;
+  let title = item.title.slice(0, 200);
+  while (REPLY_TITLE.test(title)) title = title.replace(REPLY_TITLE, "");
+  if (RELATIVE.test(title)) return undefined;
+  return createHash("sha256")
+    .update([title.trim().replace(/\s+/g, " ").toLowerCase(), ...[...new Set(held)].sort()].join("\n"))
+    .digest("hex")
+    .slice(0, 32);
+}
 
 function rng(seed: number) {
   let a = seed >>> 0;

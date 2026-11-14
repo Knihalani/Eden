@@ -1,15 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { monthDaysByPattern, monthDaysOf } from "./day-facts";
-import { spanHinted, spanHintedByPattern } from "./days";
+import { monthDays } from "./day-facts";
+import { spanHinted } from "./days";
 
 /*
  * D1916: `SPAN_HINT`'s month alternative and `MONTH_DAY` are tried only where a month's three letters start (at a
  * word boundary for `MONTH_DAY`), with sticky copies of the patterns, where each was tried at every position. The
- * patterns themselves are the reference: every answer must be theirs, on the eval's texts and on fuzzed strings
+ * patterns themselves, copied below from days.ts and day-facts.ts before D1916, are the reference: every answer must
+ * be theirs, on the eval's texts and on fuzzed strings
  * made of the shapes that decide where a match may start (a month's letters inside a word, after "_" or a digit,
  * full and short month names, ranges, years, connectors, ordinals, and matches that overlap a later month).
  */
+
+const MONTH3 = "(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)";
+const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
+const WEEKDAY = String.raw`(?:sun|mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?)(?:day)?`;
+const SPAN_HINT = new RegExp(
+  String.raw`${MONTH}(?:,?\s+\d{4})?\s*(?:[–—→-]|(?:to|until|till|through|thru)\b)` +
+    String.raw`|\b(?:until|till|through|thru|up to|to)\s+(?:at least\s+)?(?:and including\s+)?(?:${WEEKDAY}\.?,?\s+)?(?:the\s+)?\d{1,2}\b`,
+);
+const MONTH_DAY = new RegExp(String.raw`\b${MONTH3}[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\b`, "g");
+
+const spanHintedByPattern = (lower: string) => SPAN_HINT.test(lower);
+const monthDaysByPattern = (lower: string): [string, string][] =>
+  [...lower.matchAll(MONTH_DAY)].map((m) => [m[1]!, m[2]!]);
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -96,7 +110,7 @@ describe("the month patterns at the months' starts (D1916) against the patterns 
   test("the eval's texts", () => {
     for (const t of scenarioTexts()) {
       expect(spanHinted(t)).toBe(spanHintedByPattern(t));
-      expect(monthDaysOf(t)).toEqual(monthDaysByPattern(t));
+      expect(monthDays(t)).toEqual(monthDaysByPattern(t));
     }
   });
 
@@ -106,7 +120,7 @@ describe("the month patterns at the months' starts (D1916) against the patterns 
     for (let i = 0; i < runs; i++) {
       const s = fuzz(r);
       if (spanHinted(s) !== spanHintedByPattern(s)) throw new Error(`span hint differs on ${JSON.stringify(s)}`);
-      const a = JSON.stringify(monthDaysOf(s));
+      const a = JSON.stringify(monthDays(s));
       const b = JSON.stringify(monthDaysByPattern(s));
       if (a !== b) throw new Error(`month days differ on ${JSON.stringify(s)}: ${a} against ${b}`);
     }

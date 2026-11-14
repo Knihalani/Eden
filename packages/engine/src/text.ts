@@ -15,11 +15,6 @@ const STOPWORDS = new Set(
   ).split(" "),
 );
 
-/** Every stopword (for tests). */
-export function stopwordList(): string[] {
-  return [...STOPWORDS];
-}
-
 export function isStopword(term: string): boolean {
   return STOPWORDS.has(term);
 }

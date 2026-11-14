@@ -9,7 +9,6 @@ import {
   isStopword,
   STOP_FNV,
   stopwordAt,
-  stopwordList,
   type Entity,
 } from "./text";
 
@@ -210,7 +209,15 @@ describe("the sync's readings by code unit (D1886) against their references", ()
 
   test("every stopword's hash is marked (D1911: a clear mark skips stopwordAt)", () => {
     const r = rng(1911);
-    const words = stopwordList();
+    // The stopword list as text.ts holds it (copied: a stopword added there and not here is checked by the fuzz only).
+    const words = (
+      "a an and are as at be been but by can could did do does for from had has have he her him his how i if in into " +
+      "is it its just me my no not of on or our please she so some than that the their them then there these they " +
+      "this to up us was we were what when where which who why will with would you your yes ok okay thanks thank hi " +
+      "hello hey sure great cool also about after again all am any because before being both each few get got here " +
+      "more most much need only other out over own same should still such too under until very want way well while"
+    ).split(" ");
+    for (const w of words) expect(isStopword(w)).toBe(true);
     for (let i = 0; i < 2_000; i++) words.push(...sentence(r).toLowerCase().split(/\s+/));
     for (const w of words) if (isStopword(w)) expect(STOP_FNV[fnvOfWord(w) & 4_095]).toBe(1);
   });
