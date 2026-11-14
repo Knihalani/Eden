@@ -156,7 +156,7 @@ import {
   type ScreenRow,
 } from "./reader-stub";
 import { packetLine } from "./uptake";
-import { DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
+import { checkLogging, DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -668,30 +668,14 @@ const checkModel =
           : null,
         CHECK_MODEL,
       );
-/** `--check-log FILE` (N5): each check call's prompt (request and items as read) and reply, sim data only. */
+/**
+ * `--check-log FILE` (N5): each check call's prompt (the rule sheet, when there is one, then the request and items as
+ * read) and reply, sim data only (`checkLogging`).
+ */
 const CHECK_LOG = opt("check-log", "");
 if (CHECK_LOG) writeFileSync(CHECK_LOG, "");
 const loggedCheck = (tag: Record<string, unknown>): Model | null =>
-  checkModel && CHECK_LOG
-    ? {
-        id: checkModel.id,
-        chat: async (request) => {
-          const prompt = request.messages.find((m) => m.role === "user")?.content ?? "";
-          let res;
-          try {
-            res = await checkModel.chat(request);
-          } catch (e) {
-            // F6: a replay miss is logged with its replay key, so the prompt can be answered elsewhere (a subagent)
-            // and written to the cache under that key; the check then fails open, as any failed call does.
-            const k = promptKey(checkModel.id, request);
-            appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, k, prompt, reply: null })}\n`);
-            throw e;
-          }
-          appendFileSync(CHECK_LOG, `${JSON.stringify({ ...tag, prompt, reply: res.text })}\n`);
-          return res;
-        },
-      }
-    : checkModel;
+  checkModel && CHECK_LOG ? checkLogging(checkModel, CHECK_LOG, tag) : checkModel;
 const checkLanes: PushChecker[] = [];
 /** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
 const CHECK_DUMP = opt("check-dump", "");
