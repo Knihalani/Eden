@@ -105,14 +105,12 @@ function wordCp(c: number): boolean {
 
 /**
  * Normalises `text` into CPS (BOS and EOS included) and its words into WS0/WS1. Returns the code point count with
- * BOS and EOS in the low 16 bits and the word count above; `normed` holds the slow path's string (else "").
+ * BOS and EOS in the low 16 bits and the word count above.
  */
-let normed = "";
 function load(text: string): number {
   let m = normFast(text);
   let w = 0;
   if (m >= 0) {
-    normed = "";
     for (let i = 1; i <= m;) {
       if (!wordCp(CPS[i]!)) {
         i++;
@@ -125,7 +123,6 @@ function load(text: string): number {
     }
   } else {
     const t = normSlow(text);
-    normed = t;
     m = 0;
     for (let i = 0; i < t.length;) {
       const c = t.codePointAt(i)!;
