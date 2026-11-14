@@ -385,9 +385,16 @@ describe("D1890: the turn gate against its earlier code", () => {
   });
 
   // Small weights that reach the paths the shipped file does not: a float table, the rule's ids, clauses, a skeleton.
-  function weights(over: Record<string, unknown>, floatEmb: boolean, hidden: number, dim: number): Uint8Array {
+  // `fill`: every int8 of the table that byte (0x7f, 0x80), so the SWAR lanes run at their bounds.
+  function weights(
+    over: Record<string, unknown>,
+    floatEmb: boolean,
+    hidden: number,
+    dim: number,
+    bits = 10,
+    fill?: number,
+  ): Uint8Array {
     const r = rng(7 + hidden);
-    const bits = 10;
     const width = dim + (over.rule2 === false ? 0 : 4);
     const out = hidden || width;
     const arrays: [string, "int8" | "float32", number[]][] = [
@@ -410,7 +417,7 @@ describe("D1890: the turn gate against its earlier code", () => {
     for (const [name, dtype, shape] of arrays) {
       const n = shape.reduce((x, y) => x * y, 1);
       let b: Uint8Array;
-      if (dtype === "int8") b = Uint8Array.from({ length: n }, () => Math.floor(r() * 256));
+      if (dtype === "int8") b = Uint8Array.from({ length: n }, () => fill ?? Math.floor(r() * 256));
       else b = new Uint8Array(Float32Array.from({ length: n }, () => (r() - 0.5) * 3).buffer);
       meta.push({ name, dtype, shape, offset: off });
       blobs.push(b);
@@ -468,6 +475,35 @@ describe("D1890: the turn gate against its earlier code", () => {
     const r = rng(hidden + 11);
     for (let i = 0; i < Math.max(400, N / 4); i++) {
       const t = turn(r);
+      const rule = RULES[i % RULES.length];
+      const a = now.read(t, rule);
+      const b = old.read(t, rule);
+      expect(Object.is(a.logit, b.logit)).toBe(true);
+      expect(a).toEqual(b);
+    }
+  });
+
+  // The SWAR sum at its bounds (the review of D1890): a table of all 127 (each lane 255 a row) or all -128 (0 a row),
+  // 12 bits, four dims a word, and turns of 300 code points or more, so a turn holds more than 256 unique ids and the
+  // lanes are flushed. A flush every 400 rows overflows a lane here; random tables never fill one.
+  const LONG = Array.from({ length: 40 }, (_, k) => {
+    const r = rng(1900 + k);
+    let t = "";
+    while (t.length < 700) t += `${PIECES[Math.floor(r() * 17)]} ${Math.floor(r() * 1e6).toString(36)} `;
+    return t;
+  });
+  test.each([
+    ["all 0x7f", 0x7f],
+    ["all 0x80", 0x80],
+  ] as const)("generated weights at the lanes' bounds: %s", (_name, fill) => {
+    const bytes = weights({ arch: "mil" }, false, 7, 8, 12, fill);
+    const now = new TurnGate(bytes);
+    const old = new OldGate(bytes);
+    const many = LONG.filter((t) => gateFeatures(t, 12).length > 256).length;
+    expect(many).toBeGreaterThan(30);
+    const r = rng(fill);
+    for (let i = 0; i < 400; i++) {
+      const t = i < LONG.length ? LONG[i]! : turn(r);
       const rule = RULES[i % RULES.length];
       const a = now.read(t, rule);
       const b = old.read(t, rule);
