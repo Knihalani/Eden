@@ -779,3 +779,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1810 | 2026-11-14 | Rejected: the push check's fixed instructions sent with no cache breakpoint at all, as a third choice of `SystemTtlPolicy` beside the hour… | rejected |
 | D1830 | 2026-11-14 | Adopted (eval tooling; no engine change): `bun run eval --live` reports the push check and fails loudly when it measured no model. | adopted |
 | D1840 | 2026-11-14 | Adopted: the MCP client reads replies faster. `bodyShapeUnder` crosses strings with the native `indexOf`, the SSE parser finds line ends… | adopted |
+| D1841 | 2026-11-14 | Adopted: the secret gate runs each gitleaks and Eden regex rule only where its matches can start, and does less around the rules, with… | adopted |

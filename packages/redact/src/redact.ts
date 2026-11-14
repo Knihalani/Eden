@@ -245,6 +245,47 @@ export function isSecretKey(key: string): boolean {
   return verdict;
 }
 
+/** Each noun's characters, last first (`secretKeyAt` reads a key from its end), by the noun's last character. */
+const NOUNS_BY_LAST: Int32Array[][] = Array.from({ length: 128 }, () => []);
+for (const noun of SECRET_NOUNS) {
+  NOUNS_BY_LAST[noun.charCodeAt(noun.length - 1)]!.push(Int32Array.from([...noun].reverse(), (c) => c.charCodeAt(0)));
+}
+/** The longest key tail a noun can need: the longest noun, an `s` and a digit. */
+const KEY_TAIL = Math.max(...SECRET_NOUNS.map((noun) => noun.length)) + 2;
+/** The last KEY_TAIL alphanumerics of a key, lower case, last first (scratch for `secretKeyAt`). */
+const tail = new Int32Array(KEY_TAIL);
+
+/**
+ * `isSecretKey(s.slice(start, end))` for a key of key characters (`[A-Za-z0-9_.-]`, as `scanAssignments` reads them),
+ * without making the string: the same test on the key's last alphanumerics. SECRET_KEY_SUFFIX holds when, with the
+ * other characters removed, the key ends in a noun, then an optional `s`, then an optional digit; letters compare
+ * ASCII case-insensitively, as the regex's `i` flag does on ASCII.
+ */
+function secretKeyAt(s: string, start: number, end: number): boolean {
+  let n = 0;
+  for (let at = end - 1; at >= start && n < KEY_TAIL; at--) {
+    const c = s.charCodeAt(at);
+    if (c >= 65 && c <= 90) tail[n++] = c | 32;
+    else if ((c >= 97 && c <= 122) || (c >= 48 && c <= 57)) tail[n++] = c;
+  }
+  // A trailing digit can only be the optional digit; then the noun ends at the `s` or just before it.
+  const from = n > 0 && tail[0]! >= 48 && tail[0]! <= 57 ? 1 : 0;
+  if (endsWithNoun(n, from)) return true;
+  return from < n && tail[from] === 115 /* s */ && endsWithNoun(n, from + 1);
+}
+
+/** Whether `tail` from `from` (read backwards from the key's end) starts with a reversed noun. */
+function endsWithNoun(n: number, from: number): boolean {
+  if (from >= n) return false;
+  for (const noun of NOUNS_BY_LAST[tail[from]!]!) {
+    if (noun.length > n - from) continue;
+    let k = 0;
+    while (k < noun.length && tail[from + k] === noun[k]) k++;
+    if (k === noun.length) return true;
+  }
+  return false;
+}
+
 /**
  * Rewrite the value of every `key = value` / `key: value` whose key names a
  * credential.
@@ -265,11 +306,16 @@ function scanAssignments(
   s: string,
   onSecret: null | ((keyEnd: number, valueStart: number, valueEnd: number) => void),
 ): boolean {
-  if (s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
+  // The next `=` and `:` at or after the cursor, by indexOf (native), rather than a test of every character.
+  let eq = s.indexOf("=");
+  let colon = s.indexOf(":");
+  if (eq < 0 && colon < 0) return false;
   let found = false;
   for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c !== 61 /* = */ && c !== 58 /* : */) continue;
+    if (eq >= 0 && eq < i) eq = s.indexOf("=", i);
+    if (colon >= 0 && colon < i) colon = s.indexOf(":", i);
+    if (eq < 0 && colon < 0) break;
+    i = eq < 0 ? colon : colon < 0 ? eq : Math.min(eq, colon);
 
     // Key: walk back over key characters, stepping over one optional quote so
     // that serialised JSON ("token":"…") is covered too.
@@ -308,7 +354,7 @@ function scanAssignments(
     if (valueEnd === valueStart) continue;
 
     i = valueEnd - 1;
-    if (!isSecretKey(s.slice(keyStart, keyEnd))) continue;
+    if (!secretKeyAt(s, keyStart, keyEnd)) continue;
     found = true;
     if (!onSecret) return true;
     onSecret(keyEnd, valueStart, valueEnd);
@@ -333,10 +379,64 @@ export function redactString(s: string): string {
   // No separate pre-filter for the token patterns: `replace` already returns
   // `s` untouched when nothing matches, so a gate would only scan the string a
   // second time — and a hand-written gate is exactly what drifted out of step
-  // with the replacer.
-  SECRET_INLINE.lastIndex = 0;
-  const t = redactBasic(redactDashedSk(redactPem(s))).replace(SECRET_INLINE, REDACTED);
+  // with the replacer. (The secret gate has a scan of its own anyway, and skips
+  // the token passes on its strength: `redactTokensIn`, TOKEN_PASSES.)
+  return redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES));
+}
 
+/**
+ * The token passes of `redactString` in order (PEM blocks, dashed sk- keys, Basic credentials, the inline token
+ * shapes), each with its regexes and lower-case literals one of which every match of the pass holds. Each regex
+ * matches ASCII letters in either case and nothing else for them, so a text that holds none of a pass's literals, in
+ * any case, comes out of that pass unchanged; and a pass only puts in `[REDACTED]`, which holds no literal of a later
+ * pass, nor makes one across its brackets. `gate-differential.test.ts` checks every regex against its literals.
+ */
+export const TOKEN_PASSES: readonly { regexes: readonly RegExp[]; literals: readonly string[] }[] = [
+  { regexes: [PEM_BEGIN], literals: ["-----begin "] },
+  { regexes: [SK_DASHED], literals: ["sk-"] },
+  { regexes: [BASIC_AUTH], literals: ["basic"] },
+  {
+    regexes: SECRET_TOKEN_PATTERNS.map((source) => new RegExp(source, "gi")),
+    literals: [
+      "bearer",
+      "sk-",
+      "k_live_",
+      "k_test_",
+      "ghp_",
+      "gho_",
+      "github_pat_",
+      "xox",
+      "eden_local_",
+      "akia",
+      "asia",
+    ],
+  },
+];
+/** Every pass's literals. */
+export const TOKEN_LITERALS = [...new Set(TOKEN_PASSES.flatMap((pass) => pass.literals))];
+/** `redactTokensIn`'s mask with every pass: bit i runs TOKEN_PASSES[i]. */
+export const ALL_TOKEN_PASSES = (1 << TOKEN_PASSES.length) - 1;
+
+/**
+ * The token passes of `redactString` whose bit is set in `passes` (TOKEN_PASSES' order). The secret gate leaves out
+ * the passes none of whose literals its text holds: they would return their input unchanged.
+ */
+export function redactTokensIn(s: string, passes: number): string {
+  let t = s;
+  if ((passes & 1) !== 0) t = redactPem(t);
+  if ((passes & 2) !== 0) t = redactDashedSk(t);
+  if ((passes & 4) !== 0) t = redactBasic(t);
+  if ((passes & 8) !== 0) {
+    SECRET_INLINE.lastIndex = 0;
+    t = t.replace(SECRET_INLINE, REDACTED);
+  }
+  return t;
+}
+
+/**
+ * The assignment pass of `redactString`: `redactString(s)` is `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`.
+ */
+export function redactAssignments(t: string): string {
   let out = "";
   let cursor = 0;
   scanAssignments(t, (_keyEnd, valueStart, valueEnd) => {
