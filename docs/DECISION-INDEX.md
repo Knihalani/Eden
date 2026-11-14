@@ -776,3 +776,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1790 | 2026-11-13 | Adopted: the servers send Anthropic `cache_control` breakpoints on the roles' stable prefix through OpenRouter by default… | adopted |
 | D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
 | D1800 | 2026-11-13 | Adopted: the push check's rule sheet carries its 1-hour cache breakpoint only when caching it is likely to pay for that user… | adopted |
+| D1810 | 2026-11-14 | Rejected: the push check's fixed instructions sent with no cache breakpoint at all, as a third choice of `SystemTtlPolicy` beside the hour… | rejected |

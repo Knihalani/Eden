@@ -115,6 +115,9 @@ export const SYSTEM_TTL_TENANTS = 10_000;
  * Kept per tenant, not per process: a timing average across tenants would be state one tenant's traffic moves for
  * another's (D9), and a tenant's own checks are the conservative view of the provider's entry, which every tenant's
  * checks keep warm. Holds a time and two numbers a tenant (no user, no content), at most `SYSTEM_TTL_TENANTS`.
+ *
+ * No third choice of no breakpoint at all (D1810, rejected): a tenant whose own checks are hours apart cannot tell a
+ * quiet box from one another tenant keeps warm, and there a plain request pays 1.0 for what five minutes reads at 0.1.
  */
 export class SystemTtlPolicy {
   private readonly tenants = new Map<string, { at: number; cost: number; seen: number }>();

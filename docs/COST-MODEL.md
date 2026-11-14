@@ -875,6 +875,62 @@ spacings on the first version of this script (weights 1/32 to 1/2, bars 0.45 to 
 second seed set (`--seed 9001`: worst +2.8% quiet, +2.0% busy) and other change rates (0–1 a day +2.9% quiet; 3–8 a day
 +2.8% quiet, +2.4% busy). The spacings are still assumed, as in F7: no real check timings exist.
 
+**No breakpoint on the instructions (D1810, rejected; [EST], $0).** D1800 left a candidate: on a very quiet box the
+instructions' five-minute write (1.25x) costs more than sending them with no breakpoint (1.0x). D1810 built it as a third
+choice of `SystemTtlPolicy` (code and tests in commit 3c8672a14; a copy, `PlainTtlPolicy`, stays in the script as the
+`plain` rule): priced per tenant from its check gaps, the hour 0.1 within it and 2.0 past it, five minutes 0.1 within
+five and 1.25 past, none 1.0 under a plain sheet. Two corrections came out of the in-sample seed (1800): none priced at
+1.0 even where a marked sheet follows a plain check within the hour (there it costs a write at 2.0, not a read), and a
+margin of 0.1 before switching to or from none (without it a tenant near the line flipped at every check, asking the
+hour before the long gap and none before the short one: +3.5% on light users at a fixed 10 minutes). Since the script
+gained `--box shared` and a rare user (1 check a day, its rows last so D1800's rows keep their seeds), D1800's own rows
+above read the same. Held out (`--seed 18100`, run once after both corrections), $ a check for the prefix (x plain),
+the rows where the two rules differ or the box is quiet:
+
+| box | user (checks a day) | spacing | D1800 (shipped) | D1810 (none as a third choice) | D1810 vs D1800 |
+|---|---|---|--:|--:|--:|
+| quiet | light (2/day) | fixed 10 min | 0.000309 (1.02) | 0.000309 (1.02) | +0.0% |
+| quiet | light (2/day) | random | 0.000326 (1.08) | 0.000304 (1.01) | -6.6% |
+| quiet | light (2/day) | bursty | 0.000278 (0.92) | 0.000278 (0.92) | +0.0% |
+| quiet | light (2/day) | 30–90 min gaps | 0.000329 (1.09) | 0.000306 (1.02) | -6.8% |
+| quiet | typical (6/day) | fixed 10 min | 0.000135 (0.45) | 0.000135 (0.45) | +0.0% |
+| quiet | typical (6/day) | random | 0.000315 (1.05) | 0.000309 (1.02) | -2.1% |
+| quiet | typical (6/day) | bursty | 0.000208 (0.69) | 0.000208 (0.69) | +0.0% |
+| quiet | typical (6/day) | 30–90 min gaps | 0.000327 (1.09) | 0.000306 (1.01) | -6.6% |
+| quiet | heavy (16/day) | fixed 10 min | 0.000073 (0.24) | 0.000073 (0.24) | +0.0% |
+| quiet | heavy (16/day) | random | 0.000130 (0.43) | 0.000130 (0.43) | +0.0% |
+| quiet | heavy (16/day) | bursty | 0.000135 (0.45) | 0.000135 (0.45) | +0.0% |
+| quiet | heavy (16/day) | 30–90 min gaps | 0.000317 (1.05) | 0.000305 (1.01) | -4.0% |
+| quiet | very heavy (40/day) | fixed 10 min | 0.000052 (0.17) | 0.000052 (0.17) | +0.0% |
+| quiet | very heavy (40/day) | random | 0.000053 (0.18) | 0.000053 (0.18) | +0.0% |
+| quiet | very heavy (40/day) | bursty | 0.000073 (0.24) | 0.000073 (0.24) | +0.0% |
+| quiet | very heavy (40/day) | 30–90 min gaps | 0.000308 (1.02) | 0.000303 (1.01) | -1.5% |
+| quiet | shifting (16 or 2/day, weekly) | fixed 10 min | 0.000099 (0.33) | 0.000099 (0.33) | +0.0% |
+| quiet | shifting (16 or 2/day, weekly) | random | 0.000171 (0.57) | 0.000171 (0.57) | +0.1% |
+| quiet | shifting (16 or 2/day, weekly) | bursty | 0.000153 (0.51) | 0.000153 (0.51) | +0.0% |
+| quiet | shifting (16 or 2/day, weekly) | 30–90 min gaps | 0.000321 (1.06) | 0.000305 (1.01) | -5.0% |
+| quiet | rare (1/day) | any of the four | 0.000326 (1.08) | 0.000303 (1.01) | -6.9% |
+| shared | light (2/day) | random | 0.000215 (0.71) | 0.000297 (0.98) | +37.8% |
+| shared | light (2/day) | 30–90 min gaps | 0.000216 (0.72) | 0.000296 (0.98) | +36.6% |
+| shared | typical (6/day) | random | 0.000218 (0.72) | 0.000275 (0.91) | +26.3% |
+| shared | typical (6/day) | 30–90 min gaps | 0.000216 (0.72) | 0.000295 (0.98) | +36.3% |
+| shared | heavy (16/day) | 30–90 min gaps | 0.000216 (0.72) | 0.000291 (0.96) | +34.8% |
+| shared | very heavy (40/day) | 30–90 min gaps | 0.000216 (0.72) | 0.000284 (0.94) | +31.6% |
+| shared | shifting (16 or 2/day, weekly) | 30–90 min gaps | 0.000216 (0.72) | 0.000291 (0.96) | +34.6% |
+| shared | rare (1/day) | any of the four | 0.000215 (0.71) | 0.000296 (0.98) | +37.8% |
+
+On the boxes the brief named it passes: quiet worst +0.1% (in sample +0.1%; 0–1 changes a day +0.0%, 3–8 +0.3%), best
+-6.9% (every rare cell, light users at random and 30–90-minute gaps -6.6% and -6.8%); busy (the same tenant's other
+users a minute before each check, which its policy sees) +0.0% in every cell on both seeds and both change rates, since
+a gap of a minute half the time keeps five minutes' mean under 1.0. It is rejected on the third box: `--box shared`
+gives the same minute-before checks to another tenant, which a per-tenant policy cannot see (D9). There the quiet tenant
+goes plain and pays 1.0x for instructions D1800 reads at 0.1x from the entry the other tenant keeps warm: +26% to +38% in
+11 of 24 cells (worst +37.8% on both seeds; 0–1 changes a day +37.9%, 3–8 +37.8%), about +$0.00008 a check
+[EST]. The instructions are the same bytes for every tenant and a box serves several on one OpenRouter key
+(`EDEN_API_KEYS`), so that reuse is the case D1790 made for caching them; a tenant cannot tell its own quiet from the
+box's. Freeing the instructions safely needs a signal of the box's warmth, such as the cached tokens the tenant's own
+five-minute sends read, or a process-wide check time (state another tenant's traffic moves, which D1800 declined).
+
 **A route that never reads (D1800).** `OpenRouterModel` counts calls that should have read the cache (a marked prefix at
 least the model's own minimum, `minCacheTokens`: 512 estimated tokens on Haiku 5.5, 4,096 on a model it does not list;
 sent within its TTL after the same model answered it) and, after 50 with no cached token served, stops sending
