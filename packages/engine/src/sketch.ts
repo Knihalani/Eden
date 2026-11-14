@@ -11,7 +11,7 @@
  * users (D425), where it is saved encrypted with them.
  */
 import { hashString } from "@eden/primitives";
-import { isStopword, readWordUnit, WORD_UNITS } from "./text";
+import { isStopword, readWordUnit, stopwordAt, WORD_UNITS } from "./text";
 
 /** The sketch's size while it fills (bits, a power of two). */
 const MAX_BITS = 1 << 15;
@@ -134,12 +134,21 @@ const DIGIT = /\d/;
  */
 export function sketchTerms(text: string): string[] {
   // One pass over the lower-cased text's code units (D1886): the split made a string of every word, two-letter ones
-  // and ones with a figure too, and tested each by a regex; this makes one only of a word it may keep. A text with a
+  // and ones with a figure too, and tested each by a regex and a set; this tests a word where it lies (its hash for
+  // repeats, `stopwordAt` for stopwords) and makes a string only of a new one it keeps (D1887). A text with a
   // surrogate is read by the split, whose `u` flag reads a pair as one code point.
   const lower = text.toLowerCase();
-  const out = new Set<string>();
+  const out: string[] = [];
+  // At most one word every two code units: the table stays under half full.
+  const size = tableFor(lower.length);
+  const mask = size - 1;
+  if (++stamp === 0xffffffff) {
+    stamps.fill(0);
+    stamp = 1;
+  }
   let start = -1;
   let figure = false;
+  let h = 0;
   for (let i = 0; i <= lower.length; i++) {
     const c = i < lower.length ? lower.charCodeAt(i) : 32;
     let k = WORD_UNITS[c]!;
@@ -148,18 +157,62 @@ export function sketchTerms(text: string): string[] {
       if (start < 0) {
         start = i;
         figure = false;
+        h = 0x811c9dc5;
       }
       // `DIGIT` (no `u` flag): the ASCII figures only.
       if (c >= 48 && c <= 57) figure = true;
+      h = Math.imul(h ^ c, 0x01000193);
     } else if (start >= 0) {
-      if (i - start >= 3 && !figure) {
-        const w = lower.slice(start, i);
-        if (!isStopword(w)) out.add(w);
+      const len = i - start;
+      if (len >= 3 && !figure && !stopwordAt(lower, start, i)) {
+        // A word seen before in this text: same hash, same length, same units.
+        let slot = h & mask;
+        for (;;) {
+          if (stamps[slot] !== stamp) {
+            const w = lower.slice(start, i);
+            stamps[slot] = stamp;
+            hashes[slot] = h;
+            words[slot] = out.length;
+            out.push(w);
+            break;
+          }
+          if (hashes[slot] === h) {
+            const seen = out[words[slot]!]!;
+            if (seen.length === len && lower.startsWith(seen, start)) break;
+          }
+          slot = (slot + 1) & mask;
+        }
       }
       start = -1;
     }
   }
-  return [...out];
+  return out;
+}
+
+/**
+ * `sketchTerms`' table of the words a text has given (D1887): per slot the stamp of the call that filled it, the
+ * word's hash and its place in the output. Process-wide scratch of integers only, sized to the longest text read (a
+ * slot per code unit): no word outlives its call, and a new stamp empties it.
+ */
+let stamps = new Uint32Array(1_024);
+let hashes = new Int32Array(1_024);
+let words = new Int32Array(1_024);
+let stamp = 0;
+
+/** The table's size for a text (a power of two at least the text's length), grown when needed. */
+function tableFor(chars: number): number {
+  let size = stamps.length;
+  while (size < chars) size *= 2;
+  if (size > stamps.length) {
+    stamps = new Uint32Array(size);
+    hashes = new Int32Array(size);
+    words = new Int32Array(size);
+    stamp = 0;
+  }
+  // A short text uses a small table's prefix: its probes stay in the cache's lines.
+  let used = 64;
+  while (used < chars * 2 && used < size) used *= 2;
+  return used;
 }
 
 /** `sketchTerms` by its split, as it read every text before D1886: the reading of a text with a surrogate. */

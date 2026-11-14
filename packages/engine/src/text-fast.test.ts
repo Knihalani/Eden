@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { sketchTerms, sketchTermsSplit } from "./sketch";
-import { extractTypedEntities, isCalendar, isCalendarByPattern, isStopword, type Entity } from "./text";
+import { extractTypedEntities, isCalendar, isCalendarByPattern, isStopword, stopwordAt, type Entity } from "./text";
 
 /*
  * D1886: the sync's per-item readings by code unit. `sketchTerms` scans the lower-cased text once (the split is kept as
@@ -157,6 +157,26 @@ describe("the sync's readings by code unit (D1886) against their references", ()
     const texts = scenarioTexts();
     for (let i = 0; i < 20_000; i++) texts.push(r() < 0.6 ? sentence(r) : units(r));
     for (const t of texts) expect(sketchTerms(t)).toEqual(sketchTermsSplit(t));
+  });
+
+  test("sketchTerms on long texts (its table grows) and on many distinct words (every probe)", () => {
+    const r = rng(18871);
+    for (let i = 0; i < 60; i++) {
+      const base = Array.from({ length: 40 }, () => sentence(r)).join(" ");
+      const long = base.repeat(1 + Math.floor(r() * 200));
+      expect(sketchTerms(long)).toEqual(sketchTermsSplit(long));
+    }
+    const letters = (k: number) => [...String(k)].map((d) => String.fromCharCode(97 + Number(d))).join("");
+    const distinct = Array.from({ length: 30_000 }, (_, k) => `w${letters(k)}q`).join(" ");
+    expect(sketchTerms(distinct)).toEqual(sketchTermsSplit(distinct));
+    expect(sketchTerms(distinct).length).toBe(30_000);
+  });
+
+  test("stopwordAt is isStopword on a word in place", () => {
+    const r = rng(18872);
+    const words = ["the", "THE", "them", "theme", "while", "whiles", "okay", "ok", "a", "", "über", "would", "you"];
+    for (let i = 0; i < 5_000; i++) words.push(...sentence(r).toLowerCase().split(/\s+/));
+    for (const w of words) expect(stopwordAt(`xx ${w} yy`, 3, 3 + w.length)).toBe(isStopword(w));
   });
 
   test("extractTypedEntities: the eval's texts, fuzzed sentences and random code units", () => {
