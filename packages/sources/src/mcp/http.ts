@@ -20,6 +20,7 @@
  * A session the server no longer knows (404 while one is held) closes the transport, so `McpSource` connects again
  * with a fresh `initialize`, as the spec asks.
  */
+import { deadlines, type Deadline } from "./deadlines";
 import { parseJsonBytes } from "./json";
 import { SseParser } from "./sse";
 import { answers, asMessage, isRequest, type JsonRpcId, type JsonRpcMessage, type Transport } from "./types";
@@ -80,7 +81,8 @@ export class StreamableHttpError extends Error {
 /** One POST in flight: aborted at its deadline, by a cancellation of its request, or by `close`. */
 interface Flight {
   abort: AbortController;
-  timer: ReturnType<typeof setTimeout>;
+  /** The POST's deadline, on the process's one MCP timer (`deadlines.ts`). */
+  deadline: Deadline;
   /**
    * The body being read, cancelled with the abort: a `fetch` errors its body when its signal aborts, but a body that
    * is not the fetch's own (a test's stream, an embedding's fetch) would leave the read waiting.
@@ -141,8 +143,10 @@ export class StreamableHttpTransport implements Transport {
   async send(message: JsonRpcMessage): Promise<void> {
     if (this.state !== "open") throw new Error("Not connected");
     const id = isRequest(message) ? message.id : undefined;
-    const flight: Flight = { abort: new AbortController(), timer: undefined as never };
-    flight.timer = setTimeout(() => cut(flight, new StreamableHttpError(-1, "Request timed out")), this.timeoutMs);
+    const flight: Flight = { abort: new AbortController(), deadline: undefined as never };
+    flight.deadline = deadlines.add(this.timeoutMs, () =>
+      cut(flight, new StreamableHttpError(-1, "Request timed out")),
+    );
     this.flights.add(flight);
     if (id !== undefined) this.byId.set(id, flight);
     // A cancelled request's POST is cut first, whatever becomes of the notification's own POST: a server that hangs
@@ -172,9 +176,9 @@ export class StreamableHttpTransport implements Transport {
     }
   }
 
-  /** Ends a flight: its timer cleared, and its fetch aborted when `abort` (a body still being read). */
+  /** Ends a flight: its deadline cancelled, and its fetch aborted when `abort` (a body still being read). */
   private land(f: Flight, abort: boolean): void {
-    clearTimeout(f.timer);
+    deadlines.cancel(f.deadline);
     this.flights.delete(f);
     if (abort) cut(f);
   }
@@ -297,14 +301,19 @@ export class StreamableHttpTransport implements Transport {
     const reader = res.body.getReader();
     flight.reader = reader;
     let answered = false;
-    const parser = new SseParser(Math.min(cap, MAX_EVENT_BYTES), (data) => {
-      const m = parseJsonBytes(data);
-      if (m === undefined) {
-        if (++tally.bad > MAX_BAD_PER_REPLY)
-          tally.failed = `Event stream carried over ${MAX_BAD_PER_REPLY} bad messages`;
-      } else answered = this.deliver(m, id, tally);
-      return answered || tally.failed !== null;
-    });
+    // The reader hands out a new array each read and none is changed after: the parser keeps views, not copies.
+    const parser = new SseParser(
+      Math.min(cap, MAX_EVENT_BYTES),
+      (data) => {
+        const m = parseJsonBytes(data);
+        if (m === undefined) {
+          if (++tally.bad > MAX_BAD_PER_REPLY)
+            tally.failed = `Event stream carried over ${MAX_BAD_PER_REPLY} bad messages`;
+        } else answered = this.deliver(m, id, tally);
+        return answered || tally.failed !== null;
+      },
+      true,
+    );
     let read = 0;
     try {
       for (;;) {
