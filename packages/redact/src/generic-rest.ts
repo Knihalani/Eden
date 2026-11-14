@@ -108,6 +108,8 @@ function endAt(text: string, at: number): number {
 export interface Runs {
   from: number;
   to: number;
+  /** `to` is where the read of W-or-S stopped, 24 past `from`, not the run's end (the run is too long for REST). */
+  capped: boolean;
   a1From: number;
   a1To: number;
   a2From: number;
@@ -115,7 +117,7 @@ export interface Runs {
 }
 
 /** A fresh cache, for one text. */
-export const freshRuns = (): Runs => ({ from: 0, to: -1, a1From: 0, a1To: -1, a2From: 0, a2To: -1 });
+export const freshRuns = (): Runs => ({ from: 0, to: -1, capped: false, a1From: 0, a1To: -1, a2From: 0, a2To: -1 });
 
 /** SEC then END from `s`: where the match ends, or -1. */
 function secretFrom(text: string, s: number, runs: Runs): number {
@@ -188,13 +190,17 @@ export function genericRest(text: string, k: number, runs: Runs): number {
   const kw = keywordAt(text, k);
   if (kw < 0) return -1;
   const after = k + kw;
-  if (after < runs.from || after > runs.to) {
+  if (after < runs.from || after > runs.to || runs.capped) {
+    // Read at most 24 past `after`: past 23 there is no split, and a run a megabyte long (`secret xxxx…`) was read to
+    // its end, 7 ms on V8. A keyword inside a long run then reads its own 24 (linear: at most 24 a keyword).
+    const limit = Math.min(text.length, after + 24);
     runs.from = after;
     runs.to = after;
-    while (runs.to < text.length && (inW(text.charCodeAt(runs.to)) || inS(text.charCodeAt(runs.to)))) runs.to++;
+    while (runs.to < limit && (inW(text.charCodeAt(runs.to)) || inS(text.charCodeAt(runs.to)))) runs.to++;
+    runs.capped = runs.to === limit && limit < text.length;
   }
   const p = runs.to;
-  if (p - after > 23 || p >= text.length) return -1;
+  if (runs.capped || p - after > 23 || p >= text.length) return -1;
   // W can end anywhere from `after` to the first character W does not take (and 20 at most); S must take the rest,
   // at most 3, all S characters.
   let firstNotW = p;
