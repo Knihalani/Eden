@@ -444,15 +444,17 @@ export function assess(frame: Frame, item: ContextItem, now: number, extraTies?:
     if (money !== "none") continue;
     const blocked =
       V && st.objectBlocks.length > 0 && objectTied(st) ? [...st.blocked, ...st.objectBlocks] : st.blocked;
-    const lastBlock = Math.max(-1, ...blocked);
+    // The marks' extremes by loops, not spreads into `Math.max` (D1889): a statement's lists are nearly always empty,
+    // and each spread made an array a statement a request.
+    const lastBlock = maxOf(blocked, -1);
     // A reaffirming word after a block or move in the sentence confirms it, so it clears only before the first.
-    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocked, ...st.moves);
-    const lastClear = Math.max(-1, ...st.clears, ...st.reaffirms.filter((at) => at < firstBlock));
+    const firstBlock = minOf(st.moves, minOf(blocked, Number.MAX_SAFE_INTEGER));
+    const lastClear = maxBelow(st.reaffirms, firstBlock, maxOf(st.clears, -1));
     // Something done already, or a standing constraint (an allergy, a confidentiality): when does not matter, and
     // a clearing word after it in the same sentence undoes it ("tested for coeliac and it's negative").
     // So is a change to what the request assumes is as usual ("same as usual" against "goes from £1650 to £1710").
-    const lastDone = Math.max(st.lastDone, ...(frame.routine ? changesOf(st) : []));
-    const lastMove = Math.max(-1, ...st.moves);
+    const lastDone = frame.routine ? maxOf(changesOf(st), st.lastDone) : st.lastDone;
+    const lastMove = maxOf(st.moves, -1);
     if (lastBlock >= 0 || lastDone >= 0 || lastMove >= 0) blockSeen = true;
     if (lastDone > lastClear) conflict(st, true);
     else if (lastClear > Math.max(lastBlock, lastMove)) {
@@ -544,6 +546,27 @@ const skipped = (s: string): Statement => ({
   lastDone: -1,
   dated: false,
 });
+
+/** The largest of `xs` and `from` (`Math.max(from, ...xs)`). */
+function maxOf(xs: readonly number[], from: number): number {
+  let m = from;
+  for (let i = 0; i < xs.length; i++) if (xs[i]! > m) m = xs[i]!;
+  return m;
+}
+
+/** The smallest of `xs` and `from` (`Math.min(from, ...xs)`). */
+function minOf(xs: readonly number[], from: number): number {
+  let m = from;
+  for (let i = 0; i < xs.length; i++) if (xs[i]! < m) m = xs[i]!;
+  return m;
+}
+
+/** The largest of `from` and the `xs` below `bound` (`Math.max(from, ...xs.filter((x) => x < bound))`). */
+function maxBelow(xs: readonly number[], bound: number, from: number): number {
+  let m = from;
+  for (let i = 0; i < xs.length; i++) if (xs[i]! < bound && xs[i]! > m) m = xs[i]!;
+  return m;
+}
 
 /** What the first statement of an item has before it. Frozen: it is shared by every item, so nothing is noted on it. */
 const NO_STATEMENT: Statement = Object.freeze({
