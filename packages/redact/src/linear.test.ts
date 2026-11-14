@@ -6,8 +6,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
-import { linearEngine, re2Source } from "./re2-oracle";
-import { backtrackingEngine, everywhere, rulesWith, secretRules, URL_USERINFO } from "./secrets";
+import { linearEngine, re2Source } from "./re2-oracle.ts";
+import { backtrackingEngine, everywhere, rulesWith, secretRules, URL_USERINFO } from "./secrets.ts";
 
 /** mulberry32: a seeded generator, so a failure names a reproducible text. */
 function prng(seed: number): () => number {

@@ -27,12 +27,16 @@
  * - (e) the redaction memory had before P0.4 (a password, passphrase or API key of any length; short token
  *   prefixes), so the gate is never looser than it was.
  */
-import { MultiMatcher } from "@eden/primitives";
-import { AnchoredRegex, anchorsOf, anchorsOfRegex, lazyPrefixOf, Occurrences } from "./anchor";
-import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton";
-import { assignmentSpans, redactAssignments, REDACTED, redactTokensIn, TOKEN_LITERALS, TOKEN_PASSES } from "./redact";
-import { SCANNERS } from "./scanners";
-import gitleaks from "./vendor/gitleaks/gitleaks.toml";
+import { MultiMatcher } from "./primitives/matcher.ts";
+import { type Analyses, AnchoredRegex, anchorsOf, anchorsOfRegex, lazyPrefixOf, Occurrences, useAnalyses } from "./anchor.ts";
+import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
+import { assignmentSpans, redactAssignments, REDACTED, redactTokensIn, TOKEN_LITERALS, TOKEN_PASSES } from "./redact.ts";
+import { SCANNERS } from "./scanners.ts";
+import generated from "./rules.generated.json" with { type: "json" };
+
+// The vendored gitleaks config (`vendor/gitleaks/gitleaks.toml`, as data any runtime imports) and each regex's
+// anchors, worked out ahead by `generate.ts`; `generated.test.ts` fails when either is stale.
+useAnalyses(generated.analyses as Analyses);
 
 interface Allowlist {
   regexTarget?: "secret" | "match" | "line";
@@ -482,7 +486,7 @@ class Lines {
 
 const NEWLINE = 10;
 /** A cheap first test for `lazyPrefixOf`, so the other rules build no JavaScript regex before they run. */
-const LAZY_PREFIX = /^(?:\(\?i\))?\[\\w\.-\]\{0,\d+\}\?/;
+export const LAZY_PREFIX = /^(?:\(\?i\))?\[\\w\.-\]\{0,\d+\}\?/;
 
 /**
  * A gitleaks rule. As gitleaks does, each match (its ends' line breaks trimmed) is matched again on its own to find
@@ -498,8 +502,10 @@ function gitleaksRule(
   let compiled: { pattern: Pattern; own: CompiledAllowlist[]; anchored?: AnchoredRegex } | undefined;
   // Only JavaScript's engine scans every position: the own matchers (scanners.ts) are linear already. A rule with a
   // lazy `[\w.-]{0,50}?` prefix reads it by hand (anchor.ts); any other tries its regex where its anchors allow.
-  const js = engine === backtrackingEngine && LAZY_PREFIX.test(rule.regex) ? goRegex(rule.regex) : undefined;
-  const lazy = js && lazyPrefixOf(rule.regex, js);
+  const lazy =
+    engine === backtrackingEngine && LAZY_PREFIX.test(rule.regex)
+      ? lazyPrefixOf(rule.regex, () => goRegex(rule.regex))
+      : undefined;
   const anchors = engine === backtrackingEngine && !lazy ? anchorsOf(rule.regex) : undefined;
   const anchorWords = lazy ? lazy.words : anchors && [...new Set(anchors.flatMap((anchor) => anchor.literals))];
   const compile = () => ({
@@ -739,15 +745,46 @@ function checkScanners(rules: GitleaksRule[]): void {
 /**
  * Throws unless every rule's own allowlist regexes parse in the allowlist automaton's subset. Those compile only when
  * their rule first runs, so without this an unsupported one (`(?m)…`) would throw on the first text that rule finds
- * something in, not when the gate is built.
+ * something in. `generate.ts` runs it when it writes the config the gate imports, so a gitleaks update with one fails
+ * there (and `generated.test.ts` fails until it is regenerated), not at the first call.
  */
-function checkAllowlists(rules: GitleaksRule[]): void {
+export function checkAllowlists(rules: GitleaksRule[]): void {
   for (const rule of rules) {
     for (const list of rule.allowlists ?? []) for (const regex of list.regexes ?? []) parseRegex(regex);
   }
 }
 
 let compiled: SecretRule[] | undefined;
+
+/**
+ * Throws unless this JavaScript engine runs RegExp modifiers (`(?-i:…)`, ES2025) as the standard says: gitleaks rules
+ * use them (generic-api-key's `(?-i:[Aa]pi|API)`), and `goRegex` keeps them. Bun and Node 24 do; Node 22 rejects
+ * them, and with `--js-regexp-modifiers` lets one leak into the rest of its alternation (`/(?:(?-i:a)|b)/i` then
+ * misses "B"), so generic-api-key missed `GITHUB_TOKEN=…`. A gate that would miss secrets must not build.
+ */
+function checkRegexModifiers(): void {
+  let sound = false;
+  try {
+    sound = new RegExp("(?:(?-i:a)|b)", "i").test("B") && !new RegExp("(?-i:a)", "i").test("A");
+  } catch {
+    // A syntax error: no modifiers at all.
+  }
+  if (!sound) {
+    throw new Error(
+      "@eden/redact needs RegExp modifiers as ES2025 defines them (Bun; Node 24 or later): this engine lacks them or " +
+        "runs them wrongly, and the gitleaks rules would miss secrets",
+    );
+  }
+}
+
+/** Eden's own regex rules' regexes, for `generate.ts` (their anchors are in the tables too). */
+export const EDEN_REGEXES: RegExp[] = [
+  ...PROVIDER_SHAPES.map(([, shape]) => shape),
+  KEYWORD_RULE,
+  URL_USERINFO,
+  LEGACY_KEYWORD,
+  LEGACY_TOKEN,
+];
 
 /** Every rule: gitleaks' (those with a regex) and Eden's (`eden-…`), engines as `GATE_ENGINES` chooses. */
 export function secretRules(): SecretRule[] {
@@ -760,9 +797,9 @@ export function secretRules(): SecretRule[] {
  * JavaScript either way. Uncached: for tests and benchmarks that compare engines.
  */
 export function rulesWith(choice: EngineChoice): SecretRule[] {
-  const config = gitleaks as GitleaksConfig;
+  const config = generated.gitleaks as GitleaksConfig;
+  checkRegexModifiers();
   checkScanners(config.rules);
-  checkAllowlists(config.rules);
   const global = compileAllowlist(config.allowlist, choice.allowlist);
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
   return [
@@ -811,7 +848,7 @@ export function gateOf(rules: SecretRule[]): Gate {
   const anchorIds = rules.map((rule) => rule.anchorWords && Int32Array.from(rule.anchorWords, (w) => index.get(w)!));
   const anchorWord = new Uint8Array(words.length);
   for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
-  const found = new Occurrences(words.length);
+  const found = new Occurrences(words.length, anchorWord);
   /** The token passes whose literals the last text scanned holds (`redactTokensIn`'s mask; the others are no-ops). */
   let tokens = 0;
   const rulesOf: number[][] = words.map(() => []);
@@ -841,7 +878,7 @@ export function gateOf(rules: SecretRule[]): Gate {
     tokens = 0;
     const out = [...always];
     for (const r of always) chosen[r] = 1;
-    const distinct = matcher.scan(text, hits, firsts, anchorWord, found);
+    const distinct = matcher.scan(text, hits, firsts, found.keep, found);
     for (let k = 0; k < distinct; k++) {
       const w = firsts[k]!;
       hits[w] = 0; // reset for the next text

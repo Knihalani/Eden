@@ -10,12 +10,12 @@
  *   bun packages/redact/src/gate-differential.ts [texts, default 1000000] [seed, default 1]
  *   bun packages/redact/src/gate-differential.ts --corpus     # the realistic corpus (bench/corpus.ts), 256 B to 1 MB
  */
-import { parseRegex, type RegexNode } from "./automaton";
-import { ALNUM, mutate, ODD, prng, sample, sourcePieces } from "./differential";
-import { redact, redactString, TOKEN_LITERALS } from "./redact";
-import { redact as redactBefore, redactString as redactStringBefore } from "./redact.reference";
-import { type Gate, gateOf, secretRules } from "./secrets";
-import { gateOf as gateOfBefore, secretRules as secretRulesBefore } from "./secrets.reference";
+import { parseRegex, type RegexNode } from "./automaton.ts";
+import { ALNUM, mutate, ODD, prng, sample, sourcePieces } from "./differential.ts";
+import { redact, redactString, TOKEN_LITERALS } from "./redact.ts";
+import { redact as redactBefore, redactString as redactStringBefore } from "./redact.reference.ts";
+import { type Gate, gateOf, secretRules } from "./secrets.ts";
+import { gateOf as gateOfBefore, secretRules as secretRulesBefore } from "./secrets.reference.ts";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 type Rnd = () => number;

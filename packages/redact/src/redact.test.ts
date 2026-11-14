@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { containsSecret, redactString } from "./redact";
-import { sanitizeForStore } from "./secrets";
+import { containsSecret, redactString } from "./redact.ts";
+import { sanitizeForStore } from "./secrets.ts";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
 // fail it the way wall time did (weak-points-1111.md R1).

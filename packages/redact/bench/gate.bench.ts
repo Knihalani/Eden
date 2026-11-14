@@ -9,11 +9,11 @@
  *
  *   env -u BUN_OPTIONS bun packages/redact/bench/gate.bench.ts [sizes, default 256,2048,16384,1048576] [--re2]
  */
-import { D24_ENGINES, linearEngine } from "../src/re2-oracle";
-import { CRAFTED_UNITS, crafted } from "../src/gate-crafted";
-import { everywhere, gateOf, secretRules, type Gate } from "../src/secrets";
-import * as reference from "../src/secrets.reference";
-import { KINDS, sample } from "./corpus";
+import { D24_ENGINES, linearEngine } from "../src/re2-oracle.ts";
+import { CRAFTED_UNITS, crafted } from "../src/gate-crafted.ts";
+import { everywhere, gateOf, secretRules, type Gate } from "../src/secrets.ts";
+import * as reference from "../src/secrets.reference.ts";
+import { KINDS, sample } from "./corpus.ts";
 
 const args = process.argv.slice(2);
 const withRe2 = args.includes("--re2");

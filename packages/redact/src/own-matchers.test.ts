@@ -7,11 +7,13 @@
  */
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { compileAllowlistRegex } from "./automaton";
-import { allowlistRegexes, fuzzAllowlist, fuzzRule, prng, ruleText } from "./differential";
-import { D24_ENGINES, linearEngine } from "./re2-oracle";
-import { SCANNER_CLASSES, SCANNERS } from "./scanners";
-import { GATE_ENGINES, gateOf, LINEAR_RULES, rulesWith, scannerEngine } from "./secrets";
+import { compileAllowlistRegex } from "./automaton.ts";
+import { allowlistRegexes, fuzzAllowlist, fuzzRule, prng, ruleText } from "./differential.ts";
+import { D24_ENGINES, linearEngine } from "./re2-oracle.ts";
+import { SCANNER_CLASSES, SCANNERS } from "./scanners.ts";
+import { GATE_ENGINES, gateOf, LINEAR_RULES, rulesWith, scannerEngine } from "./secrets.ts";
+import { generate } from "./generate.ts";
+import generated from "./rules.generated.json" with { type: "json" };
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 /** Every BMP code point (lone surrogates included) and a sample of astral ones. */
@@ -40,7 +42,9 @@ describe("the scanned rules", () => {
 
   test("a vendored config the gate cannot run exactly stops it building (the review)", () => {
     type Rule = { id: string; regex?: string; allowlists?: { regexes?: string[] }[] };
-    const rules = (gitleaks as { rules: Rule[] }).rules;
+    // The config the gate builds from (the TOML as JSON); its allowlist regexes are checked when `generate.ts` writes
+    // it, so the TOML's own copy is the one refused there.
+    const rules = (generated.gitleaks as { rules: Rule[] }).rules;
     /** Changes one field of the vendored config for the length of `check`, then puts it back. */
     const mutated = (change: () => () => void, check: () => void) => {
       const restore = change();
@@ -60,9 +64,9 @@ describe("the scanned rules", () => {
       },
       () => expect(() => rulesWith(GATE_ENGINES)).toThrow("curl-auth-user changed"),
     );
-    // One rule's own allowlist regex in syntax the automaton lacks: refused when the gate is built, not when the
-    // rule first finds something.
-    const aws = rules.find((rule) => rule.id === "aws-access-token")!;
+    // One rule's own allowlist regex in syntax the automaton lacks: refused when the config is generated, not when
+    // the rule first finds something.
+    const aws = (gitleaks as { rules: Rule[] }).rules.find((rule) => rule.id === "aws-access-token")!;
     const list = aws.allowlists![0]!.regexes!;
     mutated(
       () => {
@@ -70,7 +74,7 @@ describe("the scanned rules", () => {
         list[0] = "(?m).+EXAMPLE$";
         return () => (list[0] = was);
       },
-      () => expect(() => rulesWith(GATE_ENGINES)).toThrow("not supported"),
+      () => expect(() => generate()).toThrow("not supported"),
     );
     expect(() => rulesWith(GATE_ENGINES)).not.toThrow();
   });

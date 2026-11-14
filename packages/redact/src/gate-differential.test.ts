@@ -9,14 +9,14 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AnchoredRegex, anchorsOf, anchorsOfRegex, Occurrences } from "./anchor";
-import { parseRegex } from "./automaton";
-import { prng, sample } from "./differential";
-import { CRAFTED_UNITS, crafted } from "./gate-crafted";
-import { difference, fuzzGate } from "./gate-differential";
-import { assignmentSpans, redactString, TOKEN_PASSES } from "./redact";
-import { assignmentSpans as assignmentSpansBefore, redactString as redactStringBefore } from "./redact.reference";
-import { isSpace, URL_USERINFO } from "./secrets";
+import { AnchoredRegex, anchorsOf, anchorsOfRegex, Occurrences } from "./anchor.ts";
+import { parseRegex } from "./automaton.ts";
+import { prng, sample } from "./differential.ts";
+import { CRAFTED_UNITS, crafted } from "./gate-crafted.ts";
+import { difference, fuzzGate } from "./gate-differential.ts";
+import { assignmentSpans, redactString, TOKEN_PASSES } from "./redact.ts";
+import { assignmentSpans as assignmentSpansBefore, redactString as redactStringBefore } from "./redact.reference.ts";
+import { isSpace, URL_USERINFO } from "./secrets.ts";
 
 describe("the gate against the reference gate", () => {
   test("a seeded fuzz of 4,000 texts: identical findings, hits, stored text and redaction", () => {
