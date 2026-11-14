@@ -21,7 +21,7 @@ export function parseJsonBytes(bytes: Uint8Array): unknown {
  * parse. A long string value that holds no escape and no control character is taken out of the parse (D1870): its
  * value is exactly the characters between its quotes, so it is a slice of the reply (no copy in JSC or V8) where
  * `JSON.parse` would read it again and copy it (172-306 µs a MiB, against 61 for the check below), and the rest is
- * parsed with a placeholder in its place. Same result as `JSON.parse(text)` (`shape.test.ts` compares them).
+ * parsed with a placeholder in its place. Same result as `JSON.parse(text)` (`json.test.ts` compares them).
  */
 export function parseJsonText(text: string): unknown {
   const seen: TextShape = { values: 0, longs: [] };
@@ -49,8 +49,8 @@ const MAX_WALK = 4_096;
 
 /**
  * The parse with the long plain string values spliced out, or `PLAIN` when there are none worth it or a placeholder
- * went astray (the caller parses the whole text). Taken only when the long strings are at least half the reply, so a slice never holds alive more
- * than as much again of the reply around it.
+ * went astray (the caller parses the whole text). Taken only when the long strings are at least half the reply, so
+ * a slice never holds alive more than as much again of the reply around it.
  */
 function spliced(text: string, seen: TextShape): unknown {
   if (seen.values > MAX_WALK) return PLAIN;
@@ -109,7 +109,7 @@ function spliced(text: string, seen: TextShape): unknown {
         else {
           const s = put(v);
           if (s === null) return PLAIN;
-          // Defined, not assigned: a key named `__proto__` is an own property of a parsed object, as JSON.parse made it.
+          // Defined, not assigned: a `__proto__` key is an own property of a parsed object, as JSON.parse made it.
           if (s !== undefined)
             Object.defineProperty(node, key, { value: s, writable: true, enumerable: true, configurable: true });
         }

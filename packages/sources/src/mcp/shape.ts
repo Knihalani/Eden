@@ -3,10 +3,10 @@
  * holds, counted outside strings (each `[`, `{` and `,`), so a body padded to make the parse costly (4 M small numbers
  * took 106-134 ms, 4 M nested arrays 453-665 ms, where an 8 MB string took 4-7 ms) is refused before the parse.
  *
- * `bodyShapeWithin` and `stringEnd` are vendored from Eden's `@eden/protocol` (`validate.ts`, D100, D1840, D1870), so this
- * directory imports nothing from outside it; `shape.test.ts` fails when the two copies differ. `textShapeWithin` is the
- * same scan over a decoded string, for a reply read natively as text (D1860): it gives the byte scan's answer on the
- * bytes the string was decoded from (structure is ASCII, and UTF-8 never puts a quote or a backslash inside a
+ * `bodyShapeWithin` and `stringEnd` are vendored from Eden's `@eden/protocol` (`validate.ts`, D100, D1840, D1870), so
+ * this directory imports nothing from outside it; `shape.test.ts` fails when the two copies differ. `textShapeWithin`
+ * is the same scan over a decoded string, for a reply read natively as text (D1860): it gives the byte scan's answer
+ * on the bytes the string was decoded from (structure is ASCII, and UTF-8 never puts a quote or a backslash inside a
  * multi-byte character, nor does decoding with replacement swallow an ASCII byte), which `shape.test.ts` checks on
  * seeded random bodies.
  */
@@ -122,7 +122,7 @@ export function textShapeWithin(text: string, maxDepth: number, maxValues: numbe
 export interface TextShape {
   /** Values counted (each `[`, `{` and `,` outside strings). */
   values: number;
-  /** The start and the closing quote's index of each string at least `LONG_STRING` long, at most `MAX_LONGS` of them. */
+  /** Start and closing quote's index of each string at least `LONG_STRING` long, at most `MAX_LONGS` of them. */
   longs: number[];
 }
 
