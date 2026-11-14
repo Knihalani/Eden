@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache, sanitizeItem } from "./cache";
-import { analyse, analyseUnfiltered, anyMark, arrangedVisit, gateOf, MARK_LISTS, mayConstrain } from "./conflict";
+import {
+  analyse,
+  analyseUnfiltered,
+  anyMark,
+  arrangedVisit,
+  datesFor,
+  gateOf,
+  MARK_LISTS,
+  mayConstrain,
+} from "./conflict";
 
 /*
  * D1722: a lookup re-stores every item it finds, and `put` replaced the held object even when the copy was equal in
@@ -291,5 +300,79 @@ describe("the reader gate's reading, once per item (D1880)", () => {
     it.title = "Visit: I've booked the plumber, he'll come Monday";
     expect(gateOf(it, false)).toBe(false);
     expect(gateOf(it, true)).toBe(true);
+  });
+});
+
+describe("the dates' month prefilter (D1883)", () => {
+  /** Date-shaped fragments and near misses: months in other words, figures with no month, every pattern's shape. */
+  const PIECES = [
+    "from 6 nov",
+    "from 6th of november",
+    "until 9th november 2026",
+    "back on 9 nov",
+    "back 12 dec",
+    "6-9 nov",
+    "6 - 9 november",
+    "friday 20 to monday 23 november",
+    "26 oct to 6 nov",
+    "20 dec - 5 jan",
+    "may 5",
+    "march 2027",
+    "on sept 30th, 2026",
+    "expires 2 nov",
+    "valid to 2036",
+    "till the 10th",
+    "back on the 3rd",
+    "until sunday",
+    "back thursday",
+    "by friday",
+    "by 17:00",
+    "due",
+    "deadline",
+    "8:00",
+    "ref ops-412",
+    "the market",
+    "the mayor",
+    "decide by 4",
+    "novel 3",
+    "maybe 2",
+    "31 feb",
+    "29 feb 2028",
+    "jan",
+    "12",
+    "the 3rd party vendor",
+    "no later than monday",
+    "the freeze holds",
+    "and",
+    ",",
+  ];
+
+  test("datesOf with the prefilter reads what it read without: 40,000 fuzzed sentences, both vocabularies", () => {
+    const r = rng(1883);
+    let found = 0;
+    for (let i = 0; i < 40_000; i++) {
+      const n = 1 + Math.floor(r() * 6);
+      const s = Array.from({ length: n }, () => PIECES[Math.floor(r() * PIECES.length)]!).join(r() < 0.7 ? " " : "");
+      const now = Date.UTC(2026, Math.floor(r() * 12), 1 + Math.floor(r() * 28), Math.floor(r() * 24));
+      const anchor = r() < 0.5 ? null : now - Math.floor(r() * 40) * 86_400_000;
+      for (const vocab of [false, true]) {
+        const want = datesFor(s, now, vocab, anchor, false);
+        expect(datesFor(s, now, vocab, anchor, true)).toEqual(want);
+        if (want.spans.length + want.limits.length > 0) found++;
+      }
+    }
+    // Both sides are exercised: many sentences state a date, many do not.
+    expect(found).toBeGreaterThan(20_000);
+    expect(found).toBeLessThan(60_000);
+  });
+
+  test("the eval's item sentences read the same with and without it", () => {
+    for (const it of scenarioItems()) {
+      for (const s of `${it.title}. ${it.text}`.toLowerCase().split(/[.!?;\n]+\s|\n+/)) {
+        for (const vocab of [false, true]) {
+          expect(datesFor(s, NOW, vocab, NOW, true)).toEqual(datesFor(s, NOW, vocab, NOW, false));
+        }
+      }
+    }
   });
 });

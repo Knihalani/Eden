@@ -275,6 +275,22 @@ const ORDINAL = new RegExp(
 const WEEKDAY_END =
   /\b(until|till|through|thru|back|by|before)(?: on)? ((?:mon|tues|wednes|thurs|fri|satur|sun)day)\b(?!,? \d)/g;
 
+/**
+ * What every month-reading pattern above needs (D1883): a figure (with its ordinal suffix and "of") then a month's
+ * first three letters, or those letters, more letters and a figure. Wider than any of them, so a sentence it does not
+ * match gives none of their matches.
+ */
+const MONTH_DATE =
+  /\d(?:st|nd|rd|th)?(?: of)? (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/;
+
+/**
+ * `datesOf` as tests read it: `prefilter` false runs every pattern on every sentence, as before D1883 (the
+ * differential test in `conflict-memo.test.ts`).
+ */
+export function datesFor(s: string, now: number, vocab: boolean, anchor: number | null, prefilter: boolean): Dates {
+  return datesOf(s, now, vocab, anchor, prefilter);
+}
+
 /** One sentence's dated statements. */
 interface Dates {
   spans: { from: string; to: string }[];
@@ -840,27 +856,34 @@ export function arrangedVisit(s: string): boolean {
  * The spans and limits a sentence states (`Dates`). With `vocab`, relative dates ("until Sunday", "till the 10th")
  * count from `anchor`, when the item was written; with no anchor they are not read.
  */
-function datesOf(s: string, now: number, vocab = false, anchor: number | null = null): Dates {
+function datesOf(s: string, now: number, vocab = false, anchor: number | null = null, prefilter = true): Dates {
   const spans: { from: string; to: string }[] = [];
   const limits: string[] = [];
+  // Every pattern that reads a month (`RANGE`, `PAIR`, `DATED`, `BACK_DATED`) needs a figure before a month's name or
+  // one after it (`MONTH_DATE`, D1883): most dated statements hold only a time or a reference ("ref OPS-412").
+  const monthed = !prefilter || MONTH_DATE.test(s);
   // Ranges first ("6-9 nov", "26 oct to 6 nov"); their text is blanked so their end is not read again as "until".
-  let rest = s.replace(RANGE, (r, d1: string, d2: string, m: string, y: string | undefined) => {
-    const from = dayOf(Number(d1), m, y, now);
-    const to = dayOf(Number(d2), m, y, now);
-    const end = from && to && !y ? after(from, to) : to;
-    if (from && end && from <= end) spans.push({ from, to: end });
-    return " ".repeat(r.length);
-  });
-  rest = rest.replace(PAIR, (r, ...g: (string | undefined)[]) => {
-    const from = dayOf(Number(g[0]), g[1]!, g[2], now);
-    const to = dayOf(Number(g[3]), g[4]!, g[5], now);
-    // Each end's year is the one nearest now: in July, "20 Dec - 5 Jan" is 20 Dec this year to 5 Jan next.
-    const end = from && to && !g[5] ? after(from, to) : to;
-    if (from && end && from <= end) spans.push({ from, to: end });
-    return " ".repeat(r.length);
-  });
-  // "Must be uploaded by 17:00 on Monday 26 October": a day in a sentence that sets a deadline is that deadline.
-  const deadline = DEADLINE.test(rest);
+  let rest = !monthed
+    ? s
+    : s.replace(RANGE, (r, d1: string, d2: string, m: string, y: string | undefined) => {
+        const from = dayOf(Number(d1), m, y, now);
+        const to = dayOf(Number(d2), m, y, now);
+        const end = from && to && !y ? after(from, to) : to;
+        if (from && end && from <= end) spans.push({ from, to: end });
+        return " ".repeat(r.length);
+      });
+  if (monthed)
+    rest = rest.replace(PAIR, (r, ...g: (string | undefined)[]) => {
+      const from = dayOf(Number(g[0]), g[1]!, g[2], now);
+      const to = dayOf(Number(g[3]), g[4]!, g[5], now);
+      // Each end's year is the one nearest now: in July, "20 Dec - 5 Jan" is 20 Dec this year to 5 Jan next.
+      const end = from && to && !g[5] ? after(from, to) : to;
+      if (from && end && from <= end) spans.push({ from, to: end });
+      return " ".repeat(r.length);
+    });
+  // "Must be uploaded by 17:00 on Monday 26 October": a day in a sentence that sets a deadline is that deadline. Read
+  // when a day is first taken (`rest` does not change after the blanking above).
+  let deadline: boolean | undefined;
   let start: string | null = null;
   const take = (word: string, day: string, yearGiven = false) => {
     if (STARTS.has(word)) start = day;
@@ -869,23 +892,24 @@ function datesOf(s: string, now: number, vocab = false, anchor: number | null = 
       const to = start && !yearGiven ? after(start, day) : day;
       if (to) spans.push({ from: start ?? iso(now), to });
       start = null;
-    } else if (LIMITS.has(word) || deadline) limits.push(day);
+    } else if (LIMITS.has(word) || (deadline ??= DEADLINE.test(rest))) limits.push(day);
     else spans.push({ from: day, to: day });
   };
-  for (const m of rest.matchAll(DATED)) {
-    const g = m.groups!;
-    // "Expired on 30 September" is the expiry; "on" alone is a day.
-    const word = g.word ?? (g.on ? "on" : "");
-    // A date with no word or weekday before it ("reminder from legal (20 Oct)") is when something was written, not
-    // a span a statement holds for.
-    if (!word && !g.wd) continue;
-    const day = g.d1
-      ? dayOf(Number(g.d1), g.m1!, g.y1, now)
-      : g.d2
-        ? dayOf(Number(g.d2), g.m2!, g.y2, now)
-        : lastOfMonth(g.m3!, g.y3!);
-    if (day) take(word, day, Boolean(g.y1 ?? g.y2 ?? g.y3));
-  }
+  if (monthed)
+    for (const m of rest.matchAll(DATED)) {
+      const g = m.groups!;
+      // "Expired on 30 September" is the expiry; "on" alone is a day.
+      const word = g.word ?? (g.on ? "on" : "");
+      // A date with no word or weekday before it ("reminder from legal (20 Oct)") is when something was written, not
+      // a span a statement holds for.
+      if (!word && !g.wd) continue;
+      const day = g.d1
+        ? dayOf(Number(g.d1), g.m1!, g.y1, now)
+        : g.d2
+          ? dayOf(Number(g.d2), g.m2!, g.y2, now)
+          : lastOfMonth(g.m3!, g.y3!);
+      if (day) take(word, day, Boolean(g.y1 ?? g.y2 ?? g.y3));
+    }
   for (const m of rest.matchAll(YEAR_LIMIT)) take(m[1]!, `${m[2]}-12-31`, true);
   if (vocab) {
     // "Back 9 Nov", "back on the 10th", "back Thursday": away until the day before. A day of the month alone ("till
@@ -895,7 +919,7 @@ function datesOf(s: string, now: number, vocab = false, anchor: number | null = 
       if (word === "back") take("until", iso(Date.parse(`${day}T00:00:00Z`) - DAY));
       else take(word, day);
     };
-    for (const m of rest.matchAll(BACK_DATED)) end("back", dayOf(Number(m[1]), m[2]!, undefined, now));
+    if (monthed) for (const m of rest.matchAll(BACK_DATED)) end("back", dayOf(Number(m[1]), m[2]!, undefined, now));
     if (anchor !== null) {
       for (const m of rest.matchAll(ORDINAL)) end(m[1]!, nextMonthDay(Number(m[2]), anchor));
       for (const m of rest.matchAll(WEEKDAY_END)) end(m[1]!, nextWeekday(m[2]!, anchor));
