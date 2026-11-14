@@ -44,7 +44,8 @@
  * `"cards": true` in `--config`.
  * `--card-limits` sets the enricher's `CardLimits` (one economy setting at a time; `"cardsEconomy": true` in
  * `--config` applies the whole preset, docs/research/econ-background.md); the run prints the enrichment's counters
- * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users.
+ * (`cards use`: items sent to the model, calls, reused by sentence) summed over its users. `"gatherMs": null` there
+ * lifts the drain's 250 ms wall-clock gather cut (`CardEnricher.gather`), so a run's card calls do not depend on load.
  * `--planted-age-days N` dates every planted item (hidden and decoy) N days before the present instead of one: a
  * stress test for rules that read an item by its age (docs/research/econ-background.md): every suite plants a
  * day-old item.
@@ -551,6 +552,9 @@ const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
 const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
+// `"gatherMs": null`: no wall-clock cut on the drain's gather (JSON has no Infinity), so its batches do not move with
+// the machine's load; the sharding checks in funnel-flags.test.ts compare card calls between two runs.
+if (CARD_LIMITS.gatherMs === null) CARD_LIMITS.gatherMs = Infinity;
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
