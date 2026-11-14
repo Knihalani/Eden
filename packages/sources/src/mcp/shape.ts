@@ -57,6 +57,21 @@ SHAPE_BYTE[0x5d] = SHAPE_BYTE[0x7d] = CLOSE;
 SHAPE_BYTE[0x2c] = COMMA;
 
 /**
+ * The next `byte` at or after `from`, or -1. On V8 (Node), `Uint8Array.prototype.indexOf` reads a byte at a time (627
+ * µs a MiB) where `Buffer`'s searches natively (16 µs); on JSC (Bun) the typed array's own is the native one (13-16
+ * µs), so it is kept there (D1870).
+ */
+type ByteSearch = (this: Uint8Array, byte: number, from: number) => number;
+/** Node's `Buffer.prototype.indexOf`, off Bun only; it searches any `Uint8Array` it is called on. */
+const bufferIndexOf: ByteSearch | undefined =
+  typeof (globalThis as { Bun?: unknown }).Bun === "undefined"
+    ? (globalThis as { Buffer?: { prototype?: { indexOf?: ByteSearch } } }).Buffer?.prototype?.indexOf
+    : undefined;
+const indexOfByte = bufferIndexOf
+  ? (bytes: Uint8Array, byte: number, from: number) => bufferIndexOf.call(bytes, byte, from)
+  : (bytes: Uint8Array, byte: number, from: number) => bytes.indexOf(byte, from);
+
+/**
  * The index of the quote that ends the string whose text starts at `i`, or `bytes.length` when it does not end (an
  * unended string holds no structure). A backslash escapes the next byte (a quote among them), so a quote ends the
  * string when the run of backslashes right before it is even. UTF-8 never puts 0x22 or 0x5c inside a multi-byte
@@ -81,7 +96,7 @@ function stringEnd(bytes: Uint8Array, i: number): number {
     }
     if (i >= n) return n;
     // No escape is open at `i`, so the run of backslashes before the next quote starts at or after it.
-    const q = bytes.indexOf(0x22, i);
+    const q = indexOfByte(bytes, 0x22, i);
     if (q < 0) return n;
     let b = q - 1;
     while (b >= i && bytes[b]! === 0x5c) b--;

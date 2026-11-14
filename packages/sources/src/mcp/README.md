@@ -203,7 +203,7 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
   `res.json()` and checking after the parse was measured and refused (D1871): it gives up D1704's bound on what a
   hostile reply can make the parse cost.
 - **On Node** the JSON read decodes bytes and then parses (Node's `text()` drops two byte-order marks where
-  `TextDecoder` drops one, D1860), so D1870's splice of long strings is Bun's only.
+  `TextDecoder` drops one, D1860), so D1870's splice of long strings is Bun's only; its faster scan is not (on Node it searches with `Buffer`'s `indexOf`, 40x V8's typed-array one: the shape check of a 1 MiB reply 21-26 µs, from 805-926).
 - **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
   callback listener for OAuth and client ID metadata documents (below).
 
