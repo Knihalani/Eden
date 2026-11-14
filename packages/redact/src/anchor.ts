@@ -569,7 +569,7 @@ export class AnchoredRegex {
  *
  * Linear: one sticky REST attempt an occurrence (REST's own work is bounded: a keyword, `[ \t\w.-]{0,20}`,
  * `[\s'"]{0,3}`, an operator, then the secret), a walk of at most 50 characters back from each that matches, and
- * one sort of the occurrences.
+ * one sort of the prefilter's lists (or one search for the occurrences, as they are needed).
  */
 export class LazyPrefixRegex {
   /** REST's literals, distinct: the words whose occurrences `each` wants. */
@@ -604,7 +604,8 @@ export class LazyPrefixRegex {
   /**
    * Calls `onMatch` with each match `matchAll` would report for the whole regex, in order. `found` holds the text's
    * occurrences of `words` (`ids[i]` the id of `words[i]`); without them, or when a literal's list is incomplete (a
-   * text dense in it), the occurrences are found here.
+   * text dense in it), the occurrences are found here as the scan needs them, so the scratch holds only a window of
+   * them however dense the text (a list of every occurrence of `api` in 16 MB of `apiapi…` held 140 MB at its peak).
    */
   each(
     text: string,
@@ -612,21 +613,58 @@ export class LazyPrefixRegex {
     ids: Int32Array | undefined,
     onMatch: (start: number, end: number) => void,
   ): void {
-    const n = this.occurrences(text, found, ids);
+    const listed = found !== undefined && ids !== undefined && allKept(found, ids);
+    /** Occurrences in the window, `[i, n)` of `candidates` (and REST's end at each in `ends`). */
+    let n = listed ? this.listed(found!, ids!) : 0;
     const other = this.otherSource === undefined ? undefined : (this.other ?? this.compile().other!);
-    if (n === 0 && !other) return;
+    if (listed && n === 0 && !other) return;
     const rest = this.rest ?? this.compile().rest;
-    const at = candidates;
-    if (ends.length < n) ends = new Int32Array(at.length);
+    if (ends.length < candidates.length) ends = new Int32Array(candidates.length);
     ends.fill(UNKNOWN, 0, n);
+    // Every start of a literal, overlapping ones included (case folded: a superset of where REST can start), one at a
+    // time: an empty match before each, so nothing is allocated per occurrence.
+    const finder = listed ? undefined : (this.finder ??= this.compileFinder());
+    /** Where the next search for an occurrence starts; past the end once every occurrence is in. */
+    let scanned = listed ? text.length + 1 : 0;
     const max = this.max;
     const prefix = this.prefix;
     let from = 0;
     let i = 0;
+    /**
+     * Appends the next occurrence to the window, first moving the window to the front when the scratch is full and
+     * its head is spent. Returns how far the entries moved, or -1 when there is no occurrence left.
+     */
+    const more = (): number => {
+      if (scanned > text.length) return -1;
+      finder!.lastIndex = scanned;
+      if (!finder!.test(text)) {
+        scanned = text.length + 1;
+        return -1;
+      }
+      const k = finder!.lastIndex;
+      scanned = k + 1;
+      let shift = 0;
+      if (n === candidates.length) {
+        if (i > 0) {
+          candidates.copyWithin(0, i, n);
+          ends.copyWithin(0, i, n);
+          shift = i;
+          n -= i;
+          i = 0;
+        } else {
+          candidates = grow(candidates);
+          ends = grow(ends);
+        }
+      }
+      candidates[n] = k;
+      ends[n] = UNKNOWN;
+      n++;
+      return shift;
+    };
     /** The lazy branch's leftmost match at or after `from` (-1: none at all), valid while `from` ≤ `best`. */
     let best = -1;
     let bestEnd = -1;
-    let lazyDone = n === 0;
+    let lazyDone = false;
     /** The other branches' leftmost match at or after `from` (-1: none), valid while `from` ≤ its start. */
     let otherStart = -2;
     let otherEnd = -1;
@@ -635,9 +673,18 @@ export class LazyPrefixRegex {
         // Raising `from` up to `best` keeps `best` the least start (no start moves below it), so it is found again
         // only once a match has passed it.
         best = -1;
-        while (i < n && at[i]! < from) i++;
-        for (let j = i; j < n; j++) {
-          const k = at[j]!;
+        while (i < n && candidates[i]! < from) i++;
+        for (let j = i; ; j++) {
+          if (j === n) {
+            const shift = more();
+            if (shift < 0) break;
+            j -= shift;
+          }
+          const k = candidates[j]!;
+          if (k < from) {
+            i = j + 1;
+            continue;
+          }
           if (best >= 0 && k > best + max) break;
           let end = ends[j]!;
           if (end === UNKNOWN) {
@@ -645,7 +692,12 @@ export class LazyPrefixRegex {
             end = rest.test(text) ? rest.lastIndex : -1;
             ends[j] = end;
           }
-          if (end < 0) continue;
+          if (end < 0) {
+            // Before any match of this round, an occurrence without one is never needed again: the next round
+            // starts past the match this one finds, which ends past it.
+            if (best < 0) i = j + 1;
+            continue;
+          }
           let s = k;
           const floor = Math.max(from, k - max);
           while (s > floor) {
@@ -683,37 +735,33 @@ export class LazyPrefixRegex {
     }
   }
 
-  /** Puts the occurrences of `words` in `candidates`, increasing and distinct; returns how many. */
-  private occurrences(text: string, found: Occurrences | undefined, ids: Int32Array | undefined): number {
+  /**
+   * Puts the occurrences the prefilter listed (every one of each literal: at most the dense limit) in `candidates`,
+   * increasing and distinct; returns how many.
+   */
+  private listed(found: Occurrences, ids: Int32Array): number {
     let n = 0;
-    const push = (k: number) => {
-      if (n === candidates.length) candidates = grow(candidates);
-      candidates[n++] = k;
-    };
-    if (found && ids && allKept(found, ids)) {
-      let lists = 0;
-      for (const id of ids) {
-        if (found.head[id]! >= 0) lists++;
-        for (let e = found.head[id]!; e >= 0; e = found.next[e]!) push(found.start[e]!);
-      }
-      if (lists > 1) candidates.subarray(0, n).sort();
-    } else {
-      // Every start of a literal, overlapping ones included (case folded: a superset of where REST can start).
-      const finder = (this.finder ??= new RegExp(
-        this.words.map((word) => word.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&")).join("|"),
-        "gi",
-      ));
-      finder.lastIndex = 0;
-      for (let m = finder.exec(text); m; m = finder.exec(text)) {
-        push(m.index);
-        finder.lastIndex = m.index + 1;
+    let lists = 0;
+    for (const id of ids) {
+      if (found.head[id]! >= 0) lists++;
+      for (let e = found.head[id]!; e >= 0; e = found.next[e]!) {
+        if (n === candidates.length) candidates = grow(candidates);
+        candidates[n++] = found.start[e]!;
       }
     }
+    if (lists > 1) candidates.subarray(0, n).sort();
     // Two literals can occur at one position (`key` and `keys`): keep each position once.
     let distinct = 0;
-    for (let j = 0; j < n; j++)
+    for (let j = 0; j < n; j++) {
       if (j === 0 || candidates[j] !== candidates[j - 1]) candidates[distinct++] = candidates[j]!;
+    }
     return distinct;
+  }
+
+  /** A regex with an empty match just before every occurrence of a literal, case folded. */
+  private compileFinder(): RegExp {
+    const words = this.words.map((word) => word.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&"));
+    return new RegExp(`(?=${words.join("|")})`, "gi");
   }
 
   /** Compiles REST (and the other branches) and runs them once, so the first text pays for neither (`warmGate`). */

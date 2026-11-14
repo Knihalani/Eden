@@ -7,15 +7,27 @@ A secret gate for text that an application stores, indexes, logs or sends to a l
 It runs the [gitleaks](https://github.com/gitleaks/gitleaks) default rules (v8.30.1, vendored byte for byte with
 their MIT licence in `src/vendor/gitleaks/`) as gitleaks applies them, plus rules of its own for shapes gitleaks
 misses or gates on context: provider tokens without their provider's name nearby, AWS secret keys beside a key id,
-`password is …` in prose, URL userinfo, presigned object URLs, long random tokens near a secret word, and a structural
-pass over `key = value` assignments whose key names a credential.
+Azure storage account keys, `password is …` in prose, URL userinfo, presigned object URLs, long random tokens near a
+secret word, and a structural pass over `key = value` assignments whose key names a credential.
 
-It has no runtime dependencies, and its time is linear in the length of the text for every input.
+It has no dependencies, runs on Bun and on Node 24 or later, and its time is linear in the length of the text for
+every input it has been tested on (below).
+
+## Install
+
+Not published to a registry. Copy this directory into your project (or depend on it by path); it needs nothing else.
+The entry point is `src/index.ts`: Bun runs it as it is, and so does Node 24 or later, which strips TypeScript types
+itself (no build step, no flags).
+
+Node 22 is refused with an error when the gate is first used: the gitleaks rules use RegExp modifiers (`(?-i:…)`),
+which Node 22 rejects, and with `--js-regexp-modifiers` runs wrongly (a modifier leaks into the rest of its
+alternation, and gitleaks' `generic-api-key` then misses `GITHUB_TOKEN=…`). A gate that would miss secrets does not
+build.
 
 ## Use
 
 ```ts
-import { redact, sanitizeForStore, secretHits, warmGate } from "@eden/redact";
+import { redact, sanitizeForStore, secretHits, warmGate } from "@eden/redact"; // or "./redact/src/index.ts"
 
 sanitizeForStore("db: postgres://admin:hunter22@db.internal/app");
 // "db: postgres://admin:[REDACTED]@db.internal/app"
@@ -33,10 +45,38 @@ warmGate(); // optional: build and compile everything now, so the first real cal
 - `secretHits(text)`: the sorted ids of the rules a text hits; empty when it holds no secret.
 - `redact(value)` / `redactString(s)`: structural redaction of arbitrary JSON (tool inputs and outputs): values under
   credential-named keys, bearer and basic credentials, private-key blocks, provider token shapes.
+- `containsSecret(value)`: whether `redact` would change anything.
 - `gateOf(rules)` builds a gate over any rule list (`secretRules()` is the full set), for tests and benchmarks.
+
+All of it is synchronous and keeps no state between calls beyond reusable scratch; one gate serves a process.
 
 Text has no file path, so where gitleaks keys a rule or an allowlist to a path the gate is stricter: a rule with a
 path condition runs on every text, a path-only rule never fires, and an allowlist's path condition never holds.
+
+It errs towards redacting. Its keyword rule takes the value after `password`, `token`, `secret`, `api_key` and the
+like whatever its entropy, so placeholders (`key = AKIAXXXXXXXXXXXXXXXX`) and code (`maxTokens: 2_000`) are redacted
+too: on gitleaks' own false-positive examples it fires on 26% where gitleaks fires on 6%. For text bound for storage
+or a model that is the trade it is built for; as a CI scanner over source code it would be noisy.
+
+## Against the alternatives
+
+Measured on one machine with each tool's recommended configuration (gitleaks 8.30.1, trufflehog 3.99.9 with
+verification off, detect-secrets 1.5.0, secretlint 13.1.0 with the recommended preset, redact-pii 3.4.0); details,
+inputs and the cases where this gate loses are in `docs/research/redact-vs-alternatives.md` in the Eden repository.
+
+| | this gate | gitleaks | trufflehog | detect-secrets | secretlint | redact-pii |
+|---|---:|---:|---:|---:|---:|---:|
+| 480 real-format secrets planted in mail, chat, code, logs, JSON: removed or flagged | 100% | 73.3% | 59.0% | 64.2% | 41.3% | 21.7% |
+| gitleaks' own 6,040 true-positive examples (216 rules) flagged | 100% | 99.7% | 24.5% | 48.5% | 12.5% | 11.9% |
+| gitleaks' own 357 false-positive examples flagged (lower is better) | 26.3% | 6.2% | 7.3% | 22.4% | 7.3% | 24.1% |
+| findings on 13.5 MB of text with no planted secret (lower is better) | 250 | 4 | 1 | 11 | 1 | 4,987 |
+| in process, 16 KB of mixed text, a call | 0.31 ms (Bun), 0.49 ms (Node) | n/a | n/a | 87 ms | 0.51 ms | 2.3 ms |
+| one command on a 1 MB file, startup included | 0.18 s (Bun) | 0.70 s | 2.5 s | 6.7 s | 0.33 s | n/a |
+
+The 250 benign findings are almost all its keyword rule on source code and documentation (`token`, `apiKey`, `secret`
+followed by a value). On the 4,460 simulated mail, chat and document items without a planted secret it flagged none,
+and on the evaluation scenarios' texts two, each holding a credential-shaped value (a wifi password, a database URL
+with a password).
 
 ## How it is fast
 
@@ -46,42 +86,50 @@ A gate runs on every item an application touches, so it is built for typical tex
    provider prefix such as `ghp_`). One Aho–Corasick automaton over all of them, folded for case and accents, reads
    the text once (about one table load a character) and selects the rules whose literals occur. The same pass records
    where the anchoring literals occur and whether any of the structural pass's token literals do.
-2. **Anchored rules.** Most gitleaks rules have the shape `[\w.-]{0,50}?(?:keyword|…)…`: a bounded prefix from a
-   known class, then a literal. The gate reads that from each regex once (`src/anchor.ts`) and tries the regex, made
-   sticky, only at the positions a few characters before an occurrence of the literal, instead of letting the engine
-   try its lazy prefix at every position of the text. The result is the same list of matches, argued in the file and
-   checked by the differential fuzz. When candidates are dense (more than 1/32 of the text, a text made of
-   keywords) the rule scans as before.
-3. **Linear matchers where JavaScript backtracks.** Seven gitleaks rules backtrack badly in JavaScript's engine
+2. **Anchored rules.** Most gitleaks rules have a bounded prefix from a known class before a literal. The gate reads
+   that from each regex (`src/anchor.ts`) and tries the regex, made sticky, only a few characters before an
+   occurrence of the literal, instead of letting the engine try every position of the text.
+3. **The lazy prefix read by hand.** 96 rules have the shape `[\w.-]{0,50}?(?:KEYWORD|…)REST`. JavaScript's engine
+   tries the 0–50 character prefix and REST after each length at every position; on text dense in keywords that was
+   about 1 µs a character. The gate instead tries REST once, sticky, at each keyword occurrence and works out the
+   leftmost start by hand (argued in `src/anchor.ts`): the same matches, linear.
+4. **Linear matchers where JavaScript backtracks.** Seven gitleaks rules backtrack badly in JavaScript's engine
    (quadratic or worse on crafted input). They run on hand-written matchers (`src/scanners.ts`) that report what RE2
-   reports, and every allowlist regex runs on a small lazily built DFA (`src/automaton.ts`).
-4. **Less work around the rules.** Rule (d)'s long tokens are found by reading each window from its far end; the
-   allowlist's 1,477 stopwords are looked up by their first two characters; the structural pass skips its regex
-   passes when the prefilter saw none of their literals, and reads keys without making strings.
+   reports, and every allowlist regex runs on a small lazily built DFA (`src/automaton.ts`), its verdict on a line
+   worked out once a line.
+5. **Less work around the rules, and at start.** Rule (d)'s long tokens are found by reading each window from its far
+   end; the allowlist's 1,477 stopwords are looked up by their first two characters; the structural pass skips its
+   regex passes when the prefilter saw none of their literals. Every regex's anchor analysis is worked out ahead into
+   `src/rules.generated.json` (with the gitleaks config as JSON), so the first call parses no rule.
 
 ## Tested how
 
-- **Against an oracle.** `src/secrets.reference.ts` and `src/redact.reference.ts` are the gate before the speed-ups,
-  kept unchanged. `src/gate-differential.ts` builds texts from samples of every rule's regex, the gate's literals in
-  random case, provider shapes, prose and the characters engines disagree on, and requires identical rule ids, spans,
-  stored text and structural redaction; one million texts pass with no difference, and so does a realistic corpus
-  (mail, chat, documents, code, logs, JSON) from 256 bytes to 1 MB.
+- **Against an oracle.** `src/secrets.reference.ts` and `src/redact.reference.ts` are the gate without its speed
+  paths. `src/gate-differential.ts` builds texts from samples of every rule's regex, the gate's literals in random
+  case, provider shapes, prose and the characters engines disagree on, and requires identical rule ids, spans, stored
+  text and structural redaction; one million texts pass with no difference, and so does a realistic corpus (mail,
+  chat, documents, code, logs, JSON) from 256 bytes to 1 MB.
 - **Against RE2.** The hand-written matchers and the allowlist DFA are fuzzed against re2js (a development dependency,
   never shipped): `src/differential.ts`.
 - **Linear time.** Crafted inputs for every rule left on JavaScript's engine, for each hand-written matcher and for
   each fast path, under CPU-time ceilings (`redos*.test.ts`, `own-matchers-linear.test.ts`, `gate-linear.test.ts`).
+- **Bun and Node agree.** `node-parity.test.ts` runs the gate on Node over fuzz texts and the crafted inputs and
+  requires Bun's findings, text for text; `src/node.check.ts` is the API under `node --test`.
 
 ```bash
-bun test packages/redact                                  # the tests
-bun packages/redact/src/gate-differential.ts 1000000      # the full differential fuzz
-bun packages/redact/src/gate-differential.ts --corpus     # the realistic corpus, 256 B to 1 MB
-env -u BUN_OPTIONS bun packages/redact/bench/gate.bench.ts --re2   # before / after / re2js, interleaved
+bun test ./src                                            # the tests (from this directory)
+node --test src/node.check.ts                             # the API on Node 24+
+bun src/gate-differential.ts 1000000                      # the full differential fuzz
+bun src/gate-differential.ts --corpus                     # the realistic corpus (needs the Eden repository)
+env -u BUN_OPTIONS bun bench/gate.bench.ts --re2          # before / after / re2js (needs the Eden repository)
 ```
 
-Numbers and the profile behind the design: `docs/research/redact-perf.md` in the Eden repository.
+Numbers and the profile behind the design: `docs/research/redact-perf.md` and `docs/research/redact-vs-alternatives.md`
+in the Eden repository.
 
 ## Upgrading the rules
 
-Replace `src/vendor/gitleaks/gitleaks.toml` with a newer release's and follow `src/vendor/gitleaks/README.md`. A rule
-whose regex has no bounded prefix before a literal is simply not anchored; a change to one of the seven scanned rules
-throws until its matcher is updated; allowlist syntax the DFA does not parse throws when it compiles.
+Replace `src/vendor/gitleaks/gitleaks.toml` with a newer release's, follow `src/vendor/gitleaks/README.md`, and run
+`bun src/generate.ts` (it writes `src/rules.generated.json`, which the gate imports; a test fails while it is stale).
+A rule whose regex has no bounded prefix before a literal is simply not anchored; a change to one of the seven
+scanned rules throws until its matcher is updated; allowlist syntax the DFA does not parse throws in `generate.ts`.

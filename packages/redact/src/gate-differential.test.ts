@@ -206,8 +206,9 @@ describe("what the speed-ups rest on", () => {
         }
         texts.push(text);
       }
-      // Dense in one keyword: its occurrences pass the limit and are found by the rule itself.
-      texts.push(`${lazy.words[0]}=`.repeat(300) + sample(rnd, node));
+      // Dense in one keyword: its occurrences pass the limit and are found by the rule itself, in a window that moves
+      // (more than the scratch's 256 entries).
+      texts.push(`${lazy.words[0]}=`.repeat(1_200) + sample(rnd, node));
       for (const text of texts) {
         const expected = [...text.matchAll(scan)].map((m) => [m.index, m.index + m[0].length]);
         matched += expected.length;
