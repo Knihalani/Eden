@@ -1,8 +1,9 @@
 /**
- * Eden's MCP client against other MCP clients, on the same local servers (D1860, `docs/research/mcp-vs-alternatives.md`):
- * speed (CPU and latency per call, peak RSS, at 1 KB, 64 KB and 1 MB, JSON and SSE replies, 1, 16 and 256 in flight,
- * on the canned server of `mcp-profile.bench.ts`), the time from process start to the first call's answer, and how each
- * client takes the hostile replies of `src/mcp/adversarial.test.ts` (a hostile server here, local only).
+ * Eden's MCP client against other MCP clients, on the same local servers (D1860,
+ * `docs/research/mcp-vs-alternatives.md`): speed (CPU and latency per call, peak RSS, at 1 KB, 64 KB and 1 MB, JSON
+ * and SSE replies, 1, 16 and 256 in flight, on the canned server of `mcp-profile.bench.ts`), the time from process
+ * start to the first call's answer, and how each client takes the hostile replies of `src/mcp/adversarial.test.ts`
+ * (a hostile server here, local only).
  *
  * The other clients are not Eden's dependencies: install each in its own empty directory under one root, with its
  * install scripts off, and point `MCP_ALT_DIR` at that root. Nothing is run from inside those directories.

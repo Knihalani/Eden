@@ -102,10 +102,11 @@ describe("textShapeWithin", () => {
   });
 
   test("is linear on a string of escapes and on long strings (the quadratic case D1840 caught)", () => {
-    const t0 = performance.now();
+    const cpu0 = process.cpuUsage();
     expect(textShapeWithin(`"${"\\".repeat(4 * 1024 * 1024)}`, 1_008, 1_010_000)).toBe(true);
     expect(textShapeWithin(`["${"x".repeat(4 * 1024 * 1024)}"]`, 1_008, 1_010_000)).toBe(true);
     expect(textShapeWithin(`"${'\\"'.repeat(2 * 1024 * 1024)}"`, 1_008, 1_010_000)).toBe(true);
-    expect(performance.now() - t0).toBeLessThan(1_000);
+    const cpu = process.cpuUsage(cpu0);
+    expect((cpu.user + cpu.system) / 1000).toBeLessThan(1_000); // CPU time: a bound on work, not on the wait
   });
 });
