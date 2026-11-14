@@ -253,3 +253,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1715 | Rejected: a binary layout specialised to a frozen user's structures, in place of the compact form's zstd JSON and the warm form's ("EDF2")… | measured, docs only; docs/research/frozen-binary.md |
 | D1730 | Rejected: specialising the per-user search index for an order-of-magnitude gain on any axis (a persisted or viewed index in the compact… | measured, docs only; docs/research/index-axes.md |
 | D1772 | Rejected at $0 on train for this bar: day seats ordered constraint-carded first, and day ranges read whole. |  |
+| D1871 | Rejected: reading a JSON reply with `res.json()` and checking its depth and size after the parse. | `mcp-vs-alternatives.md` "Closing the losses"; measured with `Response.json()` over each body kind at 1 MB… |

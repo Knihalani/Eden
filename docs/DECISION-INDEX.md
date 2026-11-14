@@ -781,3 +781,9 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1840 | 2026-11-14 | Adopted: the MCP client reads replies faster. `bodyShapeUnder` crosses strings with the native `indexOf`, the SSE parser finds line ends… | adopted |
 | D1841 | 2026-11-14 | Adopted: the secret gate runs each gitleaks and Eden regex rule only where its matches can start, and does less around the rules, with… | adopted |
 | D1860 | 2026-11-14 | Adopted: the MCP client reads a JSON reply natively when its only framing is a declared length under the cap, carries its shape check with… | adopted |
+| D1870 | 2026-11-14 | Adopted: the shape scan finds a string's end by its next quote, and a JSON reply's long plain strings are spliced out of the parse as… | adopted |
+| D1871 | 2026-11-14 | Rejected: reading a JSON reply with `res.json()` and checking its depth and size after the parse. | rejected |
+| D1872 | 2026-11-14 | Adopted: the per-reply caps on server requests and bad messages become budgets, settable per transport. | adopted |
+| D1873 | 2026-11-14 | Adopted (opt-in, off on Eden's path): SSE resumption by `Last-Event-ID` and the standalone GET stream. | adopted |
+| D1874 | 2026-11-14 | Adopted (opt-in, never imported by Eden's path): the client side of MCP's authorization spec, `src/mcp/oauth.ts`. | adopted |
+| D1875 | 2026-11-14 | Adopted (opt-in; Eden sets none): handlers for the server's requests. | adopted |

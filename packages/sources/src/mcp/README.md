@@ -188,11 +188,24 @@ beside a small `Content-Length`, a body shorter or longer than declared.
 ## Speed
 
 Measured against a canned server in its own process (`bench/mcp-profile.bench.ts`, `bench/mcp-compare.bench.ts`, 4
-cores, Bun 1.4.4): the numbers, and where this client loses, are in `docs/research/mcp-vs-alternatives.md`. In short:
-the time to the first call (26 ms from spawn) is the lowest of the six clients measured; up to 64 KB, and in SSE at
-every size to 1 MB, a call costs the least CPU of them all (at 4 MB, measured against the SDK only, 0.73-0.77x its); JSON replies of 1 MB cost about what the official SDK's
-do, 0.92-1.18x across two runs (they were 1.2-2.2x before D1860's native read), and of 4 MB 0.81-0.89x. With 256
-replies of 1 MB in flight it peaks at 394-450 MB (JSON), the SDK at 457-499.
+cores, Bun 1.4.4): the numbers are in `docs/research/mcp-vs-alternatives.md`. In short: the time to the first call
+(26 ms from spawn) is the lowest of the six clients measured; up to 64 KB, and in SSE at every size to 1 MB, a call
+costs the least CPU of them all (D1860's run); since D1870, a JSON `tools/call` of 1 MB costs 0.73-0.77x the official
+SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 MB 0.65-0.76x, on the bench's replies
+(one long plain string). With 256 replies of 1 MB in flight it peaks at 391 MB (JSON), the SDK at 475.
+
+## Where it loses
+
+- **JSON replies whose long strings hold escapes**, as tool output does (a newline and quotes on every line): 1.13-1.30x
+  the SDK's CPU at 1 MB and 0.94-1.26x at 64 KB (D1870's `MCP_PROFILE_TEXT=lines` run; 1.12-1.72x before). The shape
+  check must find each string's end exactly before the parse, which costs a search per escaped quote, and Bun's
+  `res.json()`, which the others use, parses the received bytes without the string our `text()` makes. Taking
+  `res.json()` and checking after the parse was measured and refused (D1871): it gives up D1704's bound on what a
+  hostile reply can make the parse cost.
+- **On Node** the JSON read decodes bytes and then parses (Node's `text()` drops two byte-order marks where
+  `TextDecoder` drops one, D1860), so D1870's splice of long strings is Bun's only.
+- **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
+  callback listener for OAuth and client ID metadata documents (below).
 
 ## Tests
 
