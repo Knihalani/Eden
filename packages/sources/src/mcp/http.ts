@@ -7,7 +7,8 @@
  * Bounded and defensive, since the server is a third party (D7: trusted to be read-only, not to be well-behaved):
  * - every POST has a deadline (`timeoutMs`) and is aborted at it or at `close`;
  * - a reply's body is read up to `maxResponseBytes` (JSON and SSE alike) and the read is aborted past it; JSON is
- *   shape-checked before it is parsed (`parseJsonBytes`);
+ *   shape-checked before it is parsed (`parseJsonBytes`); a JSON body whose only framing is a declared length under
+ *   the cap is read natively, which reads exactly that length (`declaredOnly`, D1860);
  * - only the response whose id is the POSTed request's is delivered from that POST; a response to any other id is
  *   dropped (server requests and notifications on the stream go to the client, which answers `ping` only);
  * - a redirect is followed only to the same origin (307/308, so the POST stays a POST): the user's credentials never
@@ -16,7 +17,8 @@
  *
  * Left out, as Eden needs none of them: the standalone GET stream (server-initiated messages outside a request),
  * resuming a broken stream by `Last-Event-ID`, OAuth (credentials are the operator's static headers), JSON-RPC
- * batches (removed from MCP in 2025-06-18), and the DELETE that ends a session (the SDK's `close` sends none either).
+ * batches (removed from MCP in 2025-06-18). The DELETE that ends a session is `terminateSession`, for a caller that
+ * wants it (D1860); `close` sends none (the SDK's sends none either), and Eden never calls it.
  * A session the server no longer knows (404 while one is held) closes the transport, so `McpSource` connects again
  * with a fresh `initialize`, as the spec asks.
  */
