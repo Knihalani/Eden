@@ -580,7 +580,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`bench/storm.bench.ts`). The card drain gathers what still waits its turn before calling (`CardEnricher.gather`,
   wired by the partner, at most `GATHER_MS` 250 ms): without it the drain ran on one page at a time (funnel card calls
   446 to 567); with it 376, the same items carded. A new await between a page's turn and its store, or in the drain's
-  no-gather path, moves those batches: re-run the funnel's `merged cards use` after touching either.
+  no-gather path, moves those batches: re-run the funnel's `merged cards use` after touching either. The cut is wall
+  time, so under load the batches move; `CardLimits.gatherMs` (lab only, the partner never sets it) changes it, and
+  the funnel's `--card-limits '{"gatherMs":null}'` lifts it where two runs' card counts are compared.
 - **The sync's per-source ids are an `IdSet` (D371, `@eden/primitives`).** Typed arrays, not one string per id: they
   outlive a frozen user's cache. `has` is ~90 ns and iterating 3,000 ~0.2 ms (against ~6 ns and ~5 µs for a `Set`):
   keep iteration off per-item paths.
