@@ -15,6 +15,11 @@ const STOPWORDS = new Set(
   ).split(" "),
 );
 
+/** Every stopword (for tests). */
+export function stopwordList(): string[] {
+  return [...STOPWORDS];
+}
+
 export function isStopword(term: string): boolean {
   return STOPWORDS.has(term);
 }
@@ -25,6 +30,20 @@ export function isStopword(term: string): boolean {
  */
 const STOP_BUCKETS: string[][] = Array.from({ length: 9 * 128 }, () => []);
 for (const w of STOPWORDS) STOP_BUCKETS[w.length * 128 + w.charCodeAt(0)]!.push(w);
+
+/**
+ * Marks of the stopwords' 32-bit FNV-1a hashes over their code units (`fnvOfWord`; `sketchTerms` hashes each word so
+ * as it reads it), by the hash's low 12 bits. Equal words hash alike, so a word whose mark is clear is not a stopword
+ * and `stopwordAt` runs only on a set one (about 4% of other words, D1911).
+ */
+export const STOP_FNV = new Uint8Array(4_096);
+/** FNV-1a over a string's code units, as `sketchTerms` folds them (`Math.imul`, an int32). */
+export function fnvOfWord(w: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < w.length; i++) h = Math.imul(h ^ w.charCodeAt(i), 0x01000193);
+  return h;
+}
+for (const w of STOPWORDS) STOP_FNV[fnvOfWord(w) & 4_095] = 1;
 
 /** `isStopword(s.slice(start, end))`, with no string made (D1887). */
 export function stopwordAt(s: string, start: number, end: number): boolean {

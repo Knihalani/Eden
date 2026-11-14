@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { sketchTableClear, sketchTableSlots, sketchTerms, sketchTermsSplit, TABLE_MAX_CHARS } from "./sketch";
-import { extractTypedEntities, isCalendar, isCalendarByPattern, isStopword, stopwordAt, type Entity } from "./text";
+import {
+  extractTypedEntities,
+  fnvOfWord,
+  isCalendar,
+  isCalendarByPattern,
+  isStopword,
+  STOP_FNV,
+  stopwordAt,
+  stopwordList,
+  type Entity,
+} from "./text";
 
 /*
  * D1886: the sync's per-item readings by code unit. `sketchTerms` scans the lower-cased text once (the split is kept as
@@ -196,6 +206,13 @@ describe("the sync's readings by code unit (D1886) against their references", ()
     const words = ["the", "THE", "them", "theme", "while", "whiles", "okay", "ok", "a", "", "über", "would", "you"];
     for (let i = 0; i < 5_000; i++) words.push(...sentence(r).toLowerCase().split(/\s+/));
     for (const w of words) expect(stopwordAt(`xx ${w} yy`, 3, 3 + w.length)).toBe(isStopword(w));
+  });
+
+  test("every stopword's hash is marked (D1911: a clear mark skips stopwordAt)", () => {
+    const r = rng(1911);
+    const words = stopwordList();
+    for (let i = 0; i < 2_000; i++) words.push(...sentence(r).toLowerCase().split(/\s+/));
+    for (const w of words) if (isStopword(w)) expect(STOP_FNV[fnvOfWord(w) & 4_095]).toBe(1);
   });
 
   test("extractTypedEntities: the eval's texts, fuzzed sentences and random code units", () => {
