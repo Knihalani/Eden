@@ -166,6 +166,15 @@ const UNREADABLE = /reply unreadable/;
 const FAILURE_CHARS = 400;
 
 /**
+ * An account id a provider puts in its error body (OpenRouter's 403 carries `"user_id":"user_…"`): not a secret the
+ * gate knows, but it names the operator's account, so it never reaches a log. The JSON form (cut off or whole) and a
+ * bare `user_id=…`.
+ */
+const ACCOUNT_ID = /("user_id"\s*:\s*)"[^"]*"?|\buser_id=[^\s&,;"']+/g;
+const withoutAccountId = (text: string) =>
+  text.replace(ACCOUNT_ID, (_m, json: string | undefined) => (json !== undefined ? `${json}"[id]"` : "user_id=[id]"));
+
+/**
  * The reader's failures, logged once per partner (one per server process): a reader that fails on every call (an
  * OpenRouter 403 for the account, a revoked key) otherwise looks exactly like a reader that found nothing, since it
  * fails open to the no-model path (D41). The line holds the provider's status and message, with the key removed
@@ -185,7 +194,7 @@ export function readerFailureLog(
     if (logged) return;
     logged = true;
     const raw = error instanceof Error ? error.message : String(error);
-    const text = sanitizeForStore(scrub(raw).slice(0, FAILURE_CHARS)).replace(/\s+/g, " ");
+    const text = sanitizeForStore(withoutAccountId(scrub(raw)).slice(0, FAILURE_CHARS)).replace(/\s+/g, " ");
     log(`eden: ${what} (logged once): ${text}`);
   };
 }
