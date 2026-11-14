@@ -5,8 +5,13 @@
  * complexity. Reports per-event latency of `observe` (fast path, waitMs 0), the CPU cost of slow-path lookups, and
  * event-loop lag while the stream runs.
  *
- *   bun packages/engine/bench/pipeline.bench.ts [--plain] [itemsPerSource=1500] [events=2000] [gateWorkers=0]
- *     [warmup=20]
+ *   bun packages/engine/bench/pipeline.bench.ts [--plain] [--asks=N] [itemsPerSource=1500] [events=2000]
+ *     [gateWorkers=0] [warmup=20]
+ *
+ * `--asks=N` (default 300; 0 skips it): after the stream, N `ask` calls with the stream's own requests (its
+ * `user_message` texts that are not chatter, in turn), each in a session of 20 asks, timed from call to answer (the
+ * sources are instant, so this is Eden's CPU for an answer). Its line is printed after the stream's, which it does
+ * not change.
  *
  * The first `warmup` events are reported on their own line and left out of the steady-state percentiles: event #0
  * pays JIT compilation and session set-up (30-45 ms), which otherwise is the whole-run max and reads as a recurring
@@ -25,7 +30,8 @@ import { buildWorkload } from "./workload";
 
 /** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before). */
 const PLAIN = process.argv.includes("--plain");
-const argv = process.argv.filter((a) => a !== "--plain");
+const ASKS = Number(process.argv.find((a) => a.startsWith("--asks="))?.slice(7) ?? 300);
+const argv = process.argv.filter((a) => a !== "--plain" && !a.startsWith("--asks="));
 const itemsPerSource = Number(argv[2] ?? 1_500);
 const eventCount = Number(argv[3] ?? 2_000);
 const gateWorkers = Number(argv[4] ?? 0);
@@ -82,6 +88,15 @@ for (const event of w.events) {
 }
 const total = performance.now() - t0;
 clearInterval(probe);
+// The ask phase: the stream's requests asked in turn, after the stream (which it does not change).
+const questions = w.events.flatMap((e) => (e.kind === "user_message" && e.text.length > 20 ? [e.text] : []));
+const askMs: number[] = [];
+for (let i = 0; i < ASKS && questions.length > 0; i++) {
+  const s = performance.now();
+  await partner.ask({ ...w.scope, sessionId: `ask${Math.floor(i / 20)}`, question: questions[i % questions.length]! });
+  askMs.push(performance.now() - s);
+  await Bun.sleep(0);
+}
 const poolStats = pool?.stats();
 pool?.close();
 
@@ -108,6 +123,7 @@ console.log(
   `whole run: observe max ${fmt(max(observeMs))} (event #${coldIdx})  slow max ${fmt(max(slowMs))}` +
     `  lag max ${fmt(max(lags))}`,
 );
+if (askMs.length > 0) console.log(line("  ask:", askMs.slice(Math.min(warmup, askMs.length - 1))));
 console.log(`total ${total.toFixed(0)} ms, ${(total / w.events.length).toFixed(3)} ms/event`);
 console.log("decisions", JSON.stringify(decisions));
 if (poolStats) console.log("pool", JSON.stringify(poolStats));
