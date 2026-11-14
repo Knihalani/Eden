@@ -133,6 +133,20 @@ the turn-time pattern 1.6%. Next levers, not taken here: `focusCount` over the m
 focus) pair; `searchLive`'s `store` and `probe` (about 5% together); `grounded`'s conflict test is still 12% of the run,
 mostly `assess`'s per-request reading of tied statements.
 
+## After the review (2026-11-14)
+
+- `sketchTerms`' table grew to the longest text it ever read and never shrank: the sync sketches each listed item's
+  title and text uncut, so a 16 MB MCP reply left about 200 MB attached for the process's life (extra memory 16.5 MB
+  on main, 217.9 MB on the branch, the reviewer's measurement), and the last text's word hashes stayed in it. Now a
+  text over `TABLE_MAX_CHARS` (65,536 code units) is read by the split (exact, `sketchTermsSplit`), so the table
+  never passes 64K slots (768 KB), and each call zeroes the hashes it wrote. `text-fast.test.ts` reads a
+  16M-character text and checks the table's size and that no hash stays; removing either guard fails it.
+- Nothing tested that the cache empties `PARTS_MEMO`: `parts-memo.test.ts` now renders a user's items and checks the
+  memo is empty after `removeItems`, `forget`, a freeze, `release` and an eviction, one test each; with the five
+  `clearParts` calls commented out all five fail.
+- D1888's `PERSIST_FORMAT` 6 cuts both ways: a rollback, or a format-5 process on a shared disk or store, deletes
+  format 6's files and those users re-sync once (D1888, docs/DEPLOY.md).
+
 ## Pitfalls (also in packages/engine/CLAUDE.md)
 
 - Memos are per item object (`ANALYSES`, `READINGS`, `PARTS_MEMO`), never per content (D9); `PARTS_MEMO` is

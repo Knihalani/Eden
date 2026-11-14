@@ -641,9 +641,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   (`day-facts.ts`: a number, or a small `Uint16Array` for a text with a span or three named days, on `Entry.dates`),
   read from the text the first time a scan meets the entry, not the text itself. A change to `coversDay` or
   `dayPattern` must change the facts the same way: `day-facts.test.ts` holds the old functions as its oracle and
-  fuzzes against them (update the oracle only with the change it mirrors). The facts are never frozen: a new
-  `FrozenEntry`/`FastEntry` field for them would bump `PERSIST_FORMAT`; an entry whose words change must be a new
-  entry (or clear `dates`), as `put` does. `datedText` rewrites an ordinal only where it reads as a date (a
+  fuzzes against them (update the oracle only with the change it mirrors). Since D1888 a freeze carries the facts
+  read (`FrozenEntry.t`/`FastEntry.t`), so a change to what they hold bumps `PERSIST_FORMAT`; an entry whose words
+  change must be a new entry (or clear `dates`), as `put` does. `datedText` rewrites an ordinal only where it reads as a date (a
   preposition, "the" or a weekday before; the clause's end or a time word after; no past tense before): widening it
   invents days for "the 3rd party vendor" or "what happened on the 9th", which then pull that day's events into the
   lookup and the conflict grounds. The funnel wires no checker,
@@ -670,10 +670,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `render-fast.test.ts`, `conflict-memo.test.ts` and `text-fast.test.ts` catch the shapes they generate, not all).
 - **Code-unit scans read `text.ts`'s `WORD_UNITS` (`\p{L}\p{N}` per code unit, filled lazily) and hand any string with
   a surrogate to the regex they replace** (`wordsIn`, `saysUnknown`, `focusCount`, `sketchTerms`): a regex with the
-  `u` flag reads a pair as one code point. `sketchTerms`' dedupe table is process-wide scratch of integers only.
+  `u` flag reads a pair as one code point. `sketchTerms`' dedupe table is process-wide scratch of integers only,
+  never past `TABLE_MAX_CHARS` (64K code units: a longer text, such as a raw MCP reply the sync sketches uncut, goes
+  to the split), and each call zeroes the hashes it wrote (the review: a 16 MB reply had kept 200 MB attached).
 - **A freeze carries the entries' date facts (D1888, `FrozenEntry.t`/`FastEntry.t`, `PERSIST_FORMAT` 6; files of 5
   are read and their facts read again at the first scan).** A change to what `dayFactsOf` computes must bump
-  `PERSIST_FORMAT` again, or a thaw serves facts of the old reading.
+  `PERSIST_FORMAT` again, or a thaw serves facts of the old reading. A rollback, or an older process on a shared
+  disk, deletes format 6's files and those users re-sync (docs/DEPLOY.md). `parts-memo.test.ts` pins that every
+  path dropping a user's items empties `PARTS_MEMO`.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
