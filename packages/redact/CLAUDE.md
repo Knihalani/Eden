@@ -18,7 +18,8 @@ docs/research/redact-vs-alternatives.md.
 | `src/secrets.ts` | The rule set (`secretRules`, `LINEAR_RULES`, `GATE_ENGINES`, `checkScanners`, `checkRegexModifiers`), Go-to-JS regex translation (`goRegex`, `backtrackingEngine`), the gate (`gateOf`: one `MultiMatcher.scan` for hits, anchor occurrences and token literals), `secretHits`, `sanitizeForStore`; Eden's extra rules (URL userinfo, `eden-aws-secret` D86, bare provider shapes such as `eden-discord-webhook`, `eden-new-relic`, `eden-azure-storage-key` and `eden-presigned-url` D220, D1850); allowlist `Stopwords`; `Lines` (a line allowlist's verdict once a line, D1850) |
 | `src/anchor.ts` | D1841: `anchorsOf` (a Go regex's bounded prefix and literals, from `parseRegex`), `anchorsOfRegex` (Eden's JavaScript regexes, lookarounds dropped), `Occurrences` (a literal past the dense limit leaves `keep` for the text, D1850), `anchoredMatches`/`AnchoredRegex` (sticky tries where a match can start; `matchAll`'s matches; dense candidates fall back to the scan). D1850: `LazyPrefixRegex`/`lazyPrefixOf` (the lazy prefix read by hand, the rest of the regex tried once at each keyword, later top-level branches as one regex), `useAnalyses` (the generated tables), `analyseAnchors`/`analyseLazy` (the analyses worked out now, for `generate.ts`) |
 | `src/generic-rest.ts` | D1850: generic-api-key's REST (the regex after its lazy prefix) read by hand, each candidate decided by the length of a run; `generic-rest.test.ts` checks every position of seeded texts against the sticky regex |
-| `src/not-secret.ts` | D1850: values that cannot be a secret (`notSecret`: a type, a member chain on a known receiver, an env or template reference, `2_000`, a mask, a run; `placeholderToken`: a mask or run), which the keyword rules and the assignment pass leave in place; `excused` wraps a rule so it reports both kinds of span |
+| `src/not-secret.ts` | D1850: values that cannot be a secret, each only as the whole value (`notSecret`: a type, `process.env.NAME`, a member chain of two or more on a known receiver, `${NAME}` without a default, `$NAME`, `%NAME%`, `{{name}}`, `<your-key>`, a mask, a run; `placeholderToken`: a mask or run), which the keyword rules and the gate's assignment pass leave in place; `excused` wraps a rule so it reports both kinds of span |
+| `src/memo.ts` | D1850: memos that answer only inside an entry point (`withMemos`: `sanitizeForStore`, `secretHits`, `findings`, `explain`) and are emptied when it returns: a memo keyed by a slice kept the caller's whole text alive (`memo.test.ts` holds the retained heap flat) |
 | `src/compose.ts` | D1850: the stored text from the rules' spans. Main's pipeline runs as it was (every pre-D1850 span, excused ones included, gates the text; the structural pass runs on it); D1850's rules (`post`) add spans and the excused values' own characters come back, by masks traced through the gating (`structuralMask` in redact.ts) |
 | `src/generate.ts`, `src/rules.generated.json` | D1850: the vendored TOML as JSON (what the gate imports, on any runtime) and every regex's anchor analysis; `bun packages/redact/src/generate.ts` rewrites it, `generated.test.ts` fails when it is stale; it also checks every allowlist regex parses (`checkAllowlists`) |
 | `src/primitives/` | D1850: `matcher.ts` and `charclass.ts` (and the test-only `matcher.reference.ts`) vendored byte for byte from @eden/primitives; `generated.test.ts` fails when they differ from the shared copies |
@@ -27,7 +28,7 @@ docs/research/redact-vs-alternatives.md.
 | `src/redact.ts` | Structural redaction of JSON (`redact`, `redactString` = `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`, `isSecretKey`, PEM blocks), `TOKEN_PASSES` (D1841: the gate leaves out a token pass whose literals its text lacks), `REDACTED`/`CYCLE`/`TRUNCATED` markers |
 | `src/secrets.reference.ts`, `src/redact.reference.ts` | Test support (D1841): the gate before D1841, the oracle (with `src/primitives/matcher.reference.ts`); unchanged but for D1850's detection changes (its post rules, the excused values, compose.ts), made in both; never imported by the gate |
 | `src/secrets.baseline.ts`, `src/redact.baseline.ts` | Test support (D1850): main's reference gate before D1850, frozen (it never moves with the gate), for `never-less.ts` |
-| `src/never-less.ts`, `src/never-less.test.ts` | D1850: the gate never redacts less than main before D1850: every baseline span inside the gate's spans or excused ones, main's mask equal to the gate's own account of it, and every character lost an excused value's, which `notSecret` or `placeholderToken` must accept; fuzz and keyword-chain texts; also a command (below) |
+| `src/never-less.ts`, `src/never-less.test.ts`, `src/never-less-oracle.ts` | D1850: the gate never redacts less than main before D1850: every baseline span inside the gate's spans or excused ones, main's mask equal to the gate's own account of it, and every run of characters main removed and the gate keeps a value the independent oracle (`never-less-oracle.ts`, written apart from `not-secret.ts`) calls code; fuzz, keyword-chain and excused-shape texts (a token glued after every shape); also a command (below) |
 | `src/gate-differential.ts` | Test support: the whole-gate fuzz against the reference (rule ids, spans, `secretHits`, `sanitizeForStore`, `redactString`, `redact`); also a command (below) |
 | `src/gate-crafted.ts` | Test support: inputs built against the fast paths, for `gate-linear.test.ts` and `bench/gate.bench.ts` |
 | `src/node.check.ts`, `src/node-parity.ts`, `src/node-linear.ts` | D1850: the gate under `node --test` (Node 24+), the Node side of `node-parity.test.ts` (Bun and Node give the same findings, text for text) and of `node-linear.test.ts` (the crafted inputs under a CPU ceiling on V8) |
@@ -66,13 +67,16 @@ docs/research/redact-vs-alternatives.md.
   scanned rule's regex makes `rulesWith` throw (`checkScanners`), and one that adds allowlist syntax the automaton
   lacks throws in `generate.ts`: update the matcher or the parser, then run the full fuzz. Never fall back to a
   backtracking regex.
-- **Never redact less than main (D1850).** A change that lets a value through goes in `not-secret.ts` with a test that
-  the nearest real secret of its shape is still caught, and `never-less.test.ts` must pass; a missed secret is worse
-  than a false redaction. A new detection is a post rule (compose.ts): its spans join after main's pipeline, never
+- **Never redact less than main (D1850).** A change that lets a value through goes in `not-secret.ts`, as a whole-value
+  shape, with a test that the nearest real secret of its shape is still caught, the same shape in
+  `never-less-oracle.ts` written apart, and `never-less.test.ts` passing; a missed secret is worse than a false
+  redaction. The public `redactString`, `redact` and `containsSecret` excuse nothing (main's behaviour). A new detection is a post rule (compose.ts): its spans join after main's pipeline, never
   before it, since spans added before it changed what the keyword rule and the structural pass saw (the review of
   2026-11-14: `token is Bearer secret is …` left the secret in clear).
 - **Never weaken the gate to fix a false positive in a test**: make the test text not secret-shaped. Secret-shaped
   test values are assembled from parts (`"AK" + "IA" + …`) so no literal in the repo is one.
+- **Memos last one call (D1850, D10).** State keyed by a caller's text (a slice keeps its parent alive) lives in a
+  `memo.ts` memo and is emptied when the entry point returns; never keep it across calls.
 - **Dependencies (D15, D1705, D1850):** none at all (the package.json has no `dependencies`). `re2js` (pinned 2.9.0)
   is a devDependency, the oracle, imported only by `re2-oracle.ts`; `scripts/dockerfile.test.ts` fails if a server
   imports any npm package.
@@ -83,7 +87,7 @@ docs/research/redact-vs-alternatives.md.
 ## Test
 
 ```bash
-bun run test:pkg redact          # 22 files; linear.test.ts, own-matchers*.test.ts and the redos* files lead
+bun run test:pkg redact          # 24 files; linear.test.ts, own-matchers*.test.ts and the redos* files lead
 cd packages/redact && bun test ./src            # alone, as the package would stand in its own repository
 node --test packages/redact/src/node.check.ts   # Node 24+ (REDACT_NODE=… bun test …/node-parity.test.ts compares;
                                                 # …/node-linear.test.ts holds the crafted inputs to a ceiling on V8)
