@@ -2,10 +2,12 @@
  * A server-sent events parser over bytes, one pass (D1704). Lines end in LF, CRLF or CR, also when the CR and LF
  * arrive in different chunks; `data:` lines of one event are joined by LF; comments, `id:` and `retry:` are skipped
  * (Eden does not resume streams); a leading byte-order mark is dropped. Bytes are decoded once per event, never per
- * chunk or line. A line split across chunks is kept as a list of its parts and joined once, at its end: joining at
- * every chunk made a long unended line quadratic (an 8 MiB line in 4 KB chunks took 1.6 s). Bounded: a line or an
- * event's data past `maxBytes` fails the parse instead of growing, and nothing here throws on any input.
+ * chunk or line. A line split across chunks is held in `Pieces` and joined once, at its end: joining at every chunk
+ * made a long unended line quadratic (an 8 MiB line in 4 KB chunks took 1.6 s), and holding each tiny read as its
+ * own array made a line dripped a byte at a time cost ~57 bytes of RSS a byte (D1860). Bounded: a line or an event's
+ * data past `maxBytes` fails the parse instead of growing, and nothing here throws on any input.
  */
+import { Pieces } from "./pieces";
 
 const LF = 0x0a;
 const CR = 0x0d;
@@ -20,9 +22,8 @@ const EMPTY = new Uint8Array(0);
 export type SseStep = "more" | "stop" | "too-large";
 
 export class SseParser {
-  /** The parts of a line not yet ended (empty most of the time: lines rarely straddle chunks), and their bytes. */
-  private parts: Uint8Array[] = [];
-  private carried = 0;
+  /** The bytes of a line not yet ended (none most of the time: lines rarely straddle chunks). */
+  private readonly pending = new Pieces();
   /** No line has been read yet: the first may start with a byte-order mark. */
   private atStart = true;
   private skipLf = false;
@@ -79,12 +80,10 @@ export class SseParser {
       const c = chunk[i]!;
       let line = chunk.subarray(start, i);
       let owned = false;
-      if (this.parts.length > 0) {
-        if (this.carried + line.length > this.maxBytes) return "too-large";
-        line = join(this.parts, this.carried, line);
+      if (this.pending.bytes > 0) {
+        if (this.pending.bytes + line.length > this.maxBytes) return "too-large";
+        line = this.pending.take(line);
         owned = true;
-        this.parts = [];
-        this.carried = 0;
       }
       if (c === CR) {
         if (i + 1 < n) {
@@ -96,10 +95,9 @@ export class SseParser {
       if (step !== "more") return this.keep(step);
     }
     if (start < n) {
-      if (this.carried + n - start > this.maxBytes) return "too-large";
-      // Copied, unless the caller keeps its chunks as they are: it may reuse one.
-      this.parts.push(this.chunksKept ? chunk.subarray(start) : chunk.slice(start));
-      this.carried += n - start;
+      if (this.pending.bytes + n - start > this.maxBytes) return "too-large";
+      // A long tail is kept as a view when the caller keeps its chunks as they are (it may reuse one otherwise).
+      this.pending.add(chunk.subarray(start), this.chunksKept, this.maxBytes);
     }
     return this.keep("more");
   }
@@ -184,16 +182,4 @@ function equals(v: Uint8Array, name: number[]): boolean {
   if (v.length !== name.length) return false;
   for (let k = 0; k < name.length; k++) if (v[k] !== name[k]) return false;
   return true;
-}
-
-/** The carried parts of a line and its last piece, in one array. */
-function join(parts: Uint8Array[], carried: number, last: Uint8Array): Uint8Array {
-  const out = new Uint8Array(carried + last.length);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  out.set(last, at);
-  return out;
 }

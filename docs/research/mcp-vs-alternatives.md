@@ -197,6 +197,37 @@ reply where the stream read held the chunks, their join, and the decoded string;
 every 1 KB cell, JSON and SSE, `tools/call` and `tools/list`). The time to the first call fell from 21.8-34.6 ms
 (D1840) to 11.8-15.7 ms: the module no longer loads `@eden/protocol`.
 
+## Fixes from the independent review
+
+An independent review of the first version (head f58325186) asked for seven changes; all are in.
+
+- **An open line's reads are coalesced** (`pieces.ts`, used by the SSE parser and the stdio transport). Holding each
+  read of an unended line as its own array, as D1840's parser did with Bun's reads, cost about 150 bytes of object a
+  read: a raw TCP server dripping a `data:` line a byte per write (`setNoDelay`) took the client's RSS up 166 MB for 3
+  MB sent (the review measured 172), about 230 MB a request at the 4 MiB event cap, on Eden's own path; a stdio child
+  dripping 400 KB held 151,264 arrays. Now the first eight reads of a line are held as before (one array a read, so a
+  large event across a few of Bun's reads costs what it did) and every later read under 16 KB is copied into one
+  buffer that doubles as it fills: the same SSE probe peaks at +24 MB, and the stdio child's 400 KB is held in 9
+  arrays (+14.7 MB RSS, against +29.6 MB before; most of what is left is the pipe's reads awaiting collection).
+  `adversarial.test.ts` holds 3,000,000 1-byte reads in at most 9 arrays (chunks kept and copied) and alternating
+  1-byte and 16 KB reads within two arrays per 16 KB; `stdio.test.ts` the dripping child. A first version copied from
+  the first small read and cost 7-23% more CPU on 64 KB SSE replies (`mcp-profile.bench.ts`, three rounds:
+  1.23 / 1.07 / 1.23 of the previous head's at 1 / 16 / 256 in flight); with the first eight reads held as they come,
+  SSE `tools/call` and `tools/list` read 0.77-0.98 of the previous head's CPU at 64 KB to 4 MB in every cell but one
+  (`tools/list` 4 MB, 16 in flight, 1.05), and the JSON and 1 KB cells 0.84-1.04 (all noise or better). Peak RSS with
+  256 SSE replies of 1 MB in flight moves with the run (808 against 685 MB in one, 729 against 819 in the other).
+- **An async `onnotification` that rejects** no longer ends the process with an unhandled rejection (Bun exits 1 on
+  one): a returned promise is caught; `client.test.ts` fails without it.
+- **Only the runtime's own `fetch` gets the native read**: the global as this module found it, and on Bun the native
+  one (its source reads `[native code]`), so a global replaced by an APM agent, a mock or a polyfill gets the capped
+  stream read. On Node the runtime's `fetch` is JavaScript, so only a replacement made after the module loaded can be
+  told apart. `framing.test.ts` replaces the global with one that hands back 5,000 bytes under `content-length: 10`.
+- **`terminateSession` is a flight**: cut at the POST deadline and by `close`.
+- **The stdio server's stderr is discarded by default** (`stderr: "inherit"` shows it): it is the server's untrusted
+  text and would otherwise reach the host's logs unasked. The SDK's default is to inherit it.
+- **Subpath exports**: `@eden/sources/mcp`, `@eden/sources/mcp/stdio` and `@eden/sources/mcp/extras` in the package's
+  `exports`.
+
 ## Packaging
 
 - **On its own**: the directory copied alone to an empty directory with `@modelcontextprotocol/sdk` 1.32.2 and zod
