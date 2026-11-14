@@ -279,3 +279,42 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
     for (const text of BENIGN) expect(sanitizeForStore(text)).toBe(text);
   });
 });
+
+/** Secret-shaped values assembled from parts (CLAUDE.md), each a `[text, secret]` the stored text must not hold. */
+const s = (...parts: string[]) => parts.join("");
+describe("what main redacted stays redacted (D1850, the reviews of 2026-11-14)", () => {
+  const cases: [text: string, secret: string][] = [
+    // The first review: an auth scheme as a keyword's value swallowed the next keyword.
+    [`the token is Bea${"rer"} secret is ${s("correct", "horsebattery")}`, s("correct", "horsebattery")],
+    [`my token is Bea${"rer"} pwd is ${s("sword", "fish99x")}`, s("sword", "fish99x")],
+    [`token is basic credential is '${s("correct horse ", "battery")}'`, s("correct horse ", "battery")],
+    [`password is bearer\t passwd: BASIC   API key='${s("OmxBOm", "GGLHFv")}`, s("OmxBOm", "GGLHFv")],
+    [`auth token=Bearer  credential = "${s("S5ca", "X4O")}`, s("S5ca", "X4O")],
+    // The second: a value that starts like code or a placeholder and goes on with a secret.
+    [`DB_PASSWORD=\${DB_PASSWORD:-${s("S3cr3tP4", "ssw0rdXq9")}}`, s("S3cr3tP4", "ssw0rdXq9")],
+    [`"password": "\${DB_PASS:-${s("Zx9Qw8Er7", "Ty6Ui5Op4")}}"`, s("Zx9Qw8Er7", "Ty6Ui5Op4")],
+    [`api_key=\${API_KEY:-${s("a8f5f167f44f4964", "e6c998dee827110c")}}`, s("a8f5f167f44f4964", "e6c998dee827110c")],
+    [`token=\${TOKEN=${s("Xk39dKf93", "kdKf8QzRt77")}}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`token=\${X-${s("Xk39dKf93", "kdKf8QzRt77")}}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`password=process.env.DB_PASS||${s("Hunt3rPass", "2Real9")}`, s("Hunt3rPass", "2Real9")],
+    [`token=options.x/${s("Xk39dKf93", "kdKf8QzRt77")}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`secret=env.X:${s("Xk39dKf93", "kdKf8QzRt77")}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`api_key=this.token#${s("Cjh3Yu6uwTnnJ", "YT17TpO4qfkxFZ")}`, s("Cjh3Yu6uwTnnJ", "YT17TpO4qfkxFZ")],
+    [`secret={{x}}${s("a8f5f167f44f4964", "e6c998dee827110c")}`, s("a8f5f167f44f4964", "e6c998dee827110c")],
+    [`password=<b>${s("Xk39dKf93", "kdKf8Qz")}`, s("Xk39dKf93", "kdKf8Qz")],
+    [`password=%PASS%${s("Xk39dKf93", "kdKf8")}`, s("Xk39dKf93", "kdKf8")],
+    [`private_key:= $(${s("czDTndMIlxf6J", "JfoVHoblrXEZ")})`, s("czDTndMIlxf6J", "JfoVHoblrXEZ")],
+    [`credential='$DB_PASS/${s("tm36M47DXCqAX0o", "epChc10xyi0QUK")}'`, s("tm36M47DXCqAX0o", "epChc10xyi0QUK")],
+    [`api_key=$API_KEY:${s("GfzNkGWpPqOP9ncu", "CmoBIUUn6k1vRDKCO3")}`, s("GfzNkGWpPqOP9ncu", "CmoBIUUn6k1vRDKCO3")],
+    [`password=data.${s("Hunter2is", "MyPassw0rd")}`, s("Hunter2is", "MyPassw0rd")],
+    [`password=self.${s("Pa55w0rd", "IsHere")}`, s("Pa55w0rd", "IsHere")],
+    [`api_key=Math.${s("Xk39dKf93", "kdKf8QzRt77")}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`password=${s("123_456", "_789")}`, s("123_456", "_789")],
+  ];
+  for (const [text, secret] of cases) {
+    test(text, () => {
+      expect(sanitizeForStore(text)).not.toContain(secret);
+      expect(secretHits(text)).not.toEqual([]);
+    });
+  }
+});

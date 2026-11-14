@@ -353,7 +353,7 @@ export function assignmentSpansSplit(s: string): { all: [number, number][]; stri
   return { all, strict };
 }
 
-export function redactString(s: string, excuse = true, seen?: { excusable: boolean }): string {
+export function redactString(s: string, excuse = false, seen?: { excusable: boolean }): string {
   // No separate pre-filter for the token patterns: `replace` already returns
   // `s` untouched when nothing matches, so a gate would only scan the string a
   // second time — and a hand-written gate is exactly what drifted out of step
@@ -383,7 +383,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null, true);
+  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null, false);
 }
 
 /**

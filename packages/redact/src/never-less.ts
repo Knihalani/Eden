@@ -11,7 +11,7 @@
  *
  * Also a command, for the fuzz at scale:
  *
- *   bun packages/redact/src/never-less.ts 250000 101       # texts, seed: fuzz and keyword-chain texts alternating
+ *   bun packages/redact/src/never-less.ts 250000 101       # texts, seed: fuzz, keyword-chain and shape texts
  */
 import { prng } from "./differential.ts";
 import { chainText, gateText } from "./gate-differential.ts";
@@ -20,7 +20,7 @@ import {
   REDACTED,
   structuralMask as structuralMaskBefore,
 } from "./redact.baseline.ts";
-import { notSecret, placeholderToken } from "./not-secret.ts";
+import { keptValue, oracleNotSecret } from "./never-less-oracle.ts";
 import { type Gate, gateOf, secretRules } from "./secrets.ts";
 import {
   type Gate as BaselineGate,
@@ -100,8 +100,10 @@ export function baselineMaskDiffers(text: string): string | undefined {
  * - the gate's own account of main's pipeline (`explain().before`) is the frozen baseline's mask, character for
  *   character (so the gate starts from what main removed), and that mask is what the baseline stores;
  * - the gate stores what its mask (`after`) says;
- * - every character main removed and the gate keeps was removed only through an excused value, and every excused
- *   value is code or a placeholder by `not-secret.ts`'s own tests.
+ * - every character main removed and the gate keeps was removed only through an excused value, and every run of
+ *   them is, as written, a value the independent oracle (`never-less-oracle.ts`) calls code or a placeholder: a
+ *   loss counts only where that oracle agrees (the second review of 2026-11-14: checking with `not-secret.ts`
+ *   itself could not catch its own mistakes).
  */
 export function lessThanBaseline(text: string): string | undefined {
   const { now, baseline } = setUp();
@@ -126,19 +128,121 @@ export function lessThanBaseline(text: string): string | undefined {
   if (!text.includes(REDACTED) && merged(stored) !== merged(render(text, explained.after!))) {
     return `stored: ${JSON.stringify(stored)} vs its mask ${JSON.stringify(render(text, explained.after!))}`;
   }
-  for (const value of explained.values!) {
-    if (!(notSecret(value) || placeholderToken(value)))
-      return `excused a value that is not code: ${JSON.stringify(value)}`;
-  }
   for (let i = 0; i < text.length; i++) {
     if (before[i] === 1 && explained.after![i] === 0 && explained.excused![i] === 0) {
       return `stored less at ${i}: ${JSON.stringify(text.slice(i, i + 24))}`;
     }
   }
+  // Each run of characters main removed and the gate keeps must be, as written in the text, a value the independent
+  // oracle (never-less-oracle.ts, not `not-secret.ts`) calls code or a placeholder.
+  for (let i = 0; i < text.length; i++) {
+    if (before[i] !== 1 || explained.after![i] !== 0) continue;
+    let j = i;
+    while (j < text.length && before[j] === 1 && explained.after![j] === 0) j++;
+    const kept = keptValue(text, i, j);
+    if (kept !== undefined && !oracleNotSecret(kept)) {
+      return `kept ${JSON.stringify(text.slice(i, j))} of ${JSON.stringify(kept)}`;
+    }
+    i = j;
+  }
   return undefined;
 }
 
-/** `count` texts from `seed`, fuzz and chain texts alternating: the texts where the gate redacts less. */
+const KEYWORDS = [
+  "password",
+  "passwd",
+  "token",
+  "secret",
+  "api_key",
+  "apiKey",
+  "API_KEY",
+  "DB_PASSWORD",
+  "auth_token",
+  "client_secret",
+  "access_token",
+  "credential",
+  "pwd",
+  "aws_secret_access_key",
+  "private_key",
+];
+const SEPARATORS = ["=", ": ", " = ", ":", '": "', "='", " is ", ":= ", "\t=\t", '="'];
+const ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+/** What can follow an excused shape inside one written value (the second review's fuzz). */
+const GLUE = [
+  ".",
+  "||",
+  "|| ",
+  "/",
+  ":",
+  ",",
+  "&&",
+  "-",
+  "+",
+  "?.",
+  "#",
+  "@",
+  "!",
+  "~",
+  ":-",
+  "-",
+  ":=",
+  "=",
+  ":?",
+  "}",
+  ")",
+  "",
+];
+
+/**
+ * An excused shape, alone or followed (after punctuation) by a random 12–40 character token, as a keyword's value:
+ * every shape `not-secret.ts` leaves, and near misses (a default inside `${…}`, one member on a broad receiver, a
+ * command, digits grouped). The token is a secret unless the oracle says the whole value is code.
+ */
+export function shapeText(rnd: () => number): string {
+  const int = (n: number) => Math.floor(rnd() * n);
+  const pick = <T>(xs: readonly T[]): T => xs[int(xs.length)]!;
+  const token = () => Array.from({ length: 12 + int(29) }, () => ALNUM[int(ALNUM.length)]).join("");
+  const shape = pick([
+    () =>
+      `\${${pick(["DB_PASS", "TOKEN", "X", "api_key", "DB_PASSWORD"])}${pick(["", ":-", "-", ":=", "=", ":?", "?", ":+", "+"])}`,
+    () =>
+      pick([
+        "process.env.X",
+        "process.env.DB_PASS",
+        "import.meta.env.VITE_KEY",
+        "this.options.apiKey",
+        "this.token",
+        "config.key",
+        "options.a",
+        "env.Y",
+        "self",
+        "data",
+        "state",
+        "Math",
+        "req.body",
+        "res.usage.input",
+      ]),
+    () => `{{${pick(["x", "vault_pw", "a.b", "X"])}}}`,
+    () => `<${pick(["your-key", "b", "token", "API_KEY", "Xy"])}>`,
+    () => `%${pick(["PASS", "API_KEY", "x"])}%`,
+    () => `$(${pick(["echo ", "cat ", ""])}`,
+    () => `$${pick(["API_KEY", "DB_PASS", "X"])}`,
+    () => pick(["string", "number", "Set<string>", "Uint8Array", "string[]", "Map<string, number>"]),
+    () => `${int(1000)}_${int(1000)}${rnd() < 0.5 ? "_" + int(1000) : ""}`,
+    () => `${pick(["", "sk-", "hf_", "pplx-"])}${pick(["****", "xxxxxxxx", "########", "•••••••••", "XXXXXXXXXX"])}`,
+    () => `${pick(["", "AIza", "AKIA", "glc_"])}${pick(["a", "X", "*", "1", "="]).repeat(14 + int(6))}`,
+  ])();
+  const quote = pick(["", "", '"', "'", "`"]);
+  let text = "";
+  for (let n = 1 + int(3); n > 0; n--) {
+    const tail = rnd() < 0.7 ? pick(GLUE) + token() + (rnd() < 0.2 ? pick(["}", ")", "%", ">", "}}"]) : "") : "";
+    text += pick(KEYWORDS) + pick(SEPARATORS) + quote + shape + tail + (rnd() < 0.6 ? quote : "");
+    text += pick([" ", "\n", ", ", ";", "", "&", " and "]);
+  }
+  return text;
+}
+
+/** `count` texts from `seed`, fuzz, chain and shape texts in turn: the texts where the gate redacts less. */
 export function fuzzNeverLess(
   count: number,
   seed: number,
@@ -146,7 +250,7 @@ export function fuzzNeverLess(
   const rnd = prng(seed);
   const failures: { text: string; why: string }[] = [];
   for (let i = 0; i < count; i++) {
-    const text = i % 2 === 0 ? gateText(rnd) : chainText(rnd);
+    const text = i % 3 === 0 ? gateText(rnd) : i % 3 === 1 ? chainText(rnd) : shapeText(rnd);
     const why = lessThanBaseline(text);
     if (why) failures.push({ text, why });
   }

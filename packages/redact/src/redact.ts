@@ -455,10 +455,11 @@ export function redactTokensIn(s: string, passes: number): string {
 
 /**
  * The assignment pass of `redactString`: `redactString(s)` is `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`.
- * `excuse`: leave values that are code or placeholders (D1850); the secret gate runs it as main did (`false`) and
- * learns through `seen` whether it took one (compose.ts).
+ * `excuse`: leave values that are code or placeholders (D1850). Off by default, so `redactString`, `redact` and
+ * `containsSecret` redact what main did; the secret gate runs it off too, learns through `seen` whether it took one,
+ * and takes such values back itself (compose.ts), where never-less checks them.
  */
-export function redactAssignments(t: string, excuse = true, seen?: { excusable: boolean }): string {
+export function redactAssignments(t: string, excuse = false, seen?: { excusable: boolean }): string {
   let out = "";
   let cursor = 0;
   scanAssignments(
@@ -481,7 +482,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null, true);
+  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null, false);
 }
 
 /**

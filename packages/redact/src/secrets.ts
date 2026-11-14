@@ -47,6 +47,7 @@ import {
   TOKEN_LITERALS,
   TOKEN_PASSES,
 } from "./redact.ts";
+import { Answers, Last, withMemos } from "./memo.ts";
 import { excused, notSecret, placeholderToken } from "./not-secret.ts";
 import { SCANNERS } from "./scanners.ts";
 import generated from "./rules.generated.json" with { type: "json" };
@@ -85,15 +86,12 @@ interface CompiledAllowlist {
   /** Path conditions never hold for text, so they only matter to an AND list (which they then fail). */
   hasPaths: boolean;
   /**
-   * D1850: the regexes' verdicts on the secrets or matches they were last tested on (at most VERDICTS_KEPT), and the
-   * last secret the stopwords read. A text dense in findings repeats a few secrets thousands of times.
+   * D1850: the regexes' verdicts on the secrets or matches they were tested on (at most VERDICTS_KEPT), and the
+   * stopwords' on the last secret, within one call (memo.ts). A text dense in findings repeats a few secrets
+   * thousands of times.
    */
-  verdicts: Map<string, boolean>;
-  /** The last target and its verdict: a string compare, where the map hashes each new slice. */
-  lastTarget?: string;
-  lastVerdict?: boolean;
-  lastStopSecret?: string;
-  lastStopword?: boolean;
+  verdicts: Answers<boolean>;
+  stopword: Last<boolean>;
 }
 
 /** Where a secret sits in a text: `[start, end)`. */
@@ -390,17 +388,13 @@ function jsClass(cls: string): string {
 
 /** Shannon entropy in bits per character, as gitleaks computes it. */
 /**
- * D1850: the last text `shannon` read, and its entropy. A text dense in findings (one line of `key=…` a megabyte long)
- * asks for the same secret thousands of times in a row; the answer is the same number.
+ * D1850: the last text `shannon` read, and its entropy, within one call (memo.ts). A text dense in findings (one line
+ * of `key=…` a megabyte long) asks for the same secret thousands of times in a row; the answer is the same number.
  */
-let lastEntropyText: string | undefined;
-let lastEntropy = 0;
+const LAST_ENTROPY = new Last<number>();
 
 function shannon(text: string): number {
-  if (text === lastEntropyText) return lastEntropy;
-  lastEntropyText = text;
-  lastEntropy = entropyOf(text);
-  return lastEntropy;
+  return LAST_ENTROPY.get(text, entropyOf);
 }
 
 function entropyOf(text: string): number {
@@ -450,7 +444,8 @@ function compileAllowlist(list: Allowlist, engine: AllowlistEngine): CompiledAll
     regexes: (list.regexes ?? []).map((regex) => engine(regex)),
     stopwords: new Stopwords((list.stopwords ?? []).map((word) => word.toLowerCase())),
     hasPaths: (list.paths ?? []).length > 0,
-    verdicts: new Map(),
+    verdicts: new Answers<boolean>(VERDICTS_KEPT),
+    stopword: new Last<boolean>(),
   };
 }
 
@@ -473,28 +468,14 @@ function allows(list: CompiledAllowlist, finding: Finding): boolean {
   let regexAllowed: boolean;
   if (list.target === "line") regexAllowed = finding.lines.allowed(list, finding.index);
   else {
-    // The last target's verdict is kept (D1850): findings dense in one text repeat their secret or match.
+    // Kept within the call (D1850): findings dense in one text repeat their secret or match.
     const target = list.target === "match" ? finding.match : finding.secret;
-    if (target !== list.lastTarget) {
-      let verdict = list.verdicts.get(target);
-      if (verdict === undefined) {
-        if (list.verdicts.size >= VERDICTS_KEPT) list.verdicts.clear();
-        verdict = list.regexes.some((regex) => regex.test(target));
-        list.verdicts.set(target, verdict);
-      }
-      list.lastTarget = target;
-      list.lastVerdict = verdict;
-    }
-    regexAllowed = list.lastVerdict!;
+    regexAllowed = list.verdicts.get(target, (t) => list.regexes.some((regex) => regex.test(t)));
   }
   // Both tests are pure, so the stopwords are read only when their answer can change the verdict.
   const stopword = () => {
     if (list.stopwords.size === 0) return false;
-    if (finding.secret !== list.lastStopSecret) {
-      list.lastStopSecret = finding.secret;
-      list.lastStopword = list.stopwords.occurIn(finding.secret.toLowerCase());
-    }
-    return list.lastStopword!;
+    return list.stopword.get(finding.secret, (secret) => list.stopwords.occurIn(secret.toLowerCase()));
   };
   if (!list.and) return regexAllowed || stopword();
   // AND: every condition the list sets must hold, and a path condition never holds for text.
@@ -625,15 +606,10 @@ function gitleaksRule(
     anchored: anchors && new AnchoredRegex(goRegex(rule.regex), anchors),
   });
   /** The secret's span within `match`; undefined when the rule's group did not take part. */
-  /** The last match read and its secret's span (D1850: a text dense in findings repeats its match). */
-  let lastMatch: string | undefined;
-  let lastSpan: Span | undefined;
-  const secretIn = (pattern: Pattern, match: string): Span | undefined => {
-    if (match === lastMatch) return lastSpan;
-    lastMatch = match;
-    lastSpan = secretOf(pattern, match);
-    return lastSpan;
-  };
+  /** The last match read and its secret's span, within one call (D1850: a text dense in findings repeats it). */
+  const lastMatch = new Last<Span | undefined>();
+  const secretIn = (pattern: Pattern, match: string): Span | undefined =>
+    lastMatch.get(match, (m) => secretOf(pattern, m));
   const secretOf = (pattern: Pattern, match: string): Span | undefined => {
     const indices = pattern.groups(match);
     if (!indices || indices.length < 2) return [0, match.length];
@@ -1093,24 +1069,31 @@ export function gateOf(rules: SecretRule[]): Gate {
     return out;
   };
 
+  // Every entry point empties the memos when it returns (memo.ts): no slice of a caller's text outlives the call.
   return {
-    findings,
+    findings: (text) => withMemos(() => findings(text)),
     secretHits: (text) =>
-      findings(text)
-        .map((found) => found.id)
-        .sort(),
-    sanitizeForStore(text) {
-      const { strict, excused, post } = sorted(text);
-      // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
-      // any finding, that pass's spans on the original text join the rules' (audit A5). Then the structural pass, as
-      // `redact` runs it; then D1850's changes (compose.ts).
-      return composeStored(text, strict, excused, post, pass);
-    },
-    explain(text) {
-      const { strict, excused, post } = sorted(text);
-      return { ...composeMasks(text, strict, excused, post, pass, true), excusedSpans: excused };
-    },
+      withMemos(() =>
+        findings(text)
+          .map((found) => found.id)
+          .sort(),
+      ),
+    sanitizeForStore: (text) => withMemos(() => store(text)),
+    explain: (text) => withMemos(() => explain(text)),
   };
+
+  function store(text: string): string {
+    const { strict, excused, post } = sorted(text);
+    // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
+    // any finding, that pass's spans on the original text join the rules' (audit A5). Then the structural pass, as
+    // `redact` runs it; then D1850's changes (compose.ts).
+    return composeStored(text, strict, excused, post, pass);
+  }
+
+  function explain(text: string): Composed & { excusedSpans: Span[] } {
+    const { strict, excused, post } = sorted(text);
+    return { ...composeMasks(text, strict, excused, post, pass, true), excusedSpans: excused };
+  }
 }
 
 let gate: Gate | undefined;

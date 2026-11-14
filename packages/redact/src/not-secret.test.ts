@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { notSecret, placeholderToken } from "./not-secret.ts";
-import { redact, redactString } from "./redact.ts";
+import { redact, redactAssignments, redactString } from "./redact.ts";
 import { sanitizeForStore } from "./secrets.ts";
 
 /** Each shape: code that is left as it is, and a secret of the nearest shape that is still redacted. */
@@ -21,13 +21,24 @@ const SHAPES: [shape: string, left: string, caught: string, secret: string][] = 
   ],
   ["this.…", "    this.apiKey = this.options.apiKey;", `    this.apiKey = "dragon.${"fire99"}";`, `dragon.${"fire99"}`],
   ["a usage count", "  inputTokens: res.usage.inputTokens,", `  token: re${"s"}9.usage.x,`, `re${"s"}9.usage.x`],
-  ["a template reference", 'password: "${DB_PASSWORD}"', `password: "$${"{"}hunter22`, `$${"{"}hunter22`],
+  ["a template reference", 'password: "${DB_PASSWORD}"', `password: "$${"{"}DB:-hunter22}"`, `hunter22`],
   ["a shell variable", "export API_KEY=$EDEN_API_KEY", `export API_KEY=$ALES${"2024"}`, `$ALES${"2024"}`],
-  ["a command", "TOKEN=$(openssl rand -hex 24)", `TOKEN=$${"x"}Kq2pd8sZ`, `$${"x"}Kq2pd8sZ`],
-  ["a placeholder in angle brackets", "API_KEY=<your-key>", `API_KEY=<9${"Kq"}2pd8sZ>`, `<9${"Kq"}2pd8sZ>`],
-  ["a number as code groups it", "const maxTokens = 2_000;", `password = 2${"000"}48;`, `2${"000"}48`],
+  [
+    "a variable then more",
+    "export API_KEY=$EDEN_API_KEY",
+    `export API_KEY=$EDEN_API_KEY/${"Kq2pd8"}sZx9`,
+    `Kq2pd8sZx9`,
+  ],
+  ["a placeholder in angle brackets", "API_KEY=<your-key>", `API_KEY=<Xk39${"dKf"}93kdKf8>`, `Xk39dKf93kdKf8`],
+  ["a template expression", "secret: {{vault_secret}}", `secret: {{x}}${"Kq2pd8"}sZx9`, `Kq2pd8sZx9`],
   ["a mask", 'password: "xxxxxxxx"', `password: "xxxx${"Kq2p"}"`, `xxxx${"Kq2p"}`],
   ["a run", `apiKey: "AIza${"a".repeat(35)}"`, `apiKey: "${"a".repeat(15)}Hunter2"`, `${"a".repeat(15)}Hunter2`],
+  [
+    "a run after a letter prefix",
+    `apiKey: "AIza${"a".repeat(35)}"`,
+    `apiKey: "Xk39${"dKf"}93kdK${"a".repeat(16)}"`,
+    `Xk39dKf93kdK`,
+  ],
 ];
 
 describe("code and placeholders are left, the nearest secrets are not (D1850)", () => {
@@ -39,7 +50,7 @@ describe("code and placeholders are left, the nearest secrets are not (D1850)", 
   }
 
   test("a plain word, a short value, a digit run, a call, upper case and changeme stay redacted", () => {
-    for (const value of ["sunshine", "hunter2", "84729163", "find(x)", "COUNT_ME_IN", "changeme", "s.input"]) {
+    for (const value of ["sunshine", "hunter2", "84729163", "find(x)", "COUNT_ME_IN", "changeme", "s.input", "2_000"]) {
       expect([value, notSecret(value)]).toEqual([value, false]);
       expect(sanitizeForStore(`the password is ${value}`)).not.toContain(value);
     }
@@ -59,14 +70,14 @@ describe("code and placeholders are left, the nearest secrets are not (D1850)", 
     expect(sanitizeForStore(`id ${"AK" + "IA"}${"QQQQRRRR".repeat(2)} is set`)).not.toContain("QQQQRRRR");
   });
 
-  test("the structural pass leaves them too, standalone", () => {
-    expect(redactString("const x = { maxTokens: 2_000, apiKey: process.env.KEY };")).toBe(
-      "const x = { maxTokens: 2_000, apiKey: process.env.KEY };",
+  test("the public structural pass excuses nothing unless asked, as main (the review of 2026-11-14)", () => {
+    expect(redactString("const x = { apiKey: process.env.EDEN_KEY };")).toBe("const x = { apiKey: [REDACTED] };");
+    expect(redactAssignments("const x = { apiKey: process.env.EDEN_KEY };", true)).toBe(
+      "const x = { apiKey: process.env.EDEN_KEY };",
     );
-    expect(redactString(`apiKey: "${"Kq2pd8"}sZx9"`)).toBe("apiKey: [REDACTED]");
     expect(redact({ password: "hunter22", note: "token: string" })).toEqual({
       password: "[REDACTED]",
-      note: "token: string",
+      note: "token: [REDACTED]",
     });
   });
 });
