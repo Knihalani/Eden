@@ -16,7 +16,7 @@ import { DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
 // The server's own log line for a failing reader (one line, key removed, redacted).
 import { readerFailureLog } from "@eden/server";
 import { parseReaderOption, type ReaderKindOption } from "./reader-stub";
-import { EVAL_TENANT, liveWiring, proxyOf, runScenarios, unwiredFlags } from "./run";
+import { counting, EVAL_TENANT, liveProblem, liveWiring, proxyOf, runScenarios, unwiredFlags } from "./run";
 import type { Scenario } from "./scenario";
 
 const args = process.argv.slice(2);
@@ -82,6 +82,19 @@ const onReaderFailure = readerFailureLog((line) => {
   readerFailure = line;
   console.error(line);
 }, wiring?.scrub);
+// The push check's, as `buildPartner` logs it: in the shipped default the check is the only model caller (the reader is
+// not called, D237), so a check refused on every call was a live run that read as $0 and no model call.
+let checkFailure: string | undefined;
+const onCheckFailure = readerFailureLog(
+  (line) => {
+    checkFailure = line;
+    console.error(line);
+  },
+  wiring?.scrub,
+  "the push check's model call failed; pushes hand the default's candidates",
+  "check",
+);
+const judgeCalls = { calls: 0, failures: 0 };
 const config = { ...extra } as Partial<EngineConfig>;
 // What runs: the override over the default (D112), whose cards, intent and reader are on. With no model and no
 // dependency they are inert by design, the default's no-model path, which is what `bun run eval` measures; they are
@@ -99,12 +112,13 @@ if (reader !== undefined && !run.askReader) {
 }
 for (const flag of unwired) console.error(`note: inert in the eval: ${flag}`);
 const options = {
-  model: wiring?.model ?? null,
+  // The judge (`--live --judge`) is counted here: the run's per-turn count also holds a stub reader's free calls.
+  model: wiring?.model ? counting(wiring.model, judgeCalls) : null,
   waitMs,
   planner,
   config,
   ...(wiring ? { spend: wiring.spend } : {}),
-  ...(wiring?.readerModel ? { readerModel: wiring.readerModel, onReaderFailure } : {}),
+  ...(wiring?.readerModel ? { readerModel: wiring.readerModel, onReaderFailure, onCheckFailure } : {}),
 };
 // With the oracle, the headline metrics come from the stub run; the oracle's run is reported only as a proxy.
 const metrics = await runScenarios(scenarios, { ...options, ...(reader ? { reader: "stub" as const } : {}) });
@@ -127,6 +141,7 @@ console.log(
             usdCap,
             spentUsd: wiring.spend.spent(EVAL_TENANT),
             ...(readerFailure ? { readerFailure } : {}),
+            ...(checkFailure ? { checkFailure } : {}),
           }
         : {}),
       waitMs,
@@ -145,3 +160,7 @@ console.log(
     2,
   ),
 );
+// A live run that made no model call, or whose every call failed, measured the no-model path: it fails loudly, after
+// the JSON (which says why: `readerPool`, `pushCheck`, `readerFailure`, `checkFailure`).
+const problem = live ? liveProblem(metrics, wiring?.model ? judgeCalls : undefined) : null;
+if (problem) fail(problem, 1);

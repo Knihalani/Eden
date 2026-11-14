@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChatRequest, ChatResponse, Model, OpenRouterOptions } from "@eden/llm";
 import { StaticSource } from "@eden/sources";
 import { buildPartner, modelFailures, readerFailureLog } from "./build";
-import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "./models";
+import { DEFAULT_ROLE_MODEL, keyScrubber, modelRolesFromEnv } from "./models";
 
 /**
  * The shipped reader fails open (D41), so a reader whose every call fails (seen live: OpenRouter's 403 "violation of
@@ -113,5 +113,52 @@ describe("the reader's failures are logged once by the server, without the key",
     });
     expect(roles.reader).toBeNull();
     expect(roles.scrub).toBeUndefined();
+  });
+});
+
+describe("what a provider's error carries besides its message never reaches the log (review of D1830)", () => {
+  test("OpenRouter's account id is replaced, whole, cut off or bare", () => {
+    const lines: string[] = [];
+    const body =
+      'openrouter 403: {"error":{"message":"The request is prohibited due to a violation of provider Terms Of ' +
+      'Service.","code":403},"user_id":"user_2uSUyeSClJeAbCdEf"}';
+    readerFailureLog((l) => lines.push(l))(new Error(body));
+    readerFailureLog((l) => lines.push(l))(new Error('openrouter 403: {"user_id" : "user_2uSUyeSClJe'));
+    readerFailureLog((l) => lines.push(l))(new Error("openrouter 403: denied for user_id=user_2uSUyeSClJe, retry"));
+    for (const line of lines) expect(line).not.toContain("user_2uSUyeSClJe");
+    expect(lines[0]).toContain('"user_id":"[id]"');
+    expect(lines[0]).toContain("Terms Of Service");
+    expect(lines[1]).toContain('"user_id" : "[id]"');
+    expect(lines[2]).toContain("user_id=[id], retry");
+  });
+
+  test("the key is scrubbed as echoed: whole, its last 16, base64 of it and of its Bearer header, split by spaces", () => {
+    const scrub = keyScrubber(KEY);
+    const b64 = (s: string) => Buffer.from(s).toString("base64");
+    const url = (s: string) => s.replace(/\+/g, "-").replace(/\//g, "_");
+    const forms = [
+      KEY,
+      `****${KEY.slice(-16)}`,
+      b64(KEY),
+      b64(`Bearer ${KEY}`),
+      url(b64(`Bearer ${KEY}`)),
+      `${KEY.slice(0, 20)}\n${KEY.slice(20)}`,
+      `${KEY.slice(0, 9)} ${KEY.slice(9, 40)}\r\n  ${KEY.slice(40)}`,
+      `${b64(KEY).slice(0, 30)}\n${b64(KEY).slice(30)}`,
+    ];
+    for (const form of forms) {
+      const out = scrub(`openrouter 401: echo ${form} end`);
+      expect(out).toContain("[key]");
+      expect(out).toContain("end");
+      expect(out.replace(/\s+/g, "")).not.toContain(KEY.slice(-16));
+      expect(out.replace(/\s+/g, "")).not.toContain(b64(KEY).slice(0, 40));
+    }
+    // Text that only shares a prefix with the key is left alone; the short key is scrubbed too.
+    expect(scrub("sk-or-v1-something else")).toBe("sk-or-v1-something else");
+    expect(keyScrubber(SHORT_KEY)(`a ${SHORT_KEY} b`)).toBe("a [key] b");
+    // The roles' scrub is this one.
+    expect(modelRolesFromEnv({ OPENROUTER_API_KEY: KEY }, () => new RefusingModel("m", "")).scrub!(b64(KEY))).toBe(
+      "[key]",
+    );
   });
 });

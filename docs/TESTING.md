@@ -282,6 +282,25 @@ three sessions instead of six in the updates test measured no difference and was
 (differential and fuzz corpora: seeds × inputs kept), and the smaller files (`sparse-index-packed`, `deletes`,
 `cache-freeze`, `unused-sweep`, `eval/run.test`), not reached.
 
+### The `--neutral under --jobs` flake: the card drain's wall-clock gather cut (2026-11-14, 4 cores, Bun 1.4.4)
+
+`funnel-flags.test.ts` compares the merged `neutral` block of a sharded `funnel.ts --neutral` run with one process's,
+card counters included. Under load it read 25 card calls and 74 items carded against 24 and 57. Cause: the card
+drain waits for stores still waiting their turn (`CardEnricher.gather`, D370) for at most 250 ms of wall time
+(`GATHER_MS`). On a loaded machine the stores took longer, the cut fell at another store, a batch went out with 4
+items where it would have held 20, and the replayed cards followed the new batches (an instrumented run logged the
+cut 12-16 times a run, at different stores). Reproduced with 6 one-process and 6 sharded runs at once on 4 cores: 1
+of the 6 one-process runs moved. The `idle()` before the neutral counters are read (already there) was not enough:
+the cut happens earlier, inside each task.
+
+Fix: `CardLimits.gatherMs` (a lab hook; the partner never sets it, so the default's 250 ms is unchanged), and the
+funnel's `--card-limits '{"gatherMs":null}'` lifts the cut (JSON has no Infinity). The test's two compared pairs (the
+`--time 0.05` pair and the `--neutral` pair) pass it, and the comparison stays exact. Proof: 16 runs of those
+funnels at once (8 one-process, 8 sharded) gave the same block; `funnel-flags.test.ts` passed 18 of 18 runs, two at
+a time beside two loops of `bun run test:pkg engine` (`--timeout=20000`, the main run's limit). A merge that keeps
+the larger of the shards' card calls instead of their sum fails the test (24 against 12). `cards.test.ts` checks the
+hook: a 50 ms cut splits the first batch, `Infinity` gives `[10, 10, 10]`.
+
 ## Caches in format:check and typecheck
 
 Both caches carry to a fresh git worktree (each audit fixer, reviewer and integrator gets one), and

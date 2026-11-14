@@ -285,6 +285,51 @@ describe("the enricher (CardEnricher)", () => {
     expect(withGather.calls).toEqual([10, 10, 10]);
   });
 
+  test("gather: `gatherMs` sets the wall-clock cut, and Infinity lifts it (the lab's load-free batches)", async () => {
+    // Ten pages of three items, 40 ms apart: 400 ms of stores, longer than the cut.
+    const run = async (gatherMs: number) => {
+      const maker = new TableMaker(table);
+      const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW }, { gatherMs });
+      let left = 10;
+      let tail: Promise<void> = Promise.resolve();
+      e.gather = () => (left > 0 ? tail : null);
+      for (let p = 0; p < 10; p++) {
+        tail = tail.then(
+          () =>
+            new Promise<void>((r) =>
+              setTimeout(() => {
+                e.enqueue(scope, [frozen(3 * p), frozen(3 * p + 1), frozen(3 * p + 2)]);
+                left--;
+                r();
+              }, 40),
+            ),
+        );
+      }
+      await tail;
+      await e.idle();
+      return { calls: maker.calls, carded: e.stats.carded };
+    };
+    const cut = await run(50);
+    const uncut = await run(Infinity);
+    expect(cut.carded).toBe(30);
+    expect(uncut.carded).toBe(30);
+    // Cut at 50 ms: the first call holds what landed by then, less than a batch.
+    expect(cut.calls[0]).toBeLessThan(10);
+    expect(uncut.calls).toEqual([10, 10, 10]);
+    // A value that is not a positive number would never cut (`now >= NaN` is false): refused at construction.
+    for (const bad of [NaN, 0, -1, "x" as unknown as number]) {
+      expect(
+        () =>
+          new CardEnricher(
+            { maker: new TableMaker(table), budget: new Budget(), now: () => NOW },
+            {
+              gatherMs: bad,
+            },
+          ),
+      ).toThrow("gatherMs must be a positive number");
+    }
+  });
+
   test("gather (D370): a forgotten user's drain stops waiting at once, with no call", async () => {
     const maker = new TableMaker(table);
     const e = new CardEnricher({ maker, budget: new Budget(), now: () => NOW });
