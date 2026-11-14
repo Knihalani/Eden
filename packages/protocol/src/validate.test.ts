@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { itemId } from "./ids";
-import { MAX_QUESTION_CHARS, bodyShapeUnder, checkAsk, checkEvent, checkSourceItems } from "./validate";
+import {
+  MAX_QUESTION_CHARS,
+  bodyShapeUnder,
+  bodyShapeWithin,
+  checkAsk,
+  checkEvent,
+  checkSourceItems,
+} from "./validate";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
 // fail it the way wall time did (weak-points-1111.md R1).
@@ -174,6 +181,55 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
     expect(bodyShapeUnder(bytes(`{"x":${"[".repeat(1_009)}${"]".repeat(1_009)}}`))).toBe(false);
     expect(bodyShapeUnder(bytes({ x: Array(1_010_002).fill(0) }))).toBe(false);
     expect(bodyShapeUnder(bytes({ x: Array(1_000_000).fill(0) }))).toBe(true);
+  });
+  // D1840: strings are crossed with `indexOf`. The byte loop it replaced is the oracle, at bounds small enough that
+  // the seeded inputs reach them: strings short and long (past the 32-byte run), escapes dense and sparse, an escape
+  // as the last byte, unended strings, non-ASCII, and structure on both sides of each.
+  test("the same answer as the plain byte loop on seeded random bodies", () => {
+    const loop = (b: Uint8Array, maxDepth: number, maxValues: number): boolean => {
+      let depth = 0;
+      let values = 0;
+      let inString = false;
+      for (let i = 0; i < b.length; i++) {
+        const c = b[i]!;
+        if (inString) {
+          if (c === 0x5c) i++;
+          else if (c === 0x22) inString = false;
+          continue;
+        }
+        if (c === 0x22) inString = true;
+        else if (c === 0x5b || c === 0x7b) {
+          if (++depth > maxDepth || ++values > maxValues) return false;
+        } else if (c === 0x5d || c === 0x7d) depth--;
+        else if (c === 0x2c && ++values > maxValues) return false;
+      }
+      return true;
+    };
+    let seed = 1708;
+    const rand = (n: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    const pieces = ['"', "\\", '\\"', "[", "]", "{", "}", ",", "x", "é", " ", "1", ':"a"', "\\\\"];
+    const run = (ch: string) => ch.repeat(1 + rand(80));
+    let differ = 0;
+    let refused = 0;
+    for (let k = 0; k < 6_000; k++) {
+      let text = "";
+      const parts = 1 + rand(40);
+      for (let p = 0; p < parts; p++)
+        text += rand(4) === 0 ? run(pieces[rand(pieces.length)]!) : pieces[rand(pieces.length)]!;
+      const b = new TextEncoder().encode(text);
+      const maxDepth = 1 + rand(12);
+      const maxValues = 1 + rand(16);
+      const want = loop(b, maxDepth, maxValues);
+      if (!want) refused++;
+      if (bodyShapeWithin(b, maxDepth, maxValues) !== want) differ++;
+    }
+    expect(differ).toBe(0);
+    // Both answers occur often, so the comparison is not of one constant.
+    expect(refused).toBeGreaterThan(400);
+    expect(refused).toBeLessThan(5_000);
   });
 });
 
