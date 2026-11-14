@@ -7,8 +7,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { EmptyResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync } from "node:fs";
 import { z } from "zod";
-import { McpSource } from "../mcp-source";
 import { McpClient } from "./client";
 import { StreamableHttpTransport } from "./http";
 
@@ -177,36 +177,42 @@ describe("StreamableHttpTransport against the SDK's server transport", () => {
     expect(s.seen.every((r) => r.session === null)).toBe(true);
   });
 
-  test("an expired session (404) closes the transport, and McpSource connects again with a new initialize", async () => {
-    const s = await serve({ json: true });
-    const real = s.url;
-    let expired = false;
-    // The SDK answers an unknown session id with 400 on a fresh transport; a server that lost its sessions says 404.
-    const fetchFn = (async (url: URL | string, init?: RequestInit) => {
-      const h = new Headers(init?.headers);
-      if (expired && h.get("mcp-session-id")) {
-        expired = false;
-        await s.restart();
-        return new Response("session not found", { status: 404 });
-      }
-      return fetch(url, init);
-    }) as typeof fetch;
-    const source = new McpSource({
-      id: "mail",
-      description: "mail",
-      transport: () => new StreamableHttpTransport(real, { fetch: fetchFn }),
-      searchTool: { name: "search_mail", args: (q) => ({ query: q.text }) },
-      quickCloseMs: 0,
-    });
-    const query = { scope: { tenantId: "t", userId: "u" }, text: "plan", entities: [], limit: 5 };
-    expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
-    expired = true;
-    await expect(source.search(query, AbortSignal.timeout(2_000))).rejects.toThrow(/HTTP 404/);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
-    expect(s.seen.filter((r) => r.method === "initialize")).toHaveLength(2);
-    await source.close();
-  });
+  // Eden's `McpSource`; skipped when this directory is used on its own.
+  const MCP_SOURCE = new URL("../mcp-source.ts", import.meta.url);
+  test.skipIf(!existsSync(MCP_SOURCE))(
+    "an expired session (404) closes the transport, and McpSource connects again with a new initialize",
+    async () => {
+      const { McpSource } = (await import(MCP_SOURCE.href)) as typeof import("../mcp-source");
+      const s = await serve({ json: true });
+      const real = s.url;
+      let expired = false;
+      // The SDK answers an unknown session id with 400 on a fresh transport; a server that lost its sessions says 404.
+      const fetchFn = (async (url: URL | string, init?: RequestInit) => {
+        const h = new Headers(init?.headers);
+        if (expired && h.get("mcp-session-id")) {
+          expired = false;
+          await s.restart();
+          return new Response("session not found", { status: 404 });
+        }
+        return fetch(url, init);
+      }) as typeof fetch;
+      const source = new McpSource({
+        id: "mail",
+        description: "mail",
+        transport: () => new StreamableHttpTransport(real, { fetch: fetchFn }),
+        searchTool: { name: "search_mail", args: (q) => ({ query: q.text }) },
+        quickCloseMs: 0,
+      });
+      const query = { scope: { tenantId: "t", userId: "u" }, text: "plan", entities: [], limit: 5 };
+      expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+      expired = true;
+      await expect(source.search(query, AbortSignal.timeout(2_000))).rejects.toThrow(/HTTP 404/);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+      expect(s.seen.filter((r) => r.method === "initialize")).toHaveLength(2);
+      await source.close();
+    },
+  );
 });
 
 describe("StreamableHttpTransport errors and redirects", () => {

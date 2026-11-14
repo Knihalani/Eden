@@ -4,12 +4,24 @@
  * replies from a fake server. Each must give the same events, steps, results, errors, `onerror` reports and POSTs.
  */
 import { describe, expect, test } from "bun:test";
-import { McpClient as OldClient } from "../../bench/mcp-d1704/client";
-import { StreamableHttpTransport as OldTransport } from "../../bench/mcp-d1704/http";
-import { SseParser as OldParser } from "../../bench/mcp-d1704/sse";
+import { existsSync } from "node:fs";
 import { McpClient } from "./client";
 import { StreamableHttpTransport } from "./http";
 import { SseParser } from "./sse";
+
+/** The frozen D1704 code, Eden's history: absent when this directory is used on its own, and the file skipped then. */
+const ORACLE = new URL("../../bench/mcp-d1704/", import.meta.url);
+const oracle = existsSync(ORACLE)
+  ? {
+      ...((await import(new URL("client.ts", ORACLE).href)) as typeof import("../../bench/mcp-d1704/client")),
+      ...((await import(new URL("http.ts", ORACLE).href)) as typeof import("../../bench/mcp-d1704/http")),
+      ...((await import(new URL("sse.ts", ORACLE).href)) as typeof import("../../bench/mcp-d1704/sse")),
+    }
+  : null;
+const OldClient = oracle?.McpClient as typeof import("../../bench/mcp-d1704/client").McpClient;
+const OldTransport =
+  oracle?.StreamableHttpTransport as typeof import("../../bench/mcp-d1704/http").StreamableHttpTransport;
+const OldParser = oracle?.SseParser as typeof import("../../bench/mcp-d1704/sse").SseParser;
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -74,7 +86,7 @@ function cut(bytes: Uint8Array, r: () => number): Uint8Array[] {
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
-describe("SseParser against D1704's", () => {
+describe.skipIf(!oracle)("SseParser against D1704's", () => {
   test("the same events and steps on 20,000 seeded streams, chunks kept or reused", () => {
     const r = rng(1708);
     let events = 0;
@@ -125,7 +137,7 @@ describe("SseParser against D1704's", () => {
   });
 });
 
-describe("McpClient and StreamableHttpTransport against D1704's", () => {
+describe.skipIf(!oracle)("McpClient and StreamableHttpTransport against D1704's", () => {
   const INIT = { protocolVersion: "2025-11-25", capabilities: {}, serverInfo: { name: "s", version: "1" } };
   const enc = new TextEncoder();
 
@@ -145,6 +157,10 @@ describe("McpClient and StreamableHttpTransport against D1704's", () => {
       JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32029, message: "slow down" } }),
       JSON.stringify({ jsonrpc: "2.0", id, result: { content: "nope" } }),
       JSON.stringify({ jsonrpc: "2.0", id, result: { content: [], structuredContent: [1] } }),
+      // Multi-byte text, escapes and a byte-order mark: the native read decodes these itself (D1860).
+      JSON.stringify({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: 'é😀 "q" \\ \r\n' }] } }),
+      `\ufeff${JSON.stringify({ jsonrpc: "2.0", id, result: { content: [] } })}`,
+      `\ufeff\ufeff${JSON.stringify({ jsonrpc: "2.0", id, result: { content: [] } })}`,
       `{"jsonrpc":"2.0","id":${id},"result":{"a":${"[".repeat(1_100)}${"]".repeat(1_100)}}}`,
       "{not json",
       "",
@@ -179,7 +195,15 @@ describe("McpClient and StreamableHttpTransport against D1704's", () => {
       );
   }
 
-  async function play(Client: typeof McpClient | typeof OldClient, Transport: typeof StreamableHttpTransport) {
+  /**
+   * Plays 1,000 seeded replies through a client. `real`: from a `Bun.serve` server through the runtime's own `fetch`,
+   * where a JSON reply with a `Content-Length` takes this code's native read (D1860) and D1704's capped stream read.
+   */
+  async function play(
+    Client: typeof McpClient | typeof OldClient,
+    Transport: typeof StreamableHttpTransport,
+    real = false,
+  ) {
     const r = rng(17_08);
     const posted: string[] = [];
     const errors: string[] = [];
@@ -196,7 +220,16 @@ describe("McpClient and StreamableHttpTransport against D1704's", () => {
       if (msg.id === undefined || !msg.method) return new Response(null, { status: 202 });
       return next!();
     }) as typeof fetch;
-    const transport = new Transport(new URL("http://mcp.test/mcp"), { fetch: fetchFn, maxResponseBytes: 64 * 1024 });
+    const server = real
+      ? Bun.serve({
+          port: 0,
+          hostname: "127.0.0.1",
+          fetch: async (req) => fetchFn(req.url, { body: await req.text() }),
+        })
+      : null;
+    const transport = server
+      ? new Transport(new URL(`http://127.0.0.1:${server.port}/mcp`), { maxResponseBytes: 64 * 1024 })
+      : new Transport(new URL("http://mcp.test/mcp"), { fetch: fetchFn, maxResponseBytes: 64 * 1024 });
     const client = new Client({ name: "eden", version: "0" });
     await client.connect(transport);
     transport.onerror = (e) => errors.push(`${e.name}: ${e.message}`);
@@ -214,6 +247,7 @@ describe("McpClient and StreamableHttpTransport against D1704's", () => {
       await new Promise((res) => setTimeout(res, 0));
     }
     await client.close();
+    void server?.stop(true);
     return { outcomes, errors, posted: posted.sort() };
   }
 
@@ -228,4 +262,14 @@ describe("McpClient and StreamableHttpTransport against D1704's", () => {
     expect(ok).toBeGreaterThan(200);
     expect(want.outcomes.length - ok).toBeGreaterThan(200);
   }, 30_000);
+
+  test("the same on 1,000 replies over real HTTP, where JSON takes the native read", async () => {
+    const want = await play(OldClient, OldTransport as unknown as typeof StreamableHttpTransport, true);
+    const got = await play(McpClient, StreamableHttpTransport, true);
+    expect(got.outcomes).toEqual(want.outcomes);
+    expect(got.errors).toEqual(want.errors);
+    expect(got.posted).toEqual(want.posted);
+    const ok = want.outcomes.filter((o) => "ok" in (o as object)).length;
+    expect(ok).toBeGreaterThan(200);
+  }, 60_000);
 });
