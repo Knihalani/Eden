@@ -558,8 +558,6 @@ const plain = (id: string, prefilter: string[], spans: (text: string) => Span[])
  * "api", `private[_-]?key` "private".
  */
 const SECRET_WORDS = ["password", "passwd", "pwd", "secret", "token", "api", "private", "credential"];
-/** The auth-scheme rule's keywords: the secret words and `auth`. */
-const SECRET_WORDS_AUTH = [...SECRET_WORDS, "auth"];
 /** Literals every match of each keyword-less shape contains (case-folded; a superset is safe, a miss is not). */
 const SHAPE_LITERALS: Record<string, string[]> = {
   "eden-cfat": ["cfat_"],
@@ -680,7 +678,7 @@ export function rulesWith(choice: EngineChoice): SecretRule[] {
     ),
     // D1850's rules, after the others (`post`).
     {
-      ...plain("eden-auth-scheme-value", SECRET_WORDS_AUTH, (text) => matchSpans(AUTH_SCHEME_VALUE, text)),
+      ...plain("eden-auth-scheme-value", ["bearer", "basic"], (text) => matchSpans(AUTH_SCHEME_VALUE, text)),
       post: true,
     },
     {
@@ -768,11 +766,11 @@ export function gateOf(rules: SecretRule[]): Gate {
   const sorted = (text: string): { strict: Span[]; excused: Span[]; post: Span[] } => {
     const out = { strict: [] as Span[], excused: [] as Span[], post: [] as Span[] };
     for (const f of split(text)) {
-      if (f.rule.post) out.post.push(...f.spans);
-      else {
-        out.strict.push(...f.spans);
-        out.excused.push(...f.excused);
-      }
+      // Loops, not `push(...spans)`: 100,000 spans is past what a spread call takes on V8.
+      // A D1850 rule's excused spans were never main's: they gate nothing.
+      const post = f.rule.post;
+      for (const span of f.spans) (post ? out.post : out.strict).push(span);
+      if (!post) for (const span of f.excused) out.excused.push(span);
     }
     return out;
   };

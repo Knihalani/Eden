@@ -125,10 +125,25 @@ export function excused<R extends { spans(text: string, ...rest: never[]): [numb
   excuse: (value: string) => boolean,
 ): R & { split(text: string, ...rest: unknown[]): { spans: [number, number][]; excused: [number, number][] } } {
   const spans = rule.spans.bind(rule) as (text: string, ...rest: unknown[]) => [number, number][];
+  // The last value's verdict is kept: a text dense in findings repeats its value.
+  let lastValue: string | undefined;
+  let lastVerdict = false;
   const split = (text: string, ...rest: unknown[]) => {
     const kept: [number, number][] = [];
     const left: [number, number][] = [];
-    for (const span of spans(text, ...rest)) (excuse(valueAt(text, span[0], span[1])) ? left : kept).push(span);
+    for (const span of spans(text, ...rest)) {
+      // Longer than any excused value (and too long to compare with the last one each time): kept.
+      if (span[1] - span[0] > VALUE_LIMIT * 2) {
+        kept.push(span);
+        continue;
+      }
+      const value = valueAt(text, span[0], span[1]);
+      if (value !== lastValue) {
+        lastValue = value;
+        lastVerdict = excuse(value);
+      }
+      (lastVerdict ? left : kept).push(span);
+    }
     return { spans: kept, excused: left };
   };
   return { ...rule, split, spans: (text: string, ...rest: unknown[]) => split(text, ...rest).spans };

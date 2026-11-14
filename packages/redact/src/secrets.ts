@@ -84,6 +84,13 @@ interface CompiledAllowlist {
   stopwords: Stopwords;
   /** Path conditions never hold for text, so they only matter to an AND list (which they then fail). */
   hasPaths: boolean;
+  /**
+   * D1850: the regexes' verdicts on the secrets or matches they were last tested on (at most VERDICTS_KEPT), and the
+   * last secret the stopwords read. A text dense in findings repeats a few secrets thousands of times.
+   */
+  verdicts: Map<string, boolean>;
+  lastStopSecret?: string;
+  lastStopword?: boolean;
 }
 
 /** Where a secret sits in a text: `[start, end)`. */
@@ -113,6 +120,11 @@ export interface SecretRule {
    * text. The gate passes their occurrences, found in its one prefilter pass, to `spans`.
    */
   anchorWords?: string[];
+  /**
+   * D1850: the rule reads `anchorWords` through `LazyPrefixRegex`, which finds a literal's occurrences itself once
+   * their list is incomplete; a literal only such rules anchor on keeps a shorter list (`Occurrences.small`).
+   */
+  findsItself?: boolean;
   /**
    * Where the rule's secrets sit in `text`; none when it finds none. `found` holds the occurrences of `anchorWords`,
    * `ids[i]` being the id there of `anchorWords[i]`; without them the rule scans the whole text, with the same result.
@@ -374,7 +386,21 @@ function jsClass(cls: string): string {
 }
 
 /** Shannon entropy in bits per character, as gitleaks computes it. */
+/**
+ * D1850: the last text `shannon` read, and its entropy. A text dense in findings (one line of `key=…` a megabyte long)
+ * asks for the same secret thousands of times in a row; the answer is the same number.
+ */
+let lastEntropyText: string | undefined;
+let lastEntropy = 0;
+
 function shannon(text: string): number {
+  if (text === lastEntropyText) return lastEntropy;
+  lastEntropyText = text;
+  lastEntropy = entropyOf(text);
+  return lastEntropy;
+}
+
+function entropyOf(text: string): number {
   if (!text) return 0;
   const counts = new Map<string, number>();
   for (const char of text) counts.set(char, (counts.get(char) ?? 0) + 1);
@@ -421,6 +447,7 @@ function compileAllowlist(list: Allowlist, engine: AllowlistEngine): CompiledAll
     regexes: (list.regexes ?? []).map((regex) => engine(regex)),
     stopwords: new Stopwords((list.stopwords ?? []).map((word) => word.toLowerCase())),
     hasPaths: (list.paths ?? []).length > 0,
+    verdicts: new Map(),
   };
 }
 
@@ -435,14 +462,33 @@ interface Finding {
   lines: Lines;
 }
 
+/** The most verdicts an allowlist keeps (then it starts again): memory bounded, the repeats still found. */
+const VERDICTS_KEPT = 256;
+
 /** Whether an allowlist excuses a finding (gitleaks `checkFindingAllowed`, with no file path or commit). */
 function allows(list: CompiledAllowlist, finding: Finding): boolean {
-  const regexAllowed =
-    list.target === "line"
-      ? finding.lines.allowed(list, finding.index)
-      : list.regexes.some((regex) => regex.test(list.target === "match" ? finding.match : finding.secret));
+  let regexAllowed: boolean;
+  if (list.target === "line") regexAllowed = finding.lines.allowed(list, finding.index);
+  else {
+    // The last target's verdict is kept (D1850): findings dense in one text repeat their secret or match.
+    const target = list.target === "match" ? finding.match : finding.secret;
+    let verdict = list.verdicts.get(target);
+    if (verdict === undefined) {
+      if (list.verdicts.size >= VERDICTS_KEPT) list.verdicts.clear();
+      verdict = list.regexes.some((regex) => regex.test(target));
+      list.verdicts.set(target, verdict);
+    }
+    regexAllowed = verdict;
+  }
   // Both tests are pure, so the stopwords are read only when their answer can change the verdict.
-  const stopword = () => list.stopwords.size > 0 && list.stopwords.occurIn(finding.secret.toLowerCase());
+  const stopword = () => {
+    if (list.stopwords.size === 0) return false;
+    if (finding.secret !== list.lastStopSecret) {
+      list.lastStopSecret = finding.secret;
+      list.lastStopword = list.stopwords.occurIn(finding.secret.toLowerCase());
+    }
+    return list.lastStopword!;
+  };
   if (!list.and) return regexAllowed || stopword();
   // AND: every condition the list sets must hold, and a path condition never holds for text.
   if (list.hasPaths || !(list.regexes.length || list.stopwords.size)) return false;
@@ -572,7 +618,16 @@ function gitleaksRule(
     anchored: anchors && new AnchoredRegex(goRegex(rule.regex), anchors),
   });
   /** The secret's span within `match`; undefined when the rule's group did not take part. */
+  /** The last match read and its secret's span (D1850: a text dense in findings repeats its match). */
+  let lastMatch: string | undefined;
+  let lastSpan: Span | undefined;
   const secretIn = (pattern: Pattern, match: string): Span | undefined => {
+    if (match === lastMatch) return lastSpan;
+    lastMatch = match;
+    lastSpan = secretOf(pattern, match);
+    return lastSpan;
+  };
+  const secretOf = (pattern: Pattern, match: string): Span | undefined => {
     const indices = pattern.groups(match);
     if (!indices || indices.length < 2) return [0, match.length];
     if (rule.secretGroup) return indices[rule.secretGroup];
@@ -583,6 +638,7 @@ function gitleaksRule(
     keywords: (rule.keywords ?? []).map((word) => word.toLowerCase()),
     prefilter: (rule.keywords ?? []).map((word) => word.toLowerCase()),
     ...(anchorWords ? { anchorWords } : {}),
+    ...(lazy ? { findsItself: true } : {}),
     spans(text, found, ids) {
       const { pattern, own, anchored } = (compiled ??= compile());
       const out: Span[] = [];
@@ -737,8 +793,6 @@ const plain = (id: string, prefilter: string[], spans: (text: string) => Span[])
  * "api", `private[_-]?key` "private".
  */
 const SECRET_WORDS = ["password", "passwd", "pwd", "secret", "token", "api", "private", "credential"];
-/** The auth-scheme rule's keywords: the secret words and `auth`. */
-const SECRET_WORDS_AUTH = [...SECRET_WORDS, "auth"];
 /** Literals every match of each keyword-less shape contains (case-folded; a superset is safe, a miss is not). */
 const SHAPE_LITERALS: Record<string, string[]> = {
   "eden-cfat": ["cfat_"],
@@ -887,7 +941,7 @@ export function rulesWith(choice: EngineChoice): SecretRule[] {
       placeholderToken,
     ),
     // D1850's rules, after the others (`post`).
-    { ...regexRule("eden-auth-scheme-value", SECRET_WORDS_AUTH, AUTH_SCHEME_VALUE), post: true },
+    { ...regexRule("eden-auth-scheme-value", ["bearer", "basic"], AUTH_SCHEME_VALUE), post: true },
     { ...excused(regexRule("eden-api-key-phrase", ["api key"], API_KEY_PHRASE), notSecret), post: true },
     { ...excused(regexRule("eden-api-key-phrase-legacy", ["api key"], API_KEY_PHRASE_LEGACY), notSecret), post: true },
     { ...regexRule("eden-azure-storage-key", ["accountkey="], AZURE_STORAGE_KEY), post: true },
@@ -929,6 +983,10 @@ export function gateOf(rules: SecretRule[]): Gate {
   const anchorWord = new Uint8Array(words.length);
   for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
   const found = new Occurrences(words.length, anchorWord);
+  found.small.set(anchorWord);
+  rules.forEach((rule, r) => {
+    if (!rule.findsItself) for (const id of anchorIds[r] ?? []) found.small[id] = 0;
+  });
   /** The token passes whose literals the last text scanned holds (`redactTokensIn`'s mask; the others are no-ops). */
   let tokens = 0;
   const rulesOf: number[][] = words.map(() => []);
@@ -998,12 +1056,12 @@ export function gateOf(rules: SecretRule[]): Gate {
   /** The spans of `text`'s rules by kind: before D1850 (found, excused) and D1850's (`post`). */
   const sorted = (text: string): { strict: Span[]; excused: Span[]; post: Span[] } => {
     const out = { strict: [] as Span[], excused: [] as Span[], post: [] as Span[] };
+    // Loops, not `push(...spans)`: a megabyte of tokens is 100,000 spans, past what a spread call takes on V8.
     for (const f of split(text)) {
-      if (rules[f.r]!.post) out.post.push(...f.spans);
-      else {
-        out.strict.push(...f.spans);
-        out.excused.push(...f.excused);
-      }
+      // A D1850 rule's excused spans were never main's: they gate nothing.
+      const post = rules[f.r]!.post;
+      for (const span of f.spans) (post ? out.post : out.strict).push(span);
+      if (!post) for (const span of f.excused) out.excused.push(span);
     }
     return out;
   };
