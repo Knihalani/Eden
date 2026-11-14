@@ -18,7 +18,7 @@
  * marks belong to the letter before them: they are skipped when looking for a boundary, and a match's end extends
  * over trailing marks ("café" spelled with a combining accent is matched whole, and "danáx" holds no "dana").
  */
-import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass";
+import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass.ts";
 
 export interface MatcherOptions {
   wholeWord?: boolean;

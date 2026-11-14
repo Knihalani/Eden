@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { goRegex, sanitizeForStore, secretHits, secretRules } from "./secrets";
+import { goRegex, sanitizeForStore, secretHits, secretRules } from "./secrets.ts";
 
 const VENDORED = join(import.meta.dir, "vendor", "gitleaks", "gitleaks.toml");
 const alnum = (n: number, seed = 7) =>

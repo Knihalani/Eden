@@ -14,7 +14,7 @@
  * marks belong to the letter before them: they are skipped when looking for a boundary, and a match's end extends
  * over trailing marks ("café" spelled with a combining accent is matched whole, and "danáx" holds no "dana").
  */
-import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass";
+import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass.ts";
 
 export interface MatcherOptions {
   wholeWord?: boolean;
@@ -214,7 +214,7 @@ export class MultiMatcher {
         continue;
       }
       special = i;
-      const expanded = foldString(String.fromCharCode(c));
+      const expanded = expansionOf(c);
       for (let u = 0; u < expanded.length; u++) {
         const e = expanded.charCodeAt(u);
         d = packed[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
@@ -279,7 +279,7 @@ export class MultiMatcher {
         const f = foldOf(c);
         if (f === FOLD_DROP) continue;
         if (f === FOLD_EXPAND) {
-          expanded = foldString(String.fromCharCode(c));
+          expanded = expansionOf(c);
           if (expanded.length === 0) continue;
           col = this.column(expanded.charCodeAt(0));
         } else col = this.column(f);
@@ -316,6 +316,21 @@ export class MultiMatcher {
 }
 
 /**
+ * What a character that folds to several (`FOLD_EXPAND`, a ligature) folds to, worked out once per code unit: made
+ * afresh (`normalize` and a new string a character), a text of ligatures cost about 0.4 µs a character to match.
+ */
+function expansionOf(c: number): string {
+  let expanded = EXPANSIONS.get(c);
+  if (expanded === undefined) {
+    expanded = foldString(String.fromCharCode(c));
+    EXPANSIONS.set(c, expanded);
+  }
+  return expanded;
+}
+/** `expansionOf`'s answers: at most one per code unit that expands (a few thousand in Unicode). */
+const EXPANSIONS = new Map<number, string>();
+
+/**
  * Where a match of `len` folded characters ending at unit `u` of character `i` starts, as `run`'s ring of offsets
  * records it: counted back over what each character folds to (a mark to nothing, a ligature to its expansion).
  */
@@ -327,7 +342,7 @@ function startOf(text: string, i: number, u: number, len: number): number {
     const c = text.charCodeAt(at);
     const f = c < 128 ? FOLD[c]! : foldOf(c);
     if (f === FOLD_DROP) continue;
-    need -= f === FOLD_EXPAND ? foldString(String.fromCharCode(c)).length : 1;
+    need -= f === FOLD_EXPAND ? expansionOf(c).length : 1;
   }
   return at;
 }

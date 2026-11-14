@@ -31,10 +31,10 @@
  * - (e) the redaction memory had before P0.4 (a password, passphrase or API key of any length; short token
  *   prefixes), so the gate is never looser than it was.
  */
-import { MultiMatcher } from "../../primitives/src/matcher.reference";
-import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton";
-import { assignmentSpans, redact, REDACTED } from "./redact.reference";
-import { SCANNERS } from "./scanners";
+import { MultiMatcher } from "./primitives/matcher.reference.ts";
+import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
+import { assignmentSpans, redact, REDACTED } from "./redact.reference.ts";
+import { SCANNERS } from "./scanners.ts";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 interface Allowlist {

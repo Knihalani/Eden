@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { REDACTED } from "./redact";
-import { redactPem } from "./redact";
+import { REDACTED } from "./redact.ts";
+import { redactPem } from "./redact.ts";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
 // fail it the way wall time did (weak-points-1111.md R1).

@@ -12,7 +12,7 @@
  * the characters between p and it are in the prefix class), so trying the candidates ≥ L in order with the same regex
  * made sticky finds the same match. Lookbehind and `\b` still see the text before p, as a sticky match does.
  */
-import { parseRegex, type Ranges, type RegexNode } from "./automaton";
+import { parseRegex, type Ranges, type RegexNode } from "./automaton.ts";
 
 /** One way a match can begin: up to `maxPrefix` characters of `prefix` (code units), then one of `literals`. */
 export interface Anchor {
@@ -30,6 +30,11 @@ export interface Anchor {
  * Undefined when what is left is outside the parser's subset or has no anchor.
  */
 export function anchorsOfRegex(regex: RegExp): Anchor[] | undefined {
+  return anchorsOf(goPatternOfRegex(regex));
+}
+
+/** One of the gate's JavaScript regexes in Go's syntax, its lookarounds dropped: what `anchorsOfRegex` analyses. */
+export function goPatternOfRegex(regex: RegExp): string {
   const src = regex.source;
   let source = "";
   /** Open groups inside the lookaround being dropped (0: none being dropped). */
@@ -61,7 +66,7 @@ export function anchorsOfRegex(regex: RegExp): Anchor[] | undefined {
     }
     if (kept) source += char;
   }
-  return anchorsOf((regex.flags.includes("i") ? "(?i)" : "") + source);
+  return (regex.flags.includes("i") ? "(?i)" : "") + source;
 }
 
 /** A shorter literal occurs too often to be worth anchoring on. */
@@ -74,7 +79,8 @@ const MIN_LITERAL = 2;
 export function anchorsOf(goPattern: string): Anchor[] | undefined {
   let anchors = ANCHORS.get(goPattern);
   if (anchors === undefined) {
-    anchors = analyse(goPattern) ?? null;
+    const known = tables?.anchors[goPattern];
+    anchors = known !== undefined ? (known && known.map(anchorFromData)) : (analyse(goPattern) ?? null);
     ANCHORS.set(goPattern, anchors);
   }
   return anchors ?? undefined;
@@ -82,6 +88,59 @@ export function anchorsOf(goPattern: string): Anchor[] | undefined {
 
 /** Each pattern's anchors (null: none), so rule sets built again (tests, benchmarks) parse nothing again. */
 const ANCHORS = new Map<string, Anchor[] | null>();
+
+/** An anchor as `rules.generated.json` stores it: the prefix class as 32 hex digits (bit c for code unit c). */
+export interface AnchorData {
+  literals: string[];
+  maxPrefix: number;
+  prefix: string;
+  wide: boolean;
+}
+
+/** A lazy-prefix regex (`lazyPrefixOf`) as `rules.generated.json` stores it. */
+export interface LazyData {
+  rest: string;
+  other: string | null;
+  flags: string;
+  max: number;
+  words: string[];
+}
+
+/**
+ * The analyses of every regex the gate ships, worked out ahead (`generate.ts` writes them into
+ * `rules.generated.json`, and `generated.test.ts` fails when they differ from what the code below works out now):
+ * per pattern, its anchors (null: none) and, for a lazy-prefix candidate, its form (null: not one). Parsing every
+ * rule's regex at the first call cost about 20-40 ms.
+ */
+export interface Analyses {
+  anchors: Record<string, AnchorData[] | null>;
+  lazy: Record<string, LazyData | null>;
+}
+let tables: Analyses | undefined;
+
+/** Makes `anchorsOf` and `lazyPrefixOf` read a pattern's analysis from `analyses` when it holds one. */
+export function useAnalyses(analyses: Analyses): void {
+  tables = analyses;
+}
+
+/** The anchors of a pattern, worked out now (never from the tables): what `generate.ts` stores. */
+export function analyseAnchors(goPattern: string): AnchorData[] | null {
+  return analyse(goPattern)?.map(anchorToData) ?? null;
+}
+
+function anchorToData(anchor: Anchor): AnchorData {
+  let prefix = "";
+  for (let c = 0; c < 128; c += 4) {
+    prefix += (anchor.prefix[c]! | (anchor.prefix[c + 1]! << 1) | (anchor.prefix[c + 2]! << 2) | (anchor.prefix[c + 3]! << 3)).toString(16);
+  }
+  return { literals: anchor.literals, maxPrefix: anchor.maxPrefix, prefix, wide: anchor.wide };
+}
+
+function anchorFromData(data: AnchorData): Anchor {
+  const prefix = new Uint8Array(128);
+  for (let c = 0; c < 128; c++) prefix[c] = (parseInt(data.prefix[c >> 2]!, 16) >> (c & 3)) & 1;
+  return { literals: data.literals, maxPrefix: data.maxPrefix, prefix: interned(prefix), wide: data.wide };
+}
 
 function analyse(goPattern: string): Anchor[] | undefined {
   let root: RegexNode;
@@ -243,21 +302,33 @@ export class Occurrences {
   head: Int32Array;
   private tail: Int32Array;
   /**
-   * Per literal id, its occurrences in the text, kept or not. Past `cap` (`denseLimit` of the text) a literal's
-   * occurrences are counted and no longer kept: every rule anchored on it would have more candidates than that, so it
-   * scans the text instead (`anchoredMatches` checks the counts first). This bounds the lists' memory and the work
-   * spent on a text dense in one literal before it falls back.
+   * Per literal id, its occurrences in the text, up to `cap` + 1. Past `cap` (`denseLimit` of the text) a literal's
+   * occurrences are no longer kept, nor counted: every rule anchored on it would have more candidates than that, so it
+   * scans the text instead (`anchoredMatches` checks the counts first), and the literal leaves `keep` until the next
+   * text, so the matcher stops reporting it. This bounds the lists' memory and the work spent on a text dense in one
+   * literal before it falls back.
    */
   count: Int32Array;
+  /**
+   * The `keep` argument of `MultiMatcher.scan`: per literal id, 1 while its occurrences are wanted (the literals some
+   * rule anchors on, less those past `cap` in this text).
+   */
+  readonly keep: Uint8Array;
+  private readonly wanted: Uint8Array;
+  /** The literals taken out of `keep` in this text, to put back. */
+  private full: number[] = [];
   private cap = Number.MAX_SAFE_INTEGER; // until the first `clear` names a length
   next = new Int32Array(64);
   start = new Int32Array(64);
   size = 0;
 
-  constructor(literals: number) {
+  /** For `literals` ids, of which `keep` (default: all) are the ones whose occurrences are wanted. */
+  constructor(literals: number, keep?: Uint8Array) {
     this.head = new Int32Array(literals).fill(-1);
     this.tail = new Int32Array(literals).fill(-1);
     this.count = new Int32Array(literals);
+    this.wanted = keep ? Uint8Array.from(keep) : new Uint8Array(literals).fill(1);
+    this.keep = Uint8Array.from(this.wanted);
   }
 
   /** Empties the lists for a text of `length` code units. */
@@ -269,6 +340,8 @@ export class Occurrences {
     this.tail.fill(-1);
     this.count.fill(0);
     this.size = 0;
+    for (const literal of this.full) this.keep[literal] = this.wanted[literal]!;
+    this.full.length = 0;
     // A text dense in literals (a megabyte of `key=`) grew the lists; the next text starts small again, so a gate
     // does not keep megabytes for the rest of the process.
     if (this.start.length > SCRATCH_KEPT) {
@@ -287,7 +360,11 @@ export class Occurrences {
 
   add(literal: number, start: number): void {
     this.counted = true;
-    if (++this.count[literal]! > this.cap) return;
+    if (++this.count[literal]! > this.cap) {
+      this.keep[literal] = 0;
+      this.full.push(literal);
+      return;
+    }
     if (this.size === this.start.length) {
       const next = new Int32Array(this.size * 2);
       next.set(this.next);
@@ -428,10 +505,12 @@ export class AnchoredRegex {
   private idsFor: Int32Array | undefined;
   private mapped: number[][] = [];
 
-  constructor(
-    private readonly source: RegExp,
-    private readonly anchors: Anchor[],
-  ) {
+  private readonly source: RegExp;
+  private readonly anchors: Anchor[];
+
+  constructor(source: RegExp, anchors: Anchor[]) {
+    this.source = source;
+    this.anchors = anchors;
     this.words = [...new Set(anchors.flatMap((anchor) => anchor.literals))];
   }
 
@@ -691,32 +770,44 @@ let candidates = new Int32Array(256);
 let ends = new Int32Array(256);
 
 /**
- * The lazy-prefix form of a gitleaks regex, given its JavaScript translation `js`: undefined unless the regex's first
- * top-level branch is `[\w.-]{0,N}?REST` (under `(?i)` or not, no other flag) with every match of REST starting with
- * one of its literals. Later branches, if any, run as one regex of their own.
+ * The lazy-prefix form of a gitleaks regex: undefined unless the regex's first top-level branch is
+ * `[\w.-]{0,N}?REST` (under `(?i)` or not, no other flag) with every match of REST starting with one of its literals.
+ * Later branches, if any, run as one regex of their own. `js` makes its JavaScript translation, called only when the
+ * analysis is not in the tables.
  */
-export function lazyPrefixOf(goPattern: string, js: RegExp): LazyPrefixRegex | undefined {
+export function lazyPrefixOf(goPattern: string, js: () => RegExp): LazyPrefixRegex | undefined {
+  const known = tables?.lazy[goPattern];
+  const data = known !== undefined ? known : analyseLazy(goPattern, js());
+  if (!data) return undefined;
+  return new LazyPrefixRegex(data.rest, data.other ?? undefined, data.flags, data.max, JS_WORD_DOT_DASH, data.words);
+}
+
+/** `lazyPrefixOf`'s analysis, worked out now (never from the tables): what `generate.ts` stores. */
+export function analyseLazy(goPattern: string, js: RegExp): LazyData | null {
   const go = /^(\(\?i\))?\[\\w\.-\]\{0,(\d+)\}\?/.exec(goPattern);
   const jsPrefix = /^\[\\w\.-\]\{0,(\d+)\}\?/.exec(js.source);
-  if (!go || !jsPrefix || go[2] !== jsPrefix[1] || /[a-z]/.test(js.flags.replace(/[dgiy]/g, ""))) return undefined;
+  if (!go || !jsPrefix || go[2] !== jsPrefix[1] || /[a-z]/.test(js.flags.replace(/[dgiy]/g, ""))) return null;
   const goBranches = topLevelBranches(goPattern.slice((go[1] ?? "").length));
   const jsBranches = topLevelBranches(js.source);
   let root: RegexNode;
   try {
     root = parseRegex(goPattern);
   } catch {
-    return undefined;
+    return null;
   }
   // The two splits must agree with each other and with the parse, or the branches are not what they seem.
   if (goBranches.length !== jsBranches.length || goBranches.length !== (root.t === "alt" ? root.xs.length : 1)) {
-    return undefined;
+    return null;
   }
-  const anchors = anchorsOf((go[1] ?? "") + goBranches[0]!.slice(go[0].length - (go[1] ?? "").length));
-  if (!anchors || anchors.some((anchor) => anchor.maxPrefix !== 0)) return undefined;
-  const words = [...new Set(anchors.flatMap((anchor) => anchor.literals))];
-  const restSource = jsBranches[0]!.slice(jsPrefix[0].length);
-  const otherSource = jsBranches.length > 1 ? jsBranches.slice(1).join("|") : undefined;
-  return new LazyPrefixRegex(restSource, otherSource, js.flags, Number(go[2]), JS_WORD_DOT_DASH, words);
+  const anchors = analyse((go[1] ?? "") + goBranches[0]!.slice(go[0].length - (go[1] ?? "").length));
+  if (!anchors || anchors.some((anchor) => anchor.maxPrefix !== 0)) return null;
+  return {
+    rest: jsBranches[0]!.slice(jsPrefix[0].length),
+    other: jsBranches.length > 1 ? jsBranches.slice(1).join("|") : null,
+    flags: js.flags.replace(/[dgy]/g, ""),
+    max: Number(go[2]),
+    words: [...new Set(anchors.flatMap((anchor) => anchor.literals))],
+  };
 }
 
 /** `[\w.-]` in JavaScript without the `u` flag, case folded or not: ASCII letters, digits, `_`, `.` and `-`. */

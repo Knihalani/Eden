@@ -6,7 +6,7 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { buildWorld } from "../../sim/src/world";
+import { buildWorld } from "../../sim/src/world.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
 
