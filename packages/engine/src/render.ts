@@ -71,15 +71,11 @@ export function renderPacket(
       const title = wordsIn(item.title.toLowerCase());
       const own = new Set(title);
       const prior = before?.(item);
-      const { parts, words } = readParts(
-        item.text,
-        (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
+      const { parts, words } = unknownParts(
         // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
         // comparing it with the request's dates where "2 Nov 2026" is not.
-        options.year,
-        options.self,
-        options.dense ? { title: item.title } : undefined,
-        options.split,
+        partsOf(item, options.year, options.self, options.dense === true, options.split === true),
+        (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
       );
       // `compactText`, with what this session showed of the item before as known too.
       const text = prior && !saysNew(parts) ? SHOWN : pick(parts, words, focus, each);
@@ -462,6 +458,131 @@ function readParts(
   dense: { title: string } | undefined,
   split: boolean | undefined,
 ): { parts: Part[]; words: string[][] } {
+  return unknownParts(allParts(text, year, self, dense, split), known);
+}
+
+/**
+ * A message's parts before the known test (`AllParts`): each distinct part once and its text in lower case, whose
+ * words (`wordsIn`) the known test and `pick` read. Words are read again each time rather than kept: as strings they
+ * were most of a memo entry's heap (39 KB an item on the bench workload, 8 MB for its 207 items).
+ */
+interface AllParts {
+  parts: Part[];
+  keys: string[];
+}
+
+/**
+ * The parts of `all` with a word `known` does not have (a sender always). `messageParts` once tested each part as it
+ * read it and noted only the kept ones as seen; a later repeat of a dropped part has the same words and was dropped
+ * again, so testing the distinct parts afterwards keeps the same parts in the same order (D1882).
+ */
+function unknownParts(all: AllParts, known: (word: string) => boolean): { parts: Part[]; words: string[][] } {
+  const parts: Part[] = [];
+  const words: string[][] = [];
+  for (let k = 0; k < all.parts.length; k++) {
+    const key = all.keys[k]!;
+    const w = wordsIn(key);
+    if (!key.startsWith("from:") && !w.some((x) => x.length > 1 && !isStopword(x) && !known(x))) continue;
+    parts.push(all.parts[k]!);
+    words.push(w);
+  }
+  return { parts, words };
+}
+
+/** An item's `AllParts` and what they were read with (`partsOf`). */
+interface PartsMemo extends AllParts {
+  text: string;
+  year: number | undefined;
+  self: string | null | undefined;
+  title: string | undefined;
+  split: boolean;
+}
+
+/**
+ * The packets' parts of recent items (D1882), by item object (a user's own cached copy: a hit is never another
+ * item's, nor another user's), first in, first out. A request's packet mostly holds items an earlier packet held (80%
+ * of `pipeline.bench.ts`'s readings were of an item read before, 89% of the characters), and reading the parts was
+ * the packet's whole cost. Bounded, and emptied with the decoded texts (`clearParts`, wherever the cache calls
+ * `clearDecoded`), so a forgotten user's text does not stay resident here.
+ */
+const PARTS_MEMO = new Map<ContextItem, PartsMemo[]>();
+/** Items `PARTS_MEMO` holds at most. */
+const PARTS_MEMO_ITEMS = 256;
+/**
+ * Characters of text its readings hold at most (each item's text counted once a reading): a reading holds about 2.5
+ * bytes a character (the parts and their lower case), so the memo stays under about 3 MB a process whatever the
+ * items' size (the cache keeps up to 8,000 characters an item).
+ */
+const PARTS_MEMO_CHARS = 1_200_000;
+/**
+ * Readings kept an item: the push's packet drops the current year from dates and the ask's answer does not, so an
+ * item both show is read two ways (with one kept, 2,934 of 4,761 readings missed in `pipeline.bench.ts`).
+ */
+const PARTS_MEMO_WAYS = 2;
+let memoChars = 0;
+
+/** `allParts` of an item's text, from `PARTS_MEMO` when it read the same text with the same settings. */
+function partsOf(
+  item: ContextItem,
+  year: number | undefined,
+  self: string | null | undefined,
+  dense: boolean,
+  split: boolean,
+): AllParts {
+  const text = item.text;
+  const title = dense ? item.title : undefined;
+  const held = PARTS_MEMO.get(item);
+  if (held) {
+    for (const m of held) {
+      if (m.text === text && m.year === year && m.self === self && m.title === title && m.split === split) return m;
+    }
+  }
+  const all = allParts(text, year, self, title === undefined ? undefined : { title }, split);
+  if (text.length > PARTS_MEMO_CHARS / 8) return all;
+  // Another text (the item changed in place) makes every reading of the old one stale.
+  const ways = held && held[0]!.text === text ? held : [];
+  if (ways !== held) dropParts(item);
+  if (ways.length >= PARTS_MEMO_WAYS) memoChars -= ways.shift()!.text.length;
+  ways.push({ ...all, text, year, self, title, split });
+  memoChars += text.length;
+  if (ways.length === 1) PARTS_MEMO.set(item, ways);
+  // First in, first out (a hit does not move an item up), by count and by characters.
+  while (PARTS_MEMO.size > PARTS_MEMO_ITEMS || memoChars > PARTS_MEMO_CHARS) {
+    dropParts(PARTS_MEMO.keys().next().value as ContextItem);
+  }
+  return all;
+}
+
+/** Drops an item's readings from `PARTS_MEMO`. */
+function dropParts(item: ContextItem): void {
+  const held = PARTS_MEMO.get(item);
+  if (!held) return;
+  for (const m of held) memoChars -= m.text.length;
+  PARTS_MEMO.delete(item);
+}
+
+/** Empties `PARTS_MEMO` (the cache calls it where it empties the decoded texts' memo). */
+export function clearParts(): void {
+  PARTS_MEMO.clear();
+  memoChars = 0;
+}
+
+/** Items `PARTS_MEMO` holds, and the characters of text their readings count (for tests). */
+export function partsMemoCount(): number {
+  return PARTS_MEMO.size;
+}
+export function partsMemoChars(): number {
+  return memoChars;
+}
+
+/** A message's parts as `messageParts` reads them, before the known test (`AllParts`). */
+function allParts(
+  text: string,
+  year: number | undefined,
+  self: string | null | undefined,
+  dense: { title: string } | undefined,
+  split: boolean | undefined,
+): AllParts {
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
   const selfFirst = self?.split(" ")[0] ?? "";
@@ -471,7 +592,7 @@ function readParts(
   const thisYear = year ? new RegExp(`\\b(\\d{1,2}(?:st|nd|rd|th)? ${MONTH_WORD}),? ${year}\\b`, "gi") : null;
   const yearText = ` ${year}`;
   const parts: Part[] = [];
-  const partWords: string[][] = [];
+  const keys: string[] = [];
   const seen = new Set<string>();
   const titleWords = dense ? wordsIn(dense.title.toLowerCase()).slice(0, TITLE_WORDS) : [];
   let own = true; // before the message's sign-off
@@ -540,16 +661,14 @@ function readParts(
       if (part.length < 3 || PLEASANTRY.test(part) || BOILERPLATE.test(part)) continue;
       const key = part.toLowerCase();
       if (seen.has(key)) continue;
-      // Nothing the conversation has not already said (every content word in it): the agent has this part. A sender
-      // stays: who said the rest is not in its words.
-      const words = wordsIn(key);
-      if (!/^from:/.test(key) && !words.some((w) => w.length > 1 && !isStopword(w) && !known(w))) continue;
       seen.add(key);
+      // The known test (`unknownParts`) drops a part the conversation has already said (every content word in it):
+      // the agent has it. A sender stays: who said the rest is not in its words.
       parts.push({ text: part, quoted, header });
-      partWords.push(words);
+      keys.push(key);
     }
   }
-  return { parts, words: partWords };
+  return { parts, keys };
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
