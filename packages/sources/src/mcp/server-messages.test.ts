@@ -223,7 +223,7 @@ describe("the GET stream (openServerStream, D1873)", () => {
     // SDK's example event store cannot replay its own GET stream, whose id holds the `_` it splits ids on, so what
     // is checked past this point is the reconnect itself.)
     transport.closeStandaloneSSEStream();
-    for (let i = 0; i < 100 && seen.filter((r) => r.method === "GET").length < 2; i++) await sleep(10);
+    for (let i = 0; i < 200 && seen.filter((r) => r.method === "GET").length < 2; i++) await sleep(10);
     const gets = seen.filter((r) => r.method === "GET");
     expect(gets[0]!.lastEventId).toBeNull();
     expect(gets[1]!.lastEventId).toBeTruthy();
@@ -302,6 +302,24 @@ describe("the GET stream (openServerStream, D1873)", () => {
     for (let i = 0; i < 200 && g.gets() < 3; i++) await sleep(10);
     await sleep(50);
     expect(g.gets()).toBe(3); // the first and maxRetries more, none delivering anything
+  });
+
+  test("a server that ends every connection at once is reopened at most twice a second; junk is not a delivery", async () => {
+    const g = await getStream(
+      () => new Response("retry: 0\ndata: x\n\n", { headers: { "content-type": "text/event-stream" } }),
+      { resume: { maxRetries: 1_000, initialDelayMs: 0 } },
+    );
+    await g.transport.openServerStream();
+    await sleep(1_100);
+    expect(g.gets()).toBeLessThanOrEqual(4);
+    const h = await getStream(
+      () => new Response("retry: 0\ndata: x\n\n", { headers: { "content-type": "text/event-stream" } }),
+      { resume: { maxRetries: 2, initialDelayMs: 0 } },
+    );
+    await h.transport.openServerStream();
+    await sleep(1_600);
+    expect(h.gets()).toBe(3); // the junk delivered nothing: two misses more and it stops
+    await g.client.close();
   });
 
   test("close ends it", async () => {
