@@ -54,44 +54,51 @@ Text has no file path, so where gitleaks keys a rule or an allowlist to a path t
 path condition runs on every text, a path-only rule never fires, and an allowlist's path condition never holds.
 
 It errs towards redacting: a missed secret is worse than a false redaction. Its keyword rule takes the value after
-`password`, `token`, `secret`, `api_key` and the like whatever its entropy. Values that cannot be a secret are left
-(`src/not-secret.ts`: a type such as `apiKey: string`, `process.env.TOKEN`, `${API_KEY}`, `maxTokens: 2_000`, a mask
-or a run such as `AKIAXXXXXXXXXXXXXXXX`), each beside a test that the nearest real secret of its shape is still
-redacted. A plain word stays redacted (`password is sunshine` is a real password), so on gitleaks' own false-positive
-examples it fires on 22% where gitleaks fires on 6%. For text bound for storage or a model that is the trade it is
-built for; as a CI scanner over source code it would be noisy. It never redacts less than the gate before these
-changes did (`src/never-less.test.ts`, against a frozen copy of it).
+`password`, `token`, `secret`, `api_key` and the like whatever its entropy. Values that cannot be a secret are left,
+each only as the whole value (`src/not-secret.ts`: a type such as `apiKey: string`, `process.env.TOKEN`,
+`${API_KEY}` without a default, a member chain such as `this.options.apiKey`, a mask or a run such as
+`AKIAXXXXXXXXXXXXXXXX`), each beside a test that the nearest real secret of its shape is still redacted. A plain
+word stays redacted (`password is sunshine` is a real password), and so does anything glued after such a shape
+(`${DB_PASSWORD:-S3cr…}`, `process.env.X||Hunt…`). On gitleaks' own false-positive examples it fires on 23% where
+gitleaks fires on 6%. For text bound for storage or a model that is the trade it is built for; as a CI scanner over
+source code it would be noisy. It never redacts less than the gate before these changes did, checked against a
+frozen copy of it and an independently written grammar of what may be left (`src/never-less.test.ts`).
+`redactString`, `redact` and `containsSecret` leave nothing: only `sanitizeForStore` takes such values back.
 
 ## Against the alternatives
 
-Measured on one machine with each tool's recommended configuration (gitleaks 8.30.1, trufflehog 3.99.9 with
-verification off, detect-secrets 1.5.0, secretlint 13.1.0 with the recommended preset, redact-pii 3.4.0); details,
-inputs and the cases where this gate loses are in `docs/research/redact-vs-alternatives.md` in the Eden repository.
+Measured on one machine on 2026-11-14 with each tool's recommended configuration (gitleaks 8.30.1, trufflehog 3.99.9
+with verification off, detect-secrets 1.5.0, secretlint 13.1.0 with the recommended preset), on this package's final
+code; details, inputs and the cases where this gate loses are in `docs/research/redact-vs-alternatives.md` in the
+Eden repository. Rows marked † were measured once in an earlier round, on the code before the last review.
 
-| | this gate | gitleaks | trufflehog | detect-secrets | secretlint | redact-pii |
-|---|---:|---:|---:|---:|---:|---:|
-| 480 real-format secrets planted in mail, chat, code, logs, JSON: removed or flagged | 100% | 73.3% | 59.0% | 64.2% | 41.3% | 21.7% |
-| gitleaks' own 6,040 true-positive examples (216 rules) flagged | 100% | 99.7% | 24.5% | 48.5% | 12.5% | 11.9% |
-| gitleaks' own 357 false-positive examples flagged (lower is better) | 22.4% | 6.2% | 7.3% | 22.4% | 7.3% | 24.1% |
-| findings on 13.5 MB of text with no planted secret (lower is better; this gate: 13.6 MB) | 177 | 4 | 1 | 11 | 1 | 4,987 |
-| in process, 16 KB of mixed text, a call | 0.31 ms (Bun), 0.49 ms (Node) | n/a | n/a | 87 ms | 0.51 ms | 2.3 ms |
-| one command on a 1 MB file, startup included | 0.18 s (Bun) | 0.70 s | 2.5 s | 6.7 s | 0.33 s | n/a |
-| slowest of 24 crafted 1 MB inputs, as a command (redact-pii: in process) | 0.37 s | 17.0 s | 3.2 s | >30 s on 3 | 0.46 s | >30 s on 9 |
-| slowest of the 24 in process | 0.15 s (Bun), 0.18 s (Node) | n/a | n/a | >30 s on 2 | 23 ms | >30 s on 9 |
+| | this gate | gitleaks | trufflehog | detect-secrets | secretlint |
+|---|---:|---:|---:|---:|---:|
+| 480 real-format secrets planted in mail, chat, code, logs, JSON: removed or flagged | 100% | 73.3% | 59.0% | 64.2% | 41.3% |
+| gitleaks' own 6,040 true-positive examples (216 rules) flagged | 100% | 99.7% | 24.5% | 48.5% | 12.5% |
+| gitleaks' own 357 false-positive examples flagged (lower is better) | 23.0% | 6.2% | 7.3% | 22.4% | 7.3% |
+| findings on 13.8 MB of text with no planted secret (lower is better) | 233 | 4 | 1 | 12 | 1 |
+| in process, 16 KB of mixed text, a call | 0.27 ms (Bun), 0.34 ms (Node) | n/a | n/a | 87 ms | 0.66 ms |
+| in process, 1 MB of mixed text, a call | 43–52 ms (Bun) | n/a | n/a | 6.1 s | 29 ms |
+| one command on a 16 KB file, startup included | 0.13 s (Bun) | 0.58 s † | 2.3 s † | 0.30 s | 0.31 s |
+| one command on a 1 MB file, startup included | 0.36 s (Bun) | 0.70 s † | 2.5 s † | 6.4 s | 0.39 s |
+| slowest of 24 crafted 1 MB inputs, as a command | 0.46 s | 14.3 s | 3.2 s | >30 s on 3 † | 0.60 s |
+| crafted 1 MB inputs where it is faster than secretlint, as a command / in process | 23 / 9 of 24 | | | | |
 
 Where it loses:
 
-- **False positives.** The 177 benign findings are mostly its keyword rule on documentation and code that names a
-  password or token (132 of them; 250 before the values above were left). On the 4,460 simulated mail, chat and
-  document items without a planted secret it flagged none, and on the evaluation scenarios' texts two, each holding a
-  credential-shaped value (a wifi password, a database URL with a password).
-- **Crafted input.** secretlint runs 27 provider rules and finds nothing in text built from keywords; this gate is
-  within 2x of it on 14 of the 24 crafted inputs and 2–15x slower on the rest (25–152 ms at 1 MB against 7–17 ms),
-  where a finding every 10–20 characters each pays for the allowlists and the structural pass. All stay linear.
-- **Node** runs the same code 1.0–2.5x slower than Bun.
-
-The benign corpus figures for this gate are on the repository after a later merge (13.6 MB, 5,609 files); the other
-tools' were measured once, on 13.5 MB.
+- **False positives.** The 233 benign findings are mostly its keyword rule on documentation and code that names a
+  password or token. On the 4,460 simulated mail, chat and document items without a planted secret it flagged none,
+  and on the evaluation scenarios' texts two, each holding a credential-shaped value (a wifi password, a database URL
+  with a password).
+- **Crafted input in process.** secretlint runs 27 provider rules and finds nothing in text built from keywords. In
+  process this gate is at or below it on 9 of the 24 crafted inputs, within 2x on 13, and 2.3–11x slower on 11
+  (15–105 ms at 1 MB against 6–16 ms), where a finding every 10–20 characters each pays for the allowlists, the
+  gating and the structural pass. All stay linear. As a command (startup included) it is faster on 23 of 24.
+- **A megabyte of mixed text in process.** 43–52 ms against secretlint's 29 ms and the previous gate's 21 ms: when a
+  text holds a value left as code, the stored text is recomposed over the whole text (`src/compose.ts`). At 2 KB and
+  16 KB it runs at 0.9–1.1x of the previous gate.
+- **Node** runs the same code 0.7–2.4x Bun's time.
 
 ## How it is fast
 

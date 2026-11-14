@@ -196,7 +196,7 @@ API key with a space (the review's low finding): main's keyword rule takes `api[
 hunter2xyz" was left by the keyword rule and caught only at 32 characters by rule (d). `eden-api-key-phrase` takes
 it with the keyword rule's value shapes, so a short API key after `API key is` is caught too (a test).
 
-### 8. False positives on code: values that cannot be a secret
+### 8. False positives on code: values that cannot be a secret (narrowed in §11)
 
 The comparison's loss (Part 2) was the keyword rule on code and docs: `maxTokens: 2_000`, `apiKey: string;`,
 `token = this.options.token`, `${API_KEY}`. `not-secret.ts` names shapes no secret is written in, each with a test
@@ -231,8 +231,10 @@ and gitleaks' 357 false-positive examples, the frozen main against now:
 | gitleaks' true-positive examples flagged | 6,040 | 6,040 | 6,040 |
 | sim worlds' planted secrets | 12 / 12 | 12 / 12 | 12 / 12 |
 
-No secret is lost for it: the planted set, gitleaks' true positives and the sim worlds are all still found, and
-never-less (§7) checks every character the gate keeps that main removed. What remains is mostly prose that names a
+The planted set, gitleaks' true positives and the sim worlds were all still found, and never-less (§7) checked every
+character the gate kept that main removed, but with `not-secret.ts` itself, and the shapes above tested only how a
+value started: the second review found real secrets let through behind them. §11 has the fix; the table above is
+the first version's. What remains is mostly prose that names a
 password (docs explaining the keyword rule itself) and gitleaks' examples that are placeholders in a shape this
 gate cannot tell from a key (`sk-ant-api03-abc123xyz…`), which the brief's rule (a missed secret is worse than a false
 redaction) leaves redacted.
@@ -331,9 +333,127 @@ character-at-a-time loops (the prefilter, the hand-read prefixes). `node-linear.
 input at 256 KB under the same 1.5 s CPU ceiling on Node 24+ (`REDACT_NODE`, skipped without one): the slowest took
 55 ms. `node-parity.test.ts` with Node 24: 0 differences.
 
+### 11. The second review: excused values checked whole, never-less on its own oracle, memos for one call
+
+The second independent review (REQUEST_CHANGES at 11bf66145) found §8's exemptions letting real secrets through,
+and never-less unable to see it.
+
+**The secrets.** Every shape in §8 tested only how a value started, so a value that began like code and went on
+with a secret was excused whole: `${DB_PASSWORD:-S3cr3tP4ssw0rdXq9}`, `process.env.DB_PASS||Hunt3rPass2Real9`,
+`%PASS%Xk39dKf93kdKf8`, `{{x}}a8f5f167…`, `$(czDTndMIlxf6…)`, one member on a broad receiver
+(`data.Hunter2isMyPassw0rd`), and digits grouped (`123_456_789` is a password too). Main redacted every one; the
+reviewer's fuzz found 12,825 of 120,000 texts stored with less redacted than main, 4,121 of them leaving a run of 12
+or more letters and digits. Now every shape is the whole value, anchored at both ends:
+
+| Shape left in place (whole value only) | Redacted again (main's behaviour) |
+|---|---|
+| a type: `string`, `Set<number>`, `Uint8Array`, generics with letters only inside | `Set<x>9Kq2` |
+| `process.env.NAME`, `import.meta.env.NAME`, `env.UPPER_NAME` (letters and `_`, no digit) | `env.Hunt3r2Pass`, `process.env.X\|\|…` |
+| a member chain on a known receiver with two or more members, letters only (`this.options.apiKey`) | `data.Hunter2isMyPassw0rd`, `self.Pa55w0rdIsHere`, `this.token#…` |
+| `${NAME}` without a default, `${camelCase}`, `$UPPER_NAME`, `%NAME%`, `{{name}}`, `<your-key>` (names letters and `_` in one case) | `${X:-…}`, `${X=…}`, `${a8f5f167…}`, `<Xk39dKf93kdKf8>`, `$API_KEY:…`, `{{x}}…` |
+| a mask after at most 8 letters (`hf_xxxx…`) | `Xk39dKf93kdK-xxxxxxxx` |
+| a run of one character to the end after at most 8 letters (`AIzaaaa…`) | `Xk39dKf93kdKaaaa…` |
+
+Dropped: `$(…)` (a command can hold its output's secret) and grouped digits. Every input of the review is a
+must-redact test in `secrets.test.ts`.
+
+**The oracle.** never-less checked an excused value with `notSecret` itself, so it could not catch `notSecret`'s
+mistakes. It now has an independent oracle, `never-less-oracle.ts`: the same grammar written apart, by hand, without
+`not-secret.ts`'s regexes. A run of characters main removed and the gate keeps counts as a loss allowed only where
+the oracle calls the value it sits in, as written in the text, code or a placeholder; every other loss fails the
+test. A new fuzz unit (`shapeText`) glues a random 12–40 character token, after punctuation, to every excused shape
+and near miss (defaults inside `${…}`, one member on a broad receiver, commands, grouped digits); its tokens must be
+redacted. The reviewer's own generator (`rn-fuzz.ts`, against origin/main's real gate): on 120,000 texts, 0 differences from the reference, 0 mismatches between the gate's account of main and main's own output, and no lost run that holds 12 or more letters and digits other than a mask or a run (4,480 texts keep a placeholder main redacted).
+
+**Memos.** The allowlist verdicts, the last match, the last entropy and the last excused value were memoised across
+calls, keyed by slices of the caller's text; on JavaScriptCore a slice keeps its whole parent alive, so 60 distinct
+1 MB texts left 56 MB on the heap after a collection (main 0.1 MB), and the texts are tenants'. `memo.ts` now gives
+memos that answer only inside an entry point (`sanitizeForStore`, `secretHits`, `findings`) and are emptied when the
+outermost one returns, whatever it returns or throws: the same 60 texts leave 0.3 MB. `memo.test.ts` holds 30 texts
+of 540 KB under 4 MB retained (it fails with the clearing turned off: 14 MB).
+
+**The public API.** `redactString`, `redact` and `containsSecret` excused values by default; they excuse nothing
+now, as main. Only `sanitizeForStore` takes excused values back, where never-less checks them.
+
+**False positives after it.** The corpus grew with origin/main (13.8 MB, 5,612 files): main makes 291 findings on
+it, the strict exemptions 237, and with `env.UPPER_NAME` and `${camelCase}` added (both in the oracle too) 233.
+gitleaks' false-positive examples: main 93 (26.1%), 11bf66145 80 (22.4%), now 82 (23.0%). Planted 480 of 480,
+gitleaks' true positives 6,040 of 6,040, the sim worlds 12 of 12, as before.
+
+**Speed after it.** Line-targeted allowlist regexes run only when the line holds one of their literals (read by
+`anchorsOf`; not under `(?i)`): a megabyte line ran five regexes through the DFA, 31 ms a call. gitleaks rules decide
+everything but line lists once a match within a call. `compose.ts` merges the rules' spans by their runs instead of
+a comparator sort, and the structural masks reuse the stored text's run of the token passes (`tokenPasses`). On V8,
+ligature folds read a typed index (a Map cost 20 ns a ligature; an array indexed by code unit fell into dictionary
+mode) and generic-api-key's REST reads at most 24 characters past a keyword. `MultiMatcher`, origin/main's against
+this branch's, interleaved CPU medians: ordinary text 0.98–1.14x, 1 MB of `sk-` with nothing kept 2.12x, of
+`xoxe-zzzz ` 1.26x; `matcher.bench.ts` now measures `scan` with nothing kept.
+
+Crafted inputs at 1 MB in process, CPU ms, interleaved medians of 5 (main and now in one process), secretlint 13.1.0
+on Node in process (median of 5 after a warm call), load 1–3:
+
+| Crafted input, 1 MB | origin/main | now | secretlint | now / secretlint |
+|---|---:|---:|---:|---:|
+| keyword then an operator | 220.2 | 32.9 | 8.0 | 4.11x |
+| keywords back to back | 1058.3 | 36.5 | 10.9 | 3.34x |
+| the longest prefix before each keyword | 277.4 | 7.0 | 15.9 | 0.44x |
+| the longest prefix, no space | 388.1 | 7.3 | 15.9 | 0.46x |
+| prefix, keyword, operator, value | 53.5 | 48.4 | 15.7 | 3.08x |
+| combining marks inside a keyword | 14.3 | 6.7 | 6.7 | 1.01x |
+| marks before a keyword | 18.8 | 14.9 | 6.2 | 2.41x |
+| ligatures beside a keyword | 126.3 | 14.8 | 6.3 | 2.33x |
+| two-character anchors | 611.6 | 20.4 | 16.0 | 1.27x |
+| one non-space run after a keyword | 4.3 | 4.5 | 9.0 | 0.50x |
+| separators | 9.6 | 5.3 | 8.4 | 0.63x |
+| quoted values | 114.9 | 105.5 | 11.4 | 9.28x |
+| eden-keyword | 100.7 | 104.7 | 9.7 | 10.75x |
+| url userinfo | 14.8 | 8.1 | 8.6 | 0.94x |
+| token literals | 51.9 | 52.1 | 13.1 | 3.99x |
+| generic-api-key, matching | 101.4 | 51.4 | 9.7 | 5.28x |
+| findings on one long line | not run (quadratic) | 99.9 | 11.3 | 8.86x |
+| ligatures | 417.3 | 9.2 | 7.4 | 1.24x |
+| password: then spaces | 24.5 | 36.0 | 10.5 | 3.44x |
+| digits and spaces (PII patterns) | 2.4 | 2.4 | 8.9 | 0.27x |
+| one long word line | 2.6 | 2.5 | 19.8 | 0.13x |
+| slashes and colons | 10.8 | 9.6 | 8.8 | 1.10x |
+| aws-ish base64 | 10.7 | 8.0 | 9.1 | 0.88x |
+| high-entropy hex | 2.4 | 2.4 | 8.5 | 0.29x |
+
+At or below secretlint on 9 of the 24 (and 1.01x on a tenth), within 2x on 13, over 2x on 11: the inputs with a
+finding every 10–20 characters (`key=`, quoted values, eden-keyword, the line of findings, generic-api-key matching,
+token literals, prefix-keyword-value, `password: ` then spaces, keywords back to back) and the two with marks or
+ligatures beside every keyword. There each finding pays for its rule's match, the allowlists, the gating and the
+structural pass, and Eden's own keyword rules fire on the same text; secretlint's 27 provider rules find nothing in
+these texts. The bar the coordinator set (at or below secretlint on every crafted input, every rule kept) is not met.
+Against origin/main the gate is 2–53x faster on the inputs main backtracked on and within the noise of a loaded VM
+(0.68–1.1x) on the rest; `password: then spaces` (24 against 36 ms here, 18 against 22–38 ms in other runs) is the
+one that reads slower in every run.
+
+As one command each (startup included, one run, 30 s limit), the same inputs: this gate 75–464 ms, secretlint
+233–598 ms, gitleaks 436 ms–14.3 s, trufflehog 2.1–3.2 s; this gate is faster than secretlint as a command on 23 of
+the 24 (all but the line of findings, 464 against 391 ms).
+
+On Node 24 (CPU, one run each, the build before the last two speed changes): 0.72–2.36x Bun's time per input; the
+inputs that stay over 1.5x are the character loops (marks and ligatures in the prefilter, the run after a keyword,
+the AWS-like base64).
+
 ## Exactness and gates
 
-After the review:
+After the second review (the final code):
+
+- `gate-differential.ts 250000 <seed>`, seeds 101–404: 1,000,000 texts, 708,806 with a finding, no difference against
+  the reference; `--corpus` (4,932 texts): none. Run twice, before and after the last speed changes.
+- `never-less.ts` with the independent oracle and the excused-shape unit: 150,000 texts on seed 7 and 150,000 on
+  20261114, no failure (twice); the reviewer's `rn-fuzz.ts` on 120,000 texts against origin/main's real gate: no
+  difference from the reference, no lost run of 12+ letters and digits.
+- `CHECK_COLD=1 FORMAT_COLD=1 bun run check` (OPENROUTER_API_KEY unset): passed in 175 s (2,922 pass and 2 skip in
+  292 files, and 524 in the 31-file tail).
+- `bun run eval`: precision 0.65, recall 0.52, falseFireRate 0; packets on 19 of 28 neutral turns (1.18 items each),
+  facts handed 10 of 11, a look-alike on 3 of 10 owed turns: main's numbers.
+- `bun run funnel` on origin/main's redact and primitives, then this tree with `--baseline`: hidden 323/384, decoys
+  294/384 both, "hidden +0 −0, decoys +0 −0".
+
+After the first review:
 
 - `gate-differential.ts 250000 <seed>`, seeds 101–404 at once: 1,000,000 texts, 708,782 with a finding (the fuzz now
   generates the keyword chains and the three new shapes), no difference against the reference; `--corpus` (4,925
@@ -504,6 +624,12 @@ this gate runs gitleaks' rules, so 100% there means its port is faithful, not th
 
 ### False positives
 
+After the second review (§11) every tool but redact-pii ran again on the final code, on the corpus after the merge of
+origin/main (13.8 MB, 5,612 files): planted, gitleaks' examples and the sim worlds gave every tool the numbers of the
+Recall table above, exactly; gitleaks' false-positive examples this gate 82 (23.0%) and the others as below; the
+benign corpus this gate 233 findings (in 2 eval, 27 code and 45 docs files), gitleaks 4, trufflehog 1,
+detect-secrets 12, secretlint 1. The table is the first round's.
+
 | | this gate | gitleaks | trufflehog | detect-secrets | secretlint | redact-pii |
 |---|---:|---:|---:|---:|---:|---:|
 | gitleaks' 357 false-positive examples flagged | 80 (22.4%); first version 94 (26.3%) | 22 (6.2%) | 26 (7.3%) | 80 (22.4%) | 26 (7.3%) | 86 (24.1%) |
@@ -527,6 +653,13 @@ be noisy. redact-pii changes almost every text (names, digits, dates, URLs: its 
 mostly collateral.
 
 ### Throughput
+
+After the second review (§11), on the final code, in process (the same harness): this gate on Bun 0.020 ms at 2 KB,
+0.27 ms at 16 KB, 43–52 ms at 1 MB (the last after its final fixes, interleaved with origin/main's gate, which took
+21–33 ms: §11); on Node 24 0.032 and 0.34 ms (1 MB 84 ms, before those fixes); secretlint 0.11, 0.66 and 29 ms;
+detect-secrets 10.2 ms, 86.5 ms and 6.1 s. As one command (median of 5, startup included): this gate 111, 131 and 358
+ms; secretlint 421, 307 and 386 ms; detect-secrets 211, 298 ms and 6.4 s (gitleaks and trufflehog were not run on
+these files again). The tables are the first round's.
 
 In process, the tool already loaded and warmed, a fresh string each call, median ms a call (one run, load 2–8):
 
@@ -602,15 +735,15 @@ the call (main: 3–41 MB).
 
 ## What was not done, and next
 
-- Ten crafted inputs stay over 2x of secretlint (§9): the cost there is per finding (allowlists, gating, the
-  structural pass, Eden's keyword rules on the same text), on texts with 50,000–100,000 findings a megabyte. The next
-  steps would be a literal prefilter for line-targeted allowlist regexes (each reads a whole long line through the
-  DFA) and a hand reader for hashicorp-tf-password's REST as generic-api-key has; neither changes what is found.
-- Node stays 1.0–2.5x slower than Bun on the same code (§10); V8 runs the character loops slower, with no deopt left
-  in the gate's own hot paths that this profile found.
-- The keyword rule still redacts prose that names a password and placeholders shaped like keys (§8); with "a missed
-  secret is worse than a false redaction" as the rule, no further exemption was found that keeps every nearest real
-  secret caught. A caller that scans source code might want gitleaks' rules alone (`gateOf` over a subset), which the
-  package allows but does not package as a preset.
-- The other tools' numbers (Part 2) are from the first round and were not run again; the downloaded tools were
-  deleted.
+- The bar set after the second review, at or below secretlint on every crafted input in process, is not met: 11 of
+  the 24 stay over 2x (§11), all dense in findings, where the cost is per finding (allowlists, gating, the
+  structural pass, Eden's keyword rules on the same text). Next: batch the per-finding work, and a hand reader for
+  hashicorp-tf-password's REST as generic-api-key has.
+- A megabyte of mixed text that holds one value left as code is recomposed whole (`compose.ts`): 43–52 ms against
+  origin/main's 21 ms. A recomposition limited to the neighbourhood of the excused values and the post rules' spans
+  would remove it; the gating and the structural pass reach across lines (quoted values, PEM blocks), so the
+  neighbourhood must be proven, which was not done.
+- Node stays 0.7–2.4x Bun's time (§10, §11), most in character loops.
+- Prose that names a password stays redacted, as do placeholders shaped like keys (§8, §11).
+- gitleaks and trufflehog were not run again on the throughput files, and redact-pii not at all, after the second
+  review; their rows are the first round's. All downloaded tools were deleted.
