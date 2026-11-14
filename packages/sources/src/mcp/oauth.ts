@@ -568,13 +568,16 @@ function canonical(url: URL): string {
   return `${url.origin}${path}`;
 }
 
-/** Whether a metadata `resource` names this server (a trailing slash aside). */
+/** Whether a metadata `resource` names this server (a trailing slash aside), with no query or fragment. */
 function sameResource(declared: string, resource: string): boolean {
+  let url: URL;
   try {
-    return canonical(new URL(declared)) === resource && !new URL(declared).search && !new URL(declared).hash;
+    url = new URL(declared);
   } catch {
     return false;
   }
+  const trim = (x: string) => x.replace(/\/+$/, "");
+  return !url.search && !url.hash && trim(canonical(url)) === trim(resource);
 }
 
 /** A string compared in time independent of where it differs. */

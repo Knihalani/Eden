@@ -67,10 +67,12 @@ export interface ReplyLimits {
 }
 
 /**
- * Defaults (D1872). Well-behaved servers send no bad message, and ask at most a few requests a tool call (the SDK's
- * example servers: 0-4, each awaited before the next, so a model's round trip apart); 100 at once and 10 more a second
- * is past any of them. A flood still fails at once: 20,000 pings sent together fail after 100, 2,000,000 junk events
- * of 8 bytes after ~115, and a junk reply's CPU stays proportional to its bytes (a bad message per KiB at most).
+ * Defaults (D1872). Well-behaved servers send no bad message and few requests: the SDK's example servers ask 0-2 per
+ * tool call (an elicitation, a sampling), each awaited before the next, so a client's round trip apart; their
+ * notifications (progress, logging: 50 a call in one example, unbounded in another) are not budgeted. 100 at once and
+ * 10 more a second is past any of them, and lets a long agentic tool ask once a second for as long as it runs. A flood
+ * still fails at once: 20,000 pings sent together fail after 100 (16 answered), 2,000,000 one-byte junk events after
+ * 100, and a junk reply's CPU stays proportional to its bytes (one bad message per KiB of messages at most).
  */
 export const DEFAULT_LIMITS: ReplyLimits = {
   serverRequests: 100,
@@ -89,6 +91,8 @@ export interface ResumeOptions {
 }
 
 export const DEFAULT_RESUME: ResumeOptions = { maxRetries: 3, initialDelayMs: 1_000, maxDelayMs: 30_000 };
+/** The shortest wait before the GET stream is opened again: at most two connections a second, whatever the server. */
+const MIN_REOPEN_MS = 500;
 
 /** Where a transport gets a bearer token (D1874). `oauth.ts`'s `OAuthClientProvider` is one. */
 export interface AuthHook {
@@ -339,7 +343,10 @@ export class StreamableHttpTransport implements Transport {
           // Opened again until it works or `maxRetries` tries in a row deliver nothing.
           for (;;) {
             if (stop.signal.aborted || this.state !== "open" || misses > resume.maxRetries) return;
-            await sleep(delayFor(resume, Math.max(1, misses), retryMs), stop.signal);
+            // Never sooner than `MIN_REOPEN_MS`, whatever `retry:` says: a server that ends every connection at once
+            // would otherwise have the client reopen it as fast as it can.
+            const wait = Math.max(MIN_REOPEN_MS, delayFor(resume, Math.max(1, misses), retryMs));
+            await sleep(wait, stop.signal);
             try {
               res = await connect();
             } catch {
@@ -377,7 +384,12 @@ export class StreamableHttpTransport implements Transport {
         tally.bytes += data.length;
         const m = parseJsonBytes(data);
         if (m === undefined) this.countBad(tally, "Event stream");
-        else if (this.deliver(m, null, tally) || !tally.failed) delivered = true;
+        else {
+          // Delivered only when it reached `onmessage`: junk must not count as a connection that worked.
+          const bad = tally.bad;
+          this.deliver(m, null, tally);
+          if (tally.bad === bad && tally.failed === null) delivered = true;
+        }
         return tally.failed !== null;
       },
       this.ownFetch && isBun,
