@@ -35,13 +35,16 @@ export function parseJsonText(text: string): unknown {
 }
 
 /**
- * The placeholder's prefix: random per process and never sent anywhere (every placeholder is replaced before a value
- * is returned), so a server cannot write a string equal to it on purpose; one it hits by chance is caught by the
- * count below, and the plain parse is used instead.
+ * A placeholder's prefix: 16 hex digits from `getRandomValues`, new for each reply spliced and never sent anywhere
+ * (every placeholder is replaced before a value is returned), so a server cannot write a string equal to one on
+ * purpose, even having seen the client's other replies; one it hits by chance is caught by the count below, and the
+ * plain parse is used instead. The control character keeps it apart from anything a reply holds unescaped.
  */
-const MARK = `\u0001${Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => (b % 36).toString(36)).join("")}:`;
-/** Placeholders as the skeleton holds them: escaped, so the skeleton stays ASCII where the reply was. */
-const MARK_JSON = JSON.stringify(MARK).slice(1, -1);
+function newMark(): string {
+  let hex = "";
+  for (const b of crypto.getRandomValues(new Uint8Array(8))) hex += (b < 16 ? "0" : "") + b.toString(16);
+  return `\u0001${hex}:`;
+}
 /** A raw control character, a backslash: a string holding either is not its characters between quotes. */
 const NOT_PLAIN = /[\x00-\x1f\\]/;
 /** Values past which the walk that puts the strings back would cost more than the copy it saves. */
@@ -68,17 +71,20 @@ function spliced(text: string, seen: TextShape): unknown {
     taken += end - start;
   }
   if (spans.length === 0 || taken * 2 < text.length) return PLAIN;
+  const mark = newMark();
+  // Escaped in the skeleton, so the skeleton stays ASCII where the reply was.
+  const markJson = JSON.stringify(mark).slice(1, -1);
   let skeleton = text.slice(0, spans[0]!);
   for (let k = 0; k < spans.length; k += 2) {
-    skeleton += `${MARK_JSON}${k >> 1}${text.slice(spans[k + 1]!, spans[k + 2] ?? text.length)}`;
+    skeleton += `${markJson}${k >> 1}${text.slice(spans[k + 1]!, spans[k + 2] ?? text.length)}`;
   }
   const value = JSON.parse(skeleton) as unknown;
   const strings = spans.length >> 1;
   const found = new Uint8Array(strings);
   let placed = 0;
   const put = (s: unknown): unknown => {
-    if (typeof s !== "string" || !s.startsWith(MARK)) return undefined;
-    const k = Number(s.slice(MARK.length));
+    if (typeof s !== "string" || !s.startsWith(mark)) return undefined;
+    const k = Number(s.slice(mark.length));
     if (!Number.isInteger(k) || k < 0 || k >= strings || found[k]) return null;
     found[k] = 1;
     placed++;

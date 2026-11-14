@@ -60,6 +60,11 @@ export interface ReplyLimits {
   serverRequests: number;
   /** Server requests added to the budget for each second the reply has been open. */
   serverRequestsPerSecond: number;
+  /**
+   * Server requests on one POST's reply, whatever how long it stays open (the GET stream, which may stay open for
+   * hours, has the burst and the rate only, counted across its reconnects).
+   */
+  serverRequestsMax: number;
   /** Messages that are not JSON, not JSON-RPC, or a response to another request, at once. */
   badMessages: number;
   /** Bad messages added to the budget for each MiB the reply has carried. */
@@ -72,11 +77,14 @@ export interface ReplyLimits {
  * notifications (progress, logging: 50 a call in one example, unbounded in another) are not budgeted. 100 at once and
  * 10 more a second is past any of them, and lets a long agentic tool ask once a second for as long as it runs. A flood
  * still fails at once: 20,000 pings sent together fail after 100 (16 answered), 2,000,000 one-byte junk events after
- * 100, and a junk reply's CPU stays proportional to its bytes (one bad message per KiB of messages at most).
+ * 100, and a junk reply's CPU stays proportional to its bytes (one bad message per KiB of messages at most). After the
+ * review, a POST's reply never takes more than 200 server requests: at 10 a second alone, a reply held open to its
+ * 60 s deadline could have had 700 answered, seven times D1704's cap, on Eden's own path.
  */
 export const DEFAULT_LIMITS: ReplyLimits = {
   serverRequests: 100,
   serverRequestsPerSecond: 10,
+  serverRequestsMax: 200,
   badMessages: 100,
   badMessagesPerMiB: 1024,
 };
@@ -134,6 +142,8 @@ interface Tally {
   bytes: number;
   /** When the reply began (`performance.now()`), for the server-request budget. */
   start: number;
+  /** The most server requests it may carry, however long it is open. */
+  ceiling: number;
   /** Why the reply is failed, once a count passes its budget. */
   failed: string | null;
 }
@@ -299,9 +309,10 @@ export class StreamableHttpTransport implements Transport {
   /**
    * Opens the standalone GET stream, on which the server sends requests and notifications outside any request
    * (D1873). Resolves true once it is open, false when the server offers none (405). Its messages go to `onmessage`
-   * under the same caps and budgets as a reply's (each connection is a reply: the per-event cap, the reply cap, after
-   * which the connection is closed and opened again, and `ReplyLimits`); a response on it is unasked, so dropped and
-   * counted. A connection that ends or breaks is opened again with `Last-Event-ID`, waiting as `resume` says (its
+   * under the same caps as a reply's (the per-event cap; the reply cap per connection, after which it is closed and
+   * opened again) and one budget for the stream's whole life, across its reconnects (`ReplyLimits`, its burst and rate:
+   * reopening does not start it again); a response on it is unasked, so dropped and counted. Each connection must open
+   * (send its headers) within `timeoutMs`. A connection that ends or breaks is opened again with `Last-Event-ID`, waiting as `resume` says (its
    * defaults when unset), until `maxRetries` connections in a row deliver nothing; a reply failed by a budget is not
    * opened again (`onerror` says why). `close` ends it. Eden never opens it.
    */
@@ -313,10 +324,29 @@ export class StreamableHttpTransport implements Transport {
     const resume = this.resume ?? DEFAULT_RESUME;
     let lastEventId: string | null = null;
     let retryMs: number | null = null;
+    // One budget for the stream, whatever the number of its connections.
+    const tally = this.tally(Infinity);
+    // The connection being opened or read: aborted by `close` (one listener for the stream, not one a connection).
+    let current: AbortController | null = null;
+    stop.signal.addEventListener("abort", () => current?.abort(stop.signal.reason), { once: true });
     const connect = async () => {
       const extra: Record<string, string> = { accept: "text/event-stream" };
       if (lastEventId) extra["last-event-id"] = lastEventId;
-      return this.fetchAuthed("GET", undefined, stop.signal, extra);
+      const ac = new AbortController();
+      current = ac;
+      // Until its headers arrive: a server that never answers the GET must not hold the open forever.
+      const timer = setTimeout(
+        () => ac.abort(new StreamableHttpError(-1, "Event stream did not open in time")),
+        this.timeoutMs,
+      );
+      try {
+        return await this.fetchAuthed("GET", undefined, ac.signal, extra);
+      } catch (e) {
+        const reason = ac.signal.reason;
+        throw reason instanceof StreamableHttpError ? reason : e;
+      } finally {
+        clearTimeout(timer);
+      }
     };
     let res: Response;
     try {
@@ -335,7 +365,7 @@ export class StreamableHttpTransport implements Transport {
       let misses = 0;
       try {
         for (;;) {
-          const got = await this.readServerStream(res, stop.signal, lastEventId, retryMs);
+          const got = await this.readServerStream(res, stop.signal, tally, lastEventId, retryMs);
           lastEventId = got.lastEventId;
           retryMs = got.retryMs;
           if (got.failed) break;
@@ -373,11 +403,12 @@ export class StreamableHttpTransport implements Transport {
   private async readServerStream(
     res: Response,
     signal: AbortSignal,
+    tally: Tally,
     lastEventId: string | null,
     retryMs: number | null,
   ): Promise<{ lastEventId: string | null; retryMs: number | null; delivered: boolean; failed: boolean }> {
-    const tally: Tally = { bad: 0, asks: 0, bytes: 0, start: performance.now(), failed: null };
     let delivered = false;
+    const badBefore = tally.bad;
     const parser = new SseParser(
       Math.min(this.maxBytes, MAX_EVENT_BYTES),
       (data) => {
@@ -423,7 +454,7 @@ export class StreamableHttpTransport implements Transport {
       // A broken connection: opened again by the caller.
     } finally {
       signal.removeEventListener("abort", onStop);
-      this.report(tally);
+      this.report(tally, badBefore);
     }
     return { lastEventId: parser.lastEventId, retryMs: parser.retryMs, delivered, failed: tally.failed !== null };
   }
@@ -486,7 +517,7 @@ export class StreamableHttpTransport implements Transport {
       return false;
     }
     const type = mediaType(res.headers.get("content-type"));
-    const tally: Tally = { bad: 0, asks: 0, bytes: 0, start: performance.now(), failed: null };
+    const tally = this.tally(this.limits.serverRequestsMax);
     if (type === "application/json") {
       const length = res.headers.get("content-length");
       const declared = Number(length ?? "0");
@@ -526,8 +557,10 @@ export class StreamableHttpTransport implements Transport {
   }
 
   /** One error for what a reply carried that was dropped, however much it was. */
-  private report(t: Tally): void {
-    if (t.bad > 0) this.onerror?.(new StreamableHttpError(-1, `Reply carried ${t.bad} malformed or unasked messages`));
+  /** `before`: what an earlier connection of the same GET stream already reported. */
+  private report(t: Tally, before = 0): void {
+    const bad = t.bad - before;
+    if (bad > 0) this.onerror?.(new StreamableHttpError(-1, `Reply carried ${bad} malformed or unasked messages`));
   }
 
   /**
@@ -697,6 +730,10 @@ export class StreamableHttpTransport implements Transport {
     }
   }
 
+  private tally(ceiling: number): Tally {
+    return { bad: 0, asks: 0, bytes: 0, start: performance.now(), ceiling, failed: null };
+  }
+
   /** Counts a bad message against the reply's budget (`ReplyLimits`). */
   private countBad(tally: Tally, what: "Reply" | "Event stream"): void {
     const allowed = this.limits.badMessages + Math.floor((tally.bytes * this.limits.badMessagesPerMiB) / 1_048_576);
@@ -719,7 +756,10 @@ export class StreamableHttpTransport implements Transport {
       // The clock is read only when a request comes, which a well-behaved reply holds few of.
       if (tally.asks > this.limits.serverRequests) {
         const open = (performance.now() - tally.start) / 1000;
-        const allowed = this.limits.serverRequests + Math.floor(open * this.limits.serverRequestsPerSecond);
+        const allowed = Math.min(
+          tally.ceiling,
+          this.limits.serverRequests + Math.floor(open * this.limits.serverRequestsPerSecond),
+        );
         if (tally.asks > allowed) {
           tally.failed = `Reply carried over ${allowed} server requests`;
           return false;

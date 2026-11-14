@@ -83,6 +83,12 @@ export interface OAuthOptions {
   timeoutMs?: number;
   /** Largest response read from those endpoints (default 64 KiB). */
   maxResponseBytes?: number;
+  /**
+   * Origins besides the MCP server's own that a 401's `resource_metadata` may name (a metadata host of the
+   * operator's). By default the hint must be on the server's origin: it is the server's text, and a GET to it is
+   * the client's.
+   */
+  metadataOrigins?: string[];
   /** Tests. */
   fetch?: typeof fetch;
 }
@@ -110,6 +116,8 @@ interface Discovered {
   tokenEndpoint: string;
   registrationEndpoint?: string;
   scope?: string;
+  /** The server sends `iss` in its callbacks (RFC 9207), so one without it is refused. */
+  issRequired?: boolean;
 }
 
 interface Pending {
@@ -134,6 +142,8 @@ export class OAuthClientProvider implements AuthHook {
   private readonly maxBytes: number;
   private refreshing: Promise<StoredTokens | undefined> | null = null;
   private readonly pending: Pending[] = [];
+  /** Where the MCP server is: what any URL its metadata names may point at (`reachable`). */
+  private readonly serverHost: HostClass;
 
   constructor(
     serverUrl: URL | string,
@@ -143,6 +153,7 @@ export class OAuthClientProvider implements AuthHook {
     secure(url, "the MCP server's URL");
     secure(new URL(options.redirectUrl), "the redirect URL");
     this.resource = canonical(url);
+    this.serverHost = hostClass(url);
     this.store = options.store ?? new MemoryTokenStore();
     this.fetchFn = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -165,7 +176,7 @@ export class OAuthClientProvider implements AuthHook {
     if (canonical(url) !== this.resource) return undefined;
     let t = await this.tokens();
     if (t?.expiresAt !== undefined && t.expiresAt - EXPIRY_MARGIN_MS <= Date.now()) {
-      t = t.refreshToken ? await this.refresh(t, signal).catch(() => undefined) : undefined;
+      t = t.refreshToken ? await untilAborted(this.refresh(t), signal).catch(() => undefined) : undefined;
     }
     return t ? `Bearer ${t.accessToken}` : undefined;
   }
@@ -181,7 +192,7 @@ export class OAuthClientProvider implements AuthHook {
     const held = await this.tokens();
     // An expired or revoked access token: a refresh is tried first, unless the server asks for more scope.
     if (challenge.status === 401 && held?.refreshToken && params.error !== "insufficient_scope") {
-      const fresh = await this.refresh(held, challenge.signal).catch(() => undefined);
+      const fresh = await untilAborted(this.refresh(held), challenge.signal).catch(() => undefined);
       if (fresh) return true;
     }
     await this.authorize(params, challenge.signal);
@@ -230,6 +241,7 @@ export class OAuthClientProvider implements AuthHook {
     // RFC 9207: an `iss` in the callback must be the issuer the flow began with (a mix-up attack otherwise).
     const iss = query.get("iss");
     if (iss !== null && iss !== flow.discovered.issuer) throw new OAuthError("the callback came from another issuer");
+    if (iss === null && flow.discovered.issRequired) throw new OAuthError("the callback names no issuer");
     const authCode = query.get("code");
     if (!authCode) throw new OAuthError("the callback holds no code");
     const body = new URLSearchParams({
@@ -243,8 +255,11 @@ export class OAuthClientProvider implements AuthHook {
     await this.save(t, flow.discovered, flow.client);
   }
 
-  /** One refresh at a time: callers that ask while one runs share it. */
-  private refresh(held: StoredTokens, signal?: AbortSignal): Promise<StoredTokens | undefined> {
+  /**
+   * One refresh at a time: callers that ask while one runs share it. It runs on its requests' own timeout, never on a
+   * caller's signal: one caller giving up must not fail the others (each abandons only its own wait).
+   */
+  private refresh(held: StoredTokens): Promise<StoredTokens | undefined> {
     this.refreshing ??= (async () => {
       try {
         const client = await this.clientFor(held);
@@ -259,7 +274,7 @@ export class OAuthClientProvider implements AuthHook {
           authorizationEndpoint: "",
           tokenEndpoint: held.tokenEndpoint,
         };
-        const t = await this.tokenRequest(discovered, client, body, signal);
+        const t = await this.tokenRequest(discovered, client, body);
         // A server may keep the refresh token unrotated: the old one stays.
         return await this.save({ ...t, refresh_token: t.refresh_token ?? held.refreshToken }, discovered, client);
       } catch (e) {
@@ -345,6 +360,9 @@ export class OAuthClientProvider implements AuthHook {
       } catch {
         throw new OAuthError("the resource metadata URL is not a URL");
       }
+      // The hint is the server's text: a GET to anywhere it names would be a request the server makes through us.
+      const allowed = new Set([server.origin, ...(this.options.metadataOrigins ?? []).map((o) => new URL(o).origin)]);
+      if (!allowed.has(hinted.origin)) throw new OAuthError("the resource metadata is on another origin");
       candidates.push(hinted.href);
     } else {
       const path = server.pathname === "/" ? "" : server.pathname;
@@ -375,7 +393,7 @@ export class OAuthClientProvider implements AuthHook {
     } catch {
       throw new OAuthError("the authorization server's issuer is not a URL");
     }
-    secure(issuerUrl, "the authorization server");
+    this.reachable(issuerUrl, "the authorization server");
     if (issuerUrl.search || issuerUrl.hash) throw new OAuthError("the issuer has a query or fragment");
     const as = await this.serverMetadata(issuerUrl, signal);
     // RFC 8414 §3.3: the issuer in the metadata is exactly the one asked about.
@@ -392,11 +410,12 @@ export class OAuthClientProvider implements AuthHook {
       } catch {
         throw new OAuthError(`the ${what} is not a URL`);
       }
-      secure(u, `the ${what}`);
+      this.reachable(u, `the ${what}`);
       return u.href;
     };
     const scopes = prm.scopes_supported;
     return {
+      ...(as.authorization_response_iss_parameter_supported === true ? { issRequired: true } : {}),
       issuer,
       authorizationEndpoint: endpoint(as.authorization_endpoint, "authorization endpoint"),
       tokenEndpoint: endpoint(as.token_endpoint, "token endpoint"),
@@ -407,6 +426,23 @@ export class OAuthClientProvider implements AuthHook {
         ? { scope: scopes.join(" ") }
         : {}),
     };
+  }
+
+  /**
+   * Whether a URL the server's metadata led to may be used: HTTPS, and on a host no more local than the server's own.
+   * A remote server cannot point the client at a loopback, private, link-local or unique-local address (a blind GET to
+   * `http://127.0.0.1/admin` otherwise); `http:` is allowed on loopback only, and only when the server is itself
+   * there. Host names are taken as public: what one resolves to is not checked (no DNS here).
+   */
+  private reachable(url: URL, what: string): void {
+    const host = hostClass(url);
+    if (
+      url.protocol !== "https:" &&
+      !(url.protocol === "http:" && host === "loopback" && this.serverHost === "loopback")
+    ) {
+      throw new OAuthError(`${what} must use HTTPS`);
+    }
+    if (rank[host] > rank[this.serverHost]) throw new OAuthError(`${what} is on a local or private address`);
   }
 
   /** RFC 8414 then OpenID Connect discovery, in the spec's order for an issuer with and without a path. */
@@ -477,7 +513,7 @@ export class OAuthClientProvider implements AuthHook {
     init: { method: "GET" | "POST"; headers: Record<string, string>; body?: string; signal?: AbortSignal },
   ): Promise<{ status: number; json: unknown }> {
     let url = new URL(href);
-    secure(url, "an authorization endpoint");
+    this.reachable(url, "an authorization endpoint");
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
     try {
@@ -554,12 +590,64 @@ export function parseChallenge(header: string | null): Challenge {
   return out;
 }
 
-/** `https:`, or `http:` on a loopback host (a local server, a native app's redirect); anything else is refused. */
+/**
+ * `https:`, or `http:` on a loopback host (a local server, a native app's redirect); anything else is refused. For the
+ * caller's own URLs; a URL from a server's metadata goes through `reachable`.
+ */
 function secure(url: URL, what: string): void {
   if (url.protocol === "https:") return;
-  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
-  if (url.protocol === "http:" && loopback) return;
+  if (url.protocol === "http:" && hostClass(url) === "loopback") return;
   throw new OAuthError(`${what} must use HTTPS`);
+}
+
+/** Where a host is, from the most local; a hostname other than `localhost` counts as public. */
+type HostClass = "public" | "private" | "loopback";
+const rank: Record<HostClass, number> = { public: 0, private: 1, loopback: 2 };
+
+/**
+ * A URL's host class. The URL parser has already normalized IPv4 written in hex, octal or as one number to a dotted
+ * quad, and IPv6 to its compressed form (an IPv4-mapped address as two hextets).
+ */
+export function hostClass(url: URL): HostClass {
+  const h = url.hostname.toLowerCase();
+  if (h === "localhost" || h.endsWith(".localhost")) return "loopback";
+  if (h.startsWith("[")) return v6Class(h.slice(1, -1));
+  const q = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  return q ? v4Class(Number(q[1]), Number(q[2])) : "public";
+}
+
+function v4Class(a: number, b: number): HostClass {
+  if (a === 127 || a === 0) return "loopback";
+  if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return "private";
+  if ((a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127)) return "private"; // link-local, shared (CGNAT)
+  return "public";
+}
+
+function v6Class(h: string): HostClass {
+  if (h === "::1" || h === "::") return "loopback";
+  const mapped = /^::ffff:(?:(\d+)\.(\d+)\.\d+\.\d+|([0-9a-f]{1,4}):[0-9a-f]{1,4})$/.exec(h);
+  if (mapped) {
+    if (mapped[1] !== undefined) return v4Class(Number(mapped[1]), Number(mapped[2]));
+    const hi = parseInt(mapped[3]!, 16);
+    return v4Class(hi >> 8, hi & 0xff);
+  }
+  const first = h.startsWith("::") ? 0 : parseInt(h.slice(0, h.indexOf(":")), 16);
+  if ((first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80) return "private"; // unique-local, link-local
+  return "public";
+}
+
+/** `p`, or a rejection when `signal` aborts first: a caller gives up its wait without stopping the shared work. */
+function untilAborted<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (v) => (signal.removeEventListener("abort", onAbort), resolve(v)),
+      (e) => (signal.removeEventListener("abort", onAbort), reject(e)),
+    );
+  });
 }
 
 /** RFC 8707's canonical URI for a server: lower-case scheme and host (the URL parser does both), path, no query. */

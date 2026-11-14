@@ -150,7 +150,8 @@ with `McpError` (`MCP error <code>: <message>`, `.code`, `.data`); a timeout or 
 | An open line's reads (SSE, stdio) | coalesced: reads under 16 KB copied into one doubling buffer | about 2 arrays held, however small the reads |
 | JSON shape | ~1,000 levels, ~1,000,000 values, counted before `JSON.parse` | treated as not JSON |
 | Bad messages on one HTTP reply (or GET connection) | 100, and 1 more per KiB of messages (`limits`) | the reply fails with one error |
-| Server requests on one HTTP reply (or GET connection) | 100, and 10 more a second it stays open (`limits`) | the reply fails |
+| Server requests on one HTTP reply | 100, and 10 more a second it stays open, at most 200 (`limits`) | the reply fails |
+| Server requests on the GET stream | 100, and 10 more a second it has been open, across its reconnects | the stream stops |
 | Resuming a reply (`resume`) | 3 tries, 1 s doubling to 30 s (`retry:` honoured, capped) | the call fails; deadline and cap span every try |
 | GET stream connections (`openServerStream`) | the event and reply caps each; reopened until 3 in a row deliver nothing | stops; a budget failure stops it at once |
 | OAuth responses (`oauth.ts`) | 64 KiB, 10 s each; HTTPS (loopback `http:` only) | the step fails with an `OAuthError` in fixed words |
@@ -158,6 +159,8 @@ with `McpError` (`MCP error <code>: <message>`, `.code`, `.data`); a timeout or 
 | `ping` answers in flight | 16 | further pings dropped until one is sent |
 | Redirects | 5, same origin, 307/308 only | rejected; no header reaches another origin |
 | OAuth redirects | a metadata GET: 3, same origin; a token or registration POST: none | the step fails |
+| OAuth URLs from a server | the `resource_metadata` hint on the server's origin (or `metadataOrigins`); every URL HTTPS and no more local than the server (no loopback, private, link-local or unique-local address for a remote one) | the step fails before any request |
+| Opening the GET stream | each connection's headers within `timeoutMs` | the open fails |
 
 Only the response whose id is the POSTed request's is taken from a reply (a numeric id echoed as a string counts, as
 the SDK accepts); a response on the GET stream is unasked, so dropped and counted. Error messages name the HTTP status
