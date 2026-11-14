@@ -4,7 +4,16 @@ import { join } from "node:path";
 import { CHECK_SYSTEM, readerMessages } from "@eden/engine";
 import { OpenRouterModel, type ChatRequest, type ChatResponse, type Model, type OpenRouterOptions } from "@eden/llm";
 import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "@eden/server";
-import { EVAL_TENANT, fromEnvVia, liveWiring, ORACLE_LABEL, proxyOf, runScenarios, unwiredFlags } from "./run";
+import {
+  EVAL_TENANT,
+  fromEnvVia,
+  liveProblem,
+  liveWiring,
+  ORACLE_LABEL,
+  proxyOf,
+  runScenarios,
+  unwiredFlags,
+} from "./run";
 import type { Scenario } from "./scenario";
 
 const scenario = JSON.parse(
@@ -328,6 +337,51 @@ describe("eval harness: --live wires what ships (D128)", () => {
     // Delivered what the stub run delivers: a failed reading changes nothing the rules deliver.
     const stub = await runScenarios([freeze], { model: null, waitMs: 1_000, reader: "stub", config: READS });
     expect(m.counts).toEqual(stub.counts);
+  });
+
+  test("the shipped default's live calls are the push check's: counted, failures told, reported as pushCheck", async () => {
+    // An OpenRouter 403 on every call (what this sandbox gets for anthropic/* models): before, the eval wired no
+    // `onFailure` for the check and printed no check counters, so a live run read as $0 and no model call at all.
+    const refused = factory({ throws: "openrouter 403: This model is not available in your region." });
+    const live = liveWiring({ judge: false, usdCap: 1, env: KEYED, make: refused.make })!;
+    const told: unknown[] = [];
+    const m = await runScenarios([freeze], {
+      model: null,
+      waitMs: 1_000,
+      readerModel: live.readerModel,
+      spend: live.spend,
+      onCheckFailure: (e) => told.push(e),
+    });
+    const calls = refused.made[0]!.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    for (const c of refused.made[0]!.calls) expect(c.messages[0]!.content).toBe(CHECK_SYSTEM);
+    // The shipped default calls no reader (D237): its pool report says 0, which alone read as "no model call".
+    expect(m.readerPool).toMatchObject({ reader: "live", calls: 0 });
+    expect(m.pushCheck).toMatchObject({ calls, failures: calls, costUsd: 0 });
+    expect(m.pushCheck!.asked).toBeGreaterThanOrEqual(calls);
+    expect(told.length).toBe(calls);
+    // The run fails loudly: every model call failed.
+    expect(liveProblem(m)).toContain(`all ${calls} model calls failed`);
+    // Answered calls: no problem.
+    const ok = factory();
+    const fine = liveWiring({ judge: false, usdCap: 1, env: KEYED, make: ok.make })!;
+    const answered = await runScenarios([freeze], {
+      model: null,
+      waitMs: 1_000,
+      readerModel: fine.readerModel,
+      spend: fine.spend,
+      config: READS,
+    });
+    expect(answered.readerPool!.calls).toBeGreaterThan(0);
+    expect(liveProblem(answered)).toBeNull();
+  });
+
+  test("a live run that attempts no model call is a problem, named as such", () => {
+    const quiet = { modelCallsPerTurn: 0, readerPool: { calls: 0, failures: 0 }, pushCheck: { calls: 0, failures: 0 } };
+    expect(liveProblem(quiet as never)).toContain("no model call");
+    // The judge shape counts its calls per turn only.
+    expect(liveProblem({ modelCallsPerTurn: 0 } as never)).toContain("no model call");
+    expect(liveProblem({ modelCallsPerTurn: 0.5 } as never)).toBeNull();
   });
 
   test("a stub reader and a live one are exclusive", async () => {
