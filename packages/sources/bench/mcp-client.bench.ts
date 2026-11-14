@@ -1,10 +1,11 @@
 /**
- * Eden's MCP client (D1704) against the official SDK's client, on the same server: the SDK's own streamable HTTP
- * server transport under `Bun.serve` in this process, in JSON and in SSE response mode. Each client arm runs in a
- * fresh child process (so its RSS is its own): it connects, warms up, then times `listTools` and `callTool` one after
- * another and reports per-call p50/p99/mean in microseconds, the process RSS and heap after, and how many TCP
- * connections the server saw from it (1 means one keep-alive connection was reused throughout). Arms alternate
- * order each round; the summary is the median over rounds.
+ * Eden's MCP client (D1704, D1840) against the official SDK's client and against itself as D1704 shipped it
+ * (`d1704`, frozen in `bench/mcp-d1704/`), on the same server: the SDK's own streamable HTTP server transport under
+ * `Bun.serve` in this process, in JSON and in SSE response mode. Each client arm runs in a fresh child process (so
+ * its RSS is its own): it connects, warms up, then times `listTools` and `callTool` one after another and reports
+ * per-call p50/p99/mean in microseconds, the process RSS and heap after, and how many TCP connections the server saw
+ * from it (1 means one keep-alive connection was reused throughout). Arms rotate order each round; the summary is the
+ * median over rounds.
  *
  *   bun packages/sources/bench/mcp-client.bench.ts [calls=2000] [rounds=3]
  */
@@ -12,7 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 
-type Arm = "eden" | "sdk";
+type Arm = "eden" | "d1704" | "sdk";
 type Mode = "json" | "sse";
 interface Result {
   arm: Arm;
@@ -55,8 +56,11 @@ async function child(arm: Arm, url: string, calls: number): Promise<void> {
   let list: () => Promise<unknown>;
   let call: () => Promise<unknown>;
   let close: () => Promise<void>;
-  if (arm === "eden") {
-    const { McpClient, StreamableHttpTransport } = await import("../src/mcp");
+  if (arm !== "sdk") {
+    const { McpClient, StreamableHttpTransport } =
+      arm === "eden"
+        ? await import("../src/mcp")
+        : { ...(await import("./mcp-d1704/client")), ...(await import("./mcp-d1704/http")) };
     const c = new McpClient({ name: "bench", version: "0" });
     await c.connect(new StreamableHttpTransport(new URL(url)));
     list = () => c.listTools();
@@ -134,7 +138,8 @@ async function main(calls: number, rounds: number): Promise<void> {
   }
   const results: Result[] = [];
   for (let round = 0; round < rounds; round++) {
-    const arms: Arm[] = round % 2 === 0 ? ["eden", "sdk"] : ["sdk", "eden"];
+    const all: Arm[] = ["eden", "d1704", "sdk"];
+    const arms = all.map((_, i) => all[(i + round) % all.length]!);
     for (const mode of ["json", "sse"] as Mode[]) {
       for (const arm of arms) {
         const before = new Set(portsBySession.keys());
@@ -156,7 +161,7 @@ async function main(calls: number, rounds: number): Promise<void> {
   const keys = ["listP50", "listP99", "listMean", "callP50", "callP99", "callMean", "rssMb", "heapMb", "connections"];
   const summary: Record<string, Record<string, number>> = {};
   for (const mode of ["json", "sse"] as Mode[]) {
-    for (const arm of ["eden", "sdk"] as Arm[]) {
+    for (const arm of ["eden", "d1704", "sdk"] as Arm[]) {
       const rs = results.filter((r) => r.arm === arm && r.mode === mode);
       summary[`${arm}/${mode}`] = Object.fromEntries(
         keys.map((k) => [k, median(rs.map((r) => (r as unknown as Record<string, number>)[k] ?? NaN))]),

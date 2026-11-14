@@ -5,6 +5,7 @@
  * <message>`), a request times out after 60 s by default, an aborted signal sends `notifications/cancelled` and
  * rejects, a closed connection rejects every request in flight and calls `onclose`.
  */
+import { deadlines, type Deadline } from "./deadlines";
 import {
   ErrorCode,
   isRequest,
@@ -121,10 +122,10 @@ export class McpClient {
       const { signal } = options;
       if (signal?.aborted) return reject(signal.reason);
       const id = this.nextId++;
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let deadline: Deadline | undefined;
       const done = () => {
         this.pending.delete(id);
-        clearTimeout(timer);
+        if (deadline) deadlines.cancel(deadline);
         signal?.removeEventListener("abort", onAbort);
       };
       // Given up on our side: the server is told, so it can stop work no one will read.
@@ -147,9 +148,8 @@ export class McpClient {
       });
       signal?.addEventListener("abort", onAbort, { once: true });
       const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-      timer = setTimeout(
-        () => cancel(new McpError(ErrorCode.RequestTimeout, "Request timed out", { timeout: timeoutMs })),
-        timeoutMs,
+      deadline = deadlines.add(timeoutMs, () =>
+        cancel(new McpError(ErrorCode.RequestTimeout, "Request timed out", { timeout: timeoutMs })),
       );
       const message: JsonRpcRequest = { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) };
       transport.send(message).catch((e: unknown) => {
