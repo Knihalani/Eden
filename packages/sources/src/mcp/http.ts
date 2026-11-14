@@ -93,7 +93,7 @@ export const DEFAULT_RESUME: ResumeOptions = { maxRetries: 3, initialDelayMs: 1_
 /** Where a transport gets a bearer token (D1874). `oauth.ts`'s `OAuthClientProvider` is one. */
 export interface AuthHook {
   /** The `Authorization` header for the next request (`Bearer …`), or undefined when there is no token yet. */
-  authorization(signal?: AbortSignal): Promise<string | undefined> | string | undefined;
+  authorization(url: URL, signal?: AbortSignal): Promise<string | undefined> | string | undefined;
   /**
    * Told of a 401 (or a 403 asking for more scope) with its `WWW-Authenticate`; resolves true when a retry may succeed
    * (a token was obtained or refreshed). Called at most once per request.
@@ -226,7 +226,7 @@ export class StreamableHttpTransport implements Transport {
     );
     this.flights.add(flight);
     try {
-      const auth = this.options.auth ? await this.options.auth.authorization(flight.abort.signal) : undefined;
+      const auth = this.options.auth ? await this.options.auth.authorization(this.url, flight.abort.signal) : undefined;
       const res = await this.fetchFn(this.url, {
         method: "DELETE",
         headers: auth ? { ...this.headers, authorization: auth } : this.headers,
@@ -531,7 +531,7 @@ export class StreamableHttpTransport implements Transport {
     const auth = this.options.auth;
     if (!auth) return this.fetchWithinOrigin(method, body, signal, extra);
     for (let retried = false; ; retried = true) {
-      const token = await auth.authorization(signal);
+      const token = await auth.authorization(this.url, signal);
       const res = await this.fetchWithinOrigin(
         method,
         body,
