@@ -17,6 +17,7 @@
  * but the excused values' own characters, by construction, and `never-less.test.ts` checks it against a frozen main.
  */
 import { valueAt } from "./not-secret.ts";
+import { type Iv, maskOf, type Pieces, same, traced, union } from "./pieces.ts";
 import { REDACTED } from "./redact.ts";
 
 type Span = [number, number];
@@ -27,13 +28,13 @@ export interface StructuralPass {
   assignments(text: string): { all: Span[]; strict: Span[] };
   /**
    * The structural pass on `gated` as main ran it: its output, `seen.excusable` set when it took an excused value,
-   * and `masks`: what it removes from `gated` (1: removed), all of it and only what is not an excused value (whose
-   * texts go to `values` when given), worked out from the same run.
+   * and `removed`: what it removes from `gated`, as sorted merged intervals, all of it and only what is not an
+   * excused value (whose texts go to `values` when given), worked out from the same run.
    */
   run(
     gated: string,
     seen: { excusable: boolean },
-  ): { stored: string; masks(values?: string[]): { all: Uint8Array; strict: Uint8Array } };
+  ): { stored: string; removed(values?: string[]): { all: Iv[]; strict: Iv[] } };
 }
 
 /** What `composeMasks` works out: the stored text, and (when asked, or when D1850 changes something) the masks. */
@@ -72,11 +73,20 @@ export function composeMasks(
   const spans = byStart(strict.concat(excused, assigned.all));
   let gated = "";
   let at = 0;
+  /** The gated text's pieces against `text` (pieces.ts): kept runs and sentinels. */
+  const gating: Pieces = [];
   for (const [start, end] of spans) {
     if (end <= at) continue;
-    gated += text.slice(at, Math.max(start, at)) + (start >= at ? REDACTED : "");
+    const kept = Math.max(start, at);
+    if (kept > at) gating.push(gated.length, gated.length + kept - at, at);
+    gated += text.slice(at, kept);
+    if (start >= at) {
+      gating.push(gated.length, gated.length + REDACTED.length, -1);
+      gated += REDACTED;
+    }
     at = end;
   }
+  if (text.length > at) gating.push(gated.length, gated.length + text.length - at, at);
   gated += text.slice(at);
   const seen = { excusable: false };
   const ran = pass.run(gated, seen);
@@ -84,61 +94,33 @@ export function composeMasks(
   const excusing = excused.length > 0 || assigned.all.length !== assigned.strict.length || seen.excusable;
   if (post.length === 0 && !excusing && !explain) return { stored };
 
-  /** Per character of `gated`, its index in `text`, or -1 inside a sentinel (the gating walk again). */
-  const map = new Int32Array(gated.length);
-  let n = 0;
-  at = 0;
-  for (const [start, end] of spans) {
-    if (end <= at) continue;
-    const kept = Math.max(start, at);
-    for (let i = at; i < kept; i++) map[n++] = i;
-    if (start >= at) for (let i = 0; i < REDACTED.length; i++) map[n++] = -1;
-    at = end;
-  }
-  for (let i = at; i < text.length; i++) map[n++] = i;
-  const before = new Uint8Array(text.length);
-  const after = new Uint8Array(text.length);
-  for (const [start, end] of spans) before.fill(1, start, end);
-  for (const [start, end] of strict) after.fill(1, start, end);
-  for (const [start, end] of assigned.strict) after.fill(1, start, end);
+  // What main removed (`before`) and what the gate removes (`after`), as intervals of `text`: the work follows the
+  // number of findings, not the text's length (D1850: masks over every character cost 20 ms a megabyte).
   const values: string[] | undefined = explain ? [] : undefined;
-  const { all, strict: kept } = ran.masks(values);
-  for (let j = 0; j < gated.length; j++) {
-    const i = map[j]!;
-    if (i < 0) continue;
-    if (all[j] === 1) before[i] = 1;
-    if (kept[j] === 1) after[i] = 1;
-  }
-  let excusedChars: Uint8Array | undefined;
+  const removed = ran.removed(values);
+  const all = traced(gating, removed.all);
+  const kept = traced(gating, removed.strict);
+  const before = union(spans, all);
+  const after = union(strict, assigned.strict, kept, post, post.length > 0 ? assigned.strict : []);
+  let masks: Pick<Composed, "before" | "after" | "excused" | "values"> = {};
   if (explain) {
     // Main removed a character only through an excused value when no other reason (above) removes it here.
-    excusedChars = new Uint8Array(text.length);
-    for (const [start, end] of excused) excusedChars.fill(1, start, end);
     const left = assigned.all.filter(([a, b]) => !assigned.strict.some(([c, d]) => a === c && b === d));
-    for (const [start, end] of left) excusedChars.fill(1, start, end);
-    for (let j = 0; j < gated.length; j++) if (all[j] === 1 && kept[j] === 0 && map[j]! >= 0) excusedChars[map[j]!] = 1;
+    const excusedChars = maskOf(union(excused, left), text.length);
+    const keptMask = maskOf(kept, text.length);
+    for (const [s0, e0] of all) for (let i = s0; i < e0; i++) if (keptMask[i] === 0) excusedChars[i] = 1;
     for (const [start, end] of excused) values!.push(valueAt(text, start, end));
     for (const [start, end] of left) values!.push(text.slice(start, end));
+    masks = { before: maskOf(before, text.length), after: maskOf(after, text.length), excused: excusedChars, values };
   }
-  for (const [start, end] of post) after.fill(1, start, end);
-  if (post.length > 0)
-    for (const [start, end] of (main ? assigned : pass.assignments(text)).strict) after.fill(1, start, end);
-  let same = true;
-  for (let i = 0; i < text.length && same; i++) same = before[i] === after[i];
-  if (same) return { stored, before, after, excused: excusedChars, values };
+  if (same(before, after)) return { stored, ...masks };
   let out = "";
   let from = 0;
-  for (let i = 0; i < text.length;) {
-    if (after[i] === 0) {
-      i++;
-      continue;
-    }
-    let j = i;
-    while (j < text.length && after[j] === 1) j++;
-    out += text.slice(from, i) + REDACTED;
-    from = i = j;
+  for (const [start, end] of after) {
+    out += text.slice(from, start) + REDACTED;
+    from = end;
   }
-  return { stored: out + text.slice(from), before, after, excused: excusedChars, values };
+  return { stored: out + text.slice(from), ...masks };
 }
 
 /**

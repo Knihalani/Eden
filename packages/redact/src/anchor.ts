@@ -762,7 +762,8 @@ export class LazyPrefixRegex {
   private listed(found: Occurrences, ids: Int32Array): number {
     let n = 0;
     let lists = 0;
-    for (const id of ids) {
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k]!;
       if (found.head[id]! >= 0) lists++;
       for (let e = found.head[id]!; e >= 0; e = found.next[e]!) {
         if (n === candidates.length) candidates = grow(candidates);
@@ -863,7 +864,7 @@ export function topLevelBranches(source: string): string[] {
 
 /** Whether `found` kept every occurrence of the literals `ids` names. */
 function allKept(found: Occurrences, ids: Int32Array): boolean {
-  for (const id of ids) if (!found.complete(id)) return false;
+  for (let k = 0; k < ids.length; k++) if (!found.complete(ids[k]!)) return false;
   return true;
 }
 
