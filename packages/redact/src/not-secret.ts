@@ -72,6 +72,16 @@ function core(value: string): string {
 /** Whether `value` (a keyword's or an assignment's value, as written) is code or a placeholder, never a secret. */
 export function notSecret(value: string): boolean {
   if (value.length > VALUE_LIMIT * 2) return false;
+  // The last value's verdict: a text dense in assignments repeats one (`token:"token:"…`, 0.3 µs a value otherwise).
+  if (value === lastValue) return lastVerdict;
+  lastValue = value;
+  lastVerdict = judge(value);
+  return lastVerdict;
+}
+let lastValue = "";
+let lastVerdict = false;
+
+function judge(value: string): boolean {
   const v = core(value);
   // One token: a value with a space or a quote inside is prose or more than one value (`'process.env.X"API key: …'`).
   if (v.length === 0 || v.length > VALUE_LIMIT || /[\s"'`]/.test(v)) return false;
