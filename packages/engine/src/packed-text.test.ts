@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache } from "./cache";
 import { termIds } from "./text";
-import { decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
+import { clearDecoded, decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
 
 const scope = { tenantId: "t", userId: "u" };
 const NOW = Date.UTC(2026, 10, 6, 9);
@@ -44,6 +44,17 @@ describe("packItem (packText, D188)", () => {
     const items = Array.from({ length: 600 }, (_, i) => packItem(item(`i${i}`, longText(`n${i}`))));
     for (let round = 0; round < 2; round++) {
       for (let i = items.length - 1; i >= 0; i--) expect(items[i]!.text).toBe(longText(`n${i}`));
+    }
+  });
+
+  test("a fresh copy's text is in the decode memo, equal to the text packed, Latin-1 and not (D1913)", () => {
+    for (const text of [longText("x").replace(/[^\x00-\xff]/g, "-"), longText("y")]) {
+      clearDecoded();
+      const packed = packItem(item("fresh", text));
+      expect(isPacked(packed)).toBe(true);
+      expect(decodedCount()).toBe(1);
+      expect(packed.text).toBe(text);
+      expect(packedOf(packed)!.latin1).toBe(!/[^\x00-\xff]/.test(text));
     }
   });
 });

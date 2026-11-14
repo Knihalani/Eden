@@ -46,10 +46,16 @@ function unpack(held: string, latin1: boolean): string {
   const text = latin1
     ? Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("latin1")
     : decoder.decode(raw);
+  remember(held, latin1, text);
+  return text;
+}
+
+/** Notes `held`'s decoded text in the memo. */
+function remember(held: string, latin1: boolean, text: string): void {
+  const memo = decoded[latin1 ? 1 : 0];
   // First in, first out: a hit is not moved up, which keeps the memo's own cost off the many hits.
   if (memo.size >= MEMO_ITEMS) memo.delete(memo.keys().next().value as string);
   memo.set(held, text);
-  return text;
 }
 
 /** Shared by every packed item, so each holds only its bytes; one for each way its text was encoded. */
@@ -92,8 +98,13 @@ export function packItem(item: ContextItem): ContextItem {
   const bytes = Bun.deflateSync(plain);
   if (bytes.byteLength > (latin1 ? text.length : text.length * 2) * 0.8) return item;
   const { text: _, ...rest } = item;
-  Object.defineProperty(rest, PACKED, { value: heldOf(bytes), enumerable: false });
+  const held = heldOf(bytes);
+  Object.defineProperty(rest, PACKED, { value: held, enumerable: false });
   Object.defineProperty(rest, "text", latin1 ? LATIN1_TEXT : UTF8_TEXT);
+  // The text these bytes decode to is in hand: the sync's `onStored` reads every copy just stored (its mentions), and
+  // would otherwise inflate each straight back (D1913). The same entry a first decode would make, so a hit is still
+  // this copy's own text.
+  remember(held, latin1, text);
   return rest as ContextItem;
 }
 
