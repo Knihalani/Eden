@@ -595,3 +595,69 @@ function scan(value: unknown, w: Walk, depth: number, hit: (s: string) => boolea
     w.path.delete(value);
   }
 }
+
+/**
+ * D1850: which characters of `s` the structural pass (`redactAssignments(redactTokensIn(s, passes))`) takes out, as a
+ * mask over `s` (1: removed). The passes run as they do there, each on the last one's output, with each character
+ * of that output traced back to `s` (a sentinel's characters to none). The secret gate uses it to add its D1850
+ * rules' spans to what the passes removed without letting them change what the passes see (`sanitizeForStore`).
+ */
+export function structuralMask(s: string, passes: number): Uint8Array {
+  const removed = new Uint8Array(s.length);
+  let cur = s;
+  /** Per character of `cur`, its index in `s`, or -1 inside a sentinel. */
+  let map = new Int32Array(s.length);
+  for (let i = 0; i < map.length; i++) map[i] = i;
+  /** Replaces `ranges` of `cur` (increasing, apart) by the sentinel, marking what they held as removed. */
+  const replace = (ranges: [number, number][]) => {
+    if (ranges.length === 0) return;
+    let out = "";
+    const next = new Int32Array(cur.length + ranges.length * REDACTED.length);
+    let n = 0;
+    let at = 0;
+    for (const [start, end] of ranges) {
+      out += cur.slice(at, start) + REDACTED;
+      for (let i = at; i < start; i++) next[n++] = map[i]!;
+      for (let i = start; i < end; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+      for (let i = 0; i < REDACTED.length; i++) next[n++] = -1;
+      at = end;
+    }
+    out += cur.slice(at);
+    for (let i = at; i < cur.length; i++) next[n++] = map[i]!;
+    cur = out;
+    map = next.subarray(0, n);
+  };
+  const matches = (regex: RegExp, keep: (m: RegExpExecArray) => boolean): [number, number][] => {
+    const out: [number, number][] = [];
+    regex.lastIndex = 0;
+    for (const m of cur.matchAll(regex)) if (keep(m)) out.push([m.index, m.index + m[0].length]);
+    return out;
+  };
+  if ((passes & 1) !== 0 && cur.indexOf("-----") >= 0) {
+    // redactPem's walk: each banner to the END line after it, or alone once no END is left.
+    const ranges: [number, number][] = [];
+    PEM_BEGIN.lastIndex = 0;
+    let endsLeft = true;
+    for (let m = PEM_BEGIN.exec(cur); m !== null; m = PEM_BEGIN.exec(cur)) {
+      let stop = m.index + m[0].length;
+      if (endsLeft) {
+        PEM_END.lastIndex = stop;
+        const e = PEM_END.exec(cur);
+        if (e === null) endsLeft = false;
+        else stop = e.index + e[0].length;
+      }
+      ranges.push([m.index, stop]);
+      PEM_BEGIN.lastIndex = stop;
+    }
+    replace(ranges);
+  }
+  if ((passes & 2) !== 0) replace(matches(SK_DASHED, (m) => DIGIT.test(m[0])));
+  if ((passes & 4) !== 0) replace(matches(BASIC_AUTH, (m) => isBasicCredential(m[1]!)));
+  if ((passes & 8) !== 0) replace(matches(SECRET_INLINE, () => true));
+  // The assignment pass, last: only what it removes is wanted, not its output.
+  scanAssignments(cur, (_keyEnd, valueStart, valueEnd) => {
+    if (valueEnd - valueStart === REDACTED.length && cur.startsWith(REDACTED, valueStart)) return;
+    for (let i = valueStart; i < valueEnd; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+  });
+  return removed;
+}
