@@ -14,6 +14,12 @@ export interface ChatMessage {
    * request, the hour when any marked message asks it. On a system message it asks the hour for that breakpoint.
    */
   cacheTtl?: "1h";
+  /**
+   * Never a breakpoint on this message, not even the one `OpenRouterModel` puts on the last system message by default:
+   * sent plain (D1810: the push check's instructions on a box too quiet for a five-minute write to pay). A request
+   * left with no breakpoint at all is sent as one with caching off. The lab's `AnthropicModel` ignores it.
+   */
+  noCache?: true;
 }
 
 export interface ChatRequest {

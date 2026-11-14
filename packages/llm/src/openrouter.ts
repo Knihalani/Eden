@@ -334,8 +334,11 @@ function asksHour(messages: ChatMessage[]): boolean {
 /**
  * The messages that carry a breakpoint at a level (`anthropicCacheMessages`' rules; at 0 none). At level 1 a message
  * that asks for an hour loses its breakpoint (at five minutes a user's sheet costs more than plain, D1197), except the
- * last system message, which keeps its breakpoint at five minutes (the fixed instructions, D1800). A 400 to a request
- * that had none is not about caching and is never retried.
+ * last system message, which keeps its breakpoint at five minutes (the fixed instructions, D1800). A message marked
+ * `noCache` never carries one, the last system message included (D1810: its default breakpoint is dropped, and no
+ * earlier system message takes its place, so no other prefix is written). A request left with none at a level is
+ * sent as at level 0, byte for byte: a 400 to it is not about caching and is never retried, it moves no refusal count
+ * (`noteLevel`) and the read watch never counts it (`chat`).
  */
 function breakpoints(messages: ChatMessage[], level: CacheLevel): Set<number> {
   if (level === 0) return new Set();
@@ -344,9 +347,9 @@ function breakpoints(messages: ChatMessage[], level: CacheLevel): Set<number> {
   messages.forEach((m, i) => {
     if (m.role === "system" && filled(m)) lastSystem = i;
   });
-  const marked = new Set<number>(lastSystem >= 0 ? [lastSystem] : []);
+  const marked = new Set<number>(lastSystem >= 0 && !messages[lastSystem]!.noCache ? [lastSystem] : []);
   for (let i = messages.length - 1; i >= 0 && marked.size < MAX_BREAKPOINTS; i--) {
-    if (messages[i]!.cache && filled(messages[i]!)) marked.add(i);
+    if (messages[i]!.cache && !messages[i]!.noCache && filled(messages[i]!)) marked.add(i);
   }
   if (level === 1) for (const i of marked) if (messages[i]!.cacheTtl === "1h" && i !== lastSystem) marked.delete(i);
   return marked;

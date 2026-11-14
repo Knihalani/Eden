@@ -802,3 +802,99 @@ describe("OpenRouterModel's TTLs and refusals (D1800)", () => {
     expect(haiku.cacheLevel).toBe(0);
   });
 });
+
+// D1810: the instructions sent with no breakpoint (`noCache`): the bytes are the plain route's, a request left with no
+// breakpoint is neither retried on a 400 nor counted by the refusals or the read watch, and a marked sheet after plain
+// instructions is the request's first and only breakpoint.
+describe("OpenRouterModel with no breakpoint on the instructions (D1810)", () => {
+  const LONG = "x".repeat(minCacheTokens("anthropic/claude-haiku-5.5") * 4 + 400);
+  const route = (status: (body: any) => number = () => 200) => {
+    const sent: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      sent.push(body);
+      const code = status(body);
+      if (code !== 200) return new Response('{"error":"bad request"}', { status: code });
+      return Response.json({
+        choices: [{ message: { content: "ok" } }],
+        usage: { prompt_tokens: 900, prompt_tokens_details: { cached_tokens: 0 } },
+      });
+    }) as unknown as typeof fetch;
+    return { sent, fake };
+  };
+  const model = (fake: typeof fetch, now: () => number = () => 0, anthropicCache = true) =>
+    new OpenRouterModel({ apiKey: "k", model: "anthropic/claude-haiku-5.5", fetch: fake, anthropicCache, now });
+  const plainSys = { role: "system" as const, content: LONG, noCache: true as const };
+  const sheet = { role: "user" as const, content: "sheet", cache: true, cacheTtl: "1h" as const };
+  const ask = { role: "user" as const, content: "the request" };
+  const control = (body: any) =>
+    body.messages.map((m: any) => (Array.isArray(m.content) ? m.content[0].cache_control : null));
+
+  test("the body is byte for byte the uncached route's, and the text the same as with the breakpoint", async () => {
+    const a = route();
+    const b = route();
+    await model(a.fake).chat({ messages: [plainSys, ask], maxTokens: 5 });
+    await model(b.fake, undefined, false).chat({ messages: [{ role: "system", content: LONG }, ask], maxTokens: 5 });
+    expect(JSON.stringify(a.sent[0])).toBe(JSON.stringify(b.sent[0]));
+    const c = route();
+    await model(c.fake).chat({ messages: [{ role: "system", content: LONG }, ask], maxTokens: 5 });
+    const texts = (body: any) =>
+      body.messages.map((x: any) => [x.role, typeof x.content === "string" ? x.content : x.content[0].text]);
+    expect(texts(a.sent[0])).toEqual(texts(c.sent[0]));
+    expect(control(c.sent[0])[0]).toEqual({ type: "ephemeral" });
+  });
+
+  test("a 400 to a request with no breakpoint is not retried and lowers nothing", async () => {
+    const { sent, fake } = route(() => 400);
+    const m = model(fake);
+    for (const _ of [1, 2, 3]) await expect(m.chat({ messages: [plainSys, ask], maxTokens: 5 })).rejects.toThrow("400");
+    expect(sent.length).toBe(3);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("calls with no breakpoint never count towards the read watch, nor reset it", async () => {
+    const { fake } = route();
+    let now = 0;
+    const m = model(fake, () => now);
+    const marked = { role: "system" as const, content: LONG };
+    await m.chat({ messages: [marked, ask], maxTokens: 5 });
+    now += 60_000;
+    await m.chat({ messages: [marked, ask], maxTokens: 5 });
+    expect(m.readsMissed).toBe(1);
+    for (let i = 0; i < CACHE_TRIP_CALLS * 2; i++, now += 60_000) {
+      const res = await m.chat({ messages: [plainSys, ask], maxTokens: 5 });
+      expect(res.cacheBreakpoints).toBeUndefined();
+    }
+    expect(m.readsMissed).toBe(1);
+    expect(m.cacheLevel).toBe(2);
+  });
+
+  test("plain instructions and a marked sheet: the sheet alone, at the hour, is the first breakpoint", async () => {
+    const { sent, fake } = route();
+    const res = await model(fake).chat({ messages: [plainSys, sheet, ask], maxTokens: 5 });
+    expect(control(sent[0])).toEqual([null, { type: "ephemeral", ttl: "1h" }, null]);
+    expect(res.cacheBreakpoints).toBe(1);
+  });
+
+  test("a refused hour on that request is sent again with none, and two such lower the model to level 1", async () => {
+    const hour = (body: any) => (JSON.stringify(body.messages).includes('"ttl":"1h"') ? 400 : 200);
+    const { sent, fake } = route(hour);
+    const m = model(fake);
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await m.chat({ messages: [plainSys, sheet, ask], maxTokens: 5 });
+      expect(sent.length).toBe(2);
+      expect(control(sent[1])).toEqual([null, null, null]);
+      expect(m.cacheLevel).toBe(2);
+      await m.chat({ messages: [plainSys, sheet, ask], maxTokens: 5 });
+      expect(m.cacheLevel).toBe(1);
+      // At level 1 the request has no breakpoint left: sent once, plain.
+      await m.chat({ messages: [plainSys, sheet, ask], maxTokens: 5 });
+      expect(sent.length).toBe(5);
+      expect(control(sent[4])).toEqual([null, null, null]);
+    } finally {
+      console.warn = warn;
+    }
+  });
+});

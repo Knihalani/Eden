@@ -202,31 +202,80 @@ describe("PushChecker follows the policy per user (D1800)", () => {
   });
 });
 
-describe("SystemTtlPolicy: the instructions' TTL under a plain sheet (D1800)", () => {
-  const notes = (p: SystemTtlPolicy, tenant: string, n: number, gapMin: number, start = T0) => {
-    for (let i = 0; i < n; i++) p.note(tenant, start + i * gapMin * MIN);
+describe("SystemTtlPolicy: the instructions' TTL under a plain sheet (D1800, D1810)", () => {
+  const notes = (p: SystemTtlPolicy, tenant: string, n: number, gapMin: number, start = T0, marked = false) => {
+    for (let i = 0; i < n; i++) p.note(tenant, start + i * gapMin * MIN, marked);
   };
 
-  test("a tenant whose checks come minutes apart gets the hour; one whose checks are hours apart, five minutes", () => {
+  test("checks minutes apart get the hour; a minute or two apart, five minutes; hours apart, none (D1810)", () => {
     const p = new SystemTtlPolicy();
-    expect(p.hour("busy", T0)).toBe(false);
+    expect(p.ttl("busy", T0)).toBe("5m");
     notes(p, "busy", 2, 10);
-    expect(p.hour("busy", T0)).toBe(true);
-    notes(p, "quiet", 20, 120);
-    expect(p.hour("quiet", T0)).toBe(false);
+    expect(p.ttl("busy", T0)).toBe("1h");
     // Checks a minute or two apart read either TTL: no reason to pay the hour's write, and none against it.
     notes(p, "constant", 20, 1);
-    expect(p.hour("constant", T0)).toBe(false);
+    expect(p.ttl("constant", T0)).toBe("5m");
+    // Hours apart: every breakpoint would write (1.25 or 2.0) where plain is 1.0.
+    notes(p, "quiet", 20, 120);
+    expect(p.ttl("quiet", T0)).toBe("none");
+    // D1800's rule (the lab's switch) never sends none: five minutes there.
+    const d1800 = new SystemTtlPolicy(undefined, undefined, false);
+    notes(d1800, "quiet", 20, 120);
+    expect(d1800.ttl("quiet", T0)).toBe("5m");
+  });
+
+  test("a new tenant starts at five minutes (D1790's shape), and one check alone decides nothing", () => {
+    const p = new SystemTtlPolicy();
+    expect(p.ttl("t", T0)).toBe("5m");
+    p.note("t", T0);
+    expect(p.ttl("t", T0)).toBe("5m");
+  });
+
+  test("none is priced as a write where a marked sheet follows a plain check within the hour", () => {
+    // Plain then marked, ten minutes apart, every ~day: with the hour, the marked check reads the instructions the
+    // plain one wrote; with none it writes them. Pricing none at 1.0 there would choose it wrongly.
+    const p = new SystemTtlPolicy();
+    for (let d = 0; d < 40; d++) {
+      p.note("t", T0 + d * 1_440 * MIN, false);
+      p.note("t", T0 + (d * 1_440 + 10) * MIN, true);
+    }
+    expect(p.ttl("t", T0)).toBe("1h");
+  });
+
+  test("near the line it holds its choice rather than flip at every check (PLAIN_MARGIN)", () => {
+    // Two checks ten minutes apart a day: the hour's mean is about 1.05, none's 1.0: within the margin, so the
+    // tenant keeps the hour at both checks of a day rather than none before the short gap and the hour before the long.
+    const p = new SystemTtlPolicy();
+    const seen: string[] = [];
+    for (let d = 0; d < 60; d++) {
+      for (const off of [0, 10]) {
+        const now = T0 + (d * 1_440 + off) * MIN;
+        if (d >= 20) seen.push(p.ttl("t", now));
+        p.note("t", now);
+      }
+    }
+    expect(new Set(seen)).toEqual(new Set(["1h"]));
+    // Once none is chosen, a tenant whose gaps shorten a little does not flip back at once either.
+    const q = new SystemTtlPolicy();
+    notes(q, "t", 40, 120);
+    expect(q.ttl("t", T0)).toBe("none");
+    q.note("t", T0 + 40 * 120 * MIN + 10 * MIN);
+    expect(q.ttl("t", T0)).toBe("none");
   });
 
   test("isolation: per tenant; bounded, least recently checked first", () => {
     const p = new SystemTtlPolicy(2);
-    notes(p, "a", 3, 10);
-    expect(p.hour("b", T0)).toBe(false);
-    notes(p, "b", 1, 10);
+    notes(p, "a", 20, 120);
+    expect(p.ttl("a", T0)).toBe("none");
+    expect(p.ttl("b", T0)).toBe("5m");
+    notes(p, "b", 3, 10);
+    expect(p.ttl("b", T0)).toBe("1h");
+    expect(p.ttl("a", T0)).toBe("none");
     notes(p, "c", 1, 10);
     expect(p.size).toBe(2);
-    expect(p.hour("a", T0)).toBe(false);
+    // "a" was dropped: it starts again at five minutes.
+    expect(p.ttl("a", T0)).toBe("5m");
+    expect(p.ttl("b", T0)).toBe("1h");
   });
 
   test("PushChecker asks the hour for the instructions alone, for a tenant whose checks come often", async () => {
@@ -245,11 +294,35 @@ describe("SystemTtlPolicy: the instructions' TTL under a plain sheet (D1800)", (
     expect(new Set(model.calls.map((c) => c.messages[0]!.content)).size).toBe(1);
   });
 
-  test("checkMessages with and without the instructions' hour: the same roles and text", () => {
-    const on = checkMessages(INPUT, { sheetCache: false, systemHour: true });
-    const off = checkMessages(INPUT, { sheetCache: false });
-    expect(on.map((m) => [m.role, m.content])).toEqual(off.map((m) => [m.role, m.content]));
-    expect(on[0]).toMatchObject({ cache: true, cacheTtl: "1h" });
-    expect(off[0]!.cacheTtl).toBeUndefined();
+  test("PushChecker sends the instructions plain for a tenant whose checks are hours apart, its neighbour not", async () => {
+    const model = new FakeModel(() => '{"items":[]}');
+    let now = T0;
+    const checker = new PushChecker({ model, budget: new Budget(), now: () => now });
+    const plain = { ...INPUT, sheet: [] };
+    const signal = new AbortController().signal;
+    for (let i = 0; i < 20; i++, now += 120 * MIN)
+      await checker.check({ tenantId: "q", userId: "u" }, "s", plain, signal);
+    const last = model.calls.at(-1)!.messages[0]!;
+    expect(last.noCache).toBe(true);
+    expect(last.cache).toBeUndefined();
+    // Another tenant on the same checker starts at five minutes: no breakpoint field set, none dropped.
+    await checker.check({ tenantId: "b", userId: "u" }, "s2", plain, signal);
+    expect(model.calls.at(-1)!.messages[0]!.noCache).toBeUndefined();
+    expect(new Set(model.calls.map((c) => c.messages[0]!.content)).size).toBe(1);
+  });
+
+  test("checkMessages under each TTL: the same roles and text, only the cache fields differ", () => {
+    const sheetPlain = (systemTtl: "1h" | "5m" | "none") => checkMessages(INPUT, { sheetCache: false, systemTtl });
+    const five = sheetPlain("5m");
+    for (const ttl of ["1h", "none"] as const) {
+      expect(sheetPlain(ttl).map((m) => [m.role, m.content])).toEqual(five.map((m) => [m.role, m.content]));
+    }
+    expect(checkMessages(INPUT, { sheetCache: false }).map((m) => [m.role, m.content])).toEqual(
+      five.map((m) => [m.role, m.content]),
+    );
+    expect(sheetPlain("1h")[0]).toMatchObject({ cache: true, cacheTtl: "1h" });
+    expect(sheetPlain("none")[0]).toEqual({ role: "system", content: five[0]!.content, noCache: true });
+    expect(five[0]).toEqual({ role: "system", content: five[0]!.content });
+    expect(sheetPlain("none").slice(1)).toEqual(five.slice(1));
   });
 });
