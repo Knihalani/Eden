@@ -140,24 +140,24 @@ with `McpError` (`MCP error <code>: <message>`, `.code`, `.data`); a timeout or 
 
 ## Bounds
 
-| Bound                                                 | Default                                                                  | What happens past it                                   |
-| ----------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------ |
-| Request timeout (client)                              | 60 s, or `timeoutMs` / `signal`                                          | rejected, `notifications/cancelled` sent, its POST cut |
-| POST deadline (HTTP)                                  | 60 s (`timeoutMs`), reply body included                                  | the fetch and the body read are aborted                |
-| Reply size (HTTP)                                     | 16 MiB (`maxResponseBytes`); 4 MiB for a listing                         | the read is cancelled, the call rejected               |
-| One SSE line or event                                 | 4 MiB                                                                    | the read is cancelled, the call rejected               |
-| One stdio line                                        | 16 MiB (`maxLineBytes`)                                                  | the line is dropped whole, never held past the cap     |
-| An open line's reads (SSE, stdio)                     | coalesced: reads under 16 KB copied into one doubling buffer             | about 2 arrays held, however small the reads           |
-| JSON shape                                            | ~1,000 levels, ~1,000,000 values, counted before `JSON.parse`            | treated as not JSON                                    |
-| Bad messages on one HTTP reply (or GET connection)    | 100, and 1 more per KiB of messages (`limits`)                           | the reply fails with one error                         |
-| Server requests on one HTTP reply (or GET connection) | 100, and 10 more a second it stays open (`limits`)                       | the reply fails                                        |
-| Resuming a reply (`resume`)                           | 3 tries, 1 s doubling to 30 s (`retry:` honoured, capped)                | the call fails; deadline and cap span every try        |
-| GET stream connections (`openServerStream`)           | the event and reply caps each; reopened until 3 in a row deliver nothing | stops; a budget failure stops it at once               |
-| OAuth responses (`oauth.ts`)                          | 64 KiB, 10 s each; HTTPS (loopback `http:` only)                         | the step fails with an `OAuthError` in fixed words     |
-| Bad stdio lines reported                              | 100                                                                      | dropped unreported                                     |
-| `ping` answers in flight                              | 16                                                                       | further pings dropped until one is sent                |
-| Redirects                                             | 5, same origin, 307/308 only                                             | rejected; no header reaches another origin             |
-| OAuth redirects                                       | a metadata GET: 3, same origin; a token or registration POST: none       | the step fails                                         |
+| Bound | Default | What happens past it |
+|---|---|---|
+| Request timeout (client) | 60 s, or `timeoutMs` / `signal` | rejected, `notifications/cancelled` sent, its POST cut |
+| POST deadline (HTTP) | 60 s (`timeoutMs`), reply body included | the fetch and the body read are aborted |
+| Reply size (HTTP) | 16 MiB (`maxResponseBytes`); 4 MiB for a listing | the read is cancelled, the call rejected |
+| One SSE line or event | 4 MiB | the read is cancelled, the call rejected |
+| One stdio line | 16 MiB (`maxLineBytes`) | the line is dropped whole, never held past the cap |
+| An open line's reads (SSE, stdio) | coalesced: reads under 16 KB copied into one doubling buffer | about 2 arrays held, however small the reads |
+| JSON shape | ~1,000 levels, ~1,000,000 values, counted before `JSON.parse` | treated as not JSON |
+| Bad messages on one HTTP reply (or GET connection) | 100, and 1 more per KiB of messages (`limits`) | the reply fails with one error |
+| Server requests on one HTTP reply (or GET connection) | 100, and 10 more a second it stays open (`limits`) | the reply fails |
+| Resuming a reply (`resume`) | 3 tries, 1 s doubling to 30 s (`retry:` honoured, capped) | the call fails; deadline and cap span every try |
+| GET stream connections (`openServerStream`) | the event and reply caps each; reopened until 3 in a row deliver nothing | stops; a budget failure stops it at once |
+| OAuth responses (`oauth.ts`) | 64 KiB, 10 s each; HTTPS (loopback `http:` only) | the step fails with an `OAuthError` in fixed words |
+| Bad stdio lines reported | 100 | dropped unreported |
+| `ping` answers in flight | 16 | further pings dropped until one is sent |
+| Redirects | 5, same origin, 307/308 only | rejected; no header reaches another origin |
+| OAuth redirects | a metadata GET: 3, same origin; a token or registration POST: none | the step fails |
 
 Only the response whose id is the POSTed request's is taken from a reply (a numeric id echoed as a string counts, as
 the SDK accepts); a response on the GET stream is unasked, so dropped and counted. Error messages name the HTTP status
@@ -234,17 +234,17 @@ On Node (checked on 22.22), use a bundle: `bun build mcp/index.ts mcp/stdio.ts m
 
 ## Files
 
-| File           | Owns                                                                                                                       |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`     | The core's exports: the client, the HTTP transport, the types                                                              |
-| `types.ts`     | JSON-RPC and MCP types, `Transport`, `asMessage` (a parsed value as a message, or null), `McpError`, versions              |
-| `client.ts`    | `McpClient`, `setRequestHandler`                                                                                           |
-| `http.ts`      | `StreamableHttpTransport`, `StreamableHttpError`, the caps and budgets, `resume`, `openServerStream`, the `AuthHook`       |
-| `sse.ts`       | `SseParser`: one pass over bytes, bounded, never throws                                                                    |
-| `pieces.ts`    | `Pieces`: an open line's bytes between reads, coalesced so tiny reads do not each hold an array                            |
-| `json.ts`      | `parseJsonBytes`, `parseJsonText`: the shape check, then `JSON.parse`; long plain strings spliced out of the parse (D1870) |
-| `shape.ts`     | The shape check (vendored from Eden's `@eden/protocol`, kept equal by `shape.test.ts`), and its string form                |
-| `deadlines.ts` | Every request's and POST's deadline on one timer                                                                           |
-| `stdio.ts`     | `StdioClientTransport` (opt-in entry point)                                                                                |
-| `extras.ts`    | Resources and prompts (opt-in entry point)                                                                                 |
-| `oauth.ts`     | `OAuthClientProvider`, `MemoryTokenStore`, `parseChallenge`: the authorization flow (opt-in entry point, D1874)            |
+| File | Owns |
+|---|---|
+| `index.ts` | The core's exports: the client, the HTTP transport, the types |
+| `types.ts` | JSON-RPC and MCP types, `Transport`, `asMessage` (a parsed value as a message, or null), `McpError`, versions |
+| `client.ts` | `McpClient`, `setRequestHandler` |
+| `http.ts` | `StreamableHttpTransport`, `StreamableHttpError`, the caps and budgets, `resume`, `openServerStream`, the `AuthHook` |
+| `sse.ts` | `SseParser`: one pass over bytes, bounded, never throws |
+| `pieces.ts` | `Pieces`: an open line's bytes between reads, coalesced so tiny reads do not each hold an array |
+| `json.ts` | `parseJsonBytes`, `parseJsonText`: the shape check, then `JSON.parse`; long plain strings spliced out of the parse (D1870) |
+| `shape.ts` | The shape check (vendored from Eden's `@eden/protocol`, kept equal by `shape.test.ts`), and its string form |
+| `deadlines.ts` | Every request's and POST's deadline on one timer |
+| `stdio.ts` | `StdioClientTransport` (opt-in entry point) |
+| `extras.ts` | Resources and prompts (opt-in entry point) |
+| `oauth.ts` | `OAuthClientProvider`, `MemoryTokenStore`, `parseChallenge`: the authorization flow (opt-in entry point, D1874) |
