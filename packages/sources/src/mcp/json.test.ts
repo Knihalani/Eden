@@ -103,7 +103,7 @@ describe("parseJsonText", () => {
   });
 
   test("a long plain value is a slice of the reply, not a copy: JSC shows it as a substring of it", async () => {
-    const { describe: jsc } = await import("bun:jsc");
+    const { jscDescribe: jsc } = await import("bun:jsc");
     const text = `{"result":{"content":[{"type":"text","text":"${"x".repeat(LONG_STRING * 2)}"}]},"id":1}`;
     const value = parseJsonText(text) as { result: { content: { text: string }[] } };
     expect(jsc(value.result.content[0]!.text)).toStartWith("String (rope)");
