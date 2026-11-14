@@ -19,6 +19,27 @@ export function isStopword(term: string): boolean {
   return STOPWORDS.has(term);
 }
 
+/** One code unit of `[\p{L}\p{N}]`: read alone, a unit outside the surrogates is the code point it is. */
+const WORD_CHAR = /^[\p{L}\p{N}]$/u;
+
+/**
+ * Per code unit, whether it is a letter or a number (`\p{L}`, `\p{N}`): 1 it is, 2 it is not, 0 not read yet (or a
+ * surrogate, never read). Filled as units are met (`readWordUnit`), once a process: content-free. Scans that read
+ * words by code unit (`render.ts`'s `wordsIn`, `sketchTerms`) test `WORD_UNITS[c]` and call `readWordUnit` on a 0.
+ */
+export const WORD_UNITS = new Uint8Array(0x10000);
+
+/**
+ * The class of code unit `c` (`WORD_UNITS`), read and kept; 0 for a surrogate, whose pair a regex with the `u` flag
+ * reads as one code point: the caller then reads the string by its regex instead.
+ */
+export function readWordUnit(c: number): number {
+  if (c >= 0xd800 && c <= 0xdfff) return 0;
+  const k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
+  WORD_UNITS[c] = k;
+  return k;
+}
+
 let scratch = new Uint32Array(1_024);
 
 /**
@@ -100,8 +121,33 @@ const CALENDAR = new Set(
   ).split(" "),
 );
 
-/** A capitalised word is a date: `Sunday`, `Sundays`, `Sunday's`, `Sunday-morning`, `SUNDAY`. */
-const isCalendar = (word: string) =>
+/**
+ * A capitalised word is a date: `Sunday`, `Sundays`, `Sunday's`, `Sunday-morning`, `SUNDAY`. Read by code unit
+ * (D1886): the part before a hyphen, or the word less a possessive and a weekday's plural "s", then one look-up. Two
+ * replaces and a split a word were a fifth of the sync's mention reading. `isCalendarByPattern` is the reading before.
+ */
+export function isCalendar(word: string): boolean {
+  let end = word.indexOf("-");
+  // A hyphen's head is the word's start whatever its end says: the two endings below hold no hyphen.
+  if (end < 0) {
+    end = word.length;
+    // /['’]s$/i: an apostrophe and an "s" either case (an `i` regex with no `u` flag folds ASCII letters only).
+    if (end >= 2 && (word.charCodeAt(end - 1) | 32) === 115) {
+      const q = word.charCodeAt(end - 2);
+      if (q === 39 || q === 0x2019) end -= 2;
+    }
+    // /(?<=day)s$/i on what is left: "Sundays".
+    if (end >= 4 && (word.charCodeAt(end - 1) | 32) === 115 && (word.charCodeAt(end - 2) | 32) === 121) {
+      if ((word.charCodeAt(end - 3) | 32) === 97 && (word.charCodeAt(end - 4) | 32) === 100) end -= 1;
+    }
+  }
+  // Every name in `CALENDAR` is 3 to 9 letters, and lower-casing never shortens a string.
+  if (end < 3 || end > 9) return false;
+  return CALENDAR.has(word.slice(0, end).toLowerCase());
+}
+
+/** `isCalendar` as it read before D1886, for its differential test. */
+export const isCalendarByPattern = (word: string) =>
   CALENDAR.has(
     word
       .replace(/['’]s$/i, "")
@@ -121,11 +167,16 @@ export function extractTypedEntities(text: string): Entity[] {
     const v = s?.trim();
     if (v && v.length > 1 && v.length <= 80 && !found.has(v)) found.set(v, { text: v, kind });
   };
-  for (const m of text.matchAll(/[\w.+-]+@[\w-]+\.[\w.-]+/g)) add(m[0], "email");
-  for (const m of text.matchAll(/(?:^|\s)@([A-Za-z0-9_][\w.-]{1,40})/g)) add(m[1], "handle");
-  for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b/g)) add(m[0], "id");
-  for (const m of text.matchAll(/https?:\/\/[^\s)>\]]+/g)) add(m[0], "url");
-  for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
+  // Each pattern runs only where the text holds the character it cannot match without (D1886): an "@", a hyphen, a
+  // link's "//", a quotation mark.
+  const at = text.includes("@");
+  if (at) for (const m of text.matchAll(/[\w.+-]+@[\w-]+\.[\w.-]+/g)) add(m[0], "email");
+  if (at) for (const m of text.matchAll(/(?:^|\s)@([A-Za-z0-9_][\w.-]{1,40})/g)) add(m[1], "handle");
+  if (text.includes("-")) for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b/g)) add(m[0], "id");
+  if (text.includes("://")) for (const m of text.matchAll(/https?:\/\/[^\s)>\]]+/g)) add(m[0], "url");
+  if (text.includes('"') || text.includes("“")) {
+    for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
+  }
   // Capitalised runs. A run that starts a sentence counts only if it has two or more words.
   // Any capital letter starts a word, not only ASCII ones: "Łukasz", "Émile", "Ögmundur".
   for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:\p{Lu}[\p{L}&'-]+)(?:\s+\p{Lu}[\p{L}&'-]+)*)/gu)) {
