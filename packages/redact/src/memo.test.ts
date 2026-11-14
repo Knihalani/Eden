@@ -19,6 +19,10 @@ const rand = (n: number, seed: number) => {
 };
 
 describe("memos last one call", () => {
+  // How the gate's call sites use a memo.
+  const get = (last: Last<number>, key: string, compute: (key: string) => number) =>
+    last.has(key) ? last.value! : last.set(key, compute(key));
+
   test("a memo answers inside an entry point, and holds nothing once it returns", () => {
     const last = new Last<number>();
     let computed = 0;
@@ -26,13 +30,13 @@ describe("memos last one call", () => {
       computed++;
       return key.length;
     };
-    expect(last.get("abc", length)).toBe(3);
-    expect(last.get("abc", length)).toBe(3);
+    expect(get(last, "abc", length)).toBe(3);
+    expect(get(last, "abc", length)).toBe(3);
     expect(computed).toBe(2); // outside an entry point: no memo
     withMemos(() => {
-      last.get("abcd", length);
-      last.get("abcd", length);
-      withMemos(() => last.get("abcd", length)); // nested: still the outer call's memo
+      get(last, "abcd", length);
+      get(last, "abcd", length);
+      withMemos(() => get(last, "abcd", length)); // nested: still the outer call's memo
     });
     expect(computed).toBe(3);
     expect(Object.values(last).includes("abcd")).toBe(false);
@@ -47,12 +51,12 @@ describe("memos last one call", () => {
     const last = new Last<number>();
     expect(() =>
       withMemos(() => {
-        last.get("kept?", (key) => key.length);
+        get(last, "kept?", (key) => key.length);
         throw new Error("boom");
       }),
     ).toThrow("boom");
     let computed = 0;
-    withMemos(() => last.get("kept?", (key) => ++computed));
+    withMemos(() => get(last, "kept?", () => ++computed));
     expect(computed).toBe(1);
   });
 

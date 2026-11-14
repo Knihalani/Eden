@@ -401,7 +401,7 @@ function jsClass(cls: string): string {
 const LAST_ENTROPY = new Last<number>();
 
 function shannon(text: string): number {
-  return LAST_ENTROPY.get(text, entropyOf);
+  return LAST_ENTROPY.has(text) ? LAST_ENTROPY.value! : LAST_ENTROPY.set(text, entropyOf(text));
 }
 
 function entropyOf(text: string): number {
@@ -477,6 +477,11 @@ interface Finding {
 /** The most verdicts an allowlist keeps (then it starts again): memory bounded, the repeats still found. */
 const VERDICTS_KEPT = 256;
 
+/** Whether one of `list`'s regexes occurs in `target` (an `Answers` computation: no closure a finding). */
+const regexesMatch = (target: string, list: CompiledAllowlist): boolean => list.regexes.some((r) => r.test(target));
+/** Whether one of `list`'s stopwords occurs in `secret`. */
+const stopwordIn = (secret: string, list: CompiledAllowlist): boolean => list.stopwords.occurIn(secret.toLowerCase());
+
 /** Whether an allowlist excuses a finding (gitleaks `checkFindingAllowed`, with no file path or commit). */
 function allows(list: CompiledAllowlist, finding: Finding): boolean {
   let regexAllowed: boolean;
@@ -484,12 +489,13 @@ function allows(list: CompiledAllowlist, finding: Finding): boolean {
   else {
     // Kept within the call (D1850): findings dense in one text repeat their secret or match.
     const target = list.target === "match" ? finding.match : finding.secret;
-    regexAllowed = list.verdicts.get(target, (t) => list.regexes.some((regex) => regex.test(t)));
+    regexAllowed = list.verdicts.get(target, regexesMatch, list);
   }
   // Both tests are pure, so the stopwords are read only when their answer can change the verdict.
   const stopword = () => {
     if (list.stopwords.size === 0) return false;
-    return list.stopword.get(finding.secret, (secret) => list.stopwords.occurIn(secret.toLowerCase()));
+    const memo = list.stopword;
+    return memo.has(finding.secret) ? memo.value! : memo.set(finding.secret, stopwordIn(finding.secret, list));
   };
   if (!list.and) return regexAllowed || stopword();
   // AND: every condition the list sets must hold, and a path condition never holds for text.
@@ -639,7 +645,7 @@ function gitleaksRule(
   /** The lists that target the line, decided per finding (`Lines`); the others by `decide`, once a match. */
   let lineLists: CompiledAllowlist[] = [];
   /** A match's secret span and secret, or undefined when the entropy or an allowlist not on the line drops it. */
-  const decide = (pattern: Pattern, own: CompiledAllowlist[], match: string) => {
+  const decide = (match: string, pattern: Pattern, own: CompiledAllowlist[]) => {
     const span = secretOf(pattern, match);
     if (!span) return undefined;
     const secret = match.slice(span[0], span[1]);
@@ -678,7 +684,9 @@ function gitleaksRule(
         const at = from === to ? start : from;
         // Everything but a line-targeted list depends on the match alone: decided once a match within the call
         // (D1850: a text dense in findings repeats one match tens of thousands of times).
-        const decided = lastDecision.get(match, (m) => decide(pattern, own, m));
+        const decided = lastDecision.has(match)
+          ? lastDecision.value
+          : lastDecision.set(match, decide(match, pattern, own));
         if (decided === undefined) return;
         if (lineLists.length > 0) {
           const finding = { match, secret: decided.secret, index: start, lines };
@@ -714,6 +722,24 @@ function gitleaksRule(
  */
 function entropyWithKeyword(text: string, word: RegExp = SECRET_WORD): Span[] {
   const out: Span[] = [];
+  const tokens = LONG_TOKENS.has(text) ? LONG_TOKENS.value! : LONG_TOKENS.set(text, longTokens(text));
+  for (const [from, at] of tokens) {
+    const before = text.slice(Math.max(0, from - KEYWORD_REACH), from);
+    const after = text.slice(at, at + KEYWORD_REACH);
+    if (word.test(before) || word.test(after)) out.push([from, at]);
+  }
+  return out;
+}
+
+/**
+ * D1850: a text's long mixed tokens, found once a call (memo.ts): rule (d) and its `api key` form both read them, and
+ * the walk twice cost 13 µs a 16 KB text.
+ */
+const LONG_TOKENS = new Last<Span[]>();
+
+/** The runs of ENTROPY_MIN or more non-spaces that hold a letter and a digit and none of `/.-`. */
+function longTokens(text: string): Span[] {
+  const out: Span[] = [];
   const n = text.length;
   // `start` is where a run may begin: 0, or just after a space. A run of ENTROPY_MIN or more from there has no space
   // in its first ENTROPY_MIN units, so the window is read from its far end: the last space in it (most windows of
@@ -732,9 +758,7 @@ function entropyWithKeyword(text: string, word: RegExp = SECRET_WORD): Span[] {
     start = at + 1; // `at` is a space or the end
     const token = text.slice(from, at);
     if (/[/.-]/.test(token) || !/[A-Za-z]/.test(token) || !/\d/.test(token)) continue;
-    const before = text.slice(Math.max(0, from - KEYWORD_REACH), from);
-    const after = text.slice(at, at + KEYWORD_REACH);
-    if (word.test(before) || word.test(after)) out.push([from, at]);
+    out.push([from, at]);
   }
   return out;
 }
@@ -1081,7 +1105,10 @@ export function gateOf(rules: SecretRule[]): Gate {
   const split = (text: string): { r: number; spans: Span[]; excused: Span[] }[] =>
     candidates(text).map((r) => {
       const rule = rules[r]!;
-      if (rule.split) return { r, ...rule.split(text, found, anchorIds[r]) };
+      if (rule.split) {
+        const parts = rule.split(text, found, anchorIds[r]);
+        return { r, spans: parts.spans, excused: parts.excused };
+      }
       return { r, spans: rule.spans(text, found, anchorIds[r]), excused: [] };
     });
   /** The rules whose prefilter words `text` holds, each with the spans it finds there. */
@@ -1120,15 +1147,15 @@ export function gateOf(rules: SecretRule[]): Gate {
 
   // Every entry point empties the memos when it returns (memo.ts): no slice of a caller's text outlives the call.
   return {
-    findings: (text) => withMemos(() => findings(text)),
+    findings: (text) => withMemos(findings, text),
     secretHits: (text) =>
       withMemos(() =>
         findings(text)
           .map((found) => found.id)
           .sort(),
       ),
-    sanitizeForStore: (text) => withMemos(() => store(text)),
-    explain: (text) => withMemos(() => explain(text)),
+    sanitizeForStore: (text) => withMemos(store, text),
+    explain: (text) => withMemos(explain, text),
   };
 
   function store(text: string): string {

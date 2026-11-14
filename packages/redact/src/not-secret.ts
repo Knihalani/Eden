@@ -104,7 +104,7 @@ function core(value: string): string {
 export function notSecret(value: string): boolean {
   if (value.length > VALUE_LIMIT * 2) return false;
   // The last value's verdict, within one call (memo.ts): a text dense in assignments repeats one (`token:"token:"…`).
-  return LAST_VALUE.get(value, judge);
+  return LAST_VALUE.has(value) ? LAST_VALUE.value! : LAST_VALUE.set(value, judge(value));
 }
 const LAST_VALUE = new Last<boolean>();
 
@@ -173,7 +173,9 @@ export function excused<R extends { spans(text: string, ...rest: never[]): [numb
         kept.push(span);
         continue;
       }
-      (last.get(valueAt(text, span[0], span[1]), excuse) ? left : kept).push(span);
+      const value = valueAt(text, span[0], span[1]);
+      const verdict = last.has(value) ? last.value! : last.set(value, excuse(value));
+      (verdict ? left : kept).push(span);
     }
     return { spans: kept, excused: left };
   };
