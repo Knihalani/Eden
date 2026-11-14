@@ -326,11 +326,12 @@ export class Occurrences {
   private cap = Number.MAX_SAFE_INTEGER; // until the first `clear` names a length
   /**
    * D1850: per literal id, 1 when only lazy-prefix rules anchor on it. Those find a literal's occurrences themselves
-   * once its list is incomplete, so its list stops at a lower limit (`capSmall`): a text dense in `key` spent its time
-   * keeping occurrences no rule then read.
+   * once its list is incomplete, by a scan of every character, so for them a listed occurrence stays the cheaper way
+   * to a denser text than for a sticky try: their lists stop at 1/32 of the text (`capLazy`), the others' at the dense
+   * limit (1/128). At 1/128 a megabyte of `${"a".repeat(49)}key ` took 28 ms of CPU against 15 ms at 1/32.
    */
-  small: Uint8Array;
-  private capSmall = Number.MAX_SAFE_INTEGER;
+  lazyOnly: Uint8Array;
+  private capLazy = Number.MAX_SAFE_INTEGER;
   next = new Int32Array(64);
   start = new Int32Array(64);
   size = 0;
@@ -342,13 +343,13 @@ export class Occurrences {
     this.count = new Int32Array(literals);
     this.wanted = keep ? Uint8Array.from(keep) : new Uint8Array(literals).fill(1);
     this.keep = Uint8Array.from(this.wanted);
-    this.small = new Uint8Array(literals);
+    this.lazyOnly = new Uint8Array(literals);
   }
 
   /** Empties the lists for a text of `length` code units. */
   clear(length: number): void {
     this.cap = denseLimit(length);
-    this.capSmall = Math.floor(length / 256) + 64;
+    this.capLazy = Math.floor(length / 32) + 64;
     if (this.size === 0 && !this.counted) return;
     this.counted = false;
     this.head.fill(-1);
@@ -370,12 +371,12 @@ export class Occurrences {
 
   /** Whether every occurrence of `literal` is in its list (none was only counted). */
   complete(literal: number): boolean {
-    return this.count[literal]! <= (this.small[literal] === 1 ? this.capSmall : this.cap);
+    return this.count[literal]! <= (this.lazyOnly[literal] === 1 ? this.capLazy : this.cap);
   }
 
   add(literal: number, start: number): void {
     this.counted = true;
-    if (++this.count[literal]! > (this.small[literal] === 1 ? this.capSmall : this.cap)) {
+    if (++this.count[literal]! > (this.lazyOnly[literal] === 1 ? this.capLazy : this.cap)) {
       this.keep[literal] = 0;
       this.full.push(literal);
       return;
@@ -397,7 +398,10 @@ export class Occurrences {
   }
 }
 
-/** Scratch longer than this (entries) is let go after the text that grew it. */
+/**
+ * Scratch longer than this (entries) is let go after the text that grew it. D1850: 131,072, not 16,384: a megabyte
+ * dense in one literal regrew the lists from 64 entries on every call; the lists kept are at most 1 MB.
+ */
 const SCRATCH_KEPT = 1 << 17;
 
 /**
