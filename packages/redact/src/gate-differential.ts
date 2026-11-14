@@ -145,12 +145,61 @@ function edenShape(rnd: Rnd): string {
   }
 }
 
+const CHAIN_KEYWORDS = [
+  "token",
+  "secret",
+  "password",
+  "pwd",
+  "credential",
+  "api_key",
+  "private key",
+  "passwd",
+  "API key",
+  "auth token",
+  "apiKey",
+  "maxTokens",
+];
+
+/**
+ * Keyword assignments chained in one text, each value a random token, an auth scheme with or without a credential,
+ * a placeholder or a number (the review's chain fuzz, which found the keyword rule's auth-scheme branch eating the
+ * next keyword).
+ */
+export function chainText(rnd: Rnd): string {
+  let text = "";
+  for (let n = 2 + int(rnd, 3); n > 0; n--) {
+    const r = rnd();
+    const value =
+      r < 0.35
+        ? `${pick(rnd, ["Bearer", "basic", "BASIC", "bearer"])}${pick(rnd, [" ", "\t", "  "])}${rnd() < 0.5 ? "" : draw(rnd, ALNUM, 1 + int(rnd, 30))}`
+        : r < 0.45
+          ? pick(rnd, [
+              "2_000",
+              "<your-key>",
+              "xxxxxxxx",
+              "changeme",
+              "${API_KEY}",
+              "process.env.TOKEN",
+              "string",
+              "1234",
+            ])
+          : draw(rnd, ALNUM + "+/", 4 + int(rnd, 40));
+    text +=
+      pick(rnd, CHAIN_KEYWORDS) +
+      pick(rnd, [" is ", ": ", "=", " = ", ":= "]) +
+      pick(rnd, ["", "'", '"']) +
+      value +
+      pick(rnd, [" ", ", ", "; ", "\n", " and ", '"', "'"]);
+  }
+  return text;
+}
+
 /** One text: one to six parts of the kinds above, joined by separators. */
 export function gateText(rnd: Rnd): string {
   const parts = 1 + int(rnd, 6);
   let text = "";
   for (let i = 0; i < parts; i++) {
-    const kind = int(rnd, 10);
+    const kind = int(rnd, 11);
     let part: string;
     if (kind <= 2) {
       const at = int(rnd, RULES.length);
@@ -162,7 +211,8 @@ export function gateText(rnd: Rnd): string {
     else if (kind === 6) part = pick(rnd, PROSE);
     else if (kind === 7) part = pick(rnd, ODD);
     else if (kind === 8) part = draw(rnd, ALNUM + "_.-/+=", int(rnd, 60));
-    else part = `${recase(rnd, pick(rnd, WORDS))}${pick(rnd, SEPARATORS)}${edenShape(rnd)}`;
+    else if (kind === 9) part = `${recase(rnd, pick(rnd, WORDS))}${pick(rnd, SEPARATORS)}${edenShape(rnd)}`;
+    else part = chainText(rnd);
     text += (i > 0 ? pick(rnd, SEPARATORS) : "") + part;
   }
   return rnd() < 0.05 ? text.repeat(2 + int(rnd, 20)) : text;

@@ -22,11 +22,15 @@ describe("the vendored gitleaks rules", () => {
     const ids = secretRules().map((rule) => rule.id);
     expect(ids.filter((id) => !id.startsWith("eden-")).length).toBe(221);
     expect(ids.filter((id) => id.startsWith("eden-")).sort()).toEqual([
+      "eden-api-key-phrase",
+      "eden-api-key-phrase-legacy",
+      "eden-auth-scheme-value",
       "eden-aws-key-id",
       "eden-aws-secret",
       "eden-azure-storage-key",
       "eden-cfat",
       "eden-discord-webhook",
+      "eden-entropy-api-key",
       "eden-entropy-keyword",
       "eden-keyword",
       "eden-legacy-keyword",
@@ -229,6 +233,18 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       `[10:42] Sam: API key is ${alnum(32)} — don't share it`,
       alnum(32),
       "API key is [REDACTED] — don't share it",
+    ],
+    [
+      "an API key spelled with a space, a short value (the keyword rule's shape, any length as the legacy rule's)",
+      `the API key is ${"hunter" + "2xyz"}, ask Sam`,
+      "hunter" + "2xyz",
+      "the API key is [REDACTED]",
+    ],
+    [
+      "an auth scheme as a keyword's value, then another keyword assignment (the review: both secrets go)",
+      `the token is Bea${"rer"} secret is correct${"horsebattery"} ok`,
+      "correct" + "horsebattery",
+      "ok",
     ],
     [
       "a bearer credential as the keyword rule's value, taken whole",

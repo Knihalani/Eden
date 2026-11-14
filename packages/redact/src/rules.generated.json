@@ -4637,17 +4637,7 @@
      "wide": false
     }
    ],
-   "(?i)\\bAccountKey=([A-Za-z0-9+/]{86}==)": [
-    {
-     "literals": [
-      "accountkey="
-     ],
-     "maxPrefix": 0,
-     "prefix": "00000000000000000000000000000000",
-     "wide": false
-    }
-   ],
-   "(?i)(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\\b[^\\n]{0,20}?(?:\\bis\\b|=|:)\\s*(\"[^\"\\n]{4,256}\"|'[^'\\n]{4,256}'|\\x{201C}[^\\x{201D}\\n]{4,256}\\x{201D}|\\x{2018}[^\\x{2019}\\n]{4,256}\\x{2019}|(?:bearer|basic)[ \\t]+[^\\s\\[]\\S*|\\S{6,})": [
+   "(?i)(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\\b[^\\n]{0,20}?(?:\\bis\\b|=|:)\\s*(\"[^\"\\n]{4,256}\"|'[^'\\n]{4,256}'|\\x{201C}[^\\x{201D}\\n]{4,256}\\x{201D}|\\x{2018}[^\\x{2019}\\n]{4,256}\\x{2019}|\\S{6,})": [
     {
      "literals": [
       "password",
@@ -4695,6 +4685,54 @@
       "gho_",
       "github_pat_",
       "akia"
+     ],
+     "maxPrefix": 0,
+     "prefix": "00000000000000000000000000000000",
+     "wide": false
+    }
+   ],
+   "(?i)(?:password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential|auth)s?\\b[^\\n]{0,20}?(?:\\bis\\b|=|:)\\s*((?:bearer|basic)[ \\t]+[^\\s\\[]\\S*)": [
+    {
+     "literals": [
+      "password",
+      "passwd",
+      "pwd",
+      "secret",
+      "token",
+      "api",
+      "private",
+      "credential",
+      "auth"
+     ],
+     "maxPrefix": 0,
+     "prefix": "00000000000000000000000000000000",
+     "wide": false
+    }
+   ],
+   "(?i)\\bapi keys?\\b[^\\n]{0,20}?(?:\\bis\\b|=|:)\\s*(\"[^\"\\n]{4,256}\"|'[^'\\n]{4,256}'|\\x{201C}[^\\x{201D}\\n]{4,256}\\x{201D}|\\x{2018}[^\\x{2019}\\n]{4,256}\\x{2019}|\\S{6,})": [
+    {
+     "literals": [
+      "api key"
+     ],
+     "maxPrefix": 0,
+     "prefix": "00000000000000000000000000000000",
+     "wide": false
+    }
+   ],
+   "(?i)\\bapi keys?\\s*(?:=|:|is)\\s+([^\\s,.;]+)": [
+    {
+     "literals": [
+      "api key"
+     ],
+     "maxPrefix": 0,
+     "prefix": "00000000000000000000000000000000",
+     "wide": false
+    }
+   ],
+   "(?i)\\bAccountKey=([A-Za-z0-9+/]{86}==)": [
+    {
+     "literals": [
+      "accountkey="
      ],
      "maxPrefix": 0,
      "prefix": "00000000000000000000000000000000",
