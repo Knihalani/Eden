@@ -5,18 +5,21 @@
  *
  * Bounded as the HTTP transport is, since the server is still a program the caller does not control:
  * - a line is read up to `maxLineBytes` (16 MiB by default, the HTTP reply cap); a longer one is dropped whole, up to
- *   its newline, never buffered;
+ *   its newline, never buffered past the cap; an open line's reads are coalesced (`pieces.ts`), so what it holds is
+ *   about its own length however small the reads (a line dripped a byte at a time no longer holds an array a byte);
  * - each line passes the shape check before `JSON.parse` (`parseJsonBytes`) and `asMessage` after it; a line that is
  *   neither is dropped, and at most 100 are reported to `onerror` (a flood of junk lines costs no more than reading);
  * - the server's requests go to the client, which answers `ping` only, at most 16 at once;
  * - `close` ends stdin, then sends SIGTERM after 2 s and SIGKILL 2 s later, so a server that ignores the end of its
  *   input cannot outlive its client;
  * - the child gets only the environment it is given, plus a few variables a program needs to start (`HOME`, `PATH`,
- *   ...): the parent's secrets are not passed on unless named. No shell is used.
+ *   ...): the parent's secrets are not passed on unless named. No shell is used. Its stderr is discarded unless
+ *   `stderr: "inherit"` is asked for: it is the server's text, and would reach the host's logs unasked.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { MAX_RESPONSE_BYTES } from "./http";
 import { parseJsonBytes } from "./json";
+import { Pieces } from "./pieces";
 import { asMessage, type JsonRpcMessage, type Transport } from "./types";
 
 export interface StdioServerParameters {
@@ -26,7 +29,10 @@ export interface StdioServerParameters {
   /** The child's environment, over the inherited defaults (`DEFAULT_INHERITED_ENV`). */
   env?: Record<string, string>;
   cwd?: string;
-  /** The child's stderr: shown on ours ("inherit", the default) or discarded. */
+  /**
+   * The child's stderr: discarded ("ignore", the default: it is the server's untrusted text, D1860) or shown on ours
+   * ("inherit", the SDK's default, for a server you trust and want to debug).
+   */
   stderr?: "inherit" | "ignore";
   /** Longest line read from the server, in bytes (default `MAX_RESPONSE_BYTES`, 16 MiB). */
   maxLineBytes?: number;
@@ -59,9 +65,8 @@ export class StdioClientTransport implements Transport {
   private child: ChildProcess | null = null;
   private state: "new" | "open" | "closed" = "new";
   private readonly maxLine: number;
-  /** The parts of a line not yet ended, and their bytes. */
-  private parts: Uint8Array[] = [];
-  private held = 0;
+  /** The bytes of a line not yet ended, coalesced (`pieces.ts`: a line dripped a byte at a time held 798k arrays). */
+  private readonly pending = new Pieces();
   /** The current line passed the cap: its bytes are skipped up to its newline. */
   private skipping = false;
   private bad = 0;
@@ -92,7 +97,7 @@ export class StdioClientTransport implements Transport {
       const child = spawn(this.params.command, this.params.args ?? [], {
         env,
         cwd: this.params.cwd,
-        stdio: ["pipe", "pipe", this.params.stderr ?? "inherit"],
+        stdio: ["pipe", "pipe", this.params.stderr ?? "ignore"],
         shell: false,
         windowsHide: true,
       });
@@ -134,8 +139,7 @@ export class StdioClientTransport implements Transport {
     this.state = "closed";
     for (const w of [...this.waiting]) w();
     const child = this.child;
-    this.parts = [];
-    this.held = 0;
+    this.pending.clear();
     if (child) {
       child.stdout?.off("data", this.onData);
       child.stdin?.end();
@@ -161,31 +165,28 @@ export class StdioClientTransport implements Transport {
         this.skipping = false;
         continue;
       }
-      if (this.held + piece.length > this.maxLine) {
+      if (this.pending.bytes + piece.length > this.maxLine) {
         this.drop();
         continue;
       }
-      const line = this.parts.length > 0 ? join(this.parts, this.held, piece) : piece;
-      this.parts = [];
-      this.held = 0;
+      const line = this.pending.bytes > 0 ? this.pending.take(piece) : piece;
       this.line(line);
       if (this.state !== "open") return;
     }
     if (start < chunk.length && !this.skipping) {
       const rest = chunk.subarray(start);
-      if (this.held + rest.length > this.maxLine) {
+      if (this.pending.bytes + rest.length > this.maxLine) {
         this.drop();
         this.skipping = true;
       } else {
-        this.parts.push(rest);
-        this.held += rest.length;
+        // Copied: a pipe's read may sit in a larger buffer that a view would keep alive.
+        this.pending.add(rest, false, this.maxLine);
       }
     }
   };
 
   private drop(): void {
-    this.parts = [];
-    this.held = 0;
+    this.pending.clear();
     this.report(`a line passed ${this.maxLine} bytes and was dropped`);
   }
 
@@ -203,15 +204,4 @@ export class StdioClientTransport implements Transport {
     if (m) this.onmessage?.(m);
     else this.report("a line that is not a JSON-RPC message was dropped");
   }
-}
-
-function join(parts: Uint8Array[], held: number, last: Uint8Array): Uint8Array {
-  const out = new Uint8Array(held + last.length);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  out.set(last, at);
-  return out;
 }

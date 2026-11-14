@@ -216,6 +216,34 @@ describe("StreamableHttpTransport against the SDK's server transport", () => {
 });
 
 describe("terminateSession (D1860)", () => {
+  test("is a flight: a DELETE that hangs is cut by close, and at the POST deadline", async () => {
+    const hang = (async (_url: URL | string, init?: RequestInit) => {
+      if (init?.method !== "DELETE") {
+        return new Response('{"jsonrpc":"2.0","id":0,"result":{}}', {
+          headers: { "content-type": "application/json", "mcp-session-id": "s1" },
+        });
+      }
+      return new Promise<Response>((_, reject) =>
+        init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+      );
+    }) as typeof fetch;
+    for (const how of ["close", "deadline"] as const) {
+      const t = new StreamableHttpTransport(new URL("http://mcp.test/mcp"), {
+        fetch: hang,
+        timeoutMs: how === "deadline" ? 50 : 60_000,
+      });
+      await t.start();
+      await t.send({ jsonrpc: "2.0", id: 0, method: "initialize", params: {} }); // holds the session id
+      const ending = t.terminateSession().then(
+        () => "ended",
+        (e: Error) => e.message,
+      );
+      if (how === "close") setTimeout(() => void t.close(), 20);
+      expect(await ending).toMatch(how === "close" ? /aborted/ : /timed out/);
+      await t.close();
+    }
+  });
+
   test("sends a DELETE with the session id; the SDK's server ends the session; a second call sends nothing", async () => {
     const s = await serve({ json: true });
     const methods: string[] = [];

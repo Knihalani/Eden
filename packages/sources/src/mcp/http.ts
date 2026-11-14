@@ -115,7 +115,10 @@ export class StreamableHttpTransport implements Transport {
   private readonly maxBytes: number;
   private readonly timeoutMs: number;
   private readonly fetchFn: typeof fetch;
-  /** The runtime's own `fetch`, not a caller's: its body framing is the HTTP client's, which the native read trusts. */
+  /**
+   * The runtime's own `fetch`, not a caller's nor a replaced global's (an APM agent, a mock, a polyfill): its body
+   * framing is the HTTP client's, which the native read trusts.
+   */
   private readonly ownFetch: boolean;
 
   constructor(
@@ -125,7 +128,7 @@ export class StreamableHttpTransport implements Transport {
     this.maxBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchFn = options.fetch ?? fetch;
-    this.ownFetch = options.fetch === undefined;
+    this.ownFetch = options.fetch === undefined && this.fetchFn === RUNTIME_FETCH && runtimeIsNative;
     this.headers = this.buildHeaders();
   }
 
@@ -145,13 +148,17 @@ export class StreamableHttpTransport implements Transport {
    */
   async terminateSession(): Promise<void> {
     if (!this.sessionId || this.state !== "open") return;
-    const abort = new AbortController();
-    const deadline = deadlines.add(this.timeoutMs, () => abort.abort());
+    // A flight like any POST: cut at its deadline or by `close`.
+    const flight: Flight = { abort: new AbortController(), deadline: undefined as never };
+    flight.deadline = deadlines.add(this.timeoutMs, () =>
+      cut(flight, new StreamableHttpError(-1, "Request timed out")),
+    );
+    this.flights.add(flight);
     try {
       const res = await this.fetchFn(this.url, {
         method: "DELETE",
         headers: this.headers,
-        signal: abort.signal,
+        signal: flight.abort.signal,
         redirect: "manual",
       });
       await res.body?.cancel().catch(() => {});
@@ -160,8 +167,12 @@ export class StreamableHttpTransport implements Transport {
       }
       this.sessionId = undefined;
       this.headers = this.buildHeaders();
+    } catch (e) {
+      // Cut at the deadline: say so, as a POST would; cut by `close`, the abort itself.
+      const reason = flight.abort.signal.reason;
+      throw reason instanceof StreamableHttpError ? reason : e;
     } finally {
-      deadlines.cancel(deadline);
+      this.land(flight, false);
     }
   }
 
@@ -431,6 +442,15 @@ function mediaType(contentType: string | null): string {
 
 /** Bun's `fetch` hands out a new array for each read and reads a `text()` as `TextDecoder` does (one BOM dropped). */
 const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+
+/**
+ * The global `fetch` as this module found it. A transport whose `fetch` is anything else (the global replaced later)
+ * reads every body through the capped stream reader. On Bun the one found must also be the native one, so a global
+ * replaced before this module loaded is caught too; on Node the runtime's own `fetch` is JavaScript (undici), so there
+ * only a replacement made after this module loaded can be told apart.
+ */
+const RUNTIME_FETCH = globalThis.fetch;
+const runtimeIsNative = !isBun || /\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(RUNTIME_FETCH));
 
 /**
  * Whether a body's length is the declared one and nothing else: one decimal `Content-Length`, no `Content-Encoding`

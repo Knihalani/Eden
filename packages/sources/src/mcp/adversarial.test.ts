@@ -211,6 +211,36 @@ describe("floods and slow growth", () => {
     expect(cpuMs() - t).toBeLessThan(400);
   });
 
+  test("sse-drip: a line dripped a byte at a time holds a few arrays, not one a byte (D1860)", () => {
+    // Each 1-byte read held as its own array cost ~57 B of RSS a byte (+172 MB for 3 MB, D1860's review).
+    for (const kept of [true, false]) {
+      let got = 0;
+      const p = new SseParser(4 * 1024 * 1024, (d) => ((got = d.length), false), kept);
+      const t = cpuMs();
+      expect(p.push(new TextEncoder().encode("data: "))).toBe("more");
+      const one = new Uint8Array([0x61]);
+      for (let n = 0; n < 3_000_000; n++) p.push(kept ? new Uint8Array([0x61]) : one);
+      const held = (p as unknown as { pending: { count: number; bytes: number } }).pending;
+      expect(held.bytes).toBe(3_000_006);
+      expect(held.count).toBeLessThanOrEqual(9);
+      expect(p.push(new TextEncoder().encode("\n\n"))).toBe("more");
+      expect(got).toBe(3_000_000);
+      expect(cpuMs() - t).toBeLessThan(1_500);
+    }
+  });
+
+  test("sse-drip-mixed: small and long reads alternating keep at most two arrays per 16 KB held", () => {
+    const p = new SseParser(4 * 1024 * 1024, () => false, true);
+    let bytes = 0;
+    for (let n = 0; bytes < 3_000_000; n++) {
+      const size = n % 2 ? 16 * 1024 : 1;
+      p.push(new Uint8Array(size).fill(0x61));
+      bytes += size;
+    }
+    const held = (p as unknown as { pending: { count: number } }).pending;
+    expect(held.count).toBeLessThanOrEqual((2 * bytes) / (16 * 1024) + 9);
+  });
+
   test("sse-e2e: 1 KB writes with no line end are cut at the 4 MiB event cap, cheaply", async () => {
     const piece = new Uint8Array(1_024).fill(0x61);
     let sent = 0;

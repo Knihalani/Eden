@@ -119,6 +119,18 @@ describe("hostile children", () => {
     expect(errors.map((e) => e.message)).toEqual(["stdio: a line passed 1048576 bytes and was dropped"]);
   });
 
+  test("a line dripped a byte at a time is held in a few arrays, not one a read (D1860)", async () => {
+    const t = script(`const fs = require("fs"); let i = 0;
+      const go = () => { for (let k = 0; k < 50 && i < 400000; k++, i++) fs.writeSync(1, "a"); if (i < 400000) setImmediate(go); };
+      go(); setInterval(() => {}, 1000);`);
+    await t.start();
+    const held = (t as unknown as { pending: { bytes: number; count: number } }).pending;
+    for (let waited = 0; held.bytes < 400_000 && waited < 20_000; waited += 50) await Bun.sleep(50);
+    expect(held.bytes).toBe(400_000);
+    expect(held.count).toBeLessThanOrEqual(9);
+    await t.close();
+  });
+
   test("a flood of server requests: pings answered at most 16 at once, others never; the call still answered", async () => {
     const t = script(
       hostile(`for (let i = 0; i < 20000; i++) w(JSON.stringify({ jsonrpc: "2.0", id: "s" + i,

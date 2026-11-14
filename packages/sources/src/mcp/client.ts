@@ -52,7 +52,7 @@ export class McpClient {
    * The server's notifications (progress, logging, list changes), shape-checked as JSON-RPC and nothing more: their
    * params are the server's data. Unset, they are dropped.
    */
-  onnotification?: (notification: JsonRpcNotification) => void;
+  onnotification?: (notification: JsonRpcNotification) => void | Promise<void>;
   /** The server's `initialize` answer, once connected. */
   server: ServerInitialize | null = null;
   private transport: Transport | null = null;
@@ -208,9 +208,12 @@ export class McpClient {
       return;
     }
     if (isNotification(m)) {
-      // A handler that throws must not fail the reply the notification rode on.
+      // A handler that throws, or returns a promise that rejects, must not fail the reply the notification rode on
+      // nor end the process with an unhandled rejection.
       try {
-        this.onnotification?.(m);
+        const done = this.onnotification?.(m);
+        if (done && typeof (done as Promise<void>).then === "function")
+          (done as Promise<void>).then(undefined, () => {});
       } catch {}
       return;
     }

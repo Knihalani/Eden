@@ -74,6 +74,8 @@ test("a declared length under the cap is read natively, and only that length", a
     return Buffer.from(head([`content-length: ${Buffer.byteLength(body)}`]) + body + "garbage after the body");
   });
   expect(await call(url)).toBe('ünï 😀 "q"');
+  // These tests run the native read: the runtime's fetch is recognized as its own here.
+  expect((new StreamableHttpTransport(url) as unknown as { ownFetch: boolean }).ownFetch).toBe(true);
 });
 
 test("a declared length over the cap is refused before the body is read", async () => {
@@ -134,4 +136,17 @@ test("a reply shaped to make the parse costly is refused on the native read too"
     return Buffer.from(head([`content-length: ${body.length}`]) + body);
   });
   expect(await call(url)).toMatch(/not JSON/);
+});
+
+test("a replaced global fetch is not trusted: its body is read through the capped reader", async () => {
+  // A wrapper (an APM agent, a mock) may hand back any body under any length; a native read would take it whole.
+  const original = globalThis.fetch;
+  const body = answer(1, "v".repeat(5_000));
+  globalThis.fetch = (async () =>
+    new Response(body, { headers: { "content-type": "application/json", "content-length": "10" } })) as never;
+  try {
+    expect(await call(new URL("http://127.0.0.1:9/mcp"), { maxResponseBytes: 1_000 })).toMatch(/larger than 1000/);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
