@@ -67,7 +67,7 @@ export function composeMasks(
 ): Composed {
   const main = strict.length + excused.length > 0;
   const assigned = main ? pass.assignments(text) : { all: [], strict: [] };
-  const spans = [...strict, ...excused, ...assigned.all].sort((a, b) => a[0] - b[0]);
+  const spans = strict.concat(excused, assigned.all).sort((a, b) => a[0] - b[0]);
   let gated = "";
   let at = 0;
   for (const [start, end] of spans) {

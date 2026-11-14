@@ -130,6 +130,39 @@ describe("MultiMatcher against the reference, and scan", () => {
     }
   });
 
+  test("scan with a sink that clears keep mid-text, then a fresh keep on the same matcher (D1850's quiet states)", () => {
+    const rnd = prng(1850);
+    const word = (len: number) => Array.from({ length: len }, () => PIECES[rnd(PIECES.length)]).join("");
+    for (let set = 0; set < 40; set++) {
+      const patterns = Array.from({ length: 1 + rnd(20) }, () => word(1 + rnd(3)));
+      const m = new MultiMatcher(patterns);
+      for (let round = 0; round < 40; round++) {
+        const text = word(rnd(200));
+        const cap = rnd(4);
+        const fresh = () => Uint8Array.from(patterns, () => (rnd(4) === 0 ? 0 : 1));
+        const keep = fresh();
+        const model = Uint8Array.from(keep);
+        // As the gate's `Occurrences` does: past `cap` occurrences, a pattern leaves `keep` for the rest of the text.
+        const count = new Int32Array(patterns.length);
+        const kept: [number, number][] = [];
+        m.scan(text, new Uint8Array(patterns.length), new Int32Array(patterns.length), keep, {
+          add: (p, start) => {
+            kept.push([p, start]);
+            if (++count[p]! > cap) keep[p] = 0;
+          },
+        });
+        const starts: [number, number][] = [];
+        const seen = new Int32Array(patterns.length);
+        m.forEach(text, (p, start) => {
+          if (model[p] !== 1) return;
+          starts.push([p, start]);
+          if (++seen[p]! > cap) model[p] = 0;
+        });
+        expect(kept).toEqual(starts);
+      }
+    }
+  });
+
   test("scan refuses a whole-word matcher", () => {
     const m = new MultiMatcher(["al"], { wholeWord: true });
     expect(() => m.scan("al", new Uint8Array(1), new Int32Array(1), new Uint8Array(1), { add: () => {} })).toThrow();

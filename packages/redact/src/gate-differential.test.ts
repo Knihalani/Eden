@@ -149,10 +149,10 @@ describe("what the speed-ups rest on", () => {
 
   test("a literal past the dense limit leaves `keep` for the text, and comes back for the next", () => {
     const found = new Occurrences(2, Uint8Array.of(1, 0));
-    found.clear(100); // the limit: 100 / 32 + 64 = 67
-    for (let at = 0; at < 67; at++) found.add(0, at);
+    found.clear(100); // the limit: 100 / 128 + 64 = 64
+    for (let at = 0; at < 64; at++) found.add(0, at);
     expect([found.complete(0), found.keep[0]]).toEqual([true, 1]);
-    found.add(0, 67);
+    found.add(0, 64);
     expect([found.complete(0), found.keep[0], found.keep[1]]).toEqual([false, 0, 0]);
     found.clear(100);
     expect([found.complete(0), found.keep[0], found.count[0]]).toEqual([true, 1, 0]);

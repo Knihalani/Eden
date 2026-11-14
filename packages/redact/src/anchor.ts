@@ -13,6 +13,7 @@
  * made sticky finds the same match. Lookbehind and `\b` still see the text before p, as a sticky match does.
  */
 import { parseRegex, type Ranges, type RegexNode } from "./automaton.ts";
+import { freshRuns, GENERIC_REST_SOURCE, genericRest } from "./generic-rest.ts";
 
 /** One way a match can begin: up to `maxPrefix` characters of `prefix` (code units), then one of `literals`. */
 export interface Anchor {
@@ -323,6 +324,13 @@ export class Occurrences {
   /** The literals taken out of `keep` in this text, to put back. */
   private full: number[] = [];
   private cap = Number.MAX_SAFE_INTEGER; // until the first `clear` names a length
+  /**
+   * D1850: per literal id, 1 when only lazy-prefix rules anchor on it. Those find a literal's occurrences themselves
+   * once its list is incomplete, so its list stops at a lower limit (`capSmall`): a text dense in `key` spent its time
+   * keeping occurrences no rule then read.
+   */
+  small: Uint8Array;
+  private capSmall = Number.MAX_SAFE_INTEGER;
   next = new Int32Array(64);
   start = new Int32Array(64);
   size = 0;
@@ -334,11 +342,13 @@ export class Occurrences {
     this.count = new Int32Array(literals);
     this.wanted = keep ? Uint8Array.from(keep) : new Uint8Array(literals).fill(1);
     this.keep = Uint8Array.from(this.wanted);
+    this.small = new Uint8Array(literals);
   }
 
   /** Empties the lists for a text of `length` code units. */
   clear(length: number): void {
     this.cap = denseLimit(length);
+    this.capSmall = Math.floor(length / 256) + 64;
     if (this.size === 0 && !this.counted) return;
     this.counted = false;
     this.head.fill(-1);
@@ -360,12 +370,12 @@ export class Occurrences {
 
   /** Whether every occurrence of `literal` is in its list (none was only counted). */
   complete(literal: number): boolean {
-    return this.count[literal]! <= this.cap;
+    return this.count[literal]! <= (this.small[literal] === 1 ? this.capSmall : this.cap);
   }
 
   add(literal: number, start: number): void {
     this.counted = true;
-    if (++this.count[literal]! > this.cap) {
+    if (++this.count[literal]! > (this.small[literal] === 1 ? this.capSmall : this.cap)) {
       this.keep[literal] = 0;
       this.full.push(literal);
       return;
@@ -388,7 +398,7 @@ export class Occurrences {
 }
 
 /** Scratch longer than this (entries) is let go after the text that grew it. */
-const SCRATCH_KEPT = 16_384;
+const SCRATCH_KEPT = 1 << 17;
 
 /**
  * Where to try a rule: per interval, its first and last candidate start (scratch shared by every rule: the sweep
@@ -402,9 +412,10 @@ let order = new Int32Array(256);
  * Past this share of the text in candidate starts, sticky tries cost more than the engine's own scan: a sticky try
  * costs about 20 scanned positions (a literal every 10 characters ran 2.9x slower than the scan at 1/8, 1.7x at 1/32
  * before the occurrence counts, review of 2026-11-14). The rule then scans the whole text, as before. Either way the
- * result is the same; this bounds the cost on crafted input.
+ * result is the same; this bounds the cost on crafted input. D1850: 1/128, not 1/32: keeping 32,000 occurrences a
+ * megabyte of `sk-` cost more than its rules' scans saved, and a literal every 64 characters ran as fast either way.
  */
-const DENSE = 1 / 32;
+const DENSE = 1 / 128;
 
 /** The most candidate starts a rule tries in a text of `length` code units before it scans instead. */
 export const denseLimit = (length: number): number => Math.floor(length * DENSE) + 64;
@@ -580,7 +591,7 @@ export class LazyPrefixRegex {
   /** Per ASCII code unit, 1 when JavaScript's prefix class takes it; it takes none outside ASCII (anchor tests). */
   private readonly prefix: Uint8Array;
   private rest: RegExp | undefined;
-  private finder: RegExp | undefined;
+  private finder: ((text: string, from: number) => number) | undefined;
   /** The regex's later top-level branches, joined (atlassian-api-token's `|\b(ATATT3…)`), when it has any. */
   private readonly otherSource: string | undefined;
   private other: RegExp | undefined;
@@ -619,6 +630,9 @@ export class LazyPrefixRegex {
     const other = this.otherSource === undefined ? undefined : (this.other ?? this.compile().other!);
     if (listed && n === 0 && !other) return;
     const rest = this.rest ?? this.compile().rest;
+    // REST read by hand, for the one rule that has such a reader (generic-rest.ts), with its run cache for this text.
+    const hand = this.restSource === GENERIC_REST_SOURCE ? genericRest : undefined;
+    const runs = freshRuns();
     if (ends.length < candidates.length) ends = new Int32Array(candidates.length);
     ends.fill(UNKNOWN, 0, n);
     // Every start of a literal, overlapping ones included (case folded: a superset of where REST can start), one at a
@@ -636,12 +650,11 @@ export class LazyPrefixRegex {
      */
     const more = (): number => {
       if (scanned > text.length) return -1;
-      finder!.lastIndex = scanned;
-      if (!finder!.test(text)) {
+      const k = finder!(text, scanned);
+      if (k < 0) {
         scanned = text.length + 1;
         return -1;
       }
-      const k = finder!.lastIndex;
       scanned = k + 1;
       let shift = 0;
       if (n === candidates.length) {
@@ -688,8 +701,11 @@ export class LazyPrefixRegex {
           if (best >= 0 && k > best + max) break;
           let end = ends[j]!;
           if (end === UNKNOWN) {
-            rest.lastIndex = k;
-            end = rest.test(text) ? rest.lastIndex : -1;
+            if (hand) end = hand(text, k, runs);
+            else {
+              rest.lastIndex = k;
+              end = rest.test(text) ? rest.lastIndex : -1;
+            }
             ends[j] = end;
           }
           if (end < 0) {
@@ -758,10 +774,40 @@ export class LazyPrefixRegex {
     return distinct;
   }
 
-  /** A regex with an empty match just before every occurrence of a literal, case folded. */
-  private compileFinder(): RegExp {
-    const words = this.words.map((word) => word.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&"));
-    return new RegExp(`(?=${words.join("|")})`, "gi");
+  /**
+   * The next start of a literal at or after `from` (overlapping ones included), ASCII case folded as the regex's `i`
+   * folds it (no literal holds a character outside ASCII), or -1. By hand: a lookahead regex for the same cost 50 ms
+   * a megabyte of `<add key=` (D1850).
+   */
+  private compileFinder(): (text: string, from: number) => number {
+    const byFirst: string[][] = Array.from({ length: 128 }, () => []);
+    for (const word of this.words) byFirst[word.charCodeAt(0)]!.push(word);
+    /** Per ASCII code unit, 1 when some literal starts with it, either case. */
+    const first = new Uint8Array(128);
+    for (const word of this.words) {
+      const c = word.charCodeAt(0);
+      first[c] = 1;
+      if (c >= 97 && c <= 122) first[c - 32] = 1;
+    }
+    return (text, from) => {
+      const n = text.length;
+      for (let i = from; i < n; i++) {
+        let c = text.charCodeAt(i);
+        if (c >= 128 || first[c] === 0) continue;
+        if (c >= 65 && c <= 90) c += 32;
+        const words = byFirst[c]!;
+        next: for (const word of words) {
+          if (i + word.length > n) continue;
+          for (let j = 1; j < word.length; j++) {
+            let d = text.charCodeAt(i + j);
+            if (d >= 65 && d <= 90) d += 32;
+            if (d !== word.charCodeAt(j)) continue next;
+          }
+          return i;
+        }
+      }
+      return -1;
+    };
   }
 
   /** Compiles REST (and the other branches) and runs them once, so the first text pays for neither (`warmGate`). */

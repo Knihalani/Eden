@@ -51,6 +51,14 @@ export class MultiMatcher {
   private readonly ringMask: number;
   /** Per ASCII code unit, its folded character's column. */
   private readonly foldCol = new Int32Array(128);
+  /**
+   * `scan`'s scratch (D1850): at a state's row (`state * cols`, as `delta` gives it, so no division), 1 once every
+   * pattern ending there is hit and not kept in this text, so the state's later matches do nothing (`keep` only goes
+   * from 1 to 0 within a scan); `quieted` lists them, to reset after. A megabyte of `sk-` with nothing kept scanned in
+   * 5.4 ms, calling `emit` at every occurrence for nothing, and scans in 2.4 ms now (one byte per transition entry).
+   */
+  private readonly quiet: Uint8Array;
+  private readonly quieted: number[] = [];
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
     this.wholeWord = options.wholeWord ?? false;
@@ -131,6 +139,7 @@ export class MultiMatcher {
     this.ring = new Int32Array(size);
     this.part = new Uint8Array(size);
     this.ringMask = size - 1;
+    this.quiet = new Uint8Array(states * cols);
   }
 
   get stateCount(): number {
@@ -178,12 +187,14 @@ export class MultiMatcher {
   /**
    * `markHits`, also writing each pattern that occurs to `firsts` (in order of first match; `patterns.length`
    * entries, so a caller can reset `hits` by them), and passing every occurrence of a pattern `p` with
-   * `keep[p] === 1` to `sink.add(p, start)`, in order of match end, with the start `forEach` reports. One pass; an
+   * `keep[p] === 1` to `sink.add(p, start)`, in order of match end, with the start `forEach` reports. The sink may
+   * clear `keep` entries during the scan (never set them). One pass; an
    * ASCII character costs one table load (for a prefilter that also wants to know where some of its words are). Not
    * for a `wholeWord` matcher (it throws).
    */
   scan(text: string, hits: Uint8Array, firsts: Int32Array, keep: Uint8Array, sink: MatchSink): number {
     if (this.wholeWord) throw new Error("scan does not support wholeWord");
+    const quiet = this.quiet;
     const packed = this.delta;
     const foldCol = this.foldCol;
     const cols = this.cols;
@@ -199,7 +210,8 @@ export class MultiMatcher {
       if (c < 128) {
         d = packed[s + foldCol[c]!]!;
         s = d >> 1;
-        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && quiet[s] === 0)
+          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
         continue;
       }
       const f = foldOf(c);
@@ -210,7 +222,8 @@ export class MultiMatcher {
       if (f !== FOLD_EXPAND) {
         d = packed[s + this.column(f)]!;
         s = d >> 1;
-        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && quiet[s] === 0)
+          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
         continue;
       }
       special = i;
@@ -219,9 +232,12 @@ export class MultiMatcher {
         const e = expanded.charCodeAt(u);
         d = packed[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
         s = d >> 1;
-        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && quiet[s] === 0)
+          distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
       }
     }
+    for (const state of this.quieted) quiet[state] = 0;
+    this.quieted.length = 0;
     return distinct;
   }
 
@@ -242,6 +258,7 @@ export class MultiMatcher {
     sink: MatchSink,
   ): number {
     const to = this.outStart[state + 1]!;
+    let kept = false;
     for (let j = this.outStart[state]!; j < to; j++) {
       const p = this.outList[j]!;
       if (hits[p] === 0) {
@@ -249,8 +266,13 @@ export class MultiMatcher {
         firsts[distinct++] = p;
       }
       if (keep[p] !== 1) continue;
+      kept = true;
       const len = this.lens[p]!;
       sink.add(p, i - len >= special ? i - len + 1 : startOf(text, i, u, len));
+    }
+    if (!kept) {
+      this.quiet[state * this.cols] = 1;
+      this.quieted.push(state * this.cols);
     }
     return distinct;
   }
