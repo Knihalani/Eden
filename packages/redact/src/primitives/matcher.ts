@@ -205,6 +205,7 @@ export class MultiMatcher {
     const quiet = this.quiet;
     const packed = this.delta;
     const foldCol = this.foldCol;
+    const asciiCol = this.asciiCol;
     const cols = this.cols;
     const n = text.length;
     let distinct = 0;
@@ -238,7 +239,7 @@ export class MultiMatcher {
       const expanded = expansionOf(c);
       for (let u = 0; u < expanded.length; u++) {
         const e = expanded.charCodeAt(u);
-        d = packed[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
+        d = packed[s + (e < 128 ? asciiCol[e]! : this.column(e))]!;
         s = d >> 1;
         if ((d & 1) !== 0 && quiet[s] !== generation)
           distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
@@ -347,15 +348,20 @@ export class MultiMatcher {
  * afresh (`normalize` and a new string a character), a text of ligatures cost about 0.4 µs a character to match.
  */
 function expansionOf(c: number): string {
-  let expanded = EXPANSIONS.get(c);
-  if (expanded === undefined) {
-    expanded = foldString(String.fromCharCode(c));
-    EXPANSIONS.set(c, expanded);
-  }
+  const k = EXPANSION_AT[c]!;
+  if (k !== 0) return EXPANSIONS[k]!;
+  const expanded = foldString(String.fromCharCode(c));
+  EXPANSION_AT[c] = EXPANSIONS.length;
+  EXPANSIONS.push(expanded);
   return expanded;
 }
-/** `expansionOf`'s answers: at most one per code unit that expands (a few thousand in Unicode). */
-const EXPANSIONS = new Map<number, string>();
+/**
+ * `expansionOf`'s answers: per code unit, its place in `EXPANSIONS` (0: not yet known), at most one per code unit
+ * that expands (a few thousand in Unicode). A typed index, not a Map: V8 read the Map at 20 ns a ligature, twice
+ * JavaScriptCore's time, and an array indexed by code unit fell into V8's slow dictionary mode (D1850).
+ */
+const EXPANSION_AT = new Uint16Array(65_536);
+const EXPANSIONS: string[] = [""];
 
 /**
  * Where a match of `len` folded characters ending at unit `u` of character `i` starts, as `run`'s ring of offsets
