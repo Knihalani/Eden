@@ -125,7 +125,7 @@ export interface SecretRule {
   anchorWords?: string[];
   /**
    * D1850: the rule reads `anchorWords` through `LazyPrefixRegex`, which finds a literal's occurrences itself once
-   * their list is incomplete; a literal only such rules anchor on keeps a shorter list (`Occurrences.small`).
+   * their list is incomplete; a literal only such rules anchor on keeps its own limit (`Occurrences.lazyOnly`).
    */
   findsItself?: boolean;
   /**
@@ -1010,9 +1010,9 @@ export function gateOf(rules: SecretRule[]): Gate {
   const anchorWord = new Uint8Array(words.length);
   for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
   const found = new Occurrences(words.length, anchorWord);
-  found.small.set(anchorWord);
+  found.lazyOnly.set(anchorWord);
   rules.forEach((rule, r) => {
-    if (!rule.findsItself) for (const id of anchorIds[r] ?? []) found.small[id] = 0;
+    if (!rule.findsItself) for (const id of anchorIds[r] ?? []) found.lazyOnly[id] = 0;
   });
   /** The token passes whose literals the last text scanned holds (`redactTokensIn`'s mask; the others are no-ops). */
   let tokens = 0;
