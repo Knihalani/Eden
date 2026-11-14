@@ -333,7 +333,10 @@ are released to the others), upgrade it, put it back (they return). Nobody is un
 Upgrade the cluster routers one at a time behind their load balancer.
 
 A change of the persistence format (`PERSIST_FORMAT`) discards older files (those users re-sync once); the release
-notes say so.
+notes say so. It cuts the other way too: a rollback to an older build, or an older process beside newer ones on a
+shared disk or store during a rolling upgrade, discards (deletes) the newer format's files, and those users re-sync
+once. Format 6 (D1888, frozen entries carry their date facts) reads format 5's files; a build of format 5 deletes
+format 6's.
 
 ## 12. What was validated here, and what was not
 
