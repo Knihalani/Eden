@@ -16,8 +16,10 @@
  *   env -u BUN_OPTIONS bun packages/sources/bench/mcp-profile.bench.ts [rounds=3] [arms=eden,d1704,sdk,fetch] [quick]
  *
  * `quick` runs 1 KB and 64 KB only. 4 MB is run at 1 and 16 in flight only (256 at once would hold 1 GiB of replies).
+ * `MCP_PROFILE_SIZES=65536,1048576` picks the sizes. The `base` arm is another tree's client: copy its `src/mcp/` to a
+ * directory and set `MCP_PROFILE_BASE` to that directory's absolute path (D1860 compared against main's this way).
  */
-type Arm = "eden" | "d1704" | "sdk" | "fetch";
+type Arm = "eden" | "d1704" | "base" | "sdk" | "fetch";
 type Mode = "json" | "sse";
 type Method = "call" | "list";
 
@@ -151,7 +153,9 @@ async function open(arm: Arm, url: string): Promise<Client> {
   const mod =
     arm === "eden"
       ? await import("../src/mcp")
-      : { ...(await import("./mcp-d1704/client")), ...(await import("./mcp-d1704/http")) };
+      : arm === "base"
+        ? ((await import(`${process.env.MCP_PROFILE_BASE}/index.ts`)) as typeof import("../src/mcp"))
+        : { ...(await import("./mcp-d1704/client")), ...(await import("./mcp-d1704/http")) };
   const c = new mod.McpClient({ name: "bench", version: "0" });
   await c.connect(new mod.StreamableHttpTransport(new URL(url)));
   return {
@@ -170,7 +174,8 @@ async function child(arm: Arm, port: number, quick: boolean): Promise<void> {
   await first.close();
   const cells: Cell[] = [];
   for (const mode of ["json", "sse"] as Mode[]) {
-    for (const size of quick ? SIZES.slice(0, 2) : SIZES) {
+    const sizes = process.env.MCP_PROFILE_SIZES?.split(",").map(Number) ?? (quick ? SIZES.slice(0, 2) : SIZES);
+    for (const size of sizes) {
       const client = await open(arm, `http://127.0.0.1:${port}/${mode}/${size}/mcp`);
       for (const method of ["call", "list"] as Method[]) {
         const f = method === "call" ? client.call : client.list;

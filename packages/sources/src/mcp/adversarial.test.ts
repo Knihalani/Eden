@@ -4,7 +4,7 @@
  * rejected call (or an `onerror`), never as a throw out of the client or a request left waiting.
  */
 import { describe, expect, test } from "bun:test";
-import { McpSource, ReadOnlyViolation } from "../mcp-source";
+import { existsSync } from "node:fs";
 import { McpClient } from "./client";
 import { StreamableHttpTransport } from "./http";
 import { SseParser } from "./sse";
@@ -506,7 +506,12 @@ describe("fuzz", () => {
   });
 });
 
-describe("pages: McpSource keeps only the tools it uses (D7 unchanged)", () => {
+/** Eden's `McpSource`, absent when this directory is used on its own: its section is skipped then. */
+const MCP_SOURCE = new URL("../mcp-source.ts", import.meta.url);
+const eden = existsSync(MCP_SOURCE) ? ((await import(MCP_SOURCE.href)) as typeof import("../mcp-source")) : null;
+
+describe.skipIf(!eden)("pages: McpSource keeps only the tools it uses (D7 unchanged)", () => {
+  const { McpSource, ReadOnlyViolation } = eden ?? ({} as typeof import("../mcp-source"));
   const filler = (n: number) =>
     Array.from({ length: n }, (_, i) => ({ name: `t${i}`, inputSchema: { type: "object" } }));
   const search = { name: "search", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } };

@@ -1,7 +1,20 @@
-export { DEFAULT_REQUEST_TIMEOUT_MS, McpClient, type RequestOptions } from "./client";
-export { parseJsonBytes } from "./json";
+/**
+ * The client's core: what a program that calls tools over streamable HTTP loads (Eden's path). The opt-in pieces are
+ * separate entry points, never imported from here, so they are loaded (and bundled) only when used: `./stdio`
+ * (`StdioClientTransport`) and `./extras` (resources and prompts).
+ */
+export { DEFAULT_REQUEST_TIMEOUT_MS, McpClient, type RequestOptions, type ServerInitialize } from "./client";
+export { parseJsonBytes, parseJsonText } from "./json";
+export { bodyShapeUnder, textShapeUnder } from "./shape";
 export { SseParser, type SseStep } from "./sse";
-export { MAX_RESPONSE_BYTES, StreamableHttpError, StreamableHttpTransport, type StreamableHttpOptions } from "./http";
+export {
+  MAX_EVENT_BYTES,
+  MAX_RESPONSE_BYTES,
+  MAX_TOOLS_LIST_BYTES,
+  StreamableHttpError,
+  StreamableHttpTransport,
+  type StreamableHttpOptions,
+} from "./http";
 export {
   answers,
   asMessage,
