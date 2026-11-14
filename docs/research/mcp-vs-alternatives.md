@@ -362,6 +362,8 @@ above: 0.82-1.13 of D1860's, 0.41-0.78 of the SDK's.)
   other throw as a bare "Internal error" (a secret in its text is not sent), and the server's cancellation aborts the
   handler; at most 16 answers at once with the pings, and the budget above.
 
+**After the independent review** (approved at a4a5e2487, with findings fixed on the branch): a 401's `resource_metadata` could make the client GET any URL, a loopback `http:` one included (a remote server's blind GET to a local admin URL): the hint must now be on the server's origin unless the caller lists others, and every URL a server's metadata names must be HTTPS and no more local than the server (loopback, private, link-local and unique-local addresses refused for a remote server, IPv4-mapped forms included). The GET stream's server-request budget no longer restarts at each reconnect, and each connection must open within `timeoutMs`. A shared refresh no longer fails all its callers when the first gives up. A POST's reply takes at most 200 server requests (the time allowance alone allowed 700 at the 60 s deadline). The splice's mark is new for each reply. A callback without `iss` is refused when the issuer says it sends one.
+
 Still lost, and why: the **legacy HTTP+SSE transport** (2024-11-05; servers still on it are rare and the SDKs keep it
 for compatibility only); **output-schema validation** of `structuredContent` (it needs a JSON Schema validator, the
 SDKs' largest dependency, and a caller that wants it can run its own on the result); a **callback listener** for OAuth

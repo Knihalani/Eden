@@ -13,7 +13,14 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js
 import type { AddressInfo } from "node:net";
 import { McpClient } from "./client";
 import { StreamableHttpTransport } from "./http";
-import { MemoryTokenStore, OAuthClientProvider, OAuthError, parseChallenge, type StoredTokens } from "./oauth";
+import {
+  hostClass,
+  MemoryTokenStore,
+  OAuthClientProvider,
+  OAuthError,
+  parseChallenge,
+  type StoredTokens,
+} from "./oauth";
 
 const stops: (() => void)[] = [];
 afterEach(() => {
@@ -358,6 +365,126 @@ describe("adversarial", () => {
     const e = await oauth.unauthorized(challenge).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(OAuthError);
     expect((e as Error).message).toBe("OAuth: a request timed out");
+  });
+});
+
+describe("what a remote server can make the client fetch (the review's SSRF finding)", () => {
+  test("a resource_metadata hint on a loopback URL, or any other origin, is refused before any request", async () => {
+    const p = provider({});
+    for (const hint of [
+      "http://127.0.0.1:8080/admin/shutdown?x=1",
+      "https://127.0.0.1/.well-known/oauth-protected-resource",
+      "https://other.example/.well-known/oauth-protected-resource",
+    ]) {
+      p.requests.length = 0;
+      const c = { ...challenge, wwwAuthenticate: `Bearer resource_metadata="${hint}"` };
+      await expect(p.oauth.unauthorized(c)).rejects.toThrow("the resource metadata is on another origin");
+      expect(p.requests).toEqual([]);
+    }
+  });
+
+  test("another origin is allowed for the hint only when the caller lists it", async () => {
+    const w = world({
+      "https://meta.example/prm": () => prm(),
+      "https://as.example/.well-known/oauth-authorization-server": () => asMeta(),
+      "https://as.example/register": () => Response.json({ client_id: "c1" }, { status: 201 }),
+    });
+    const redirects: URL[] = [];
+    const oauth = new OAuthClientProvider(MCP, {
+      redirectUrl: "https://app.example/cb",
+      onRedirect: (u) => void redirects.push(u),
+      fetch: w.fetchFn,
+      metadataOrigins: ["https://meta.example"],
+    });
+    await oauth.unauthorized({ ...challenge, wwwAuthenticate: `Bearer resource_metadata="https://meta.example/prm"` });
+    expect(redirects).toHaveLength(1);
+  });
+
+  test.each([
+    ["http://127.0.0.1", "must use HTTPS"],
+    ["https://127.0.0.1", "local or private"],
+    ["https://localhost:8443", "local or private"],
+    ["https://app.localhost", "local or private"],
+    ["https://0x7f000001", "local or private"],
+    ["https://0.0.0.0", "local or private"],
+    ["https://10.0.0.5", "local or private"],
+    ["https://172.20.1.1", "local or private"],
+    ["https://192.168.1.1", "local or private"],
+    ["https://169.254.169.254", "local or private"],
+    ["https://100.64.0.1", "local or private"],
+    ["https://[::1]", "local or private"],
+    ["https://[::ffff:127.0.0.1]", "local or private"],
+    ["https://[::ffff:a9fe:a9fe]", "local or private"],
+    ["https://[fd00::1]", "local or private"],
+    ["https://[fe80::1]", "local or private"],
+  ])("a remote server's metadata naming %s is refused, and nothing is fetched there", async (issuer, why) => {
+    const p = provider({
+      "https://mcp.example/.well-known/oauth-protected-resource/mcp": () => prm({ authorization_servers: [issuer] }),
+    });
+    await expect(p.oauth.unauthorized(challenge)).rejects.toThrow(why);
+    expect(p.requests.map((r) => new URL(r.url).origin)).toEqual(["https://mcp.example"]);
+  });
+
+  test("an endpoint on a private address is refused too, while a public one passes", async () => {
+    const p = provider({
+      "https://as.example/.well-known/oauth-authorization-server": () =>
+        asMeta({ token_endpoint: "https://192.168.0.10/token" }),
+    });
+    await expect(p.oauth.unauthorized(challenge)).rejects.toThrow("token endpoint is on a local or private address");
+    expect(hostClass(new URL("https://8.8.8.8"))).toBe("public");
+    expect(hostClass(new URL("https://[2001:db8::1]"))).toBe("public");
+    expect(hostClass(new URL("https://mcp.example"))).toBe("public");
+  });
+
+  test("a server on loopback may name loopback, over http:, as the SDK's local fixture does", () => {
+    // Covered end to end by "against the SDK's authorization server" (127.0.0.1 for both); the rule itself:
+    expect(hostClass(new URL("http://127.0.0.1:9"))).toBe("loopback");
+    expect(hostClass(new URL("http://[::1]:9"))).toBe("loopback");
+  });
+});
+
+describe("refresh and the callback (review findings 3 and 4)", () => {
+  test("a caller that gives up does not fail the shared refresh for the others", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const p = provider({
+      "https://as.example/token": async () => {
+        await gate;
+        return Response.json({ access_token: "AT1", token_type: "bearer", expires_in: 3600 });
+      },
+    });
+    await p.store.set(`tokens ${MCP}`, {
+      accessToken: "AT0",
+      refreshToken: "RT",
+      expiresAt: Date.now() - 1,
+      issuer: ISSUER,
+      tokenEndpoint: `${ISSUER}/token`,
+      resource: MCP,
+      clientId: "c1",
+    } satisfies StoredTokens);
+    const first = new AbortController();
+    const quitter = p.oauth.authorization(new URL(MCP), first.signal);
+    const others = Array.from({ length: 5 }, () => p.oauth.authorization(new URL(MCP), new AbortController().signal));
+    first.abort(new Error("gave up"));
+    expect(await quitter).toBeUndefined();
+    release();
+    expect(await Promise.all(others)).toEqual(Array(5).fill("Bearer AT1"));
+    expect(p.requests.filter((r) => r.url.endsWith("/token"))).toHaveLength(1);
+  });
+
+  test("an issuer that says it sends iss has a callback without one refused", async () => {
+    const p = provider({
+      "https://as.example/.well-known/oauth-authorization-server": () =>
+        asMeta({ authorization_response_iss_parameter_supported: true }),
+      "https://as.example/token": () => Response.json({ access_token: "AT", token_type: "Bearer" }),
+    });
+    await p.oauth.unauthorized(challenge);
+    const state = p.redirects[0]!.searchParams.get("state")!;
+    await expect(p.oauth.finishAuth(`https://app.example/cb?code=k&state=${state}`)).rejects.toThrow("names no issuer");
+    await p.oauth.unauthorized(challenge);
+    const s2 = p.redirects[1]!.searchParams.get("state")!;
+    await p.oauth.finishAuth(`https://app.example/cb?code=k&state=${s2}&iss=${encodeURIComponent(ISSUER)}`);
+    expect((await p.oauth.tokens())!.accessToken).toBe("AT");
   });
 });
 

@@ -322,6 +322,48 @@ describe("the GET stream (openServerStream, D1873)", () => {
     await g.client.close();
   });
 
+  test("one budget for the stream's life: closing and reopening it does not start the budget again", async () => {
+    // 60 pings a connection, then the server ends it: under a budget per connection this ran forever (the review saw
+    // 112 pings answered in 3.1 s); under one for the stream, the second connection passes 100 + 10 a second.
+    const body = () => {
+      let s = "";
+      for (let i = 0; i < 60; i++) s += `data: {"jsonrpc":"2.0","id":"p${i}","method":"ping"}\n\n`;
+      return new Response(s, { headers: { "content-type": "text/event-stream" } });
+    };
+    const g = await getStream(body, { resume: { maxRetries: 100, initialDelayMs: 0 } });
+    await g.transport.openServerStream();
+    for (let i = 0; i < 300 && !g.errors.some((e) => /server requests/.test(e)); i++) await sleep(10);
+    expect(g.errors.filter((e) => /server requests/.test(e))).toHaveLength(1);
+    expect(g.gets()).toBe(2);
+    await sleep(700);
+    expect(g.gets()).toBe(2); // failed by its budget: not reopened
+  });
+
+  test("a GET the server never answers fails the open at the transport's deadline", async () => {
+    const fetchFn = (async (_u: URL | string, init?: RequestInit) => {
+      if (init?.method === "GET") {
+        return new Promise<Response>((_, reject) =>
+          init.signal?.addEventListener("abort", () => reject(init.signal!.reason)),
+        );
+      }
+      const msg = JSON.parse(String(init?.body)) as { id?: number; method?: string };
+      const result = { protocolVersion: "2025-11-25", capabilities: {}, serverInfo: { name: "f", version: "1" } };
+      if (msg.method === "initialize") {
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(null, { status: 202 });
+    }) as typeof fetch;
+    const transport = new StreamableHttpTransport(new URL("http://mcp.test/mcp"), { fetch: fetchFn, timeoutMs: 100 });
+    const client = new McpClient({ name: "c", version: "0" });
+    await client.connect(transport);
+    const t = performance.now();
+    await expect(transport.openServerStream()).rejects.toThrow("Event stream did not open in time");
+    expect(performance.now() - t).toBeLessThan(2_000);
+    await client.close();
+  });
+
   test("close ends it", async () => {
     const g = await getStream(
       () => new Response(new ReadableStream({ start() {} }), { headers: { "content-type": "text/event-stream" } }),
@@ -498,7 +540,17 @@ describe("reply budgets (limits, D1872)", () => {
 
   test("the budget is the caller's to set", async () => {
     const c = new McpClient({ name: "c", version: "0" });
-    await c.connect(pacedPings(500, 0, { limits: { serverRequests: 1_000 } }));
+    await c.connect(pacedPings(500, 0, { limits: { serverRequests: 1_000, serverRequestsMax: 1_000 } }));
     await expect(c.callTool({ name: "x" })).resolves.toEqual({ content: [] });
+  });
+
+  test("a POST's reply never takes more than 200 server requests, however fast the allowance grows", async () => {
+    const limits = { serverRequests: 10, serverRequestsPerSecond: 1_000_000 };
+    const c = new McpClient({ name: "c", version: "0" });
+    await c.connect(pacedPings(300, 1, { limits }));
+    await expect(c.callTool({ name: "x" })).rejects.toThrow("Reply carried over 200 server requests");
+    const d = new McpClient({ name: "c", version: "0" });
+    await d.connect(pacedPings(300, 1, { limits: { ...limits, serverRequestsMax: 400 } }));
+    await expect(d.callTool({ name: "x" })).resolves.toEqual({ content: [] });
   });
 });
