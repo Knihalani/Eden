@@ -524,7 +524,38 @@ function lookup(x: Lexicon, at: number, w: string): string {
   return i < 0 ? "" : entry(x.bytes, x.glosses[at]!, i);
 }
 
-const isCapital = (w: string) => w !== w.toLowerCase();
+/** Whether lower-casing changes `w`; an ASCII word is read by its codes with no new string (D1891). */
+function isCapital(w: string): boolean {
+  for (let i = 0; i < w.length; i++) {
+    const c = w.charCodeAt(i);
+    if (c >= 0x80) return w !== w.toLowerCase();
+    if (c >= 65 && c <= 90) return true;
+  }
+  return false;
+}
+
+/**
+ * Each function word's languages as a bitmask over `g.langs` in order, built once a glossary (D1891): a request's
+ * candidate languages are one lookup a word instead of a Set lookup a word a language. Null past 31 languages.
+ */
+type FnIndex = { masks: Map<string, number>; langs: [string, Lang][] };
+// Keyed by the language map, which is all the index reads (a copy of a glossary with its lexicons unread shares it).
+const fnIndexes = new WeakMap<Map<string, Lang>, FnIndex | null>();
+function fnIndexOf(g: Glossary): FnIndex | null {
+  let x = fnIndexes.get(g.langs);
+  if (x !== undefined) return x;
+  x = null;
+  if (g.langs.size <= 31) {
+    const masks = new Map<string, number>();
+    const langs = [...g.langs];
+    langs.forEach(([, l], k) => {
+      for (const w of l.fn) masks.set(w, (masks.get(w) ?? 0) | (1 << k));
+    });
+    x = { masks, langs };
+  }
+  fnIndexes.set(g.langs, x);
+  return x;
+}
 
 /**
  * The words that tell a request's language: lowercased, without the names. A capitalised word past the first, and a
@@ -548,14 +579,13 @@ function telling(words: readonly string[]): string[] {
  * that are not function words and that its filter certainly lacks). A filter has no false negatives, so a language this
  * rules out is one the count rules out too.
  */
-function couldWin(told: readonly string[], g: Glossary, l: Lang, best: number): boolean {
+function couldWin(told: readonly string[], en: readonly boolean[], g: Glossary, l: Lang, best: number): boolean {
   let most = 0;
   let english = 0;
-  for (const w of told) {
-    const en = isStopword(w) || find(g.head, g.english, w) >= 0;
-    const may = l.fn.has(w) || mayHold(g.head, l.filter, w);
-    if (may && !en) most++;
-    else if (en && !may) english++;
+  for (let i = 0; i < told.length; i++) {
+    const may = l.fn.has(told[i]!) || mayHold(g.head, l.filter, told[i]!);
+    if (may && !en[i]) most++;
+    else if (en[i] && !may) english++;
   }
   return most >= MIN_HITS && most > english && most >= best;
 }
@@ -571,20 +601,33 @@ export function languagesOf(words: readonly string[], g: Glossary): string[] {
   const told = telling(words);
   let best = 0;
   let out: string[] = [];
-  for (const [code, l] of g.langs) {
-    // A language none of whose function words the request holds is not it: set lookups first, so an English
-    // request never searches (or reads) the lexicons.
-    if (!told.some((w) => l.fn.has(w) && !isStopword(w))) continue;
-    if (g.lex === undefined && !couldWin(told, g, l, best)) continue;
+  // A language none of whose function words the request holds is not it: set lookups first, so an English request
+  // never searches (or reads) the lexicons. One mask lookup a word where the glossary has an index (D1891).
+  const idx = fnIndexOf(g);
+  let cands: [string, Lang][];
+  if (idx) {
+    let held = 0;
+    for (const w of told) {
+      const m = idx.masks.get(w);
+      if (m !== undefined && !isStopword(w)) held |= m;
+    }
+    cands = [];
+    for (let b = held; b !== 0; b &= b - 1) cands.push(idx.langs[31 - Math.clz32(b & -b)]!);
+  } else cands = [...g.langs].filter(([, l]) => told.some((w) => l.fn.has(w) && !isStopword(w)));
+  if (cands.length === 0) return out;
+  // Whether each word is English, read once a request (the same for every language).
+  const en = told.map((w) => isStopword(w) || find(g.head, g.english, w) >= 0);
+  for (const [code, l] of cands) {
+    if (g.lex === undefined && !couldWin(told, en, g, l, best)) continue;
     const x = lexicon(g);
     if (!x) return [];
     let mine = 0;
     let english = 0;
-    for (const w of told) {
+    for (let i = 0; i < told.length; i++) {
+      const w = told[i]!;
       const known = l.fn.has(w) || find(x.bytes, x.keys[l.at]!, w) >= 0;
-      const en = isStopword(w) || find(g.head, g.english, w) >= 0;
-      if (known && !en) mine++;
-      else if (en && !known) english++;
+      if (known && !en[i]) mine++;
+      else if (en[i] && !known) english++;
     }
     if (mine < MIN_HITS || mine <= english || mine < best) continue;
     if (mine > best) out = [];
