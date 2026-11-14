@@ -47,9 +47,12 @@ import { bucketOf, type Scope } from "@eden/protocol";
 // it would not read one, and discards it as another version. Files of 3 are still read (`READABLE_FORMATS`).
 // 5 (D992): the owner's extra carries the user's source-map rows (learning that moves with them between processes and
 // machines), and file names start with the user's bucket; files of 3 and 4 had other names and are not met again.
-export const PERSIST_FORMAT = 5;
+// 6 (D1888): an entry may carry its date facts (`FrozenEntry.t`, `FastEntry.t`); a build before it would ignore them,
+// and discards the file as another version all the same. Files of 5 are still read: their entries have none, and
+// read them from the text at the first scan, as before.
+export const PERSIST_FORMAT = 6;
 /** Formats a file may have and still be read: 3's blobs are compact ones, which this build still reads (D862). */
-const READABLE_FORMATS = new Set([3, 4, PERSIST_FORMAT]);
+const READABLE_FORMATS = new Set([3, 4, 5, PERSIST_FORMAT]);
 
 const MAGIC = Buffer.from("EDNF", "latin1");
 const HEADER = 44;

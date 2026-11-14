@@ -265,6 +265,8 @@ interface FrozenEntry {
   /** The sketch: [lo, hi, numbers], null (no own words), or absent (not computed yet). */
   k?: [number, number, number] | null;
   q: number;
+  /** The date facts (`Entry.dates`, D1888): the number form, the array form's values, or absent (not read yet). */
+  t?: number | number[];
 }
 
 interface FrozenBody {
@@ -288,6 +290,27 @@ interface FastEntry {
   r?: number;
   k?: [number, number, number] | null;
   q: number;
+  t?: number | number[];
+}
+
+/**
+ * An entry's date facts as a blob holds them (D1888): a thaw read every item's text again at the user's first request
+ * naming a day (`dated`, D1721), a few milliseconds a hundred items. Facts depend on the item's words alone, which the
+ * blob carries with them.
+ */
+function frozenDates(dates: DayFacts | undefined): number | number[] | undefined {
+  return dates === undefined || typeof dates === "number" ? dates : Array.from(dates);
+}
+
+/**
+ * `frozenDates` read back. Anything else than its two forms (a blob of format 5 has none) reads as not read yet, so
+ * the next scan reads the item's text as before.
+ */
+function thawedDates(t: unknown): DayFacts | undefined {
+  if (typeof t === "number") return Number.isSafeInteger(t) && t >= 0 ? t : undefined;
+  if (!Array.isArray(t) || t.length < 5) return undefined;
+  for (const x of t) if (!Number.isInteger(x) || x < 0 || x > 0xffff) return undefined;
+  return Uint16Array.from(t as number[]);
 }
 
 /** The JSON head of a fast-thaw blob's zstd section; `arrays` gives each array's kind and length, in order. */
@@ -2020,6 +2043,7 @@ export class ItemCache {
       const rec: FrozenEntry = { i: e.item, f: e.fetchedAt, m: e.readMark, s: e.synced ? 1 : 0, q: e.seq };
       if (e.raw !== undefined) rec.r = e.raw;
       if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
+      if (e.dates !== undefined) rec.t = frozenDates(e.dates);
       chunk.push(rec);
       if (chunk.length >= STEP_ITEMS) {
         parts.push(JSON.stringify(chunk).slice(1, -1));
@@ -2071,6 +2095,7 @@ export class ItemCache {
       }
       if (e.raw !== undefined) rec.r = e.raw;
       if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
+      if (e.dates !== undefined) rec.t = frozenDates(e.dates);
       recs.push(rec);
       if (++n % STEP_ITEMS === 0) yield;
     }
@@ -2218,7 +2243,7 @@ export class ItemCache {
         next: null,
         raw: r.r,
         seq: r.q,
-        dates: undefined,
+        dates: thawedDates(r.t),
       };
       if (r.s === 1) {
         entry.synced = true;
@@ -2380,7 +2405,7 @@ export class ItemCache {
         next: null,
         raw: r.r,
         seq: r.q,
-        dates: undefined,
+        dates: thawedDates(r.t),
       };
       if (r.s === 1) {
         entry.synced = true;
