@@ -9,7 +9,7 @@ validation for what arrives over HTTP; Eden's data directory; the `ask_context` 
 |---|---|
 | `src/types.ts` | `AgentEvent` (user/agent message, tool call/result, external, session start/end; `draft` on a user message), `ContextItem`, `Injection`, `ObserveResult`, `AskRequest`/`AskResponse` (optional `sources`: each chosen source's status, D127), `ActionCheck`, `Feedback`, `Scope` |
 | `src/ids.ts` | `newId`, `itemId`, `scopeKey` (`tenant/user`, the key every piece of per-user state uses) |
-| `src/validate.ts` | `checkEvent`, `checkAsk`, `isId`: hand-written checks that return `{ok:false,error}` instead of throwing; `bodyShapeUnder`, the server's byte scan of a raw body's values and depth before `JSON.parse` |
+| `src/validate.ts` | `checkEvent`, `checkAsk`, `isId`: hand-written checks that return `{ok:false,error}` instead of throwing; `bodyShapeUnder`, the server's byte scan of a raw body's values and depth before `JSON.parse` (strings crossed with the native `indexOf`, D1840; `bodyShapeWithin` takes the bounds, for the test against the plain loop) |
 | `src/home.ts` | `edenHome()`: `$EDEN_HOME`, else `~/.eden`, created 0700 |
 | `src/describe.ts` | `ASK_CONTEXT_DESCRIPTION`, used by the server's MCP tool and the lab (the guided variant, D88, was deleted by D112) |
 
