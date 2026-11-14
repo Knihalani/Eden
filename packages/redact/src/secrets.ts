@@ -1070,9 +1070,9 @@ export function gateOf(rules: SecretRule[]): Gate {
       .filter((f) => f.spans.length > 0)
       .map((f) => ({ id: rules[f.r]!.id, spans: f.spans }));
   /**
-   * The structural pass the stored text goes through. Every token literal in a gated text was in `text` (the sentinel
-   * holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks would return its
-   * input unchanged and is left out (TOKEN_PASSES).
+   * The structural pass the stored text goes through. Every token literal in a gated text was in `text` (the
+   * sentinel holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks
+   * would return its input unchanged and is left out (TOKEN_PASSES).
    */
   const pass: StructuralPass = {
     assignments: assignmentSpansSplit,
