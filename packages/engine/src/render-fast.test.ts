@@ -156,7 +156,7 @@ describe("render's fast reading (D1881) against the reference", () => {
       const known = (w: string) => knownWords.has(w);
       for (const year of [undefined, 2026]) {
         for (const self of [undefined, null, SELF]) {
-          for (const split of [false, true]) {
+          for (const split of [false, true, undefined]) {
             const dense = r() < 0.5 ? { title: it.title } : undefined;
             expect(fast.messageParts(it.text, known, year, self, dense, split)).toEqual(
               ref.messageParts(it.text, known, year, self, dense, split),

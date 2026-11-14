@@ -458,7 +458,7 @@ function readParts(
   dense: { title: string } | undefined,
   split: boolean | undefined,
 ): { parts: Part[]; words: string[][] } {
-  return unknownParts(allParts(text, year, self, dense, split), known);
+  return unknownParts(allParts(text, year, self, dense, split ?? false), known);
 }
 
 /**
@@ -581,7 +581,7 @@ function allParts(
   year: number | undefined,
   self: string | null | undefined,
   dense: { title: string } | undefined,
-  split: boolean | undefined,
+  split: boolean,
 ): AllParts {
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
