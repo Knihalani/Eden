@@ -1,44 +1,54 @@
 /**
  * D1850: values that cannot be a secret, which the keyword rules and the structural assignment pass leave in place.
  * The keyword rule (D13) takes the value after `password`, `token`, `secret`, `api_key`… whatever its entropy, so in
- * code it redacted `maxTokens: 2_000`, `apiKey: string;`, `token = this.options.token` and `${API_KEY}`: 93 of its
- * 222 findings on 13.6 MB of the repository's code, docs and the sim worlds' items, and the assignment pass the same
- * shapes. Each shape below is code or a placeholder: a reference to where a secret lives, a type, a number written
- * as code writes it, or a mask; none is how a secret is written. `not-secret.test.ts` holds, for each, a real secret
- * of the nearest shape that is still caught.
+ * code it redacted `apiKey: string;`, `token = this.options.token` and `${API_KEY}`. Each shape below is code or a
+ * placeholder: a reference to where a secret lives, a type, or a mask; none is how a secret is written.
+ * `not-secret.test.ts` holds, for each, a real secret of the nearest shape that is still caught.
+ *
+ * Every shape is the whole value, anchored at both ends: the review of 2026-11-14 found the first version checking
+ * only how a value started, so `${DB_PASSWORD:-S3cr3tP4ssw0rdXq9}`, `process.env.X||Hunt3rPass2Real9` and
+ * `%PASS%Xk39dKf93kdKf8` were stored in clear. `never-less.ts` checks every value let through against a grammar
+ * written apart from this one.
  *
  * What is not here, on purpose: a plain word (`password is sunshine` is a real, weak password), a short value, a low
- * entropy value, an ALL_CAPS name (random keys can be upper case), a decimal or a digit run (a PIN), a call
- * (`pass(word)`), a member chain on an arbitrary name (`dragon.fire`), and `changeme`-style defaults (often the real
- * password).
+ * entropy value, an ALL_CAPS name (random keys can be upper case), a number however written (`123_456_789` is a
+ * password too), a call or a command (`$(…)`), a member chain on an arbitrary name (`dragon.fire`), a reference with
+ * a default (`${X:-…}` holds the secret), and `changeme`-style defaults (often the real password).
  */
+
+import { Last } from "./memo.ts";
 
 /** TypeScript types as a value (`apiKey: string;`, `tokens: Set<number>`, `secret: number[]`). */
 const TYPE =
-  /^(?:string|number|boolean|bigint|undefined|null|unknown|never|void|object)(?:\[\])*$|^(?:Set|Map|WeakMap|WeakSet|Array|ReadonlyArray|Promise|Record|Partial|Readonly)<[\w$, |[\]]*(?:<[\w$, |[\]]*>[\w$, |[\]]*)*>$|^(?:Uint8|Int8|Uint16|Int16|Uint32|Int32|Float32|Float64|BigInt64|BigUint64|Uint8Clamped)Array$/;
+  /^(?:string|number|boolean|bigint|undefined|null|unknown|never|void|object)(?:\[\])*$|^(?:Set|Map|WeakMap|WeakSet|Array|ReadonlyArray|Promise|Record|Partial|Readonly)<[A-Za-z$, |[\]]*(?:<[A-Za-z$, |[\]]*>[A-Za-z$, |[\]]*)*>$|^(?:Uint8|Int8|Uint16|Int16|Uint32|Int32|Float32|Float64|BigInt64|BigUint64|Uint8Clamped)Array$/;
+/** An environment variable read in code: `process.env.API_KEY`, `import.meta.env.VITE_KEY` (upper case, no digit). */
+const ENV = /^(?:process\.env|import\.meta\.env)\.[A-Z_]+$/;
 /**
- * A member chain on a well-known receiver: where the secret is read from, not the secret (`this.options.apiKey`,
- * `process.env.TOKEN`, `res.usage.inputTokens`, `Math.ceil(…)`). The receivers are words no password starts with
- * followed by a dot and an identifier.
+ * A member chain on a well-known receiver, to the end of the value: where the secret is read from, not the secret
+ * (`this.options.apiKey`, `res.usage.inputTokens`). At least two members after the receiver, each letters only: one
+ * member after a broad receiver (`data.Hunter2isMyPassw0rd`, `self.Pa55w0rdIsHere`) can be a password.
  */
-const RECEIVER =
-  /^(?:this|process|env|options|opts|config|cfg|settings|req|request|res|response|data|body|usage|ctx|context|args|params|props|state|self|os|window|globalThis|import\.meta|Math|JSON|Number|Object|Date)(?:\??\.[A-Za-z_$][\w$]*)+(?![\w$])/;
+const MEMBER =
+  /^(?:this|process|env|options|opts|config|cfg|settings|req|request|res|response|data|body|usage|ctx|context|args|params|props|state|self|window|globalThis)(?:\??\.[A-Za-z_$][A-Za-z_$]*){2,}$/;
 /**
- * An environment or template reference: `${API_KEY}`, `$(openssl …)`, `$API_KEY` (upper case with an underscore, as
- * shells and dotenv write names; `$ALES2024` could be a password), `%API_KEY%`, `{{ secret }}`, and a placeholder in
- * angle brackets that starts with a letter (`<your-key>`).
+ * A reference as the whole value: `${API_KEY}` (no default: `${X:-…}`, `${X=…}`, `${X-…}` hold the value itself),
+ * `$API_KEY` (with an underscore, as shells and dotenv write names; `$ALES2024` could be a password), `%API_KEY%`,
+ * `{{secret}}`, and a placeholder in angle brackets (`<your-key>`). A name is letters and underscores in one case, no
+ * digit: `${a8f5f167f44f4964}` or `<Xk39dKf93kdKf8>` is a key in braces.
  */
-const REFERENCE =
-  /^(?:\$\{[A-Za-z_]|\$\(|\$[A-Z][A-Z0-9]*_[A-Z0-9_]+(?![\w$])|%[A-Z_][A-Z0-9_]*%|\{\{|<[A-Za-z][\w .:-]*>)/;
-/** A number as code writes it, digits grouped by `_` (`2_000`, `3_600_000`): no password or PIN is written so. */
-const GROUPED = /^\d{1,3}(?:_\d{3})+$/;
-/** A mask: `xxxxxxxx`, `****`, `•••`, `####`, alone or after a short prefix (`hf_xxxx…`, `pplx-XXXX…`). */
-const MASK = /^(?:[A-Za-z0-9]{1,12}[_~.-])?[xX*•#]{8,}$/;
+// The first letter picks the case, so no name has two readings (a regex with two would backtrack exponentially).
+const NAME = String.raw`_?(?:[A-Z][A-Z_]*|[a-z][a-z_]*)`;
+const REFERENCE = new RegExp(
+  String.raw`^(?:\$\{${NAME}\}|\$[A-Z]+_[A-Z_]+|%${NAME}%|\{\{${NAME}(?:\.${NAME})*\}\}|<(?:[a-z]+(?:[-_][a-z]+)*|[A-Z]+(?:[-_][A-Z]+)*)>)$`,
+);
+/** A mask: `xxxxxxxx`, `****`, `•••`, `####`, alone or after a short prefix of letters (`hf_xxxx…`, `pplx-XXXX…`). */
+const MASK = /^(?:[A-Za-z]{1,8}[_~.-])?[xX*•#]{8,}$/;
 /**
- * One character sixteen or more times to the end (then up to two `=`), alone or after a short prefix
+ * One character sixteen or more times to the end (then up to two `=`), alone or after a short prefix of letters
  * (`AIzaaaaaaaaaaaaaaaaa…`, `AKIAXXXXXXXXXXXXXXXX`, `glc_1111…=`): a placeholder. A random secret holds such a run
  * with probability under 62^-15 a position, and the run must fill the rest of the value, so a secret cannot hide
- * behind one. Read by hand: as a regex (`(.)\1{15,}=*$`) a run of `=` backtracked quadratically.
+ * behind one; the prefix is letters, at most 8 (12 random characters before a run would be a secret). Read by hand:
+ * as a regex (`(.)\1{15,}=*$`) a run of `=` backtracked quadratically.
  */
 function isRun(v: string): boolean {
   let end = v.length;
@@ -50,7 +60,7 @@ function isRun(v: string): boolean {
   while (start > 0 && v.charCodeAt(start - 1) === c) start--;
   return end - start >= 16 && RUN_PREFIX.test(v.slice(0, start));
 }
-const RUN_PREFIX = /^(?:[A-Za-z0-9]{0,12}[_~.-]?)$/;
+const RUN_PREFIX = /^(?:[A-Za-z]{0,8}[_~.-]?)$/;
 /** Longer values are never excused: no shape above is longer, and every test stays linear. */
 const VALUE_LIMIT = 512;
 /** The punctuation code puts after a value: `,;):]}`. */
@@ -58,9 +68,24 @@ const TRAILING = new Set([...",;):]}"].map((c) => c.charCodeAt(0)));
 
 /** Strips one pair of quotes or backticks around `value`, and the punctuation code puts after one. */
 function core(value: string): string {
-  // By hand: `/[,;):\]}]+$/` re-read a long run of those characters from each of its positions (quadratic).
+  // By hand: `/[,;):\]}]+$/` re-read a long run of those characters from each of its positions (quadratic). A
+  // closing bracket goes only while it closes nothing in the value (`${API_KEY}` keeps its brace, `${X})` loses `)`).
+  let open = 0;
+  let close = 0;
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 123 || c === 40 || c === 91) open++;
+    else if (c === 125 || c === 41 || c === 93) close++;
+  }
   let end = value.length;
-  while (end > 0 && TRAILING.has(value.charCodeAt(end - 1))) end--;
+  while (end > 0 && TRAILING.has(value.charCodeAt(end - 1))) {
+    const c = value.charCodeAt(end - 1);
+    if (c === 125 || c === 41 || c === 93) {
+      if (close <= open) break;
+      close--;
+    }
+    end--;
+  }
   let v = value.slice(0, end);
   const first = v[0];
   if (v.length >= 2 && (first === '"' || first === "'" || first === "`") && v[v.length - 1] === first) {
@@ -72,20 +97,16 @@ function core(value: string): string {
 /** Whether `value` (a keyword's or an assignment's value, as written) is code or a placeholder, never a secret. */
 export function notSecret(value: string): boolean {
   if (value.length > VALUE_LIMIT * 2) return false;
-  // The last value's verdict: a text dense in assignments repeats one (`token:"token:"…`, 0.3 µs a value otherwise).
-  if (value === lastValue) return lastVerdict;
-  lastValue = value;
-  lastVerdict = judge(value);
-  return lastVerdict;
+  // The last value's verdict, within one call (memo.ts): a text dense in assignments repeats one (`token:"token:"…`).
+  return LAST_VALUE.get(value, judge);
 }
-let lastValue = "";
-let lastVerdict = false;
+const LAST_VALUE = new Last<boolean>();
 
 function judge(value: string): boolean {
   const v = core(value);
   // One token: a value with a space or a quote inside is prose or more than one value (`'process.env.X"API key: …'`).
   if (v.length === 0 || v.length > VALUE_LIMIT || /[\s"'`]/.test(v)) return false;
-  return TYPE.test(v) || RECEIVER.test(v) || REFERENCE.test(v) || GROUPED.test(v) || MASK.test(v) || isRun(v);
+  return TYPE.test(v) || ENV.test(v) || MEMBER.test(v) || REFERENCE.test(v) || MASK.test(v) || isRun(v);
 }
 
 /** Whether a provider-shaped token is a placeholder (`MASK` or `RUN`): for the bare-shape rules. */
@@ -135,9 +156,8 @@ export function excused<R extends { spans(text: string, ...rest: never[]): [numb
   excuse: (value: string) => boolean,
 ): R & { split(text: string, ...rest: unknown[]): { spans: [number, number][]; excused: [number, number][] } } {
   const spans = rule.spans.bind(rule) as (text: string, ...rest: unknown[]) => [number, number][];
-  // The last value's verdict is kept: a text dense in findings repeats its value.
-  let lastValue: string | undefined;
-  let lastVerdict = false;
+  // The last value's verdict, within one call (memo.ts): a text dense in findings repeats its value.
+  const last = new Last<boolean>();
   const split = (text: string, ...rest: unknown[]) => {
     const kept: [number, number][] = [];
     const left: [number, number][] = [];
@@ -147,12 +167,7 @@ export function excused<R extends { spans(text: string, ...rest: never[]): [numb
         kept.push(span);
         continue;
       }
-      const value = valueAt(text, span[0], span[1]);
-      if (value !== lastValue) {
-        lastValue = value;
-        lastVerdict = excuse(value);
-      }
-      (lastVerdict ? left : kept).push(span);
+      (last.get(valueAt(text, span[0], span[1]), excuse) ? left : kept).push(span);
     }
     return { spans: kept, excused: left };
   };
