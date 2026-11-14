@@ -67,7 +67,7 @@ export function composeMasks(
 ): Composed {
   const main = strict.length + excused.length > 0;
   const assigned = main ? pass.assignments(text) : { all: [], strict: [] };
-  const spans = strict.concat(excused, assigned.all).sort((a, b) => a[0] - b[0]);
+  const spans = byStart(strict.concat(excused, assigned.all));
   let gated = "";
   let at = 0;
   for (const [start, end] of spans) {
@@ -136,4 +136,39 @@ export function composeMasks(
     from = i = j;
   }
   return { stored: out + text.slice(from), before, after, excused: excusedChars, values };
+}
+
+/**
+ * `spans` sorted by start, stably: what `spans.sort((a, b) => a[0] - b[0])` gives, by merging the runs already in
+ * order (each rule reports its spans in order, so a text holds a few runs however many spans): a comparator sort
+ * cost 10 ms a megabyte of findings (D1850).
+ */
+export function byStart(spans: Span[]): Span[] {
+  let runs: Span[][] = [];
+  let from = 0;
+  for (let i = 1; i <= spans.length; i++) {
+    if (i === spans.length || spans[i]![0] < spans[i - 1]![0]) {
+      runs.push(spans.slice(from, i));
+      from = i;
+    }
+  }
+  if (runs.length <= 1) return spans;
+  // Merge neighbours, the left one first at an equal start (stable), until one run is left.
+  while (runs.length > 1) {
+    const next: Span[][] = [];
+    for (let r = 0; r + 1 < runs.length; r += 2) next.push(merge(runs[r]!, runs[r + 1]!));
+    if (runs.length % 2 === 1) next.push(runs[runs.length - 1]!);
+    runs = next;
+  }
+  return runs[0]!;
+}
+
+function merge(a: Span[], b: Span[]): Span[] {
+  const out: Span[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) out.push(b[j]![0] < a[i]![0] ? b[j++]! : a[i++]!);
+  while (i < a.length) out.push(a[i++]!);
+  while (j < b.length) out.push(b[j++]!);
+  return out;
 }
