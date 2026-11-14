@@ -158,4 +158,5 @@ body carries no whitespace or field that reaches the model's tokens beyond the m
   packets (1.18 items each), facts handed 10 of 11, look-alikes 3 of 10: unchanged.
 - `bun run funnel --jobs 4 --baseline` (the baseline run with origin/main's `turn-gate.ts` and `gloss.ts` swapped in):
   hidden 323/384, decoys 294/384, against it hidden +0 −0, decoys +0 −0.
-- `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check`: see the branch's last commit.
+- `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check`: passed in 88 s on the final code (format, types,
+  every test file run cold).
