@@ -1,4 +1,4 @@
-# Eden's MCP client against the alternatives (2026-11-14, D1860: adopted)
+# Eden's MCP client against the alternatives (2026-11-14, D1860 and D1870-D1875: adopted)
 
 D1704 replaced the official SDK with Eden's own MCP client; D1840 made it faster. The owner may release the module
 (`packages/sources/src/mcp/`) on its own, so this note does three things: fixes the weak points D1840 left (JSON
@@ -11,14 +11,14 @@ every speed comparison interleaves its arms over three rounds and reports median
 
 ## The clients
 
-| Client | Version | What it is | Install (npm or pip, own empty directory, scripts off) |
-|---|---|---|---|
-| Eden (`eden`) | this tree | this module | 0 packages; 1,760 lines of source (72 KB with comments); a minified tools-only bundle 17.5 KB (6.3 KB gzipped) |
-| Official TypeScript SDK 1.x (`sdk`) | `@modelcontextprotocol/sdk` 1.32.2 | the reference implementation; Eden's devDependency | 95 packages (with its zod peer), 29 MB |
-| Official TypeScript SDK 2.x (`sdk2`) | `@modelcontextprotocol/client` 2.4.0 | the SDK's split client package | 13 packages, 18 MB |
-| pi-mcp (`pi`) | `@earendil-works/pi-mcp` 1.5.2 | the Pi harness's standalone client (no SDK dependency), ~13M downloads a month | 7 packages, 1.1 MB |
-| AI SDK MCP (`aisdk`) | `@ai-sdk/mcp` 2.0.99 | Vercel AI SDK's client, ~31M downloads a month | 15 packages (with its zod peer), 14 MB |
-| Python SDK (`python`) | `mcp` 2.3.0 | the official Python SDK | 28 packages, about 44 MB of `site-packages` (57 MB with pip's 13) |
+| Client                               | Version                              | What it is                                                                     | Install (npm or pip, own empty directory, scripts off)                                                         |
+| ------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Eden (`eden`)                        | this tree                            | this module                                                                    | 0 packages; 1,760 lines of source (72 KB with comments); a minified tools-only bundle 17.5 KB (6.3 KB gzipped) |
+| Official TypeScript SDK 1.x (`sdk`)  | `@modelcontextprotocol/sdk` 1.32.2   | the reference implementation; Eden's devDependency                             | 95 packages (with its zod peer), 29 MB                                                                         |
+| Official TypeScript SDK 2.x (`sdk2`) | `@modelcontextprotocol/client` 2.4.0 | the SDK's split client package                                                 | 13 packages, 18 MB                                                                                             |
+| pi-mcp (`pi`)                        | `@earendil-works/pi-mcp` 1.5.2       | the Pi harness's standalone client (no SDK dependency), ~13M downloads a month | 7 packages, 1.1 MB                                                                                             |
+| AI SDK MCP (`aisdk`)                 | `@ai-sdk/mcp` 2.0.99                 | Vercel AI SDK's client, ~31M downloads a month                                 | 15 packages (with its zod peer), 14 MB                                                                         |
+| Python SDK (`python`)                | `mcp` 2.3.0                          | the official Python SDK                                                        | 28 packages, about 44 MB of `site-packages` (57 MB with pip's 13)                                              |
 
 Lightweight JavaScript clients were found by searching the npm registry for "mcp client" and "model context protocol
 client": pi-mcp and the AI SDK's are the most used that do not wrap the official SDK (`mcp-client` 1.13 and
@@ -48,26 +48,26 @@ fresh process, against two local servers in their own processes:
 
 CPU per call (µs, all threads; lower is better):
 
-| Reply | In flight | eden | sdk | sdk2 | pi | aisdk | python |
-|---|---|---|---|---|---|---|---|
-| JSON 1 KB | 1 | **89** | 118 | 185 | 100 | 157 | 3,051 |
-| JSON 1 KB | 16 | **46** | 66 | 101 | 90 | 66 | 3,073 |
-| JSON 1 KB | 256 | **60** | 62 | 116 | 64 | 98 | 3,372 |
-| JSON 64 KB | 1 | **155** | 197 | 253 | 225 | 265 | 4,490 |
-| JSON 64 KB | 16 | **141** | 178 | 181 | 147 | 176 | 4,613 |
-| JSON 64 KB | 256 | **119** | 146 | 164 | 163 | 149 | 4,832 |
-| JSON 1 MB | 1 | 1,474 | 1,249 | **1,138** | 2,592 | 1,258 | 29,972 |
-| JSON 1 MB | 16 | 1,304 | **1,174** | 1,213 | 1,805 | 1,269 | 26,978 |
-| JSON 1 MB | 256 | 1,810 | 1,624 | **1,543** | 2,219 | 1,565 | 29,692 |
-| SSE 1 KB | 1 | **95** | 131 | 145 | 130 | 167 | 4,532 |
-| SSE 1 KB | 16 | **45** | 92 | 96 | 93 | 127 | 4,087 |
-| SSE 1 KB | 256 | **42** | 78 | 120 | 82 | 106 | 4,609 |
-| SSE 64 KB | 1 | **208** | 271 | 304 | 682 | 362 | 6,351 |
-| SSE 64 KB | 16 | **171** | 358 | 303 | 661 | 353 | 6,613 |
-| SSE 64 KB | 256 | **177** | 257 | 277 | 546 | 254 | 6,888 |
-| SSE 1 MB | 1 | **2,602** | 3,439 | 3,270 | 20,586 | 3,527 | 42,192 |
-| SSE 1 MB | 16 | **1,809** | 2,615 | 2,720 | 15,193 | 2,649 | 40,430 |
-| SSE 1 MB | 256 | **2,106** | 2,581 | 2,528 | 15,036 | 2,746 | 37,520 |
+| Reply      | In flight | eden      | sdk       | sdk2      | pi     | aisdk | python |
+| ---------- | --------- | --------- | --------- | --------- | ------ | ----- | ------ |
+| JSON 1 KB  | 1         | **89**    | 118       | 185       | 100    | 157   | 3,051  |
+| JSON 1 KB  | 16        | **46**    | 66        | 101       | 90     | 66    | 3,073  |
+| JSON 1 KB  | 256       | **60**    | 62        | 116       | 64     | 98    | 3,372  |
+| JSON 64 KB | 1         | **155**   | 197       | 253       | 225    | 265   | 4,490  |
+| JSON 64 KB | 16        | **141**   | 178       | 181       | 147    | 176   | 4,613  |
+| JSON 64 KB | 256       | **119**   | 146       | 164       | 163    | 149   | 4,832  |
+| JSON 1 MB  | 1         | 1,474     | 1,249     | **1,138** | 2,592  | 1,258 | 29,972 |
+| JSON 1 MB  | 16        | 1,304     | **1,174** | 1,213     | 1,805  | 1,269 | 26,978 |
+| JSON 1 MB  | 256       | 1,810     | 1,624     | **1,543** | 2,219  | 1,565 | 29,692 |
+| SSE 1 KB   | 1         | **95**    | 131       | 145       | 130    | 167   | 4,532  |
+| SSE 1 KB   | 16        | **45**    | 92        | 96        | 93     | 127   | 4,087  |
+| SSE 1 KB   | 256       | **42**    | 78        | 120       | 82     | 106   | 4,609  |
+| SSE 64 KB  | 1         | **208**   | 271       | 304       | 682    | 362   | 6,351  |
+| SSE 64 KB  | 16        | **171**   | 358       | 303       | 661    | 353   | 6,613  |
+| SSE 64 KB  | 256       | **177**   | 257       | 277       | 546    | 254   | 6,888  |
+| SSE 1 MB   | 1         | **2,602** | 3,439     | 3,270     | 20,586 | 3,527 | 42,192 |
+| SSE 1 MB   | 16        | **1,809** | 2,615     | 2,720     | 15,193 | 2,649 | 40,430 |
+| SSE 1 MB   | 256       | **2,106** | 2,581     | 2,528     | 15,036 | 2,746 | 37,520 |
 
 p50 latency follows CPU: one call at a time, 98 / 103 / 143 / 109 / 138 / 2,982 µs at 1 KB JSON (eden, sdk, sdk2, pi,
 aisdk, python), 1,619 / 1,360 / 1,247 / 2,371 / 1,432 / 31,180 µs at 1 MB JSON, 2,420 / 2,383 / 2,277 / 18,666 /
@@ -79,56 +79,60 @@ Peak RSS (MB): at 1 KB one call at a time 44 / 61 / 74 / 54 / 65 / 73 (JSON); 25
 that does not fall back between cells (its process keeps the memory it took), so its SSE column reads 280 MB from the
 first SSE cell; it is still the lowest at 256 MB of replies in flight, since it reads them more slowly.
 
-**Time to the first call** (spawn to answer, medians of 3): eden 26 ms, pi 56, aisdk 106, sdk 125, sdk2 173, python
-710.
+**Time to the first call** (spawn to answer, medians of 3): eden 26 ms, pi 56, aisdk 106, sdk 125, sdk2 173, python 710.
 
-Where ours loses: **JSON replies of 1 MB**, 1.11-1.18x the CPU of the SDK 1.x and 1.07-1.30x of the SDK 2.x, and
-1.0-1.3x their latency. Every other client reads a JSON reply with `res.json()` in one native step; ours reads it
-natively as text (D1860, below) but must then run the shape check over it before `JSON.parse`, and the text is a
-string the parse reads again. At 64 KB and below ours is the cheapest in every cell, and in SSE at every size.
+Where ours lost (D1860's run): **JSON replies of 1 MB**, 1.11-1.18x the CPU of the SDK 1.x and 1.07-1.30x of the
+SDK 2.x, and 1.0-1.3x their latency. Every other client reads a JSON reply with `res.json()` in one native step; ours
+read it natively as text (D1860, below) but then ran the shape check over it before `JSON.parse`, and the text is a
+string the parse reads again. At 64 KB and below ours was the cheapest in every cell, and in SSE at every size.
+D1870 closes it (below, "Closing the losses"): JSON at 1 MB is now 0.73-0.77x the SDK 1.x's CPU at 1 and 16 in flight
+in `mcp-profile.bench.ts`, and with text written as tool output is (an escape every line) it went from 1.4-1.5x the
+SDK's to 0.94-1.30x, from 1.12-1.72x: a loss that is smaller, not gone.
 
 ## Hostile replies
 
-| Case | eden | sdk | sdk2 | pi | aisdk | python |
-|---|---|---|---|---|---|---|
-| Oversized JSON (128 MiB, declared) | refused at 16 MiB, 26 MB RSS | read whole, answered, 305 MB | read whole, 314 MB | refused at 16 MiB, 65 MB | read whole, 306 MB | read whole, 712 MB |
-| Oversized SSE (a line that never ends, up to 512 MiB) | refused at 4 MiB, 15 ms, 33 MB | grew to the 5 s timeout, 637 MB | same, 648 MB | refused at 16 MiB after 1.4 s of CPU, 153 MB | grew to the timeout (5.2 s CPU), 643 MB | refused at its 1 MiB event cap, 72 MB |
-| Slow drip (an SSE comment every 250 ms, no answer) | timeout at 5.0 s | timeout at 5.1 s | timeout | timeout | timeout | timeout |
-| SSE junk (2,000,000 junk events, then the answer) | failed after 100 bad events, 9 ms CPU | answered after 2.1 s CPU | answered, 1.9 s | answered, 2.6 s | aborted at the timeout after 7.0 s CPU | failed at the first bad event, 93 ms |
-| Server-request flood (20,000 pings and sampling requests, then the answer) | failed after 100; 16 POSTs back | answered; 19,998 POSTs back | answered; 20,000 POSTs | answered; 18,033 POSTs | answered; 14,805 POSTs | timed out after 10.6 s of CPU; 3,763 POSTs |
-| Redirect to another origin (307) | not followed | not followed | not followed | **followed; `x-api-key` sent to the other origin** | not followed | not followed |
-| Malformed JSON | clean error | clean error | clean error | clean error | clean error | clean error |
-| 1,000,000 nested arrays | refused before the parse, 10 ms CPU | parsed, then refused by zod, 354 ms, 134 MB | same, 377 ms | parsed, refused, 266 ms, 132 MB | parsed, refused, 297 ms | refused by its parser, 98 ms |
+| Case                                                                       | eden                                  | sdk                                         | sdk2                   | pi                                                 | aisdk                                   | python                                     |
+| -------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------- | ---------------------- | -------------------------------------------------- | --------------------------------------- | ------------------------------------------ |
+| Oversized JSON (128 MiB, declared)                                         | refused at 16 MiB, 26 MB RSS          | read whole, answered, 305 MB                | read whole, 314 MB     | refused at 16 MiB, 65 MB                           | read whole, 306 MB                      | read whole, 712 MB                         |
+| Oversized SSE (a line that never ends, up to 512 MiB)                      | refused at 4 MiB, 15 ms, 33 MB        | grew to the 5 s timeout, 637 MB             | same, 648 MB           | refused at 16 MiB after 1.4 s of CPU, 153 MB       | grew to the timeout (5.2 s CPU), 643 MB | refused at its 1 MiB event cap, 72 MB      |
+| Slow drip (an SSE comment every 250 ms, no answer)                         | timeout at 5.0 s                      | timeout at 5.1 s                            | timeout                | timeout                                            | timeout                                 | timeout                                    |
+| SSE junk (2,000,000 junk events, then the answer)                          | failed after 100 bad events, 9 ms CPU | answered after 2.1 s CPU                    | answered, 1.9 s        | answered, 2.6 s                                    | aborted at the timeout after 7.0 s CPU  | failed at the first bad event, 93 ms       |
+| Server-request flood (20,000 pings and sampling requests, then the answer) | failed after 100; 16 POSTs back       | answered; 19,998 POSTs back                 | answered; 20,000 POSTs | answered; 18,033 POSTs                             | answered; 14,805 POSTs                  | timed out after 10.6 s of CPU; 3,763 POSTs |
+| Redirect to another origin (307)                                           | not followed                          | not followed                                | not followed           | **followed; `x-api-key` sent to the other origin** | not followed                            | not followed                               |
+| Malformed JSON                                                             | clean error                           | clean error                                 | clean error            | clean error                                        | clean error                             | clean error                                |
+| 1,000,000 nested arrays                                                    | refused before the parse, 10 ms CPU   | parsed, then refused by zod, 354 ms, 134 MB | same, 377 ms           | parsed, refused, 266 ms, 132 MB                    | parsed, refused, 297 ms                 | refused by its parser, 98 ms               |
 
 POSTs back are counted past the three of the handshake and the call. No client crashed or hung past its timeout. Bun's
 `fetch` drops `authorization` on a cross-origin redirect but not other headers, so a client that follows redirects
 (pi-mcp does, as `fetch` does by default) sends a key in any other header to the redirect's target; the SDKs, the AI SDK
 and Python refuse cross-origin redirects, as ours does.
 
-Where ours is stricter than the others, and a well-behaved server could notice: a reply carrying more than 100 server
-requests, or more than 100 malformed or unasked messages, fails its call, where the SDKs answer every request and skip
-junk. It also answers only `ping` among server requests (no sampling, roots or elicitation handlers).
+Where ours was stricter than the others, and a well-behaved server could notice (D1860): a reply carrying more than
+100 server requests, or more than 100 malformed or unasked messages, failed its call, where the SDKs answer every
+request and skip junk; and it answered only `ping` among server requests. D1872 makes both counts budgets (100 server
+requests plus 10 a second the reply stays open, 100 bad messages plus one per KiB of messages), settable per transport,
+and D1875 lets a caller answer sampling, roots and elicitation (below).
 
 ## Features
 
-| | eden | sdk / sdk2 | pi | aisdk | python |
-|---|---|---|---|---|---|
-| Streamable HTTP | yes | yes | yes | yes | yes |
-| stdio (spawning a server) | yes (D1860) | yes | yes | yes | yes |
-| Legacy HTTP+SSE transport | no | yes | no | yes | yes |
-| Tools | yes | yes | yes | yes | yes |
-| Resources | yes (`extras`, D1860) | yes | yes | yes | yes |
-| Prompts | yes (`extras`, D1860) | yes | no | yes | yes |
-| Completions | through `request` | yes | no | yes | yes |
-| Server-request handlers (sampling, roots, elicitation) | no (dropped) | yes | roots; any through `setRequestHandler` | elicitation | yes |
-| OAuth | no | yes | yes | yes | yes |
-| SSE resumability (`Last-Event-ID`) | no | yes | yes | handles `Last-Event-ID` | yes |
-| Output-schema validation | no | yes | no | not checked | yes |
-| Reply size cap | 16 MiB (4 MiB a listing or event) | none | 16 MiB | none | 1 MiB a SSE event; JSON none |
-| Shape check before the parse | yes | no | no | no | no |
-| Server-request flood bound | 100 a reply, 16 answers at once | no | no | no | no |
-| Cross-origin redirects | refused | refused | followed | refused | refused |
-| npm dependencies | 0 | 94 / 12 | 6 | 14 | 27 (pip) |
+|                                                        | eden                                                               | sdk / sdk2 | pi                                     | aisdk                   | python                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------ | ---------- | -------------------------------------- | ----------------------- | ---------------------------- |
+| Streamable HTTP                                        | yes                                                                | yes        | yes                                    | yes                     | yes                          |
+| stdio (spawning a server)                              | yes (D1860)                                                        | yes        | yes                                    | yes                     | yes                          |
+| Legacy HTTP+SSE transport                              | no                                                                 | yes        | no                                     | yes                     | yes                          |
+| Tools                                                  | yes                                                                | yes        | yes                                    | yes                     | yes                          |
+| Resources                                              | yes (`extras`, D1860)                                              | yes        | yes                                    | yes                     | yes                          |
+| Prompts                                                | yes (`extras`, D1860)                                              | yes        | no                                     | yes                     | yes                          |
+| Completions                                            | through `request`                                                  | yes        | no                                     | yes                     | yes                          |
+| Server-request handlers (sampling, roots, elicitation) | opt-in: `setRequestHandler` (D1875); dropped without one           | yes        | roots; any through `setRequestHandler` | elicitation             | yes                          |
+| OAuth                                                  | opt-in: `oauth.ts` (D1874)                                         | yes        | yes                                    | yes                     | yes                          |
+| SSE resumability (`Last-Event-ID`)                     | opt-in: `resume`, and the GET stream (D1873)                       | yes        | yes                                    | handles `Last-Event-ID` | yes                          |
+| Output-schema validation                               | no                                                                 | yes        | no                                     | not checked             | yes                          |
+| Reply size cap                                         | 16 MiB (4 MiB a listing or event)                                  | none       | 16 MiB                                 | none                    | 1 MiB a SSE event; JSON none |
+| Shape check before the parse                           | yes                                                                | no         | no                                     | no                      | no                           |
+| Server-request flood bound                             | 100 a reply plus 10 a second, settable; 16 answers at once (D1872) | no         | no                                     | no                      | no                           |
+| Cross-origin redirects                                 | refused                                                            | refused    | followed                               | refused                 | refused                      |
+| npm dependencies                                       | 0                                                                  | 94 / 12    | 6                                      | 14                      | 27 (pip)                     |
 
 The others' columns are from their published types, READMEs and these runs, not from reading all their code.
 
@@ -169,19 +173,19 @@ validation.
 arm order rotating, medians. CPU per `tools/call` in µs; the last two columns are D1860 against D1840 and against the
 SDK 1.x (below 1 is better):
 
-| JSON reply | In flight | D1840 | D1860 | SDK | D1860 / D1840 | D1860 / SDK |
-|---|---|---|---|---|---|---|
-| 1 KB | 1 | 70.6 | 58.7 | 138.6 | 0.83 | 0.42 |
-| 1 KB | 16 | 58.2 | 45.8 | 68.4 | 0.79 | 0.67 |
-| 1 KB | 256 | 60.3 | 59.4 | 65.7 | 0.99 | 0.90 |
-| 64 KB | 1 | 210.4 | 162.5 | 210.8 | 0.77 | 0.77 |
-| 64 KB | 16 | 186.4 | 83.2 | 131.6 | 0.45 | 0.63 |
-| 64 KB | 256 | 181.3 | 113.6 | 118.9 | 0.63 | 0.96 |
-| 1 MB | 1 | 2,231 | 1,289 | 1,204 | 0.58 | 1.07 |
-| 1 MB | 16 | 1,875 | 1,094 | 1,193 | 0.58 | 0.92 |
-| 1 MB | 256 | 2,284 | 1,574 | 1,598 | 0.69 | 0.99 |
-| 4 MB | 1 | 7,935 | 3,530 | 4,385 | 0.44 | 0.81 |
-| 4 MB | 16 | 7,680 | 3,587 | 4,032 | 0.47 | 0.89 |
+| JSON reply | In flight | D1840 | D1860 | SDK   | D1860 / D1840 | D1860 / SDK |
+| ---------- | --------- | ----- | ----- | ----- | ------------- | ----------- |
+| 1 KB       | 1         | 70.6  | 58.7  | 138.6 | 0.83          | 0.42        |
+| 1 KB       | 16        | 58.2  | 45.8  | 68.4  | 0.79          | 0.67        |
+| 1 KB       | 256       | 60.3  | 59.4  | 65.7  | 0.99          | 0.90        |
+| 64 KB      | 1         | 210.4 | 162.5 | 210.8 | 0.77          | 0.77        |
+| 64 KB      | 16        | 186.4 | 83.2  | 131.6 | 0.45          | 0.63        |
+| 64 KB      | 256       | 181.3 | 113.6 | 118.9 | 0.63          | 0.96        |
+| 1 MB       | 1         | 2,231 | 1,289 | 1,204 | 0.58          | 1.07        |
+| 1 MB       | 16        | 1,875 | 1,094 | 1,193 | 0.58          | 0.92        |
+| 1 MB       | 256       | 2,284 | 1,574 | 1,598 | 0.69          | 0.99        |
+| 4 MB       | 1         | 7,935 | 3,530 | 4,385 | 0.44          | 0.81        |
+| 4 MB       | 16        | 7,680 | 3,587 | 4,032 | 0.47          | 0.89        |
 
 `tools/list` in JSON: 0.64-0.95 of D1840's from 64 KB (one cell at 1 KB, 16 in flight, 1.05) and 0.44-0.70 of the
 SDK's. Before, JSON `tools/call` was 1.20-2.23x the SDK's from 64 KB (D1840's run); now 0.77-1.07x. The other
@@ -227,6 +231,143 @@ An independent review of the first version (head f58325186) asked for seven chan
   text and would otherwise reach the host's logs unasked. The SDK's default is to inherit it.
 - **Subpath exports**: `@eden/sources/mcp`, `@eden/sources/mcp/stdio` and `@eden/sources/mcp/extras` in the package's
   `exports`.
+
+## Closing the losses (D1870-D1875)
+
+A second pass, the same day, at the list above: JSON at 1 MB, no OAuth, no resumability or GET stream, the flood
+caps, and the server requests ours would not answer. Machine and method as above; the other agent on the machine was
+running benches throughout, so every comparison is interleaved and the medians of three rounds are reported.
+
+### Where the time went at 1 MB (D1870)
+
+Profiled down from the whole call (`--cpu-prof-md`, and A/B variants of the read in a copy of the transport, each in
+its own process against the canned server, 1,200 calls at 1 and 16 in flight, three rounds):
+
+| Read of a 1 MiB JSON reply                                                            | CPU per call (µs), 1 in flight | 16 in flight |
+| ------------------------------------------------------------------------------------- | ------------------------------ | ------------ |
+| D1860: `text()`, shape check, `JSON.parse`                                            | 1,010-1,170                    | 870-1,030    |
+| the same without the shape check                                                      | 1,040-1,070                    | 900-930      |
+| `res.json()`, no shape check (the floor ours cannot take: it parses before any check) | 790-910                        | 670-810      |
+| `bytes()`, byte shape check, `TextDecoder`, `JSON.parse` (Node's path)                | 1,370-1,460                    | 1,130-1,220  |
+| `bytes()` or `blob()`, the check, then `new Response(bytes).json()` / `Blob.json()`   | 1,160-1,480                    | 1,135-1,245  |
+| SDK 1.x (`res.json()`, then zod)                                                      | 1,050-1,170                    | 990-1,080    |
+
+So the shape check itself cost 30-90 µs a MiB; the loss was `text()`'s string plus `JSON.parse` reading and copying
+it again (in-process: `JSON.parse` of a fetched 1 MiB string 172-306 µs, `text()` 100-120 µs over `bytes()`, and the
+second 1 MiB string doubling what the collector sees). Bun's `res.json()` parses the received bytes without making
+that string, which no public API offers after a check: `Bun.JSONL.parse(bytes)` costs the same as decode and parse
+(and accepts `{"a":1}{"b":2}` as one value), and a `clone()` before `json()` costs 1,740-2,300 µs. Skipping the check
+was measured too and refused: a 1 MB body of nested arrays costs `json()` 108 ms of CPU against 46 ms for the worst
+body the check lets through, and at 16 MiB 1,284 ms and 775 MB RSS, so D1704's depth bound before the parse stays.
+
+Two changes, both keeping the check before any parse:
+
+1. **A string's end is found by its next quote** (`stringEnd` here and in `@eden/protocol`): search for the next
+   quote with `indexOf` and count the backslashes right before it, where D1840 searched for the next backslash too and
+   went back to the byte loop at each one. Escaped quotes closer than 4 bytes apart (JSON written as text, a run of
+   `\"`) are read byte by byte in a window that doubles while they stay that close. On 1 MiB strings (µs, three
+   rounds): plain text 16 against 30 before, text with an escaped newline and quote every line (tool output) 350-430
+   against 850-1,000, JSON written as text 1,190-1,360 against 1,460, a run of `\"` 690-710 against 970, Latin and
+   emoji text 73-88 against 1,445. The protocol's oracle test (6,000 seeded bodies against the plain loop), its 8 MiB
+   linear-time test and `shape.test.ts`'s 20,000 bodies (text against bytes) all pass.
+2. **Long plain strings are spliced out of the parse** (`parseJsonText`): the shape scan records strings of 32 KiB or
+   more; one with no backslash and no control character (one regex test, 61 µs a MiB) is exactly its characters, so
+   when such strings are at least half the reply and it holds at most 4,096 values, each is replaced by a placeholder,
+   the rest is parsed, and the placeholders are put back as slices of the reply (JSC and V8 share the buffer: no copy).
+   The placeholder carries a per-process random mark; one found twice or missing (a duplicate key drops one) falls
+   back to the plain parse. `json.test.ts` compares it with `JSON.parse` on 6,000 seeded replies (keys, `__proto__`,
+   duplicates, escapes, control characters, truncation): 0 differences; and checks the value is a slice.
+
+`mcp-profile.bench.ts 3 eden,base,sdk` (`base` = main's `src/mcp/` at 60712533a, D1860), CPU per call in µs,
+medians of three interleaved rounds; plain text (the bench's default):
+
+| JSON reply             | In flight | D1860 | D1870 | SDK 1.x | D1870 / D1860 | D1870 / SDK |
+| ---------------------- | --------- | ----- | ----- | ------- | ------------- | ----------- |
+| `tools/call` 1 KB      | 1         | 67.0  | 94.3  | 132.4   | 1.41          | 0.71        |
+|                        | 16        | 47.8  | 45.0  | 55.0    | 0.94          | 0.82        |
+|                        | 256       | 56.0  | 59.4  | 55.0    | 1.06          | 1.08        |
+| `tools/call` 64 KB     | 1         | 136.6 | 124.0 | 176.0   | 0.91          | 0.70        |
+|                        | 16        | 106.6 | 75.5  | 134.2   | 0.71          | 0.56        |
+|                        | 256       | 118.7 | 109.3 | 108.1   | 0.92          | 1.01        |
+| `tools/call` 1 MB      | 1         | 1,212 | 983   | 1,280   | 0.81          | **0.77**    |
+|                        | 16        | 1,120 | 817   | 1,120   | 0.73          | **0.73**    |
+|                        | 256       | 1,778 | 1,331 | 1,428   | 0.75          | 0.93        |
+| `tools/call` 4 MB      | 1         | 3,888 | 2,918 | 4,520   | 0.75          | 0.65        |
+|                        | 16        | 3,601 | 3,192 | 4,210   | 0.89          | 0.76        |
+| `tools/list` 1 KB-4 MB | 1, 16     |       |       |         | 0.76-1.07     | 0.53-0.87   |
+| `tools/list`           | 256       |       |       |         | 0.88-1.00     | 0.62-0.68   |
+
+Every JSON cell at 1 and 16 in flight is now under the SDK's, the target; at 256 in flight `tools/call` reads 0.93 at
+1 MB and 1.01-1.08 at 1 KB and 64 KB, where D1860 read 0.90-0.99 (one run each: at 256 in flight the cells are
+scheduler-bound and move 10-20% between runs). The 1 KB one-at-a-time cell reads 1.41 of D1860's in this run (94
+against 67 µs) and 0.71 of the SDK's; D1860's own run had it at 58.7, so it is that cell's spread, and nothing on the
+1 KB path changed but one `performance.now()` per reply. SSE cells, whose path changed only in bookkeeping, read
+0.81-1.15 of D1860's; five further interleaved rounds of the SSE cells alone (1 KB, 64 KB, 1 MB at 1 in flight; 1 MB
+at 16) put the medians at 1.04, 0.98 (eight rounds: 198 against 203), 0.99 and 1.06, so no change past noise. Time to
+the first call: 15.1-38.9 ms against 37.1-86.2 (D1860) and 98.9-125.2 (SDK); the machine was loaded.
+
+With text written as tool output is (`MCP_PROFILE_TEXT=lines`: lines of 80 characters, so an escaped newline in each
+and an escaped quote pair, which the splice does not take), the same bench at 64 KB and 1 MB:
+
+| JSON `tools/call` | In flight | D1860 | D1870 | SDK 1.x | D1870 / D1860 | D1870 / SDK |
+| ----------------- | --------- | ----- | ----- | ------- | ------------- | ----------- |
+| 64 KB             | 1         | 252.8 | 210.4 | 203.0   | 0.83          | 1.04        |
+|                   | 16        | 212.9 | 179.2 | 190.7   | 0.84          | 0.94        |
+|                   | 256       | 217.4 | 192.0 | 152.7   | 0.88          | 1.26        |
+| 1 MB              | 1         | 3,011 | 2,280 | 1,747   | 0.76          | **1.30**    |
+|                   | 16        | 3,381 | 2,259 | 1,995   | 0.67          | **1.13**    |
+|                   | 256       | 3,905 | 2,801 | 2,477   | 0.72          | 1.13        |
+
+So with text as tool output writes it, ours was 1.12-1.72x the SDK's CPU on a JSON `tools/call` (worse than the
+plain-text bench showed, since D1840's scan went back to the byte loop at every escape), and is now 0.94-1.30x: better
+by a quarter to a third, and still a loss at 1 MB. What is left is the scan's search per escaped quote (about 13 ns
+each; two a line here) and the string `text()` makes, which `res.json()` never does. SSE `tools/call` on the same
+text: 0.82-0.95 of D1860's, 0.87-1.16 of the SDK's. (`tools/list` replies are not text-filled, so they repeat the cells
+above: 0.82-1.13 of D1860's, 0.41-0.78 of the SDK's.)
+
+### What else was lost, and what was added
+
+- **Flood caps** (D1872). Real servers: the SDK's example servers ask 0-2 requests a tool call (an elicitation, a
+  sampling), each awaited, and send notifications freely (50 a call in one example, unbounded in another), which were
+  never counted; the captured connector results (`src/fixtures/mcp-results.json`) hold none of either. No
+  well-behaved server sends a malformed message. So the caps became budgets: server requests 100 plus 10 for each
+  second the reply has been open (a long agentic tool may ask once a second as long as it runs), bad messages 100
+  plus one per KiB of messages (a junk reply's CPU stays proportional to its bytes); `limits` on the transport sets
+  them. The hostile cases still fail at once: 20,000 pings sent together fail after 100 with at most 16 answers, and
+  2,000,000 one-byte junk events after 100 (`adversarial.test.ts`, unchanged); paced pings (40, 5 ms apart, with a
+  burst of 10 and 200 a second) pass where the same 40 at once fail (`server-messages.test.ts`).
+- **OAuth** (D1874, `oauth.ts`, opt-in, not imported by `index.ts`: a test walks the imports). The flow and its
+  checks are in the README; it is tested against the SDK's own authorization server (`mcpAuthRouter` with its demo
+  provider under express, which verifies PKCE and the resource): discovery from the 401, registration, the
+  authorization URL with S256 and `resource`, the callback, the code exchange, and a tool call with the token.
+  Adversarial cases against fakes, each failing when its check is removed: a mismatched issuer, metadata over 64 KiB
+  (declared, or streamed: refused within 1 MiB of a 64 MiB stream), a redirect to another origin (nothing reaches it;
+  a token POST follows no redirect at all), plain HTTP outside loopback for the server, the issuer and each endpoint,
+  metadata for another resource, no S256, a forged, reused or erroring state and a mismatched `iss`, a token offered
+  to another origin's transport (no `Authorization` sent) or quoted back in an error (the error is fixed words), and
+  20 callers with an expired token causing one refresh.
+- **Resumability and the GET stream** (D1873, opt-in, off on Eden's path). Against the SDK's polling pattern (a tool
+  whose stream the server closes midway, replayed from its event store), ours with `resume` answers after one GET
+  with `Last-Event-ID` and gets every notification in order; without it the call fails as before and no GET is sent.
+  The GET stream receives the SDK server's notifications and reopens from the last event when the server closes it.
+  Bounds, each tested: reconnects of a reply (3 by default) within its deadline and its cap counted across
+  connections, `retry:` capped by `maxDelayMs`, an event id that is not short visible ASCII never sent back, a GET
+  stream flood failed by the budget and not reopened, a response on it counted as unasked, an oversized event ending
+  the connection, reopening bounded by `maxRetries` misses in a row (junk is not a delivery) and never sooner than
+  500 ms whatever `retry:` says (a first version counted junk as a delivery and honoured `retry: 0`, which reopened
+  as fast as the server closed: caught in self-review, now a test).
+- **Server-request handlers** (D1875). `setRequestHandler` answers sampling, roots and elicitation against the SDK's
+  server (each a real `sendRequest` from a tool), an `McpError` reaches the server with its code and message, any
+  other throw as a bare "Internal error" (a secret in its text is not sent), and the server's cancellation aborts the
+  handler; at most 16 answers at once with the pings, and the budget above.
+
+Still lost, and why: the **legacy HTTP+SSE transport** (2024-11-05; servers still on it are rare and the SDKs keep it
+for compatibility only); **output-schema validation** of `structuredContent` (it needs a JSON Schema validator, the
+SDKs' largest dependency, and a caller that wants it can run its own on the result); a **callback listener** for OAuth
+and the client ID metadata documents of 2025-11-25 (left to the caller and not implemented); on Node, the JSON read
+still decodes bytes and parses (`text()` there drops two byte-order marks where `TextDecoder` drops one, D1860), so
+the splice is Bun's only; and against `res.json()` itself, a reply whose long strings all hold escapes still costs
+ours the extra string `text()` makes (1.13-1.30x the SDK's CPU at 1 MB, 0.94-1.26x at 64 KB, above: a search per escaped quote, and the string `text()` makes).
 
 ## Packaging
 
