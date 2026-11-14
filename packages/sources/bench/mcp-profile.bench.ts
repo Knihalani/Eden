@@ -52,6 +52,12 @@ function server(): void {
       }));
       return JSON.stringify({ tools });
     }
+    // `MCP_PROFILE_TEXT=lines`: text as a tool's output reads (lines of 80 characters, so an escaped newline in every
+    // line, and a quote now and then), which the splice of D1870 does not take; the default is one plain run.
+    if (process.env.MCP_PROFILE_TEXT === "lines") {
+      const line = 'a line of tool output, with "quoted" words, and some more words to fill it to eighty\n'.slice(-80);
+      return JSON.stringify({ content: [{ type: "text", text: line.repeat(Math.ceil(size / 80)).slice(0, size) }] });
+    }
     return JSON.stringify({ content: [{ type: "text", text: "x".repeat(size) }] });
   };
   const parts = (mode: string, method: string, size: number): [Uint8Array, Uint8Array] => {

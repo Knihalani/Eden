@@ -1,7 +1,8 @@
 /**
  * A server-sent events parser over bytes, one pass (D1704). Lines end in LF, CRLF or CR, also when the CR and LF
- * arrive in different chunks; `data:` lines of one event are joined by LF; comments, `id:` and `retry:` are skipped
- * (Eden does not resume streams); a leading byte-order mark is dropped. Bytes are decoded once per event, never per
+ * arrive in different chunks; `data:` lines of one event are joined by LF; comments are skipped, and so are `id:` and
+ * `retry:` unless `track` is set (a transport that resumes streams, D1873; Eden's own path does not); a leading
+ * byte-order mark is dropped. Bytes are decoded once per event, never per
  * chunk or line. A line split across chunks is held in `Pieces` and joined once, at its end: joining at every chunk
  * made a long unended line quadratic (an 8 MiB line in 4 KB chunks took 1.6 s), and holding each tiny read as its
  * own array made a line dripped a byte at a time cost ~57 bytes of RSS a byte (D1860). Bounded: a line or an event's
@@ -16,6 +17,10 @@ const SPACE = 0x20;
 const DATA = [0x64, 0x61, 0x74, 0x61]; // "data"
 const EVENT = [0x65, 0x76, 0x65, 0x6e, 0x74]; // "event"
 const MESSAGE = [0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65]; // "message"
+const ID = [0x69, 0x64]; // "id"
+const RETRY = [0x72, 0x65, 0x74, 0x72, 0x79]; // "retry"
+/** Longest event id kept: it is sent back as a header, so it is visible ASCII and short, or it is not kept. */
+const MAX_ID = 512;
 const EMPTY = new Uint8Array(0);
 
 /** What `push` reports: keep reading, or stop (the handler asked to, or a bound was passed). */
@@ -39,17 +44,25 @@ export class SseParser {
   private hasData = false;
   /** The event's type is "message" (or unset): the only one that carries JSON-RPC. */
   private isMessage = true;
+  /** With `track`: the id of the last event dispatched (the stream's place, to resume from), or null. */
+  lastEventId: string | null = null;
+  /** With `track`: the last `retry:` the server asked for, in ms, or null. */
+  retryMs: number | null = null;
+  /** The id field seen since the last dispatch, committed at the dispatch, as an EventSource does. */
+  private idBuffer: string | null = null;
 
   /**
    * @param onEvent Called with each message event's data bytes (a view, valid only during the call); returns true to
    *   stop the parse (the awaited response has arrived).
    * @param chunksKept The caller never changes a chunk after pushing it (a `fetch` body's reader hands out a new
    *   array each read), so the parser keeps views of it where it would otherwise keep copies (D1840). Default false.
+   * @param track Read `id:` and `retry:` into `lastEventId` and `retryMs` (D1873). Default false.
    */
   constructor(
     private readonly maxBytes: number,
     private readonly onEvent: (data: Uint8Array) => boolean,
     private readonly chunksKept = false,
+    private readonly track = false,
   ) {}
 
   push(chunk: Uint8Array): SseStep {
@@ -147,8 +160,25 @@ export class SseParser {
     } else if (startsField(line, colon, EVENT)) {
       const v = value <= line.length ? line.subarray(value) : line.subarray(line.length);
       this.isMessage = v.length === 0 || equals(v, MESSAGE);
-    }
+    } else if (this.track) this.field(line, colon, value);
     return "more";
+  }
+
+  /** `id:` and `retry:`, when tracked. An id that is not short visible ASCII is ignored (it would be sent back). */
+  private field(line: Uint8Array, colon: number, value: number): void {
+    const v = value <= line.length ? line.subarray(value) : line.subarray(line.length);
+    if (startsField(line, colon, ID)) {
+      if (v.length > MAX_ID) return;
+      for (let k = 0; k < v.length; k++) if (v[k]! < 0x21 || v[k]! > 0x7e) return;
+      this.idBuffer = String.fromCharCode(...v);
+    } else if (startsField(line, colon, RETRY) && v.length > 0 && v.length <= 9) {
+      let ms = 0;
+      for (let k = 0; k < v.length; k++) {
+        if (v[k]! < 0x30 || v[k]! > 0x39) return;
+        ms = ms * 10 + v[k]! - 0x30;
+      }
+      this.retryMs = ms;
+    }
   }
 
   /** Moves the one-line data into `data`, with room for `need` bytes. */
@@ -162,6 +192,7 @@ export class SseParser {
   }
 
   private dispatch(): SseStep {
+    if (this.idBuffer !== null) this.lastEventId = this.idBuffer;
     const deliver = this.hasData && this.isMessage && this.dataLen > 0;
     const data = this.single ?? this.data.subarray(0, this.dataLen);
     this.single = null;
