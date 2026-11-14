@@ -26,7 +26,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "@eden/engine";
-import { EVAL_TENANT, liveWiring, runScenarios, unwiredFlags, type Scenario } from "@eden/eval";
+import { EVAL_TENANT, liveProblem, liveWiring, runScenarios, unwiredFlags, type Scenario } from "@eden/eval";
 import type { Model } from "@eden/llm";
 import { readerFailureLog } from "@eden/server";
 import { flags } from "./flags";
@@ -116,6 +116,17 @@ const onReaderFailure = readerFailureLog((line) => {
   readerFailure = line;
   console.error(line);
 }, scrub);
+// The push check's (D828): the shipped default's only model caller, the reader not being called (D237).
+let checkFailure: string | undefined;
+const onCheckFailure = readerFailureLog(
+  (line) => {
+    checkFailure = line;
+    console.error(line);
+  },
+  scrub,
+  "the push check's model call failed; pushes hand the default's candidates",
+  "check",
+);
 
 const scenarios = readdirSync(dir)
   .filter((f) => f.endsWith(".json"))
@@ -132,6 +143,7 @@ const metrics = await runScenarios(scenarios, {
   spend: wiring!.spend,
   readerModel: wiring!.readerModel,
   onReaderFailure,
+  onCheckFailure,
 });
 console.log(
   JSON.stringify(
@@ -146,6 +158,7 @@ console.log(
       spentUsd: wiring!.spend.spent(EVAL_TENANT),
       ledger: { run: ledger.run, role: "eden.reader", rows: ledger.calls, bookedUsd: ledger.bookedUsd },
       ...(readerFailure ? { readerFailure } : {}),
+      ...(checkFailure ? { checkFailure } : {}),
       waitMs,
       planner,
       ...(inert.length ? { inert } : {}),
@@ -155,3 +168,9 @@ console.log(
     2,
   ),
 );
+// No model call, or every one failed: the numbers are the no-model path's (D1830). Loud, after the JSON.
+const problem = liveProblem(metrics);
+if (problem) {
+  console.error(`eval-live: ${problem}`);
+  process.exit(1);
+}

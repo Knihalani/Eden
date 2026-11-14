@@ -51,6 +51,11 @@ export interface RunOptions {
   spend?: TenantSpend;
   /** Told of each failed reader call (a provider's 403, an unreadable reply): `AskReader`'s `onFailure`. */
   onReaderFailure?: (error: unknown) => void;
+  /**
+   * Told of each failed push-check call (a provider's 403, an unreadable reply): `PushChecker`'s `onFailure`, as
+   * `buildPartner` wires it. Under the shipped `--live` the check is the default's only model caller (D237, D828).
+   */
+  onCheckFailure?: (error: unknown) => void;
 }
 
 /** The tenant every scenario runs under: `TenantSpend` keys the run's cap on it. */
@@ -96,6 +101,33 @@ export function liveWiring(options: {
   const roles = modelRolesFromEnv(env, options.make);
   if (!roles.reader) return null;
   return { model: null, readerModel: roles.reader, spend, scrub: roles.scrub ?? ((t) => t) };
+}
+
+/**
+ * Why a `--live` run measured no model, or null: it attempted no model call, or every call it made failed (an
+ * OpenRouter 403 on every call fails open to the no-model path, so its metrics read like a free run's). The shipped
+ * default calls no reader (`pushCandidates`, D237); its live calls are the push check's (D828), counted in `pushCheck`.
+ * The judge shape (`--live --judge`) counts its calls per turn only.
+ */
+export function liveProblem(m: Pick<Metrics, "modelCallsPerTurn" | "readerPool" | "pushCheck">): string | null {
+  if (!m.readerPool && !m.pushCheck) {
+    return m.modelCallsPerTurn > 0 ? null : "--live made no model call: the numbers are the no-model path's";
+  }
+  const calls = (m.readerPool?.calls ?? 0) + (m.pushCheck?.calls ?? 0);
+  const failures = (m.readerPool?.failures ?? 0) + (m.pushCheck?.failures ?? 0);
+  if (calls === 0) {
+    return (
+      "--live made no model call (the reader is not called in the default, D237, and no push check ran): " +
+      "the numbers are the no-model path's"
+    );
+  }
+  if (failures >= calls) {
+    return (
+      `--live: all ${calls} model calls failed (see readerFailure / checkFailure; an OpenRouter 403 for the model ` +
+      "is the usual cause): the numbers are the no-model path's"
+    );
+  }
+  return null;
 }
 
 /** `OpenRouterModel.fromEnv`'s options, through a test's factory (run.test.ts pins the two equal). */
@@ -174,6 +206,11 @@ export interface Metrics {
   ask: { cases: number; answered: number; recall: number };
   /** Only with `RunOptions.reader`. */
   readerPool?: ReaderPoolMetrics;
+  /**
+   * Only when the push check is wired (`readerModel`, `pushCheck` on): its pools asked, model calls made, calls that
+   * failed (thrown or unreadable; each push handed the default's candidates) and their cost, summed over scenarios.
+   */
+  pushCheck?: { asked: number; calls: number; failures: number; costUsd: number };
   /** The acting suite's labels (`"neutral"`, `decoys`; D810): present when a scenario carries one. */
   acting?: ActingMetrics;
 }
@@ -276,6 +313,8 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
   };
   let readerCalls = 0;
   let readerFailures = 0;
+  let checkWired = false;
+  const checks = { asked: 0, calls: 0, failures: 0, costUsd: 0 };
   const acting = { labelled: false, neutral: 0, neutralFired: 0, neutralItems: 0, owed: 0, facts: 0, handed: 0 };
   const decoy = { turns: 0, handed: 0 };
 
@@ -324,7 +363,11 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     // The push check (D828) on the reader's model, as `buildPartner` wires it with a key: only under `--live`.
     const checker =
       options.readerModel && { ...DEFAULT_CONFIG, ...options.config }.pushCheck
-        ? new PushChecker({ model: options.readerModel, budget: budget() })
+        ? new PushChecker({
+            model: options.readerModel,
+            budget: budget(),
+            ...(options.onCheckFailure ? { onFailure: options.onCheckFailure } : {}),
+          })
         : null;
     if (!pool.byCategory.has(category)) pool.byCategory.set(category, { expected: 0, expectedInPool: 0 });
     const poolTally = pool.byCategory.get(category)!;
@@ -457,6 +500,13 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     }
     readerCalls += maker?.calls ?? reader?.stats.calls ?? 0;
     readerFailures += reader?.stats.failures ?? 0;
+    if (checker) {
+      checkWired = true;
+      checks.asked += checker.stats.asked;
+      checks.calls += checker.stats.calls;
+      checks.failures += checker.stats.failures;
+      checks.costUsd += checker.stats.costUsd;
+    }
   }
 
   const decisions: Record<string, number> = {};
@@ -508,6 +558,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
           },
         }
       : {}),
+    ...(checkWired ? { pushCheck: checks } : {}),
     ...(acting.labelled
       ? {
           acting: {

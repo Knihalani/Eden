@@ -1,5 +1,6 @@
 export {
   EVAL_TENANT,
+  liveProblem,
   liveWiring,
   runScenarios,
   unwiredFlags,
