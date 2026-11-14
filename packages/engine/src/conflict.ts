@@ -563,6 +563,21 @@ interface AnalysisEntry {
   title: string;
   updatedAt: number | undefined;
   views: [Analysis | undefined, Analysis | undefined];
+  /**
+   * `gateOf`'s two readings of the item, each read on first use: bit 0 set once `mayConstrain` was read and bit 1
+   * its answer, bits 2 and 3 the same for `arrangedVisit` (D1880).
+   */
+  gate: number;
+}
+
+/** The item's entry in `ANALYSES`, a fresh one when its text, title or date changed in place. */
+function entryOf(item: ContextItem): AnalysisEntry {
+  let e = ANALYSES.get(item);
+  if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
+    e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined], gate: 0 };
+    ANALYSES.set(item, e);
+  }
+  return e;
 }
 
 /**
@@ -570,11 +585,7 @@ interface AnalysisEntry {
  * for tests only (`conflict.test.ts` checks what an analysis keeps).
  */
 export function analyse(item: ContextItem, vocab: boolean): Analysis {
-  let e = ANALYSES.get(item);
-  if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
-    e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined] };
-    ANALYSES.set(item, e);
-  }
+  const e = entryOf(item);
   const k = vocab ? 1 : 0;
   return (e.views[k] ??= analysis(item, vocab, e.views[1 - k]));
 }
@@ -784,6 +795,29 @@ export function mayConstrain(s: string): boolean {
   const t = s.slice(0, MAX_TEXT).replace(IDIOMS, " ");
   // `search` ignores the shared lists' global `lastIndex`.
   return constrains(t) || [BLOCKS_MORE, BLOCKS_OBJECT, STANDING_MORE, GUARD_WORDING].some((re) => t.search(re) >= 0);
+}
+
+/**
+ * `readerGate`'s reading of an item's own words (D1880): whether its title and text, lower case, may state a
+ * constraint (`mayConstrain`) or, with `visits` (`readerGateVisits`), an arranged visit (`arrangedVisit`). Both depend
+ * on the item alone, and a request's candidates are mostly the last request's, so each is read once per item object
+ * and kept on its `ANALYSES` entry (dropped with it when the text, title or date changes in place). Before, every
+ * request lower-cased each candidate's text and ran about a dozen lists over it: 14% of `pipeline.bench.ts`'s CPU.
+ */
+export function gateOf(item: ContextItem, visits: boolean): boolean {
+  const e = entryOf(item);
+  let g = e.gate;
+  let text: string | undefined;
+  if ((g & 1) === 0) {
+    text = `${item.title}. ${item.text}`.toLowerCase();
+    g |= mayConstrain(text) ? 3 : 1;
+  }
+  if ((g & 2) === 0 && visits && (g & 4) === 0) {
+    text ??= `${item.title}. ${item.text}`.toLowerCase();
+    g |= arrangedVisit(text) ? 12 : 4;
+  }
+  e.gate = g;
+  return (g & 2) !== 0 || (visits && (g & 8) !== 0);
 }
 
 /**

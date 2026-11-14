@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache, sanitizeItem } from "./cache";
-import { analyse, analyseUnfiltered, anyMark, MARK_LISTS } from "./conflict";
+import { analyse, analyseUnfiltered, anyMark, arrangedVisit, gateOf, MARK_LISTS, mayConstrain } from "./conflict";
 
 /*
  * D1722: a lookup re-stores every item it finds, and `put` replaced the held object even when the copy was equal in
@@ -252,5 +252,44 @@ describe("the mark lists' union (D1723)", () => {
         expect(analyse(structuredClone(it), vocab)).toEqual(analyseUnfiltered(it, vocab));
       }
     }
+  });
+});
+
+describe("the reader gate's reading, once per item (D1880)", () => {
+  /** The gate's test as `constraintLike` read it before D1880, on every call. */
+  const before = (it: ContextItem, visits: boolean) => {
+    const text = `${it.title}. ${it.text}`.toLowerCase();
+    return mayConstrain(text) || (visits && arrangedVisit(text));
+  };
+
+  test("gateOf answers as the per-call test, read first with or without visits, and again from its memo", () => {
+    const items = scenarioItems();
+    const r = rng(1880);
+    for (let i = 0; i < 3_000; i++) {
+      const text = Array.from({ length: 1 + Math.floor(r() * 6) }, () => fuzzSentence(r)).join(r() < 0.5 ? ". " : "\n");
+      items.push({ id: `f${i}`, sourceId: "s", ref: "r", title: fuzzSentence(r), text });
+    }
+    items.push(item("v", "I've booked the engineer, he'll come Thursday between 8 and 12."));
+    let open = 0;
+    for (const it of items) {
+      const first = r() < 0.5;
+      for (const visits of [first, !first, first, !first]) expect(gateOf(it, visits)).toBe(before(it, visits));
+      if (before(it, true)) open++;
+    }
+    // Both answers are exercised.
+    expect(open).toBeGreaterThan(500);
+    expect(open).toBeLessThan(items.length - 500);
+  });
+
+  test("an item whose text or title changes in place is read again", () => {
+    const it = item("m", "Lunch is at noon.");
+    expect(gateOf(it, true)).toBe(false);
+    it.text = "The account is on hold until Friday.";
+    expect(gateOf(it, true)).toBe(true);
+    it.text = "Lunch is at noon.";
+    expect(gateOf(it, false)).toBe(false);
+    it.title = "Visit: I've booked the plumber, he'll come Monday";
+    expect(gateOf(it, false)).toBe(false);
+    expect(gateOf(it, true)).toBe(true);
   });
 });
