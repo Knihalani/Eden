@@ -22,6 +22,13 @@ const SHAPES: [shape: string, left: string, caught: string, secret: string][] = 
   ["this.…", "    this.apiKey = this.options.apiKey;", `    this.apiKey = "dragon.${"fire99"}";`, `dragon.${"fire99"}`],
   ["a usage count", "  inputTokens: res.usage.inputTokens,", `  token: re${"s"}9.usage.x,`, `re${"s"}9.usage.x`],
   ["a template reference", 'password: "${DB_PASSWORD}"', `password: "$${"{"}DB:-hunter22}"`, `hunter22`],
+  [
+    "an environment variable on env",
+    "  apiKey: env.OPENROUTER_API_KEY,",
+    `  apiKey: env.Hunt${"3r2"}Pass,`,
+    `Hunt3r2Pass`,
+  ],
+  ["a camelCase interpolation", 'token: "${accessToken}"', `token: "$${"{"}Hunter2Pass}"`, `Hunter2Pass`],
   ["a shell variable", "export API_KEY=$EDEN_API_KEY", `export API_KEY=$ALES${"2024"}`, `$ALES${"2024"}`],
   [
     "a variable then more",

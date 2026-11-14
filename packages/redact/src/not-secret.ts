@@ -21,8 +21,11 @@ import { Last } from "./memo.ts";
 /** TypeScript types as a value (`apiKey: string;`, `tokens: Set<number>`, `secret: number[]`). */
 const TYPE =
   /^(?:string|number|boolean|bigint|undefined|null|unknown|never|void|object)(?:\[\])*$|^(?:Set|Map|WeakMap|WeakSet|Array|ReadonlyArray|Promise|Record|Partial|Readonly)<[A-Za-z$, |[\]]*(?:<[A-Za-z$, |[\]]*>[A-Za-z$, |[\]]*)*>$|^(?:Uint8|Int8|Uint16|Int16|Uint32|Int32|Float32|Float64|BigInt64|BigUint64|Uint8Clamped)Array$/;
-/** An environment variable read in code: `process.env.API_KEY`, `import.meta.env.VITE_KEY` (upper case, no digit). */
-const ENV = /^(?:process\.env|import\.meta\.env)\.[A-Z_]+$/;
+/**
+ * An environment variable read in code: `process.env.API_KEY`, `import.meta.env.VITE_KEY` (upper case, no digit), or
+ * `env.API_KEY` (there also with an underscore inside, as environments name variables: `env.X` is any member).
+ */
+const ENV = /^(?:(?:process\.env|import\.meta\.env)\.[A-Z_]+|env\.[A-Z]+_[A-Z_]+)$/;
 /**
  * A member chain on a well-known receiver, to the end of the value: where the secret is read from, not the secret
  * (`this.options.apiKey`, `res.usage.inputTokens`). At least two members after the receiver, each letters only: one
@@ -38,8 +41,11 @@ const MEMBER =
  */
 // The first letter picks the case, so no name has two readings (a regex with two would backtrack exponentially).
 const NAME = String.raw`_?(?:[A-Z][A-Z_]*|[a-z][a-z_]*)`;
+// In `${…}` also a camelCase name, as template literals interpolate variables (`Bearer ${apiKey}`): lower case,
+// then capitals each followed by lower case, no digit.
+const CAMEL = String.raw`[a-z]+(?:[A-Z][a-z]+)+`;
 const REFERENCE = new RegExp(
-  String.raw`^(?:\$\{${NAME}\}|\$[A-Z]+_[A-Z_]+|%${NAME}%|\{\{${NAME}(?:\.${NAME})*\}\}|<(?:[a-z]+(?:[-_][a-z]+)*|[A-Z]+(?:[-_][A-Z]+)*)>)$`,
+  String.raw`^(?:\$\{(?:${NAME}|${CAMEL})\}|\$[A-Z]+_[A-Z_]+|%${NAME}%|\{\{${NAME}(?:\.${NAME})*\}\}|<(?:[a-z]+(?:[-_][a-z]+)*|[A-Z]+(?:[-_][A-Z]+)*)>)$`,
 );
 /** A mask: `xxxxxxxx`, `****`, `•••`, `####`, alone or after a short prefix of letters (`hf_xxxx…`, `pplx-XXXX…`). */
 const MASK = /^(?:[A-Za-z]{1,8}[_~.-])?[xX*•#]{8,}$/;

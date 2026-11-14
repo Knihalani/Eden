@@ -223,6 +223,7 @@ export function shapeText(rnd: () => number): string {
         "res.usage.input",
       ]),
     () => `{{${pick(["x", "vault_pw", "a.b", "X"])}}}`,
+    () => pick(["env.OPENROUTER_API_KEY", "env.X", "env.Api_KEY", "${accessToken}", "${apiKey2}", "${aB}"]),
     () => `<${pick(["your-key", "b", "token", "API_KEY", "Xy"])}>`,
     () => `%${pick(["PASS", "API_KEY", "x"])}%`,
     () => `$(${pick(["echo ", "cat ", ""])}`,

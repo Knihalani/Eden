@@ -88,6 +88,20 @@ function name(s: string): boolean {
   return upper + lower > 0 && (upper === 0 || lower === 0);
 }
 
+/** lowerCamelCase with at least one hump, each capital followed by lower case, no digit or underscore. */
+function camel(s: string): boolean {
+  if (s.length === 0 || !isLower(s.charCodeAt(0))) return false;
+  let humps = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (isUpper(c)) {
+      if (i + 1 >= s.length || !isLower(s.charCodeAt(i + 1))) return false;
+      humps++;
+    } else if (!isLower(c)) return false;
+  }
+  return humps > 0;
+}
+
 function typeValue(v: string): boolean {
   let base = v;
   while (base.endsWith("[]")) base = base.slice(0, -2);
@@ -101,8 +115,13 @@ function typeValue(v: string): boolean {
 }
 
 function envValue(v: string): boolean {
-  for (const head of ["process.env.", "import.meta.env."]) {
-    if (v.startsWith(head)) return all(v.slice(head.length), (c) => isUpper(c) || c === 95);
+  for (const head of ["process.env.", "import.meta.env.", "env."]) {
+    if (!v.startsWith(head)) continue;
+    const variable = v.slice(head.length);
+    // `env.X` names a variable only as environments write them: upper case with an underscore inside.
+    const upper = all(variable, (c) => isUpper(c) || c === 95);
+    if (head !== "env.") return upper;
+    return upper && isUpper(variable.charCodeAt(0)) && variable.slice(1, -1).includes("_");
   }
   return false;
 }
@@ -114,7 +133,7 @@ function memberValue(v: string): boolean {
 }
 
 function referenceValue(v: string): boolean {
-  if (v.startsWith("${") && v.endsWith("}")) return name(v.slice(2, -1));
+  if (v.startsWith("${") && v.endsWith("}")) return name(v.slice(2, -1)) || camel(v.slice(2, -1));
   if (v.startsWith("{{") && v.endsWith("}}")) return v.slice(2, -2).split(".").every(name);
   if (v.length > 2 && v.startsWith("%") && v.endsWith("%")) return name(v.slice(1, -1));
   if (v.startsWith("$")) return v.includes("_") && all(v.slice(1), (c) => isUpper(c) || c === 95);
