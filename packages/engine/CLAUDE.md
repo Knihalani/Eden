@@ -684,9 +684,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   focus string through `wordsIn`'s regex. `sketchTerms` asks `stopwordAt` only where `STOP_FNV` marks the word's
   FNV-1a hash: a new stopword is marked by the module's own loop, and a change to the scan's hash must change
   `fnvOfWord` too (`text-fast.test.ts` checks every stopword is marked). `packItem` seeds the decode memo with the
-  text it packed (D1913): the memo stays keyed by held bytes and emptied by `clearDecoded`. The card queue reads the
+  text it packed (D1913): the memo stays keyed by held bytes and emptied by `clearDecoded`, and the seeded entry must be what a decode gives (Latin-1 through `latin1`; the UTF-8 decoder keeps a leading BOM, `ignoreBOM`). The card queue reads the
   strict own text once (`strictOwnText`, D1915): a change to `worthCardingStrict` or `sentenceKey` changes their
-  `*Before` references in cards.ts with it (`cards-own.test.ts`). `SPAN_HINT`'s month alternative and `MONTH_DAY`
+  `*Before` references in `cards-own.test.ts` with it. `SPAN_HINT`'s month alternative and `MONTH_DAY`
   (day-facts.ts) are tried only at a month's three letters (D1916): a new alternative must begin with them, or move
   out of the sticky copy; `day-hints.test.ts` compares the two against the patterns.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on

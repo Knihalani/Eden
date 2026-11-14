@@ -48,7 +48,7 @@ interleaved rounds, paired median of B/A in brackets with its range.
 
 | Decision | Change | Measured |
 |---|---|---|
-| D1910 | `pick`'s focus count: `indexOf` of each focus word with a neighbour test, not a scan of every word (render.ts) | pipeline 8 rounds: process CPU 3,959 → 3,785 ms [0.943, 0.86-1.02]; ask p50 2,016 → 1,747 µs [0.878, 0.80-0.97]; observe p50 105.3 → 103.4 µs [0.967]; `focusCount` 7.8% → 1.8% self; alone on 2,000 recorded calls 3.0x (786 → 222-273 ms) |
+| D1910 | `pick`'s focus count: `indexOf` of each focus word with a neighbour test, not a scan of every word (render.ts) | pipeline 8 rounds: process CPU 3,959 → 3,785 ms [0.943, 0.86-1.02]; ask p50 2,016 → 1,747 µs [0.878, 0.80-0.97]; observe p50 105.3 → 103.4 µs [0.967]; ask p50 across runs about 0.84-0.93 (the end to end below 0.840; the independent review's 12 rounds 0.927 paired, 0.90 on medians); `focusCount` 7.8% → 1.8% self; alone on 2,000 recorded calls 3.0x (786 → 222-273 ms) |
 | D1911 | `sketchTerms` asks `stopwordAt` only where `STOP_FNV` marks the word's hash (text.ts, sketch.ts) | ingest 6 rounds: CPU 6,349 → 5,866 ms [0.926, 0.87-1.04]; backfill 199.1 → 182.3 µs/item [0.939]; CPU 249.5 → 233.3 µs/item [0.932] |
 | D1913 | `packItem` seeds the decode memo with the text it packed (packed-text.ts) | ingest 6 rounds: backfill 195.9 → 179.1 µs/item [0.939, 0.88-0.97, every round]; main thread 188.5 → 173.8 µs/item [0.944]; held 3,300 → 3,283 B/item |
 | D1915 | The card queue reads the strict own text once for the prefilter and the sentence key (cards.ts) | users 60 × 500 `--cards`, 4 rounds: storm CPU 292.1 → 286.6 µs/item [0.970, 0.94-1.01]; storm wall 7.49 → 7.16 s [0.965, 0.93-0.98, every round] |
@@ -58,8 +58,8 @@ Oracles and mutations: `render-focus.test.ts` (D1884's scan verbatim; 40,000 fuz
 random code-unit strings; the right-boundary test, the surrogate fallback and the fallback's focus list each fail it
 when broken); `text-fast.test.ts` (every stopword marked, the `sketchTermsSplit` fuzz; a shifted mark fails it);
 `packed-text.test.ts` (a fresh copy is in the memo and reads its own text); `cards-own.test.ts` (the two readings
-before, kept in cards.ts as `*Before`, on the eval's items and 4,000 fuzzed mails, plain and packed; a dropped footer
-cut fails it); `day-hints.test.ts` (the patterns themselves on the eval's texts and 60,000 fuzzed strings; three of
+before, verbatim in the test as `*Before` with the patterns they read, on the eval's items and 4,000 fuzzed mails, plain and packed; a dropped footer
+cut fails it); `day-hints.test.ts` (the patterns themselves, copied into the test, on the eval's texts and 60,000 fuzzed strings; three of
 four mutations fail it, the fourth, resuming one unit early, is equivalent: the boundary test already drops a month
 inside a match's last word) and `day-facts.test.ts`'s pre-D1721 oracle. D1916 leaves the date facts as they were, so
 `PERSIST_FORMAT` stays 6; none of the changes touches a persisted shape or a model-facing byte, adds or removes an
@@ -99,7 +99,8 @@ Main (4f6837b58) against this branch, every changed source file swapped, interle
 1.3-3.5).
 
 - `pipeline.bench.ts`, 8 rounds: process CPU 4,532 → 4,139 ms [0.962, 0.85-1.13]; ms/event 1.15 → 1.13 [0.958];
-  ask p50 2,294 → 1,947 µs [0.840, 0.70-1.22], ask p99 9,673 → 8,764 µs [0.968, 0.52-1.67]; observe p50 116.5 →
+  ask p50 2,294 → 1,947 µs [0.840, 0.70-1.22] (the independent review measured 0.927 paired, 0.90 on medians, over 12
+  rounds: about 0.84-0.93), ask p99 9,673 → 8,764 µs [0.968, 0.52-1.67]; observe p50 116.5 →
   114.3 µs [1.038, 0.90-1.10], observe p99 3,889 → 4,166 µs [1.080, 0.84-1.56]. The observe figures do not move
   beyond their spread (no change here is on the fast path but the packet's focus count); the tails swing ±50% run to
   run on this machine.
@@ -140,6 +141,28 @@ One profiled run each, same intervals as before.
   tests in 287 files, then the 524 of the real-time tail, none failing). The run before it failed one tail test,
   `router-processes.test.ts`'s 500 ms child-start deadline, at load average 9.4 (packages/server, untouched here); it
   passed three times alone and in the rerun.
+
+## After the independent review (2026-11-14)
+
+The review (REQUEST_CHANGES, one medium finding; the other four changes passed its 600k/65k-text fuzz against main's
+own code with no mismatch):
+
+- **D1913 and a leading byte order mark.** `TextDecoder` drops a leading U+FEFF, so a BOM-led UTF-8 copy read with
+  the BOM from the memo `packItem` seeded and without it once any user's `forget` or `release` emptied the memo (the
+  review's fuzz: 2 of 3,000). On main the same copy already read without the character it was indexed with. The
+  decoder now runs with `ignoreBOM: true`, so a decode returns exactly the stored text: chosen over keeping BOM-led
+  text plain (as lone surrogates are), because it also mends main's mismatch and costs nothing. Blobs are unchanged
+  (the bytes always held the BOM), so `PERSIST_FORMAT` stays 6. `packed-text.test.ts` reads 3,000 random texts (a
+  leading BOM, lone and paired surrogates, Latin-1 and two-byte characters) from the memo and again after
+  `clearDecoded` (a real inflate) and checks both equal the text packed; it failed on the code before the fix.
+- **D998's one-byte strings.** The seeded entry for Latin-1 text is now its bytes through `latin1`, the decode
+  `unpack` makes, so the memo never holds a two-byte string for Latin-1 text.
+- **Ask p50.** The review measured D1910 at 0.927 paired (0.90 on medians) over 12 interleaved rounds; with this
+  session's 0.840 and 0.878 the figure is about 0.84-0.93, and the rows above say so.
+- **Oracles out of production modules.** `worthCardingStrictBefore`, `sentenceKeyBefore`, `monthDaysByPattern`,
+  `spanHintedByPattern` and the stopword list now live in their tests (`cards-own.test.ts`, `day-hints.test.ts`,
+  `text-fast.test.ts`), copied verbatim with the patterns they read; production exports `monthDays` and `spanHinted`.
+  A broken footer cut and a dropped lead alternative still fail them.
 
 ## Pitfalls (also in packages/engine/CLAUDE.md)
 
