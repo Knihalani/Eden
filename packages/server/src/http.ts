@@ -71,6 +71,66 @@ const ROUTES = new Set(
     "sources",
   ].map((r) => `/v1/${r}`),
 );
+/** The authority `pathOf` last confirmed: one a server sees on every request, so it is checked once. */
+let plainAuthority = "";
+
+/**
+ * A request URL's path, as `new URL(url).pathname` gives it, and throwing where it throws (D1892). An http(s) URL whose
+ * path holds only letters, digits, `/`, `_` and `-` (nothing `new URL` rewrites: no dot segment, escape, backslash or
+ * white space) is sliced; its authority is checked by `new URL` itself, once per distinct authority. Anything else
+ * is parsed. `path-of.test.ts` fuzzes it against `new URL`.
+ */
+export function pathOf(url: string): string {
+  const s = url.startsWith("http://") ? 7 : url.startsWith("https://") ? 8 : -1;
+  const p = s < 0 ? -1 : url.indexOf("/", s);
+  if (p < 0) return new URL(url).pathname;
+  let i = p;
+  for (; i < url.length; i++) {
+    const c = url.charCodeAt(i);
+    if (c === 63 || c === 35) break; // ? and #: the path ends
+    const plain = (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 47 && c <= 57) || c === 95 || c === 45;
+    if (!plain) return new URL(url).pathname;
+  }
+  const authority = url.slice(0, p);
+  if (authority !== plainAuthority) {
+    // The authority must end where the slice says (no `\`, `?`, `#` or white space moving the path) and parse.
+    if (new URL(`${authority}/x`).pathname !== "/x") return new URL(url).pathname;
+    plainAuthority = authority;
+  }
+  return url.slice(p, i);
+}
+
+/**
+ * A request URL's query, as `new URL(url).searchParams` reads it (D1892): the text after the first `?` up to a `#`,
+ * parsed by URLSearchParams directly when it holds nothing the URL parser strips or rewrites first (white space,
+ * control characters, a backslash); otherwise the whole URL is parsed. None when there is no `?`.
+ */
+export function queryOf(url: string): URLSearchParams {
+  const q = url.indexOf("?");
+  const f = url.indexOf("#");
+  if (q < 0 || (f >= 0 && f < q)) return new URLSearchParams();
+  const h = url.indexOf("#", q);
+  const query = h < 0 ? url.slice(q + 1) : url.slice(q + 1, h);
+  for (let i = 0; i < query.length; i++) if (query.charCodeAt(i) <= 0x20) return new URL(url).searchParams;
+  // URLSearchParams drops one leading "?" of a string it is given; the URL's own query keeps it.
+  return new URLSearchParams(query.charCodeAt(0) === 63 ? `?${query}` : query);
+}
+
+/** The UTC day (YYYY-MM-DD) last formatted, and the milliseconds it covers: one toISOString a day, not a request. */
+let dayText = "";
+let dayFrom = 0;
+let dayTo = 0;
+export function utcDay(now: number): string {
+  // Years 0-9999 only (`toISOString`'s plain form); anything else (and NaN, which throws) is formatted each time.
+  if (!(now >= 0 && now < 253_402_300_800_000)) return new Date(now).toISOString().slice(0, 10);
+  if (now < dayFrom || now >= dayTo || !dayText) {
+    dayText = new Date(now).toISOString().slice(0, 10);
+    dayFrom = Date.UTC(+dayText.slice(0, 4), +dayText.slice(5, 7) - 1, +dayText.slice(8, 10));
+    dayTo = dayFrom + 86_400_000;
+  }
+  return dayText;
+}
+
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
@@ -103,7 +163,7 @@ export function createHandler(
   let countedDay = "";
   const counted = new Map<string, Record<string, number>>();
   const count = (tenant: string, route: string) => {
-    const day = new Date().toISOString().slice(0, 10);
+    const day = utcDay(Date.now());
     if (day !== countedDay) {
       counted.clear();
       countedDay = day;
@@ -114,11 +174,10 @@ export function createHandler(
   };
 
   return async function handle(req: Request): Promise<Response> {
-    const url = new URL(req.url);
-    if (req.method === "GET" && url.pathname === "/healthz") return json({ ok: true });
+    const path = pathOf(req.url);
+    if (req.method === "GET" && path === "/healthz") return json({ ok: true });
     // A path the API does not have is 404 whatever the method (R1); one of its routes asked with GET is 405.
-    if (req.method !== "POST")
-      return ROUTES.has(url.pathname) ? fail(405, "method not allowed") : fail(404, "not found");
+    if (req.method !== "POST") return ROUTES.has(path) ? fail(405, "method not allowed") : fail(404, "not found");
     const tenant = tenantOf(req);
     if (!tenant) return fail(401, "missing or unknown API key");
     if (foreignPage(req, tenant)) return fail(403, "dev mode serves no key-less request from another site's page");
@@ -127,9 +186,7 @@ export function createHandler(
     // would read as down (A24). Honoured only in a router child and on the routes the router copies: in a single
     // process, or on any other route, the header means nothing.
     const copy =
-      config.child != null &&
-      (url.pathname === "/v1/forget" || url.pathname === "/v1/usage") &&
-      req.headers.get(FANOUT_COPY) === "1";
+      config.child != null && (path === "/v1/forget" || path === "/v1/usage") && req.headers.get(FANOUT_COPY) === "1";
     const waitMs = copy ? 0 : limiter.take(tenant);
     if (waitMs > 0) {
       return Response.json(
@@ -143,7 +200,7 @@ export function createHandler(
     if (declared > maxBodyBytes) return fail(413, tooLarge);
     let body: Json;
     try {
-      const bytes = new Uint8Array(await req.arrayBuffer());
+      const bytes = await req.bytes();
       // Before the parse, which is where a padded body's cost lies (D100's cap bounds bytes, not values or depth).
       if (!bodyShapeUnder(bytes)) return fail(400, "body holds too many values or nests too deep");
       const parsed: unknown = JSON.parse(decoder.decode(bytes));
@@ -156,25 +213,26 @@ export function createHandler(
     if (body.tenantId !== tenant) return fail(403, "tenantId does not match the API key");
 
     // Known routes only (a bounded record), and not a router's fan-out copy (counted once, by the owning child).
-    if (ROUTES.has(url.pathname) && !copy) count(tenant, url.pathname.slice(4));
+    if (ROUTES.has(path) && !copy) count(tenant, path.slice(4));
     try {
-      const answer = await route(url, body, tenant);
+      const answer = await route(path, req.url, body, tenant);
       if (answer.status === 400) stats.refused(tenant);
       return answer;
     } catch (e) {
-      console.error("eden: request failed", url.pathname, e instanceof Error ? e.message : e);
+      console.error("eden: request failed", path, e instanceof Error ? e.message : e);
       return fail(503, "temporarily unable to serve context"); // An integration treats this as silence.
     }
   };
 
-  async function route(url: URL, body: Json, tenant: string): Promise<Response> {
-    switch (url.pathname) {
+  async function route(path: string, url: string, body: Json, tenant: string): Promise<Response> {
+    switch (path) {
       case "/v1/events": {
         const checked = checkEvent(body);
         if (!checked.ok) return fail(400, checked.error);
-        const waitMs = Math.max(0, Math.min(5_000, Number(url.searchParams.get("waitMs") ?? 0) || 0));
+        const query = queryOf(url);
+        const waitMs = Math.max(0, Math.min(5_000, Number(query.get("waitMs") ?? 0) || 0));
         // `?shadow=1`: an integration trying Eden without injecting (the proxy's shadow mode): nothing is learned.
-        const shadow = url.searchParams.get("shadow") === "1";
+        const shadow = query.get("shadow") === "1";
         const observed = await partner.observe(checked.value, { waitMs, ...(shadow ? { shadow } : {}) });
         stats.event(tenant, checked.value, waitMs, observed.pending === true, shadow);
         return json(observed);
@@ -197,7 +255,7 @@ export function createHandler(
         const bad = badId(body, ["userId", "sessionId"]);
         if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
         const who = { tenantId: tenant, userId: body.userId as string, sessionId: body.sessionId as string };
-        const shadow = url.searchParams.get("shadow") === "1";
+        const shadow = queryOf(url).get("shadow") === "1";
         stats.pending(tenant, who.userId, who.sessionId, shadow);
         // D325: the take checks new items against the session's plans (`checkPlans`), which reads the user's items.
         await partner.ready(who);
@@ -250,7 +308,7 @@ export function createHandler(
       case "/v1/usage": {
         // The tenant's own usage today in this process (D326): model spend and calls against the cap this process
         // holds, requests by route, users held. The router sums its children's (router.ts); counts only.
-        const day = new Date().toISOString().slice(0, 10);
+        const day = utcDay(Date.now());
         return json({
           tenantId: tenant,
           day,
