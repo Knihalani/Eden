@@ -1,8 +1,8 @@
 /**
- * The streamable HTTP client transport, as far as Eden uses it (D1704): each message is one POST; a request's answer
- * comes back as `application/json` (one message or an array) or as a `text/event-stream` read until the response to
- * that request arrives; a notification or response is answered 202. The server's `Mcp-Session-Id` is kept and sent
- * back, and after `initialize` the negotiated version goes in `Mcp-Protocol-Version`.
+ * The streamable HTTP client transport (D1704): each message is one POST; a request's answer comes back as
+ * `application/json` (one message or an array) or as a `text/event-stream` read until the response to that request
+ * arrives; a notification or response is answered 202. The server's `Mcp-Session-Id` is kept and sent back, and after
+ * `initialize` the negotiated version goes in `Mcp-Protocol-Version`.
  *
  * Bounded and defensive, since the server is a third party (D7: trusted to be read-only, not to be well-behaved):
  * - every POST has a deadline (`timeoutMs`) and is aborted at it or at `close`;
@@ -10,17 +10,20 @@
  *   shape-checked before it is parsed (`parseJsonBytes`); a JSON body whose only framing is a declared length under
  *   the cap is read natively, which reads exactly that length (`declaredOnly`, D1860);
  * - only the response whose id is the POSTed request's is delivered from that POST; a response to any other id is
- *   dropped (server requests and notifications on the stream go to the client, which answers `ping` only);
+ *   dropped (server requests and notifications on the stream go to the client, which answers `ping` only unless the
+ *   caller set a handler);
+ * - malformed messages and server requests on one reply are budgeted (`ReplyLimits`, D1872): past the budget the reply
+ *   fails, so a flood costs a bounded amount of CPU and POSTs;
  * - a redirect is followed only to the same origin (307/308, so the POST stays a POST): the user's credentials never
  *   reach another host;
- * - an error names the HTTP status and Retry-After, never the reply's body or a header Eden sent.
+ * - an error names the HTTP status and Retry-After, never the reply's body or a header that was sent.
  *
- * Left out, as Eden needs none of them: the standalone GET stream (server-initiated messages outside a request),
- * resuming a broken stream by `Last-Event-ID`, OAuth (credentials are the operator's static headers), JSON-RPC
- * batches (removed from MCP in 2025-06-18). The DELETE that ends a session is `terminateSession`, for a caller that
- * wants it (D1860); `close` sends none (the SDK's sends none either), and Eden never calls it.
- * A session the server no longer knows (404 while one is held) closes the transport, so `McpSource` connects again
- * with a fresh `initialize`, as the spec asks.
+ * Opt-in, and off on Eden's own path: resuming a broken SSE reply by `Last-Event-ID` (`resume`, D1873), the standalone
+ * GET stream for server-initiated messages (`openServerStream`, D1873), and a bearer token from an `AuthHook` such as
+ * `oauth.ts`'s (`auth`, D1874), which `http.ts` does not import. Left out: JSON-RPC batches (removed from MCP in
+ * 2025-06-18). The DELETE that ends a session is `terminateSession`, for a caller that wants it (D1860); `close` sends
+ * none (the SDK's sends none either), and Eden never calls it. A session the server no longer knows (404 while one is
+ * held) closes the transport, so `McpSource` connects again with a fresh `initialize`, as the spec asks.
  */
 import { deadlines, type Deadline } from "./deadlines";
 import { parseJsonBytes, parseJsonText } from "./json";
@@ -34,8 +37,73 @@ export interface StreamableHttpOptions {
   maxResponseBytes?: number;
   /** Deadline of each POST, its reply's body included (default 60 s, the client's request timeout). */
   timeoutMs?: number;
+  /** Budgets for what one reply may carry besides its response (`DEFAULT_LIMITS`, D1872). */
+  limits?: Partial<ReplyLimits>;
+  /**
+   * Resume an SSE reply that breaks before its response, with a GET carrying `Last-Event-ID` (D1873), and reconnect
+   * the GET stream. Off by default: `true` takes `DEFAULT_RESUME`.
+   */
+  resume?: boolean | Partial<ResumeOptions>;
+  /** A bearer token for every request, renewed on a 401 (`oauth.ts` makes one, D1874). */
+  auth?: AuthHook;
   /** Tests. */
   fetch?: typeof fetch;
+}
+
+/**
+ * What one reply (a POST's, or one connection of the GET stream) may carry besides its response, before it is failed.
+ * Budgets, not counts: a server that asks for things as it works, or sends a large reply, gets room in proportion;
+ * a flood does not.
+ */
+export interface ReplyLimits {
+  /** Server requests at once (each `ping`, or each request a handler answers, costs a POST). */
+  serverRequests: number;
+  /** Server requests added to the budget for each second the reply has been open. */
+  serverRequestsPerSecond: number;
+  /** Messages that are not JSON, not JSON-RPC, or a response to another request, at once. */
+  badMessages: number;
+  /** Bad messages added to the budget for each MiB the reply has carried. */
+  badMessagesPerMiB: number;
+}
+
+/**
+ * Defaults (D1872). Well-behaved servers send no bad message, and ask at most a few requests a tool call (the SDK's
+ * example servers: 0-4, each awaited before the next, so a model's round trip apart); 100 at once and 10 more a second
+ * is past any of them. A flood still fails at once: 20,000 pings sent together fail after 100, 2,000,000 junk events
+ * of 8 bytes after ~115, and a junk reply's CPU stays proportional to its bytes (a bad message per KiB at most).
+ */
+export const DEFAULT_LIMITS: ReplyLimits = {
+  serverRequests: 100,
+  serverRequestsPerSecond: 10,
+  badMessages: 100,
+  badMessagesPerMiB: 1024,
+};
+
+export interface ResumeOptions {
+  /** Reconnects of one reply, or failed reconnects in a row of the GET stream, before giving up. */
+  maxRetries: number;
+  /** The first wait before a reconnect; it doubles each time, unless the server's `retry:` says otherwise. */
+  initialDelayMs: number;
+  /** The longest wait, whatever `retry:` asks. */
+  maxDelayMs: number;
+}
+
+export const DEFAULT_RESUME: ResumeOptions = { maxRetries: 3, initialDelayMs: 1_000, maxDelayMs: 30_000 };
+
+/** Where a transport gets a bearer token (D1874). `oauth.ts`'s `OAuthClientProvider` is one. */
+export interface AuthHook {
+  /** The `Authorization` header for the next request (`Bearer …`), or undefined when there is no token yet. */
+  authorization(signal?: AbortSignal): Promise<string | undefined> | string | undefined;
+  /**
+   * Told of a 401 (or a 403 asking for more scope) with its `WWW-Authenticate`; resolves true when a retry may succeed
+   * (a token was obtained or refreshed). Called at most once per request.
+   */
+  unauthorized(challenge: {
+    status: number;
+    wwwAuthenticate: string | null;
+    url: URL;
+    signal?: AbortSignal;
+  }): Promise<boolean>;
 }
 
 /**
@@ -53,19 +121,16 @@ export const MAX_TOOLS_LIST_BYTES = 4 * 1024 * 1024;
 const LISTS = new Set(["tools/list", "resources/list", "resources/templates/list", "prompts/list"]);
 /** Cap on one SSE line or event: Eden's replies are a tool page or a search's rows, far below the whole stream's. */
 export const MAX_EVENT_BYTES = 4 * 1024 * 1024;
-/**
- * Messages on one reply that are not JSON, not JSON-RPC, or a response to another request, before the reply is failed:
- * a flood of junk events cost seconds of CPU (2.1M `data:x` events, 3.1 s), and one error is reported, not one each.
- */
-const MAX_BAD_PER_REPLY = 100;
-/** Requests from the server on one reply before it is failed (each `ping` is answered with a POST). */
-const MAX_ASKS_PER_REPLY = 100;
 
 /** What one reply carried besides its response: counted so a flood fails the reply instead of costing per message. */
 interface Tally {
   bad: number;
   asks: number;
-  /** Why the reply is failed, once a count passes its cap. */
+  /** Bytes of the messages the reply has carried (a JSON body's, an SSE event's data), for the bad-message budget. */
+  bytes: number;
+  /** When the reply began (`performance.now()`), for the server-request budget. */
+  start: number;
+  /** Why the reply is failed, once a count passes its budget. */
   failed: string | null;
 }
 /** Same-origin redirects followed per request, at most. */
@@ -115,6 +180,10 @@ export class StreamableHttpTransport implements Transport {
   private readonly maxBytes: number;
   private readonly timeoutMs: number;
   private readonly fetchFn: typeof fetch;
+  private readonly limits: ReplyLimits;
+  private readonly resume: ResumeOptions | null;
+  /** The GET stream's connection, while one is open (`openServerStream`); aborted by `close`. */
+  private serverStream: AbortController | null = null;
   /**
    * The runtime's own `fetch`, not a caller's nor a replaced global's (an APM agent, a mock, a polyfill): its body
    * framing is the HTTP client's, which the native read trusts.
@@ -129,6 +198,8 @@ export class StreamableHttpTransport implements Transport {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchFn = options.fetch ?? fetch;
     this.ownFetch = options.fetch === undefined && this.fetchFn === RUNTIME_FETCH && runtimeIsNative;
+    this.limits = { ...DEFAULT_LIMITS, ...options.limits };
+    this.resume = options.resume ? { ...DEFAULT_RESUME, ...(options.resume === true ? {} : options.resume) } : null;
     this.headers = this.buildHeaders();
   }
 
@@ -155,9 +226,10 @@ export class StreamableHttpTransport implements Transport {
     );
     this.flights.add(flight);
     try {
+      const auth = this.options.auth ? await this.options.auth.authorization(flight.abort.signal) : undefined;
       const res = await this.fetchFn(this.url, {
         method: "DELETE",
-        headers: this.headers,
+        headers: auth ? { ...this.headers, authorization: auth } : this.headers,
         signal: flight.abort.signal,
         redirect: "manual",
       });
@@ -181,6 +253,8 @@ export class StreamableHttpTransport implements Transport {
     this.state = "closed";
     for (const f of this.flights) this.land(f, true);
     this.byId.clear();
+    this.serverStream?.abort();
+    this.serverStream = null;
     this.onclose?.();
   }
 
@@ -218,6 +292,124 @@ export class StreamableHttpTransport implements Transport {
     }
   }
 
+  /**
+   * Opens the standalone GET stream, on which the server sends requests and notifications outside any request
+   * (D1873). Resolves true once it is open, false when the server offers none (405). Its messages go to `onmessage`
+   * under the same caps and budgets as a reply's (each connection is a reply: the per-event cap, the reply cap, after
+   * which the connection is closed and opened again, and `ReplyLimits`); a response on it is unasked, so dropped and
+   * counted. A connection that ends or breaks is opened again with `Last-Event-ID`, waiting as `resume` says (its
+   * defaults when unset), until `maxRetries` connections in a row deliver nothing; a reply failed by a budget is not
+   * opened again (`onerror` says why). `close` ends it. Eden never opens it.
+   */
+  async openServerStream(): Promise<boolean> {
+    if (this.state !== "open") throw new Error("Not connected");
+    if (this.serverStream) return true;
+    const stop = new AbortController();
+    this.serverStream = stop;
+    const resume = this.resume ?? DEFAULT_RESUME;
+    let lastEventId: string | null = null;
+    let retryMs: number | null = null;
+    const connect = async () => {
+      const extra: Record<string, string> = { accept: "text/event-stream" };
+      if (lastEventId) extra["last-event-id"] = lastEventId;
+      return this.fetchAuthed("GET", undefined, stop.signal, extra);
+    };
+    let res: Response;
+    try {
+      res = await connect();
+    } catch (e) {
+      if (this.serverStream === stop) this.serverStream = null;
+      throw e;
+    }
+    if (res.status === 405 || !res.ok || mediaType(res.headers.get("content-type")) !== "text/event-stream") {
+      await res.body?.cancel().catch(() => {});
+      if (this.serverStream === stop) this.serverStream = null;
+      if (res.status === 405) return false;
+      throw new StreamableHttpError(res.status, `Error opening the event stream (HTTP ${res.status})`);
+    }
+    void (async () => {
+      let misses = 0;
+      while (!stop.signal.aborted && this.state === "open") {
+        const got = await this.readServerStream(res, stop.signal, lastEventId, retryMs);
+        lastEventId = got.lastEventId;
+        retryMs = got.retryMs;
+        if (got.failed || stop.signal.aborted) break;
+        misses = got.delivered ? 0 : misses + 1;
+        if (misses > resume.maxRetries) break;
+        try {
+          await sleep(delayFor(resume, Math.max(1, misses), retryMs), stop.signal);
+          res = await connect();
+        } catch {
+          misses++;
+          continue;
+        }
+        if (!res.ok || mediaType(res.headers.get("content-type")) !== "text/event-stream") {
+          await res.body?.cancel().catch(() => {});
+          // The server no longer offers one: stop trying.
+          if (res.status === 405 || res.status === 404) break;
+          misses++;
+          if (misses > resume.maxRetries) break;
+        }
+      }
+      if (this.serverStream === stop) this.serverStream = null;
+    })();
+    return true;
+  }
+
+  /** One connection of the GET stream, read to its end, its cap, its budget or the stop. */
+  private async readServerStream(
+    res: Response,
+    signal: AbortSignal,
+    lastEventId: string | null,
+    retryMs: number | null,
+  ): Promise<{ lastEventId: string | null; retryMs: number | null; delivered: boolean; failed: boolean }> {
+    const tally: Tally = { bad: 0, asks: 0, bytes: 0, start: performance.now(), failed: null };
+    let delivered = false;
+    const parser = new SseParser(
+      Math.min(this.maxBytes, MAX_EVENT_BYTES),
+      (data) => {
+        tally.bytes += data.length;
+        const m = parseJsonBytes(data);
+        if (m === undefined) this.countBad(tally, "Event stream");
+        else if (this.deliver(m, null, tally) || !tally.failed) delivered = true;
+        return tally.failed !== null;
+      },
+      this.ownFetch && isBun,
+      true,
+    );
+    parser.lastEventId = lastEventId;
+    parser.retryMs = retryMs;
+    if (!res.body) return { lastEventId, retryMs, delivered, failed: false };
+    let read = 0;
+    const reader = res.body.getReader();
+    const onStop = () => void reader.cancel().catch(() => {});
+    signal.addEventListener("abort", onStop, { once: true });
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        read += value.length;
+        // Past the reply cap the connection is closed and opened again: nothing is held across events, so this
+        // bounds only how long one connection lives.
+        if (read > this.maxBytes || parser.push(value) === "too-large") {
+          void reader.cancel().catch(() => {});
+          break;
+        }
+        if (tally.failed) {
+          void reader.cancel().catch(() => {});
+          this.onerror?.(new StreamableHttpError(-1, tally.failed));
+          break;
+        }
+      }
+    } catch {
+      // A broken connection: opened again by the caller.
+    } finally {
+      signal.removeEventListener("abort", onStop);
+      this.report(tally);
+    }
+    return { lastEventId: parser.lastEventId, retryMs: parser.retryMs, delivered, failed: tally.failed !== null };
+  }
+
   /** Ends a flight: its deadline cancelled, and its fetch aborted when `abort` (a body still being read). */
   private land(f: Flight, abort: boolean): void {
     deadlines.cancel(f.deadline);
@@ -245,7 +437,7 @@ export class StreamableHttpTransport implements Transport {
     cap: number,
   ): Promise<boolean> {
     const heldSession = this.sessionId !== undefined;
-    const res = await this.fetchWithinOrigin(JSON.stringify(message), flight.abort.signal);
+    const res = await this.fetchAuthed("POST", JSON.stringify(message), flight.abort.signal);
     const sid = res.headers.get("mcp-session-id");
     if (sid && sid !== this.sessionId) {
       // The spec allows visible ASCII only; anything else is not sent back (a header with a line break in it would
@@ -270,13 +462,13 @@ export class StreamableHttpTransport implements Transport {
     }
     if (res.status === 202 || id === undefined) {
       await res.body?.cancel().catch(() => {});
-      // A request accepted with nothing to read will never be answered here (no GET stream): fail it now, not at the
-      // client's 60 s timeout.
+      // A request accepted with nothing to read will never be answered here: fail it now, not at the client's 60 s
+      // timeout (a server that answers on the GET stream instead does not follow the spec).
       if (id !== undefined) throw new StreamableHttpError(202, "Server accepted the request without answering it");
       return false;
     }
     const type = mediaType(res.headers.get("content-type"));
-    const tally: Tally = { bad: 0, asks: 0, failed: null };
+    const tally: Tally = { bad: 0, asks: 0, bytes: 0, start: performance.now(), failed: null };
     if (type === "application/json") {
       const length = res.headers.get("content-length");
       const declared = Number(length ?? "0");
@@ -287,10 +479,12 @@ export class StreamableHttpTransport implements Transport {
         // framing to contradict it), so a native read is capped by the check above, at the cost of an uncapped one
         // (D1860). Its deadline still holds: the flight's abort ends the read.
         data = isBun ? parseJsonText(await res.text()) : parseJsonBytes(new Uint8Array(await res.arrayBuffer()));
+        tally.bytes = declared;
       } else {
         const bytes = await readCapped(res, cap, flight);
         if (!bytes) throw await this.tooLarge(res, cap);
         data = parseJsonBytes(bytes);
+        tally.bytes = bytes.length;
       }
       if (data === undefined) throw new StreamableHttpError(-1, "Reply is not JSON");
       let answered = false;
@@ -318,11 +512,47 @@ export class StreamableHttpTransport implements Transport {
     if (t.bad > 0) this.onerror?.(new StreamableHttpError(-1, `Reply carried ${t.bad} malformed or unasked messages`));
   }
 
+  /**
+   * A request with the auth hook's token, if there is one: on a 401 (or a 403 asking for more scope) the hook is told
+   * once, and the request is sent again if it says a new token may succeed. Without a hook, `fetchWithinOrigin`.
+   */
+  private async fetchAuthed(
+    method: string,
+    body: string | undefined,
+    signal: AbortSignal,
+    extra?: Record<string, string>,
+  ): Promise<Response> {
+    const auth = this.options.auth;
+    if (!auth) return this.fetchWithinOrigin(method, body, signal, extra);
+    for (let retried = false; ; retried = true) {
+      const token = await auth.authorization(signal);
+      const res = await this.fetchWithinOrigin(
+        method,
+        body,
+        signal,
+        token ? { ...extra, authorization: token } : extra,
+      );
+      const challenge = res.headers.get("www-authenticate");
+      const askedScope = res.status === 403 && challenge !== null && /insufficient_scope/i.test(challenge);
+      if (retried || (res.status !== 401 && !askedScope)) return res;
+      if (!(await auth.unauthorized({ status: res.status, wwwAuthenticate: challenge, url: this.url, signal }))) {
+        return res;
+      }
+      await res.body?.cancel().catch(() => {});
+    }
+  }
+
   /** `fetch` without following a redirect to another origin, which would carry the user's credentials there. */
-  private async fetchWithinOrigin(body: string, signal: AbortSignal): Promise<Response> {
+  private async fetchWithinOrigin(
+    method: string,
+    body: string | undefined,
+    signal: AbortSignal,
+    extra?: Record<string, string>,
+  ): Promise<Response> {
     let url = this.url;
+    const headers = extra ? { ...this.headers, ...extra } : this.headers;
     for (let hop = 0; ; hop++) {
-      const res = await this.fetchFn(url, { method: "POST", headers: this.headers, body, signal, redirect: "manual" });
+      const res = await this.fetchFn(url, { method, headers, body, signal, redirect: "manual" });
       if (res.status < 300 || res.status >= 400 || res.status === 304) return res;
       await res.body?.cancel().catch(() => {});
       const location = res.headers.get("location");
@@ -345,46 +575,83 @@ export class StreamableHttpTransport implements Transport {
   /**
    * Reads server-sent events until the response to `id` arrives. The rest of the stream (servers end it right after)
    * is drained in the background within the POST's deadline and cap, so the connection goes back to the keep-alive
-   * pool instead of being torn down; true when that drain is running.
+   * pool instead of being torn down; true when that drain is running. With `resume`, a stream that ends or breaks
+   * before the response is resumed by a GET with the last event's id (D1873), within the same deadline, cap (counted
+   * across connections) and budgets.
    */
   private async readStream(res: Response, id: JsonRpcId, flight: Flight, cap: number, tally: Tally): Promise<boolean> {
     if (!res.body) throw new StreamableHttpError(-1, "Empty event stream");
-    const reader = res.body.getReader();
+    let reader: Reader = res.body.getReader();
     flight.reader = reader;
     let answered = false;
     // Bun's fetch hands out a new array each read and changes none after: the parser keeps views of them, not copies.
     // A caller's own fetch may reuse one buffer for every chunk, so its chunks are copied as before.
-    const parser = new SseParser(
-      Math.min(cap, MAX_EVENT_BYTES),
-      (data) => {
-        const m = parseJsonBytes(data);
-        if (m === undefined) {
-          if (++tally.bad > MAX_BAD_PER_REPLY)
-            tally.failed = `Event stream carried over ${MAX_BAD_PER_REPLY} bad messages`;
-        } else answered = this.deliver(m, id, tally);
-        return answered || tally.failed !== null;
-      },
-      this.ownFetch && isBun,
-    );
+    const parser = () =>
+      new SseParser(
+        Math.min(cap, MAX_EVENT_BYTES),
+        (data) => {
+          tally.bytes += data.length;
+          const m = parseJsonBytes(data);
+          if (m === undefined) this.countBad(tally, "Event stream");
+          else answered = this.deliver(m, id, tally);
+          return answered || tally.failed !== null;
+        },
+        this.ownFetch && isBun,
+        this.resume !== null,
+      );
+    let events = parser();
     let read = 0;
+    let retries = 0;
     try {
       for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        read += value.length;
-        const step = read > cap ? "too-large" : parser.push(value);
-        if (step === "too-large") {
-          void reader.cancel().catch(() => {});
-          throw new StreamableHttpError(-1, `Event stream larger than ${read > cap ? cap : MAX_EVENT_BYTES} bytes`);
+        let broken: unknown = null;
+        for (;;) {
+          let chunk: { done: boolean; value?: Uint8Array };
+          try {
+            chunk = await reader.read();
+          } catch (e) {
+            broken = e;
+            break;
+          }
+          if (chunk.done) break;
+          const value = chunk.value!;
+          read += value.length;
+          const step = read > cap ? "too-large" : events.push(value);
+          if (step === "too-large") {
+            void reader.cancel().catch(() => {});
+            throw new StreamableHttpError(-1, `Event stream larger than ${read > cap ? cap : MAX_EVENT_BYTES} bytes`);
+          }
+          if (tally.failed) {
+            void reader.cancel().catch(() => {});
+            throw new StreamableHttpError(-1, tally.failed);
+          }
+          if (step === "stop") {
+            void this.drain(reader, read, flight, cap);
+            return true;
+          }
         }
-        if (tally.failed) {
-          void reader.cancel().catch(() => {});
-          throw new StreamableHttpError(-1, tally.failed);
+        const from = events.lastEventId;
+        if (!this.resume || !from || retries >= this.resume.maxRetries || flight.abort.signal.aborted) {
+          if (broken !== null) throw broken;
+          break;
         }
-        if (step === "stop") {
-          void this.drain(reader, read, flight, cap);
-          return true;
+        retries++;
+        await sleep(delayFor(this.resume, retries, events.retryMs), flight.abort.signal);
+        const again = await this.fetchAuthed("GET", undefined, flight.abort.signal, {
+          accept: "text/event-stream",
+          "last-event-id": from,
+        });
+        if (!again.ok || mediaType(again.headers.get("content-type")) !== "text/event-stream" || !again.body) {
+          await again.body?.cancel().catch(() => {});
+          throw new StreamableHttpError(again.status, `Could not resume the event stream (HTTP ${again.status})`);
         }
+        // A new connection starts a new parse (a line cut by the break is gone), from the place it resumed.
+        const retryMs = events.retryMs;
+        events = parser();
+        events.lastEventId = from;
+        events.retryMs = retryMs;
+        reader = again.body.getReader();
+        flight.reader = reader;
       }
     } finally {
       this.report(tally);
@@ -412,19 +679,34 @@ export class StreamableHttpTransport implements Transport {
     }
   }
 
+  /** Counts a bad message against the reply's budget (`ReplyLimits`). */
+  private countBad(tally: Tally, what: "Reply" | "Event stream"): void {
+    const allowed = this.limits.badMessages + Math.floor((tally.bytes * this.limits.badMessagesPerMiB) / 1_048_576);
+    if (++tally.bad > allowed) tally.failed = `${what} carried over ${allowed} bad messages`;
+  }
+
   /**
-   * Delivers one message from a reply; true when it is the response to `id`. A message that is not JSON-RPC, or a
-   * response to another id, is dropped and counted; past the caps the reply is failed (`tally.failed`).
+   * Delivers one message from a reply; true when it is the response to `id` (`null`: the GET stream, where no response
+   * is asked for). A message that is not JSON-RPC, or a response to another id, is dropped and counted; past the
+   * budgets the reply is failed (`tally.failed`).
    */
-  private deliver(x: unknown, id: JsonRpcId, tally: Tally): boolean {
+  private deliver(x: unknown, id: JsonRpcId | null, tally: Tally): boolean {
     const m = asMessage(x);
-    if (!m || (!("method" in m) && !answers(m.id, id))) {
-      if (++tally.bad > MAX_BAD_PER_REPLY) tally.failed = `Reply carried over ${MAX_BAD_PER_REPLY} bad messages`;
+    if (!m || (!("method" in m) && (id === null || !answers(m.id, id)))) {
+      this.countBad(tally, "Reply");
       return false;
     }
-    if ("method" in m && "id" in m && ++tally.asks > MAX_ASKS_PER_REPLY) {
-      tally.failed = `Reply carried over ${MAX_ASKS_PER_REPLY} server requests`;
-      return false;
+    if ("method" in m && "id" in m) {
+      tally.asks++;
+      // The clock is read only when a request comes, which a well-behaved reply holds few of.
+      if (tally.asks > this.limits.serverRequests) {
+        const open = (performance.now() - tally.start) / 1000;
+        const allowed = this.limits.serverRequests + Math.floor(open * this.limits.serverRequestsPerSecond);
+        if (tally.asks > allowed) {
+          tally.failed = `Reply carried over ${allowed} server requests`;
+          return false;
+        }
+      }
     }
     this.onmessage?.(m);
     return !("method" in m);
@@ -432,6 +714,28 @@ export class StreamableHttpTransport implements Transport {
 }
 
 type Reader = { read(): Promise<{ done: boolean; value?: Uint8Array }>; cancel(): Promise<void> };
+
+/** The wait before reconnect `n` (1 for the first): the server's `retry:` if it gave one, else doubling; capped. */
+function delayFor(o: ResumeOptions, n: number, retryMs: number | null): number {
+  const ms = retryMs ?? o.initialDelayMs * 2 ** (n - 1);
+  return Math.max(0, Math.min(ms, o.maxDelayMs));
+}
+
+/** Waits `ms`, or rejects with the signal's reason when it aborts first. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 /** The media type of a Content-Type, lower-cased, without parameters. */
 function mediaType(contentType: string | null): string {
