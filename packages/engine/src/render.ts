@@ -68,10 +68,10 @@ export function renderPacket(
     // calendar event, its invitation and the reply confirming it do, says nothing more. Its own title too.
     const shown = new Set<string>();
     items = items.map((item) => {
-      const title = item.title.toLowerCase().match(WORDS) ?? [];
+      const title = wordsIn(item.title.toLowerCase());
       const own = new Set(title);
       const prior = before?.(item);
-      const parts = messageParts(
+      const { parts, words } = readParts(
         item.text,
         (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
         // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
@@ -82,10 +82,10 @@ export function renderPacket(
         options.split,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, words, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
-      for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
+      for (const w of wordsIn(text.toLowerCase())) shown.add(w);
       return { ...item, text };
     });
   }
@@ -269,6 +269,51 @@ const GREETED = /^([Hh]i|[Hh]ello|[Hh]ey|[Dd]ear)\s+[\p{Lu}][\p{L}'-]*\s?[,-]\s+
 const PLEASANTRY =
   /^(shout if|let me know (if|what)|hope (you|your|all)|see you (then|soon)|thanks|thank you|looking forward|following up on|happy to help|have a (great|good|nice)|speak soon|talk soon|any questions)\b.{0,50}$/i;
 const WORDS = /[\p{L}\p{N}]+/gu;
+/** One code unit of `WORDS`: read alone, a unit outside the surrogates is the code point it is. */
+const WORD_CHAR = /^[\p{L}\p{N}]$/u;
+/** Per code unit, whether it is a word character: 0 not yet read, 1 it is, 2 it is not. Filled as units are met. */
+const WORD_UNITS = new Uint8Array(0x10000);
+
+/**
+ * `s.match(WORDS) ?? []` read by one pass over the code units, each class read once a process (`WORD_UNITS`): the
+ * regex's Unicode classes cost several times this on the packet path (D1881). A string with a surrogate (an emoji, a
+ * character past the BMP) is left to the regex, which reads a pair as one code point.
+ */
+export function wordsIn(s: string): string[] {
+  const out: string[] = [];
+  let start = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    let k = WORD_UNITS[c]!;
+    if (k === 0) {
+      if (c >= 0xd800 && c <= 0xdfff) return s.match(WORDS) ?? [];
+      k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
+      WORD_UNITS[c] = k;
+    }
+    if (k === 1) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      out.push(s.slice(start, i));
+      start = -1;
+    }
+  }
+  if (start >= 0) out.push(start === 0 ? s : s.slice(start));
+  return out;
+}
+
+/** Whether `/[ \t\r\f\v]+/g` would change the text: a tab, CR, form feed or vertical tab, or two spaces in a row. */
+function spacedOut(s: string): boolean {
+  let space = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 32) {
+      if (space) return true;
+      space = true;
+    } else if (c === 9 || c === 13 || c === 12 || c === 11) return true;
+    else space = false;
+  }
+  return false;
+}
 const DIGIT = /\d/;
 // A sentence ends at ". " before a capital or digit; with `dense`, not after a title or street abbreviation ("booked
 // St. John for Tuesday", "Dr. Okafor"), which would split a place or a name in two.
@@ -372,7 +417,8 @@ export function compactText(
   dense?: { title: string },
   split?: boolean,
 ): string {
-  return pick(messageParts(text, known, year, self, dense, split), focus, maxBytes);
+  const { parts, words } = readParts(text, known, year, self, dense, split);
+  return pick(parts, words, focus, maxBytes);
 }
 
 /** One part of a message (`messageParts`): a sentence or a line, whether it is quoted, whether it is a header. */
@@ -401,6 +447,21 @@ export function messageParts(
   dense?: { title: string },
   split = false,
 ): Part[] {
+  return readParts(text, known, year, self, dense, split).parts;
+}
+
+/**
+ * `messageParts`, with each part's lower-case words (`wordsIn`) beside it: the known test reads them, and `pick`
+ * scores the parts by them rather than reading every part's words again (D1881).
+ */
+function readParts(
+  text: string,
+  known: (word: string) => boolean,
+  year: number | undefined,
+  self: string | null | undefined,
+  dense: { title: string } | undefined,
+  split: boolean | undefined,
+): { parts: Part[]; words: string[][] } {
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
   const selfFirst = self?.split(" ")[0] ?? "";
@@ -408,9 +469,11 @@ export function messageParts(
   // The current year adds nothing to a day and month ("Sat, 24 Oct 2026 12:00" is "Sat 24 Oct 12:00"); ISO dates
   // ("2026-11-10") keep it.
   const thisYear = year ? new RegExp(`\\b(\\d{1,2}(?:st|nd|rd|th)? ${MONTH_WORD}),? ${year}\\b`, "gi") : null;
+  const yearText = ` ${year}`;
   const parts: Part[] = [];
+  const partWords: string[][] = [];
   const seen = new Set<string>();
-  const titleWords = dense ? (dense.title.toLowerCase().match(WORDS) ?? []).slice(0, TITLE_WORDS) : [];
+  const titleWords = dense ? wordsIn(dense.title.toLowerCase()).slice(0, TITLE_WORDS) : [];
   let own = true; // before the message's sign-off
   let signed = false; // in a quoted message's signature: until the next quoted message starts
   let first = true; // the message's first sentence, past its headers
@@ -418,13 +481,16 @@ export function messageParts(
   // A connector's snippet is often one line: the thread's markers are put back on lines of their own first.
   // Whitespace is collapsed first, in linear passes: every pattern below then sees runs of one character at most (a
   // long run would make their leading `\s+` rescan it from every start, quadratic on hostile text).
-  const lines = text
-    .replace(/[ \t\r\f\v]+/g, " ")
-    .replace(/ ?\n[\n ]*/g, "\n")
-    .replace(/\s+(On [^\n]{6,160}? wrote:)\s*/g, "\n$1\n")
-    .replace(/[ \t]+((?:>[ \t]?)+)/g, "\n$1")
-    .replace(/\s+(--|Sent from my \S+)(\s|$)/g, "\n$1\n")
-    .split("\n");
+  // Each pass runs only where the text holds what it must match (exact tests, D1881): on an item of plain prose every
+  // one of them was a scan of the whole text for nothing.
+  let flat = spacedOut(text) ? text.replace(/[ \t\r\f\v]+/g, " ") : text;
+  if (flat.includes("\n")) flat = flat.replace(/ ?\n[\n ]*/g, "\n");
+  if (flat.includes(" wrote:")) flat = flat.replace(/\s+(On [^\n]{6,160}? wrote:)\s*/g, "\n$1\n");
+  if (flat.includes(">")) flat = flat.replace(/[ \t]+((?:>[ \t]?)+)/g, "\n$1");
+  if (flat.includes("--") || flat.includes("Sent from my ")) {
+    flat = flat.replace(/\s+(--|Sent from my \S+)(\s|$)/g, "\n$1\n");
+  }
+  const lines = flat.split("\n");
   for (const raw of lines) {
     const quoted = QUOTED.test(raw);
     let line = (quoted ? raw.replace(QUOTED, "") : raw).trim();
@@ -447,8 +513,9 @@ export function messageParts(
       line = attendeesBeyond(line, self, titleWords);
       if (!line) continue;
     }
-    if (you) line = line.replace(you, selfFirst);
-    if (thisYear) line = line.replace(thisYear, "$1").replace(WEEKDAY_COMMA, "$1 $2");
+    if (you && line.includes(self!)) line = line.replace(you, selfFirst);
+    if (thisYear && line.includes(yearText)) line = line.replace(thisYear, "$1");
+    if (thisYear && line.includes(", ")) line = line.replace(WEEKDAY_COMMA, "$1 $2");
     const sentences = line.split(dense ? SENTENCE_DENSE : SENTENCE);
     for (let part of split ? sentences.flatMap((x) => x.split(TABLE_ROW)) : sentences) {
       if (SIGNOFF.test(part) || SIGNED.test(part)) {
@@ -461,7 +528,8 @@ export function messageParts(
       const header = /^(from|date|subject):/i.test(part) || (sentTo && /^to:/i.test(part));
       part = part.replace(first && !quoted && !header ? SALUTED : GREETED, "");
       if (!quoted && !header) first = false;
-      part = part.replace(URL, "").trim();
+      if (part.includes("http")) part = part.replace(URL, "");
+      part = part.trim();
       if (dense && !header) {
         part = part.replace(TIME_OF_DAY_GREETING, "");
         const footer = part.search(FOOTER);
@@ -474,20 +542,22 @@ export function messageParts(
       if (seen.has(key)) continue;
       // Nothing the conversation has not already said (every content word in it): the agent has this part. A sender
       // stays: who said the rest is not in its words.
-      const words = key.match(WORDS) ?? [];
+      const words = wordsIn(key);
       if (!/^from:/.test(key) && !words.some((w) => w.length > 1 && !isStopword(w) && !known(w))) continue;
       seen.add(key);
       parts.push({ text: part, quoted, header });
+      partWords.push(words);
     }
   }
-  return parts;
+  return { parts, words: partWords };
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
-function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
+function pick(parts: Part[], words: readonly string[][], focus: ReadonlySet<string>, maxBytes: number): string {
   const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
-    for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
+    // The part's words as `readParts` read them: those of its text in lower case.
+    for (const w of words[k]!) if (focus.has(w)) n += 1;
     n += DIGIT.test(part.text) ? 1 : 0;
     return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
   };
