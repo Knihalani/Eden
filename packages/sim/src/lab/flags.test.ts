@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { PARTS } from "@eden/engine";
-import { labConfig, parseFlags, type FlagSpec } from "./flags";
+import { cardLimits, labConfig, parseFlags, type FlagSpec } from "./flags";
 import { PRESETS } from "./presets";
 
 const KNOWN: FlagSpec = { preset: "value", seeds: "value", set: "value", record: "bool", blind: "bool" };
@@ -75,4 +75,18 @@ test("funnel, hidden-funnel and quality-cli exit 2 on a misspelled flag without 
     expect(code).toBe(2);
     expect(err).toMatch(/unknown flag --/);
   }
+});
+
+describe("--card-limits", () => {
+  test("gatherMs: null is no cut (Infinity), a positive number stands, anything else is refused by name", () => {
+    expect(cardLimits('{"gatherMs":null,"batch":20}')).toEqual({ gatherMs: Infinity, batch: 20 });
+    expect(cardLimits('{"gatherMs":50}')).toEqual({ gatherMs: 50 });
+    expect(cardLimits("{}")).toEqual({});
+    // A typo used to reach the drain's gather and act as no cut at all.
+    for (const bad of ['"x"', "0", "-5", "true", "1e999", "{}"]) {
+      expect(() => cardLimits(`{"gatherMs":${bad}}`)).toThrow("gatherMs must be null (no cut) or a positive number");
+    }
+    expect(() => cardLimits("[1]")).toThrow("must be an object");
+    expect(() => cardLimits("{gatherMs:1}")).toThrow("--card-limits is not JSON");
+  });
 });

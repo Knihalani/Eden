@@ -1023,6 +1023,11 @@ export class CardEnricher {
     private readonly given: Partial<CardLimits> = {},
   ) {
     this.limits = { ...DEFAULT_CARD_LIMITS, ...given };
+    // NaN or a non-number would act as no cut at all (`performance.now() >= NaN` is never true).
+    const ms = given.gatherMs;
+    if (ms !== undefined && !(typeof ms === "number" && ms > 0)) {
+      throw new Error(`CardLimits.gatherMs must be a positive number of ms (Infinity: no cut), got ${String(ms)}`);
+    }
   }
 
   /**
