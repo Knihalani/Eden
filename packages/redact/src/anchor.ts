@@ -191,19 +191,45 @@ function anchorOfBranch(parts: RegexNode[]): Anchor | undefined {
     // quantifier on it repeats its second. Two a repetition bounds both, as the parse cannot tell them apart.
     return ranges[ranges.length - 1]! > 0xffff ? 2 : 1;
   };
+  /**
+   * The most code units a node can match, its characters joining the prefix class; undefined when unbounded. A
+   * group, an alternation or a repetition of either counts as its longest way through (`(?:https?://)?` is at most 8
+   * characters from `[htps:/]`, `(?:^|[\s=:])` at most one), so every match's characters before the literal are
+   * still in the class and at most `maxPrefix` of them.
+   */
+  const bounded = (node: RegexNode): number | undefined => {
+    switch (node.t) {
+      case "set":
+        return addSet(node.ranges);
+      case "assert":
+      case "empty":
+        return 0;
+      case "rep": {
+        const one = node.max < 0 ? undefined : bounded(node.x);
+        return one === undefined ? undefined : one * node.max;
+      }
+      case "cat":
+      case "alt": {
+        let total = 0;
+        for (const x of node.xs) {
+          const n = bounded(x);
+          if (n === undefined) return undefined;
+          total = node.t === "cat" ? total + n : Math.max(total, n);
+        }
+        return total;
+      }
+    }
+  };
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i]!;
     if (part.t === "assert" || part.t === "empty") continue;
     // A literal, or an alternation whose every branch starts with one: those literals.
     const literals = leadingLiterals(parts.slice(i));
     if (literals) return { literals: [...new Set(literals)], maxPrefix, prefix: interned(prefix), wide };
-    if (part.t === "alt") return undefined;
     // Otherwise the part must be of bounded length over a known class, and joins the prefix.
-    if (part.t === "set") {
-      maxPrefix += addSet(part.ranges);
-    } else if (part.t === "rep" && part.x.t === "set" && part.max >= 0) {
-      maxPrefix += addSet(part.x.ranges) * part.max;
-    } else return undefined;
+    const n = bounded(part);
+    if (n === undefined) return undefined;
+    maxPrefix += n;
   }
   return undefined;
 }
@@ -253,6 +279,11 @@ export class Occurrences {
 
   /** Whether any occurrence was counted since the last `clear`. */
   private counted = false;
+
+  /** Whether every occurrence of `literal` is in its list (none was only counted). */
+  complete(literal: number): boolean {
+    return this.count[literal]! <= this.cap;
+  }
 
   add(literal: number, start: number): void {
     this.counted = true;
@@ -433,4 +464,263 @@ export class AnchoredRegex {
     this.sticky.lastIndex = 0;
     return this.sticky;
   }
+}
+
+/**
+ * The keyword-assignment rules (96 of gitleaks'), `(?i)[\w.-]{0,50}?REST` where every match of REST starts with one
+ * of a few literals (the rule's keywords): the lazy prefix is the engine's cost. From each start the engine tries
+ * the prefix's 0 to 50 characters in turn and REST after each, so a text dense in keywords (`tokentoken…`, 1 µs a
+ * character) or in prefix characters before them cost it about 50 REST attempts a position, and the anchored tries
+ * could not help: every position near a keyword is a candidate start.
+ *
+ * So the prefix is read by hand and REST alone runs, sticky, once at each keyword occurrence k. From a start s the
+ * engine tries k = s, s + 1, … while `[s, k)` is prefix characters and k − s ≤ 50, and the first k where REST
+ * matches gives the match, `[s, REST's end from k)`; REST's match from k depends on k alone (it reads the text before
+ * k only through lookbehind or `\b`, the same text either way). The starts that reach k are an interval, from
+ * start(k) (the least s ≥ the scan's position with `[s, k)` all prefix characters and k − s ≤ 50) to k. So the
+ * leftmost match starts at s* = the least start(k) over the occurrences k where REST matches, and its k is the least
+ * such k with start(k) = s* (from s* every smaller REST match is out of reach, or it would give a smaller start).
+ * Matches go on from each one's end, as `matchAll` does. Since start(k) ≥ k − 50, the search for s* stops 50 past
+ * the best start so far; an occurrence is looked at again only within that window, its REST result kept.
+ *
+ * Linear: one sticky REST attempt an occurrence (REST's own work is bounded: a keyword, `[ \t\w.-]{0,20}`,
+ * `[\s'"]{0,3}`, an operator, then the secret), a walk of at most 50 characters back from each that matches, and
+ * one sort of the occurrences.
+ */
+export class LazyPrefixRegex {
+  /** REST's literals, distinct: the words whose occurrences `each` wants. */
+  readonly words: string[];
+  private readonly restSource: string;
+  private readonly flags: string;
+  private readonly max: number;
+  /** Per ASCII code unit, 1 when JavaScript's prefix class takes it; it takes none outside ASCII (anchor tests). */
+  private readonly prefix: Uint8Array;
+  private rest: RegExp | undefined;
+  private finder: RegExp | undefined;
+  /** The regex's later top-level branches, joined (atlassian-api-token's `|\b(ATATT3…)`), when it has any. */
+  private readonly otherSource: string | undefined;
+  private other: RegExp | undefined;
+
+  constructor(
+    restSource: string,
+    otherSource: string | undefined,
+    flags: string,
+    max: number,
+    prefix: Uint8Array,
+    words: string[],
+  ) {
+    this.restSource = restSource;
+    this.otherSource = otherSource;
+    this.flags = flags.replace(/[dgy]/g, "");
+    this.max = max;
+    this.prefix = prefix;
+    this.words = words;
+  }
+
+  /**
+   * Calls `onMatch` with each match `matchAll` would report for the whole regex, in order. `found` holds the text's
+   * occurrences of `words` (`ids[i]` the id of `words[i]`); without them, or when a literal's list is incomplete (a
+   * text dense in it), the occurrences are found here.
+   */
+  each(
+    text: string,
+    found: Occurrences | undefined,
+    ids: Int32Array | undefined,
+    onMatch: (start: number, end: number) => void,
+  ): void {
+    const n = this.occurrences(text, found, ids);
+    const other = this.otherSource === undefined ? undefined : (this.other ?? this.compile().other!);
+    if (n === 0 && !other) return;
+    const rest = this.rest ?? this.compile().rest;
+    const at = candidates;
+    if (ends.length < n) ends = new Int32Array(at.length);
+    ends.fill(UNKNOWN, 0, n);
+    const max = this.max;
+    const prefix = this.prefix;
+    let from = 0;
+    let i = 0;
+    /** The lazy branch's leftmost match at or after `from` (-1: none at all), valid while `from` ≤ `best`. */
+    let best = -1;
+    let bestEnd = -1;
+    let lazyDone = n === 0;
+    /** The other branches' leftmost match at or after `from` (-1: none), valid while `from` ≤ its start. */
+    let otherStart = -2;
+    let otherEnd = -1;
+    for (;;) {
+      if (!lazyDone && (best < 0 || from > best)) {
+        // Raising `from` up to `best` keeps `best` the least start (no start moves below it), so it is found again
+        // only once a match has passed it.
+        best = -1;
+        while (i < n && at[i]! < from) i++;
+        for (let j = i; j < n; j++) {
+          const k = at[j]!;
+          if (best >= 0 && k > best + max) break;
+          let end = ends[j]!;
+          if (end === UNKNOWN) {
+            rest.lastIndex = k;
+            end = rest.test(text) ? rest.lastIndex : -1;
+            ends[j] = end;
+          }
+          if (end < 0) continue;
+          let s = k;
+          const floor = Math.max(from, k - max);
+          while (s > floor) {
+            const c = text.charCodeAt(s - 1);
+            if (c >= 128 || prefix[c] === 0) break;
+            s--;
+          }
+          if (best < 0 || s < best) {
+            best = s;
+            bestEnd = end;
+          }
+        }
+        lazyDone = best < 0;
+      }
+      if (other && otherStart !== -1 && from > otherStart) {
+        // A global scan from `from`: the other branches' leftmost match there (they hold no lazy prefix).
+        other.lastIndex = from;
+        const m = other.exec(text);
+        otherStart = m ? m.index : -1;
+        otherEnd = m ? m.index + m[0].length : -1;
+      }
+      // At one start the engine tries the first branch first.
+      if (!lazyDone && (otherStart < 0 || best <= otherStart)) {
+        onMatch(best, bestEnd);
+        // REST holds a literal, so a match is never empty and `from` moves on.
+        from = bestEnd;
+      } else if (otherStart >= 0) {
+        onMatch(otherStart, otherEnd);
+        from = otherEnd > otherStart ? otherEnd : otherStart + 1;
+      } else break;
+    }
+    if (candidates.length > SCRATCH_KEPT) {
+      candidates = new Int32Array(256);
+      ends = new Int32Array(256);
+    }
+  }
+
+  /** Puts the occurrences of `words` in `candidates`, increasing and distinct; returns how many. */
+  private occurrences(text: string, found: Occurrences | undefined, ids: Int32Array | undefined): number {
+    let n = 0;
+    const push = (k: number) => {
+      if (n === candidates.length) candidates = grow(candidates);
+      candidates[n++] = k;
+    };
+    if (found && ids && allKept(found, ids)) {
+      let lists = 0;
+      for (const id of ids) {
+        if (found.head[id]! >= 0) lists++;
+        for (let e = found.head[id]!; e >= 0; e = found.next[e]!) push(found.start[e]!);
+      }
+      if (lists > 1) candidates.subarray(0, n).sort();
+    } else {
+      // Every start of a literal, overlapping ones included (case folded: a superset of where REST can start).
+      const finder = (this.finder ??= new RegExp(
+        this.words.map((word) => word.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&")).join("|"),
+        "gi",
+      ));
+      finder.lastIndex = 0;
+      for (let m = finder.exec(text); m; m = finder.exec(text)) {
+        push(m.index);
+        finder.lastIndex = m.index + 1;
+      }
+    }
+    // Two literals can occur at one position (`key` and `keys`): keep each position once.
+    let distinct = 0;
+    for (let j = 0; j < n; j++) if (j === 0 || candidates[j] !== candidates[j - 1]) candidates[distinct++] = candidates[j]!;
+    return distinct;
+  }
+
+  /** Compiles REST (and the other branches) and runs them once, so the first text pays for neither (`warmGate`). */
+  warm(): void {
+    const { rest, other } = this.compile();
+    rest.test("");
+    other?.test("");
+  }
+
+  private compile(): { rest: RegExp; other: RegExp | undefined } {
+    this.rest ??= new RegExp(this.restSource, this.flags + "y");
+    if (this.otherSource !== undefined) this.other ??= new RegExp(this.otherSource, this.flags + "g");
+    return { rest: this.rest, other: this.other };
+  }
+}
+
+/**
+ * A regex's top-level branches (its text split at each `|` outside a group or class), in Go's syntax or JavaScript's:
+ * escapes, classes (a `]` first in one is literal, and Go's `[:name:]` sits inside one) and groups are skipped.
+ */
+export function topLevelBranches(source: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let at = 0; at < source.length; at++) {
+    const char = source[at];
+    if (char === "\\") {
+      at++;
+    } else if (char === "[") {
+      at++;
+      if (source[at] === "^") at++;
+      if (source[at] === "]") at++;
+      for (; at < source.length && source[at] !== "]"; at++) {
+        if (source[at] === "\\") at++;
+        else if (source.startsWith("[:", at)) at = source.indexOf(":]", at) + 1;
+      }
+    } else if (char === "(") {
+      depth++;
+    } else if (char === ")") {
+      depth--;
+    } else if (char === "|" && depth === 0) {
+      out.push(source.slice(from, at));
+      from = at + 1;
+    }
+  }
+  out.push(source.slice(from));
+  return out;
+}
+
+/** Whether `found` kept every occurrence of the literals `ids` names. */
+function allKept(found: Occurrences, ids: Int32Array): boolean {
+  for (const id of ids) if (!found.complete(id)) return false;
+  return true;
+}
+
+/** REST's result at each occurrence: not tried yet. */
+const UNKNOWN = -2;
+/** The lazy-prefix scan's scratch: occurrences, and REST's end at each (-1: no match). */
+let candidates = new Int32Array(256);
+let ends = new Int32Array(256);
+
+/**
+ * The lazy-prefix form of a gitleaks regex, given its JavaScript translation `js`: undefined unless the regex's first
+ * top-level branch is `[\w.-]{0,N}?REST` (under `(?i)` or not, no other flag) with every match of REST starting with
+ * one of its literals. Later branches, if any, run as one regex of their own.
+ */
+export function lazyPrefixOf(goPattern: string, js: RegExp): LazyPrefixRegex | undefined {
+  const go = /^(\(\?i\))?\[\\w\.-\]\{0,(\d+)\}\?/.exec(goPattern);
+  const jsPrefix = /^\[\\w\.-\]\{0,(\d+)\}\?/.exec(js.source);
+  if (!go || !jsPrefix || go[2] !== jsPrefix[1] || /[a-z]/.test(js.flags.replace(/[dgiy]/g, ""))) return undefined;
+  const goBranches = topLevelBranches(goPattern.slice((go[1] ?? "").length));
+  const jsBranches = topLevelBranches(js.source);
+  let root: RegexNode;
+  try {
+    root = parseRegex(goPattern);
+  } catch {
+    return undefined;
+  }
+  // The two splits must agree with each other and with the parse, or the branches are not what they seem.
+  if (goBranches.length !== jsBranches.length || goBranches.length !== (root.t === "alt" ? root.xs.length : 1)) {
+    return undefined;
+  }
+  const anchors = anchorsOf((go[1] ?? "") + goBranches[0]!.slice(go[0].length - (go[1] ?? "").length));
+  if (!anchors || anchors.some((anchor) => anchor.maxPrefix !== 0)) return undefined;
+  const words = [...new Set(anchors.flatMap((anchor) => anchor.literals))];
+  const restSource = jsBranches[0]!.slice(jsPrefix[0].length);
+  const otherSource = jsBranches.length > 1 ? jsBranches.slice(1).join("|") : undefined;
+  return new LazyPrefixRegex(restSource, otherSource, js.flags, Number(go[2]), JS_WORD_DOT_DASH, words);
+}
+
+/** `[\w.-]` in JavaScript without the `u` flag, case folded or not: ASCII letters, digits, `_`, `.` and `-`. */
+const JS_WORD_DOT_DASH = new Uint8Array(128);
+for (let c = 0; c < 128; c++) {
+  if (/[\w.-]/.test(String.fromCharCode(c))) JS_WORD_DOT_DASH[c] = 1;
 }
