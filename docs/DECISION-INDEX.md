@@ -781,6 +781,12 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1840 | 2026-11-14 | Adopted: the MCP client reads replies faster. `bodyShapeUnder` crosses strings with the native `indexOf`, the SSE parser finds line ends… | adopted |
 | D1841 | 2026-11-14 | Adopted: the secret gate runs each gitleaks and Eden regex rule only where its matches can start, and does less around the rules, with… | adopted |
 | D1860 | 2026-11-14 | Adopted: the MCP client reads a JSON reply natively when its only framing is a declared length under the cap, carries its shape check with… | adopted |
+| D1870 | 2026-11-14 | Adopted: the shape scan finds a string's end by its next quote, and a JSON reply's long plain strings are spliced out of the parse as… | adopted |
+| D1871 | 2026-11-14 | Rejected: reading a JSON reply with `res.json()` and checking its depth and size after the parse. | rejected |
+| D1872 | 2026-11-14 | Adopted: the per-reply caps on server requests and bad messages become budgets, settable per transport. | adopted |
+| D1873 | 2026-11-14 | Adopted (opt-in, off on Eden's path): SSE resumption by `Last-Event-ID` and the standalone GET stream. | adopted |
+| D1874 | 2026-11-14 | Adopted (opt-in, never imported by Eden's path): the client side of MCP's authorization spec, `src/mcp/oauth.ts`. | adopted |
+| D1875 | 2026-11-14 | Adopted (opt-in; Eden sets none): handlers for the server's requests. | adopted |
 | D1880 | 2026-11-14 | Adopted: the reader gate reads each item's words once. | adopted |
 | D1881 | 2026-11-14 | Adopted (same brief): packet compaction does less per item with the same output. | adopted |
 | D1882 | 2026-11-14 | Adopted (same brief): the packet's parts of recent items are read once. | adopted |
@@ -791,3 +797,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1887 | 2026-11-14 | Adopted (same brief): `sketchTerms` tests stopwords and repeats where the word lies. | adopted |
 | D1888 | 2026-11-14 | Adopted (same brief; amends D1721's "not frozen or persisted"): a freeze carries each entry's date facts. | adopted |
 | D1889 | 2026-11-14 | Adopted (same brief): `assess` reads a statement's mark extremes by loops (`maxOf`, `minOf`, `maxBelow`), not spreads into `Math.max`. | adopted |
+| D1890 | 2026-11-14 | Adopted: the turn gate reads a turn 3.0x faster. | adopted |
+| D1891 | 2026-11-14 | Adopted: the glossary's English path 2.6x faster. | adopted |
+| D1892 | 2026-11-14 | Adopted: the HTTP handler parses less a request. | adopted |
+| D1893 | 2026-11-14 | Finding: the model call path has no CPU or token lever worth its risk. | finding |
+| D1894 | 2026-11-14 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | rejected |
