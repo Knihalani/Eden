@@ -781,3 +781,13 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1840 | 2026-11-14 | Adopted: the MCP client reads replies faster. `bodyShapeUnder` crosses strings with the native `indexOf`, the SSE parser finds line ends… | adopted |
 | D1841 | 2026-11-14 | Adopted: the secret gate runs each gitleaks and Eden regex rule only where its matches can start, and does less around the rules, with… | adopted |
 | D1860 | 2026-11-14 | Adopted: the MCP client reads a JSON reply natively when its only framing is a declared length under the cap, carries its shape check with… | adopted |
+| D1880 | 2026-11-14 | Adopted: the reader gate reads each item's words once. | adopted |
+| D1881 | 2026-11-14 | Adopted (same brief): packet compaction does less per item with the same output. | adopted |
+| D1882 | 2026-11-14 | Adopted (same brief): the packet's parts of recent items are read once. | adopted |
+| D1883 | 2026-11-14 | Adopted (same brief): `datesOf` skips its month patterns on a sentence that holds no figure beside a month's name. | adopted |
+| D1884 | 2026-11-14 | Adopted (same brief): the known test and `pick`'s score read a part's words in place. | adopted |
+| D1885 | 2026-11-14 | Adopted (same brief): an item's version and times are read once per item object; a lookup hashes only items the ledger holds a version of. | adopted |
+| D1886 | 2026-11-14 | Adopted (same brief): the sync's per-item readings by code unit. | adopted |
+| D1887 | 2026-11-14 | Adopted (same brief): `sketchTerms` tests stopwords and repeats where the word lies. | adopted |
+| D1888 | 2026-11-14 | Adopted (same brief; amends D1721's "not frozen or persisted"): a freeze carries each entry's date facts. | adopted |
+| D1889 | 2026-11-14 | Adopted (same brief): `assess` reads a statement's mark extremes by loops (`maxOf`, `minOf`, `maxBelow`), not spreads into `Math.max`. | adopted |
