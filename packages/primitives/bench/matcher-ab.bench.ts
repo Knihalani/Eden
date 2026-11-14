@@ -1,5 +1,5 @@
 /**
- * `MultiMatcher` before and after D1840 interleaved in one process (the A/B to trust): `matcher.reference.ts` (the
+ * `MultiMatcher` before and after D1841 interleaved in one process (the A/B to trust): `matcher.reference.ts` (the
  * matcher before, kept as the oracle) against the matcher with its transitions packed (next row and output bit in one
  * load), on the gitleaks keywords, as `markHits`; and `scan` (hits, first-hit list, every occurrence's start kept).
  * Medians of 9 alternating rounds, µs a call.

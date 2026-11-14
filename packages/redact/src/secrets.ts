@@ -789,7 +789,7 @@ export function gateOf(rules: SecretRule[]): Gate {
   });
   /** The rules whose prefilter words `text` holds, in rule order. */
   const candidates = (text: string): number[] => {
-    found.clear();
+    found.clear(text.length);
     tokens = 0;
     const out = [...always];
     for (const r of always) chosen[r] = 1;

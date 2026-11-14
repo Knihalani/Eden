@@ -14,6 +14,7 @@ const SPACE = 0x20;
 const DATA = [0x64, 0x61, 0x74, 0x61]; // "data"
 const EVENT = [0x65, 0x76, 0x65, 0x6e, 0x74]; // "event"
 const MESSAGE = [0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65]; // "message"
+const EMPTY = new Uint8Array(0);
 
 /** What `push` reports: keep reading, or stop (the handler asked to, or a bound was passed). */
 export type SseStep = "more" | "stop" | "too-large";
@@ -25,7 +26,14 @@ export class SseParser {
   /** No line has been read yet: the first may start with a byte-order mark. */
   private atStart = true;
   private skipLf = false;
-  private data: Uint8Array = new Uint8Array(1024);
+  /**
+   * The event's data while it is one line: a view of that line, not copied (`singleOwned` false while it is a view of
+   * the chunk being pushed, which the caller may reuse after `push` returns; it is copied then). A second data line
+   * copies it into `data`, where the event's lines are joined. Most events are one line, so most are never copied.
+   */
+  private single: Uint8Array | null = null;
+  private singleOwned = false;
+  private data: Uint8Array = EMPTY;
   private dataLen = 0;
   private hasData = false;
   /** The event's type is "message" (or unset): the only one that carries JSON-RPC. */
@@ -34,10 +42,13 @@ export class SseParser {
   /**
    * @param onEvent Called with each message event's data bytes (a view, valid only during the call); returns true to
    *   stop the parse (the awaited response has arrived).
+   * @param chunksKept The caller never changes a chunk after pushing it (a `fetch` body's reader hands out a new
+   *   array each read), so the parser keeps views of it where it would otherwise keep copies (D1840). Default false.
    */
   constructor(
     private readonly maxBytes: number,
     private readonly onEvent: (data: Uint8Array) => boolean,
+    private readonly chunksKept = false,
   ) {}
 
   push(chunk: Uint8Array): SseStep {
@@ -47,35 +58,63 @@ export class SseParser {
       this.skipLf = false;
       if (chunk[0] === LF) start = i = 1;
     }
-    for (; i < chunk.length; i++) {
+    // Line ends are found with the native `indexOf` (a byte loop here cost eight times the JSON parse it fed: 159 µs
+    // a 64 KB event against 19, D1840). A bare CR ends a line too. The next LF and the next CR are each searched once
+    // and again only after they are passed, so each byte is read by at most one search for each: searching for LF
+    // again at every CR-ended line would read the chunk's rest once a line.
+    const n = chunk.length;
+    let nextLf = -1;
+    let nextCr = -1;
+    for (; i < n; i++) {
+      if (nextLf < i) {
+        nextLf = chunk.indexOf(LF, i);
+        if (nextLf < 0) nextLf = n;
+      }
+      if (nextCr < i) {
+        nextCr = chunk.indexOf(CR, i);
+        if (nextCr < 0) nextCr = n;
+      }
+      i = nextLf < nextCr ? nextLf : nextCr;
+      if (i >= n) break;
       const c = chunk[i]!;
-      if (c !== LF && c !== CR) continue;
       let line = chunk.subarray(start, i);
+      let owned = false;
       if (this.parts.length > 0) {
         if (this.carried + line.length > this.maxBytes) return "too-large";
         line = join(this.parts, this.carried, line);
+        owned = true;
         this.parts = [];
         this.carried = 0;
       }
       if (c === CR) {
-        if (i + 1 < chunk.length) {
+        if (i + 1 < n) {
           if (chunk[i + 1] === LF) i++;
         } else this.skipLf = true;
       }
       start = i + 1;
-      const step = this.line(line);
-      if (step !== "more") return step;
+      const step = this.line(line, owned);
+      if (step !== "more") return this.keep(step);
     }
-    if (start < chunk.length) {
-      if (this.carried + chunk.length - start > this.maxBytes) return "too-large";
-      // Copied: the caller may reuse its chunk.
-      this.parts.push(chunk.slice(start));
-      this.carried += chunk.length - start;
+    if (start < n) {
+      if (this.carried + n - start > this.maxBytes) return "too-large";
+      // Copied, unless the caller keeps its chunks as they are: it may reuse one.
+      this.parts.push(this.chunksKept ? chunk.subarray(start) : chunk.slice(start));
+      this.carried += n - start;
     }
-    return "more";
+    return this.keep("more");
   }
 
-  private line(line: Uint8Array): SseStep {
+  /** Before `push` returns: an event's one data line still viewing the chunk is copied, as the chunk may be reused. */
+  private keep(step: SseStep): SseStep {
+    if (this.single && !this.singleOwned && !this.chunksKept) {
+      this.single = this.single.slice();
+      this.singleOwned = true;
+    }
+    return step;
+  }
+
+  /** One line; `owned` when it is not a view of the pushed chunk (it was joined from parts). */
+  private line(line: Uint8Array, owned: boolean): SseStep {
     if (this.atStart) {
       this.atStart = false;
       if (line[0] === 0xef && line[1] === 0xbb && line[2] === 0xbf) line = line.subarray(3);
@@ -89,17 +128,24 @@ export class SseParser {
     if (value < line.length && line[value] === SPACE) value++;
     if (startsField(line, colon, DATA)) {
       const v = value <= line.length ? line.subarray(value) : line.subarray(line.length);
-      const need = this.dataLen + (this.hasData ? 1 : 0) + v.length;
+      if (!this.hasData) {
+        this.single = v;
+        this.singleOwned = owned;
+        this.dataLen = v.length;
+        this.hasData = true;
+        return "more";
+      }
+      const need = this.dataLen + 1 + v.length;
       if (need > this.maxBytes) return "too-large";
-      if (need > this.data.length) {
+      if (this.single) this.spill(need);
+      else if (need > this.data.length) {
         const grown = new Uint8Array(Math.min(this.maxBytes, Math.max(need, this.data.length * 2)));
         grown.set(this.data.subarray(0, this.dataLen));
         this.data = grown;
       }
-      if (this.hasData) this.data[this.dataLen++] = LF;
+      this.data[this.dataLen++] = LF;
       this.data.set(v, this.dataLen);
       this.dataLen += v.length;
-      this.hasData = true;
     } else if (startsField(line, colon, EVENT)) {
       const v = value <= line.length ? line.subarray(value) : line.subarray(line.length);
       this.isMessage = v.length === 0 || equals(v, MESSAGE);
@@ -107,9 +153,20 @@ export class SseParser {
     return "more";
   }
 
+  /** Moves the one-line data into `data`, with room for `need` bytes. */
+  private spill(need: number): void {
+    const single = this.single!;
+    if (need > this.data.length) {
+      this.data = new Uint8Array(Math.min(this.maxBytes, Math.max(need, this.data.length * 2, 1024)));
+    }
+    this.data.set(single, 0);
+    this.single = null;
+  }
+
   private dispatch(): SseStep {
     const deliver = this.hasData && this.isMessage && this.dataLen > 0;
-    const data = this.data.subarray(0, this.dataLen);
+    const data = this.single ?? this.data.subarray(0, this.dataLen);
+    this.single = null;
     this.dataLen = 0;
     this.hasData = false;
     this.isMessage = true;

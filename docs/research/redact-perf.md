@@ -1,6 +1,6 @@
 # The secret gate, faster and leaner, with identical results
 
-Decision: D1840. Owner's brief of 2026-11-14: make `packages/redact` faster and leaner without changing a single
+Decision: D1841. Owner's brief of 2026-11-14: make `packages/redact` faster and leaner without changing a single
 detection. No model call was made. Every number below comes from a command run in this session on the shared 4-core
 development VM (another agent's work ran beside it), with `env -u BUN_OPTIONS`; timings are medians of interleaved
 rounds unless a line says otherwise, and vary about ±30% run to run on this VM.
@@ -70,9 +70,10 @@ differential fuzz below.
    same match. 210 of the 214 gitleaks rules left on JavaScript's engine are anchored (`ghp_`, `ATATT3`, keyword
    alternations; the four left are `azure-ad-client-secret`, `facebook-access-token`, `slack-webhook-url`,
    `sourcegraph-access-token`, whose matches begin with a class), and so are eleven of Eden's own regex rules (their
-   lookarounds dropped for the analysis: they are zero-width). When the candidates exceed an eighth of the text plus
+   lookarounds dropped for the analysis: they are zero-width). When the candidates exceed 1/32 of the text plus
    64 positions (a text made of keywords) the rule scans the whole text as before, which bounds the cost on crafted
-   input. The seven scanned rules (D1705) are linear already and are left alone.
+   input; the occurrences of the rule's literals are counted first, so a dense text falls back without walking any,
+   and past that limit a literal's occurrences are only counted, not kept. The seven scanned rules (D1705) are linear already and are left alone.
 2. **One prefilter scan that does more, and cheaper** (`MultiMatcher`, a primitive). The transition table now holds,
    per (state, column), the next state's row offset shifted left with the output bit in bit 0: one load per character
    and no multiply, and the output lists are read only when the bit is set (it replaces the old table; memory is
@@ -257,6 +258,44 @@ prefix at 5 characters failed the fuzz within 5,000 texts, and always taking `st
   each), facts handed 10 of 11, a look-alike handed on 3 of 10 owed turns: main's numbers.
 - `bun run funnel` on origin/main's tree (9edd7f198) with `--json`, then on this branch with `--baseline`: hidden
   323/384, decoys 294/384 both, "hidden +0 −0, decoys +0 −0".
+
+## Review follow-up (2026-11-14)
+
+The independent review found no missed or extra secret in about 850,000 adversarial texts of its own, and three
+things to fix:
+
+- **Inputs packed with one literal, just under the fallback.** At the first threshold (an eighth of the text) a
+  literal every 10 characters (`a3tzzzzzz `, `sk-` repeated) ran up to about 3.5x slower than before at 1 MB (16.8
+  against 4.8 ms; 37.9 against 14.9 for `sk-`, the review's figures): a sticky try costs about 20 positions of the
+  engine's own scan. Now the threshold is 1/32, each literal's occurrences are counted in the prefilter pass and
+  checked before any walk, and past the threshold a literal's occurrences are counted but not kept. Interleaved
+  medians of 7 rounds, 1 MB, the gate after against the reference (on a quiet VM, load 0.7):
+
+  | Unit repeated to 1 MB | after | before | after / before |
+  |---|---:|---:|---:|
+  | `a3tzzzzzz ` | 6.8 ms | 7.5 ms | 0.90 |
+  | `sk-` | 14.6 ms | 10.9 ms | 1.35 |
+  | `<add key="zz ` | 19.6 ms | 22.8 ms | 0.86 |
+  | `gho_zzzzz ` | 43.3 ms | 48.3 ms | 0.90 |
+  | `akiazzzzz ` | 13.3 ms | 15.8 ms | 0.84 |
+  | `glpat-zzz ` | 10.2 ms | 10.0 ms | 1.02 |
+  | `xoxe-zzzz ` | 14.2 ms | 11.8 ms | 1.21 |
+  | `kind:zzzz ` | 16.6 ms | 27.0 ms | 0.61 |
+  | `eyzzzzzzz ` | 7.6 ms | 10.7 ms | 0.71 |
+
+  The bound measured: 0.61–1.35x of the reference on these, the residue being the prefilter's counting of every
+  occurrence. Typical text keeps its gain (the same A/B on the corpus, 1/32: 2.3–3.8x at 2 KB, 4.6–13.3x at 16 KB,
+  3.8–14.8x at 1 MB; single runs, ±30%).
+- **Memory peak.** Occurrence lists cost 8 bytes an occurrence kept (a start and a link; now at most 1/32 of the
+  text's length per literal) and are held until the next call. On a 7 MB literal-dense text (`token` a million times,
+  then `ghp_zzzzz ` 200,000 times), two processes each: heap held after the call 36.9–37.1 MB against 31.3–32.2 MB on
+  the reference, peak RSS growth 64–65 MB against 59–71 MB, and back to the warm size (2.25 against 1.75 MB) after the
+  next small text.
+- **A test-order fault.** `gate-linear.test.ts` called `warmGate()` at module scope, which marked the module's gate
+  warm and failed `warm.test.ts` whenever both ran in one process; it now warms the rules and builds a gate of its
+  own. `bun test ./packages/redact ./packages/primitives`: 456 pass, 0 fail.
+
+The decision is D1841 (D1840 went to the MCP change on main).
 
 ## What was not done, and next
 

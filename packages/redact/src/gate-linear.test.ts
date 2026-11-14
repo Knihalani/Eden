@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { CRAFTED_UNITS, crafted } from "./gate-crafted";
-import { sanitizeForStore, warmGate } from "./secrets";
+import { gateOf, secretRules } from "./secrets";
 
 const cpuMs = () => {
   const u = process.cpuUsage();
@@ -17,12 +17,16 @@ const SIZE = 262_144;
 const CEILING_MS = 1_500;
 
 describe("the gate on crafted input", () => {
-  warmGate();
+  // Warmed as warmGate warms, on a gate of this file's own: calling warmGate here would mark the module's gate warm,
+  // and warm.test.ts, when it shares the process, checks what warmGate does on its first call.
+  const rules = secretRules();
+  for (const rule of rules) rule.warm?.();
+  const gate = gateOf(rules);
   for (const [name, unit] of CRAFTED_UNITS) {
     test(`256 KB of ${name}`, () => {
       const text = crafted(unit, SIZE);
       const t0 = cpuMs();
-      sanitizeForStore(text);
+      gate.sanitizeForStore(text);
       expect(cpuMs() - t0).toBeLessThan(CEILING_MS);
     }, 20_000);
   }

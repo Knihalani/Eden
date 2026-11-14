@@ -76,27 +76,79 @@ function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean 
  * a JSON check: whatever passes is still parsed and validated as before.
  */
 export function bodyShapeUnder(bytes: Uint8Array): boolean {
-  const maxDepth = MAX_INPUT_DEPTH + 8;
-  const maxValues = MAX_INPUT_NODES + 10_000;
+  return bodyShapeWithin(bytes, MAX_INPUT_DEPTH + 8, MAX_INPUT_NODES + 10_000);
+}
+
+/** `bodyShapeUnder` with its bounds given: the tests compare it with the plain byte loop at small bounds. */
+export function bodyShapeWithin(bytes: Uint8Array, maxDepth: number, maxValues: number): boolean {
+  const n = bytes.length;
   let depth = 0;
   let values = 0;
-  let inString = false;
-  for (let i = 0; i < bytes.length; i++) {
-    const c = bytes[i]!;
-    if (inString) {
-      // A backslash escapes the next byte (a quote among them). UTF-8 never puts 0x22 or 0x5c inside a multi-byte
-      // character, so a byte scan cannot misread one.
-      if (c === 0x5c) i++;
-      else if (c === 0x22) inString = false;
-      continue;
-    }
-    if (c === 0x22) inString = true;
-    else if (c === 0x5b || c === 0x7b) {
+  const at: StringScan = { nextQuote: -1, nextEscape: -1 };
+  for (let i = 0; i < n; i++) {
+    // Most bytes outside strings are digits, letters and whitespace: one table load passes them.
+    const k = SHAPE_BYTE[bytes[i]!]!;
+    if (k === 0) continue;
+    if (k === QUOTE) i = stringEnd(bytes, i + 1, at);
+    else if (k === OPEN) {
       if (++depth > maxDepth || ++values > maxValues) return false;
-    } else if (c === 0x5d || c === 0x7d) depth--;
-    else if (c === 0x2c && ++values > maxValues) return false;
+    } else if (k === CLOSE) depth--;
+    else if (++values > maxValues) return false;
   }
   return true;
+}
+
+const QUOTE = 1;
+const OPEN = 2;
+const CLOSE = 3;
+const COMMA = 4;
+/** What each byte is to the shape scan outside strings: 0 for nothing. */
+const SHAPE_BYTE = new Uint8Array(256);
+SHAPE_BYTE[0x22] = QUOTE;
+SHAPE_BYTE[0x5b] = SHAPE_BYTE[0x7b] = OPEN;
+SHAPE_BYTE[0x5d] = SHAPE_BYTE[0x7d] = CLOSE;
+SHAPE_BYTE[0x2c] = COMMA;
+
+/**
+ * The next quote and the next backslash at or after the string scan's position (`length` when there is none), each
+ * found once and moved only forward, so each byte is read by at most one search for each (D1840): searching again
+ * from every run made a body of escapes quadratic.
+ */
+interface StringScan {
+  nextQuote: number;
+  nextEscape: number;
+}
+
+/**
+ * The index of the quote that ends the string whose text starts at `i`, or `bytes.length` when it does not end (an
+ * unended string holds no structure). A backslash escapes the next byte (a quote among them). UTF-8 never puts 0x22
+ * or 0x5c inside a multi-byte character, so a byte scan cannot misread one. Strings are most of a reply's bytes, and a
+ * byte loop over them cost six times the parse (113 µs a 64 KB result against 19), so a long run is crossed with the
+ * native `indexOf`; a short run, or a run dense in escapes, is read byte by byte, where a call per escape would cost
+ * more than the loop.
+ */
+function stringEnd(bytes: Uint8Array, i: number, at: StringScan): number {
+  const n = bytes.length;
+  for (;;) {
+    const stop = i + 32 < n ? i + 32 : n;
+    for (; i < stop; i++) {
+      const s = bytes[i]!;
+      if (s === 0x5c) i++;
+      else if (s === 0x22) return i;
+    }
+    if (i >= n) return n;
+    if (at.nextQuote < i) {
+      at.nextQuote = bytes.indexOf(0x22, i);
+      if (at.nextQuote < 0) at.nextQuote = n;
+    }
+    if (at.nextQuote === n) return n;
+    if (at.nextEscape < i) {
+      at.nextEscape = bytes.indexOf(0x5c, i);
+      if (at.nextEscape < 0) at.nextEscape = n;
+    }
+    if (at.nextQuote < at.nextEscape) return at.nextQuote;
+    i = at.nextEscape + 2;
+  }
 }
 
 /**

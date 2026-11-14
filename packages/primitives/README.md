@@ -285,7 +285,7 @@ A cold term and a sketch cost about a tenth to a quarter more; both run once per
 event. The end-to-end anchor (`packages/engine/bench/pipeline.bench.ts`, six alternating pairs on main b99f0171 and
 the merged branch): observe p99 medians 4,144 and 4,381 µs (+5.7%), p50 118-134 against 115-125 µs.
 
-## Packed matcher transitions and `scan` (2026-11-14, D1840)
+## Packed matcher transitions and `scan` (2026-11-14, D1841)
 
 `MultiMatcher`'s table holds, per (state, column), the next state's row offset shifted left with bit 0 set when
 patterns end there: one load a character, no multiply, and the output lists are read only on the bit (it replaces

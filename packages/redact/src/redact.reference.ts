@@ -1,4 +1,4 @@
-// Test support (D1840): `redact.ts` as it was before docs/research/redact-perf.md, kept as the oracle of
+// Test support (D1841): `redact.ts` as it was before docs/research/redact-perf.md, kept as the oracle of
 // gate-differential.ts. Its code is unchanged.
 // Never imported by the gate. A change meant to change detections makes the same change here
 // (packages/redact/CLAUDE.md).
