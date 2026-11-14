@@ -32,7 +32,10 @@ const PACKED = Symbol("eden.packedText");
 type Packed = ContextItem & { readonly [PACKED]: string };
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+// `ignoreBOM`: a text that starts with U+FEFF decodes with it, as it was stored and indexed. The default drops a
+// leading one, so before the review of D1913 such a copy read without the character its terms were taken with, and,
+// once the memo held the packed text, read one way or the other by whether another user's forget had emptied it.
+const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
 /** Decoded texts by held bytes: [UTF-8, Latin-1]. */
 const decoded = [new Map<string, string>(), new Map<string, string>()] as const;
 
@@ -103,8 +106,9 @@ export function packItem(item: ContextItem): ContextItem {
   Object.defineProperty(rest, "text", latin1 ? LATIN1_TEXT : UTF8_TEXT);
   // The text these bytes decode to is in hand: the sync's `onStored` reads every copy just stored (its mentions), and
   // would otherwise inflate each straight back (D1913). The same entry a first decode would make, so a hit is still
-  // this copy's own text.
-  remember(held, latin1, text);
+  // this copy's own text: Latin-1 text through `latin1` from its bytes (a one-byte string, as `unpack` makes, D998),
+  // other text as it is (a UTF-8 decode returns the same characters, BOM and all).
+  remember(held, latin1, latin1 ? (plain as Buffer).toString("latin1") : text);
   return rest as ContextItem;
 }
 
