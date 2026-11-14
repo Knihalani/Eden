@@ -5,7 +5,9 @@
  * prompts on it, outside this file so a program that does not use them does not load them). It matches the
  * official SDK's `Client` where Eden depends on it: a JSON-RPC error rejects with `McpError` (`MCP error <code>:
  * <message>`), a request times out after 60 s by default, an aborted signal sends `notifications/cancelled` and
- * rejects, a closed connection rejects every request in flight and calls `onclose`.
+ * rejects, a closed connection rejects every request in flight and calls `onclose`. A caller that wants to answer the
+ * server's sampling, roots or elicitation requests sets a handler for each (`setRequestHandler`) and declares the
+ * capability (`capabilities`, D1875); Eden sets none, so every such request is dropped as before.
  */
 import { deadlines, type Deadline } from "./deadlines";
 import {
@@ -37,6 +39,21 @@ export interface RequestOptions {
 
 type Pending = (response: { result: Record<string, unknown> } | Error) => void;
 
+/**
+ * Answers one kind of server request (D1875). `params` is the server's data, unchecked; the handler returns the
+ * result object, or throws: an `McpError` is sent back with its code and message, anything else as "Internal error"
+ * (its text stays here). `signal` aborts when the server cancels the request or the connection closes.
+ */
+export type RequestHandler = (
+  params: Record<string, unknown>,
+  extra: { signal: AbortSignal; id: string | number },
+) => Promise<Record<string, unknown>> | Record<string, unknown>;
+
+export interface ClientOptions {
+  /** Sent in `initialize`: what this client offers (`{ sampling: {} }`, `{ roots: { listChanged: true } }`, …). */
+  capabilities?: Record<string, unknown>;
+}
+
 /** What the server said of itself in `initialize`: untrusted, as everything a server sends. */
 export interface ServerInitialize {
   protocolVersion: string;
@@ -58,10 +75,32 @@ export class McpClient {
   private transport: Transport | null = null;
   private nextId = 0;
   private readonly pending = new Map<number, Pending>();
-  /** `ping` answers being sent now. */
+  /** Answers to server requests (`ping` and handled ones) being worked on or sent now. */
   private pings = 0;
+  /** Handlers for server requests by method; none unless the caller sets them. */
+  private readonly handlers = new Map<string, RequestHandler>();
+  /** Server requests a handler is working on, by id, so a cancellation or a close can stop them. */
+  private readonly answering = new Map<string | number, AbortController>();
 
-  constructor(private readonly info: { name: string; version: string }) {}
+  constructor(
+    private readonly info: { name: string; version: string },
+    private readonly options: ClientOptions = {},
+  ) {}
+
+  /**
+   * Answers the server's requests of `method` with `handler` (D1875), under the same bound as `ping`: at most 16
+   * answers at once, more dropped unanswered until one is sent, and the transport's server-request budget. `ping`
+   * cannot be replaced. Each answer is a POST carrying the transport's credentials, so set only what the host means
+   * to do: a request is the server's data, never an instruction to the host.
+   */
+  setRequestHandler(method: string, handler: RequestHandler): void {
+    if (method === "ping") throw new Error("ping is answered by the client");
+    this.handlers.set(method, handler);
+  }
+
+  removeRequestHandler(method: string): void {
+    this.handlers.delete(method);
+  }
 
   /** Starts the transport and runs the `initialize` handshake; closes and rethrows on any failure. */
   async connect(transport: Transport, options?: RequestOptions): Promise<void> {
@@ -81,7 +120,11 @@ export class McpClient {
       await transport.start();
       const result = await this.request(
         "initialize",
-        { protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, clientInfo: this.info },
+        {
+          protocolVersion: LATEST_PROTOCOL_VERSION,
+          capabilities: this.options.capabilities ?? {},
+          clientInfo: this.info,
+        },
         options,
       );
       const version = result.protocolVersion;
@@ -208,6 +251,10 @@ export class McpClient {
       return;
     }
     if (isNotification(m)) {
+      if (m.method === "notifications/cancelled" && this.answering.size > 0) {
+        const target = m.params?.requestId;
+        if (typeof target === "string" || typeof target === "number") this.answering.get(target)?.abort();
+      }
       // A handler that throws, or returns a promise that rejects, must not fail the reply the notification rode on
       // nor end the process with an unhandled rejection.
       try {
@@ -222,17 +269,52 @@ export class McpClient {
     // (200,000 asked made 200,000 POSTs). Every other request (sampling, roots, elicitation) is dropped unanswered,
     // never acted on.
     const ask = m as JsonRpcRequest;
-    if (ask.method !== "ping" || this.pings >= MAX_PINGS_IN_FLIGHT || !this.transport) return;
+    if (this.pings >= MAX_PINGS_IN_FLIGHT || !this.transport) return;
+    if (ask.method === "ping") {
+      this.pings++;
+      this.transport
+        .send({ jsonrpc: "2.0", id: ask.id, result: {} })
+        .catch(() => {})
+        .finally(() => this.pings--);
+      return;
+    }
+    const handler = this.handlers.get(ask.method);
+    // One answer per id at once: a server that repeats an id it has not had answered gets nothing for the repeat.
+    if (!handler || this.answering.has(ask.id)) return;
     this.pings++;
-    this.transport
-      .send({ jsonrpc: "2.0", id: ask.id, result: {} })
-      .catch(() => {})
-      .finally(() => this.pings--);
+    void this.answer(this.transport, ask, handler).finally(() => this.pings--);
+  }
+
+  /** Runs a handler and sends its answer, unless the request was cancelled or the connection changed meanwhile. */
+  private async answer(transport: Transport, ask: JsonRpcRequest, handler: RequestHandler): Promise<void> {
+    const abort = new AbortController();
+    this.answering.set(ask.id, abort);
+    let reply: JsonRpcMessage;
+    try {
+      const result = await handler(ask.params ?? {}, { signal: abort.signal, id: ask.id });
+      reply = { jsonrpc: "2.0", id: ask.id, result: isObject(result) ? result : {} };
+    } catch (e) {
+      const error =
+        e instanceof McpError
+          ? {
+              code: e.code,
+              message: e.message.replace(/^MCP error -?\d+: /, ""),
+              ...(e.data !== undefined ? { data: e.data } : {}),
+            }
+          : { code: ErrorCode.InternalError, message: "Internal error" };
+      reply = { jsonrpc: "2.0", id: ask.id, error };
+    } finally {
+      if (this.answering.get(ask.id) === abort) this.answering.delete(ask.id);
+    }
+    if (abort.signal.aborted || this.transport !== transport) return;
+    await transport.send(reply).catch(() => {});
   }
 
   private closed(transport: Transport): void {
     if (this.transport !== transport) return;
     this.transport = null;
+    for (const a of this.answering.values()) a.abort();
+    this.answering.clear();
     const handlers = [...this.pending.values()];
     this.pending.clear();
     this.onclose?.();
