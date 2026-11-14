@@ -128,10 +128,34 @@ const UNTIL = new RegExp(
  * Fri 6 Nov"), or an open range's lead followed by a day ("until Monday 2 November"). Most dated texts (a mail's
  * `Date:` line, an event's start) hold neither and end here, before any date is parsed.
  */
-const SPAN_HINT = new RegExp(
-  String.raw`${MONTH}(?:,?\s+\d{4})?\s*(?:[–—→-]|(?:to|until|till|through|thru)\b)` +
-    String.raw`|\b(?:until|till|through|thru|up to|to)\s+(?:at least\s+)?(?:and including\s+)?(?:${WEEKDAY}\.?,?\s+)?(?:the\s+)?\d{1,2}\b`,
-);
+const SPAN_BY_MONTH = String.raw`${MONTH}(?:,?\s+\d{4})?\s*(?:[–—→-]|(?:to|until|till|through|thru)\b)`;
+const SPAN_BY_LEAD = String.raw`\b(?:until|till|through|thru|up to|to)\s+(?:at least\s+)?(?:and including\s+)?(?:${WEEKDAY}\.?,?\s+)?(?:the\s+)?\d{1,2}\b`;
+const SPAN_HINT = new RegExp(`${SPAN_BY_MONTH}|${SPAN_BY_LEAD}`);
+/**
+ * `SPAN_HINT`'s two alternatives apart (D1916). The first, a month and a range's connector, is sticky and tried only
+ * where one of the months' first three letters stands (`spanHinted`): every one of `MONTH`'s alternatives begins with
+ * them, so a match can start nowhere else, and tried at every position it was three quarters of the hint's cost (12
+ * alternatives a position). `SPAN_HINT` stays as their union, the reference of `day-facts.test.ts`.
+ */
+const SPAN_MONTH = new RegExp(SPAN_BY_MONTH, "y");
+const SPAN_LEAD = new RegExp(SPAN_BY_LEAD);
+
+/** Whether `SPAN_HINT` matches `lower` (D1916): its month alternative at the months' starts, its lead anywhere. */
+export function spanHinted(lower: string): boolean {
+  for (const m of MONTHS) {
+    for (let i = lower.indexOf(m); i >= 0; i = lower.indexOf(m, i + 1)) {
+      SPAN_MONTH.lastIndex = i;
+      if (SPAN_MONTH.test(lower)) return true;
+    }
+  }
+  return SPAN_LEAD.test(lower);
+}
+
+/** `SPAN_HINT` read as one pattern, as before D1916 (for its differential test). */
+export function spanHintedByPattern(lower: string): boolean {
+  return SPAN_HINT.test(lower);
+}
+
 /** The longest span read as one: a term, a course of medicine, a closure. Longer ones name two separate dates. */
 const MAX_SPAN_DAYS = 62;
 
@@ -169,7 +193,7 @@ export interface SpanFacts {
 export function spanFactsOf(text: string): SpanFacts | null {
   if (!/\d/.test(text)) return null;
   const lower = text.slice(0, 4000).toLowerCase();
-  if (!SPAN_HINT.test(lower)) return null;
+  if (!spanHinted(lower)) return null;
   const dates = datesOf(lower);
   if (dates.length === 0) return null;
   const closed: number[] = [];

@@ -40,6 +40,51 @@ const K2 = 2 ** 40;
 const DAY_MONTH = new RegExp(String.raw`\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+${MONTH3}[a-z]*\b`, "g");
 /** "March 5", "mar 5th". */
 const MONTH_DAY = new RegExp(String.raw`\b${MONTH3}[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\b`, "g");
+/**
+ * `MONTH_DAY` less its leading `\b`, sticky: `monthDays` tries it only where a month's three letters start a word
+ * (D1916), the only places a match can start. Tried at every position, the pattern was a quarter of `dayFactsOf`.
+ */
+const MONTH_DAY_AT = new RegExp(String.raw`${MONTH3}[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\b`, "y");
+/** A code unit `\w` holds without the `u` flag: an ASCII letter or digit, or "_". */
+const isWordUnit = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+
+/**
+ * `lower.matchAll(MONTH_DAY)`'s matches, each as its month and day captures, in order (D1916): the months' starts at
+ * a word boundary, ascending, each tried with the sticky pattern unless an earlier match covers it, as `matchAll`
+ * resumes at a match's end. `MONTH_DAY` is kept as the reference (`monthDaysByPattern`).
+ */
+function monthDays(lower: string): [string, string][] {
+  let starts: number[] | null = null;
+  for (const m of MONTHS) {
+    for (let i = lower.indexOf(m); i >= 0; i = lower.indexOf(m, i + 1)) {
+      if (i === 0 || !isWordUnit(lower.charCodeAt(i - 1))) (starts ??= []).push(i);
+    }
+  }
+  if (starts === null) return [];
+  starts.sort((a, b) => a - b);
+  const out: [string, string][] = [];
+  let from = 0;
+  for (const i of starts) {
+    if (i < from) continue;
+    MONTH_DAY_AT.lastIndex = i;
+    const m = MONTH_DAY_AT.exec(lower);
+    if (m === null) continue;
+    out.push([m[1]!, m[2]!]);
+    from = i + m[0].length;
+  }
+  return out;
+}
+
+/** `monthDays` by `matchAll` over `MONTH_DAY`, as before D1916 (for its differential test). */
+export function monthDaysByPattern(lower: string): [string, string][] {
+  return [...lower.matchAll(MONTH_DAY)].map((m) => [m[1]!, m[2]!]);
+}
+
+/** `monthDays`, for its differential test. */
+export function monthDaysOf(lower: string): [string, string][] {
+  return monthDays(lower);
+}
+
 /** "5th", "21st": the day alone, with its own ordinal suffix. */
 const ORDINAL_DAY = /\b(\d{1,2})(st|nd|rd|th)\b/g;
 /** "5/03", "05/03", "010/11": `\b0?{day}/{mm}\b`. */
@@ -64,9 +109,9 @@ function namedOf(lower: string): { keys: number[]; mask: number } {
     const d = plainDay(m[1]!);
     if (d) keys.add(MONTHS.indexOf(m[2]!) * 32 + d);
   }
-  for (const m of lower.matchAll(MONTH_DAY)) {
-    const d = plainDay(m[2]!);
-    if (d) keys.add(MONTHS.indexOf(m[1]!) * 32 + d);
+  for (const [month, day] of monthDays(lower)) {
+    const d = plainDay(day);
+    if (d) keys.add(MONTHS.indexOf(month) * 32 + d);
   }
   for (const m of lower.matchAll(ORDINAL_DAY)) {
     const d = plainDay(m[1]!);
