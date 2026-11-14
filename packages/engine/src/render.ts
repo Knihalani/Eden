@@ -71,14 +71,14 @@ export function renderPacket(
       const title = wordsIn(item.title.toLowerCase());
       const own = new Set(title);
       const prior = before?.(item);
-      const { parts, words } = unknownParts(
+      const { parts, keys } = unknownParts(
         // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
         // comparing it with the request's dates where "2 Nov 2026" is not.
         partsOf(item, options.year, options.self, options.dense === true, options.split === true),
         (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, words, focus, each);
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, keys, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
       for (const w of wordsIn(text.toLowerCase())) shown.add(w);
@@ -413,8 +413,8 @@ export function compactText(
   dense?: { title: string },
   split?: boolean,
 ): string {
-  const { parts, words } = readParts(text, known, year, self, dense, split);
-  return pick(parts, words, focus, maxBytes);
+  const { parts, keys } = readParts(text, known, year, self, dense, split);
+  return pick(parts, keys, focus, maxBytes);
 }
 
 /** One part of a message (`messageParts`): a sentence or a line, whether it is quoted, whether it is a header. */
@@ -447,8 +447,7 @@ export function messageParts(
 }
 
 /**
- * `messageParts`, with each part's lower-case words (`wordsIn`) beside it: the known test reads them, and `pick`
- * scores the parts by them rather than reading every part's words again (D1881).
+ * `messageParts`, with each part's text in lower case beside it, which the known test and `pick` read (D1881).
  */
 function readParts(
   text: string,
@@ -457,7 +456,7 @@ function readParts(
   self: string | null | undefined,
   dense: { title: string } | undefined,
   split: boolean | undefined,
-): { parts: Part[]; words: string[][] } {
+): { parts: Part[]; keys: string[] } {
   return unknownParts(allParts(text, year, self, dense, split ?? false), known);
 }
 
@@ -476,17 +475,82 @@ interface AllParts {
  * read it and noted only the kept ones as seen; a later repeat of a dropped part has the same words and was dropped
  * again, so testing the distinct parts afterwards keeps the same parts in the same order (D1882).
  */
-function unknownParts(all: AllParts, known: (word: string) => boolean): { parts: Part[]; words: string[][] } {
+function unknownParts(all: AllParts, known: (word: string) => boolean): { parts: Part[]; keys: string[] } {
   const parts: Part[] = [];
-  const words: string[][] = [];
+  const keys: string[] = [];
   for (let k = 0; k < all.parts.length; k++) {
     const key = all.keys[k]!;
-    const w = wordsIn(key);
-    if (!key.startsWith("from:") && !w.some((x) => x.length > 1 && !isStopword(x) && !known(x))) continue;
+    if (!key.startsWith("from:") && !saysUnknown(key, known)) continue;
     parts.push(all.parts[k]!);
-    words.push(w);
+    keys.push(key);
   }
-  return { parts, words };
+  return { parts, keys };
+}
+
+/**
+ * `wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w))`, making a string only of each word of two or
+ * more characters up to the first that answers (usually the part's first or second word), not of every word (D1884).
+ */
+function saysUnknown(s: string, known: (word: string) => boolean): boolean {
+  let start = -1;
+  for (let i = 0; i <= s.length; i++) {
+    const c = i < s.length ? s.charCodeAt(i) : 32;
+    let k = WORD_UNITS[c]!;
+    if (k === 0) {
+      if (c >= 0xd800 && c <= 0xdfff) return wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w));
+      k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
+      WORD_UNITS[c] = k;
+    }
+    if (k === 1) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      if (i - start > 1) {
+        const w = s.slice(start, i);
+        if (!isStopword(w) && !known(w)) return true;
+      }
+      start = -1;
+    }
+  }
+  return false;
+}
+
+/**
+ * How many of `s`'s words (`wordsIn`) are in `focus`, given as its words (`focus`'s strings): each word compared in
+ * place with the few focus words of its length, with no string made of it (D1884).
+ */
+function focusCount(s: string, focus: readonly string[]): number {
+  let n = 0;
+  let start = -1;
+  for (let i = 0; i <= s.length; i++) {
+    const c = i < s.length ? s.charCodeAt(i) : 32;
+    let k = WORD_UNITS[c]!;
+    if (k === 0) {
+      if (c >= 0xd800 && c <= 0xdfff) return focusCountOf(wordsIn(s), focus);
+      k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
+      WORD_UNITS[c] = k;
+    }
+    if (k === 1) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      const len = i - start;
+      for (let f = 0; f < focus.length; f++) {
+        const w = focus[f]!;
+        if (w.length === len && s.startsWith(w, start)) {
+          n++;
+          break;
+        }
+      }
+      start = -1;
+    }
+  }
+  return n;
+}
+
+/** `focusCount` over words already read (a string with a surrogate). */
+function focusCountOf(words: readonly string[], focus: readonly string[]): number {
+  let n = 0;
+  for (const w of words) if (focus.includes(w)) n++;
+  return n;
 }
 
 /** An item's `AllParts` and what they were read with (`partsOf`). */
@@ -672,11 +736,12 @@ function allParts(
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
-function pick(parts: Part[], words: readonly string[][], focus: ReadonlySet<string>, maxBytes: number): string {
+function pick(parts: Part[], keys: readonly string[], focus: ReadonlySet<string>, maxBytes: number): string {
+  const focusWords = [...focus];
   const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
-    // The part's words as `readParts` read them: those of its text in lower case.
-    for (const w of words[k]!) if (focus.has(w)) n += 1;
+    // Its words in `focus`, read from its text in lower case (`readParts`' keys).
+    n += focusCount(keys[k]!, focusWords);
     n += DIGIT.test(part.text) ? 1 : 0;
     return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
   };

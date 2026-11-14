@@ -118,7 +118,12 @@ function units(r: () => number): string {
   return s;
 }
 
-const FOCI = [new Set<string>(), new Set(["freeze", "budget", "nov", "dana"]), new Set(["robin", "invoice", "20"])];
+const FOCI = [
+  new Set<string>(),
+  new Set(["freeze", "budget", "nov", "dana"]),
+  new Set(["robin", "invoice", "20"]),
+  new Set(["zoë", "o'brien", "🎉", "kraków", "会议改到星期五", "2026", "deck", "s"]),
+];
 
 function corpus(): ContextItem[] {
   const r = rng(1881);
