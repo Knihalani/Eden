@@ -32,4 +32,6 @@ packages/sources/src/deadline-unwatched.test.ts
 packages/sources/src/guarded.test.ts
 packages/sources/src/list.test.ts
 packages/sources/src/mcp/deadlines.test.ts
+packages/sources/src/mcp/framing.test.ts
+packages/sources/src/mcp/stdio.test.ts
 packages/sources/src/regressions.test.ts

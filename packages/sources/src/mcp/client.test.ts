@@ -36,6 +36,49 @@ async function connected(server: { connect(t: InMemoryTransport): Promise<void> 
   return { client, clientSide, serverSide };
 }
 
+describe("McpClient's general surface (D1860)", () => {
+  test("server info, any request, notifications to onnotification (a throwing handler fails nothing)", async () => {
+    const server = new McpServer(
+      { name: "notes", version: "2" },
+      { instructions: "be brief", capabilities: { logging: {} } },
+    );
+    server.registerTool("log", { inputSchema: {} }, async (_args, extra) => {
+      await extra.sendNotification({ method: "notifications/message", params: { level: "info", data: "working" } });
+      return { content: [{ type: "text", text: "done" }] };
+    });
+    const { client } = await connected(server);
+    expect(client.server).toMatchObject({ serverInfo: { name: "notes", version: "2" }, instructions: "be brief" });
+    expect(client.server?.capabilities).toHaveProperty("tools");
+    const seen: string[] = [];
+    client.onnotification = (n) => {
+      seen.push(`${n.method} ${JSON.stringify(n.params?.data)}`);
+      throw new Error("a caller's bug");
+    };
+    expect((await client.callTool({ name: "log", arguments: {} })).content).toEqual([{ type: "text", text: "done" }]);
+    expect(seen).toEqual(['notifications/message "working"']);
+    // An async handler that rejects: no unhandled rejection (Bun exits 1 on one), and the call still answers.
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      client.onnotification = async (n) => {
+        seen.push(n.method);
+        throw new Error("an async caller's bug");
+      };
+      expect((await client.callTool({ name: "log", arguments: {} })).content).toHaveLength(1);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(seen).toHaveLength(2);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(await client.request("ping")).toEqual({});
+    await expect(client.request("no/such")).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
+    await client.notify("notifications/roots/list_changed");
+    await client.close();
+  });
+});
+
 describe("McpClient against the SDK's McpServer (in memory)", () => {
   test("initialize, tools/list with annotations and schema, tools/call with structured content", async () => {
     const server = notes();

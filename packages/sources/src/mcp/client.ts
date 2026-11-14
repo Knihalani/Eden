@@ -1,6 +1,8 @@
 /**
  * A minimal MCP client (D1704): `initialize` with version negotiation, `tools/list`, `tools/call`, `ping` answered
- * (at most 16 at once), every other server request dropped unanswered, server notifications ignored. It matches the
+ * (at most 16 at once), every other server request dropped unanswered, server notifications handed to
+ * `onnotification` when one is set (D1860). Any other method goes through `request` (`extras.ts` has resources and
+ * prompts on it, outside this file so a program that does not use them does not load them). It matches the
  * official SDK's `Client` where Eden depends on it: a JSON-RPC error rejects with `McpError` (`MCP error <code>:
  * <message>`), a request times out after 60 s by default, an aborted signal sends `notifications/cancelled` and
  * rejects, a closed connection rejects every request in flight and calls `onclose`.
@@ -8,13 +10,14 @@
 import { deadlines, type Deadline } from "./deadlines";
 import {
   ErrorCode,
-  isRequest,
+  isNotification,
   isResponse,
   LATEST_PROTOCOL_VERSION,
   McpError,
   SUPPORTED_PROTOCOL_VERSIONS,
   type CallToolResult,
   type JsonRpcMessage,
+  type JsonRpcNotification,
   type JsonRpcRequest,
   type Tool,
   type Transport,
@@ -34,9 +37,24 @@ export interface RequestOptions {
 
 type Pending = (response: { result: Record<string, unknown> } | Error) => void;
 
+/** What the server said of itself in `initialize`: untrusted, as everything a server sends. */
+export interface ServerInitialize {
+  protocolVersion: string;
+  capabilities: Record<string, unknown>;
+  serverInfo: { name: string; version: string; [key: string]: unknown };
+  instructions?: string;
+}
+
 export class McpClient {
   /** Called once when the connection closes, whichever side closed it. */
   onclose?: () => void;
+  /**
+   * The server's notifications (progress, logging, list changes), shape-checked as JSON-RPC and nothing more: their
+   * params are the server's data. Unset, they are dropped.
+   */
+  onnotification?: (notification: JsonRpcNotification) => void | Promise<void>;
+  /** The server's `initialize` answer, once connected. */
+  server: ServerInitialize | null = null;
   private transport: Transport | null = null;
   private nextId = 0;
   private readonly pending = new Map<number, Pending>();
@@ -70,6 +88,13 @@ export class McpClient {
       if (typeof version !== "string" || !SUPPORTED_PROTOCOL_VERSIONS.includes(version)) {
         throw new Error(`Server's protocol version is not supported: ${String(version)}`);
       }
+      const info = isObject(result.serverInfo) ? result.serverInfo : {};
+      this.server = {
+        protocolVersion: version,
+        capabilities: isObject(result.capabilities) ? result.capabilities : {},
+        serverInfo: { ...info, name: String(info.name ?? ""), version: String(info.version ?? "") },
+        ...(typeof result.instructions === "string" ? { instructions: result.instructions } : {}),
+      };
       transport.setProtocolVersion?.(version);
       await transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
     } catch (e) {
@@ -111,9 +136,19 @@ export class McpClient {
     await this.transport?.close();
   }
 
-  private request(
+  /** Sends a notification (no answer comes back). */
+  async notify(method: string, params?: Record<string, unknown>): Promise<void> {
+    if (!this.transport) throw new Error("Not connected");
+    await this.transport.send({ jsonrpc: "2.0", method, ...(params ? { params } : {}) });
+  }
+
+  /**
+   * Any request, with the timeout, cancellation and errors of the methods above; the result is the server's object,
+   * unchecked: the caller checks the fields it reads.
+   */
+  request(
     method: string,
-    params: Record<string, unknown> | undefined,
+    params?: Record<string, unknown>,
     options: RequestOptions = {},
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
@@ -172,14 +207,25 @@ export class McpClient {
       else handler({ result: m.result });
       return;
     }
-    // Notifications (progress, logging, list changes) are not used. Of the server's requests only `ping` is answered,
-    // and at most `MAX_PINGS_IN_FLIGHT` at once: each answer is a POST carrying the user's credentials, so a server
-    // that floods requests must not turn them into a flood of POSTs (200,000 asked made 200,000 POSTs). Every other
-    // request (sampling, roots, elicitation) is dropped unanswered, never acted on.
-    if (!isRequest(m) || m.method !== "ping" || this.pings >= MAX_PINGS_IN_FLIGHT || !this.transport) return;
+    if (isNotification(m)) {
+      // A handler that throws, or returns a promise that rejects, must not fail the reply the notification rode on
+      // nor end the process with an unhandled rejection.
+      try {
+        const done = this.onnotification?.(m);
+        if (done && typeof (done as Promise<void>).then === "function")
+          (done as Promise<void>).then(undefined, () => {});
+      } catch {}
+      return;
+    }
+    // Of the server's requests only `ping` is answered, and at most `MAX_PINGS_IN_FLIGHT` at once: each answer is a
+    // POST carrying the user's credentials, so a server that floods requests must not turn them into a flood of POSTs
+    // (200,000 asked made 200,000 POSTs). Every other request (sampling, roots, elicitation) is dropped unanswered,
+    // never acted on.
+    const ask = m as JsonRpcRequest;
+    if (ask.method !== "ping" || this.pings >= MAX_PINGS_IN_FLIGHT || !this.transport) return;
     this.pings++;
     this.transport
-      .send({ jsonrpc: "2.0", id: m.id, result: {} })
+      .send({ jsonrpc: "2.0", id: ask.id, result: {} })
       .catch(() => {})
       .finally(() => this.pings--);
   }
