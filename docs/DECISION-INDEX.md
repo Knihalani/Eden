@@ -787,3 +787,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1873 | 2026-11-14 | Adopted (opt-in, off on Eden's path): SSE resumption by `Last-Event-ID` and the standalone GET stream. | adopted |
 | D1874 | 2026-11-14 | Adopted (opt-in, never imported by Eden's path): the client side of MCP's authorization spec, `src/mcp/oauth.ts`. | adopted |
 | D1875 | 2026-11-14 | Adopted (opt-in; Eden sets none): handlers for the server's requests. | adopted |
+| D1890 | 2026-11-14 | Adopted: the turn gate reads a turn 3.0x faster. | adopted |
+| D1891 | 2026-11-14 | Adopted: the glossary's English path 2.6x faster. | adopted |
+| D1892 | 2026-11-14 | Adopted: the HTTP handler parses less a request. | adopted |
+| D1893 | 2026-11-14 | Finding: the model call path has no CPU or token lever worth its risk. | finding |
+| D1894 | 2026-11-14 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | rejected |
