@@ -5,6 +5,7 @@ import { CHECK_SYSTEM, readerMessages } from "@eden/engine";
 import { OpenRouterModel, type ChatRequest, type ChatResponse, type Model, type OpenRouterOptions } from "@eden/llm";
 import { DEFAULT_ROLE_MODEL, modelRolesFromEnv } from "@eden/server";
 import {
+  counting,
   EVAL_TENANT,
   fromEnvVia,
   liveProblem,
@@ -374,6 +375,57 @@ describe("eval harness: --live wires what ships (D128)", () => {
     });
     expect(answered.readerPool!.calls).toBeGreaterThan(0);
     expect(liveProblem(answered)).toBeNull();
+  });
+
+  test("--live --judge with a stub reader: a judge refused on every call is a problem (the stub's calls are free)", async () => {
+    const refused = factory({ throws: "openrouter 403: This model is not available in your region." });
+    const old = liveWiring({ judge: true, usdCap: 1, env: KEYED, make: refused.make })!;
+    const judge = { calls: 0, failures: 0 };
+    const m = await runScenarios([freeze], {
+      model: counting(old.model!, judge),
+      waitMs: 1_000,
+      reader: "stub",
+      spend: old.spend,
+    });
+    expect(m.readerPool!.reader).toBe("stub");
+    expect(judge.calls).toBe(refused.made[0]!.calls.length);
+    expect(judge.calls).toBeGreaterThan(0);
+    expect(judge.failures).toBe(judge.calls);
+    // Before, the stub reader's free calls counted as live ones, so this run read as measured.
+    expect(liveProblem(m, judge)).toContain(`all ${judge.calls} model calls failed`);
+    // A stub reader that read (over all scenarios it did once) is free: its call does not make the run measured.
+    const stubRead = { ...m, readerPool: { ...m.readerPool!, calls: 1 } };
+    expect(liveProblem(stubRead, judge)).toContain(`all ${judge.calls} model calls failed`);
+    // The same run with a judge that answers is fine.
+    const ok = factory();
+    const fine = liveWiring({ judge: true, usdCap: 1, env: KEYED, make: ok.make })!;
+    const answered = { calls: 0, failures: 0 };
+    const n = await runScenarios([freeze], {
+      model: counting(fine.model!, answered),
+      waitMs: 1_000,
+      reader: "stub",
+      spend: fine.spend,
+    });
+    expect(answered.calls).toBeGreaterThan(0);
+    expect(liveProblem(n, answered)).toBeNull();
+  });
+
+  test("a run the budget cap stopped before any call says so, not that no check ran", async () => {
+    // Under the check's estimate: every check is refused by the budget before a call.
+    const paid = factory({ costUsd: 0.002 });
+    const capped = liveWiring({ judge: false, usdCap: 0.0001, env: KEYED, make: paid.make })!;
+    const m = await runScenarios([freeze], {
+      model: null,
+      waitMs: 1_000,
+      readerModel: capped.readerModel,
+      spend: capped.spend,
+    });
+    expect(paid.made[0]!.calls.length).toBe(0);
+    expect(m.pushCheck!.calls).toBe(0);
+    expect(m.pushCheck!.asked).toBeGreaterThan(0);
+    expect(m.pushCheck!.overBudget).toBeGreaterThan(0);
+    expect(liveProblem(m)).toContain("the budget cap refused every model call");
+    expect(liveProblem({ ...m, pushCheck: { ...m.pushCheck!, overBudget: 0 } })).toContain("no model call");
   });
 
   test("a live run that attempts no model call is a problem, named as such", () => {

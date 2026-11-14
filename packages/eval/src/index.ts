@@ -1,5 +1,6 @@
 export {
   EVAL_TENANT,
+  counting,
   liveProblem,
   liveWiring,
   runScenarios,

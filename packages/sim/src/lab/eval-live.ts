@@ -28,7 +28,7 @@ import { join } from "node:path";
 import { DEFAULT_CONFIG } from "@eden/engine";
 import { EVAL_TENANT, liveProblem, liveWiring, runScenarios, unwiredFlags, type Scenario } from "@eden/eval";
 import type { Model } from "@eden/llm";
-import { readerFailureLog } from "@eden/server";
+import { keyScrubber, readerFailureLog } from "@eden/server";
 import { flags } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 
@@ -110,7 +110,8 @@ const wiring = liveWiring({
 });
 if (!wiring?.readerModel) fail("the shipped wiring built no reader");
 // The placeholder is all `wiring.scrub` knows; the key actually sent is Anthropic's, so it is scrubbed too.
-const scrub = (text: string) => wiring!.scrub(text).split(anthropicKey!).join("[key]");
+const anthropicScrub = keyScrubber(anthropicKey!);
+const scrub = (text: string) => anthropicScrub(wiring!.scrub(text));
 let readerFailure: string | undefined;
 const onReaderFailure = readerFailureLog((line) => {
   readerFailure = line;
