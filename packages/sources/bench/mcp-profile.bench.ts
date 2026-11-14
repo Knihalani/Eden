@@ -25,7 +25,52 @@ type Method = "call" | "list";
 
 // The largest stays under the 4 MiB caps on a `tools/list` reply and on one SSE event, envelope included.
 const SIZES = [1024, 65_536, 1_048_576, 4_000_000];
-const INFLIGHT = [1, 16, 256];
+const INFLIGHT = (process.env.MCP_PROFILE_INFLIGHT ?? "1,16,256").split(",").map(Number);
+const MODES = (process.env.MCP_PROFILE_MODES ?? "json,sse").split(",") as Mode[];
+const METHODS = (process.env.MCP_PROFILE_METHODS ?? "call,list").split(",") as Method[];
+
+/**
+ * A `tools/call` result of about `size` bytes, by the shape of its text (`MCP_PROFILE_TEXT`, a list; `plain` by
+ * default). `plain` is one run of a letter (the splice of D1870 takes it); `lines` is text as a tool's output reads,
+ * lines of 80 characters with an escaped newline in each and an escaped quote pair (D1870); `escapes` is JSON written
+ * as text (an escaped quote every few bytes, a backslash run now and then); `unicode` is Latin, CJK and emoji text, so
+ * a two-byte string in the runtime and multi-byte UTF-8 on the wire, with a line break every 80 characters; `numbers`
+ * is a `structuredContent` array of numbers (structure, no strings) beside a short text.
+ */
+const TEXT_SHAPES: Record<string, (size: number) => unknown> = {
+  plain: (size) => ({ content: [{ type: "text", text: "x".repeat(size) }] }),
+  lines: (size) => {
+    const line = 'a line of tool output, with "quoted" words, and some more words to fill it to eighty\n'.slice(-80);
+    return { content: [{ type: "text", text: line.repeat(Math.ceil(size / 80)).slice(0, size) }] };
+  },
+  escapes: (size) => {
+    const rows: unknown[] = [];
+    let text = "";
+    for (let i = 0; text.length < size; i++) {
+      rows.push({ id: i, title: `Row "${i}"`, path: `C:\\data\\${i}`, tags: ["a", "b"], done: i % 2 === 0 });
+      if (rows.length === 64) {
+        text += JSON.stringify(rows);
+        rows.length = 0;
+      }
+    }
+    return { content: [{ type: "text", text: text.slice(0, size) }] };
+  },
+  unicode: (size) => {
+    const line = "Grüße aus Zürich, naïve café — 東京の天気は晴れ、気温は二十度です。🎉🚀 ünïcödé ✓ résumé\n";
+    return { content: [{ type: "text", text: line.repeat(Math.ceil(size / 60)).slice(0, Math.ceil(size / 1.6)) }] };
+  },
+  numbers: (size) => {
+    const values: number[] = [];
+    for (let i = 0, bytes = 0; bytes < size; i++) {
+      const v = i % 3 === 0 ? i : Math.round(Math.sin(i) * 1e6) / 100;
+      values.push(v);
+      bytes += String(v).length + 1;
+    }
+    return { content: [{ type: "text", text: `${values.length} values` }], structuredContent: { values } };
+  },
+};
+const SHAPES = (process.env.MCP_PROFILE_TEXT ?? "plain").split(",");
+for (const s of SHAPES) if (!TEXT_SHAPES[s]) throw new Error(`unknown MCP_PROFILE_TEXT shape: ${s}`);
 
 /** Calls timed for one cell: enough for a p99 at small sizes, bounded in bytes at large ones. */
 function callsFor(size: number, inflight: number): number {
@@ -39,7 +84,7 @@ function callsFor(size: number, inflight: number): number {
 function server(): void {
   const enc = new TextEncoder();
   const cache = new Map<string, [Uint8Array, Uint8Array]>();
-  const body = (method: string, size: number): string => {
+  const body = (method: string, size: number, shape: string): string => {
     if (method === "tools/list") {
       // Tools of about 1 KB each (a description of the rest), up to `size` bytes in all.
       const n = Math.max(1, Math.round(size / 1024));
@@ -52,19 +97,13 @@ function server(): void {
       }));
       return JSON.stringify({ tools });
     }
-    // `MCP_PROFILE_TEXT=lines`: text as a tool's output reads (lines of 80 characters, so an escaped newline in every
-    // line, and a quote now and then), which the splice of D1870 does not take; the default is one plain run.
-    if (process.env.MCP_PROFILE_TEXT === "lines") {
-      const line = 'a line of tool output, with "quoted" words, and some more words to fill it to eighty\n'.slice(-80);
-      return JSON.stringify({ content: [{ type: "text", text: line.repeat(Math.ceil(size / 80)).slice(0, size) }] });
-    }
-    return JSON.stringify({ content: [{ type: "text", text: "x".repeat(size) }] });
+    return JSON.stringify(TEXT_SHAPES[shape]!(size));
   };
-  const parts = (mode: string, method: string, size: number): [Uint8Array, Uint8Array] => {
-    const key = `${mode}/${method}/${size}`;
+  const parts = (mode: string, method: string, size: number, shape: string): [Uint8Array, Uint8Array] => {
+    const key = `${mode}/${method}/${size}/${shape}`;
     let p = cache.get(key);
     if (!p) {
-      const result = body(method, size);
+      const result = body(method, size, shape);
       const pre = `{"result":${result},"jsonrpc":"2.0","id":`;
       p =
         mode === "sse"
@@ -81,7 +120,7 @@ function server(): void {
     async fetch(req) {
       // The SDK's client opens a standalone GET stream; this server offers none, as the spec allows.
       if (req.method !== "POST") return new Response(null, { status: 405 });
-      const [, mode, sizeText] = new URL(req.url).pathname.split("/");
+      const [, mode, sizeText, shape] = new URL(req.url).pathname.split("/");
       const text = await req.text();
       const msg = JSON.parse(text) as { id?: number; method?: string; params?: { protocolVersion?: string } };
       if (msg.id === undefined || msg.method === undefined) return new Response(null, { status: 202 });
@@ -98,7 +137,7 @@ function server(): void {
           headers: { "content-type": type, "mcp-session-id": "canned-session" },
         });
       }
-      const [pre, post] = parts(mode!, msg.method, Number(sizeText));
+      const [pre, post] = parts(mode!, msg.method, Number(sizeText), shape!);
       const idBytes = enc.encode(id);
       const out = new Uint8Array(pre.length + idBytes.length + post.length);
       out.set(pre, 0);
@@ -114,6 +153,7 @@ function server(): void {
 // One client arm in its own process.
 
 interface Cell {
+  shape: string;
   mode: Mode;
   method: Method;
   size: number;
@@ -174,44 +214,49 @@ async function open(arm: Arm, url: string): Promise<Client> {
 async function child(arm: Arm, port: number, quick: boolean): Promise<void> {
   const quantile = (xs: Float64Array, p: number) => xs.slice().sort()[Math.floor(p * (xs.length - 1))]!;
   // Time to first call: from process start (performance.timeOrigin) to the first answer, imports included.
-  const first = await open(arm, `http://127.0.0.1:${port}/json/1024/mcp`);
+  const first = await open(arm, `http://127.0.0.1:${port}/json/1024/plain/mcp`);
   await first.call();
   const firstCallMs = performance.now();
   await first.close();
   const cells: Cell[] = [];
-  for (const mode of ["json", "sse"] as Mode[]) {
-    const sizes = process.env.MCP_PROFILE_SIZES?.split(",").map(Number) ?? (quick ? SIZES.slice(0, 2) : SIZES);
-    for (const size of sizes) {
-      const client = await open(arm, `http://127.0.0.1:${port}/${mode}/${size}/mcp`);
-      for (const method of ["call", "list"] as Method[]) {
-        const f = method === "call" ? client.call : client.list;
-        for (const inflight of INFLIGHT) {
-          if (size > 1_048_576 && inflight > 16) continue;
-          const calls = callsFor(size, inflight);
-          // Warm: a tenth of the calls, at the same concurrency.
-          await run(f, Math.max(inflight, Math.floor(calls / 10)), inflight);
-          Bun.gc(true);
-          let peak = process.memoryUsage.rss();
-          const sampler = setInterval(() => (peak = Math.max(peak, process.memoryUsage.rss())), 2);
-          const cpu0 = process.cpuUsage();
-          const lat = await run(f, calls, inflight);
-          const cpu = process.cpuUsage(cpu0);
-          clearInterval(sampler);
-          const heap = process.memoryUsage().heapUsed;
-          cells.push({
-            mode,
-            method,
-            size,
-            inflight,
-            p50: quantile(lat, 0.5),
-            p99: quantile(lat, 0.99),
-            cpu: (cpu.user + cpu.system) / calls,
-            rssMb: Math.max(peak, process.memoryUsage.rss()) / 2 ** 20,
-            heapMb: heap / 2 ** 20,
-          });
+  for (const shape of SHAPES) {
+    for (const mode of MODES) {
+      const sizes = process.env.MCP_PROFILE_SIZES?.split(",").map(Number) ?? (quick ? SIZES.slice(0, 2) : SIZES);
+      for (const size of sizes) {
+        const client = await open(arm, `http://127.0.0.1:${port}/${mode}/${size}/${shape}/mcp`);
+        for (const method of METHODS) {
+          // `tools/list` replies are not text-filled: one shape covers them.
+          if (method === "list" && shape !== SHAPES[0]) continue;
+          const f = method === "call" ? client.call : client.list;
+          for (const inflight of INFLIGHT) {
+            if (size > 1_048_576 && inflight > 16) continue;
+            const calls = callsFor(size, inflight);
+            // Warm: a tenth of the calls, at the same concurrency.
+            await run(f, Math.max(inflight, Math.floor(calls / 10)), inflight);
+            Bun.gc(true);
+            let peak = process.memoryUsage.rss();
+            const sampler = setInterval(() => (peak = Math.max(peak, process.memoryUsage.rss())), 2);
+            const cpu0 = process.cpuUsage();
+            const lat = await run(f, calls, inflight);
+            const cpu = process.cpuUsage(cpu0);
+            clearInterval(sampler);
+            const heap = process.memoryUsage().heapUsed;
+            cells.push({
+              shape,
+              mode,
+              method,
+              size,
+              inflight,
+              p50: quantile(lat, 0.5),
+              p99: quantile(lat, 0.99),
+              cpu: (cpu.user + cpu.system) / calls,
+              rssMb: Math.max(peak, process.memoryUsage.rss()) / 2 ** 20,
+              heapMb: heap / 2 ** 20,
+            });
+          }
         }
+        await client.close();
       }
-      await client.close();
     }
   }
   console.log(JSON.stringify({ firstCallMs, cells }));
@@ -261,7 +306,7 @@ async function main(rounds: number, arms: Arm[], quick: boolean): Promise<void> 
   const firstCall = Object.fromEntries(
     arms.map((a) => [a, r1(median(runs.filter((r) => r.arm === a).map((r) => r.firstCallMs)))]),
   );
-  const keyOf = (c: Cell) => `${c.mode} ${c.method} ${c.size} x${c.inflight}`;
+  const keyOf = (c: Cell) => `${c.shape} ${c.mode} ${c.method} ${c.size} x${c.inflight}`;
   const rows: Record<string, Record<string, string>> = {};
   for (const arm of arms) {
     const mine = runs.filter((r) => r.arm === arm);
