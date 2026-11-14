@@ -23,6 +23,11 @@ export interface MatcherOptions {
 /** Called per match with the pattern's index and the match's [start, end) in the original text. */
 export type OnMatch = (pattern: number, start: number, end: number) => void;
 
+/** Receives the occurrences `MultiMatcher.scan` keeps: the pattern's index and the match's start. */
+export interface MatchSink {
+  add(pattern: number, start: number): void;
+}
+
 export class MultiMatcher {
   /** The patterns as folded, in the order given. */
   readonly patterns: string[];
@@ -30,6 +35,11 @@ export class MultiMatcher {
   private readonly asciiCol = new Int32Array(128);
   private readonly otherCol = new Map<number, number>();
   private readonly cols: number;
+  /**
+   * The transitions: per (state, column), at `state * cols + column`, the next state times `cols` (where its row
+   * starts), shifted left one, with bit 0 set when patterns end there. One load per character, no multiply, and
+   * `scan` tests for outputs without reading `outStart`.
+   */
   private readonly delta: Int32Array;
   /** CSR lists of the patterns ending at each state, own and inherited through suffix links. */
   private readonly outStart: Int32Array;
@@ -39,6 +49,8 @@ export class MultiMatcher {
   /** Per ring slot, its letter's place in a ligature's expansion (0 for an ordinary character). */
   private readonly part: Uint8Array;
   private readonly ringMask: number;
+  /** Per ASCII code unit, its folded character's column. */
+  private readonly foldCol = new Int32Array(128);
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
     this.wholeWord = options.wholeWord ?? false;
@@ -103,10 +115,15 @@ export class MultiMatcher {
         }
       }
     }
-    this.delta = delta;
     this.outStart = new Int32Array(states + 1);
     for (let s = 0; s < states; s++) this.outStart[s + 1] = this.outStart[s]! + out[s]!.length;
     this.outList = Int32Array.from(out.flat());
+    for (let k = 0; k < delta.length; k++) {
+      const next = delta[k]!;
+      delta[k] = ((next * cols) << 1) | (out[next]!.length > 0 ? 1 : 0);
+    }
+    this.delta = delta;
+    for (let c = 0; c < 128; c++) this.foldCol[c] = this.asciiCol[FOLD[c]!]!;
 
     // Original offsets of the last few folded characters, to recover a match's start (folding drops marks).
     const longest = Math.max(1, ...this.lens);
@@ -158,6 +175,86 @@ export class MultiMatcher {
     return distinct;
   }
 
+  /**
+   * `markHits`, also writing each pattern that occurs to `firsts` (in order of first match; `patterns.length`
+   * entries, so a caller can reset `hits` by them), and passing every occurrence of a pattern `p` with
+   * `keep[p] === 1` to `sink.add(p, start)`, in order of match end, with the start `forEach` reports. One pass; an
+   * ASCII character costs one table load (for a prefilter that also wants to know where some of its words are). Not
+   * for a `wholeWord` matcher (it throws).
+   */
+  scan(text: string, hits: Uint8Array, firsts: Int32Array, keep: Uint8Array, sink: MatchSink): number {
+    if (this.wholeWord) throw new Error("scan does not support wholeWord");
+    const packed = this.delta;
+    const foldCol = this.foldCol;
+    const cols = this.cols;
+    const n = text.length;
+    let distinct = 0;
+    let s = 0; // the state times cols
+    // The last index whose character did not fold to exactly one (a mark dropped, a ligature expanded): a match whose
+    // characters all come after it starts `length - 1` characters before its last.
+    let special = -1;
+    for (let i = 0; i < n; i++) {
+      const c = text.charCodeAt(i);
+      let d: number;
+      if (c < 128) {
+        d = packed[s + foldCol[c]!]!;
+        s = d >> 1;
+        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        continue;
+      }
+      const f = foldOf(c);
+      if (f === FOLD_DROP) {
+        special = i;
+        continue;
+      }
+      if (f !== FOLD_EXPAND) {
+        d = packed[s + this.column(f)]!;
+        s = d >> 1;
+        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        continue;
+      }
+      special = i;
+      const expanded = foldString(String.fromCharCode(c));
+      for (let u = 0; u < expanded.length; u++) {
+        const e = expanded.charCodeAt(u);
+        d = packed[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
+        s = d >> 1;
+        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
+      }
+    }
+    return distinct;
+  }
+
+  /**
+   * The patterns ending in `state` at character `i` (unit `u` of its expansion): hits and `firsts` (returns the count
+   * of distinct patterns so far, `distinct` before), and starts for `keep`.
+   */
+  private emit(
+    state: number,
+    i: number,
+    u: number,
+    special: number,
+    text: string,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+  ): number {
+    const to = this.outStart[state + 1]!;
+    for (let j = this.outStart[state]!; j < to; j++) {
+      const p = this.outList[j]!;
+      if (hits[p] === 0) {
+        hits[p] = 1;
+        firsts[distinct++] = p;
+      }
+      if (keep[p] !== 1) continue;
+      const len = this.lens[p]!;
+      sink.add(p, i - len >= special ? i - len + 1 : startOf(text, i, u, len));
+    }
+    return distinct;
+  }
+
   private run(text: string, onMatch: OnMatch | null, stop: (() => boolean) | null): void {
     const n = text.length;
     const delta = this.delta;
@@ -191,9 +288,11 @@ export class MultiMatcher {
         ring[k & ringMask] = i;
         part[k & ringMask] = u;
         k++;
-        s = delta[s * cols + col]!;
-        const from = outStart[s]!;
-        const to = outStart[s + 1]!;
+        const d = delta[s + col]!;
+        s = d >> 1; // the next state's row
+        const out = (d & 1) !== 0;
+        const from = out ? outStart[s / cols]! : 0;
+        const to = out ? outStart[s / cols + 1]! : 0;
         for (let j = from; j < to; j++) {
           const p = this.outList[j]!;
           const slot = (k - this.lens[p]!) & ringMask;
@@ -214,6 +313,23 @@ export class MultiMatcher {
       }
     }
   }
+}
+
+/**
+ * Where a match of `len` folded characters ending at unit `u` of character `i` starts, as `run`'s ring of offsets
+ * records it: counted back over what each character folds to (a mark to nothing, a ligature to its expansion).
+ */
+function startOf(text: string, i: number, u: number, len: number): number {
+  let need = len - (u + 1);
+  let at = i;
+  while (need > 0 && at > 0) {
+    at--;
+    const c = text.charCodeAt(at);
+    const f = c < 128 ? FOLD[c]! : foldOf(c);
+    if (f === FOLD_DROP) continue;
+    need -= f === FOLD_EXPAND ? foldString(String.fromCharCode(c)).length : 1;
+  }
+  return at;
 }
 
 const isDropped = (c: number) => c >= 128 && foldOf(c) === FOLD_DROP && (classOf(c) & WORD_START) === 0;

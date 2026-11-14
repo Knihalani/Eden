@@ -36,7 +36,7 @@ const draw = (rnd: Rnd, alphabet: string, n: number) => {
 const LONG_S = "\u017f";
 const KELVIN = "\u212a";
 /** Characters where engines that read code units, fold case or class spaces differently would disagree. */
-const ODD = [
+export const ODD = [
   LONG_S,
   KELVIN,
   "\ud800",
@@ -61,10 +61,10 @@ const ODD = [
   "\\",
   "\0",
 ];
-const ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+export const ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 /** Mutations: a fragment's characters replaced, dropped, doubled, or an odd character put in. */
-function mutate(rnd: Rnd, text: string): string {
+export function mutate(rnd: Rnd, text: string): string {
   const chars = Array.from(text);
   const edits = int(rnd, 4);
   for (let e = 0; e < edits && chars.length > 0; e++) {
@@ -281,7 +281,7 @@ export function ruleText(rnd: Rnd, id: string): string {
 // --- texts for an allowlist regex: samples of the regex itself, mutated, inside other text ---------------------
 
 /** A string the pattern (roughly) matches: a random walk over its parse, assertions ignored. */
-function sample(rnd: Rnd, node: RegexNode, depth = 0): string {
+export function sample(rnd: Rnd, node: RegexNode, depth = 0): string {
   switch (node.t) {
     case "empty":
     case "assert":
@@ -313,7 +313,7 @@ function sample(rnd: Rnd, node: RegexNode, depth = 0): string {
 }
 
 /** The literal pieces of a pattern's source: words and punctuation it names, to scatter as near misses. */
-function sourcePieces(source: string): string[] {
+export function sourcePieces(source: string): string[] {
   const pieces = source.split(/\\[a-zA-Z]|[()[\]|?*+{}^$\\]/).filter((piece) => piece.length > 0 && piece.length < 40);
   return pieces.length > 0 ? pieces : ["x"];
 }

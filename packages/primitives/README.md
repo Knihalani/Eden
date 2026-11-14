@@ -12,7 +12,7 @@ choices they drove are in [docs/research/primitives.md](../../docs/research/prim
 | `charclass.ts` | Per-code-unit class and fold tables (lowercase, accents dropped), filled lazily | Anything that scans text |
 | `vocab.ts` | `Vocab`: term ↔ dense id, 64-bit fingerprint identity, range lookups without slicing, `release` (ids reused) | Indexes, sets, counters keyed by term |
 | `tokenize.ts` | `tokenizeInto`: fused scan + fold + hash + intern into a `Uint32Array` | Indexing, queries, usage tracking |
-| `matcher.ts` | `MultiMatcher`: folded Aho–Corasick dense DFA, optional whole-word | Keyword prefilters, cue lists, small gazetteers |
+| `matcher.ts` | `MultiMatcher`: folded Aho–Corasick dense DFA (transitions packed with an output bit), optional whole-word; `scan`: hits, first-hit list and kept occurrences' starts in one pass | Keyword prefilters, cue lists, small gazetteers |
 | `topk.ts` | `TopK`: typed-array heap, `pushDense` for accumulators | Ranking |
 | `cache.ts` | `S3FifoCache`: S3-FIFO eviction, byte budget, stale/expire TTLs, no per-op allocation; optional `group(key)` with `deleteGroup` (O(group) drops) | Item caches, MCP result caches, negative caches |
 | `deadline.ts` | `Deadline`: one absolute deadline, child slices, one AbortSignal | Every multi-stage operation |
@@ -284,3 +284,23 @@ The `contentTerms` row was run on the tree before the one-pass commit (5ace457e)
 A cold term and a sketch cost about a tenth to a quarter more; both run once per new term or per item hit, not per
 event. The end-to-end anchor (`packages/engine/bench/pipeline.bench.ts`, six alternating pairs on main b99f0171 and
 the merged branch): observe p99 medians 4,144 and 4,381 µs (+5.7%), p50 118-134 against 115-125 µs.
+
+## Packed matcher transitions and `scan` (2026-11-14, D1841)
+
+`MultiMatcher`'s table holds, per (state, column), the next state's row offset shifted left with bit 0 set when
+patterns end there: one load a character, no multiply, and the output lists are read only on the bit (it replaces
+the old table, so memory is unchanged). `scan(text, hits, firsts, keep, sink)` is `markHits` that also lists the
+patterns hit in order (the caller resets and walks only those) and passes each occurrence of a kept pattern with its
+start to a sink, with no closure per match; the start is `forEach`'s (counted back over folded characters only when a
+mark or ligature lies in the window). The matcher before is kept as `src/matcher.reference.ts`, the oracle of
+`matcher.test.ts`. Interleaved in one process (`bench/matcher-ab.bench.ts`, 244 gitleaks keywords, medians of 9
+alternating rounds):
+
+| Text | markHits before | markHits after | scan (every occurrence kept) |
+|---|---:|---:|---:|
+| 256 B | 1.33 µs | 1.17 µs | 0.75 µs |
+| 2 KB | 10.99 µs | 9.54 µs | 5.68 µs |
+| 16 KB | 109.99 µs | 92.96 µs | 55.56 µs |
+| 2 KB, 10% non-ASCII | 8.97 µs | 7.83 µs | 4.98 µs |
+
+The secret gate's use of it: docs/research/redact-perf.md.
