@@ -28,7 +28,7 @@
  *   prefixes), so the gate is never looser than it was.
  */
 import { MultiMatcher } from "@eden/primitives";
-import { AnchoredRegex, anchorsOf, anchorsOfRegex, Occurrences } from "./anchor";
+import { AnchoredRegex, anchorsOf, anchorsOfRegex, lazyPrefixOf, Occurrences } from "./anchor";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton";
 import { assignmentSpans, redactAssignments, REDACTED, redactTokensIn, TOKEN_LITERALS, TOKEN_PASSES } from "./redact";
 import { SCANNERS } from "./scanners";
@@ -363,26 +363,22 @@ function compileAllowlist(list: Allowlist, engine: AllowlistEngine): CompiledAll
 }
 
 /**
- * One finding of a rule. `line` is read only by allowlists that target the line; `lines` caches it per line, so a
- * long line with many findings is sliced once rather than once per finding.
+ * One finding of a rule. Its line is read only by allowlists that target the line, through `lines` (one per rule
+ * call), which finds and tests each line once however many findings it holds.
  */
 interface Finding {
   match: string;
   secret: string;
-  text: string;
   index: number;
-  lines: Map<number, string>;
+  lines: Lines;
 }
 
 /** Whether an allowlist excuses a finding (gitleaks `checkFindingAllowed`, with no file path or commit). */
 function allows(list: CompiledAllowlist, finding: Finding): boolean {
-  const target =
-    list.target === "match"
-      ? finding.match
-      : list.target === "line"
-        ? lineAt(finding.text, finding.index, finding.lines)
-        : finding.secret;
-  const regexAllowed = list.regexes.some((regex) => regex.test(target));
+  const regexAllowed =
+    list.target === "line"
+      ? finding.lines.allowed(list, finding.index)
+      : list.regexes.some((regex) => regex.test(list.target === "match" ? finding.match : finding.secret));
   // Both tests are pure, so the stopwords are read only when their answer can change the verdict.
   const stopword = () => list.stopwords.size > 0 && list.stopwords.occurIn(finding.secret.toLowerCase());
   if (!list.and) return regexAllowed || stopword();
@@ -430,19 +426,63 @@ class Stopwords {
   }
 }
 
-/** The line of `text` that holds `index`, cached by the line's start. */
-function lineAt(text: string, index: number, lines: Map<number, string>): string {
-  const start = text.lastIndexOf("\n", index - 1) + 1;
-  let line = lines.get(start);
-  if (line === undefined) {
-    const end = text.indexOf("\n", index);
-    line = text.slice(start, end < 0 ? text.length : end);
-    lines.set(start, line);
+/**
+ * The lines of one text as a rule's findings reach them, and whether each line-targeted allowlist's regexes occur in
+ * each. The verdict depends on the line alone, so it is worked out once a line: tested once a finding, a line holding
+ * many findings was read again for each (a 64 KB line of `bedrock-api-key-='` took 3.4 s and 128 KB 13 s, quadratic;
+ * so was the search back to each finding's line start). Findings come in increasing order, so the line breaks are
+ * found by one forward walk.
+ */
+class Lines {
+  private readonly text: string;
+  /** The line holding `last`: its start, and its end (the first `\n` at or after `last`, or the text's length). */
+  private start = 0;
+  private end = -1;
+  private last = 0;
+  private readonly verdicts = new Map<CompiledAllowlist, boolean>();
+
+  constructor(text: string) {
+    this.text = text;
   }
-  return line;
+
+  /** Whether one of `list`'s regexes occurs in the line that holds `index` (a line ends before its `\n`). */
+  allowed(list: CompiledAllowlist, index: number): boolean {
+    if (this.end < 0 || index < this.last) {
+      // The first finding, or one before the last (no rule reports one, but the answer must not depend on order).
+      this.start = this.text.lastIndexOf("\n", index - 1) + 1;
+      this.end = this.breakFrom(index);
+      this.verdicts.clear();
+    } else if (this.end < index) {
+      // A break lies before `index`: walk the breaks forward to the line that holds it.
+      let start = this.end + 1;
+      let end = this.breakFrom(start);
+      while (end < index) {
+        start = end + 1;
+        end = this.breakFrom(start);
+      }
+      this.start = start;
+      this.end = end;
+      this.verdicts.clear();
+    }
+    this.last = index;
+    let verdict = this.verdicts.get(list);
+    if (verdict === undefined) {
+      const line = this.text.slice(this.start, this.end);
+      verdict = list.regexes.some((regex) => regex.test(line));
+      this.verdicts.set(list, verdict);
+    }
+    return verdict;
+  }
+
+  private breakFrom(at: number): number {
+    const end = this.text.indexOf("\n", at);
+    return end < 0 ? this.text.length : end;
+  }
 }
 
 const NEWLINE = 10;
+/** A cheap first test for `lazyPrefixOf`, so the other rules build no JavaScript regex before they run. */
+const LAZY_PREFIX = /^(?:\(\?i\))?\[\\w\.-\]\{0,\d+\}\?/;
 
 /**
  * A gitleaks rule. As gitleaks does, each match (its ends' line breaks trimmed) is matched again on its own to find
@@ -456,9 +496,12 @@ function gitleaksRule(
   allowlistEngine: AllowlistEngine,
 ): SecretRule {
   let compiled: { pattern: Pattern; own: CompiledAllowlist[]; anchored?: AnchoredRegex } | undefined;
-  // Only JavaScript's engine scans every position: the own matchers (scanners.ts) are linear already.
-  const anchors = engine === backtrackingEngine ? anchorsOf(rule.regex) : undefined;
-  const anchorWords = anchors && [...new Set(anchors.flatMap((anchor) => anchor.literals))];
+  // Only JavaScript's engine scans every position: the own matchers (scanners.ts) are linear already. A rule with a
+  // lazy `[\w.-]{0,50}?` prefix reads it by hand (anchor.ts); any other tries its regex where its anchors allow.
+  const js = engine === backtrackingEngine && LAZY_PREFIX.test(rule.regex) ? goRegex(rule.regex) : undefined;
+  const lazy = js && lazyPrefixOf(rule.regex, js);
+  const anchors = engine === backtrackingEngine && !lazy ? anchorsOf(rule.regex) : undefined;
+  const anchorWords = lazy ? lazy.words : anchors && [...new Set(anchors.flatMap((anchor) => anchor.literals))];
   const compile = () => ({
     pattern: engine(rule.regex),
     own: (rule.allowlists ?? []).map((list) => compileAllowlist(list, allowlistEngine)),
@@ -479,7 +522,7 @@ function gitleaksRule(
     spans(text, found, ids) {
       const { pattern, own, anchored } = (compiled ??= compile());
       const out: Span[] = [];
-      const lines = new Map<number, string>();
+      const lines = new Lines(text);
       const onMatch = (start: number, end: number) => {
         // Trim the match's line breaks by index: `/\n+$/` retries from every break in an inner run (quadratic).
         let from = start;
@@ -492,10 +535,14 @@ function gitleaksRule(
         if (!span) return;
         const secret = match.slice(span[0], span[1]);
         if (rule.entropy && shannon(secret) <= rule.entropy) return;
-        const finding = { match, secret, text, index: start, lines };
+        const finding = { match, secret, index: start, lines };
         if (allows(global, finding) || own.some((list) => allows(list, finding))) return;
         out.push([at + span[0], at + span[1]]);
       };
+      if (lazy) {
+        lazy.each(text, found, ids, onMatch);
+        return out;
+      }
       const tried = anchored?.each(text, found, ids, (m) => onMatch(m.index, m.index + m[0].length));
       if (!tried) for (const [start, end] of pattern.matches(text)) onMatch(start, end);
       return out;
@@ -506,6 +553,7 @@ function gitleaksRule(
       // first run, an allowlist automaton its first states), so the first real text pays for neither.
       pattern.test("");
       anchored?.warm();
+      lazy?.warm();
       for (const list of [global, ...own]) for (const regex of list.regexes) regex.test("");
     },
   };
