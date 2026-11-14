@@ -72,8 +72,10 @@ inputs and the cases where this gate loses are in `docs/research/redact-vs-alter
 | findings on 13.5 MB of text with no planted secret (lower is better) | 250 | 4 | 1 | 11 | 1 | 4,987 |
 | in process, 16 KB of mixed text, a call | 0.31 ms (Bun), 0.49 ms (Node) | n/a | n/a | 87 ms | 0.51 ms | 2.3 ms |
 | one command on a 1 MB file, startup included | 0.18 s (Bun) | 0.70 s | 2.5 s | 6.7 s | 0.33 s | n/a |
+| slowest of 24 crafted 1 MB inputs, as a command (redact-pii: in process) | 0.37 s | 17.0 s | 3.2 s | >30 s on 3 | 0.46 s | >30 s on 9 |
 
-The 250 benign findings are almost all its keyword rule on source code and documentation (`token`, `apiKey`, `secret`
+secretlint is faster than this gate on every crafted input in process (7–23 ms against up to 221 ms at 1 MB): it
+runs 27 provider rules. The 250 benign findings are almost all its keyword rule on source code and documentation (`token`, `apiKey`, `secret`
 followed by a value). On the 4,460 simulated mail, chat and document items without a planted secret it flagged none,
 and on the evaluation scenarios' texts two, each holding a credential-shaped value (a wifi password, a database URL
 with a password).
