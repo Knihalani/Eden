@@ -215,6 +215,26 @@ describe("StreamableHttpTransport against the SDK's server transport", () => {
   );
 });
 
+describe("terminateSession (D1860)", () => {
+  test("sends a DELETE with the session id; the SDK's server ends the session; a second call sends nothing", async () => {
+    const s = await serve({ json: true });
+    const methods: string[] = [];
+    const fetchFn = (async (url: URL | string, init?: RequestInit) => {
+      methods.push(`${init?.method} ${new Headers(init?.headers).get("mcp-session-id") ? "with" : "without"} session`);
+      return fetch(url, init);
+    }) as typeof fetch;
+    const transport = new StreamableHttpTransport(s.url, { fetch: fetchFn });
+    const client = new McpClient({ name: "eden", version: "0" });
+    await client.connect(transport);
+    await transport.terminateSession();
+    await transport.terminateSession();
+    expect(methods.filter((m) => m.startsWith("DELETE"))).toEqual(["DELETE with session"]);
+    // The server no longer knows the session: a call without one is refused.
+    await expect(client.listTools()).rejects.toThrow(/HTTP 404/);
+    await client.close();
+  });
+});
+
 describe("StreamableHttpTransport errors and redirects", () => {
   test("an HTTP error rejects with its status in the message (the fan-out reads a 429 from it, D212)", async () => {
     const http = Bun.serve({

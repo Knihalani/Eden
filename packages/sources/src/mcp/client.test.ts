@@ -36,6 +36,33 @@ async function connected(server: { connect(t: InMemoryTransport): Promise<void> 
   return { client, clientSide, serverSide };
 }
 
+describe("McpClient's general surface (D1860)", () => {
+  test("server info, any request, notifications to onnotification (a throwing handler fails nothing)", async () => {
+    const server = new McpServer(
+      { name: "notes", version: "2" },
+      { instructions: "be brief", capabilities: { logging: {} } },
+    );
+    server.registerTool("log", { inputSchema: {} }, async (_args, extra) => {
+      await extra.sendNotification({ method: "notifications/message", params: { level: "info", data: "working" } });
+      return { content: [{ type: "text", text: "done" }] };
+    });
+    const { client } = await connected(server);
+    expect(client.server).toMatchObject({ serverInfo: { name: "notes", version: "2" }, instructions: "be brief" });
+    expect(client.server?.capabilities).toHaveProperty("tools");
+    const seen: string[] = [];
+    client.onnotification = (n) => {
+      seen.push(`${n.method} ${JSON.stringify(n.params?.data)}`);
+      throw new Error("a caller's bug");
+    };
+    expect((await client.callTool({ name: "log", arguments: {} })).content).toEqual([{ type: "text", text: "done" }]);
+    expect(seen).toEqual(['notifications/message "working"']);
+    expect(await client.request("ping")).toEqual({});
+    await expect(client.request("no/such")).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
+    await client.notify("notifications/roots/list_changed");
+    await client.close();
+  });
+});
+
 describe("McpClient against the SDK's McpServer (in memory)", () => {
   test("initialize, tools/list with annotations and schema, tools/call with structured content", async () => {
     const server = notes();
