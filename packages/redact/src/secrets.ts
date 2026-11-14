@@ -38,15 +38,16 @@ import {
   useAnalyses,
 } from "./anchor.ts";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
+import { type Composed, composeMasks, composeStored, type StructuralPass } from "./compose.ts";
 import {
-  assignmentSpans,
+  assignmentSpansSplit,
   redactAssignments,
-  REDACTED,
   redactTokensIn,
   structuralMask,
   TOKEN_LITERALS,
   TOKEN_PASSES,
 } from "./redact.ts";
+import { excused, notSecret, placeholderToken } from "./not-secret.ts";
 import { SCANNERS } from "./scanners.ts";
 import generated from "./rules.generated.json" with { type: "json" };
 
@@ -95,6 +96,11 @@ export interface SecretRule {
    * to what the gate redacted before them.
    */
   post?: boolean;
+  /**
+   * D1850: the spans, and those it found but leaves because their value is code or a placeholder (not-secret.ts);
+   * absent when it leaves none. The gate gates the second as main did (compose.ts).
+   */
+  split?(text: string, found?: Occurrences, ids?: Int32Array): { spans: Span[]; excused: Span[] };
   /** Lower-case words of which at least one must occur in the text for the rule to run; none: always runs. */
   keywords: string[];
   /**
@@ -154,7 +160,7 @@ const LEGACY_KEYWORD = new RegExp(
  * (`Bearer …`, `Basic …`), and a span holding only the credential left it the scheme word alone.
  */
 const AUTH_SCHEME_VALUE = new RegExp(
-  String.raw`(?:password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential|auth)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*((?:bearer|basic)[ \t]+(?!\[REDACTED\])[^\s\[]\S*)`,
+  String.raw`(?:password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential|auth)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*["'“‘\x60]?((?:bearer|basic)[ \t]+(?!\[REDACTED\])[^\s\[]\S*)`,
   "dgi",
 );
 /**
@@ -863,19 +869,27 @@ export function rulesWith(choice: EngineChoice): SecretRule[] {
   return [
     ...withRegex.map((rule) => gitleaksRule(rule, global, choice.rule(rule.id), choice.allowlist)),
     // A shape without literals gets none: an empty prefilter means the rule always runs (safe, only slower).
-    ...PROVIDER_SHAPES.map(([id, shape]) => regexRule(id, SHAPE_LITERALS[id] ?? [], shape)),
-    regexRule("eden-keyword", SECRET_WORDS, KEYWORD_RULE),
+    ...PROVIDER_SHAPES.map(([id, shape]) => {
+      const rule = regexRule(id, SHAPE_LITERALS[id] ?? [], shape);
+      // A placeholder key id (`AKIAXXXXXXXXXXXXXXXX`) is no key (D1850, not-secret.ts).
+      return id === "eden-aws-key-id" ? excused(rule, placeholderToken) : rule;
+    }),
+    // Code and placeholders as a keyword's value are left (D1850, not-secret.ts).
+    excused(regexRule("eden-keyword", SECRET_WORDS, KEYWORD_RULE), notSecret),
     regexRule("eden-url-userinfo", ["://"], URL_USERINFO),
     plain("eden-presigned-url", SHAPE_LITERALS["eden-presigned-url"]!, presignedSpans),
     plain("eden-entropy-keyword", SECRET_WORDS, (text) => entropyWithKeyword(text)),
     // Every anchor holds one of these literals ("[redacted]" folded, as the matcher folds case).
     plain("eden-aws-secret", ["akia", "asia", "[redacted]", "secret"], awsSecret),
-    regexRule("eden-legacy-keyword", ["passw", "passphrase", "api"], LEGACY_KEYWORD),
-    regexRule("eden-legacy-token", ["sk-", "ghp_", "gho_", "github_pat_", "akia"], LEGACY_TOKEN),
+    excused(regexRule("eden-legacy-keyword", ["passw", "passphrase", "api"], LEGACY_KEYWORD), notSecret),
+    excused(
+      regexRule("eden-legacy-token", ["sk-", "ghp_", "gho_", "github_pat_", "akia"], LEGACY_TOKEN),
+      placeholderToken,
+    ),
     // D1850's rules, after the others (`post`).
     { ...regexRule("eden-auth-scheme-value", SECRET_WORDS_AUTH, AUTH_SCHEME_VALUE), post: true },
-    { ...regexRule("eden-api-key-phrase", ["api key"], API_KEY_PHRASE), post: true },
-    { ...regexRule("eden-api-key-phrase-legacy", ["api key"], API_KEY_PHRASE_LEGACY), post: true },
+    { ...excused(regexRule("eden-api-key-phrase", ["api key"], API_KEY_PHRASE), notSecret), post: true },
+    { ...excused(regexRule("eden-api-key-phrase-legacy", ["api key"], API_KEY_PHRASE_LEGACY), notSecret), post: true },
     { ...regexRule("eden-azure-storage-key", ["accountkey="], AZURE_STORAGE_KEY), post: true },
     { ...plain("eden-entropy-api-key", ["api key"], (text) => entropyWithKeyword(text, API_KEY_WORD)), post: true },
   ];
@@ -892,6 +906,8 @@ export interface Gate {
   sanitizeForStore(text: string): string;
   /** Each rule that finds something in `text`, in rule order, with the spans it finds (for differential tests). */
   findings(text: string): { id: string; spans: Span[] }[];
+  /** How the stored text was made (compose.ts), and the spans the rules excused (for `never-less.test.ts`). */
+  explain(text: string): Composed & { excusedSpans: Span[] };
 }
 
 /**
@@ -923,7 +939,6 @@ export function gateOf(rules: SecretRule[]): Gate {
     for (const word of new Set(rule.prefilter)) rulesOf[index.get(word)!]!.push(r);
   });
   const matcher = new MultiMatcher(words);
-  const postIds = new Set(rules.filter((rule) => rule.post).map((rule) => rule.id));
 
   // Scratch reused from text to text: the gate is synchronous and no rule calls back into it.
   const hits = new Uint8Array(words.length);
@@ -957,11 +972,41 @@ export function gateOf(rules: SecretRule[]): Gate {
     for (const r of out) chosen[r] = 0;
     return out.length > 1 ? out.sort((a, b) => a - b) : out;
   };
+  /** The rules whose prefilter words `text` holds, each with the spans it finds there and the ones it excuses. */
+  const split = (text: string): { r: number; spans: Span[]; excused: Span[] }[] =>
+    candidates(text).map((r) => {
+      const rule = rules[r]!;
+      if (rule.split) return { r, ...rule.split(text, found, anchorIds[r]) };
+      return { r, spans: rule.spans(text, found, anchorIds[r]), excused: [] };
+    });
   /** The rules whose prefilter words `text` holds, each with the spans it finds there. */
   const findings = (text: string): { id: string; spans: Span[] }[] =>
-    candidates(text)
-      .map((r) => ({ id: rules[r]!.id, spans: rules[r]!.spans(text, found, anchorIds[r]) }))
-      .filter((f) => f.spans.length > 0);
+    split(text)
+      .filter((f) => f.spans.length > 0)
+      .map((f) => ({ id: rules[f.r]!.id, spans: f.spans }));
+  /**
+   * The structural pass the stored text goes through. Every token literal in a gated text was in `text` (the sentinel
+   * holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks would return its
+   * input unchanged and is left out (TOKEN_PASSES).
+   */
+  const pass: StructuralPass = {
+    assignments: assignmentSpansSplit,
+    run: (gated, seen) => redactAssignments(redactTokensIn(gated, tokens), false, seen),
+    mask: (gated, strict, values) => structuralMask(gated, tokens, strict, values),
+  };
+
+  /** The spans of `text`'s rules by kind: before D1850 (found, excused) and D1850's (`post`). */
+  const sorted = (text: string): { strict: Span[]; excused: Span[]; post: Span[] } => {
+    const out = { strict: [] as Span[], excused: [] as Span[], post: [] as Span[] };
+    for (const f of split(text)) {
+      if (rules[f.r]!.post) out.post.push(...f.spans);
+      else {
+        out.strict.push(...f.spans);
+        out.excused.push(...f.excused);
+      }
+    }
+    return out;
+  };
 
   return {
     findings,
@@ -970,77 +1015,17 @@ export function gateOf(rules: SecretRule[]): Gate {
         .map((found) => found.id)
         .sort(),
     sanitizeForStore(text) {
-      const found: Span[] = [];
-      const post: Span[] = [];
-      for (const f of findings(text)) (postIds.has(f.id) ? post : found).push(...f.spans);
-      // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass below:
-      // with any finding, that pass's spans on the original text join the rules' (audit A5). No finding, no extra scan.
-      const spans = (found.length > 0 ? [...found, ...assignmentSpans(text)] : found).sort((a, b) => a[0] - b[0]);
-      let out = "";
-      let at = 0;
-      for (const [start, end] of spans) {
-        if (end <= at) continue;
-        out += text.slice(at, Math.max(start, at)) + (start >= at ? REDACTED : "");
-        at = end;
-      }
-      const gated = out + text.slice(at);
-      // `redact(gated)`, as it was: `redactString`, its token passes and then its assignment pass. Every token literal
-      // in `gated` was in `text` (the sentinel holds none and no literal spans its brackets), so a pass whose literals
-      // `text` lacks would return its input unchanged and is left out (TOKEN_PASSES).
-      const stored = redactAssignments(redactTokensIn(gated, tokens));
-      // D1850's rules add what they find, and the assignment pass's spans with them (as with any finding above).
-      return post.length === 0
-        ? stored
-        : withPost(text, spans, gated, tokens, [...post, ...assignmentSpans(text)], stored);
+      const { strict, excused, post } = sorted(text);
+      // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
+      // any finding, that pass's spans on the original text join the rules' (audit A5). Then the structural pass, as
+      // `redact` runs it; then D1850's changes (compose.ts).
+      return composeStored(text, strict, excused, post, pass);
+    },
+    explain(text) {
+      const { strict, excused, post } = sorted(text);
+      return { ...composeMasks(text, strict, excused, post, pass, true), excusedSpans: excused };
     },
   };
-}
-
-/**
- * D1850: `stored` (what the rules before D1850, then the structural pass, made of `text`: `spans` gated it into
- * `gated`) with the spans of D1850's rules (`post`) taken out as well. Those rules run apart, after: their spans,
- * gated with the others, changed what the keyword rule's matches and the structural pass saw (a span over `Bearer`
- * left the pass the credential after it; a quoted value taken whole hid the key after it), and the gate redacted
- * less than before (the review of 2026-11-14). So `stored` is what main stored, and what `post` adds is added to it:
- * the mask of what `stored` removed (each span, then `structuralMask` traced back through the gating), plus `post`,
- * rendered one sentinel a removed run. When `post` adds nothing, `stored` is returned as it is.
- */
-function withPost(text: string, spans: Span[], gated: string, passes: number, post: Span[], stored: string): string {
-  const mask = new Uint8Array(text.length);
-  /** Per character of `gated`, its index in `text`, or -1 inside a sentinel (the gating walk, as it ran). */
-  const map = new Int32Array(gated.length);
-  let n = 0;
-  let at = 0;
-  for (const [start, end] of spans) {
-    if (end <= at) continue;
-    const kept = Math.max(start, at);
-    for (let i = at; i < kept; i++) map[n++] = i;
-    if (start >= at) for (let i = 0; i < REDACTED.length; i++) map[n++] = -1;
-    mask.fill(1, kept, end);
-    at = end;
-  }
-  for (let i = at; i < text.length; i++) map[n++] = i;
-  const structural = structuralMask(gated, passes);
-  for (let j = 0; j < gated.length; j++) if (structural[j] === 1 && map[j]! >= 0) mask[map[j]!] = 1;
-  let adds = false;
-  for (const [start, end] of post) {
-    for (let i = start; i < end && !adds; i++) adds = mask[i] === 0;
-    mask.fill(1, start, end);
-  }
-  if (!adds) return stored;
-  let out = "";
-  let from = 0;
-  for (let i = 0; i < text.length;) {
-    if (mask[i] === 0) {
-      i++;
-      continue;
-    }
-    let j = i;
-    while (j < text.length && mask[j] === 1) j++;
-    out += text.slice(from, i) + REDACTED;
-    from = i = j;
-  }
-  return out + text.slice(from);
 }
 
 let gate: Gate | undefined;

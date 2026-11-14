@@ -4691,7 +4691,7 @@
      "wide": false
     }
    ],
-   "(?i)(?:password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential|auth)s?\\b[^\\n]{0,20}?(?:\\bis\\b|=|:)\\s*((?:bearer|basic)[ \\t]+[^\\s\\[]\\S*)": [
+   "(?i)(?:password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential|auth)s?\\b[^\\n]{0,20}?(?:\\bis\\b|=|:)\\s*[\"'\\x{201C}\\x{2018}\\x60]?((?:bearer|basic)[ \\t]+[^\\s\\[]\\S*)": [
     {
      "literals": [
       "password",

@@ -4,7 +4,10 @@
  * a secret; this can. Two checks a text:
  *
  * - every character inside a span some baseline rule finds is inside a span some rule of the gate finds;
- * - every character the baseline's `sanitizeForStore` removes, the gate's removes too (`lessThanBaseline`).
+ * - every character the baseline's `sanitizeForStore` removes, the gate's removes too (`lessThanBaseline`);
+ *
+ * except the characters of a value that is code or a placeholder (`not-secret.ts`), which D1850 leaves on purpose
+ * (and only those: `compose.ts` reports which, and each is checked here).
  *
  * Also a command, for the fuzz at scale:
  *
@@ -17,24 +20,30 @@ import {
   REDACTED,
   structuralMask as structuralMaskBefore,
 } from "./redact.baseline.ts";
+import { notSecret, placeholderToken } from "./not-secret.ts";
 import { type Gate, gateOf, secretRules } from "./secrets.ts";
-import { gateOf as gateOfBaseline, secretRules as secretRulesBaseline } from "./secrets.baseline.ts";
+import {
+  type Gate as BaselineGate,
+  gateOf as gateOfBaseline,
+  secretRules as secretRulesBaseline,
+} from "./secrets.baseline.ts";
 
-let gates: { now: Gate; baseline: Gate; post: Set<string> } | undefined;
+let gates: { now: Gate; baseline: BaselineGate } | undefined;
 
-/** Per character of `text`, 1 when a span the gate's rules find covers it. */
-function spanMask(gate: Gate, text: string): Uint8Array {
-  const mask = new Uint8Array(text.length);
-  for (const found of gate.findings(text)) for (const [start, end] of found.spans) mask.fill(1, start, end);
-  return mask;
+function setUp(): { now: Gate; baseline: BaselineGate } {
+  gates ??= { now: gateOf(secretRules()), baseline: gateOfBaseline(secretRulesBaseline()) };
+  return gates;
 }
 
 /**
- * What the baseline's `sanitizeForStore` removes from `text`, exactly: its rules' spans (and the assignment pass's,
- * with any finding), then what its structural pass removes from the gated text (`structuralMask`), traced back.
+ * What the baseline's `sanitizeForStore` removes from `text`, worked out apart from it with its own frozen modules:
+ * its rules' spans (and the assignment pass's, with any finding), then what its structural pass removes from the
+ * gated text (`structuralMask`), traced back. Checked against its output (`baselineMaskDiffers`).
  */
 function baselineMask(text: string): Uint8Array {
-  const found = gates!.baseline.findings(text).flatMap((f) => f.spans);
+  const found = setUp()
+    .baseline.findings(text)
+    .flatMap((f) => f.spans);
   const spans = (found.length > 0 ? [...found, ...assignmentSpansBefore(text)] : found).sort((a, b) => a[0] - b[0]);
   const mask = new Uint8Array(text.length);
   const map: number[] = [];
@@ -76,48 +85,57 @@ function render(text: string, mask: Uint8Array): string {
 /** Adjacent sentinels as one: the pipeline can leave two side by side where a mask has one run. */
 const merged = (s: string) => s.replace(/(?:\[REDACTED\]){2,}/g, REDACTED);
 
-/**
- * Where the gate redacts less than the baseline on `text`, or undefined when it does not. The spans of every rule
- * the baseline has must be inside the gate's; and the gate must store either what the baseline stores, or that
- * text with D1850's rules' spans also taken out (the baseline's mask, checked against the baseline's own output, plus
- * those spans): so every character the baseline removes, the gate removes.
- */
-export function lessThanBaseline(text: string): string | undefined {
-  if (!gates) {
-    const rules = secretRules();
-    gates = {
-      now: gateOf(rules),
-      baseline: gateOfBaseline(secretRulesBaseline()),
-      post: new Set(rules.filter((rule) => rule.post).map((rule) => rule.id)),
-    };
-  }
-  const mine = spanMask(gates.now, text);
-  const theirs = spanMask(gates.baseline, text);
-  for (let i = 0; i < text.length; i++) {
-    if (theirs[i] === 1 && mine[i] === 0) return `span: character ${i} (${JSON.stringify(text.slice(i, i + 20))})`;
-  }
-  const before = gates.baseline.sanitizeForStore(text);
-  const now = gates.now.sanitizeForStore(text);
-  if (now === before) return undefined;
-  const mask = baselineMask(text);
-  // The mask is the baseline's output (a text that holds a sentinel of its own can read either way: left out).
-  if (!text.includes(REDACTED) && merged(render(text, mask)) !== merged(before)) {
-    return `baseline mask: ${JSON.stringify(render(text, mask))} vs ${JSON.stringify(before)}`;
-  }
-  const post = gates.now.findings(text).filter((f) => gates!.post.has(f.id));
-  for (const f of post) for (const [start, end] of f.spans) mask.fill(1, start, end);
-  if (post.length > 0) for (const [start, end] of assignmentSpansBefore(text)) mask.fill(1, start, end);
-  const expected = render(text, mask);
-  return now === expected ? undefined : `stored: ${JSON.stringify(now)} vs ${JSON.stringify(expected)}`;
+/** Where the baseline mask is not what the baseline stores on `text` (sentinels side by side as one), or undefined. */
+export function baselineMaskDiffers(text: string): string | undefined {
+  if (text.includes(REDACTED)) return undefined; // a sentinel of the text's own reads either way
+  const rendered = merged(render(text, baselineMask(text)));
+  const stored = merged(setUp().baseline.sanitizeForStore(text));
+  return rendered === stored ? undefined : `${JSON.stringify(rendered)} vs ${JSON.stringify(stored)}`;
 }
 
-/** Where the baseline mask (`structuralMask` traced back) is not what the baseline stores, or undefined. */
-export function baselineMaskDiffers(text: string): string | undefined {
-  lessThanBaseline("");
-  if (text.includes(REDACTED)) return undefined;
-  const rendered = merged(render(text, baselineMask(text)));
-  const stored = merged(gates!.baseline.sanitizeForStore(text));
-  return rendered === stored ? undefined : `${JSON.stringify(rendered)} vs ${JSON.stringify(stored)}`;
+/**
+ * Where the gate redacts less than the baseline on `text`, or undefined when it does not. Four checks:
+ *
+ * - every character in a span of a baseline rule is in a span of the gate's rules, or in one they excused;
+ * - the gate's own account of main's pipeline (`explain().before`) is the frozen baseline's mask, character for
+ *   character (so the gate starts from what main removed), and that mask is what the baseline stores;
+ * - the gate stores what its mask (`after`) says;
+ * - every character main removed and the gate keeps was removed only through an excused value, and every excused
+ *   value is code or a placeholder by `not-secret.ts`'s own tests.
+ */
+export function lessThanBaseline(text: string): string | undefined {
+  const { now, baseline } = setUp();
+  const explained = now.explain(text);
+  const mine = new Uint8Array(text.length);
+  for (const f of now.findings(text)) for (const [start, end] of f.spans) mine.fill(1, start, end);
+  for (const [start, end] of explained.excusedSpans) mine.fill(1, start, end);
+  for (const f of baseline.findings(text)) {
+    for (const [start, end] of f.spans) {
+      for (let i = start; i < end; i++) {
+        if (mine[i] === 0) return `span: ${f.id} at ${i} (${JSON.stringify(text.slice(i, i + 24))})`;
+      }
+    }
+  }
+  const before = baselineMask(text);
+  const differs = baselineMaskDiffers(text);
+  if (differs) return `baseline mask: ${differs}`;
+  for (let i = 0; i < text.length; i++) {
+    if (before[i] !== explained.before![i]) return `main's pipeline at ${i}: ${JSON.stringify(text.slice(i, i + 24))}`;
+  }
+  const stored = now.sanitizeForStore(text);
+  if (!text.includes(REDACTED) && merged(stored) !== merged(render(text, explained.after!))) {
+    return `stored: ${JSON.stringify(stored)} vs its mask ${JSON.stringify(render(text, explained.after!))}`;
+  }
+  for (const value of explained.values!) {
+    if (!(notSecret(value) || placeholderToken(value)))
+      return `excused a value that is not code: ${JSON.stringify(value)}`;
+  }
+  for (let i = 0; i < text.length; i++) {
+    if (before[i] === 1 && explained.after![i] === 0 && explained.excused![i] === 0) {
+      return `stored less at ${i}: ${JSON.stringify(text.slice(i, i + 24))}`;
+    }
+  }
+  return undefined;
 }
 
 /** `count` texts from `seed`, fuzz and chain texts alternating: the texts where the gate redacts less. */
