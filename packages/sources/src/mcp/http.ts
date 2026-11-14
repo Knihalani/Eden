@@ -312,9 +312,9 @@ export class StreamableHttpTransport implements Transport {
    * under the same caps as a reply's (the per-event cap; the reply cap per connection, after which it is closed and
    * opened again) and one budget for the stream's whole life, across its reconnects (`ReplyLimits`, its burst and rate:
    * reopening does not start it again); a response on it is unasked, so dropped and counted. Each connection must open
-   * (send its headers) within `timeoutMs`. A connection that ends or breaks is opened again with `Last-Event-ID`, waiting as `resume` says (its
-   * defaults when unset), until `maxRetries` connections in a row deliver nothing; a reply failed by a budget is not
-   * opened again (`onerror` says why). `close` ends it. Eden never opens it.
+   * (send its headers) within `timeoutMs`. A connection that ends or breaks is opened again with `Last-Event-ID`,
+   * waiting as `resume` says (its defaults when unset), until `maxRetries` connections in a row deliver nothing; a
+   * stream failed by its budget is not opened again (`onerror` says why). `close` ends it. Eden never opens it.
    */
   async openServerStream(): Promise<boolean> {
     if (this.state !== "open") throw new Error("Not connected");
