@@ -84,6 +84,12 @@ async function open(arm: ArmName, url: string, timeoutMs: number): Promise<Opene
 
 const SIZES = [1024, 65_536, 1_048_576];
 const INFLIGHT = [1, 16, 256];
+/**
+ * The shapes of the result's text (`mcp-profile.bench.ts`'s `TEXT_SHAPES`: plain, lines, escapes, unicode, numbers) and
+ * the reply modes, each a list; a cell's key starts with its shape. `MCP_COMPARE_TEXT` defaults to plain alone.
+ */
+const SHAPES = (process.env.MCP_COMPARE_TEXT ?? "plain").split(",");
+const MODES = (process.env.MCP_COMPARE_MODES ?? "json,sse").split(",");
 const callsFor = (size: number, inflight: number) =>
   Math.max(inflight * 4, Math.min(2_000, Math.floor((256 * 1_048_576) / size)));
 
@@ -97,39 +103,41 @@ interface Cell {
 }
 
 async function perfChild(arm: ArmName, port: number): Promise<void> {
-  const first = await open(arm, `http://127.0.0.1:${port}/json/1024/mcp`, 60_000);
+  const first = await open(arm, `http://127.0.0.1:${port}/json/1024/plain/mcp`, 60_000);
   await first.call();
   process.stdout.write("first\n");
   await first.close();
   const cells: Cell[] = [];
   const quantile = (xs: Float64Array, p: number) => xs.slice().sort()[Math.floor(p * (xs.length - 1))]!;
-  for (const mode of ["json", "sse"]) {
-    for (const size of SIZES) {
-      const c = await open(arm, `http://127.0.0.1:${port}/${mode}/${size}/mcp`, 120_000);
-      for (const inflight of INFLIGHT) {
-        const key = `${mode} ${size} x${inflight}`;
-        const calls = callsFor(size, inflight);
-        try {
-          await run(c.call, Math.max(inflight, Math.floor(calls / 10)), inflight);
-          Bun.gc(true);
-          let peak = process.memoryUsage.rss();
-          const sampler = setInterval(() => (peak = Math.max(peak, process.memoryUsage.rss())), 2);
-          const cpu0 = process.cpuUsage();
-          const lat = await run(c.call, calls, inflight);
-          const cpu = process.cpuUsage(cpu0);
-          clearInterval(sampler);
-          cells.push({
-            key,
-            p50: quantile(lat, 0.5),
-            p99: quantile(lat, 0.99),
-            cpu: (cpu.user + cpu.system) / calls,
-            rssMb: Math.max(peak, process.memoryUsage.rss()) / 2 ** 20,
-          });
-        } catch (e) {
-          cells.push({ key, p50: 0, p99: 0, cpu: 0, rssMb: 0, error: String(e).slice(0, 200) });
+  for (const shape of SHAPES) {
+    for (const mode of MODES) {
+      for (const size of SIZES) {
+        const c = await open(arm, `http://127.0.0.1:${port}/${mode}/${size}/${shape}/mcp`, 120_000);
+        for (const inflight of INFLIGHT) {
+          const key = `${shape} ${mode} ${size} x${inflight}`;
+          const calls = callsFor(size, inflight);
+          try {
+            await run(c.call, Math.max(inflight, Math.floor(calls / 10)), inflight);
+            Bun.gc(true);
+            let peak = process.memoryUsage.rss();
+            const sampler = setInterval(() => (peak = Math.max(peak, process.memoryUsage.rss())), 2);
+            const cpu0 = process.cpuUsage();
+            const lat = await run(c.call, calls, inflight);
+            const cpu = process.cpuUsage(cpu0);
+            clearInterval(sampler);
+            cells.push({
+              key,
+              p50: quantile(lat, 0.5),
+              p99: quantile(lat, 0.99),
+              cpu: (cpu.user + cpu.system) / calls,
+              rssMb: Math.max(peak, process.memoryUsage.rss()) / 2 ** 20,
+            });
+          } catch (e) {
+            cells.push({ key, p50: 0, p99: 0, cpu: 0, rssMb: 0, error: String(e).slice(0, 200) });
+          }
         }
+        await c.close();
       }
-      await c.close();
     }
   }
   console.log(JSON.stringify({ cells }));
