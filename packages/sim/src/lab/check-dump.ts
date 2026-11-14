@@ -5,10 +5,12 @@
  * fail open), its raw reply and the task's labels (suite, seed, variant, template, the planted item's id). A dataset
  * for any student of the check (M7's pre-screen, docs/research/m7-prescreen.md; M1's checkers). Sim data only.
  */
+import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import type { Model } from "@eden/llm";
 import { checkKey, checkMessages, PushChecker, type PushCheckInput, type PushCheckRead } from "@eden/engine";
 import type { Scope } from "@eden/protocol";
+import { promptKey } from "./reader-disk";
 
 /** What the funnel knows of the task a session runs. */
 export interface DumpTask {
@@ -35,6 +37,35 @@ export function replyKeeping(model: Model): { model: Model; replies: Map<string,
         while (replies.size > 256) replies.delete(replies.keys().next().value as string);
         return res;
       },
+    },
+  };
+}
+
+/**
+ * `--check-log FILE` (N5): the check's model with each call's prompt and reply appended to `file` as a row (sim data
+ * only), under `tag`. The prompt is every user message in order, joined by a blank line: with a rule sheet the first
+ * is the sheet and the last the request and the pool, so logging the first alone lost the request (as `check-dump.ts`
+ * once keyed replies by it). `sheetHash` (the sheet message's sha-1, 12 hex) groups a user's checks under one sheet.
+ * A failed call (a replay miss, F6) is logged with its replay key `k` and a null reply, so the prompt can be answered
+ * elsewhere (a subagent) and cached under that key; the error is then rethrown and the check fails open.
+ */
+export function checkLogging(model: Model, file: string, tag: Record<string, unknown>): Model {
+  return {
+    id: model.id,
+    chat: async (request) => {
+      const users = request.messages.filter((m) => m.role === "user").map((m) => m.content);
+      const prompt = users.join("\n\n");
+      const sheetHash = users.length > 1 ? createHash("sha1").update(users[0]!).digest("hex").slice(0, 12) : undefined;
+      const logged = { ...tag, prompt, ...(sheetHash ? { sheetHash } : {}) };
+      let res;
+      try {
+        res = await model.chat(request);
+      } catch (e) {
+        appendFileSync(file, `${JSON.stringify({ ...logged, k: promptKey(model.id, request), reply: null })}\n`);
+        throw e;
+      }
+      appendFileSync(file, `${JSON.stringify({ ...logged, reply: res.text })}\n`);
+      return res;
     },
   };
 }
