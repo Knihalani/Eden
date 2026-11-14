@@ -33,7 +33,7 @@
  */
 import { MultiMatcher } from "./primitives/matcher.reference.ts";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
-import { assignmentSpans, redact, REDACTED } from "./redact.reference.ts";
+import { assignmentSpans, redact, REDACTED } from "./redact.baseline.ts";
 import { SCANNERS } from "./scanners.ts";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
