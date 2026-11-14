@@ -134,7 +134,7 @@ describe("what hits", () => {
       `?X-Amz-Date=20261107T000000Z&${"X-Amz-" + "Security-Token="}${alnum(40)}%2F${alnum(60, 5)}&X-Amz-Expires=60`,
       "eden-presigned-url",
     ],
-    ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"Q".repeat(16)} is set`, "eden-aws-key-id"],
+    ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"QQQQRRRR".repeat(2)} is set`, "eden-aws-key-id"],
     ["entropy + keyword", `deploy secret ${alnum(40, 5)}3 rotates monthly`, "eden-entropy-keyword"],
   ];
   for (const [name, text, rule] of cases) {
