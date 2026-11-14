@@ -267,7 +267,7 @@ export class McpClient {
     // Of the server's requests only `ping` is answered, and at most `MAX_PINGS_IN_FLIGHT` at once: each answer is a
     // POST carrying the user's credentials, so a server that floods requests must not turn them into a flood of POSTs
     // (200,000 asked made 200,000 POSTs). Every other request (sampling, roots, elicitation) is dropped unanswered,
-    // never acted on.
+    // never acted on, unless the caller set a handler for its method (D1875): then it shares the same bound.
     const ask = m as JsonRpcRequest;
     if (this.pings >= MAX_PINGS_IN_FLIGHT || !this.transport) return;
     if (ask.method === "ping") {
