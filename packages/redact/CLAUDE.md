@@ -17,15 +17,20 @@ docs/research/redact-vs-alternatives.md.
 |---|---|
 | `src/secrets.ts` | The rule set (`secretRules`, `LINEAR_RULES`, `GATE_ENGINES`, `checkScanners`, `checkRegexModifiers`), Go-to-JS regex translation (`goRegex`, `backtrackingEngine`), the gate (`gateOf`: one `MultiMatcher.scan` for hits, anchor occurrences and token literals), `secretHits`, `sanitizeForStore`; Eden's extra rules (URL userinfo, `eden-aws-secret` D86, bare provider shapes such as `eden-discord-webhook`, `eden-new-relic`, `eden-azure-storage-key` and `eden-presigned-url` D220, D1850); allowlist `Stopwords`; `Lines` (a line allowlist's verdict once a line, D1850) |
 | `src/anchor.ts` | D1841: `anchorsOf` (a Go regex's bounded prefix and literals, from `parseRegex`), `anchorsOfRegex` (Eden's JavaScript regexes, lookarounds dropped), `Occurrences` (a literal past the dense limit leaves `keep` for the text, D1850), `anchoredMatches`/`AnchoredRegex` (sticky tries where a match can start; `matchAll`'s matches; dense candidates fall back to the scan). D1850: `LazyPrefixRegex`/`lazyPrefixOf` (the lazy prefix read by hand, the rest of the regex tried once at each keyword, later top-level branches as one regex), `useAnalyses` (the generated tables), `analyseAnchors`/`analyseLazy` (the analyses worked out now, for `generate.ts`) |
+| `src/generic-rest.ts` | D1850: generic-api-key's REST (the regex after its lazy prefix) read by hand, each candidate decided by the length of a run; `generic-rest.test.ts` checks every position of seeded texts against the sticky regex |
+| `src/not-secret.ts` | D1850: values that cannot be a secret (`notSecret`: a type, a member chain on a known receiver, an env or template reference, `2_000`, a mask, a run; `placeholderToken`: a mask or run), which the keyword rules and the assignment pass leave in place; `excused` wraps a rule so it reports both kinds of span |
+| `src/compose.ts` | D1850: the stored text from the rules' spans. Main's pipeline runs as it was (every pre-D1850 span, excused ones included, gates the text; the structural pass runs on it); D1850's rules (`post`) add spans and the excused values' own characters come back, by masks traced through the gating (`structuralMask` in redact.ts) |
 | `src/generate.ts`, `src/rules.generated.json` | D1850: the vendored TOML as JSON (what the gate imports, on any runtime) and every regex's anchor analysis; `bun packages/redact/src/generate.ts` rewrites it, `generated.test.ts` fails when it is stale; it also checks every allowlist regex parses (`checkAllowlists`) |
 | `src/primitives/` | D1850: `matcher.ts` and `charclass.ts` (and the test-only `matcher.reference.ts`) vendored byte for byte from @eden/primitives; `generated.test.ts` fails when they differ from the shared copies |
 | `src/scanners.ts` | `SCANNERS`: the linear matchers for the seven rules in `LINEAR_RULES` (five keyword-assignment rules, two curl rules), each with the exact regex it implements; `SCANNER_CLASSES` for the class tests (D1705) |
 | `src/automaton.ts` | The allowlist engine: an RE2-subset parser, a Thompson NFA, a lazily built DFA (`test` only, at most 2,000 states a pattern), `compileAllowlistRegex` (D1705) |
 | `src/redact.ts` | Structural redaction of JSON (`redact`, `redactString` = `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`, `isSecretKey`, PEM blocks), `TOKEN_PASSES` (D1841: the gate leaves out a token pass whose literals its text lacks), `REDACTED`/`CYCLE`/`TRUNCATED` markers |
-| `src/secrets.reference.ts`, `src/redact.reference.ts` | Test support (D1841): the gate before D1841, the oracle (with `src/primitives/matcher.reference.ts`); unchanged but for D1850's three detection changes, made in both; never imported by the gate |
+| `src/secrets.reference.ts`, `src/redact.reference.ts` | Test support (D1841): the gate before D1841, the oracle (with `src/primitives/matcher.reference.ts`); unchanged but for D1850's detection changes (its post rules, the excused values, compose.ts), made in both; never imported by the gate |
+| `src/secrets.baseline.ts`, `src/redact.baseline.ts` | Test support (D1850): main's reference gate before D1850, frozen (it never moves with the gate), for `never-less.ts` |
+| `src/never-less.ts`, `src/never-less.test.ts` | D1850: the gate never redacts less than main before D1850: every baseline span inside the gate's spans or excused ones, main's mask equal to the gate's own account of it, and every character lost an excused value's, which `notSecret` or `placeholderToken` must accept; fuzz and keyword-chain texts; also a command (below) |
 | `src/gate-differential.ts` | Test support: the whole-gate fuzz against the reference (rule ids, spans, `secretHits`, `sanitizeForStore`, `redactString`, `redact`); also a command (below) |
 | `src/gate-crafted.ts` | Test support: inputs built against the fast paths, for `gate-linear.test.ts` and `bench/gate.bench.ts` |
-| `src/node.check.ts`, `src/node-parity.ts` | D1850: the gate under `node --test` (Node 24+), and the Node side of `node-parity.test.ts` (Bun and Node give the same findings, text for text) |
+| `src/node.check.ts`, `src/node-parity.ts`, `src/node-linear.ts` | D1850: the gate under `node --test` (Node 24+), the Node side of `node-parity.test.ts` (Bun and Node give the same findings, text for text) and of `node-linear.test.ts` (the crafted inputs under a CPU ceiling on V8) |
 | `src/re2-oracle.ts` | Test support: re2js (a devDependency) as the oracle, `re2Source`, `linearEngine`, `D24_ENGINES` (the gate D24 shipped); not in the image |
 | `src/differential.ts` | Test support: the seeded differential fuzz of every scanned rule and allowlist regex against re2js; also a command (below); not in the image |
 | `src/vendor/gitleaks/` | `gitleaks.toml` byte for byte, its LICENSE and pinned hash ([upgrade steps](src/vendor/gitleaks/README.md)) |
@@ -52,7 +57,8 @@ docs/research/redact-vs-alternatives.md.
   joins `LINEAR_RULES`. `redos.test.ts` and `redos-{1,2,3}.test.ts` (the sweep in `redos-sweep.ts`, split by rule
   index) fail when a gitleaks update adds one (rules left on JavaScript must stay under 40 ms on 8 KB crafted runs,
   best of three, each run timed as the lesser of wall and CPU time) and check 128 KB attacks stay under 1 s.
-  `own-matchers-linear.test.ts` holds each own matcher under a CPU-time ceiling on 1 MB crafted runs. Work done per
+  `own-matchers-linear.test.ts` holds each own matcher under a CPU-time ceiling on 1 MB crafted runs, and
+  `gate-linear.test.ts` (Bun) and `node-linear.test.ts` (Node 24+) the whole gate on the crafted inputs. Work done per
   finding must not grow with the text (D1850: a line allowlist re-read its whole line for every finding on it).
 - **Exact against RE2 (D1705).** The own matchers report what re2js reports on D24's patterns (`re2Source`'s
   meanings: JavaScript's `\s` and `.`, Unicode case folding, code points): `own-matchers.test.ts` checks every
@@ -60,6 +66,11 @@ docs/research/redact-vs-alternatives.md.
   scanned rule's regex makes `rulesWith` throw (`checkScanners`), and one that adds allowlist syntax the automaton
   lacks throws in `generate.ts`: update the matcher or the parser, then run the full fuzz. Never fall back to a
   backtracking regex.
+- **Never redact less than main (D1850).** A change that lets a value through goes in `not-secret.ts` with a test that
+  the nearest real secret of its shape is still caught, and `never-less.test.ts` must pass; a missed secret is worse
+  than a false redaction. A new detection is a post rule (compose.ts): its spans join after main's pipeline, never
+  before it, since spans added before it changed what the keyword rule and the structural pass saw (the review of
+  2026-11-14: `token is Bearer secret is …` left the secret in clear).
 - **Never weaken the gate to fix a false positive in a test**: make the test text not secret-shaped. Secret-shaped
   test values are assembled from parts (`"AK" + "IA" + …`) so no literal in the repo is one.
 - **Dependencies (D15, D1705, D1850):** none at all (the package.json has no `dependencies`). `re2js` (pinned 2.9.0)
@@ -72,13 +83,15 @@ docs/research/redact-vs-alternatives.md.
 ## Test
 
 ```bash
-bun run test:pkg redact          # 19 files; linear.test.ts, own-matchers*.test.ts and the redos* files lead
+bun run test:pkg redact          # 22 files; linear.test.ts, own-matchers*.test.ts and the redos* files lead
 cd packages/redact && bun test ./src            # alone, as the package would stand in its own repository
-node --test packages/redact/src/node.check.ts   # Node 24+ (REDACT_NODE=… bun test …/node-parity.test.ts compares)
+node --test packages/redact/src/node.check.ts   # Node 24+ (REDACT_NODE=… bun test …/node-parity.test.ts compares;
+                                                # …/node-linear.test.ts holds the crafted inputs to a ceiling on V8)
 bun packages/redact/src/differential.ts 50000   # the full fuzz: 50,000 texts per matcher, ~5 min
 bun packages/redact/src/gate-differential.ts 250000 101   # the whole gate against the reference: 4 seeds of 250,000
                                                           # (101, 202, 303, 404) at once, ~110 s each
 bun packages/redact/src/gate-differential.ts --corpus     # the realistic corpus, 256 B to 1 MB
+bun packages/redact/src/never-less.ts 100000 7            # never less than main: 100,000 fuzz and chain texts
 env -u BUN_OPTIONS bun packages/redact/bench/gate.bench.ts --re2   # before / after / re2js
 ```
 
