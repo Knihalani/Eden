@@ -92,6 +92,12 @@ interface CompiledAllowlist {
    */
   verdicts: Answers<boolean>;
   stopword: Last<boolean>;
+  /**
+   * D1850, for a list that targets the line: per regex, literals one of which every match holds (lower case, read
+   * from the regex by `anchorsOf`), or undefined (none known, or the regex folds case). A line holding none of them
+   * cannot match, so `Lines` skips the regex: a megabyte line ran 5 regexes through the DFA, 31 ms a call.
+   */
+  lineLiterals: (string[] | undefined)[];
 }
 
 /** Where a secret sits in a text: `[start, end)`. */
@@ -446,6 +452,13 @@ function compileAllowlist(list: Allowlist, engine: AllowlistEngine): CompiledAll
     hasPaths: (list.paths ?? []).length > 0,
     verdicts: new Answers<boolean>(VERDICTS_KEPT),
     stopword: new Last<boolean>(),
+    lineLiterals:
+      list.regexTarget === "line"
+        ? (list.regexes ?? []).map((regex) =>
+            // Under (?i) a match can hold `ſ` or `K` where the literal has `s` or `k`, which `toLowerCase` keeps.
+            regex.includes("(?i") ? undefined : anchorsOf(regex)?.flatMap((anchor) => anchor.literals),
+          )
+        : [],
   };
 }
 
@@ -536,6 +549,8 @@ class Lines {
   private end = -1;
   private last = 0;
   private readonly verdicts = new Map<CompiledAllowlist, boolean>();
+  /** The line holding `last`, lower case, once a regex with literals asks (`lineLiterals`). */
+  private lower: string | undefined;
 
   constructor(text: string) {
     this.text = text;
@@ -548,6 +563,7 @@ class Lines {
       this.start = this.text.lastIndexOf("\n", index - 1) + 1;
       this.end = this.breakFrom(index);
       this.verdicts.clear();
+      this.lower = undefined;
     } else if (this.end < index) {
       // A break lies before `index`: walk the breaks forward to the line that holds it.
       let start = this.end + 1;
@@ -559,12 +575,20 @@ class Lines {
       this.start = start;
       this.end = end;
       this.verdicts.clear();
+      this.lower = undefined;
     }
     this.last = index;
     let verdict = this.verdicts.get(list);
     if (verdict === undefined) {
       const line = this.text.slice(this.start, this.end);
-      verdict = list.regexes.some((regex) => regex.test(line));
+      verdict = list.regexes.some((regex, k) => {
+        const literals = list.lineLiterals[k];
+        if (literals) {
+          const lower = (this.lower ??= line.toLowerCase());
+          if (!literals.some((literal) => lower.includes(literal))) return false;
+        }
+        return regex.test(line);
+      });
       this.verdicts.set(list, verdict);
     }
     return verdict;
@@ -575,6 +599,9 @@ class Lines {
     return end < 0 ? this.text.length : end;
   }
 }
+
+/** A finding's `lines` where no list asks for the line (`decide` in `gitleaksRule`). */
+const NO_LINES = new Lines("");
 
 const NEWLINE = 10;
 /** A cheap first test for `lazyPrefixOf`, so the other rules build no JavaScript regex before they run. */
@@ -600,16 +627,30 @@ function gitleaksRule(
       : undefined;
   const anchors = engine === backtrackingEngine && !lazy ? anchorsOf(rule.regex) : undefined;
   const anchorWords = lazy ? lazy.words : anchors && [...new Set(anchors.flatMap((anchor) => anchor.literals))];
-  const compile = () => ({
-    pattern: engine(rule.regex),
-    own: (rule.allowlists ?? []).map((list) => compileAllowlist(list, allowlistEngine)),
-    anchored: anchors && new AnchoredRegex(goRegex(rule.regex), anchors),
-  });
+  const compile = () => {
+    const own = (rule.allowlists ?? []).map((list) => compileAllowlist(list, allowlistEngine));
+    lineLists = [global, ...own].filter((list) => list.target === "line");
+    return { pattern: engine(rule.regex), own, anchored: anchors && new AnchoredRegex(goRegex(rule.regex), anchors) };
+  };
   /** The secret's span within `match`; undefined when the rule's group did not take part. */
-  /** The last match read and its secret's span, within one call (D1850: a text dense in findings repeats it). */
-  const lastMatch = new Last<Span | undefined>();
-  const secretIn = (pattern: Pattern, match: string): Span | undefined =>
-    lastMatch.get(match, (m) => secretOf(pattern, m));
+  /** The last match decided, within one call (memo.ts). */
+  const lastDecision = new Last<{ span: Span; secret: string } | undefined>();
+  /** The lists that target the line, decided per finding (`Lines`); the others by `decide`, once a match. */
+  let lineLists: CompiledAllowlist[] = [];
+  /** A match's secret span and secret, or undefined when the entropy or an allowlist not on the line drops it. */
+  const decide = (pattern: Pattern, own: CompiledAllowlist[], match: string) => {
+    const span = secretOf(pattern, match);
+    if (!span) return undefined;
+    const secret = match.slice(span[0], span[1]);
+    if (rule.entropy && shannon(secret) <= rule.entropy) return undefined;
+    // `index` and `lines` are read only by a list that targets the line, which is not asked here.
+    const finding = { match, secret, index: 0, lines: NO_LINES };
+    const asked = (list: CompiledAllowlist) => list.target !== "line" && allows(list, finding);
+    if (asked(global) || own.some(asked)) {
+      return undefined;
+    }
+    return { span, secret };
+  };
   const secretOf = (pattern: Pattern, match: string): Span | undefined => {
     const indices = pattern.groups(match);
     if (!indices || indices.length < 2) return [0, match.length];
@@ -634,13 +675,15 @@ function gitleaksRule(
         while (to > from && text.charCodeAt(to - 1) === NEWLINE) to--;
         const match = text.slice(from, to);
         const at = from === to ? start : from;
-        const span = secretIn(pattern, match);
-        if (!span) return;
-        const secret = match.slice(span[0], span[1]);
-        if (rule.entropy && shannon(secret) <= rule.entropy) return;
-        const finding = { match, secret, index: start, lines };
-        if (allows(global, finding) || own.some((list) => allows(list, finding))) return;
-        out.push([at + span[0], at + span[1]]);
+        // Everything but a line-targeted list depends on the match alone: decided once a match within the call
+        // (D1850: a text dense in findings repeats one match tens of thousands of times).
+        const decided = lastDecision.get(match, (m) => decide(pattern, own, m));
+        if (decided === undefined) return;
+        if (lineLists.length > 0) {
+          const finding = { match, secret: decided.secret, index: start, lines };
+          if (lineLists.some((list) => allows(list, finding))) return;
+        }
+        out.push([at + decided.span[0], at + decided.span[1]]);
       };
       if (lazy) {
         lazy.each(text, found, ids, onMatch);
