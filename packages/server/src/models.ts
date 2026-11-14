@@ -81,8 +81,36 @@ export function modelRolesFromEnv(
     cards: make({ ...base, sort: "price" }),
     cardsRetry: make(base),
     usdPerTenantDay,
-    scrub: (text) => text.split(apiKey).join("[key]"),
+    scrub: keyScrubber(apiKey),
   };
+}
+
+/**
+ * Removes an API key from a provider's error text before it is logged: the key itself, its last 16 characters (a
+ * provider may echo a masked key), and the base64 of the key and of `Bearer <key>` (an echoed header), each also when
+ * split by whitespace or a line break. One regular expression built once per key; each pattern is a run of literal
+ * characters with optional whitespace between them, so matching stays linear in the text.
+ */
+export function keyScrubber(key: string): (text: string) => string {
+  if (!key) return (text) => text;
+  const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64").replace(/=+$/, "");
+  // A base64 form also takes its padding, so no stray "=" is left beside the placeholder.
+  const forms = new Map<string, string>([
+    [key, ""],
+    [key.slice(-16), ""],
+  ]);
+  for (const form of [b64(key), b64(`Bearer ${key}`)]) {
+    forms.set(form, "(?:\\s*=){0,2}");
+    forms.set(form.replace(/\+/g, "-").replace(/\//g, "_"), "(?:\\s*=){0,2}"); // base64url
+  }
+  const escape = (c: string) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = [...forms]
+    .filter(([f]) => f.length > 0)
+    .sort(([a], [b]) => b.length - a.length)
+    .map(([f, tail]) => [...f].map(escape).join("\\s*") + tail)
+    .join("|");
+  const re = new RegExp(pattern, "g");
+  return (text) => text.replace(re, "[key]");
 }
 
 /** `EDEN_MODEL_CACHE`: `on` or unset (on, D1790), or `off`; any other value stops startup (a typo must not read as

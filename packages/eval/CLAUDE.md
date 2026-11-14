@@ -32,7 +32,12 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   JSON adds `wiring`, `readerModel`, `usdCap`, `spentUsd`, `readerPool` (`reader: "live"`, with `failures`) and
   `readerFailure`: the first failed reader call as the server logs it (key removed, redacted). A reader that fails
   on every call (an OpenRouter 403 for the account) still scores, as the no-model path: read `readerPool.failures`
-  before the metrics.
+  before the metrics. The shipped default calls no reader (`pushCandidates`, D237: `readerPool.calls` is 0 by design);
+  its live calls are the push check's, reported as `pushCheck` (asked, calls, failures, overBudget, cost) with
+  `checkFailure` (the first failed check call, as the server logs it: key and account id removed). A live run that
+  attempted no model call, or whose every call failed, prints its JSON and exits 1 (`liveProblem`, D1830; the judge
+  of `--live --judge` is counted by `counting`, a stub reader's calls are not; a run the cap refused says so): from
+  this sandbox OpenRouter answers `anthropic/claude-haiku-5.5` with a 403 on every call.
   `--live --judge` is the pre-D128 shape (`OpenRouterModel.fromEnv` as judge, default `z-ai/glm-5.3-flash`, no live
   reader; `--reader stub|oracle` as before), so D119's and D125's `--live` numbers can be re-run. `--reader` with
   the shipped `--live` is refused.

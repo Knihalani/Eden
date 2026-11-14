@@ -20,7 +20,7 @@ import { Budget, DEFAULT_LIMITS, OpenRouterModel, TenantSpend, type Model } from
 // model, its routing (D12's ZDR and no data collection, D95's throughput sort) and EDEN_MODEL cannot drift from what
 // ships. Imported through the declared @eden/server dependency, so test:changed reruns the eval's tests when the
 // server's wiring changes (scripts/test-select.ts follows package.json only).
-import { modelRolesFromEnv, type MakeRoleModel } from "@eden/server";
+import { keyScrubber, modelRolesFromEnv, type MakeRoleModel } from "@eden/server";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner, StaticSource } from "@eden/sources";
 import { OracleReader, readerFor, type ReaderKindOption } from "./reader-stub";
@@ -51,6 +51,11 @@ export interface RunOptions {
   spend?: TenantSpend;
   /** Told of each failed reader call (a provider's 403, an unreadable reply): `AskReader`'s `onFailure`. */
   onReaderFailure?: (error: unknown) => void;
+  /**
+   * Told of each failed push-check call (a provider's 403, an unreadable reply): `PushChecker`'s `onFailure`, as
+   * `buildPartner` wires it. Under the shipped `--live` the check is the default's only model caller (D237, D828).
+   */
+  onCheckFailure?: (error: unknown) => void;
 }
 
 /** The tenant every scenario runs under: `TenantSpend` keys the run's cap on it. */
@@ -91,11 +96,72 @@ export function liveWiring(options: {
     const model = options.make ? fromEnvVia(env, options.make) : OpenRouterModel.fromEnv(env);
     if (!model) return null;
     const key = env.OPENROUTER_API_KEY!;
-    return { model, readerModel: null, spend, scrub: (t) => t.split(key).join("[key]") };
+    return { model, readerModel: null, spend, scrub: keyScrubber(key) };
   }
   const roles = modelRolesFromEnv(env, options.make);
   if (!roles.reader) return null;
   return { model: null, readerModel: roles.reader, spend, scrub: roles.scrub ?? ((t) => t) };
+}
+
+/** A model's calls and the ones that threw, for a live role the run has no other count of (the judge). */
+export interface CallCount {
+  calls: number;
+  failures: number;
+}
+
+/** `model` with each call counted in `count` (a thrown call counted as failed, then rethrown). */
+export function counting(model: Model, count: CallCount): Model {
+  return {
+    id: model.id,
+    chat: async (request) => {
+      count.calls++;
+      try {
+        return await model.chat(request);
+      } catch (error) {
+        count.failures++;
+        throw error;
+      }
+    },
+  };
+}
+
+/**
+ * Why a `--live` run measured no model, or null: it attempted no model call, or every call it made failed (an
+ * OpenRouter 403 on every call fails open to the no-model path, so its metrics read like a free run's). Counted: the
+ * live reader's calls (`readerPool` with `reader: "live"`; a stub's calls cost nothing and do not count), the push
+ * check's (`pushCheck`, D828; the shipped default calls no reader, D237) and the judge's (`judge`, `--live --judge`,
+ * counted by `counting`). With none of them known, the run's model calls per turn decide.
+ */
+export function liveProblem(
+  m: Pick<Metrics, "modelCallsPerTurn" | "readerPool" | "pushCheck">,
+  judge?: CallCount,
+): string | null {
+  const reader = m.readerPool?.reader === "live" ? m.readerPool : undefined;
+  if (!reader && !m.pushCheck && !judge) {
+    return m.modelCallsPerTurn > 0 ? null : "--live made no model call: the numbers are the no-model path's";
+  }
+  const calls = (reader?.calls ?? 0) + (m.pushCheck?.calls ?? 0) + (judge?.calls ?? 0);
+  const failures = (reader?.failures ?? 0) + (m.pushCheck?.failures ?? 0) + (judge?.failures ?? 0);
+  if (calls === 0) {
+    const refused = m.pushCheck?.overBudget ?? 0;
+    if ((m.pushCheck?.asked ?? 0) > 0 && refused > 0) {
+      return (
+        `--live: the budget cap refused every model call (${refused} push checks over budget; raise --usd-cap): ` +
+        "the numbers are the no-model path's"
+      );
+    }
+    return (
+      "--live made no model call (the reader is not called in the default, D237, and no push check ran): " +
+      "the numbers are the no-model path's"
+    );
+  }
+  if (failures >= calls) {
+    return (
+      `--live: all ${calls} model calls failed (see readerFailure / checkFailure; an OpenRouter 403 for the model ` +
+      "is the usual cause): the numbers are the no-model path's"
+    );
+  }
+  return null;
 }
 
 /** `OpenRouterModel.fromEnv`'s options, through a test's factory (run.test.ts pins the two equal). */
@@ -174,6 +240,12 @@ export interface Metrics {
   ask: { cases: number; answered: number; recall: number };
   /** Only with `RunOptions.reader`. */
   readerPool?: ReaderPoolMetrics;
+  /**
+   * Only when the push check is wired (`readerModel`, `pushCheck` on): its pools asked, model calls made, calls that
+   * failed (thrown or unreadable; each push handed the default's candidates), checks the budget refused before any
+   * call (`overBudget`: the run's cap) and their cost, summed over scenarios.
+   */
+  pushCheck?: { asked: number; calls: number; failures: number; overBudget: number; costUsd: number };
   /** The acting suite's labels (`"neutral"`, `decoys`; D810): present when a scenario carries one. */
   acting?: ActingMetrics;
 }
@@ -276,6 +348,8 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
   };
   let readerCalls = 0;
   let readerFailures = 0;
+  let checkWired = false;
+  const checks = { asked: 0, calls: 0, failures: 0, overBudget: 0, costUsd: 0 };
   const acting = { labelled: false, neutral: 0, neutralFired: 0, neutralItems: 0, owed: 0, facts: 0, handed: 0 };
   const decoy = { turns: 0, handed: 0 };
 
@@ -324,7 +398,11 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     // The push check (D828) on the reader's model, as `buildPartner` wires it with a key: only under `--live`.
     const checker =
       options.readerModel && { ...DEFAULT_CONFIG, ...options.config }.pushCheck
-        ? new PushChecker({ model: options.readerModel, budget: budget() })
+        ? new PushChecker({
+            model: options.readerModel,
+            budget: budget(),
+            ...(options.onCheckFailure ? { onFailure: options.onCheckFailure } : {}),
+          })
         : null;
     if (!pool.byCategory.has(category)) pool.byCategory.set(category, { expected: 0, expectedInPool: 0 });
     const poolTally = pool.byCategory.get(category)!;
@@ -457,6 +535,14 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
     }
     readerCalls += maker?.calls ?? reader?.stats.calls ?? 0;
     readerFailures += reader?.stats.failures ?? 0;
+    if (checker) {
+      checkWired = true;
+      checks.asked += checker.stats.asked;
+      checks.calls += checker.stats.calls;
+      checks.failures += checker.stats.failures;
+      checks.overBudget += checker.stats.overBudget;
+      checks.costUsd += checker.stats.costUsd;
+    }
   }
 
   const decisions: Record<string, number> = {};
@@ -508,6 +594,7 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
           },
         }
       : {}),
+    ...(checkWired ? { pushCheck: checks } : {}),
     ...(acting.labelled
       ? {
           acting: {
