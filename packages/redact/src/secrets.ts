@@ -43,7 +43,8 @@ import {
   assignmentSpansSplit,
   redactAssignments,
   redactTokensIn,
-  structuralMask,
+  structuralMasksOf,
+  tokenPasses as runTokenPasses,
   TOKEN_LITERALS,
   TOKEN_PASSES,
 } from "./redact.ts";
@@ -1095,8 +1096,13 @@ export function gateOf(rules: SecretRule[]): Gate {
    */
   const pass: StructuralPass = {
     assignments: assignmentSpansSplit,
-    run: (gated, seen) => redactAssignments(redactTokensIn(gated, tokens), false, seen),
-    mask: (gated, strict, values) => structuralMask(gated, tokens, strict, values),
+    run: (gated, seen) => {
+      const passed = runTokenPasses(gated, tokens);
+      return {
+        stored: redactAssignments(passed.out, false, seen),
+        masks: (values) => structuralMasksOf(passed, values),
+      };
+    },
   };
 
   /** The spans of `text`'s rules by kind: before D1850 (found, excused) and D1850's (`post`). */

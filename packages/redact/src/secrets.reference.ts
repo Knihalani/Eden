@@ -34,7 +34,7 @@
 import { MultiMatcher } from "./primitives/matcher.reference.ts";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
 import { type Composed, composeMasks, composeStored, type StructuralPass } from "./compose.ts";
-import { assignmentSpansSplit, redactString, structuralMask } from "./redact.reference.ts";
+import { assignmentSpansSplit, redactString, structuralMasks } from "./redact.reference.ts";
 import { excused, notSecret, placeholderToken } from "./not-secret.ts";
 import { SCANNERS } from "./scanners.ts";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
@@ -758,8 +758,10 @@ export function gateOf(rules: SecretRule[]): Gate {
       .map((f) => ({ id: f.rule.id, spans: f.spans }));
   const pass: StructuralPass = {
     assignments: assignmentSpansSplit,
-    run: (gated, seen) => redactString(gated, false, seen),
-    mask: (gated, strict, values) => structuralMask(gated, 15, strict, values),
+    run: (gated, seen) => ({
+      stored: redactString(gated, false, seen),
+      masks: (values) => structuralMasks(gated, 15, values),
+    }),
   };
 
   /** The spans of `text`'s rules by kind: before D1850 (found, excused) and D1850's (`post`). */

@@ -25,13 +25,15 @@ type Span = [number, number];
 export interface StructuralPass {
   /** Main's assignment spans on `text`: every credential key's value (`all`) and the ones not excused (`strict`). */
   assignments(text: string): { all: Span[]; strict: Span[] };
-  /** The structural pass's output on `gated` as main ran it; `seen.excusable` set when it took an excused value. */
-  run(gated: string, seen: { excusable: boolean }): string;
   /**
-   * What the pass removes from `gated` (1: removed), all of it or only what is not an excused value (whose texts go
-   * to `values` when given).
+   * The structural pass on `gated` as main ran it: its output, `seen.excusable` set when it took an excused value,
+   * and `masks`: what it removes from `gated` (1: removed), all of it and only what is not an excused value (whose
+   * texts go to `values` when given), worked out from the same run.
    */
-  mask(gated: string, strict: boolean, values?: string[]): Uint8Array;
+  run(
+    gated: string,
+    seen: { excusable: boolean },
+  ): { stored: string; masks(values?: string[]): { all: Uint8Array; strict: Uint8Array } };
 }
 
 /** What `composeMasks` works out: the stored text, and (when asked, or when D1850 changes something) the masks. */
@@ -77,7 +79,8 @@ export function composeMasks(
   }
   gated += text.slice(at);
   const seen = { excusable: false };
-  const stored = pass.run(gated, seen);
+  const ran = pass.run(gated, seen);
+  const stored = ran.stored;
   const excusing = excused.length > 0 || assigned.all.length !== assigned.strict.length || seen.excusable;
   if (post.length === 0 && !excusing && !explain) return { stored };
 
@@ -99,8 +102,7 @@ export function composeMasks(
   for (const [start, end] of strict) after.fill(1, start, end);
   for (const [start, end] of assigned.strict) after.fill(1, start, end);
   const values: string[] | undefined = explain ? [] : undefined;
-  const all = pass.mask(gated, false);
-  const kept = pass.mask(gated, true, values);
+  const { all, strict: kept } = ran.masks(values);
   for (let j = 0; j < gated.length; j++) {
     const i = map[j]!;
     if (i < 0) continue;
@@ -119,7 +121,8 @@ export function composeMasks(
     for (const [start, end] of left) values!.push(text.slice(start, end));
   }
   for (const [start, end] of post) after.fill(1, start, end);
-  if (post.length > 0) for (const [start, end] of pass.assignments(text).strict) after.fill(1, start, end);
+  if (post.length > 0)
+    for (const [start, end] of (main ? assigned : pass.assignments(text)).strict) after.fill(1, start, end);
   let same = true;
   for (let i = 0; i < text.length && same; i++) same = before[i] === after[i];
   if (same) return { stored, before, after, excused: excusedChars, values };
