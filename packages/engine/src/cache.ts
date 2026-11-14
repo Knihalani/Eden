@@ -40,6 +40,7 @@ import { dayKeys } from "./days";
 import { dayFactsClass, dayFactsOf, type DayFacts } from "./day-facts";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
+import { clearParts } from "./render";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
 import { orgLabel } from "./parties";
@@ -264,6 +265,8 @@ interface FrozenEntry {
   /** The sketch: [lo, hi, numbers], null (no own words), or absent (not computed yet). */
   k?: [number, number, number] | null;
   q: number;
+  /** The date facts (`Entry.dates`, D1888): the number form, the array form's values, or absent (not read yet). */
+  t?: number | number[];
 }
 
 interface FrozenBody {
@@ -287,6 +290,27 @@ interface FastEntry {
   r?: number;
   k?: [number, number, number] | null;
   q: number;
+  t?: number | number[];
+}
+
+/**
+ * An entry's date facts as a blob holds them (D1888): a thaw read every item's text again at the user's first request
+ * naming a day (`dated`, D1721), a few milliseconds a hundred items. Facts depend on the item's words alone, which the
+ * blob carries with them.
+ */
+function frozenDates(dates: DayFacts | undefined): number | number[] | undefined {
+  return dates === undefined || typeof dates === "number" ? dates : Array.from(dates);
+}
+
+/**
+ * `frozenDates` read back. Anything else than its two forms (a blob of format 5 has none) reads as not read yet, so
+ * the next scan reads the item's text as before.
+ */
+function thawedDates(t: unknown): DayFacts | undefined {
+  if (typeof t === "number") return Number.isSafeInteger(t) && t >= 0 ? t : undefined;
+  if (!Array.isArray(t) || t.length < 5) return undefined;
+  for (const x of t) if (!Number.isInteger(x) || x < 0 || x > 0xffff) return undefined;
+  return Uint16Array.from(t as number[]);
 }
 
 /** The JSON head of a fast-thaw blob's zstd section; `arrays` gives each array's kind and length, in order. */
@@ -896,6 +920,7 @@ export class ItemCache {
     this.restoring.delete(key);
     this.thawing.delete(key);
     clearDecoded();
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo();
     // The user's gone-holds go too, as on a forget: the new owner holds its own.
     const held = this.holds.get(scope.tenantId);
@@ -1046,6 +1071,7 @@ export class ItemCache {
     this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo(); // Nor its terms in the vocabulary's decode memo (D998).
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
@@ -1278,6 +1304,7 @@ export class ItemCache {
    */
   removeItems(scope: Scope, ids: Iterable<string>, now = Date.now(), holdMs = 0): number {
     clearDecoded(); // A deleted item's decoded text does not stay in the memo.
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     let held: TenantHolds | undefined;
     if (holdMs > 0) {
       held = this.holds.get(scope.tenantId);
@@ -1989,6 +2016,7 @@ export class ItemCache {
   private install(key: string, f: FrozenUser): void {
     this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo();
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
@@ -2015,6 +2043,7 @@ export class ItemCache {
       const rec: FrozenEntry = { i: e.item, f: e.fetchedAt, m: e.readMark, s: e.synced ? 1 : 0, q: e.seq };
       if (e.raw !== undefined) rec.r = e.raw;
       if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
+      if (e.dates !== undefined) rec.t = frozenDates(e.dates);
       chunk.push(rec);
       if (chunk.length >= STEP_ITEMS) {
         parts.push(JSON.stringify(chunk).slice(1, -1));
@@ -2066,6 +2095,7 @@ export class ItemCache {
       }
       if (e.raw !== undefined) rec.r = e.raw;
       if (e.sketch !== undefined) rec.k = e.sketch && [e.sketch.lo, e.sketch.hi, e.sketch.numbers];
+      if (e.dates !== undefined) rec.t = frozenDates(e.dates);
       recs.push(rec);
       if (++n % STEP_ITEMS === 0) yield;
     }
@@ -2213,7 +2243,7 @@ export class ItemCache {
         next: null,
         raw: r.r,
         seq: r.q,
-        dates: undefined,
+        dates: thawedDates(r.t),
       };
       if (r.s === 1) {
         entry.synced = true;
@@ -2375,7 +2405,7 @@ export class ItemCache {
         next: null,
         raw: r.r,
         seq: r.q,
-        dates: undefined,
+        dates: thawedDates(r.t),
       };
       if (r.s === 1) {
         entry.synced = true;
@@ -2464,6 +2494,7 @@ export class ItemCache {
 
   forget(scope: Scope, sourceId?: string): void {
     clearDecoded(); // The decode memo may hold their text (`packed-text.ts`).
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo(); // ... and the vocabulary's decoded terms (D998).
     if (!sourceId) {
       this.dropUser(scopeKey(scope), scope.tenantId);

@@ -44,6 +44,9 @@ bun run test:pkg llm             # < 0.1 s; fetch is faked, no network
 - A test that needs a key sets it on the options, never in `process.env` (the preload clears it and other files
   must not see it).
 - `pacing.test.ts` drives time through injected clocks; do not add real sleeps.
+- `estimateTokens` (length / 4) underestimates prose by about 17% (D1742), but it sizes only reservations and the read
+  watch's minimum prefix: a more accurate estimate changes behaviour (budget refusals, the watch), so it needs a
+  decision. A call's own CPU (body, parse, keys) is 120–145 µs against a 600–1,000 ms wait (D1893): not a lever.
 
 ## Where next
 

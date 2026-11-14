@@ -56,16 +56,7 @@ import { nearDuplicate, sanitizedId, sanitizeItem, type CacheHit, type ItemCache
 import { SyncManager } from "./sync";
 import { pooledSanitizer } from "./gate";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
-import {
-  arrangedVisit,
-  assess,
-  mayConstrain,
-  frameOf,
-  namesRef,
-  unmeasuredLimit,
-  type Frame,
-  type Verdict,
-} from "./conflict";
+import { assess, frameOf, gateOf, namesRef, unmeasuredLimit, type Frame, type Verdict } from "./conflict";
 import {
   cardKey,
   cardVerdict,
@@ -138,6 +129,7 @@ import { type TurnGate, turnGate } from "./turn-gate";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
 import { Ledger, type LedgerEntry } from "./ledger";
+import { isPacked } from "./packed-text";
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
@@ -3198,8 +3190,7 @@ export class ContextPartner {
     if (card && (STANDING_KINDS.has(card.kind) || card.kind === "status-change" || card.kind === "already-done")) {
       return true;
     }
-    const text = `${x.item.title}. ${x.item.text}`.toLowerCase();
-    return mayConstrain(text) || (this.config.readerGateVisits && arrangedVisit(text));
+    return gateOf(x.item, this.config.readerGateVisits);
   }
 
   /**
@@ -3771,7 +3762,10 @@ export class ContextPartner {
     // it and its old words are near the new (D40: what the agent was given must not stand once superseded).
     const revised = new Set(
       this.config.syncPollBehind
-        ? found.filter((h) => s.ledger.revised(h.item.id, versionOf(h.item), s.turn)).map((h) => h.item.id)
+        ? found
+            // Only an item the ledger holds a version of can be revised: the others' words are not hashed (D1885).
+            .filter((h) => s.ledger.holdsVersion(h.item.id) && s.ledger.revised(h.item.id, versionOf(h.item), s.turn))
+            .map((h) => h.item.id)
         : [],
     );
     return (
@@ -6636,7 +6630,7 @@ interface Copy {
 function copiesOf(items: readonly ContextItem[], withTimes: boolean): Copy[] {
   return items.map((it) =>
     withTimes
-      ? { id: it.id, sourceId: it.sourceId, version: versionOf(it), times: timesOf(it) }
+      ? { id: it.id, sourceId: it.sourceId, version: versionOf(it), times: timesOfItem(it) }
       : { id: it.id, sourceId: it.sourceId, version: versionOf(it) },
   );
 }
@@ -6699,7 +6693,44 @@ function renderedCopies(items: readonly ContextItem[], text: string, withTimes: 
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
 function versionOf(item: ContextItem): number {
-  return hashString(`${item.title}\n${item.text}`, 0);
+  const r = readingOf(item);
+  return (r.version ??= hashString(`${item.title}\n${item.text}`, 0));
+}
+
+/** `timesOf` an item, read once per item object (`readingOf`); the array is shared, and never changed by a reader. */
+function timesOfItem(item: ContextItem): string[] {
+  const r = readingOf(item);
+  return (r.times ??= timesOf(item));
+}
+
+/** What `versionOf` and `timesOfItem` read of an item, kept on it (`READINGS`). */
+interface Reading {
+  /** The text read, for an item held plain (`null` for a packed one, whose text cannot change). */
+  text: string | null;
+  title: string;
+  version?: number;
+  times?: string[];
+}
+
+/**
+ * Each item object's `Reading` (D1885). An item's version was hashed again for every copy a packet, a revision check or
+ * a lookup's ledger test named (the title and up to 8,000 characters of text joined, then hashed), and its times read
+ * by a pattern for every packet that handed it. Held weakly, per item object (a user's own cached copy, so no other
+ * tenant's), and checked against the item: a plain item whose text or title changed in place is read again; a packed
+ * one's text cannot change (its getter is fixed), and its deflated bytes are the only copy kept, so none is held here.
+ */
+const READINGS = new WeakMap<ContextItem, Reading>();
+
+/** `versionOf` and `timesOfItem`, for tests (`readings.test.ts`). */
+export const itemReadings = { versionOf, timesOfItem };
+
+function readingOf(item: ContextItem): Reading {
+  const packed = isPacked(item);
+  let r = READINGS.get(item);
+  if (r && r.title === item.title && (packed ? r.text === null : r.text === item.text)) return r;
+  r = { text: packed ? null : item.text, title: item.title };
+  READINGS.set(item, r);
+  return r;
 }
 
 /**

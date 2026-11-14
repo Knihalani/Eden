@@ -275,6 +275,22 @@ const ORDINAL = new RegExp(
 const WEEKDAY_END =
   /\b(until|till|through|thru|back|by|before)(?: on)? ((?:mon|tues|wednes|thurs|fri|satur|sun)day)\b(?!,? \d)/g;
 
+/**
+ * What every month-reading pattern above needs (D1883): a figure (with its ordinal suffix and "of") then a month's
+ * first three letters, or those letters, more letters and a figure. Wider than any of them, so a sentence it does not
+ * match gives none of their matches.
+ */
+const MONTH_DATE =
+  /\d(?:st|nd|rd|th)?(?: of)? (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d/;
+
+/**
+ * `datesOf` as tests read it: `prefilter` false runs every pattern on every sentence, as before D1883 (the
+ * differential test in `conflict-memo.test.ts`).
+ */
+export function datesFor(s: string, now: number, vocab: boolean, anchor: number | null, prefilter: boolean): Dates {
+  return datesOf(s, now, vocab, anchor, prefilter);
+}
+
 /** One sentence's dated statements. */
 interface Dates {
   spans: { from: string; to: string }[];
@@ -428,15 +444,17 @@ export function assess(frame: Frame, item: ContextItem, now: number, extraTies?:
     if (money !== "none") continue;
     const blocked =
       V && st.objectBlocks.length > 0 && objectTied(st) ? [...st.blocked, ...st.objectBlocks] : st.blocked;
-    const lastBlock = Math.max(-1, ...blocked);
+    // The marks' extremes by loops, not spreads into `Math.max` (D1889): a statement's lists are nearly always empty,
+    // and each spread made an array a statement a request.
+    const lastBlock = maxOf(blocked, -1);
     // A reaffirming word after a block or move in the sentence confirms it, so it clears only before the first.
-    const firstBlock = Math.min(Number.MAX_SAFE_INTEGER, ...blocked, ...st.moves);
-    const lastClear = Math.max(-1, ...st.clears, ...st.reaffirms.filter((at) => at < firstBlock));
+    const firstBlock = minOf(st.moves, minOf(blocked, Number.MAX_SAFE_INTEGER));
+    const lastClear = maxBelow(st.reaffirms, firstBlock, maxOf(st.clears, -1));
     // Something done already, or a standing constraint (an allergy, a confidentiality): when does not matter, and
     // a clearing word after it in the same sentence undoes it ("tested for coeliac and it's negative").
     // So is a change to what the request assumes is as usual ("same as usual" against "goes from £1650 to £1710").
-    const lastDone = Math.max(st.lastDone, ...(frame.routine ? changesOf(st) : []));
-    const lastMove = Math.max(-1, ...st.moves);
+    const lastDone = frame.routine ? maxOf(changesOf(st), st.lastDone) : st.lastDone;
+    const lastMove = maxOf(st.moves, -1);
     if (lastBlock >= 0 || lastDone >= 0 || lastMove >= 0) blockSeen = true;
     if (lastDone > lastClear) conflict(st, true);
     else if (lastClear > Math.max(lastBlock, lastMove)) {
@@ -529,6 +547,27 @@ const skipped = (s: string): Statement => ({
   dated: false,
 });
 
+/** The largest of `xs` and `from` (`Math.max(from, ...xs)`). */
+function maxOf(xs: readonly number[], from: number): number {
+  let m = from;
+  for (let i = 0; i < xs.length; i++) if (xs[i]! > m) m = xs[i]!;
+  return m;
+}
+
+/** The smallest of `xs` and `from` (`Math.min(from, ...xs)`). */
+function minOf(xs: readonly number[], from: number): number {
+  let m = from;
+  for (let i = 0; i < xs.length; i++) if (xs[i]! < m) m = xs[i]!;
+  return m;
+}
+
+/** The largest of `from` and the `xs` below `bound` (`Math.max(from, ...xs.filter((x) => x < bound))`). */
+function maxBelow(xs: readonly number[], bound: number, from: number): number {
+  let m = from;
+  for (let i = 0; i < xs.length; i++) if (xs[i]! < bound && xs[i]! > m) m = xs[i]!;
+  return m;
+}
+
 /** What the first statement of an item has before it. Frozen: it is shared by every item, so nothing is noted on it. */
 const NO_STATEMENT: Statement = Object.freeze({
   ...skipped(""),
@@ -563,6 +602,21 @@ interface AnalysisEntry {
   title: string;
   updatedAt: number | undefined;
   views: [Analysis | undefined, Analysis | undefined];
+  /**
+   * `gateOf`'s two readings of the item, each read on first use: bit 0 set once `mayConstrain` was read and bit 1
+   * its answer, bits 2 and 3 the same for `arrangedVisit` (D1880).
+   */
+  gate: number;
+}
+
+/** The item's entry in `ANALYSES`, a fresh one when its text, title or date changed in place. */
+function entryOf(item: ContextItem): AnalysisEntry {
+  let e = ANALYSES.get(item);
+  if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
+    e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined], gate: 0 };
+    ANALYSES.set(item, e);
+  }
+  return e;
 }
 
 /**
@@ -570,11 +624,7 @@ interface AnalysisEntry {
  * for tests only (`conflict.test.ts` checks what an analysis keeps).
  */
 export function analyse(item: ContextItem, vocab: boolean): Analysis {
-  let e = ANALYSES.get(item);
-  if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
-    e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined] };
-    ANALYSES.set(item, e);
-  }
+  const e = entryOf(item);
   const k = vocab ? 1 : 0;
   return (e.views[k] ??= analysis(item, vocab, e.views[1 - k]));
 }
@@ -787,6 +837,29 @@ export function mayConstrain(s: string): boolean {
 }
 
 /**
+ * `readerGate`'s reading of an item's own words (D1880): whether its title and text, lower case, may state a
+ * constraint (`mayConstrain`) or, with `visits` (`readerGateVisits`), an arranged visit (`arrangedVisit`). Both depend
+ * on the item alone, and a request's candidates are mostly the last request's, so each is read once per item object
+ * and kept on its `ANALYSES` entry (dropped with it when the text, title or date changes in place). Before, every
+ * request lower-cased each candidate's text and ran about a dozen lists over it: 14% of `pipeline.bench.ts`'s CPU.
+ */
+export function gateOf(item: ContextItem, visits: boolean): boolean {
+  const e = entryOf(item);
+  let g = e.gate;
+  let text: string | undefined;
+  if ((g & 1) === 0) {
+    text = `${item.title}. ${item.text}`.toLowerCase();
+    g |= mayConstrain(text) ? 3 : 1;
+  }
+  if ((g & 2) === 0 && visits && (g & 4) === 0) {
+    text ??= `${item.title}. ${item.text}`.toLowerCase();
+    g |= arrangedVisit(text) ? 12 : 4;
+  }
+  e.gate = g;
+  return (g & 2) !== 0 || (visits && (g & 8) !== 0);
+}
+
+/**
  * A visit someone has booked for the user ("i've booked the engineer, he'll come thursday between 8 and 12") or a
  * request that someone be in ("make sure someone's in?"): it binds the user's time though no constraint word says so.
  * The booking verb and the visit must share a sentence, within 60 characters. Read only by
@@ -806,27 +879,34 @@ export function arrangedVisit(s: string): boolean {
  * The spans and limits a sentence states (`Dates`). With `vocab`, relative dates ("until Sunday", "till the 10th")
  * count from `anchor`, when the item was written; with no anchor they are not read.
  */
-function datesOf(s: string, now: number, vocab = false, anchor: number | null = null): Dates {
+function datesOf(s: string, now: number, vocab = false, anchor: number | null = null, prefilter = true): Dates {
   const spans: { from: string; to: string }[] = [];
   const limits: string[] = [];
+  // Every pattern that reads a month (`RANGE`, `PAIR`, `DATED`, `BACK_DATED`) needs a figure before a month's name or
+  // one after it (`MONTH_DATE`, D1883): most dated statements hold only a time or a reference ("ref OPS-412").
+  const monthed = !prefilter || MONTH_DATE.test(s);
   // Ranges first ("6-9 nov", "26 oct to 6 nov"); their text is blanked so their end is not read again as "until".
-  let rest = s.replace(RANGE, (r, d1: string, d2: string, m: string, y: string | undefined) => {
-    const from = dayOf(Number(d1), m, y, now);
-    const to = dayOf(Number(d2), m, y, now);
-    const end = from && to && !y ? after(from, to) : to;
-    if (from && end && from <= end) spans.push({ from, to: end });
-    return " ".repeat(r.length);
-  });
-  rest = rest.replace(PAIR, (r, ...g: (string | undefined)[]) => {
-    const from = dayOf(Number(g[0]), g[1]!, g[2], now);
-    const to = dayOf(Number(g[3]), g[4]!, g[5], now);
-    // Each end's year is the one nearest now: in July, "20 Dec - 5 Jan" is 20 Dec this year to 5 Jan next.
-    const end = from && to && !g[5] ? after(from, to) : to;
-    if (from && end && from <= end) spans.push({ from, to: end });
-    return " ".repeat(r.length);
-  });
-  // "Must be uploaded by 17:00 on Monday 26 October": a day in a sentence that sets a deadline is that deadline.
-  const deadline = DEADLINE.test(rest);
+  let rest = !monthed
+    ? s
+    : s.replace(RANGE, (r, d1: string, d2: string, m: string, y: string | undefined) => {
+        const from = dayOf(Number(d1), m, y, now);
+        const to = dayOf(Number(d2), m, y, now);
+        const end = from && to && !y ? after(from, to) : to;
+        if (from && end && from <= end) spans.push({ from, to: end });
+        return " ".repeat(r.length);
+      });
+  if (monthed)
+    rest = rest.replace(PAIR, (r, ...g: (string | undefined)[]) => {
+      const from = dayOf(Number(g[0]), g[1]!, g[2], now);
+      const to = dayOf(Number(g[3]), g[4]!, g[5], now);
+      // Each end's year is the one nearest now: in July, "20 Dec - 5 Jan" is 20 Dec this year to 5 Jan next.
+      const end = from && to && !g[5] ? after(from, to) : to;
+      if (from && end && from <= end) spans.push({ from, to: end });
+      return " ".repeat(r.length);
+    });
+  // "Must be uploaded by 17:00 on Monday 26 October": a day in a sentence that sets a deadline is that deadline. Read
+  // when a day is first taken (`rest` does not change after the blanking above).
+  let deadline: boolean | undefined;
   let start: string | null = null;
   const take = (word: string, day: string, yearGiven = false) => {
     if (STARTS.has(word)) start = day;
@@ -835,23 +915,24 @@ function datesOf(s: string, now: number, vocab = false, anchor: number | null = 
       const to = start && !yearGiven ? after(start, day) : day;
       if (to) spans.push({ from: start ?? iso(now), to });
       start = null;
-    } else if (LIMITS.has(word) || deadline) limits.push(day);
+    } else if (LIMITS.has(word) || (deadline ??= DEADLINE.test(rest))) limits.push(day);
     else spans.push({ from: day, to: day });
   };
-  for (const m of rest.matchAll(DATED)) {
-    const g = m.groups!;
-    // "Expired on 30 September" is the expiry; "on" alone is a day.
-    const word = g.word ?? (g.on ? "on" : "");
-    // A date with no word or weekday before it ("reminder from legal (20 Oct)") is when something was written, not
-    // a span a statement holds for.
-    if (!word && !g.wd) continue;
-    const day = g.d1
-      ? dayOf(Number(g.d1), g.m1!, g.y1, now)
-      : g.d2
-        ? dayOf(Number(g.d2), g.m2!, g.y2, now)
-        : lastOfMonth(g.m3!, g.y3!);
-    if (day) take(word, day, Boolean(g.y1 ?? g.y2 ?? g.y3));
-  }
+  if (monthed)
+    for (const m of rest.matchAll(DATED)) {
+      const g = m.groups!;
+      // "Expired on 30 September" is the expiry; "on" alone is a day.
+      const word = g.word ?? (g.on ? "on" : "");
+      // A date with no word or weekday before it ("reminder from legal (20 Oct)") is when something was written, not
+      // a span a statement holds for.
+      if (!word && !g.wd) continue;
+      const day = g.d1
+        ? dayOf(Number(g.d1), g.m1!, g.y1, now)
+        : g.d2
+          ? dayOf(Number(g.d2), g.m2!, g.y2, now)
+          : lastOfMonth(g.m3!, g.y3!);
+      if (day) take(word, day, Boolean(g.y1 ?? g.y2 ?? g.y3));
+    }
   for (const m of rest.matchAll(YEAR_LIMIT)) take(m[1]!, `${m[2]}-12-31`, true);
   if (vocab) {
     // "Back 9 Nov", "back on the 10th", "back Thursday": away until the day before. A day of the month alone ("till
@@ -861,7 +942,7 @@ function datesOf(s: string, now: number, vocab = false, anchor: number | null = 
       if (word === "back") take("until", iso(Date.parse(`${day}T00:00:00Z`) - DAY));
       else take(word, day);
     };
-    for (const m of rest.matchAll(BACK_DATED)) end("back", dayOf(Number(m[1]), m[2]!, undefined, now));
+    if (monthed) for (const m of rest.matchAll(BACK_DATED)) end("back", dayOf(Number(m[1]), m[2]!, undefined, now));
     if (anchor !== null) {
       for (const m of rest.matchAll(ORDINAL)) end(m[1]!, nextMonthDay(Number(m[2]), anchor));
       for (const m of rest.matchAll(WEEKDAY_END)) end(m[1]!, nextWeekday(m[2]!, anchor));

@@ -398,6 +398,50 @@ describe("day facts on the cache's entries (D1721)", () => {
     }
   });
 
+  test("a freeze carries the facts read (D1888): warm and compact, exactly, and none for an entry not read", () => {
+    /** The entries' facts, by id (private: what a thaw restored, not what a scan reads again). */
+    const factsOf = (cache: ItemCache) => {
+      const u = (cache as unknown as { peek(s: typeof scope): { items: Map<string, { dates: unknown }> } }).peek(scope);
+      return new Map([...u.items].map(([id, e]) => [id, e.dates]));
+    };
+    const texts = [
+      "Lift out of service 26 Oct – 6 Nov",
+      "see you 30 Oct and 2 Nov",
+      "closed until Monday 2 November",
+      "the 5th, the 21st, 03/11 and 30.10",
+      "on 1 Nov, 2 Nov, 3 Nov and 4 Nov",
+      "nothing on that day",
+      "ref 1234",
+    ];
+    for (const warm of [true, false]) {
+      const cache = new ItemCache(warm ? {} : { warmIdleMs: 0 });
+      const items = Array.from({ length: 300 }, (_, i) =>
+        item(`i${i}`, `${texts[i % texts.length]!} ${i}`.padEnd(i % 2 ? 400 : 40, "."), NOW - (i % 9) * DAY),
+      );
+      cache.put(scope, items, NOW);
+      // Read the facts of the first 200 only: the rest freeze unread and must thaw unread.
+      cache.dated(scope, days, (x) => Number(x.id.slice(1)) >= 200, NOW, 3, 0);
+      const before = factsOf(cache);
+      expect([...before.values()].filter((f) => f !== undefined).length).toBe(200);
+      for (let i = 0; i < 40 && cache.frozenCount === 0; i++) cache.expireIdle(NOW);
+      expect(cache.frozenCount).toBe(1);
+      cache.hits(scope, ["i0"], NOW); // the thaw
+      const after = factsOf(cache);
+      expect(after).toEqual(before);
+      for (const it of items) {
+        const f = after.get(it.id);
+        if (f !== undefined) expect(f).toEqual(dayFactsOf(it.title, it.text));
+      }
+      // Every answer is as a fresh cache gives it.
+      const fresh = new ItemCache();
+      fresh.put(scope, items, NOW);
+      for (const d of ["2026-10-26", "2026-10-30", "2026-11-02", "2026-11-03", "2026-11-05", "2026-11-21"]) {
+        const want = fresh.dated(scope, new Set([d]), () => false, NOW, 50, 0).map((h) => h.item.id);
+        expect(cache.dated(scope, new Set([d]), () => false, NOW, 50, 0).map((h) => h.item.id)).toEqual(want);
+      }
+    }
+  });
+
   test("isolation: facts are per user's entry; the same id with other words elsewhere reads its own", () => {
     const cache = new ItemCache();
     const other = { tenantId: "t2", userId: "u1" };

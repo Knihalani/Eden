@@ -49,6 +49,11 @@ export class Ledger {
     return at === undefined || turn - at >= this.cooldownTurns;
   }
 
+  /** Whether the ledger holds a delivered version of the item: `revised` is false for any other (D1885). */
+  holdsVersion(itemId: string): boolean {
+    return this.versions.has(itemId);
+  }
+
   /** Delivered within the cooldown with a recorded version other than `version`: the agent holds an older copy. */
   revised(itemId: string, version: number, turn: number): boolean {
     const was = this.versions.get(itemId);
