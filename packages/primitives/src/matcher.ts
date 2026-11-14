@@ -52,13 +52,16 @@ export class MultiMatcher {
   /** Per ASCII code unit, its folded character's column. */
   private readonly foldCol = new Int32Array(128);
   /**
-   * `scan`'s scratch (D1850): at a state's row (`state * cols`, as `delta` gives it, so no division), 1 once every
-   * pattern ending there is hit and not kept in this text, so the state's later matches do nothing (`keep` only goes
-   * from 1 to 0 within a scan); `quieted` lists them, to reset after. A megabyte of `sk-` with nothing kept scanned in
-   * 5.4 ms, calling `emit` at every occurrence for nothing, and scans in 2.4 ms now (one byte per transition entry).
+   * `scan`'s scratch (D1850): at a state's row (`state * cols`, as `delta` gives it, so no division), the scan's
+   * `generation` once every pattern ending there is hit and not kept in this text, so the state's later matches do
+   * nothing (`keep` only goes from 1 to 0 within a scan). A megabyte of `sk-` with nothing kept scanned in 5.4 ms,
+   * calling `emit` at every occurrence for nothing, and scans in 2.4 ms now (one byte per transition entry). A
+   * generation, not a list reset after the loop: V8 compiles the loop on stack replacement before any code after it
+   * has run, and code there without type feedback deoptimized the scan at the end of every call.
    */
   private readonly quiet: Uint8Array;
-  private readonly quieted: number[] = [];
+  /** 1 to 255; the next scan after 255 clears `quiet`. */
+  private generation = 0;
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
     this.wholeWord = options.wholeWord ?? false;
@@ -194,6 +197,11 @@ export class MultiMatcher {
    */
   scan(text: string, hits: Uint8Array, firsts: Int32Array, keep: Uint8Array, sink: MatchSink): number {
     if (this.wholeWord) throw new Error("scan does not support wholeWord");
+    if (this.generation === 255) {
+      this.quiet.fill(0);
+      this.generation = 0;
+    }
+    const generation = ++this.generation;
     const quiet = this.quiet;
     const packed = this.delta;
     const foldCol = this.foldCol;
@@ -210,7 +218,7 @@ export class MultiMatcher {
       if (c < 128) {
         d = packed[s + foldCol[c]!]!;
         s = d >> 1;
-        if ((d & 1) !== 0 && quiet[s] === 0)
+        if ((d & 1) !== 0 && quiet[s] !== generation)
           distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
         continue;
       }
@@ -222,7 +230,7 @@ export class MultiMatcher {
       if (f !== FOLD_EXPAND) {
         d = packed[s + this.column(f)]!;
         s = d >> 1;
-        if ((d & 1) !== 0 && quiet[s] === 0)
+        if ((d & 1) !== 0 && quiet[s] !== generation)
           distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
         continue;
       }
@@ -232,12 +240,10 @@ export class MultiMatcher {
         const e = expanded.charCodeAt(u);
         d = packed[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
         s = d >> 1;
-        if ((d & 1) !== 0 && quiet[s] === 0)
+        if ((d & 1) !== 0 && quiet[s] !== generation)
           distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
       }
     }
-    for (const state of this.quieted) quiet[state] = 0;
-    this.quieted.length = 0;
     return distinct;
   }
 
@@ -271,8 +277,7 @@ export class MultiMatcher {
       sink.add(p, i - len >= special ? i - len + 1 : startOf(text, i, u, len));
     }
     if (!kept) {
-      this.quiet[state * this.cols] = 1;
-      this.quieted.push(state * this.cols);
+      this.quiet[state * this.cols] = this.generation;
     }
     return distinct;
   }
