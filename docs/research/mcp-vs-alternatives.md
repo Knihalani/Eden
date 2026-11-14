@@ -367,7 +367,7 @@ for compatibility only); **output-schema validation** of `structuredContent` (it
 SDKs' largest dependency, and a caller that wants it can run its own on the result); a **callback listener** for OAuth
 and the client ID metadata documents of 2025-11-25 (left to the caller and not implemented); on Node, the JSON read
 still decodes bytes and parses (`text()` there drops two byte-order marks where `TextDecoder` drops one, D1860), so
-the splice is Bun's only; and against `res.json()` itself, a reply whose long strings all hold escapes still costs
+the splice is Bun's only (the scan itself is not: Node's `Uint8Array.prototype.indexOf` reads a byte at a time, 627 µs a MiB against 16 for `Buffer`'s, so off Bun the scan calls `Buffer.prototype.indexOf`, which takes the shape check of a 1 MiB reply on Node 22.22 from 805-926 µs to 21-26 for plain text, 1,969-2,537 to 396-585 for tool output, and 3,497-4,332 to 20-24 for Latin and emoji text); and against `res.json()` itself, a reply whose long strings all hold escapes still costs
 ours the extra string `text()` makes (1.13-1.30x the SDK's CPU at 1 MB, 0.94-1.26x at 64 KB, above: a search per escaped quote, and the string `text()` makes).
 
 
