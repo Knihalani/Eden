@@ -28,7 +28,7 @@ near-duplicate sketches, calibration and certification statistics, Thompson samp
 | `bench/redos.scan.ts` | The search that found the secret gate's backtracking rules (D24) |
 | `src/pool.fixture.ts`, `src/pool-worker.ts` | The worker pool's test fixture and worker entry (Bun workers) |
 | `src/regressions.test.ts` | Bugs found in audits, one test each |
-| `src/matcher.reference.ts` | `MultiMatcher` before D1840 (packed transitions, `scan`), unchanged: the oracle `matcher.test.ts` compares with, and the reference secret gate's prefilter; not exported |
+| `src/matcher.reference.ts` | `MultiMatcher` before D1841 (packed transitions, `scan`), unchanged: the oracle `matcher.test.ts` compares with, and the reference secret gate's prefilter; not exported |
 | `src/sparse-index.reference.ts` | The index layout before D111, unchanged: the oracle `sparse-index-packed.test.ts` compares the packed index with, result for result; not exported |
 | `src/dedup.reference.ts` | `TextSketcher` before D998 (a per-id hash memo as long as the vocabulary), unchanged: the oracle `dedup.test.ts` compares the memo-free sketcher with, output for output; not exported |
 | `bench/sparse-index-ab.bench.ts` | Reference vs packed index interleaved in one process (the A/B to trust); memory is `packages/engine/bench/index-memory.bench.ts` |

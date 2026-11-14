@@ -1,5 +1,5 @@
 /**
- * `MultiMatcher` before docs/research/redact-perf.md (D1840: the transition table packed with its output bit, and
+ * `MultiMatcher` before docs/research/redact-perf.md (D1841: the transition table packed with its output bit, and
  * `scan`), its code unchanged: the oracle `matcher.test.ts` compares the matcher with, and the reference secret gate's
  * prefilter (`packages/redact/src/secrets.reference.ts`). Not exported.
  *

@@ -100,6 +100,64 @@ describe("StreamableHttpTransport against the SDK's server transport", () => {
     });
   }
 
+  // D1840 changed how replies are read (native line and string searches, views kept, one timer): results of every
+  // size, 16 in flight, must equal what the SDK's own client reads from the same server, in both reply modes.
+  for (const json of [true, false]) {
+    test(`${json ? "JSON" : "SSE"}: 1 KB to 3 MB results, 16 in flight, as the SDK's client reads them`, async () => {
+      const server = () => {
+        const s = new McpServer({ name: "big", version: "1" });
+        s.registerTool(
+          "read",
+          { inputSchema: { size: z.number(), seed: z.number() }, annotations: { readOnlyHint: true } },
+          async ({ size, seed }) => {
+            // Escapes, quotes, CRs and multi-byte characters inside the text, at every size.
+            const unit = `row ${seed} "quoted" \\ back\r\nslash é ☕ ${"x".repeat(seed % 50)}\n`;
+            const text = unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+            return { content: [{ type: "text", text }], structuredContent: { rows: [{ id: `r${seed}`, size }] } };
+          },
+        );
+        return s;
+      };
+      const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
+      const http = Bun.serve({
+        port: 0,
+        hostname: "127.0.0.1",
+        fetch: async (req) => {
+          const sid = req.headers.get("mcp-session-id");
+          let t = sid ? sessions.get(sid) : undefined;
+          if (!t) {
+            t = new WebStandardStreamableHTTPServerTransport({
+              sessionIdGenerator: () => crypto.randomUUID(),
+              enableJsonResponse: json,
+              onsessioninitialized: (id) => void sessions.set(id, t!),
+            });
+            await server().connect(t);
+          }
+          return t.handleRequest(req);
+        },
+      });
+      servers.push(http);
+      const url = new URL(`http://127.0.0.1:${http.port}/mcp`);
+      const ours = new McpClient({ name: "eden", version: "0" });
+      await ours.connect(new StreamableHttpTransport(url));
+      const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+      const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+      const sdk = new Client({ name: "sdk", version: "0" });
+      await sdk.connect(new StreamableHTTPClientTransport(url));
+      // Up to 3 MB of text: escaped, it stays under the 4 MiB cap on one SSE event.
+      const sizes = [1_024, 65_536, 1_048_576, 3_000_000];
+      const calls = Array.from({ length: 16 }, (_, i) => ({ size: sizes[i % sizes.length]!, seed: i }));
+      const got = await Promise.all(calls.map((a) => ours.callTool({ name: "read", arguments: a })));
+      for (const [i, a] of calls.entries()) {
+        const want = await sdk.callTool({ name: "read", arguments: a });
+        expect(got[i]).toEqual(want as never);
+        expect(got[i]!.content[0]!.text!.length).toBe(a.size);
+      }
+      await ours.close();
+      await sdk.close();
+    }, 30_000);
+  }
+
   test("SSE: a server request before the response is answered, and the response still arrives", async () => {
     const s = await serve({ json: false, pingFirst: true });
     const client = new McpClient({ name: "eden", version: "0" });

@@ -1,4 +1,4 @@
-// Test support (D1840): `secrets.ts` as it was before docs/research/redact-perf.md, kept as the oracle of
+// Test support (D1841): `secrets.ts` as it was before docs/research/redact-perf.md, kept as the oracle of
 // gate-differential.ts. Its code is unchanged but for its imports (the reference files), and `findings` exposed.
 // Never imported by the gate. A change meant to change detections makes the same change here
 // (packages/redact/CLAUDE.md).

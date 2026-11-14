@@ -2,7 +2,7 @@
 
 The secret gate (salvaged from the memory era, D16): vendored gitleaks v8.30.1 rules plus Eden's own rules,
 prefiltered by one Aho–Corasick pass (D21) that also says where each rule's anchoring literals occur, so most rules
-try their regex only just before those (D1840, docs/research/redact-perf.md). The seven rules that backtrack in
+try their regex only just before those (D1841, docs/research/redact-perf.md). The seven rules that backtrack in
 JavaScript run on hand-written linear matchers and every allowlist regex on the gate's own lazy DFA (D1705; D24 ran
 both on re2js); the gate has no npm dependency. Every text Eden stores, indexes, logs or sends to a model passes
 `sanitizeForStore` first (D10). See [README.md](README.md).
@@ -12,11 +12,11 @@ both on re2js); the gate has no npm dependency. Every text Eden stores, indexes,
 | File | Owns |
 |---|---|
 | `src/secrets.ts` | The rule set (`secretRules`, `LINEAR_RULES`, `GATE_ENGINES`, `checkScanners`), Go-to-JS regex translation (`goRegex`, `backtrackingEngine`), the gate (`gateOf`: one `MultiMatcher.scan` for hits, anchor occurrences and token literals), `secretHits`, `sanitizeForStore`; Eden's extra rules (URL userinfo, `eden-aws-secret` D86, bare provider shapes such as `eden-discord-webhook`, `eden-new-relic` and `eden-presigned-url` D220); allowlist `Stopwords` |
-| `src/anchor.ts` | D1840: `anchorsOf` (a Go regex's bounded prefix and literals, from `parseRegex`), `anchorsOfRegex` (Eden's JavaScript regexes, lookarounds dropped), `Occurrences`, `anchoredMatches`/`AnchoredRegex` (sticky tries where a match can start; `matchAll`'s matches; dense candidates fall back to the scan) |
+| `src/anchor.ts` | D1841: `anchorsOf` (a Go regex's bounded prefix and literals, from `parseRegex`), `anchorsOfRegex` (Eden's JavaScript regexes, lookarounds dropped), `Occurrences`, `anchoredMatches`/`AnchoredRegex` (sticky tries where a match can start; `matchAll`'s matches; dense candidates fall back to the scan) |
 | `src/scanners.ts` | `SCANNERS`: the linear matchers for the seven rules in `LINEAR_RULES` (five keyword-assignment rules, two curl rules), each with the exact regex it implements; `SCANNER_CLASSES` for the class tests (D1705) |
 | `src/automaton.ts` | The allowlist engine: an RE2-subset parser, a Thompson NFA, a lazily built DFA (`test` only, at most 2,000 states a pattern), `compileAllowlistRegex` (D1705) |
-| `src/redact.ts` | Structural redaction of JSON (`redact`, `redactString` = `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`, `isSecretKey`, PEM blocks), `TOKEN_PASSES` (D1840: the gate leaves out a token pass whose literals its text lacks), `REDACTED`/`CYCLE`/`TRUNCATED` markers |
-| `src/secrets.reference.ts`, `src/redact.reference.ts` | Test support (D1840): the gate before D1840, unchanged, the oracle (with `packages/primitives/src/matcher.reference.ts`); never imported by the gate |
+| `src/redact.ts` | Structural redaction of JSON (`redact`, `redactString` = `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`, `isSecretKey`, PEM blocks), `TOKEN_PASSES` (D1841: the gate leaves out a token pass whose literals its text lacks), `REDACTED`/`CYCLE`/`TRUNCATED` markers |
+| `src/secrets.reference.ts`, `src/redact.reference.ts` | Test support (D1841): the gate before D1841, unchanged, the oracle (with `packages/primitives/src/matcher.reference.ts`); never imported by the gate |
 | `src/gate-differential.ts` | Test support: the whole-gate fuzz against the reference (rule ids, spans, `secretHits`, `sanitizeForStore`, `redactString`, `redact`); also a command (below) |
 | `src/gate-crafted.ts` | Test support: inputs built against the fast paths, for `gate-linear.test.ts` and `bench/gate.bench.ts` |
 | `src/re2-oracle.ts` | Test support: re2js (a devDependency) as the oracle, `re2Source`, `linearEngine`, `D24_ENGINES` (the gate D24 shipped); not in the image |
@@ -28,7 +28,7 @@ both on re2js); the gate has no npm dependency. Every text Eden stores, indexes,
 ## Rules that apply here
 
 - **The prefilter may only add candidates, never drop them (D21);** `prefilter.test.ts` enforces it.
-- **Anchors only skip positions where no match can start (D1840).** An anchor is read from the regex (a bounded
+- **Anchors only skip positions where no match can start (D1841).** An anchor is read from the regex (a bounded
   prefix from a known class, then a literal of 2+ characters every match holds), never written by hand; a regex
   without one scans as before. Any change to the gate's speed paths runs `gate-differential.test.ts` and the full
   fuzz below. The reference files are the gate without its speed paths: a change meant to change what the gate

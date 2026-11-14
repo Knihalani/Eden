@@ -216,6 +216,14 @@ export class Occurrences {
   /** Per literal id, the first and last entry of its list (-1: none). */
   head: Int32Array;
   private tail: Int32Array;
+  /**
+   * Per literal id, its occurrences in the text, kept or not. Past `cap` (`denseLimit` of the text) a literal's
+   * occurrences are counted and no longer kept: every rule anchored on it would have more candidates than that, so it
+   * scans the text instead (`anchoredMatches` checks the counts first). This bounds the lists' memory and the work
+   * spent on a text dense in one literal before it falls back.
+   */
+  count: Int32Array;
+  private cap = Number.MAX_SAFE_INTEGER; // until the first `clear` names a length
   next = new Int32Array(64);
   start = new Int32Array(64);
   size = 0;
@@ -223,12 +231,17 @@ export class Occurrences {
   constructor(literals: number) {
     this.head = new Int32Array(literals).fill(-1);
     this.tail = new Int32Array(literals).fill(-1);
+    this.count = new Int32Array(literals);
   }
 
-  clear(): void {
-    if (this.size === 0) return;
+  /** Empties the lists for a text of `length` code units. */
+  clear(length: number): void {
+    this.cap = denseLimit(length);
+    if (this.size === 0 && !this.counted) return;
+    this.counted = false;
     this.head.fill(-1);
     this.tail.fill(-1);
+    this.count.fill(0);
     this.size = 0;
     // A text dense in literals (a megabyte of `key=`) grew the lists; the next text starts small again, so a gate
     // does not keep megabytes for the rest of the process.
@@ -238,7 +251,12 @@ export class Occurrences {
     }
   }
 
+  /** Whether any occurrence was counted since the last `clear`. */
+  private counted = false;
+
   add(literal: number, start: number): void {
+    this.counted = true;
+    if (++this.count[literal]! > this.cap) return;
     if (this.size === this.start.length) {
       const next = new Int32Array(this.size * 2);
       next.set(this.next);
@@ -268,11 +286,15 @@ let highs = new Int32Array(256);
 let order = new Int32Array(256);
 
 /**
- * Past this share of the text in candidate starts, one sticky try per position costs more than the engine's own scan
- * (a text made of the rule's keywords): the rule then scans the whole text, as before. Either way the result is the
- * same; this bounds the cost on crafted input.
+ * Past this share of the text in candidate starts, sticky tries cost more than the engine's own scan: a sticky try
+ * costs about 20 scanned positions (a literal every 10 characters ran 2.9x slower than the scan at 1/8, 1.7x at 1/32
+ * before the occurrence counts, review of 2026-11-14). The rule then scans the whole text, as before. Either way the
+ * result is the same; this bounds the cost on crafted input.
  */
-const DENSE = 1 / 8;
+const DENSE = 1 / 32;
+
+/** The most candidate starts a rule tries in a text of `length` code units before it scans instead. */
+export const denseLimit = (length: number): number => Math.floor(length * DENSE) + 64;
 
 /**
  * Calls `onMatch` with every match of `sticky`'s regex in `text`, leftmost-first and non-overlapping as `matchAll`
@@ -290,7 +312,11 @@ export function anchoredMatches(
 ): boolean {
   let n = 0;
   let total = 0;
-  const limit = text.length * DENSE + 64;
+  const limit = denseLimit(text.length);
+  // Each occurrence is at least one candidate: past the limit in occurrences alone, scan without walking any.
+  for (const literals of ids) for (const id of literals) total += found.count[id]!;
+  if (total > limit) return false;
+  total = 0;
   for (let a = 0; a < anchors.length; a++) {
     const anchor = anchors[a]!;
     const prefix = anchor.prefix;

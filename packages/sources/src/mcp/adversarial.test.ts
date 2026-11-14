@@ -130,6 +130,24 @@ describe("event streams", () => {
     await expect(c.callTool({ name: "x" })).rejects.toThrow("Event stream ended before the response");
   });
 
+  test("a body stream that reuses one buffer for every chunk still parses (its chunks are copied)", async () => {
+    const bytes = new TextEncoder().encode(`event: message\ndata: ${result(1)}\n\n`);
+    const buffer = new Uint8Array(7);
+    let at = 0;
+    const reusing = new ReadableStream<Uint8Array>({
+      pull(ctl) {
+        if (at >= bytes.length) return ctl.close();
+        const n = Math.min(buffer.length, bytes.length - at);
+        // The same memory every time: what the parser held of the last chunk is overwritten now.
+        buffer.set(bytes.subarray(at, at + n));
+        at += n;
+        ctl.enqueue(buffer.subarray(0, n));
+      },
+    });
+    const { c } = await client(() => sse(reusing));
+    expect(await c.callTool({ name: "x" })).toEqual({ content: [{ type: "text", text: "ok" }] });
+  });
+
   test("a server that closes mid-stream rejects instead of hanging", async () => {
     const { c } = await client(() => sse(chunks(["event: message\n", "data: {"], new Error("socket hang up"))));
     await expect(c.callTool({ name: "x" })).rejects.toThrow("socket hang up");

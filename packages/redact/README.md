@@ -50,7 +50,8 @@ A gate runs on every item an application touches, so it is built for typical tex
    known class, then a literal. The gate reads that from each regex once (`src/anchor.ts`) and tries the regex, made
    sticky, only at the positions a few characters before an occurrence of the literal, instead of letting the engine
    try its lazy prefix at every position of the text. The result is the same list of matches, argued in the file and
-   checked by the differential fuzz. When candidates are dense (a text made of keywords) the rule scans as before.
+   checked by the differential fuzz. When candidates are dense (more than 1/32 of the text, a text made of
+   keywords) the rule scans as before.
 3. **Linear matchers where JavaScript backtracks.** Seven gitleaks rules backtrack badly in JavaScript's engine
    (quadratic or worse on crafted input). They run on hand-written matchers (`src/scanners.ts`) that report what RE2
    reports, and every allowlist regex runs on a small lazily built DFA (`src/automaton.ts`).
