@@ -28,8 +28,9 @@
  *   prefixes), so the gate is never looser than it was.
  */
 import { MultiMatcher } from "@eden/primitives";
+import { AnchoredRegex, anchorsOf, anchorsOfRegex, Occurrences } from "./anchor";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton";
-import { assignmentSpans, redact, REDACTED } from "./redact";
+import { assignmentSpans, redactAssignments, REDACTED, redactTokensIn, TOKEN_LITERALS, TOKEN_PASSES } from "./redact";
 import { SCANNERS } from "./scanners";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
@@ -59,7 +60,7 @@ interface CompiledAllowlist {
   target: "secret" | "match" | "line";
   and: boolean;
   regexes: Tester[];
-  stopwords: string[];
+  stopwords: Stopwords;
   /** Path conditions never hold for text, so they only matter to an AND list (which they then fail). */
   hasPaths: boolean;
 }
@@ -76,8 +77,16 @@ export interface SecretRule {
    * match contains ("sk-" for an OpenAI key). Used only to skip a rule cheaply, so it never changes what a rule finds.
    */
   prefilter: string[];
-  /** Where the rule's secrets sit in `text`; none when it finds none. */
-  spans(text: string): Span[];
+  /**
+   * Lower-case literals that tell where the rule's matches can start (anchor.ts); absent when the rule scans the whole
+   * text. The gate passes their occurrences, found in its one prefilter pass, to `spans`.
+   */
+  anchorWords?: string[];
+  /**
+   * Where the rule's secrets sit in `text`; none when it finds none. `found` holds the occurrences of `anchorWords`,
+   * `ids[i]` being the id there of `anchorWords[i]`; without them the rule scans the whole text, with the same result.
+   */
+  spans(text: string, found?: Occurrences, ids?: Int32Array): Span[];
   /** Compiles what the rule would compile on its first `spans` call (`warmGate`); absent when nothing is deferred. */
   warm?(): void;
 }
@@ -168,10 +177,23 @@ function presignedSpans(text: string): Span[] {
   return spans;
 }
 
-const isSpace = (c: number) =>
-  c <= 32 ? c === 32 || (c >= 9 && c <= 13) : c > 127 && /\s/.test(String.fromCharCode(c));
+/** JavaScript's `\s` on one code unit (WhiteSpace and LineTerminator; secrets.test.ts checks every code unit). */
+export const isSpace = (c: number): boolean =>
+  c <= 32
+    ? c === 32 || (c >= 9 && c <= 13)
+    : c >= 0xa0 &&
+      (c === 0xa0 ||
+        c === 0x1680 ||
+        (c >= 0x2000 && c <= 0x200a) ||
+        c === 0x2028 ||
+        c === 0x2029 ||
+        c === 0x202f ||
+        c === 0x205f ||
+        c === 0x3000 ||
+        c === 0xfeff);
 
-const ENTROPY_TOKEN = /\S{32,}/g;
+/** Rule (d)'s tokens: `/\S{32,}/g`, as `entropyWithKeyword` walks them (ENTROPY_MIN). */
+const ENTROPY_MIN = 32;
 /** How far from a long token rule (d) looks for a secret keyword. */
 const KEYWORD_REACH = 40;
 /**
@@ -335,7 +357,7 @@ function compileAllowlist(list: Allowlist, engine: AllowlistEngine): CompiledAll
     target: list.regexTarget ?? "secret",
     and: list.condition === "AND",
     regexes: (list.regexes ?? []).map((regex) => engine(regex)),
-    stopwords: (list.stopwords ?? []).map((word) => word.toLowerCase()),
+    stopwords: new Stopwords((list.stopwords ?? []).map((word) => word.toLowerCase())),
     hasPaths: (list.paths ?? []).length > 0,
   };
 }
@@ -361,12 +383,51 @@ function allows(list: CompiledAllowlist, finding: Finding): boolean {
         ? lineAt(finding.text, finding.index, finding.lines)
         : finding.secret;
   const regexAllowed = list.regexes.some((regex) => regex.test(target));
-  const lower = finding.secret.toLowerCase();
-  const stopword = list.stopwords.some((word) => lower.includes(word));
-  if (!list.and) return regexAllowed || stopword;
+  // Both tests are pure, so the stopwords are read only when their answer can change the verdict.
+  const stopword = () => list.stopwords.size > 0 && list.stopwords.occurIn(finding.secret.toLowerCase());
+  if (!list.and) return regexAllowed || stopword();
   // AND: every condition the list sets must hold, and a path condition never holds for text.
-  if (list.hasPaths || !(list.regexes.length || list.stopwords.length)) return false;
-  return (!list.regexes.length || regexAllowed) && (!list.stopwords.length || stopword);
+  if (list.hasPaths || !(list.regexes.length || list.stopwords.size)) return false;
+  return (!list.regexes.length || regexAllowed) && (!list.stopwords.size || stopword());
+}
+
+/**
+ * An allowlist's stopwords: `occurIn(lower)` is `words.some((word) => lower.includes(word))`, read position by
+ * position against the words that start with the two characters there (generic-api-key has 1,477 stopwords, and
+ * an `includes` for each cost more than the rest of a finding).
+ */
+class Stopwords {
+  readonly size: number;
+  /** Words of two or more characters by their first two (`c0 << 16 | c1`); one-character words; an empty word. */
+  private readonly byPair = new Map<number, string[]>();
+  private readonly single = new Set<number>();
+  private readonly empty: boolean;
+
+  constructor(words: string[]) {
+    this.size = words.length;
+    this.empty = words.includes("");
+    for (const word of words) {
+      if (word.length === 1) this.single.add(word.charCodeAt(0));
+      if (word.length < 2) continue;
+      const key = (word.charCodeAt(0) << 16) | word.charCodeAt(1);
+      const list = this.byPair.get(key);
+      if (list) list.push(word);
+      else this.byPair.set(key, [word]);
+    }
+  }
+
+  occurIn(lower: string): boolean {
+    if (this.empty) return true;
+    const n = lower.length;
+    for (let i = 0; i < n; i++) {
+      const c = lower.charCodeAt(i);
+      if (this.single.size > 0 && this.single.has(c)) return true;
+      if (i + 1 >= n) break;
+      const list = this.byPair.get((c << 16) | lower.charCodeAt(i + 1));
+      if (list) for (const word of list) if (lower.startsWith(word, i)) return true;
+    }
+    return false;
+  }
 }
 
 /** The line of `text` that holds `index`, cached by the line's start. */
@@ -394,10 +455,14 @@ function gitleaksRule(
   engine: Engine,
   allowlistEngine: AllowlistEngine,
 ): SecretRule {
-  let compiled: { pattern: Pattern; own: CompiledAllowlist[] } | undefined;
+  let compiled: { pattern: Pattern; own: CompiledAllowlist[]; anchored?: AnchoredRegex } | undefined;
+  // Only JavaScript's engine scans every position: the own matchers (scanners.ts) are linear already.
+  const anchors = engine === backtrackingEngine ? anchorsOf(rule.regex) : undefined;
+  const anchorWords = anchors && [...new Set(anchors.flatMap((anchor) => anchor.literals))];
   const compile = () => ({
     pattern: engine(rule.regex),
     own: (rule.allowlists ?? []).map((list) => compileAllowlist(list, allowlistEngine)),
+    anchored: anchors && new AnchoredRegex(goRegex(rule.regex), anchors),
   });
   /** The secret's span within `match`; undefined when the rule's group did not take part. */
   const secretIn = (pattern: Pattern, match: string): Span | undefined => {
@@ -410,11 +475,12 @@ function gitleaksRule(
     id: rule.id,
     keywords: (rule.keywords ?? []).map((word) => word.toLowerCase()),
     prefilter: (rule.keywords ?? []).map((word) => word.toLowerCase()),
-    spans(text) {
-      const { pattern, own } = (compiled ??= compile());
+    ...(anchorWords ? { anchorWords } : {}),
+    spans(text, found, ids) {
+      const { pattern, own, anchored } = (compiled ??= compile());
       const out: Span[] = [];
       const lines = new Map<number, string>();
-      for (const [start, end] of pattern.matches(text)) {
+      const onMatch = (start: number, end: number) => {
         // Trim the match's line breaks by index: `/\n+$/` retries from every break in an inner run (quadratic).
         let from = start;
         let to = end;
@@ -423,34 +489,57 @@ function gitleaksRule(
         const match = text.slice(from, to);
         const at = from === to ? start : from;
         const span = secretIn(pattern, match);
-        if (!span) continue;
+        if (!span) return;
         const secret = match.slice(span[0], span[1]);
-        if (rule.entropy && shannon(secret) <= rule.entropy) continue;
+        if (rule.entropy && shannon(secret) <= rule.entropy) return;
         const finding = { match, secret, text, index: start, lines };
-        if (allows(global, finding) || own.some((list) => allows(list, finding))) continue;
+        if (allows(global, finding) || own.some((list) => allows(list, finding))) return;
         out.push([at + span[0], at + span[1]]);
-      }
+      };
+      const tried = anchored?.each(text, found, ids, (m) => onMatch(m.index, m.index + m[0].length));
+      if (!tried) for (const [start, end] of pattern.matches(text)) onMatch(start, end);
       return out;
     },
     warm() {
-      const { pattern, own } = (compiled ??= compile());
+      const { pattern, own, anchored } = (compiled ??= compile());
       // One match on the empty text makes the engine build its matcher too (JavaScriptCore compiles a RegExp on its
       // first run, an allowlist automaton its first states), so the first real text pays for neither.
       pattern.test("");
+      anchored?.warm();
       for (const list of [global, ...own]) for (const regex of list.regexes) regex.test("");
     },
   };
 }
 
-/** Rule (d): long letters-and-digits tokens with a secret keyword nearby. */
+/**
+ * Rule (d): long letters-and-digits tokens with a secret keyword nearby. The tokens are `/\S{32,}/g`'s matches,
+ * found by a walk over the text's code units: global and greedy, it matches exactly the maximal runs of non-space
+ * code units at least 32 long (a match ends at a space or the end, and a shorter run fails from every position in
+ * it), so the walk reports those runs. As a regex it tried each position of a shorter run again.
+ */
 function entropyWithKeyword(text: string): Span[] {
   const out: Span[] = [];
-  for (const found of text.matchAll(ENTROPY_TOKEN)) {
-    const token = found[0];
+  const n = text.length;
+  // `start` is where a run may begin: 0, or just after a space. A run of ENTROPY_MIN or more from there has no space
+  // in its first ENTROPY_MIN units, so the window is read from its far end: the last space in it (most windows of
+  // prose have one near the end) moves `start` past it, and only a window without one is a run, walked to its end.
+  let start = 0;
+  while (start + ENTROPY_MIN <= n) {
+    let back = start + ENTROPY_MIN - 1;
+    while (back >= start && !isSpace(text.charCodeAt(back))) back--;
+    if (back >= start) {
+      start = back + 1;
+      continue;
+    }
+    let at = start + ENTROPY_MIN;
+    while (at < n && !isSpace(text.charCodeAt(at))) at++;
+    const from = start;
+    start = at + 1; // `at` is a space or the end
+    const token = text.slice(from, at);
     if (/[/.-]/.test(token) || !/[A-Za-z]/.test(token) || !/\d/.test(token)) continue;
-    const before = text.slice(Math.max(0, found.index - KEYWORD_REACH), found.index);
-    const after = text.slice(found.index + token.length, found.index + token.length + KEYWORD_REACH);
-    if (SECRET_WORD.test(before) || SECRET_WORD.test(after)) out.push([found.index, found.index + token.length]);
+    const before = text.slice(Math.max(0, from - KEYWORD_REACH), from);
+    const after = text.slice(at, at + KEYWORD_REACH);
+    if (SECRET_WORD.test(before) || SECRET_WORD.test(after)) out.push([from, at]);
   }
   return out;
 }
@@ -494,9 +583,34 @@ function awsSecret(text: string): Span[] {
   return out;
 }
 
+/** A match's group 1 when the regex has one and it took part, else the whole match. */
+const spanOf = (found: RegExpExecArray): Span =>
+  (found.indices?.[1] as Span | undefined) ?? [found.index, found.index + found[0].length];
+
 /** Every match of a global regex: group 1 when the regex has one, else the whole match. */
 function matchSpans(regex: RegExp, text: string): Span[] {
-  return [...text.matchAll(regex)].map((found) => found.indices?.[1] ?? [found.index, found.index + found[0].length]);
+  return [...text.matchAll(regex)].map(spanOf);
+}
+
+/**
+ * One of Eden's regex rules (`matchSpans`), tried only where its anchors allow when the gate passes the occurrences
+ * of their literals (anchor.ts; the regex's lookarounds do not count). Without them it scans, with the same spans.
+ */
+function regexRule(id: string, prefilter: string[], regex: RegExp): SecretRule {
+  const anchors = anchorsOfRegex(regex);
+  const anchored = anchors && new AnchoredRegex(regex, anchors);
+  return {
+    id,
+    keywords: [],
+    prefilter,
+    ...(anchored ? { anchorWords: anchored.words } : {}),
+    spans(text, found, ids) {
+      const out: Span[] = [];
+      if (anchored?.each(text, found, ids, (m) => out.push(spanOf(m)))) return out;
+      return matchSpans(regex, text);
+    },
+    ...(anchored ? { warm: () => anchored.warm() } : {}),
+  };
 }
 
 const plain = (id: string, prefilter: string[], spans: (text: string) => Span[]): SecretRule => ({
@@ -606,17 +720,15 @@ export function rulesWith(choice: EngineChoice): SecretRule[] {
   return [
     ...withRegex.map((rule) => gitleaksRule(rule, global, choice.rule(rule.id), choice.allowlist)),
     // A shape without literals gets none: an empty prefilter means the rule always runs (safe, only slower).
-    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, SHAPE_LITERALS[id] ?? [], (text) => matchSpans(shape, text))),
-    plain("eden-keyword", SECRET_WORDS, (text) => matchSpans(KEYWORD_RULE, text)),
-    plain("eden-url-userinfo", ["://"], (text) => matchSpans(URL_USERINFO, text)),
+    ...PROVIDER_SHAPES.map(([id, shape]) => regexRule(id, SHAPE_LITERALS[id] ?? [], shape)),
+    regexRule("eden-keyword", SECRET_WORDS, KEYWORD_RULE),
+    regexRule("eden-url-userinfo", ["://"], URL_USERINFO),
     plain("eden-presigned-url", SHAPE_LITERALS["eden-presigned-url"]!, presignedSpans),
     plain("eden-entropy-keyword", SECRET_WORDS, entropyWithKeyword),
     // Every anchor holds one of these literals ("[redacted]" folded, as the matcher folds case).
     plain("eden-aws-secret", ["akia", "asia", "[redacted]", "secret"], awsSecret),
-    plain("eden-legacy-keyword", ["passw", "passphrase", "api"], (text) => matchSpans(LEGACY_KEYWORD, text)),
-    plain("eden-legacy-token", ["sk-", "ghp_", "gho_", "github_pat_", "akia"], (text) =>
-      matchSpans(LEGACY_TOKEN, text),
-    ),
+    regexRule("eden-legacy-keyword", ["passw", "passphrase", "api"], LEGACY_KEYWORD),
+    regexRule("eden-legacy-token", ["sk-", "ghp_", "gho_", "github_pat_", "akia"], LEGACY_TOKEN),
   ];
 }
 
@@ -629,6 +741,8 @@ export interface Gate {
   secretHits(text: string): string[];
   /** `text` with every secret the rules find replaced, then the structural redactor applied. */
   sanitizeForStore(text: string): string;
+  /** Each rule that finds something in `text`, in rule order, with the spans it finds (for differential tests). */
+  findings(text: string): { id: string; spans: Span[] }[];
 }
 
 /**
@@ -641,8 +755,17 @@ export interface Gate {
  * `gateOf` builds the gate over any rules: tests and benchmarks build reference gates with it.
  */
 export function gateOf(rules: SecretRule[]): Gate {
-  const words = [...new Set(rules.flatMap((rule) => rule.prefilter))];
+  const words = [
+    ...new Set([...rules.flatMap((rule) => [...rule.prefilter, ...(rule.anchorWords ?? [])]), ...TOKEN_LITERALS]),
+  ];
   const index = new Map(words.map((word, i) => [word, i]));
+  /** Per rule, its anchor words' ids; per word, whether some rule anchors on it (its occurrences are kept). */
+  const anchorIds = rules.map((rule) => rule.anchorWords && Int32Array.from(rule.anchorWords, (w) => index.get(w)!));
+  const anchorWord = new Uint8Array(words.length);
+  for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
+  const found = new Occurrences(words.length);
+  /** The token passes whose literals the last text scanned holds (`redactTokensIn`'s mask; the others are no-ops). */
+  let tokens = 0;
   const rulesOf: number[][] = words.map(() => []);
   const always: number[] = [];
   rules.forEach((rule, r) => {
@@ -652,22 +775,46 @@ export function gateOf(rules: SecretRule[]): Gate {
   });
   const matcher = new MultiMatcher(words);
 
-  const candidates = (text: string): SecretRule[] => {
-    const hits = new Uint8Array(rulesOf.length);
-    const chosen = new Uint8Array(rules.length);
-    for (const r of always) chosen[r] = 1;
-    if (matcher.markHits(text, hits) > 0) {
-      for (let w = 0; w < hits.length; w++) if (hits[w] === 1) for (const r of rulesOf[w]!) chosen[r] = 1;
+  // Scratch reused from text to text: the gate is synchronous and no rule calls back into it.
+  const hits = new Uint8Array(words.length);
+  const firsts = new Int32Array(words.length);
+  const chosen = new Uint8Array(rules.length);
+  /** Per word, the token passes it is a literal of (a bit each). */
+  const tokenPasses = new Uint8Array(words.length);
+  TOKEN_PASSES.forEach((pass, i) => {
+    for (const word of pass.literals) {
+      const id = index.get(word)!;
+      tokenPasses[id] = tokenPasses[id]! | (1 << i);
     }
-    return rules.filter((_, r) => chosen[r] === 1);
+  });
+  /** The rules whose prefilter words `text` holds, in rule order. */
+  const candidates = (text: string): number[] => {
+    found.clear();
+    tokens = 0;
+    const out = [...always];
+    for (const r of always) chosen[r] = 1;
+    const distinct = matcher.scan(text, hits, firsts, anchorWord, found);
+    for (let k = 0; k < distinct; k++) {
+      const w = firsts[k]!;
+      hits[w] = 0; // reset for the next text
+      tokens |= tokenPasses[w]!;
+      for (const r of rulesOf[w]!) {
+        if (chosen[r] === 1) continue;
+        chosen[r] = 1;
+        out.push(r);
+      }
+    }
+    for (const r of out) chosen[r] = 0;
+    return out.length > 1 ? out.sort((a, b) => a - b) : out;
   };
   /** The rules whose prefilter words `text` holds, each with the spans it finds there. */
   const findings = (text: string): { id: string; spans: Span[] }[] =>
     candidates(text)
-      .map((rule) => ({ id: rule.id, spans: rule.spans(text) }))
-      .filter((found) => found.spans.length > 0);
+      .map((r) => ({ id: rules[r]!.id, spans: rules[r]!.spans(text, found, anchorIds[r]) }))
+      .filter((f) => f.spans.length > 0);
 
   return {
+    findings,
     secretHits: (text) =>
       findings(text)
         .map((found) => found.id)
@@ -685,8 +832,10 @@ export function gateOf(rules: SecretRule[]): Gate {
         at = end;
       }
       const gated = out + text.slice(at);
-      const redacted = redact(gated);
-      return typeof redacted === "string" ? redacted : gated;
+      // `redact(gated)`, as it was: `redactString`, its token passes and then its assignment pass. Every token literal
+      // in `gated` was in `text` (the sentinel holds none and no literal spans its brackets), so a pass whose literals
+      // `text` lacks would return its input unchanged and is left out (TOKEN_PASSES).
+      return redactAssignments(redactTokensIn(gated, tokens));
     },
   };
 }
