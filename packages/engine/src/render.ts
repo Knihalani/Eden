@@ -1,7 +1,7 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
 import { safeBlock, safeLine } from "./line";
-import { isStopword } from "./text";
+import { isStopword, readWordUnit, WORD_UNITS } from "./text";
 
 /**
  * The packet the agent sees. Short, cited, and labelled as background so the agent treats it as information, not
@@ -68,24 +68,20 @@ export function renderPacket(
     // calendar event, its invitation and the reply confirming it do, says nothing more. Its own title too.
     const shown = new Set<string>();
     items = items.map((item) => {
-      const title = item.title.toLowerCase().match(WORDS) ?? [];
+      const title = wordsIn(item.title.toLowerCase());
       const own = new Set(title);
       const prior = before?.(item);
-      const parts = messageParts(
-        item.text,
-        (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
+      const { parts, keys } = unknownParts(
         // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
         // comparing it with the request's dates where "2 Nov 2026" is not.
-        options.year,
-        options.self,
-        options.dense ? { title: item.title } : undefined,
-        options.split,
+        partsOf(item, options.year, options.self, options.dense === true, options.split === true),
+        (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, keys, focus, each);
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
-      for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
+      for (const w of wordsIn(text.toLowerCase())) shown.add(w);
       return { ...item, text };
     });
   }
@@ -269,6 +265,43 @@ const GREETED = /^([Hh]i|[Hh]ello|[Hh]ey|[Dd]ear)\s+[\p{Lu}][\p{L}'-]*\s?[,-]\s+
 const PLEASANTRY =
   /^(shout if|let me know (if|what)|hope (you|your|all)|see you (then|soon)|thanks|thank you|looking forward|following up on|happy to help|have a (great|good|nice)|speak soon|talk soon|any questions)\b.{0,50}$/i;
 const WORDS = /[\p{L}\p{N}]+/gu;
+
+/**
+ * `s.match(WORDS) ?? []` read by one pass over the code units, each class read once a process (`WORD_UNITS`): the
+ * regex's Unicode classes cost several times this on the packet path (D1881). A string with a surrogate (an emoji, a
+ * character past the BMP) is left to the regex, which reads a pair as one code point.
+ */
+export function wordsIn(s: string): string[] {
+  const out: string[] = [];
+  let start = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    let k = WORD_UNITS[c]!;
+    if (k === 0 && (k = readWordUnit(c)) === 0) return s.match(WORDS) ?? [];
+    if (k === 1) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      out.push(s.slice(start, i));
+      start = -1;
+    }
+  }
+  if (start >= 0) out.push(start === 0 ? s : s.slice(start));
+  return out;
+}
+
+/** Whether `/[ \t\r\f\v]+/g` would change the text: a tab, CR, form feed or vertical tab, or two spaces in a row. */
+function spacedOut(s: string): boolean {
+  let space = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 32) {
+      if (space) return true;
+      space = true;
+    } else if (c === 9 || c === 13 || c === 12 || c === 11) return true;
+    else space = false;
+  }
+  return false;
+}
 const DIGIT = /\d/;
 // A sentence ends at ". " before a capital or digit; with `dense`, not after a title or street abbreviation ("booked
 // St. John for Tuesday", "Dr. Okafor"), which would split a place or a name in two.
@@ -372,7 +405,8 @@ export function compactText(
   dense?: { title: string },
   split?: boolean,
 ): string {
-  return pick(messageParts(text, known, year, self, dense, split), focus, maxBytes);
+  const { parts, keys } = readParts(text, known, year, self, dense, split);
+  return pick(parts, keys, focus, maxBytes);
 }
 
 /** One part of a message (`messageParts`): a sentence or a line, whether it is quoted, whether it is a header. */
@@ -401,6 +435,203 @@ export function messageParts(
   dense?: { title: string },
   split = false,
 ): Part[] {
+  return readParts(text, known, year, self, dense, split).parts;
+}
+
+/**
+ * `messageParts`, with each part's text in lower case beside it, which the known test and `pick` read (D1881).
+ */
+function readParts(
+  text: string,
+  known: (word: string) => boolean,
+  year: number | undefined,
+  self: string | null | undefined,
+  dense: { title: string } | undefined,
+  split: boolean | undefined,
+): { parts: Part[]; keys: string[] } {
+  return unknownParts(allParts(text, year, self, dense, split ?? false), known);
+}
+
+/**
+ * A message's parts before the known test (`AllParts`): each distinct part once and its text in lower case, whose
+ * words (`wordsIn`) the known test and `pick` read. Words are read again each time rather than kept: as strings they
+ * were most of a memo entry's heap (39 KB an item on the bench workload, 8 MB for its 207 items).
+ */
+interface AllParts {
+  parts: Part[];
+  keys: string[];
+}
+
+/**
+ * The parts of `all` with a word `known` does not have (a sender always). `messageParts` once tested each part as it
+ * read it and noted only the kept ones as seen; a later repeat of a dropped part has the same words and was dropped
+ * again, so testing the distinct parts afterwards keeps the same parts in the same order (D1882).
+ */
+function unknownParts(all: AllParts, known: (word: string) => boolean): { parts: Part[]; keys: string[] } {
+  const parts: Part[] = [];
+  const keys: string[] = [];
+  for (let k = 0; k < all.parts.length; k++) {
+    const key = all.keys[k]!;
+    if (!key.startsWith("from:") && !saysUnknown(key, known)) continue;
+    parts.push(all.parts[k]!);
+    keys.push(key);
+  }
+  return { parts, keys };
+}
+
+/**
+ * `wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w))`, making a string only of each word of two or
+ * more characters up to the first that answers (usually the part's first or second word), not of every word (D1884).
+ */
+function saysUnknown(s: string, known: (word: string) => boolean): boolean {
+  let start = -1;
+  for (let i = 0; i <= s.length; i++) {
+    const c = i < s.length ? s.charCodeAt(i) : 32;
+    let k = WORD_UNITS[c]!;
+    if (k === 0 && (k = readWordUnit(c)) === 0)
+      return wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w));
+    if (k === 1) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      if (i - start > 1) {
+        const w = s.slice(start, i);
+        if (!isStopword(w) && !known(w)) return true;
+      }
+      start = -1;
+    }
+  }
+  return false;
+}
+
+/**
+ * How many of `s`'s words (`wordsIn`) are in `focus`, given as its words (`focus`'s strings): each word compared in
+ * place with the few focus words of its length, with no string made of it (D1884).
+ */
+function focusCount(s: string, focus: readonly string[]): number {
+  let n = 0;
+  let start = -1;
+  for (let i = 0; i <= s.length; i++) {
+    const c = i < s.length ? s.charCodeAt(i) : 32;
+    let k = WORD_UNITS[c]!;
+    if (k === 0 && (k = readWordUnit(c)) === 0) return focusCountOf(wordsIn(s), focus);
+    if (k === 1) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      const len = i - start;
+      for (let f = 0; f < focus.length; f++) {
+        const w = focus[f]!;
+        if (w.length === len && s.startsWith(w, start)) {
+          n++;
+          break;
+        }
+      }
+      start = -1;
+    }
+  }
+  return n;
+}
+
+/** `focusCount` over words already read (a string with a surrogate). */
+function focusCountOf(words: readonly string[], focus: readonly string[]): number {
+  let n = 0;
+  for (const w of words) if (focus.includes(w)) n++;
+  return n;
+}
+
+/** An item's `AllParts` and what they were read with (`partsOf`). */
+interface PartsMemo extends AllParts {
+  text: string;
+  year: number | undefined;
+  self: string | null | undefined;
+  title: string | undefined;
+  split: boolean;
+}
+
+/**
+ * The packets' parts of recent items (D1882), by item object (a user's own cached copy: a hit is never another
+ * item's, nor another user's), first in, first out. A request's packet mostly holds items an earlier packet held (80%
+ * of `pipeline.bench.ts`'s readings were of an item read before, 89% of the characters), and reading the parts was
+ * the packet's whole cost. Bounded, and emptied with the decoded texts (`clearParts`, wherever the cache calls
+ * `clearDecoded`), so a forgotten user's text does not stay resident here.
+ */
+const PARTS_MEMO = new Map<ContextItem, PartsMemo[]>();
+/** Items `PARTS_MEMO` holds at most. */
+const PARTS_MEMO_ITEMS = 256;
+/**
+ * Characters of text its readings hold at most (each item's text counted once a reading): a reading holds about 2.5
+ * bytes a character (the parts and their lower case), so the memo stays under about 3 MB a process whatever the
+ * items' size (the cache keeps up to 8,000 characters an item).
+ */
+const PARTS_MEMO_CHARS = 1_200_000;
+/**
+ * Readings kept an item: the push's packet drops the current year from dates and the ask's answer does not, so an
+ * item both show is read two ways (with one kept, 2,934 of 4,761 readings missed in `pipeline.bench.ts`).
+ */
+const PARTS_MEMO_WAYS = 2;
+let memoChars = 0;
+
+/** `allParts` of an item's text, from `PARTS_MEMO` when it read the same text with the same settings. */
+function partsOf(
+  item: ContextItem,
+  year: number | undefined,
+  self: string | null | undefined,
+  dense: boolean,
+  split: boolean,
+): AllParts {
+  const text = item.text;
+  const title = dense ? item.title : undefined;
+  const held = PARTS_MEMO.get(item);
+  if (held) {
+    for (const m of held) {
+      if (m.text === text && m.year === year && m.self === self && m.title === title && m.split === split) return m;
+    }
+  }
+  const all = allParts(text, year, self, title === undefined ? undefined : { title }, split);
+  if (text.length > PARTS_MEMO_CHARS / 8) return all;
+  // Another text (the item changed in place) makes every reading of the old one stale.
+  const ways = held && held[0]!.text === text ? held : [];
+  if (ways !== held) dropParts(item);
+  if (ways.length >= PARTS_MEMO_WAYS) memoChars -= ways.shift()!.text.length;
+  ways.push({ ...all, text, year, self, title, split });
+  memoChars += text.length;
+  if (ways.length === 1) PARTS_MEMO.set(item, ways);
+  // First in, first out (a hit does not move an item up), by count and by characters.
+  while (PARTS_MEMO.size > PARTS_MEMO_ITEMS || memoChars > PARTS_MEMO_CHARS) {
+    dropParts(PARTS_MEMO.keys().next().value as ContextItem);
+  }
+  return all;
+}
+
+/** Drops an item's readings from `PARTS_MEMO`. */
+function dropParts(item: ContextItem): void {
+  const held = PARTS_MEMO.get(item);
+  if (!held) return;
+  for (const m of held) memoChars -= m.text.length;
+  PARTS_MEMO.delete(item);
+}
+
+/** Empties `PARTS_MEMO` (the cache calls it where it empties the decoded texts' memo). */
+export function clearParts(): void {
+  PARTS_MEMO.clear();
+  memoChars = 0;
+}
+
+/** Items `PARTS_MEMO` holds, and the characters of text their readings count (for tests). */
+export function partsMemoCount(): number {
+  return PARTS_MEMO.size;
+}
+export function partsMemoChars(): number {
+  return memoChars;
+}
+
+/** A message's parts as `messageParts` reads them, before the known test (`AllParts`). */
+function allParts(
+  text: string,
+  year: number | undefined,
+  self: string | null | undefined,
+  dense: { title: string } | undefined,
+  split: boolean,
+): AllParts {
   // The user goes by their first name: their full name is on most of their own items and tells the agent nothing new
   // ("you" would read as the agent itself).
   const selfFirst = self?.split(" ")[0] ?? "";
@@ -408,9 +639,11 @@ export function messageParts(
   // The current year adds nothing to a day and month ("Sat, 24 Oct 2026 12:00" is "Sat 24 Oct 12:00"); ISO dates
   // ("2026-11-10") keep it.
   const thisYear = year ? new RegExp(`\\b(\\d{1,2}(?:st|nd|rd|th)? ${MONTH_WORD}),? ${year}\\b`, "gi") : null;
+  const yearText = ` ${year}`;
   const parts: Part[] = [];
+  const keys: string[] = [];
   const seen = new Set<string>();
-  const titleWords = dense ? (dense.title.toLowerCase().match(WORDS) ?? []).slice(0, TITLE_WORDS) : [];
+  const titleWords = dense ? wordsIn(dense.title.toLowerCase()).slice(0, TITLE_WORDS) : [];
   let own = true; // before the message's sign-off
   let signed = false; // in a quoted message's signature: until the next quoted message starts
   let first = true; // the message's first sentence, past its headers
@@ -418,13 +651,16 @@ export function messageParts(
   // A connector's snippet is often one line: the thread's markers are put back on lines of their own first.
   // Whitespace is collapsed first, in linear passes: every pattern below then sees runs of one character at most (a
   // long run would make their leading `\s+` rescan it from every start, quadratic on hostile text).
-  const lines = text
-    .replace(/[ \t\r\f\v]+/g, " ")
-    .replace(/ ?\n[\n ]*/g, "\n")
-    .replace(/\s+(On [^\n]{6,160}? wrote:)\s*/g, "\n$1\n")
-    .replace(/[ \t]+((?:>[ \t]?)+)/g, "\n$1")
-    .replace(/\s+(--|Sent from my \S+)(\s|$)/g, "\n$1\n")
-    .split("\n");
+  // Each pass runs only where the text holds what it must match (exact tests, D1881): on an item of plain prose every
+  // one of them was a scan of the whole text for nothing.
+  let flat = spacedOut(text) ? text.replace(/[ \t\r\f\v]+/g, " ") : text;
+  if (flat.includes("\n")) flat = flat.replace(/ ?\n[\n ]*/g, "\n");
+  if (flat.includes(" wrote:")) flat = flat.replace(/\s+(On [^\n]{6,160}? wrote:)\s*/g, "\n$1\n");
+  if (flat.includes(">")) flat = flat.replace(/[ \t]+((?:>[ \t]?)+)/g, "\n$1");
+  if (flat.includes("--") || flat.includes("Sent from my ")) {
+    flat = flat.replace(/\s+(--|Sent from my \S+)(\s|$)/g, "\n$1\n");
+  }
+  const lines = flat.split("\n");
   for (const raw of lines) {
     const quoted = QUOTED.test(raw);
     let line = (quoted ? raw.replace(QUOTED, "") : raw).trim();
@@ -447,8 +683,9 @@ export function messageParts(
       line = attendeesBeyond(line, self, titleWords);
       if (!line) continue;
     }
-    if (you) line = line.replace(you, selfFirst);
-    if (thisYear) line = line.replace(thisYear, "$1").replace(WEEKDAY_COMMA, "$1 $2");
+    if (you && line.includes(self!)) line = line.replace(you, selfFirst);
+    if (thisYear && line.includes(yearText)) line = line.replace(thisYear, "$1");
+    if (thisYear && line.includes(", ")) line = line.replace(WEEKDAY_COMMA, "$1 $2");
     const sentences = line.split(dense ? SENTENCE_DENSE : SENTENCE);
     for (let part of split ? sentences.flatMap((x) => x.split(TABLE_ROW)) : sentences) {
       if (SIGNOFF.test(part) || SIGNED.test(part)) {
@@ -461,7 +698,8 @@ export function messageParts(
       const header = /^(from|date|subject):/i.test(part) || (sentTo && /^to:/i.test(part));
       part = part.replace(first && !quoted && !header ? SALUTED : GREETED, "");
       if (!quoted && !header) first = false;
-      part = part.replace(URL, "").trim();
+      if (part.includes("http")) part = part.replace(URL, "");
+      part = part.trim();
       if (dense && !header) {
         part = part.replace(TIME_OF_DAY_GREETING, "");
         const footer = part.search(FOOTER);
@@ -472,22 +710,23 @@ export function messageParts(
       if (part.length < 3 || PLEASANTRY.test(part) || BOILERPLATE.test(part)) continue;
       const key = part.toLowerCase();
       if (seen.has(key)) continue;
-      // Nothing the conversation has not already said (every content word in it): the agent has this part. A sender
-      // stays: who said the rest is not in its words.
-      const words = key.match(WORDS) ?? [];
-      if (!/^from:/.test(key) && !words.some((w) => w.length > 1 && !isStopword(w) && !known(w))) continue;
       seen.add(key);
+      // The known test (`unknownParts`) drops a part the conversation has already said (every content word in it):
+      // the agent has it. A sender stays: who said the rest is not in its words.
       parts.push({ text: part, quoted, header });
+      keys.push(key);
     }
   }
-  return parts;
+  return { parts, keys };
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
-function pick(parts: Part[], focus: ReadonlySet<string>, maxBytes: number): string {
+function pick(parts: Part[], keys: readonly string[], focus: ReadonlySet<string>, maxBytes: number): string {
+  const focusWords = [...focus];
   const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
-    for (const w of part.text.toLowerCase().match(WORDS) ?? []) if (focus.has(w)) n += 1;
+    // Its words in `focus`, read from its text in lower case (`readParts`' keys).
+    n += focusCount(keys[k]!, focusWords);
     n += DIGIT.test(part.text) ? 1 : 0;
     return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
   };

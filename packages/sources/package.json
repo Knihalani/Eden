@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./mcp": "./src/mcp/index.ts",
     "./mcp/stdio": "./src/mcp/stdio.ts",
-    "./mcp/extras": "./src/mcp/extras.ts"
+    "./mcp/extras": "./src/mcp/extras.ts",
+    "./mcp/oauth": "./src/mcp/oauth.ts"
   },
   "dependencies": {
     "@eden/primitives": "workspace:*",
