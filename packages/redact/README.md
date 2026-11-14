@@ -53,10 +53,14 @@ All of it is synchronous and keeps no state between calls beyond reusable scratc
 Text has no file path, so where gitleaks keys a rule or an allowlist to a path the gate is stricter: a rule with a
 path condition runs on every text, a path-only rule never fires, and an allowlist's path condition never holds.
 
-It errs towards redacting. Its keyword rule takes the value after `password`, `token`, `secret`, `api_key` and the
-like whatever its entropy, so placeholders (`key = AKIAXXXXXXXXXXXXXXXX`) and code (`maxTokens: 2_000`) are redacted
-too: on gitleaks' own false-positive examples it fires on 26% where gitleaks fires on 6%. For text bound for storage
-or a model that is the trade it is built for; as a CI scanner over source code it would be noisy.
+It errs towards redacting: a missed secret is worse than a false redaction. Its keyword rule takes the value after
+`password`, `token`, `secret`, `api_key` and the like whatever its entropy. Values that cannot be a secret are left
+(`src/not-secret.ts`: a type such as `apiKey: string`, `process.env.TOKEN`, `${API_KEY}`, `maxTokens: 2_000`, a mask
+or a run such as `AKIAXXXXXXXXXXXXXXXX`), each beside a test that the nearest real secret of its shape is still
+redacted. A plain word stays redacted (`password is sunshine` is a real password), so on gitleaks' own false-positive
+examples it fires on 22% where gitleaks fires on 6%. For text bound for storage or a model that is the trade it is
+built for; as a CI scanner over source code it would be noisy. It never redacts less than the gate before these
+changes did (`src/never-less.test.ts`, against a frozen copy of it).
 
 ## Against the alternatives
 
@@ -68,17 +72,26 @@ inputs and the cases where this gate loses are in `docs/research/redact-vs-alter
 |---|---:|---:|---:|---:|---:|---:|
 | 480 real-format secrets planted in mail, chat, code, logs, JSON: removed or flagged | 100% | 73.3% | 59.0% | 64.2% | 41.3% | 21.7% |
 | gitleaks' own 6,040 true-positive examples (216 rules) flagged | 100% | 99.7% | 24.5% | 48.5% | 12.5% | 11.9% |
-| gitleaks' own 357 false-positive examples flagged (lower is better) | 26.3% | 6.2% | 7.3% | 22.4% | 7.3% | 24.1% |
-| findings on 13.5 MB of text with no planted secret (lower is better) | 250 | 4 | 1 | 11 | 1 | 4,987 |
+| gitleaks' own 357 false-positive examples flagged (lower is better) | 22.4% | 6.2% | 7.3% | 22.4% | 7.3% | 24.1% |
+| findings on 13.5 MB of text with no planted secret (lower is better; this gate: 13.6 MB) | 177 | 4 | 1 | 11 | 1 | 4,987 |
 | in process, 16 KB of mixed text, a call | 0.31 ms (Bun), 0.49 ms (Node) | n/a | n/a | 87 ms | 0.51 ms | 2.3 ms |
 | one command on a 1 MB file, startup included | 0.18 s (Bun) | 0.70 s | 2.5 s | 6.7 s | 0.33 s | n/a |
 | slowest of 24 crafted 1 MB inputs, as a command (redact-pii: in process) | 0.37 s | 17.0 s | 3.2 s | >30 s on 3 | 0.46 s | >30 s on 9 |
+| slowest of the 24 in process | 0.15 s (Bun), 0.18 s (Node) | n/a | n/a | >30 s on 2 | 23 ms | >30 s on 9 |
 
-secretlint is faster than this gate on every crafted input in process (7–23 ms against up to 221 ms at 1 MB): it
-runs 27 provider rules. The 250 benign findings are almost all its keyword rule on source code and documentation (`token`, `apiKey`, `secret`
-followed by a value). On the 4,460 simulated mail, chat and document items without a planted secret it flagged none,
-and on the evaluation scenarios' texts two, each holding a credential-shaped value (a wifi password, a database URL
-with a password).
+Where it loses:
+
+- **False positives.** The 177 benign findings are mostly its keyword rule on documentation and code that names a
+  password or token (132 of them; 250 before the values above were left). On the 4,460 simulated mail, chat and
+  document items without a planted secret it flagged none, and on the evaluation scenarios' texts two, each holding a
+  credential-shaped value (a wifi password, a database URL with a password).
+- **Crafted input.** secretlint runs 27 provider rules and finds nothing in text built from keywords; this gate is
+  within 2x of it on 14 of the 24 crafted inputs and 2–15x slower on the rest (25–152 ms at 1 MB against 7–17 ms),
+  where a finding every 10–20 characters each pays for the allowlists and the structural pass. All stay linear.
+- **Node** runs the same code 1.0–2.5x slower than Bun.
+
+The benign corpus figures for this gate are on the repository after a later merge (13.6 MB, 5,609 files); the other
+tools' were measured once, on 13.5 MB.
 
 ## How it is fast
 
@@ -94,7 +107,8 @@ A gate runs on every item an application touches, so it is built for typical tex
 3. **The lazy prefix read by hand.** 96 rules have the shape `[\w.-]{0,50}?(?:KEYWORD|…)REST`. JavaScript's engine
    tries the 0–50 character prefix and REST after each length at every position; on text dense in keywords that was
    about 1 µs a character. The gate instead tries REST once, sticky, at each keyword occurrence and works out the
-   leftmost start by hand (argued in `src/anchor.ts`): the same matches, linear.
+   leftmost start by hand (argued in `src/anchor.ts`): the same matches, linear. For generic-api-key, the rule that
+   fires most, REST itself is read by hand too (`src/generic-rest.ts`), each candidate decided by the length of a run.
 4. **Linear matchers where JavaScript backtracks.** Seven gitleaks rules backtrack badly in JavaScript's engine
    (quadratic or worse on crafted input). They run on hand-written matchers (`src/scanners.ts`) that report what RE2
    reports, and every allowlist regex runs on a small lazily built DFA (`src/automaton.ts`), its verdict on a line
@@ -115,8 +129,13 @@ A gate runs on every item an application touches, so it is built for typical tex
   never shipped): `src/differential.ts`.
 - **Linear time.** Crafted inputs for every rule left on JavaScript's engine, for each hand-written matcher and for
   each fast path, under CPU-time ceilings (`redos*.test.ts`, `own-matchers-linear.test.ts`, `gate-linear.test.ts`).
+- **Never less than before.** `src/never-less.test.ts` holds the gate to a frozen copy of itself before the values
+  that cannot be a secret were left and the newest rules added: every character the old gate removed is removed, or
+  belongs to a value `src/not-secret.ts` accepts. The new rules run after the old pipeline (`src/compose.ts`), so they
+  cannot change what it sees.
 - **Bun and Node agree.** `node-parity.test.ts` runs the gate on Node over fuzz texts and the crafted inputs and
-  requires Bun's findings, text for text; `src/node.check.ts` is the API under `node --test`.
+  requires Bun's findings, text for text; `node-linear.test.ts` holds the crafted inputs under the same CPU ceiling
+  on Node; `src/node.check.ts` is the API under `node --test`.
 
 ```bash
 bun test ./src                                            # the tests (from this directory)

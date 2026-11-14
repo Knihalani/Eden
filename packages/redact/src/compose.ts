@@ -37,7 +37,7 @@ export interface StructuralPass {
 /** What `composeMasks` works out: the stored text, and (when asked, or when D1850 changes something) the masks. */
 export interface Composed {
   stored: string;
-  /** What main removed; what the gate removes; what main removed only through an excused value (1: such a character). */
+  /** What main removed; what the gate removes; what main removed only through an excused value (1: such a char). */
   before?: Uint8Array;
   after?: Uint8Array;
   excused?: Uint8Array;

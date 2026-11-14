@@ -625,8 +625,9 @@ function scan(value: unknown, w: Walk, depth: number, hit: (s: string) => boolea
  * D1850: which characters of `s` the structural pass (`redactAssignments(redactTokensIn(s, passes))`) takes out, as a
  * mask over `s` (1: removed). The passes run as they do there, each on the last one's output, with each character
  * of that output traced back to `s` (a sentinel's characters to none). `strict`: an assignment value that is code or
- * a placeholder (not-secret.ts) is not counted as removed, and its text goes to `values` when given. The secret gate uses it to add its D1850
- * rules' spans to what the passes removed without letting them change what the passes see (`sanitizeForStore`).
+ * a placeholder (not-secret.ts) is not counted as removed, and its text goes to `values` when given. The secret
+ * gate uses it to add its D1850 rules' spans to what the passes removed without letting them change what the passes
+ * see (`sanitizeForStore`).
  */
 export function structuralMask(s: string, passes: number, strict = false, values?: string[]): Uint8Array {
   const removed = new Uint8Array(s.length);
