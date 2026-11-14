@@ -50,12 +50,27 @@ function rng(seed: number) {
   };
 }
 
-const WORDS = ["a", "aa", "aaa", "ab", "ba", "kim", "kimberly", "garcía", "garcia", "renewal", "2026", "x1", "東京", "ß"];
+const WORDS = [
+  "a",
+  "aa",
+  "aaa",
+  "ab",
+  "ba",
+  "kim",
+  "kimberly",
+  "garcía",
+  "garcia",
+  "renewal",
+  "2026",
+  "x1",
+  "東京",
+  "ß",
+];
 const ODD = ["", "a b", "kim-lee", "😀", "𝒜bc", "x́", "-", "\uD800"];
 const GLUE = [" ", "  ", ", ", ".", "-", "'", "’", "\n", "\t", "/", "@", "_", "́", "😀", "\uDC00", "1", "é"];
 
 function fuzzCase(r: () => number): { s: string; focus: string[] } {
-  const pickOf = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)]!;
+  const pickOf = <T>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)]!;
   let s = "";
   const n = Math.floor(r() * 14);
   for (let i = 0; i < n; i++) {

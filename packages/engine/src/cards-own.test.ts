@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { ContextItem } from "@eden/protocol";
-import {
-  sentenceKey,
-  sentenceKeyBefore,
-  strictOwnText,
-  worthCardingStrict,
-  worthCardingStrictBefore,
-} from "./cards";
+import { sentenceKey, sentenceKeyBefore, strictOwnText, worthCardingStrict, worthCardingStrictBefore } from "./cards";
 import { packItem } from "./packed-text";
 
 /*
