@@ -102,7 +102,7 @@ const KEYS = [
 /** Eden's own shapes and the structural redactor's, assembled from parts so no literal here is a secret. */
 function edenShape(rnd: Rnd): string {
   const value = () => draw(rnd, ALNUM + (rnd() < 0.3 ? "+/_-.=" : ""), pick(rnd, [3, 6, 8, 12, 20, 24, 32, 40, 64]));
-  switch (int(rnd, 16)) {
+  switch (int(rnd, 19)) {
     case 0:
       return `${pick(rnd, KEYS)}${pick(rnd, [" is ", "=", ": ", ":", " = ", '": "', "='"])}${pick(rnd, ["", '"', "'", "“", "‘"])}${value()}${pick(rnd, ["", '"', "'", "”", "’", " "])}`;
     case 1:
@@ -133,6 +133,13 @@ function edenShape(rnd: Rnd): string {
       return `eden_local_${draw(rnd, "0123456789abcdef", 16)}`;
     case 14:
       return `{"${pick(rnd, KEYS)}":"${value()}${pick(rnd, ['\\"x', ",y", ""])}","n":1}`;
+    // D1850's shapes: an API key spelled with a space, an auth scheme as a keyword's value, an Azure account key.
+    case 15:
+      return `${pick(rnd, ["API key", "api key", "Datadog API key", "apikey"])}${pick(rnd, [" is ", ": ", " "])}${value()}`;
+    case 16:
+      return `${pick(rnd, ["token", "secret", "password"])}${pick(rnd, [" is ", "=", ": "])}${pick(rnd, ["Bearer", "basic", "Basic\t"])}${pick(rnd, [" ", "  ", ""])}${pick(rnd, [value(), "[REDACTED]"])}`;
+    case 17:
+      return `${pick(rnd, ["AccountKey=", "accountkey=", "AccountKey: "])}${draw(rnd, ALNUM + "+/", pick(rnd, [85, 86, 87]))}${pick(rnd, ["==", "=", ""])};`;
     default:
       return `curl -${pick(rnd, ["u", "H"])} ${pick(rnd, ['"', "'", ""])}${pick(rnd, ["user:", "Authorization: Bearer ", "X-Api-Key: "])}${value()}`;
   }

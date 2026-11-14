@@ -24,6 +24,7 @@ describe("the vendored gitleaks rules", () => {
     expect(ids.filter((id) => id.startsWith("eden-")).sort()).toEqual([
       "eden-aws-key-id",
       "eden-aws-secret",
+      "eden-azure-storage-key",
       "eden-cfat",
       "eden-discord-webhook",
       "eden-entropy-keyword",
@@ -221,6 +222,25 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       `next=b%3F${"X-Amz-" + "Signature%3D"}${"0a1b2c3d".repeat(8)}%26${"X-Amz-" + "Security-Token%3D"}${alnum(40)}%26x%3D1`,
       alnum(40),
       "Signature%3D[REDACTED]%26X-Amz-Security-Token%3D[REDACTED]%26x%3D1",
+    ],
+    // D1850: three shapes the head-to-head comparison (docs/research/redact-vs-alternatives.md) found left in clear.
+    [
+      "an API key spelled with a space, before a long token (rule (d))",
+      `[10:42] Sam: API key is ${alnum(32)} — don't share it`,
+      alnum(32),
+      "API key is [REDACTED] — don't share it",
+    ],
+    [
+      "a bearer credential as the keyword rule's value, taken whole",
+      `[10:42] Sam: bearer token is ${"Bea" + "rer"} ${alnum(40, 5)} — don't share it`,
+      alnum(40, 5),
+      "don't share it",
+    ],
+    [
+      "an Azure storage account key starting with a slash",
+      `conn: DefaultEndpointsProtocol=https;AccountName=acme;${"Account" + "Key="}/+${alnum(84)}==;EndpointSuffix=x`,
+      `/+${alnum(84)}==`,
+      "[REDACTED];EndpointSuffix=x",
     ],
     [
       "a private key block, whole",
