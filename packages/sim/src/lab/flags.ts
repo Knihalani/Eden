@@ -108,6 +108,28 @@ export function labConfig(config: unknown, where: string): Record<string, unknow
   return checkEngineConfig(config, { where, deps: LAB_DEPS }) as Record<string, unknown>;
 }
 
+/**
+ * `--card-limits` (the enricher's `CardLimits`): JSON, with `"gatherMs": null` read as no wall-clock gather cut
+ * (`Infinity`, which JSON cannot write). Any other `gatherMs` must be a positive finite number: a typo ("x", NaN)
+ * would otherwise reach the drain's gather and act as no cut at all.
+ */
+export function cardLimits(text: string): Record<string, unknown> {
+  const limits = parseJson(text, "--card-limits");
+  if (!limits || typeof limits !== "object" || Array.isArray(limits))
+    throw new Error("--card-limits must be an object");
+  const out = { ...(limits as Record<string, unknown>) };
+  if ("gatherMs" in out) {
+    const ms = out.gatherMs;
+    if (ms === null) out.gatherMs = Infinity;
+    else if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) {
+      throw new Error(
+        `--card-limits gatherMs must be null (no cut) or a positive number of ms, got ${JSON.stringify(ms)}`,
+      );
+    }
+  }
+  return out;
+}
+
 /** `text` parsed as JSON, or an error naming `where` (a `--set '{probes:true}'` typo is not a stack trace). */
 export function parseJson(text: string, where: string): unknown {
   try {

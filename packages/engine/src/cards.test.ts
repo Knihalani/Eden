@@ -316,6 +316,18 @@ describe("the enricher (CardEnricher)", () => {
     // Cut at 50 ms: the first call holds what landed by then, less than a batch.
     expect(cut.calls[0]).toBeLessThan(10);
     expect(uncut.calls).toEqual([10, 10, 10]);
+    // A value that is not a positive number would never cut (`now >= NaN` is false): refused at construction.
+    for (const bad of [NaN, 0, -1, "x" as unknown as number]) {
+      expect(
+        () =>
+          new CardEnricher(
+            { maker: new TableMaker(table), budget: new Budget(), now: () => NOW },
+            {
+              gatherMs: bad,
+            },
+          ),
+      ).toThrow("gatherMs must be a positive number");
+    }
   });
 
   test("gather (D370): a forgotten user's drain stops waiting at once, with no call", async () => {

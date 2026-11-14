@@ -137,7 +137,7 @@ import {
   SubsetReplay,
   systemHash,
 } from "./reader-disk";
-import { flags, labConfig, parseJson } from "./flags";
+import { cardLimits, flags, labConfig, parseJson } from "./flags";
 import { keyFor, labAccess, labModel } from "./free";
 import { clearSlot, dress } from "./hidden-context";
 import { applyEdits, noiseEdits, plantBefore } from "./silent";
@@ -551,10 +551,16 @@ const cardUse: Record<string, number> = {};
 const cardLanes: CardEnricher[] = [];
 /** No cap on replayed cards: they cost nothing here (the enrichment's spend is `cards-enrich.ts`'s). */
 const UNCAPPED = { callsPerSession: Infinity, usdPerSession: Infinity, usdPerUserDay: Infinity };
-const CARD_LIMITS = JSON.parse(opt("card-limits", "{}")) as Record<string, unknown>;
 // `"gatherMs": null`: no wall-clock cut on the drain's gather (JSON has no Infinity), so its batches do not move with
 // the machine's load; the sharding checks in funnel-flags.test.ts compare card calls between two runs.
-if (CARD_LIMITS.gatherMs === null) CARD_LIMITS.gatherMs = Infinity;
+const CARD_LIMITS = (() => {
+  try {
+    return cardLimits(opt("card-limits", "{}"));
+  } catch (error) {
+    console.error(`hidden-funnel: ${(error as Error).message}`);
+    process.exit(2);
+  }
+})();
 const PLANTED_AGE_DAYS = Number(opt("planted-age-days", "0"));
 const LEAD = opt("lead-in", "") as DraftMode | "";
 if (LEAD && LEAD !== "clause" && LEAD !== "half") throw new Error("--lead-in must be clause or half");
