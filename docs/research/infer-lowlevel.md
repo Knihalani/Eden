@@ -44,7 +44,10 @@ combining marks, ligatures, full-width forms, Turkish İ, Devanagari, CJK, emoji
 space, the 300 and 1,200 cuts, the SWAR flush, lane shifts, bias, the rule ids), 10 fail it; of the 5 that pass, 4
 are equivalent (`acc -= -v`; a sign extension the lane mask removes; the sorted order of a float table's ids, which
 cannot move a sum of a few hundred float32 values in a double; the bitset's size bound) and one is weak coverage (the
-rule ids' duplicate test starting at the second id: a rule id equal to the first unique id is rare in the fuzz). `turn-gate.test.ts` (feats.py's sums and
+rule ids' duplicate test starting at the second id: a rule id equal to the first unique id is rare in the fuzz). The
+independent review found one more gap: a flush every 400 rows in place of 256 passed, because random tables never
+fill a lane. The test now also reads tables of all 0x7f and all 0x80 (12 bits, 8 dims) on turns of 300+ code points
+with more than 256 unique ids; the planted 400 fails it, and 256 passes. `turn-gate.test.ts` (feats.py's sums and
 ids, the hard gates) passes unchanged; `parity.ts` needs export.py's parity file, which is not on this machine: the
 oracle test checks the same logits against the code that passed parity 64/64, to the bit rather than within 1e-4.
 
