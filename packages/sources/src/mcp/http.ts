@@ -7,7 +7,8 @@
  * Bounded and defensive, since the server is a third party (D7: trusted to be read-only, not to be well-behaved):
  * - every POST has a deadline (`timeoutMs`) and is aborted at it or at `close`;
  * - a reply's body is read up to `maxResponseBytes` (JSON and SSE alike) and the read is aborted past it; JSON is
- *   shape-checked before it is parsed (`parseJsonBytes`);
+ *   shape-checked before it is parsed (`parseJsonBytes`); a JSON body whose only framing is a declared length under
+ *   the cap is read natively, which reads exactly that length (`declaredOnly`, D1860);
  * - only the response whose id is the POSTed request's is delivered from that POST; a response to any other id is
  *   dropped (server requests and notifications on the stream go to the client, which answers `ping` only);
  * - a redirect is followed only to the same origin (307/308, so the POST stays a POST): the user's credentials never
@@ -16,12 +17,13 @@
  *
  * Left out, as Eden needs none of them: the standalone GET stream (server-initiated messages outside a request),
  * resuming a broken stream by `Last-Event-ID`, OAuth (credentials are the operator's static headers), JSON-RPC
- * batches (removed from MCP in 2025-06-18), and the DELETE that ends a session (the SDK's `close` sends none either).
+ * batches (removed from MCP in 2025-06-18). The DELETE that ends a session is `terminateSession`, for a caller that
+ * wants it (D1860); `close` sends none (the SDK's sends none either), and Eden never calls it.
  * A session the server no longer knows (404 while one is held) closes the transport, so `McpSource` connects again
  * with a fresh `initialize`, as the spec asks.
  */
 import { deadlines, type Deadline } from "./deadlines";
-import { parseJsonBytes } from "./json";
+import { parseJsonBytes, parseJsonText } from "./json";
 import { SseParser } from "./sse";
 import { answers, asMessage, isRequest, type JsonRpcId, type JsonRpcMessage, type Transport } from "./types";
 
@@ -44,9 +46,11 @@ export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60_000;
 /**
  * Cap on one `tools/list` reply: a page of tool descriptions, far below the general cap (a 16 MiB page held ~240,000
- * tools). `McpSource` caps what it keeps across pages too.
+ * tools). `McpSource` caps what it keeps across pages too. The other listings (`extras.ts`) are pages of the same kind
+ * and take the same cap.
  */
 export const MAX_TOOLS_LIST_BYTES = 4 * 1024 * 1024;
+const LISTS = new Set(["tools/list", "resources/list", "resources/templates/list", "prompts/list"]);
 /** Cap on one SSE line or event: Eden's replies are a tool page or a search's rows, far below the whole stream's. */
 export const MAX_EVENT_BYTES = 4 * 1024 * 1024;
 /**
@@ -111,6 +115,11 @@ export class StreamableHttpTransport implements Transport {
   private readonly maxBytes: number;
   private readonly timeoutMs: number;
   private readonly fetchFn: typeof fetch;
+  /**
+   * The runtime's own `fetch`, not a caller's nor a replaced global's (an APM agent, a mock, a polyfill): its body
+   * framing is the HTTP client's, which the native read trusts.
+   */
+  private readonly ownFetch: boolean;
 
   constructor(
     private readonly url: URL,
@@ -119,6 +128,7 @@ export class StreamableHttpTransport implements Transport {
     this.maxBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchFn = options.fetch ?? fetch;
+    this.ownFetch = options.fetch === undefined && this.fetchFn === RUNTIME_FETCH && runtimeIsNative;
     this.headers = this.buildHeaders();
   }
 
@@ -130,6 +140,40 @@ export class StreamableHttpTransport implements Transport {
   setProtocolVersion(version: string): void {
     this.protocolVersion = version;
     this.headers = this.buildHeaders();
+  }
+
+  /**
+   * Ends the session on the server: a DELETE with its id, within the POST deadline and never redirected. A 405 is the
+   * server saying it keeps sessions until they expire. Call it before `close` when done; Eden never does (D1860).
+   */
+  async terminateSession(): Promise<void> {
+    if (!this.sessionId || this.state !== "open") return;
+    // A flight like any POST: cut at its deadline or by `close`.
+    const flight: Flight = { abort: new AbortController(), deadline: undefined as never };
+    flight.deadline = deadlines.add(this.timeoutMs, () =>
+      cut(flight, new StreamableHttpError(-1, "Request timed out")),
+    );
+    this.flights.add(flight);
+    try {
+      const res = await this.fetchFn(this.url, {
+        method: "DELETE",
+        headers: this.headers,
+        signal: flight.abort.signal,
+        redirect: "manual",
+      });
+      await res.body?.cancel().catch(() => {});
+      if (!res.ok && res.status !== 405) {
+        throw new StreamableHttpError(res.status, `Error ending the session (HTTP ${res.status})`);
+      }
+      this.sessionId = undefined;
+      this.headers = this.buildHeaders();
+    } catch (e) {
+      // Cut at the deadline: say so, as a POST would; cut by `close`, the abort itself.
+      const reason = flight.abort.signal.reason;
+      throw reason instanceof StreamableHttpError ? reason : e;
+    } finally {
+      this.land(flight, false);
+    }
   }
 
   async close(): Promise<void> {
@@ -157,9 +201,7 @@ export class StreamableHttpTransport implements Transport {
       if (f) this.land(f, true);
     }
     const cap =
-      "method" in message && message.method === "tools/list"
-        ? Math.min(this.maxBytes, MAX_TOOLS_LIST_BYTES)
-        : this.maxBytes;
+      "method" in message && LISTS.has(message.method) ? Math.min(this.maxBytes, MAX_TOOLS_LIST_BYTES) : this.maxBytes;
     let draining = false;
     try {
       draining = await this.post(message, id, flight, cap);
@@ -236,11 +278,20 @@ export class StreamableHttpTransport implements Transport {
     const type = mediaType(res.headers.get("content-type"));
     const tally: Tally = { bad: 0, asks: 0, failed: null };
     if (type === "application/json") {
-      const declared = Number(res.headers.get("content-length") ?? "0");
+      const length = res.headers.get("content-length");
+      const declared = Number(length ?? "0");
       if (declared > cap) throw await this.tooLarge(res, cap);
-      const bytes = await readCapped(res, cap, flight);
-      if (!bytes) throw await this.tooLarge(res, cap);
-      const data = parseJsonBytes(bytes);
+      let data: unknown;
+      if (this.ownFetch && length !== null && declaredOnly(res.headers, length)) {
+        // The runtime's HTTP client reads exactly the declared length here (no encoding to inflate, no chunked
+        // framing to contradict it), so a native read is capped by the check above, at the cost of an uncapped one
+        // (D1860). Its deadline still holds: the flight's abort ends the read.
+        data = isBun ? parseJsonText(await res.text()) : parseJsonBytes(new Uint8Array(await res.arrayBuffer()));
+      } else {
+        const bytes = await readCapped(res, cap, flight);
+        if (!bytes) throw await this.tooLarge(res, cap);
+        data = parseJsonBytes(bytes);
+      }
       if (data === undefined) throw new StreamableHttpError(-1, "Reply is not JSON");
       let answered = false;
       for (const m of Array.isArray(data) ? data : [data]) {
@@ -313,7 +364,7 @@ export class StreamableHttpTransport implements Transport {
         } else answered = this.deliver(m, id, tally);
         return answered || tally.failed !== null;
       },
-      this.options.fetch === undefined,
+      this.ownFetch && isBun,
     );
     let read = 0;
     try {
@@ -387,6 +438,27 @@ function mediaType(contentType: string | null): string {
   if (!contentType) return "";
   const semi = contentType.indexOf(";");
   return (semi < 0 ? contentType : contentType.slice(0, semi)).trim().toLowerCase();
+}
+
+/** Bun's `fetch` hands out a new array for each read and reads a `text()` as `TextDecoder` does (one BOM dropped). */
+const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+
+/**
+ * The global `fetch` as this module found it. A transport whose `fetch` is anything else (the global replaced later)
+ * reads every body through the capped stream reader. On Bun the one found must also be the native one, so a global
+ * replaced before this module loaded is caught too; on Node the runtime's own `fetch` is JavaScript (undici), so there
+ * only a replacement made after this module loaded can be told apart.
+ */
+const RUNTIME_FETCH = globalThis.fetch;
+const runtimeIsNative = !isBun || /\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(RUNTIME_FETCH));
+
+/**
+ * Whether a body's length is the declared one and nothing else: one decimal `Content-Length`, no `Content-Encoding`
+ * (the runtime would inflate it past the declared length: 8 KB declared, 8 MB read) and no `Transfer-Encoding` (Bun
+ * read a chunked body past a `Content-Length` sent beside it, and until the deadline when it was short, D1840).
+ */
+function declaredOnly(headers: Headers, length: string): boolean {
+  return /^\d{1,10}$/.test(length) && !headers.has("content-encoding") && !headers.has("transfer-encoding");
 }
 
 /** The phrases the fan-out reads as a connector's rate limit (`guarded.ts`, D212). */

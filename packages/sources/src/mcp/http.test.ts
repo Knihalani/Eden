@@ -7,8 +7,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { EmptyResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync } from "node:fs";
 import { z } from "zod";
-import { McpSource } from "../mcp-source";
 import { McpClient } from "./client";
 import { StreamableHttpTransport } from "./http";
 
@@ -177,35 +177,89 @@ describe("StreamableHttpTransport against the SDK's server transport", () => {
     expect(s.seen.every((r) => r.session === null)).toBe(true);
   });
 
-  test("an expired session (404) closes the transport, and McpSource connects again with a new initialize", async () => {
-    const s = await serve({ json: true });
-    const real = s.url;
-    let expired = false;
-    // The SDK answers an unknown session id with 400 on a fresh transport; a server that lost its sessions says 404.
-    const fetchFn = (async (url: URL | string, init?: RequestInit) => {
-      const h = new Headers(init?.headers);
-      if (expired && h.get("mcp-session-id")) {
-        expired = false;
-        await s.restart();
-        return new Response("session not found", { status: 404 });
+  // Eden's `McpSource`; skipped when this directory is used on its own.
+  const MCP_SOURCE = new URL("../mcp-source.ts", import.meta.url);
+  test.skipIf(!existsSync(MCP_SOURCE))(
+    "an expired session (404) closes the transport, and McpSource connects again with a new initialize",
+    async () => {
+      const { McpSource } = (await import(MCP_SOURCE.href)) as typeof import("../mcp-source");
+      const s = await serve({ json: true });
+      const real = s.url;
+      let expired = false;
+      // The SDK answers an unknown session id with 400 on a fresh transport; a server that lost its sessions says 404.
+      const fetchFn = (async (url: URL | string, init?: RequestInit) => {
+        const h = new Headers(init?.headers);
+        if (expired && h.get("mcp-session-id")) {
+          expired = false;
+          await s.restart();
+          return new Response("session not found", { status: 404 });
+        }
+        return fetch(url, init);
+      }) as typeof fetch;
+      const source = new McpSource({
+        id: "mail",
+        description: "mail",
+        transport: () => new StreamableHttpTransport(real, { fetch: fetchFn }),
+        searchTool: { name: "search_mail", args: (q) => ({ query: q.text }) },
+        quickCloseMs: 0,
+      });
+      const query = { scope: { tenantId: "t", userId: "u" }, text: "plan", entities: [], limit: 5 };
+      expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+      expired = true;
+      await expect(source.search(query, AbortSignal.timeout(2_000))).rejects.toThrow(/HTTP 404/);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
+      expect(s.seen.filter((r) => r.method === "initialize")).toHaveLength(2);
+      await source.close();
+    },
+  );
+});
+
+describe("terminateSession (D1860)", () => {
+  test("is a flight: a DELETE that hangs is cut by close, and at the POST deadline", async () => {
+    const hang = (async (_url: URL | string, init?: RequestInit) => {
+      if (init?.method !== "DELETE") {
+        return new Response('{"jsonrpc":"2.0","id":0,"result":{}}', {
+          headers: { "content-type": "application/json", "mcp-session-id": "s1" },
+        });
       }
+      return new Promise<Response>((_, reject) =>
+        init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+      );
+    }) as typeof fetch;
+    for (const how of ["close", "deadline"] as const) {
+      const t = new StreamableHttpTransport(new URL("http://mcp.test/mcp"), {
+        fetch: hang,
+        timeoutMs: how === "deadline" ? 50 : 60_000,
+      });
+      await t.start();
+      await t.send({ jsonrpc: "2.0", id: 0, method: "initialize", params: {} }); // holds the session id
+      const ending = t.terminateSession().then(
+        () => "ended",
+        (e: Error) => e.message,
+      );
+      if (how === "close") setTimeout(() => void t.close(), 20);
+      expect(await ending).toMatch(how === "close" ? /aborted/ : /timed out/);
+      await t.close();
+    }
+  });
+
+  test("sends a DELETE with the session id; the SDK's server ends the session; a second call sends nothing", async () => {
+    const s = await serve({ json: true });
+    const methods: string[] = [];
+    const fetchFn = (async (url: URL | string, init?: RequestInit) => {
+      methods.push(`${init?.method} ${new Headers(init?.headers).get("mcp-session-id") ? "with" : "without"} session`);
       return fetch(url, init);
     }) as typeof fetch;
-    const source = new McpSource({
-      id: "mail",
-      description: "mail",
-      transport: () => new StreamableHttpTransport(real, { fetch: fetchFn }),
-      searchTool: { name: "search_mail", args: (q) => ({ query: q.text }) },
-      quickCloseMs: 0,
-    });
-    const query = { scope: { tenantId: "t", userId: "u" }, text: "plan", entities: [], limit: 5 };
-    expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
-    expired = true;
-    await expect(source.search(query, AbortSignal.timeout(2_000))).rejects.toThrow(/HTTP 404/);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(await source.search(query, AbortSignal.timeout(2_000))).toHaveLength(1);
-    expect(s.seen.filter((r) => r.method === "initialize")).toHaveLength(2);
-    await source.close();
+    const transport = new StreamableHttpTransport(s.url, { fetch: fetchFn });
+    const client = new McpClient({ name: "eden", version: "0" });
+    await client.connect(transport);
+    await transport.terminateSession();
+    await transport.terminateSession();
+    expect(methods.filter((m) => m.startsWith("DELETE"))).toEqual(["DELETE with session"]);
+    // The server no longer knows the session: a call without one is refused.
+    await expect(client.listTools()).rejects.toThrow(/HTTP 404/);
+    await client.close();
   });
 });
 
