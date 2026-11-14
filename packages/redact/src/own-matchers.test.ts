@@ -247,13 +247,13 @@ describe("the gate", () => {
     }
   }, 30_000);
 
-  test("loads no re2js in production: only the tests' oracle imports it", () => {
+  test("loads no re2js in production: only the tests' oracle imports it, and nothing is a dependency", () => {
     for (const file of ["index.ts", "secrets.ts", "scanners.ts", "automaton.ts", "redact.ts"]) {
       expect([file, readFileSync(new URL(file, import.meta.url), "utf8").includes('"re2js"')]).toEqual([file, false]);
     }
     expect(readFileSync(new URL("index.ts", import.meta.url), "utf8")).not.toContain("re2-oracle");
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    expect(manifest.dependencies.re2js).toBeUndefined();
+    expect(manifest.dependencies ?? {}).toEqual({}); // no production dependency at all, @eden/primitives included
     expect(manifest.devDependencies.re2js).toBe("2.9.0");
   });
 });

@@ -80,7 +80,7 @@ export function anchorsOf(goPattern: string): Anchor[] | undefined {
   let anchors = ANCHORS.get(goPattern);
   if (anchors === undefined) {
     const known = tables?.anchors[goPattern];
-    anchors = known !== undefined ? (known && known.map(anchorFromData)) : (analyse(goPattern) ?? null);
+    anchors = known !== undefined ? known && known.map(anchorFromData) : (analyse(goPattern) ?? null);
     ANCHORS.set(goPattern, anchors);
   }
   return anchors ?? undefined;
@@ -131,7 +131,12 @@ export function analyseAnchors(goPattern: string): AnchorData[] | null {
 function anchorToData(anchor: Anchor): AnchorData {
   let prefix = "";
   for (let c = 0; c < 128; c += 4) {
-    prefix += (anchor.prefix[c]! | (anchor.prefix[c + 1]! << 1) | (anchor.prefix[c + 2]! << 2) | (anchor.prefix[c + 3]! << 3)).toString(16);
+    prefix += (
+      anchor.prefix[c]! |
+      (anchor.prefix[c + 1]! << 1) |
+      (anchor.prefix[c + 2]! << 2) |
+      (anchor.prefix[c + 3]! << 3)
+    ).toString(16);
   }
   return { literals: anchor.literals, maxPrefix: anchor.maxPrefix, prefix, wide: anchor.wide };
 }
@@ -706,7 +711,8 @@ export class LazyPrefixRegex {
     }
     // Two literals can occur at one position (`key` and `keys`): keep each position once.
     let distinct = 0;
-    for (let j = 0; j < n; j++) if (j === 0 || candidates[j] !== candidates[j - 1]) candidates[distinct++] = candidates[j]!;
+    for (let j = 0; j < n; j++)
+      if (j === 0 || candidates[j] !== candidates[j - 1]) candidates[distinct++] = candidates[j]!;
     return distinct;
   }
 

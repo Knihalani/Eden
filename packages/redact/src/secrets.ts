@@ -28,9 +28,24 @@
  *   prefixes), so the gate is never looser than it was.
  */
 import { MultiMatcher } from "./primitives/matcher.ts";
-import { type Analyses, AnchoredRegex, anchorsOf, anchorsOfRegex, lazyPrefixOf, Occurrences, useAnalyses } from "./anchor.ts";
+import {
+  type Analyses,
+  AnchoredRegex,
+  anchorsOf,
+  anchorsOfRegex,
+  lazyPrefixOf,
+  Occurrences,
+  useAnalyses,
+} from "./anchor.ts";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
-import { assignmentSpans, redactAssignments, REDACTED, redactTokensIn, TOKEN_LITERALS, TOKEN_PASSES } from "./redact.ts";
+import {
+  assignmentSpans,
+  redactAssignments,
+  REDACTED,
+  redactTokensIn,
+  TOKEN_LITERALS,
+  TOKEN_PASSES,
+} from "./redact.ts";
 import { SCANNERS } from "./scanners.ts";
 import generated from "./rules.generated.json" with { type: "json" };
 

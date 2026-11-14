@@ -9,7 +9,12 @@ import { gateOf, secretRules } from "./secrets.ts";
 
 export function verdicts(texts: string[]): unknown[] {
   const gate = gateOf(secretRules());
-  return texts.map((text) => [gate.findings(text), gate.secretHits(text), gate.sanitizeForStore(text), redactString(text)]);
+  return texts.map((text) => [
+    gate.findings(text),
+    gate.secretHits(text),
+    gate.sanitizeForStore(text),
+    redactString(text),
+  ]);
 }
 
 if (process.argv[1] === import.meta.filename) {
