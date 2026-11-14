@@ -781,3 +781,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1840 | 2026-11-14 | Adopted: the MCP client reads replies faster. `bodyShapeUnder` crosses strings with the native `indexOf`, the SSE parser finds line ends… | adopted |
 | D1841 | 2026-11-14 | Adopted: the secret gate runs each gitleaks and Eden regex rule only where its matches can start, and does less around the rules, with… | adopted |
 | D1860 | 2026-11-14 | Adopted: the MCP client reads a JSON reply natively when its only framing is a declared length under the cap, carries its shape check with… | adopted |
+| D1890 | 2026-11-14 | Adopted: the turn gate reads a turn 3.0x faster. | adopted |
+| D1891 | 2026-11-14 | Adopted: the glossary's English path 2.6x faster. | adopted |
+| D1892 | 2026-11-14 | Adopted: the HTTP handler parses less a request. | adopted |
+| D1893 | 2026-11-14 | Finding: the model call path has no CPU or token lever worth its risk. | finding |
+| D1894 | 2026-11-14 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | rejected |
