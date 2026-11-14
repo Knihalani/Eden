@@ -89,6 +89,9 @@ interface CompiledAllowlist {
    * last secret the stopwords read. A text dense in findings repeats a few secrets thousands of times.
    */
   verdicts: Map<string, boolean>;
+  /** The last target and its verdict: a string compare, where the map hashes each new slice. */
+  lastTarget?: string;
+  lastVerdict?: boolean;
   lastStopSecret?: string;
   lastStopword?: boolean;
 }
@@ -472,13 +475,17 @@ function allows(list: CompiledAllowlist, finding: Finding): boolean {
   else {
     // The last target's verdict is kept (D1850): findings dense in one text repeat their secret or match.
     const target = list.target === "match" ? finding.match : finding.secret;
-    let verdict = list.verdicts.get(target);
-    if (verdict === undefined) {
-      if (list.verdicts.size >= VERDICTS_KEPT) list.verdicts.clear();
-      verdict = list.regexes.some((regex) => regex.test(target));
-      list.verdicts.set(target, verdict);
+    if (target !== list.lastTarget) {
+      let verdict = list.verdicts.get(target);
+      if (verdict === undefined) {
+        if (list.verdicts.size >= VERDICTS_KEPT) list.verdicts.clear();
+        verdict = list.regexes.some((regex) => regex.test(target));
+        list.verdicts.set(target, verdict);
+      }
+      list.lastTarget = target;
+      list.lastVerdict = verdict;
     }
-    regexAllowed = verdict;
+    regexAllowed = list.lastVerdict!;
   }
   // Both tests are pure, so the stopwords are read only when their answer can change the verdict.
   const stopword = () => {
@@ -757,8 +764,28 @@ const spanOf = (found: RegExpExecArray): Span =>
 
 /** Every match of a global regex: group 1 when the regex has one, else the whole match. */
 function matchSpans(regex: RegExp, text: string): Span[] {
-  return [...text.matchAll(regex)].map(spanOf);
+  // `exec` in a loop, as `matchAll` iterates (an empty match steps one code unit, or one code point under `u`/`v`):
+  // spreading `matchAll` cost a third of the gate's time on a megabyte of findings (D1850).
+  const out: Span[] = [];
+  regex.lastIndex = 0;
+  for (let found = regex.exec(text); found !== null; found = regex.exec(text)) {
+    out.push(spanOf(found));
+    if (found[0].length === 0) {
+      const at = regex.lastIndex;
+      const wide = (regex.unicode || regex.flags.includes("v")) && at + 1 < text.length && isPair(text, at);
+      regex.lastIndex = at + (wide ? 2 : 1);
+    }
+  }
+  regex.lastIndex = 0;
+  return out;
 }
+
+/** Whether a surrogate pair starts at `at`. */
+const isPair = (text: string, at: number): boolean => {
+  const c = text.charCodeAt(at);
+  const d = text.charCodeAt(at + 1);
+  return c >= 0xd800 && c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff;
+};
 
 /**
  * One of Eden's regex rules (`matchSpans`), tried only where its anchors allow when the gate passes the occurrences
