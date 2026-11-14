@@ -802,3 +802,12 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1892 | 2026-11-14 | Adopted: the HTTP handler parses less a request. | adopted |
 | D1893 | 2026-11-14 | Finding: the model call path has no CPU or token lever worth its risk. | finding |
 | D1894 | 2026-11-14 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | rejected |
+| D1910 | 2026-11-14 | Adopted: `pick`'s focus count searches each focus word with `indexOf`. | adopted |
+| D1911 | 2026-11-14 | Adopted (same brief): `sketchTerms` skips `stopwordAt` where the word's FNV-1a hash has no stopword's mark. | adopted |
+| D1912 | 2026-11-14 | Rejected (measured): a packed text deflated by libdeflate (`Bun.deflateSync`'s `library: "libdeflate"`, level 6) in place of zlib. | rejected |
+| D1913 | 2026-11-14 | Adopted (same brief): `packItem` notes the text it deflated in the decode memo. | adopted |
+| D1914 | 2026-11-14 | Rejected (measured): `extractTypedEntities` reading a one-word capitalised run without its split, join and three `isCalendar` calls. | rejected |
+| D1915 | 2026-11-14 | Adopted (same brief; no `await` added or removed, card bytes unchanged): the card queue reads the strict prefilter's own text once. | adopted |
+| D1916 | 2026-11-14 | Adopted (same brief; date facts unchanged, so `PERSIST_FORMAT` stays 6): `SPAN_HINT`'s month alternative and `MONTH_DAY` are tried only… | adopted |
+| D1917 | 2026-11-14 | Rejected (measured beside D1910-D1916): an in-place JS xxHash32 so `sketchTerms` makes no string a word, and one-class lookahead prefixes… | rejected |
+| D1918 | 2026-11-14 | Finding (measured beside D1910-D1917): the rest of the second brief's scope has no lever worth its risk at today's shares. | finding |
