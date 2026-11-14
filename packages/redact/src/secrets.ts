@@ -43,7 +43,7 @@ import {
   assignmentSpansSplit,
   redactAssignments,
   redactTokensIn,
-  structuralMasksOf,
+  structuralRemoved,
   tokenPasses as runTokenPasses,
   TOKEN_LITERALS,
   TOKEN_PASSES,
@@ -1125,9 +1125,10 @@ export function gateOf(rules: SecretRule[]): Gate {
     assignments: assignmentSpansSplit,
     run: (gated, seen) => {
       const passed = runTokenPasses(gated, tokens);
+      const assigned: [number, number][] = [];
       return {
-        stored: redactAssignments(passed.out, false, seen),
-        masks: (values) => structuralMasksOf(passed, values),
+        stored: redactAssignments(passed.out, false, seen, assigned),
+        removed: (values) => structuralRemoved(passed, assigned, values),
       };
     },
   };

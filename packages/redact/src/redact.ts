@@ -28,6 +28,7 @@
  * to drift apart again.
  */
 import { notSecret } from "./not-secret.ts";
+import { identity, type Iv, replaced, traced, union } from "./pieces.ts";
 const SECRET_NOUNS = [
   "apikey",
   "accesskey",
@@ -459,7 +460,12 @@ export function redactTokensIn(s: string, passes: number): string {
  * `containsSecret` redact what main did; the secret gate runs it off too, learns through `seen` whether it took one,
  * and takes such values back itself (compose.ts), where never-less checks them.
  */
-export function redactAssignments(t: string, excuse = false, seen?: { excusable: boolean }): string {
+export function redactAssignments(
+  t: string,
+  excuse = false,
+  seen?: { excusable: boolean },
+  ranges?: [number, number][],
+): string {
   let out = "";
   let cursor = 0;
   scanAssignments(
@@ -469,6 +475,7 @@ export function redactAssignments(t: string, excuse = false, seen?: { excusable:
       // than nesting sentinels.
       if (valueEnd - valueStart === REDACTED.length && t.startsWith(REDACTED, valueStart)) return;
       if (seen && !seen.excusable && notSecret(t.slice(valueStart, valueEnd))) seen.excusable = true;
+      ranges?.push([valueStart, valueEnd]);
       out += t.slice(cursor, valueStart) + REDACTED;
       cursor = valueEnd;
     },
@@ -800,6 +807,32 @@ export function tokenPasses(s: string, passes: number): TokenPassed {
   if ((passes & 4) !== 0) pass(BASIC_AUTH, (_match, b64) => isBasicCredential(b64));
   if ((passes & 8) !== 0) pass(SECRET_INLINE, () => true);
   return { source: s, out: cur, steps };
+}
+
+/**
+ * D1850: what the structural pass removed from its input, as sorted merged intervals of it (pieces.ts): the token
+ * passes' ranges (`passed`) and the assignment pass's (`assigned`, the ranges `redactAssignments` replaced in
+ * `passed.out`, given through its `ranges`), all of them and only those whose value is not code or a placeholder
+ * (whose texts go to `values`). The secret gate's composer reads these instead of a mask per character.
+ */
+export function structuralRemoved(
+  passed: TokenPassed,
+  assigned: [number, number][],
+  values?: string[],
+): { all: Iv[]; strict: Iv[] } {
+  let pieces = identity(passed.source.length);
+  const tokens: Iv[][] = [];
+  for (const ranges of passed.steps) {
+    tokens.push(traced(pieces, ranges));
+    pieces = replaced(pieces, ranges, REDACTED.length);
+  }
+  const strict: Iv[] = [];
+  for (const [start, end] of assigned) {
+    const value = passed.out.slice(start, end);
+    if (notSecret(value)) values?.push(value);
+    else strict.push([start, end]);
+  }
+  return { all: union(...tokens, traced(pieces, assigned)), strict: union(...tokens, traced(pieces, strict)) };
 }
 
 /** `structuralMasks` from the token passes already run (`tokenPasses`): their ranges replayed, then the assignments. */

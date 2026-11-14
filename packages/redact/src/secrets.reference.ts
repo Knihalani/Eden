@@ -34,6 +34,7 @@
 import { MultiMatcher } from "./primitives/matcher.reference.ts";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
 import { type Composed, composeMasks, composeStored, type StructuralPass } from "./compose.ts";
+import { runsOf } from "./pieces.ts";
 import { assignmentSpansSplit, redactString, structuralMasks } from "./redact.reference.ts";
 import { excused, notSecret, placeholderToken } from "./not-secret.ts";
 import { SCANNERS } from "./scanners.ts";
@@ -760,7 +761,10 @@ export function gateOf(rules: SecretRule[]): Gate {
     assignments: assignmentSpansSplit,
     run: (gated, seen) => ({
       stored: redactString(gated, false, seen),
-      masks: (values) => structuralMasks(gated, 15, values),
+      removed: (values) => {
+        const masks = structuralMasks(gated, 15, values);
+        return { all: runsOf(masks.all), strict: runsOf(masks.strict) };
+      },
     }),
   };
 
