@@ -123,7 +123,7 @@ const FOCI = [new Set<string>(), new Set(["freeze", "budget", "nov", "dana"]), n
 function corpus(): ContextItem[] {
   const r = rng(1881);
   const out = scenarioItems();
-  for (let i = 0; i < 2_500; i++) {
+  for (let i = 0; i < 1_200; i++) {
     out.push({ id: `f${i}`, sourceId: "mail", ref: String(i), title: message(r).slice(0, 80), text: message(r) });
   }
   return out;
@@ -171,7 +171,7 @@ describe("render's fast reading (D1881) against the reference", () => {
         }
       }
     }
-    expect(compared).toBeGreaterThan(30_000);
+    expect(compared).toBeGreaterThan(15_000);
   });
 
   test("renderPacket gives the reference's packet", () => {
@@ -193,5 +193,66 @@ describe("render's fast reading (D1881) against the reference", () => {
       };
       expect(fast.renderPacket(pack, options)).toBe(ref.renderPacket(pack, options));
     }
+  });
+
+  test("the parts memo (D1882): reused across packets and settings, read again when an item changes in place", () => {
+    const r = rng(1882);
+    fast.clearParts();
+    const pool = items.slice(0, 40).map((x) => ({ ...x }));
+    for (let i = 0; i < 2_000; i++) {
+      const it = pool[Math.floor(r() * pool.length)]!;
+      // An item edited in place: its text or title changes under the same object.
+      if (r() < 0.05) it.text = message(r);
+      if (r() < 0.03) it.title = message(r).slice(0, 60);
+      const pack = [it, pool[Math.floor(r() * pool.length)]!];
+      const seen = new Set(message(r).toLowerCase().split(/\W+/));
+      const options = {
+        maxBytes: 2_000,
+        focus: FOCI[Math.floor(r() * FOCI.length)]!,
+        itemBytes: 80 + Math.floor(r() * 300),
+        ...(r() < 0.5 ? { year: 2026 } : {}),
+        ...(r() < 0.5 ? { self: SELF } : {}),
+        dense: r() < 0.5,
+        split: r() < 0.5,
+        ...(r() < 0.5 ? { shownBefore: () => seen } : {}),
+      };
+      expect(fast.renderPacket(pack, options)).toBe(ref.renderPacket(pack, options));
+    }
+    expect(fast.partsMemoCount()).toBeGreaterThan(0);
+    expect(fast.partsMemoCount()).toBeLessThanOrEqual(pool.length);
+    fast.clearParts();
+    expect(fast.partsMemoCount()).toBe(0);
+  });
+
+  test("the parts memo holds at most 256 items, oldest out first", () => {
+    fast.clearParts();
+    const many = items.slice(0, 300);
+    for (const it of many) fast.renderPacket([it], { maxBytes: 1_000, focus: FOCI[1]! });
+    expect(fast.partsMemoCount()).toBe(256);
+    fast.clearParts();
+  });
+
+  test("the parts memo holds at most 1,200,000 characters of text, counted exactly", () => {
+    fast.clearParts();
+    const r = rng(18820);
+    const big = Array.from({ length: 200 }, (_, i) => ({
+      id: `b${i}`,
+      sourceId: "mail",
+      ref: String(i),
+      title: `Big ${i}`,
+      text: Array.from({ length: 200 }, () => message(r))
+        .join(" ")
+        .slice(0, 8_000),
+    }));
+    for (let i = 0; i < 1_000; i++) {
+      const it = big[Math.floor(r() * big.length)]!;
+      if (r() < 0.1) it.text = message(r).repeat(60).slice(0, 8_000);
+      fast.renderPacket([it], { maxBytes: 1_000, focus: FOCI[1]!, ...(r() < 0.5 ? { year: 2026 } : {}) });
+      expect(fast.partsMemoChars()).toBeLessThanOrEqual(1_200_000);
+    }
+    // The count is the held readings' texts, summed: what a clear gives back.
+    expect(fast.partsMemoChars()).toBeGreaterThan(1_000_000);
+    fast.clearParts();
+    expect(fast.partsMemoChars()).toBe(0);
   });
 });

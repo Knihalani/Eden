@@ -40,6 +40,7 @@ import { dayKeys } from "./days";
 import { dayFactsClass, dayFactsOf, type DayFacts } from "./day-facts";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
 import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
+import { clearParts } from "./render";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
 import { orgLabel } from "./parties";
@@ -896,6 +897,7 @@ export class ItemCache {
     this.restoring.delete(key);
     this.thawing.delete(key);
     clearDecoded();
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo();
     // The user's gone-holds go too, as on a forget: the new owner holds its own.
     const held = this.holds.get(scope.tenantId);
@@ -1046,6 +1048,7 @@ export class ItemCache {
     this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo(); // Nor its terms in the vocabulary's decode memo (D998).
     const n = (this.perTenant.get(tenantId) ?? 1) - 1;
     if (n <= 0) this.perTenant.delete(tenantId);
@@ -1278,6 +1281,7 @@ export class ItemCache {
    */
   removeItems(scope: Scope, ids: Iterable<string>, now = Date.now(), holdMs = 0): number {
     clearDecoded(); // A deleted item's decoded text does not stay in the memo.
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     let held: TenantHolds | undefined;
     if (holdMs > 0) {
       held = this.holds.get(scope.tenantId);
@@ -1989,6 +1993,7 @@ export class ItemCache {
   private install(key: string, f: FrozenUser): void {
     this.users.set(key, f); // Same key: the user's place in the eviction order is unchanged.
     clearDecoded(); // Decoded texts of this user's items do not stay in the memo.
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo();
     this.freezes.frozen++;
     // D425 (opt-in): the same blob, encrypted, on disk while the user stays frozen; a write that fails leaves none.
@@ -2464,6 +2469,7 @@ export class ItemCache {
 
   forget(scope: Scope, sourceId?: string): void {
     clearDecoded(); // The decode memo may hold their text (`packed-text.ts`).
+    clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo(); // ... and the vocabulary's decoded terms (D998).
     if (!sourceId) {
       this.dropUser(scopeKey(scope), scope.tenantId);
