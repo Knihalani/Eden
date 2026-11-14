@@ -723,40 +723,49 @@ function scan(value: unknown, w: Walk, depth: number, hit: (s: string) => boolea
 /**
  * D1850: which characters of `s` the structural pass (`redactAssignments(redactTokensIn(s, passes))`) takes out, as a
  * mask over `s` (1: removed). The passes run as they do there, each on the last one's output, with each character
- * of that output traced back to `s` (a sentinel's characters to none). `strict`: an assignment value that is code or
- * a placeholder (not-secret.ts) is not counted as removed, and its text goes to `values` when given. The secret
+ * of that output traced back to `s` (a sentinel's characters to none): `all`, and `strict`, where an assignment
+ * value that is code or a placeholder (not-secret.ts) is not counted as removed (its text goes to `values` when given). The secret
  * gate uses it to add its D1850 rules' spans to what the passes removed without letting them change what the passes
  * see (`sanitizeForStore`).
  */
-export function structuralMask(s: string, passes: number, strict = false, values?: string[]): Uint8Array {
-  const removed = new Uint8Array(s.length);
+export function structuralMasks(s: string, passes: number, values?: string[]): { all: Uint8Array; strict: Uint8Array } {
+  return structuralMasksOf(tokenPasses(s, passes), values);
+}
+
+/** The token passes' output on a text, and the ranges each pass replaced (in its input), for `structuralMasksOf`. */
+export interface TokenPassed {
+  source: string;
+  out: string;
+  steps: [number, number][][];
+}
+
+/**
+ * D1850: `redactTokensIn(s, passes)` (its output is `out`), keeping the ranges each pass replaced, so the masks can be
+ * worked out after it without running the passes' regexes again (7 ms a megabyte each time).
+ */
+export function tokenPasses(s: string, passes: number): TokenPassed {
   let cur = s;
-  /** Per character of `cur`, its index in `s`, or -1 inside a sentinel. */
-  let map = new Int32Array(s.length);
-  for (let i = 0; i < map.length; i++) map[i] = i;
-  /** Replaces `ranges` of `cur` (increasing, apart) by the sentinel, marking what they held as removed. */
+  const steps: [number, number][][] = [];
+  /** Replaces `ranges` of `cur` (increasing, apart) by the sentinel. */
   const replace = (ranges: [number, number][]) => {
     if (ranges.length === 0) return;
     let out = "";
-    const next = new Int32Array(cur.length + ranges.length * REDACTED.length);
-    let n = 0;
     let at = 0;
     for (const [start, end] of ranges) {
       out += cur.slice(at, start) + REDACTED;
-      for (let i = at; i < start; i++) next[n++] = map[i]!;
-      for (let i = start; i < end; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
-      for (let i = 0; i < REDACTED.length; i++) next[n++] = -1;
       at = end;
     }
-    out += cur.slice(at);
-    for (let i = at; i < cur.length; i++) next[n++] = map[i]!;
-    cur = out;
-    map = next.subarray(0, n);
+    cur = out + cur.slice(at);
+    steps.push(ranges);
   };
   const matches = (regex: RegExp, keep: (m: RegExpExecArray) => boolean): [number, number][] => {
     const out: [number, number][] = [];
     regex.lastIndex = 0;
-    for (const m of cur.matchAll(regex)) if (keep(m)) out.push([m.index, m.index + m[0].length]);
+    for (let m = regex.exec(cur); m !== null; m = regex.exec(cur)) {
+      if (keep(m)) out.push([m.index, m.index + m[0].length]);
+      if (m[0].length === 0) regex.lastIndex++;
+    }
+    regex.lastIndex = 0;
     return out;
   };
   if ((passes & 1) !== 0 && cur.indexOf("-----") >= 0) {
@@ -780,18 +789,46 @@ export function structuralMask(s: string, passes: number, strict = false, values
   if ((passes & 2) !== 0) replace(matches(SK_DASHED, (m) => DIGIT.test(m[0])));
   if ((passes & 4) !== 0) replace(matches(BASIC_AUTH, (m) => isBasicCredential(m[1]!)));
   if ((passes & 8) !== 0) replace(matches(SECRET_INLINE, () => true));
-  // The assignment pass, last: only what it removes is wanted, not its output.
+  return { source: s, out: cur, steps };
+}
+
+/** `structuralMasks` from the token passes already run (`tokenPasses`): their ranges replayed, then the assignments. */
+export function structuralMasksOf(passed: TokenPassed, values?: string[]): { all: Uint8Array; strict: Uint8Array } {
+  const s = passed.source;
+  const removed = new Uint8Array(s.length);
+  /** Per character of the current text, its index in `s`, or -1 inside a sentinel. */
+  let map = new Int32Array(s.length);
+  for (let i = 0; i < map.length; i++) map[i] = i;
+  let length = s.length;
+  for (const ranges of passed.steps) {
+    const next = new Int32Array(length + ranges.length * REDACTED.length);
+    let n = 0;
+    let at = 0;
+    for (const [start, end] of ranges) {
+      for (let i = at; i < start; i++) next[n++] = map[i]!;
+      for (let i = start; i < end; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+      for (let i = 0; i < REDACTED.length; i++) next[n++] = -1;
+      at = end;
+    }
+    for (let i = at; i < length; i++) next[n++] = map[i]!;
+    map = next;
+    length = n;
+  }
+  const cur = passed.out;
+  // The assignment pass, last: only what it removes is wanted, not its output. Both masks share the token passes.
+  const strict = removed.slice();
   scanAssignments(
     cur,
     (_keyEnd, valueStart, valueEnd) => {
       if (valueEnd - valueStart === REDACTED.length && cur.startsWith(REDACTED, valueStart)) return;
-      if (strict && notSecret(cur.slice(valueStart, valueEnd))) {
+      for (let i = valueStart; i < valueEnd; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+      if (notSecret(cur.slice(valueStart, valueEnd))) {
         values?.push(cur.slice(valueStart, valueEnd));
         return;
       }
-      for (let i = valueStart; i < valueEnd; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+      for (let i = valueStart; i < valueEnd; i++) if (map[i]! >= 0) strict[map[i]!] = 1;
     },
     false,
   );
-  return removed;
+  return { all: removed, strict };
 }
