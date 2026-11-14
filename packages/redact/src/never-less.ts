@@ -16,7 +16,7 @@ import {
   assignmentSpans as assignmentSpansBefore,
   REDACTED,
   structuralMask as structuralMaskBefore,
-} from "./redact.reference.ts";
+} from "./redact.baseline.ts";
 import { type Gate, gateOf, secretRules } from "./secrets.ts";
 import { gateOf as gateOfBaseline, secretRules as secretRulesBaseline } from "./secrets.baseline.ts";
 
