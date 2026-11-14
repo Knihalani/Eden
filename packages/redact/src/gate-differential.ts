@@ -210,7 +210,7 @@ export function fuzzGate(count: number, seed: number): GateFuzzResult {
  * whole, and each kind at 256 B to 1 MB. Imported on demand: it builds sim worlds, which the tests do not need.
  */
 async function corpusDifferences(): Promise<{ texts: number; failures: { text: string; why: string }[] }> {
-  const { KINDS, pieces, sample: sized } = await import("../bench/corpus");
+  const { KINDS, pieces, sample: sized } = await import("../bench/corpus.ts");
   const failures: { text: string; why: string }[] = [];
   const texts = [
     ...pieces().map((piece) => piece.text),

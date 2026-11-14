@@ -2,13 +2,20 @@
   "name": "@eden/redact",
   "version": "0.0.0",
   "private": true,
+  "description": "A secret gate for text: gitleaks' rules and its own, linear time, no dependencies",
+  "license": "MIT",
   "type": "module",
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
-    
+  "engines": {
+    "bun": ">=1.2",
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "bun test ./src",
+    "test:node": "node --test src/node.check.ts"
   },
   "devDependencies": {
     "re2js": "2.9.0"
