@@ -136,7 +136,10 @@ One profiled run each, same intervals as before.
   packets at 1.18 items, facts handed 10/11, look-alikes handed 3/10: main's figures.
 - Funnel (`--jobs 4`, the default, shipped coverage, train seeds 41-42): main 323/384 hidden, 294/384 decoys; this
   branch 323/384 and 294/384, `--baseline` against main's rows hidden +0 −0, decoys +0 −0.
-- `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` on the final tree (see the PR-less push).
+- `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` on the final tree: passed in 163 s (2,858
+  tests in 287 files, then the 524 of the real-time tail, none failing). The run before it failed one tail test,
+  `router-processes.test.ts`'s 500 ms child-start deadline, at load average 9.4 (packages/server, untouched here); it
+  passed three times alone and in the rerun.
 
 ## Pitfalls (also in packages/engine/CLAUDE.md)
 
