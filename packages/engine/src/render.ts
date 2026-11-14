@@ -1,7 +1,7 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
 import { safeBlock, safeLine } from "./line";
-import { isStopword } from "./text";
+import { isStopword, readWordUnit, WORD_UNITS } from "./text";
 
 /**
  * The packet the agent sees. Short, cited, and labelled as background so the agent treats it as information, not
@@ -265,10 +265,6 @@ const GREETED = /^([Hh]i|[Hh]ello|[Hh]ey|[Dd]ear)\s+[\p{Lu}][\p{L}'-]*\s?[,-]\s+
 const PLEASANTRY =
   /^(shout if|let me know (if|what)|hope (you|your|all)|see you (then|soon)|thanks|thank you|looking forward|following up on|happy to help|have a (great|good|nice)|speak soon|talk soon|any questions)\b.{0,50}$/i;
 const WORDS = /[\p{L}\p{N}]+/gu;
-/** One code unit of `WORDS`: read alone, a unit outside the surrogates is the code point it is. */
-const WORD_CHAR = /^[\p{L}\p{N}]$/u;
-/** Per code unit, whether it is a word character: 0 not yet read, 1 it is, 2 it is not. Filled as units are met. */
-const WORD_UNITS = new Uint8Array(0x10000);
 
 /**
  * `s.match(WORDS) ?? []` read by one pass over the code units, each class read once a process (`WORD_UNITS`): the
@@ -281,11 +277,7 @@ export function wordsIn(s: string): string[] {
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
     let k = WORD_UNITS[c]!;
-    if (k === 0) {
-      if (c >= 0xd800 && c <= 0xdfff) return s.match(WORDS) ?? [];
-      k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
-      WORD_UNITS[c] = k;
-    }
+    if (k === 0 && (k = readWordUnit(c)) === 0) return s.match(WORDS) ?? [];
     if (k === 1) {
       if (start < 0) start = i;
     } else if (start >= 0) {
@@ -496,11 +488,8 @@ function saysUnknown(s: string, known: (word: string) => boolean): boolean {
   for (let i = 0; i <= s.length; i++) {
     const c = i < s.length ? s.charCodeAt(i) : 32;
     let k = WORD_UNITS[c]!;
-    if (k === 0) {
-      if (c >= 0xd800 && c <= 0xdfff) return wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w));
-      k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
-      WORD_UNITS[c] = k;
-    }
+    if (k === 0 && (k = readWordUnit(c)) === 0)
+      return wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w));
     if (k === 1) {
       if (start < 0) start = i;
     } else if (start >= 0) {
@@ -524,11 +513,7 @@ function focusCount(s: string, focus: readonly string[]): number {
   for (let i = 0; i <= s.length; i++) {
     const c = i < s.length ? s.charCodeAt(i) : 32;
     let k = WORD_UNITS[c]!;
-    if (k === 0) {
-      if (c >= 0xd800 && c <= 0xdfff) return focusCountOf(wordsIn(s), focus);
-      k = WORD_CHAR.test(String.fromCharCode(c)) ? 1 : 2;
-      WORD_UNITS[c] = k;
-    }
+    if (k === 0 && (k = readWordUnit(c)) === 0) return focusCountOf(wordsIn(s), focus);
     if (k === 1) {
       if (start < 0) start = i;
     } else if (start >= 0) {

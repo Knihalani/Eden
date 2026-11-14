@@ -11,7 +11,7 @@
  * users (D425), where it is saved encrypted with them.
  */
 import { hashString } from "@eden/primitives";
-import { isStopword } from "./text";
+import { isStopword, readWordUnit, WORD_UNITS } from "./text";
 
 /** The sketch's size while it fills (bits, a power of two). */
 const MAX_BITS = 1 << 15;
@@ -110,10 +110,18 @@ export class TermSketch {
 
 /** A term's two hashes for the sketch (a term as `sketchTerms` gives it). */
 export function termHashes(term: string): [number, number] {
-  const h1 = hashString(term, SEED) >>> 0;
-  // The second hash is odd, so h1 + h2 walks every bit of a power-of-two filter.
-  const h2 = (Math.imul(h1 ^ (h1 >>> 15), 0x2c1b3c6d) >>> 0) | 1;
-  return [h1, h2];
+  const h1 = termHash(term);
+  return [h1, secondHash(h1)];
+}
+
+/** `termHashes`' first hash, with no pair made (the sync's store hashes every listed item's terms, D1886). */
+export function termHash(term: string): number {
+  return hashString(term, SEED) >>> 0;
+}
+
+/** `termHashes`' second hash, from the first. It is odd, so h1 + h2 walks every bit of a power-of-two filter. */
+export function secondHash(h1: number): number {
+  return (Math.imul(h1 ^ (h1 >>> 15), 0x2c1b3c6d) >>> 0) | 1;
 }
 
 const SEED = 0x5ee7;
@@ -125,6 +133,37 @@ const DIGIT = /\d/;
  * digit (ticket numbers and ids would fill a sketch with terms no request names), stopwords out, each once.
  */
 export function sketchTerms(text: string): string[] {
+  // One pass over the lower-cased text's code units (D1886): the split made a string of every word, two-letter ones
+  // and ones with a figure too, and tested each by a regex; this makes one only of a word it may keep. A text with a
+  // surrogate is read by the split, whose `u` flag reads a pair as one code point.
+  const lower = text.toLowerCase();
+  const out = new Set<string>();
+  let start = -1;
+  let figure = false;
+  for (let i = 0; i <= lower.length; i++) {
+    const c = i < lower.length ? lower.charCodeAt(i) : 32;
+    let k = WORD_UNITS[c]!;
+    if (k === 0 && (k = readWordUnit(c)) === 0) return sketchTermsSplit(text);
+    if (k === 1) {
+      if (start < 0) {
+        start = i;
+        figure = false;
+      }
+      // `DIGIT` (no `u` flag): the ASCII figures only.
+      if (c >= 48 && c <= 57) figure = true;
+    } else if (start >= 0) {
+      if (i - start >= 3 && !figure) {
+        const w = lower.slice(start, i);
+        if (!isStopword(w)) out.add(w);
+      }
+      start = -1;
+    }
+  }
+  return [...out];
+}
+
+/** `sketchTerms` by its split, as it read every text before D1886: the reading of a text with a surrogate. */
+export function sketchTermsSplit(text: string): string[] {
   const out = new Set<string>();
   for (const w of text.toLowerCase().split(SPLIT)) {
     if (w.length < 3 || DIGIT.test(w) || isStopword(w)) continue;
