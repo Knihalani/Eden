@@ -172,7 +172,12 @@ export const DEONTIC = new RegExp(
 
 /** The own text of an item: headers, quoted history and bulk boilerplate out, at most `READ_CHARS`. */
 export function ownText(item: ContextItem): string {
-  return item.text
+  return ownTextOf(item.text);
+}
+
+/** `ownText` of a text. */
+function ownTextOf(text: string): string {
+  return text
     .slice(0, READ_CHARS * 3)
     .replace(HEADER_LINE, "")
     .replace(QUOTED, "")
@@ -238,6 +243,14 @@ export function worthCarding(item: ContextItem): boolean {
  */
 const FOOTER =
   /(?:confidentiality notice|this (?:e-?mail|message) and any attachments?|if you (?:are not|have received this) (?:the )?(?:intended|in error)|notification (?:preferences|settings)|manage (?:your )?(?:notifications|email preferences|subscriptions?)|to (?:stop|change what you) receiv)(?:[^\n]|\n(?![ \t]*\n))*/gi;
+/**
+ * What `worthCardingStrict` and `sentenceKey` read of an item: its own text (`ownText`) with each footer block out.
+ * `enqueue` reads it once for both (D1915); before, each made it from a spread copy of the item.
+ */
+export function strictOwnText(item: ContextItem): string {
+  return ownTextOf(item.text.slice(0, READ_CHARS * 3).replace(FOOTER, ""));
+}
+
 /** A reply or a forward: its title is the thread's, not what this message says. */
 const REPLY_TITLE = /^\s*(?:re|fwd?|aw|sv)\s*:/i;
 
@@ -246,8 +259,7 @@ const REPLY_TITLE = /^\s*(?:re|fwd?|aw|sv)\s*:/i;
  * end of its paragraph out, and a reply's or forward's title left out (the thread's first message is read under it).
  * What it rejects gets no card at no call; what it passes is read by the same prompt as before, so a card is unchanged.
  */
-export function worthCardingStrict(item: ContextItem): boolean {
-  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") });
+export function worthCardingStrict(item: ContextItem, own = strictOwnText(item)): boolean {
   const title = REPLY_TITLE.test(item.title) ? "" : item.title.slice(0, 200);
   return DEONTIC.test(`${title}\n${own}`);
 }
@@ -269,7 +281,31 @@ const RELATIVE =
  * two projects. No key (undefined) when no sentence qualifies or one is dated relative to its message ("next Friday",
  * "tomorrow"): the same words then mean different days.
  */
-export function sentenceKey(item: ContextItem): string | undefined {
+export function sentenceKey(item: ContextItem, own = strictOwnText(item)): string | undefined {
+  const held = own
+    .toLowerCase()
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((x) => x.replace(GREETING, "").trim())
+    .filter((x) => x.length > 0 && DEONTIC.test(x));
+  if (held.length === 0 || held.some((x) => RELATIVE.test(x))) return undefined;
+  let title = item.title.slice(0, 200);
+  while (REPLY_TITLE.test(title)) title = title.replace(REPLY_TITLE, "");
+  if (RELATIVE.test(title)) return undefined;
+  return createHash("sha256")
+    .update([title.trim().replace(/\s+/g, " ").toLowerCase(), ...[...new Set(held)].sort()].join("\n"))
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/** `worthCardingStrict` as it read before D1915 (its own text from a spread copy), for its differential test. */
+export function worthCardingStrictBefore(item: ContextItem): boolean {
+  const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") });
+  const title = REPLY_TITLE.test(item.title) ? "" : item.title.slice(0, 200);
+  return DEONTIC.test(`${title}\n${own}`);
+}
+
+/** `sentenceKey` as it read before D1915, for its differential test. */
+export function sentenceKeyBefore(item: ContextItem): string | undefined {
   const own = ownText({ ...item, text: item.text.slice(0, READ_CHARS * 3).replace(FOOTER, "") }).toLowerCase();
   const held = own
     .split(/(?<=[.!?])\s+|\n+/)
@@ -1173,7 +1209,9 @@ export class CardEnricher {
         this.stats.reused++;
         continue;
       }
-      if (!(this.limits.strict ? worthCardingStrict(item) : worthCarding(item))) {
+      // The strict prefilter's reading, kept for the sentence key when the item is queued (D1915).
+      const own = this.limits.strict ? strictOwnText(item) : undefined;
+      if (!(own !== undefined ? worthCardingStrict(item, own) : worthCarding(item))) {
         this.stats.prefiltered++;
         // With `intent`, an item with no constraint language may still bear on a request (an event, a thread about
         // a project): it is read for its requests, and its card stays none.
@@ -1190,7 +1228,7 @@ export class CardEnricher {
         }
         continue;
       }
-      this.queueItem(u, item, hash, now);
+      this.queueItem(u, item, hash, now, own);
     }
     this.trim(u);
     while (u.byItem.size > this.limits.maxCardsPerUser * 2) unlink(u, u.byItem.keys().next().value as string);
@@ -1200,8 +1238,8 @@ export class CardEnricher {
   }
 
   /** Queues an item for the model, or gives it the card of an item saying the same constraint (`sentenceReuse`). */
-  private queueItem(u: UserCards, item: ContextItem, hash: string, now: number): void {
-    const skey = this.limits.sentenceReuse ? sentenceKey(item) : undefined;
+  private queueItem(u: UserCards, item: ContextItem, hash: string, now: number, own?: string): void {
+    const skey = this.limits.sentenceReuse ? sentenceKey(item, own ?? strictOwnText(item)) : undefined;
     if (skey !== undefined) {
       const twin = u.bySentence.get(skey);
       const made = twin !== undefined ? u.byHash.get(twin) : undefined;
