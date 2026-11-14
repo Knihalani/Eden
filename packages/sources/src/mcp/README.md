@@ -226,7 +226,7 @@ tests in `adversarial.test.ts` and `http.test.ts`, and the test that keeps `shap
 ```bash
 bun test ./packages/sources/src/mcp/      # in Eden
 # On its own: copy the directory to an empty one as mcp/, add @modelcontextprotocol/sdk and zod as
-# devDependencies there, and run `bun test ./mcp/` (78 pass, 10 skipped, D1860).
+# devDependencies there, and run `bun test ./mcp/` (124 pass, 10 skipped, D1870).
 ```
 
 On Node (checked on 22.22), use a bundle: `bun build mcp/index.ts mcp/stdio.ts mcp/extras.ts --target=node
