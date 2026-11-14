@@ -329,29 +329,35 @@ export class StreamableHttpTransport implements Transport {
     }
     void (async () => {
       let misses = 0;
-      while (!stop.signal.aborted && this.state === "open") {
-        const got = await this.readServerStream(res, stop.signal, lastEventId, retryMs);
-        lastEventId = got.lastEventId;
-        retryMs = got.retryMs;
-        if (got.failed || stop.signal.aborted) break;
-        misses = got.delivered ? 0 : misses + 1;
-        if (misses > resume.maxRetries) break;
-        try {
-          await sleep(delayFor(resume, Math.max(1, misses), retryMs), stop.signal);
-          res = await connect();
-        } catch {
-          misses++;
-          continue;
+      try {
+        for (;;) {
+          const got = await this.readServerStream(res, stop.signal, lastEventId, retryMs);
+          lastEventId = got.lastEventId;
+          retryMs = got.retryMs;
+          if (got.failed) break;
+          misses = got.delivered ? 0 : misses + 1;
+          // Opened again until it works or `maxRetries` tries in a row deliver nothing.
+          for (;;) {
+            if (stop.signal.aborted || this.state !== "open" || misses > resume.maxRetries) return;
+            await sleep(delayFor(resume, Math.max(1, misses), retryMs), stop.signal);
+            try {
+              res = await connect();
+            } catch {
+              misses++;
+              continue;
+            }
+            if (res.ok && mediaType(res.headers.get("content-type")) === "text/event-stream") break;
+            await res.body?.cancel().catch(() => {});
+            // The server no longer offers one, or no longer knows the session: stop trying.
+            if (res.status === 405 || res.status === 404) return;
+            misses++;
+          }
         }
-        if (!res.ok || mediaType(res.headers.get("content-type")) !== "text/event-stream") {
-          await res.body?.cancel().catch(() => {});
-          // The server no longer offers one: stop trying.
-          if (res.status === 405 || res.status === 404) break;
-          misses++;
-          if (misses > resume.maxRetries) break;
-        }
+      } catch {
+        // Stopped by `close` while waiting: nothing is waiting on this loop.
+      } finally {
+        if (this.serverStream === stop) this.serverStream = null;
       }
-      if (this.serverStream === stop) this.serverStream = null;
     })();
     return true;
   }
