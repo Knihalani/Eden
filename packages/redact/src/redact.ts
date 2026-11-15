@@ -195,6 +195,13 @@ function isSpace(c: number): boolean {
   return c === 32 || c === 9 || c === 10 || c === 13 || c === 12 || c === 11;
 }
 
+/** `ASSIGN_CLASS` values: a key character (`isKeyChar`), a character that ends a value (`endsValue`). */
+const KEY_CHAR = 1;
+const ENDS_VALUE = 2;
+/** Per ASCII code unit, its class for `scanAssignments` (a table load in its loops; D1850). */
+const ASSIGN_CLASS = new Uint8Array(128);
+for (let c = 0; c < 128; c++) ASSIGN_CLASS[c] = isKeyChar(c) ? KEY_CHAR : endsValue(c) ? ENDS_VALUE : 0;
+
 /** Where a value ends: whitespace, or a separator that starts a *different* field. */
 function endsValue(c: number): boolean {
   return isSpace(c) || c === 38 /* & */ || c === 59; /* ; */
@@ -304,6 +311,29 @@ function endsWithNoun(n: number, from: number): boolean {
  * fast-path gate was not — there is nothing here that can drift out of step
  * with the nouns.
  */
+/**
+ * Where a quoted value that opens before `from` ends: just past its closing `quote`, where a walk from `from` that
+ * steps over the character after each backslash stops (past the text's end when none closes it). By `indexOf`, not
+ * that walk: a quote closes the value when the run of backslashes before it (from `from`) is even, since a backslash
+ * outside that run is followed by a character that is not one.
+ */
+function quotedEnd(s: string, from: number, quote: number): number {
+  const char = quote === 34 ? '"' : "'";
+  let at = from;
+  for (;;) {
+    const q = s.indexOf(char, at);
+    if (q < 0) break;
+    let back = q;
+    while (back > from && s.charCodeAt(back - 1) === 92 /* \ */) back--;
+    if (((q - back) & 1) === 0) return q + 1;
+    at = q + 1;
+  }
+  // No closing quote: the walk runs to the end, stepping over the character after each backslash.
+  let end = at;
+  while (end < s.length) end += s.charCodeAt(end) === 92 ? 2 : 1;
+  return end;
+}
+
 function scanAssignments(
   s: string,
   onSecret: null | ((keyEnd: number, valueStart: number, valueEnd: number) => void),
@@ -313,12 +343,14 @@ function scanAssignments(
   let eq = s.indexOf("=");
   let colon = s.indexOf(":");
   if (eq < 0 && colon < 0) return false;
+  const n = s.length;
   let found = false;
-  for (let i = 0; i < s.length; i++) {
+  let i = 0;
+  while (i < n) {
     if (eq >= 0 && eq < i) eq = s.indexOf("=", i);
     if (colon >= 0 && colon < i) colon = s.indexOf(":", i);
     if (eq < 0 && colon < 0) break;
-    i = eq < 0 ? colon : colon < 0 ? eq : Math.min(eq, colon);
+    i = eq < 0 ? colon : colon < 0 ? eq : eq < colon ? eq : colon;
 
     // Key: walk back over key characters, stepping over one optional quote so
     // that serialised JSON ("token":"…") is covered too.
@@ -328,35 +360,40 @@ function scanAssignments(
       if (q === 34 || q === 39) keyEnd--;
     }
     let keyStart = keyEnd;
-    const floor = Math.max(0, keyEnd - MAX_KEY_LEN);
-    while (keyStart > floor && isKeyChar(s.charCodeAt(keyStart - 1))) keyStart--;
-    if (keyStart === keyEnd) continue;
+    const floor = keyEnd > MAX_KEY_LEN ? keyEnd - MAX_KEY_LEN : 0;
+    while (keyStart > floor) {
+      const c = s.charCodeAt(keyStart - 1);
+      if (c >= 128 || ASSIGN_CLASS[c] !== KEY_CHAR) break;
+      keyStart--;
+    }
+    if (keyStart === keyEnd) {
+      i++;
+      continue;
+    }
 
     // Value: whitespace, then a run that stops at the next field. A quoted
     // value runs to its closing quote — commas inside it belong to the value
     // ("password":"a,b","n":1 must keep n) and an escaped quote (`\"`) does
     // not close it, or the tail of the secret survives in the clear.
     let valueStart = i + 1;
-    while (valueStart < s.length && isSpace(s.charCodeAt(valueStart))) valueStart++;
+    while (valueStart < n && isSpace(s.charCodeAt(valueStart))) valueStart++;
     let valueEnd = valueStart;
     const vq = s.charCodeAt(valueStart);
     if (vq === 34 || vq === 39) {
-      valueEnd++;
-      while (valueEnd < s.length) {
-        const c = s.charCodeAt(valueEnd);
-        if (c === 92 /* \ */) {
-          valueEnd += 2;
-          continue;
-        }
-        valueEnd++;
-        if (c === vq) break;
-      }
+      valueEnd = quotedEnd(s, valueStart + 1, vq);
     } else {
-      while (valueEnd < s.length && !endsValue(s.charCodeAt(valueEnd))) valueEnd++;
+      while (valueEnd < n) {
+        const c = s.charCodeAt(valueEnd);
+        if (c < 128 && ASSIGN_CLASS[c] === ENDS_VALUE) break;
+        valueEnd++;
+      }
     }
-    if (valueEnd === valueStart) continue;
+    if (valueEnd === valueStart) {
+      i++;
+      continue;
+    }
 
-    i = valueEnd - 1;
+    i = valueEnd;
     if (!secretKeyAt(s, keyStart, keyEnd)) continue;
     // Code or a placeholder as the value (`maxTokens: 2_000`, `apiKey: string`) is no credential (D1850), where
     // the caller excuses them: the secret gate runs this pass as main did and takes them back itself (compose.ts).
