@@ -460,9 +460,14 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   because re-adding a term or word added in the current epoch writes nothing: an epoch moves on a sketch's restart,
   and on a `RareTerms` drop, forgotten source or renumbering. A new way a sketch or the table can lose a term, or a
   new path that writes `Entry.item` with other words, must move an epoch or clear the stamp. Stamps survive warm and
-  compact freezes in memory (`FrozenUser.stamps`, never in a blob, so never on disk). `sketch-skip.test.ts` drives
-  the skipping engine and one built with `SyncManager.resketchForTests` through the same random sequences and compares
-  their snapshots, routing and answers; nine mutations of the rule each fail it.
+  compact freezes in memory (`FrozenUser.stamps`, never in a blob, so never on disk). The epochs are read-only
+  getters: only the sketch and the table move their own. `sketch-skip.test.ts` drives the skipping engine and one
+  built with `PartnerDeps.syncResketchForTests` (`SyncOptions.resketchForTests`, a test-only option of one manager)
+  through the same random sequences and compares their snapshots, routing and answers; nine mutations of the rule
+  each fail it. `sketch-skip-edges.test.ts` does the same past `RareTerms`' 4,094 source numbers (words dropped) and
+  for sketches restarting mid-listing with reorders and freezes. Every drop moves the table's epoch, so a user with
+  more sources than that (or a full table) gets almost no skip: exact, only slower. The backfill pays two stamp
+  lookups an item (about 60-90 ns, against about 155 µs an item): not measurably dearer (docs/research/opt-round3.md).
 - **Which sources are read live is learned (`sourceYield`, D505, D509, on in the default; `source-yield.ts`,
   docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies whose live reads it skips: no search
   behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A lookup that waits for
