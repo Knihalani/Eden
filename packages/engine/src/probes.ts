@@ -721,7 +721,7 @@ export function absenceSpan(item: ContextItem, now: number): { from: string; to:
 
 /**
  * Whether a request's person (a name of one or more words) is named in an item, whole words, any case. The reference
- * for `mentionsAny`, which the partner calls (`mentions-any.test.ts` fuzzes the two).
+ * for `mentionsAny`, which the partner calls (`opt-round3.test.ts` fuzzes the two).
  */
 export function mentions(name: string, item: ContextItem): boolean {
   const hay = ` ${`${item.title} ${item.text} ${item.meta?.people ?? ""}`.toLowerCase().replace(/[^\p{L}\p{N}@.]+/gu, " ")} `;
