@@ -341,6 +341,7 @@ export class Occurrences {
     this.head = new Int32Array(literals).fill(-1);
     this.tail = new Int32Array(literals).fill(-1);
     this.count = new Int32Array(literals);
+    this.seen = new Int32Array(literals);
     this.wanted = keep ? Uint8Array.from(keep) : new Uint8Array(literals).fill(1);
     this.keep = Uint8Array.from(this.wanted);
     this.lazyOnly = new Uint8Array(literals);
@@ -352,9 +353,14 @@ export class Occurrences {
     this.capLazy = Math.floor(length / 32) + 64;
     if (this.size === 0 && !this.counted) return;
     this.counted = false;
-    this.head.fill(-1);
-    this.tail.fill(-1);
-    this.count.fill(0);
+    // Only the literals that occurred (D1850: three fills over every literal cost about 1 µs a call).
+    for (let k = 0; k < this.touched; k++) {
+      const literal = this.seen[k]!;
+      this.head[literal] = -1;
+      this.tail[literal] = -1;
+      this.count[literal] = 0;
+    }
+    this.touched = 0;
     this.size = 0;
     for (const literal of this.full) this.keep[literal] = this.wanted[literal]!;
     this.full.length = 0;
@@ -368,6 +374,9 @@ export class Occurrences {
 
   /** Whether any occurrence was counted since the last `clear`. */
   private counted = false;
+  /** The literals counted since the last `clear` (`touched` of them), each once: what `clear` resets. */
+  private seen: Int32Array;
+  private touched = 0;
 
   /** Whether every occurrence of `literal` is in its list (none was only counted). */
   complete(literal: number): boolean {
@@ -376,6 +385,7 @@ export class Occurrences {
 
   add(literal: number, start: number): void {
     this.counted = true;
+    if (this.count[literal] === 0) this.seen[this.touched++] = literal;
     if (++this.count[literal]! > (this.lazyOnly[literal] === 1 ? this.capLazy : this.cap)) {
       this.keep[literal] = 0;
       this.full.push(literal);
