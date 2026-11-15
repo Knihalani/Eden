@@ -332,7 +332,7 @@ describe("D1933: compaction's native spacing test and its words' bytes", () => {
   });
 });
 
-describe("D1935: assess reads only the statements that can move its verdict", () => {
+describe("D1950: assess reads only the statements that can move its verdict", () => {
   /** Request pieces: names, days, amounts, a routine, references, actions, and words items hold. */
   const ASKS = [
     "Book lunch with Dana Lee",
@@ -391,7 +391,7 @@ describe("D1935: assess reads only the statements that can move its verdict", ()
   });
 });
 
-describe("D1936: an equal re-put counts the held copy's people out and in from one reading", () => {
+describe("D1951: an equal re-put counts the held copy's people out and in from one reading", () => {
   const PEOPLE = ["Dana Lee", "Priya Raman", "Sam Ortiz", "Robin Carter", "Ana Silva"];
   const ADDRESSES = ["dana@acme.com", "priya@globex.com", "sam@acme.com", "robin@example.org"];
   const user = () => ({
