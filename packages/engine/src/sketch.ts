@@ -22,22 +22,47 @@ const FOLD_FILL = 0.2;
 /** A fill past this restarts the sketch: a k = 2 filter half full matches a quarter of the terms it never saw. */
 const SATURATED = 0.5;
 
+/**
+ * A process-wide counter of epochs (D1927): a sketch takes a new one when made and at each restart, a `RareTerms`
+ * when made and whenever adding a word again could change it, and the sync's store a new stamp whenever either of a
+ * source's changes (`SyncManager.stampOf`). Values are never reused, so an equal stamp means the same sketch and table
+ * in the same epoch, never another user's or a replaced one's.
+ */
+let epochs = 0;
+
+/** A new epoch, never handed out before in this process (always past 0, which means "none"). */
+export function nextEpoch(): number {
+  return ++epochs;
+}
+
 export class TermSketch {
   private bits = new Uint32Array(MAX_BITS / 32);
   private set = 0;
+  /**
+   * D1927: changes when the sketch restarts (or is made), the one way a term once added stops being in it. A term
+   * added in this epoch is still held (a fold keeps every term), so adding it again changes nothing while the sketch
+   * is not `saturated`.
+   */
+  epoch = nextEpoch();
 
   /** Bytes held. */
   get bytes(): number {
     return this.bits.byteLength;
   }
 
+  /** Whether the next `add`, of any term, restarts the sketch (D1927: a term held then is not added again for free). */
+  get saturated(): boolean {
+    return this.set > SATURATED * this.bits.length * 32;
+  }
+
   /** Adds a term by its two hashes (`termHashes`). */
   add(h1: number, h2: number): void {
     // Saturated (a folded sketch whose source grew, or a busy one): it would match every term, so it starts again,
     // full size, from what comes next (the daily sweep re-lists the source). The review measured 96% false matches.
-    if (this.set > SATURATED * this.bits.length * 32) {
+    if (this.saturated) {
       this.bits = new Uint32Array(MAX_BITS / 32);
       this.set = 0;
+      this.epoch = nextEpoch();
     }
     const mask = this.bits.length * 32 - 1;
     this.setBit(h1 & mask);

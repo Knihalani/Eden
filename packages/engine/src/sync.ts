@@ -28,7 +28,7 @@ import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
 import { RareTerms } from "./rare-terms";
-import { secondHash, sketchTerms, termHash, TermSketch } from "./sketch";
+import { nextEpoch, secondHash, sketchTerms, termHash, TermSketch } from "./sketch";
 import type { Tracer } from "./spans";
 
 export interface SyncOptions {
@@ -304,6 +304,13 @@ interface SourceSync {
   deep: { cursor: string | undefined; lost: boolean } | null;
   /** `routeSketch`: the terms of what the sync listed from the source (made at its first store). */
   sketch: TermSketch | null;
+  /**
+   * D1927 (`stampOf`): the stamp the store gives the entries whose words it added to this source's sketch and the
+   * user's rare-word table, and the two epochs it stands for. A new stamp whenever either epoch moves.
+   */
+  stamp: number;
+  stampSketch: number;
+  stampRare: number;
   /** The source's connector can fetch an item by ref (`unusedSweepMs`: only such a source may be swept less often). */
   fetches: boolean;
   /**
@@ -360,6 +367,8 @@ export interface SyncStats {
   demandItems: number;
   /** Items dropped because their source no longer lists them. */
   deleted: number;
+  /** D1927: listed items whose words the store did not add again (held unchanged, added under the current stamp). */
+  sketchSkipped: number;
 }
 
 /** `activePollBackoff`: a quiet source's floor interval doubles at most this often (a 2 h floor waits up to 8 h). */
@@ -378,6 +387,12 @@ function changeChance(s: SourceSync, now: number): number {
 }
 
 export class SyncManager {
+  /**
+   * Tests only (D1927's differential test): a manager made while this is set adds every listed item's words again,
+   * as before D1927, and stamps nothing. Read once, at construction.
+   */
+  static resketchForTests = false;
+  private readonly resketch = SyncManager.resketchForTests;
   private readonly users = new Map<string, UserSync>();
   private readonly budget: Gcra<string>;
   private ticking = false;
@@ -397,6 +412,7 @@ export class SyncManager {
     backgroundItems: 0,
     demandItems: 0,
     deleted: 0,
+    sketchSkipped: 0,
   };
 
   constructor(
@@ -1811,12 +1827,27 @@ export class SyncManager {
     // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
     // `rareTerms` (D600): the same terms, in the user's one table of which few sources hold a word. Filled with or
     // without the sketch: with `routeSketch` off the earn rule would otherwise read on names alone (the review).
+    let stamp = 0;
     if (this.o.sketch || this.o.rareTerms) {
       const sketch = this.o.sketch ? (s.sketch ??= new TermSketch()) : null;
       const rare = this.o.rareTerms ? (u.rare ??= new RareTerms()) : null;
+      // D1927: the stamp for this page, taken before any word is added; a restart while it is added changes the
+      // epochs, so the stamp the entries get is stale and never matches again.
+      const before = this.resketch ? 0 : this.stampOf(s, sketch, rare);
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
+        // D1927: the very copy the cache holds, whose words this store added under the stamp still current, is
+        // skipped: each of its terms is in the sketch and the table, and adding it again would write nothing. Not
+        // while the sketch is saturated (its next add restarts it, whatever the term). Anything else (new, changed,
+        // a fresh copy, cut, a frozen user) is added as before.
+        if (before !== 0 && !sketch?.saturated) {
+          const current = this.stampOf(s, sketch, rare);
+          if (current === before && this.deps.cache.stampOf(u.scope, it) === current) {
+            this.stats.sketchSkipped++;
+            continue;
+          }
+        }
         for (const t of sketchTerms(`${it.title} ${it.text}`)) {
           const h1 = termHash(t);
           const h2 = secondHash(h1);
@@ -1824,6 +1855,7 @@ export class SyncManager {
           rare?.add(s.id, h1, h2);
         }
       }
+      stamp = before;
     }
     // `keepCut`: a poll's or a sweep's item dated before the user's cut would be the first a trim drops (the cache's
     // synced cap evicted such items oldest synced first, which could be the user's newest mail). Not stored, and the
@@ -1839,7 +1871,7 @@ export class SyncManager {
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
     // counted as synced, or the listing would undo `removed`.
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
-    const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark);
+    const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark, stamp);
     // A user whose sync was forgotten by the time the put returned (it can thaw the user, and the owner's hooks run
     // inside a thaw): what was just stored belongs to no sync state, so it goes rather than sit unswept.
     if (u.gone) {
@@ -1874,6 +1906,21 @@ export class SyncManager {
       this.deps.onStored?.(u.scope, changed);
     }
     return changed.length;
+  }
+
+  /**
+   * D1927: the source's store stamp for its sketch's and the user's table's current epochs, new (never handed out
+   * before) when either moved since the last call. An entry stamped with it had its words added to both since then.
+   */
+  private stampOf(s: SourceSync, sketch: TermSketch | null, rare: RareTerms | null): number {
+    const a = sketch?.epoch ?? 0;
+    const b = rare?.epoch ?? 0;
+    if (s.stamp === 0 || s.stampSketch !== a || s.stampRare !== b) {
+      s.stamp = nextEpoch();
+      s.stampSketch = a;
+      s.stampRare = b;
+    }
+    return s.stamp;
   }
 
   /** Whether a source's copy goes by its notifications (`push` and the source `notifies`). */
@@ -2088,6 +2135,9 @@ function newSourceSync(id: string): SourceSync {
     engaged: false,
     deep: null,
     sketch: null,
+    stamp: 0,
+    stampSketch: 0,
+    stampRare: 0,
     fetches: false,
     skipped: false,
   };
