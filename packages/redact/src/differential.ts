@@ -7,9 +7,9 @@
  *
  *   bun packages/redact/src/differential.ts [texts per matcher, default 50000] [seed, default 1]
  */
-import { compileAllowlistRegex, parseRegex, type RegexNode } from "./automaton";
-import { linearEngine } from "./re2-oracle";
-import { SCANNERS } from "./scanners";
+import { compileAllowlistRegex, parseRegex, type RegexNode } from "./automaton.ts";
+import { linearEngine } from "./re2-oracle.ts";
+import { SCANNERS } from "./scanners.ts";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 /** mulberry32: a seeded generator, so a failure names a reproducible text. */

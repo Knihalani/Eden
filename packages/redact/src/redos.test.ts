@@ -4,8 +4,8 @@
  * values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { backtrackingEngine, GATE_ENGINES, LINEAR_RULES, rulesWith, sanitizeForStore, secretRules } from "./secrets";
-import { CEILING_MS, costMs, craftedInputs, SHARDS, shardRules, slowOn } from "./redos-sweep";
+import { backtrackingEngine, GATE_ENGINES, LINEAR_RULES, rulesWith, sanitizeForStore, secretRules } from "./secrets.ts";
+import { CEILING_MS, costMs, craftedInputs, SHARDS, shardRules, slowOn } from "./redos-sweep.ts";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
 // fail it the way wall time did (weak-points-1111.md R1).

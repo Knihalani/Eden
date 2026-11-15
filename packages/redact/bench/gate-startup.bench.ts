@@ -5,7 +5,7 @@
  *
  *   env -u BUN_OPTIONS bun packages/redact/bench/gate-startup.bench.ts before|after
  */
-import { KINDS, sample } from "./corpus";
+import { KINDS, sample } from "./corpus.ts";
 
 const which = process.argv[2] ?? "after";
 if (which !== "before" && which !== "after") throw new Error("before or after");

@@ -42,4 +42,24 @@ for (const size of [256, 2048, 16384]) {
     ),
   );
 }
+// `scan` (hits, first-hit list, starts for kept patterns), nothing kept: on ordinary text, and on 64 KB dense in one
+// literal (`sk-` repeated), where D1850's quiet states stop calling `emit` once each pattern there is hit.
+const firsts = new Int32Array(keywords.length);
+const none = new Uint8Array(keywords.length);
+const sink = { add: () => {} };
+for (const [name, text] of [
+  ["corpus 16384B", corpus(16_384)],
+  ["sk- dense 64KB", "sk-".repeat(21_846)],
+] as const) {
+  results.push(
+    bench(
+      `MultiMatcher.scan, nothing kept     ${name}`,
+      () => {
+        hits.fill(0);
+        return matcher.scan(text, hits, firsts, none, sink);
+      },
+      { batch: 5, batches: 100 },
+    ),
+  );
+}
 report(results);

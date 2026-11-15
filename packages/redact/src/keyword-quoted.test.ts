@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sanitizeForStore } from "./secrets";
+import { sanitizeForStore } from "./secrets.ts";
 
 // Audit A5 (fixed). A multi-word password in quotes under `password` (and, after another credential field, under any
 // credential key). KEYWORD_RULE (secrets.ts:88) redacts only `"correct` (`\S{6,}` starts at the quote, stops at the
