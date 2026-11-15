@@ -272,13 +272,15 @@ describe("the GET stream (openServerStream, D1873)", () => {
     });
     const t = cpuMs();
     expect(await g.transport.openServerStream()).toBe(true);
-    for (let i = 0; i < 100 && !g.errors.some((e) => /server requests/.test(e)); i++) await sleep(5);
+    // Up to 10 s for the failure to be reported, not 0.5 s (overrun under load, D1965): a bound only a stream that
+    // never fails reaches. The cost is bounded in CPU below.
+    for (let i = 0; i < 2_000 && !g.errors.some((e) => /server requests/.test(e)); i++) await sleep(5);
     expect(g.errors.filter((e) => /over 100 server requests/.test(e))).toHaveLength(1);
     await sleep(30);
     expect(g.answers()).toBeLessThanOrEqual(100);
     expect(g.gets()).toBe(1);
     expect(cpuMs() - t).toBeLessThan(1_000);
-  });
+  }, 30_000);
 
   test("a response on it is unasked: dropped and counted, never taken as an answer", async () => {
     const g = await getStream(

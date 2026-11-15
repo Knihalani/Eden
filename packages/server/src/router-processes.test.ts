@@ -415,7 +415,9 @@ describe("every start has a deadline (D172)", () => {
       };
       const config = { ...loadConfig(env), port: 0, processes: 1 };
       const restartMs = 50;
-      const startTimeoutMs = 500;
+      // The first start must listen within it: at 500 ms a loaded machine's Bun start-up missed it ("router child 0 did
+      // not start in 500 ms", D1965). The restart hangs however long it is given, so a longer one only waits longer.
+      const startTimeoutMs = 4_000;
       // Alongside, in a directory of its own: a first start that hangs fails startRouter at its deadline and leaves
       // no process behind (no outer race any more; each spawn's own deadline settles the start).
       const hangDir = tempDir("eden-router-hang-first-");
@@ -445,7 +447,7 @@ describe("every start has a deadline (D172)", () => {
       try {
         expect(router.children[0]!.up).toBe(true);
         // The first start exits after 200 ms; the restart hangs.
-        for (let i = 0; i < 300 && pids.length < 2; i++) await Bun.sleep(10);
+        for (let i = 0; i < 1_000 && pids.length < 2; i++) await Bun.sleep(10);
         expect(pids.length).toBe(2);
         const hung = pids[1]!;
         // Killed at its deadline and started again after the doubled backoff (restartMs * 2), never left hanging.

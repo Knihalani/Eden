@@ -70,7 +70,9 @@ describe("Deadlines", () => {
     });
     d.add(5, () => fired.push("second"));
     later = d.add(8, () => fired.push("cancelled"));
-    await sleep(40);
+    // Until "added" fires, not a fixed 40 ms, which a loaded machine overran (D1965). It is due 5 ms after "first"
+    // fired, so at least 10 ms in: "cancelled" (8 ms) would have fired before it had the cancel not held.
+    for (let i = 0; i < 400 && fired.length < 3; i++) await sleep(5);
     expect(fired).toEqual(["first", "second", "added"]);
     expect(internals(d).pending).toBe(0);
   });
@@ -79,7 +81,8 @@ describe("Deadlines", () => {
     const d = new Deadlines();
     const fired: number[] = [];
     for (const ms of [0, -5, Number.NaN, 2 ** 40]) d.add(ms, () => fired.push(ms));
-    await sleep(20);
+    // Until all four fire (a fixed 20 ms is overrun under load, D1965); one held at 2^40 ms would never fire.
+    for (let i = 0; i < 400 && fired.length < 4; i++) await sleep(5);
     expect(fired).toHaveLength(4);
   });
 });
