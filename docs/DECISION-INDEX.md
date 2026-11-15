@@ -831,6 +831,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1932 | 2026-11-15 | Adopted (same brief; D1918 had not built a `datesOf` memo because its days depend on the instant): a statement's date patterns are read… | rejected |
 | D1933 | 2026-11-15 | Adopted (same brief): the ask path's smaller repeats. | adopted |
 | D1934 | 2026-11-15 | Adopted (same brief): `mentionsAny` searches the item's lowercased text in place. | adopted |
-| D1935 | 2026-11-15 | Adopted (same brief): `assess` reads only the statements that can move its verdict. | adopted |
-| D1936 | 2026-11-15 | Adopted (same brief): an equal re-put tallies the held copy's people out and in from one reading. | adopted |
-| D1937 | 2026-11-15 | Finding (measured beside D1930-D1936): the ask path's end to end, and what was left. | finding |
+| D1950 | 2026-11-15 | Adopted (same brief): `assess` reads only the statements that can move its verdict. | adopted |
+| D1951 | 2026-11-15 | Adopted (same brief): an equal re-put tallies the held copy's people out and in from one reading. | adopted |
+| D1952 | 2026-11-15 | Finding (measured beside D1930-D1934, D1950 and D1951): the ask path's end to end, and what was left. | finding |

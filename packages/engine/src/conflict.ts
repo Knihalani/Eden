@@ -441,7 +441,7 @@ export function assess(
   let before: Statement = NO_STATEMENT;
   const statements = a.statements;
   // With no amount in the request and no routine to change, a statement with no mark and no date changes nothing
-  // below: only the others are read (`activeOf`, D1935). Most of an item's statements are such.
+  // below: only the others are read (`activeOf`, D1950). Most of an item's statements are such.
   const active = quietSkipped && frame.amounts.length === 0 && !frame.routine ? activeOf(a) : null;
   const count = active ? active.length : statements.length;
   for (let j = 0; j < count; j++) {
@@ -722,7 +722,7 @@ function analysis(item: ContextItem, V: boolean, other: Analysis | undefined, pr
 
 /**
  * The indices of an analysis's statements that can change `assess`'s verdict for a request with no amount and no
- * routine: read, and with a mark of some kind or a date (D1935). Any other statement leaves every variable of
+ * routine: read, and with a mark of some kind or a date (D1950). Any other statement leaves every variable of
  * `assess`'s loop as it was (its marks are empty, its `lastDone` -1 and its date verdict "none"); the statement before
  * one read is still `statements[i - 1]`, read or not.
  */
@@ -744,7 +744,7 @@ function activeOf(a: Analysis): Int32Array {
   return (a.active = Int32Array.from(out));
 }
 
-/** `assess` reading every statement, as before D1935, for tests (`opt-round4.test.ts`). */
+/** `assess` reading every statement, as before D1950, for tests (`opt-round4.test.ts`). */
 export function assessEvery(frame: Frame, item: ContextItem, now: number, extraTies?: ReadonlySet<string>): Verdict {
   return assess(frame, item, now, extraTies, false);
 }

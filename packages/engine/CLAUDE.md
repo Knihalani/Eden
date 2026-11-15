@@ -706,7 +706,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   entity read as `\s+`: an entity's words must hold no other spacing. `extractTypedEntities`' `persistableCap` stops
   the capitalised runs once that many `PERSISTABLE_KINDS` are found: exact only while names are the last kind added.
   `opt-round3.test.ts` fuzzes each against the code it replaced.
-- **The fourth round (D1930-D1937, docs/research/opt-round4-ask.md) took the ask path's repeated work; each rewrite
+- **The fourth round (D1930-D1934, D1950-D1952, docs/research/opt-round4-ask.md) took the ask path's repeated work; each rewrite
   keeps its reference and `opt-round4.test.ts` fuzzes the two.** `ANALYSES`' entry never reads a packed item's text
   (D1930): an item object is packed or plain for life, so a path that changed a packed copy's text in place would
   serve a stale analysis. `renderPacket` compacts an item only when its size loop reaches it (D1931): an item's
@@ -714,7 +714,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   statement's date patterns are read once (`planDates`, on the statement) and its days worked out per request
   (`replayDates`, D1932): a change to `datesOf`'s patterns, its date words or its `take` changes `planDates` and
   `replayDates` with it (`datesOf` stays as the reference). `assess` reads only `activeOf`'s statements (a mark of
-  some kind or a date) when the request has no amount and no routine (D1935): a new statement field that can move
+  some kind or a date) when the request has no amount and no routine (D1950): a new statement field that can move
   the verdict joins `activeOf`'s test. `mentionsAny` searches the lowercased text in place with `mentionText`'s
   classes (`keeps`: letters, digits, "@" and "."), the copied text (`mentionsAnyByText`) for a surrogate (D1934). The
   packet's `shown` words and `Session.shown` keep only words of two or more characters, the only ones the known test
@@ -722,7 +722,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   one-character word drops the filter. `safeLine` skips its whitespace pass where `RESPACED` finds nothing to rewrite
   and `spacedOut` is two native searches (widen each with the pattern it guards); `focusOf` is read once a cue
   (`FOCI`, a shared set: never changed by a reader); an equal re-put's held copy is tallied out and in from one
-  reading (`retally`, D1936).
+  reading (`retally`, D1951).
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 

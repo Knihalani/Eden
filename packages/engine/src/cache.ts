@@ -469,7 +469,7 @@ function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
 
 /**
  * `tally(u, item, -1)` then `tally(u, item, 1)`: an equal re-put keeps the held object (D1722), whose people are
- * counted out and in again. Its addresses and names are read once, not twice (D1936), and applied in the same order.
+ * counted out and in again. Its addresses and names are read once, not twice (D1951), and applied in the same order.
  */
 function retally(u: UserCache, item: ContextItem): void {
   const addresses = u.addresses !== undefined ? addressesOf(item.text) : undefined;
@@ -1210,7 +1210,7 @@ export class ItemCache {
         const fresh =
           same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
         // The people and the offset counted out for the old copy and in for the new (the tallies are apart: neither
-        // reads the other's state). The same object held is read once for both (`retally`, D1936).
+        // reads the other's state). The same object held is read once for both (`retally`, D1951).
         if (fresh === old.item) retally(u, fresh);
         else {
           tally(u, old.item, -1);

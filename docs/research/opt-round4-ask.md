@@ -1,6 +1,6 @@
 # Low-level round 4: the ask path
 
-Decisions: D1930–D1937. The brief (2026-11-15): a deep, low-level pass over the engine's ask path (the agent's
+Decisions: D1930–D1952. The brief (2026-11-15): a deep, low-level pass over the engine's ask path (the agent's
 question to its answer), every output unchanged, after three rounds (D1880–D1889, D1910–D1918, D1920/D1925/D1926)
 had taken the obvious costs. No model call and no paid call was made. Every number below comes from a command run in
 this session on the shared 4-core VM, with other agents' funnels, benches, typechecks and Prettier runs beside it:
@@ -17,7 +17,7 @@ control and the control's spread is the noise floor.
 - **A/B**: arms in separate processes, interleaved and slot-balanced (round k starts at arm k mod n): origin/main's
   `src/` (A), a second copy of it (A', the control), and the branch's changes added in three groups by file: R
   (render.ts and line.ts: D1931, D1933's render and line parts), G (R plus conflict.ts and probes.ts: D1930, D1932,
-  D1934, D1935) and B (G plus cache.ts and partner.ts: D1936, D1933's partner parts; the branch). Process CPU time
+  D1934, D1950) and B (G plus cache.ts and partner.ts: D1951, D1933's partner parts; the branch). Process CPU time
   (`resourceUsage`, every thread) and the ask phase's own CPU time (`process.cpuUsage` around the bench's ask loop,
   the same line added to every arm's copy of the bench), the bench's ask p50/p99, observe p50 and stream total;
   medians, and the paired median of each arm over A in the same round with its range. Two GC conditions: the natural
@@ -61,10 +61,10 @@ Algorithmic findings:
 | D1930 | `entryOf` never reads a packed item's text: an object is packed or plain for life and a packed one's bytes are fixed (non-writable, non-configurable), so its entry is checked by title and date only and holds no decoded copy | `opt-round4.test.ts`: analyses and gate equal a plain copy's; a second read decodes nothing; title and date changes still re-read |
 | D1931 | `renderPacket` compacts an item when its size loop reaches it; items past the cut are never compacted; `onParts` (lab) is still told every item, the reader's note gets the item as said | item k's text depends on items before it only; `render-fast.test.ts`'s 3,000 fuzzed packets (maxBytes 200-3,200) against `render.reference.ts`, plus `onParts` and `note` sequences equal to the reference's |
 | D1932 | a statement's date matches are read once (`planDates`, kept on the statement) and replayed per request (`replayDates`): only `dayOf`, `after` and `iso(now)` depend on the instant | `datesOf` kept as the reference: 12,000 fuzzed sentences × 4 instants × both vocabularies from one plan each, and the eval's sentences |
-| D1935 | with no amount and no routine in the request, `assess` reads only `activeOf`'s statements (a mark of some kind or a date) | every other statement is a no-op of the loop (marks empty, `lastDone` −1, date verdict "none"); `assessEvery` (the full loop) on 120,000 request × item pairs, every verdict exercised |
+| D1950 | with no amount and no routine in the request, `assess` reads only `activeOf`'s statements (a mark of some kind or a date) | every other statement is a no-op of the loop (marks empty, `lastDone` −1, date verdict "none"); `assessEvery` (the full loop) on 120,000 request × item pairs, every verdict exercised |
 | D1934 | `mentionsAny` searches the lowercased text in place: a word occurs with no kept character (letter, digit, "@", ".") either side; a surrogate anywhere goes to the copied text | `mentionsAnyByText` on 40,000 fuzzed items and names; `opt-round3.test.ts`'s `mentions` oracle |
 | D1933 | the packet's `shown` words join only when another item is read and only if two characters or longer, `Session.shown` likewise; `pick` reads the focus arrays once a packet and the whole text's bytes as a sum; `spacedOut` by `includes` and one class regex; `safeLine` skips `SPACES` where `RESPACED` finds nothing; `focusOf` once a cue (`FOCI`); the ask reads its days once | the known test asks only of words of two or more characters; `render-fast.test.ts`; `spacedOut` and `safeLine` against the code they replaced on 50,000 fuzzed strings each; `compactText` on lone surrogates and astral letters |
-| D1936 | an equal re-put's held copy is tallied out and in from one reading of its header lines (`retally`) | counts, Map order and invalidations equal two `tally` calls over 3,000 steps |
+| D1951 | an equal re-put's held copy is tallied out and in from one reading of its header lines (`retally`) | counts, Map order and invalidations equal two `tally` calls over 3,000 steps |
 
 Mutations (each alone, its tests run; 19 of 20 fail): dropping the packed shortcut's guard, the plain check,
 the `onParts` tail, the note's copy, a pair's year, the deadline role, the "back" day, the plan's vocabulary key,
@@ -103,8 +103,8 @@ By group, two earlier runs under heavier load (18-36), ask p50 paired against ma
 | no GC, 15 rounds, load 16-22 | 0.980 | 0.933 | 0.759 | 0.788 |
 | forced GC, 10 rounds | 1.064 | 1.006 | 0.837 | 0.784 |
 
-Roughly half the gain is the conflict side (D1930, D1932, D1935, D1934: G against R 0.81-0.94 in three of four runs)
-and half the render side (D1931, D1933: R 0.81-0.93 in three of four); the cache and partner group (D1936, D1933's
+Roughly half the gain is the conflict side (D1930, D1932, D1950, D1934: G against R 0.81-0.94 in three of four runs)
+and half the render side (D1931, D1933: R 0.81-0.93 in three of four); the cache and partner group (D1951, D1933's
 `noteShown` filter, `focusOf`, one `timeWindow`) is inside the noise on its own (B against G 0.85-1.04). The forced-GC
 CPU columns of those runs were within their controls' spread. The load made per-change A/Bs of the smaller items
 pointless; each is exact and kept for its profile share (below) and its micro measurement where one was taken.
