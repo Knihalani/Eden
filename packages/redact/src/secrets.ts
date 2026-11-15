@@ -1099,7 +1099,7 @@ export function gateOf(rules: SecretRule[]): Gate {
   const anchorIds = rules.map((rule) => rule.anchorWords && Int32Array.from(rule.anchorWords, (w) => index.get(w)!));
   const anchorWord = new Uint8Array(words.length);
   for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
-  /** The literals of the last token pass and of the dashed `sk-` pass: their occurrences are kept too (`passStarts`). */
+  /** The literals of the last token pass and the dashed `sk-` pass: their occurrences are kept too (`passStarts`). */
   const inlineIds = Int32Array.from(TOKEN_PASSES[TOKEN_PASSES.length - 1]!.literals, (w) => index.get(w)!);
   const dashedIds = Int32Array.from(TOKEN_PASSES[1]!.literals, (w) => index.get(w)!);
   const keepWord = Uint8Array.from(anchorWord);
