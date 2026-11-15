@@ -698,7 +698,8 @@ on seed 7 and 150,000 on 20261114: no failure; the reviewer's `rn-fuzz.ts` (impo
 origin/main's gate), 120,000 texts: no difference from the reference, no mismatch with main's own output, 4,480 texts
 keeping a value main redacted, as at 4254c9f5d on the same seed (its filter flags 145 lost runs on both trees,
 every one it prints a quoted mask of `x`, which its mask test does not recognise with the quotes);
-`env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` (see D1850 for the final run); `bun run eval`:
+`env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` passed in 122 s (2,935 pass and 2 skip in 296
+files, 524 in the 31-file tail); `bun run eval`:
 precision 0.65, recall 0.52, falseFireRate 0, packets on 19 of 28 neutral turns (1.18 items each), facts handed 10 of
 11, a look-alike on 3 of 10 owed turns; `bun run funnel` on origin/main's redact and primitives, then this tree with
 `--baseline`: hidden 323/384, decoys 294/384, "hidden +0 −0, decoys +0 −0"; with `REDACT_NODE` at Node 24.22.3,
