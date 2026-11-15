@@ -126,16 +126,14 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
             const m = have.find((x) => x.id === id) ?? new Mutable(id);
             // Fresh objects each time, as a connector's reply is: the store sees an unchanged item only through the
             // listing's reuse of the held copy.
-            m.items = docs
-              .get(`${key(s)}|${id}`)!
-              .map((d) => ({
-                id: itemId(id, d.ref),
-                sourceId: id,
-                ref: d.ref,
-                title: d.title,
-                text: d.text,
-                updatedAt: d.at,
-              }));
+            m.items = docs.get(`${key(s)}|${id}`)!.map((d) => ({
+              id: itemId(id, d.ref),
+              sourceId: id,
+              ref: d.ref,
+              title: d.title,
+              text: d.text,
+              updatedAt: d.at,
+            }));
             out.push(m);
           }
           e.sources.set(key(s), out);

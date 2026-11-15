@@ -826,3 +826,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1920 | 2026-11-15 | Adopted (a third low-level brief; outputs unchanged): the rule paths' repeated per-item and per-name readings are memoised per item object… | adopted |
 | D1925 | 2026-11-15 | Adopted (a profiling survey's brief; routing unchanged): the router reads a body's top-level `userId` by one scan, not a decode and… | adopted |
 | D1926 | 2026-11-15 | Adopted (same brief; pre-registered in 86c1645bc: promote if ingest process CPU paired ≤ 0.92 and live heap a user ≤ +3%, else delete): a… | adopted |
+| D1927 | 2026-11-15 | Adopted (a profiling survey's brief; pre-registered in ef7f794d3: adopt if the shipped ingest.bench sweep's process CPU, 200 × 500, paired… | adopted |
