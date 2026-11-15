@@ -233,10 +233,8 @@ export const NUMBER_REGION = { first: 512, most: 32 * 1024 };
  * region's numbers kept, and an array that fits is made its exact length (grown by pushes, 900,000 numbers peaked at
  * 30 MB against 13, D1908). Counting only after the first region keeps an array that is not numbers from both the
  * count and the array (D1919: 16 MiB of 17-digit floats peaked 38 MB against main's 24 when both came first).
- * `most`, when given with `close`, bounds the elements already (the byte scan counted the reply's values): the array is
- * made that long and the commas are not counted (D1919: counting cost a 3 MB series on the bytes path about 15%).
  */
-export function readNumbers(text: string, open: number, room: number, close = -1, most = 0): number {
+export function readNumbers(text: string, open: number, room: number, close = -1): number {
   numbersStop.at = -1;
   let i = open + 1;
   let c = text.charCodeAt(i);
@@ -262,15 +260,11 @@ export function readNumbers(text: string, open: number, room: number, close = -1
     }
     i += resumeAt;
     if (close >= 0) {
-      // The first region read as numbers: count the rest's commas (or take `most`), then make the array that long.
-      let length = most;
-      if (length === 0) {
-        const commas = commasIn(text, i, close, room - filled);
-        if (commas === -1) return TOO_MANY;
-        if (commas === -2) return stopped(numbersStop.at, filled + numbersStop.commas);
-        length = filled + commas + 1;
-      }
-      const sized: Element[] = new Array(length);
+      // The first region read as numbers: count the rest's commas, then make the array that long.
+      const commas = commasIn(text, i, close, room - filled);
+      if (commas === -1) return TOO_MANY;
+      if (commas === -2) return stopped(numbersStop.at, filled + numbersStop.commas);
+      const sized: Element[] = new Array(filled + commas + 1);
       for (let k = 0; k < filled; k++) sized[k] = out[k]!;
       out = sized;
       close = -1;
