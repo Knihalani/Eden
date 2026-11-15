@@ -20,7 +20,7 @@ docs/research/redact-vs-alternatives.md.
 | `src/generic-rest.ts` | D1850: generic-api-key's REST (the regex after its lazy prefix) read by hand, each candidate decided by the length of a run; `generic-rest.test.ts` checks every position of seeded texts against the sticky regex |
 | `src/not-secret.ts` | D1850: values that cannot be a secret, each only as the whole value (`notSecret`: a type, `process.env.NAME`, a member chain of two or more on a known receiver, `${NAME}` without a default, `$NAME`, `%NAME%`, `{{name}}`, `<your-key>`, a mask, a run; `placeholderToken`: a mask or run), which the keyword rules and the gate's assignment pass leave in place; `excused` wraps a rule so it reports both kinds of span |
 | `src/memo.ts` | D1850: memos that answer only inside an entry point (`withMemos`: `sanitizeForStore`, `secretHits`, `findings`, `explain`) and are emptied when it returns: a memo keyed by a slice kept the caller's whole text alive (`memo.test.ts` holds the retained heap flat) |
-| `src/compose.ts` | D1850: the stored text from the rules' spans. Main's pipeline runs as it was (every pre-D1850 span, excused ones included, gates the text; the structural pass runs on it); D1850's rules (`post`) add spans and the excused values' own characters come back, by masks traced through the gating (`structuralMask` in redact.ts) |
+| `src/compose.ts`, `src/pieces.ts` | D1850: the stored text from the rules' spans. Main's pipeline runs as it was (every pre-D1850 span, excused ones included, gates the text; the structural pass runs on it); D1850's rules (`post`) add spans and the excused values' own characters come back. Each rewrite is kept as pieces (`pieces.ts`) and every removal traced back to the text as intervals (`structuralRemoved` in redact.ts), so the cost follows the findings; `byStart` merges the rules' spans |
 | `src/generate.ts`, `src/rules.generated.json` | D1850: the vendored TOML as JSON (what the gate imports, on any runtime) and every regex's anchor analysis; `bun packages/redact/src/generate.ts` rewrites it, `generated.test.ts` fails when it is stale; it also checks every allowlist regex parses (`checkAllowlists`) |
 | `src/primitives/` | D1850: `matcher.ts` and `charclass.ts` (and the test-only `matcher.reference.ts`) vendored byte for byte from @eden/primitives; `generated.test.ts` fails when they differ from the shared copies |
 | `src/scanners.ts` | `SCANNERS`: the linear matchers for the seven rules in `LINEAR_RULES` (five keyword-assignment rules, two curl rules), each with the exact regex it implements; `SCANNER_CLASSES` for the class tests (D1705) |
@@ -87,7 +87,7 @@ docs/research/redact-vs-alternatives.md.
 ## Test
 
 ```bash
-bun run test:pkg redact          # 24 files; linear.test.ts, own-matchers*.test.ts and the redos* files lead
+bun run test:pkg redact          # 25 files; linear.test.ts, own-matchers*.test.ts and the redos* files lead
 cd packages/redact && bun test ./src            # alone, as the package would stand in its own repository
 node --test packages/redact/src/node.check.ts   # Node 24+ (REDACT_NODE=… bun test …/node-parity.test.ts compares;
                                                 # …/node-linear.test.ts holds the crafted inputs to a ceiling on V8)

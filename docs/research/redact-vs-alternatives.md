@@ -437,9 +437,68 @@ On Node 24 (CPU, one run each, the build before the last two speed changes): 0.7
 inputs that stay over 1.5x are the character loops (marks and ligatures in the prefilter, the run after a keyword,
 the AWS-like base64).
 
+### 12. Large text after the second review, and where the work stands (handoff)
+
+The coordinator held the merge: a megabyte of mixed text holding a value left as code took 43–52 ms against
+origin/main's 21–33 ms, and Eden stores large tool results through `sanitizeForStore`. The cause was the composer:
+whenever a value was excused it built a map and two masks over every character of the text and rendered from them.
+It now works on intervals (`pieces.ts`): each rewrite (the gating, each token pass, the assignment pass) is kept as
+pieces, runs of its input or sentinels, so what a pass removed is traced back to the original by intervals; the masks
+`before` and `after` are sorted merged interval lists, compared and rendered in time that follows the findings. The
+assignment pass reports the ranges it replaced (`redactAssignments(…, ranges)`), so it is not run a second time.
+`pieces.test.ts` checks the pieces against a map per character through chains of random rewrites; the gate's
+differential compares against the reference, which still derives masks per character, so the two derivations are
+checked against each other on every fuzz text.
+
+origin/main's gate against this branch's, in one process, interleaved, CPU time, median of 7 rounds (load 5–7):
+
+| Text | main ms | now ms | main / now |
+|---|---:|---:|---:|
+| mixed 2 KB | 0.026 | 0.036 | 0.71x |
+| mixed 2 KB, code values | 0.118 | 0.100 | 1.18x |
+| mixed 16 KB | 0.116 | 0.131 | 0.89x |
+| mixed 16 KB, code values | 0.194 | 0.170 | 1.14x |
+| mixed 1 MB | 24.971 | 26.708 | 0.93x |
+| mixed 1 MB, code values | 20.963 | 23.575 | 0.89x |
+| mail 1 MB | 5.922 | 6.511 | 0.91x |
+| chat 1 MB | 22.883 | 22.974 | 1.00x |
+| doc 1 MB | 8.519 | 8.022 | 1.06x |
+| eval 1 MB | 9.246 | 9.934 | 0.93x |
+| code 1 MB | 28.951 | 30.702 | 0.94x |
+| log 1 MB | 8.363 | 7.853 | 1.06x |
+| json 1 MB | 7.358 | 8.462 | 0.87x |
+
+An earlier run of the mixed rows at load 1 (11 rounds): 2 KB 0.73x, with code values 1.50x; 16 KB 0.81x and 0.96x;
+1 MB 0.94x and 0.95x (before the change the 1 MB row with code values read 0.41–0.49x). The 1 MB rows now sit within
+this VM's noise of main (0.87–1.06x across kinds and runs), not clearly at or under it.
+
+What is left of the bar (no input class slower than main):
+
+- **Small mixed text with no finding.** 2 KB of mixed text that holds no secret runs at 0.7–1.0x of main (12 against
+  15–16 µs a call, each gate alone in its process), 16 KB at 0.8–0.96x; by kind at 2 KB it is 0.96–1.16x. Profiled:
+  the prefilter's scan costs about 1.8 µs more a 2 KB call (the automaton holds more literals: the lazy rules'
+  keywords, whose occurrences are kept, and the D1850 rules' prefilters), and the rules that run on a text with no
+  finding about 1.8 µs more (the lazy-prefix rules read their listed occurrences). Not fixed.
+- **Crafted inputs in process** (§11): unchanged by this step; 9 of 24 at or below secretlint.
+- **Node** (§11): unchanged by this step.
+
+To continue: the scan's extra cost could go by keeping occurrences only for literals a candidate rule anchors on in
+this text (the matcher cannot know before its own pass; a second, small matcher over the lazy keywords run only when
+one hits is the measured-next idea), and the lazy rules' cost on texts with no finding by checking, once a text,
+whether any keyword occurrence is followed within 23 characters by an operator character before reading REST. Every
+step keeps the gates: `gate-differential.ts` 1M texts, `never-less.ts` with the oracle, the reviewer's `rn-fuzz.ts`
+(kept in the review's scratch), `memo.test.ts`, the linear-time tests on Bun and Node, the cold check, the eval and
+the funnel `--baseline`.
+
 ## Exactness and gates
 
-After the second review (the final code):
+After the large-text fix (§12): `gate-differential.ts` 1,000,000 texts (708,806 with a finding) and the corpus (4,932):
+no difference; `never-less.ts` with the oracle, 2 × 150,000 texts: no failure; the reviewer's `rn-fuzz.ts`, 120,000
+texts against origin/main's real gate: no difference from the reference, no lost run of 12+ letters and digits;
+`CHECK_COLD=1 FORMAT_COLD=1 bun run check` passed in 121 s (2,924 pass and 2 skip in 293 files, 524 in the tail); `bun
+run eval` unchanged (0.65 / 0.52 / 0; 19 of 28 at 1.18; 10 of 11; 3 of 10).
+
+After the second review (the code before §12):
 
 - `gate-differential.ts 250000 <seed>`, seeds 101–404: 1,000,000 texts, 708,806 with a finding, no difference against
   the reference; `--corpus` (4,932 texts): none. Run twice, before and after the last speed changes.
@@ -739,10 +798,7 @@ the call (main: 3–41 MB).
   the 24 stay over 2x (§11), all dense in findings, where the cost is per finding (allowlists, gating, the
   structural pass, Eden's keyword rules on the same text). Next: batch the per-finding work, and a hand reader for
   hashicorp-tf-password's REST as generic-api-key has.
-- A megabyte of mixed text that holds one value left as code is recomposed whole (`compose.ts`): 43–52 ms against
-  origin/main's 21 ms. A recomposition limited to the neighbourhood of the excused values and the post rules' spans
-  would remove it; the gating and the structural pass reach across lines (quoted values, PEM blocks), so the
-  neighbourhood must be proven, which was not done.
+- Small mixed text with no finding stays 0.7–1.0x of main at 2 KB and 0.8–0.96x at 16 KB (§12, with the next steps).
 - Node stays 0.7–2.4x Bun's time (§10, §11), most in character loops.
 - Prose that names a password stays redacted, as do placeholders shaped like keys (§8, §11).
 - gitleaks and trufflehog were not run again on the throughput files, and redact-pii not at all, after the second
