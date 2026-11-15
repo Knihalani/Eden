@@ -254,13 +254,23 @@ describe("request body size (D100)", () => {
     const nested = `${deep},"junk":${"[".repeat(half)}${"]".repeat(half)}}`;
     for (const body of [wide, nested]) {
       expect(Buffer.byteLength(body)).toBeLessThan(8_388_608);
+      // Timed against the parse it must come before, in this process and on this body (wide 106-134 ms, nested
+      // 453-665 ms on a quiet machine), not against a fixed 100 ms that a loaded machine passed (150 ms seen in a
+      // gate). The scan stops at the first token past either bound, so the 400 costs a few milliseconds: a handler
+      // that parsed first would take at least the reference. The fastest of three sends, so one descheduling of the
+      // test does not decide it.
       const t0 = performance.now();
-      const res = await send(h, body);
-      const ms = performance.now() - t0;
-      expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toMatch(/too many values or nests too deep/);
-      // Loose for a loaded machine: the scan stops at the first token past either bound.
-      expect(ms).toBeLessThan(100);
+      JSON.parse(body);
+      const parseMs = performance.now() - t0;
+      let ms = Infinity;
+      for (let i = 0; i < 3; i++) {
+        const t1 = performance.now();
+        const res = await send(h, body);
+        ms = Math.min(ms, performance.now() - t1);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: string }).error).toMatch(/too many values or nests too deep/);
+      }
+      expect(ms).toBeLessThan(parseMs / 3);
     }
     expect(observed.length).toBe(0);
     // A long text is no structure: the largest valid event (a 1,000,000-unit text field) is still served.
