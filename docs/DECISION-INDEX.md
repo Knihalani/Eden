@@ -823,3 +823,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1917 | 2026-11-14 | Rejected (measured beside D1910-D1916): an in-place JS xxHash32 so `sketchTerms` makes no string a word, and one-class lookahead prefixes… | rejected |
 | D1918 | 2026-11-14 | Finding (measured beside D1910-D1917): the rest of the second brief's scope has no lever worth its risk at today's shares. | finding |
 | D1919 | 2026-11-15 | Adopted (D1909's independent review, REQUEST_CHANGES on the number reader's cost; every finding fixed, no answer changed: 0 differences… | adopted |
+| D1920 | 2026-11-15 | Adopted (a third low-level brief; outputs unchanged): the rule paths' repeated per-item and per-name readings are memoised per item object… | adopted |

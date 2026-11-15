@@ -117,16 +117,45 @@ function windowDays(a: Anchors): NamedDay[] {
 /** Whether `item` names one of the request's entities: as a participant, or its words in the item's title or text. */
 export function namesEntity(item: ContextItem, a: Anchors): boolean {
   if (a.entities.length === 0) return false;
-  const text = `${item.title} ${item.text}`.toLowerCase().replace(/\s+/g, " ");
-  return a.entities.some((e) => {
-    if (namesParticipant(e, item)) return true;
-    const w = e.toLowerCase().replace(/\s+/g, " ").trim();
-    if (w.length < 2) return false;
-    // On letter and number boundaries: "Harlow." and "Harlow-based" name Harlow, "Harlowe" does not.
-    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(text);
-  });
+  let tests = ENTITY_TESTS.get(a);
+  if (!tests) {
+    tests = a.entities.map((entity) => ({ entity, words: entity.toLowerCase().replace(/\s+/g, " ").trim() }));
+    ENTITY_TESTS.set(a, tests);
+  }
+  // The item's text is read only when a participant test leaves an entity to look for in it.
+  let text: string | undefined;
+  for (const t of tests) {
+    if (namesParticipant(t.entity, item)) return true;
+    if (t.words.length < 2) continue;
+    // Lowercased, its spacing as written: the pattern reads a run of spacing where the entity has a space, which
+    // is what testing its words against the text with each run made one space (as before D1920) matched.
+    text ??= `${item.title} ${item.text}`.toLowerCase();
+    // On letter and number boundaries: "Harlow." and "Harlow-based" name Harlow, "Harlowe" does not. Built when first
+    // needed, as before, so an entity a participant test always settles first is never compiled.
+    t.pattern ??= new RegExp(`(?<![\\p{L}\\p{N}])${spaced(escapeRegex(t.words))}(?![\\p{L}\\p{N}])`, "u");
+    if (t.pattern.test(text)) return true;
+  }
+  return false;
 }
+
+const escapeRegex = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** An escaped pattern with each space (the only spacing in an entity's words) read as a run of spacing. */
+const spaced = (escaped: string) => escaped.replaceAll(" ", "\\s+");
+
+/** One request entity as `namesEntity` tests it: its words lowercased, one space apart, and their pattern. */
+interface EntityTest {
+  entity: string;
+  words: string;
+  pattern?: RegExp;
+}
+
+/**
+ * Each `Anchors`' entity tests, built once per request rather than once per item (D1920): `namesEntity` built a
+ * pattern for every entity of every candidate and rewrote each candidate's spacing (together 1.8% of the pipeline
+ * bench). Held weakly, with the anchors (one request's; `entities` is never changed after `anchorsOf`). The patterns
+ * are not global, so a test keeps no state.
+ */
+const ENTITY_TESTS = new WeakMap<Anchors, EntityTest[]>();
 
 /** Whether `item` is on, or names, one of the request's days. */
 export function namesRequestDay(item: ContextItem, a: Anchors): boolean {
