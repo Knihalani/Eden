@@ -150,7 +150,7 @@ export interface SecretRule {
  */
 const KEYWORD_RULE = new RegExp(
   String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])("[^"\n]{4,256}"|'[^'\n]{4,256}'|“[^”\n]{4,256}”|‘[^’\n]{4,256}’|\S{6,})`,
-  "dgi",
+  "gi",
 );
 const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;
 /**
@@ -161,7 +161,7 @@ const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?k
  */
 export const URL_USERINFO = new RegExp(
   String.raw`(?<=\b[a-z][a-z0-9+.-]*):\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@`,
-  "dgi",
+  "gi",
 );
 /**
  * (e) The redaction memory had before P0.4, kept so the gate is never looser: a password, passphrase or API key
@@ -170,7 +170,7 @@ export const URL_USERINFO = new RegExp(
  */
 const LEGACY_KEYWORD = new RegExp(
   String.raw`\b(?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+(?!\[REDACTED\])([^\s,.;]+)`,
-  "dgi",
+  "gi",
 );
 /**
  * D1850: a keyword's value that is an auth scheme (`token is Bearer …`): the keyword rule takes `Bearer` as the value
@@ -181,7 +181,7 @@ const LEGACY_KEYWORD = new RegExp(
  */
 const AUTH_SCHEME_VALUE = new RegExp(
   String.raw`(?:password|passwd|pwd|secret|token|api[_ -]?key|private[_-]?key|credential|auth)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*["'“‘\x60]?((?:bearer|basic)[ \t]+(?!\[REDACTED\])[^\s\[]\S*)`,
-  "dgi",
+  "gi",
 );
 /**
  * D1850: `api key` spelled with a space, as prose spells it (`API key is …`), which the keyword rules' `api[_-]?key`
@@ -190,11 +190,11 @@ const AUTH_SCHEME_VALUE = new RegExp(
  */
 const API_KEY_PHRASE = new RegExp(
   String.raw`\bapi keys?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\]|["'“‘]?(?:bearer|basic)\b)("[^"\n]{4,256}"|'[^'\n]{4,256}'|“[^”\n]{4,256}”|‘[^’\n]{4,256}’|\S{6,})`,
-  "dgi",
+  "gi",
 );
 const API_KEY_PHRASE_LEGACY = new RegExp(
   String.raw`\bapi keys?\s*(?:=|:|is)\s+(?!\[REDACTED\]|["'“‘]?(?:bearer|basic)\b)([^\s,.;]+)`,
-  "dgi",
+  "gi",
 );
 /**
  * D1850: an Azure storage account key in a connection string: 64 random bytes, base64. gitleaks has no rule for it,
@@ -830,18 +830,35 @@ function awsSecret(text: string): Span[] {
   return out;
 }
 
-/** A match's group 1 when the regex has one and it took part, else the whole match. */
-const spanOf = (found: RegExpExecArray): Span =>
-  (found.indices?.[1] as Span | undefined) ?? [found.index, found.index + found[0].length];
+/**
+ * A match's span: group 1's for the regexes in GROUP_TAIL (`tail` the code units after it, at the match's end), the
+ * whole match's for the others (`tail` -1). Each of those ends with group 1 but for `tail` (URL_USERINFO's `@`), so
+ * its span is read from its text and the match's end: the `d` flag (indices for every match, which the regexes had)
+ * doubled a regex's time on a megabyte of findings (D1850).
+ */
+const spanOf = (found: RegExpExecArray, tail: number): Span => {
+  const end = found.index + found[0].length;
+  const group = found[1];
+  return tail < 0 || group === undefined ? [found.index, end] : [end - tail - group.length, end - tail];
+};
+/** The regexes whose span is group 1's, and the code units after it at a match's end (`spanOf`). */
+const GROUP_TAIL = new Map<RegExp, number>([
+  [KEYWORD_RULE, 0],
+  [URL_USERINFO, 1],
+  [LEGACY_KEYWORD, 0],
+  [AUTH_SCHEME_VALUE, 0],
+  [API_KEY_PHRASE, 0],
+  [API_KEY_PHRASE_LEGACY, 0],
+]);
 
 /** Every match of a global regex: group 1 when the regex has one, else the whole match. */
-function matchSpans(regex: RegExp, text: string): Span[] {
+function matchSpans(regex: RegExp, text: string, tail: number): Span[] {
   // `exec` in a loop, as `matchAll` iterates (an empty match steps one code unit, or one code point under `u`/`v`):
   // spreading `matchAll` cost a third of the gate's time on a megabyte of findings (D1850).
   const out: Span[] = [];
   regex.lastIndex = 0;
   for (let found = regex.exec(text); found !== null; found = regex.exec(text)) {
-    out.push(spanOf(found));
+    out.push(spanOf(found, tail));
     if (found[0].length === 0) {
       const at = regex.lastIndex;
       const wide = (regex.unicode || regex.flags.includes("v")) && at + 1 < text.length && isPair(text, at);
@@ -866,6 +883,7 @@ const isPair = (text: string, at: number): boolean => {
 function regexRule(id: string, prefilter: string[], regex: RegExp): SecretRule {
   const anchors = anchorsOfRegex(regex);
   const anchored = anchors && new AnchoredRegex(regex, anchors);
+  const tail = GROUP_TAIL.get(regex) ?? -1;
   return {
     id,
     keywords: [],
@@ -873,8 +891,8 @@ function regexRule(id: string, prefilter: string[], regex: RegExp): SecretRule {
     ...(anchored ? { anchorWords: anchored.words } : {}),
     spans(text, found, ids) {
       const out: Span[] = [];
-      if (anchored?.each(text, found, ids, (m) => out.push(spanOf(m)))) return out;
-      return matchSpans(regex, text);
+      if (anchored?.each(text, found, ids, (m) => out.push(spanOf(m, tail)))) return out;
+      return matchSpans(regex, text, tail);
     },
     ...(anchored ? { warm: () => anchored.warm() } : {}),
   };
