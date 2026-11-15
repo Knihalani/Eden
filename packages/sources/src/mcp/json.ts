@@ -1,6 +1,8 @@
-import { decodeRange, releaseScratch } from "./readers";
+import { decodedAscii, decodeRange, releaseScratch } from "./readers";
 import {
   bodyShapeWithin,
+  byteLongString,
+  byteSawRead,
   byteShapeOrStop,
   LONG_REPLY,
   MAX_JSON_DEPTH,
@@ -42,14 +44,16 @@ export function parseJsonBytesWithin(bytes: Uint8Array, maxDepth: number, maxVal
   // depth bomb) never becomes a string. The scan gives up where the text path reads faster (escaped strings, number
   // arrays), and the body is then decoded and read as text from its start (the scan over the string gives the byte
   // scan's answer, `shape.test.ts`): only a body that cannot hold more values than the bound, since giving up costs
-  // a refused body its decode.
-  let known = true;
-  if (bytes.length <= 2 * maxValues) {
-    const shape = byteShapeOrStop(bytes, maxDepth, maxValues);
-    if (shape === OVER) return undefined;
-    known = shape === WITHIN;
-  } else if (!bodyShapeWithin(bytes, maxDepth, maxValues)) return undefined;
-  return readLong(decodeRange(bytes, 0, bytes.length, true), maxDepth, maxValues, known);
+  // a refused body its decode. A longer body is scanned whole, noting whether it holds what the text path reads.
+  const stop = bytes.length <= 2 * maxValues;
+  const shape = byteShapeOrStop(bytes, maxDepth, maxValues, stop);
+  if (shape === OVER) return undefined;
+  const known = shape === WITHIN;
+  const text = decodeRange(bytes, 0, bytes.length, true);
+  // Nothing the text path would read or slice, or multi-byte text, whose plain strings cost as much to check as to
+  // parse: main's parse (D1909; the text scan cost a 64 KB reply of short strings 10-20% for nothing).
+  if (known && !byteSawRead && (!byteLongString || !decodedAscii)) return parseOrUndefined(text);
+  return readLong(text, maxDepth, maxValues, known, decodedAscii);
 }
 
 /**
@@ -67,18 +71,21 @@ export function parseJsonText(text: string): unknown {
 
 /** `parseJsonText` with its bounds given: the tests drive refusals with small ones (`json.test.ts`). */
 export function parseJsonTextWithin(text: string, maxDepth: number, maxValues: number): unknown {
-  if (text.length >= LONG_REPLY.body) return readLong(text, maxDepth, maxValues, false);
+  if (text.length >= LONG_REPLY.body) return readLong(text, maxDepth, maxValues, false, true);
   return textShapeWithin(text, maxDepth, maxValues) ? parseOrUndefined(text) : undefined;
 }
 
 /**
  * The long-reply path (D1900): `known` when the byte scan has already found the reply within its bounds, so a reply
- * that is mostly structure is parsed as soon as the scan's budget is spent.
+ * that is mostly structure is parsed as soon as the scan's budget is spent; `slices` off for a body the bytes path
+ * decoded from multi-byte UTF-8, whose long plain strings stay in the parse, as main parses them (D1909).
  */
-function readLong(text: string, maxDepth: number, maxValues: number, known: boolean): unknown {
+function readLong(text: string, maxDepth: number, maxValues: number, known: boolean, slices: boolean): unknown {
   // Known within, the scan only looks for long strings to slice: a reply whose structure outlasts a short budget is
   // parsed whole at once.
   const seen = newTextShape(text, true, known ? LONG_REPLY.steps >>> 2 : LONG_REPLY.steps + (text.length >>> 8));
+  seen.known = known;
+  seen.slices = slices;
   try {
     let shape = scanText(text, maxDepth, maxValues, seen);
     if (shape === STOPPED) {
