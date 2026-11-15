@@ -125,25 +125,43 @@ function stringEnd(bytes: Uint8Array, i: number): number {
  * output, JSON written as text: the search per escaped quote costs this scan as much as the parse), or an array that
  * has gone `2 * LONG_REPLY.numbers - 2` bytes past its bracket with nothing but numbers' characters, commas and spaces.
  * Otherwise its answer is `bodyShapeWithin`'s, at its cost: the reply is mostly structure or plain strings, which the
- * text path would only scan again.
+ * text path would only scan again. With `stop` off it never gives up, and notes in `byteSawRead` whether it met such a
+ * place; `byteLongString` notes a string long enough for the text path to slice or guess (D1909: a body with neither
+ * is parsed as main parses it, as is a multi-byte one with no such place).
  */
-export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: number): number {
+export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: number, stop = true): number {
   const n = bytes.length;
   let depth = 0;
   let values = 0;
   // The bracket of the array that may be a number array; `n` for none, so one compare a comma tests it.
   let cand = n;
   const reach = 2 * LONG_REPLY.numbers - 2;
+  byteSawRead = byteLongString = false;
+  // A string this long may be sliced or have its end guessed by the text path: shorter ones it only crosses.
+  const long = Math.min(LONG_REPLY.string, LONG_REPLY.guessAfter + 1);
   for (let i = 0; i < n; i++) {
     const k = BYTE_KIND[bytes[i]!]!;
     if (k === 0) continue;
     if (k === QUOTE) {
-      i = stringEndOrStop(bytes, i + 1);
-      if (i < 0) return STOPPED;
+      // Once a place is noted, the plain `stringEnd`; a string first crossed to its stop is crossed again from its
+      // start, once a body, so at most twice.
+      const end = byteSawRead ? stringEnd(bytes, i + 1) : stringEndOrStop(bytes, i + 1);
+      if (end < 0) {
+        if (stop) return STOPPED;
+        byteSawRead = true;
+        i = stringEnd(bytes, i + 1);
+      } else {
+        if (end - i > long) byteLongString = true;
+        i = end;
+      }
       cand = n;
     } else if (k === COMMA) {
       if (++values > maxValues) return OVER;
-      if (i - cand >= reach) return STOPPED;
+      if (i - cand >= reach) {
+        if (stop) return STOPPED;
+        byteSawRead = true;
+        cand = n;
+      }
     } else if (k === CLOSE) {
       depth--;
       cand = n;
@@ -154,6 +172,11 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
   }
   return WITHIN;
 }
+
+/** Whether the last `byteShapeOrStop` with `stop` off met a place where it would have stopped. */
+export let byteSawRead = false;
+/** Whether the last `byteShapeOrStop` crossed a string the text path may slice or guess the end of. */
+export let byteLongString = false;
 
 /** `SHAPE_BYTE` with `{` apart from `[` (`OPEN`). */
 const BRACE = 5;
@@ -259,6 +282,12 @@ export interface TextShape {
   budget: number;
   /** Whether the scan may read what `JSON.parse` reads slowly (`readers.ts`) and bound a rest (`restWithin`). */
   read: boolean;
+  /**
+   * Whether a long string with no escape may be recorded to be sliced (`PLAIN_STRING`): off for a body the bytes path
+   * decoded from multi-byte UTF-8 (D1909), where the check for a backslash or control character over a string of
+   * two-byte characters costs as much as the copy `JSON.parse` would make (0.7 against 0.8 ms for 1.2 M characters).
+   */
+  slices: boolean;
   /** Each piece's range: from its opening quote or bracket to past its closing one. */
   pieces: number[];
   /** Each piece's value as read, or `PLAIN_STRING` for a long string to be checked and sliced when spliced. */
@@ -267,6 +296,11 @@ export interface TextShape {
   inPieces: number;
   /** Whether a long string may still have its end guessed: once a reply. */
   guess: boolean;
+  /**
+   * Whether the byte scan has already found the reply within its bounds (`json.ts`): a long string read apart is
+   * then the only thing left to gain, and the rest is never bounded again (D1909).
+   */
+  known: boolean;
   /** Where the rest was bounded from (`restWithin`), once a reply; -1 before. */
   restFrom: number;
   /** The next `]` and the next quote at or after the last array the scan asked about (2^32 - 1 for none), -1 before. */
@@ -288,6 +322,8 @@ export function newTextShape(text: string, read: boolean, budget = Infinity): Te
     found: [],
     inPieces: 0,
     guess: read && text.length > LONG_REPLY.guessAfter,
+    known: false,
+    slices: true,
     restFrom: -1,
     close: -1,
     quote: -1,
@@ -363,6 +399,14 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
       const pieces = seen.pieces.length;
       let end = textStringEnd(text, start, seen);
       if (end === ASK_REST) {
+        if (seen.known) {
+          // Already within (the byte scan): bounding the rest again, then crossing the string quote by quote, cost
+          // an escaped string past 4 MiB 1.21-1.27x main's CPU (D1909). The scan ends here, with the rest's length
+          // as a bound on its values, so the parse that follows takes the whole reply unless the pieces read pay.
+          seen.values = values + (n - i);
+          seen.at = n;
+          return WITHIN;
+        }
         const rest = restWithin(text, seen.restFrom, maxDepth - depth, maxValues - values);
         if (rest >= 0) {
           // Whatever the rest holds, it cannot pass the bounds: the scan ends here.
@@ -372,7 +416,13 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
         }
         end = textStringEnd(text, start, seen);
       }
-      if (seen.read && seen.pieces.length === pieces && pieces < 2 * MAX_PIECES && end - start >= LONG_REPLY.string) {
+      if (
+        seen.read &&
+        seen.slices &&
+        seen.pieces.length === pieces &&
+        pieces < 2 * MAX_PIECES &&
+        end - start >= LONG_REPLY.string
+      ) {
         // Perhaps its own characters: `json.ts` checks it holds no backslash or control character before slicing it.
         if (end < n) push(seen, i, end + 1, PLAIN_STRING);
       }
@@ -432,6 +482,17 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
  * scan has passed them, so these searches cross the reply once, however deep its arrays nest. Where more elements
  * could fit than the room left, the commas are counted first (`commasIn`), so a flood is refused before any of its
  * numbers is kept, and an array that fits is made its exact length at once.
+ *
+ * Linear (D1909): `commasIn` and `readNumbers` read each character of a reply a bounded number of times. Both read
+ * from `open` and stop at the next `]` or sooner: `commasIn` at a `[` or `{`, `readNumbers` at the first character
+ * that is not a number's, a comma or a space. So what either reads, `R`, holds no bracket, brace or quote. The scan
+ * asks here only once it is `reach` (1,022) characters past `open`, goes on from there (or from the `]` read to) with
+ * the candidate dropped, and the next candidate is a later `[`, so past `R`: the `R` of successive calls do not
+ * overlap, and calls are at least `reach` apart. Each reader encodes regions that double from 512 characters, so
+ * encodes at most twice what it reads plus 512: in all at most about 2.5 encodes and reads of each character by
+ * each. The array `readNumbers` makes is at most one longer than `R`'s commas. Before D1909 `commasIn` counted on past
+ * a nested `[` to the innermost `]`, which every level shares, so every nested candidate counted the rest of the
+ * reply (12x main's CPU at 16 MiB).
  */
 function numberArrayAt(text: string, open: number, room: number, seen: TextShape): number {
   if (seen.close < open) seen.close = text.indexOf("]", open) >>> 0;
@@ -443,6 +504,8 @@ function numberArrayAt(text: string, open: number, room: number, seen: TextShape
   if ((close - open) >> 1 <= room) return readNumbers(text, open, room);
   const commas = commasIn(text, open + 1, close, room);
   if (commas === -1) return TOO_MANY;
+  // A nested array or object, or a character outside ASCII, before the `]`: not a number array.
+  if (commas === -2) return NOT_NUMBERS;
   return readNumbers(text, open, room, commas + 1);
 }
 

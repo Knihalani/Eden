@@ -206,9 +206,12 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
   65-150 µs a MiB. Taking `json()` and checking after would close it and was refused (D1871): `json()` of 1 MB of
   nested arrays costs 54-87 ms before anything can refuse it, and of a 16 MiB number flood 134-201 ms, which this
   refuses in 3-5 ms. Also lost in that run: plain JSON at 1 KB and at 64 KB with 256 in flight (1.11x) and tool output
-  in SSE at 64 KB one at a time (1.11x); four numbers cells tie (1.00-1.02x). Against main's own parser, the shapes
-  measured cost 0.26-1.06x its CPU (a 64 KB `[[1],[1],...]` read 1.28x in one run, 0.98-1.03x in others) and at most
-  its peak memory at 16 MiB (D1908); a refused depth bomb costs about 1 µs more.
+  in SSE at 64 KB one at a time (1.11x); four numbers cells tie (1.00-1.02x). Against main's own parser (D1909,
+  measured with and without a forced GC): tool output, numbers, plain text and refused floods cost 0.25-0.75x its CPU,
+  structured replies and multi-byte text about the same (within the control's 10-20% at 64 KB), and peak memory at
+  16 MiB is at or under main's once the process has warmed; still over it: a hostile pair of strings whose guessed end
+  is wrong (1.26-1.46x), a number array whose last element has more than 15 digits (1.6-2.1x, read to its end before
+  that element is met), and a refused depth bomb (about 1 µs).
 - **On Node** a long body is decoded once and takes the same long-reply path (D1904); V8 parses dense escapes faster
   than the byte unescaper, so there the literal is parsed (D1901).
 - **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
@@ -221,7 +224,7 @@ modes), `stdio.test.ts` against the SDK's server as a child process (tools, reso
 children; `adversarial.test.ts` against malformed, oversized, truncated, flooding and hanging servers, with seeded
 fuzz of the SSE parser, `asMessage` and the client; `framing.test.ts` the native read's hostile framings;
 `shape.test.ts` the shape check; `json.test.ts` the spliced parse against `JSON.parse` (D1870); `long-reply.test.ts` the
-long-reply path (D1900-D1904) against the plain shape check and `JSON.parse` on 110,000 seeded bodies (escapes,
+long-reply path (D1900-D1904, D1908, D1909) against the plain shape check and `JSON.parse` on 110,000 seeded bodies (escapes,
 surrogates, byte-order marks, broken UTF-8, number edge cases, small bounds so refusals are common), the readers
 against `JSON.parse`, and hostile shapes kept linear; `deadlines.test.ts`
 the shared timer; `server-messages.test.ts` resumption and the GET stream against the SDK's resumable server (its

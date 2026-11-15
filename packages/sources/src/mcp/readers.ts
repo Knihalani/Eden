@@ -28,9 +28,12 @@ const isAscii = (
  */
 export function decodeRange(bytes: Uint8Array, start: number, end: number, atStart = false): string {
   const sub = start === 0 && end === bytes.length ? bytes : bytes.subarray(start, end);
-  if (latin1Slice && isAscii?.(sub)) return latin1Slice.call(sub, 0, sub.length);
+  decodedAscii = latin1Slice !== undefined && isAscii?.(sub) === true;
+  if (decodedAscii) return latin1Slice!.call(sub, 0, sub.length);
   return (atStart ? stripMark : keepMark).decode(sub);
 }
+/** Whether the last `decodeRange` copied ASCII one byte a character (its string is then one byte a character too). */
+export let decodedAscii = false;
 
 const encoder = new TextEncoder();
 /**
@@ -238,21 +241,27 @@ export function readNumbers(text: string, open: number, room: number, count = 0)
 
 /**
  * The commas in `text[from, to)`, which holds no quote: -1 past `room` (each is a value the scan would count, so the
- * scan refuses), -2 at a character outside ASCII (no number array holds one: the scan then counts as usual). Counted
- * a scratch region at a time with one byte compare each (about 1 ns a character, half the scan's), so a flood is
- * refused before any of its numbers is kept, and an array that fits is read into an array of its exact length: grown
- * by pushes, 900,000 numbers peaked at 30 MB against 13 (D1902's review).
+ * scan refuses), -2 at a `[`, a `{` or a character outside ASCII (no number array holds one: the scan then counts as
+ * usual). Counted with one byte compare each (about 1 ns a character, half the scan's), so a flood is refused before
+ * any of its numbers is kept, and an array that fits is read into an array of its exact length: grown by pushes,
+ * 900,000 numbers peaked at 30 MB against 13 (D1902's review). The regions double from `NUMBER_REGION.first`, as
+ * `readNumbers`' do, so stopping at a nested array costs about what was counted before it, not a whole region
+ * (D1909: with `to` a `]` deep inside, a count over everything up to it at every level cost 12x main).
  */
 export function commasIn(text: string, from: number, to: number, room: number): number {
   let commas = 0;
-  for (let p = from; p < to; p += encodedChars) {
-    const n = encodeNumbers(text, p, to);
+  for (
+    let p = from, size = NUMBER_REGION.first;
+    p < to;
+    p += encodedChars, size = Math.min(2 * size, NUMBER_REGION.most)
+  ) {
+    const n = encodeNumbers(text, p, Math.min(to, p + size));
     const b = scratch;
     for (let j = 0; j < n; j++) {
       const c = b[j]!;
       if (c === 0x2c) {
         if (++commas > room) return -1;
-      } else if (c >= 0x80) return -2;
+      } else if (c >= 0x80 || c === 0x5b || c === 0x7b) return -2;
     }
     if (encodedChars === 0) return -2;
   }

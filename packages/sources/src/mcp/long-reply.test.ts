@@ -388,6 +388,24 @@ describe("the long-reply path stays linear", () => {
     }
   });
 
+  test("nested candidates whose next `]` is deep inside cost what the plain path costs (D1909: 6-12x)", () => {
+    // Each level runs past `reach` with numbers, then opens the next: every level's next `]` is the innermost one, so
+    // its span is past twice the room the commas may take, and the commas are counted before reading. Counting on to
+    // that `]` at every level read the rest of the reply once a level, as many levels as the step budget reached.
+    const level = `[${"1234567890123,".repeat(80)}`;
+    const text = `${level.repeat(160)}[${"1234567890123,".repeat(280_000)}1${"]".repeat(161)}`;
+    const plain = () => {
+      LONG_REPLY.body = Infinity;
+      parseJsonText(text);
+      LONG_REPLY.body = DEFAULTS.body;
+    };
+    expect(same(parseJsonText(text), plainText(text, 1_008, 1_010_000))).toBe(true);
+    for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
+    const [long, short] = medians(() => parseJsonText(text), plain, 7);
+    // About 1.0 here; 4-6x at this size when every level counted to the innermost `]`.
+    expect(long).toBeLessThan(short * 1.5 + 2);
+  });
+
   test("a refused number flood on the bytes path costs what the byte scan costs, and is never decoded", () => {
     const flood = encoder.encode(`[${"1,".repeat(2_000_000)}1]`);
     expect(parseJsonBytes(flood)).toBeUndefined();

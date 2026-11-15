@@ -1,4 +1,4 @@
-# Eden's MCP client against the alternatives (2026-11-14, D1860, D1870-D1875 and D1900-D1908: adopted)
+# Eden's MCP client against the alternatives (2026-11-14, D1860, D1870-D1875 and D1900-D1909: adopted)
 
 D1704 replaced the official SDK with Eden's own MCP client; D1840 made it faster. The owner may release the module
 (`packages/sources/src/mcp/`) on its own, so this note does three things: fixes the weak points D1840 left (JSON
@@ -601,6 +601,7 @@ unchanged (five fresh seeds of the review's fuzz, 40,000 bodies each, and `long-
 **Method.** `parseJsonText` and `parseJsonBytes` timed in one process against main's `src/mcp/json.ts` and a copy of it
 (the control): each cell a batch of about 8 ms of process CPU, the arms interleaved and their order alternating, a
 forced GC before each batch, 15 rounds, the median of the per-round ratios; load 1.5-3 on the shared 4-core machine.
+Every CPU number in this section was taken with that forced GC; D1909 (below) remeasures without it too.
 "Before" is D1900 as reviewed (189427c31), measured the same way in the same session. Peak RSS is VmHWM after
 `clear_refs`, above the baseline, median of 5 processes per arm.
 
@@ -630,8 +631,9 @@ forced GC before each batch, 15 rounds, the median of the per-round ratios; load
 | multi-byte tool output with escapes | text / bytes | 72.5 / 72.8 | | 61.8 / 62.6 |
 | depth bomb, refused | text / bytes | 17.3 / 1.2 | | 17.2 / 0.9 |
 
-Single runs of the escaped shapes spread 59-70 MB for both main and the branch (the collector's timing); the bytes
-cell's medians over 8 more runs each were 65.9 for main and 65.2 for the branch.
+Single runs of the escaped shapes spread 59-70 MB for both main and the branch (the collector's timing). The bytes
+cell's "8 more runs" medians (65.9 for main, 65.2 for the branch) did not reproduce in D1909's review (63.3 against
+70.1); D1909 fixed the cause and remeasured it (below).
 
 **Structured and plain replies** (CPU over main's; text path, then bytes):
 
@@ -655,8 +657,10 @@ nothing read is finished by main's scan (`plainScan`), and the bound is tried on
 plain path for replies under 16 KiB is main's scan again (sharing the reading scan cost them 4-20%); the readers'
 buffers are zeroed after each reply.
 
-What is left over main: a refused depth bomb costs 0.7-1.1 µs more than main's 2-3 µs (the long path's set-up); a
-hostile pair of strings whose guessed end is wrong (`["ab\"...", "\"\"..."]`, 2 MB) 0.84-1.30x across runs.
+What is left over main: superseded by D1909's measurement (below), which found nested number arrays at up to 12x,
+an escaped string past 4 MiB on the bytes path at 1.2x, and, without the forced GC, multi-byte text on the bytes path at
+1.2-1.4x; after D1909 a refused depth bomb costs 0.1-1.1 µs more than main's 1.2-3.3 µs and a hostile pair of strings
+whose guessed end is wrong (`["ab\"...", "\"\"..."]`, 2 MB) 1.26-1.46x.
 
 **Against the alternatives** (`MCP_ALT_DIR=<scratch> MCP_COMPARE_TEXT=plain,lines,escapes,unicode,numbers
 MCP_COMPARE_SIZES=65536,1048576 mcp-compare.bench.ts perf 2 eden,sdk,sdk2,pi,aisdk`, then the 1 KB JSON cells of the
@@ -773,6 +777,126 @@ ms. The trade is 65-150 µs a MiB on tool output in JSON against 20-50x the CPU 
 every hostile reply. At 1 KB, `fetch` is 66% of a call's CPU in ours and the check and parse about 15%; the client's
 own JavaScript (deadlines, the abort controller, the message bookkeeping) is about 10%, 8 µs of the 82 that loop
 measured.
+
+## The third review's fixes (D1909)
+
+A third independent review (of D1908) found no answer that differed from main's and nothing retained, and three cost
+findings. D1909 fixes them; no answer changed: 0 differences from main's real `json.ts` and `shape.ts` (text and bytes
+paths, the review's two fuzzers with two new generators, nested candidates and multi-byte bodies) on 268,012 bodies over
+eleven fresh seeds, 47,000 of them on the final tree, and `long-reply.test.ts`.
+
+**Method.** As D1908's, with two changes. The review's A/B kept the branch in the middle of every round (main, branch,
+control, then reversed); without a forced GC, whichever arm sat in that slot read 1.10-1.13x the first slot's (main
+against itself, the control against main), so every arm now takes each of the three slots equally often (18-48
+rounds). Each cell is measured both without a forced GC ("no GC") and with one before each batch ("GC"): allocation is
+real cost, and only the first counts it. "Before" is D1908 as reviewed (aa64d4dea), measured alongside. Load 0.6-1.1.
+
+**Nested candidates** (`("[" + "1234567890123," x 80) x 40`, then one long number array; ratio of main's CPU):
+
+| Size | Path | Before, no GC / GC | After, no GC / GC | Control, no GC / GC |
+|---|---|---|---|---|
+| 2 MB | text | 1.15 / 0.99 | 0.88 / 0.87 | 0.94 / 0.93 |
+| 6 MB | text | 6.09 / 5.82 | 0.87 / 0.87 | 0.96 / 0.95 |
+| 12.6 MB | text | 8.46 / 8.95 | 0.49 / 0.50 | 0.98 / 0.96 |
+| 2 MB | bytes | 1.29 / 1.14 | 1.13 / 1.15 | 0.94 / 0.82 |
+| 6 MB | bytes | 1.34 / 1.19 | 1.03 / 0.78 | 1.03 / 0.84 |
+| 12.6 MB | bytes | 1.35 / 1.17 | 1.04 / 0.80 | 1.03 / 0.84 |
+| 16 MiB, 200 levels (the review's `worst.ts`) | text | 900-1,048 ms | 41-51 ms | main 78-104 ms |
+
+Every level shares the innermost `]`, and each level's span was more than twice the room left, so `commasIn` counted
+from the level's bracket to that `]` (the rest of the reply), `readNumbers` made an array that long and gave up at the
+next `[`, and this repeated at every level the step budget reached. `commasIn` now stops at a `[` or `{` (no number
+array holds one), which `numberArrayAt` takes as not a number array, and counts in regions that double from 512
+characters, so stopping early costs what was counted. The comment on `numberArrayAt` proves the bound: what either
+reader reads from a candidate holds no bracket, brace or quote, the next candidate is a later `[`, so the spans of
+successive calls do not overlap, calls are at least 1,022 characters apart, and each reader encodes at most twice what
+it reads plus 512 characters. `long-reply.test.ts` holds a 4 MB nested reply under 1.5x the plain path (4.8x on
+D1908's code, which fails it). On the bytes path at 2 MB the byte scan stops at the first level and the body takes the
+text path, whose scan costs more than main's byte scan; in one process the two cost the same (4.45 against 4.34 ms at
+1 MB).
+
+**An escaped string past 4 MiB on the bytes path** (tool output with escapes; ratio of main's CPU):
+
+| Size | Path | Before, no GC / GC | After, no GC / GC | Control, no GC / GC |
+|---|---|---|---|---|
+| 6.1 MB | bytes | 1.19 / 1.23 | 1.00 / 1.02 | 0.99 / 1.01 |
+| 8.1 MB | bytes | 1.28 / 1.20 | 1.01 / 1.00 | 0.99 / 1.03 |
+| 16.2 MB | bytes | 1.19 / 1.20 | 1.00 / 1.01 | 1.03 / 1.00 |
+| 6.1-16.2 MB | text | 1.01-1.04 / 0.93-1.00 | 1.00-1.08 / 0.97-1.00 | 0.94-1.01 / 0.98-1.00 |
+
+The body had already been byte-scanned and found within, but the text scan declined the string (past 4 MiB, read
+apart it held a second copy), tried to bound the rest of the reply, and crossed the string again quote by quote. A
+reply known within (`TextShape.known`) now ends the scan there and is parsed whole.
+
+**Multi-byte text on the bytes path** (`"東京 tokyo "` repeated; ratio of main's CPU):
+
+| Characters | Before, no GC / GC | After, no GC / GC | Control, no GC / GC |
+|---|---|---|---|
+| 590 K | 1.19 / 1.13 | 1.02-1.05 / 1.02 | 0.99-1.01 / 0.99 |
+| 1.2 M | 1.18 / 0.99 | 1.02-1.03 / 1.03 | 0.97-1.02 / 1.00 |
+| 2.4 M | 1.43 / 0.85 | 0.95-1.07 / 1.01 | 0.85-0.91 / 1.02 |
+
+Reliably over 1.0 without a forced GC, so fixed rather than documented. Over two-byte characters the check that a long
+string holds no backslash or control character, before it is sliced, costs 0.7 ms for 1.2 M characters, as much as the
+copy `JSON.parse` would make (0.8), and the text scan's search for the string's end costs 0.2 ms more for 2.4 M. A body decoded from
+multi-byte UTF-8 now slices no plain string, and a body the byte scan found within with no place where it would have
+stopped and no string long enough to slice or guess (`byteSawRead`, `byteLongString`; past twice the value bound the
+byte scan runs whole and notes them) is parsed as main parses it, with no text scan. The same rule takes a 64 KB reply
+of short strings off the text scan (it cost about 10% there for nothing). The slice held no copy, so peak memory goes back
+to main's (below): allocation traded for CPU.
+
+**Peak memory at 16 MiB** (MB above baseline, median of 7 processes; "cold" is a fresh process, "warm" one that parsed a
+6 MB reply of the same shape three times first, so the compiler's memory is not counted):
+
+| Shape | Path | main | before | after |
+|---|---|---|---|---|
+| tool output with escapes, cold | bytes | 61.6 | 66.0 | 62.4 |
+| tool output with escapes, warm | bytes | 59.3 | 59.3 | 58.8 |
+| tool output with escapes, cold / warm | text | 61.4 / 59.2 | 62.9 / 59.2 | 63.8 / 59.2 |
+| multi-byte tool output, cold / warm | bytes | 61.3 / 55.4 | 61.4 / 57.3 | 60.4 / 53.0 |
+| multi-byte tool output, cold / warm | text | 61.3 / 54.7 | 61.4 / 56.7 | 61.2 / 55.8 |
+| multi-byte text | bytes | 28.9 | 15.1 | 28.6 |
+| multi-byte text | text | 15.4 | 14.9 | 15.0 |
+| plain text | text / bytes | 17.6 / 33.5 | 17.2 / 17.3 | 17.2 / 17.4 |
+| numbers, accepted | text / bytes | 32.7 / 32.1 | 21.2 / 32.0 | 21.3 / 26.1 |
+| number flood, refused, cold | text / bytes | 23.0 / 6.5 | 23.1 / 6.0 | 23.2 / 6.9 |
+| number flood, refused, warm | bytes | 0.1 | 0.1 | 0.1 |
+| nested candidates, refused | text / bytes | 22.8 / 6.3 | 23.2 / 5.9 | 23.8 / 6.8 |
+| rows of objects | text / bytes | 16.4 / 1.6 | 15.7 / 1.6 | 16.5 / 3.5 |
+| depth bomb, refused | text / bytes | 17.0 / 0.9 | 17.0 / 0.7 | 17.0 / 0.7 |
+
+Single cold runs of the escaped shapes still spread 52-75 MB for every arm (the collector's timing; 52.4-55.3 for main's
+text path in one batch of seven, 61.4 in another), so only the medians are compared. The cold refused bodies past twice
+the value bound peak 0.4-0.8 MB over main because they now run `byteShapeOrStop`, not `bodyShapeWithin`, and compiling
+it costs memory once; warmed, all three read 0.1. Rows of objects on the bytes path read 2.6-3.9 MB cold against main's
+0.4-1.7 for the same reason; warmed, 0.1 against 0.0 (median of 5).
+
+**The other shapes**, after (no GC, every arm in every slot; ratio of main's CPU at 64 KB and 1 MB; the control's
+ratios ran 0.84-1.28 in this sweep, so cells within about 10-20% of 1.0 at 64 KB are noise, and the in-process timing
+of the 64 KB reply of 40 strings read 155.8 against main's 155.2 µs):
+
+| Shape | text | bytes |
+|---|---|---|
+| tool output with escapes | 0.37-0.38 | 0.33-0.50 |
+| numbers | 0.42-0.45 | 0.40-0.54 |
+| plain text | 0.99-1.00 | 0.64-0.68 |
+| multi-byte text | 0.99 | 0.99-1.12 |
+| rows of objects | 0.88-1.22 | 0.86-1.17 |
+| `[[n,2,3],...]` | 0.93-1.07 | 1.01-1.18 |
+| `[[1],[1],...]` | 1.04-1.19 | 0.94-1.30 |
+| 40 long plain strings | 1.08-1.18 | 1.08-1.28 |
+| refused number flood | 0.64-0.70 | 0.73-0.75 |
+| refused escaped quotes | 0.25-0.43 | 0.28-0.51 |
+| refused depth bomb | +0.1 to +1.0 µs (main 2.3-3.3) | +0.8 to +1.1 µs (main 1.2-2.2) |
+| hostile wrong guess | 1.26-1.37 | 1.32-1.46 |
+| number array ending in a 17-digit number | 1.60-1.81 | 2.07-2.13 |
+
+Left over, and not fixed: the depth bomb (the long path's set-up, about a microsecond); the wrong guess (a guessed end
+proven wrong costs one parse of the string's literal; finding the string's end without the guess is the quote-by-quote
+search the guess exists to avoid), 1.23-1.43 on D1908's code alongside; and a number array whose last element has more
+than 15 digits, which `readNumbers` reads to the end before it meets the element it leaves to `JSON.parse` (1.87-1.88 on
+D1908's code: not new, and linear, at most one read of the array more than main; an array of 17-digit floats stops at
+its first element and costs nothing).
 
 ## Packaging
 
