@@ -178,6 +178,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1025 | Rejected: the recipes that did not help on the held-out sources. |  |
 | D1123 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | killed by D1126: stopped on D1125's pre-registered rule |
 | D1720 | Rejected: a specialised store for the source map (an in-memory map per user with an append-only log and compaction) in place of… | measured first, docs only; docs/research/source-map-store.md |
+| D1914 | Rejected (measured): `extractTypedEntities` reading a one-word capitalised run without its split, join and three `isCalendar` calls. | measured |
 
 ## Ask
 
@@ -257,3 +258,5 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1871 | Rejected: reading a JSON reply with `res.json()` and checking its depth and size after the parse. | `mcp-vs-alternatives.md` "Closing the losses"; measured with `Response.json()` over each body kind at 1 MB… |
 | D1894 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | measured beside D1890–D1892 |
 | D1907 | Rejected (measured beside D1900-D1904): other ways to the same values. | measured beside D1900-D1904 |
+| D1912 | Rejected (measured): a packed text deflated by libdeflate (`Bun.deflateSync`'s `library: "libdeflate"`, level 6) in place of zlib. | measured |
+| D1917 | Rejected (measured beside D1910-D1916): an in-place JS xxHash32 so `sketchTerms` makes no string a word, and one-class lookahead prefixes… | measured beside D1910-D1916 |
