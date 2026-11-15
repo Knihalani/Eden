@@ -62,20 +62,29 @@ describe("WorkerPool", () => {
       inlineBelow: 0,
     });
     pools.push(p);
-    const busy = p.run("spin", 300).catch(() => 0);
-    await Bun.sleep(20);
+    // The one worker is held until the test lets it go, not for a fixed 300 ms: under load the main thread could sleep
+    // past a fixed spin, and the two tasks below then ran instead of waiting (D1965).
+    const flag = new Int32Array(new SharedArrayBuffer(4));
+    const busy = p.run("hold", flag).catch(() => 0);
+    for (let i = 0; i < 1_000 && p.stats().busy === 0; i++) await Bun.sleep(5);
+    expect(p.stats()).toMatchObject({ busy: 1, queued: 0 });
     const c1 = new AbortController();
     const c2 = new AbortController();
     const w1 = p.run("double", 1, c1.signal).catch(() => "aborted");
     const w2 = p.run("double", 2, c2.signal).catch(() => "aborted");
+    expect(p.stats().queued).toBe(2);
     await Bun.sleep(10);
     c1.abort();
     c2.abort();
     expect(await w1).toBe("aborted");
     expect(await w2).toBe("aborted");
     expect(p.stats().queued).toBe(0);
-    expect(await p.run<number>("double", 21)).toBe(42);
-    await busy;
+    // Asked while the worker is still held: the queue has room again only if the aborted tasks gave theirs back.
+    const next = p.run<number>("double", 21);
+    Atomics.store(flag, 0, 1);
+    Atomics.notify(flag, 0);
+    expect(await next).toBe(42);
+    expect(await busy).toBe(1);
   });
 });
 

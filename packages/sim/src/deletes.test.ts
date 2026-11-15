@@ -38,5 +38,5 @@ describe("source-side deletions (--deletes)", () => {
     const lost = await runQuality({ ...base, deletes: 0.3, push: "payload", lostNotices: 1 });
     expect(lost.lostNotices).toBeGreaterThan(0);
     expect(lost.deletes.applied).toBe(pushed.deletes.applied);
-  }, 20_000); // Two quality runs: about 3 s alone, more under the full suite's load.
+  }, 120_000); // Two quality runs: about 3 s alone, more under load: the main run's limit (D1965).
 });

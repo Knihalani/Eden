@@ -180,7 +180,7 @@ describe("quality runner", () => {
     expect(shards[0]!.users).toBe(1);
     await expect(tallyQuality({ ...o, userRange: [1, 3] })).rejects.toThrow(/userRange/);
     await expect(tallyQuality({ ...o, userRange: [1, 1] })).rejects.toThrow(/no user/);
-  }, 20_000);
+  }, 120_000);
 
   test("mergeTallies sums key by key, keeps first-seen key order, and treats any key as plain data", () => {
     const t = (needDecisions: Record<string, number>): QualityTally =>
@@ -325,6 +325,6 @@ describe("source-side updates", () => {
     expect(on.updates.applied).toBe(on.updates.planned);
     expect(on.updates.planned).toBeGreaterThan(0);
     // Two full quality runs: 2.1-2.5 s alone, but over bun's 5 s default under the parallel gate's load (5.1-6.0 s
-    // seen in the 2026-11-03b audit). 20 s still catches a hang.
-  }, 20_000);
+    // seen in the 2026-11-03b audit), over 20 s at load 10-35 (D1965). The main run's 120 s still catches a hang.
+  }, 120_000);
 });

@@ -261,7 +261,7 @@ describe.skipIf(!oracle)("McpClient and StreamableHttpTransport against D1704's"
     const ok = want.outcomes.filter((o) => "ok" in (o as object)).length;
     expect(ok).toBeGreaterThan(200);
     expect(want.outcomes.length - ok).toBeGreaterThan(200);
-  }, 30_000);
+  }, 120_000);
 
   test("the same on 1,000 replies over real HTTP, where JSON takes the native read", async () => {
     const want = await play(OldClient, OldTransport as unknown as typeof StreamableHttpTransport, true);

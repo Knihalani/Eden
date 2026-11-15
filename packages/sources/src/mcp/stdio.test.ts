@@ -129,7 +129,9 @@ describe("hostile children", () => {
     expect(held.bytes).toBe(400_000);
     expect(held.count).toBeLessThanOrEqual(9);
     await t.close();
-  });
+    // The wait above has its own 20 s bound; the tail's 5 s limit cut it off under load (D1965), and nothing here is
+    // asserted on time: the arrays are counted.
+  }, 30_000);
 
   test("a flood of server requests: pings answered at most 16 at once, others never; the call still answered", async () => {
     const t = script(
