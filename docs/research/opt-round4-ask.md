@@ -138,4 +138,14 @@ misses and the search's re-stores).
 
 ## Gates
 
-GATES
+On the final tree:
+
+- `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check`: the first run failed one test outside this
+  branch's scope, `packages/sources/src/mcp/long-reply.test.ts`'s long-reply differential, timed out at 20 s at load
+  average 22; it passed alone (21/21, 11.9 s), and the gate passed on the second run in 176 s (2,987 tests in 300
+  files, then 524 in 31 of the real-time tail, none failing).
+- The no-model eval (`packages/eval/src/cli.ts`): precision 0.65, recall 0.52, falseFireRate 0; acting packets on 19
+  of 28 neutral requests at 1.18 items, facts handed 10 of 11, look-alikes 3 of 10; the whole JSON equal to a fresh
+  origin/main run's but for its two latency fields.
+- `bun run funnel --jobs 4`: origin/main (its engine sources, run in this session) and the branch both hidden
+  323/384, decoys 294/384 (shipped coverage); `--baseline` against main's run hidden +0 −0, decoys +0 −0.
