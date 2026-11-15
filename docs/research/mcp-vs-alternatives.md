@@ -1,4 +1,4 @@
-# Eden's MCP client against the alternatives (2026-11-14, D1860, D1870-D1875 and D1900-D1907: adopted)
+# Eden's MCP client against the alternatives (2026-11-14, D1860, D1870-D1875 and D1900-D1908: adopted)
 
 D1704 replaced the official SDK with Eden's own MCP client; D1840 made it faster. The owner may release the module
 (`packages/sources/src/mcp/`) on its own, so this note does three things: fixes the weak points D1840 left (JSON
@@ -569,25 +569,210 @@ lowest in the row; the last column is ours over the cheapest other client):
 | numbers | SSE | 1 MB | 16 | **4,962** | 6,689 | 6,726 | 18,825 | 6,232 | 82,887 | 0.80 |
 | numbers | SSE | 1 MB | 256 | **5,442** | 6,904 | 6,522 | 17,985 | 6,456 | 84,515 | 0.84 |
 
-Ours is the cheapest client in 77 of the 90 cells (three rounds; loads 1.6-9.8 over the 35 minutes of each, the
-machine shared with another agent). Every `escapes` and `unicode` cell from 64 KB up and every SSE cell is ours (tool
-output at 1 KB one at a time ties pi at 103 µs); JSON written as text costs 0.59-0.73x the cheapest other client at 1 MB, numbers 0.79-1.10x. The 13
-losses: `lines` in JSON at 1 KB, 64 KB and 1 MB (1.09-1.38x the SDK 1.x; below), plain JSON at 1 MB one at a time
-(1.06x) and at 1 KB with 256 in flight (1.12x pi), numbers in JSON one at a time at 1 KB and 1 MB (1.15x, 1.10x) and at
-64 KB with 256 in flight (1.11x), and unicode at 1 KB one at a time (1.03x pi). Time to the first call (spawn to
-answer, medians of three): eden 35 ms, pi 74, aisdk 119, sdk 120, sdk2 127, python 706.
+Ours is the cheapest client in 77 of the 90 cells (three rounds; loads 1.6-9.8 over the 35 minutes of each, the machine
+shared with another agent). Every `escapes` and `unicode` cell from 64 KB up and every SSE cell is ours (tool output at
+1 KB one at a time ties pi at 103 µs); JSON written as text costs 0.59-0.73x the cheapest other client at 1 MB, numbers
+0.79-1.10x. The 13 losses: `lines` in JSON at 1 KB, 64 KB and 1 MB (1.09-1.38x the SDK 1.x; below), plain JSON at 1 MB
+one at a time (1.06x) and at 1 KB with 256 in flight (1.12x pi), numbers in JSON one at a time at 1 KB and 1 MB (1.15x,
+1.10x) and at 64 KB with 256 in flight (1.11x), and unicode at 1 KB one at a time (1.03x pi). Time to the first call
+(spawn to answer, medians of three): eden 35 ms, pi 74, aisdk 119, sdk 120, sdk2 127, python 706.
 
-**Where it still loses.**
+**Where it still loses** (D1900's run; D1908's, below, supersedes these numbers).
 
-- **Tool output in JSON** (`lines`): 1.04-1.20x the SDK's CPU at 64 KB and 1.08-1.16x at 1 MB in the profile run
-  (before D1900, 1.18-1.32x at 1 MB), and 1.09-1.38x the SDK in the comparison run above. The scan now crosses the string in one guessed read and is about 1% of the call;
-  the parse is 85% of it (`--cpu-prof-md`). Bun's `res.json()`, which the other clients use, parses the received bytes
-  without making the string our `text()` makes. Taking `res.json()` and checking the depth and size after the parse
-  would close it, and was refused (D1871): the bound is on what a hostile reply can make the parse cost, and 1 MB of
-  nested arrays costs `json()` 108 ms. Reading bytes and decoding ourselves is slower than `text()` (D1906).
+- **Tool output in JSON** (`lines`): 1.04-1.20x the SDK's CPU at 64 KB and 1.08-1.16x at 1 MB in the profile run (before
+  D1900, 1.18-1.32x at 1 MB), and 1.09-1.38x the SDK in the comparison run above. The scan now crosses the string in one
+  guessed read and is about 1% of the call; the parse is 85% of it (`--cpu-prof-md`). Bun's `res.json()`, which the
+  other clients use, parses the received bytes without making the string our `text()` makes. Taking `res.json()` and
+  checking the depth and size after the parse would close it, and was refused (D1871): the bound is on what a hostile
+  reply can make the parse cost, and 1 MB of nested arrays costs `json()` 108 ms. Reading bytes and decoding ourselves
+  is slower than `text()` (D1906).
 - **1 KB replies with escapes**: 1.22-1.46x the SDK's CPU in the profile run, a difference of 10-30 µs a call. Short
   replies take the plain path (the long-reply path does not pay below 16 KiB), and these cells move that much between
   runs.
+
+## The review's fixes (D1908)
+
+An independent review of D1900-D1907 found no answer that differed from main's (230,000 fuzzed bodies) but six cost
+findings: a reader call for every `[` before a digit (a `[[n,2,3],...]` matrix at 2.7-2.9x main's CPU, a refused 2-8
+MB number flood at 11-12x), peak memory at 16 MiB over main's, rows of objects and plain text at 1 MB over main's, a
+4 MiB scratch buffer that kept the last reply's text, and three long lines here. D1908 fixes each; the answers are
+unchanged (five fresh seeds of the review's fuzz, 40,000 bodies each, and `long-reply.test.ts`: 0 differences).
+
+**Method.** `parseJsonText` and `parseJsonBytes` timed in one process against main's `src/mcp/json.ts` and a copy of it
+(the control): each cell a batch of about 8 ms of process CPU, the arms interleaved and their order alternating, a
+forced GC before each batch, 15 rounds, the median of the per-round ratios; load 1.5-3 on the shared 4-core machine.
+"Before" is D1900 as reviewed (189427c31), measured the same way in the same session. Peak RSS is VmHWM after
+`clear_refs`, above the baseline, median of 5 processes per arm.
+
+**Short number arrays** (CPU over main's, text path; the control read 0.95-1.06):
+
+| Shape | Size | Before | After |
+|---|---|---|---|
+| `[[n,2,3],...]` | 64 KB | 2.76 | 0.95-1.06 |
+| `[[n,2,3],...]` | 1 MB | 2.50 | 0.98-1.02 |
+| `[[1],[1],...]` | 64 KB | 3.97 | 0.98-1.28 |
+| `[[1],[1],...]` | 1 MB | 2.41 | 0.99-1.09 |
+| refused `[1,1,...]` | 2-16 MB, bytes | 14.2-23.8 ms (main 3.1-3.6) | 3.2-3.5 ms |
+| refused `[1,1,...]` | 2-16 MB, text | 12.3-16.6 ms (main 5.7-6.6) | 2.6-5.0 ms |
+
+**Peak memory at 16 MiB** (MB above baseline; "before" from the review):
+
+| Shape | Path | main | before | after |
+|---|---|---|---|---|
+| numbers, accepted | text | 28.8 | 41-46 | 21.3 |
+| numbers, accepted | bytes | 28.1 | 41-46 | 28.0 |
+| number flood, refused | text | 23.2 | 51-62 | 23.3 |
+| number flood, refused | bytes | 6.7 | 51-62 | 6.3 |
+| flood after a multi-byte string, refused | text / bytes | 40.2 / 6.9 | | 39.7 / 6.3 |
+| plain text | text / bytes | 18.1 / 33.7 | | 17.5 / 17.6 |
+| multi-byte text | text / bytes | 15.8 / 29.2 | | 15.2 / 15.3 |
+| tool output with escapes | text / bytes | 66.2 / 65.8 | | 57.8 / 68.6 |
+| multi-byte tool output with escapes | text / bytes | 72.5 / 72.8 | | 61.8 / 62.6 |
+| depth bomb, refused | text / bytes | 17.3 / 1.2 | | 17.2 / 0.9 |
+
+Single runs of the escaped shapes spread 59-70 MB for both main and the branch (the collector's timing); the bytes
+cell's medians over 8 more runs each were 65.9 for main and 65.2 for the branch.
+
+**Structured and plain replies** (CPU over main's; text path, then bytes):
+
+| Shape | Size | Before | After (text) | After (bytes) |
+|---|---|---|---|---|
+| rows of objects | 64 KB | 1.12-1.26 | 1.00-1.06 | 1.02 |
+| rows of objects | 1 MB | 1.08-1.34 | 0.98-1.02 | 0.98 |
+| plain text | 64 KB | 1.33-1.60 | 1.00-1.16 (control 1.05) | 0.58 |
+| plain text | 1 MB | 1.03-1.22 | 1.00-1.03 | 0.81 |
+| multi-byte text | 786 KB | 1.12 | 1.00 | 1.03 (control 1.05) |
+| tool output, JSON as text | 1.4 MB | 0.29-0.34 | 0.29-0.36 | 0.38 |
+| numbers | 1 MB | 0.39-0.54 | 0.47-0.56 | 0.56-0.60 |
+| replies under 16 KiB | 1 KB | 1.04-1.21 | 0.94-1.00 | 0.92-1.10 (control 0.96-1.05) |
+
+What changed: a number array is a candidate the scan reads as usual, and `readNumbers` is asked only once it has run
+1,022 characters with nothing but numbers' characters (one store a `[`, one compare a comma), with its commas counted
+first (`commasIn`, 1 ns a character) where a flood could fit, which also sizes the array; regions stop at 32 KiB; a long
+body on the bytes path is scanned as bytes first and decoded only when within, or when the byte scan stopped at what
+the text path reads faster (`byteShapeOrStop`, only up to twice the value bound); past the step budget a reply with
+nothing read is finished by main's scan (`plainScan`), and the bound is tried only where values were sparse; the
+plain path for replies under 16 KiB is main's scan again (sharing the reading scan cost them 4-20%); the readers'
+buffers are zeroed after each reply.
+
+What is left over main: a refused depth bomb costs 0.7-1.1 µs more than main's 2-3 µs (the long path's set-up); a
+hostile pair of strings whose guessed end is wrong (`["ab\"...", "\"\"..."]`, 2 MB) 0.84-1.30x across runs.
+
+**Against the alternatives** (`MCP_ALT_DIR=<scratch> MCP_COMPARE_TEXT=plain,lines,escapes,unicode,numbers
+MCP_COMPARE_SIZES=65536,1048576 mcp-compare.bench.ts perf 2 eden,sdk,sdk2,pi,aisdk`, then the 1 KB JSON cells of the
+earlier losses, `perf 3`; CPU µs a `tools/call`, medians; load 2-4; the Python SDK was not rerun, as it cost 10-30x the
+others in every cell before):
+
+| Text | Reply | Size | In flight | eden | sdk | sdk2 | pi | aisdk | eden / best other |
+|---|---|---|---|---|---|---|---|---|---|
+| plain | JSON | 64 KB | 1 | **166** | 200 | 249 | 220 | 221 | 0.83 |
+| plain | JSON | 64 KB | 16 | **122** | 165 | 194 | 218 | 166 | 0.74 |
+| plain | JSON | 64 KB | 256 | 135 | **121** | 159 | 199 | 167 | 1.11 |
+| plain | JSON | 1 MB | 1 | **1,054** | 1,232 | 1,232 | 2,950 | 1,155 | 0.91 |
+| plain | JSON | 1 MB | 16 | **942** | 1,148 | 1,249 | 2,190 | 1,147 | 0.82 |
+| plain | JSON | 1 MB | 256 | **1,207** | 1,508 | 1,551 | 2,162 | 1,449 | 0.83 |
+| plain | SSE | 64 KB | 1 | **220** | 309 | 341 | 728 | 402 | 0.71 |
+| plain | SSE | 64 KB | 16 | **211** | 276 | 344 | 636 | 364 | 0.76 |
+| plain | SSE | 64 KB | 256 | **182** | 259 | 337 | 695 | 257 | 0.71 |
+| plain | SSE | 1 MB | 1 | **2,351** | 3,340 | 3,488 | 21,840 | 3,530 | 0.70 |
+| plain | SSE | 1 MB | 16 | **1,761** | 2,591 | 2,798 | 15,155 | 2,755 | 0.68 |
+| plain | SSE | 1 MB | 256 | **1,910** | 2,394 | 2,327 | 15,103 | 2,601 | 0.82 |
+| lines | JSON | 64 KB | 1 | **188** | 200 | 200 | 282 | 227 | 0.94 |
+| lines | JSON | 64 KB | 16 | 211 | **166** | 264 | 274 | 212 | 1.27 |
+| lines | JSON | 64 KB | 256 | 188 | 178 | 217 | 256 | **166** | 1.13 |
+| lines | JSON | 1 MB | 1 | 2,516 | **1,731** | 1,829 | 3,738 | 1,899 | 1.45 |
+| lines | JSON | 1 MB | 16 | 2,061 | **1,805** | 2,030 | 2,780 | 1,991 | 1.14 |
+| lines | JSON | 1 MB | 256 | 2,642 | **2,338** | 2,516 | 3,053 | 2,367 | 1.13 |
+| lines | SSE | 64 KB | 1 | 357 | **321** | 374 | 698 | 441 | 1.11 |
+| lines | SSE | 64 KB | 16 | **266** | 353 | 383 | 743 | 469 | 0.76 |
+| lines | SSE | 64 KB | 256 | **249** | 284 | 311 | 594 | 332 | 0.88 |
+| lines | SSE | 1 MB | 1 | **3,254** | 4,156 | 3,954 | 21,194 | 4,844 | 0.82 |
+| lines | SSE | 1 MB | 16 | **2,605** | 3,460 | 3,695 | 15,159 | 3,969 | 0.75 |
+| lines | SSE | 1 MB | 256 | **3,204** | 3,409 | 3,678 | 15,278 | 3,922 | 0.94 |
+| escapes | JSON | 64 KB | 1 | **341** | 462 | 494 | 612 | 505 | 0.74 |
+| escapes | JSON | 64 KB | 16 | **304** | 468 | 573 | 536 | 486 | 0.65 |
+| escapes | JSON | 64 KB | 256 | **283** | 388 | 553 | 469 | 454 | 0.73 |
+| escapes | JSON | 1 MB | 1 | **3,868** | 5,311 | 5,556 | 7,926 | 5,578 | 0.73 |
+| escapes | JSON | 1 MB | 16 | **3,556** | 5,722 | 5,836 | 6,869 | 5,164 | 0.69 |
+| escapes | JSON | 1 MB | 256 | **4,542** | 6,162 | 6,758 | 7,390 | 6,809 | 0.74 |
+| escapes | SSE | 64 KB | 1 | **520** | 673 | 621 | 1,099 | 920 | 0.84 |
+| escapes | SSE | 64 KB | 16 | **452** | 660 | 685 | 999 | 1,047 | 0.68 |
+| escapes | SSE | 64 KB | 256 | **362** | 629 | 546 | 882 | 832 | 0.66 |
+| escapes | SSE | 1 MB | 1 | **5,508** | 7,884 | 7,986 | 35,414 | 12,302 | 0.70 |
+| escapes | SSE | 1 MB | 16 | **4,876** | 7,273 | 8,497 | 24,808 | 11,482 | 0.67 |
+| escapes | SSE | 1 MB | 256 | **5,252** | 7,480 | 7,518 | 24,073 | 11,089 | 0.70 |
+| unicode | JSON | 64 KB | 1 | **245** | 345 | 387 | 340 | 345 | 0.72 |
+| unicode | JSON | 64 KB | 16 | **253** | 350 | 393 | 312 | 415 | 0.81 |
+| unicode | JSON | 64 KB | 256 | **207** | 298 | 330 | 298 | 327 | 0.69 |
+| unicode | JSON | 1 MB | 1 | **2,477** | 3,494 | 3,366 | 7,598 | 4,122 | 0.74 |
+| unicode | JSON | 1 MB | 16 | **2,384** | 3,617 | 3,518 | 5,746 | 4,243 | 0.68 |
+| unicode | JSON | 1 MB | 256 | **3,047** | 4,448 | 4,400 | 6,002 | 4,627 | 0.69 |
+| unicode | SSE | 64 KB | 1 | **334** | 371 | 446 | 1,630 | 500 | 0.90 |
+| unicode | SSE | 64 KB | 16 | **340** | 390 | 475 | 1,664 | 482 | 0.87 |
+| unicode | SSE | 64 KB | 256 | **272** | 308 | 364 | 1,300 | 380 | 0.88 |
+| unicode | SSE | 1 MB | 1 | **3,675** | 4,643 | 5,050 | 63,386 | 5,115 | 0.79 |
+| unicode | SSE | 1 MB | 16 | **3,131** | 3,825 | 4,463 | 46,329 | 4,882 | 0.82 |
+| unicode | SSE | 1 MB | 256 | **3,824** | 3,965 | 4,317 | 40,636 | 4,613 | 0.96 |
+| numbers | JSON | 64 KB | 1 | 440 | **439** | 632 | 554 | 526 | 1.00 |
+| numbers | JSON | 64 KB | 16 | **454** | 516 | 530 | 458 | 491 | 0.99 |
+| numbers | JSON | 64 KB | 256 | **350** | 432 | 562 | 434 | 446 | 0.81 |
+| numbers | JSON | 1 MB | 1 | **4,476** | 4,920 | 5,060 | 6,420 | 5,128 | 0.91 |
+| numbers | JSON | 1 MB | 16 | **4,795** | 5,263 | 4,875 | 5,794 | 4,808 | 1.00 |
+| numbers | JSON | 1 MB | 256 | 5,379 | **5,334** | 6,171 | 6,130 | 5,838 | 1.01 |
+| numbers | SSE | 64 KB | 1 | 562 | **549** | 669 | 1,368 | 647 | 1.02 |
+| numbers | SSE | 64 KB | 16 | **547** | 584 | 675 | 1,077 | 749 | 0.94 |
+| numbers | SSE | 64 KB | 256 | **466** | 478 | 600 | 1,292 | 568 | 0.97 |
+| numbers | SSE | 1 MB | 1 | **5,914** | 6,904 | 8,542 | 35,718 | 8,263 | 0.86 |
+| numbers | SSE | 1 MB | 16 | **5,612** | 7,015 | 6,631 | 17,018 | 7,550 | 0.85 |
+| numbers | SSE | 1 MB | 256 | **6,274** | 6,533 | 6,750 | 18,369 | 6,942 | 0.96 |
+| plain | JSON | 1 KB | 1 | **103** | 136 | 198 | 118 | 143 | 0.87 |
+| plain | JSON | 1 KB | 16 | **52** | 70 | 107 | 90 | 70 | 0.74 |
+| plain | JSON | 1 KB | 256 | 61 | 67 | 130 | **55** | 79 | 1.11 |
+| lines | JSON | 1 KB | 1 | **92** | 109 | 169 | 123 | 113 | 0.85 |
+| lines | JSON | 1 KB | 16 | **57** | 79 | 91 | 69 | 70 | 0.83 |
+| lines | JSON | 1 KB | 256 | **45** | 61 | 95 | 72 | 76 | 0.75 |
+| unicode | JSON | 1 KB | 1 | **90** | 126 | 122 | 111 | 127 | 0.81 |
+| unicode | JSON | 1 KB | 16 | **44** | 52 | 84 | 63 | 86 | 0.85 |
+| unicode | JSON | 1 KB | 256 | **41** | 54 | 88 | 70 | 95 | 0.76 |
+| numbers | JSON | 1 KB | 1 | **96** | 104 | 126 | 103 | 104 | 0.93 |
+| numbers | JSON | 1 KB | 16 | **46** | 66 | 86 | 70 | 87 | 0.69 |
+| numbers | JSON | 1 KB | 256 | **54** | 60 | 101 | 58 | 87 | 0.95 |
+
+Ours is the cheapest in 61 of these 72 cells. Of the 13 earlier losses, seven are now ours: plain JSON at 1 MB one at a
+time (0.91), numbers in JSON at 1 KB and 1 MB one at a time (0.93, 0.91) and at 64 KB with 256 in flight (0.81),
+unicode at 1 KB one at a time (0.81), and tool output in JSON at 1 KB (0.75-0.85) and at 64 KB one at a time (0.94).
+Still lost: tool output in JSON at 64 KB with 16 and 256 in flight and at 1 MB (1.13-1.45, below), plain JSON at 1 KB
+with 256 in flight (1.11 pi). New in this run: plain JSON at 64 KB with 256 in flight (1.11; 0.87 in D1900's run),
+tool output in SSE at 64 KB one at a time (1.11; 0.92 before), and four numbers cells at 1.00-1.02. The parse path of
+those cells did not get slower (numbers at 64 KB: 237-247 µs against D1900's 275-304 in one process); one or two
+rounds on a loaded machine move a cell 10-20%. Time to the first call: eden 33-36 ms, pi 70-78, aisdk 119-126, sdk
+122-123, sdk2 135-164.
+
+**Where the remaining time goes, and what D1871 costs.** One JSON `tools/call` of 1 MB tool output, client process CPU
+(`wire.ts`-style: a local server in another process, nine interleaved rounds):
+
+| Read | µs |
+|---|---|
+| `res.bytes()` only | 809-929 |
+| `res.text()` only | 893-953 |
+| `res.text()`, then `JSON.parse` (no check) | 1,630-1,713 |
+| `res.text()`, then `parseJsonText` (ours) | 1,757-1,883 |
+| `res.json()` (what the SDK does) | 1,564-1,634 |
+| `res.bytes()`, `latin1Slice` or `TextDecoder`, `JSON.parse` (no check) | 1,834-1,936 |
+| `res.bytes()`, byte scan, `latin1Slice`, `JSON.parse` | 2,296 |
+| `res.bytes()`, byte scan, `new Response(bytes).json()` | 2,285 |
+
+Our check and the guessed read cost 3-10% over an unchecked `text()` and `JSON.parse`; in one process, on the string
+alone, `parseJsonText` costs 963 µs against `JSON.parse`'s 899 (the scan is 1.3% of the profile, the parse 96%). The
+rest of the gap to the SDK is `text()` against `json()`: 65-150 µs a MiB, the string `text()` makes. No read that
+checks before parsing is cheaper: bytes and a decode (`latin1Slice` or `TextDecoder`) then `JSON.parse` cost more than
+`text()`, and handing checked bytes to `json()` costs more again. The only way to that cell is `json()` first and the
+check after, which D1871 refused, and the numbers still say keep it: `json()` of 1 MB of nested arrays costs 54-87 ms
+of CPU and of a 16 MiB number flood 134-201 ms before anything can refuse them, where ours refuses the flood in 3.4-5.0
+ms. The trade is 65-150 µs a MiB on tool output in JSON against 20-50x the CPU (and the parsed objects in memory) on
+every hostile reply. At 1 KB, `fetch` is 66% of a call's CPU in ours and the check and parse about 15%; the client's
+own JavaScript (deadlines, the abort controller, the message bookkeeping) is about 10%, 8 µs of the 82 that loop
+measured.
 
 ## Packaging
 

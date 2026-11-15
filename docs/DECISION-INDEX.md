@@ -810,6 +810,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1905 | 2026-11-15 | Bench: the MCP benches take the result's text shape. | adopted |
 | D1906 | 2026-11-15 | Rejected: reading Bun's JSON replies as bytes (`res.bytes()`, a byte scan with the same readers, pieces decoded apart). | rejected |
 | D1907 | 2026-11-15 | Rejected (measured beside D1900-D1904): other ways to the same values. | rejected |
+| D1908 | 2026-11-15 | Adopted (D1900's independent review, every finding fixed; no answer changed: 0 differences from main's shape check and `JSON.parse` on… | adopted |
 | D1910 | 2026-11-14 | Adopted: `pick`'s focus count searches each focus word with `indexOf`. | adopted |
 | D1911 | 2026-11-14 | Adopted (same brief): `sketchTerms` skips `stopwordAt` where the word's FNV-1a hash has no stopword's mark. | adopted |
 | D1912 | 2026-11-14 | Rejected (measured): a packed text deflated by libdeflate (`Bun.deflateSync`'s `library: "libdeflate"`, level 6) in place of zlib. | rejected |
