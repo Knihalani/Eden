@@ -124,7 +124,9 @@ afterEach(() => {
 });
 
 describe("D1927 at its edges: identical state to the engine that re-adds every item", () => {
-  for (const seed of [1, 2, 3, 4]) {
+  // 15-35 s a seed alone (4,110 sources), so one seed runs by default: seed 4, the cheapest that kills the
+  // drop-keeps-its-epoch mutation; TEST_DEEP=1 runs all four (D1927's follow-ups' review).
+  for (const seed of process.env.TEST_DEEP === "1" ? [1, 2, 3, 4] : [4]) {
     test(`seed ${seed}: more sources than RareTerms numbers, items of a few fresh words (words dropped)`, async () => {
       const r = rng(seed);
       let clock = Date.parse("2026-11-01T00:00:00Z");
@@ -282,12 +284,12 @@ describe("D1927 at its edges: identical state to the engine that re-adds every i
           // A lookup's put of what it found (fresh copies equal to the held ones: D1722 keeps the held object and
           // its stamp) moves those entries last in the cache's order, after entries a later page stamped.
           const listed = (await src.list(scope, undefined, 1_000)).items.filter(() => r() < 0.5);
-          for (const e of engines)
-            e.cache.put(
-              scope,
-              listed.sort(() => r() - 0.5),
-              clock,
-            );
+          // Shuffled once (Fisher-Yates), so both engines get the same order.
+          for (let i = listed.length - 1; i > 0; i--) {
+            const j = Math.floor(r() * (i + 1));
+            [listed[i], listed[j]] = [listed[j]!, listed[i]!];
+          }
+          for (const e of engines) e.cache.put(scope, listed, clock);
           compare(`round ${round}: lookup`);
         }
         const freeze = r();
