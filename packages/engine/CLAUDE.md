@@ -13,7 +13,7 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `partner.ts` (about 7,000 lines)                                           | `ContextPartner`, `PartnerDeps`: observe, fast path, slow path, ask, check, sessions and their AbortControllers (D17), delivery, queues                                                                                       |
 | `config.ts`, `parts.ts`                                                    | `EngineConfig`, `DEFAULT_CONFIG` (the unified default, D112: thresholds such as `confidentScore` 1.1, D6, and every part on); `PARTS` (each part's settings that take it out), `withoutParts`, `CORE_CONFIG` (every part out) |
-| `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held deflated behind a `text` getter (D188), the bytes as a one-byte string (D998)                                                                  |
+| `cache.ts`, `packed-text.ts`                                               | `ItemCache`: per-user BM25F item cache, TTL, synced items, near-duplicate suppression; `sanitizeItem`; item text held compressed behind a `text` getter (D188; zstd level 1 since D1926, DEFLATE copies of a format-6 blob read by their tag), the bytes as a one-byte string (D998); `packed-text.reference.ts` is the DEFLATE packing before D1926, for the tests' format-6 copies                                                                  |
 | `persist.ts`                                                               | `EncryptedFrozenDisk` (D425; the servers' default since D991): frozen users' blobs written AES-256-GCM, one file per user under a keyed-hash name, tenant/user in the additional data; `FrozenDisk`, `PERSIST_FORMAT` (bump it when a blob's shape changes) |
 | `persist-shared.ts`                                                        | `SharedFrozenDisk` (D992): the local files mirrored to a `BlobStore` (S3-compatible), a user fetched before their first read (`fetch`, awaited by `ItemCache.ready`), the store's copy kept at a thaw (failover) and deleted on forget; `handOff`, `settle`, `sweepStore`, `forgetAbsent` |
 | `text.ts`, `situation.ts`                                                  | Cues with no model (entities, content terms, chatter); a coarse situation label for routing                                                                                                                                   |
@@ -405,10 +405,15 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   task). Under signal-only notices the agent's wait is the re-read itself (D126, D211), bounded by `verifyTimeoutMs`.
 - `fetchChecked`'s `gone` needs `Source.fetchReportsGone`: an MCP tool's null fetch proves nothing, so verification
   never deletes an MCP item on its own; deletions there come from `sourceRemoved` or the sweep.
-- **Cached items' `text` is a getter over deflated bytes (D188).** A stored copy is not the object `put` was given;
+- **Cached items' `text` is a getter over compressed bytes (D188; zstd level 1 since D1926).** A stored copy is not the object `put` was given;
   spreads and `JSON` see the text, but a memo that keeps `item.text` keeps a decoded copy. Decode Latin-1 bytes with
   `latin1`, never `TextDecoder`: its output for an accented letter is a two-byte string, and every regex over it ran
-  1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local.
+  1.17x slower (`pipeline.bench.ts`). Text a new path reads in a loop should be read once into a local. A packed
+  copy's codec and encoding are its getter's `PackTag` (bit 0 Latin-1, bit 1 zstd; the frame's 4-byte magic is not
+  held), one decode memo map a tag, and a warm blob's `FastEntry.p[1]`: a new codec takes a new bit and bumps
+  `PERSIST_FORMAT`, and the old tags must keep reading (a format-6 warm blob holds DEFLATE, tags 0 and 1;
+  `persist.test.ts` rewrites a blob so and reads it back). zlib levels 1-9 and zstd 3 and 5 were measured beside it
+  (docs/research/opt-round3.md): none a better trade.
 - **An equal re-put keeps the held object (D1722).** A lookup re-stores what it finds; a copy equal in words and
   details (`sameDetails`, `sameFields`) leaves `Entry.item` as it was, so per-object memos (`analyse`, `ownText`,
   the card order's heads) keep answering. Never use an item object's identity as its version (hash its words,
@@ -517,7 +522,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   on Bun 1.4 `heapUsed` already counts typed arrays' stores and `external` counts them again (D372): report each
   on its own, and RSS, never their sum.
 - **Warm freezing (D860, D862, in the default; `CacheLimits.warmIdleMs`; docs/research/p6-scale.md).** A user idle
-  `warmIdleMs` (2 min; the expiry tick is a minute, `expireEveryMs`) is frozen warm (`fastFreezeSteps`): the "EDF2" blob holds each item's deflated text bytes as they are
+  `warmIdleMs` (2 min; the expiry tick is a minute, `expireEveryMs`) is frozen warm (`fastFreezeSteps`): the "EDF2" blob holds each item's packed text bytes as they are
   (`packedOf`/`packedFrom`), the vocabulary's terms and the compacted index as arrays (`Vocab.snapshot`,
   `SparseIndex.snapshot`, postings and forward arena as varint gaps), so `fastThawSteps` copies instead of
   tokenizing, indexing and deflating (10-20 ms at 3,000 items against 150-300). Doc numbers and term ids are the
@@ -673,8 +678,8 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `u` flag reads a pair as one code point. `sketchTerms`' dedupe table is process-wide scratch of integers only,
   never past `TABLE_MAX_CHARS` (64K code units: a longer text, such as a raw MCP reply the sync sketches uncut, goes
   to the split), and each call zeroes the hashes it wrote (the review: a 16 MB reply had kept 200 MB attached).
-- **A freeze carries the entries' date facts (D1888, `FrozenEntry.t`/`FastEntry.t`, `PERSIST_FORMAT` 6; files of 5
-  are read and their facts read again at the first scan).** A change to what `dayFactsOf` computes must bump
+- **A freeze carries the entries' date facts (D1888, `FrozenEntry.t`/`FastEntry.t`, `PERSIST_FORMAT` 6, 7 since
+  D1926's zstd texts; files of 5 are read and their facts read again at the first scan, files of 6 as they are).** A change to what `dayFactsOf` computes must bump
   `PERSIST_FORMAT` again, or a thaw serves facts of the old reading. A rollback, or an older process on a shared
   disk, deletes format 6's files and those users re-sync (docs/DEPLOY.md). `parts-memo.test.ts` pins that every
   path dropping a user's items empties `PARTS_MEMO`.

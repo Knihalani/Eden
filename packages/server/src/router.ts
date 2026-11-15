@@ -29,8 +29,8 @@
  * `/healthz` answers here: 200 while at least one child is up (`up` < `processes` in the body says the instance is
  * degraded: alert on that, but a load balancer must not pull every user for one child's 1/N), 503 when none is.
  *
- * The router reads each POST body once to find `userId` (a `JSON.parse` the child repeats; router.bench.ts measures
- * the hop) and forwards the bytes unchanged with the `authorization` and `content-type` headers. A declared
+ * The router reads each POST body once to find `userId` (a scan that parses nothing but that value, D1925;
+ * router.bench.ts measures the hop, `--hop` the scan against the parse it replaced) and forwards the bytes unchanged with the `authorization` and `content-type` headers. A declared
  * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice,
  * and a request past the tenant's whole rate (`tenantRatePerSec`, `tenantBurst`, undivided) gets the handler's 429
  * here before its body is read; every other answer, auth, the child's own 1/N rate limit and validation included, is
