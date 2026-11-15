@@ -78,32 +78,12 @@ export function composeMasks(
   const main = strict.length + excused.length > 0;
   const assigned = main ? pass.assignments(text) : { all: [], strict: [] };
   const spans = byStart(strict.concat(excused, assigned.all));
-  let at = 0;
   /** The gated text's pieces against `text` (pieces.ts): kept runs and sentinels. */
   const gating: Pieces = [];
   // Its parts, joined once (D1850): a string built by `+=` a span at a time was a rope of as many parts, flattened
   // when the structural pass first read it.
   const parts: string[] = [];
-  let length = 0;
-  for (let k = 0; k < spans.length; k++) {
-    const start = spans[k]![0];
-    const end = spans[k]![1];
-    if (end <= at) continue;
-    const kept = start > at ? start : at;
-    if (kept > at) {
-      gating.push(length, length + kept - at, at);
-      parts.push(text.slice(at, kept));
-      length += kept - at;
-    }
-    if (start >= at) {
-      gating.push(length, length + REDACTED.length, -1);
-      parts.push(REDACTED);
-      length += REDACTED.length;
-    }
-    at = end;
-  }
-  if (text.length > at) gating.push(length, length + text.length - at, at);
-  parts.push(text.slice(at));
+  gate(text, spans, gating, parts);
   const gated = parts.length === 1 ? parts[0]! : parts.join("");
   const seen = { excusable: false };
   const ran = pass.run(gated, seen, gating);
@@ -143,6 +123,39 @@ export function composeMasks(
     from = end;
   }
   return { stored: out + text.slice(from), ...masks };
+}
+
+/**
+ * The gating of `text` by `spans` (sorted by start): its parts (kept runs and sentinels) in `parts` and its pieces in
+ * `gating`. A function of its own, its loop last (D1850): V8 compiles a loop on stack replacement and keeps that code
+ * for later calls, and code after the loop that saw another kind of string there deoptimized it at every call (849
+ * times in one run over the benchmark's texts).
+ */
+function gate(text: string, spans: Span[], gating: Pieces, parts: string[]): void {
+  let at = 0;
+  let length = 0;
+  for (let k = 0; k <= spans.length; k++) {
+    // One past the last span: the text's tail, kept (so no code follows the loop).
+    const start = k < spans.length ? spans[k]![0] : text.length;
+    const end = k < spans.length ? spans[k]![1] : text.length;
+    if (end <= at && k < spans.length) continue;
+    const kept = start > at ? start : at;
+    if (kept > at) {
+      gating.push(length, length + kept - at, at);
+      parts.push(text.slice(at, kept));
+      length += kept - at;
+    }
+    if (k === spans.length) {
+      if (kept === at) parts.push("");
+      return;
+    }
+    if (start >= at) {
+      gating.push(length, length + REDACTED.length, -1);
+      parts.push(REDACTED);
+      length += REDACTED.length;
+    }
+    at = end;
+  }
 }
 
 /**
