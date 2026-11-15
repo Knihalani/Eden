@@ -116,7 +116,8 @@ import {
   LEADING,
   isScheduling,
   isSubject,
-  mentions,
+  mentionsAny,
+  mentionWords,
   orgsOf,
   overlaps,
   requestedSpan,
@@ -143,6 +144,8 @@ import {
   renderAnswer,
   renderPacket,
   shownText,
+  shownTextOfLines,
+  wordsIn,
 } from "./render";
 import {
   callParties,
@@ -512,6 +515,30 @@ const RARE_SHARE = 0.03;
 /** Each cue's frame (`conflict.ts`), read once and dropped with the cue. */
 const FRAMES = new WeakMap<Cue, Frame>();
 
+/** A request's names as the rule paths read them: its people cleaned, addresses left out, and their words. */
+interface CueNames {
+  /** `cleanEntities(cue.entities)` with no address. */
+  names: string[];
+  /** `mentionWords(names)`, for `mentionsAny`. */
+  words: string[][];
+}
+
+/**
+ * Each cue's names, read once and dropped with the cue (D1920): the conflict, away and fallback paths and `about`
+ * cleaned the entities again for every candidate (`cleanEntities` was 0.8% of the pipeline bench on its own).
+ */
+const CUE_NAMES = new WeakMap<Cue, CueNames>();
+const NO_NAMES: CueNames = { names: [], words: [] };
+
+function cueNames(cue: Cue): CueNames {
+  let n = CUE_NAMES.get(cue);
+  if (!n) {
+    const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+    CUE_NAMES.set(cue, (n = { names, words: mentionWords(names) }));
+  }
+  return n;
+}
+
 /** Requests that act on someone, where an item they take part in is context (D44). */
 const ACTING = new Set<string>(["scheduling", "communication", "task", "travel"]);
 /**
@@ -596,7 +623,7 @@ interface Built {
    * the agent takes it says its items in full (deep audit 2026-11-05 `ask-shown-before-handed-out`). Cleared once
    * noted.
    */
-  shown?: { items: readonly ContextItem[]; text: string };
+  shown?: { items: readonly ContextItem[]; text: string; lines?: ItemLines };
   /** With `revisionNotice`: each item's version the agent holds once this is handed out (`noteShown`). */
   copies?: { id: string; sourceId: string; version: number }[];
 }
@@ -3645,7 +3672,7 @@ export class ContextPartner {
     // Every path that gives the agent an injection comes through here: what it was shown is noted first, before the
     // usage tracking's early returns (an injection already tracked or recorded was still shown).
     if (built?.shown) {
-      this.noteShown(s, built.shown.items, built.shown.text);
+      this.noteShown(s, built.shown.items, built.shown.lines ?? itemLinesOf(built.shown.text.split("\n")));
       built.shown = undefined;
     }
     if (built?.copies) {
@@ -3816,7 +3843,7 @@ export class ContextPartner {
       if (bulkMail(x.item)) continue;
       // Nor, with `quietSettled`, an item that only says things stand as expected (`settled`); nor, with
       // `groundAway`, an absence on other days than the request names (`awayElsewhere`).
-      if (this.config.quietSettled && settled(x.item)) continue;
+      if (this.config.quietSettled && settledOf(x.item)) continue;
       if (this.awayElsewhere(x.item, cue)) continue;
       // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
       if (this.cleared(x, cue)) continue;
@@ -3896,13 +3923,11 @@ export class ContextPartner {
     // With `groundAway`: a person the request names, away on a day it names ("ask Jamie to feed the cat next weekend"
     // and Jamie's "away on Skye 6–9 Nov"), whatever the words: the agent should know before it asks them (D48).
     if (this.config.groundAway && time && time.days.size > 0) {
-      const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+      const { words } = cueNames(cue);
       const away = pool.filter((x) => {
         const span = absenceSpan(x.item, cue.at);
         return (
-          span !== null &&
-          [...time.days].some((d) => d >= span.from && d <= span.to) &&
-          names.some((n) => mentions(n, x.item))
+          span !== null && [...time.days].some((d) => d >= span.from && d <= span.to) && mentionsAny(words, x.item)
         );
       });
       if (away.length > 0) return { items: away.slice(0, this.max()), how: "away" };
@@ -3968,10 +3993,10 @@ export class ContextPartner {
     // constraints bind everyone (a change freeze, the user's own passport), whoever it names; for one whose bind one
     // party, when the request names no one or the find names someone it does: a legal hold on another client's
     // records is not this one's. The class's words are a tie beyond a name, so `quietNameOnly` does not gate it.
-    const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+    const { names, words } = cueNames(cue);
     for (const x of pool) {
       if (!bridged.has(x.item.id) || hits.includes(x)) continue;
-      if (cls?.scope === "general" || names.length === 0 || names.some((n) => mentions(n, x.item))) hits.push(x);
+      if (cls?.scope === "general" || names.length === 0 || mentionsAny(words, x.item)) hits.push(x);
     }
     return hits;
   }
@@ -4007,7 +4032,7 @@ export class ContextPartner {
     const top = scored[0]?.score ?? 0;
     const days = cue.time?.days;
     const hasDays = days !== undefined && days.size > 0;
-    const names = cleanEntities(cue.entities).filter((e) => !e.includes("@"));
+    const { words } = cueNames(cue);
     const people = cue.entities.filter((e) => e.includes("@") || e.trim().split(/\s+/).length >= 2);
     const acts = this.acts(s, cue, eventKind);
     const imperative = isImperative(cue.raw);
@@ -4024,6 +4049,8 @@ export class ContextPartner {
       const beyondName = this.beyondName(x, cue);
       const about = this.about(x, cue);
       const unmeasured = unmeasuredLimit(frame, item);
+      // Read once: the away test and the fact itself ask the same question.
+      const named = mentionsAny(words, item);
       const facts: Facts = {
         score: x.score,
         matched: x.matched,
@@ -4036,27 +4063,23 @@ export class ContextPartner {
         conflict: b(verdict === "conflict"),
         clear: b(verdict === "clear"),
         conflictHit: b(
-          verdict === "conflict" && about && beyondName && !bulkMail(item) && !settled(item) && !unmeasured,
+          verdict === "conflict" && about && beyondName && !bulkMail(item) && !settledOf(item) && !unmeasured,
         ),
         bulk: b(bulkMail(item)),
-        settled: b(settled(item)),
+        settled: b(settledOf(item)),
         awayElsewhere: b(this.awayElsewhere(item, cue)),
         onNamedDay: b(hasDays && days!.has(day ?? "")),
         namesDay: b(hasDays && daysNamed(item, cue.at).some((d) => days!.has(d))),
         dated: b(day !== null),
         upcoming: b(day !== null && at >= cue.at),
-        awayOnDay: b(
-          span !== null &&
-            [...days!].some((d) => d >= span.from && d <= span.to) &&
-            names.some((n) => mentions(n, item)),
-        ),
+        awayOnDay: b(span !== null && [...days!].some((d) => d >= span.from && d <= span.to) && named),
         probed: b(ctx.probed?.has(item.id) === true),
         bridged: b(ctx.bridged?.has(item.id) === true),
         carded: b(card !== undefined),
         cardViolated: b(card?.violated === true),
         cardByName: b(card?.tied === "name"),
         participant: b(people.some((p) => namesParticipant(p, item))),
-        mentions: b(names.some((n) => mentions(n, item))),
+        mentions: b(named),
         namesRef: b(namesRef(frame, item)),
         unmeasured: b(unmeasured),
         ageDays: day !== null ? Math.log1p(Math.abs(at - cue.at) / 86_400_000) : 0,
@@ -4114,7 +4137,7 @@ export class ContextPartner {
    */
   private about(x: Scored, cue: Cue): boolean {
     if (x.matched >= 2 || namesRef(this.frame(cue), x.item)) return true;
-    return cleanEntities(cue.entities).some((e) => !e.includes("@") && mentions(e, x.item));
+    return mentionsAny(cueNames(cue).words, x.item);
   }
 
   /**
@@ -4236,25 +4259,25 @@ export class ContextPartner {
   private fallback(unsure: Scored[], cue?: Cue): Scored | null {
     const top = unsure[0];
     const c = this.config;
-    if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settled(top.item))) return null;
+    if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settledOf(top.item))) return null;
     if (cue && this.awayElsewhere(top.item, cue)) return null;
     if (cue && this.cleared(top, cue)) return null;
     // `fallbackAsks`: a request that asks (a question, or an action) about something it names, with an item that names
     // it too, needs two of its terms, not three. A question about the world at large ("a good stretch for back pain")
     // names nothing of the user's, and words like "good" or "week" match anything.
     const asks = cue !== undefined && c.fallbackAsks && (/\?\s*$/.test(cue.raw) || isAction(cue.raw));
-    const named = asks ? cleanEntities(cue.entities).filter((e) => !e.includes("@")) : [];
+    const { names: named, words } = asks ? cueNames(cue) : NO_NAMES;
     if (named.length > 0) {
       // The best of the first three that names what the request names: the top one may be about something else.
       const hit = unsure
         .slice(0, 3)
         .find(
           (x) =>
-            named.some((e) => mentions(e, x.item)) &&
+            mentionsAny(words, x.item) &&
             !bulkMail(x.item) &&
             x.matched >= 2 &&
             x.score >= c.fallbackScore &&
-            !(c.quietSettled && settled(x.item)) &&
+            !(c.quietSettled && settledOf(x.item)) &&
             !this.awayElsewhere(x.item, cue!) &&
             !this.cleared(x, cue!) &&
             this.beyondName(x, cue!),
@@ -6348,12 +6371,9 @@ export class ContextPartner {
    * With `askDedup`, keeps the words each item's line in `text` (a rendered packet or answer of `items`, in order)
    * showed the agent. A line is matched to its item by its `[source]` tag; a packet cut short has fewer lines.
    */
-  private noteShown(s: Session, items: readonly ContextItem[], text: string): void {
-    // Item lines only.
-    const lines = text
-      .split("\n")
-      .slice(1, -1)
-      .filter((line) => line.startsWith("- ["));
+  private noteShown(s: Session, items: readonly ContextItem[], text: ItemLines): void {
+    // Item lines only, of the text's lines after its first and before its last.
+    const lines = noteLines(text);
     const shown = (s.shown ??= new Map());
     // A packet's dates leave out the current year ("9 Oct"), meaning this one: an answer saying it is no news.
     const year = String(new Date(this.now()).getUTCFullYear());
@@ -6362,8 +6382,7 @@ export class ContextPartner {
       if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
       const key = shownKey(item);
       const words = shown.get(key) ?? new Set<string>([year]);
-      const said = line.slice(line.indexOf("] ") + 2);
-      for (const w of `${item.sourceId} ${said}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) words.add(w);
+      for (const w of lineWords(item.sourceId, line)) words.add(w);
       shown.delete(key); // re-inserted last: the most recently shown is dropped last
       shown.set(key, words);
     }
@@ -6458,21 +6477,25 @@ export class ContextPartner {
       createdAt: this.now(),
     };
     if (rendering) spans!.close(rendering);
+    // The text the agent is shown, split once for the three readers of its lines below (D1920).
+    const said = shown ?? injection.text;
+    const all = said.split("\n");
+    const lines = this.config.askDedup || this.config.revisionNotice ? itemLinesOf(all) : undefined;
     this.built.set(injection, {
       sourceIds: [...new Set(items.map((i) => i.sourceId))],
       items: items.map((i) => ({ sourceId: i.sourceId, id: i.id })),
       // Only the words the agent received: an item's text past the packet's cut is not evidence of use.
-      text: shownText(shown ?? injection.text),
+      text: shownTextOfLines(all),
       // What the agent will have been shown of each item once it is handed out (`markShown`): an answer's lines are
       // its items' in order (not folded); a model's composed answer has no item lines and is attributed to none.
       ...(this.config.askDedup
-        ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: shown ?? injection.text } }
+        ? { shown: { items: shown === undefined ? items : scored.map((x) => x.item), text: said, lines } }
         : {}),
       ...(this.config.revisionNotice
         ? {
             copies: renderedCopies(
               shown === undefined ? items : scored.map((x) => x.item),
-              shown ?? injection.text,
+              lines!,
               this.config.revisionDiff,
             ),
           }
@@ -6676,20 +6699,56 @@ export function timesOf(item: Pick<ContextItem, "title" | "text">): string[] {
 }
 
 /**
+ * A packet's or answer's item lines (those starting `- [`), and whether its first and its last line are among them:
+ * `noteShown` reads the lines between its first and last, `renderedCount` all of them. Read once from one split.
+ */
+interface ItemLines {
+  lines: string[];
+  head: boolean;
+  tail: boolean;
+}
+
+function itemLinesOf(all: readonly string[]): ItemLines {
+  const lines = all.filter((line) => line.startsWith("- ["));
+  return {
+    lines,
+    head: lines.length > 0 && all[0]!.startsWith("- ["),
+    tail: all.length > 1 && lines.length > 0 && all[all.length - 1]!.startsWith("- ["),
+  };
+}
+
+/** `text.split("\n").slice(1, -1).filter((line) => line.startsWith("- ["))`, from the text's `ItemLines`. */
+function noteLines(text: ItemLines): string[] {
+  const { lines, head, tail } = text;
+  return head || tail ? lines.slice(head ? 1 : 0, tail ? lines.length - 1 : lines.length) : lines;
+}
+
+/**
+ * The words `noteShown` keeps of an item's line: its source and what the line says after its `[source]` tag,
+ * lowercased, read as `/[\p{L}\p{N}]+/gu` reads them (`wordsIn`'s code-unit pass, the regex for a surrogate, D1881).
+ */
+function lineWords(sourceId: string, line: string): string[] {
+  return wordsIn(`${sourceId} ${line.slice(line.indexOf("] ") + 2)}`.toLowerCase());
+}
+
+/**
  * How many of `items`, in order, have their line in `text` (a packet or answer: one `- [source] …` line each, in
  * the items' order, until the size cut), as `noteShown` reads them.
  */
-function renderedCount(items: readonly ContextItem[], text: string): number {
-  const lines = text.split("\n").filter((line) => line.startsWith("- ["));
+function renderedCount(items: readonly ContextItem[], text: string | ItemLines): number {
+  const lines = (typeof text === "string" ? itemLinesOf(text.split("\n")) : text).lines;
   let n = 0;
   while (n < items.length && n < lines.length && lines[n]!.startsWith(`- [${items[n]!.sourceId}] `)) n++;
   return n;
 }
 
 /** The copies of the items whose lines the agent receives: one cut from the text was not shown. */
-function renderedCopies(items: readonly ContextItem[], text: string, withTimes: boolean) {
+function renderedCopies(items: readonly ContextItem[], text: ItemLines, withTimes: boolean) {
   return copiesOf(items.slice(0, renderedCount(items, text)), withTimes);
 }
+
+/** The line readers, for `opt-round3.test.ts`. */
+export const shownReadings = { itemLinesOf, noteLines, lineWords, renderedCount };
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */
 function versionOf(item: ContextItem): number {
@@ -6703,13 +6762,24 @@ function timesOfItem(item: ContextItem): string[] {
   return (r.times ??= timesOf(item));
 }
 
-/** What `versionOf` and `timesOfItem` read of an item, kept on it (`READINGS`). */
+/**
+ * `settled` (probes.ts) of an item, read once per item object (`readingOf`, D1920): the push's `confident` and the
+ * fallback asked it of every candidate they reached, a pattern over the title and text each time (8.5 µs an item on
+ * the pipeline bench).
+ */
+function settledOf(item: ContextItem): boolean {
+  const r = readingOf(item);
+  return (r.settled ??= settled(item));
+}
+
+/** What `versionOf`, `timesOfItem` and `settledOf` read of an item, kept on it (`READINGS`). */
 interface Reading {
   /** The text read, for an item held plain (`null` for a packed one, whose text cannot change). */
   text: string | null;
   title: string;
   version?: number;
   times?: string[];
+  settled?: boolean;
 }
 
 /**
@@ -6721,8 +6791,8 @@ interface Reading {
  */
 const READINGS = new WeakMap<ContextItem, Reading>();
 
-/** `versionOf` and `timesOfItem`, for tests (`readings.test.ts`). */
-export const itemReadings = { versionOf, timesOfItem };
+/** `versionOf`, `timesOfItem` and `settledOf`, for tests (`readings.test.ts`). */
+export const itemReadings = { versionOf, timesOfItem, settledOf };
 
 function readingOf(item: ContextItem): Reading {
   const packed = isPacked(item);
@@ -7201,13 +7271,16 @@ function bulkMail(item: ContextItem): boolean {
   return (category !== undefined && BULK_CATEGORY.test(category)) || BULK_TITLE.test(item.title);
 }
 
+/** The entities an item's mentions record keeps, its first of `PERSISTABLE_KINDS`. */
+const MAX_MENTIONS = 20;
+
 /** The names each item mentions, as the source map records them (D57): at most 20 an item, persistable kinds. */
 function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities: string[] }[] {
   return items.map((item) => ({
     sourceId: item.sourceId,
-    entities: extractTypedEntities(`${item.title}. ${item.text}`)
+    entities: extractTypedEntities(`${item.title}. ${item.text}`, MAX_MENTIONS)
       .filter((e) => PERSISTABLE_KINDS.has(e.kind))
-      .slice(0, 20)
+      .slice(0, MAX_MENTIONS)
       .map((e) => e.text),
   }));
 }
