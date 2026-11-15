@@ -2,7 +2,8 @@
 
 The source map, layer 1 of the knowledge graph: per user, which sources mention which entities, and how useful each
 source has proven in each situation (a Beta posterior per user, situation and source, D13, D18, D23). Routing reads
-it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One file: `src/source-map.ts`.
+it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One file: `src/source-map.ts` (and its
+oracle, `src/source-map.reference.ts`).
 
 (The per-user knowledge graph over cached items, D58, was the engine's `kg.ts`, since deleted; it was not this package.)
 
@@ -33,7 +34,19 @@ it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One fil
 - `busy_timeout` is 2 s: two processes may share a file (mcp-stdio launched by two MCP clients for one user), and
   without it one failed in the constructor with SQLITE_BUSY (`source-map.test.ts`, the two-process test).
 - Statements go through `db.query` (prepared-statement cache): re-preparing per call was 5% of end-to-end CPU
-  (`packages/engine/bench/pipeline.bench.ts`).
+  (`packages/engine/bench/pipeline.bench.ts`). The two hot reads are held as fields (`mentionRead`, `outcomesRead`).
+- **Reads are memoised, exactly (D1935).** `sourcesFor`'s file rows per (user, entity) and `route`'s outcomes per
+  (user, situation) are kept (scope key first; at most 4,096 keys plus rows each, about 0.45 MB, then emptied whole).
+  Every write this connection makes to `mention` or `utility` empties that memo, and a file's `PRAGMA data_version`,
+  read once a `sourcesFor` or `route`, empties both when another process committed. A new statement that writes
+  either table clears its memo (`clearMentionMemo`, `clearOutcomeMemo`), or reads go stale; a new read of either
+  table goes through the memo or reads the file as it is, never a memo with a caller's edits (rows are copied out).
+- **Tables are WITHOUT ROWID in a new file (D1936)**: half the pages and about half the disk writes; a file made
+  before keeps its rowid tables and works unchanged, so no statement may depend on a rowid or on which layout a file
+  has. `normalizeEntity` reads plain ASCII names in one pass (D1937); `normalizeEntitySlow` is the definition.
+- `source-map.reference.ts` is the map before D1935-D1937, unchanged: the oracle `source-map-fast.test.ts` runs
+  beside the map on random call streams (in memory, new files, an old-layout file, two connections). A change to an
+  answer of the map changes both, or the test fails; docs/research/opt-round4-graph.md has the measurements.
 - Exploration (Thompson draws) decides which sources are queried, never whether anything is injected (D23).
 - Explicit feedback corrects a recorded outcome (`correctOutcome`, D18).
 - **SQLite stays (D1720, docs/research/source-map-store.md).** A specialised store (a resident map per user with an
@@ -44,7 +57,7 @@ it to ask the few sources likely to know. SQLite via `bun:sqlite` (D15). One fil
 ## Test
 
 ```bash
-bun run test:pkg graph          # ~0.3 s
+bun run test:pkg graph          # ~3 s (source-map-fast.test.ts's differential fuzz is 2.8 s of it)
 ```
 
 Tests use an in-memory database or the preload's temp `EDEN_HOME`; the server's default file is

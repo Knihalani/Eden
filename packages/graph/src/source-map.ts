@@ -103,6 +103,26 @@ export class SourceMap {
   private readonly explore: boolean;
   private readonly rng: Xoshiro128;
 
+  /**
+   * The file's mention rows per (user, entity), as `sourcesFor`'s query returns them (count descending, then source
+   * id), and its outcomes per (user, situation), as `outcomesIn` reads them (D1935): a lookup routes the same names
+   * several times (its search, each person probe, the earn rule's holders), and 95% of the pipeline bench's mention
+   * reads repeated one before. Exact: emptied by every write of its table this connection makes (`flushMentions`,
+   * `flushOutcomes`, `correctOutcome`, `importUser`, `forget`), and for a file, which another process may write (D15),
+   * whenever `PRAGMA data_version` says another connection committed (`fresh`). Each holds at most `MEMO_MAX`
+   * keys and rows together, then is emptied whole. Keyed by scope key first: one user's reads never answer
+   * another's (D9).
+   */
+  private mentionMemo = new Map<string, Map<string, [sourceId: string, count: number][]>>();
+  private mentionMemoSize = 0;
+  private outcomeMemo = new Map<string, Map<string, Map<string, { shown: number; used: number }>>>();
+  private outcomeMemoSize = 0;
+  /** A file another connection may write (null for a private in-memory or temporary database). */
+  private readonly version: { values(): unknown[][] } | null;
+  private lastVersion = -1;
+  private readonly mentionRead: { values(...args: string[]): unknown[][] };
+  private readonly outcomesRead: { values(...args: string[]): unknown[][] };
+
   constructor(path = ":memory:", options: SourceMapOptions = {}) {
     this.explore = options.explore ?? true;
     this.mentionFlushMs = options.mentionFlushMs ?? MENTION_FLUSH_MS;
@@ -115,23 +135,32 @@ export class SourceMap {
     this.db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA synchronous = NORMAL");
+    // WITHOUT ROWID (D1936): each table is its primary key's B-tree alone. With a rowid every row was stored twice
+    // (the table and the key's automatic index), so a file held about twice the pages. A file made before keeps its
+    // rowid tables (IF NOT EXISTS) and reads and writes as it did: every statement here names its columns, and a
+    // user's rows are read in the key's order in either layout (`source-map.test.ts` holds both to the same rows).
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mention (
         scope TEXT NOT NULL, entity TEXT NOT NULL, source_id TEXT NOT NULL,
         count INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL,
         PRIMARY KEY (scope, entity, source_id)
-      );
+      ) WITHOUT ROWID;
       CREATE TABLE IF NOT EXISTS utility (
         scope TEXT NOT NULL, situation TEXT NOT NULL, source_id TEXT NOT NULL,
         shown INTEGER NOT NULL DEFAULT 0, used INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (scope, situation, source_id)
-      );
+      ) WITHOUT ROWID;
       CREATE TABLE IF NOT EXISTS planner_arm (
         scope TEXT NOT NULL, source_id TEXT NOT NULL, bucket INTEGER NOT NULL, shape TEXT NOT NULL,
         alpha REAL NOT NULL, beta REAL NOT NULL,
         PRIMARY KEY (scope, source_id, bucket, shape)
-      );
+      ) WITHOUT ROWID;
     `);
+    this.mentionRead = this.db.query(
+      "SELECT source_id, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC, source_id",
+    );
+    this.outcomesRead = this.db.query("SELECT source_id, shown, used FROM utility WHERE scope = ? AND situation = ?");
+    this.version = path === ":memory:" || path === "" ? null : this.db.query("PRAGMA data_version");
     if (path !== ":memory:" && path !== "") {
       OPEN.add((this.ref = new WeakRef(this)));
       CLOSED_BY_GC.register(this, this.ref, this.ref);
@@ -154,9 +183,14 @@ export class SourceMap {
   recordMentionsMany(scope: Scope, rows: { sourceId: string; entities: string[] }[], now = Date.now()): void {
     const key = scopeKey(scope);
     let byEntity = this.mentions.get(key);
+    // An item's names counted once each, in their first order (a Set a row before; one Set a call, D1937).
+    const seen = new Set<string>();
     for (const row of rows) {
-      for (const e of new Set(row.entities.map(normalizeEntity))) {
-        if (!e) continue;
+      seen.clear();
+      for (const raw of row.entities) {
+        const e = normalizeEntity(raw);
+        if (!e || seen.has(e)) continue;
+        seen.add(e);
         if (!byEntity) this.mentions.set(key, (byEntity = new Map()));
         let bySource = byEntity.get(e);
         if (!bySource) byEntity.set(e, (bySource = new Map()));
@@ -211,6 +245,7 @@ export class SourceMap {
     const rows = this.mentionRows;
     this.mentions = new Map();
     this.mentionRows = 0;
+    this.clearMentionMemo();
     // `count + excluded.count` and the last mention's time: the row one upsert a mention would have left.
     const upsert = this.db.query(`
       INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, ?, ?)
@@ -298,6 +333,7 @@ export class SourceMap {
     if (this.pending.length === 0) return;
     const rows = this.pending;
     this.pending = [];
+    this.clearOutcomeMemo();
     const upsert = this.db.query(
       `INSERT INTO utility (scope, situation, source_id, shown, used) VALUES (?, ?, ?, 1, ?)
        ON CONFLICT (scope, situation, source_id) DO UPDATE SET shown = shown + 1, used = used + excluded.used`,
@@ -310,6 +346,7 @@ export class SourceMap {
   /** Corrects an outcome recorded earlier (explicit feedback overriding an inferred one). Counts never go negative. */
   correctOutcome(scope: Scope, situation: string, sourceId: string, used: boolean): void {
     this.flushOutcomes();
+    this.clearOutcomeMemo();
     const delta = used ? 1 : -1;
     this.db
       .query(
@@ -335,10 +372,52 @@ export class SourceMap {
   /** Every source's outcomes in a situation for a user, by source id (sources with none are absent). */
   private outcomesIn(scope: Scope, situation: string): Map<string, { shown: number; used: number }> {
     this.flushOutcomes();
-    const rows = this.db
-      .query("SELECT source_id AS sourceId, shown, used FROM utility WHERE scope = ? AND situation = ?")
-      .all(scopeKey(scope), situation) as { sourceId: string; shown: number; used: number }[];
-    return new Map(rows.map((r) => [r.sourceId, { shown: r.shown, used: r.used }]));
+    const key = scopeKey(scope);
+    let bySituation = this.outcomeMemo.get(key);
+    const held = bySituation?.get(situation);
+    if (held) return held;
+    const rows = this.outcomesRead.values(key, situation) as [string, number, number][];
+    const known = new Map(rows.map((r) => [r[0], { shown: r[1], used: r[2] }]));
+    if (this.outcomeMemoSize + rows.length + 1 > MEMO_MAX) this.clearOutcomeMemo();
+    if (!bySituation || this.outcomeMemoSize === 0) this.outcomeMemo.set(key, (bySituation = new Map()));
+    bySituation.set(situation, known);
+    this.outcomeMemoSize += rows.length + 1;
+    return known;
+  }
+
+  /** For a file: empties both memos if another connection committed since the last look (D1935). */
+  private fresh(): void {
+    if (this.version === null) return;
+    const v = this.version.values()[0]![0] as number;
+    if (v === this.lastVersion) return;
+    this.lastVersion = v;
+    this.clearMentionMemo();
+    this.clearOutcomeMemo();
+  }
+
+  private clearMentionMemo(): void {
+    if (this.mentionMemoSize === 0) return;
+    this.mentionMemo = new Map();
+    this.mentionMemoSize = 0;
+  }
+
+  private clearOutcomeMemo(): void {
+    if (this.outcomeMemoSize === 0) return;
+    this.outcomeMemo = new Map();
+    this.outcomeMemoSize = 0;
+  }
+
+  /** The file's rows for a normalised entity (count descending, then source id), through the memo. */
+  private fileRows(key: string, e: string): [sourceId: string, count: number][] {
+    let byEntity = this.mentionMemo.get(key);
+    const held = byEntity?.get(e);
+    if (held) return held;
+    const rows = this.mentionRead.values(key, e) as [string, number][];
+    if (this.mentionMemoSize + rows.length + 1 > MEMO_MAX) this.clearMentionMemo();
+    if (!byEntity || this.mentionMemoSize === 0) this.mentionMemo.set(key, (byEntity = new Map()));
+    byEntity.set(e, rows);
+    this.mentionMemoSize += rows.length + 1;
+    return rows;
   }
 
   /**
@@ -346,13 +425,17 @@ export class SourceMap {
    * to the file's counts, so a read sees every mention recorded, written yet or not.
    */
   sourcesFor(scope: Scope, entity: string): { sourceId: string; count: number }[] {
-    const key = scopeKey(scope);
+    this.fresh();
+    return this.sourcesOf(scopeKey(scope), entity);
+  }
+
+  /** `sourcesFor` past the freshness check (`route` makes it once for all its reads). */
+  private sourcesOf(key: string, entity: string): { sourceId: string; count: number }[] {
     const e = normalizeEntity(entity);
-    const rows = this.db
-      .query(
-        "SELECT source_id AS sourceId, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC, source_id",
-      )
-      .all(key, e) as { sourceId: string; count: number }[];
+    const file = this.fileRows(key, e);
+    // Fresh objects each read: the memo's rows are never handed out (the merge below adds to a row's count).
+    const rows = new Array<{ sourceId: string; count: number }>(file.length);
+    for (let i = 0; i < file.length; i++) rows[i] = { sourceId: file[i]![0], count: file[i]![1] };
     const pending = this.mentions.get(key)?.get(e);
     if (!pending) return rows;
     const added = new Map(pending);
@@ -376,8 +459,10 @@ export class SourceMap {
    */
   route(request: RouteRequest): RankedSource[] {
     const hits = new Map<string, number>();
+    this.fresh();
+    const key = scopeKey(request.scope);
     for (const entity of request.entities) {
-      for (const { sourceId, count } of this.sourcesFor(request.scope, entity)) {
+      for (const { sourceId, count } of this.sourcesOf(key, entity)) {
         hits.set(sourceId, (hits.get(sourceId) ?? 0) + Math.log2(1 + count));
       }
     }
@@ -482,6 +567,8 @@ export class SourceMap {
   /** Deletes everything held for a user (account deletion, connector revocation). */
   forget(scope: Scope, sourceId?: string): void {
     this.flush();
+    this.clearMentionMemo();
+    this.clearOutcomeMemo();
     const key = scopeKey(scope);
     for (const table of ["mention", "utility", "planner_arm"]) {
       if (sourceId) this.db.query(`DELETE FROM ${table} WHERE scope = ? AND source_id = ?`).run(key, sourceId);
@@ -525,6 +612,11 @@ export interface UserRows {
 }
 
 const NONE = { shown: 0, used: 0 } as const;
+/**
+ * Keys plus rows each read memo holds before it is emptied whole (D1935): about 0.45 MB of heap when full (2-row keys
+ * over 100 users, measured), a process's whole cost however many users it serves.
+ */
+const MEMO_MAX = 4_096;
 
 /**
  * File-backed maps not yet closed, flushed at a normal exit (D1780: an mcp-stdio process ends when its client closes
@@ -538,6 +630,32 @@ const OPEN = new Set<WeakRef<SourceMap>>();
 const CLOSED_BY_GC = new FinalizationRegistry<WeakRef<SourceMap>>((ref) => OPEN.delete(ref));
 process.on("exit", () => SourceMap.flushAllOpen());
 
+/**
+ * An entity as the map keys it: trimmed, lowercased, every run of whitespace one space. ASCII with single inner
+ * spaces and no control whitespace (most names) is lowercased alone (D1937: the same string, without the trim's and
+ * the replace's passes); anything else takes `normalizeEntitySlow`, the definition (`source-map-fast.test.ts` fuzzes
+ * the two).
+ */
 export function normalizeEntity(e: string): string {
+  const n = e.length;
+  let upper = false;
+  let space = true;
+  for (let i = 0; i < n; i++) {
+    const c = e.charCodeAt(i);
+    if (c === 32) {
+      if (space) return normalizeEntitySlow(e);
+      space = true;
+    } else if (c >= 0x80 || (c >= 9 && c <= 13)) return normalizeEntitySlow(e);
+    else {
+      space = false;
+      if (c >= 65 && c <= 90) upper = true;
+    }
+  }
+  if (space && n > 0) return normalizeEntitySlow(e);
+  return upper ? e.toLowerCase() : e;
+}
+
+/** `normalizeEntity`'s definition (the whole function before D1937). */
+export function normalizeEntitySlow(e: string): string {
   return e.trim().toLowerCase().replace(/\s+/g, " ");
 }
