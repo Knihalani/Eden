@@ -104,16 +104,20 @@ describe("defaultWaitMs (D105, D112)", () => {
     const t0 = performance.now();
     expect(await eden.observe({ kind: "user_message", text: "hi" })).toEqual({ injection: null, pending: false });
     const waited = performance.now() - t0;
+    // Lower bounds hold on any machine (a timer never fires early); the upper ones only catch a call never ended.
     expect(waited).toBeGreaterThanOrEqual(190);
-    expect(waited).toBeLessThan(2_000);
-    // Other events keep the bare timeout.
+    expect(waited).toBeLessThan(5_000);
+    // Other events keep the bare timeout. Which timeout a call got is read from its error, which names the value the
+    // signal was made with: an upper bound on elapsed time failed under load (242 ms against 190, D1965).
     const t1 = performance.now();
     expect(await eden.observe({ kind: "external", source: "gmail", text: "x" })).toEqual({
       injection: null,
       pending: false,
     });
-    expect(performance.now() - t1).toBeLessThan(190);
-    expect(errors.length).toBe(2);
+    const bare = performance.now() - t1;
+    expect(bare).toBeGreaterThanOrEqual(40);
+    expect(bare).toBeLessThan(5_000);
+    expect(errors.map((e) => String(e).match(/no answer within (\d+) ms/)?.[1])).toEqual(["200", "50"]);
   });
 });
 

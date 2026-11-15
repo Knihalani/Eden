@@ -114,7 +114,7 @@ describe("the scanned rules", () => {
       expect(result.mismatches).toEqual([]);
       expect(result.positives).toBeGreaterThan(15);
     }
-  }, 30_000);
+  }, 120_000);
 });
 
 describe("the allowlist automaton", () => {
@@ -201,7 +201,7 @@ describe("the allowlist automaton", () => {
       const result = fuzzAllowlist(source, 300, 100 + i);
       expect(result.mismatches).toEqual([]);
     }
-  }, 30_000);
+  }, 120_000);
 
   test("answers as re2js does on assertions, anchors and code points", () => {
     const cases: [string, string[]][] = [
@@ -245,7 +245,7 @@ describe("the gate", () => {
       expect([text, own.secretHits(text)]).toEqual([text, d24.secretHits(text)]);
       expect([text, own.sanitizeForStore(text)]).toEqual([text, d24.sanitizeForStore(text)]);
     }
-  }, 30_000);
+  }, 120_000);
 
   test("loads no re2js in production: only the tests' oracle imports it, and nothing is a dependency", () => {
     for (const file of ["index.ts", "secrets.ts", "scanners.ts", "automaton.ts", "redact.ts"]) {

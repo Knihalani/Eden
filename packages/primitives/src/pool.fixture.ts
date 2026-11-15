@@ -18,6 +18,15 @@ export function spin(ms: number): number {
   return n;
 }
 
+/**
+ * Blocks until the caller stores a non-zero value at index 0 of `flag` (a SharedArrayBuffer's Int32Array), or 60 s
+ * pass: a task that holds its worker for exactly as long as a test needs, on a loaded machine as on a quiet one.
+ */
+export function hold(flag: Int32Array): number {
+  Atomics.wait(flag, 0, 0, 60_000);
+  return Atomics.load(flag, 0);
+}
+
 export function fail(message: string): never {
   throw new Error(message);
 }

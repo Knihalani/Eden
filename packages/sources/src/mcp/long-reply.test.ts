@@ -437,6 +437,34 @@ describe("the long-reply path stays linear", () => {
     expect(long).toBeLessThan(short * 1.5 + 2);
   });
 
+  /** This thread's CPU in milliseconds: the work measured, not a concurrent collector's or compiler's threads. */
+  const threadCpuMs = () => {
+    const u = process.threadCpuUsage();
+    return (u.user + u.system) / 1_000;
+  };
+
+  /**
+   * `medians` with a full collection before each timed call and this thread's CPU, so neither side pays for garbage
+   * the other (or the fuzz tests before it) left: the plain process clock put this ratio at 0.87 against 0.85 once in
+   * a loaded gate (D1965), while it reads 0.4-0.7 beside busy loops and 1.0-1.2 with D1919's regression planted.
+   */
+  function settledMedians(f: () => unknown, g: () => unknown, runs: number): [number, number] {
+    const a: number[] = [];
+    const b: number[] = [];
+    for (let k = 0; k < runs; k++) {
+      Bun.gc(true);
+      let t = threadCpuMs();
+      f();
+      a.push(threadCpuMs() - t);
+      Bun.gc(true);
+      t = threadCpuMs();
+      g();
+      b.push(threadCpuMs() - t);
+    }
+    const mid = (x: number[]) => x.sort((p, q) => p - q)[x.length >> 1]!;
+    return [mid(a), mid(b)];
+  }
+
   const plainOf = (text: string) => () => {
     LONG_REPLY.body = Infinity;
     parseJsonText(text);
@@ -453,7 +481,7 @@ describe("the long-reply path stays linear", () => {
     expect(same(parseJsonBytes(encoder.encode(text)), JSON.parse(text))).toBe(true);
     const plain = plainOf(text);
     for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
-    const [long, short] = medians(() => parseJsonText(text), plain, 7);
+    const [long, short] = settledMedians(() => parseJsonText(text), plain, 7);
     // About 0.4 here; 1.3-1.6x when the reader gave up at the `null`.
     expect(long).toBeLessThan(short * 0.85);
   });

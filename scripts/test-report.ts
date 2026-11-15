@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * The end of a test run (scripts/test.sh, D811): the ten slowest files and every test over `SLOW_MS`, from the junit
- * reports of the run's parts. A test is given 60 s (`TEST_TIMEOUT_MS`, D1945) so that load cannot fail it; this keeps
+ * reports of the run's parts. A test is given 120 s (`TEST_TIMEOUT_MS`, D1965) so that load cannot fail it; this keeps
  * one that grows slow in sight instead.
  *
  *   bun scripts/test-report.ts <junit.xml>...     missing files are skipped

@@ -259,18 +259,24 @@ describe("request body size (D100)", () => {
       // gate). The scan stops at the first token past either bound, so the 400 costs a few milliseconds: a handler
       // that parsed first would take at least the reference. The fastest of three sends, so one descheduling of the
       // test does not decide it; the reference is the fastest of three parses too, so one slow sample of it does not
-      // pass a handler that parsed first (D1945's review: such a handler took 0.5-0.8x of a single parse).
+      // pass a handler that parsed first (D1945's review: such a handler took 0.5-0.8x of a single parse). Both sides
+      // read this thread's CPU, not the wall clock: in a loaded gate the fastest of three sends still read 33.5 ms of
+      // wall against a bound of 30 (D1965), time the thread spent descheduled; the work it did is what is bounded.
+      const threadMs = () => {
+        const u = process.threadCpuUsage();
+        return (u.user + u.system) / 1_000;
+      };
       let parseMs = Infinity;
       for (let i = 0; i < 3; i++) {
-        const t0 = performance.now();
+        const t0 = threadMs();
         JSON.parse(body);
-        parseMs = Math.min(parseMs, performance.now() - t0);
+        parseMs = Math.min(parseMs, threadMs() - t0);
       }
       let ms = Infinity;
       for (let i = 0; i < 3; i++) {
-        const t1 = performance.now();
+        const t1 = threadMs();
         const res = await send(h, body);
-        ms = Math.min(ms, performance.now() - t1);
+        ms = Math.min(ms, threadMs() - t1);
         expect(res.status).toBe(400);
         expect(((await res.json()) as { error: string }).error).toMatch(/too many values or nests too deep/);
       }
@@ -281,7 +287,9 @@ describe("request body size (D100)", () => {
     const text = JSON.stringify({ ...who, kind: "user_message", text: `Globex renewal ${'[\\"{,'.repeat(160_000)}` });
     expect((await send(h, text)).status).toBe(200);
     expect(observed.length).toBe(1);
-  });
+    // Six parses of two 4 MiB bodies: the tail's 5 s limit cut it off under load (D1965); time is asserted above
+    // against the in-process reference, so the limit only catches a hang.
+  }, 30_000);
 });
 
 describe("gate pool", () => {
