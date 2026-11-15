@@ -52,14 +52,18 @@ export function renderPacket(
   },
 ): string {
   const before = options.shownBefore;
+  // An item's text as the packet says it, or null for its own text, read only when the size loop below reaches the
+  // item (D1931): an item past the packet's cut is never compacted. Item k's text depends only on the items before it
+  // (`shown`), so reading them in order as the loop goes gives each text the loop reads, as reading all first did.
+  let sayOf: ((item: ContextItem) => string | null) | undefined;
   if (before && !options.focus) {
     // Not compacted: an item shown before keeps its message's parts with something new, in its own words and order.
-    items = items.map((item) => {
+    sayOf = (item) => {
       const prior = before(item);
-      if (!prior) return item;
+      if (!prior) return null;
       const parts = messageParts(item.text, (w) => prior.has(w), undefined, undefined, undefined, options.split);
-      return { ...item, text: saysNew(parts) ? parts.map((p) => p.text).join(" ") : SHOWN };
-    });
+      return saysNew(parts) ? parts.map((p) => p.text).join(" ") : SHOWN;
+    };
   }
   if (options.focus) {
     const focus = options.focus;
@@ -67,7 +71,19 @@ export function renderPacket(
     // Words the packet already shows (earlier items' titles and kept parts): a part that only repeats them, as a
     // calendar event, its invitation and the reply confirming it do, says nothing more. Its own title too.
     const shown = new Set<string>();
-    items = items.map((item) => {
+    // The focus's strings and those a code-unit word can equal (`pick`), read once a packet rather than once an item.
+    const focusAll = [...focus];
+    const focusWords = focusWordsOf(focusAll);
+    // The last item's title and text, whose words join `shown` only when another item is read (D1933): the known
+    // test reads `shown` for the items after it, so the last item read adds nothing. Only words of two or more
+    // characters: the known test asks of no other (`saysUnknown`).
+    let last: { title: string[]; text: string } | null = null;
+    sayOf = (item) => {
+      if (last) {
+        for (const w of last.title) if (w.length > 1) shown.add(w);
+        for (const w of wordsIn(last.text.toLowerCase())) if (w.length > 1) shown.add(w);
+        last = null;
+      }
       const title = wordsIn(item.title.toLowerCase());
       const own = new Set(title);
       const prior = before?.(item);
@@ -78,22 +94,25 @@ export function renderPacket(
         (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
       );
       // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, keys, focus, each);
+      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, keys, focus, each, focusAll, focusWords);
       options.onParts?.(item, parts, text);
-      for (const w of title) shown.add(w);
-      for (const w of wordsIn(text.toLowerCase())) shown.add(w);
-      return { ...item, text };
-    });
+      last = { title, text };
+      return text;
+    };
   }
   const lines = [HEADER, ...(options.lead ? [options.lead] : [])];
   const footer = "</context>";
   let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
   const maxBytes = options.maxBytes;
-  for (const item of items) {
+  let k = 0;
+  for (; k < items.length; k++) {
     const room = maxBytes - bytes - 1;
     if (room < 40) break;
-    // The reader's bearing is model text read from the item (bounded by `parseReader`).
-    const note = options.note?.(item);
+    const item = items[k]!;
+    const say = sayOf ? sayOf(item) : null;
+    const text = say ?? item.text;
+    // The reader's bearing is model text read from the item (bounded by `parseReader`), given the item as said.
+    const note = options.note?.(say === null ? item : { ...item, text });
     const said = note ? `${READER_TAG}${safeLine(note).replace(/\|/g, "/")} | ` : "";
     // One item, one line (D11, D221): `safeLine` removes every kind of line break, control and bidi character, so
     // source text cannot forge another item's `- [source]` line inside the envelope.
@@ -101,14 +120,16 @@ export function renderPacket(
     const title = said + (named ? `${named}: ` : "");
     // Collapse whitespace only in a prefix that can fill the room (a char is at least one byte once collapsed), not
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
-    const prefix = item.text.length > room * 2 + 64 ? item.text.slice(0, room * 2 + 64) : item.text;
-    const cut = prefix.length < item.text.length;
+    const prefix = text.length > room * 2 + 64 ? text.slice(0, room * 2 + 64) : text;
+    const cut = prefix.length < text.length;
     let line = `- [${item.sourceId}] ${title}${safeLine(prefix)}`;
     const size = utf8Length(line);
     if (size > room || cut) line = truncateUtf8(line, room - 3) + "…"; // "…" is 3 bytes
     lines.push(line);
     bytes += (size > room || cut ? utf8Length(line) : size) + 1;
   }
+  // The lab's dump (`onParts`) is told every item's parts, the cut ones too, as when all were compacted first.
+  if (options.onParts && options.focus) for (; k < items.length; k++) sayOf!(items[k]!);
   lines.push(footer);
   return lines.join("\n");
 }
@@ -293,19 +314,15 @@ export function wordsIn(s: string): string[] {
   return out;
 }
 
-/** Whether `/[ \t\r\f\v]+/g` would change the text: a tab, CR, form feed or vertical tab, or two spaces in a row. */
-function spacedOut(s: string): boolean {
-  let space = false;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c === 32) {
-      if (space) return true;
-      space = true;
-    } else if (c === 9 || c === 13 || c === 12 || c === 11) return true;
-    else space = false;
-  }
-  return false;
+/**
+ * Whether `/[ \t\r\f\v]+/g` would change the text: a tab, CR, form feed or vertical tab, or two spaces in a row. Two
+ * native searches (D1933): a JS loop over every code unit of an item's text was 7x slower (`opt-round4.test.ts` keeps
+ * that loop as the reference).
+ */
+export function spacedOut(s: string): boolean {
+  return s.includes("  ") || SPACING.test(s);
 }
+const SPACING = /[\t\r\f\v]/;
 const DIGIT = /\d/;
 // A sentence ends at ". " before a capital or digit; with `dense`, not after a title or street abbreviation ("booked
 // St. John for Tuesday", "Dr. Okafor"), which would split a place or a name in two.
@@ -744,9 +761,14 @@ function allParts(
 }
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
-function pick(parts: Part[], keys: readonly string[], focus: ReadonlySet<string>, maxBytes: number): string {
-  const focusAll = [...focus];
-  const focusWords = focusWordsOf(focusAll);
+function pick(
+  parts: Part[],
+  keys: readonly string[],
+  focus: ReadonlySet<string>,
+  maxBytes: number,
+  focusAll: readonly string[] = [...focus],
+  focusWords: readonly string[] = focusWordsOf(focusAll),
+): string {
   const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
     // Its words in `focus`, read from its text in lower case (`readParts`' keys).
@@ -756,7 +778,11 @@ function pick(parts: Part[], keys: readonly string[], focus: ReadonlySet<string>
   };
   const ranked = parts.map((p, k) => ({ k, s: score(p, k), bytes: utf8Length(p.text) + 3 }));
   const whole = parts.filter((p, k) => !p.quoted || ranked[k]!.s > 0).map((p) => p.text);
-  if (utf8Length(whole.join(" ")) <= maxBytes) return whole.join(" ");
+  // The joined text's bytes are its parts' and a space between each (no pair of surrogates forms across a space), so
+  // the text is joined only when it is the answer or must be cut (D1933).
+  let wholeBytes = whole.length > 0 ? whole.length - 1 : 0;
+  for (let k = 0; k < parts.length; k++) if (!parts[k]!.quoted || ranked[k]!.s > 0) wholeBytes += ranked[k]!.bytes - 3;
+  if (wholeBytes <= maxBytes) return whole.join(" ");
   const keep = new Set<number>();
   let room = maxBytes;
   for (const o of ranked.filter((x) => x.s > -1).sort((a, b) => b.s - a.s)) {

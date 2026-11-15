@@ -3,6 +3,97 @@
 Optimisations found by a profiling survey of main 4559e0634. Each section is one branch's work, with its own method
 and numbers; every number below comes from a command run in that branch's session.
 
+## The sweep stops re-sketching unchanged items (D1927; branch claude/sweep-skip)
+
+Decision: D1927. Every sweep re-lists a source whole, and the sync's `store` read every listed item's title and text
+into the source's `TermSketch` and the user's `RareTerms` again, decoding each held copy's packed text to do it. Two
+earlier rounds left it ("it needs per-item state", opt-round2); most of that state was already there, since a listing
+hands back the held copy itself when the raw item is unchanged (`reuseFor`, `rawHash`). Re-measured on main 7bca42093
+(`bun --cpu-prof packages/engine/bench/ingest.bench.ts 40 500 shipped`, 3,385 samples): `sketchTerms` 19.9% self and
+23.8% inclusive, the sync's `sweep` 18.7% inclusive, `zstdDecompressSync` 2.0%. The survey's 7.4% self / 18.9%
+inclusive split differs by what the JIT inlined into `sketchTerms`; the total is the same order.
+
+### The rule, and why it is exact
+
+`store` skips an item when (1) it is the very object the cache's entry holds, (2) the entry's `stamp` equals the
+source's current stamp and (3) the sketch is not `saturated`. The stamp (`SyncManager.stampOf`) is a value from one
+process-wide counter, new whenever the source's `TermSketch.epoch` or the user's `RareTerms.epoch` moves; it is taken
+before a page's first add and written to every entry the page puts (`ItemCache.put`'s `stamp`). So a stamp that still
+matches says: this entry's words were all added to this sketch and this table, and neither has since done anything
+that could make adding them again write a bit.
+
+- `TermSketch`: a term once added stays matched until a restart (a fold ORs the halves, so every set bit has its image).
+  A restart takes a new epoch. A saturated sketch restarts at its next add whatever the term, so while it is
+  saturated nothing is skipped: the old code's re-add of a held item was the add that restarted it.
+- `RareTerms`: `add` returns at the source's own slot or at the common mark before writing anything, and no slot is
+  ever emptied (a renumbering rewrites numbers, a dropped source's slot becomes a hole only `add` takes over). The
+  epoch moves on the three events that could change what a re-add does: a word not kept (`dropped`), a forgotten
+  source, a renumbering.
+- A restart in the middle of a page makes the page's stamp stale: it never matches again, so those items are added at
+  the next listing. A source dropped and back, a user forgotten, a sketch or table read from a snapshot are new objects
+  with new epochs. Stamps from one counter never coincide across sources or users.
+
+Stamps survive freezes in memory: `FrozenUser.stamps` holds them in blob order beside the blob, never inside it, so
+nothing on disk changes (`PERSIST_FORMAT` stays 7) and a user read from disk starts with none. Without that the daily
+sweep of an idle user, which is always frozen by then (warm after 2 minutes, compact after 30), would skip nothing.
+`stampOf` reads a live user only, with no thaw and no `seen`: a frozen user's items are added as before.
+
+### Tests
+
+`sketch-skip.test.ts` drives two engines, the skipping one and one built under `SyncManager.resketchForTests` (the old
+behaviour), through six seeded sequences of 60 steps over three users in two tenants, three sources each: backfill,
+ticks, sweeps, edits, new items, items past the cut, deletions, floods that saturate a folded sketch, sources dropped
+and coming back, `forget` of a source and of a user, warm and compact freezes, restarts through `EncryptedFrozenDisk`,
+and asks. After every step the sync's snapshots (sketch bits and `RareTerms` dumps), `sketchScores`, `rareHolders`,
+synced counts and the asks' citations are equal. Directed cases: a saturated sketch met by an unchanged item (a sweep
+that reads the whole listing in one page), stamps through warm and compact freezes and not from disk, and the two
+invariants on `TermSketch` (40,000 adds with folds) and `RareTerms` (360,000 adds past the full table, forgotten
+sources, a renumbering). Nine mutations each fail the file (no saturation check, a restart or a drop or a forget or a
+renumbering keeping its epoch, the skip compared with the page's stamp instead of the current one, no identity check,
+thawed stamps shifted by one, the stamp not following the sketch's epoch). A tenth, stamping the page's entries only
+when no restart happened during it, is equivalent (the stale stamp never matches) and was simplified away. Since
+sync.ts changed, `mutate-sync-kick.py` was run: 35 of 35 killed.
+
+### Measured
+
+Three arms in separate processes, interleaved and slot-balanced (round k starts at arm k mod 3): main (A), main again
+(A', the control), the branch (B); process CPU per item from the bench's own phase counters (`sweepCpuUs` is new in
+the bench, as is `--freeze=warm|compact`, which freezes every user before the sweep). Paired medians of B/A and A'/A
+in the same round with their ranges. Another agent's runs shared the 4-core machine.
+
+ingest.bench 200 × 500 shipped:
+
+| Condition | Rounds | Sweep CPU µs/item A → B | paired B/A | control A'/A | Backfill CPU paired B/A | control | Total CPU B/A |
+|---|---|---|---|---|---|---|---|
+| bench as is (a full GC between phases) | 6 | 47.2 → 7.5 | **0.159** (0.14-0.17) | 1.111 (0.91-1.20) | 1.038 (1.00-1.06) | 1.015 | 0.832 |
+| forced `Bun.gc(true)` every 100 ms | 6 | 343.3 → 68.3 | **0.178** (0.05-0.42) | 0.887 (0.63-1.43) | 1.019 (0.66-1.13) | 0.927 | 0.663 |
+| every user frozen warm before the sweep | 4 | 61.4 → 15.3 | **0.252** (0.21-0.30) | 1.017 | 0.967 | 1.029 | 0.772 |
+| every user frozen compact before the sweep | 4 | 111.8 → 64.3 | **0.560** (0.54-0.69) | 1.028 | 1.027 | 0.999 | 0.856 |
+
+Memory in the same runs: held B/item paired 1.000, 1.001, 0.997, 0.999; released after the sweep 1.005 (1,821.3 →
+1,829.9 B/item), 1.002, 0.999, 1.001. Frozen, the sweep keeps the thaw's cost (a compact thaw rebuilds the index),
+which is why the compact case keeps more; the warm case is the active user's pause.
+
+users.bench 200 × 500, 6 rounds, medians B/A (control A'/A): live heap a user 1.000 (1.000), live RSS 1.005 (0.996),
+frozen heap 1.006 (1.000: the stamps, 4 bytes an entry), frozen RSS 1.010 (1.000), backfill peak RSS 0.929 (0.947),
+thaw peak RSS 0.974 (0.996), thaw p50 1.056 (1.054), storm CPU µs/item 1.000 (1.008).
+
+A profile after (same command, 2,768 samples against 3,385): `sweep` 1.9% inclusive, `sketchTerms` 9.3% self (the
+backfill's), `zstdDecompressSync` gone, `stampOf` 0.3%.
+
+The rule was registered in ef7f794d3 before the runs: adopt if the sweep's process CPU paired is ≤ 0.90 with identical
+bits and held/released memory within +1%. Every condition passes; adopted. The backfill pays a `Map` lookup an item
+(`stampOf`, 0.3% of samples), inside the controls' spread in every condition.
+
+### Gates
+
+On the final tree: `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` green on its second run
+(2,988 of 2,990 tests pass, 0 fail, plus 524 of 524; the first, on a loaded machine, failed four load-sensitive tests
+and a format check of the new test file, each file passing alone after the format fix); `bun packages/eval/src/cli.ts` reads precision 0.65, recall 0.52, falseFireRate 0, acting packets on 19 of 28
+neutral requests at 1.18 items, facts handed 10 of 11, look-alikes 3 of 10, as on main; `bun run funnel --jobs 4`
+reads hidden 323/384 and decoys 294/384 on main (main's engine, run in this session) and on the branch, and
+`--baseline` against main's run reads hidden +0 −0, decoys +0 −0.
+
 ## The router's body scan and the packed-text codec (D1925, D1926; branch claude/router-codec)
 
 Two levers from the survey: the router's `userOf` decoded and parsed a whole body to read one key (1.6 µs for 126
