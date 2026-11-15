@@ -28,6 +28,15 @@ export interface MatchSink {
   add(pattern: number, start: number): void;
 }
 
+/** `walk`'s modes: occurrences passed to the sink, held back for it, or not reported. */
+const EMIT = 0;
+const DEFER = 1;
+const SILENT = 2;
+/** Shorter texts run one walk: two cost more than they save on a few hundred characters. */
+const PAIRED_MIN = 256;
+/** Held-back lists longer than this are not kept for the next text. */
+const DEFERRED_KEPT = 1 << 16;
+
 export class MultiMatcher {
   /** The patterns as folded, in the order given. */
   readonly patterns: string[];
@@ -62,6 +71,15 @@ export class MultiMatcher {
   private readonly quiet: Uint8Array;
   /** 1 to 255; the next scan after 255 clears `quiet`. */
   private generation = 0;
+  /** The longest pattern, folded: how far before the middle the second half's walk starts (`contextStart`). */
+  private readonly longest: number;
+  /** `walk`'s state row and last special index when it returns. */
+  private endState = 0;
+  private endSpecial = -1;
+  /** The second half's occurrences held back, in order (`scan`): patterns and starts, `deferred` of them. */
+  private deferred = 0;
+  private deferredPattern = new Int32Array(64);
+  private deferredStart = new Int32Array(64);
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
     this.wholeWord = options.wholeWord ?? false;
@@ -138,6 +156,7 @@ export class MultiMatcher {
 
     // Original offsets of the last few folded characters, to recover a match's start (folding drops marks).
     const longest = Math.max(1, ...this.lens);
+    this.longest = longest;
     const size = 1 << Math.ceil(Math.log2(longest + 1));
     this.ring = new Int32Array(size);
     this.part = new Uint8Array(size);
@@ -188,7 +207,7 @@ export class MultiMatcher {
   }
 
   /**
-   * `markHits`, also writing each pattern that occurs to `firsts` (in order of first match; `patterns.length`
+   * `markHits`, also writing each pattern that occurs to `firsts` (each once, in no set order; `patterns.length`
    * entries, so a caller can reset `hits` by them), and passing every occurrence of a pattern `p` with
    * `keep[p] === 1` to `sink.add(p, start)`, in order of match end, with the start `forEach` reports. The sink may
    * clear `keep` entries during the scan (never set them). One pass; an
@@ -202,25 +221,112 @@ export class MultiMatcher {
       this.generation = 0;
     }
     const generation = ++this.generation;
+    const n = text.length;
+    if (n < PAIRED_MIN) return this.walk(text, 0, n, 0, -1, hits, firsts, 0, keep, sink, EMIT);
+    // Two automata at once (D1850): one over the first half, one over the second, in one loop. Each character's
+    // transition waits for the one before it (a load whose address is the last load's result), so a single walk is
+    // bound by that latency; two independent walks overlap it. The second starts from the root early enough before
+    // the middle (`contextStart`) to be in the state one walk would be in there, and holds back what it would pass to
+    // `sink` until the first half is done (`deferred`), so the sink sees every occurrence in order of match end.
+    const mid = n >> 1;
+    const from = this.contextStart(text, mid);
+    this.walk(text, from, mid, 0, from - 1, hits, firsts, 0, keep, sink, SILENT);
+    let sB = this.endState;
+    let specialB = this.endSpecial;
+    this.deferred = 0;
+    const quiet = this.quiet;
+    const packed = this.delta;
+    const foldCol = this.foldCol;
+    const cols = this.cols;
+    let distinct = 0;
+    let sA = 0;
+    let specialA = -1;
+    for (let i = 0, j = mid; i < mid; i++, j++) {
+      const a = text.charCodeAt(i);
+      const b = text.charCodeAt(j);
+      if ((a | b) < 128) {
+        const dA = packed[sA + foldCol[a]!]!;
+        const dB = packed[sB + foldCol[b]!]!;
+        sA = dA >> 1;
+        sB = dB >> 1;
+        if ((dA & 1) !== 0 && quiet[sA] !== generation)
+          distinct = this.emit(sA / cols, i, 0, specialA, text, hits, firsts, distinct, keep, sink, EMIT);
+        if ((dB & 1) !== 0 && quiet[sB] !== generation)
+          distinct = this.emit(sB / cols, j, 0, specialB, text, hits, firsts, distinct, keep, sink, DEFER);
+        continue;
+      }
+      distinct = this.walk(text, i, i + 1, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
+      sA = this.endState;
+      specialA = this.endSpecial;
+      distinct = this.walk(text, j, j + 1, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
+      sB = this.endState;
+      specialB = this.endSpecial;
+    }
+    if ((n & 1) !== 0) distinct = this.walk(text, n - 1, n, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
+    // The second half's occurrences, in order, each only while its pattern is still kept: as one walk would have
+    // passed them, after every occurrence in the first half.
+    const patterns = this.deferredPattern;
+    const starts = this.deferredStart;
+    for (let k = 0; k < this.deferred; k++) {
+      const p = patterns[k]!;
+      if (keep[p] === 1) sink.add(p, starts[k]!);
+    }
+    if (patterns.length > DEFERRED_KEPT) {
+      this.deferredPattern = new Int32Array(64);
+      this.deferredStart = new Int32Array(64);
+    }
+    return distinct;
+  }
+
+  /**
+   * Where a walk from the root must start to be, at `mid`, in the state a walk from the text's start is in: at least
+   * the longest pattern's length of folded characters before it (a state is the longest folded suffix that begins a
+   * pattern, never longer than the longest pattern).
+   */
+  private contextStart(text: string, mid: number): number {
+    let at = mid;
+    let units = 0;
+    while (at > 0 && units < this.longest) {
+      at--;
+      const c = text.charCodeAt(at);
+      const f = c < 128 ? FOLD[c]! : foldOf(c);
+      if (f !== FOLD_DROP) units += f === FOLD_EXPAND ? expansionOf(c).length : 1;
+    }
+    return at;
+  }
+
+  /**
+   * One automaton over `text[from, to)` from state row `s`, `special` the last index before `from` whose character did
+   * not fold to exactly one (or an index at or before it). `mode`: pass occurrences to `sink` (EMIT), hold them back
+   * (DEFER) or report nothing (SILENT, to reach a state). Leaves its state and `special` in `endState`/`endSpecial`.
+   */
+  private walk(
+    text: string,
+    from: number,
+    to: number,
+    s: number,
+    special: number,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+    mode: number,
+  ): number {
+    const generation = mode === SILENT ? -1 : this.generation;
     const quiet = this.quiet;
     const packed = this.delta;
     const foldCol = this.foldCol;
     const asciiCol = this.asciiCol;
     const cols = this.cols;
-    const n = text.length;
-    let distinct = 0;
-    let s = 0; // the state times cols
-    // The last index whose character did not fold to exactly one (a mark dropped, a ligature expanded): a match whose
-    // characters all come after it starts `length - 1` characters before its last.
-    let special = -1;
-    for (let i = 0; i < n; i++) {
+    for (let i = from; i < to; i++) {
       const c = text.charCodeAt(i);
       let d: number;
       if (c < 128) {
         d = packed[s + foldCol[c]!]!;
         s = d >> 1;
-        if ((d & 1) !== 0 && quiet[s] !== generation)
-          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && mode !== SILENT && quiet[s] !== generation)
+          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink, mode);
         continue;
       }
       const f = foldOf(c);
@@ -231,8 +337,8 @@ export class MultiMatcher {
       if (f !== FOLD_EXPAND) {
         d = packed[s + this.column(f)]!;
         s = d >> 1;
-        if ((d & 1) !== 0 && quiet[s] !== generation)
-          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && mode !== SILENT && quiet[s] !== generation)
+          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink, mode);
         continue;
       }
       special = i;
@@ -241,16 +347,18 @@ export class MultiMatcher {
         const e = expanded.charCodeAt(u);
         d = packed[s + (e < 128 ? asciiCol[e]! : this.column(e))]!;
         s = d >> 1;
-        if ((d & 1) !== 0 && quiet[s] !== generation)
-          distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && mode !== SILENT && quiet[s] !== generation)
+          distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink, mode);
       }
     }
+    this.endState = s;
+    this.endSpecial = special;
     return distinct;
   }
 
   /**
    * The patterns ending in `state` at character `i` (unit `u` of its expansion): hits and `firsts` (returns the count
-   * of distinct patterns so far, `distinct` before), and starts for `keep`.
+   * of distinct patterns so far, `distinct` before), and starts for `keep`, passed to `sink` or held back (DEFER).
    */
   private emit(
     state: number,
@@ -263,6 +371,7 @@ export class MultiMatcher {
     distinct: number,
     keep: Uint8Array,
     sink: MatchSink,
+    mode: number,
   ): number {
     const to = this.outStart[state + 1]!;
     let kept = false;
@@ -275,12 +384,27 @@ export class MultiMatcher {
       if (keep[p] !== 1) continue;
       kept = true;
       const len = this.lens[p]!;
-      sink.add(p, i - len >= special ? i - len + 1 : startOf(text, i, u, len));
+      const start = i - len >= special ? i - len + 1 : startOf(text, i, u, len);
+      if (mode === EMIT) sink.add(p, start);
+      else this.defer(p, start);
     }
     if (!kept) {
       this.quiet[state * this.cols] = this.generation;
     }
     return distinct;
+  }
+
+  private defer(pattern: number, start: number): void {
+    if (this.deferred === this.deferredPattern.length) {
+      const patterns = new Int32Array(this.deferred * 2);
+      patterns.set(this.deferredPattern);
+      this.deferredPattern = patterns;
+      const starts = new Int32Array(this.deferred * 2);
+      starts.set(this.deferredStart);
+      this.deferredStart = starts;
+    }
+    this.deferredPattern[this.deferred] = pattern;
+    this.deferredStart[this.deferred++] = start;
   }
 
   private run(text: string, onMatch: OnMatch | null, stop: (() => boolean) | null): void {

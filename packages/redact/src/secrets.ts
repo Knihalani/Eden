@@ -1101,21 +1101,15 @@ export function gateOf(rules: SecretRule[]): Gate {
     for (const r of out) chosen[r] = 0;
     return out.length > 1 ? out.sort((a, b) => a - b) : out;
   };
-  /** The rules whose prefilter words `text` holds, each with the spans it finds there and the ones it excuses. */
-  const split = (text: string): { r: number; spans: Span[]; excused: Span[] }[] =>
-    candidates(text).map((r) => {
-      const rule = rules[r]!;
-      if (rule.split) {
-        const parts = rule.split(text, found, anchorIds[r]);
-        return { r, spans: parts.spans, excused: parts.excused };
-      }
-      return { r, spans: rule.spans(text, found, anchorIds[r]), excused: [] };
-    });
   /** The rules whose prefilter words `text` holds, each with the spans it finds there. */
-  const findings = (text: string): { id: string; spans: Span[] }[] =>
-    split(text)
-      .filter((f) => f.spans.length > 0)
-      .map((f) => ({ id: rules[f.r]!.id, spans: f.spans }));
+  const findings = (text: string): { id: string; spans: Span[] }[] => {
+    const out: { id: string; spans: Span[] }[] = [];
+    for (const r of candidates(text)) {
+      const spans = rules[r]!.spans(text, found, anchorIds[r]);
+      if (spans.length > 0) out.push({ id: rules[r]!.id, spans });
+    }
+    return out;
+  };
   /**
    * The structural pass the stored text goes through. Every token literal in a gated text was in `text` (the
    * sentinel holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks
@@ -1137,11 +1131,14 @@ export function gateOf(rules: SecretRule[]): Gate {
   const sorted = (text: string): { strict: Span[]; excused: Span[]; post: Span[] } => {
     const out = { strict: [] as Span[], excused: [] as Span[], post: [] as Span[] };
     // Loops, not `push(...spans)`: a megabyte of tokens is 100,000 spans, past what a spread call takes on V8.
-    for (const f of split(text)) {
+    for (const r of candidates(text)) {
+      const rule = rules[r]!;
+      const parts = rule.split ? rule.split(text, found, anchorIds[r]) : undefined;
+      const spans = parts ? parts.spans : rule.spans(text, found, anchorIds[r]);
       // A D1850 rule's excused spans were never main's: they gate nothing.
-      const post = rules[f.r]!.post;
-      for (const span of f.spans) (post ? out.post : out.strict).push(span);
-      if (!post) for (const span of f.excused) out.excused.push(span);
+      const into = rule.post ? out.post : out.strict;
+      for (const span of spans) into.push(span);
+      if (parts && !rule.post) for (const span of parts.excused) out.excused.push(span);
     }
     return out;
   };
@@ -1161,6 +1158,13 @@ export function gateOf(rules: SecretRule[]): Gate {
 
   function store(text: string): string {
     const { strict, excused, post } = sorted(text);
+    if (strict.length + excused.length + post.length === 0) {
+      // No rule found anything (most stored text): the text is gated as it is, so the stored text is the structural
+      // pass on it, as main ran it, unless that pass took a value that is code (then compose.ts gives it back).
+      const seen = { excusable: false };
+      const stored = redactAssignments(redactTokensIn(text, tokens), false, seen);
+      if (!seen.excusable) return stored;
+    }
     // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
     // any finding, that pass's spans on the original text join the rules' (audit A5). Then the structural pass, as
     // `redact` runs it; then D1850's changes (compose.ts).

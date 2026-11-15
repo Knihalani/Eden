@@ -157,17 +157,23 @@ export function valueAt(text: string, start: number, end: number): string {
  * `rule` with the spans whose value `excuse` calls code or a placeholder left out of `spans` (the rule's scan is
  * unchanged), and `split` giving both: the secret gate still gates the excused ones as main did (compose.ts).
  */
-export function excused<R extends { spans(text: string, ...rest: never[]): [number, number][] }>(
+export function excused<R extends { spans(text: string, found?: never, ids?: never): [number, number][] }>(
   rule: R,
   excuse: (value: string) => boolean,
-): R & { split(text: string, ...rest: unknown[]): { spans: [number, number][]; excused: [number, number][] } } {
-  const spans = rule.spans.bind(rule) as (text: string, ...rest: unknown[]) => [number, number][];
+): R & {
+  split(text: string, found?: unknown, ids?: unknown): { spans: [number, number][]; excused: [number, number][] };
+} {
+  // Fixed arguments, not a rest parameter and a bound function: the gate calls this for every text that holds a
+  // keyword, and the spread cost more than the rule on a text with no finding (D1850).
+  const spans = rule.spans as (text: string, found: unknown, ids: unknown) => [number, number][];
   // The last value's verdict, within one call (memo.ts): a text dense in findings repeats its value.
   const last = new Last<boolean>();
-  const split = (text: string, ...rest: unknown[]) => {
+  const split = (text: string, found?: unknown, ids?: unknown) => {
     const kept: [number, number][] = [];
     const left: [number, number][] = [];
-    for (const span of spans(text, ...rest)) {
+    const all = spans.call(rule, text, found, ids);
+    if (all.length === 0) return { spans: all, excused: left };
+    for (const span of all) {
       // Longer than any excused value (and too long to compare with the last one each time): kept.
       if (span[1] - span[0] > VALUE_LIMIT * 2) {
         kept.push(span);
@@ -179,5 +185,5 @@ export function excused<R extends { spans(text: string, ...rest: never[]): [numb
     }
     return { spans: kept, excused: left };
   };
-  return { ...rule, split, spans: (text: string, ...rest: unknown[]) => split(text, ...rest).spans };
+  return { ...rule, split, spans: (text: string, found?: unknown, ids?: unknown) => split(text, found, ids).spans };
 }
