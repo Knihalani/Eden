@@ -217,6 +217,82 @@ describe("SourceMap against the map before D1935-D1937", () => {
     writer.close();
   });
 
+  test("two maps on one file, interleaved, with raw SQL from a third connection, answer as two old maps do", () => {
+    // The directed test above checks one commit; this interleaves both maps' writes and reads with outside commits,
+    // so a memo emptied or re-filled at the wrong moment (between `fresh()` and a commit) shows up (D1935's review).
+    const scopes: Scope[] = [
+      { tenantId: "t1", userId: "u" },
+      { tenantId: "t2", userId: "u" },
+      { tenantId: "t1", userId: "v" },
+    ];
+    const srcs = ["a", "b", "c", "d"];
+    const sits = ["s1", "s2"];
+    const names = ["Dana", "dana", " DANA ", "Ann Lee", "ann  lee", "Zoë"];
+    let compared = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const fa = join(dir, `two-n${seed}.db`);
+      const fb = join(dir, `two-r${seed}.db`);
+      const o = { explore: seed % 2 === 0, seed, mentionFlushMs: 60_000 };
+      const news = [new SourceMap(fa, o), new SourceMap(fa, { ...o, seed: seed + 7 })];
+      const refs = [new ReferenceMap(fb, o), new ReferenceMap(fb, { ...o, seed: seed + 7 })];
+      const rng = new Xoshiro128(seed);
+      const pick = <T>(xs: T[]) => xs[rng.below(xs.length)]!;
+      for (let i = 0; i < 1_000; i++) {
+        const w = rng.below(2);
+        const sc = pick(scopes);
+        const r = rng.uniform();
+        // biome-ignore lint/suspicious/noExplicitAny: both maps share the public calls used here
+        const both = (f: (m: any) => unknown) => {
+          const a = f(news[w]);
+          const b = f(refs[w]);
+          compared++;
+          if (!Bun.deepEquals(a, b, true)) expect({ seed, i, a }).toEqual({ seed, i, a: b });
+        };
+        if (r < 0.2) {
+          const src = pick(srcs);
+          const es = [pick(names), pick(names)];
+          both((m) => m.recordMentions(sc, src, es, i));
+        } else if (r < 0.3) {
+          const [sit, src, used] = [pick(sits), pick(srcs), rng.uniform() < 0.5];
+          both((m) => m.recordOutcome(sc, sit, src, used));
+        } else if (r < 0.33) {
+          const [sit, src, used] = [pick(sits), pick(srcs), rng.uniform() < 0.5];
+          both((m) => m.correctOutcome(sc, sit, src, used));
+        } else if (r < 0.5) {
+          const e = pick(names);
+          both((m) => m.sourcesFor(sc, e));
+        } else if (r < 0.7) {
+          const entities = [pick(names), pick(names)];
+          const req = { scope: sc, entities, situation: pick(sits), sourceIds: srcs, limit: 4 };
+          both((m) => m.route(req));
+        } else if (r < 0.8) both((m) => m.flush());
+        else if (r < 0.83) {
+          const src = rng.uniform() < 0.5 ? pick(srcs) : undefined;
+          both((m) => m.forget(sc, src));
+        } else if (r < 0.86) {
+          const from = pick(scopes);
+          const rows = news[1 - w]!.exportUser(from);
+          expect(rows).toEqual(refs[1 - w]!.exportUser(from));
+          both((m) => m.importUser(sc, structuredClone(rows)));
+        } else if (r < 0.95) {
+          const [sit, src] = [pick(sits), pick(srcs)];
+          both((m) => m.utility(sc, sit, src));
+        } else {
+          const n = 1 + rng.below(5);
+          for (const f of [fa, fb]) {
+            const d = new Database(f);
+            d.exec("PRAGMA busy_timeout=2000");
+            d.query("UPDATE mention SET count = count + ?").run(n);
+            d.query("UPDATE utility SET shown = shown + ?").run(n);
+            d.close();
+          }
+        }
+      }
+      for (const m of [...news, ...refs]) m.close();
+    }
+    expect(compared).toBeGreaterThan(5_000);
+  }, 60_000);
+
   test("the memos stay bounded past their cap and answer as the old map through every emptying", () => {
     const opts = { explore: false, mentionFlushMs: 60_000 };
     const [map, old] = [new SourceMap(":memory:", opts), new ReferenceMap(":memory:", opts)];
