@@ -176,8 +176,8 @@ What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `s
 - **Bounds on work are CPU time.** 22 wall-clock ceilings around synchronous code (ReDoS and linearity guards in
   engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
   not on how long the scheduler kept the test waiting.
-- **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`): the limit catches a hang; Bun's 5 s
-  default failed CPU-bound tests under load. The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
+- **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`; 60 s since D1945): the limit catches a
+  hang; Bun's 5 s default failed CPU-bound tests under load. The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
   assert nothing about time relied on it, and the tail runs unloaded. A name filter (`bun run test -- -t X`) runs one
   invocation, unsplit, since a part it matched nothing in would fail. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
   visible. `rare-terms.test.ts`'s two full-table tests fill 300,000 words, not 400,000 (still 38,000 past the table's
@@ -549,6 +549,77 @@ sessions' gates did.
 What would reach 20%: fewer, cheaper end-to-end processes (`funnel-flags` starts thirteen, `pi-ab-resume` four), a
 shared module graph across files (`--no-isolate`, which D811 declined), or more cores. Each is a decision of its own.
 
+## D1945: less CPU in the gate, two load flakes made deterministic (2026-11-15, 4 cores shared, Bun 1.4.4)
+
+The brief: the dev loop and the cold gate faster, no test weakened, every test still run. Measured on a machine other
+agents kept at load 8-36 (the 1-minute average; four cores), so wall times there say more about the load than about
+the change, and CPU (user + sys, children included) is the steadier figure.
+
+**Profile** (each of the 330 files alone, `TIMEFORMAT='%R %U %S'; time bun test --timeout=60000 ./file`): 390.2 s of
+wall, 352.3 s of CPU. The tail's 31 files are 84.3 s of wall and 27.5 s of CPU (card-queue 9.0 s of wall, 1.8 of
+CPU: `cold-start.ts`'s `warmAll` sleeps 250 ms between idle sync ticks). 237 files take under 0.6 s of CPU (53.2 s in
+all). By package: sim 136.5 s, engine 71.3, redact 36.3, sources 30.5, server 27.3, primitives 19.3. Cold
+format:check was 33.8 s of wall and 45.1 s of CPU (Prettier on Node over 874 files) plus the line check's 5.0 s;
+typecheck (tsgo) 9.6 s and 9.4 s. The cold gate is CPU-bound: about 420 s of CPU on four cores.
+
+**What changed** (no `expect` removed; fuzz counts, seeds and inputs as they were):
+
+- `suites.test.ts` built about 600 worlds at ~25 ms each. One base world per seed is built once and each test gets
+  its own lists and maps over it, as `cards-disk.test.ts` does (D819); a check after the file fails if a suite or
+  `prepareWorld` changed a base item (a planted edit to a base item's title fails it). 8.24 s of wall and 10.07 s of
+  CPU alone to 1.12 and 1.50; the same 23 tests and 5,695 `expect()` calls.
+- `pi-user.test.ts`'s thirty four-week users took their templates from `suiteTemplates`, six worlds a seed; they now
+  plant into one world a seed (checked equal to `suiteTemplates` on seed 41, base items checked unchanged): the test
+  3.7 s to 1.5 s, 1,875 `expect()` calls to 1,907.
+- Prettier runs on Bun (`bun node_modules/prettier/bin/prettier.cjs`): all 874 files, their indentation stripped and
+  every other line joined, formatted byte for byte the same on Node 22 and on Bun; cold, 33.8 s and 45.1 s of CPU on
+  Node against 25.6 s and 35.5 s on Bun (load 2-3). Bun's version joins the known-formatted set's key
+  (`format-key.test.ts`, a new case). A misformatted file still fails `format:check`, cold and warm.
+- `check-line-length.ts` parses only a file with a line over the width in UTF-16 units (a line's code points are at
+  most that): 315 of 874 files have one; 6.1 s and 5.0 s of CPU to 3.6 s and 3.8 s. A 133-column comment still fails.
+- The main run's per-test limit is 60 s, not 20 s: at load 18-36 `long-reply.test.ts`'s fuzz tests (3 s alone) ran
+  21-32 s and failed on the limit, as did `differential.test.ts`'s stream fuzz (24 s). The limit only catches a hang.
+
+**The two load flakes.** sse-drip (`adversarial.test.ts`) bounded the parser's CPU at 1,500 ms and failed in three of
+four base gates here (2,806, 10,462 and 4,100 ms). It now counts what the parser does while 3,000,000 one-byte reads
+drip in: bytes copied by `set` and `slice` (10,194,047, 3.4 per byte held; bound 4 per byte) and `indexOf` searches
+(6,000,006, two a read; bound two a read plus 8), beside its count of arrays held. Planted regressions fail it: one
+array a read (D1860's original: 3,000,001 arrays held against at most 9) and a buffer grown by a constant 256 bytes
+instead of doubling (17,516,772,356 bytes copied). The D100 test (`http.test.ts`) asserted a 400 within 100 ms (150 ms
+seen); it now takes the fastest of three sends against a `JSON.parse` of the same body in the same process, under a
+third of it (quiet: 5-10 ms against 91-122 ms for the wide body, 1-2 ms against 482-625 ms for the nested one);
+parsing before the shape scan fails it (83-95 ms against a bound of 35-40). Neither failed in the branch's three
+gates; beside four busy loops, alone, both passed 12 of 12 runs (load 9.7-11.3), as did the old versions (the flake
+needs the gate's own contention).
+
+**Cold gates**, `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check`, interleaved (base 7bca42093,
+then the branch at 8ba6fe6c0, three times; load is the 1, 5, 15-minute average before → after):
+
+| Run | Wall (s) | CPU (s) | Load | Tests (pass / skip / fail) |
+|---|---|---|---|---|
+| Base 1 | 435.0 | 438.8 | 11.2, 19.1, 15.5 → 36.0, 31.9, 22.8 | 3,494 / 2 / 5 |
+| Branch 1 | 330.3 | 393.3 | 36.0, 31.9, 22.8 → 18.2, 26.4, 23.4 | 3,496 / 2 / 4 |
+| Base 2 | 229.3 | 410.9 | 18.2, 26.4, 23.4 → 16.9, 21.8, 22.2 | 3,498 / 2 / 1 |
+| Branch 2 | 309.5 | 381.0 | 16.9, 21.8, 22.2 → 23.6, 24.3, 23.3 | 3,498 / 2 / 2 |
+| Base 3 | 233.6 | 390.8 | 23.6, 24.3, 23.3 → 12.6, 19.4, 21.7 | 3,498 / 2 / 1 |
+| Branch 3 | 318.4 | 377.0 | 12.6, 19.4, 21.7 → 28.4, 25.7, 23.9 | 3,496 / 2 / 4 |
+
+Every file and test ran in every run: 3,501 tests in 330 files on the base, 3,502 on the branch (the new
+`format-key.test.ts` case). CPU fell from 413.5 s to 383.8 s on the means (7%). The wall times moved with the other
+agents' load by more than that (229-435 s on one tree), so they show nothing about the change; the branch's fails
+were the 20 s limit on `long-reply.test.ts` (fixed after these runs) and deadline tests in the tail (`ask-behind`,
+`push-cut-behind`, `router-processes`' hanging restart, `hermes-worker`), which D811 runs on the assumption that
+nothing else loads the machine; the base's were the same plus sse-drip and `differential.test.ts`. On a quiet
+machine a CPU-bound gate's wall is about its CPU over four cores, so about 7 s less.
+
+Not taken: a shared transpiler cache for the processes tests start (each test file's children start with the
+preload's fresh `HOME`; about 0.3 s of CPU a file, within the noise of three tries); `--parallel` above the core
+count to fill the main run's waiting files (38.7 s of wall past CPU summed, chiefly `cluster.test.ts` 8.5 s): on a
+shared machine more workers take a larger share from the other agents, which would flatter it; `BUN_OPTIONS` without
+`--smol` (gate-differential, long-reply, render-fast: no less CPU). The end-to-end process tests (funnel-flags'
+thirteen funnel runs, pi-ab-resume's ten pi-ab runs, days-calls) hold most of sim's CPU and D819 already shared what
+they can.
+
 ## The slowest files (each alone, `bun test <file>`, wall incl. ~70 ms start-up)
 
 | File | ms | Where the time goes | Proposal |
@@ -560,7 +631,7 @@ shared module graph across files (`--no-isolate`, which D811 declined), or more 
 | packages/protocol/src/validate.test.ts | 2,305 | 60,000-deep array: `JSON.stringify` throwing RangeError costs 2.3 s in JSC (20,000 deep: 2 ms, no throw) | Find the smallest depth that still overflows on Linux and macOS and use it; keep one deep case |
 | packages/primitives/src/sparse-index.test.ts | 1,349 | randomized index checks | Fewer iterations behind a constant, full count in a bench |
 | packages/primitives/src/bandit.test.ts | 1,268 | statistical convergence runs | as above |
-| packages/sim/src/lab/suites.test.ts | 1,213 | builds worlds for every suite | One world per seed shared by the registry tests |
+| packages/sim/src/lab/suites.test.ts | 1,213 | builds worlds for every suite | Done: one base world per seed shared by the whole file (D1945) |
 | packages/engine/src/partner.test.ts | 1,143 | 74 tests | (protected while the engine is being edited) |
 | packages/engine/src/reader.test.ts | 2,187 | wait-bound tests with real delays (300–400 ms readings) | Sleep-free where the test is not of a wait bound (2026-11-03b) |
 | packages/sim/src/lab/reader-stub.test.ts | 3,340 | three `hidden-funnel.ts` processes (5.5 s CPU), run at once; also holds the NEWL flag checks | Done: sync capped at 100 items (was 8.4 s CPU); next, build the simulated sources once per seed |
@@ -644,9 +715,12 @@ they would contend for CPU and GC, and the stage differences are per-mode subtra
 - A ceiling on work (a ReDoS or linearity guard) measures CPU time (`cpuMs`, D811), not wall time. A test that must
   measure a wait in wall time goes in `scripts/test-tail.txt`. To show that
   work was done ahead of time, count the work (`warm.test.ts` counts pattern compilations and first runs through
-  counting engines) rather than timing the call.
-- A test over 5 s alone gives its own timeout and says why (the run's default is 20 s, D811; the report at the end
-  of `bun run test` lists every test over 3.5 s).
+  counting engines) rather than timing the call. CPU time still grows under a loaded gate (sse-drip's 1,500 ms bound
+  read 2,806-10,462 ms there): where the work can be counted, count it (sse-drip counts the bytes copied and the
+  searches started, D1945), and where it cannot, time it against a reference workload in the same process (the D100
+  400 against a `JSON.parse` of the same body). Prove the guard by planting the regression it was written for.
+- A test over 5 s alone gives its own timeout and says why (the run's default is 60 s, D1945, 20 s before; the report
+  at the end of `bun run test` lists every test over 3.5 s).
 - A heap bound measures in a process of its own (`Bun.spawn` of a scenario script, as
   `packages/sources/src/cache-heap.scenario.ts`): under `--parallel` a file shares its worker's heap with the files
   run before it, whose leftovers moved one reading by 1.2 MB (docs/research/b2-deflake.md).
