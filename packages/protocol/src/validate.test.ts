@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { itemId } from "./ids";
 import {
   MAX_QUESTION_CHARS,
+  bodyShapeQuick,
   bodyShapeUnder,
   bodyShapeWithin,
   checkAsk,
@@ -214,6 +215,7 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
     const run = (ch: string) => ch.repeat(1 + rand(80));
     let differ = 0;
     let refused = 0;
+    let quickPassed = 0;
     for (let k = 0; k < 6_000; k++) {
       let text = "";
       const parts = 1 + rand(40);
@@ -225,8 +227,31 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
       const want = loop(b, maxDepth, maxValues);
       if (!want) refused++;
       if (bodyShapeWithin(b, maxDepth, maxValues) !== want) differ++;
+      if (bodyShapeQuick(b, maxDepth, maxValues) !== want) differ++;
+      // D1940's bracket count decides only where the body's bytes fit the value bound: give it such bounds too,
+      // with depths up to past the body's brackets, so both of its answers (and its early give-up) are reached.
+      const wide = rand(2) === 0 ? b.length + rand(4) : 1 + rand(b.length + 1);
+      const deep = 1 + rand(rand(3) === 0 ? 200 : 40);
+      const wanted = loop(b, deep, wide);
+      if (bodyShapeQuick(b, deep, wide) !== wanted) differ++;
+      if (wanted) quickPassed++;
+    }
+    // At the bracket count's own edges: every bracket nested outside strings (depth equals the count), and bodies
+    // that are all structure (values equal the bytes), each at its bound, one under and one over.
+    for (let d = 1; d <= 70; d++) {
+      for (const open of ["[", "{"]) {
+        const close = open === "[" ? "]" : "}";
+        const nested = new TextEncoder().encode(open.repeat(d) + close.repeat(d));
+        const flat = new TextEncoder().encode(`${open}${",".repeat(d)}`);
+        for (const bound of [d - 1, d, d + 1]) {
+          if (bodyShapeQuick(nested, bound, 1_000) !== loop(nested, bound, 1_000)) differ++;
+          if (bodyShapeQuick(flat, 1_000, bound) !== loop(flat, 1_000, bound)) differ++;
+          if (bodyShapeQuick(flat, 1, bound + 1) !== loop(flat, 1, bound + 1)) differ++;
+        }
+      }
     }
     expect(differ).toBe(0);
+    expect(quickPassed).toBeGreaterThan(1_000);
     // Both answers occur often, so the comparison is not of one constant.
     expect(refused).toBeGreaterThan(400);
     expect(refused).toBeLessThan(5_000);

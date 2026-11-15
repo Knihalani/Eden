@@ -139,12 +139,12 @@ const MAX_KEPT_BYTES = 64_000;
  * placement keeps to its own message when a window slides or a history is compacted ahead of it, where a copy number
  * alone shifted ("yes" in turn 4 took turn 2's packet once turn 2's "yes" slid out; the review).
  */
-function userKeys(messages: readonly Message[]): (string | null)[] {
+function userKeys(messages: readonly Message[], hashes: readonly string[]): (string | null)[] {
   const copies = new Map<string, number>();
   let before = "start";
-  return messages.map((m) => {
+  return messages.map((m, i) => {
     if (m.role === "system" || m.role === "developer") return null;
-    const h = hashOf(m);
+    const h = hashes[i]!;
     const anchor = before;
     before = h;
     if (m.role !== "user") return null;
@@ -217,13 +217,39 @@ function cappedInput(input: unknown, args: unknown): unknown {
   return text;
 }
 
-/** A message's identity for "already reported": role, text, tool call ids and calls. */
+/**
+ * SHA-256 of a string's UTF-8 as hex. Bun's own `Bun.SHA256` gives `createHash`'s digest at about twice its speed
+ * (4.3-4.9 against 7.0-8.9 µs a 6 KB message, D1940); elsewhere `node:crypto`.
+ */
+const sha256Hex: (text: string) => string =
+  typeof Bun !== "undefined"
+    ? (text) => Bun.SHA256.hash(text, "hex")
+    : (text) => createHash("sha256").update(text).digest("hex");
+
+/**
+ * A message's identity for "already reported": role, text, tool call ids and calls. Each request hashes each of its
+ * messages once (`withEden`'s loop) and hands the hashes on (D1940): the whole history was hashed three or four times
+ * a request (the loop, the retry check, `userKeys` once or twice), 61% of the proxy's own time on a long conversation.
+ */
 function hashOf(m: Message): string {
   const calls = Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls) : "";
   const id = typeof m.tool_call_id === "string" ? m.tool_call_id : "";
-  return createHash("sha256")
-    .update(`${String(m.role)}\u0000${textOf(m.content)}\u0000${id}\u0000${calls}`)
-    .digest("hex");
+  return sha256Hex(`${String(m.role)}\u0000${textOf(m.content)}\u0000${id}\u0000${calls}`);
+}
+
+/**
+ * The tool names `eventsOf` records for a message (its only effect on `tools`), without building its events: the loop
+ * over the whole history needs only the names, and `eventsOf` parsed and re-serialized every call's arguments on every
+ * request (D1940). Throws where `eventsOf` throws (a message that is null or undefined).
+ */
+function toolNamesOf(m: Message, tools: Map<string, string>): void {
+  if (m.role !== "assistant") return;
+  for (const call of Array.isArray(m.tool_calls) ? m.tool_calls : []) {
+    const fn = (call as { function?: { name?: unknown } })?.function;
+    if (typeof fn?.name !== "string") continue;
+    const id = (call as { id?: unknown }).id;
+    if (typeof id === "string") tools.set(id, fn.name);
+  }
 }
 
 type EventInput = Parameters<EdenClient["observe"]>[0];
@@ -377,9 +403,12 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     const copies = new Map<string, number>();
     const fresh: Message[] = [];
     const lastUserAt = (messages as Message[]).map((m) => m.role).lastIndexOf("user");
+    // Each message's hash, once a request: the retry check and `userKeys` read them from here (D1940).
+    const hashes: string[] = [];
     for (const [i, m] of (messages as Message[]).entries()) {
-      eventsOf(m, tools); // tool names, for the results that follow
+      toolNamesOf(m, tools); // tool names, for the results that follow
       const h = hashOf(m);
+      hashes.push(h);
       const k = (copies.get(h) ?? 0) + 1;
       copies.set(h, k);
       if (k > (conv.seen.get(h) ?? 0)) {
@@ -397,15 +426,11 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     // request, and a retry would then read as a new turn and lose its packets (the review).
     // With the history held by the provider the request is only the new input, so a short reply repeated on the
     // next turn would hash the same as a retry: the response it follows tells them apart (the review of D656).
-    const all = createHash("sha256")
-      .update(held === undefined ? "" : `held:${held}\n`)
-      .update(
-        (messages as Message[])
-          .filter((m) => m.role !== "system" && m.role !== "developer")
-          .map(hashOf)
-          .join(","),
-      )
-      .digest("hex");
+    const spoken = hashes.filter((_, i) => {
+      const role = (messages as Message[])[i]!.role;
+      return role !== "system" && role !== "developer";
+    });
+    const all = sha256Hex(`${held === undefined ? "" : `held:${held}\n`}${spoken.join(",")}`);
     const end = (messages as Message[]).at(-1)!;
     if (known && end.role === "user" && fresh.at(-1) !== end && conv.last !== undefined && conv.last !== all) {
       fresh.push(end);
@@ -453,7 +478,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       try {
         onSpeculate(
           keepPackets && conv.placed?.size
-            ? keptInPlace(conv, messages as Message[], [], turn, options.maxKeptBytes ?? MAX_KEPT_BYTES)
+            ? keptInPlace(conv, messages as Message[], hashes, [], turn, options.maxKeptBytes ?? MAX_KEPT_BYTES)
             : null,
         );
       } catch (e) {
@@ -489,7 +514,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       return withContext(messages as { role: string; content: unknown }[], fresh);
     }
     if (keepPackets) {
-      return keptInPlace(conv, messages as Message[], packets, turn, options.maxKeptBytes ?? MAX_KEPT_BYTES);
+      return keptInPlace(conv, messages as Message[], hashes, packets, turn, options.maxKeptBytes ?? MAX_KEPT_BYTES);
     }
     return withContext(messages as { role: string; content: unknown }[], packets);
   };
@@ -922,6 +947,8 @@ export function toAnthropic(
 function keptInPlace(
   conv: Conversation,
   messages: Message[],
+  /** `hashOf` of each message, from `withEden`'s loop. */
+  hashes: readonly string[],
   packets: Injection[],
   turn: number,
   maxBytes: number,
@@ -930,7 +957,7 @@ function keptInPlace(
     return packets.length ? withContext(messages as { role: string; content: unknown }[], packets) : null;
   }
   const placed = (conv.placed ??= new Map());
-  const keys = userKeys(messages);
+  const keys = userKeys(messages, hashes);
   const latest = keys.findLastIndex((k) => k !== null);
   const current = packets.length ? packets.map((p) => p.text).join("\n\n") : null;
   if (current !== null) {
