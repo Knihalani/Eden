@@ -131,9 +131,11 @@ its model roles.
 - **Source-map files made before D1936 are moved to the WITHOUT ROWID layout at open (D1960),** by the `SourceMap`
   constructor, wherever a file is opened: `main.ts` (one process, and each router child its own `.<i>` file) before it
   listens or reports its port, `mergeInto`'s targets in `rehomeSourceMaps`, and each mcp-stdio user's file before it
-  reads stdin. One log line (`moved to the WITHOUT ROWID layout ... N rows, compacted, T ms`), at most about 4.5 s
-  (files over 128 MiB are left alone, one line an open); a file that cannot be moved keeps working as it was, so it
-  never stops a start. Do not move it anywhere else (the router before children, a rename): every open already does.
+  reads stdin. One log line (`moved to the WITHOUT ROWID layout ... N rows, compacted, T ms`), at most about 3.5 s
+  an open however many children move at once (the copy rolls back past `MIGRATE_BUDGET_MS`, 3 s; files over 128 MiB,
+  short of disk room or with other schema are left alone, one line an open); a file that cannot be moved keeps
+  working as it was, so it never stops a start. Do not move it anywhere else (the router before children, a
+  rename): every open already does.
 - **Usage and spend across processes (D326).** `POST /v1/usage` answers the key's tenant only (counts and
   dollars, no ids or content); the router sums every child's answer (`sumUsage`), so a new field must be a number
   that adds, or a record of them. The handler's request counters are per tenant and UTC day, known routes only.

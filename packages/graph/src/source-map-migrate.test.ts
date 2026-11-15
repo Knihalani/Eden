@@ -7,7 +7,19 @@
  */
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { copyFileSync, mkdtempSync, openSync, readFileSync, statSync, writeSync, closeSync } from "node:fs";
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statfsSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Xoshiro128 } from "@eden/primitives";
@@ -435,3 +447,262 @@ describe("migrateLayout (D1960)", () => {
     expect(dump(path).slice(2)).toEqual(dump(copy).slice(2));
   });
 });
+
+describe("migrateLayout's bounds (D1960: disk room, time, other schema)", () => {
+  const big = () => 1e15;
+  const walSize = (path: string) => (existsSync(`${path}-wal`) ? statSync(`${path}-wal`).size : 0);
+  const wait = (ms: number) => {
+    const until = performance.now() + ms;
+    while (performance.now() < until);
+  };
+
+  test("a disk without room for the move and its VACUUM keeps the file as it was, with one line", () => {
+    const path = oldFile(17, 3_000);
+    const bytes = readFileSync(path);
+    // The test's files and SQLite's temp directory are one filesystem here (both under TMPDIR): twice the file
+    // and the 4 MiB reserve. Just short of it is refused; just over it moves.
+    const need = 2 * bytes.length + 4 * 2 ** 20;
+    const lines: string[] = [];
+    const db = new Database(path);
+    const short = migrateLayout(db, { log: (l) => lines.push(l), freeBytes: () => need - 4096 });
+    expect(short.status).toBe("kept");
+    expect(short.reason).toMatch(/MiB free beside it, short of the [\d.]+ MiB the move needs$/);
+    expect(lines).toHaveLength(1);
+    db.close();
+    expect(readFileSync(path).equals(bytes)).toBe(true);
+    const db2 = new Database(path);
+    expect(migrateLayout(db2, { log: (l) => lines.push(l), freeBytes: () => need + 4096 }).status).toBe("migrated");
+    db2.close();
+    // A free-space query that fails is no room.
+    const db3 = new Database(oldFile(18, 100));
+    const unknown = migrateLayout(db3, {
+      log: (l) => lines.push(l),
+      freeBytes: () => {
+        throw new Error("statfs refused");
+      },
+    });
+    db3.close();
+    expect(unknown).toEqual({ status: "kept", reason: "free space unknown (statfs refused)" });
+  });
+
+  test("a VACUUM that fails after the commit still truncates the WAL; writes work; a later open with room compacts", () => {
+    const path = oldFile(19, 30_000);
+    const before = dump(path);
+    const db = new Database(path);
+    db.exec("PRAGMA journal_mode = WAL");
+    const lines: string[] = [];
+    const moved = migrateLayout(db, {
+      log: (l) => lines.push(l),
+      freeBytes: big,
+      onStep: (s) => {
+        if (s === "vacuum") throw new Error("database or disk is full");
+      },
+    });
+    expect(moved.status).toBe("migrated");
+    expect(lines[0]).toContain("not compacted (database or disk is full; later writes reuse its free pages");
+    expect(walSize(path)).toBe(0);
+    const pages = db.query("PRAGMA page_count").values()[0]![0] as number;
+    const loose = db.query("PRAGMA freelist_count").values()[0]![0] as number;
+    expect(loose).toBeGreaterThan(pages * 0.4);
+    db.close();
+    // No room yet: one line, the file untouched, and the map reads and writes it.
+    const bytes = readFileSync(path);
+    const noRoom = new Database(path);
+    expect(migrateLayout(noRoom, { log: (l) => lines.push(l), freeBytes: () => 0 }).status).toBe("kept");
+    noRoom.close();
+    expect(lines[1]).toContain("is not compacted (D1960; it works as before): 0.0 MiB free beside it");
+    expect(readFileSync(path).equals(bytes)).toBe(true);
+    // Room again: compacted once, every row kept, then left alone.
+    new SourceMap(path).close();
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/compacted \(D1960\): \d+ free pages of \d+, \d+ ms$/);
+    expect(statSync(path).size).toBeLessThan(bytes.length * 0.5);
+    expect(dump(path)).toEqual(before);
+    answersAsReference(path, 19, 150);
+    expect(logged).toHaveLength(1);
+  });
+
+  test("the time budget: a copy past it rolls back between batches, and a slow move skips its VACUUM", () => {
+    // 20,000 rows: five batches of the mention copy. The step waits out the budget, so the clock read after the
+    // first batch is past it.
+    const path = oldFile(20, 20_000);
+    const before = dump(path);
+    const lines: string[] = [];
+    const db = new Database(path);
+    const late = migrateLayout(db, {
+      log: (l) => lines.push(l),
+      budgetMs: 200,
+      onStep: (s) => {
+        if (s === "mention:copy") wait(210);
+      },
+    });
+    expect(late.status).toBe("kept");
+    expect(late.reason).toMatch(/^over the 200 ms a move may take at open \(\d+ ms, mention:copy\)$/);
+    expect(lines[0]).toContain("keeps its rowid layout");
+    db.close();
+    expect(layout(path)).toEqual(["rowid", "rowid", "rowid"]);
+    expect(dump(path)).toEqual(before);
+    // Past half the budget at the commit: moved, not compacted; the next open compacts it.
+    const db2 = new Database(path);
+    const slow = migrateLayout(db2, {
+      log: (l) => lines.push(l),
+      budgetMs: 2_000,
+      onStep: (s) => {
+        if (s === "commit") wait(1_010);
+        if (s === "vacuum") throw new Error("the VACUUM ran");
+      },
+    });
+    db2.close();
+    expect(slow.status).toBe("migrated");
+    expect(lines[1]).toMatch(/not compacted \(the move took \d+ ms; a later open compacts it\)/);
+    expect(walSize(path)).toBe(0);
+    new SourceMap(path).close();
+    expect(logged.at(-1)).toContain("compacted (D1960)");
+    expect(dump(path)).toEqual(before);
+  });
+
+  test("an index, trigger or view made outside Eden on the tables keeps the layout, with one line naming it", () => {
+    const cases = [
+      ["index", "CREATE INDEX by_source ON mention (source_id)"],
+      ["trigger", "CREATE TRIGGER audit AFTER INSERT ON utility BEGIN SELECT 1; END"],
+      ["view", "CREATE VIEW counts AS SELECT scope, sum(count) FROM mention GROUP BY scope"],
+      ["trigger", "CREATE TABLE log (x); CREATE TRIGGER other AFTER INSERT ON log BEGIN DELETE FROM planner_arm; END"],
+    ] as const;
+    for (const [type, sql] of cases) {
+      const path = oldFile(21, 200);
+      const setup = new Database(path);
+      setup.exec(sql);
+      setup.close();
+      const before = dump(path);
+      const lines: string[] = [];
+      const db = new Database(path);
+      const result = migrateLayout(db, { log: (l) => lines.push(l) });
+      db.close();
+      expect(result.status).toBe("kept");
+      expect(result.reason).toMatch(new RegExp(`^${type} \\w+ not made by Eden names its tables`));
+      expect(lines).toHaveLength(1);
+      expect(dump(path)).toEqual(before);
+      // The map still reads and writes it, and leaves the user's schema alone.
+      answersAsReference(path, 21, 100);
+      expect(layout(path)).toEqual(["rowid", "rowid", "rowid"]);
+    }
+  });
+
+  test("migrate.ts: a file without the map's tables says so and exits 1; a moved file exits 0", () => {
+    const empty = fileOf();
+    new Database(empty).close();
+    const cli = join(import.meta.dir, "migrate.ts");
+    const run = (file: string) => Bun.spawnSync([process.execPath, cli, file], { stdout: "pipe", stderr: "pipe" });
+    const none = run(empty);
+    expect(none.exitCode).toBe(1);
+    expect(none.stderr.toString()).toContain(`eden: ${empty}: no source-map tables`);
+    const old = oldFile(22, 100);
+    const moved = run(old);
+    expect(moved.exitCode).toBe(0);
+    expect(moved.stdout.toString()).toContain("moved to the WITHOUT ROWID layout");
+    const again = run(old);
+    expect(again.exitCode).toBe(0);
+    expect(again.stdout.toString()).toContain("already has the WITHOUT ROWID layout");
+  });
+
+  // On a real small filesystem (a tmpfs, where this runs as root and may mount one): the review's case, a nearly
+  // full disk. Everything SQLite writes, its VACUUM temp file included, is on the tmpfs (the child's TMPDIR).
+  const mountable = process.platform === "linux" && process.getuid?.() === 0 && tryMount();
+  test.skipIf(!mountable)(
+    "on a nearly full tmpfs: kept by the real free space, writes work, compacted once there is room",
+    () => {
+      const mnt = mkdtempSync(join(tmpdir(), "eden-map-tmpfs-"));
+      expect(Bun.spawnSync(["mount", "-t", "tmpfs", "-o", "size=24m", "tmpfs", mnt]).exitCode).toBe(0);
+      try {
+        const path = join(mnt, "map.db");
+        copyFileSync(oldFile(23, 100_000), path);
+        const before = dump(path);
+        const size = statSync(path).size;
+        const filler = join(mnt, "filler");
+        const fill = (free: number) => {
+          const s = statfsSync(mnt);
+          const now = s.bavail * s.bsize + (existsSync(filler) ? statSync(filler).size : 0);
+          writeFileSync(filler, Buffer.alloc(Math.max(0, Math.round(now - free))));
+        };
+        const child = (code: string) => {
+          const r = Bun.spawnSync([process.execPath, "-e", code, path], {
+            env: { ...process.env, TMPDIR: mnt, SQLITE_TMPDIR: mnt },
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+          return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
+        };
+        const src = JSON.stringify(join(import.meta.dir, "source-map.ts"));
+        // Writes through the map, enough to need new pages, then a read back.
+        const writes = `
+        const { SourceMap } = require(${src});
+        const map = new SourceMap(process.argv[1], { mentionFlushMs: 60_000 });
+        const scope = { tenant: "t", user: "u" };
+        for (let i = 0; i < 2000; i++) map.recordMentions(scope, "crm", ["new name " + i]);
+        map.recordOutcome(scope, "planning", "crm", true);
+        map.flush();
+        console.log(JSON.stringify(map.sourcesFor(scope, "new name 1999")));
+        map.close();`;
+        // The review's probe: an old file with 0.7x its size free. Kept by the real statfs; the map writes it.
+        fill(size * 0.7);
+        const kept = child(writes);
+        expect(kept.err).toContain("keeps its rowid layout (D1960; it works as before)");
+        expect(kept.err).toContain("free beside it, short of the");
+        expect(kept.err).not.toContain("failed");
+        expect(kept.out).toContain('"crm"');
+        expect(kept.code).toBe(0);
+        expect(layout(path)).toEqual(["rowid", "rowid", "rowid"]);
+        // Forced past the check (as if the disk filled during the move) with room for the move but not its VACUUM:
+        // moved and committed, the VACUUM refused by the full disk, the WAL truncated; the map still writes.
+        fill(size * 1.25);
+        const forced = child(`
+        const { Database } = require("bun:sqlite");
+        const { migrateLayout } = require(${src});
+        const db = new Database(process.argv[1]);
+        db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL");
+        const r = migrateLayout(db, { freeBytes: () => 1e15, log: (l) => console.log(l) });
+        console.log(JSON.stringify(r));
+        db.close();`);
+        expect(forced.out).toContain('"status":"migrated"');
+        expect(forced.out).toContain("not compacted (database or disk is full");
+        expect(walSize(path)).toBe(0);
+        const loose = child(writes);
+        expect(loose.err).toContain("is not compacted (D1960; it works as before)");
+        expect(loose.err).not.toContain("failed");
+        expect(loose.out).toContain('"crm"');
+        // Room again: the next open compacts it.
+        rmSync(filler);
+        const room = child(writes);
+        expect(room.err).toMatch(/compacted \(D1960\): \d+ free pages/);
+        expect(room.code).toBe(0);
+        expect(layout(path)).toEqual(["without rowid", "without rowid", "without rowid"]);
+        expect(statSync(path).size).toBeLessThan(size * 0.7);
+        const after = dump(path);
+        expect(after[0]).toBe("ok");
+        // Every row from before is still there; the writes added rows for one new user only.
+        const key = `'${scopeKey({ tenant: "t", user: "u" })}'`;
+        const mine = (r: string) => r.includes(key);
+        expect(after.filter((r) => !mine(r))).toEqual(before.filter((r) => !mine(r)));
+        expect(after.filter(mine).length).toBeGreaterThan(2000);
+      } finally {
+        Bun.spawnSync(["umount", mnt]);
+        rmSync(mnt, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+});
+
+/** Whether a tmpfs can be mounted here (root on Linux, and a container that allows it). */
+function tryMount(): boolean {
+  const probe = mkdtempSync(join(tmpdir(), "eden-map-probe-"));
+  try {
+    if (Bun.spawnSync(["mount", "-t", "tmpfs", "-o", "size=1m", "tmpfs", probe]).exitCode !== 0) return false;
+    Bun.spawnSync(["umount", probe]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}

@@ -113,13 +113,16 @@ Why this shape and not another:
   call no rehome when nothing is stranded, and a router's N children move their own files in parallel. The rehome's
   targets are moved too (`mergeInto` opens each with a `SourceMap` first), before the stranded rows are merged in.
 - **Fail open, bounded.** Any failure (the write lock held past `MIGRATE_BUSY_MS`, 250 ms; a read-only connection; a
-  full disk; a damaged page; columns that are not the map's, as an October 27 file's `last_ref`) rolls back, logs one
-  line and leaves the file as it was, in its old layout, which every statement still reads and writes. A file over
-  `MIGRATE_MAX_PAGES` (32,768 pages, 128 MiB) is not moved at open: the move costs about 0.13 ms a page on this
-  VM, so the cap bounds an open near 4.5 s, far inside a router child's 30 s start deadline (D172);
-  `bun packages/graph/src/migrate.ts FILE` moves a larger one with the server stopped. Nothing is served during the
-  move: one process and a router child open the map before they listen or report their port (a router listens once
-  every child has), mcp-stdio before it reads stdin.
+  full disk; a damaged page; columns that are not the map's, as an October 27 file's `last_ref`, never moved; an
+  index, trigger or view made outside Eden naming a map table) rolls back, logs one line and leaves the file as it
+  was, in its old layout, which every statement still reads and writes. Before the lock: free disk for the move and
+  its VACUUM (below), and at most `MIGRATE_MAX_PAGES` (32,768 pages, 128 MiB). During it: the copy runs in batches
+  of 4,096 rows in key order (each starting past the largest key copied, read back from the new B-tree) and reads
+  the clock between batches and tables, rolling back past `MIGRATE_BUDGET_MS` (3 s); the VACUUM runs only if the
+  move took at most half of that. `bun packages/graph/src/migrate.ts FILE` moves a larger or slower file with the
+  server stopped, with neither bound. Nothing is served during the move: one process and a router child open the
+  map before they listen or report their port (a router listens once every child has), mcp-stdio before it reads
+  stdin.
 - **Rollback.** The map before D1936 (the reference) reads and writes a moved file unchanged (the test runs one
   across the move), so a rollback needs nothing.
 
@@ -154,6 +157,53 @@ missing a row) fails the count and rolls back; a file another connection moved b
 is `current`, with nothing done. Eight mutations of `migrateLayout` each fail the file: no transaction (4 tests), no
 VACUUM (1), a row dropped from the copy (8), no count (1), no second look under the lock (1), no column check (1), no
 cap (1), no short busy wait (1).
+
+#### After the review: disk room, time, other schema
+
+An independent review found no row loss and three gaps, each closed with a test in `source-map-migrate.test.ts`:
+
+- **A nearly full disk.** On a 40 MB tmpfs with an 18.5 MB old file and 12-15 MB free, the move committed, its
+  VACUUM failed with `SQLITE_FULL`, and the file was left 1.5x its size plus a WAL on a full disk, where every later
+  write failed; the old file would have kept working. Measured on tmpfs with a 28.5 MB old file (a sampler reading
+  `statfs` every millisecond, 3 runs): the move and its VACUUM used at most 1.0x the file more on its own
+  filesystem and 0.47x in SQLite's temp directory (VACUUM's copy of the database), 1.48x (41.6-42.2 MB) when the
+  two are one filesystem. The move now needs, before it takes the lock, free space of 2x the file plus its WAL plus
+  4 MiB when the temp directory is on the file's filesystem, else 1.5x beside the file and 1x in the temp
+  directory (SQLite's own order: `temp_store_directory`, `SQLITE_TMPDIR`, `TMPDIR`, `/var/tmp`, `/usr/tmp`, `/tmp`;
+  none when `temp_store` is memory); a `statfs` that fails counts as no room. A VACUUM that fails or is skipped
+  still truncates the WAL in its own try, and a later open compacts a file with no rowid table whose free pages
+  are at least a quarter of it (and 256 pages), if its live pages are at most half the cap and the same room holds
+  for its live size. Tested on a real 24 MiB tmpfs (root only; skipped where a tmpfs cannot be mounted), the child
+  processes' temp directory on it: a 7 MB old file with 0.7x free is kept by the real `statfs`, and the map writes
+  2,000 new mentions; forced past the check with 1.25x free, the move commits and its VACUUM fails with `database
+  or disk is full`, the WAL is truncated and the map still writes; with the filler removed the next open compacts
+  the file below 0.7x, every row kept.
+- **Children moving at once.** A router starts a child a core and each moves its own file; the review measured a
+  110 MB file a child at 6.9-8.2 s for 4 at once, 13.5-15.4 s with 4 busy processes more, and 20.8-28 s for 8,
+  against a 30 s start deadline (D172) that also covers the gate's warm-up, and a kill mid-copy rolls back, so every
+  restart would repeat it. With the budget, on the same 4-core VM at a load average of 17-21 (`par.ts`, a scratch
+  script: N processes each opening a `SourceMap` on their own copy at once):
+
+  | Old file | 1 | 4 | 4 + 4 busy | 8 |
+  | --- | ---: | ---: | ---: | ---: |
+  | 110 MB (28,376 pages) | kept, 3.0 s | kept, 3.0 s | kept, 3.0-3.3 s | kept, 3.0-3.2 s |
+  | 28.5 MB (7,298 pages) | moved, compacted, 1.0 s | 3 moved (not compacted), 1 kept: 3.1-3.4 s | kept, 3.0 s | kept, 3.0-3.3 s |
+  | 110 MB moved, not compacted (15,004 live pages) | compacted, 0.5 s | | compacted, 2.7-3.4 s | compacted, 2.5-3.3 s |
+
+  An open past the last clock reading still drops, renames and commits, so the longest measured was 3.4 s. The
+  110 MB file moves offline (`migrate.ts`) in 4.7 s. The VACUUM measured 0.15-0.2x the move (124-150 ms after a
+  722-979 ms move at 7,298 pages), hence the half-budget rule.
+- **Other schema.** A user's index or trigger on a map table was dropped with it, silently, and a view naming one
+  made the rename fail with a line every open. The move now reads `sqlite_schema` first and keeps the layout, with
+  one line naming each (an index or trigger on a map table, or a view or trigger whose SQL names one).
+
+`migrate.ts` on a file with none of the map's tables now says `no source-map tables` and exits 1 (it said the file
+already had the new layout). Ten mutations of the new code each fail the file: no room check (2 tests), one
+filesystem counted as two (1), no WAL truncate after the move (1), no later compaction (3), no clock between batches
+(1), VACUUM however long the move (1), no schema check (1), the schema check by table only (1), the last key read
+with `DESC` on its last column only (6; a bug the first draft had: the second batch hit the key's UNIQUE constraint
+and the move was kept), migrate.ts without its table check (1); and the eight before still fail it (no transaction
+11, no VACUUM 3, a row dropped 15, no count, no second look, no column check, no cap, no short busy wait 1 each).
 
 ### D1937: `normalizeEntity` reads plain names in one pass
 
