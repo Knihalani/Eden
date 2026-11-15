@@ -140,10 +140,8 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
   // The bracket of the array that may be a number array; `n` for none, so one compare a comma tests it.
   let cand = n;
   const reach = 2 * LONG_REPLY.numbers - 2;
-  // The next `]` and quote at or after the last candidate checked, kept as `numberArrayAt` keeps them; -1 before.
-  let close = -1;
-  let quote = -1;
   byteSawRead = byteLongString = false;
+  nextClose = nextQuote = -1;
   // A string this long may be sliced or have its end guessed by the text path: shorter ones it only crosses.
   const long = Math.min(LONG_REPLY.string, LONG_REPLY.guessAfter + 1);
   for (let i = 0; i < n; i++) {
@@ -165,26 +163,9 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
     } else if (k === COMMA) {
       if (++values > maxValues) return OVER;
       if (i - cand >= reach) {
-        const from = cand;
+        if (stop && readsAt(bytes, cand)) return STOPPED;
+        if (!stop) byteSawRead = true;
         cand = n;
-        if (!stop) {
-          byteSawRead = true;
-          continue;
-        }
-        // Stopped only where the text path would read the array (`numberArrayAt`'s checks, on bytes): elsewhere the
-        // text scan would cross what this scan crosses for less (D1919: `[1,...,12345678901234567]` cost 1.1-1.2x
-        // main). Not asked of a longer body, which this scans whole: there the searches for the `]` and the quote
-        // crossed a 16 MiB flood twice before it was refused (1.3x main).
-        if (close < from) close = indexOfByte(bytes, 0x5d, from) >>> 0;
-        if (quote < from) quote = indexOfByte(bytes, 0x22, from) >>> 0;
-        if (
-          close < n &&
-          close - from >= 2 * LONG_REPLY.numbers - 1 &&
-          quote > close &&
-          lastElementReadsBytes(bytes, from, close)
-        ) {
-          return STOPPED;
-        }
       }
     } else if (k === CLOSE) {
       depth--;
@@ -196,6 +177,28 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
   }
   return WITHIN;
 }
+
+/**
+ * Whether the text path would read the number array opened at `from` (`numberArrayAt`'s checks, on bytes): the byte
+ * scan stops only there, since elsewhere the text scan would cross what it crosses for less (D1919:
+ * `[1,...,12345678901234567]` cost the bytes path 1.1-1.2x main). Asked only of a body the scan may stop on: a longer
+ * one is scanned whole, and there the searches for the `]` and the quote crossed a 16 MiB flood twice before it was
+ * refused (1.3x main). Kept out of `byteShapeOrStop`, whose size sets how soon JSC compiles it (inline, a refused depth
+ * bomb cost 0.3-0.5 µs more).
+ */
+function readsAt(bytes: Uint8Array, from: number): boolean {
+  if (nextClose < from) nextClose = indexOfByte(bytes, 0x5d, from) >>> 0;
+  if (nextQuote < from) nextQuote = indexOfByte(bytes, 0x22, from) >>> 0;
+  return (
+    nextClose < bytes.length &&
+    nextClose - from >= 2 * LONG_REPLY.numbers - 1 &&
+    nextQuote > nextClose &&
+    lastElementReadsBytes(bytes, from, nextClose)
+  );
+}
+/** The next `]` and quote at or after the last array `readsAt` checked (2^32 - 1 for none), -1 before. */
+let nextClose = -1;
+let nextQuote = -1;
 
 /** Whether the last `byteShapeOrStop` with `stop` off met a place where it would have stopped. */
 export let byteSawRead = false;
