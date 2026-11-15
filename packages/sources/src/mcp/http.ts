@@ -527,6 +527,8 @@ export class StreamableHttpTransport implements Transport {
         // The runtime's HTTP client reads exactly the declared length here (no encoding to inflate, no chunked
         // framing to contradict it), so a native read is capped by the check above, at the cost of an uncapped one
         // (D1860). Its deadline still holds: the flight's abort ends the read.
+        // Bun's `text()` decodes as `TextDecoder` does (one byte-order mark dropped) and costs less than its `bytes()`
+        // and a decode (D1900); Node's drops two marks, so there the bytes are decoded here (`parseJsonBytes`).
         data = isBun ? parseJsonText(await res.text()) : parseJsonBytes(new Uint8Array(await res.arrayBuffer()));
         tally.bytes = declared;
       } else {
