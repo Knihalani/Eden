@@ -209,16 +209,19 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
   in SSE at 64 KB one at a time (1.11x); four numbers cells tie (1.00-1.02x). Against main's own parser (D1909,
   D1919, measured with and without a forced GC): tool output, numbers (a series with `null` gaps, a few 16-17-digit
   doubles or `1e400` anywhere in it, or an element no JSON array holds, which ends the scan as `JSON.parse` would end
-  the parse), plain text and refused floods cost 0.3-0.9x its CPU; structured replies, multi-byte text, arrays of
+  the parse; once 4,096 elements have read, a series that turns into computed doubles is read on, 0.6-0.8x) and
+  plain text cost 0.3-0.9x its CPU; refused floods 0.8-1.0x on text and 1.0-1.2x on bytes; structured replies, multi-byte text, arrays of
   computed doubles on the bytes path and long number arrays on the bytes path about the same (within the control's
   10-20%). Still over it: siblings of short number arrays that the reader reads but the parse is not spared (on the
-  bytes path, 1 MB of arrays of 600 numbers 1.22-1.28x, the same with `1e400` in each 1.30-1.42x); refused nested
+  bytes path, 1 MB of arrays of 600 numbers 1.22-1.28x, the same with `1e400` in each 1.24-1.42x; on the text path
+  1.04-1.22x: a prototype that stopped holding pieces after 16 gained 5-15% and was not worth its code); refused nested
   number arrays (16 MiB, 0.9-1.3x of main's 5-6 ms); a hostile pair of strings whose guessed end is wrong
   (1.27x); a refused depth bomb (about 1 µs). Peak memory is under main's for accepted number arrays (6 MB with an
   early 17-digit id: 18.5 against 25.9 MB cold, 7.8 against 21.0 warmed) and about main's elsewhere, but not at or
   under it everywhere: a cold process on the text path still lands one 7 MB step over main on 16 MiB of floats (26.8
   against 19.6, as D1919's earlier code did: compiling, not the reply), a series that turns into computed doubles
-  past its start 1.5 MB over main warmed (8.4 against 6.9), and a cold process on the bytes path 2-6 MB over (33.0
+  past its start 1.5 MB over main warmed (8.4 against 6.9; one that turns half way, before the 4,096 rule, held 22.0
+  against 12.3, and 10.2 after it), and a cold process on the bytes path 2-6 MB over (33.0
   against 30.7 on 6 MB of ids).
 - **On Node** a long body is decoded once and takes the same long-reply path (D1904); V8 parses dense escapes faster
   than the byte unescaper, so there the literal is parsed (D1901).
