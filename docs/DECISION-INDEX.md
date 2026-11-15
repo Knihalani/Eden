@@ -832,6 +832,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1932 | 2026-11-15 | Adopted (same brief; D1918 had not built a `datesOf` memo because its days depend on the instant): a statement's date patterns are read… | rejected |
 | D1933 | 2026-11-15 | Adopted (same brief): the ask path's smaller repeats. | adopted |
 | D1934 | 2026-11-15 | Adopted (same brief): `mentionsAny` searches the item's lowercased text in place. | adopted |
+| D1940 | 2026-11-15 | Adopted: the proxy reads a request's history once, the server's shape check counts brackets before it scans, and a tool call's check skips… | adopted |
+| D1941 | 2026-11-15 | Finding (measured beside D1940): the rest of the edge has no lever. | finding |
 | D1945 | 2026-11-15 | Adopted (a dev-loop brief; no test weakened, every test still run): the gate spends about 7% less CPU, its main-run test limit is 60 s… | adopted |
 | D1950 | 2026-11-15 | Adopted (same brief): `assess` reads only the statements that can move its verdict. | adopted |
 | D1951 | 2026-11-15 | Adopted (same brief): an equal re-put tallies the held copy's people out and in from one reading. | adopted |

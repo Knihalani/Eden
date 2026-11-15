@@ -199,11 +199,14 @@ export function createHandler(
     const declared = Number(req.headers.get("content-length") ?? NaN);
     if (declared > maxBodyBytes) return fail(413, tooLarge);
     let body: Json;
+    let chars: number;
     try {
       const bytes = await req.bytes();
       // Before the parse, which is where a padded body's cost lies (D100's cap bounds bytes, not values or depth).
       if (!bodyShapeUnder(bytes)) return fail(400, "body holds too many values or nests too deep");
-      const parsed: unknown = JSON.parse(decoder.decode(bytes));
+      const text = decoder.decode(bytes);
+      chars = text.length; // `checkEvent`'s bound on a tool call input's JSON (D1940)
+      const parsed: unknown = JSON.parse(text);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fail(400, "body must be an object");
       body = parsed as Json;
     } catch {
@@ -215,7 +218,7 @@ export function createHandler(
     // Known routes only (a bounded record), and not a router's fan-out copy (counted once, by the owning child).
     if (ROUTES.has(path) && !copy) count(tenant, path.slice(4));
     try {
-      const answer = await route(path, req.url, body, tenant);
+      const answer = await route(path, req.url, body, tenant, chars);
       if (answer.status === 400) stats.refused(tenant);
       return answer;
     } catch (e) {
@@ -224,10 +227,10 @@ export function createHandler(
     }
   };
 
-  async function route(path: string, url: string, body: Json, tenant: string): Promise<Response> {
+  async function route(path: string, url: string, body: Json, tenant: string, chars: number): Promise<Response> {
     switch (path) {
       case "/v1/events": {
-        const checked = checkEvent(body);
+        const checked = checkEvent(body, chars);
         if (!checked.ok) return fail(400, checked.error);
         const query = queryOf(url);
         const waitMs = Math.max(0, Math.min(5_000, Number(query.get("waitMs") ?? 0) || 0));
@@ -239,7 +242,7 @@ export function createHandler(
       }
       case "/v1/check": {
         // The party check (D376): a tool call the agent is about to make, checked before it runs (no model).
-        const checked = checkEvent(body);
+        const checked = checkEvent(body, chars);
         if (!checked.ok) return fail(400, checked.error);
         if (checked.value.kind !== "tool_call") return fail(400, "check takes a tool_call event");
         stats.check(tenant, checked.value.tool);

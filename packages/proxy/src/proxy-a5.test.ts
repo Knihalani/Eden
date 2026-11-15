@@ -102,6 +102,38 @@ describe("audit A5: proxy (D280)", () => {
     expect(userEvents.length).toBe(1);
   });
 
+  test("a retry whose developer message changed (today's time in it) is still a retry (D1940): reported once, packets kept", async () => {
+    const proxy = createProxy({
+      upstream: `${upstream.url.href}v1`,
+      edenUrl: eden.url.href,
+      edenApiKey: KEY,
+      waitMs: 500,
+    });
+    const h = { "x-eden-user-id": "udev", "x-eden-session-id": "sdev" };
+    const turn = (stamp: string) =>
+      chat(
+        proxy,
+        {
+          model: "m",
+          messages: [
+            { role: "developer", content: `You are helpful. It is ${stamp}.` },
+            { role: "user", content: "hello" },
+            { role: "assistant", content: "Hi!" },
+            { role: "user", content: "What time is lunch with Priya Raman?" },
+          ],
+        },
+        h,
+      );
+    await turn("09:00:01");
+    expect(JSON.stringify(seen.at(-1).messages)).toContain("Dishoom");
+    await turn("09:00:07"); // the same request retried a few seconds later
+    expect(JSON.stringify(seen.at(-1).messages)).toContain("Dishoom"); // the turn's packet is kept
+    const userEvents = (await explain("udev", "sdev")).filter(
+      (d) => d.event === "user_message" && d.decision !== "reader-push",
+    );
+    expect(userEvents.length).toBe(1);
+  });
+
   test("a stateless repeat does not carry the previous turn's packet into the new turn", async () => {
     const proxy = createProxy({
       upstream: `${upstream.url.href}v1`,
