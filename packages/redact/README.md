@@ -79,7 +79,7 @@ Eden repository. Rows marked † were measured once in an earlier round, on the 
 | gitleaks' own 357 false-positive examples flagged (lower is better) | 23.0% | 6.2% | 7.3% | 22.4% | 7.3% |
 | findings on 13.8 MB of text with no planted secret (lower is better) | 233 | 4 | 1 | 12 | 1 |
 | in process, 16 KB of mixed text, a call | 0.27 ms (Bun), 0.34 ms (Node) | n/a | n/a | 87 ms | 0.66 ms |
-| in process, 1 MB of mixed text, a call | 43–52 ms (Bun) | n/a | n/a | 6.1 s | 29 ms |
+| in process, 1 MB of mixed text, a call | 19–27 ms (Bun) | n/a | n/a | 6.1 s | 29 ms |
 | one command on a 16 KB file, startup included | 0.13 s (Bun) | 0.58 s † | 2.3 s † | 0.30 s | 0.31 s |
 | one command on a 1 MB file, startup included | 0.36 s (Bun) | 0.70 s † | 2.5 s † | 6.4 s | 0.39 s |
 | slowest of 24 crafted 1 MB inputs, as a command | 0.46 s | 14.3 s | 3.2 s | >30 s on 3 † | 0.60 s |
@@ -95,9 +95,9 @@ Where it loses:
   process this gate is at or below it on 9 of the 24 crafted inputs, within 2x on 13, and 2.3–11x slower on 11
   (15–105 ms at 1 MB against 6–16 ms), where a finding every 10–20 characters each pays for the allowlists, the
   gating and the structural pass. All stay linear. As a command (startup included) it is faster on 23 of 24.
-- **A megabyte of mixed text in process.** 43–52 ms against secretlint's 29 ms and the previous gate's 21 ms: when a
-  text holds a value left as code, the stored text is recomposed over the whole text (`src/compose.ts`). At 2 KB and
-  16 KB it runs at 0.9–1.1x of the previous gate.
+- **Against the previous gate on ordinary text.** At 1 MB it is within noise of it (0.87–1.06x across text kinds; the
+  stored text is composed by intervals, `src/pieces.ts`), but small mixed text with no finding runs at 0.7–1.0x
+  (2 KB) and 0.8–0.96x (16 KB): its prefilter holds more literals and its lazy-prefix rules read their occurrences.
 - **Node** runs the same code 0.7–2.4x Bun's time.
 
 ## How it is fast

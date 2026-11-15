@@ -17,9 +17,9 @@ export type Pieces = number[];
 export const identity = (length: number): Pieces => (length > 0 ? [0, length, 0] : []);
 
 /**
- * The pieces of `cur` after `ranges` of it (sorted, apart, none empty) are each replaced by a sentinel `sentinel` long, given
- * `pieces`, the pieces of `cur` against the original. Kept runs keep their origin; a replaced range becomes one
- * sentinel piece.
+ * The pieces of `cur` after `ranges` of it (sorted, apart, none empty) are each replaced by a sentinel `sentinel`
+ * long, given `pieces`, the pieces of `cur` against the original. Kept runs keep their origin; a replaced range
+ * becomes one sentinel piece.
  */
 export function replaced(pieces: Pieces, ranges: Iv[], sentinel: number): Pieces {
   const out: Pieces = [];
