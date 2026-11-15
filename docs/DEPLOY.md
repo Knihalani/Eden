@@ -347,7 +347,8 @@ layout at open, before it serves: about half the file and half its later disk wr
 their files at once: the copy gives up and rolls back past 3 s (`MIGRATE_BUDGET_MS`), and measured with eight
 children on 110 MB files each gave up at 3.0-3.3 s on the loaded 4-core VM, where a 28.5 MB file moved in 1.0 s
 alone. A move that ran past 1.5 s skips its VACUUM (`not compacted`) and a later open compacts the file (`compacted
-(D1960): F free pages of P`). Free disk is checked first: at least twice the file (plus its WAL and 4 MiB) when
+(D1960): F free pages of P`); the same compaction runs on any file grown loose, a new one after many forgets
+included, if at most 64 MiB of it is live (0.4 s alone, up to 2.6 s with eight at once under load). Free disk is checked first: at least twice the file (plus its WAL and 4 MiB) when
 SQLite's temp directory (`SQLITE_TMPDIR`, `TMPDIR`, else `/var/tmp` or `/tmp`) is on the same filesystem, else 1.5x
 beside the file and 1x there. A file that cannot be moved logs `keeps its rowid layout … it works as before` and is
 served as it was, and the next start tries again: another process holding it, read-only, too little free disk (the

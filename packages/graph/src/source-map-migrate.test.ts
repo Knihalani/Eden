@@ -561,6 +561,29 @@ describe("migrateLayout's bounds (D1960: disk room, time, other schema)", () => 
     expect(dump(path)).toEqual(before);
   });
 
+  test("keys a JS round trip would change (invalid UTF-8, a lone surrogate) at a batch boundary move with every row", () => {
+    // The batch's last key is read in SQL: read into JS, text that is not valid UTF-8 came back as U+FFFD and the
+    // next batch skipped rows (the count check kept the file at every open, D1960's second review).
+    for (const mode of ["invalid-utf8", "lone-surrogate"]) {
+      const path = fileOf();
+      const db = new Database(path);
+      db.exec("PRAGMA journal_mode=WAL");
+      db.exec(`CREATE TABLE mention (scope TEXT NOT NULL, entity TEXT NOT NULL, source_id TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL, PRIMARY KEY (scope, entity, source_id))`);
+      const add = db.query("INSERT INTO mention VALUES (?, ?, ?, ?, ?)");
+      for (let i = 0; i < 4_095; i++) add.run(`a${String(i).padStart(5, "0")}`, "e", "x", 1, 1);
+      if (mode === "invalid-utf8") db.exec("INSERT INTO mention VALUES (CAST(x'c3' AS TEXT), 'e', 'x', 1, 1)");
+      else add.run("\ud800", "e", "x", 1, 1);
+      for (let i = 0; i < 100; i++) add.run(`é${i}`, "e", "x", 1, 1);
+      for (let i = 0; i < 100; i++) add.run(`\ud7ff${i}`, "e", "x", 1, 1);
+      const before = db.query("SELECT hex(scope) FROM mention ORDER BY scope").values();
+      const result = migrateLayout(db, { log: () => {}, freeBytes: () => 1e15 });
+      expect(result).toEqual({ status: "migrated", rows: 4_296 });
+      expect(db.query("SELECT hex(scope) FROM mention ORDER BY scope").values()).toEqual(before);
+      db.close();
+    }
+  });
+
   test("an index, trigger or view made outside Eden on the tables keeps the layout, with one line naming it", () => {
     const cases = [
       ["index", "CREATE INDEX by_source ON mention (source_id)"],
