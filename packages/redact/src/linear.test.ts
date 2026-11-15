@@ -89,7 +89,7 @@ describe("RE2 for the gitleaks rules", () => {
     }
     expect(found).toBeGreaterThan(400); // the corpus exercises the rules, not only prose
     // About 4 s alone; Bun's 5 s default is too tight when the parallel test run shares the cores.
-  }, 30_000);
+  }, 120_000);
 
   test("Unicode case folding only ever adds findings (RE2 folds s with U+017F)", () => {
     const text = `api_key = "${"aB3dE5gH7jK9mN2pQ4sT6vW8yZ"}${"x".repeat(6)}"`.replace("api", "api\u017f");

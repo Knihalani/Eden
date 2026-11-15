@@ -379,7 +379,8 @@ describe("query planner wiring", () => {
     const shadow = new QueryPlanner({ seed: 1, epsilon: 0, cascadeMin: 0, mode: "shadow" });
     const { p: q } = partner({ planner: shadow, config, onShadow: (r) => records.push(r) }, [shadowed.source]);
     await ask(q);
-    for (let i = 0; i < 20 && records.length === 0; i++) await Bun.sleep(10);
+    // The shadow record lands after the ask returns: polled under a hang-only bound (200 ms failed under load).
+    for (let i = 0; i < 500 && records.length === 0; i++) await Bun.sleep(10);
     expect(records.map((r) => r.calls)).toEqual([1]);
     // Served once without a planner, shadowed once: two calls, no third.
     expect(shadowed.sent).toHaveLength(2);

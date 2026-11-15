@@ -10,6 +10,19 @@ const KEY = "k_proxy_spec_0123456789abc";
 const EDEN_MS = 300;
 const UPSTREAM_MS = 300;
 const script: Record<string, string> = {};
+/**
+ * The order things happened in, as "eden-in <text>", "eden-out <text>" and "upstream-in <messages>": whether the
+ * model call went out during Eden's wait is read from it, not from a wall-clock bound (one at 500 ms failed at 614 ms
+ * under load, D1965; a timer never fires early, so Eden's answer cannot overtake a call already sent).
+ */
+const order: string[] = [];
+/** True when an upstream call carrying `text` arrived while Eden held its latest answer for `text`. */
+const sentDuringWait = (text: string) => {
+  const into = order.lastIndexOf(`eden-in ${text}`);
+  const out = order.lastIndexOf(`eden-out ${text}`);
+  const up = order.findIndex((x, i) => i > into && x.startsWith("upstream-in ") && x.includes(JSON.stringify(text)));
+  return into >= 0 && out > into && up > into && up < out;
+};
 const eden = Bun.serve({
   port: 0,
   async fetch(req) {
@@ -17,7 +30,9 @@ const eden = Bun.serve({
     const body = (await req.json().catch(() => ({}))) as { kind?: string; text?: string };
     if (url.pathname === "/v1/pending") return Response.json({ injections: [] });
     if (url.pathname !== "/v1/events" || body.kind !== "user_message") return Response.json({ injection: null });
+    order.push(`eden-in ${body.text}`);
     await Bun.sleep(EDEN_MS);
+    order.push(`eden-out ${body.text}`);
     const packet = script[body.text ?? ""];
     return Response.json({ injection: packet ? { id: `i-${packet}`, text: packet } : null });
   },
@@ -32,6 +47,7 @@ const upstream = Bun.serve({
     const parsed = JSON.parse(await req.text()) as { messages?: any[]; input?: unknown };
     const call = { messages: (parsed.messages ?? [parsed.input]) as any[], aborted: false };
     calls.push(call);
+    order.push(`upstream-in ${JSON.stringify(call.messages)}`);
     req.signal.addEventListener("abort", () => (call.aborted = true));
     await Bun.sleep(UPSTREAM_MS);
     // "overloaded" fails the first time it is seen (a 503), as a rate-limited or busy provider does.
@@ -94,7 +110,9 @@ describe("speculate (F10)", () => {
     const on = await timed(() => chat(proxyFor(true), [u("plain question two")], "s-b"));
     expect(calls.length - before).toBe(2);
     expect(on.body).toEqual(off.body);
-    expect(on.ms).toBeLessThan(EDEN_MS + UPSTREAM_MS - 100);
+    expect(sentDuringWait("plain question two")).toBe(true);
+    // The answer still came: Eden's wait then the held answer, not the two in a row (see `order`).
+    expect(on.ms).toBeGreaterThanOrEqual(EDEN_MS - 20);
   });
 
   test("Eden adds a packet: the speculative call is aborted and the request goes with the packet", async () => {
@@ -165,7 +183,8 @@ describe("speculate (F10)", () => {
     );
     expect(res.status).toBe(200);
     expect(calls.length - before).toBe(1);
-    expect(performance.now() - t0).toBeLessThan(EDEN_MS + UPSTREAM_MS - 100);
+    expect(sentDuringWait("plain anthropic question")).toBe(true);
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(EDEN_MS - 20);
   });
 
   test("never early when the provider runs tools itself, with `store: true`, or on the Responses route (review)", async () => {
