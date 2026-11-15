@@ -106,7 +106,7 @@ export class SourceMap {
   /**
    * The file's mention rows per (user, entity), as `sourcesFor`'s query returns them (count descending, then source
    * id), and its outcomes per (user, situation), as `outcomesIn` reads them (D1935): a lookup routes the same names
-   * several times (its search, each person probe, the earn rule's holders), and 95% of the pipeline bench's mention
+   * several times (its search, each person probe, the earn rule's holders), and 97% of the pipeline bench's mention
    * reads repeated one before. Exact: emptied by every write of its table this connection makes (`flushMentions`,
    * `flushOutcomes`, `correctOutcome`, `importUser`, `forget`), and for a file, which another process may write (D15),
    * whenever `PRAGMA data_version` says another connection committed (`fresh`). Each holds at most `MEMO_MAX`
