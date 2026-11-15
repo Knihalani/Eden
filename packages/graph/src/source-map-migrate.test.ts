@@ -637,7 +637,7 @@ describe("migrateLayout's bounds (D1960: disk room, time, other schema)", () => 
         const writes = `
         const { SourceMap } = require(${src});
         const map = new SourceMap(process.argv[1], { mentionFlushMs: 60_000 });
-        const scope = { tenant: "t", user: "u" };
+        const scope = { tenantId: "t", userId: "u" };
         for (let i = 0; i < 2000; i++) map.recordMentions(scope, "crm", ["new name " + i]);
         map.recordOutcome(scope, "planning", "crm", true);
         map.flush();
@@ -680,7 +680,7 @@ describe("migrateLayout's bounds (D1960: disk room, time, other schema)", () => 
         const after = dump(path);
         expect(after[0]).toBe("ok");
         // Every row from before is still there; the writes added rows for one new user only.
-        const key = `'${scopeKey({ tenant: "t", user: "u" })}'`;
+        const key = `'${scopeKey({ tenantId: "t", userId: "u" })}'`;
         const mine = (r: string) => r.includes(key);
         expect(after.filter((r) => !mine(r))).toEqual(before.filter((r) => !mine(r)));
         expect(after.filter(mine).length).toBeGreaterThan(2000);
