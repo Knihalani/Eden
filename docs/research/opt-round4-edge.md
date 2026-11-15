@@ -71,8 +71,8 @@ most 1,008 opening brackets anywhere, in strings or not, cannot nest deeper outs
 `{` and `[` with the native `indexOf` and passes such a body; anything else is scanned as before, so a false from
 the count decides nothing. A body dense in brackets stops counting after 64 if they come often enough to pass the
 bound, so it costs at most 64 searches more than the scan. The scan itself (`bodyShapeWithin`, vendored in
-`sources/src/mcp/shape.ts`) is unchanged; the router's `padded` check and the stdio transport go through
-`bodyShapeUnder` too.
+`sources/src/mcp/shape.ts`) is unchanged; the router's `padded` check goes through
+`bodyShapeUnder` too (stdio reads with `parseJsonBytes`, below).
 
 | `bodyShapeUnder`, µs (median of 7 interleaved, no GC) | Main | This | This / main | Control |
 | ----------------------------------------------------- | ---: | ---: | ----------: | ------: |
