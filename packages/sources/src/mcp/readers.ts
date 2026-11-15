@@ -286,6 +286,8 @@ function encodeNumbers(text: string, start: number, end: number): number {
  * separator or space is, so every loop stops there.
  */
 function numbersIn(b: Uint8Array, length: number, out: number[], room: number): number {
+  // Kept local in the loop (a module variable written for every number cost the reader 5-10%), stored at each exit.
+  let f = filled;
   let i = 0;
   let c = b[0]!;
   // A region may start inside the spaces before an element.
@@ -303,14 +305,14 @@ function numbersIn(b: Uint8Array, length: number, out: number[], room: number): 
         m = m * 10 + (c - 0x30);
         c = b[++i]!;
       } while ((c - 0x30) >>> 0 < 10);
-    } else return i >= length ? more(element) : NOT_NUMBERS;
+    } else return i >= length ? more(element, f) : NOT_NUMBERS;
     // A leading zero is not significant.
     let digits = m === 0 ? 0 : i - first;
     let p = 0;
     if (c === 0x2e) {
       const dot = ++i;
       c = b[i]!;
-      if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element) : NOT_NUMBERS;
+      if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element, f) : NOT_NUMBERS;
       do {
         m = m * 10 + (c - 0x30);
         c = b[++i]!;
@@ -322,7 +324,7 @@ function numbersIn(b: Uint8Array, length: number, out: number[], room: number): 
       c = b[++i]!;
       const negative = c === 0x2d;
       if (negative || c === 0x2b) c = b[++i]!;
-      if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element) : NOT_NUMBERS;
+      if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element, f) : NOT_NUMBERS;
       let e = 0;
       do {
         if (e < 10_000) e = e * 10 + (c - 0x30);
@@ -331,7 +333,7 @@ function numbersIn(b: Uint8Array, length: number, out: number[], room: number): 
       p += negative ? -e : e;
     }
     // A number the region cut may have more digits after the cut.
-    if (i >= length) return more(element);
+    if (i >= length) return more(element, f);
     // Past 15 digits the integer may not be exact; past 1e22 the power of ten is not.
     if (digits > 15 || p > 22 || p < -22) return NOT_NUMBERS;
     const v = p === 0 ? m : p > 0 ? m * POW10[p]! : m / POW10[-p]!;
@@ -339,21 +341,23 @@ function numbersIn(b: Uint8Array, length: number, out: number[], room: number): 
     if (c !== 0x2c) {
       while (isSpaceByte(c)) c = b[++i]!;
       if (c === 0x5d) {
-        out[filled++] = neg ? -v : v;
+        out[f++] = neg ? -v : v;
+        filled = f;
         return i;
       }
-      if (c !== 0x2c) return i >= length ? more(element) : NOT_NUMBERS;
+      if (c !== 0x2c) return i >= length ? more(element, f) : NOT_NUMBERS;
     }
-    out[filled++] = neg ? -v : v;
-    if (filled > room) return TOO_MANY;
+    out[f++] = neg ? -v : v;
+    if (f > room) return TOO_MANY;
     c = b[++i]!;
     if (c <= 0x20) while (isSpaceByte(c)) c = b[++i]!;
-    if (i >= length) return more(i);
+    if (i >= length) return more(i, f);
   }
 }
 
-function more(at: number): number {
+function more(at: number, f: number): number {
   resumeAt = at;
+  filled = f;
   return MORE;
 }
 

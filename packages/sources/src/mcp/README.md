@@ -199,15 +199,16 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
 
 ## Where it loses
 
-- **Tool output in JSON** (a long string with an escaped newline and quotes every line): 1.04-1.20x the SDK's CPU at
-  64 KB and 1.08-1.16x at 1 MB (D1900's run: `MCP_PROFILE_TEXT=plain,lines,escapes,unicode,numbers`, 3 rounds, Bun
-  1.4.4, 4 cores, load 6.9 falling to 1.6; base, before D1900, 1.18-1.32x at 1 MB), and 1.09-1.38x in the
-  six-client comparison (`docs/research/mcp-vs-alternatives.md`, where ours is the cheapest in 77 of 90 cells). The scan now crosses the string
-  in one guessed read, but Bun's `res.json()`, which the others use, parses bytes without making the string our
-  `text()` makes, and the parse is 85% of the call. Taking `res.json()` and checking after was refused (D1871). In
-  SSE the same text costs 0.80-1.18x. JSON written as text now costs 0.56-0.73x the SDK from 64 KB up (1.20-1.49x
-  before), numbers 0.70-0.93x (1.17-1.55x), plain and multi-byte text 0.6-0.8x; tiny 1 KB replies with escapes cost
-  1.22-1.46x, noise-sized differences of 10-30 µs. 93 of the run's 108 cells are below the SDK.
+- **Tool output in JSON** (a long string with an escaped newline and quotes every line): 1.13-1.45x the SDK 1.x's
+  CPU at 64 KB with 16 and 256 in flight and at 1 MB, in D1908's run of the comparison
+  (`docs/research/mcp-vs-alternatives.md`; ours is the cheapest in 61 of its 72 cells). Our check and read cost 3-10%
+  over an unchecked `text()` and `JSON.parse`; the rest is Bun's `text()` against the `res.json()` the others use,
+  65-150 µs a MiB. Taking `json()` and checking after would close it and was refused (D1871): `json()` of 1 MB of
+  nested arrays costs 54-87 ms before anything can refuse it, and of a 16 MiB number flood 134-201 ms, which this
+  refuses in 3-5 ms. Also lost in that run: plain JSON at 1 KB and at 64 KB with 256 in flight (1.11x) and tool output
+  in SSE at 64 KB one at a time (1.11x); four numbers cells tie (1.00-1.02x). Against main's own parser, the shapes
+  measured cost 0.26-1.06x its CPU (a 64 KB `[[1],[1],...]` read 1.28x in one run, 0.98-1.03x in others) and at most
+  its peak memory at 16 MiB (D1908); a refused depth bomb costs about 1 µs more.
 - **On Node** a long body is decoded once and takes the same long-reply path (D1904); V8 parses dense escapes faster
   than the byte unescaper, so there the literal is parsed (D1901).
 - **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
