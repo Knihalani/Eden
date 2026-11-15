@@ -216,7 +216,10 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
 modes), `stdio.test.ts` against the SDK's server as a child process (tools, resources, prompts) and against hostile
 children; `adversarial.test.ts` against malformed, oversized, truncated, flooding and hanging servers, with seeded
 fuzz of the SSE parser, `asMessage` and the client; `framing.test.ts` the native read's hostile framings;
-`shape.test.ts` the shape check; `json.test.ts` the spliced parse against `JSON.parse` (D1870); `deadlines.test.ts`
+`shape.test.ts` the shape check; `json.test.ts` the spliced parse against `JSON.parse` (D1870); `long-reply.test.ts` the
+long-reply path (D1900-D1904) against the plain shape check and `JSON.parse` on 110,000 seeded bodies (escapes,
+surrogates, byte-order marks, broken UTF-8, number edge cases, small bounds so refusals are common), the readers
+against `JSON.parse`, and hostile shapes kept linear; `deadlines.test.ts`
 the shared timer; `server-messages.test.ts` resumption and the GET stream against the SDK's resumable server (its
 polling pattern) and hostile fakes, request handlers against the SDK's sampling, roots and elicitation, and the
 budgets; `oauth.test.ts` the OAuth flow against the SDK's own authorization server (`mcpAuthRouter` and its demo
@@ -245,8 +248,9 @@ On Node (checked on 22.22), use a bundle: `bun build mcp/index.ts mcp/stdio.ts m
 | `http.ts` | `StreamableHttpTransport`, `StreamableHttpError`, the caps and budgets, `resume`, `openServerStream`, the `AuthHook` |
 | `sse.ts` | `SseParser`: one pass over bytes, bounded, never throws |
 | `pieces.ts` | `Pieces`: an open line's bytes between reads, coalesced so tiny reads do not each hold an array |
-| `json.ts` | `parseJsonBytes`, `parseJsonText`: the shape check, then `JSON.parse`; long plain strings spliced out of the parse (D1870) |
-| `shape.ts` | The shape check (vendored from Eden's `@eden/protocol`, kept equal by `shape.test.ts`), and its string form |
+| `json.ts` | `parseJsonBytes`, `parseJsonText`: the shape check, then `JSON.parse`; on a long reply, what the scan read spliced into the parse of the rest (D1870, D1900-D1904) |
+| `readers.ts` | What the scan reads instead of `JSON.parse`: a long string with dense escapes, an array of plain numbers; ranges decoded as `TextDecoder` does (D1900-D1904) |
+| `shape.ts` | The shape check (vendored from Eden's `@eden/protocol`, kept equal by `shape.test.ts`), its string form, and the long-reply scan (`scanText`: guessed string ends, the rest bound, the step budget) |
 | `deadlines.ts` | Every request's and POST's deadline on one timer |
 | `stdio.ts` | `StdioClientTransport` (opt-in entry point) |
 | `extras.ts` | Resources and prompts (opt-in entry point) |

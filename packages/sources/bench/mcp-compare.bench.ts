@@ -82,11 +82,12 @@ async function open(arm: ArmName, url: string, timeoutMs: number): Promise<Opene
 // ---------------------------------------------------------------------------------------------------------------------
 // Speed: one arm in its own process, against the canned server.
 
-const SIZES = [1024, 65_536, 1_048_576];
+const SIZES = (process.env.MCP_COMPARE_SIZES ?? "1024,65536,1048576").split(",").map(Number);
 const INFLIGHT = [1, 16, 256];
 /**
  * The shapes of the result's text (`mcp-profile.bench.ts`'s `TEXT_SHAPES`: plain, lines, escapes, unicode, numbers) and
- * the reply modes, each a list; a cell's key starts with its shape. `MCP_COMPARE_TEXT` defaults to plain alone.
+ * the reply modes, each a list; a cell's key starts with its shape. `MCP_COMPARE_TEXT` defaults to plain alone, and
+ * `MCP_COMPARE_SIZES` picks the sizes.
  */
 const SHAPES = (process.env.MCP_COMPARE_TEXT ?? "plain").split(",");
 const MODES = (process.env.MCP_COMPARE_MODES ?? "json,sse").split(",");

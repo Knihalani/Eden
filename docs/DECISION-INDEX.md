@@ -802,3 +802,11 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1892 | 2026-11-14 | Adopted: the HTTP handler parses less a request. | adopted |
 | D1893 | 2026-11-14 | Finding: the model call path has no CPU or token lever worth its risk. | finding |
 | D1894 | 2026-11-14 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | rejected |
+| D1900 | 2026-11-15 | Adopted: a long reply's long string with escapes is read once, its end guessed from the back and proven by reading it. | adopted |
+| D1901 | 2026-11-15 | Adopted (Bun only): a long string with an escape every dozen bytes or closer is unescaped by a byte loop, not `JSON.parse`. | adopted |
+| D1902 | 2026-11-15 | Adopted: an array of plain numbers is read as the scan reaches it. | adopted |
+| D1903 | 2026-11-15 | Adopted: a reply that is mostly structure is bounded by counting brackets and commas, not scanned. | adopted |
+| D1904 | 2026-11-15 | Adopted: `parseJsonBytes` decodes a long body first and takes the same path, so Node, SSE and stdio get D1870-D1903; ASCII is decoded by… | adopted |
+| D1905 | 2026-11-15 | Bench: the MCP benches take the result's text shape. | adopted |
+| D1906 | 2026-11-15 | Rejected: reading Bun's JSON replies as bytes (`res.bytes()`, a byte scan with the same readers, pieces decoded apart). | rejected |
+| D1907 | 2026-11-15 | Rejected (measured beside D1900-D1904): other ways to the same values. | rejected |

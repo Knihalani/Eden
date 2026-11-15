@@ -118,6 +118,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D840 | Not kept: re-reading by id the items the agent holds from quiet sources (`heldReread`, P4; weak point 4), built, screened at $0 and deleted. | It costs more per recovered update than D606's poll in every form: a session holds about 11 due copies (up… |
 | D1127 | Trial `freshenAgeMs` (F3, 0 = off): with `verifyDelivery`, a cached copy no read has refreshed for longer than this is re-read by its ref… | killed by D1130: stopped on D1128's pre-registered rule |
 | D1129 | Trial `freshenBehind` (F3, off; with `freshenAgeMs`): the aged copies' re-reads run beside the delivery instead of before it. | killed by D1130: stopped on D1128's pre-registered rule |
+| D1906 | Rejected: reading Bun's JSON replies as bytes (`res.bytes()`, a byte scan with the same readers, pieces decoded apart). | `ab2.sh`-style interleaved runs in the research note |
 
 ## Cards and intent
 
@@ -255,3 +256,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1772 | Rejected at $0 on train for this bar: day seats ordered constraint-carded first, and day ranges read whole. |  |
 | D1871 | Rejected: reading a JSON reply with `res.json()` and checking its depth and size after the parse. | `mcp-vs-alternatives.md` "Closing the losses"; measured with `Response.json()` over each body kind at 1 MB… |
 | D1894 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | measured beside D1890–D1892 |
+| D1907 | Rejected (measured beside D1900-D1904): other ways to the same values. | measured beside D1900-D1904 |
