@@ -1,14 +1,18 @@
-import { decodeRange } from "./readers";
+import { decodeRange, releaseScratch } from "./readers";
 import {
   bodyShapeWithin,
+  byteShapeOrStop,
   LONG_REPLY,
   MAX_JSON_DEPTH,
   MAX_JSON_VALUES,
   newTextShape,
+  OVER,
   PLAIN_STRING,
+  plainScan,
   scanText,
   STOPPED,
   textBoundWithin,
+  textShapeWithin,
   WITHIN,
   type TextShape,
 } from "./shape";
@@ -18,10 +22,10 @@ import {
  * ~1,000 levels or holding more than ~1,000,000 values, counted by a scan before `JSON.parse` (`shape.ts`, D100's
  * bound, reused). The caller has already capped the byte count. Never throws. The same answer as
  * `JSON.parse(new TextDecoder().decode(bytes))` where the check passes (`long-reply.test.ts` compares them). A long
- * body is decoded first and read as `parseJsonText` reads a reply (D1900): the scan over the string gives the byte
- * scan's answer (`shape.test.ts`), and the decode is one the parse needs anyway. Node's JSON replies, the capped
- * stream read, each SSE event and each stdio line read through here; Bun's native JSON read takes `parseJsonText` on
- * its `text()`.
+ * body is scanned as bytes first, then decoded and read as `parseJsonText` reads a reply (D1904, D1908): from its start
+ * when the byte scan stopped short of what the text path reads faster, else with only long strings left to find.
+ * Node's JSON replies, the capped stream read, each SSE event and each stdio line read through here; Bun's native
+ * JSON read takes `parseJsonText` on its `text()`.
  */
 export function parseJsonBytes(bytes: Uint8Array): unknown {
   return parseJsonBytesWithin(bytes, MAX_JSON_DEPTH, MAX_JSON_VALUES);
@@ -29,11 +33,23 @@ export function parseJsonBytes(bytes: Uint8Array): unknown {
 
 /** `parseJsonBytes` with its bounds given: the tests drive refusals with small ones (`json.test.ts`). */
 export function parseJsonBytesWithin(bytes: Uint8Array, maxDepth: number, maxValues: number): unknown {
-  if (bytes.length >= LONG_REPLY.body) {
-    return parseJsonTextWithin(decodeRange(bytes, 0, bytes.length, true), maxDepth, maxValues);
+  if (bytes.length < LONG_REPLY.body) {
+    return bodyShapeWithin(bytes, maxDepth, maxValues)
+      ? parseOrUndefined(decodeRange(bytes, 0, bytes.length, true))
+      : undefined;
   }
-  if (!bodyShapeWithin(bytes, maxDepth, maxValues)) return undefined;
-  return parseOrUndefined(decodeRange(bytes, 0, bytes.length, true));
+  // A long body is scanned as bytes first, as main scans every body, so one the scan refuses (a 16 MiB number flood, a
+  // depth bomb) never becomes a string. The scan gives up where the text path reads faster (escaped strings, number
+  // arrays), and the body is then decoded and read as text from its start (the scan over the string gives the byte
+  // scan's answer, `shape.test.ts`): only a body that cannot hold more values than the bound, since giving up costs
+  // a refused body its decode.
+  let known = true;
+  if (bytes.length <= 2 * maxValues) {
+    const shape = byteShapeOrStop(bytes, maxDepth, maxValues);
+    if (shape === OVER) return undefined;
+    known = shape === WITHIN;
+  } else if (!bodyShapeWithin(bytes, maxDepth, maxValues)) return undefined;
+  return readLong(decodeRange(bytes, 0, bytes.length, true), maxDepth, maxValues, known);
 }
 
 /**
@@ -43,7 +59,7 @@ export function parseJsonBytesWithin(bytes: Uint8Array, maxDepth: number, maxVal
  * becomes a slice of the reply, a long string with dense escapes and a long array of plain numbers are read by the
  * scan, and each is spliced into the parse of the rest (`spliced`). A reply that is mostly structure stops the scan
  * after a budget of steps and is bounded by counting brackets and commas with `indexOf` instead (`textBoundWithin`);
- * when that bound does not hold, the scan goes on from where it stopped.
+ * when that bound does not hold, or would not pay, the plain scan checks the rest (D1908).
  */
 export function parseJsonText(text: string): unknown {
   return parseJsonTextWithin(text, MAX_JSON_DEPTH, MAX_JSON_VALUES);
@@ -51,21 +67,45 @@ export function parseJsonText(text: string): unknown {
 
 /** `parseJsonText` with its bounds given: the tests drive refusals with small ones (`json.test.ts`). */
 export function parseJsonTextWithin(text: string, maxDepth: number, maxValues: number): unknown {
-  const long = text.length >= LONG_REPLY.body;
-  const seen = newTextShape(text, long, long ? LONG_REPLY.steps + (text.length >>> 8) : Infinity);
-  let shape = scanText(text, maxDepth, maxValues, seen);
-  if (shape === STOPPED) {
-    if (seen.pieces.length === 0 && textBoundWithin(text, maxDepth, maxValues)) return parseOrUndefined(text);
-    seen.budget = Infinity;
-    shape = scanText(text, maxDepth, maxValues, seen);
-  }
-  if (shape !== WITHIN) return undefined;
-  if (seen.pieces.length === 0) return parseOrUndefined(text);
+  if (text.length >= LONG_REPLY.body) return readLong(text, maxDepth, maxValues, false);
+  return textShapeWithin(text, maxDepth, maxValues) ? parseOrUndefined(text) : undefined;
+}
+
+/**
+ * The long-reply path (D1900): `known` when the byte scan has already found the reply within its bounds, so a reply
+ * that is mostly structure is parsed as soon as the scan's budget is spent.
+ */
+function readLong(text: string, maxDepth: number, maxValues: number, known: boolean): unknown {
+  // Known within, the scan only looks for long strings to slice: a reply whose structure outlasts a short budget is
+  // parsed whole at once.
+  const seen = newTextShape(text, true, known ? LONG_REPLY.steps >>> 2 : LONG_REPLY.steps + (text.length >>> 8));
   try {
+    let shape = scanText(text, maxDepth, maxValues, seen);
+    if (shape === STOPPED) {
+      // Known within, the byte scan found no number array to read: the reply is parsed whole.
+      if (known && seen.pieces.length === 0) return parseOrUndefined(text);
+      // Nothing read yet (an array that may be numbers, met just before the stop, is checked as any other is).
+      if (seen.pieces.length === 0) {
+        // The bound counts every comma it needs with a search each: where the scan met a value every 16 characters
+        // or closer, it would give up after costing as much as the scan it saves (rows of objects: 5% of the call).
+        if (seen.values * 16 <= seen.at && textBoundWithin(text, maxDepth, maxValues)) {
+          return parseOrUndefined(text);
+        }
+        // Mostly structure: the rest is checked by the plain scan, which reads nothing.
+        const within = plainScan(text, seen.at, seen.depth, seen.values, maxDepth, maxValues);
+        return within ? parseOrUndefined(text) : undefined;
+      }
+      seen.budget = Infinity;
+      shape = scanText(text, maxDepth, maxValues, seen);
+    }
+    if (shape !== WITHIN) return undefined;
+    if (seen.pieces.length === 0) return parseOrUndefined(text);
     const fast = spliced(text, seen);
     return fast === PLAIN ? JSON.parse(text) : fast;
   } catch {
     return undefined;
+  } finally {
+    releaseScratch();
   }
 }
 
@@ -84,10 +124,21 @@ function parseOrUndefined(text: string): unknown {
  * plain parse is used instead. The control character keeps it apart from anything a reply holds unescaped.
  */
 function newMark(): string {
+  // Drawn from a pool of random bytes filled 4 KiB at a time, each byte used once: one `getRandomValues` call a
+  // reply cost as much as the rest of splicing a 64 KB reply's string.
+  if (poolAt + 8 > pool.length) {
+    crypto.getRandomValues(pool);
+    poolAt = 0;
+  }
   let hex = "";
-  for (const b of crypto.getRandomValues(new Uint8Array(8))) hex += (b < 16 ? "0" : "") + b.toString(16);
+  for (let k = poolAt; k < poolAt + 8; k++) hex += HEX_BYTE[pool[k]!];
+  pool.fill(0, poolAt, poolAt + 8);
+  poolAt += 8;
   return `\u0001${hex}:`;
 }
+const pool = new Uint8Array(4096);
+let poolAt = pool.length;
+const HEX_BYTE = Array.from({ length: 256 }, (_, b) => b.toString(16).padStart(2, "0"));
 /** A raw control character, a backslash: a string holding either is not its characters between quotes. */
 const NOT_PLAIN = /[\x00-\x1f\\]/;
 /** Values past which the walk that puts the pieces back would cost more than the parse it saves. */
@@ -135,7 +186,9 @@ function spliced(text: string, seen: TextShape): unknown {
   // The walk costs about as much a value as a parse does about eight characters of what the pieces keep out of it.
   if (spans.length === 0 || seen.values - seen.inPieces > MAX_WALK + (readChars >>> 3)) return PLAIN;
   const mark = newMark();
-  const quoted = JSON.stringify(mark).slice(0, -1);
+  // The mark as the start of a JSON string, its control character escaped: the skeleton stays ASCII where the reply
+  // was.
+  const quoted = `"\\u0001${mark.slice(1)}`;
   let skeleton = text.slice(0, spans[0]!);
   for (let k = 0; k < spans.length; k += 2) {
     skeleton += `${quoted}${k >> 1}"${text.slice(spans[k + 1]!, spans[k + 2] ?? text.length)}`;

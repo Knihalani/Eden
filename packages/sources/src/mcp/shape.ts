@@ -1,4 +1,13 @@
-import { clearNumbers, NOT_NUMBERS, numbersRead, readNumbers, TOO_MANY, unescapeText } from "./readers";
+import {
+  clearNumbers,
+  commasIn,
+  NOT_NUMBERS,
+  numbersRead,
+  readNumbers,
+  TOO_MANY,
+  UNESCAPE_MOST,
+  unescapeText,
+} from "./readers";
 
 /**
  * The shape check that runs before every `JSON.parse` of a peer's JSON: how deep it nests and how many values it
@@ -111,11 +120,126 @@ function stringEnd(bytes: Uint8Array, i: number): number {
 // ---- end of the vendored copy ----
 
 /**
+ * `bodyShapeWithin` that gives up (`STOPPED`) on reaching what the long-reply path reads faster from the decoded text
+ * (`json.ts`, D1904): a string crossed `LONG_REPLY.guessAfter` bytes with escaped quotes every few dozen bytes (tool
+ * output, JSON written as text: the search per escaped quote costs this scan as much as the parse), or an array that
+ * has gone `2 * LONG_REPLY.numbers - 2` bytes past its bracket with nothing but numbers' characters, commas and spaces.
+ * Otherwise its answer is `bodyShapeWithin`'s, at its cost: the reply is mostly structure or plain strings, which the
+ * text path would only scan again.
+ */
+export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: number): number {
+  const n = bytes.length;
+  let depth = 0;
+  let values = 0;
+  // The bracket of the array that may be a number array; `n` for none, so one compare a comma tests it.
+  let cand = n;
+  const reach = 2 * LONG_REPLY.numbers - 2;
+  for (let i = 0; i < n; i++) {
+    const k = BYTE_KIND[bytes[i]!]!;
+    if (k === 0) continue;
+    if (k === QUOTE) {
+      i = stringEndOrStop(bytes, i + 1);
+      if (i < 0) return STOPPED;
+      cand = n;
+    } else if (k === COMMA) {
+      if (++values > maxValues) return OVER;
+      if (i - cand >= reach) return STOPPED;
+    } else if (k === CLOSE) {
+      depth--;
+      cand = n;
+    } else {
+      if (++depth > maxDepth || ++values > maxValues) return OVER;
+      cand = k === OPEN ? i : n;
+    }
+  }
+  return WITHIN;
+}
+
+/** `SHAPE_BYTE` with `{` apart from `[` (`OPEN`). */
+const BRACE = 5;
+const BYTE_KIND = SHAPE_BYTE.slice();
+BYTE_KIND[0x7b] = BRACE;
+
+/** `stringEnd`, or -1 once the string has run `LONG_REPLY.guessAfter` bytes with more than 8 escaped quotes. */
+function stringEndOrStop(bytes: Uint8Array, i: number): number {
+  const n = bytes.length;
+  const start = i;
+  let run = 32;
+  let hops = 0;
+  for (;;) {
+    const stop = i + run < n ? i + run : n;
+    for (; i < stop; i++) {
+      const s = bytes[i]!;
+      if (s === 0x5c) i++;
+      else if (s === 0x22) return i;
+    }
+    if (i >= n) return n;
+    if (hops > 8 && i - start > LONG_REPLY.guessAfter) return -1;
+    const q = indexOfByte(bytes, 0x22, i);
+    if (q < 0) return n;
+    let b = q - 1;
+    while (b >= i && bytes[b]! === 0x5c) b--;
+    if (((q - 1 - b) & 1) === 0) return q;
+    hops++;
+    run = q - i < 4 ? Math.min(Math.max(run * 2, 16), 4096) : 0;
+    i = q + 1;
+  }
+}
+
+/**
  * `bodyShapeWithin` over a string, code unit by code unit: a character outside ASCII is never structure, as a byte of
  * a multi-byte character never is. Strings are crossed with the string's native `indexOf`, as `stringEnd` does.
  */
 export function textShapeWithin(text: string, maxDepth: number, maxValues: number): boolean {
-  return scanText(text, maxDepth, maxValues, newTextShape(text, false)) === WITHIN;
+  return plainScan(text, 0, 0, 0, maxDepth, maxValues);
+}
+
+/** `textShapeWithin` from `from`, with `depth` and `values` counted before it. */
+export function plainScan(
+  text: string,
+  from: number,
+  depth: number,
+  values: number,
+  maxDepth: number,
+  maxValues: number,
+) {
+  const n = text.length;
+  // Kept apart from `scanText`, with nothing but the check in its loop: short replies and the plain path pay for no
+  // reading, and the JIT compiles this loop alone (sharing it cost short replies 4-20%, D1900's review).
+  for (let i = from; i < n; i++) {
+    const c = text.charCodeAt(i);
+    const k = c < 128 ? SHAPE_BYTE[c]! : 0;
+    if (k === 0) continue;
+    if (k === QUOTE) i = plainStringEnd(text, i + 1);
+    else if (k === OPEN) {
+      if (++depth > maxDepth || ++values > maxValues) return false;
+    } else if (k === CLOSE) depth--;
+    else if (++values > maxValues) return false;
+  }
+  return true;
+}
+
+/** `stringEnd` over a string. */
+function plainStringEnd(text: string, i: number): number {
+  const n = text.length;
+  let run = 32;
+  for (;;) {
+    const stop = i + run < n ? i + run : n;
+    for (; i < stop; i++) {
+      const s = text.charCodeAt(i);
+      if (s === 0x5c) i++;
+      else if (s === 0x22) return i;
+    }
+    if (i >= n) return n;
+    // No escape is open at `i`, so the run of backslashes before the next quote starts at or after it.
+    const q = text.indexOf('"', i);
+    if (q < 0) return n;
+    let b = q - 1;
+    while (b >= i && text.charCodeAt(b) === 0x5c) b--;
+    if (((q - 1 - b) & 1) === 0) return q;
+    run = q - i < 4 ? Math.min(Math.max(run * 2, 16), 4096) : 0;
+    i = q + 1;
+  }
 }
 
 /** `scanText`'s answers. */
@@ -145,8 +269,12 @@ export interface TextShape {
   guess: boolean;
   /** Where the rest was bounded from (`restWithin`), once a reply; -1 before. */
   restFrom: number;
-  /** The next backslash at or after the last long string's start (2^32 - 1 for none), -1 before any. */
-  slash: number;
+  /** The next `]` and the next quote at or after the last array the scan asked about (2^32 - 1 for none), -1 before. */
+  close: number;
+  quote: number;
+  /** The `[` of an array that may be a number array, -1 for none, and the values counted at it (`scanText`). */
+  cand: number;
+  candValues: number;
 }
 
 export function newTextShape(text: string, read: boolean, budget = Infinity): TextShape {
@@ -161,7 +289,10 @@ export function newTextShape(text: string, read: boolean, budget = Infinity): Te
     inPieces: 0,
     guess: read && text.length > LONG_REPLY.guessAfter,
     restFrom: -1,
-    slash: -1,
+    close: -1,
+    quote: -1,
+    cand: -1,
+    candValues: 0,
   };
 }
 
@@ -218,6 +349,11 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
   // as much as its parse.
   let stop = seen.budget < n - seen.at ? seen.at + seen.budget : n;
   let i = seen.at;
+  // The `[` of the array that may be a number array, and the values counted when the scan passed it.
+  let cand = seen.cand;
+  let candValues = seen.candValues;
+  // How far past its bracket a candidate must go before it is read: as far as `LONG_REPLY.numbers` elements reach.
+  const reach = 2 * LONG_REPLY.numbers - 2;
   for (; i < stop; i++) {
     const c = text.charCodeAt(i);
     const k = c < 128 ? SHAPE_BYTE[c]! : 0;
@@ -237,36 +373,48 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
         end = textStringEnd(text, start, seen);
       }
       if (seen.read && seen.pieces.length === pieces && pieces < 2 * MAX_PIECES && end - start >= LONG_REPLY.string) {
-        // Only one with no backslash can be its own characters (`json.ts` checks for control characters). The next
-        // backslash is kept, and searched for again only once passed, so these searches cross the reply once.
-        if (seen.slash < start) seen.slash = text.indexOf("\\", start) >>> 0;
-        if (seen.slash > end && end < n) push(seen, i, end + 1, PLAIN_STRING);
+        // Perhaps its own characters: `json.ts` checks it holds no backslash or control character before slicing it.
+        if (end < n) push(seen, i, end + 1, PLAIN_STRING);
       }
       // Strings are crossed by search, not counted against the budget: move the stop on by what was crossed.
       if (stop < n) stop = Math.min(n, stop + (end - i));
       i = end;
+      cand = -1;
     } else if (k === OPEN) {
       if (++depth > maxDepth || ++values > maxValues) return OVER;
-      if (c !== 0x5b || !seen.read || seen.pieces.length >= 2 * MAX_PIECES) continue;
-      const end = readNumbers(text, i, maxValues - values);
+      // An array is a candidate number array: it is scanned as usual until it has gone on far enough to be worth
+      // reading, and any quote, bracket or brace on the way drops it (`readNumbers` checks what it starts with).
+      cand = c === 0x5b ? i : -1;
+      candValues = values;
+    } else if (k === CLOSE) {
+      depth--;
+      cand = -1;
+    } else {
+      if (++values > maxValues) return OVER;
+      if (cand < 0 || i - cand < reach || !seen.read || seen.pieces.length >= 2 * MAX_PIECES) continue;
+      // A candidate this long with nothing but numbers' characters, commas and spaces so far: read it whole from its
+      // bracket, counting its commas as the scan counts them; when it is not a number array, the scan goes on here.
+      const from = cand;
+      cand = -1;
+      const end = numberArrayAt(text, from, maxValues - candValues, seen);
       if (end === NOT_NUMBERS) continue;
       if (end === TOO_MANY) return OVER;
-      // The array's commas, as the scan counts them, and its closing bracket.
       const read = numbersRead;
       clearNumbers();
-      values += read.length - 1;
+      values = candValues + read.length - 1;
       depth--;
       if (read.length >= LONG_REPLY.numbers) {
-        push(seen, i, end + 1, read);
+        push(seen, from, end + 1, read);
         seen.inPieces += read.length;
       }
       if (stop < n) stop = Math.min(n, stop + (end - i));
       i = end;
-    } else if (k === CLOSE) depth--;
-    else if (++values > maxValues) return OVER;
+    }
   }
   seen.depth = depth;
   seen.values = values;
+  seen.cand = cand;
+  seen.candValues = candValues;
   if (i < n) {
     seen.at = i;
     seen.budget = 0;
@@ -274,6 +422,28 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
   }
   seen.at = n;
   return WITHIN;
+}
+
+/**
+ * `readNumbers` at the `[` at `open`, asked only of a candidate that has gone on far enough to be worth reading
+ * (D1902's review: a call for every `[` before a digit cost a `[[1,2,3],...]` matrix 2.7-2.9 times main's scan), and
+ * only when the next `]` (where a number array closes) is far enough for `LONG_REPLY.numbers` elements and no quote
+ * comes before it (a string is not a number). The next `]` and quote are kept and searched for again only once the
+ * scan has passed them, so these searches cross the reply once, however deep its arrays nest. Where more elements
+ * could fit than the room left, the commas are counted first (`commasIn`), so a flood is refused before any of its
+ * numbers is kept, and an array that fits is made its exact length at once.
+ */
+function numberArrayAt(text: string, open: number, room: number, seen: TextShape): number {
+  if (seen.close < open) seen.close = text.indexOf("]", open) >>> 0;
+  const close = seen.close;
+  if (close >= text.length || close - open < 2 * LONG_REPLY.numbers - 1) return NOT_NUMBERS;
+  if (seen.quote < open) seen.quote = text.indexOf('"', open) >>> 0;
+  if (seen.quote < close) return NOT_NUMBERS;
+  // k elements take at least 2k - 1 characters between the brackets, and k - 1 commas.
+  if ((close - open) >> 1 <= room) return readNumbers(text, open, room);
+  const commas = commasIn(text, open + 1, close, room);
+  if (commas === -1) return TOO_MANY;
+  return readNumbers(text, open, room, commas + 1);
 }
 
 function push(seen: TextShape, from: number, to: number, value: unknown): void {
@@ -330,7 +500,8 @@ function textStringEnd(text: string, start: number, seen: TextShape): number {
 function readLongString(text: string, start: number, at: number, seen: TextShape, dense: boolean): number {
   seen.guess = false;
   const end = guessEnd(text, at);
-  if (end < 0) return -1;
+  // A string past 4 MiB is left in the parse: reading it apart held a second copy of it at the peak (D1900's review).
+  if (end < 0 || end - start > UNESCAPE_MOST) return -1;
   let value: string | undefined;
   if (dense) value = unescapeText(text, start, end);
   if (value === undefined) {

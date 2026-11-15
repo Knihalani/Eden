@@ -9,13 +9,22 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { parseJsonBytes, parseJsonBytesWithin, parseJsonText, parseJsonTextWithin } from "./json";
-import { NOT_NUMBERS, NUMBER_REGION, numbersRead, readNumbers, TOO_MANY, unescapeText } from "./readers";
+import {
+  NOT_NUMBERS,
+  NUMBER_REGION,
+  numbersRead,
+  readNumbers,
+  scratchIsClear,
+  TOO_MANY,
+  unescapeText,
+} from "./readers";
 import { bodyShapeWithin, LONG_REPLY, newTextShape, PLAIN_STRING, scanText, WITHIN } from "./shape";
 
 const DEFAULTS = { ...LONG_REPLY };
 afterEach(() => {
   Object.assign(LONG_REPLY, DEFAULTS);
   NUMBER_REGION.first = 512;
+  NUMBER_REGION.most = 32 * 1024;
 });
 const SMALL = { body: 24, string: 12, numbers: 3, guessAfter: 8, tailSteps: 48, steps: 6 };
 
@@ -222,6 +231,7 @@ describe("the long-reply path against the plain path", () => {
   test("text: 70,000 seeded bodies, small thresholds and bounds, the same answer", () => {
     Object.assign(LONG_REPLY, SMALL);
     NUMBER_REGION.first = 2;
+    NUMBER_REGION.most = 16;
     const r = rng(1900);
     let differ = 0;
     let refused = 0;
@@ -267,7 +277,9 @@ describe("the long-reply path against the plain path", () => {
       Object.assign(LONG_REPLY, i % 4 === 0 ? DEFAULTS : SMALL);
       const bytes = mangle(r, encoder.encode(body(r)));
       const d = 2 + Math.floor(r() * 12);
-      const v = 4 + Math.floor(r() * 120);
+      // Half the bounds leave room for twice the body's length in values: the byte scan that stops (D1908) runs on
+      // those, the plain byte scan on the rest.
+      const v = r() < 0.5 ? 4 + Math.floor(r() * 120) : Math.ceil(bytes.length / 2) + Math.floor(r() * 120);
       if (!same(parseJsonBytesWithin(bytes, d, v), plainBytes(bytes, d, v))) differ++;
     }
     expect(differ).toBe(0);
@@ -297,6 +309,9 @@ describe("the long-reply path against the plain path", () => {
       bodies.push(JSON.stringify({ result: { content: [{ text: t }], structuredContent: { nums } }, id: 1 }));
     }
     bodies.push(JSON.stringify({ result: { structuredContent: { nums } }, id: 1 }));
+    // A depth bomb, or too many values, after a number array the byte scan stops at.
+    bodies.push(`{"nums":${JSON.stringify(nums)},"b":${"[".repeat(1_100)}1${"]".repeat(1_100)}}`);
+    bodies.push(`{"nums":${JSON.stringify(nums)},"b":[${"[],".repeat(505_000)}1]}`);
     // A depth bomb after a long string, and inside the reading's reach.
     bodies.push(`{"a":${JSON.stringify(line.repeat(2_000))},"b":${"[".repeat(2_000)}${"]".repeat(2_000)}}`);
     bodies.push(`{"a":${JSON.stringify(rows)},"b":${"[".repeat(1_100)}1${"]".repeat(1_100)}}`);
@@ -325,7 +340,7 @@ describe("the long-reply path stays linear", () => {
       // Each level's numbers run to the next level's bracket: a reader that encoded up to the first `]` would read
       // the rest of the reply again at every level.
       `${`[${run}`.repeat(1_000)}1${"]".repeat(1_000)}`,
-      // 500 long strings and no backslash anywhere: each search for one must not cross the reply again.
+      // 500 long strings and no backslash anywhere: each is checked for one once, when spliced.
       JSON.stringify(Array.from({ length: 500 }, () => "x".repeat(33_000))),
       JSON.stringify(Array.from({ length: 200 }, () => 'a "b" c\n'.repeat(5_000))),
     ];
@@ -338,6 +353,64 @@ describe("the long-reply path stays linear", () => {
       expect(ms).toBeLessThan(1_500);
     }
   });
+
+  /** Median CPU ms of `f` over runs taken in turn with `g`'s, so load hits both alike. */
+  function medians(f: () => unknown, g: () => unknown, runs: number): [number, number] {
+    const a: number[] = [];
+    const b: number[] = [];
+    for (let k = 0; k < runs; k++) {
+      let t = cpuMs();
+      f();
+      a.push(cpuMs() - t);
+      t = cpuMs();
+      g();
+      b.push(cpuMs() - t);
+    }
+    const mid = (x: number[]) => x.sort((p, q) => p - q)[x.length >> 1]!;
+    return [mid(a), mid(b)];
+  }
+
+  test("short number arrays cost what the plain path costs (D1900's review: a reader call for each was 2.7-4x)", () => {
+    const shapes = [
+      JSON.stringify({ result: Array.from({ length: 60_000 }, (_, i) => [i % 100, 2, 3]) }),
+      `[${"[1],".repeat(150_000)}[1]]`,
+    ];
+    for (const text of shapes) {
+      const plain = () => {
+        LONG_REPLY.body = Infinity;
+        parseJsonText(text);
+        LONG_REPLY.body = DEFAULTS.body;
+      };
+      for (let k = 0; k < 3; k++) [parseJsonText(text), plain()];
+      const [long, short] = medians(() => parseJsonText(text), plain, 9);
+      // About 1.0 here; 2.7-4 with a reader call for every `[` before a digit.
+      expect(long).toBeLessThan(short * 1.5 + 2);
+    }
+  });
+
+  test("a refused number flood on the bytes path costs what the byte scan costs, and is never decoded", () => {
+    const flood = encoder.encode(`[${"1,".repeat(2_000_000)}1]`);
+    expect(parseJsonBytes(flood)).toBeUndefined();
+    for (let k = 0; k < 2; k++) bodyShapeWithin(flood, 1_008, 1_010_000);
+    const [ours, scan] = medians(
+      () => parseJsonBytes(flood),
+      () => bodyShapeWithin(flood, 1_008, 1_010_000),
+      7,
+    );
+    // About 1.0; 9.5x when the body was decoded and read as text first.
+    expect(ours).toBeLessThan(scan * 1.5 + 2);
+  });
+
+  test("no reply's text stays in the readers' buffers after the call", () => {
+    const nums = JSON.stringify({ r: Array.from({ length: 5_000 }, (_, i) => i * 1.5) });
+    const dense = JSON.stringify({ t: '{"k":"v","n":[1,2]}\n'.repeat(5_000) });
+    for (const text of [nums, dense, `${nums.slice(0, -1)},"x":${dense}}`]) {
+      expect(parseJsonText(text)).toEqual(JSON.parse(text));
+      expect(scratchIsClear()).toBe(true);
+      expect(parseJsonBytes(encoder.encode(text))).toEqual(JSON.parse(text));
+      expect(scratchIsClear()).toBe(true);
+    }
+  });
 });
 
 describe("the readers against JSON.parse", () => {
@@ -346,6 +419,7 @@ describe("the readers against JSON.parse", () => {
     let read = 0;
     for (let i = 0; i < 30_000; i++) {
       NUMBER_REGION.first = 1 + Math.floor(r() * 24);
+      NUMBER_REGION.most = NUMBER_REGION.first * (1 + Math.floor(r() * 4));
       const text = numberArray(r);
       const end = readNumbers(text, 0, 1_000);
       const want = tryParse(text);
