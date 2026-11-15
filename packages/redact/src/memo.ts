@@ -98,3 +98,59 @@ export class Answers<V> {
     this.lastValue = undefined;
   }
 }
+
+/**
+ * The answers for the last `size` keys asked, within one entry point, found by comparison (no Map: hashing a key cost
+ * more than the answer on short values). For answers several passes ask about the same few values in one call: the
+ * keyword rules, the assignment pass and the composer each judge a value as code or not (D1850).
+ */
+export class Recent<V> {
+  private readonly keys: (string | undefined)[];
+  private readonly values: (V | undefined)[];
+  private next = 0;
+  private holding = false;
+  /** The slot `has` found last, for `value`. */
+  private found = 0;
+
+  constructor(size: number) {
+    this.keys = new Array<string | undefined>(size).fill(undefined);
+    this.values = new Array<V | undefined>(size).fill(undefined);
+  }
+
+  /** Whether `key` is one of the last keys set in this call (never outside an entry point); `value` is its answer. */
+  has(key: string): boolean {
+    if (!this.holding) return false;
+    for (let i = 0; i < this.keys.length; i++) {
+      if (this.keys[i] === key) {
+        this.found = i;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** The answer for the key `has` found last. */
+  get value(): V {
+    return this.values[this.found] as V;
+  }
+
+  /** Keeps `value` for `key` until the entry point returns (nothing outside one); returns `value`. */
+  set(key: string, value: V): V {
+    if (depth === 0) return value;
+    this.keys[this.next] = key;
+    this.values[this.next] = value;
+    this.next = (this.next + 1) % this.keys.length;
+    if (!this.holding) {
+      this.holding = true;
+      live.push(this);
+    }
+    return value;
+  }
+
+  clear(): void {
+    this.holding = false;
+    this.keys.fill(undefined);
+    this.values.fill(undefined);
+    this.next = 0;
+  }
+}
