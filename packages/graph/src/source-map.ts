@@ -737,9 +737,10 @@ export function migrateLayout(db: Database, options: MigrateOptions = {}): Migra
     const short = roomFor(db, pages * pragma(db, "main.page_size") + walBytes(db), free);
     if (short) return kept(log, db, short);
     const started = performance.now();
-    const inTime = (at: string) => {
+    // `share` below 1 leaves room for what follows the check: the commit of a large file takes 200-300 ms (the review).
+    const inTime = (at: string, share = 1) => {
       const ms = performance.now() - started;
-      if (ms > budgetMs)
+      if (ms > budgetMs * share)
         throw new Error(`over the ${budgetMs} ms a move may take at open (${Math.round(ms)} ms, ${at})`);
     };
     shortWait();
@@ -769,7 +770,7 @@ export function migrateLayout(db: Database, options: MigrateOptions = {}): Migra
         step(`${t}:rename`);
         db.exec(`ALTER TABLE ${t}_new RENAME TO ${t}`);
       }
-      inTime("before the commit");
+      inTime("before the commit", 0.9);
       step("commit");
       db.exec("COMMIT");
     } catch (e) {
@@ -803,6 +804,9 @@ export function migrateLayout(db: Database, options: MigrateOptions = {}): Migra
     );
     return { status: "migrated", rows };
   } catch (e) {
+    // A rolled-back move leaves its copy in the WAL (48 MB on a 121 MB file, measured): truncated here too, or it
+    // stays that size for the connection's life.
+    truncateWal(db);
     return kept(log, db, message(e));
   } finally {
     if (busy !== undefined) {
@@ -817,38 +821,38 @@ export function migrateLayout(db: Database, options: MigrateOptions = {}): Migra
 
 /**
  * Copies a rowid table's rows into `<t>_new` in key order, `MIGRATE_BATCH_ROWS` at a time: each batch starts past the
- * largest key copied so far (read back from the new table's B-tree, integers exact), and `inTime` runs between
+ * largest key copied so far (read from the new table's B-tree in SQL), and `inTime` runs between
  * batches. Returns the rows copied; the caller checks them against the table's count.
  */
 function copyInKeyOrder(db: Database, t: Table, inTime: (at: string) => void): number {
   const cols = COLUMNS[t].join(", ");
   const keys = COLUMNS[t].slice(0, KEY_COLUMNS[t]);
   const key = keys.join(", ");
-  const marks = keys.map(() => "?").join(", ");
   const insert = `INSERT INTO ${t}_new (${cols}) SELECT ${cols} FROM ${t}`;
   const limit = `ORDER BY ${key} LIMIT ${MIGRATE_BATCH_ROWS}`;
   const first = db.prepare(`${insert} ${limit}`);
-  const next = db.prepare(`${insert} WHERE (${key}) > (${marks}) ${limit}`);
-  const last = db
-    .prepare(`SELECT ${key} FROM ${t}_new ORDER BY ${keys.map((k) => `${k} DESC`).join(", ")} LIMIT 1`)
-    .safeIntegers(true);
+  // The last key copied is read in SQL, never round-tripped through JS: text that is not valid UTF-8 would come back
+  // as U+FFFD and skip rows (the count check then kept the file at every open, the review's probe).
+  const lastKey = `SELECT ${key} FROM ${t}_new ORDER BY ${keys.map((k) => `${k} DESC`).join(", ")} LIMIT 1`;
+  const next = db.prepare(`${insert} WHERE (${key}) > (${lastKey}) ${limit}`);
   try {
     let copied = first.run().changes;
     let total = copied;
     while (copied === MIGRATE_BATCH_ROWS) {
       inTime(`${t}:copy`);
-      copied = next.run(...(last.values()[0] as (string | number | bigint)[])).changes;
+      copied = next.run().changes;
       total += copied;
     }
     return total;
   } finally {
-    for (const s of [first, next, last]) s.finalize();
+    for (const s of [first, next]) s.finalize();
   }
 }
 
 /**
- * Finishes an earlier move whose VACUUM was skipped or failed (D1960): a file with no rowid table whose free pages
- * are at least `LOOSE_SHARE` of it is compacted, if its live pages are at most half `maxPages` and the disk has room.
+ * Finishes an earlier move whose VACUUM was skipped or failed (D1960), and compacts any other WITHOUT ROWID file
+ * grown loose (a new file after many `forget`s): a file with no rowid table whose free pages are at least
+ * `LOOSE_SHARE` of it is compacted, if its live pages are at most half `maxPages` and the disk has room.
  * Anything else is `current`, untouched; a file it cannot compact now (no room, locked, full) is `kept`, one line.
  */
 function compactLoose(

@@ -48,9 +48,10 @@ oracle, `src/source-map.reference.ts`; `src/migrate.ts`, the operator's command 
   read-only, full, damaged, other columns, an index, trigger or view made outside Eden on its tables, less free disk
   than `ROOM` asks, over `MIGRATE_MAX_PAGES`, past `MIGRATE_BUDGET_MS`) keeps its rowid tables with one log line and
   works unchanged, so no statement may depend on a rowid or on which layout a file has. A moved file whose VACUUM was
-  skipped or failed is compacted at a later open (`compactLoose`). The budget is what keeps a router's children,
-  which all move at once, inside their 30 s start deadline (D172): do not raise it, or add work to the open, without
-  measuring eight at once. A new table or column joins `TABLES`, `TABLE_SQL`, `COLUMNS` and `KEY_COLUMNS` (the move
+  skipped or failed, or any WITHOUT ROWID file grown loose, is compacted at a later open (`compactLoose`, at most half
+  the page cap live). A rolled-back move truncates its WAL; the batch's last key is read in SQL, never through JS.
+  The budget is what keeps a router's children, which all move at once, inside their 30 s start deadline (D172): do
+  not raise it, or add work to the open, without measuring eight at once. A new table or column joins `TABLES`, `TABLE_SQL`, `COLUMNS` and `KEY_COLUMNS` (the move
   refuses a table whose columns differ, so an added column must also teach it the old set). Never move a file by
   renaming another over it: a second connection (mcp-stdio for the same user, an older process) would keep writing
   the old inode. `source-map-migrate.test.ts` (in the test tail, D811: it times a lock wait and kills children)
