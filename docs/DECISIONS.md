@@ -829,3 +829,4 @@ trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|
+| D1926 (zstd packed text) | `CacheLimits.packZstd` | this session (claude/router-codec) | 2026-11-15 | Pre-registered: promote if ingest process CPU paired ≤ 0.92 (40 × 500 shipped, `--world`) and live heap a user ≤ +3% (users.bench `--world`), else delete. |

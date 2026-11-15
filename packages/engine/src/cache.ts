@@ -39,7 +39,7 @@ import type { ListReuse } from "@eden/sources";
 import { dayKeys } from "./days";
 import { dayFactsClass, dayFactsOf, type DayFacts } from "./day-facts";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
-import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
+import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText, type PackTag } from "./packed-text";
 import { clearParts } from "./render";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
@@ -282,7 +282,7 @@ interface FrozenBody {
  */
 interface FastEntry {
   i: Omit<ContextItem, "text"> | ContextItem;
-  p?: [number, 0 | 1];
+  p?: [number, PackTag];
   d: number;
   f: number;
   m: number;
@@ -568,6 +568,10 @@ export interface CacheLimits {
    */
   packText: boolean;
   /**
+   * Trial (D1926): pack with zstd level 1 instead of DEFLATE level 6 (`packItem`'s `zstd`). Off by default.
+   */
+  packZstd: boolean;
+  /**
    * A user neither read nor written for about this long (ms) is frozen at an expiry tick (`FrozenUser`, D325): held as
    * one compressed blob and thawed, exactly, on next use. Counted in expiry ticks (`expireEveryMs`), at least two: a
    * user last seen in tick k freezes at tick k + ceil(freezeIdleMs / expireEveryMs), so 29-30 minutes after their last
@@ -603,6 +607,7 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   expireEveryMs: 60_000,
   releaseTerms: true,
   packText: true,
+  packZstd: false,
   freezeIdleMs: 30 * 60_000,
   warmIdleMs: 2 * 60_000,
   idleCompact: true,
@@ -1187,7 +1192,11 @@ export class ItemCache {
         // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
         // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
         const fresh =
-          same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
+          same && sameFields(old.item, item)
+            ? old.item
+            : this.limits.packText
+              ? repackLike(item, old.item, this.limits.packZstd)
+              : item;
         old.item = fresh;
         tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
@@ -1205,7 +1214,7 @@ export class ItemCache {
       tally(u, item, 1);
       const doc = this.index(u, item);
       // The copy held: with `packText`, its text deflated (the tallies and index above read the plain one).
-      const stored = this.limits.packText ? packItem(item) : item;
+      const stored = this.limits.packText ? packItem(item, this.limits.packZstd) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
         item: stored,
@@ -2089,7 +2098,7 @@ export class ItemCache {
         q: e.seq,
       };
       if (packed) {
-        rec.p = [packed.bytes.byteLength, packed.latin1 ? 1 : 0];
+        rec.p = [packed.bytes.byteLength, packed.tag];
         texts.push(packed.bytes);
         textBytes += packed.bytes.byteLength;
       }
@@ -2228,7 +2237,7 @@ export class ItemCache {
       let item: ContextItem;
       if (r.p) {
         // A view, not a copy: `packedFrom` copies the bytes into the item's own string (D998).
-        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1] === 1);
+        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1]);
         t += r.p[0];
       } else item = r.i as ContextItem;
       const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
@@ -2395,7 +2404,7 @@ export class ItemCache {
       plain[j] = item;
       const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
       const entry: Entry = {
-        item: this.limits.packText ? packItem(item) : item,
+        item: this.limits.packText ? packItem(item, this.limits.packZstd) : item,
         fetchedAt: r.f,
         // Another process's marks mean nothing here: 0 is older than any signal this process takes (D425).
         readMark: f.fromDisk ? 0 : r.m,
