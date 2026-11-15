@@ -624,9 +624,9 @@ moved on by wall time since), so a simulation on an injected clock expires on it
 only through a `WeakRef`, so a cache nobody closes (labs build one per task) is still collected, and its timer stops.
 A user's vocabulary releases each term no live item holds once the index compacts it away (`releaseTerms`, on in the
 default, D112), so its term ids follow the live items without a rebuild.
-Each cached item's text is held deflated (`CacheLimits.packText`, on by default, D188; `packed-text.ts`): the stored
-copy's `text` is a getter that decodes it, with a 256-entry memo of recent decodes that `forget` and `removeItems`
-clear. Index and tallies are built from the plain text before it is packed; a refresh with the same words
+Each cached item's text is held compressed (`CacheLimits.packText`, on by default, D188; `packed-text.ts`; a zstd
+level 1 frame since D1926, DEFLATE before): the stored copy's `text` is a getter that decodes it, with a 256-entry
+memo of recent decodes that `forget` and `removeItems` clear. Index and tallies are built from the plain text before it is packed; a refresh with the same words
 keeps the held bytes. Sim-world text, where one arrow or dash makes a whole JS string two bytes a character, costs
 about 1.6x less heap per synced user, for 1.2-1.3x the backfill CPU.
 
@@ -643,13 +643,13 @@ same scheduler, so a burst of returning users queues instead of stalling every o
 docs/research/a14-scale-users.md.
 
 Two frozen forms (D860-D862, docs/research/p6-scale.md). A user idle two minutes (two one-minute expiry ticks) is
-frozen _warm_: the blob keeps each item's deflated text bytes as they are and the user's vocabulary and index as
+frozen _warm_: the blob keeps each item's compressed text bytes as they are and the user's vocabulary and index as
 arrays (`Vocab.snapshot`, `SparseIndex.snapshot` after `compact`, postings as varint gaps), so a thaw copies instead
-of tokenizing, indexing and deflating every item (10-20 ms at 3,000 items against 150-300). Per-item deflate shares
-no words across items, so a warm blob is about twice a compact one on prose; a user still idle at `freezeIdleMs` (30
-minutes) is thawed and frozen again _compact_, the one zstd stream above. A live user idle through a whole tick
-interval has its index compacted first (D861: the delta tier merged and its spare room let go, 0.5-1 MB at the
-cap).
+of tokenizing, indexing and compressing every item (10-20 ms at 3,000 items against 150-300). Per-item compression
+shares no words across items, so a warm blob is about twice a compact one on prose; a user still idle at
+`freezeIdleMs` (30 minutes) is thawed and frozen again _compact_, the one zstd stream above. A live user idle
+through a whole tick interval has its index compacted first (D861: the delta tier merged and its spare room let go,
+0.5-1 MB at the cap).
 
 Frozen users are persisted by default (D991; D425-D427 built it opt-in, `persist.ts`; the operator's
 `EDEN_PERSIST_KEY` is required unless `EDEN_PERSIST=off`, and the directory is `EDEN_PERSIST_FROZEN_DIR`, default

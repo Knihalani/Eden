@@ -412,7 +412,9 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   copy's codec and encoding are its getter's `PackTag` (bit 0 Latin-1, bit 1 zstd; the frame's 4-byte magic is not
   held), one decode memo map a tag, and a warm blob's `FastEntry.p[1]`: a new codec takes a new bit and bumps
   `PERSIST_FORMAT`, and the old tags must keep reading (a format-6 warm blob holds DEFLATE, tags 0 and 1;
-  `persist.test.ts` rewrites a blob so and reads it back). zlib levels 1-9 and zstd 3 and 5 were measured beside it
+  `persist.test.ts` rewrites a blob so and reads it back). `packedFrom` refuses any other tag (RangeError), and a
+  user read from disk whose thaw throws is dropped with their file (`thawHeld`, `freezes.discarded`), never left
+  frozen to throw on every request. zlib levels 1-9 and zstd 3 and 5 were measured beside it
   (docs/research/opt-round3.md): none a better trade.
 - **An equal re-put keeps the held object (D1722).** A lookup re-stores what it finds; a copy equal in words and
   details (`sameDetails`, `sameFields`) leaves `Entry.item` as it was, so per-object memos (`analyse`, `ownText`,
@@ -525,7 +527,7 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `warmIdleMs` (2 min; the expiry tick is a minute, `expireEveryMs`) is frozen warm (`fastFreezeSteps`): the "EDF2" blob holds each item's packed text bytes as they are
   (`packedOf`/`packedFrom`), the vocabulary's terms and the compacted index as arrays (`Vocab.snapshot`,
   `SparseIndex.snapshot`, postings and forward arena as varint gaps), so `fastThawSteps` copies instead of
-  tokenizing, indexing and deflating (10-20 ms at 3,000 items against 150-300). Doc numbers and term ids are the
+  tokenizing, indexing and compressing (10-20 ms at 3,000 items against 150-300). Doc numbers and term ids are the
   frozen user's own, so `Entry.doc` carries over: a change to how the index numbers docs must keep `snapshot` exact
   (`sparse-index-snapshot.test.ts`). A warm user still idle at `freezeIdleMs` is thawed and frozen again compact
   (`coldDue`, `laterJob`; a warm thaw for that is counted in `freezes.recompacted`, not `thawed`); `thawSteps` reads

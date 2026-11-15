@@ -188,8 +188,13 @@ export function withoutText(item: ContextItem): Omit<ContextItem, "text"> {
   return rest as Omit<ContextItem, "text">;
 }
 
-/** A packed item from `rest` and bytes `packedOf` gave (D860): the inverse of `withoutText` plus `packedOf`. */
+/**
+ * A packed item from `rest` and bytes `packedOf` gave (D860): the inverse of `withoutText` plus `packedOf`. Throws a
+ * `RangeError` for a tag that is not a `PackTag` (a blob that does not read as this build's: the thaw that read it
+ * fails, and `ItemCache` discards a blob from disk that fails so, D1926).
+ */
 export function packedFrom(rest: Omit<ContextItem, "text">, bytes: Uint8Array, tag: PackTag): ContextItem {
+  if (TEXT[tag] === undefined || !Number.isInteger(tag)) throw new RangeError(`not a packed-text tag: ${String(tag)}`);
   const item = { ...rest };
   Object.defineProperty(item, PACKED, { value: heldOf(bytes), enumerable: false });
   Object.defineProperty(item, "text", TEXT[tag]!);
