@@ -464,14 +464,35 @@ function partiesOf(item: ContextItem): string[] {
 
 /** Counts an item's people in or out of the user's tally (`selfOf`). */
 function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
-  if (u.addresses !== undefined) {
-    for (const a of addressesOf(item.text)) {
+  tallyRead(u, u.addresses !== undefined ? addressesOf(item.text) : undefined, partiesOf(item), by);
+}
+
+/**
+ * `tally(u, item, -1)` then `tally(u, item, 1)`: an equal re-put keeps the held object (D1722), whose people are
+ * counted out and in again. Its addresses and names are read once, not twice (D1936), and applied in the same order.
+ */
+function retally(u: UserCache, item: ContextItem): void {
+  const addresses = u.addresses !== undefined ? addressesOf(item.text) : undefined;
+  const names = partiesOf(item);
+  tallyRead(u, addresses, names, -1);
+  tallyRead(u, addresses, names, 1);
+}
+
+/** `tally` and `retally`, for tests (`opt-round4.test.ts`): they touch only a user's people fields. */
+export const tallies = { tally, retally } as unknown as {
+  tally(u: object, item: ContextItem, by: 1 | -1): void;
+  retally(u: object, item: ContextItem): void;
+};
+
+/** `tally` with the item's addresses (undefined when the user keeps none) and names read. */
+function tallyRead(u: UserCache, addresses: Set<string> | undefined, names: string[], by: 1 | -1): void {
+  if (u.addresses !== undefined && addresses !== undefined) {
+    for (const a of addresses) {
       const c = (u.addresses.get(a) ?? 0) + by;
       if (c > 0) u.addresses.set(a, c);
       else u.addresses.delete(a);
     }
   }
-  const names = partiesOf(item);
   if (names.length === 0) return;
   u.partied += by;
   for (const n of names) {
@@ -1183,15 +1204,20 @@ export class ItemCache {
         // people are counted again: its meta may name others.
         const same = sameDetails(old.item, item);
         if (!same) u.revision = ++this.revisions;
-        tally(u, old.item, -1);
-        tallyOffset(u, old.item, -1);
         // The new copy's fields, its text still packed (the held bytes reused: same words, no second compression). A
         // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
         // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
         const fresh =
           same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
+        // The people and the offset counted out for the old copy and in for the new (the tallies are apart: neither
+        // reads the other's state). The same object held is read once for both (`retally`, D1936).
+        if (fresh === old.item) retally(u, fresh);
+        else {
+          tally(u, old.item, -1);
+          tally(u, fresh, 1);
+        }
+        tallyOffset(u, old.item, -1);
         old.item = fresh;
-        tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
         old.raw = from; // What this copy was redacted from, if a listing said; a lookup's copy ends the reuse.
         old.fetchedAt = now;
