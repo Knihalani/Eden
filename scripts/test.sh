@@ -13,9 +13,10 @@
 # loading: they wait on real time (a deadline, a sleeping connector, a child process) and assert on it, so the CPU
 # contention of the main run made them flaky, and in the main run they held a worker while doing nothing. The main run
 # starts the slowest files first (`bun test --timings`, from the last run's durations, kept beside the other caches
-# under the git common dir: an order, never a result). In the main run a test gets `TEST_TIMEOUT_MS` (20 s) unless it
+# under the git common dir: an order, never a result). In the main run a test gets `TEST_TIMEOUT_MS` (60 s) unless it
 # names its own: a per-test limit is there to catch a hang, and Bun's 5 s default failed CPU-bound tests under
-# parallel load (weak-points-1111.md R1). The tail keeps Bun's 5 s (`TEST_TAIL_TIMEOUT_MS`): its deadline tests that
+# parallel load (weak-points-1111.md R1), as 20 s did at load 18-36 (long-reply.test.ts's 3 s fuzz tests at 21-32 s,
+# D1945). The tail keeps Bun's 5 s (`TEST_TAIL_TIMEOUT_MS`): its deadline tests that
 # assert nothing about time relied on it to fail a deadline not honoured, and it runs unloaded. The run ends with the
 # slowest files and every test over 3.5 s (scripts/test-report.ts), so a test that grows slow still shows. Arguments
 # for `bun test` (a name filter, `-t X`) run everything in one invocation: a filter that matches tests of only one part
@@ -109,7 +110,7 @@ run() {
     --reporter=junit "--reporter-outfile=$home/$1.xml" $files ${pass[@]+"${pass[@]}"} || status=$?
 }
 cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
-run main "$main_tests" "$cores" "${TEST_TIMEOUT_MS:-20000}"
+run main "$main_tests" "$cores" "${TEST_TIMEOUT_MS:-60000}"
 [ -z "$tail_tests" ] || echo "── the tail (scripts/test-tail.txt): files that wait on real time, after the rest"
 run tail "$tail_tests" "${TEST_TAIL_JOBS:-8}" "${TEST_TAIL_TIMEOUT_MS:-5000}"
 bun scripts/test-report.ts "$home/main.xml" "$home/tail.xml" || true
