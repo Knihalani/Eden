@@ -339,6 +339,17 @@ once. Format 6 (D1888, frozen entries carry their date facts) reads format 5's f
 format 6's. Format 7 (D1926, a warm blob's packed texts may be zstd) reads format 6's; a build of format 6 deletes
 format 7's.
 
+**Source-map files made before D1936 are moved once (D1960).** The first start of a build with D1960 rewrites each
+older source-map file (`source-map.db`, `source-map.<i>.db`, mcp-stdio's per-user files) to the WITHOUT ROWID
+layout at open, before it serves: about half the file and half its later disk writes. It logs one line a file
+(`eden: source map … moved to the WITHOUT ROWID layout (D1960): N rows, compacted, T ms`); a real 7.5 MB file took
+123 ms and wrote about 14 MB once, and the move costs about 0.13 ms a 4 KiB page, so plan a few seconds at most. A
+file that cannot be moved (another process holding it, read-only, a full disk, damage) logs `keeps its rowid layout
+… it works as before` and is served as it was; the next start tries again. A file over 128 MiB is not moved at open
+(the same line, each start); to move it, stop the server and run `bun packages/graph/src/migrate.ts FILE` (from
+`/app` in the image; it holds the file for about 0.13 ms a page). A rollback to an older build reads and writes a
+moved file unchanged.
+
 ## 12. What was validated here, and what was not
 
 Validated on 2026-11-11 (x86-64 host): the image built for linux/arm64 under QEMU and ran (healthy, events 200, a

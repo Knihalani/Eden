@@ -1,6 +1,6 @@
 # Low-level round 4: the graph and search-index layer
 
-Decisions: D1935-D1938. A fourth low-level brief (2026-11-15): profile the graph and index layer (packages/graph's
+Decisions: D1935-D1938, and D1960 (a follow-up: files made before D1936 moved). A fourth low-level brief (2026-11-15): profile the graph and index layer (packages/graph's
 source map: SQLite statements, mentions, outcomes; the sparse index's build, freeze and thaw in
 `@eden/primitives` and the engine's cache) on real workloads, and cut what costs, with every answer unchanged to
 the order and the float. Other sessions held the engine's ask path, the sync sweep, the servers and the test
@@ -82,7 +82,78 @@ reads its layout.
 | the same: MB written / bytes an upsert | 1.99 / 408 | 1.57 [0.808] / 335 [0.840, 0.71-0.90] | 1.085 / 0.999 |
 
 Half the pages: the file on disk, the page cache a process holds for it, and an in-memory map's heap (every lab
-run). The write CPU did not move beyond the control (an upsert is about 2 µs either way; see "Tried").
+run). The write CPU did not move beyond the control (an upsert is about 2 µs either way; see "Tried"). A file made
+before kept its rowid tables until D1960 (below) moved it.
+
+### D1960: a file made before D1936 is moved once, at open
+
+D1936 left every existing file in the rowid layout forever. `migrateLayout` (source-map.ts) now runs in the map's
+constructor for every file: when `PRAGMA table_list` shows one of the three tables with a rowid and its columns are
+exactly the map's, one `BEGIN IMMEDIATE` transaction creates `<table>_new` WITHOUT ROWID, copies every row by named
+columns in key order (`ORDER BY` the key, which the old table's automatic index serves without a sort), checks the
+copy's count against a table scan of the old one (`NOT INDEXED`, so a damaged index cannot hide rows), drops the old
+table and renames the new one; the layout is read again under the lock, so a second process that moved the file
+first leaves nothing to do. Then `VACUUM` in its own transaction (the new tables were written past the old ones'
+pages, so the file is larger than before until it is rewritten) and `wal_checkpoint(TRUNCATE)`.
+
+Why this shape and not another:
+
+- **Inside the file, not a copy renamed over it.** `VACUUM INTO` a temp file and an atomic rename measured about the
+  same (0.33 s against 0.30-0.31 s at 100k rows, each after the same copy) but is unsafe with another connection
+  open: a second mcp-stdio for the same user, an older process during a rolling upgrade, or a reader keeps the old
+  inode and its WAL, and its next writes go into a deleted file. In one transaction, every other connection keeps
+  its snapshot until it ends and re-prepares its statements on the new schema at its next step (checked: a reader in
+  an open transaction across the move and the VACUUM saw its rows unchanged, then the new table).
+- **Key order.** The copy read in rowid order (insertion order, random keys) built the new B-tree at random and
+  spilled the page cache into the WAL again and again: 117 MB written at 100k rows against 12 MB in key order, at the
+  same time.
+- **The VACUUM.** Without it the moved file is 1.5x the old one (14.6 against 9.8 MB at 100k rows) until later
+  writes fill the free pages; with it 0.49x (4.8 MB), for +0.04 s and +14 MB written once at 100k rows.
+- **At open, not in `rehomeSourceMaps`.** The open is the one place every file passes: one process and mcp-stdio
+  call no rehome when nothing is stranded, and a router's N children move their own files in parallel. The rehome's
+  targets are moved too (`mergeInto` opens each with a `SourceMap` first), before the stranded rows are merged in.
+- **Fail open, bounded.** Any failure (the write lock held past `MIGRATE_BUSY_MS`, 250 ms; a read-only connection; a
+  full disk; a damaged page; columns that are not the map's, as an October 27 file's `last_ref`) rolls back, logs one
+  line and leaves the file as it was, in its old layout, which every statement still reads and writes. A file over
+  `MIGRATE_MAX_PAGES` (32,768 pages, 128 MiB) is not moved at open: the move costs about 0.13 ms a page on this
+  VM, so the cap bounds an open near 4.5 s, far inside a router child's 30 s start deadline (D172);
+  `bun packages/graph/src/migrate.ts FILE` moves a larger one with the server stopped. Nothing is served during the
+  move: one process and a router child open the map before they listen or report their port (a router listens once
+  every child has), mcp-stdio before it reads stdin.
+- **Rollback.** The map before D1936 (the reference) reads and writes a moved file unchanged (the test runs one
+  across the move), so a rollback needs nothing.
+
+Measured on a real file: `users.bench.ts 40 500` run on main's map (`source-map.reference.ts`) left 91,440 mention
+rows in 7,476 KB. Seven interleaved rounds of each open (scratch script, load average 10-13):
+
+| Open | ms, median (min-max) | Written once (wchar / write_bytes) | File after |
+| --- | ---: | ---: | ---: |
+| main's map, the old file | 0.39 (0.32-11.9) | 0 / 32 KB | 7,476 KB |
+| the new map, the old file (moves it) | 123 (107-160) | 14.1 MB / 10.7 MB | 3,480 KB (0.47x) |
+| the new map, a moved file | 0.57 (0.55-0.75) | 0 / 32 KB | 3,480 KB |
+
+The same 30 batches of 2,000 mention upserts (keys drawn from the file's rows, a fifth of them new) then wrote
+363.5-365.3 MB on the old file (main's map) and 169.3-174.1 MB on the moved one (the new map), 0.47x, 4 rounds each:
+the move's one-time 11-14 MB is repaid within the first batches. Synthetic old files (90% mentions; 5 repetitions):
+1,000 rows 15-20 ms, 10,000 rows 28-33 ms, 100,000 rows 0.30-0.31 s, the medians of two runs (2,456 pages; 26 MB written), 1,000,000 rows
+3.2-3.6 s (25,084 pages, 100 MB → 48.6 MB; 265 MB written) at a load average of 14.
+
+Exactness and safety (`source-map-migrate.test.ts`, 4-8 s alone at a load average of 18-21): old-layout files of four sizes (a random stream's rows,
+and 50, 2,000 and 20,000 rows more, with edge values: 2^53, a real in an integer column, empty and astral text) move
+with every row equal (each value `quote`d, so 2 and 2.0 differ, in key order) and the same unordered reads, then
+600 random calls answer as main's map on a copy. An error thrown before each of the 15 steps, a SIGKILL of a child
+process at each step, and two SIGKILLs sent as the copy and the VACUUM of a 60,000-row file start each leave
+`integrity_check` ok, one layout and every row, and the next open moves the file. Under a heavy load the parent's
+signal can land after the child has finished: with the test file run six at a time, 5 of 12 runs met it before
+the test allowed it (it now checks the file the same way). A file whose write lock another
+connection holds waits 250 ms, stays old and answers as main's map through 500 calls; read-only, full
+(`max_page_count`), damaged, over the cap and other-columns files are kept with one line and no throw; an old map
+and a reader in a transaction open across the move answer as on the copy; a new or moved file is left alone byte for
+byte, with no log line. A copy that skipped a row (a temp trigger ignoring one insert, standing in for an index
+missing a row) fails the count and rolls back; a file another connection moved between the first look and the lock
+is `current`, with nothing done. Eight mutations of `migrateLayout` each fail the file: no transaction (4 tests), no
+VACUUM (1), a row dropped from the copy (8), no count (1), no second look under the lock (1), no column check (1), no
+cap (1), no short busy wait (1).
 
 ### D1937: `normalizeEntity` reads plain names in one pass
 

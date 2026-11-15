@@ -842,3 +842,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1950 | 2026-11-15 | Adopted (same brief): `assess` reads only the statements that can move its verdict. | adopted |
 | D1951 | 2026-11-15 | Adopted (same brief): an equal re-put tallies the held copy's people out and in from one reading. | adopted |
 | D1952 | 2026-11-15 | Finding (measured beside D1930-D1934, D1950 and D1951): the ask path's end to end, and what was left. | finding |
+| D1960 | 2026-11-15 | Adopted (closes D1936's open item; every row, value and answer unchanged): a source-map file made before D1936 is moved to the WITHOUT… | adopted |
