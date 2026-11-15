@@ -218,23 +218,26 @@ function cappedInput(input: unknown, args: unknown): unknown {
 }
 
 /**
- * SHA-256 of a string's UTF-8 as hex. Bun's own `Bun.SHA256` gives `createHash`'s digest at about twice its speed
- * (4.3-4.9 against 7.0-8.9 µs a 6 KB message, D1940); elsewhere `node:crypto`.
+ * SHA-256 of a string's UTF-8, its 32 bytes as a 32-character Latin-1 string: the same digest as hex, at half the
+ * characters, so a conversation's `seen` keys take 24% less heap (32.7 → 24.9 KB a 241-message conversation, D1940).
+ * Bun's own `Bun.SHA256` gives `createHash`'s digest at about twice its speed (4.3-4.9 against 7.0-8.9 µs a 6 KB
+ * message); elsewhere `node:crypto`. The digests are keys only, compared for equality and never shown.
  */
-const sha256Hex: (text: string) => string =
+const sha256Key: (text: string) => string =
   typeof Bun !== "undefined"
-    ? (text) => Bun.SHA256.hash(text, "hex")
-    : (text) => createHash("sha256").update(text).digest("hex");
+    ? (text) => Bun.SHA256.hash(text, "latin1" as "hex")
+    : (text) => createHash("sha256").update(text).digest("latin1");
 
 /**
- * A message's identity for "already reported": role, text, tool call ids and calls. Each request hashes each of its
- * messages once (`withEden`'s loop) and hands the hashes on (D1940): the whole history was hashed three or four times
- * a request (the loop, the retry check, `userKeys` once or twice), 61% of the proxy's own time on a long conversation.
+ * A message's identity for "already reported": role, text, tool call ids and calls (`sha256Key`). Each request
+ * hashes each of its messages once (`withEden`'s loop) and hands the hashes on (D1940): the whole history was hashed
+ * three or four times a request (the loop, the retry check, `userKeys` once or twice), 61% of the proxy's own time on
+ * a long conversation.
  */
 function hashOf(m: Message): string {
   const calls = Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls) : "";
   const id = typeof m.tool_call_id === "string" ? m.tool_call_id : "";
-  return sha256Hex(`${String(m.role)}\u0000${textOf(m.content)}\u0000${id}\u0000${calls}`);
+  return sha256Key(`${String(m.role)}\u0000${textOf(m.content)}\u0000${id}\u0000${calls}`);
 }
 
 /**
@@ -430,7 +433,9 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       const role = (messages as Message[])[i]!.role;
       return role !== "system" && role !== "developer";
     });
-    const all = sha256Hex(`${held === undefined ? "" : `held:${held}\n`}${spoken.join(",")}`);
+    // One key for (held, the hashes), as injective as the hex join was: the held value's length first ("-" for none),
+    // then the value, then the 32-character digests, each of fixed length.
+    const all = sha256Key(`${held === undefined ? "-" : held.length}:${held ?? ""}${spoken.join("")}`);
     const end = (messages as Message[]).at(-1)!;
     if (known && end.role === "user" && fresh.at(-1) !== end && conv.last !== undefined && conv.last !== all) {
       fresh.push(end);
