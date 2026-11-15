@@ -490,7 +490,219 @@ step keeps the gates: `gate-differential.ts` 1M texts, `never-less.ts` with the 
 (kept in the review's scratch), `memo.test.ts`, the linear-time tests on Bun and Node, the cold check, the eval and
 the funnel `--baseline`.
 
+### 13. No class slower than main, the crafted inputs, Node (after the handoff)
+
+The bar for the merge: no input class slower than origin/main's gate. §12 left small mixed text with no finding at
+0.7–1.0x and 16 KB at 0.8–0.96x. A profile of this branch at 4254c9f5d against main on 2 KB of mixed text with no
+finding (Bun's `--cpu-prof`, the same six texts in turn) did not support the handoff's account: the prefilter held
+303 literals against main's 300 (1,436 states against 1,424) and scanned at the same speed, about 3 ns a character;
+the extra work was spread over the D1850 rules that run on any text with `api key` (0.7 µs), generic-api-key's
+lazy-prefix reading (+0.4 µs), the excused rules' wrappers, and the composer's allocations on a text with no finding
+(+1.2 µs). So the work went where it pays on every class, main's included, as well as at this branch's own extra:
+
+- **Two automata at once** (`MultiMatcher.scan`, @eden/primitives and its vendored copy). Each character's transition
+  is a load whose address is the last load's result, so one walk is bound by that latency (a 16-bit table, half the
+  size, was 20% slower: the extra multiply sat on the chain). From 256 code units on, `scan` walks the two halves in
+  one loop; the second starts from the root the longest pattern's length of folded characters before the middle (a
+  state is the longest folded suffix that begins a pattern, so it is the same state there) and holds back what it
+  would pass to the sink until the first half is done, then passes each occurrence only while its pattern is still
+  kept: the sink sees what one walk would have shown it, in the same order. Past 32 characters outside ASCII each
+  half goes on alone (a walk call a character cost more than the overlap saved on a text of marks or ligatures).
+  Four walks were no faster than two. `matcher.test.ts` compares the kept occurrences with `forEach` on texts of 256
+  to 1,750 code units built across the middle, with marks and ligatures before it and with a sink that clears `keep`
+  mid-text; context one character short, or the held-back occurrences passed without the `keep` check, fail it.
+  The gate's scan alone, the gate's 303 literals, interleaved: 2.98 → 2.20 ns a character on 2 KB of mixed text,
+  2.93 → 2.14 at 16 KB, 2.90 → 2.17 at 1 MB, 3.96 → 3.46 on 2 KB holding code values. `matcher.bench.ts`
+  (244 gitleaks keywords), before → after, p50: `scan` with nothing kept on the 16 KB corpus 38.7 → 25.6 µs, on
+  64 KB of `sk-` 160.4 → 108.3 µs; `markHits` (one walk, unchanged) 1.38 / 5.41 / 46.81 → 1.25 / 5.48 / 44.70 µs at
+  256 B / 2 KB / 16 KB (within its noise).
+- **No composer work on a text with no finding.** When no rule finds anything the stored text is the structural pass
+  on the text as main ran it; `store` returns that unless the pass took a value that is code.
+- **The token passes read by their starts.** The last token pass (`Bearer`, `sk-`, `ghp_`, `AKIA`…, one alternation)
+  ran its global regex over the whole text whenever one of its literals occurred anywhere (`task-` holds `sk-`):
+  2–3 ns a character, a sixth of the gate on 16 KB of mixed text. Every match starts at one of its literals or one
+  character before (`[sr]k_live_`), and the prefilter already lists them (their occurrences are now kept); the
+  pass tries its regex there alone, sticky, and keeps `replace`'s matches (the leftmost at or after the last one's
+  end). The dashed `sk-` pass the same way. Only while no earlier pass changed the text; the starts are traced
+  through the gating (`passStarts`). The fuzz caught both planted faults (offset 0 for `k_live_`, no dashed starts).
+- **The assignment pass.** Key and value characters by a table, the closing quote of a quoted value by `indexOf`
+  with the backslash run before it counted (`quotedEnd`); a new test holds `redactString` equal to main's frozen
+  pass on 20,000 texts of quotes, backslashes and separators (an off-by-one in the backslash count fails it).
+- **The composer.** When every finding is excused and the structural pass removed nothing but excused values
+  (`keepsAll`), the gate removes nothing: the text is stored as it is, without the interval masks. The gated text is
+  joined once from its parts (a `+=` per span made a rope of as many parts).
+- **Smaller costs on every call.** Entropy of an ASCII secret by a count array, summed in the Map's first-appearance
+  order so the number is the same to the last bit (a Map cost 1 µs a 40-character secret); awsSecret's runs by a
+  table load, not a closure a character (5 ms a megabyte); Eden's regex rules without the `d` flag, group 1 read back
+  from the match's end (`spanOf`: each such regex ends with its group, URL userinfo but for its `@`; the flag doubled
+  a regex's time on a megabyte of findings); a value judged as code by the shapes its first character allows;
+  the last eight verdicts kept for the call (`Recent`, memo.ts), as the keyword rules, the assignment pass and the
+  composer ask about the same values; `Occurrences.clear` resets only the literals that occurred (three fills over
+  every literal were about 1 µs a call); `excused` without a rest parameter and a bound function.
+
+Tried and dropped: an alternation regex as the lazy rules' occurrence finder (worse on `key=`: an `exec` per
+occurrence every four characters); keeping lazy-only literals' occurrences up to 1/4 or 1/8 of the text, with or
+without leaving out those that hold a character outside ASCII (quoted values and `password: ` 25–40% faster, `key=`
+and combining marks 30–90% slower, within this machine's noise elsewhere); the 4-walk scan.
+
+**Typical text against main.** In one process, origin/main's gate (copied aside with its own primitives), 4254c9f5d and
+this branch (c6db9ac2e, before the last change) interleaved, CPU time, six texts of each class in turn (so main's
+cross-call memos do not answer a repeated text), median of 7 rounds, load 3.7–5 (other sessions on the machine). "Mixed"
+is every corpus kind in chunks of an eighth; "no finding" is the first six seeds the gate leaves unchanged; "code
+values" adds a line of code every third chunk (`apiKey: string = process.env.API_KEY`, `${DB_PASSWORD}`,
+`this.options.authToken`, `<your-secret>`), each left in place:
+
+| Text | origin/main | 4254c9f5d | now | main / now | 4254c9f5d / now |
+|---|---:|---:|---:|---:|---:|
+| mixed 2KB | 87.3 µs | 85.1 µs | 52.0 µs | 1.68x | 1.64x |
+| mixed 2KB no finding | 48.6 µs | 55.8 µs | 47.5 µs | 1.02x | 1.17x |
+| mixed 2KB code values | 100.1 µs | 214.6 µs | 101.6 µs | 0.99x | 2.11x |
+| mail 2KB | 12.4 µs | 17.6 µs | 11.0 µs | 1.13x | 1.60x |
+| chat 2KB | 62.7 µs | 77.6 µs | 46.0 µs | 1.36x | 1.69x |
+| doc 2KB | 14.4 µs | 18.4 µs | 9.3 µs | 1.55x | 1.98x |
+| eval 2KB | 13.8 µs | 12.0 µs | 12.5 µs | 1.10x | 0.96x |
+| code 2KB | 25.7 µs | 26.1 µs | 12.0 µs | 2.14x | 2.18x |
+| log 2KB | 36.4 µs | 42.5 µs | 27.7 µs | 1.31x | 1.53x |
+| json 2KB | 15.5 µs | 14.7 µs | 13.2 µs | 1.17x | 1.11x |
+| mail 2KB no finding | 11.7 µs | 11.8 µs | 10.7 µs | 1.09x | 1.10x |
+| chat 2KB no finding | 13.5 µs | 15.0 µs | 12.3 µs | 1.10x | 1.22x |
+| doc 2KB no finding | 9.3 µs | 10.4 µs | 7.5 µs | 1.24x | 1.39x |
+| eval 2KB no finding | 8.9 µs | 10.2 µs | 7.3 µs | 1.22x | 1.40x |
+| code 2KB no finding | 13.5 µs | 14.7 µs | 8.9 µs | 1.52x | 1.65x |
+| log 2KB no finding | 16.8 µs | 25.3 µs | 19.3 µs | 0.87x | 1.31x |
+| json 2KB no finding | 19.0 µs | 20.2 µs | 14.8 µs | 1.28x | 1.36x |
+| mixed 16KB | 240.0 µs | 246.4 µs | 163.5 µs | 1.47x | 1.51x |
+| mixed 16KB no finding | 254.7 µs | 282.1 µs | 183.9 µs | 1.38x | 1.53x |
+| mixed 16KB code values | 253.6 µs | 300.4 µs | 206.2 µs | 1.23x | 1.46x |
+| mail 16KB | 105.1 µs | 125.9 µs | 93.4 µs | 1.13x | 1.35x |
+| chat 16KB | 274.6 µs | 358.8 µs | 257.6 µs | 1.07x | 1.39x |
+| doc 16KB | 75.0 µs | 81.6 µs | 59.6 µs | 1.26x | 1.37x |
+| eval 16KB | 104.8 µs | 118.3 µs | 85.7 µs | 1.22x | 1.38x |
+| code 16KB | 258.0 µs | 172.0 µs | 138.2 µs | 1.87x | 1.24x |
+| log 16KB | 153.1 µs | 139.1 µs | 96.0 µs | 1.59x | 1.45x |
+| json 16KB | 120.9 µs | 118.0 µs | 55.9 µs | 2.16x | 2.11x |
+| mail 16KB no finding | 96.3 µs | 101.2 µs | 60.1 µs | 1.60x | 1.68x |
+| chat 16KB no finding | 121.0 µs | 125.5 µs | 108.9 µs | 1.11x | 1.15x |
+| doc 16KB no finding | 76.7 µs | 73.5 µs | 54.8 µs | 1.40x | 1.34x |
+| eval 16KB no finding | 86.5 µs | 87.2 µs | 73.7 µs | 1.17x | 1.18x |
+| code 16KB no finding | 146.5 µs | 151.2 µs | 97.7 µs | 1.50x | 1.55x |
+| log 16KB no finding | 117.6 µs | 124.9 µs | 91.5 µs | 1.29x | 1.37x |
+| json 16KB no finding | 114.7 µs | 111.4 µs | 51.8 µs | 2.21x | 2.15x |
+| mixed 1MB | 21.12 ms | 21.63 ms | 14.38 ms | 1.47x | 1.50x |
+| mixed 1MB code values | 18.13 ms | 20.99 ms | 13.81 ms | 1.31x | 1.52x |
+| mail 1MB | 10.99 ms | 11.01 ms | 7.76 ms | 1.42x | 1.42x |
+| chat 1MB | 17.72 ms | 20.40 ms | 13.61 ms | 1.30x | 1.50x |
+| doc 1MB | 8.18 ms | 7.84 ms | 8.42 ms | 0.97x | 0.93x |
+| eval 1MB | 10.91 ms | 10.26 ms | 10.23 ms | 1.07x | 1.00x |
+| code 1MB | 25.72 ms | 25.88 ms | 19.99 ms | 1.29x | 1.29x |
+| log 1MB | 7.05 ms | 7.51 ms | 7.97 ms | 0.88x | 0.94x |
+| json 1MB | 9.79 ms | 10.55 ms | 6.53 ms | 1.50x | 1.62x |
+
+Every class at 1.02x of main or more in that run but 2 KB with code values (0.99x), the 2 KB logs with no finding
+(0.87x), and logs and docs at 1 MB (0.88x, 0.97x); earlier runs of the same bench on the same code read 1.03x,
+1.16–1.24x and 1.15x for the last three, and the row-to-row noise of a gate against an identical copy of itself was
+±10–20% on this machine. So each gate also ran alone in its own process, alternated, CPU time a call over 2–3 s
+(a0ec1f75a):
+
+| Class | origin/main | 4254c9f5d | now | main / now | rounds |
+|---|---:|---:|---:|---:|---:|
+| mixed 2 KB, no finding | 18.2 µs | 19.7 µs | 16.9 µs | 1.08x | 7 |
+| mixed 2 KB, with findings | 26.8 µs | 33.2 µs | 23.6 µs | 1.13x | 7 |
+| mixed 2 KB, code values | 47.3 µs | 59.5 µs | 45.5 µs | 1.04x | 7 |
+| mixed 16 KB, no finding | 217.6 µs | 265.5 µs | 171.0 µs | 1.27x | 5 |
+| mixed 16 KB, code values | 271.6 µs | 316.4 µs | 234.9 µs | 1.16x | 5 |
+| mixed 1 MB | 20.94 ms | 23.09 ms | 16.03 ms | 1.31x | 5 |
+| mixed 1 MB, code values | 20.72 ms | 21.82 ms | 16.04 ms | 1.29x | 5 |
+| logs 2 KB, no finding (two runs) | 21.6–25.2 µs | | 21.3–23.7 µs | 1.01–1.06x | 7–9 |
+
+2 KB with code values is the one class that does not clear main in every run: 1.04x here, 0.89x (15 rounds) and
+0.95x (9 rounds) in two runs before the last change (`Occurrences.clear`), 0.98x in process. Its texts hold five
+excused values each and no other finding; the excused rules' wrappers and the composer's check that the passes took
+only code cost about what the faster scan and passes save there. Every other class reads 1.0x or more in every
+run made of it alone.
+
+**The crafted inputs.** Each 1 MB, CPU ms, median of 5 interleaved (origin/main, 4254c9f5d and a0ec1f75a in one process,
+load 3–4; main's quadratic line not run); secretlint 13.1.0 with its recommended preset in process on Node 22,
+median of 5 after a warm call, the same inputs. The last six units are aimed at other engines' patterns and were
+written for this run (`password:` and 30 spaces, `123 456 7890 `, `a`, `a://b/`, a 40-character AWS-like base64
+run, hex), so their rows are not the earlier rounds':
+
+| Crafted input, 1 MB | origin/main | 4254c9f5d | now | secretlint | now / secretlint | 4254c9f5d / secretlint |
+|---|---:|---:|---:|---:|---:|---:|
+| keyword then an operator | 150.8 | 34.3 | 31.4 | 7.8 | 4.03x | 4.40x |
+| keywords back to back | 898.3 | 33.5 | 35.0 | 13.7 | 2.55x | 2.45x |
+| the longest prefix before each keyword | 368.9 | 8.4 | 9.3 | 16.2 | 0.57x | 0.52x |
+| the longest prefix, no space | 418.0 | 6.5 | 4.9 | 16.5 | 0.30x | 0.39x |
+| prefix, keyword, operator, value | 44.9 | 56.6 | 44.1 | 15.4 | 2.86x | 3.68x |
+| combining marks inside a keyword | 22.5 | 10.6 | 10.5 | 6.7 | 1.57x | 1.58x |
+| marks before a keyword | 25.2 | 24.5 | 23.6 | 6.4 | 3.69x | 3.83x |
+| ligatures beside a keyword | 133.9 | 19.0 | 20.9 | 6.1 | 3.43x | 3.11x |
+| two-character anchors | 566.4 | 21.8 | 23.4 | 10.5 | 2.23x | 2.08x |
+| one non-space run after a keyword | 4.7 | 4.9 | 4.0 | 9.5 | 0.42x | 0.52x |
+| separators | 5.6 | 5.7 | 3.4 | 8.5 | 0.40x | 0.67x |
+| quoted values | 110.6 | 97.6 | 112.9 | 9.4 | 12.01x | 10.38x |
+| eden-keyword | 130.3 | 113.6 | 80.1 | 9.7 | 8.26x | 11.71x |
+| url userinfo | 21.7 | 11.6 | 7.2 | 8.7 | 0.83x | 1.33x |
+| token literals | 77.4 | 74.7 | 70.4 | 13.0 | 5.42x | 5.75x |
+| generic-api-key, matching | 116.3 | 84.0 | 74.5 | 9.4 | 7.93x | 8.94x |
+| ligatures | 386.5 | 12.6 | 16.7 | 5.6 | 2.98x | 2.25x |
+| password: then spaces | 60.2 | 57.1 | 55.7 | 8.3 | 6.71x | 6.88x |
+| digits and spaces (PII patterns) | 4.3 | 4.0 | 3.1 | 7.5 | 0.41x | 0.53x |
+| one long word line | 4.4 | 4.0 | 3.1 | 18.2 | 0.17x | 0.22x |
+| slashes and colons | 12.2 | 11.9 | 5.5 | 9.9 | 0.56x | 1.20x |
+| aws-ish base64 | 115.3 | 9.3 | 8.6 | 9.9 | 0.87x | 0.94x |
+| high-entropy hex | 2.6 | 2.8 | 1.6 | 8.6 | 0.19x | 0.33x |
+| findings on one long line | not run (quadratic) | 106.4 | 96.8 | 10.5 | 9.22x | 10.13x |
+
+At or below secretlint on 10 of 24 (4254c9f5d in the same run: 8), within 2x on 11 (11). What changed on the
+finding-dense inputs is 5–30% (eden-keyword 114 → 80 ms, generic-api-key 84 → 75, url userinfo 12 → 7, slashes and
+colons 12 → 6), not the 2–10x they need: they hold a finding every 10–20 characters, and each pays for its rule's
+match, the allowlists and the structural pass, with Eden's keyword rules firing on the same text. The ideas the brief
+named were not done: batching the allowlists by line (a line allowlist's verdict is already worked out once a
+line), skipping Eden's keyword rules where another finding covers the span (a span covered only once the rule's own
+match is known), an incremental structural pass, and a dedupe across rules beyond the recent verdicts. Their run-to-run
+spread is large on this machine (quoted values 98–165 ms across this session's runs of the same code).
+
+**Node.** Profiled on V8 (Node 24.22.3, downloaded into its own directory for this, deleted after). The gate's code
+deoptimized every call in five places, each the same fault §10 found once: V8 compiles a long loop on stack
+replacement and keeps that code for later calls, and code after the loop that had not run yet (or had seen another
+kind of string or array) deoptimized it again at every call: the paired scan's tail (31 deopts in 31 calls),
+the composer's gating (849 in one run over the benchmark's classes), the gate's span pushes inside its loop over rules
+(442), the lazy rules' listed occurrences (166) and the scan's ligature step (1,684). The loops now sit in functions
+of their own with nothing after them but a return, and the matcher runs `scan` on two short texts when it is built so
+V8 has type feedback for each path (no measurable cost: building it took 1.6–5.7 ms before and after). After it,
+no deopt in those places in the same run. Bun against Node 24, each in one process over all classes in turn, 1.5 s
+of warm-up a class (V8 reaches its optimizing tier later), median of 5, at 2e543995a: Node 0.80–3.7x Bun's time,
+median 1.52x; 13 of 53 classes within 1.2x (typical text 8 of 29, median 1.43x; crafted 5 of 24, median 1.78x).
+In a process that runs one class alone Node matched Bun (16 KB of mixed text with no finding 0.205 against 0.211 ms),
+so much of the rest is V8 running code shaped by many kinds of text at once; the classes furthest off are the
+character loops on short ASCII text (hex 2.25x, one long word 3.7x, digits 2.7x) and ligatures (2.8x). The bar
+(within 1.2x) is not met. `node-parity.test.ts` (0 differences) and `node-linear.test.ts` pass with `REDACT_NODE`
+at Node 24.22.3; `node --test packages/redact/src/node.check.ts` 4 of 4.
+
+**What still loses**
+
+- 2 KB of mixed text holding only excused code values: 0.89–1.04x of main across runs (above), not clearly 1.0x.
+- 14 of 24 crafted inputs are slower than secretlint in process: 2.6–12x on the nine with a finding every 10–20
+  characters (`key=`, quoted values, eden-keyword, the line of findings, generic-api-key matching, token literals,
+  prefix-keyword-value, `password: ` then spaces, keywords back to back), 1.6–3.7x on five (two-character anchors,
+  combining marks inside and before a keyword, ligatures beside a keyword, ligatures alone). As a command it stays
+  faster (§11).
+- Node: 0.80–3.7x Bun's time, median 1.52x, not within 1.2x.
+
 ## Exactness and gates
+
+After §13, on its last code (a0ec1f75a): `gate-differential.ts 250000 <seed>`, seeds 101–404, 1,000,000 texts
+(708,806 with a finding) and `--corpus` (4,935 texts): no difference; `never-less.ts` with the oracle, 150,000 texts
+on seed 7 and 150,000 on 20261114: no failure; the reviewer's `rn-fuzz.ts` (imports pointed at this tree and at
+origin/main's gate), 120,000 texts: no difference from the reference, no mismatch with main's own output, 4,480 texts
+keeping a value main redacted, as at 4254c9f5d on the same seed (its filter flags 145 lost runs on both trees,
+every one it prints a quoted mask of `x`, which its mask test does not recognise with the quotes);
+`env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` (see D1850 for the final run); `bun run eval`:
+precision 0.65, recall 0.52, falseFireRate 0, packets on 19 of 28 neutral turns (1.18 items each), facts handed 10 of
+11, a look-alike on 3 of 10 owed turns; `bun run funnel` on origin/main's redact and primitives, then this tree with
+`--baseline`: hidden 323/384, decoys 294/384, "hidden +0 −0, decoys +0 −0"; with `REDACT_NODE` at Node 24.22.3,
+`node-parity.test.ts` and `node-linear.test.ts` pass.
 
 After the large-text fix (§12): `gate-differential.ts` 1,000,000 texts (708,806 with a finding) and the corpus (4,932):
 no difference; `never-less.ts` with the oracle, 2 × 150,000 texts: no failure; the reviewer's `rn-fuzz.ts`, 120,000
@@ -794,12 +1006,14 @@ the call (main: 3–41 MB).
 
 ## What was not done, and next
 
-- The bar set after the second review, at or below secretlint on every crafted input in process, is not met: 11 of
-  the 24 stay over 2x (§11), all dense in findings, where the cost is per finding (allowlists, gating, the
-  structural pass, Eden's keyword rules on the same text). Next: batch the per-finding work, and a hand reader for
-  hashicorp-tf-password's REST as generic-api-key has.
-- Small mixed text with no finding stays 0.7–1.0x of main at 2 KB and 0.8–0.96x at 16 KB (§12, with the next steps).
-- Node stays 0.7–2.4x Bun's time (§10, §11), most in character loops.
+- The bar set after the second review, at or below secretlint on every crafted input in process, is not met: 13 of the
+  24 stay over 2x (§13; 11 in §11 with other secretlint timings), most dense in findings, where the cost is per finding
+  (allowlists, gating, the structural pass, Eden's keyword rules on the same text). Next: batch the per-finding work,
+  and a hand reader for hashicorp-tf-password's REST as generic-api-key has.
+- Small mixed text with no finding is now 1.08x of main at 2 KB and 1.27x at 16 KB (§13); 2 KB holding only excused
+  code values reads 0.89–1.04x across runs, not clearly 1.0x.
+- The crafted inputs: at or below secretlint on 10 of 24 in process (§13); the nine dense in findings stay 2.6–12x.
+- Node stays 0.80–3.7x Bun's time (median 1.52x, §13), after five deopt loops on V8 were removed.
 - Prose that names a password stays redacted, as do placeholders shaped like keys (§8, §11).
 - gitleaks and trufflehog were not run again on the throughput files, and redact-pii not at all, after the second
   review; their rows are the first round's. All downloaded tools were deleted.
