@@ -378,6 +378,8 @@ export class SourceMap {
     if (held) return held;
     const rows = this.outcomesRead.values(key, situation) as [string, number, number][];
     const known = new Map(rows.map((r) => [r[0], { shown: r[1], used: r[2] }]));
+    // A read larger than the whole cap is answered unheld, so the cap is strict.
+    if (rows.length + 1 > MEMO_MAX) return known;
     if (this.outcomeMemoSize + rows.length + 1 > MEMO_MAX) this.clearOutcomeMemo();
     if (!bySituation || this.outcomeMemoSize === 0) this.outcomeMemo.set(key, (bySituation = new Map()));
     bySituation.set(situation, known);
@@ -413,6 +415,7 @@ export class SourceMap {
     const held = byEntity?.get(e);
     if (held) return held;
     const rows = this.mentionRead.values(key, e) as [string, number][];
+    if (rows.length + 1 > MEMO_MAX) return rows;
     if (this.mentionMemoSize + rows.length + 1 > MEMO_MAX) this.clearMentionMemo();
     if (!byEntity || this.mentionMemoSize === 0) this.mentionMemo.set(key, (byEntity = new Map()));
     byEntity.set(e, rows);
@@ -614,7 +617,7 @@ export interface UserRows {
 const NONE = { shown: 0, used: 0 } as const;
 /**
  * Keys plus rows each read memo holds before it is emptied whole (D1935): about 0.45 MB of heap when full (2-row keys
- * over 100 users, measured), a process's whole cost however many users it serves.
+ * over 100 users, measured), an open map's whole cost however many users it serves (one map a server process).
  */
 const MEMO_MAX = 4_096;
 
