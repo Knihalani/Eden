@@ -434,8 +434,8 @@ describe("D1936: an equal re-put counts the held copy's people out and in from o
   });
 });
 
+describe("D1934: mentionsAny searches the item's text in place", () => {
   /** Units each side of every class `mentionText` reads: letters, digits, "@", ".", spacing, punctuation. */
-  /** Units each side of every class `mentionText` reads: letters, digits, "@", ".", spacing, punctuation, surrogates. */
   const UNITS = [
     "a",
     "b",
