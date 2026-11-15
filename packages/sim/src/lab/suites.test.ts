@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { RARE_SOURCE_IDS } from "../rare-sources";
-import { buildWorld } from "../world";
+import { buildWorld as buildFresh, type World } from "../world";
 import { HELDOUT17_LATE } from "./hidden-heldout17";
 import { HELDOUT18_ANCHORED, HELDOUT18_LATE } from "./hidden-heldout18";
 import {
@@ -29,7 +29,40 @@ import {
 import { userWorldOf } from "./pi-user";
 import { supportsNeutral } from "./neutral";
 import { REWORDED } from "./reworded";
-import { parseSuites, preparedWorld, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
+import { parseSuites, prepareWorld, SUITE_NAMES, SUITES, UNREAD_BLIND, UNRUN_BLIND } from "./suites";
+
+// One base world per seed, built once for the file and shared, as cards-disk.test.ts shares its (D819): each world a
+// test asks for gets its own lists and maps over the base's item objects, so it is the world a fresh build gives (a
+// suite plants new items, `prepareWorld` adds rare sources, neither may change a base item, which the fingerprint check
+// after the file asserts). The file built about 600 worlds at ~25 ms each; it builds 14.
+const bases = new Map<number, { world: World; printed: string }>();
+const fingerprint = (w: World) => JSON.stringify([w.items, [...w.facts], w.arcs, w.people, w.user, w.sources, w.now]);
+function buildWorld({ seed }: { seed: number }): World {
+  let base = bases.get(seed);
+  if (!base) {
+    const world = buildFresh({ seed });
+    base = { world, printed: fingerprint(world) };
+    bases.set(seed, base);
+  }
+  const w = base.world;
+  return {
+    ...w,
+    people: [...w.people],
+    arcs: [...w.arcs],
+    facts: new Map(w.facts),
+    items: [...w.items],
+    sources: { ...w.sources },
+  };
+}
+/** suites.ts's `preparedWorld`, over the shared base. */
+function preparedWorld(suite: string, seed: number): World {
+  const world = buildWorld({ seed: seed * 1_000 });
+  prepareWorld(suite, world, seed);
+  return world;
+}
+afterAll(() => {
+  for (const { world, printed } of bases.values()) expect(fingerprint(world)).toBe(printed);
+});
 
 describe("suite registry", () => {
   test("task ids are unique across a suite's hidden and control variants (runners key results by id)", () => {
