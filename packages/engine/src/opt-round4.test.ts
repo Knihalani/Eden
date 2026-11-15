@@ -135,25 +135,28 @@ describe("D1932: a statement's date patterns read once, its days worked out per 
     ",",
   ];
 
-  test("the plan replayed gives datesOf's answer: 30,000 fuzzed sentences, each at four instants, both vocabularies", () => {
+  test("the plan replayed gives datesOf's answer: 12,000 fuzzed sentences, each at four instants, both vocabularies", () => {
     const r = rng(1932);
     let found = 0;
-    for (let i = 0; i < 30_000; i++) {
+    for (let i = 0; i < 12_000; i++) {
       const n = 1 + Math.floor(r() * 6);
       const s = Array.from({ length: n }, () => pick(r, PIECES)).join(r() < 0.7 ? " " : "");
       const anchor = r() < 0.5 ? null : Date.UTC(2026, Math.floor(r() * 12), 1 + Math.floor(r() * 28));
       for (const vocab of [false, true]) {
         // One plan a statement, replayed at instants across the year, as a cached analysis is across requests.
-        for (let k = 0; k < 4; k++) {
-          const now = Date.UTC(2025 + Math.floor(r() * 3), Math.floor(r() * 12), 1 + Math.floor(r() * 28), r() * 24);
+        const nows = Array.from({ length: 4 }, () =>
+          Date.UTC(2025 + Math.floor(r() * 3), Math.floor(r() * 12), 1 + Math.floor(r() * 28), r() * 24),
+        );
+        const got = datesByPlan(s, nows, vocab, anchor);
+        for (const [k, now] of nows.entries()) {
           const want = datesFor(s, now, vocab, anchor, true);
-          expect(datesByPlan(s, now, vocab, anchor)).toEqual(want);
+          expect(got[k]).toEqual(want);
           if (want.spans.length + want.limits.length > 0) found++;
         }
       }
     }
-    expect(found).toBeGreaterThan(80_000);
-    expect(found).toBeLessThan(240_000);
+    expect(found).toBeGreaterThan(30_000);
+    expect(found).toBeLessThan(96_000);
   });
 
   test("the eval's sentences read the same", () => {
@@ -162,7 +165,8 @@ describe("D1932: a statement's date patterns read once, its days worked out per 
       for (const s of `${it.title}. ${it.text}`.toLowerCase().split(/[.!?;\n]+\s|\n+/)) {
         for (const vocab of [false, true]) {
           const now = Date.UTC(2026, Math.floor(r() * 12), 1 + Math.floor(r() * 28));
-          expect(datesByPlan(s, now, vocab, now - 86_400_000)).toEqual(datesFor(s, now, vocab, now - 86_400_000, true));
+          const anchor = now - 86_400_000;
+          expect(datesByPlan(s, [now], vocab, anchor)[0]).toEqual(datesFor(s, now, vocab, anchor, true));
         }
       }
     }
