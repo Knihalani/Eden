@@ -7,16 +7,25 @@
  * Secret-shaped values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AnchoredRegex, anchorsOf, anchorsOfRegex, Occurrences } from "./anchor";
-import { parseRegex } from "./automaton";
-import { prng, sample } from "./differential";
-import { CRAFTED_UNITS, crafted } from "./gate-crafted";
-import { difference, fuzzGate } from "./gate-differential";
-import { assignmentSpans, redactString, TOKEN_PASSES } from "./redact";
-import { assignmentSpans as assignmentSpansBefore, redactString as redactStringBefore } from "./redact.reference";
-import { isSpace, URL_USERINFO } from "./secrets";
+import {
+  AnchoredRegex,
+  analyseAnchors,
+  anchorsOf,
+  anchorsOfRegex,
+  lazyPrefixOf,
+  Occurrences,
+  topLevelBranches,
+} from "./anchor.ts";
+import { parseRegex } from "./automaton.ts";
+import { prng, sample } from "./differential.ts";
+import { CRAFTED_UNITS, crafted } from "./gate-crafted.ts";
+import { difference, fuzzGate } from "./gate-differential.ts";
+import { assignmentSpans, redactString, TOKEN_PASSES } from "./redact.ts";
+import { assignmentSpans as assignmentSpansBefore, redactString as redactStringBefore } from "./redact.reference.ts";
+import generated from "./rules.generated.json" with { type: "json" };
+import { goRegex, isSpace, LAZY_PREFIX, LINEAR_RULES, URL_USERINFO } from "./secrets.ts";
 
 describe("the gate against the reference gate", () => {
   test("a seeded fuzz of 4,000 texts: identical findings, hits, stored text and redaction", () => {
@@ -26,15 +35,16 @@ describe("the gate against the reference gate", () => {
     expect(result.withFindings).toBeGreaterThan(2_000);
   }, 30_000);
 
-  test("every text of the eval scenarios", () => {
+  // In the Eden repository; skipped where the package stands alone.
+  const scenarios = join(import.meta.dir, "../../eval/scenarios");
+  test.skipIf(!existsSync(scenarios))("every text of the eval scenarios", () => {
     const texts: string[] = [];
     const walk = (value: unknown) => {
       if (typeof value === "string") texts.push(value);
       else if (Array.isArray(value)) value.forEach(walk);
       else if (value && typeof value === "object") Object.values(value).forEach(walk);
     };
-    const root = join(import.meta.dir, "../../eval/scenarios");
-    for (const dir of [root, join(root, "acting")]) {
+    for (const dir of [scenarios, join(scenarios, "acting")]) {
       for (const name of readdirSync(dir).filter((file) => file.endsWith(".json"))) {
         walk(JSON.parse(readFileSync(join(dir, name), "utf8")));
       }
@@ -135,5 +145,104 @@ describe("what the speed-ups rest on", () => {
     const found = new Occurrences(1);
     for (let at = 0; at < dense.length; at += 5) found.add(0, at);
     expect(anchored.each(dense, found, ids, () => {})).toBe(false);
+  });
+
+  test("a literal past the dense limit leaves `keep` for the text, and comes back for the next", () => {
+    const found = new Occurrences(2, Uint8Array.of(1, 0));
+    found.clear(100); // the limit: 100 / 128 + 64 = 64
+    for (let at = 0; at < 64; at++) found.add(0, at);
+    expect([found.complete(0), found.keep[0]]).toEqual([true, 1]);
+    found.add(0, 64);
+    expect([found.complete(0), found.keep[0], found.keep[1]]).toEqual([false, 0, 0]);
+    found.clear(100);
+    expect([found.complete(0), found.keep[0], found.count[0]]).toEqual([true, 1, 0]);
+  });
+
+  test("JavaScript's [\\w.-] is the lazy prefix's table on every code unit, case folded or not", () => {
+    const lazy = lazyPrefixOf(String.raw`(?i)[\w.-]{0,50}?(?:key)=x`, () => /[\w.-]{0,50}?(?:key)=x/i)!;
+    // The scan reads the table through a match: a prefix character before `key=x` joins the match, any other not.
+    for (let c = 0; c < 65_536; c++) {
+      const text = `${String.fromCharCode(c)}key=x`;
+      for (const flags of ["", "i"]) {
+        const expected = new RegExp(String.raw`[\w.-]`, flags).test(String.fromCharCode(c)) ? 0 : 1;
+        const seen: number[] = [];
+        lazy.each(text, undefined, undefined, (start) => seen.push(start));
+        expect([c, seen]).toEqual([c, [expected]]);
+      }
+    }
+  });
+
+  test("top-level branches split as the parse does, in Go's syntax and JavaScript's", () => {
+    expect(topLevelBranches(String.raw`a(b|c)[|\]]|d[[:alpha:]|]|\|e`)).toEqual([
+      String.raw`a(b|c)[|\]]`,
+      String.raw`d[[:alpha:]|]`,
+      String.raw`\|e`,
+    ]);
+    expect(topLevelBranches("[]|]x|y")).toEqual(["[]|]x", "y"]);
+  });
+
+  test("every lazy-prefix rule reports matchAll's matches: with occurrences, without, and dense", () => {
+    const config = generated.gitleaks as { rules: { id: string; regex?: string }[] };
+    const rnd = prng(17);
+    let rules = 0;
+    let matched = 0;
+    for (const rule of config.rules) {
+      if (!rule.regex || LINEAR_RULES.has(rule.id) || !LAZY_PREFIX.test(rule.regex)) continue;
+      const lazy = lazyPrefixOf(rule.regex, () => goRegex(rule.regex!))!;
+      expect([rule.id, lazy !== undefined]).toEqual([rule.id, true]);
+      rules++;
+      const js = goRegex(rule.regex);
+      const scan = new RegExp(js.source, js.flags + "g");
+      const node = parseRegex(rule.regex);
+      const pieces = [...lazy.words, "a", "-", ".", "_", "0", " ", "=", ":", "'", '"', "\n", "\\n", "x9Y", "K"];
+      const texts: string[] = [];
+      for (let i = 0; i < 60; i++) {
+        let text = "";
+        for (let n = 1 + Math.floor(rnd() * 8); n > 0; n--) {
+          const r = rnd();
+          let piece = r < 0.35 ? sample(rnd, node) : pieces[Math.floor(rnd() * pieces.length)]!;
+          if (rnd() < 0.2) piece = piece.toUpperCase();
+          text += r < 0.5 && rnd() < 0.3 ? piece.repeat(1 + Math.floor(rnd() * 5)) : piece;
+        }
+        texts.push(text);
+      }
+      // Dense in one keyword: its occurrences pass the limit and are found by the rule itself, in a window that moves
+      // (more than the scratch's 256 entries).
+      texts.push(`${lazy.words[0]}=`.repeat(1_200) + sample(rnd, node));
+      for (const text of texts) {
+        const expected = [...text.matchAll(scan)].map((m) => [m.index, m.index + m[0].length]);
+        matched += expected.length;
+        const without: number[][] = [];
+        lazy.each(text, undefined, undefined, (start, end) => without.push([start, end]));
+        expect([rule.id, text, without]).toEqual([rule.id, text, expected]);
+        // The occurrences as the gate's prefilter records them (case folded), in a fresh list per text.
+        const found = new Occurrences(lazy.words.length);
+        found.clear(text.length);
+        const lower = text.toLowerCase();
+        lazy.words.forEach((word, id) => {
+          for (let at = lower.indexOf(word); at >= 0; at = lower.indexOf(word, at + 1)) found.add(id, at);
+        });
+        const ids = Int32Array.from(lazy.words, (_, i) => i);
+        const withFound: number[][] = [];
+        lazy.each(text, found, ids, (start, end) => withFound.push([start, end]));
+        expect([rule.id, text, withFound]).toEqual([rule.id, text, expected]);
+      }
+    }
+    expect(rules).toBe(96);
+    expect(matched).toBeGreaterThan(2_000);
+  }, 60_000);
+
+  test("analyses read from the generated tables are the ones worked out now", () => {
+    const tables = generated.analyses as { anchors: Record<string, unknown>; lazy: Record<string, unknown> };
+    for (const [pattern, data] of Object.entries(tables.anchors)) {
+      expect([pattern, analyseAnchors(pattern)]).toEqual([pattern, data as never]);
+    }
+    expect(Object.keys(tables.lazy).length).toBe(95); // 96 rules: bittrex-access-key and -secret-key share one regex
+    // The four rules D1841 left unanchored: two now anchored, two still scanning (the reasons are
+    // in docs/research/redact-vs-alternatives.md).
+    const rules = (generated.gitleaks as { rules: { id: string; regex?: string }[] }).rules;
+    const anchored = (id: string) => tables.anchors[rules.find((rule) => rule.id === id)!.regex!] !== null;
+    expect(["azure-ad-client-secret", "slack-webhook-url"].map(anchored)).toEqual([true, true]);
+    expect(["facebook-access-token", "sourcegraph-access-token"].map(anchored)).toEqual([false, false]);
   });
 });

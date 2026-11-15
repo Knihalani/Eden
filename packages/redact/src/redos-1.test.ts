@@ -1,6 +1,6 @@
 /** D24 and D86: shard 1 of the crafted-input sweep (redos-sweep.ts; shard 0 and the rest are in redos.test.ts). */
 import { expect, test } from "bun:test";
-import { shardRules, slowOn } from "./redos-sweep";
+import { shardRules, slowOn } from "./redos-sweep.ts";
 
 test("rules left on JavaScript's engine stay cheap on crafted input: shard 1", () => {
   expect(shardRules(1).length).toBeGreaterThan(0);

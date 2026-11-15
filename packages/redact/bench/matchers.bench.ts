@@ -8,12 +8,12 @@
  *
  *   bun packages/redact/bench/matchers.bench.ts
  */
-import { compileAllowlistRegex } from "../src/automaton";
-import { allowlistRegexes, allowlistText, prng, ruleText } from "../src/differential";
-import { parseRegex } from "../src/automaton";
-import { linearEngine } from "../src/re2-oracle";
-import { SCANNERS } from "../src/scanners";
-import type { Pattern } from "../src/secrets";
+import { compileAllowlistRegex } from "../src/automaton.ts";
+import { allowlistRegexes, allowlistText, prng, ruleText } from "../src/differential.ts";
+import { parseRegex } from "../src/automaton.ts";
+import { linearEngine } from "../src/re2-oracle.ts";
+import { SCANNERS } from "../src/scanners.ts";
+import type { Pattern } from "../src/secrets.ts";
 
 let salt = 0;
 /**

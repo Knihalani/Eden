@@ -299,6 +299,11 @@ The decision is D1841 (D1840 went to the MCP change on main).
 
 ## What was not done, and next
 
+D1850 (docs/research/redact-vs-alternatives.md) took up the first item below and the review's residue: the
+keyword-assignment rules now read their lazy prefix by hand (the keyword-dense worst case 1,052 → 45 ms a MB), a
+line allowlist is tested once a line (main was quadratic there), the first call parses no rule, and the literal-dense
+inputs sit at 0.85-2.2x of the reference.
+
 - **The keyword-dense worst case.** On 256 KB of keywords back to back the gate takes about as long as before
   (~200 ms; JavaScript's engine on the lazy prefixes, every position a candidate), where re2js for everything takes
   ~5 ms. It is linear and under the ReDoS ceilings, and re2js is 10–100x slower on typical text; a linear matcher

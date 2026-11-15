@@ -3,8 +3,8 @@
  * a size: every keyword occurrence an anchor with the longest prefix it allows, candidates dense enough to pass the
  * scan back to the engine, combining marks and ligatures inside the prefilter's words (where a match's start is
  * counted back), the two-character anchors (`ey`, `s.`, `sk`), one non-space run (rule (d)'s walk), separators for
- * the assignment pass, and every token literal. `gate-linear.test.ts` holds the gate under a CPU-time ceiling on
- * them; `bench/gate.bench.ts` times them before and after.
+ * the assignment pass, every token literal, one line of findings and ligatures alone. `gate-linear.test.ts` holds
+ * the gate under a CPU-time ceiling on them; `bench/gate.bench.ts` times them before and after.
  */
 export const CRAFTED_UNITS: [string, string][] = [
   ["keyword then an operator", "key="],
@@ -23,6 +23,10 @@ export const CRAFTED_UNITS: [string, string][] = [
   ["url userinfo", "a-b://"],
   ["token literals", "Bearer sk-ghp_xoxbasic AKIA"],
   ["generic-api-key, matching", `api_key = "${"0a1b2c3d4e".repeat(2)}" `],
+  // One line of findings that a line-targeted allowlist reads: each finding read the whole line again (quadratic).
+  ["findings on one long line", "bedrock-api-key-='"],
+  // Ligatures alone: the prefilter expanded each afresh (0.5 µs a character).
+  ["ligatures", "\ufb01"],
 ];
 
 /** `unit` repeated to `size` characters; the run of `x` gets a keyword in front (rule (d) runs on it). */

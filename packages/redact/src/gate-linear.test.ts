@@ -6,8 +6,8 @@
  * the rules' lazy prefixes); a quadratic slip would take seconds.
  */
 import { describe, expect, test } from "bun:test";
-import { CRAFTED_UNITS, crafted } from "./gate-crafted";
-import { gateOf, secretRules } from "./secrets";
+import { CRAFTED_UNITS, crafted } from "./gate-crafted.ts";
+import { gateOf, secretRules } from "./secrets.ts";
 
 const cpuMs = () => {
   const u = process.cpuUsage();

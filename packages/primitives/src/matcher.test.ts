@@ -110,7 +110,8 @@ describe("MultiMatcher against the reference, and scan", () => {
       const m = new MultiMatcher(patterns);
       const keep = Uint8Array.from(patterns, () => (rnd(3) === 0 ? 0 : 1));
       for (let round = 0; round < 40; round++) {
-        const text = word(rnd(120));
+        // Past 255 code units the scan runs two walks, one a half (D1850): long texts test the second half's start.
+        const text = word(round % 2 === 0 ? rnd(120) : 150 + rnd(600));
         const hits = new Uint8Array(patterns.length);
         const expected = new Uint8Array(patterns.length);
         const firsts = new Int32Array(patterns.length);
@@ -124,6 +125,86 @@ describe("MultiMatcher against the reference, and scan", () => {
         const starts: [number, number][] = [];
         m.forEach(text, (p, start) => {
           if (keep[p] === 1) starts.push([p, start]);
+        });
+        expect(kept).toEqual(starts);
+      }
+    }
+  });
+
+  test("scan with a sink that clears keep mid-text, then a fresh keep on the same matcher (D1850's quiet states)", () => {
+    const rnd = prng(1850);
+    const word = (len: number) => Array.from({ length: len }, () => PIECES[rnd(PIECES.length)]).join("");
+    for (let set = 0; set < 40; set++) {
+      const patterns = Array.from({ length: 1 + rnd(20) }, () => word(1 + rnd(3)));
+      const m = new MultiMatcher(patterns);
+      for (let round = 0; round < 40; round++) {
+        const text = word(round % 2 === 0 ? rnd(200) : 150 + rnd(600));
+        const cap = rnd(4);
+        const fresh = () => Uint8Array.from(patterns, () => (rnd(4) === 0 ? 0 : 1));
+        const keep = fresh();
+        const model = Uint8Array.from(keep);
+        // As the gate's `Occurrences` does: past `cap` occurrences, a pattern leaves `keep` for the rest of the text.
+        const count = new Int32Array(patterns.length);
+        const kept: [number, number][] = [];
+        m.scan(text, new Uint8Array(patterns.length), new Int32Array(patterns.length), keep, {
+          add: (p, start) => {
+            kept.push([p, start]);
+            if (++count[p]! > cap) keep[p] = 0;
+          },
+        });
+        const starts: [number, number][] = [];
+        const seen = new Int32Array(patterns.length);
+        m.forEach(text, (p, start) => {
+          if (model[p] !== 1) return;
+          starts.push([p, start]);
+          if (++seen[p]! > cap) model[p] = 0;
+        });
+        expect(kept).toEqual(starts);
+      }
+    }
+  });
+
+  test("scan's two walks (D1850): patterns across the middle, long patterns, marks and ligatures before it", () => {
+    const rnd = prng(2026);
+    for (let set = 0; set < 60; set++) {
+      const patterns = Array.from({ length: 1 + rnd(12) }, () =>
+        Array.from({ length: 1 + rnd(14) }, () => PIECES[rnd(PIECES.length)]).join(""),
+      );
+      const m = new MultiMatcher(patterns);
+      for (let round = 0; round < 30; round++) {
+        // Patterns and noise; near the middle, runs of combining marks or ligatures (they change how many code
+        // units the second walk reads before the middle).
+        let text = "";
+        const length = 256 + rnd(1500);
+        // Odd rounds: few characters outside ASCII, so the two walks run to the end (past WIDE_LIMIT each half goes
+        // alone, as even rounds test).
+        const sparse = round % 2 === 1;
+        while (text.length < length) {
+          const piece = sparse && rnd(40) !== 0 ? PIECES[rnd(11)]! : PIECES[rnd(PIECES.length)]!;
+          text += rnd(3) === 0 ? patterns[rnd(patterns.length)]! : piece;
+          if (Math.abs(text.length - length / 2) < 40 && rnd(2) === 0) text += (rnd(2) ? "́" : "ﬃ").repeat(rnd(30));
+        }
+        const keep = Uint8Array.from(patterns, () => (rnd(4) === 0 ? 0 : 1));
+        const model = Uint8Array.from(keep);
+        const cap = rnd(2) === 0 ? 1 << 20 : rnd(20);
+        const count = new Int32Array(patterns.length);
+        const kept: [number, number][] = [];
+        const hits = new Uint8Array(patterns.length);
+        const distinct = m.scan(text, hits, new Int32Array(patterns.length), keep, {
+          add: (p, start) => {
+            kept.push([p, start]);
+            if (++count[p]! > cap) keep[p] = 0;
+          },
+        });
+        const expected = new Uint8Array(patterns.length);
+        expect(distinct).toBe(m.markHits(text, expected));
+        expect([...hits]).toEqual([...expected]);
+        const starts: [number, number][] = [];
+        const seen = new Int32Array(patterns.length);
+        m.forEach(text, (p, start) => {
+          if (model[p] !== 1) return;
+          starts.push([p, start]);
+          if (++seen[p]! > cap) model[p] = 0;
         });
         expect(kept).toEqual(starts);
       }
