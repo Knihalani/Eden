@@ -1190,6 +1190,10 @@ export function gateOf(rules: SecretRule[]): Gate {
       return {
         stored: redactAssignments(passed.out, false, seen, assigned),
         removed: (values) => structuralRemoved(passed, assigned, values),
+        // `structuralRemoved`'s `strict` is empty when no token pass replaced anything and every value the
+        // assignment pass replaced is code or a placeholder.
+        keepsAll: () =>
+          passed.steps.length === 0 && assigned.every(([start, end]) => notSecret(passed.out.slice(start, end))),
       };
     },
   };
