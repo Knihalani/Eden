@@ -123,6 +123,15 @@ export function redactPem(s: string): string {
 
 /** Global, for replacing every occurrence. */
 const SECRET_INLINE = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "gi");
+/**
+ * Sticky, tried only where a match can start (`tokenPasses`'s `inlineAt`). Every match holds one of the last token
+ * pass's literals (TOKEN_PASSES) at its start, or one character after it (`[sr]k_live_`), in ASCII letters of either
+ * case, which the gate's prefilter reports (it folds case and more): so a match starts at most `INLINE_BACK` before
+ * an occurrence of one.
+ */
+const SECRET_INLINE_AT = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "iy");
+/** How far before a literal of the last token pass a match can start: 0, or 1 for `k_live_`/`k_test_`. */
+export const INLINE_BACK = 1;
 /** Non-global, so `.test()` carries no lastIndex between calls. */
 const SECRET_ANY = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "i");
 
@@ -786,8 +795,13 @@ export interface TokenPassed {
 /**
  * D1850: `redactTokensIn(s, passes)` (its output is `out`), keeping the ranges each pass replaced, so the masks can be
  * worked out after it without running the passes' regexes again (7 ms a megabyte each time).
+ *
+ * `inlineAt`, when given, holds every place in `s` where a match of the inline token shapes (the last pass) can
+ * start, ascending (the secret gate's prefilter found their literals: `inlineStarts`); the pass then tries its regex
+ * there alone, sticky, unless an earlier pass changed the text. The global regex scanned every position of the text
+ * (2-3 ns a character, a sixth of the gate on a 16 KB text holding `task-`).
  */
-export function tokenPasses(s: string, passes: number): TokenPassed {
+export function tokenPasses(s: string, passes: number, inlineAt?: ArrayLike<number>): TokenPassed {
   let cur = s;
   const steps: [number, number][][] = [];
   /** Replaces `ranges` of `cur` (increasing, apart) by the sentinel. */
@@ -842,7 +856,22 @@ export function tokenPasses(s: string, passes: number): TokenPassed {
   }
   if ((passes & 2) !== 0) pass(SK_DASHED, (match) => DIGIT.test(match));
   if ((passes & 4) !== 0) pass(BASIC_AUTH, (_match, b64) => isBasicCredential(b64));
-  if ((passes & 8) !== 0) pass(SECRET_INLINE, () => true);
+  if ((passes & 8) !== 0 && inlineAt && steps.length === 0) {
+    // `replace`'s matches: the leftmost match at or after the last one's end, each time. Every match starts at one
+    // of `inlineAt`, so trying them in order with the same regex, sticky, finds the same ones (none is empty).
+    const ranges: [number, number][] = [];
+    let end = 0;
+    for (let k = 0; k < inlineAt.length; k++) {
+      const at = inlineAt[k]!;
+      if (at < end) continue;
+      SECRET_INLINE_AT.lastIndex = at;
+      const m = SECRET_INLINE_AT.exec(cur);
+      if (m === null) continue;
+      end = at + m[0].length;
+      ranges.push([at, end]);
+    }
+    replace(ranges);
+  } else if ((passes & 8) !== 0) pass(SECRET_INLINE, () => true);
   return { source: s, out: cur, steps };
 }
 
