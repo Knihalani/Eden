@@ -76,7 +76,38 @@ function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean 
  * a JSON check: whatever passes is still parsed and validated as before.
  */
 export function bodyShapeUnder(bytes: Uint8Array): boolean {
-  return bodyShapeWithin(bytes, BODY_MAX_DEPTH, BODY_MAX_VALUES);
+  return bodyShapeQuick(bytes, BODY_MAX_DEPTH, BODY_MAX_VALUES);
+}
+
+/**
+ * `bodyShapeWithin`'s answer, mostly without its byte scan (D1940): a body of at most `maxValues` bytes holds at most
+ * that many values (each is a byte), and one with at most `maxDepth` opening brackets anywhere, inside strings or not,
+ * nests no deeper outside them; such a body passes on two native `indexOf` searches. Anything else is scanned.
+ * Measured (median of 7 interleaved runs): a user message 0.26 → 0.09 µs, a 5.9 KB tool result 3.5 → 0.5, a 63 KB
+ * one 57 → 6, 100 pushed items (45 KB) 19-28 → 3-4; bodies past the bracket bound cost the scan as before.
+ */
+export function bodyShapeQuick(bytes: Uint8Array, maxDepth: number, maxValues: number): boolean {
+  return fewOpenings(bytes, maxDepth, maxValues) || bodyShapeWithin(bytes, maxDepth, maxValues);
+}
+
+/**
+ * True only where `bodyShapeWithin` is (above); false decides nothing. A body dense in brackets gives up after 64 of
+ * them when they come often enough that the whole body would pass `maxDepth`, so it costs at most those 64 searches
+ * more than the scan alone (about 1 µs on a 4 KB string of brackets).
+ */
+function fewOpenings(bytes: Uint8Array, maxDepth: number, maxValues: number): boolean {
+  const n = bytes.length;
+  if (n > maxValues) return false;
+  let found = 0;
+  for (let k = 0; k < 2; k++) {
+    const bracket = k === 0 ? 0x7b : 0x5b;
+    for (let i = indexOfByte(bytes, bracket, 0); i >= 0; i = indexOfByte(bytes, bracket, i + 1)) {
+      if (++found > maxDepth) return false;
+      // At this rate the brackets would pass the bound: the scan is the cheaper answer.
+      if (found === 64 && found * n > maxDepth * (i + 1)) return false;
+    }
+  }
+  return true;
 }
 
 /** `bodyShapeUnder`'s bounds: levels and values (opening brackets and commas) outside strings. */
@@ -167,10 +198,12 @@ function stringEnd(bytes: Uint8Array, i: number): number {
  * cannot stringify (nested past the stack limit) or that is huge is the caller's error, not a 503 later. The shape
  * walk runs first so deep input is refused before the stringify that would stall on it (D100).
  */
-function jsonUnder(v: unknown, max: number): boolean {
+function jsonUnder(v: unknown, max: number, sourceChars: number): boolean {
   try {
     // Inside the try: an embedder's object may have a throwing getter, and validation must not throw.
     if (!shapeUnder(v, MAX_INPUT_DEPTH, MAX_INPUT_NODES)) return false;
+    // Parsed from JSON text at most a sixth of `max` long: its JSON is at most `max` (`JSON_GROWTH`), unbuilt.
+    if (sourceChars * JSON_GROWTH <= max) return true;
     return (JSON.stringify(v ?? null)?.length ?? 0) <= max;
   } catch {
     return false;
@@ -184,7 +217,20 @@ function scopeError(r: Record<string, unknown>): string | null {
   return null;
 }
 
-export function checkEvent(v: unknown): Checked<AgentEvent> {
+/**
+ * How much longer than the JSON text it was parsed from a value's `JSON.stringify` can be: a number written short
+ * grows most ("1e20" is 21 characters, 5.25x), a lone surrogate written raw becomes a 6-character escape, white space
+ * and repeated keys go, and nothing else grows (an escape in the text is never shorter than what stringify writes).
+ */
+const JSON_GROWTH = 6;
+
+/**
+ * `sourceChars`, when given, is the length of the JSON text `v` was parsed from (the server's decoded body). A tool
+ * call's input parsed from text at most a sixth of its 1,000,000-character bound fits that bound, so its
+ * `JSON.stringify`, most of the check's cost (0.55 of 0.96 µs for a 206-character input, 3.0 of 3.6 at 1,466), is
+ * skipped (D1940); the engine builds that JSON itself later. The default, Infinity, always stringifies.
+ */
+export function checkEvent(v: unknown, sourceChars = Infinity): Checked<AgentEvent> {
   if (!isRecord(v)) return { ok: false, error: "event must be an object" };
   const scope = scopeError(v);
   if (scope) return { ok: false, error: scope };
@@ -205,7 +251,7 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
       return { ok: true, value: { ...base, kind: v.kind, text: v.text } };
     case "tool_call":
       if (!isText(v.tool, 200)) return { ok: false, error: textError("tool_call.tool", 200) };
-      if (!jsonUnder(v.input, 1_000_000)) {
+      if (!jsonUnder(v.input, 1_000_000, sourceChars)) {
         return {
           ok: false,
           error: "tool_call.input must be JSON of at most 1,000,000 characters, nested at most 1,000 deep",

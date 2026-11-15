@@ -16,9 +16,10 @@ forwarded as is.
 
 | File                          | Owns                                                                                                                                                                                                                                                                                                                                                                                               |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/proxy.ts`                | `createProxy` (identity: `x-eden-user-id` or the body's `user`; conversation: `x-eden-session-id` or a hash of its first non-system message; new messages by content hash, `Conversation.seen`; one deadline per request; `proxyKey`), `eventsOf` (messages to events), `textOf`                                                                                                                   |
+| `src/proxy.ts`                | `createProxy` (identity: `x-eden-user-id` or the body's `user`; conversation: `x-eden-session-id` or a hash of its first non-system message; new messages by content hash, `Conversation.seen`; one deadline per request; `proxyKey`), `eventsOf` (messages to events), `textOf`; D1940: each message hashed once a request (`hashOf`, `Bun.SHA256` held as 32 Latin-1 characters; the retry check and `userKeys` read those hashes), tool names by `toolNamesOf`, not every message's events                                                                                                                   |
 | `src/ask.ts`                  | `askTool` (D851, opt-in, D857): `ask_context`'s definition per route, `withAskTool` (added to `tools`, every other byte kept; skipped when the caller has one), `readRound` (a JSON or buffered streamed answer read for its asks: chat `tool_calls`, Anthropic `tool_use` with thinking kept, Responses `function_call`; the round to append), `setKey`, `noToolChoice`                           |
 | `src/with-messages.ts`        | `withMessages`: one top-level key of a JSON body's text replaced, every other byte kept (audit A5)                                                                                                                                                                                                                                                                                                 |
+| `bench/proxy.bench.ts`        | D1940: the proxy's own µs a request on a growing tool-using conversation (stub upstream and Eden), `[turns] [reps] [srcB]`; with another copy of `src/` it runs both arms interleaved with a self-vs-self control |
 | `src/proxy-ask.test.ts`       | `askTool` on the three routes, streamed and not: the tool added, the round appended, the agent's answer the final round's bytes; the caller's own calls left out of a round; the round cap and `tool_choice` none; Eden down; an upstream error on round 2; not offered off, in shadow, without a user, or beside the caller's own `ask_context`                                                   |
 | `src/main.ts`                 | `bun run proxy` (`EDEN_PROXY_UPSTREAM`, `EDEN_URL`, `EDEN_API_KEY`, `PROXY_PORT`/`PROXY_HOST`, default 127.0.0.1:8791; `EDEN_PROXY_KEY` required off loopback; `EDEN_PROXY_SHADOW`; `EDEN_PROXY_MAX_BODY_BYTES`, default 64 MB, a chat body with images). At startup (D365): a warning for an upstream with no path, and one `/v1/whoami` probe saying whether Eden is reachable and takes the key |
 | `src/proxy-anthropic.test.ts` | The Messages route (D653): injection as a text block with the rest byte for byte, `metadata.user_id` (this route only), a tool turn, text beside tool results not a turn, a later turn, isolation, fail open, `keepPackets` off, shadow, streaming, other `…/messages` routes untouched, error shape, `fromAnthropic`/`toAnthropic` alone                                                          |
@@ -95,8 +96,16 @@ forwarded as is.
   aborts it and goes as today. Chat and Anthropic routes only (not Responses); not with `askTool`, in shadow mode or
   with `store: true`. An aborted call is billed its input and any output written or billed after the abort.
 
+- **One pass over the history a request (D1940).** Work over every message of a request grows with the
+  conversation (548 KB by a coding agent's 30th turn): hash each message once in `withEden`'s loop and hand the
+  hashes on (main hashed the history three or four times, 61% of the proxy's own time), and never build every
+  message's events to learn one thing (`toolNamesOf`). The digests are keys only: keep them SHA-256 (a weaker hash
+  lets a tool output be crafted to collide with a later message, which then goes unreported), and keep any key built
+  from them injective (fixed-length digests, a length before free text). `bench/proxy.bench.ts` times it.
+
 ## Test
 
 ```bash
 bun run test:pkg proxy     # < 1 s
+bun packages/proxy/bench/proxy.bench.ts 30 7   # the history work on a growing conversation, ~20 s
 ```
