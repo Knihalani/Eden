@@ -198,10 +198,12 @@ function stringEnd(bytes: Uint8Array, i: number): number {
  * cannot stringify (nested past the stack limit) or that is huge is the caller's error, not a 503 later. The shape
  * walk runs first so deep input is refused before the stringify that would stall on it (D100).
  */
-function jsonUnder(v: unknown, max: number): boolean {
+function jsonUnder(v: unknown, max: number, sourceChars: number): boolean {
   try {
     // Inside the try: an embedder's object may have a throwing getter, and validation must not throw.
     if (!shapeUnder(v, MAX_INPUT_DEPTH, MAX_INPUT_NODES)) return false;
+    // Parsed from JSON text at most a sixth of `max` long: its JSON is at most `max` (`JSON_GROWTH`), unbuilt.
+    if (sourceChars * JSON_GROWTH <= max) return true;
     return (JSON.stringify(v ?? null)?.length ?? 0) <= max;
   } catch {
     return false;
@@ -215,7 +217,20 @@ function scopeError(r: Record<string, unknown>): string | null {
   return null;
 }
 
-export function checkEvent(v: unknown): Checked<AgentEvent> {
+/**
+ * How much longer than the JSON text it was parsed from a value's `JSON.stringify` can be: a number written short
+ * grows most ("1e20" is 21 characters, 5.25x), a lone surrogate written raw becomes a 6-character escape, white space
+ * and repeated keys go, and nothing else grows (an escape in the text is never shorter than what stringify writes).
+ */
+const JSON_GROWTH = 6;
+
+/**
+ * `sourceChars`, when given, is the length of the JSON text `v` was parsed from (the server's decoded body). A tool
+ * call's input parsed from text at most a sixth of its 1,000,000-character bound fits that bound, so its
+ * `JSON.stringify`, most of the check's cost (0.55 of 0.96 µs for a 206-character input, 3.0 of 3.6 at 1,466), is
+ * skipped (D1940); the engine builds that JSON itself later. The default, Infinity, always stringifies.
+ */
+export function checkEvent(v: unknown, sourceChars = Infinity): Checked<AgentEvent> {
   if (!isRecord(v)) return { ok: false, error: "event must be an object" };
   const scope = scopeError(v);
   if (scope) return { ok: false, error: scope };
@@ -236,7 +251,7 @@ export function checkEvent(v: unknown): Checked<AgentEvent> {
       return { ok: true, value: { ...base, kind: v.kind, text: v.text } };
     case "tool_call":
       if (!isText(v.tool, 200)) return { ok: false, error: textError("tool_call.tool", 200) };
-      if (!jsonUnder(v.input, 1_000_000)) {
+      if (!jsonUnder(v.input, 1_000_000, sourceChars)) {
         return {
           ok: false,
           error: "tool_call.input must be JSON of at most 1,000,000 characters, nested at most 1,000 deep",
