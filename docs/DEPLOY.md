@@ -343,12 +343,21 @@ format 7's.
 older source-map file (`source-map.db`, `source-map.<i>.db`, mcp-stdio's per-user files) to the WITHOUT ROWID
 layout at open, before it serves: about half the file and half its later disk writes. It logs one line a file
 (`eden: source map … moved to the WITHOUT ROWID layout (D1960): N rows, compacted, T ms`); a real 7.5 MB file took
-123 ms and wrote about 14 MB once, and the move costs about 0.13 ms a 4 KiB page, so plan a few seconds at most. A
-file that cannot be moved (another process holding it, read-only, a full disk, damage) logs `keeps its rowid layout
-… it works as before` and is served as it was; the next start tries again. A file over 128 MiB is not moved at open
-(the same line, each start); to move it, stop the server and run `bun packages/graph/src/migrate.ts FILE` (from
-`/app` in the image; it holds the file for about 0.13 ms a page). A rollback to an older build reads and writes a
-moved file unchanged.
+123 ms and wrote about 14 MB once. An open spends at most about 3.5 s on it, however many router children move
+their files at once: the copy gives up and rolls back past 3 s (`MIGRATE_BUDGET_MS`), and measured with eight
+children on 110 MB files each gave up at 3.0-3.3 s on the loaded 4-core VM, where a 28.5 MB file moved in 1.0 s
+alone. A move that ran past 1.5 s skips its VACUUM (`not compacted`) and a later open compacts the file (`compacted
+(D1960): F free pages of P`). Free disk is checked first: at least twice the file (plus its WAL and 4 MiB) when
+SQLite's temp directory (`SQLITE_TMPDIR`, `TMPDIR`, else `/var/tmp` or `/tmp`) is on the same filesystem, else 1.5x
+beside the file and 1x there. A file that cannot be moved logs `keeps its rowid layout … it works as before` and is
+served as it was, and the next start tries again: another process holding it, read-only, too little free disk (the
+line says how much it needs), damage, past the time budget, or an index, trigger or view someone added on its
+tables (named in the line; drop it to let the move run). Two kinds are never moved at open and log that line at
+every start: a file over 128 MiB, and a file from October 27 (its `mention` table has a `last_ref` column; neither
+the open nor migrate.ts moves it, and the map reads and writes it as it is). To move a large or slow file, stop the
+server and run `bun packages/graph/src/migrate.ts FILE` (from `/app` in the image; no size or time bound, about
+0.13-0.17 ms a page: 4.7 s for 110 MB; it says `no source-map tables` for a file that is not a map). A rollback to
+an older build reads and writes a moved file unchanged.
 
 ## 12. What was validated here, and what was not
 

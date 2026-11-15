@@ -31,6 +31,8 @@
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
  */
 import { Database } from "bun:sqlite";
+import { accessSync, constants as fsConstants, statfsSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 import { Xoshiro128 } from "@eden/primitives";
 import { scopeKey, type Scope } from "@eden/protocol";
 
@@ -638,54 +640,109 @@ const KEY_COLUMNS: Record<Table, number> = { mention: 3, utility: 3, planner_arm
  */
 export const MIGRATE_BUSY_MS = 250;
 /**
- * The largest file moved at open, in pages (D1960): 128 MiB of 4 KiB pages. The move costs about 0.13 ms a page on
- * the shared 4-core VM (a 1M-row, 25,084-page file in 3.2-3.6 s), so this bounds an open's wait near 4.5 s there, far
- * inside a router child's 30 s start deadline (D172). A larger file keeps its layout and works as before (one log
- * line an open); `bun packages/graph/src/migrate.ts FILE` moves it with the server stopped.
+ * The largest file moved at open, in pages (D1960): 128 MiB of 4 KiB pages. A larger file keeps its layout and works
+ * as before (one log line an open); `bun packages/graph/src/migrate.ts FILE` moves it with the server stopped. The
+ * time a move may take is bounded by `MIGRATE_BUDGET_MS`; this cap only saves starting a copy that could not finish.
  */
 export const MIGRATE_MAX_PAGES = 32_768;
+/**
+ * The longest a move may run at open (D1960). A router starts its children at once (`EDEN_PROCESSES`, one a core),
+ * each moving its own file inside a 30 s start deadline (D172) that also covers the gate's warm-up and the persisted
+ * users: with a 110 MB file a child, eight moving at once took 20.8-28 s. The copy reads the clock between tables and
+ * between batches of `MIGRATE_BATCH_ROWS` rows and rolls the whole move back past this (one log line; the file works
+ * as before, the next start tries again, `migrate.ts` has no budget). The VACUUM after it runs only if the move took
+ * at most half of this: it measured 0.15-0.2x the move, and a skipped one is retried at a later open (`LOOSE_SHARE`).
+ */
+export const MIGRATE_BUDGET_MS = 3_000;
+/** Rows a copy statement moves before the clock is read again (about 100 pages: 10-50 ms by load). */
+const MIGRATE_BATCH_ROWS = 4_096;
+/**
+ * The free space a move needs, as multiples of the file plus its WAL (D1960). Measured on tmpfs with a 28.5 MB old
+ * file: the move and its VACUUM used at most 1.0x more on the file's filesystem (the new tables in the WAL, then the
+ * file grown by them) and 0.47x in SQLite's temp directory (VACUUM's copy of the database), 1.48x when the two are one
+ * filesystem. Each requirement is about a third over the measurement, plus `ROOM_RESERVE`, so a small file never
+ * takes a disk's last bytes. Short of it the file keeps its layout: a move that commits and then cannot VACUUM leaves
+ * a file 1.5x the old one and the disk full, where the old file kept working. A compaction alone (a later open) needs
+ * the same multiples of the file's live pages.
+ */
+const ROOM = { file: 1.5, temp: 1, both: 2 } as const;
+const ROOM_RESERVE = 4 * 2 ** 20;
+/**
+ * A file whose free pages are at least this share of it (and at least `LOOSE_MIN_PAGES`) is compacted at open, when
+ * its live pages are at most half `maxPages` (a capped file's moved size) and the disk has room (D1960): a move whose
+ * VACUUM was skipped (the budget) or failed (the disk) is finished at a later open, once.
+ */
+const LOOSE_SHARE = 0.25;
+const LOOSE_MIN_PAGES = 256;
 
 export interface MigrateResult {
-  /** `current`: nothing to move; `migrated`: moved now; `kept`: not moved, the file is as it was. */
-  status: "current" | "migrated" | "kept";
+  /**
+   * `current`: nothing to do; `migrated`: moved now; `compacted`: an earlier move's VACUUM finished now; `kept`: not
+   * moved or not compacted, the file is as it was.
+   */
+  status: "current" | "migrated" | "compacted" | "kept";
   /** Rows moved (`migrated`). */
   rows?: number;
   /** Why it was kept (an error's message, never a row). */
   reason?: string;
 }
 
+export interface MigrateOptions {
+  log?: (line: string) => void;
+  /** Called with each step's name before it runs (tests stop the move there). */
+  onStep?: (step: string) => void;
+  maxPages?: number;
+  budgetMs?: number;
+  /** Bytes free to this process on the filesystem holding `dir` (tests stand in a full disk). */
+  freeBytes?: (dir: string) => number;
+}
+
 /**
  * Moves a file's rowid tables to the WITHOUT ROWID layout, once (D1960). One transaction (`BEGIN IMMEDIATE`, so the
  * layout is read again under the write lock): for each rowid table a `<table>_new` WITHOUT ROWID, every row copied by
- * named columns in key order (in rowid order the new B-tree was built at random and wrote 10x the bytes) and counted,
- * the old table dropped and the new one renamed; then a VACUUM. A crash or an error at any statement before the
- * commit rolls the whole move back (WAL): the file is in one layout or the other, every row in it. Not `VACUUM INTO`
- * a copy renamed over the file: another connection open on it (a second mcp-stdio, an older process) would keep
- * writing the old inode. Here such a connection keeps reading its snapshot and re-prepares its statements on the new
- * schema at its next step (SQLite's schema check); one holding the write lock makes the move give up after
- * `MIGRATE_BUSY_MS`. Never throws: a failure is one log line and the file keeps its layout. `onStep` names each step
- * before it runs (tests stop the move there). docs/research/opt-round4-graph.md has the measurements.
+ * named columns in key order (in rowid order the new B-tree was built at random and wrote 10x the bytes), in batches
+ * that read the clock (`MIGRATE_BUDGET_MS`), and counted, the old table dropped and the new one renamed; then a VACUUM
+ * and a WAL truncate, each in its own try. A crash or an error at any statement before the commit rolls the whole
+ * move back (WAL): the file is in one layout or the other, every row in it. Not `VACUUM INTO` a copy renamed over the
+ * file: another connection open on it (a second mcp-stdio, an older process) would keep writing the old inode. Here
+ * such a connection keeps reading its snapshot and re-prepares its statements on the new schema at its next step
+ * (SQLite's schema check); one holding the write lock makes the move give up after `MIGRATE_BUSY_MS`. Before it
+ * starts: the columns must be the map's, no index, trigger or view made outside Eden may name the tables (the drop
+ * would lose it), the file must be within `maxPages`, and the disk must have room (`ROOM`). A moved file left with
+ * many free pages is compacted at a later open (`LOOSE_SHARE`). Never throws: a failure is one log line and the file
+ * keeps its layout. docs/research/opt-round4-graph.md has the measurements.
  */
-export function migrateLayout(
-  db: Database,
-  options: { log?: (line: string) => void; onStep?: (step: string) => void; maxPages?: number } = {},
-): MigrateResult {
+export function migrateLayout(db: Database, options: MigrateOptions = {}): MigrateResult {
   const log = options.log ?? console.error;
   const step = options.onStep ?? (() => {});
   const maxPages = options.maxPages ?? MIGRATE_MAX_PAGES;
+  const budgetMs = options.budgetMs ?? MIGRATE_BUDGET_MS;
+  const free = options.freeBytes ?? freeBytesAt;
   let busy: number | undefined;
+  const shortWait = () => {
+    busy = pragma(db, "busy_timeout");
+    db.exec(`PRAGMA busy_timeout = ${MIGRATE_BUSY_MS}`);
+  };
   try {
     const old = rowidTables(db);
-    if (old.length === 0) return { status: "current" };
+    if (old.length === 0) return compactLoose(db, log, step, maxPages, free, shortWait);
     for (const t of old) {
       const cols = (db.query(`PRAGMA main.table_info(${t})`).values() as [number, string][]).map((r) => r[1]);
       if (cols.join() !== COLUMNS[t].join()) return kept(log, db, `${t} has the columns ${cols.join(", ")}`);
     }
-    const pages = db.query("PRAGMA main.page_count").values()[0]![0] as number;
+    const others = dependents(db);
+    if (others) return kept(log, db, others);
+    const pages = pragma(db, "main.page_count");
     if (pages > maxPages) return kept(log, db, `${pages} pages, more than the ${maxPages} moved at open`);
+    const short = roomFor(db, pages * pragma(db, "main.page_size") + walBytes(db), free);
+    if (short) return kept(log, db, short);
     const started = performance.now();
-    busy = db.query("PRAGMA busy_timeout").values()[0]![0] as number;
-    db.exec(`PRAGMA busy_timeout = ${MIGRATE_BUSY_MS}`);
+    const inTime = (at: string) => {
+      const ms = performance.now() - started;
+      if (ms > budgetMs)
+        throw new Error(`over the ${budgetMs} ms a move may take at open (${Math.round(ms)} ms, ${at})`);
+    };
+    shortWait();
     let rows = 0;
     step("begin");
     db.exec("BEGIN IMMEDIATE");
@@ -697,15 +754,12 @@ export function migrateLayout(
         return { status: "current" };
       }
       for (const t of moving) {
-        const cols = COLUMNS[t].join(", ");
+        inTime(`before ${t}`);
         step(`${t}:create`);
         db.exec(`DROP TABLE IF EXISTS ${t}_new`);
         db.exec(`CREATE TABLE ${t}_new ${TABLE_SQL[t]}`);
         step(`${t}:copy`);
-        const order = COLUMNS[t].slice(0, KEY_COLUMNS[t]).join(", ");
-        const copied = db
-          .query(`INSERT INTO ${t}_new (${cols}) SELECT ${cols} FROM ${t} ORDER BY ${order}`)
-          .run().changes;
+        const copied = copyInKeyOrder(db, t, inTime);
         // The copy read the key's index; the count reads the table itself, so an index missing rows cannot drop them.
         const held = db.query(`SELECT count(*) FROM ${t} NOT INDEXED`).values()[0]![0] as number;
         if (copied !== held) throw new Error(`${t}: copied ${copied} of ${held} rows`);
@@ -715,6 +769,7 @@ export function migrateLayout(
         step(`${t}:rename`);
         db.exec(`ALTER TABLE ${t}_new RENAME TO ${t}`);
       }
+      inTime("before the commit");
       step("commit");
       db.exec("COMMIT");
     } catch (e) {
@@ -726,24 +781,29 @@ export function migrateLayout(
       throw e;
     }
     // The old tables' pages are free inside the file now, and the new tables were written past them, so the file is
-    // larger than before; VACUUM writes it again at its new size (half the old file). Its own transaction: a crash
-    // or a failure here leaves the moved file with free pages, which later writes reuse.
+    // larger than before; VACUUM writes it again at its new size (half the old file). Its own transaction: a crash,
+    // a failure or a skip here leaves the moved file with free pages, which later writes reuse and a later open
+    // compacts (`compactLoose`).
     let compacted = "compacted";
-    try {
-      step("vacuum");
-      db.exec("VACUUM");
-      // The WAL file grew to the size of the rewrite; truncate it if no reader holds it (else it is reused).
-      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    } catch (e) {
-      compacted = `not compacted (${e instanceof Error ? e.message : String(e)}; later writes reuse its free pages)`;
+    const moveMs = performance.now() - started;
+    if (moveMs > budgetMs / 2) {
+      compacted = `not compacted (the move took ${Math.round(moveMs)} ms; a later open compacts it)`;
+    } else {
+      try {
+        step("vacuum");
+        db.exec("VACUUM");
+      } catch (e) {
+        compacted = `not compacted (${message(e)}; later writes reuse its free pages, a later open compacts it)`;
+      }
     }
+    truncateWal(db);
     const ms = Math.round(performance.now() - started);
     log(
       `eden: source map ${db.filename} moved to the WITHOUT ROWID layout (D1960): ${rows} rows, ${compacted}, ${ms} ms`,
     );
     return { status: "migrated", rows };
   } catch (e) {
-    return kept(log, db, e instanceof Error ? e.message : String(e));
+    return kept(log, db, message(e));
   } finally {
     if (busy !== undefined) {
       try {
@@ -753,6 +813,176 @@ export function migrateLayout(
       }
     }
   }
+}
+
+/**
+ * Copies a rowid table's rows into `<t>_new` in key order, `MIGRATE_BATCH_ROWS` at a time: each batch starts past the
+ * largest key copied so far (read back from the new table's B-tree, integers exact), and `inTime` runs between
+ * batches. Returns the rows copied; the caller checks them against the table's count.
+ */
+function copyInKeyOrder(db: Database, t: Table, inTime: (at: string) => void): number {
+  const cols = COLUMNS[t].join(", ");
+  const keys = COLUMNS[t].slice(0, KEY_COLUMNS[t]);
+  const key = keys.join(", ");
+  const marks = keys.map(() => "?").join(", ");
+  const insert = `INSERT INTO ${t}_new (${cols}) SELECT ${cols} FROM ${t}`;
+  const limit = `ORDER BY ${key} LIMIT ${MIGRATE_BATCH_ROWS}`;
+  const first = db.prepare(`${insert} ${limit}`);
+  const next = db.prepare(`${insert} WHERE (${key}) > (${marks}) ${limit}`);
+  const last = db
+    .prepare(`SELECT ${key} FROM ${t}_new ORDER BY ${keys.map((k) => `${k} DESC`).join(", ")} LIMIT 1`)
+    .safeIntegers(true);
+  try {
+    let copied = first.run().changes;
+    let total = copied;
+    while (copied === MIGRATE_BATCH_ROWS) {
+      inTime(`${t}:copy`);
+      copied = next.run(...(last.values()[0] as (string | number | bigint)[])).changes;
+      total += copied;
+    }
+    return total;
+  } finally {
+    for (const s of [first, next, last]) s.finalize();
+  }
+}
+
+/**
+ * Finishes an earlier move whose VACUUM was skipped or failed (D1960): a file with no rowid table whose free pages
+ * are at least `LOOSE_SHARE` of it is compacted, if its live pages are at most half `maxPages` and the disk has room.
+ * Anything else is `current`, untouched; a file it cannot compact now (no room, locked, full) is `kept`, one line.
+ */
+function compactLoose(
+  db: Database,
+  log: (line: string) => void,
+  step: (step: string) => void,
+  maxPages: number,
+  free: (dir: string) => number,
+  shortWait: () => void,
+): MigrateResult {
+  const pages = pragma(db, "main.page_count");
+  const loose = pragma(db, "main.freelist_count");
+  const live = pages - loose;
+  if (loose < LOOSE_MIN_PAGES || loose < pages * LOOSE_SHARE || live > maxPages / 2) return { status: "current" };
+  const notCompacted = (reason: string): MigrateResult => {
+    log(`eden: source map ${db.filename} is not compacted (D1960; it works as before): ${reason}`);
+    return { status: "kept", reason };
+  };
+  const short = roomFor(db, live * pragma(db, "main.page_size") + walBytes(db), free);
+  if (short) return notCompacted(short);
+  const started = performance.now();
+  shortWait();
+  try {
+    step("compact");
+    db.exec("VACUUM");
+  } catch (e) {
+    truncateWal(db);
+    return notCompacted(message(e));
+  }
+  truncateWal(db);
+  const ms = Math.round(performance.now() - started);
+  log(`eden: source map ${db.filename} compacted (D1960): ${loose} free pages of ${pages}, ${ms} ms`);
+  return { status: "compacted" };
+}
+
+/**
+ * Why the disk cannot take the move or compaction of `bytes` (null when it can): `ROOM`'s multiples on the file's
+ * filesystem and on the one SQLite's VACUUM writes its temporary database to, summed when the two are one.
+ */
+function roomFor(db: Database, bytes: number, free: (dir: string) => number): string | null {
+  const dir = dirname(db.filename);
+  const need = (k: number) => Math.ceil(bytes * k) + ROOM_RESERVE;
+  const mib = (n: number) => `${(n / 2 ** 20).toFixed(1)} MiB`;
+  const tmp = vacuumTempDir(db);
+  try {
+    const here = free(dir);
+    const same = tmp === null || statSync(tmp).dev === statSync(dir).dev;
+    const fileNeed = need(same && tmp !== null ? ROOM.both : ROOM.file);
+    if (here < fileNeed) return `${mib(here)} free beside it, short of the ${mib(fileNeed)} the move needs`;
+    if (!same) {
+      const there = free(tmp);
+      if (there < need(ROOM.temp))
+        return `${mib(there)} free in ${tmp}, short of the ${mib(need(ROOM.temp))} VACUUM needs`;
+    }
+    return null;
+  } catch (e) {
+    return `free space unknown (${message(e)})`;
+  }
+}
+
+/** Free bytes for an unprivileged writer on the filesystem holding `dir`. */
+function freeBytesAt(dir: string): number {
+  const s = statfsSync(dir);
+  return s.bavail * s.bsize;
+}
+
+/**
+ * Where SQLite's unix VFS puts VACUUM's temporary database (`unixTempFileDir`): `temp_store_directory`, then
+ * `SQLITE_TMPDIR`, `TMPDIR`, /var/tmp, /usr/tmp, /tmp, the first that is a writable directory, else ".". Null when
+ * temp storage is memory (`temp_store = 2`; this build's default, `SQLITE_TEMP_STORE=1`, is a file).
+ */
+function vacuumTempDir(db: Database): string | null {
+  if (pragma(db, "temp_store") === 2) return null;
+  let set: unknown;
+  try {
+    set = db.query("PRAGMA temp_store_directory").values()[0]?.[0];
+  } catch {
+    // A build without the deprecated pragma: the environment decides.
+  }
+  for (const d of [set, process.env.SQLITE_TMPDIR, process.env.TMPDIR, "/var/tmp", "/usr/tmp", "/tmp"]) {
+    if (typeof d !== "string" || d === "") continue;
+    try {
+      if (!statSync(d).isDirectory()) continue;
+      accessSync(d, fsConstants.W_OK | fsConstants.X_OK);
+      return d;
+    } catch {
+      // Missing or not writable: SQLite tries the next.
+    }
+  }
+  return ".";
+}
+
+/**
+ * An index, trigger or view made outside Eden on the map's tables (the map makes none): the move's DROP would delete
+ * an index or trigger with its table, and a view naming a table makes the rename fail. Such a file keeps its layout.
+ */
+function dependents(db: Database): string | null {
+  const named = new RegExp(`\\b(${TABLES.join("|")})\\b`, "i");
+  const rows = db
+    .query("SELECT type, name, tbl_name, sql FROM main.sqlite_schema WHERE type IN ('index', 'trigger', 'view')")
+    .values() as [string, string, string, string | null][];
+  const found = rows
+    .filter(([type, , table, sql]) => {
+      if (sql === null) return false; // a primary key's automatic index
+      return (TABLES as readonly string[]).includes(table.toLowerCase()) || (type !== "index" && named.test(sql));
+    })
+    .map(([type, name]) => `${type} ${name}`);
+  if (found.length === 0) return null;
+  return `${found.join(", ")} not made by Eden names its tables, and the move would drop or break it`;
+}
+
+/** Truncates the WAL if no reader holds it (the move or VACUUM grew it to the rewrite's size); else it is reused. */
+function truncateWal(db: Database): void {
+  try {
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  } catch {
+    // A reader holds it or the disk refused: later checkpoints reuse it from the start.
+  }
+}
+
+function walBytes(db: Database): number {
+  try {
+    return statSync(`${db.filename}-wal`).size;
+  } catch {
+    return 0;
+  }
+}
+
+function pragma(db: Database, name: string): number {
+  return db.query(`PRAGMA ${name}`).values()[0]![0] as number;
+}
+
+function message(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 /** The map's tables that still have a rowid (`PRAGMA table_list`'s `wr` is 0). */

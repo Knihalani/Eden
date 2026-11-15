@@ -43,15 +43,20 @@ oracle, `src/source-map.reference.ts`; `src/migrate.ts`, the operator's command 
   table goes through the memo or reads the file as it is, never a memo with a caller's edits (rows are copied out).
 - **Tables are WITHOUT ROWID in a new file (D1936), and a file made before is moved once at open (D1960)**: half
   the pages and about half the disk writes. `migrateLayout` runs in the constructor for every file: one transaction
-  (`<table>_new`, copy by named columns in key order, count checked, drop, rename), then `VACUUM`. A file it cannot
-  move (locked past `MIGRATE_BUSY_MS`, read-only, full, damaged, other columns, over `MIGRATE_MAX_PAGES`) keeps its
-  rowid tables with one log line and works unchanged, so no statement may depend on a rowid or on which layout a file
-  has. A new table or column joins `TABLES`, `TABLE_SQL`, `COLUMNS` and `KEY_COLUMNS` (the move refuses a table whose
-  columns differ, so an added column must also teach it the old set). Never move a file by renaming another over it:
-  a second connection (mcp-stdio for the same user, an older process) would keep writing the old inode.
-  `source-map-migrate.test.ts` (in the test tail, D811: it times a lock wait and kills children) stops the move at
-  each step (a throw, a SIGKILL) and checks one layout and every row;
-  `bun packages/graph/src/migrate.ts FILE` moves a file over the cap with the server stopped.
+  (`<table>_new`, copy by named columns in key order in batches that read the clock, count checked, drop, rename),
+  then `VACUUM` and a WAL truncate, each in its own try. A file it cannot move (locked past `MIGRATE_BUSY_MS`,
+  read-only, full, damaged, other columns, an index, trigger or view made outside Eden on its tables, less free disk
+  than `ROOM` asks, over `MIGRATE_MAX_PAGES`, past `MIGRATE_BUDGET_MS`) keeps its rowid tables with one log line and
+  works unchanged, so no statement may depend on a rowid or on which layout a file has. A moved file whose VACUUM was
+  skipped or failed is compacted at a later open (`compactLoose`). The budget is what keeps a router's children,
+  which all move at once, inside their 30 s start deadline (D172): do not raise it, or add work to the open, without
+  measuring eight at once. A new table or column joins `TABLES`, `TABLE_SQL`, `COLUMNS` and `KEY_COLUMNS` (the move
+  refuses a table whose columns differ, so an added column must also teach it the old set). Never move a file by
+  renaming another over it: a second connection (mcp-stdio for the same user, an older process) would keep writing
+  the old inode. `source-map-migrate.test.ts` (in the test tail, D811: it times a lock wait and kills children)
+  stops the move at each step (a throw, a SIGKILL) and checks one layout and every row, and tests each bound (on a
+  real tmpfs where it runs as root and may mount one; it unmounts it); `bun packages/graph/src/migrate.ts FILE` moves
+  a file over the cap or the budget with the server stopped.
 - `normalizeEntity` reads plain ASCII names in one pass (D1937); `normalizeEntitySlow` is the definition.
 - `source-map.reference.ts` is the map before D1935-D1937, unchanged: the oracle `source-map-fast.test.ts` runs
   beside the map on random call streams (in memory, new files, a moved old-layout file, two connections; the streams
