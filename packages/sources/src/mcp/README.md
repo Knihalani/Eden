@@ -199,14 +199,32 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
 
 ## Where it loses
 
-- **JSON replies whose long strings hold escapes**, as tool output does (a newline and quotes on every line): 1.13-1.30x
-  the SDK's CPU at 1 MB and 0.94-1.26x at 64 KB (D1870's `MCP_PROFILE_TEXT=lines` run; 1.12-1.72x before). The shape
-  check must find each string's end exactly before the parse, which costs a search per escaped quote, and Bun's
-  `res.json()`, which the others use, parses the received bytes without the string our `text()` makes. Taking
-  `res.json()` and checking after the parse was measured and refused (D1871): it gives up D1704's bound on what a
-  hostile reply can make the parse cost.
-- **On Node** the JSON read decodes bytes and then parses (Node's `text()` drops two byte-order marks where
-  `TextDecoder` drops one, D1860), so D1870's splice of long strings is Bun's only; its faster scan is not (on Node it searches with `Buffer`'s `indexOf`, 40x V8's typed-array one: the shape check of a 1 MiB reply 21-26 µs, from 805-926).
+- **Tool output in JSON** (a long string with an escaped newline and quotes every line): 1.13-1.45x the SDK 1.x's
+  CPU at 64 KB with 16 and 256 in flight and at 1 MB, in D1908's run of the comparison
+  (`docs/research/mcp-vs-alternatives.md`; ours is the cheapest in 61 of its 72 cells). Our check and read cost 3-10%
+  over an unchecked `text()` and `JSON.parse`; the rest is Bun's `text()` against the `res.json()` the others use,
+  65-150 µs a MiB. Taking `json()` and checking after would close it and was refused (D1871): `json()` of 1 MB of
+  nested arrays costs 54-87 ms before anything can refuse it, and of a 16 MiB number flood 134-201 ms, which this
+  refuses in 3-5 ms. Also lost in that run: plain JSON at 1 KB and at 64 KB with 256 in flight (1.11x) and tool output
+  in SSE at 64 KB one at a time (1.11x); four numbers cells tie (1.00-1.02x). Against main's own parser (D1909,
+  D1919, measured with and without a forced GC): tool output, numbers (a series with `null` gaps, a few 16-17-digit
+  doubles or `1e400` anywhere in it, or an element no JSON array holds, which ends the scan as `JSON.parse` would end
+  the parse; once 4,096 elements have read, a series that turns into computed doubles is read on, 0.6-0.8x) and
+  plain text cost 0.3-0.9x its CPU; refused floods 0.8-1.0x on text and 1.0-1.2x on bytes; structured replies, multi-byte text, arrays of
+  computed doubles on the bytes path and long number arrays on the bytes path about the same (within the control's
+  10-20%). Still over it: siblings of short number arrays that the reader reads but the parse is not spared (on the
+  bytes path, 1 MB of arrays of 600 numbers 1.22-1.28x, the same with `1e400` in each 1.24-1.42x; on the text path
+  1.04-1.22x: a prototype that stopped holding pieces after 16 gained 5-15% and was not worth its code); refused nested
+  number arrays (16 MiB, 0.9-1.3x of main's 5-6 ms); a hostile pair of strings whose guessed end is wrong
+  (1.27x); a refused depth bomb (about 1 µs). Peak memory is under main's for accepted number arrays (6 MB with an
+  early 17-digit id: 18.5 against 25.9 MB cold, 7.8 against 21.0 warmed) and about main's elsewhere, but not at or
+  under it everywhere: a cold process on the text path still lands one 7 MB step over main on 16 MiB of floats (26.8
+  against 19.6, as D1919's earlier code did: compiling, not the reply), a series that turns into computed doubles
+  past its start 1.5 MB over main warmed (8.4 against 6.9; one that turns half way, before the 4,096 rule, held 22.0
+  against 12.3, and 10.2 after it), and a cold process on the bytes path 2-6 MB over (33.0
+  against 30.7 on 6 MB of ids).
+- **On Node** a long body is decoded once and takes the same long-reply path (D1904); V8 parses dense escapes faster
+  than the byte unescaper, so there the literal is parsed (D1901).
 - **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
   callback listener for OAuth and client ID metadata documents (below).
 
@@ -216,7 +234,10 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
 modes), `stdio.test.ts` against the SDK's server as a child process (tools, resources, prompts) and against hostile
 children; `adversarial.test.ts` against malformed, oversized, truncated, flooding and hanging servers, with seeded
 fuzz of the SSE parser, `asMessage` and the client; `framing.test.ts` the native read's hostile framings;
-`shape.test.ts` the shape check; `json.test.ts` the spliced parse against `JSON.parse` (D1870); `deadlines.test.ts`
+`shape.test.ts` the shape check; `json.test.ts` the spliced parse against `JSON.parse` (D1870); `long-reply.test.ts` the
+long-reply path (D1900-D1904, D1908, D1909, D1919) against the plain shape check and `JSON.parse` on 110,000 seeded bodies (escapes,
+surrogates, byte-order marks, broken UTF-8, number edge cases, small bounds so refusals are common), the readers
+against `JSON.parse`, and hostile shapes kept linear; `deadlines.test.ts`
 the shared timer; `server-messages.test.ts` resumption and the GET stream against the SDK's resumable server (its
 polling pattern) and hostile fakes, request handlers against the SDK's sampling, roots and elicitation, and the
 budgets; `oauth.test.ts` the OAuth flow against the SDK's own authorization server (`mcpAuthRouter` and its demo
@@ -245,8 +266,9 @@ On Node (checked on 22.22), use a bundle: `bun build mcp/index.ts mcp/stdio.ts m
 | `http.ts` | `StreamableHttpTransport`, `StreamableHttpError`, the caps and budgets, `resume`, `openServerStream`, the `AuthHook` |
 | `sse.ts` | `SseParser`: one pass over bytes, bounded, never throws |
 | `pieces.ts` | `Pieces`: an open line's bytes between reads, coalesced so tiny reads do not each hold an array |
-| `json.ts` | `parseJsonBytes`, `parseJsonText`: the shape check, then `JSON.parse`; long plain strings spliced out of the parse (D1870) |
-| `shape.ts` | The shape check (vendored from Eden's `@eden/protocol`, kept equal by `shape.test.ts`), and its string form |
+| `json.ts` | `parseJsonBytes`, `parseJsonText`: the shape check, then `JSON.parse`; on a long reply, what the scan read spliced into the parse of the rest (D1870, D1900-D1904) |
+| `readers.ts` | What the scan reads instead of `JSON.parse`: a long string with dense escapes, an array of plain numbers; ranges decoded as `TextDecoder` does (D1900-D1904) |
+| `shape.ts` | The shape check (vendored from Eden's `@eden/protocol`, kept equal by `shape.test.ts`), its string form, and the long-reply scan (`scanText`: guessed string ends, the rest bound, the step budget) |
 | `deadlines.ts` | Every request's and POST's deadline on one timer |
 | `stdio.ts` | `StdioClientTransport` (opt-in entry point) |
 | `extras.ts` | Resources and prompts (opt-in entry point) |

@@ -73,16 +73,20 @@ async def run(call, calls: int, inflight: int) -> list[float]:
 
 
 async def perf(port: int) -> None:
-    async with Opened(f"http://127.0.0.1:{port}/json/1024/mcp", 60, None) as first:
+    async with Opened(f"http://127.0.0.1:{port}/json/1024/plain/mcp", 60, None) as first:
         await first.call()
         print("first", flush=True)
     cells = []
-    for mode in ["json", "sse"]:
-        for size in SIZES:
+    # The shapes and modes as the TypeScript bench takes them (`MCP_COMPARE_TEXT`, `MCP_COMPARE_MODES`).
+    shapes = os.environ.get("MCP_COMPARE_TEXT", "plain").split(",")
+    modes = os.environ.get("MCP_COMPARE_MODES", "json,sse").split(",")
+    sizes = [int(x) for x in os.environ.get("MCP_COMPARE_SIZES", ",".join(map(str, SIZES))).split(",")]
+    for shape, mode in [(sh, mo) for sh in shapes for mo in modes]:
+        for size in sizes:
             # The per-event cap raised to Eden's (4 MiB) so a 1 MB event is read; the default is 1 MiB.
-            async with Opened(f"http://127.0.0.1:{port}/{mode}/{size}/mcp", 120, 4 * 2**20) as c:
+            async with Opened(f"http://127.0.0.1:{port}/{mode}/{size}/{shape}/mcp", 120, 4 * 2**20) as c:
                 for inflight in INFLIGHT:
-                    key = f"{mode} {size} x{inflight}"
+                    key = f"{shape} {mode} {size} x{inflight}"
                     calls = max(inflight * 4, min(2_000, (256 * 2**20) // size))
                     try:
                         await run(c.call, max(inflight, calls // 10), inflight)

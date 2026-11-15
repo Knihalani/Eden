@@ -803,6 +803,16 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1892 | 2026-11-14 | Adopted: the HTTP handler parses less a request. | adopted |
 | D1893 | 2026-11-14 | Finding: the model call path has no CPU or token lever worth its risk. | finding |
 | D1894 | 2026-11-14 | Rejected (measured beside D1890–D1892): the turn gate's int8 table copied biased at load, the hidden layer transposed, a dim-specific… | rejected |
+| D1900 | 2026-11-15 | Adopted: a long reply's long string with escapes is read once, its end guessed from the back and proven by reading it. | adopted |
+| D1901 | 2026-11-15 | Adopted (Bun only): a long string with an escape every dozen bytes or closer is unescaped by a byte loop, not `JSON.parse`. | adopted |
+| D1902 | 2026-11-15 | Adopted: an array of plain numbers is read as the scan reaches it. | adopted |
+| D1903 | 2026-11-15 | Adopted: a reply that is mostly structure is bounded by counting brackets and commas, not scanned. | adopted |
+| D1904 | 2026-11-15 | Adopted: `parseJsonBytes` decodes a long body first and takes the same path, so Node, SSE and stdio get D1870-D1903; ASCII is decoded by… | adopted |
+| D1905 | 2026-11-15 | Bench: the MCP benches take the result's text shape. | adopted |
+| D1906 | 2026-11-15 | Rejected: reading Bun's JSON replies as bytes (`res.bytes()`, a byte scan with the same readers, pieces decoded apart). | rejected |
+| D1907 | 2026-11-15 | Rejected (measured beside D1900-D1904): other ways to the same values. | rejected |
+| D1908 | 2026-11-15 | Adopted (D1900's independent review, every finding fixed; no answer changed: 0 differences from main's shape check and `JSON.parse` on… | adopted |
+| D1909 | 2026-11-15 | Adopted (D1908's independent review, REQUEST_CHANGES on cost only; every finding fixed, no answer changed: 0 differences from main's real… | adopted |
 | D1910 | 2026-11-14 | Adopted: `pick`'s focus count searches each focus word with `indexOf`. | adopted |
 | D1911 | 2026-11-14 | Adopted (same brief): `sketchTerms` skips `stopwordAt` where the word's FNV-1a hash has no stopword's mark. | adopted |
 | D1912 | 2026-11-14 | Rejected (measured): a packed text deflated by libdeflate (`Bun.deflateSync`'s `library: "libdeflate"`, level 6) in place of zlib. | rejected |
@@ -812,3 +822,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1916 | 2026-11-14 | Adopted (same brief; date facts unchanged, so `PERSIST_FORMAT` stays 6): `SPAN_HINT`'s month alternative and `MONTH_DAY` are tried only… | adopted |
 | D1917 | 2026-11-14 | Rejected (measured beside D1910-D1916): an in-place JS xxHash32 so `sketchTerms` makes no string a word, and one-class lookahead prefixes… | rejected |
 | D1918 | 2026-11-14 | Finding (measured beside D1910-D1917): the rest of the second brief's scope has no lever worth its risk at today's shares. | finding |
+| D1919 | 2026-11-15 | Adopted (D1909's independent review, REQUEST_CHANGES on the number reader's cost; every finding fixed, no answer changed: 0 differences… | adopted |
