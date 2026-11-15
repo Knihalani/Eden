@@ -362,8 +362,10 @@ export class Occurrences {
     }
     this.touched = 0;
     this.size = 0;
-    for (const literal of this.full) this.keep[literal] = this.wanted[literal]!;
-    this.full.length = 0;
+    if (this.full.length > 0) {
+      for (let k = 0; k < this.full.length; k++) this.keep[this.full[k]!] = this.wanted[this.full[k]!]!;
+      this.full.length = 0;
+    }
     // A text dense in literals (a megabyte of `key=`) grew the lists; the next text starts small again, so a gate
     // does not keep megabytes for the rest of the process.
     if (this.start.length > SCRATCH_KEPT) {
@@ -538,10 +540,14 @@ export class AnchoredRegex {
   private readonly source: RegExp;
   private readonly anchors: Anchor[];
 
-  constructor(source: RegExp, anchors: Anchor[]) {
+  /**
+   * `words`, when given, are the anchors' literals in the order the caller's `ids` follow (a lazy-prefix rule's
+   * words, D1850 (12)); by default they are the literals in anchor order.
+   */
+  constructor(source: RegExp, anchors: Anchor[], words?: string[]) {
     this.source = source;
     this.anchors = anchors;
-    this.words = [...new Set(anchors.flatMap((anchor) => anchor.literals))];
+    this.words = words ?? [...new Set(anchors.flatMap((anchor) => anchor.literals))];
   }
 
   /**

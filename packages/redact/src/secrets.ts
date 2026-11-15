@@ -30,15 +30,17 @@
 import { MultiMatcher } from "./primitives/matcher.ts";
 import {
   type Analyses,
+  type Anchor,
   AnchoredRegex,
   anchorsOf,
   anchorsOfRegex,
+  type LazyPrefixRegex,
   lazyPrefixOf,
   Occurrences,
   useAnalyses,
 } from "./anchor.ts";
 import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
-import { type Composed, composeMasks, composeStored, type StructuralPass } from "./compose.ts";
+import { byStart, type Composed, composeMasks, composeStored, gate as gateBy, type StructuralPass } from "./compose.ts";
 import {
   assignmentSpansSplit,
   INLINE_BACK,
@@ -637,6 +639,26 @@ class Lines {
 const NO_LINES = new Lines("");
 
 const NEWLINE = 10;
+/**
+ * D1850 (12): up to this length a lazy-prefix rule tries its whole regex where its anchors allow (`anchoredMatches`,
+ * as main did), not its hand-read prefix (`LazyPrefixRegex`): on a short text the native engine's few tries cost
+ * less than compiling the hand-written reader, which in a short-lived process ran in the compiler's threads during
+ * the calls measured (2 KB of code: 1.5x main's CPU time, the review of 2026-11-15). Past it, or where the tries
+ * decline (dense candidates), the prefix is read by hand. Both report `matchAll`'s matches, so the result is the same.
+ */
+const SMALL_TEXT = 4096;
+
+/**
+ * A rule's anchors (anchor.ts); for a lazy-prefix rule only when their literals are its words, the occurrences the
+ * gate keeps for it (atlassian-api-token's later branch anchors on `atatt3` too, which it does not keep).
+ */
+function anchorsFor(regex: string, lazy: LazyPrefixRegex | undefined): Anchor[] | undefined {
+  const anchors = anchorsOf(regex);
+  if (!lazy || !anchors) return anchors;
+  const literals = new Set(anchors.flatMap((anchor) => anchor.literals));
+  return literals.size === lazy.words.length && lazy.words.every((word) => literals.has(word)) ? anchors : undefined;
+}
+
 /** A cheap first test for `lazyPrefixOf`, so the other rules build no JavaScript regex before they run. */
 export const LAZY_PREFIX = /^(?:\(\?i\))?\[\\w\.-\]\{0,\d+\}\?/;
 
@@ -653,17 +675,19 @@ function gitleaksRule(
 ): SecretRule {
   let compiled: { pattern: Pattern; own: CompiledAllowlist[]; anchored?: AnchoredRegex } | undefined;
   // Only JavaScript's engine scans every position: the own matchers (scanners.ts) are linear already. A rule with a
-  // lazy `[\w.-]{0,50}?` prefix reads it by hand (anchor.ts); any other tries its regex where its anchors allow.
+  // lazy `[\w.-]{0,50}?` prefix reads it by hand (anchor.ts) past SMALL_TEXT; any other text, and any other rule,
+  // tries its regex where its anchors allow.
   const lazy =
     engine === backtrackingEngine && LAZY_PREFIX.test(rule.regex)
       ? lazyPrefixOf(rule.regex, () => goRegex(rule.regex))
       : undefined;
-  const anchors = engine === backtrackingEngine && !lazy ? anchorsOf(rule.regex) : undefined;
+  const anchors = engine === backtrackingEngine ? anchorsFor(rule.regex, lazy) : undefined;
   const anchorWords = lazy ? lazy.words : anchors && [...new Set(anchors.flatMap((anchor) => anchor.literals))];
   const compile = () => {
     const own = (rule.allowlists ?? []).map((list) => compileAllowlist(list, allowlistEngine));
     lineLists = [global, ...own].filter((list) => list.target === "line");
-    return { pattern: engine(rule.regex), own, anchored: anchors && new AnchoredRegex(goRegex(rule.regex), anchors) };
+    const anchored = anchors && new AnchoredRegex(goRegex(rule.regex), anchors, anchorWords);
+    return { pattern: engine(rule.regex), own, anchored };
   };
   /** The secret's span within `match`; undefined when the rule's group did not take part. */
   /** The last match decided, within one call (memo.ts). */
@@ -699,7 +723,8 @@ function gitleaksRule(
     spans(text, found, ids) {
       const { pattern, own, anchored } = (compiled ??= compile());
       const out: Span[] = [];
-      const lines = new Lines(text);
+      /** Made at the first finding a line-targeted list asks about: most calls find nothing. */
+      let lines: Lines | undefined;
       const onMatch = (start: number, end: number) => {
         // Trim the match's line breaks by index: `/\n+$/` retries from every break in an inner run (quadratic).
         let from = start;
@@ -715,17 +740,17 @@ function gitleaksRule(
           : lastDecision.set(match, decide(match, pattern, own));
         if (decided === undefined) return;
         if (lineLists.length > 0) {
-          const finding = { match, secret: decided.secret, index: start, lines };
+          const finding = { match, secret: decided.secret, index: start, lines: (lines ??= new Lines(text)) };
           if (lineLists.some((list) => allows(list, finding))) return;
         }
         out.push([at + decided.span[0], at + decided.span[1]]);
       };
-      if (lazy) {
-        lazy.each(text, found, ids, onMatch);
-        return out;
-      }
-      const tried = anchored?.each(text, found, ids, (m) => onMatch(m.index, m.index + m[0].length));
-      if (!tried) for (const [start, end] of pattern.matches(text)) onMatch(start, end);
+      const onMatchOf = (m: RegExpExecArray) => onMatch(m.index, m.index + m[0].length);
+      // One call site for the anchored tries (each one was compiled into this function again): a lazy-prefix rule
+      // takes them on a short text only, and reads its prefix by hand on a longer one or when they decline.
+      if ((!lazy || text.length <= SMALL_TEXT) && anchored?.each(text, found, ids, onMatchOf)) return out;
+      if (lazy) lazy.each(text, found, ids, onMatch);
+      else for (const [start, end] of pattern.matches(text)) onMatch(start, end);
       return out;
     },
     warm() {
@@ -1223,9 +1248,10 @@ export function gateOf(rules: SecretRule[]): Gate {
       const rule = rules[r]!;
       const parts = rule.split ? rule.split(text, found, anchorIds[r]) : undefined;
       const spans = parts ? parts.spans : rule.spans(text, found, anchorIds[r]);
-      // A D1850 rule's excused spans were never main's: they gate nothing.
-      pushAll(rule.post ? out.post : out.strict, spans);
-      if (parts && !rule.post) pushAll(out.excused, parts.excused);
+      // Most rules find nothing: no call then (each call warms `pushAll` towards a compile, D1850 (12)). A D1850
+      // rule's excused spans were never main's: they gate nothing.
+      if (spans.length > 0) pushAll(rule.post ? out.post : out.strict, spans);
+      if (parts && !rule.post && parts.excused.length > 0) pushAll(out.excused, parts.excused);
     }
     return out;
   };
@@ -1252,10 +1278,41 @@ export function gateOf(rules: SecretRule[]): Gate {
       const stored = redactAssignments(runTokenPasses(text, tokens, passStarts()).out, false, seen);
       if (!seen.excusable) return stored;
     }
+    // Every finding excused and no token pass to run (code, most often): stored as it is when the structural pass
+    // takes only code from the gated text (`keepsText`, the composer's own test in one lean pass).
+    if (strict.length + post.length === 0 && excused.length > 0 && tokens === 0 && keepsText(text, excused)) {
+      return text;
+    }
     // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
     // any finding, that pass's spans on the original text join the rules' (audit A5). Then the structural pass, as
     // `redact` runs it; then D1850's changes (compose.ts).
     return composeStored(text, strict, excused, post, pass);
+  }
+
+  /**
+   * Whether `composeStored(text, [], excused, [], pass)` is `text` itself, for a text whose findings are all excused
+   * and in which no token pass runs (`tokens` 0): the test `composeMasks` makes before it stores the text as it is
+   * (every assignment value on `text` is code or a placeholder, and every value the assignment pass takes from the
+   * gated text is too: `keepsAll`), in one lean pass with the same calls main's pipeline makes, without the pieces,
+   * the traced removals or the pass's closures. False means only that `composeStored` must decide.
+   *
+   * The composer reaches the same answer through more code, and a short-lived process compiles that code again
+   * before it is fast: 2 KB of code holding only excused values took 1.5x main's CPU time, the compiler threads'
+   * included (the review of 2026-11-15, rvbench in D1850 (12)).
+   */
+  function keepsText(text: string, excused: Span[]): boolean {
+    const assigned = assignmentSpansSplit(text);
+    if (assigned.strict.length > 0) return false;
+    const parts: string[] = [];
+    // Sorted by start, stably, as `composeMasks` sorts them (the rules' spans come one rule after another); a few
+    // spans by the engine's sort, which the gate runs anyway (`candidates`), so this path compiles nothing more.
+    const spans = excused.concat(assigned.all);
+    gateBy(text, spans.length <= 64 ? spans.sort(byFirst) : byStart(spans), [], parts);
+    const gated = parts.length === 1 ? parts[0]! : parts.join("");
+    const taken: [number, number][] = [];
+    redactAssignments(gated, false, undefined, taken);
+    for (const [start, end] of taken) if (!notSecret(gated.slice(start, end))) return false;
+    return true;
   }
 
   function explain(text: string): Composed & { excusedSpans: Span[] } {
@@ -1263,6 +1320,9 @@ export function gateOf(rules: SecretRule[]): Gate {
     return { ...composeMasks(text, strict, excused, post, pass, true), excusedSpans: excused };
   }
 }
+
+/** Orders spans by start (`Array.prototype.sort` is stable). */
+const byFirst = (a: Span, b: Span): number => a[0] - b[0];
 
 /**
  * Appends `spans` to `into`. A loop, not `push(...spans)` (a megabyte of tokens is 100,000 spans, past what a spread

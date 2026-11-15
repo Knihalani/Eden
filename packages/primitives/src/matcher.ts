@@ -332,6 +332,10 @@ export class MultiMatcher {
    * Where a walk from the root must start to be, at `mid`, in the state a walk from the text's start is in: at least
    * the longest pattern's length of folded characters before it (a state is the longest folded suffix that begins a
    * pattern, never longer than the longest pattern).
+   *
+   * The bound is conservative by one: a state as long as the longest pattern is that pattern, ending just before
+   * `mid` (the first walk reports it), and its next transition is its failure state's, which a walk starting one
+   * unit later also reaches. Kept as it is: it is the plain statement of the invariant, and one unit costs nothing.
    */
   private contextStart(text: string, mid: number): number {
     let at = mid;

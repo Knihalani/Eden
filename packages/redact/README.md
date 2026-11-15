@@ -96,9 +96,11 @@ Where it loses:
   process this gate is at or below it on 10 of the 24 crafted inputs and 2.6–12x slower on the nine with a finding
   every 10–20 characters (31–113 ms at 1 MB against 8–15 ms), where each finding pays for the allowlists, the gating
   and the structural pass. All stay linear. As a command (startup included) it is faster on 23 of 24.
-- **Against the previous gate on ordinary text.** Each alone in its process it is 1.08x of it on 2 KB of mixed text
-  with no finding, 1.27x at 16 KB and 1.3x at 1 MB; 2 KB of text whose only findings are values left as code reads
-  0.89–1.04x across runs, not clearly faster.
+- **Against the previous gate on ordinary text.** Each alone in its process, CPU time over its first 5,000 calls
+  (the review's bench, 8 rounds): 0.62–0.67x of its time at 16 KB and 0.63–0.91x at 1 MB; at 2 KB 0.86x with no
+  finding and 0.98–1.05x with findings or with values left as code. Those 2 KB medians sit within the previous
+  gate's spread against itself, not clearly under it: what is left there is the compiler's threads compiling code
+  during a process's first thousands of calls (after warm-up the same texts read 0.77–0.93x).
 - **Node** runs the same code 0.8–3.7x Bun's time (median 1.5x over the benchmark's classes in one process).
 
 ## How it is fast

@@ -682,13 +682,102 @@ at Node 24.22.3; `node --test packages/redact/src/node.check.ts` 4 of 4.
 
 **What still loses**
 
-- 2 KB of mixed text holding only excused code values: 0.89–1.04x of main across runs (above), not clearly 1.0x.
+- 2 KB of mixed text holding only excused code values: 0.89–1.04x of main across runs (above), not clearly 1.0x;
+  the review of 2026-11-15 measured 1.5–1.67x on its own bench; §14 finds the cause and brings it to 0.98–1.05x.
 - 14 of 24 crafted inputs are slower than secretlint in process: 2.6–12x on the nine with a finding every 10–20
   characters (`key=`, quoted values, eden-keyword, the line of findings, generic-api-key matching, token literals,
   prefix-keyword-value, `password: ` then spaces, keywords back to back), 1.6–3.7x on five (two-character anchors,
   combining marks inside and before a keyword, ligatures beside a keyword, ligatures alone). As a command it stays
   faster (§11).
 - Node: 0.80–3.7x Bun's time, median 1.52x, not within 1.2x.
+
+### 14. 2 KB of excused code values: the cost was the compiler (the review of 2026-11-15)
+
+The independent review held the branch at f8ca61cf4 on one class: 2 KB of text whose only findings are excused code
+values ran at 1.59x of main's CPU time (range 1.03–1.87, 8 rounds, each gate alone in its process; main against
+main 0.75–1.22); type values about 1.6x, member chains about 1.5x, env values and `${…}` references within noise;
+16 KB and 1 MB 0.62–0.91x. Its bench (`rvbench`: `run.ts` times 4,000 calls after 1,000 of warm-up a class,
+`run2.ts` 5,000 after 1,500 a shape, CPU time from `process.cpuUsage`) was re-run here against origin/main's
+`packages/redact` and `packages/primitives` unpacked aside, and reproduced it (2 KB code 1.52x, type 1.67x, member
+1.53x, 6 rounds).
+
+**The cause was not per-call work.** The same texts in one process, interleaved after warm-up, read 0.89–1.04x
+(steady state), and the wall time of the very calls the bench measured was at parity while their CPU time was not
+(type, median of 4–6 processes: at f8ca61cf4 wall 23.0 against main's 22.7 µs, CPU 70 against 43; midway through
+this step wall 19.5 against 22.7, CPU 46 against 43). `process.cpuUsage` counts every thread of the process, and with Bun's FTL tier off
+(`BUN_JSC_useFTLJIT=0`) the branch's CPU time fell to main's (33.5 against 34.2 µs). So the difference was the
+optimizing compiler's threads compiling the branch's code during the calls measured: functions called a few times a
+text (the excusal's helpers, the composer, the lazy rules' hand-written reader) reach the FTL tier only after
+thousands of calls, inside the bench's window, where main's few large functions had compiled during its warm-up.
+`BUN_JSC_reportCompileTimes=1` showed it: for 2 KB of code the branch compiled 215–230 ms in the window against
+main's 55–79 ms, generic-api-key's hand reader (`genericRest`, `keywordAt`, `operatorAt`, `tailFrom`, `secretFrom`,
+`LazyPrefixRegex.each`) alone about 85 ms of it.
+
+**What changed**, each cutting the code that runs (and so is compiled) on short text, the result unchanged:
+
+- **Short text tries the lazy rules' regex where its anchors allow** (`SMALL_TEXT`, 4,096 code units, secrets.ts):
+  `anchoredMatches` with the native engine, as main did, and the hand-read prefix past that length or where the
+  tries decline (dense candidates). Both report `matchAll`'s matches. The lazy rules' anchors are now in
+  `rules.generated.json` too (parsed at the first call they cost 20–40 ms); atlassian-api-token, whose later branch
+  anchors on a literal the gate does not keep for it, reads its prefix by hand at every length. One call site for the
+  anchored tries in the rule's `spans` (two call sites had compiled `AnchoredRegex.each` into it twice: 13.9 → 7.4 KB
+  of machine code), and its `Lines` made only when a line-targeted list asks.
+- **A lean test for a text whose findings are all excused** (`keepsText`): the assignment pass's values on the text
+  all code, the gated text built from the excused and assignment spans, and every value the assignment pass takes
+  from it code: what `composeMasks` checks before it stores the text as it is, without the pieces, the traced
+  removals or the pass's closures, and with the same two calls into the assignment scan main makes (one call site
+  the earlier phases had not seen made the scan's compiled code throw away and recompile on the next class). Only
+  when no token pass runs; anything else goes to the composer as before.
+- **The commonest excused values by one native test** (`FAST`, not-secret.ts): a type, an environment read, a member
+  chain or a reference, unquoted, then at most one `,` or `;`, with no space or quote, before `judge`'s hand-written
+  steps; every value it takes `judge` takes (`not-secret.test.ts` holds `notSecret` equal to the verdict alone on
+  40,000 glued shape pieces, 1,000 or more of them excused).
+- No `pushAll` call for a rule that found nothing; `Occurrences.clear` puts back `keep` by index.
+
+Tried and dropped: two walks in the scan only from 4 KB (no paired-walk code compiled for 2 KB; each text alone in
+a fresh process against main, 8 rounds, two runs: code 1.12 → 1.08x, member 1.07 → 0.99x, type 1.05 → 0.98x),
+since it gives back the paired walk's 25% of the prefilter at 2 KB in steady state (§13).
+
+**The review's bench after it** (`ab.sh`: 8 rounds, each gate alone in its process, the two gates alternated, A/A the
+same gate's two runs in a round; load 1.7–2.4):
+
+| Class | main µs | now µs | now / main, median | range | main / main | now / now |
+|---|---:|---:|---:|---:|---:|---:|
+| 2 KB, no finding | 17 | 15 | 0.86 | 0.70–1.14 | 0.91–1.29 | 0.64–1.18 |
+| 2 KB, findings | 39 | 39 | 0.99 | 0.83–1.13 | 0.78–1.47 | 0.79–1.17 |
+| 2 KB, code values | 37 | 36 | 0.98 | 0.71–1.09 | 0.75–1.79 | 0.65–1.19 |
+| 16 KB, no finding | 315 | 206 | 0.62 | 0.44–0.80 | 0.75–1.20 | 0.94–1.18 |
+| 16 KB, findings | 471 | 416 | 0.90 | 0.81–1.02 | 0.93–1.20 | 0.78–1.18 |
+| 16 KB, code values | 358 | 236 | 0.67 | 0.52–0.87 | 0.87–1.23 | 0.72–1.35 |
+| 1 MB, no finding | 18,242 | 11,743 | 0.63 | 0.54–0.76 | 0.87–1.14 | 0.95–1.26 |
+| 1 MB, findings | 26,762 | 19,152 | 0.75 | 0.58–0.85 | 0.82–1.22 | 0.77–1.30 |
+| 1 MB, code values | 16,169 | 14,349 | 0.91 | 0.71–1.10 | 0.81–1.07 | 0.86–1.28 |
+
+By shape (`run.ts` 2 KB and `run2.ts`, 12 rounds, load 1.8–2.4; in `run2.ts` the type text comes first in its
+process, so it carries the whole gate's compile, and the member text third):
+
+| Shape, 2 KB | main µs | now µs | now / main, median | range | main / main | now / now |
+|---|---:|---:|---:|---:|---:|---:|
+| no finding | 17.7 | 15.8 | 0.86 | 0.66–0.99 | 0.73–1.32 | 0.60–1.33 |
+| findings | 35.5 | 38.1 | 1.05 | 0.90–1.23 | 0.81–1.37 | 0.83–1.23 |
+| code values | 37.5 | 41.0 | 1.01 | 0.70–1.39 | 0.60–1.88 | 0.72–1.19 |
+| type values (first) | 36.3 | 37.9 | 1.04 | 0.81–1.24 | 0.79–1.16 | 0.90–1.32 |
+| env values | 36.3 | 33.5 | 0.92 | 0.81–1.13 | 0.72–1.17 | 0.82–1.32 |
+| member chains | 25.4 | 26.9 | 1.05 | 0.92–1.37 | 0.81–1.20 | 0.92–1.57 |
+| `${…}` / `%…%` references | 22.3 | 21.1 | 0.95 | 0.74–1.30 | 0.93–1.13 | 0.69–1.54 |
+| code values (later in the process) | 24.4 | 22.8 | 0.93 | 0.76–1.05 | 0.80–1.20 | 0.81–1.07 |
+| no finding (last) | 14.6 | 14.1 | 0.93 | 0.63–1.11 | 0.84–1.17 | 0.81–1.25 |
+
+Every class of `ab.sh` at or under main; by shape type values 1.67 → 1.04x, member chains 1.53 → 1.05x and the
+`run.ts` code class 1.52 → 0.98–1.01x across the two runs, with findings at 0.99–1.05x (1.10x at f8ca61cf4 in this
+session's first run). Those four medians sit inside their own main-against-main spread but not clearly under 1.0x:
+what is left there is compile time on the compiler's threads in the first 6,500 calls of a process, not time in the
+calls (in process after warm-up these texts read 0.77–0.93x). Exact: `gate-differential.ts 250000 101` (176,856 with
+a finding) and `--corpus` (4,935): no difference; `never-less.ts 100000 7` and `100000 91537`: no failure; a fuzz
+against origin/main's real gate on seed 20261115, 300,000 texts (fuzz, keyword-chain, shape and prose-with-shapes
+texts): the branch's account of main's pipeline renders to what main's `sanitizeForStore` stores, never-less holds,
+and `sanitizeForStore` equals the composer's own stored text (so `keepsText` and the short-text tries change
+nothing), 0 failures.
 
 ## Exactness and gates
 

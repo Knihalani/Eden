@@ -29,7 +29,8 @@ export function generate(): string {
     if (!rule.regex || LINEAR_RULES.has(rule.id)) continue;
     const lazy = LAZY_PREFIX.test(rule.regex) ? analyseLazy(rule.regex, goRegex(rule.regex)) : undefined;
     if (lazy !== undefined) analyses.lazy[rule.regex] = lazy;
-    if (!lazy) analyses.anchors[rule.regex] = analyseAnchors(rule.regex);
+    // A lazy-prefix rule's anchors too: on a short text it tries its regex where they allow (D1850 (12)).
+    analyses.anchors[rule.regex] = analyseAnchors(rule.regex);
   }
   for (const regex of EDEN_REGEXES) {
     const pattern = goPatternOfRegex(regex);

@@ -131,7 +131,7 @@ export function composeMasks(
  * for later calls, and code after the loop that saw another kind of string there deoptimized it at every call (849
  * times in one run over the benchmark's texts).
  */
-function gate(text: string, spans: Span[], gating: Pieces, parts: string[]): void {
+export function gate(text: string, spans: Span[], gating: Pieces, parts: string[]): void {
   let at = 0;
   let length = 0;
   for (let k = 0; k <= spans.length; k++) {

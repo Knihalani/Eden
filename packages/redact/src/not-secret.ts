@@ -19,20 +19,21 @@
 import { Last, Recent } from "./memo.ts";
 
 /** TypeScript types as a value (`apiKey: string;`, `tokens: Set<number>`, `secret: number[]`). */
-const TYPE =
-  /^(?:string|number|boolean|bigint|undefined|null|unknown|never|void|object)(?:\[\])*$|^(?:Set|Map|WeakMap|WeakSet|Array|ReadonlyArray|Promise|Record|Partial|Readonly)<[A-Za-z$, |[\]]*(?:<[A-Za-z$, |[\]]*>[A-Za-z$, |[\]]*)*>$|^(?:Uint8|Int8|Uint16|Int16|Uint32|Int32|Float32|Float64|BigInt64|BigUint64|Uint8Clamped)Array$/;
+const TYPE_BODY = String.raw`(?:string|number|boolean|bigint|undefined|null|unknown|never|void|object)(?:\[\])*|(?:Set|Map|WeakMap|WeakSet|Array|ReadonlyArray|Promise|Record|Partial|Readonly)<[A-Za-z$, |[\]]*(?:<[A-Za-z$, |[\]]*>[A-Za-z$, |[\]]*)*>|(?:Uint8|Int8|Uint16|Int16|Uint32|Int32|Float32|Float64|BigInt64|BigUint64|Uint8Clamped)Array`;
+const TYPE = new RegExp(`^(?:${TYPE_BODY})$`);
 /**
  * An environment variable read in code: `process.env.API_KEY`, `import.meta.env.VITE_KEY` (upper case, no digit), or
  * `env.API_KEY` (there also with an underscore inside, as environments name variables: `env.X` is any member).
  */
-const ENV = /^(?:(?:process\.env|import\.meta\.env)\.[A-Z_]+|env\.[A-Z]+_[A-Z_]+)$/;
+const ENV_BODY = String.raw`(?:process\.env|import\.meta\.env)\.[A-Z_]+|env\.[A-Z]+_[A-Z_]+`;
+const ENV = new RegExp(`^(?:${ENV_BODY})$`);
 /**
  * A member chain on a well-known receiver, to the end of the value: where the secret is read from, not the secret
  * (`this.options.apiKey`, `res.usage.inputTokens`). At least two members after the receiver, each letters only: one
  * member after a broad receiver (`data.Hunter2isMyPassw0rd`, `self.Pa55w0rdIsHere`) can be a password.
  */
-const MEMBER =
-  /^(?:this|process|env|options|opts|config|cfg|settings|req|request|res|response|data|body|usage|ctx|context|args|params|props|state|self|window|globalThis)(?:\??\.[A-Za-z_$][A-Za-z_$]*){2,}$/;
+const MEMBER_BODY = String.raw`(?:this|process|env|options|opts|config|cfg|settings|req|request|res|response|data|body|usage|ctx|context|args|params|props|state|self|window|globalThis)(?:\??\.[A-Za-z_$][A-Za-z_$]*){2,}`;
+const MEMBER = new RegExp(`^(?:${MEMBER_BODY})$`);
 /**
  * A reference as the whole value: `${API_KEY}` (no default: `${X:-…}`, `${X=…}`, `${X-…}` hold the value itself),
  * `$API_KEY` (with an underscore, as shells and dotenv write names; `$ALES2024` could be a password), `%API_KEY%`,
@@ -44,8 +45,17 @@ const NAME = String.raw`_?(?:[A-Z][A-Z_]*|[a-z][a-z_]*)`;
 // In `${…}` also a camelCase name, as template literals interpolate variables (`Bearer ${apiKey}`): lower case,
 // then capitals each followed by lower case, no digit.
 const CAMEL = String.raw`[a-z]+(?:[A-Z][a-z]+)+`;
-const REFERENCE = new RegExp(
-  String.raw`^(?:\$\{(?:${NAME}|${CAMEL})\}|\$[A-Z]+_[A-Z_]+|%${NAME}%|\{\{${NAME}(?:\.${NAME})*\}\}|<(?:[a-z]+(?:[-_][a-z]+)*|[A-Z]+(?:[-_][A-Z]+)*)>)$`,
+const REFERENCE_BODY = String.raw`\$\{(?:${NAME}|${CAMEL})\}|\$[A-Z]+_[A-Z_]+|%${NAME}%|\{\{${NAME}(?:\.${NAME})*\}\}|<(?:[a-z]+(?:[-_][a-z]+)*|[A-Z]+(?:[-_][A-Z]+)*)>`;
+const REFERENCE = new RegExp(`^(?:${REFERENCE_BODY})$`);
+/**
+ * The commonest excused values in one native test, before any of `judge`'s steps: a type, an environment read, a
+ * member chain or a reference, unquoted, then at most one `,` or `;` (which `core` strips: neither is a bracket), with
+ * no space or quote anywhere (`judge` refuses those). Every value it takes, `judge` takes (`not-secret.test.ts`
+ * checks); one it refuses goes on to `judge`. In a short-lived process the hand-written steps cost more to compile
+ * than they save, and a regex runs compiled from its first call (D1850 (12)).
+ */
+const FAST = new RegExp(
+  String.raw`^(?=[^\s"'\x60]*$)(?:${TYPE_BODY}|${ENV_BODY}|${MEMBER_BODY}|${REFERENCE_BODY})[,;]?$`,
 );
 /** A mask: `xxxxxxxx`, `****`, `•••`, `####`, alone or after a short prefix of letters (`hf_xxxx…`, `pplx-XXXX…`). */
 const MASK = /^(?:[A-Za-z]{1,8}[_~.-])?[xX*•#]{8,}$/;
@@ -103,11 +113,15 @@ function core(value: string): string {
 /** Whether `value` (a keyword's or an assignment's value, as written) is code or a placeholder, never a secret. */
 export function notSecret(value: string): boolean {
   if (value.length > VALUE_LIMIT * 2) return false;
+  if (value.length <= VALUE_LIMIT && FAST.test(value)) return true;
   // The last few verdicts, within one call (memo.ts): the keyword rules, the assignment pass and the composer each ask
   // about the same values, and a text dense in assignments repeats one (`token:"token:"…`).
   return VERDICTS.has(value) ? VERDICTS.value : VERDICTS.set(value, judge(value));
 }
 const VERDICTS = new Recent<boolean>(8);
+
+/** `notSecret` without its native first test (`FAST`) or its memo: for `not-secret.test.ts`, which holds them equal. */
+export const judgeAlone = (value: string): boolean => value.length <= VALUE_LIMIT * 2 && judge(value);
 
 function judge(value: string): boolean {
   const v = core(value);
@@ -176,10 +190,10 @@ export function excused<R extends { spans(text: string, found?: never, ids?: nev
   // The last value's verdict, within one call (memo.ts): a text dense in findings repeats its value.
   const last = new Last<boolean>();
   const split = (text: string, found?: unknown, ids?: unknown) => {
+    const all = spans.call(rule, text, found, ids);
+    if (all.length === 0) return { spans: all, excused: all };
     const kept: [number, number][] = [];
     const left: [number, number][] = [];
-    const all = spans.call(rule, text, found, ids);
-    if (all.length === 0) return { spans: all, excused: left };
     for (const span of all) {
       // Longer than any excused value (and too long to compare with the last one each time): kept.
       if (span[1] - span[0] > VALUE_LIMIT * 2) {
