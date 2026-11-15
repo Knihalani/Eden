@@ -1,4 +1,4 @@
-# Eden's MCP client against the alternatives (2026-11-14, D1860 and D1870-D1875: adopted)
+# Eden's MCP client against the alternatives (2026-11-14, D1860, D1870-D1875 and D1900-D1907: adopted)
 
 D1704 replaced the official SDK with Eden's own MCP client; D1840 made it faster. The owner may release the module
 (`packages/sources/src/mcp/`) on its own, so this note does three things: fixes the weak points D1840 left (JSON
@@ -373,6 +373,222 @@ the splice is Bun's only (the scan itself is not: Node's `Uint8Array.prototype.i
 ours the extra string `text()` makes (1.13-1.30x the SDK's CPU at 1 MB, 0.94-1.26x at 64 KB, above: a search per escaped quote, and the string `text()` makes).
 
 
+## Reading long replies (D1900-D1907)
+
+A third pass (2026-11-15) at the cells D1870 left above the SDK: JSON replies whose long strings hold escapes (tool
+output, JSON written as text) and replies that are mostly numbers, which the benches had not measured. Both benches
+now take the result's text shape (D1905): `plain` (the earlier default), `lines` (tool output: 80-character lines, so
+an escaped newline and an escaped quote pair in each), `escapes` (JSON written as text, an escape every few bytes),
+`unicode` (Latin, CJK and emoji: a two-byte string) and `numbers` (a `structuredContent` array of numbers).
+
+**What changed.** A reply of 16 KiB or more takes a long-reply path (`scanText`, `readers.ts`), and every read is
+bounded before any parse of the whole:
+
+- A long string with escapes, crossed 4,096 characters quote by quote, has its end guessed by reading the reply
+  backward from its end, and the guess is proven by reading that one string whole: `JSON.parse` of the literal (a
+  literal cannot nest or hold values, so that parse is bounded by its length), or on Bun a byte unescaper when its
+  escapes are a dozen bytes apart or closer. The value is spliced into the parse of the rest. When no end can be
+  guessed or the guess is wrong, the rest is bounded by counting `[`, `{` and `,` (D1900, D1901).
+- An array of plain numbers (at most 15 significant digits, a power of ten within 22) is read as the scan reaches it;
+  one IEEE operation rounds each exactly as `JSON.parse` does (D1902).
+- A reply that is mostly structure stops the scan after a step budget and is bounded by the same count (D1903).
+- `parseJsonBytes` decodes a long body first, so Node, SSE and stdio take the same path (D1904).
+
+`long-reply.test.ts` holds every answer to the plain path's (the vendored shape check, then `JSON.parse`) on 110,000
+seeded bodies with the thresholds lowered and small bounds (0 differences; 50,000 more under Node 22.22, 0), checks
+the readers against `JSON.parse`, and holds three hostile shapes to linear CPU; breaking the `[` bound, the 15-digit
+limit or the surrogate check each fails it. Two quadratic first versions (numbers encoded up to the first `]`; a
+backslash searched for again for every long string) were caught in self-review and are covered there. The no-model
+eval is unchanged (precision 0.65, recall 0.52, falseFireRate 0, the `acting` block as on main) and the funnel against
+main's `src/mcp/` reads hidden +0 −0, decoys +0 −0.
+
+**Profile** (`MCP_PROFILE_TEXT=plain,lines,escapes,unicode,numbers mcp-profile.bench.ts 3 eden,base,sdk`, `base` =
+main's `src/mcp/` before D1900; CPU µs a `tools/call`, medians of three interleaved rounds; load 6.9 falling to 1.6,
+and a cold check overlapped part of the run):
+
+| Text | Reply | Size | In flight | D1900 | before | SDK 1.x | D1900 / SDK | before / SDK |
+|---|---|---|---|---|---|---|---|---|
+| plain | JSON | 64 KB | 1 | 136.3 | 156.7 | 152.0 | 0.90 | 1.03 |
+| plain | JSON | 64 KB | 16 | 87.1 | 89.8 | 127.1 | 0.69 | 0.71 |
+| plain | JSON | 64 KB | 256 | 123.1 | 113.7 | 118.4 | 1.04 | 0.96 |
+| plain | JSON | 1 MB | 1 | 982.7 | 951.8 | 1184.2 | 0.83 | 0.80 |
+| plain | JSON | 1 MB | 16 | 886.2 | 804.8 | 1126.7 | 0.79 | 0.71 |
+| plain | JSON | 1 MB | 256 | 1259.9 | 1390.6 | 1467.0 | 0.86 | 0.95 |
+| plain | SSE | 64 KB | 1 | 211.6 | 193.4 | 230.5 | 0.92 | 0.84 |
+| plain | SSE | 64 KB | 16 | 180.9 | 203.9 | 250.1 | 0.72 | 0.82 |
+| plain | SSE | 64 KB | 256 | 178.1 | 212.0 | 229.5 | 0.78 | 0.92 |
+| plain | SSE | 1 MB | 1 | 1983.3 | 2406.4 | 2429.5 | 0.82 | 0.99 |
+| plain | SSE | 1 MB | 16 | 1608.6 | 1864.1 | 2097.9 | 0.77 | 0.89 |
+| plain | SSE | 1 MB | 256 | 2043.9 | 2192.4 | 2405.2 | 0.85 | 0.91 |
+| lines | JSON | 64 KB | 1 | 198.4 | 211.3 | 190.1 | 1.04 | 1.11 |
+| lines | JSON | 64 KB | 16 | 180.9 | 158.8 | 164.0 | 1.10 | 0.97 |
+| lines | JSON | 64 KB | 256 | 178.8 | 175.7 | 149.0 | 1.20 | 1.18 |
+| lines | JSON | 1 MB | 1 | 1958.4 | 2246.5 | 1699.9 | 1.15 | 1.32 |
+| lines | JSON | 1 MB | 16 | 1983.2 | 2204.5 | 1714.6 | 1.16 | 1.29 |
+| lines | JSON | 1 MB | 256 | 2561.4 | 2861.9 | 2381.5 | 1.08 | 1.20 |
+| lines | SSE | 64 KB | 1 | 286.5 | 259.1 | 242.3 | 1.18 | 1.07 |
+| lines | SSE | 64 KB | 16 | 240.2 | 222.1 | 299.5 | 0.80 | 0.74 |
+| lines | SSE | 64 KB | 256 | 236.4 | 250.3 | 259.1 | 0.91 | 0.97 |
+| lines | SSE | 1 MB | 1 | 2851.0 | 3644.9 | 3229.3 | 0.88 | 1.13 |
+| lines | SSE | 1 MB | 16 | 2778.4 | 3084.6 | 2940.7 | 0.94 | 1.05 |
+| lines | SSE | 1 MB | 256 | 3188.8 | 3782.0 | 3194.5 | 1.00 | 1.18 |
+| escapes | JSON | 64 KB | 1 | 351.2 | 609.3 | 359.6 | 0.98 | 1.69 |
+| escapes | JSON | 64 KB | 16 | 282.8 | 555.7 | 446.7 | 0.63 | 1.24 |
+| escapes | JSON | 64 KB | 256 | 349.3 | 572.7 | 392.0 | 0.89 | 1.46 |
+| escapes | JSON | 1 MB | 1 | 3830.9 | 7819.6 | 4890.9 | 0.78 | 1.60 |
+| escapes | JSON | 1 MB | 16 | 3340.6 | 7969.0 | 5362.6 | 0.62 | 1.49 |
+| escapes | JSON | 1 MB | 256 | 4538.1 | 8825.0 | 6002.7 | 0.76 | 1.47 |
+| escapes | SSE | 64 KB | 1 | 430.9 | 740.4 | 641.2 | 0.67 | 1.15 |
+| escapes | SSE | 64 KB | 16 | 429.2 | 660.9 | 587.5 | 0.73 | 1.12 |
+| escapes | SSE | 64 KB | 256 | 391.3 | 639.7 | 584.9 | 0.67 | 1.09 |
+| escapes | SSE | 1 MB | 1 | 4785.7 | 9508.6 | 7852.7 | 0.61 | 1.21 |
+| escapes | SSE | 1 MB | 16 | 3974.4 | 8473.9 | 7085.9 | 0.56 | 1.20 |
+| escapes | SSE | 1 MB | 256 | 5463.4 | 9822.9 | 8313.2 | 0.66 | 1.18 |
+| unicode | JSON | 64 KB | 1 | 224.8 | 217.1 | 281.8 | 0.80 | 0.77 |
+| unicode | JSON | 64 KB | 16 | 226.9 | 173.3 | 309.2 | 0.73 | 0.56 |
+| unicode | JSON | 64 KB | 256 | 215.4 | 188.8 | 266.8 | 0.81 | 0.71 |
+| unicode | JSON | 1 MB | 1 | 2499.4 | 2356.8 | 3468.0 | 0.72 | 0.68 |
+| unicode | JSON | 1 MB | 16 | 2406.3 | 2449.3 | 3421.6 | 0.70 | 0.72 |
+| unicode | JSON | 1 MB | 256 | 2963.0 | 3254.1 | 4125.9 | 0.72 | 0.79 |
+| unicode | SSE | 64 KB | 1 | 292.9 | 253.7 | 369.3 | 0.79 | 0.69 |
+| unicode | SSE | 64 KB | 16 | 268.4 | 253.6 | 378.1 | 0.71 | 0.67 |
+| unicode | SSE | 64 KB | 256 | 238.7 | 247.5 | 286.6 | 0.83 | 0.86 |
+| unicode | SSE | 1 MB | 1 | 3294.7 | 3107.3 | 4654.2 | 0.71 | 0.67 |
+| unicode | SSE | 1 MB | 16 | 2740.4 | 2635.4 | 3966.9 | 0.69 | 0.66 |
+| unicode | SSE | 1 MB | 256 | 3787.5 | 3465.4 | 4026.2 | 0.94 | 0.86 |
+| numbers | JSON | 64 KB | 1 | 342.9 | 585.5 | 388.5 | 0.88 | 1.51 |
+| numbers | JSON | 64 KB | 16 | 341.5 | 559.3 | 446.6 | 0.76 | 1.25 |
+| numbers | JSON | 64 KB | 256 | 290.8 | 557.8 | 369.6 | 0.79 | 1.51 |
+| numbers | JSON | 1 MB | 1 | 4049.9 | 7710.2 | 5462.8 | 0.74 | 1.41 |
+| numbers | JSON | 1 MB | 16 | 4591.1 | 7666.9 | 4948.1 | 0.93 | 1.55 |
+| numbers | JSON | 1 MB | 256 | 4875.0 | 8767.6 | 5543.4 | 0.88 | 1.58 |
+| numbers | SSE | 64 KB | 1 | 449.8 | 625.7 | 562.5 | 0.80 | 1.11 |
+| numbers | SSE | 64 KB | 16 | 409.2 | 550.9 | 581.4 | 0.70 | 0.95 |
+| numbers | SSE | 64 KB | 256 | 425.1 | 623.2 | 493.3 | 0.86 | 1.26 |
+| numbers | SSE | 1 MB | 1 | 5527.8 | 8654.1 | 6727.8 | 0.82 | 1.29 |
+| numbers | SSE | 1 MB | 16 | 4869.5 | 7934.6 | 6762.2 | 0.72 | 1.17 |
+| numbers | SSE | 1 MB | 256 | 5779.8 | 8812.5 | 6841.2 | 0.84 | 1.29 |
+
+`tools/list` cells (not text-filled) read 0.54-1.00 of the SDK's. Across all 108 cells of the run, D1900 is below
+the SDK in 93.
+
+**Against the alternatives** (`MCP_COMPARE_TEXT=plain,lines,escapes,unicode,numbers mcp-compare.bench.ts perf 1`,
+three separate one-round runs with the client order rotated, medians; CPU µs a `tools/call`, all threads; bold is the
+lowest in the row; the last column is ours over the cheapest other client):
+
+| Text | Reply | Size | In flight | eden | sdk | sdk2 | pi | aisdk | python | eden / best other |
+|---|---|---|---|---|---|---|---|---|---|---|
+| plain | JSON | 1 KB | 1 | **87** | 120 | 192 | 108 | 132 | 2,673 | 0.80 |
+| plain | JSON | 1 KB | 16 | **46** | 58 | 93 | 79 | 67 | 2,975 | 0.79 |
+| plain | JSON | 1 KB | 256 | 59 | 58 | 120 | **53** | 82 | 2,976 | 1.12 |
+| plain | JSON | 64 KB | 1 | **137** | 158 | 259 | 212 | 187 | 4,213 | 0.87 |
+| plain | JSON | 64 KB | 16 | **132** | 173 | 177 | 196 | 160 | 4,173 | 0.83 |
+| plain | JSON | 64 KB | 256 | **115** | 142 | 166 | 187 | 132 | 4,150 | 0.87 |
+| plain | JSON | 1 MB | 1 | 1,056 | **996** | 1,266 | 2,705 | 1,196 | 25,884 | 1.06 |
+| plain | JSON | 1 MB | 16 | **827** | 1,188 | 1,284 | 1,857 | 1,132 | 26,988 | 0.73 |
+| plain | JSON | 1 MB | 256 | **1,316** | 1,592 | 1,577 | 2,022 | 1,504 | 26,070 | 0.88 |
+| plain | SSE | 1 KB | 1 | **98** | 110 | 163 | 127 | 148 | 4,241 | 0.89 |
+| plain | SSE | 1 KB | 16 | **53** | 74 | 102 | 66 | 100 | 4,085 | 0.80 |
+| plain | SSE | 1 KB | 256 | **52** | 73 | 134 | 62 | 133 | 4,225 | 0.85 |
+| plain | SSE | 64 KB | 1 | **201** | 234 | 300 | 583 | 320 | 6,144 | 0.86 |
+| plain | SSE | 64 KB | 16 | **173** | 303 | 320 | 561 | 351 | 6,128 | 0.57 |
+| plain | SSE | 64 KB | 256 | **174** | 228 | 260 | 513 | 263 | 6,042 | 0.76 |
+| plain | SSE | 1 MB | 1 | **2,148** | 2,936 | 3,135 | 18,424 | 3,305 | 37,174 | 0.73 |
+| plain | SSE | 1 MB | 16 | **1,760** | 2,348 | 2,497 | 14,882 | 2,437 | 36,684 | 0.75 |
+| plain | SSE | 1 MB | 256 | **1,820** | 2,406 | 2,463 | 14,105 | 2,424 | 39,039 | 0.76 |
+| lines | JSON | 1 KB | 1 | 105 | **94** | 114 | 104 | 99 | 2,910 | 1.11 |
+| lines | JSON | 1 KB | 16 | **43** | 48 | 81 | 52 | 62 | 3,425 | 0.90 |
+| lines | JSON | 1 KB | 256 | **38** | 57 | 84 | 64 | 74 | 3,143 | 0.66 |
+| lines | JSON | 64 KB | 1 | 200 | **176** | 236 | 276 | 186 | 4,217 | 1.14 |
+| lines | JSON | 64 KB | 16 | 166 | **153** | 207 | 215 | 174 | 4,564 | 1.09 |
+| lines | JSON | 64 KB | 256 | 188 | **143** | 177 | 238 | 181 | 4,392 | 1.31 |
+| lines | JSON | 1 MB | 1 | 2,288 | **1,656** | 1,794 | 3,261 | 1,754 | 27,304 | 1.38 |
+| lines | JSON | 1 MB | 16 | 2,069 | **1,890** | 1,911 | 2,786 | 1,967 | 28,101 | 1.09 |
+| lines | JSON | 1 MB | 256 | 2,572 | **2,323** | 2,344 | 3,003 | 2,354 | 27,631 | 1.11 |
+| lines | SSE | 1 KB | 1 | **103** | 110 | 160 | 103 | 145 | 4,210 | 1.00 |
+| lines | SSE | 1 KB | 16 | **50** | 64 | 101 | 67 | 88 | 3,874 | 0.78 |
+| lines | SSE | 1 KB | 256 | **50** | 92 | 101 | 63 | 86 | 4,109 | 0.80 |
+| lines | SSE | 64 KB | 1 | **282** | 305 | 382 | 604 | 401 | 6,018 | 0.92 |
+| lines | SSE | 64 KB | 16 | **257** | 313 | 353 | 590 | 430 | 6,516 | 0.82 |
+| lines | SSE | 64 KB | 256 | **240** | 259 | 277 | 632 | 310 | 6,462 | 0.92 |
+| lines | SSE | 1 MB | 1 | **3,250** | 3,878 | 3,881 | 19,963 | 4,572 | 40,346 | 0.84 |
+| lines | SSE | 1 MB | 16 | **2,749** | 3,283 | 3,394 | 15,825 | 4,091 | 40,469 | 0.84 |
+| lines | SSE | 1 MB | 256 | **3,008** | 3,137 | 3,119 | 15,214 | 3,821 | 40,926 | 0.96 |
+| escapes | JSON | 1 KB | 1 | **96** | 102 | 127 | 109 | 109 | 2,678 | 0.95 |
+| escapes | JSON | 1 KB | 16 | **54** | 63 | 94 | 64 | 76 | 2,909 | 0.86 |
+| escapes | JSON | 1 KB | 256 | **51** | 61 | 93 | 73 | 66 | 2,934 | 0.83 |
+| escapes | JSON | 64 KB | 1 | **326** | 467 | 556 | 566 | 481 | 4,653 | 0.70 |
+| escapes | JSON | 64 KB | 16 | **328** | 450 | 483 | 511 | 460 | 4,775 | 0.73 |
+| escapes | JSON | 64 KB | 256 | **294** | 406 | 415 | 469 | 444 | 4,898 | 0.72 |
+| escapes | JSON | 1 MB | 1 | **3,345** | 5,382 | 5,258 | 7,193 | 5,464 | 30,912 | 0.64 |
+| escapes | JSON | 1 MB | 16 | **3,420** | 5,432 | 5,584 | 6,505 | 5,174 | 30,391 | 0.66 |
+| escapes | JSON | 1 MB | 256 | **4,532** | 6,349 | 6,284 | 7,508 | 6,214 | 32,390 | 0.73 |
+| escapes | SSE | 1 KB | 1 | **106** | 118 | 169 | 120 | 164 | 4,090 | 0.90 |
+| escapes | SSE | 1 KB | 16 | **53** | 91 | 106 | 99 | 120 | 4,397 | 0.58 |
+| escapes | SSE | 1 KB | 256 | **59** | 79 | 123 | 90 | 122 | 4,253 | 0.75 |
+| escapes | SSE | 64 KB | 1 | **442** | 595 | 650 | 1,023 | 950 | 6,475 | 0.74 |
+| escapes | SSE | 64 KB | 16 | **395** | 565 | 664 | 937 | 1,000 | 6,603 | 0.70 |
+| escapes | SSE | 64 KB | 256 | **371** | 464 | 580 | 980 | 811 | 6,742 | 0.80 |
+| escapes | SSE | 1 MB | 1 | **4,969** | 8,481 | 8,404 | 36,802 | 11,906 | 50,087 | 0.59 |
+| escapes | SSE | 1 MB | 16 | **4,758** | 6,934 | 7,864 | 24,714 | 11,126 | 46,729 | 0.69 |
+| escapes | SSE | 1 MB | 256 | **5,232** | 7,480 | 7,613 | 25,469 | 11,524 | 45,704 | 0.70 |
+| unicode | JSON | 1 KB | 1 | 89 | 92 | 120 | **87** | 97 | 2,746 | 1.03 |
+| unicode | JSON | 1 KB | 16 | **37** | 48 | 84 | 56 | 58 | 3,042 | 0.78 |
+| unicode | JSON | 1 KB | 256 | **43** | 56 | 99 | 56 | 70 | 3,297 | 0.77 |
+| unicode | JSON | 64 KB | 1 | **191** | 318 | 335 | 289 | 361 | 4,521 | 0.66 |
+| unicode | JSON | 64 KB | 16 | **206** | 302 | 345 | 299 | 311 | 4,634 | 0.69 |
+| unicode | JSON | 64 KB | 256 | **199** | 299 | 308 | 260 | 300 | 4,785 | 0.76 |
+| unicode | JSON | 1 MB | 1 | **2,363** | 3,421 | 3,457 | 6,493 | 3,300 | 29,277 | 0.72 |
+| unicode | JSON | 1 MB | 16 | **2,509** | 3,683 | 3,480 | 5,489 | 3,462 | 29,305 | 0.72 |
+| unicode | JSON | 1 MB | 256 | **3,157** | 4,072 | 4,400 | 6,131 | 4,313 | 31,693 | 0.78 |
+| unicode | SSE | 1 KB | 1 | **88** | 101 | 153 | 128 | 148 | 4,289 | 0.87 |
+| unicode | SSE | 1 KB | 16 | **45** | 60 | 117 | 99 | 111 | 4,051 | 0.75 |
+| unicode | SSE | 1 KB | 256 | **48** | 73 | 149 | 86 | 106 | 4,159 | 0.66 |
+| unicode | SSE | 64 KB | 1 | **302** | 305 | 386 | 1,483 | 460 | 6,625 | 0.99 |
+| unicode | SSE | 64 KB | 16 | **327** | 337 | 419 | 1,336 | 480 | 7,010 | 0.97 |
+| unicode | SSE | 64 KB | 256 | **276** | 282 | 334 | 1,311 | 374 | 6,796 | 0.98 |
+| unicode | SSE | 1 MB | 1 | **3,448** | 3,795 | 4,957 | 63,050 | 4,968 | 57,547 | 0.91 |
+| unicode | SSE | 1 MB | 16 | **3,205** | 3,443 | 4,050 | 43,864 | 4,467 | 58,478 | 0.93 |
+| unicode | SSE | 1 MB | 256 | **3,679** | 3,842 | 4,130 | 42,228 | 5,037 | 62,659 | 0.96 |
+| numbers | JSON | 1 KB | 1 | 103 | **90** | 154 | 104 | 107 | 2,756 | 1.15 |
+| numbers | JSON | 1 KB | 16 | **53** | 56 | 97 | 63 | 81 | 2,880 | 0.94 |
+| numbers | JSON | 1 KB | 256 | **51** | 54 | 109 | 73 | 80 | 3,034 | 0.95 |
+| numbers | JSON | 64 KB | 1 | **376** | 421 | 532 | 528 | 466 | 4,997 | 0.89 |
+| numbers | JSON | 64 KB | 16 | **347** | 413 | 450 | 461 | 369 | 5,241 | 0.94 |
+| numbers | JSON | 64 KB | 256 | 348 | **314** | 452 | 450 | 344 | 5,471 | 1.11 |
+| numbers | JSON | 1 MB | 1 | 4,862 | **4,414** | 4,972 | 6,747 | 5,173 | 50,023 | 1.10 |
+| numbers | JSON | 1 MB | 16 | **4,206** | 4,672 | 4,971 | 5,794 | 4,893 | 44,348 | 0.90 |
+| numbers | JSON | 1 MB | 256 | **4,796** | 5,381 | 5,701 | 6,419 | 5,493 | 50,643 | 0.89 |
+| numbers | SSE | 1 KB | 1 | **98** | 113 | 182 | 126 | 132 | 4,291 | 0.87 |
+| numbers | SSE | 1 KB | 16 | **44** | 85 | 129 | 89 | 112 | 4,276 | 0.52 |
+| numbers | SSE | 1 KB | 256 | **50** | 101 | 135 | 82 | 113 | 4,294 | 0.61 |
+| numbers | SSE | 64 KB | 1 | **498** | 616 | 575 | 1,190 | 555 | 8,528 | 0.90 |
+| numbers | SSE | 64 KB | 16 | **387** | 620 | 676 | 1,135 | 619 | 8,985 | 0.63 |
+| numbers | SSE | 64 KB | 256 | **371** | 570 | 511 | 1,180 | 575 | 8,942 | 0.73 |
+| numbers | SSE | 1 MB | 1 | **5,503** | 7,483 | 7,307 | 23,866 | 6,965 | 86,021 | 0.79 |
+| numbers | SSE | 1 MB | 16 | **4,962** | 6,689 | 6,726 | 18,825 | 6,232 | 82,887 | 0.80 |
+| numbers | SSE | 1 MB | 256 | **5,442** | 6,904 | 6,522 | 17,985 | 6,456 | 84,515 | 0.84 |
+
+Ours is the cheapest client in 77 of the 90 cells (three rounds; loads 1.6-9.8 over the 35 minutes of each, the
+machine shared with another agent). Every `escapes` and `unicode` cell from 64 KB up and every SSE cell but one at
+1 KB is ours; JSON written as text costs 0.59-0.73x the cheapest other client at 1 MB, numbers 0.81-1.10x. The 13
+losses: `lines` in JSON at 1 KB, 64 KB and 1 MB (1.09-1.38x the SDK 1.x; below), plain JSON at 1 MB one at a time
+(1.06x) and at 1 KB with 256 in flight (1.12x pi), numbers in JSON one at a time at 1 KB and 1 MB (1.15x, 1.10x) and at
+64 KB with 256 in flight (1.11x), and unicode at 1 KB one at a time (1.03x pi). Time to the first call (spawn to
+answer, medians of three): eden 35 ms, pi 74, aisdk 119, sdk 120, sdk2 127, python 706.
+
+**Where it still loses.**
+
+- **Tool output in JSON** (`lines`): 1.04-1.20x the SDK's CPU at 64 KB and 1.08-1.16x at 1 MB in the profile run
+  (before D1900, 1.18-1.32x at 1 MB), and 1.09-1.38x the SDK in the comparison run above. The scan now crosses the string in one guessed read and is about 1% of the call;
+  the parse is 85% of it (`--cpu-prof-md`). Bun's `res.json()`, which the other clients use, parses the received bytes
+  without making the string our `text()` makes. Taking `res.json()` and checking the depth and size after the parse
+  would close it, and was refused (D1871): the bound is on what a hostile reply can make the parse cost, and 1 MB of
+  nested arrays costs `json()` 108 ms. Reading bytes and decoding ourselves is slower than `text()` (D1906).
+- **1 KB replies with escapes**: 1.22-1.46x the SDK's CPU in the profile run, a difference of 10-30 µs a call. Short
+  replies take the plain path (the long-reply path does not pay below 16 KiB), and these cells move that much between
+  runs.
+
 ## Packaging
 
 - **On its own**: the directory copied alone to an empty directory with `@modelcontextprotocol/sdk` 1.32.2 and zod
@@ -391,7 +607,9 @@ ours the extra string `text()` makes (1.13-1.30x the SDK's CPU at 1 MB, 0.94-1.2
 
 ```bash
 # alternatives in their own directories under one root (see the bench's header), then
-MCP_ALT_DIR=<root> env -u BUN_OPTIONS bun packages/sources/bench/mcp-compare.bench.ts perf 3     # ~75 min
+MCP_ALT_DIR=<root> env -u BUN_OPTIONS bun packages/sources/bench/mcp-compare.bench.ts perf 3     # ~75 min, plain text
+# every text shape, one round (~35 min); D1900 ran it three times with the client order rotated
+MCP_ALT_DIR=<root> MCP_COMPARE_TEXT=plain,lines,escapes,unicode,numbers env -u BUN_OPTIONS bun packages/sources/bench/mcp-compare.bench.ts perf 1 eden,sdk,sdk2,pi,aisdk,python
 MCP_ALT_DIR=<root> env -u BUN_OPTIONS bun packages/sources/bench/mcp-compare.bench.ts hostile   # ~3 min
-MCP_PROFILE_BASE=<copy of another tree's src/mcp> env -u BUN_OPTIONS bun packages/sources/bench/mcp-profile.bench.ts 3 eden,base,sdk
+MCP_PROFILE_BASE=<copy of another tree's src/mcp> MCP_PROFILE_TEXT=plain,lines,escapes,unicode,numbers env -u BUN_OPTIONS bun packages/sources/bench/mcp-profile.bench.ts 3 eden,base,sdk
 ```
