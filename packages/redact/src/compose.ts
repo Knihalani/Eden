@@ -78,23 +78,33 @@ export function composeMasks(
   const main = strict.length + excused.length > 0;
   const assigned = main ? pass.assignments(text) : { all: [], strict: [] };
   const spans = byStart(strict.concat(excused, assigned.all));
-  let gated = "";
   let at = 0;
   /** The gated text's pieces against `text` (pieces.ts): kept runs and sentinels. */
   const gating: Pieces = [];
-  for (const [start, end] of spans) {
+  // Its parts, joined once (D1850): a string built by `+=` a span at a time was a rope of as many parts, flattened
+  // when the structural pass first read it.
+  const parts: string[] = [];
+  let length = 0;
+  for (let k = 0; k < spans.length; k++) {
+    const start = spans[k]![0];
+    const end = spans[k]![1];
     if (end <= at) continue;
-    const kept = Math.max(start, at);
-    if (kept > at) gating.push(gated.length, gated.length + kept - at, at);
-    gated += text.slice(at, kept);
+    const kept = start > at ? start : at;
+    if (kept > at) {
+      gating.push(length, length + kept - at, at);
+      parts.push(text.slice(at, kept));
+      length += kept - at;
+    }
     if (start >= at) {
-      gating.push(gated.length, gated.length + REDACTED.length, -1);
-      gated += REDACTED;
+      gating.push(length, length + REDACTED.length, -1);
+      parts.push(REDACTED);
+      length += REDACTED.length;
     }
     at = end;
   }
-  if (text.length > at) gating.push(gated.length, gated.length + text.length - at, at);
-  gated += text.slice(at);
+  if (text.length > at) gating.push(length, length + text.length - at, at);
+  parts.push(text.slice(at));
+  const gated = parts.length === 1 ? parts[0]! : parts.join("");
   const seen = { excusable: false };
   const ran = pass.run(gated, seen, gating);
   const stored = ran.stored;
