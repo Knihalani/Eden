@@ -216,7 +216,8 @@ describe("floods and slow growth", () => {
     // Linear, counted rather than timed: every byte the parser copies (`set`, `slice`) and every search it starts
     // (`indexOf`) is counted while the line drips. A doubling buffer copies each byte about three times (in, at the
     // regrows, once at the end); a buffer grown by a constant, or a line re-joined or re-searched each read, copies or
-    // searches quadratically. A CPU bound of 1,500 ms here failed at 1,511-2,806 ms on a loaded machine.
+    // searches quadratically through `set`, `slice` or `indexOf`. A CPU bound of 1,500 ms here failed at
+    // 2,806-10,462 ms on a loaded machine.
     const proto = Uint8Array.prototype;
     const { set, slice, indexOf } = proto;
     const work = { copied: 0, searches: 0 };
@@ -233,6 +234,27 @@ describe("floods and slow growth", () => {
       work.searches++;
       return indexOf.call(this, v, from);
     };
+    // A backstop for growth that goes around those three (a `Buffer.concat`, `transfer`, a byte loop: 8.5-35 s when
+    // planted, D1945's review): the drip's CPU against a linear reference in this process, so load stretches both.
+    // About 9-14x on a quiet machine; a constant-step buffer by any route is 70x or more.
+    const reference = () => {
+      const t = cpuMs();
+      let buf = new Uint8Array(16);
+      let len = 0;
+      for (let n = 0; n < 6_000_000; n++) {
+        const b = new Uint8Array(1);
+        b[0] = 0x61;
+        if (len === buf.length) {
+          const grown = new Uint8Array(len * 2);
+          grown.set(buf);
+          buf = grown;
+        }
+        buf[len++] = b[0]!;
+      }
+      return cpuMs() - t;
+    };
+    const before = reference();
+    const t = cpuMs();
     try {
       for (const kept of [true, false]) {
         let got = 0;
@@ -254,6 +276,8 @@ describe("floods and slow growth", () => {
       proto.slice = slice;
       proto.indexOf = indexOf;
     }
+    const drip = cpuMs() - t;
+    expect(drip).toBeLessThan(40 * Math.max(before, reference()));
   });
 
   test("sse-drip-mixed: small and long reads alternating keep at most two arrays per 16 KB held", () => {

@@ -258,10 +258,14 @@ describe("request body size (D100)", () => {
       // 453-665 ms on a quiet machine), not against a fixed 100 ms that a loaded machine passed (150 ms seen in a
       // gate). The scan stops at the first token past either bound, so the 400 costs a few milliseconds: a handler
       // that parsed first would take at least the reference. The fastest of three sends, so one descheduling of the
-      // test does not decide it.
-      const t0 = performance.now();
-      JSON.parse(body);
-      const parseMs = performance.now() - t0;
+      // test does not decide it; the reference is the fastest of three parses too, so one slow sample of it does not
+      // pass a handler that parsed first (D1945's review: such a handler took 0.5-0.8x of a single parse).
+      let parseMs = Infinity;
+      for (let i = 0; i < 3; i++) {
+        const t0 = performance.now();
+        JSON.parse(body);
+        parseMs = Math.min(parseMs, performance.now() - t0);
+      }
       let ms = Infinity;
       for (let i = 0; i < 3; i++) {
         const t1 = performance.now();

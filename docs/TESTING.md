@@ -177,7 +177,8 @@ What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `s
   engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
   not on how long the scheduler kept the test waiting.
 - **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`; 60 s since D1945): the limit catches a
-  hang; Bun's 5 s default failed CPU-bound tests under load. The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
+  hang; Bun's 5 s default failed CPU-bound tests under load.
+  The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
   assert nothing about time relied on it, and the tail runs unloaded. A name filter (`bun run test -- -t X`) runs one
   invocation, unsplit, since a part it matched nothing in would fail. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
   visible. `rare-terms.test.ts`'s two full-table tests fill 300,000 words, not 400,000 (still 38,000 past the table's
