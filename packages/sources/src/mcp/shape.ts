@@ -145,7 +145,7 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
   let candValues = 0;
   const reach = 2 * LONG_REPLY.numbers - 2;
   byteSawRead = byteLongString = false;
-  nextClose = nextQuote = nextBracket = nextBrace = -1;
+  nextClose = nextQuote = nextBracket = -1;
   // A string this long may be sliced or have its end guessed by the text path: shorter ones it only crosses.
   const long = Math.min(LONG_REPLY.string, LONG_REPLY.guessAfter + 1);
   for (let i = 0; i < n; i++) {
@@ -202,13 +202,11 @@ function readsAt(bytes: Uint8Array, from: number, commas: number, at: number): b
   if (nextClose < from) nextClose = indexOfByte(bytes, 0x5d, from) >>> 0;
   if (nextQuote < from) nextQuote = indexOfByte(bytes, 0x22, from) >>> 0;
   if (nextBracket <= from) nextBracket = indexOfByte(bytes, 0x5b, from + 1) >>> 0;
-  if (nextBrace < from) nextBrace = indexOfByte(bytes, 0x7b, from) >>> 0;
   return (
     nextClose < bytes.length &&
     nextClose - from >= 2 * LONG_REPLY.numbers - 1 &&
     nextQuote > nextClose &&
     nextBracket > nextClose &&
-    nextBrace > nextClose &&
     enoughElements(commas, from, at, nextClose) &&
     lastElementReadsBytes(bytes, from, nextClose) &&
     firstRegionReadsBytes(bytes, from)
@@ -225,13 +223,12 @@ function enoughElements(commas: number, open: number, at: number, close: number)
   return commas * (close - open) >= LONG_REPLY.numbers * (at - open);
 }
 /**
- * The next `]`, quote, `[` (past its own) and `{` at or after the last array `readsAt` checked (2^32 - 1 for none), -1
+ * The next `]`, quote and `[` (past its own) at or after the last array `readsAt` checked (2^32 - 1 for none), -1
  * before: each searched for again only once the scan has passed it, so each search crosses a body once.
  */
 let nextClose = -1;
 let nextQuote = -1;
 let nextBracket = -1;
-let nextBrace = -1;
 
 /** Whether the last `byteShapeOrStop` with `stop` off met a place where it would have stopped. */
 export let byteSawRead = false;
@@ -554,16 +551,16 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
  * `readNumbers` at the `[` at `open`, asked only of a candidate that has gone on far enough to be worth reading
  * (D1902's review: a call for every `[` before a digit cost a `[[1,2,3],...]` matrix 2.7-2.9 times main's scan), and
  * only when the next `]` (where a number array closes) is far enough for `LONG_REPLY.numbers` elements and no quote
- * comes before it (a string is not a number), nor a `[` or `{`. The next `[` is kept and searched for again only once
- * the scan has passed it; the `]` only up to that `[`, and the quote and `{` only between the brackets, so each search
- * covers a stretch no other call's does: together they cross the reply once, however deep its arrays nest, and never
- * past the array a refused reply is refused in. An array whose commas
- * so far, at the same rate up to that `]`, make fewer than `LONG_REPLY.numbers` elements is left to the scan (read, it
- * would not be kept: `enoughElements`), and the last element is read first (`lastElementReads`), so an array that ends
- * in what the reader leaves to `JSON.parse` is left to the scan at once (D1919). Where more elements could fit than the
- * room left, the reader counts the commas once its first region has read (`commasIn`), so a flood is refused with at
- * most a region's numbers kept, and an array that fits is made its exact length; an array that is not numbers from
- * its first element is neither counted nor allocated. A reader's `NOT_JSON` ends the scan (`NOT_JSON_REPLY`).
+ * or `[` comes before it (a string is not a number; a nested array makes no number array). The next `[` is kept and
+ * searched for again only once the scan has passed it, the `]` only up to that `[`, and the quote only between the
+ * brackets, so each search covers a stretch no other call's does: together they cross the reply once, however deep
+ * its arrays nest, and never past the array a refused reply is refused in. An array whose commas so far, at the same
+ * rate up to that `]`, make fewer than `LONG_REPLY.numbers` elements is left to the scan (read, it would not be kept:
+ * `enoughElements`), and the last element is read first (`lastElementReads`), so an array that ends in what the
+ * reader leaves to `JSON.parse` is left to the scan at once (D1919). Where more elements could fit than the room
+ * left, the reader counts the commas once its first region has read (`commasIn`), so a flood is refused with at most
+ * a region's numbers kept, and an array that fits is made its exact length; an array that is not numbers from its
+ * first element is neither counted nor allocated. A reader's `NOT_JSON` ends the scan (`NOT_JSON_REPLY`).
  *
  * Linear (D1909, D1919): `commasIn` and `readNumbers` read each character of a reply a bounded number of times. Both
  * read from `open` and stop at the next `]` or sooner: `commasIn` at any character no number array holds before its
@@ -591,10 +588,11 @@ function numberArrayAt(text: string, open: number, room: number, seen: TextShape
   const window = seen.bracket < text.length ? text.slice(open, seen.bracket) : text.slice(open);
   const close = open + window.indexOf("]");
   if (close < open || close - open < 2 * LONG_REPLY.numbers - 1) return NOT_NUMBERS;
-  // No quote or `{` before it either (a string or an object is no number): searched for between the brackets only.
-  const inside = window.slice(0, close - open);
-  if (inside.indexOf('"') >= 0 || inside.indexOf("{") >= 0) return NOT_NUMBERS;
-  if (!enoughElements(commas, open, at, close) || !lastElementReads(text, open, close)) return NOT_NUMBERS;
+  if (!enoughElements(commas, open, at, close)) return NOT_NUMBERS;
+  // No quote before it either (a string is no number): searched for between the brackets only. A `{` the reader meets
+  // as it would a `[`, where the scan goes on (a search for it too crossed a refused 16 MiB flood once more).
+  const quote = window.indexOf('"');
+  if ((quote >= 0 && quote < close - open) || !lastElementReads(text, open, close)) return NOT_NUMBERS;
   // k elements take at least 2k - 1 characters between the brackets, and k - 1 commas: where more could fit than the
   // room left, the reader counts the commas once its first region reads (counting them up to a nested `[` is what
   // keeps nested candidates linear: sizing the array from the byte scan's count instead made one that long at every
