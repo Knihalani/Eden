@@ -39,7 +39,7 @@ import type { ListReuse } from "@eden/sources";
 import { dayKeys } from "./days";
 import { dayFactsClass, dayFactsOf, type DayFacts } from "./day-facts";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
-import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText } from "./packed-text";
+import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText, type PackTag } from "./packed-text";
 import { clearParts } from "./render";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
@@ -212,8 +212,8 @@ class UserCache {
 
 /**
  * A user's cache while idle (`CacheLimits.freezeIdleMs`, D325): every entry, with the tallies kept beside them, as one
- * deflated JSON blob in memory, and no vocabulary, index, sketcher or entry objects. Content stays in memory (D8):
- * nothing is written to disk, unless the operator opted in (`ItemCache.persist`, D425: the blob is then also
+ * zstd-compressed JSON blob in memory, and no vocabulary, index, sketcher or entry objects. Content stays in memory
+ * (D8): nothing is written to disk, unless the operator opted in (`ItemCache.persist`, D425: the blob is then also
  * written, encrypted, while the user stays frozen). The next read or write of the user thaws it (`ItemCache.thaw`)
  * into the same state: the same items in the same order, fetch times, read marks, raw hashes and sketches, the same
  * revision and probes, and an index whose docs were added in the same order, so every answer is the same
@@ -278,11 +278,12 @@ interface FrozenBody {
 
 /**
  * One entry of a fast-thaw blob (D860): `FrozenEntry`'s fields, the item without its text when the text is packed
- * (`p`: its deflated bytes' length in the blob's text section, and 1 when they decode as Latin-1), and its doc number.
+ * (`p`: its packed bytes' length in the blob's text section, and their `PackTag`: bit 0 Latin-1, bit 1 zstd, D1926),
+ * and its doc number.
  */
 interface FastEntry {
   i: Omit<ContextItem, "text"> | ContextItem;
-  p?: [number, 0 | 1];
+  p?: [number, PackTag];
   d: number;
   f: number;
   m: number;
@@ -560,11 +561,11 @@ export interface CacheLimits {
    */
   releaseTerms: boolean;
   /**
-   * Hold each stored item's text deflated (`packed-text.ts`) and decode it on read through its `text` getter (D188,
-   * which reopened D111's compressed text as a trial and promoted it): cached text was about half a synced user's
-   * heap. `ingest.bench.ts --world`, shipped, 200 users x 500 items: 3,799-3,953 to 2,368-2,543 B/item released
-   * (1.55-1.61x), backfill 1.17-1.30x the CPU; `pipeline.bench.ts` 1.01-1.04x; eval and funnel identical. Off: text as
-   * plain strings (the benches' `--plain`, for before/after figures).
+   * Hold each stored item's text compressed (`packed-text.ts`; zstd level 1 since D1926, DEFLATE before) and decode it
+   * on read through its `text` getter (D188, which reopened D111's compressed text as a trial and promoted it): cached
+   * text was about half a synced user's heap. `ingest.bench.ts --world`, shipped, 200 users x 500 items: 3,799-3,953 to
+   * 2,368-2,543 B/item released (1.55-1.61x), backfill 1.17-1.30x the CPU; `pipeline.bench.ts` 1.01-1.04x; eval and
+   * funnel identical. Off: text as plain strings (the benches' `--plain`, for before/after figures).
    */
   packText: boolean;
   /**
@@ -577,10 +578,10 @@ export interface CacheLimits {
   freezeIdleMs: number;
   /**
    * D860, D862 (2 minutes by default; 0: off): a user idle this long (counted in expiry ticks as `freezeIdleMs` is,
-   * at least two) is frozen "warm": in a blob that keeps what a thaw would otherwise rebuild, each item's deflated
+   * at least two) is frozen "warm": in a blob that keeps what a thaw would otherwise rebuild, each item's packed
    * text bytes as they are and the vocabulary and the compacted index as arrays (`fastFreezeSteps`), so the thaw is
    * mostly copying (10-20 ms at 3,000 items against 150-300). The warm blob is larger than the compact one (per-item
-   * deflate shares no words across items), so a user still idle at `freezeIdleMs` is frozen again compact. Needs
+   * compression shares no words across items), so a user still idle at `freezeIdleMs` is frozen again compact. Needs
    * `expireEveryMs` at most half of it, or the ticks are too coarse to freeze on time. Only when below `freezeIdleMs`
    * (so never with users that never freeze) and with `releaseTerms`; a thaw reads either form.
    */
@@ -802,7 +803,7 @@ export class ItemCache {
    * Users frozen and thawed since the cache was built (D325): for the benches and stats. `loaded`: users read back
    * from disk (D425), counted in `thawed` too once thawed; `loadMs` their reads.
    */
-  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0, recompacted: 0, loaded: 0, loadMs: 0 };
+  readonly freezes = { frozen: 0, thawed: 0, thawMs: 0, recompacted: 0, loaded: 0, loadMs: 0, discarded: 0 };
   /** The owner's restores still settling, per user read back from disk (D425): `ready` waits on them. */
   private readonly restoring = new Map<string, Promise<unknown>>();
   /** Where frozen users are also written (D425, opt-in); null by default: nothing goes to disk (D8). */
@@ -1040,7 +1041,8 @@ export class ItemCache {
     const key = scopeKey(scope);
     const x = this.users.get(key) ?? this.load(key, scope);
     if (x === undefined) return undefined;
-    const u = x instanceof UserCache ? x : this.thaw(key, x);
+    const u = x instanceof UserCache ? x : this.thawHeld(key, x);
+    if (u === undefined) return undefined;
     u.seen = this.epoch;
     return u;
   }
@@ -1048,8 +1050,8 @@ export class ItemCache {
   private touch(scope: Scope): UserCache {
     const key = scopeKey(scope);
     const found = this.users.get(key) ?? this.load(key, scope);
-    if (found) {
-      const existing = found instanceof UserCache ? found : this.thaw(key, found);
+    const existing = found instanceof FrozenUser ? this.thawHeld(key, found) : found;
+    if (existing) {
       existing.seen = this.epoch;
       this.users.delete(key); // Re-insert: Map order is least recently written first.
       this.users.set(key, existing);
@@ -1183,7 +1185,7 @@ export class ItemCache {
         if (!same) u.revision = ++this.revisions;
         tally(u, old.item, -1);
         tallyOffset(u, old.item, -1);
-        // The new copy's fields, its text still deflated (the held bytes reused: same words, no second deflate). A
+        // The new copy's fields, its text still packed (the held bytes reused: same words, no second compression). A
         // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
         // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
         const fresh =
@@ -1204,7 +1206,7 @@ export class ItemCache {
       tallyOffset(u, item, 1);
       tally(u, item, 1);
       const doc = this.index(u, item);
-      // The copy held: with `packText`, its text deflated (the tallies and index above read the plain one).
+      // The copy held: with `packText`, its text packed (the tallies and index above read the plain one).
       const stored = this.limits.packText ? packItem(item) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
@@ -1812,14 +1814,19 @@ export class ItemCache {
         if (!this.frozenExpired(x, now)) {
           if (!this.coldDue(x, freezeTicks)) continue;
           if (sliced) this.later.add(key);
-          else this.freeze(key, this.thaw(key, x, true), false);
+          else {
+            const thawed = this.thawHeld(key, x, true);
+            if (thawed) this.freeze(key, thawed, false);
+          }
           continue;
         }
         if (sliced) {
           this.later.add(key);
           continue;
         }
-        u = this.thaw(key, x);
+        const thawed = this.thawHeld(key, x);
+        if (thawed === undefined) continue;
+        u = thawed;
       } else u = x;
       if (this.expireUser(key, u, now)) {
         n++;
@@ -2064,7 +2071,7 @@ export class ItemCache {
   /**
    * A freeze in the fast-thaw form (`CacheLimits.warmIdleMs`, D860), a step per `STEP_ITEMS` entries: the entries'
    * fields as JSON with each packed text's bytes kept apart, and the vocabulary and the compacted index as arrays.
-   * Nothing is inflated or deflated; the JSON and the arrays go through zstd, the text bytes (deflated already) do not.
+   * No text is decompressed or compressed; the JSON and the arrays go through zstd, the packed text bytes do not.
    */
   private *fastFreezeSteps(u: UserCache): Generator<undefined, FrozenUser> {
     const texts: Uint8Array[] = [];
@@ -2089,7 +2096,7 @@ export class ItemCache {
         q: e.seq,
       };
       if (packed) {
-        rec.p = [packed.bytes.byteLength, packed.latin1 ? 1 : 0];
+        rec.p = [packed.bytes.byteLength, packed.tag];
         texts.push(packed.bytes);
         textBytes += packed.bytes.byteLength;
       }
@@ -2228,7 +2235,7 @@ export class ItemCache {
       let item: ContextItem;
       if (r.p) {
         // A view, not a copy: `packedFrom` copies the bytes into the item's own string (D998).
-        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1] === 1);
+        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1]);
         t += r.p[0];
       } else item = r.i as ContextItem;
       const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
@@ -2341,6 +2348,25 @@ export class ItemCache {
     let r = steps.next();
     while (!r.done) r = steps.next();
     return this.thawed(key, r.value, t0, f, recompact);
+  }
+
+  /**
+   * `thaw` for a request, or undefined when a user read from disk does not thaw (a blob that decrypted and whose
+   * header read but whose body does not: a tag `packedFrom` refuses, a section that does not decompress). Such a user
+   * is dropped with their file, as `EncryptedFrozenDisk` discards a blob that does not open, and starts over (D8, a
+   * re-sync); left frozen, every request for them would throw. Unlike that discard, `dropUser` also deletes a shared
+   * store's copy (`SharedFrozenDisk`), which would only be fetched and fail again; an allocation failure during the
+   * thaw discards too (the contents are a cache). A blob this process froze itself still throws.
+   */
+  private thawHeld(key: string, f: FrozenUser, recompact = false): UserCache | undefined {
+    if (!f.fromDisk) return this.thaw(key, f, recompact);
+    try {
+      return this.thaw(key, f, recompact);
+    } catch {
+      this.freezes.discarded++;
+      this.dropUser(key, f.scope.tenantId);
+      return undefined;
+    }
   }
 
   /** `recompact`: a warm user thawed only to be frozen compact (D862), counted apart from users' thaws. */

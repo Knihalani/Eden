@@ -9,7 +9,8 @@ import { Budget } from "@eden/llm";
 import { buildWorkload } from "../bench/workload";
 import type { ListPage, Source } from "@eden/sources";
 import { ItemCache, type CacheHit } from "./cache";
-import { isPacked } from "./packed-text";
+import { isPacked, packedOf } from "./packed-text";
+import { deflatePacked } from "./packed-text.reference";
 import { ContextPartner } from "./partner";
 import { termIds } from "./text";
 
@@ -292,6 +293,34 @@ describe("idle users frozen (D325)", () => {
       const want = batch.find((x) => x.id === h.item.id)!;
       expect(h.item.text).toBe(want.text);
       expect(isPacked(h.item)).toBe(want.text.length >= 256);
+    }
+  });
+});
+
+describe("packed texts and their codec through freezes (D1926)", () => {
+  test("a copy given packed as before D1926 is held as zstd, and warm and compact freezes keep every text", () => {
+    const r = rng(19);
+    const batch = Array.from({ length: 40 }, (_, n) => makeItem(r, n, "alice"));
+    // Every other item arrives packed as `packItem` packed before (DEFLATE); `put` reads its text and packs anew.
+    const given = batch.map((x, n) => (n % 2 === 0 ? deflatePacked(x) : x));
+    expect(given.some((x) => isPacked(x) && packedOf(x)!.tag >> 1 === 0)).toBe(true);
+    const held = (c: ItemCache) => {
+      for (const x of batch) {
+        const it = c.get(alice, x.id, T0)!;
+        expect(it.text).toBe(x.text);
+        if (isPacked(it)) expect(packedOf(it)!.tag >> 1).toBe(1);
+      }
+    };
+    for (const limits of [
+      { freezeIdleMs: 1_000, warmIdleMs: 1, expireEveryMs: 1 },
+      { freezeIdleMs: 2, expireEveryMs: 1 },
+    ]) {
+      const c = manual(limits);
+      c.put(alice, given, T0, false, true, 1);
+      held(c);
+      for (let t = 0; t < 4; t++) c.expireIdle(T0);
+      expect(c.frozenCount).toBe(1);
+      held(c);
     }
   });
 });

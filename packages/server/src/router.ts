@@ -29,19 +29,19 @@
  * `/healthz` answers here: 200 while at least one child is up (`up` < `processes` in the body says the instance is
  * degraded: alert on that, but a load balancer must not pull every user for one child's 1/N), 503 when none is.
  *
- * The router reads each POST body once to find `userId` (a `JSON.parse` the child repeats; router.bench.ts measures
- * the hop) and forwards the bytes unchanged with the `authorization` and `content-type` headers. A declared
- * content-length past `maxBodyBytes` is refused here with the handler's 413 (D100) so it is never buffered twice,
- * and a request past the tenant's whole rate (`tenantRatePerSec`, `tenantBurst`, undivided) gets the handler's 429
- * here before its body is read; every other answer, auth, the child's own 1/N rate limit and validation included, is
- * the child's.
+ * The router reads each POST body once to find `userId` (a scan that parses nothing but that value, D1925;
+ * router.bench.ts measures the hop, `--hop` the scan against the parse it replaced) and forwards the bytes unchanged
+ * with the `authorization` and `content-type` headers. A declared content-length past `maxBodyBytes` is refused here
+ * with the handler's 413 (D100) so it is never buffered twice, and a request past the tenant's whole rate
+ * (`tenantRatePerSec`, `tenantBurst`, undivided) gets the handler's 429 here before its body is read; every other
+ * answer, auth, the child's own 1/N rate limit and validation included, is the child's.
  */
 import { Database } from "bun:sqlite";
 import { existsSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SourceMap } from "@eden/graph";
 import { childTable, Gcra } from "@eden/primitives";
-import { bodyShapeUnder, bucketOf, keylessOriginAllowed } from "@eden/protocol";
+import { BODY_MAX_DEPTH, BODY_MAX_VALUES, bodyShapeUnder, bucketOf, keylessOriginAllowed } from "@eden/protocol";
 import { keyOf } from "./auth";
 import { childSourceMapPath, DEFAULT_MAX_BODY_BYTES, FANOUT_COPY, MAX_PROCESSES, type ServerConfig } from "./config";
 import { clusterKeyMatches, sumMetrics } from "./ops";
@@ -63,24 +63,302 @@ export function childFor(tenant: string, userId: string, children: number): numb
 }
 
 /**
- * The top-level `userId` of a JSON body, or "" when there is none (not JSON, not an object, no string userId). A
- * full parse, not a scan: a nested `"userId"` (inside an item's `meta`, say) must not route a request. Requests
- * without one go to the tenant's own child, where the handler refuses them with its usual 400.
+ * The top-level `userId` of a JSON body, or "" when there is none (not JSON, not an object, no string userId, or a
+ * body past `bodyShapeUnder`'s bounds, which the child refuses unparsed). Exactly what `JSON.parse` of the decoded body
+ * gave (the last of duplicate keys, an escaped key read as its characters, a nested `"userId"` ignored: one inside an
+ * item's `meta` must not route a request; one BOM at the body's start dropped, as the decode dropped it, and a BOM
+ * inside a value kept as a character of it), without the parse: one pass over the bytes checks the whole body against
+ * JSON's grammar and `bodyShapeUnder`'s bounds and notes where the last top-level `userId` value lies, and only that
+ * value is decoded. The parse built every item's strings and objects to read one key, on the one thread every tenant's
+ * requests pass through (D1925; `router-user.test.ts` fuzzes this against it). A body dense in structure also gets
+ * `bodyShapeUnder` itself (`padded`). Requests without one go to the tenant's own child, where the handler refuses
+ * them with its usual 400.
  */
 export function userOf(body: Uint8Array): string {
-  // A body the child refuses unparsed (`bodyShapeUnder`, http.ts) is not parsed here either: padded structure is where
-  // the parse's cost lies (hundreds of ms for 8 MB), on the one thread every tenant's requests pass through.
-  if (body.byteLength === 0 || !bodyShapeUnder(body)) return "";
-  try {
-    const parsed: unknown = JSON.parse(decoder.decode(body));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const user = (parsed as Record<string, unknown>).userId;
-      if (typeof user === "string") return user;
+  const b = body;
+  const n = b.length;
+  let i = 0;
+  // The decode the parse ran dropped one leading BOM (TextDecoder's default); any other byte not JSON's is invalid.
+  if (n >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) i = 3;
+  scan.quote = scan.slash = scan.control = -1;
+  scan.words = null;
+  scan.run = 32;
+  scan.shaped = false;
+  while (i < n && WS[b[i]!] === 1) i++;
+  // Not an object: no userId, whatever follows (a body past the bounds or not JSON gives "" all the same).
+  if (i >= n || b[i] !== 0x7b) return "";
+  const kinds = KINDS; // the container open at each depth: 1 an object, 2 an array
+  let depth = 0;
+  let values = 0; // opening brackets and commas, as `bodyShapeUnder` counts them
+  let userStart = -1; // the last top-level userId value's span
+  let userEnd = -1;
+  let userEscaped = false;
+  let valueStart = -1; // where the value of a top-level userId key starts, until that value ends
+  for (;;) {
+    // A value starts at `i`, past any whitespace.
+    while (i < n && WS[b[i]!] === 1) i++;
+    if (i >= n) return "";
+    let c = b[i]!;
+    if (c === 0x7b || c === 0x5b) {
+      if (++depth > BODY_MAX_DEPTH || ++values > BODY_MAX_VALUES) return "";
+      if ((values & PACE) === 0 && padded(b, i, values)) return "";
+      const object = c === 0x7b;
+      kinds[depth] = object ? 1 : 2;
+      i++;
+      while (i < n && WS[b[i]!] === 1) i++;
+      if (i >= n) return "";
+      if (b[i] === (object ? 0x7d : 0x5d)) {
+        depth--;
+        i++;
+      } else {
+        if (object) {
+          if ((i = memberValue(b, i, depth)) < 0) return "";
+          if (depth === 1 && keyIsUser) valueStart = i;
+        }
+        continue;
+      }
+    } else if (c === 0x22) {
+      if ((i = stringEnd(b, i + 1)) < 0) return "";
+      i++;
+    } else if ((i = scalarEnd(b, i)) < 0) return "";
+    // A value ended at `i`: what follows it in its container, closing containers until a comma.
+    for (;;) {
+      if (depth === 1 && valueStart >= 0) {
+        userStart = valueStart;
+        userEnd = i;
+        userEscaped = escaped; // the value's own scan, when it is a string
+        valueStart = -1;
+      }
+      while (i < n && WS[b[i]!] === 1) i++;
+      if (depth === 0) {
+        if (i !== n) return "";
+        if (userStart < 0 || b[userStart] !== 0x22) return "";
+        // Without an escape the characters are the bytes' decoding, as the parse's decode made them.
+        return userEscaped ? stringAt(b, userStart, userEnd) : decoder.decode(b.subarray(userStart + 1, userEnd - 1));
+      }
+      if (i >= n) return "";
+      c = b[i]!;
+      if (c === 0x2c) {
+        if (++values > BODY_MAX_VALUES) return "";
+        if ((values & PACE) === 0 && padded(b, i, values)) return "";
+        i++;
+        if (kinds[depth] === 1) {
+          while (i < n && WS[b[i]!] === 1) i++;
+          if ((i = memberValue(b, i, depth)) < 0) return "";
+          if (depth === 1 && keyIsUser) valueStart = i;
+        }
+        break;
+      }
+      if (c !== (kinds[depth] === 1 ? 0x7d : 0x5d)) return "";
+      depth--;
+      i++;
     }
-  } catch {
-    // Not JSON, or nested past the parser's depth: the child answers it with its 400.
   }
-  return "";
+}
+
+/**
+ * Whether a body the scan has read to `i`, with `values` values so far, is past `bodyShapeUnder`'s bounds, by that
+ * check itself: asked every 16,384 values (`PACE`), it runs the check once a body, when the body at the density read so
+ * far would hold more than an eighth of the values bound (`DENSE`, 126,250 values; a body under 126 KB never can). The
+ * check's byte loop reads structure about four times faster than this scan, so a padded body (8 MB of `"a":1,` or of
+ * digits, past the bound) is refused at about the parse's old cost, where scanning to the bound took 2.5-4.5x it; a
+ * dense body within the bound pays the check and the scan, against the check and the parse before. Items and events, a
+ * value every few hundred bytes or more, never pay it (D1925).
+ */
+function padded(b: Uint8Array, i: number, values: number): boolean {
+  if (scan.shaped || values * b.length <= DENSE * i) return false;
+  scan.shaped = true;
+  return !bodyShapeUnder(b);
+}
+
+const PACE = 0x3fff;
+const DENSE = BODY_MAX_VALUES / 8;
+
+/** JSON's whitespace: space, tab, line feed, carriage return. */
+const WS = new Uint8Array(256);
+WS[0x20] = WS[0x09] = WS[0x0a] = WS[0x0d] = 1;
+/** The bytes after a backslash that make an escape, `u` apart (it needs four hex digits). */
+const ESCAPE = new Uint8Array(256);
+for (const c of '"\\/bfnrt') ESCAPE[c.charCodeAt(0)] = 1;
+const HEX = new Uint8Array(256);
+for (const c of "0123456789abcdefABCDEF") HEX[c.charCodeAt(0)] = 1;
+const DIGIT = new Uint8Array(256);
+for (let c = 0x30; c <= 0x39; c++) DIGIT[c] = 1;
+/** Container kinds by depth: depth is bounded (`BODY_MAX_DEPTH`), so one array serves every call. */
+const KINDS = new Uint8Array(BODY_MAX_DEPTH + 2);
+/** Whether the key `memberValue` last read at depth 1 is `userId`. */
+let keyIsUser = false;
+/** Whether the string `stringEnd` last scanned held an escape. */
+let escaped = false;
+const USER_ID = [0x75, 0x73, 0x65, 0x72, 0x49, 0x64]; // "userId"
+
+/**
+ * Reads an object member's key at `i` and its colon; returns where its value starts (past whitespace), or -1 when the
+ * bytes are not a key and a colon. At depth 1 sets `keyIsUser`: the key's characters are `userId`, compared byte by
+ * byte when it holds no escape and a character at a time when it does (`escapedIsUser`: `\u0075serId` is `userId`).
+ */
+function memberValue(b: Uint8Array, i: number, depth: number): number {
+  const n = b.length;
+  if (i >= n || b[i] !== 0x22) return -1;
+  const end = stringEnd(b, i + 1);
+  if (end < 0) return -1;
+  if (depth === 1) {
+    if (!escaped) {
+      keyIsUser = end - i - 1 === 6;
+      for (let k = 0; keyIsUser && k < 6; k++) keyIsUser = b[i + 1 + k] === USER_ID[k];
+    } else keyIsUser = escapedIsUser(b, i + 1, end);
+  }
+  let j = end + 1;
+  while (j < n && WS[b[j]!] === 1) j++;
+  if (j >= n || b[j] !== 0x3a) return -1;
+  j++;
+  while (j < n && WS[b[j]!] === 1) j++;
+  return j;
+}
+
+/**
+ * Whether the escaped key whose characters lie in `b[from, to)` reads `userId`, compared in place a character at a
+ * time: a plain byte must be the character, a `\uXXXX` must name it; any other escape, and any byte past 0x7f (the
+ * decode gave a character outside ASCII for it), is not in `userId`. `stringEnd` checked the escapes' form. Decoding
+ * and parsing each escaped key made a body of many of them twice as slow as the parse it replaced (D1925).
+ */
+function escapedIsUser(b: Uint8Array, from: number, to: number): boolean {
+  let k = 0;
+  for (let i = from; i < to; k++) {
+    if (k === 6) return false;
+    let c = b[i]!;
+    if (c === 0x5c) {
+      if (b[i + 1] !== 0x75) return false;
+      c = 0;
+      for (let h = i + 2; h < i + 6; h++) {
+        const x = b[h]!;
+        c = (c << 4) | (x <= 0x39 ? x - 0x30 : (x | 0x20) - 0x57);
+      }
+      i += 6;
+    } else i++;
+    if (c !== USER_ID[k]) return false;
+  }
+  return k === 6;
+}
+
+/**
+ * The index of the quote that ends the string whose characters start at `i`, or -1 when the string is not valid JSON
+ * (unended, a control character, a bad escape). Bytes past 0x7f pass: the decode turned invalid UTF-8 into U+FFFD,
+ * which a string may hold, and UTF-8 never puts a byte under 0x80 inside a multi-byte character.
+ *
+ * Strings are most of a large body's bytes, and a byte loop reads about a byte a nanosecond. So past a short run read
+ * byte by byte (most strings, and most gaps between escapes, are short), the next quote and backslash are found with
+ * the native `indexOf` (13-16 µs a MiB on Bun, D1870) and the next control byte four at a time (`nextControl`). Each
+ * position found is kept until the scan passes it (`scan`), so each search covers a byte at most once whatever the
+ * number of strings or escapes; where the stop found was near, the run doubles (to 4,096), as D1870's does, since a
+ * search there costs more than the loop (text with an escaped quote or newline every few dozen bytes).
+ */
+function stringEnd(b: Uint8Array, i: number): number {
+  const n = b.length;
+  escaped = false;
+  for (;;) {
+    const stop = i + scan.run < n ? i + scan.run : n;
+    while (i < stop && STR_STOP[b[i]!] === 0) i++;
+    let at = i;
+    if (i === stop) {
+      if (i >= n) return -1;
+      if (scan.quote < i) scan.quote = found(b.indexOf(0x22, i), n);
+      if (scan.slash < i) scan.slash = found(b.indexOf(0x5c, i), n);
+      if (scan.control < i) scan.control = nextControl(b, i);
+      at = scan.quote < scan.slash ? scan.quote : scan.slash;
+      if (scan.control < at) at = scan.control;
+      scan.run = at - i < 128 ? Math.min(scan.run * 2, 4096) : 32;
+      if (at >= n) return -1;
+    }
+    const c = b[at]!;
+    if (c === 0x22) return at;
+    if (c !== 0x5c || at + 1 >= n) return -1;
+    escaped = true;
+    const e = b[at + 1]!;
+    if (e === 0x75) {
+      if (at + 5 >= n || !HEX[b[at + 2]!] || !HEX[b[at + 3]!] || !HEX[b[at + 4]!] || !HEX[b[at + 5]!]) return -1;
+      i = at + 6;
+    } else if (ESCAPE[e] === 1) i = at + 2;
+    else return -1;
+  }
+}
+
+/** Bytes that end a string's byte loop: a quote, a backslash, or a control character (invalid unescaped). */
+const STR_STOP = new Uint8Array(256);
+for (let c = 0; c < 0x20; c++) STR_STOP[c] = 1;
+STR_STOP[0x22] = STR_STOP[0x5c] = 1;
+
+/** `indexOf`'s answer with "none" as `n`. */
+const found = (at: number, n: number) => (at < 0 ? n : at);
+
+/**
+ * `stringEnd`'s state for the body `userOf` is reading (reset at its start): the byte run, and the next quote,
+ * backslash and control byte at or after the position each was last searched from (one below the scan's position
+ * means "search again"), the body's `Uint32Array` view once `nextControl` made it, and whether `padded` ran its check.
+ */
+const scan = { run: 32, quote: -1, slash: -1, control: -1, words: null as Uint32Array | null, base: 0, shaped: false };
+
+/** The first byte under 0x20 at or after `i`, or `b.length`: four at a time over an aligned `Uint32Array` view. */
+function nextControl(b: Uint8Array, i: number): number {
+  const n = b.length;
+  if (n - i >= 64) {
+    if (scan.words === null) {
+      // A view from the word boundary at or before the body's start; only words wholly inside the body are read.
+      scan.base = b.byteOffset & ~3;
+      scan.words = new Uint32Array(b.buffer, scan.base, (b.byteOffset + n - scan.base) >> 2);
+    }
+    const lead = b.byteOffset - scan.base; // the view's offset of byte 0
+    for (; ((lead + i) & 3) !== 0; i++) if (b[i]! < 0x20) return i;
+    const w = scan.words;
+    let k = (lead + i) >> 2;
+    // Any byte of x under 0x20 sets its high bit here (and none is set without one): Hacker's Delight's `hasless`.
+    for (const end = w.length; k < end; k++) if (((w[k]! - 0x20202020) & ~w[k]! & 0x80808080) !== 0) break;
+    i = (k << 2) - lead;
+  }
+  while (i < n && b[i]! >= 0x20) i++;
+  return i;
+}
+
+/** The end of the number, `true`, `false` or `null` at `i`, or -1 when none starts there (JSON's number grammar). */
+function scalarEnd(b: Uint8Array, i: number): number {
+  const n = b.length;
+  const c = b[i]!;
+  if (c === 0x74) return word(b, i, TRUE);
+  if (c === 0x66) return word(b, i, FALSE);
+  if (c === 0x6e) return word(b, i, NULL);
+  if (c === 0x2d) i++;
+  if (i >= n) return -1;
+  if (b[i] === 0x30) i++;
+  else if (b[i]! >= 0x31 && b[i]! <= 0x39) while (i < n && DIGIT[b[i]!] === 1) i++;
+  else return -1;
+  if (i < n && b[i] === 0x2e) {
+    const from = ++i;
+    while (i < n && DIGIT[b[i]!] === 1) i++;
+    if (i === from) return -1;
+  }
+  if (i < n && (b[i] === 0x65 || b[i] === 0x45)) {
+    i++;
+    if (i < n && (b[i] === 0x2b || b[i] === 0x2d)) i++;
+    const from = i;
+    while (i < n && DIGIT[b[i]!] === 1) i++;
+    if (i === from) return -1;
+  }
+  return i;
+}
+
+const TRUE = [0x74, 0x72, 0x75, 0x65];
+const FALSE = [0x66, 0x61, 0x6c, 0x73, 0x65];
+const NULL = [0x6e, 0x75, 0x6c, 0x6c];
+/** The end of literal `w` at `i`, or -1. */
+function word(b: Uint8Array, i: number, w: number[]): number {
+  if (i + w.length > b.length) return -1;
+  for (let k = 0; k < w.length; k++) if (b[i + k] !== w[k]) return -1;
+  return i + w.length;
+}
+
+/** The string whose quotes are at `from` and `to - 1`, decoded as the parse decoded it. */
+function stringAt(b: Uint8Array, from: number, to: number): string {
+  return JSON.parse(decoder.decode(b.subarray(from, to))) as string;
 }
 
 /**
@@ -182,7 +460,11 @@ function mergeInto(target: string, from: string, tables: readonly string[], scop
   }
 }
 
-const decoder = new TextDecoder();
+/**
+ * `userOf`'s decoder for one string's bytes. The parse decoded the whole body, so only a BOM at the body's first byte
+ * was dropped (`userOf` skips that one itself); one at the start of a value is a character of it, so it is kept.
+ */
+const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
 const UNAVAILABLE = "temporarily unable to serve context";
 const MAX_RESTART_MS = 30_000;
 /** The router kills a child this many times the shutdown grace after its SIGTERM (R1: the child's steps fill it). */

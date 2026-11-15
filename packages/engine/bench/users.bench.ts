@@ -27,7 +27,7 @@
  * `--world` takes item text from the sim world (as `ingest.bench.ts --world`); `--prose` the world's items with the
  * text of docs/ (`prosePieces`). No model, no network.
  */
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
@@ -101,6 +101,26 @@ class ListSource implements Source {
       items: this.items.slice(at, at + limit),
       next: at + limit < this.items.length ? String(at + limit) : null,
     };
+  }
+}
+
+/**
+ * Peak RSS over a phase: `resetPeak` before it (writing 5 to `/proc/self/clear_refs` sets VmHWM back to the current
+ * RSS), `peakMB` after (VmHWM). NaN where /proc is not there.
+ */
+function resetPeak(): void {
+  try {
+    writeFileSync("/proc/self/clear_refs", "5");
+  } catch {
+    // Not Linux: peakMB reads NaN or the process's own peak.
+  }
+}
+function peakMB(): number {
+  try {
+    const kb = /VmHWM:\s+(\d+) kB/.exec(readFileSync("/proc/self/status", "utf8"))?.[1];
+    return kb === undefined ? Number.NaN : Number(kb) / 1024;
+  } catch {
+    return Number.NaN;
   }
 }
 
@@ -225,6 +245,7 @@ const n = USERS * PER_USER;
 
 // 1. Backfill: every user at once, or (`--waves=K`) K waves one after another, each earlier wave left idle (and,
 // with freezing, frozen by two expiry ticks) before the next arrives: a steady state where 1/K of the users are active.
+resetPeak();
 const cpu0 = process.cpuUsage();
 const t0 = performance.now();
 for (let w = 0; w < WAVES; w++) {
@@ -247,6 +268,7 @@ for (let w = 0; w < WAVES; w++) {
 if (enricher) await enricher.idle();
 const stormMs = performance.now() - t0;
 const cpu = process.cpuUsage(cpu0);
+const backfillPeakMB = peakMB();
 for (const { sources } of users) for (const s of sources) s.items = [];
 const frozenAtSteady = cache.frozenCount;
 const warmAtSteady = cache.warmCount;
@@ -279,6 +301,7 @@ if (!NO_FREEZE) {
 }
 
 // 3. Thaw: each user's first read.
+resetPeak();
 const thaws: number[] = [];
 for (const { scope } of users) {
   const a = performance.now();
@@ -287,6 +310,7 @@ for (const { scope } of users) {
   cache.search(scope, q.ids, q.n, 10, clock);
   thaws.push(performance.now() - a);
 }
+const thawPeakMB = peakMB();
 const m4 = await mem();
 
 /** Event-loop lag while `work` runs: a 1 ms timer chain, each delay past 1 ms recorded. */
@@ -378,6 +402,7 @@ if (sliced) {
       `lag max ${f(sliced.thaw.lagMax, 1)} ms, p99 ${f(sliced.thaw.lagP99, 1)} ms`,
   );
 }
+console.log(`peak RSS (VmHWM): backfill ${f(backfillPeakMB, 0)} MB, thaw ${f(thawPeakMB, 0)} MB`);
 console.log(`first event per user (fast path): p50 ${f(pct(events, 0.5))} ms, p99 ${f(pct(events, 0.99))} ms`);
 console.log(
   JSON.stringify({
@@ -399,6 +424,8 @@ console.log(
     eventP99: pct(events, 0.99),
     sliced,
     baseRssMB: m0.rss / MB,
+    backfillPeakMB,
+    thawPeakMB,
   }),
 );
 process.exit(0);
