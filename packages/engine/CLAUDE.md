@@ -39,7 +39,8 @@ model call). [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) describes every 
 `bench/`: `pipeline.bench.ts` (the end-to-end anchor for performance work), `live-heap.bench.ts` (a live heavy
 user's state walked and summed by part, JSC's object counts and heap snapshot by class, D998), `stub-cards.ts` (a $0
 card maker for the memory benches' `--cards`), `ingest.bench.ts` (memory per synced
-user, ingest µs/item; the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
+user, ingest µs/item and process CPU per phase; `--freeze=warm|compact` freezes every user before the sweep, D1927;
+the scale anchor, docs/TESTING.md), `users.bench.ts` (many users: memory live and frozen, thaw,
 D325), `storm.bench.ts` (a cold-start storm with warm users' p99, D328), `index-memory` (the per-user index's heap per
 item and per user, put/search latency, D111), `segment-screen` (O4's screens of varint postings, columns and text
 blocks, D750), `index-axes` (the index at 1,000-100,000 items on every axis, and a compact thaw split into its
@@ -450,6 +451,18 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   lost 2 of 96 hidden facts: what it stores is routing evidence), and the trim waits for 1.5x the cap (trimming the
   backfill's overshoot back to the cap also lost 2). The sketch (`sketch.ts`) is per (user, source) in `SourceSync`,
   filled from every listed item in `store`, folded at `warmUp`.
+- **`store` does not add an unchanged item's words again (D1927).** An item that is the very object the cache holds
+  (the listing's reuse of an unchanged raw item) and whose entry carries the source's current stamp
+  (`SyncManager.stampOf`: a value from one process-wide counter, new whenever the source's `TermSketch.epoch` or the
+  user's `RareTerms.epoch` moves) is skipped, unless the sketch is `saturated` (its next add restarts it, whatever the
+  term). Every other item (new, changed, a fresh copy, past the cut, a frozen user's) is added as before, and the page's
+  entries get the stamp taken before its first add (`ItemCache.put`'s `stamp`, `Entry.stamp`). The rule is exact
+  because re-adding a term or word added in the current epoch writes nothing: an epoch moves on a sketch's restart,
+  and on a `RareTerms` drop, forgotten source or renumbering. A new way a sketch or the table can lose a term, or a
+  new path that writes `Entry.item` with other words, must move an epoch or clear the stamp. Stamps survive warm and
+  compact freezes in memory (`FrozenUser.stamps`, never in a blob, so never on disk). `sketch-skip.test.ts` drives
+  the skipping engine and one built with `SyncManager.resketchForTests` through the same random sequences and compares
+  their snapshots, routing and answers; nine mutations of the rule each fail it.
 - **Which sources are read live is learned (`sourceYield`, D505, D509, on in the default; `source-yield.ts`,
   docs/research/n1-calls.md).** `spentSources` gives a lookup the warm copies whose live reads it skips: no search
   behind, no probe (they join the probes' `local` set) and, for a cut copy, no on-demand poll. A lookup that waits for

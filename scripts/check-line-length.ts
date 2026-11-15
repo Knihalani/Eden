@@ -54,15 +54,20 @@ function scriptKind(path: string): ts.ScriptKind {
 
 /** Lines longer than `width` once the literals on them are left out. */
 export function overlongLines(path: string, text: string, width: number): OverlongLine[] {
-  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path));
-  const literals = literalSpans(source);
+  // A line's length in code points is at most its length in UTF-16 units, so a file with no line over `width` units
+  // has nothing to report: it is not parsed. Parsing every file was most of format:check's line check (4.8 s of CPU
+  // for 874 files; most have no long line).
+  if (!text.split("\n").some((line) => line.length > width)) return [];
+  let literals: Array<[number, number]> | undefined;
+  const spans = () =>
+    (literals ??= literalSpans(ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path))));
   const found: OverlongLine[] = [];
   let lineStart = 0;
   text.split("\n").forEach((line, index) => {
     const lineEnd = lineStart + line.length;
     const length = lengthOf(line);
     if (length > width) {
-      const literalLength = literals
+      const literalLength = spans()
         .filter(([start, end]) => start < lineEnd && end > lineStart)
         .reduce(
           (sum, [start, end]) => sum + lengthOf(text.slice(Math.max(start, lineStart), Math.min(end, lineEnd))),

@@ -66,6 +66,26 @@ describe("format.sh's key (D819)", () => {
     });
   }
 
+  test("changes with the version of Bun that runs Prettier (D1945)", () => {
+    const r = repo();
+    const before = r.key();
+    // A `bun` first on PATH that reports another version and otherwise is the real one.
+    const bin = join(r.dir, "fake-bin");
+    mkdirSync(bin);
+    const real = Bun.which("bun")!;
+    writeFileSync(
+      join(bin, "bun"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 9.9.9; else exec "${real}" "$@"; fi\n`,
+      { mode: 0o755 },
+    );
+    const run = Bun.spawnSync(["bash", "scripts/format.sh", "--key"], {
+      cwd: r.dir,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    });
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toString().trim()).not.toBe(before);
+  });
+
   test("does not change with a source file: that is the set's own entry", () => {
     const r = repo();
     const before = r.key();

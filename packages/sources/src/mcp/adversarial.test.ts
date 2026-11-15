@@ -213,20 +213,71 @@ describe("floods and slow growth", () => {
 
   test("sse-drip: a line dripped a byte at a time holds a few arrays, not one a byte (D1860)", () => {
     // Each 1-byte read held as its own array cost ~57 B of RSS a byte (+172 MB for 3 MB, D1860's review).
-    for (const kept of [true, false]) {
-      let got = 0;
-      const p = new SseParser(4 * 1024 * 1024, (d) => ((got = d.length), false), kept);
+    // Linear, counted rather than timed: every byte the parser copies (`set`, `slice`) and every search it starts
+    // (`indexOf`) is counted while the line drips. A doubling buffer copies each byte about three times (in, at the
+    // regrows, once at the end); a buffer grown by a constant, or a line re-joined or re-searched each read, copies or
+    // searches quadratically through `set`, `slice` or `indexOf`. A CPU bound of 1,500 ms here failed at
+    // 2,806-10,462 ms on a loaded machine.
+    const proto = Uint8Array.prototype;
+    const { set, slice, indexOf } = proto;
+    const work = { copied: 0, searches: 0 };
+    proto.set = function (this: Uint8Array, src: ArrayLike<number>, at?: number) {
+      work.copied += src.length;
+      return set.call(this, src, at);
+    };
+    proto.slice = function (this: Uint8Array, start?: number, end?: number) {
+      const out = slice.call(this, start, end);
+      work.copied += out.length;
+      return out;
+    };
+    proto.indexOf = function (this: Uint8Array, v: number, from?: number) {
+      work.searches++;
+      return indexOf.call(this, v, from);
+    };
+    // A backstop for growth that goes around those three (a `Buffer.concat`, `transfer`, a byte loop: 8.5-35 s when
+    // planted, D1945's review): the drip's CPU against a linear reference in this process, so load stretches both.
+    // About 9-14x on a quiet machine; a constant-step buffer by any route is 70x or more.
+    const reference = () => {
       const t = cpuMs();
-      expect(p.push(new TextEncoder().encode("data: "))).toBe("more");
-      const one = new Uint8Array([0x61]);
-      for (let n = 0; n < 3_000_000; n++) p.push(kept ? new Uint8Array([0x61]) : one);
-      const held = (p as unknown as { pending: { count: number; bytes: number } }).pending;
-      expect(held.bytes).toBe(3_000_006);
-      expect(held.count).toBeLessThanOrEqual(9);
-      expect(p.push(new TextEncoder().encode("\n\n"))).toBe("more");
-      expect(got).toBe(3_000_000);
-      expect(cpuMs() - t).toBeLessThan(1_500);
+      let buf = new Uint8Array(16);
+      let len = 0;
+      for (let n = 0; n < 6_000_000; n++) {
+        const b = new Uint8Array(1);
+        b[0] = 0x61;
+        if (len === buf.length) {
+          const grown = new Uint8Array(len * 2);
+          grown.set(buf);
+          buf = grown;
+        }
+        buf[len++] = b[0]!;
+      }
+      return cpuMs() - t;
+    };
+    const before = reference();
+    const t = cpuMs();
+    try {
+      for (const kept of [true, false]) {
+        let got = 0;
+        const p = new SseParser(4 * 1024 * 1024, (d) => ((got = d.length), false), kept);
+        work.copied = work.searches = 0;
+        expect(p.push(new TextEncoder().encode("data: "))).toBe("more");
+        const one = new Uint8Array([0x61]);
+        for (let n = 0; n < 3_000_000; n++) p.push(kept ? new Uint8Array([0x61]) : one);
+        const held = (p as unknown as { pending: { count: number; bytes: number } }).pending;
+        expect(held.bytes).toBe(3_000_006);
+        expect(held.count).toBeLessThanOrEqual(9);
+        expect(p.push(new TextEncoder().encode("\n\n"))).toBe("more");
+        expect(got).toBe(3_000_000);
+        expect(work.copied).toBeLessThan(4 * 3_000_006);
+        expect(work.searches).toBeLessThanOrEqual(2 * 3_000_002 + 8);
+      }
+    } finally {
+      proto.set = set;
+      proto.slice = slice;
+      proto.indexOf = indexOf;
     }
+    const drip = cpuMs() - t;
+    expect(drip).toBeLessThan(40 * Math.max(before, reference()));
   });
 
   test("sse-drip-mixed: small and long reads alternating keep at most two arrays per 16 KB held", () => {
