@@ -313,8 +313,10 @@ export function lastElementReadsBytes(bytes: Uint8Array, open: number, close: nu
   const length = close + 1 - (p + 1);
   scratch.set(bytes.subarray(p + 1, close + 1));
   scratch[length] = 0;
-  if (length >= scratchUsed) scratchUsed = length + 1;
-  return lastElementIn(length);
+  const reads = lastElementIn(length);
+  // Zeroed here: a body the byte scan refuses never reaches `releaseScratch`.
+  scratch.fill(0, 0, length);
+  return reads;
 }
 
 /** Whether the `length` bytes in the scratch buffer are one element `numbersIn` reads and the `]` after it. */

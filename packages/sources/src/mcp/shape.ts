@@ -125,11 +125,13 @@ function stringEnd(bytes: Uint8Array, i: number): number {
  * `bodyShapeWithin` that gives up (`STOPPED`) on reaching what the long-reply path reads faster from the decoded text
  * (`json.ts`, D1904): a string crossed `LONG_REPLY.guessAfter` bytes with escaped quotes every few dozen bytes (tool
  * output, JSON written as text: the search per escaped quote costs this scan as much as the parse), or an array that
- * has gone `2 * LONG_REPLY.numbers - 2` bytes past its bracket with nothing but numbers' characters, commas and spaces.
- * Otherwise its answer is `bodyShapeWithin`'s, at its cost: the reply is mostly structure or plain strings, which the
- * text path would only scan again. With `stop` off it never gives up, and notes in `byteSawRead` whether it met such a
- * place; `byteLongString` notes a string long enough for the text path to slice or guess (D1909: a body with neither
- * is parsed as main parses it, as is a multi-byte one with no such place).
+ * has gone `2 * LONG_REPLY.numbers - 2` bytes past its bracket with nothing but numbers' characters, commas and spaces,
+ * whose next `]` is far enough and whose last element the reader reads (D1919). Otherwise its answer is
+ * `bodyShapeWithin`'s, at its cost: the reply is mostly structure or plain strings, which the text path would only
+ * scan again. With `stop` off it never gives up, and notes in `byteSawRead` whether it met such a string or such an
+ * array (any that has gone that far: the checks are not made); `byteLongString` notes a string long enough for the
+ * text path to slice or guess (D1909: a body with neither is parsed as main parses it, as is a multi-byte one with no
+ * such place).
  */
 export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: number, stop = true): number {
   const n = bytes.length;
@@ -163,19 +165,26 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
     } else if (k === COMMA) {
       if (++values > maxValues) return OVER;
       if (i - cand >= reach) {
-        // Only where the text path would read it (`numberArrayAt`'s checks, on bytes): elsewhere the text scan would
-        // cross what this scan crosses for less (D1919).
-        if (close < cand) close = indexOfByte(bytes, 0x5d, cand) >>> 0;
-        if (quote < cand) quote = indexOfByte(bytes, 0x22, cand) >>> 0;
-        const reads =
-          close < n &&
-          close - cand >= 2 * LONG_REPLY.numbers - 1 &&
-          quote > close &&
-          lastElementReadsBytes(bytes, cand, close);
+        const from = cand;
         cand = n;
-        if (!reads) continue;
-        if (stop) return STOPPED;
-        byteSawRead = true;
+        if (!stop) {
+          byteSawRead = true;
+          continue;
+        }
+        // Stopped only where the text path would read the array (`numberArrayAt`'s checks, on bytes): elsewhere the
+        // text scan would cross what this scan crosses for less (D1919: `[1,...,12345678901234567]` cost 1.1-1.2x
+        // main). Not asked of a longer body, which this scans whole: there the searches for the `]` and the quote
+        // crossed a 16 MiB flood twice before it was refused (1.3x main).
+        if (close < from) close = indexOfByte(bytes, 0x5d, from) >>> 0;
+        if (quote < from) quote = indexOfByte(bytes, 0x22, from) >>> 0;
+        if (
+          close < n &&
+          close - from >= 2 * LONG_REPLY.numbers - 1 &&
+          quote > close &&
+          lastElementReadsBytes(bytes, from, close)
+        ) {
+          return STOPPED;
+        }
       }
     } else if (k === CLOSE) {
       depth--;

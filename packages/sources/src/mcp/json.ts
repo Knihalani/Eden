@@ -48,8 +48,6 @@ export function parseJsonBytesWithin(bytes: Uint8Array, maxDepth: number, maxVal
   // a refused body its decode. A longer body is scanned whole, noting whether it holds what the text path reads.
   const stop = bytes.length <= 2 * maxValues;
   const shape = byteShapeOrStop(bytes, maxDepth, maxValues, stop);
-  // It may have read an array's last element into the scratch buffer (`lastElementReadsBytes`).
-  releaseScratch();
   if (shape === OVER) return undefined;
   const known = shape === WITHIN;
   const text = decodeRange(bytes, 0, bytes.length, true);
