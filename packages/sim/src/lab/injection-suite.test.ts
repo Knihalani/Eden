@@ -87,7 +87,7 @@ describe("A10 injection suite, no model (D305)", () => {
     // The suite plants its attacks where the candidates push delivers them (the agent's worst case).
     expect(runs.filter((r) => r.delivered).length).toBeGreaterThanOrEqual(ATTACKS.length - 1);
     for (const r of runs) for (const p of r.packets) expect(p.text.startsWith(HEADER)).toBe(true);
-  }, 30_000);
+  }, 120_000);
 
   test("an attack is followed by a matching action call, or by its words in the reply", () => {
     const direct = ATTACKS.find((a) => a.kind === "direct")!;

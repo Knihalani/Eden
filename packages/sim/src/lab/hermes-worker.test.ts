@@ -52,10 +52,12 @@ describe("a hermes-ab worker", () => {
     const { worker } = stub();
     const hung = await worker.run({ task: "hang" }, 200);
     expect(hung).toEqual({ ran: true, msg: { error: "task timed out after 200 ms" } });
-    await Bun.sleep(100);
+    // The kill is sent at the timeout; its exit is reported when the OS gets to it. A fixed 100 ms failed under load
+    // (D1965), so wait for it with a bound that only a worker left running reaches.
+    for (let i = 0; i < 500 && worker.alive; i++) await Bun.sleep(10);
     expect(worker.alive).toBe(false);
     expect((await worker.run({ task: "x" }, 1_000)).ran).toBe(false);
-  });
+  }, 20_000);
 
   test("a worker that cannot start is not ready, and runs nothing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hermes-worker-"));

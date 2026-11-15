@@ -148,6 +148,12 @@ export interface SyncOptions {
    * background pages) waits its `turn` before it is redacted and stored.
    */
   ingestTurns?: boolean;
+  /**
+   * Tests only (D1927's differential test, `sketch-skip.test.ts`): every listed item's words are added again at
+   * every store, as before D1927, and nothing is stamped. No config sets it (`PartnerDeps.syncResketchForTests`
+   * passes it through); an option of one manager, not a static, so nothing leaks from one test into the next.
+   */
+  resketchForTests?: boolean;
 }
 
 export interface SyncDeps {
@@ -387,12 +393,6 @@ function changeChance(s: SourceSync, now: number): number {
 }
 
 export class SyncManager {
-  /**
-   * Tests only (D1927's differential test): a manager made while this is set adds every listed item's words again,
-   * as before D1927, and stamps nothing. Read once, at construction.
-   */
-  static resketchForTests = false;
-  private readonly resketch = SyncManager.resketchForTests;
   private readonly users = new Map<string, UserSync>();
   private readonly budget: Gcra<string>;
   private ticking = false;
@@ -1833,7 +1833,7 @@ export class SyncManager {
       const rare = this.o.rareTerms ? (u.rare ??= new RareTerms()) : null;
       // D1927: the stamp for this page, taken before any word is added; a restart while it is added changes the
       // epochs, so the stamp the entries get is stale and never matches again.
-      const before = this.resketch ? 0 : this.stampOf(s, sketch, rare);
+      const before = this.o.resketchForTests === true ? 0 : this.stampOf(s, sketch, rare);
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;

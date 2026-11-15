@@ -51,7 +51,12 @@ export class RareTerms {
    * forgotten, a renumbering. A word a source added in this epoch is held for it or common, and adding it again
    * returns before writing anything (`add` stops at its own slot or the common one; no slot is ever emptied).
    */
-  epoch = nextEpoch();
+  private epochNow = nextEpoch();
+
+  /** The current epoch (above); read-only from outside, so nothing can move it back. */
+  get epoch(): number {
+    return this.epochNow;
+  }
 
   /** Bytes held by the table (the sources' ids apart). */
   get bytes(): number {
@@ -125,7 +130,7 @@ export class RareTerms {
     // fewer sources hold the word than do: with one holder kept, the word is marked common. It fails towards weak
     // evidence, never towards a live read.
     this.dropped++;
-    this.epoch = nextEpoch();
+    this.epochNow = nextEpoch();
     if (holders >= 1) firstIn![first] = ((tag << 12) | COMMON) >>> 0;
   }
 
@@ -138,7 +143,7 @@ export class RareTerms {
     if (n === undefined) return;
     this.numbers.delete(sourceId);
     this.ids[n] = undefined;
-    this.epoch = nextEpoch();
+    this.epochNow = nextEpoch();
   }
 
   /**
@@ -170,7 +175,7 @@ export class RareTerms {
       this.ids.push(id);
     }
     this.renumbered++;
-    this.epoch = nextEpoch();
+    this.epochNow = nextEpoch();
   }
 
   private put(h1: number, value: number): boolean {

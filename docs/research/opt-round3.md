@@ -40,7 +40,8 @@ sweep of an idle user, which is always frozen by then (warm after 2 minutes, com
 
 ### Tests
 
-`sketch-skip.test.ts` drives two engines, the skipping one and one built under `SyncManager.resketchForTests` (the old
+`sketch-skip.test.ts` drives two engines, the skipping one and one built under `SyncManager.resketchForTests` (since
+the follow-ups below, `PartnerDeps.syncResketchForTests`; the old
 behaviour), through six seeded sequences of 60 steps over three users in two tenants, three sources each: backfill,
 ticks, sweeps, edits, new items, items past the cut, deletions, floods that saturate a folded sketch, sources dropped
 and coming back, `forget` of a source and of a user, warm and compact freezes, restarts through `EncryptedFrozenDisk`,
@@ -93,6 +94,68 @@ and a format check of the new test file, each file passing alone after the forma
 neutral requests at 1.18 items, facts handed 10 of 11, look-alikes 3 of 10, as on main; `bun run funnel --jobs 4`
 reads hidden 323/384 and decoys 294/384 on main (main's engine, run in this session) and on the branch, and
 `--baseline` against main's run reads hidden +0 −0, decoys +0 −0.
+
+### Follow-ups (D1927's review; branch claude/sweep-followups)
+
+**Backfill CPU.** The review read backfill process CPU at 1.080 of main against a control of 0.989, every backfilled
+item paying `SyncManager.stampOf` and `ItemCache.stampOf` where nothing can skip. Measured again with
+`bun packages/engine/bench/ingest.bench.ts 200 500 shipped`: A is main 2deecc12d with #366's engine changes taken out
+(`git diff cada39c33^1 cada39c33` on cache, rare-terms, sketch and sync, applied in reverse: D1927's parent code with
+the later rounds' changes kept, so only D1927 differs), A' the same copy again (the control), B main; 8 rounds,
+interleaved and slot-balanced, each run its own process, paired medians against A with their ranges. The machine was
+not quiet (two other agents; load average 8.6-29 on 4 cores), so the control's spread is the noise floor.
+
+| Condition | Backfill CPU µs/item A, A', B | B/A | control A'/A | Backfill CPU total s A → B | Sweep B/A |
+|---|---|---|---|---|---|
+| bench as is | 155.5, 154.6, 154.1 | 0.985 (0.925-1.163) | 0.962 (0.872-1.131) | 15.55 → 15.41 | 0.149 (0.124-0.200) |
+| forced `Bun.gc(true)` every 100 ms | 290.3, 318.1, 338.2 | 1.102 (0.919-1.297) | 1.124 (0.960-1.217) | 29.03 → 33.82 | 0.151 (0.101-0.337) |
+
+Neither condition reads dearer beyond the control. The two lookups alone, timed in a loop over 500 items no cache
+entry holds (a backfill page), cost 60-87 ns an item, about 0.05% of a backfilled item's 155 µs. So nothing was
+changed for the backfill: hoisting the lookups would save less than the bench can see.
+
+**The test's switch and the epochs.** `SyncManager.resketchForTests` (a static read at construction) is now
+`SyncOptions.resketchForTests`, passed by `PartnerDeps.syncResketchForTests`: one manager's option, so no test can
+leave it set for the next. `TermSketch.epoch` and `RareTerms.epoch` are getters over private fields
+(`sketch-skip.test.ts` checks an assignment throws and moves nothing).
+
+**The differential at its edges** (`sketch-skip-edges.test.ts`). Two randomized cases the six seeds rarely reached,
+each the skipping engine against the old store, compared after every step:
+
+- A user with 4,110 sources whose items are a few words each, a fresh one and some still being taken up, so the
+  last sources listed have no `RareTerms` number and their words are dropped, and a word one of them dropped is later
+  written by a numbered source (adding the dropped one's item again then marks the word common); adds, edits, sweeps,
+  polls, forgotten sources (numbers taken back by a renumbering), warm and compact freezes; 4 seeds of 24 steps, 15-35 s each alone (the review measured the file at 37 s alone, 126 s in a cold gate, not ~20 s), so the gate runs seed 4 (it kills the drop mutation) and `TEST_DEEP=1` runs all four.
+- Sketches restarting mid-listing: a source read again (its sketch folded small), a flood of 300-800 fresh words at a
+  random place in its listing read one to three items a page, by a sweep or a poll; a lookup's put of some items
+  (equal copies: the held object and its stamp kept, the entries moved last); a warm or compact freeze; a sweep. One
+  source or two whose pages interleave; 12 seeds of 12 rounds.
+
+Mutations of the follow-ups (each applied alone, the file run whole):
+
+| Mutation | `sketch-skip-edges.test.ts` | `sketch-skip.test.ts` |
+|---|---|---|
+| a drop keeps its epoch (`RareTerms.add`) | killed: seeds 2 and 4 of the dropped-words case | killed by the `RareTerms` invariant only |
+| warm thaw gives entry j the stamp of j + 1 | killed: 5 of 12 restart seeds | killed by the directed freeze case |
+| compact thaw gives entry j the stamp of j + 1 | killed: 3 of 12 restart seeds | killed by the directed freeze case |
+| warm or compact thaw gives j the stamp of j − 1 | survives | killed (skip count: 5 skips, not 6) |
+
+The shift back changes no state the differentials compare, only the skip count (the first entry gets stamp 0 and is re-added; the review found the directed freeze test catches it), on every path the engine has: a sync page stamps all its entries with one stamp and
+moves them last, so a source's entries run from older stamps to the current one in the cache's order, and the one
+other put that moves an entry (a lookup's) ends its listing's reuse (`raw` cleared), so that entry is not skipped at
+its next listing whatever its stamp. An entry whose words a restart lost therefore never follows one carrying the
+current stamp while it can still be skipped.
+
+A finding from the first case: every drop moves the table's epoch, and each page's stamp then goes stale, so a user
+past 4,094 sources, or with a full table, re-adds almost every item at every listing (the oracle's cost, as before
+D1927): exact, and only that user's skip is lost.
+
+Gates on the final tree: `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` green on its second run
+(3,029 of 3,031 tests pass, 0 fail, plus 524 of 524; the first failed one timing test in the untouched
+`server/src/http.test.ts`, which passed alone); `bun packages/eval/src/cli.ts` reads precision 0.65, recall 0.52,
+falseFireRate 0, acting packets on 19 of 28 neutral requests at 1.18 items, facts handed 10 of 11, look-alikes 3 of
+10; `bun run funnel` reads hidden 323/384 and decoys 294/384 on main (run in this session) and on the branch, and
+`--baseline` against main's run reads hidden +0 −0, decoys +0 −0; `mutate-sync-kick.py` 35 of 35 killed.
 
 ## The router's body scan and the packed-text codec (D1925, D1926; branch claude/router-codec)
 

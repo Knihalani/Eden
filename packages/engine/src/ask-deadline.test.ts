@@ -12,12 +12,14 @@ import { AskReader, type ReaderMaker } from "./reader";
 // share it, so a source whose listing and search both hang holds the reader back about `sourceTimeoutMs`, not twice
 // that (the poll's own deadline, then a fresh one for the search).
 //
-// TIMEOUT is short so the file does not idle for seconds, and the bound is proportional to it: one deadline must land
-// under 1.5x TIMEOUT (750 ms) while a regression to two lands at 2x (1,000 ms), 250 ms clear of the bound. Do not
-// shrink TIMEOUT without keeping that gap; at 300 ms with a fixed +250 ms the two cases sat 50 ms apart.
+// The bound is proportional to TIMEOUT: one deadline must land under 1.5x TIMEOUT (2,250 ms) while a regression to two
+// lands at 2x (3,000 ms) or later (a timer never fires early), 750 ms clear of the bound. What lands past one TIMEOUT
+// is the ask's own work after its deadline, which load stretches: at 500 ms (bound 750) it reached 770-920 ms beside
+// busy loops and other test files (D1965; up to 442 ms past the deadline, most of it after it). Do not shrink TIMEOUT
+// without keeping that gap; at 300 ms with a fixed +250 ms the two cases sat 50 ms apart.
 
 const scope: Scope = { tenantId: "t", userId: "u" };
-const TIMEOUT = 500;
+const TIMEOUT = 1_500;
 /** One deadline plus setup and scheduling slack; two deadlines (2x TIMEOUT) must fail it. */
 const ONE_DEADLINE = TIMEOUT * 1.5;
 
@@ -119,7 +121,7 @@ describe("D140: one deadline for an ask's poll, live search and probes", () => {
     expect(beforeReader!).toBeLessThan(ONE_DEADLINE);
     // The source that did not answer is named: an empty or partial answer is not an all-clear (D127).
     expect(r.sources?.find((x) => x.sourceId === "notes")?.status).not.toBe("ok");
-  }, 10_000);
+  }, 30_000);
 
   test("an ask just after a poll that timed out does not poll that source again: it is searched live", async () => {
     const { src, ask } = await setup();
@@ -130,7 +132,7 @@ describe("D140: one deadline for an ask's poll, live search and probes", () => {
     expect(src.lists).toBe(lists);
     expect(src.searches).toBeGreaterThan(searches);
     expect(beforeReader!).toBeLessThan(ONE_DEADLINE);
-  }, 10_000);
+  }, 30_000);
 
   test("once sourceTimeoutMs has passed since that poll gave up, a listing still running is joined, not made again", async () => {
     // Audit A5: the lookup stops waiting at its deadline, not the listing, which runs on under the sync's own timeout;
@@ -142,5 +144,5 @@ describe("D140: one deadline for an ask's poll, live search and probes", () => {
     const { totalMs } = await ask("s2");
     expect(src.lists).toBe(lists);
     expect(totalMs).toBeLessThan(ONE_DEADLINE * 2);
-  }, 10_000);
+  }, 30_000);
 });
