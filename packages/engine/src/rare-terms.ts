@@ -17,6 +17,7 @@
  * Content-free as the sketches are (hashed bits, never a word), per user, in memory; saved with the user's sync
  * state only under D425's opt-in.
  */
+import { nextEpoch } from "./sketch";
 
 /** Slots of the first segment (a power of two): 1 KB. Each after it is twice the last, up to `SEGMENT_SLOTS`. */
 const FIRST_SLOTS = 1 << 8;
@@ -45,6 +46,12 @@ export class RareTerms {
   dropped = 0;
   /** Times the sources were renumbered to take back dropped sources' numbers. */
   renumbered = 0;
+  /**
+   * D1927: changes whenever adding a word again might change the table: a word not kept (`dropped`), a source
+   * forgotten, a renumbering. A word a source added in this epoch is held for it or common, and adding it again
+   * returns before writing anything (`add` stops at its own slot or the common one; no slot is ever emptied).
+   */
+  epoch = nextEpoch();
 
   /** Bytes held by the table (the sources' ids apart). */
   get bytes(): number {
@@ -118,6 +125,7 @@ export class RareTerms {
     // fewer sources hold the word than do: with one holder kept, the word is marked common. It fails towards weak
     // evidence, never towards a live read.
     this.dropped++;
+    this.epoch = nextEpoch();
     if (holders >= 1) firstIn![first] = ((tag << 12) | COMMON) >>> 0;
   }
 
@@ -130,6 +138,7 @@ export class RareTerms {
     if (n === undefined) return;
     this.numbers.delete(sourceId);
     this.ids[n] = undefined;
+    this.epoch = nextEpoch();
   }
 
   /**
@@ -161,6 +170,7 @@ export class RareTerms {
       this.ids.push(id);
     }
     this.renumbered++;
+    this.epoch = nextEpoch();
   }
 
   private put(h1: number, value: number): boolean {
