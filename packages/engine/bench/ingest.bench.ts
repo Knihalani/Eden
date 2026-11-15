@@ -23,9 +23,12 @@
  * The `cpu` line prints each mode's CPU per backfilled item for the whole process (every thread) and for the main
  * thread alone (`thread-cpu.ts`): work moved to a worker thread shows as the difference (D216 measured it so).
  *
- * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [users=200] [itemsPerUser=500]
- * [mode=all|core|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world] [--plain]`. `--plain`
- * holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
+ * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [--freeze=warm|compact] [--no-gc] [users=200]
+ * [itemsPerUser=500] [mode=all|core|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world]
+ * [--plain]`. `--plain` holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
+ * `--freeze` freezes every user (warm, D862, or compact, D325) between the backfill and the sweep, so the sweep thaws
+ * each one first, as a daily sweep of an idle user does (D1927: the sync's stamps must survive it). `--no-gc` skips
+ * the full GCs before each phase, for CPU A/Bs (its memory figures are then not a measurement).
  *
  * Text: by default the bench workload's (`workload.ts`: names, topics and filler, all Latin-1, which the engine holds
  * at a byte a character). `--world` takes each user's items from the sim world instead (`buildWorld` seed 1, noise
@@ -53,7 +56,14 @@ const QUICK = process.argv.includes("--quick");
 const WORLD = process.argv.includes("--world");
 /** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before), in every mode. */
 const PLAIN = process.argv.includes("--plain");
-const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world" && a !== "--plain");
+/** `--no-gc`: no full GC between the phases (CPU A/Bs with the collector left to its own timing; memory is noise). */
+const NO_GC = process.argv.includes("--no-gc");
+/** `--freeze=warm|compact`: every user frozen so between the backfill and the sweep. */
+const FREEZE = process.argv.find((a) => a.startsWith("--freeze="))?.slice("--freeze=".length);
+if (FREEZE !== undefined && FREEZE !== "warm" && FREEZE !== "compact") throw new Error("--freeze=warm or compact");
+const args = process.argv
+  .slice(2)
+  .filter((a) => !["--quick", "--world", "--plain", "--no-gc"].includes(a) && !a.startsWith("--freeze="));
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
@@ -76,6 +86,8 @@ interface Result {
   cpuUs: number;
   /** The main thread's CPU per item over the backfill, µs (`thread-cpu.ts`). */
   mainUs: number;
+  /** Whole-process CPU per item over the sweep (and, with `--freeze`, the thaws it starts), µs. */
+  sweepCpuUs: number;
 }
 
 /** A connector that lists a fixed set of items newest first, instantly. */
@@ -99,7 +111,7 @@ class ListSource implements Source {
 }
 
 const heap = () => {
-  Bun.gc(true);
+  if (!NO_GC) Bun.gc(true);
   return process.memoryUsage().heapUsed;
 };
 
@@ -152,10 +164,12 @@ async function run(mode: Mode): Promise<Result> {
   const byUser = new Map(users.map((x) => [x.scope.userId, x.source]));
   const sources = async (scope: Scope) => [byUser.get(scope.userId)!];
 
+  // `--freeze`: expiry ticks far apart (its timer never fires in a run), so the bench ticks it by hand: two ticks
+  // idle freeze warm, four compact.
   const cache = new ItemCache({
     maxSyncedPerUser: PER_USER,
     maxUsersPerTenant: USERS + 1,
-    expireEveryMs: 0,
+    ...(FREEZE ? { expireEveryMs: 1e9, warmIdleMs: 2e9, freezeIdleMs: 4e9 } : { expireEveryMs: 0 }),
     packText: !PLAIN,
   });
   let sync: SyncManager;
@@ -223,10 +237,19 @@ async function run(mode: Mode): Promise<Result> {
   const after = heap();
   if (synced() !== n) throw new Error(`synced ${synced()} items, expected ${n}`);
 
+  if (FREEZE) {
+    const frozen = cache.freezes.frozen;
+    for (let t = 0; t < (FREEZE === "warm" ? 2 : 4); t++) cache.expireIdle(clock);
+    const wanted = FREEZE === "warm" ? USERS : 2 * USERS; // Compact: frozen warm, then again compact.
+    if (cache.freezes.frozen - frozen !== wanted) throw new Error(`${cache.freezes.frozen - frozen} freezes`);
+  }
+
   // A sweep per user: the whole listing again, nothing changed.
   clock += sweepAfter + 1;
   for (const { scope } of users) sync.track(scope, clock);
+  const sweepCpu0 = process.cpuUsage();
   const sweepMs = await listAll(n);
+  const sweepCpu = process.cpuUsage(sweepCpu0);
 
   // The sources' raw items dropped: what is left is the cache's own (its copies of the text included).
   for (const { source } of users) source.items = [];
@@ -244,6 +267,7 @@ async function run(mode: Mode): Promise<Result> {
     sweepMs,
     cpuUs: (cpu.user + cpu.system) / n,
     mainUs,
+    sweepCpuUs: (sweepCpu.user + sweepCpu.system) / n,
   };
 }
 
@@ -263,6 +287,7 @@ const minus = (a: Result, b: Result, label: string): Result => ({
   sweepMs: a.sweepMs - b.sweepMs,
   cpuUs: a.cpuUs - b.cpuUs,
   mainUs: a.mainUs - b.mainUs,
+  sweepCpuUs: a.sweepCpuUs - b.sweepCpuUs,
 });
 
 if (MODE !== "all") {
@@ -277,6 +302,8 @@ if (MODE !== "all") {
       import.meta.path,
       ...(WORLD ? ["--world"] : []),
       ...(PLAIN ? ["--plain"] : []),
+      ...(FREEZE ? [`--freeze=${FREEZE}`] : []),
+      ...(NO_GC ? ["--no-gc"] : []),
       String(USERS),
       String(PER_USER),
     ];
@@ -301,6 +328,8 @@ if (MODE !== "all") {
   console.log(line("+onStored", minus(shipped, core, "+onStored")));
   const cpuOf = (r: Result) => `${r.mode} ${r.cpuUs.toFixed(1)} µs/item (main thread ${r.mainUs.toFixed(1)})`;
   console.log(`cpu (backfill): ${results.map(cpuOf).join(", ")}`);
+  const sweepCpuOf = (r: Result) => `${r.mode} ${r.sweepCpuUs.toFixed(1)} µs/item`;
+  console.log(`cpu (sweep${FREEZE ? `, from ${FREEZE} frozen` : ""}): ${results.map(sweepCpuOf).join(", ")}`);
   const ratio = (a: number, b: number) => (a / b).toFixed(2);
   console.log(
     `shipped / core: backfill ${ratio(shipped.backfillUs, core.backfillUs)}x, memory ` +
