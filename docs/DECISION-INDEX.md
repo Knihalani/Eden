@@ -826,3 +826,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1920 | 2026-11-15 | Adopted (a third low-level brief; outputs unchanged): the rule paths' repeated per-item and per-name readings are memoised per item object… | adopted |
 | D1925 | 2026-11-15 | Adopted (a profiling survey's brief; routing unchanged): the router reads a body's top-level `userId` by one scan, not a decode and… | adopted |
 | D1926 | 2026-11-15 | Adopted (same brief; pre-registered in 86c1645bc: promote if ingest process CPU paired ≤ 0.92 and live heap a user ≤ +3%, else delete): a… | adopted |
+| D1935 | 2026-11-15 | Adopted (a fourth low-level brief, the graph and index layer; every answer unchanged): the source map's reads are memoised, exactly. | adopted |
+| D1936 | 2026-11-15 | Adopted (same brief; answers unchanged): a new source-map file makes its three tables `WITHOUT ROWID`. | adopted |
+| D1937 | 2026-11-15 | Adopted (same brief; keys unchanged): `normalizeEntity` reads plain names in one pass. | adopted |
+| D1938 | 2026-11-15 | Finding (measured beside D1935-D1937): the rest of the graph and index layer has no lever worth its risk at today's shares. | finding |
