@@ -185,9 +185,12 @@ export function byteShapeOrStop(bytes: Uint8Array, maxDepth: number, maxValues: 
       cand = k === OPEN ? i : n;
     }
   }
+  byteValues = values;
   return WITHIN;
 }
 
+/** The values the last `byteShapeOrStop` that answered `WITHIN` counted. */
+export let byteValues = 0;
 /** Whether the last `byteShapeOrStop` with `stop` off met a place where it would have stopped. */
 export let byteSawRead = false;
 /** Whether the last `byteShapeOrStop` crossed a string the text path may slice or guess the end of. */
@@ -309,6 +312,8 @@ export interface TextShape {
   found: unknown[];
   /** Values counted inside the pieces (a number array's). */
   inPieces: number;
+  /** The values the byte scan counted in the whole reply when it found it within (`known`), else 0. */
+  knownValues: number;
   /** Whether a long string may still have its end guessed: once a reply. */
   guess: boolean;
   /**
@@ -338,6 +343,7 @@ export function newTextShape(text: string, read: boolean, budget = Infinity): Te
     inPieces: 0,
     guess: read && text.length > LONG_REPLY.guessAfter,
     known: false,
+    knownValues: 0,
     slices: true,
     restFrom: -1,
     close: -1,
@@ -462,7 +468,8 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
       // or from where the reader stopped.
       const from = cand;
       cand = -1;
-      const end = numberArrayAt(text, from, maxValues - candValues, seen);
+      const most = seen.knownValues > 0 ? seen.knownValues - candValues + 1 : 0;
+      const end = numberArrayAt(text, from, maxValues - candValues, seen, most);
       if (end === NOT_NUMBERS) {
         // Everything from the array's first element to where the reader stopped is numbers, `null`, `true`, `false`,
         // commas and spaces, in which the scan only counts the commas: it goes on from there with them counted (D1919),
@@ -527,7 +534,7 @@ export function scanText(text: string, maxDepth: number, maxValues: number, seen
  * before D1919 the scan went on from where it asked, crossing again everything the reader read (1.3-1.6x main on a
  * long series with a gap near its end).
  */
-function numberArrayAt(text: string, open: number, room: number, seen: TextShape): number {
+function numberArrayAt(text: string, open: number, room: number, seen: TextShape, most: number): number {
   // Every answer here that is not the reader's leaves the scan where it is (two placements further down went stale).
   numbersStop.at = -1;
   if (seen.close < open) seen.close = text.indexOf("]", open) >>> 0;
@@ -537,8 +544,10 @@ function numberArrayAt(text: string, open: number, room: number, seen: TextShape
   if (seen.quote < close) return NOT_NUMBERS;
   if (!lastElementReads(text, open, close)) return NOT_NUMBERS;
   // k elements take at least 2k - 1 characters between the brackets, and k - 1 commas: where more could fit than the
-  // room left, the reader counts the commas once its first region reads.
-  return readNumbers(text, open, room, (close - open) >> 1 <= room ? -1 : close);
+  // room left, the reader counts the commas once its first region reads, unless the byte scan has counted them all
+  // (`most`: the array holds no more elements than the values counted after its bracket, plus one).
+  if ((close - open) >> 1 <= room) return readNumbers(text, open, room);
+  return readNumbers(text, open, room, close, most > 0 ? Math.min(most, ((close - open) >> 1) + 1) : 0);
 }
 
 function push(seen: TextShape, from: number, to: number, value: unknown): void {
