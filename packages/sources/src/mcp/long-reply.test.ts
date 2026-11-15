@@ -10,15 +10,28 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { parseJsonBytes, parseJsonBytesWithin, parseJsonText, parseJsonTextWithin } from "./json";
 import {
+  lastElementReads,
+  lastElementReadsBytes,
   NOT_NUMBERS,
   NUMBER_REGION,
   numbersRead,
+  numbersStop,
   readNumbers,
+  releaseScratch,
   scratchIsClear,
   TOO_MANY,
   unescapeText,
 } from "./readers";
-import { bodyShapeWithin, LONG_REPLY, newTextShape, PLAIN_STRING, scanText, WITHIN } from "./shape";
+import {
+  bodyShapeWithin,
+  byteShapeOrStop,
+  LONG_REPLY,
+  newTextShape,
+  PLAIN_STRING,
+  scanText,
+  STOPPED,
+  WITHIN,
+} from "./shape";
 
 const DEFAULTS = { ...LONG_REPLY };
 afterEach(() => {
@@ -532,6 +545,54 @@ describe("the readers against JSON.parse", () => {
       expect(got).toBe(want as string);
     }
     expect(read).toBeGreaterThan(3_000);
+  });
+
+  test("an array's last element is checked before reading, on text and on bytes (D1919)", () => {
+    const head = `[${"12,".repeat(400)}`;
+    const cases: [string, boolean][] = [
+      ["7]", true],
+      ["  -3.25e2 ]", true],
+      ["null]", true],
+      ["true]", true],
+      ["false ]", true],
+      ["12345678901234567]", false],
+      ["1e23]", false],
+      ["nul]", false],
+      ["1 2]", false],
+      ["]", false],
+      ["é]", false],
+      [`1e${"0".repeat(80)}1]`, true],
+    ];
+    for (const [tail, reads] of cases) {
+      const text = head + tail;
+      expect(lastElementReads(text, 0, text.length - 1)).toBe(reads);
+      // The text path's reply releases the buffer; the byte scan's check zeroes what it wrote itself.
+      releaseScratch();
+      const bytes = encoder.encode(text);
+      expect(lastElementReadsBytes(bytes, 0, bytes.length - 1)).toBe(reads);
+      expect(scratchIsClear()).toBe(true);
+    }
+    // The byte scan stops for the text path only at an array it would read.
+    const body = (tail: string) => encoder.encode(`{"v":[${"12,".repeat(20_000)}${tail}]}`);
+    expect(byteShapeOrStop(body("12"), 1_008, 1_010_000)).toBe(STOPPED);
+    expect(byteShapeOrStop(body("null"), 1_008, 1_010_000)).toBe(STOPPED);
+    expect(byteShapeOrStop(body("12345678901234567"), 1_008, 1_010_000)).toBe(WITHIN);
+    expect(scratchIsClear()).toBe(true);
+  });
+
+  test("where readNumbers gives up, it says where, with the commas before it (D1919)", () => {
+    for (const [text, at, commas] of [
+      ["[1,2,3,12345678901234567,4]", 7, 3],
+      ["[1, 2 ,x]", 7, 2],
+      ["[1,2,[3]]", 5, 2],
+      ["[null,true,1e400]", 11, 2],
+    ] as [string, number, number][]) {
+      expect(readNumbers(text, 0, 100)).toBe(NOT_NUMBERS);
+      expect([numbersStop.at, numbersStop.commas]).toEqual([at, commas]);
+    }
+    expect(readNumbers("[1,null,true,false,-0]", 0, 100)).toBe(21);
+    expect(numbersRead).toEqual([1, null, true, false, -0]);
+    expect(Object.is(numbersRead[4], -0)).toBe(true);
   });
 
   test("unescapeText leaves lone surrogates, raw quotes and controls to JSON.parse", () => {

@@ -207,11 +207,16 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
   nested arrays costs 54-87 ms before anything can refuse it, and of a 16 MiB number flood 134-201 ms, which this
   refuses in 3-5 ms. Also lost in that run: plain JSON at 1 KB and at 64 KB with 256 in flight (1.11x) and tool output
   in SSE at 64 KB one at a time (1.11x); four numbers cells tie (1.00-1.02x). Against main's own parser (D1909,
-  measured with and without a forced GC): tool output, numbers, plain text and refused floods cost 0.25-0.75x its CPU,
-  structured replies and multi-byte text about the same (within the control's 10-20% at 64 KB), and peak memory at
-  16 MiB is at or under main's once the process has warmed; still over it: a hostile pair of strings whose guessed end
-  is wrong (1.26-1.46x), a number array whose last element has more than 15 digits (1.6-2.1x, read to its end before
-  that element is met), and a refused depth bomb (about 1 µs).
+  D1919, measured with and without a forced GC): tool output, numbers (a series with `null` gaps too), plain text and
+  refused floods cost 0.25-0.75x its CPU, structured replies, multi-byte text and number arrays with an element the
+  reader leaves to `JSON.parse` (a 16-17-digit number) about the same (within the control's 10-20%). Still over it:
+  a hostile pair of strings whose guessed end is wrong (1.25-1.46x); on the bytes path, a body past twice the value
+  bound that holds number arrays (1.0-1.25x: the byte scan that notes them costs 1.5-2x main's on 16 MiB of floats);
+  a refused depth bomb (about 1 µs). Peak memory at 16 MiB is under main's for accepted number arrays and about
+  main's elsewhere, but not at or under it everywhere: on the text path the reader's code adds 0.3-7 MB to a process
+  (importing it alone moves main's warmed reading from 1.5 to 6.5 MB; with every arm's code loaded, 16 MiB of
+  full-precision floats peaks 11.2 against main's 10.9 cold and 5.5 against 4.4 warmed), and a cold process on the
+  bytes path past twice the bound can peak one 8 MB step higher (46 against 38) while it compiles the text scan.
 - **On Node** a long body is decoded once and takes the same long-reply path (D1904); V8 parses dense escapes faster
   than the byte unescaper, so there the literal is parsed (D1901).
 - **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
@@ -224,7 +229,7 @@ modes), `stdio.test.ts` against the SDK's server as a child process (tools, reso
 children; `adversarial.test.ts` against malformed, oversized, truncated, flooding and hanging servers, with seeded
 fuzz of the SSE parser, `asMessage` and the client; `framing.test.ts` the native read's hostile framings;
 `shape.test.ts` the shape check; `json.test.ts` the spliced parse against `JSON.parse` (D1870); `long-reply.test.ts` the
-long-reply path (D1900-D1904, D1908, D1909) against the plain shape check and `JSON.parse` on 110,000 seeded bodies (escapes,
+long-reply path (D1900-D1904, D1908, D1909, D1919) against the plain shape check and `JSON.parse` on 110,000 seeded bodies (escapes,
 surrogates, byte-order marks, broken UTF-8, number edge cases, small bounds so refusals are common), the readers
 against `JSON.parse`, and hostile shapes kept linear; `deadlines.test.ts`
 the shared timer; `server-messages.test.ts` resumption and the GET stream against the SDK's resumable server (its
