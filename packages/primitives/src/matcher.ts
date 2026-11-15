@@ -34,6 +34,8 @@ const DEFER = 1;
 const SILENT = 2;
 /** Shorter texts run one walk: two cost more than they save on a few hundred characters. */
 const PAIRED_MIN = 256;
+/** How many characters outside ASCII the two walks step over one at a time before each half goes on alone. */
+const WIDE_LIMIT = 32;
 /** Held-back lists longer than this are not kept for the next text. */
 const DEFERRED_KEPT = 1 << 16;
 
@@ -241,9 +243,12 @@ export class MultiMatcher {
     let distinct = 0;
     let sA = 0;
     let specialA = -1;
-    for (let i = 0, j = mid; i < mid; i++, j++) {
+    /** Steps taken a walk at a time (a character outside ASCII in a half); past WIDE_LIMIT each half goes alone. */
+    let wide = 0;
+    let i = 0;
+    for (; i < mid; i++) {
       const a = text.charCodeAt(i);
-      const b = text.charCodeAt(j);
+      const b = text.charCodeAt(mid + i);
       if ((a | b) < 128) {
         const dA = packed[sA + foldCol[a]!]!;
         const dB = packed[sB + foldCol[b]!]!;
@@ -252,17 +257,21 @@ export class MultiMatcher {
         if ((dA & 1) !== 0 && quiet[sA] !== generation)
           distinct = this.emit(sA / cols, i, 0, specialA, text, hits, firsts, distinct, keep, sink, EMIT);
         if ((dB & 1) !== 0 && quiet[sB] !== generation)
-          distinct = this.emit(sB / cols, j, 0, specialB, text, hits, firsts, distinct, keep, sink, DEFER);
+          distinct = this.emit(sB / cols, mid + i, 0, specialB, text, hits, firsts, distinct, keep, sink, DEFER);
         continue;
       }
+      // A text with many such characters (accents, marks, ligatures) reads each half in one walk, where they are
+      // handled inline: a walk call a character cost more than the two automata saved.
+      if (++wide > WIDE_LIMIT) break;
       distinct = this.walk(text, i, i + 1, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
       sA = this.endState;
       specialA = this.endSpecial;
-      distinct = this.walk(text, j, j + 1, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
+      distinct = this.walk(text, mid + i, mid + i + 1, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
       sB = this.endState;
       specialB = this.endSpecial;
     }
-    if ((n & 1) !== 0) distinct = this.walk(text, n - 1, n, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
+    if (i < mid) distinct = this.walk(text, i, mid, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
+    distinct = this.walk(text, mid + i, n, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
     // The second half's occurrences, in order, each only while its pattern is still kept: as one walk would have
     // passed them, after every occurrence in the first half.
     const patterns = this.deferredPattern;

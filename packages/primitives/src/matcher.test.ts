@@ -176,8 +176,12 @@ describe("MultiMatcher against the reference, and scan", () => {
         // units the second walk reads before the middle).
         let text = "";
         const length = 256 + rnd(1500);
+        // Odd rounds: few characters outside ASCII, so the two walks run to the end (past WIDE_LIMIT each half goes
+        // alone, as even rounds test).
+        const sparse = round % 2 === 1;
         while (text.length < length) {
-          text += rnd(3) === 0 ? patterns[rnd(patterns.length)]! : PIECES[rnd(PIECES.length)]!;
+          const piece = sparse && rnd(40) !== 0 ? PIECES[rnd(11)]! : PIECES[rnd(PIECES.length)]!;
+          text += rnd(3) === 0 ? patterns[rnd(patterns.length)]! : piece;
           if (Math.abs(text.length - length / 2) < 40 && rnd(2) === 0) text += (rnd(2) ? "́" : "ﬃ").repeat(rnd(30));
         }
         const keep = Uint8Array.from(patterns, () => (rnd(4) === 0 ? 0 : 1));
