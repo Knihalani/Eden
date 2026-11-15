@@ -73,12 +73,21 @@ const BODIES: Record<string, string> = {
       })),
     ),
   }),
+  // A tool call with ~1.5 KB of input (D1940: its check skips the input's stringify).
+  tool_call: JSON.stringify({
+    userId: "user-1",
+    sessionId: "s-1",
+    kind: "tool_call",
+    tool: "gmail.send",
+    input: { to: ["dana@globex.com"], subject: text, body: text.repeat(16), labels: ["renewal", "q3"] },
+  }),
   ask: JSON.stringify({ userId: "user-1", sessionId: "s-1", question: "What did Dana say about the renewal?" }),
   pending: JSON.stringify({ userId: "user-1", sessionId: "s-1" }),
 };
 const PATH: Record<string, string> = {
   events: "/v1/events",
   tool_result: "/v1/events",
+  tool_call: "/v1/events",
   ask: "/v1/ask",
   pending: "/v1/pending",
 };

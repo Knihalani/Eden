@@ -36,8 +36,14 @@ const OPENERS = /[<\uFF1C\uFE64]/g;
  * cut an escape in half.
  */
 export function safeLine(text: string): string {
-  return text.replace(CONTROLS, "").replace(SPACES, " ").replace(OPENERS, "&lt;").trim();
+  const t = text.replace(CONTROLS, "");
+  // `SPACES` changes a text only where it holds whitespace other than a lone space (D1933): most lines hold none, and
+  // replacing each of their single spaces with itself was most of this function's time on the packet path.
+  return (RESPACED.test(t) ? t.replace(SPACES, " ") : t).replace(OPENERS, "&lt;").trim();
 }
+
+/** What `SPACES` rewrites: whitespace other than U+0020, NEL, or two spaces in a row. */
+const RESPACED = /[^\S ]|\u0085| {2}/;
 
 /**
  * `text` made safe as a fenced block of lines (a conversation window, an answer's body): the same rules as

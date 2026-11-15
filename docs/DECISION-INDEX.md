@@ -826,7 +826,19 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1920 | 2026-11-15 | Adopted (a third low-level brief; outputs unchanged): the rule paths' repeated per-item and per-name readings are memoised per item object… | adopted |
 | D1925 | 2026-11-15 | Adopted (a profiling survey's brief; routing unchanged): the router reads a body's top-level `userId` by one scan, not a decode and… | adopted |
 | D1926 | 2026-11-15 | Adopted (same brief; pre-registered in 86c1645bc: promote if ingest process CPU paired ≤ 0.92 and live heap a user ≤ +3%, else delete): a… | adopted |
+| D1927 | 2026-11-15 | Adopted (a profiling survey's brief; pre-registered in ef7f794d3: adopt if the shipped ingest.bench sweep's process CPU, 200 × 500, paired… | adopted |
+| D1930 | 2026-11-15 | Adopted (a fourth low-level brief, on the ask path; outputs unchanged): the conflict analysis's per-object entry never reads a packed… | adopted |
+| D1931 | 2026-11-15 | Adopted (same brief): `renderPacket` compacts an item only when its size loop reaches it. | adopted |
+| D1932 | 2026-11-15 | Adopted (same brief; D1918 had not built a `datesOf` memo because its days depend on the instant): a statement's date patterns are read… | rejected |
+| D1933 | 2026-11-15 | Adopted (same brief): the ask path's smaller repeats. | adopted |
+| D1934 | 2026-11-15 | Adopted (same brief): `mentionsAny` searches the item's lowercased text in place. | adopted |
 | D1935 | 2026-11-15 | Adopted (a fourth low-level brief, the graph and index layer; every answer unchanged): the source map's reads are memoised, exactly. | adopted |
 | D1936 | 2026-11-15 | Adopted (same brief; answers unchanged): a new source-map file makes its three tables `WITHOUT ROWID`. | adopted |
 | D1937 | 2026-11-15 | Adopted (same brief; keys unchanged): `normalizeEntity` reads plain names in one pass. | adopted |
 | D1938 | 2026-11-15 | Finding (measured beside D1935-D1937): the rest of the graph and index layer has no lever worth its risk at today's shares. | finding |
+| D1940 | 2026-11-15 | Adopted: the proxy reads a request's history once, the server's shape check counts brackets before it scans, and a tool call's check skips… | adopted |
+| D1941 | 2026-11-15 | Finding (measured beside D1940): the rest of the edge has no lever. | finding |
+| D1945 | 2026-11-15 | Adopted (a dev-loop brief; no test weakened, every test still run): the gate spends about 7% less CPU, its main-run test limit is 60 s… | adopted |
+| D1950 | 2026-11-15 | Adopted (same brief): `assess` reads only the statements that can move its verdict. | adopted |
+| D1951 | 2026-11-15 | Adopted (same brief): an equal re-put tallies the held copy's people out and in from one reading. | adopted |
+| D1952 | 2026-11-15 | Finding (measured beside D1930-D1934, D1950 and D1951): the ask path's end to end, and what was left. | finding |

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { itemId } from "./ids";
 import {
   MAX_QUESTION_CHARS,
+  bodyShapeQuick,
   bodyShapeUnder,
   bodyShapeWithin,
   checkAsk,
@@ -214,6 +215,7 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
     const run = (ch: string) => ch.repeat(1 + rand(80));
     let differ = 0;
     let refused = 0;
+    let quickPassed = 0;
     for (let k = 0; k < 6_000; k++) {
       let text = "";
       const parts = 1 + rand(40);
@@ -225,8 +227,31 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
       const want = loop(b, maxDepth, maxValues);
       if (!want) refused++;
       if (bodyShapeWithin(b, maxDepth, maxValues) !== want) differ++;
+      if (bodyShapeQuick(b, maxDepth, maxValues) !== want) differ++;
+      // D1940's bracket count decides only where the body's bytes fit the value bound: give it such bounds too,
+      // with depths up to past the body's brackets, so both of its answers (and its early give-up) are reached.
+      const wide = rand(2) === 0 ? b.length + rand(4) : 1 + rand(b.length + 1);
+      const deep = 1 + rand(rand(3) === 0 ? 200 : 40);
+      const wanted = loop(b, deep, wide);
+      if (bodyShapeQuick(b, deep, wide) !== wanted) differ++;
+      if (wanted) quickPassed++;
+    }
+    // At the bracket count's own edges: every bracket nested outside strings (depth equals the count), and bodies
+    // that are all structure (values equal the bytes), each at its bound, one under and one over.
+    for (let d = 1; d <= 70; d++) {
+      for (const open of ["[", "{"]) {
+        const close = open === "[" ? "]" : "}";
+        const nested = new TextEncoder().encode(open.repeat(d) + close.repeat(d));
+        const flat = new TextEncoder().encode(`${open}${",".repeat(d)}`);
+        for (const bound of [d - 1, d, d + 1]) {
+          if (bodyShapeQuick(nested, bound, 1_000) !== loop(nested, bound, 1_000)) differ++;
+          if (bodyShapeQuick(flat, 1_000, bound) !== loop(flat, 1_000, bound)) differ++;
+          if (bodyShapeQuick(flat, 1, bound + 1) !== loop(flat, 1, bound + 1)) differ++;
+        }
+      }
     }
     expect(differ).toBe(0);
+    expect(quickPassed).toBeGreaterThan(1_000);
     // Both answers occur often, so the comparison is not of one constant.
     expect(refused).toBeGreaterThan(400);
     expect(refused).toBeLessThan(5_000);
@@ -254,6 +279,64 @@ describe("bodyShapeUnder: the raw body's values and depth before the parse", () 
       const ms = cpuMs() - t0;
       expect({ name, slow: ms > 200 }).toEqual({ name, slow: false });
     }
+  });
+});
+
+// D1940: a tool call's input parsed from text of at most 1,000,000 / 6 characters skips its stringify, which rests on
+// `JSON.stringify(JSON.parse(t))` never passing six times `t`'s length. The worst cases by hand, then seeded texts.
+describe("checkEvent's source length: the stringify it skips", () => {
+  const grows = (t: string) => JSON.stringify(JSON.parse(t)).length / t.length;
+  test("no text's JSON grows past six times its length", () => {
+    const worst = [
+      "1e20",
+      "9e20",
+      "-1e20",
+      "1E+20",
+      "[1e20,1e20]",
+      "1e-6",
+      "1e21",
+      `"\ud800"`,
+      `"${"\udc00".repeat(99)}"`,
+    ];
+    for (const t of worst) expect({ t, over: grows(t) > 6 }).toEqual({ t, over: false });
+    let seed = 1940;
+    const rand = (n: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    const atoms = ["1e20", "0", "-0", "1e-7", "1.5e19", "123456789012345678901234", "true", "null", '"\\u0041"'];
+    atoms.push('"\\n"', '"\\/"', `"\ud83d"`, `"é"`, '"\\ud800"', '"x"', "1e400", "0.000001", "12e18");
+    const value = (d: number): string => {
+      const r = rand(10);
+      if (d > 4 || r < 5) return atoms[rand(atoms.length)]!;
+      const n = rand(6);
+      const parts = Array.from({ length: n }, () => value(d + 1));
+      if (r < 7) return `[${parts.join(rand(2) ? "," : " , ")}]`;
+      return `{${parts.map((p) => `"${"ab"[rand(2)]}" : ${p}`).join(",")}}`;
+    };
+    let max = 0;
+    for (let k = 0; k < 20_000; k++) max = Math.max(max, grows(value(0)));
+    expect(max).toBeLessThanOrEqual(6);
+    expect(max).toBeGreaterThan(4); // the generator reaches the bound's neighbourhood
+  });
+  test("the same answer with and without the source length", () => {
+    const input = (n: number) => ({ path: "a.ts", content: "x\n".repeat(n), n: 1e20 });
+    for (const n of [0, 10, 80_000, 600_000]) {
+      const text = JSON.stringify({ ...scope, at: 1, kind: "tool_call", tool: "write", input: input(n) });
+      const plain = checkEvent(JSON.parse(text));
+      expect(checkEvent(JSON.parse(text), text.length)).toEqual(plain);
+    }
+    // Short numbers that grow past the bound (230,000 characters, about 1,012,000 as JSON): refused either way, so the
+    // skip's threshold cannot be raised past a sixth unnoticed.
+    const grown = `{"tenantId":"acme","userId":"u_1","sessionId":"s_1","at":1,"kind":"tool_call","tool":"t",
+      "input":[${"1e20,".repeat(46_000)}1e20]}`;
+    expect(checkEvent(JSON.parse(grown)).ok).toBe(false);
+    expect(checkEvent(JSON.parse(grown), grown.length).ok).toBe(false);
+    // Deep input is still refused by the walk, whatever the length.
+    let deep: unknown = 1;
+    for (let i = 0; i < 1_001; i++) deep = [deep];
+    const text = JSON.stringify({ ...scope, kind: "tool_call", tool: "t", input: deep });
+    expect(checkEvent(JSON.parse(text), text.length).ok).toBe(false);
   });
 });
 

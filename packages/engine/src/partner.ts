@@ -1994,24 +1994,18 @@ export class ContextPartner {
     // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
     // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
     const gloss = this.config.requestGloss ? glossOf(question) : "";
-    const cue = buildCue(
-      question,
-      distinctTermIds(gloss ? `${gloss}\n${question}` : question, s.vocab),
-      s.vocab,
-      this.now(),
-      this.deps.cache.offsetOf(s.scope),
-      this.config.probes,
-    );
-    if (gloss) cue.gloss = gloss;
+    const ids = distinctTermIds(gloss ? `${gloss}\n${question}` : question, s.vocab);
+    const at = this.now();
+    const offset = this.deps.cache.offsetOf(s.scope);
     // `pushDaySeats` (G1, D1400): the request's days read past `timeWindow`: a bare day of the month given its month
     // (`datedText`), and the glossary's English beside the request, so a weekday in another language is a day too.
-    if (this.config.pushDaySeats > 0) {
-      cue.time = timeWindow(
-        datedText(gloss ? `${question}\n${gloss}` : question, cue.at, cue.offset),
-        cue.at,
-        cue.offset,
-      );
-    }
+    // Read in place of the cue's own reading, which would be thrown away (D1933).
+    const time =
+      this.config.pushDaySeats > 0
+        ? timeWindow(datedText(gloss ? `${question}\n${gloss}` : question, at, offset), at, offset)
+        : undefined;
+    const cue = buildCue(question, ids, s.vocab, at, offset, this.config.probes, time);
+    if (gloss) cue.gloss = gloss;
     if (root) cue.span = root.id;
     const limit = request.maxItems ?? 5;
     // `readerPushBehind`: the push reads the index as it stands while the sync's poll runs behind (the agent's asks
@@ -6382,7 +6376,8 @@ export class ContextPartner {
       if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
       const key = shownKey(item);
       const words = shown.get(key) ?? new Set<string>([year]);
-      for (const w of lineWords(item.sourceId, line)) words.add(w);
+      // Only words of two or more characters: the known test that reads these asks of no other (`saysUnknown`, D1933).
+      for (const w of lineWords(item.sourceId, line)) if (w.length > 1) words.add(w);
       shown.delete(key); // re-inserted last: the most recently shown is dropped last
       shown.set(key, words);
     }
@@ -6963,10 +6958,20 @@ function spanDays(c: { start?: string; end?: string }): number {
 }
 
 /** The request's words and its people's names, lowercased: what a compacted packet keeps the parts holding. */
-function focusOf(cue: Cue): Set<string> {
-  const words = `${cue.text} ${cue.entities.join(" ")}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  return new Set(words.filter((w) => w.length > 1 && !isStopword(w)));
+function focusOf(cue: Cue): ReadonlySet<string> {
+  let focus = FOCI.get(cue);
+  if (!focus) {
+    const words = `${cue.text} ${cue.entities.join(" ")}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+    FOCI.set(cue, (focus = new Set(words.filter((w) => w.length > 1 && !isStopword(w)))));
+  }
+  return focus;
 }
+
+/**
+ * Each cue's focus words, read once and dropped with the cue (D1933): an ask read them three times (its answer, its
+ * delivery's fold and packet). Shared by every reader, so read only, never changed.
+ */
+const FOCI = new WeakMap<Cue, ReadonlySet<string>>();
 
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -7081,14 +7086,32 @@ const intentQuery = (cue: Cue) =>
 const localNow = (cue: Cue) => cue.at + cue.offset * 60_000;
 
 /** `offset`: the user's UTC offset in minutes, so "today" is their today (D44). */
-function buildCue(text: string, ids: Uint32Array, vocab: Vocab, at: number, offset: number, probes = false): Cue {
+/** `time`, when given, is the cue's days read already (the ask's wider reading), in place of `timeWindow(text)`. */
+function buildCue(
+  text: string,
+  ids: Uint32Array,
+  vocab: Vocab,
+  at: number,
+  offset: number,
+  probes = false,
+  time?: TimeWindow | null,
+): Cue {
   // With probes on, a sentence's leading verb is not part of the name it starts ("Send Rose Kimura").
   const entities = (probes ? cleanEntities(extractEntities(text)) : extractEntities(text)).slice(0, 8);
   const terms = contentTermsOf(ids, vocab).slice(0, 16); // Distinct already.
   const key = (entities.length ? entities.map((e) => e.toLowerCase()) : terms).slice().sort().join("|").slice(0, 200);
   // Traces and reasons carry this id, never the cue itself: the cue is the user's words.
   const id = `cue:${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;
-  return { text: terms.join(" "), entities, key, id, time: timeWindow(text, at, offset), at, raw: text, offset };
+  return {
+    text: terms.join(" "),
+    entities,
+    key,
+    id,
+    time: time !== undefined ? time : timeWindow(text, at, offset),
+    at,
+    raw: text,
+    offset,
+  };
 }
 
 /**
