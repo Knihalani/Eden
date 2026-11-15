@@ -53,9 +53,7 @@ const QUICK = process.argv.includes("--quick");
 const WORLD = process.argv.includes("--world");
 /** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before), in every mode. */
 const PLAIN = process.argv.includes("--plain");
-/** `--zstd`: packed text held as zstd level 1 frames (`CacheLimits.packZstd`, the trial D1926), in every mode. */
-const ZSTD = process.argv.includes("--zstd");
-const args = process.argv.slice(2).filter((a) => !["--quick", "--world", "--plain", "--zstd"].includes(a));
+const args = process.argv.slice(2).filter((a) => a !== "--quick" && a !== "--world" && a !== "--plain");
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
@@ -159,7 +157,6 @@ async function run(mode: Mode): Promise<Result> {
     maxUsersPerTenant: USERS + 1,
     expireEveryMs: 0,
     packText: !PLAIN,
-    packZstd: ZSTD,
   });
   let sync: SyncManager;
   let sweepAfter: number;
@@ -280,7 +277,6 @@ if (MODE !== "all") {
       import.meta.path,
       ...(WORLD ? ["--world"] : []),
       ...(PLAIN ? ["--plain"] : []),
-      ...(ZSTD ? ["--zstd"] : []),
       String(USERS),
       String(PER_USER),
     ];

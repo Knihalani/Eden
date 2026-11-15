@@ -278,7 +278,8 @@ interface FrozenBody {
 
 /**
  * One entry of a fast-thaw blob (D860): `FrozenEntry`'s fields, the item without its text when the text is packed
- * (`p`: its deflated bytes' length in the blob's text section, and 1 when they decode as Latin-1), and its doc number.
+ * (`p`: its packed bytes' length in the blob's text section, and their `PackTag`: bit 0 Latin-1, bit 1 zstd, D1926),
+ * and its doc number.
  */
 interface FastEntry {
   i: Omit<ContextItem, "text"> | ContextItem;
@@ -568,10 +569,6 @@ export interface CacheLimits {
    */
   packText: boolean;
   /**
-   * Trial (D1926): pack with zstd level 1 instead of DEFLATE level 6 (`packItem`'s `zstd`). Off by default.
-   */
-  packZstd: boolean;
-  /**
    * A user neither read nor written for about this long (ms) is frozen at an expiry tick (`FrozenUser`, D325): held as
    * one compressed blob and thawed, exactly, on next use. Counted in expiry ticks (`expireEveryMs`), at least two: a
    * user last seen in tick k freezes at tick k + ceil(freezeIdleMs / expireEveryMs), so 29-30 minutes after their last
@@ -607,7 +604,6 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   expireEveryMs: 60_000,
   releaseTerms: true,
   packText: true,
-  packZstd: false,
   freezeIdleMs: 30 * 60_000,
   warmIdleMs: 2 * 60_000,
   idleCompact: true,
@@ -1192,11 +1188,7 @@ export class ItemCache {
         // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
         // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
         const fresh =
-          same && sameFields(old.item, item)
-            ? old.item
-            : this.limits.packText
-              ? repackLike(item, old.item, this.limits.packZstd)
-              : item;
+          same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
         old.item = fresh;
         tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
@@ -1214,7 +1206,7 @@ export class ItemCache {
       tally(u, item, 1);
       const doc = this.index(u, item);
       // The copy held: with `packText`, its text deflated (the tallies and index above read the plain one).
-      const stored = this.limits.packText ? packItem(item, this.limits.packZstd) : item;
+      const stored = this.limits.packText ? packItem(item) : item;
       // `raw` always set (if undefined), so every entry has one shape.
       const entry: Entry = {
         item: stored,
@@ -2404,7 +2396,7 @@ export class ItemCache {
       plain[j] = item;
       const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
       const entry: Entry = {
-        item: this.limits.packText ? packItem(item, this.limits.packZstd) : item,
+        item: this.limits.packText ? packItem(item) : item,
         fetchedAt: r.f,
         // Another process's marks mean nothing here: 0 is older than any signal this process takes (D425).
         readMark: f.fromDisk ? 0 : r.m,
