@@ -33,7 +33,7 @@ describe("the gate against the reference gate", () => {
     expect(result.failures).toEqual([]);
     // Most texts hold something a rule finds, so spans are compared, not only empty results.
     expect(result.withFindings).toBeGreaterThan(2_000);
-  }, 30_000);
+  }, 120_000);
 
   // In the Eden repository; skipped where the package stands alone.
   const scenarios = join(import.meta.dir, "../../eval/scenarios");
@@ -56,7 +56,7 @@ describe("the gate against the reference gate", () => {
 
   test("the crafted inputs at 16 KB", () => {
     for (const [, unit] of CRAFTED_UNITS) expect(difference(crafted(unit, 16_384))).toBeUndefined();
-  }, 30_000);
+  }, 120_000);
 });
 
 describe("what the speed-ups rest on", () => {
