@@ -16,6 +16,7 @@
  * Nothing here calls a model; every probe is a source call, bounded per lookup (`probeCalls`).
  */
 import type { ContextItem } from "@eden/protocol";
+import { readWordUnit, WORD_UNITS } from "./text";
 
 /**
  * Words that start a request without naming anything: imperatives and politeness. A capitalised run at a sentence
@@ -623,6 +624,8 @@ const FREE_MAIL = new Set(
  */
 const SETTLED =
   /\b(as usual|as planned|as normal|as agreed|as before|no changes?|unchanged|nothing (has )?changed|still (on|valid|in place|the same|going ahead)|all clear|(is|are|now|it's) clear to|good to go|(?:you|we) can go ahead|(?:you're|you are) clear to go ahead|resolved|sorted( out)?)\b/i;
+/** `SETTLED` for `matchAll`, built once: `matchAll` scans a copy, so this one's `lastIndex` stays 0. */
+const SETTLED_ALL = new RegExp(SETTLED.source, "gi");
 const NEGATED =
   /\b(not|n't|never|no longer|isn't|hasn't|wasn't|yet to be|nothing (?:is|has been|was|got))\s+(\w+\s+)?$/i;
 
@@ -632,7 +635,7 @@ const NEGATED =
  */
 export function settled(item: ContextItem): boolean {
   const text = `${item.title}. ${item.text}`;
-  for (const m of text.matchAll(new RegExp(SETTLED.source, "gi"))) {
+  for (const m of text.matchAll(SETTLED_ALL)) {
     if (NEGATED.test(text.slice(Math.max(0, m.index! - 24), m.index!))) continue;
     // Asked, not said: the sentence it is in ends with a question mark ("Is this resolved?").
     const end = text.slice(m.index!).search(/[.!?\n]/);
@@ -716,7 +719,10 @@ export function absenceSpan(item: ContextItem, now: number): { from: string; to:
   return read(after) ?? read(before);
 }
 
-/** Whether a request's person (a name of one or more words) is named in an item, whole words, any case. */
+/**
+ * Whether a request's person (a name of one or more words) is named in an item, whole words, any case. The reference
+ * for `mentionsAny`, which the partner calls (`opt-round3.test.ts` fuzzes the two).
+ */
 export function mentions(name: string, item: ContextItem): boolean {
   const hay = ` ${`${item.title} ${item.text} ${item.meta?.people ?? ""}`.toLowerCase().replace(/[^\p{L}\p{N}@.]+/gu, " ")} `;
   const words = name
@@ -724,6 +730,66 @@ export function mentions(name: string, item: ContextItem): boolean {
     .split(/\s+/)
     .filter((w) => w.length > 1);
   return words.length > 0 && words.every((w) => hay.includes(` ${w} `));
+}
+
+/**
+ * Each name's words as `mentions` reads them (lowercased, of two characters or more), names with none left out:
+ * read once per request, for `mentionsAny`.
+ */
+export function mentionWords(names: readonly string[]): string[][] {
+  const out: string[][] = [];
+  for (const name of names) {
+    const words = name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 1);
+    if (words.length > 0) out.push(words);
+  }
+  return out;
+}
+
+/**
+ * `names.some((n) => mentions(n, item))` for `words = mentionWords(names)`, with the item's text read once rather than
+ * once per name, by a code-unit pass (D1920): building it was most of `mentions`' cost (12 µs a call on the pipeline
+ * bench).
+ */
+export function mentionsAny(words: readonly (readonly string[])[], item: ContextItem): boolean {
+  if (words.length === 0) return false;
+  const hay = ` ${mentionText(`${item.title} ${item.text} ${item.meta?.people ?? ""}`.toLowerCase())} `;
+  return words.some((ws) => ws.every((w) => hay.includes(` ${w} `)));
+}
+
+const NOT_MENTION_CHARS = /[^\p{L}\p{N}@.]+/gu;
+
+/**
+ * `lower.replace(/[^\p{L}\p{N}@.]+/gu, " ")` by one pass over the code units (`WORD_UNITS`, D1881): a run of other
+ * characters becomes one space, and a lone space, the usual run, is kept without copying. A string with a surrogate
+ * goes to the regex, which reads a pair as one code point.
+ */
+export function mentionText(lower: string): string {
+  let out = "";
+  let from = 0;
+  const n = lower.length;
+  for (let i = 0; i < n;) {
+    let c = lower.charCodeAt(i);
+    let k = WORD_UNITS[c]!;
+    if (k === 0 && (k = readWordUnit(c)) === 0) return lower.replace(NOT_MENTION_CHARS, " ");
+    if (k === 1 || c === 64 || c === 46) {
+      i++;
+      continue;
+    }
+    const start = i;
+    for (i++; i < n; i++) {
+      c = lower.charCodeAt(i);
+      k = WORD_UNITS[c]!;
+      if (k === 0 && (k = readWordUnit(c)) === 0) return lower.replace(NOT_MENTION_CHARS, " ");
+      if (k === 1 || c === 64 || c === 46) break;
+    }
+    if (i - start === 1 && lower.charCodeAt(start) === 32) continue;
+    out += lower.slice(from, start) + " ";
+    from = i;
+  }
+  return from === 0 ? lower : out + lower.slice(from);
 }
 
 /**

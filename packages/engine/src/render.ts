@@ -118,8 +118,12 @@ export function renderPacket(
  * Usage tracking looks for these words later, so it must not count words the packet cut or the envelope adds.
  */
 export function shownText(rendered: string): string {
-  return rendered
-    .split("\n")
+  return shownTextOfLines(rendered.split("\n"));
+}
+
+/** `shownText` of a text already split at its newlines (the partner reads one split for its line readers, D1920). */
+export function shownTextOfLines(lines: readonly string[]): string {
+  return lines
     .filter((line) => line !== HEADER && line !== "</context>" && !line.startsWith(EDEN_NOTE))
     .map((line) => line.replace(/^- \[[^\]]*\] /, "").replace(READER_PREFIX, ""))
     .join("\n");

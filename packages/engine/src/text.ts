@@ -190,12 +190,20 @@ export const isCalendarByPattern = (word: string) =>
  * Named things a source might hold: emails, @handles, ticket-style ids (ABC-123), URLs, quoted phrases, and runs of
  * capitalised words not at a sentence start ("Dana Lee", "Acme Corp"). Recall over precision: a false entity costs
  * one wasted lookup, a missed one costs the injection. Weekday and month names are not entities (D37).
+ *
+ * With `persistableCap`, the capitalised runs stop being read once that many entities of `PERSISTABLE_KINDS` are
+ * found (D1920): every later one would come after them in the result, so a caller that keeps only the first
+ * `persistableCap` of those kinds (`mentionsOf`) gets what reading every run gave.
  */
-export function extractTypedEntities(text: string): Entity[] {
+export function extractTypedEntities(text: string, persistableCap = Infinity): Entity[] {
   const found = new Map<string, Entity>();
+  let persistable = 0;
   const add = (s: string | undefined, kind: EntityKind) => {
     const v = s?.trim();
-    if (v && v.length > 1 && v.length <= 80 && !found.has(v)) found.set(v, { text: v, kind });
+    if (v && v.length > 1 && v.length <= 80 && !found.has(v)) {
+      found.set(v, { text: v, kind });
+      if (PERSISTABLE_KINDS.has(kind)) persistable++;
+    }
   };
   // Each pattern runs only where the text holds the character it cannot match without (D1886): an "@", a hyphen, a
   // link's "//", a quotation mark.
@@ -207,9 +215,11 @@ export function extractTypedEntities(text: string): Entity[] {
   if (text.includes('"') || text.includes("“")) {
     for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
   }
-  // Capitalised runs. A run that starts a sentence counts only if it has two or more words.
+  // Capitalised runs, which must stay the last kind added: `persistableCap` is exact only then (D1920).
+  // A run that starts a sentence counts only if it has two or more words.
   // Any capital letter starts a word, not only ASCII ones: "Łukasz", "Émile", "Ögmundur".
   for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:\p{Lu}[\p{L}&'-]+)(?:\s+\p{Lu}[\p{L}&'-]+)*)/gu)) {
+    if (persistable >= persistableCap) break;
     const sentenceStart = m[1] === "" || /[.!?]/.test(m[1]!);
     let words = m[2]!.split(/\s+/);
     // Dates around a name ("on Friday Dana Lee") are trimmed when a name of two or more words remains; a weekday
