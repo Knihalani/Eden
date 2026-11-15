@@ -32,6 +32,11 @@ function rng(seed: number): () => number {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+/** Process CPU in milliseconds: a bound on work, not on a wait (D811). */
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1_000;
+};
 
 function tryParse(text: string): unknown {
   try {
@@ -255,10 +260,11 @@ describe("the long-reply path against the plain path", () => {
   });
 
   test("bytes: 40,000 seeded bodies with byte-order marks and broken UTF-8, the same answer", () => {
-    Object.assign(LONG_REPLY, SMALL);
     const r = rng(19001);
     let differ = 0;
     for (let i = 0; i < 40_000; i++) {
+      // A quarter at the real thresholds: these small bodies take the short path, its decode included.
+      Object.assign(LONG_REPLY, i % 4 === 0 ? DEFAULTS : SMALL);
       const bytes = mangle(r, encoder.encode(body(r)));
       const d = 2 + Math.floor(r() * 12);
       const v = 4 + Math.floor(r() * 120);
@@ -324,11 +330,11 @@ describe("the long-reply path stays linear", () => {
       JSON.stringify(Array.from({ length: 200 }, () => 'a "b" c\n'.repeat(5_000))),
     ];
     for (const text of cases) {
-      const t0 = performance.now();
+      const t0 = cpuMs();
       const got = parseJsonText(text);
-      const ms = performance.now() - t0;
+      const ms = cpuMs() - t0;
       expect(same(got, plainText(text, 1_008, 1_010_000))).toBe(true);
-      // About 2-20 ms each here; the quadratic versions took seconds.
+      // 5-60 ms of CPU each here (as much as `JSON.parse` of the same text); the quadratic versions took seconds.
       expect(ms).toBeLessThan(1_500);
     }
   });

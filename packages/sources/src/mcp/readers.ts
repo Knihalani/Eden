@@ -6,14 +6,19 @@
  * first (about 0.06 ns a byte), since a loop over a typed array costs JSC about a nanosecond a byte where `charCodeAt`
  * costs more, and `JSON.parse` takes about 16 ns an escape and 23 a number.
  */
-import { isAscii } from "node:buffer";
-
 /** Decodes as `TextDecoder` does but keeps a byte-order mark: a range that is not the body's start has none to drop. */
 const keepMark = new TextDecoder("utf-8", { ignoreBOM: true });
 const stripMark = new TextDecoder();
 /** Node's and Bun's `Buffer.prototype.latin1Slice`: one byte a character, which ASCII decodes to as UTF-8 does. */
 type Slice = (this: Uint8Array, start: number, end: number) => string;
 const latin1Slice = (globalThis as { Buffer?: { prototype?: { latin1Slice?: Slice } } }).Buffer?.prototype?.latin1Slice;
+/**
+ * `node:buffer`'s `isAscii` (simdutf on both runtimes), looked up at run time rather than imported, so a bundle for
+ * another platform pulls in no `Buffer` polyfill; without it every range is decoded by `TextDecoder`.
+ */
+const isAscii = (
+  globalThis as { process?: { getBuiltinModule?: (id: string) => { isAscii?: (b: Uint8Array) => boolean } } }
+).process?.getBuiltinModule?.("node:buffer")?.isAscii;
 
 /**
  * `bytes[start, end)` decoded as UTF-8, with replacement, as `TextDecoder` decodes it; a byte-order mark is dropped
@@ -23,7 +28,7 @@ const latin1Slice = (globalThis as { Buffer?: { prototype?: { latin1Slice?: Slic
  */
 export function decodeRange(bytes: Uint8Array, start: number, end: number, atStart = false): string {
   const sub = start === 0 && end === bytes.length ? bytes : bytes.subarray(start, end);
-  if (latin1Slice && isAscii(sub)) return latin1Slice.call(sub, 0, sub.length);
+  if (latin1Slice && isAscii?.(sub)) return latin1Slice.call(sub, 0, sub.length);
   return (atStart ? stripMark : keepMark).decode(sub);
 }
 

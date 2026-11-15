@@ -80,8 +80,9 @@ async def perf(port: int) -> None:
     # The shapes and modes as the TypeScript bench takes them (`MCP_COMPARE_TEXT`, `MCP_COMPARE_MODES`).
     shapes = os.environ.get("MCP_COMPARE_TEXT", "plain").split(",")
     modes = os.environ.get("MCP_COMPARE_MODES", "json,sse").split(",")
+    sizes = [int(x) for x in os.environ.get("MCP_COMPARE_SIZES", ",".join(map(str, SIZES))).split(",")]
     for shape, mode in [(sh, mo) for sh in shapes for mo in modes]:
-        for size in SIZES:
+        for size in sizes:
             # The per-event cap raised to Eden's (4 MiB) so a 1 MB event is read; the default is 1 MiB.
             async with Opened(f"http://127.0.0.1:{port}/{mode}/{size}/{shape}/mcp", 120, 4 * 2**20) as c:
                 for inflight in INFLIGHT:
