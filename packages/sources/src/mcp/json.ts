@@ -2,7 +2,6 @@ import { decodedAscii, decodeRange, releaseScratch } from "./readers";
 import {
   bodyShapeWithin,
   byteLongString,
-  byteValues,
   byteSawRead,
   byteShapeOrStop,
   LONG_REPLY,
@@ -86,7 +85,6 @@ function readLong(text: string, maxDepth: number, maxValues: number, known: bool
   // parsed whole at once.
   const seen = newTextShape(text, true, known ? LONG_REPLY.steps >>> 2 : LONG_REPLY.steps + (text.length >>> 8));
   seen.known = known;
-  if (known) seen.knownValues = byteValues;
   seen.slices = slices;
   try {
     let shape = scanText(text, maxDepth, maxValues, seen);
