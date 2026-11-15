@@ -91,6 +91,12 @@ interface Entry {
    * words change is a new entry, and a new copy with the same words (`put`) keeps them, as it keeps the index.
    */
   dates: DayFacts | undefined;
+  /**
+   * D1927: the sync's stamp (`SyncManager.stampOf`) for the source sketch and rare-word table this entry's words were
+   * last added to by the sync's store, or 0 when none is known (a lookup's copy, a thaw from disk). Kept while the
+   * words are (a copy with the same words keeps it), and through a freeze in memory (`FrozenUser.stamps`).
+   */
+  stamp: number;
 }
 
 /**
@@ -249,6 +255,18 @@ class FrozenUser {
   readonly bytes: number;
   /** Frozen warm (`CacheLimits.warmIdleMs`, D862): to be frozen again in the compact form once idle long enough. */
   readonly warm: boolean;
+  /**
+   * D1927: the entries' `Entry.stamp`s in the blob's order, or undefined when none is set. In memory only: never in
+   * the blob, so never on disk (a stamp means something only to the process that made it), and a user loaded from
+   * disk has none.
+   */
+  stamps: Uint32Array | undefined = undefined;
+}
+
+/** D1927: the entries' stamps for `FrozenUser.stamps`, or undefined when every one is 0. */
+function stampsOf(stamps: number[]): Uint32Array | undefined {
+  // A stamp past 32 bits (a process that has made four billion) is kept as 0: the next store adds its words again.
+  return stamps.some((x) => x !== 0) ? Uint32Array.from(stamps, (x) => (x <= 0xffffffff ? x : 0)) : undefined;
 }
 
 /**
@@ -464,14 +482,35 @@ function partiesOf(item: ContextItem): string[] {
 
 /** Counts an item's people in or out of the user's tally (`selfOf`). */
 function tally(u: UserCache, item: ContextItem, by: 1 | -1): void {
-  if (u.addresses !== undefined) {
-    for (const a of addressesOf(item.text)) {
+  tallyRead(u, u.addresses !== undefined ? addressesOf(item.text) : undefined, partiesOf(item), by);
+}
+
+/**
+ * `tally(u, item, -1)` then `tally(u, item, 1)`: an equal re-put keeps the held object (D1722), whose people are
+ * counted out and in again. Its addresses and names are read once, not twice (D1951), and applied in the same order.
+ */
+function retally(u: UserCache, item: ContextItem): void {
+  const addresses = u.addresses !== undefined ? addressesOf(item.text) : undefined;
+  const names = partiesOf(item);
+  tallyRead(u, addresses, names, -1);
+  tallyRead(u, addresses, names, 1);
+}
+
+/** `tally` and `retally`, for tests (`opt-round4.test.ts`): they touch only a user's people fields. */
+export const tallies = { tally, retally } as unknown as {
+  tally(u: object, item: ContextItem, by: 1 | -1): void;
+  retally(u: object, item: ContextItem): void;
+};
+
+/** `tally` with the item's addresses (undefined when the user keeps none) and names read. */
+function tallyRead(u: UserCache, addresses: Set<string> | undefined, names: string[], by: 1 | -1): void {
+  if (u.addresses !== undefined && addresses !== undefined) {
+    for (const a of addresses) {
       const c = (u.addresses.get(a) ?? 0) + by;
       if (c > 0) u.addresses.set(a, c);
       else u.addresses.delete(a);
     }
   }
-  const names = partiesOf(item);
   if (names.length === 0) return;
   u.partied += by;
   for (const n of names) {
@@ -1145,6 +1184,7 @@ export class ItemCache {
     sanitized = false,
     synced = false,
     readMark = 0,
+    stamp = 0,
   ): ContextItem[] {
     this.lastNow = now;
     this.lastWall = Date.now();
@@ -1171,6 +1211,8 @@ export class ItemCache {
         // A listing reused the copy held (`reuseFor`): nothing about it changed, so only its fetch time and order.
         old.fetchedAt = now;
         old.readMark = Math.max(old.readMark, readMark);
+        // D1927: the sync's store added these words under `stamp`; any other put keeps the stamp (same words).
+        if (stamp !== 0) old.stamp = stamp;
         u.items.delete(item.id);
         u.items.set(item.id, old);
         unlink(u, old);
@@ -1183,19 +1225,25 @@ export class ItemCache {
         // people are counted again: its meta may name others.
         const same = sameDetails(old.item, item);
         if (!same) u.revision = ++this.revisions;
-        tally(u, old.item, -1);
-        tallyOffset(u, old.item, -1);
         // The new copy's fields, its text still packed (the held bytes reused: same words, no second compression). A
         // copy equal in every field keeps the object held (D1722), so what is memoised per item object (the conflict
         // test's `analyse`, `ownText`, the card order's heads) still answers: a lookup re-stores every item it finds.
         const fresh =
           same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
+        // The people and the offset counted out for the old copy and in for the new (the tallies are apart: neither
+        // reads the other's state). The same object held is read once for both (`retally`, D1951).
+        if (fresh === old.item) retally(u, fresh);
+        else {
+          tally(u, old.item, -1);
+          tally(u, fresh, 1);
+        }
+        tallyOffset(u, old.item, -1);
         old.item = fresh;
-        tally(u, fresh, 1);
         tallyOffset(u, fresh, 1);
         old.raw = from; // What this copy was redacted from, if a listing said; a lookup's copy ends the reuse.
         old.fetchedAt = now;
         old.readMark = Math.max(old.readMark, readMark); // The same words: current as of the later read.
+        if (stamp !== 0) old.stamp = stamp;
         u.items.delete(item.id); // Re-insert: Map order stays oldest-first for eviction.
         u.items.set(item.id, old);
         unlink(u, old);
@@ -1220,6 +1268,7 @@ export class ItemCache {
         raw: from,
         seq: ++this.seqs,
         dates: undefined,
+        stamp,
       };
       if (isSynced) {
         entry.synced = true;
@@ -1271,6 +1320,18 @@ export class ItemCache {
    */
   revision(scope: Scope): number {
     return this.users.get(scopeKey(scope))?.revision ?? 0; // A frozen user's too, without thawing it.
+  }
+
+  /**
+   * D1927: the stamp (`Entry.stamp`) of the entry holding this very item object, or 0 when the user is not live in
+   * memory (frozen, on disk, absent), holds no entry for the id, or holds another object. No side effect: no thaw, no
+   * `seen`, no order change, so the sync's store reads it before its `put` with nothing moved.
+   */
+  stampOf(scope: Scope, item: ContextItem): number {
+    const u = this.users.get(scopeKey(scope));
+    if (!(u instanceof UserCache)) return 0;
+    const e = u.items.get(item.id);
+    return e !== undefined && e.item === item ? e.stamp : 0;
   }
 
   /** Whether the cached item is held by the user's sync (D57). */
@@ -1384,9 +1445,9 @@ export class ItemCache {
     u.seen = old.seen;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
-      const { item, fetchedAt, readMark, sketch, raw, dates } = e;
+      const { item, fetchedAt, readMark, sketch, raw, dates, stamp } = e;
       const seq = ++this.seqs; // The new index's insertion order.
-      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw, seq, dates };
+      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw, seq, dates, stamp };
       if (e.synced) entry.synced = true;
       u.items.set(e.item.id, entry);
       link(u, entry); // In `items` order, so each class's list keeps its order.
@@ -2042,7 +2103,9 @@ export class ItemCache {
     let maxSeq = 0;
     const oldest: [number, number] = [Number.NaN, Number.NaN];
     const newest: [number, number] = [Number.NaN, Number.NaN];
+    const stamps: number[] = [];
     for (const e of u.items.values()) {
+      stamps.push(e.stamp);
       const s = e.synced ? SYNCED : LOOSE;
       if (Number.isNaN(oldest[s])) oldest[s] = e.fetchedAt;
       newest[s] = e.fetchedAt;
@@ -2065,7 +2128,20 @@ export class ItemCache {
     // zstd at level 3 over the whole user: 270 B an item against 464 for deflate at its default level, at 3.3 against
     // 42.7 µs an item (500 workload items, `.local` scratch measurement; docs/research/a14-scale-users.md).
     const blob = Bun.zstdCompressSync(utf8.encode(json), { level: 3 });
-    return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen, maxSeq);
+    const f = new FrozenUser(
+      u.scope,
+      u.revision,
+      u.synced,
+      u.items.size,
+      u.probes,
+      blob,
+      oldest,
+      newest,
+      u.seen,
+      maxSeq,
+    );
+    f.stamps = stampsOf(stamps);
+    return f;
   }
 
   /**
@@ -2081,7 +2157,9 @@ export class ItemCache {
     const oldest: [number, number] = [Number.NaN, Number.NaN];
     const newest: [number, number] = [Number.NaN, Number.NaN];
     let n = 0;
+    const stamps: number[] = [];
     for (const e of u.items.values()) {
+      stamps.push(e.stamp);
       const s = e.synced ? SYNCED : LOOSE;
       if (Number.isNaN(oldest[s])) oldest[s] = e.fetchedAt;
       newest[s] = e.fetchedAt;
@@ -2170,7 +2248,20 @@ export class ItemCache {
       blob.set(b, t);
       t += b.byteLength;
     }
-    return new FrozenUser(u.scope, u.revision, u.synced, u.items.size, u.probes, blob, oldest, newest, u.seen, maxSeq);
+    const f = new FrozenUser(
+      u.scope,
+      u.revision,
+      u.synced,
+      u.items.size,
+      u.probes,
+      blob,
+      oldest,
+      newest,
+      u.seen,
+      maxSeq,
+    );
+    f.stamps = stampsOf(stamps);
+    return f;
   }
 
   /**
@@ -2251,6 +2342,7 @@ export class ItemCache {
         raw: r.r,
         seq: r.q,
         dates: thawedDates(r.t),
+        stamp: f.stamps?.[j] ?? 0,
       };
       if (r.s === 1) {
         entry.synced = true;
@@ -2432,6 +2524,7 @@ export class ItemCache {
         raw: r.r,
         seq: r.q,
         dates: thawedDates(r.t),
+        stamp: f.stamps?.[j] ?? 0,
       };
       if (r.s === 1) {
         entry.synced = true;
