@@ -97,7 +97,7 @@ Where it loses:
   every 10–20 characters (31–113 ms at 1 MB against 8–15 ms), where each finding pays for the allowlists, the gating
   and the structural pass. All stay linear. As a command (startup included) it is faster on 23 of 24.
 - **Against the previous gate on ordinary text.** Each alone in its process, CPU time over its first 5,000 calls
-  (the review's bench, 8 rounds): 0.62–0.67x of its time at 16 KB and 0.63–0.91x at 1 MB; at 2 KB 0.86x with no
+  (the review's bench, 8 rounds): 0.62–0.90x of its time at 16 KB and 0.63–0.91x at 1 MB; at 2 KB 0.86x with no
   finding and 0.98–1.05x with findings or with values left as code. Those 2 KB medians sit within the previous
   gate's spread against itself, not clearly under it: what is left there is the compiler's threads compiling code
   during a process's first thousands of calls (after warm-up the same texts read 0.77–0.93x).
