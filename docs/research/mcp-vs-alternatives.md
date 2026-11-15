@@ -796,7 +796,7 @@ real cost, and only the first counts it. "Before" is D1908 as reviewed (aa64d4de
 | Size | Path | Before, no GC / GC | After, no GC / GC | Control, no GC / GC |
 |---|---|---|---|---|
 | 2 MB | text | 1.15 / 0.99 | 0.88 / 0.87 | 0.94 / 0.93 |
-| 6 MB | text | 6.09 / 5.82 | 0.87 / 0.87 | 0.96 / 0.95 |
+| 6 MB | text | 6.09 / 5.82 | 0.87 / 0.87 (0.86-0.95 with a GC in D1919's sweeps) | 0.96 / 0.95 |
 | 12.6 MB | text | 8.46 / 8.95 | 0.49 / 0.50 | 0.98 / 0.96 |
 | 2 MB | bytes | 1.29 / 1.14 | 1.13 / 1.15 | 0.94 / 0.82 |
 | 6 MB | bytes | 1.34 / 1.19 | 1.03 / 0.78 | 1.03 / 0.84 |
@@ -896,7 +896,134 @@ proven wrong costs one parse of the string's literal; finding the string's end w
 search the guess exists to avoid), 1.23-1.43 on D1908's code alongside; and a number array whose last element has more
 than 15 digits, which `readNumbers` reads to the end before it meets the element it leaves to `JSON.parse` (1.87-1.88 on
 D1908's code: not new, and linear, at most one read of the array more than main; an array of 17-digit floats stops at
-its first element and costs nothing).
+its first element and costs nothing). Too narrow, the fourth review found: any element the reader leaves to
+`JSON.parse` late in a long array cost the same (a `null` in a series 1.3-1.6x), and the 17-digit floats cost memory
+before refusing; both fixed by D1919, below.
+
+## The fourth review's fixes (D1919)
+
+A fourth independent review (of D1909) found no answer that differed from main's (0 differences over 120,000 fuzz
+checks, `known` never true out of bounds, linear) and two cost findings, both in the number reader, plus docs that
+described D1909's leftover too narrowly. D1919 fixes them; no answer changed: 0 differences from main's real `json.ts`
+and `shape.ts` and `JSON.parse` on 689,886 checks (344,943 bodies, each on the text and the bytes path) over eighteen
+fresh seeds, about a quarter of them from a generator that puts `null`, `true`, `false`, 16-17-digit numbers and broken
+elements at every position of number arrays (first, last, around the first region's and the reach's ends), 119,972
+checks on the final tree.
+
+**Method.** The review's 4×4 Latin square: main, D1909's code (680c818a9, "before"), the branch and a copy of the
+branch (the control, a second module instance of identical code) each take every slot equally often, 24-32 rounds,
+each cell without a forced GC and with one before every batch; the ratio is the arm's CPU over main's in the same round,
+median and interquartile range. The two copies of the branch disagree by up to 30% on a few cells (`[1,...]` nested
+candidates with a forced GC: 1.11-1.18 against 0.85-0.91, in three sweeps), so only differences larger than the
+control's are read as real.
+
+**A non-number late in a long number array.** The reader read up to the element, gave up, and the scan crossed the
+whole array again from where it had asked, then the parse read it a third time; past 2 M characters `commasIn` had
+also counted the whole array first. Four changes: `readNumbers` reads `null`, `true` and `false` as elements (a metrics
+series with gaps is a number array, and `JSON.parse` makes the same array of it); the last element is read before
+anything else (`lastElementReads`), so an array that ends in a number of more than 15 digits goes to the scan at once;
+where the reader stops at any other element it reports where and how many commas came before (`numbersStop`), and the
+scan goes on from there with them counted (everything before is numbers' characters, commas and spaces, of which the
+scan counts only the commas, so its answer cannot change); `commasIn` stops at any character no number array holds. On
+the bytes path the byte scan stops for a candidate only where the text path would read it (`readsAt`: the `]` far
+enough, no quote before it, the last element read), so `[1,...,12345678901234567]` keeps main's byte scan.
+
+| Shape (1 MB unless given) | Path | Before, no GC / GC | After, no GC / GC | Control, no GC / GC |
+|---|---|---|---|---|
+| series, one `null` third from last | text | 1.27 / 1.52 | 0.41 / 0.62 | 0.41 / 0.63 |
+| same, 3 MB | text | 1.42 / 1.54 | 0.52 / 0.54 | 0.51 / 0.56 |
+| same | bytes | 1.43-1.44 / 1.52-1.60 | 0.51-0.59 / 0.60-0.61 | 0.47-0.48 / 0.59-0.63 |
+| same, 3 MB | bytes | 0.96 / 0.93 | 0.99 / 0.98 | 0.94 / 0.95 |
+| ids, a 17-digit id last | text | 1.33 / 1.60 | 0.87 / 0.83 | 0.84 / 0.79 |
+| same | bytes | 1.64-1.85 / 1.70-1.89 | 0.98-1.17 / 1.03-1.08 | 0.99-1.10 / 1.00-1.12 |
+| `[1,...,12345678901234567]` | text | 1.70 / 1.56 | 1.04 / 0.92 | 0.89 / 0.99 |
+| same | bytes | 1.88-1.89 / 1.99-2.03 | 1.01-1.02 / 1.06-1.07 | 1.00-1.04 / 1.03-1.08 |
+| series, a `null` every 200, 3 MB | text | 1.25 / 1.15 | 0.54 / 0.50 | 0.61 / 0.48 |
+| same | bytes | 0.99 / 0.98 | 1.04 / 1.00 | 1.02 / 1.02 |
+| `[1,true,true,...]`, 4 MB | text | 1.27 / 1.24 | 0.61 / 0.59 | 0.73 / 0.58 |
+| `[1 x600, null,...]`, 4 MB | text | 1.19 / 1.50 | 0.64 / 0.59 | 0.65 / 0.61 |
+| `[true,...]`, 4 MB | text | 1.15 / 1.19 | 0.68 / 0.63 | 0.63 / 0.58 |
+| ids, a 17-digit id in the middle | text | 1.16 / 1.31 | 0.88 / 1.06 | 0.90 / 1.14 |
+
+Reading the literals is what moves the series from about main's cost to about half of it; the resume alone (the
+review's prototype) brought the late `null` to 0.96-1.14. A series at 3 MB on the bytes path is past twice the value
+bound, where the byte scan runs whole first (below), so reading it saves little there. `long-reply.test.ts` holds the
+late-gap series under 0.85x the plain path (1.6x on D1909's code) and `[12,...,12345678901234567]` with the long number
+last and third from last under 1.3x (1.8x and 1.4x on D1909's code).
+
+**Memory for full-precision floats.** `JSON.stringify` writes computed doubles with 16-17 significant digits, which the
+reader refuses at the first element; before refusing, `commasIn` had sliced the whole array region by region and
+`readNumbers` had made an array of its length (about 930,000). Both now wait until the first region has read as
+numbers. Peak RSS above baseline at 16 MiB, median of 7 processes [range]:
+
+| Shape, harness | Path | main | before | after |
+|---|---|---|---|---|
+| computed doubles, one arm's code a process, cold | text | 24.0 | 38.1 | 29.7 |
+| same, warmed (baseline before the warm-up) | text | 1.5 | 15.7 | 8.3 |
+| flat 16-digit floats, one arm, cold / warmed | text | 23.4 / 1.6 | 38.3 / 16.0 | 30.0 / 8.6 |
+| the 200-level nested reply (`worst.ts`), one arm, cold / warmed | text | 23.4 / 1.9 | 30.4 / 10.9 | 30.8 / 11.2 |
+| computed doubles, every arm's code in every process, cold | text | 10.9 | 19.1 | 11.2 |
+| same, warmed / baseline after the warm-up | text | 4.4 / 4.5 | 13.1 / 5.6 | 5.5 / 5.2 |
+| flat 16-digit floats, every arm, cold / warmed | text | 10.1 / 4.3 | 19.5 / 13.5 | 11.2 / 5.9 |
+| accepted numbers (6.5 MB), one arm, cold / warmed | text | 22.5 / 13.6 | 17.7 / 11.5 | 18.2 / 12.4 |
+| accepted series with gaps (6.5 MB), one arm, cold / warmed | text | 22.7 / 20.1 | 31.0 / 28.0 | 18.7 / 12.6 |
+| accepted numbers, series with gaps, one arm, cold | bytes | 34.0, 34.9 | 34.7, 35.6 | 34.9, 35.8 |
+| computed doubles, one arm, cold / warmed | bytes | 38.2 / 38.4 | 45.8 / 45.4 | 46.0 / 45.3 |
+| same, every arm, baseline after the warm-up | bytes | 10.7 [8.4-12.8] | 9.6 [7.5-12.6] | 13.0 [10.6-13.6] |
+| flat 16-digit floats, one arm, cold / warmed | bytes | 38.0 / 45.1 | 38.7 / 45.4 | 39.0 / 45.8 |
+
+The reply's own allocation is gone (the 14 MB D1909 added on the floats). What is left above main on the text path is
+code: importing D1919's module into main's process without calling it moves main's warmed reading from 1.5 to 6.4-6.7
+MB, the nested reply, whose path D1919 did not change, reads the same gap on D1909's code, and with every arm's code
+loaded in every process the gap is 0.3-1.6 MB. A cold process on the bytes path past twice the value bound lands one
+8 MB step over main for the floats (single runs 35-46 MB for every arm, so bimodal): it runs, and compiles, the text
+scan after the byte scan; so did D1909's code.
+
+**Docs.** D1909 described the leftover as "a number array whose last element has more than 15 digits"; any element the
+reader leaves to `JSON.parse` late in a long array cost the same, and a `null` in a series is the common one. D1909's
+nested candidates with a forced GC on the text path read 0.86-0.95 on D1909's code in this session's four sweeps (the
+review read about 1.0), not 0.87 throughout.
+
+**Tried and dropped.** Sizing an array on the bytes path from the byte scan's count of the reply's values, to skip
+counting its commas (about 15% of a 3 MB series there): with nested candidates every level made an array that long
+before giving up at the next `[` (6-12.6 MB, bytes, 1.05-1.19x against 0.92-0.97 counting).
+
+**The other shapes**, after (ratio of main's CPU, no GC / GC, the before and control columns alongside in the same
+runs; only differences beyond the control's spread are changes):
+
+| Shape | Path | Before | After | Control |
+|---|---|---|---|---|
+| numbers, 64 KB and 1 MB | text | 0.41-0.54 | 0.41-0.50 | 0.38-0.50 |
+| numbers, 1 MB | bytes | 0.46 / 0.50 | 0.41 / 0.53 | 0.49 / 0.51 |
+| computed doubles, 16 MiB | text / bytes | 0.71-0.92 / 0.94-0.99 | 0.45-0.60 / 0.98-0.99 | 0.46-0.61 / 0.96-0.97 |
+| flat 16-digit floats, 16 MiB | bytes | 1.11-1.24 | 1.07-1.25 | 0.99-1.25 |
+| `[[n,2,3],...]`, 64 KB and 1 MB | text / bytes | 0.92-1.07 / 0.99-1.12 | 0.89-0.99 / 1.01-1.02 | 0.93-0.99 / 0.98-1.05 |
+| `[[1],[1],...]` | text / bytes | 0.94-1.07 / 1.02-1.03 | 0.95-1.09 / 1.02-1.07 | 0.93-1.09 / 1.06-1.07 |
+| nested candidates, 2-6 MB | text | 0.86-1.18 | 0.90-1.18 | 0.85-1.19 |
+| nested candidates, 12.6 MB | text | 0.52-0.53 | 0.51 | 0.49-0.51 |
+| nested candidates, 2-12.6 MB | bytes | 0.92-1.41 | 0.98-1.47 | 0.94-1.28 |
+| the 200-level nested reply, 16 MiB | text / bytes | 0.44-0.51 / 1.12-1.27 | 0.47-0.50 / 0.95-1.26 | 0.46-0.51 / 0.89-1.28 |
+| nested, a level just past the reach, 4-16 MB | text | 0.88-0.94 | 0.94-0.95 | 0.86-0.92 |
+| siblings each broken by an object, 4-15 MB | text | 1.25-1.31 | 1.06-1.09 | 1.04-1.08 |
+| refused number flood, 2 and 16 MB | text | 0.65-0.95 | 0.60-0.95 | 0.59-0.90 |
+| same | bytes | 0.79-1.12 | 0.78-1.16 | 0.76-1.13 |
+| tool output with escapes, 6.5-15.7 MB | bytes | 0.97-1.01 | 0.99-1.05 | 0.99-1.03 |
+| tool output with escapes, 1 MB | text | 0.40 | 0.37-0.38 | 0.36-0.43 |
+| multi-byte text, 0.4-1.8 M characters | bytes | 0.96-1.04 | 1.01-1.05 | 0.99-1.04 |
+| plain text, 8 KB and 1 MB | text / bytes | 1.00-1.03 / 0.61-0.67 | 0.97-1.06 / 0.66 | 0.99-1.04 / 0.62-0.68 |
+| rows of objects, 64 KB and 1 MB | text / bytes | 0.93-1.12 / 0.86-0.91 | 0.93-1.17 / 0.91-0.97 | 0.98-1.13 / 0.92-0.96 |
+| 40 long plain strings, 64 KB | text | 1.05-1.08 | 1.00-1.03 | 1.03-1.11 |
+| refused depth bomb (main 1-2 µs) | text / bytes | 1.17-1.71 / 1.37-1.86 | 1.23-1.73 / 1.71-1.76 | 1.15-1.67 / 1.42-1.76 |
+| hostile wrong guess | text | 1.22-1.31 | 1.25-1.28 | 1.24-1.28 |
+
+The bytes path past twice the value bound (2 MB with these bounds) is where D1919 leaves costs over main, as D1909
+did: the byte scan runs whole there to find whether the text path has anything to read, `byteShapeOrStop` costs
+1.5-2x main's `bodyShapeWithin` on 16 MiB of floats (27-36 against 15-25 ms in one process), and what the text path
+then reads pays back little after it. Not changed here; the cells match D1909's code within the control. Linear:
+`lin.ts`'s nested and hostile shapes (a level per reach, spaced levels, siblings broken by objects, a far object, a
+series with a late gap, a long id in the middle, numbers among `true`s) cost the same per MB from 2 to 16 MB (the
+medians of 6 runs, a forced GC before each, 0.4-1.9x main from size to size; rerun beside D1909's code, the
+level-per-reach shape at 8 and 16 MB read 38-57 and 75-81 ms against its 39-40 and 76-77).
 
 ## Packaging
 
