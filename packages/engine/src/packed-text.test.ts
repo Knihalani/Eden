@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache } from "./cache";
 import { termIds } from "./text";
-import { decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
+import { clearDecoded, decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
 
 const scope = { tenantId: "t", userId: "u" };
 const NOW = Date.UTC(2026, 10, 6, 9);
@@ -45,6 +45,61 @@ describe("packItem (packText, D188)", () => {
     for (let round = 0; round < 2; round++) {
       for (let i = items.length - 1; i >= 0; i--) expect(items[i]!.text).toBe(longText(`n${i}`));
     }
+  });
+
+  test("a fresh copy's text is in the decode memo, equal to the text packed, Latin-1 and not (D1913)", () => {
+    for (const text of [longText("x").replace(/[^\x00-\xff]/g, "-"), longText("y")]) {
+      clearDecoded();
+      const packed = packItem(item("fresh", text));
+      expect(isPacked(packed)).toBe(true);
+      expect(decodedCount()).toBe(1);
+      expect(packed.text).toBe(text);
+      expect(packedOf(packed)!.latin1).toBe(!/[^\x00-\xff]/.test(text));
+    }
+  });
+});
+
+describe("a packed copy reads one text, from the memo or inflated (the review of D1913)", () => {
+  // Random texts long enough to pack, from pieces that decide the encoding and what a decode could change: a leading
+  // byte order mark (TextDecoder drops one unless told not to), lone and paired surrogates, Latin-1 and two-byte
+  // characters, and plain ASCII.
+  const PIECES = ["﻿", "\ud800", "\udc00", "😀", "é", "ß", "→", "—", "東京", "plain words ", "\n", "ÿ"];
+  function rng(seed: number) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  test("the memo's read equals a real inflate's, and a packed copy's text equals the text packed", () => {
+    const r = rng(19130);
+    let packed = 0;
+    let boms = 0;
+    for (let i = 0; i < 3_000; i++) {
+      let text = r() < 0.2 ? "﻿" : "";
+      while (text.length < MIN_PACK_CHARS * 2) {
+        const p = PIECES[Math.floor(r() * PIECES.length)]!;
+        // Mostly words, so most texts compress and pack; the odd pieces in between.
+        text += r() < 0.7 ? "the meeting moved to Friday at noon " : p;
+      }
+      const copy = packItem(item(`r${i}`, text));
+      const fromMemo = copy.text;
+      clearDecoded();
+      const inflated = copy.text;
+      expect(fromMemo).toBe(inflated);
+      if (isPacked(copy)) {
+        packed++;
+        if (text.charCodeAt(0) === 0xfeff) boms++;
+        expect(inflated).toBe(text);
+      }
+    }
+    // The run reached packed copies, BOM-led ones among them.
+    expect(packed).toBeGreaterThan(1_000);
+    expect(boms).toBeGreaterThan(100);
   });
 });
 

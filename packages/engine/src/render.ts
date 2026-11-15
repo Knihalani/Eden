@@ -503,29 +503,48 @@ function saysUnknown(s: string, known: (word: string) => boolean): boolean {
   return false;
 }
 
+/** A code unit in a surrogate pair's range: `wordsIn` then reads the string by its regex. */
+const SURROGATE = /[\uD800-\uDFFF]/;
+
+/** The class of code unit `c` in `WORD_UNITS` (1 a letter or digit, 2 not), read on its first use. */
+function unitOf(c: number): number {
+  const k = WORD_UNITS[c]!;
+  return k !== 0 ? k : readWordUnit(c);
+}
+
 /**
- * How many of `s`'s words (`wordsIn`) are in `focus`, given as its words (`focus`'s strings): each word compared in
- * place with the few focus words of its length, with no string made of it (D1884).
+ * `focus`'s strings that could equal a word `wordsIn`'s code-unit scan reads: not empty, every code unit a letter or
+ * digit, no surrogate. No other string equals such a word, so `focusCount` searches only these.
  */
-function focusCount(s: string, focus: readonly string[]): number {
+export function focusWordsOf(focus: readonly string[]): string[] {
+  return focus.filter((w) => {
+    if (w.length === 0) return false;
+    for (let i = 0; i < w.length; i++) if (unitOf(w.charCodeAt(i)) !== 1) return false;
+    return true;
+  });
+}
+
+/**
+ * How many of `s`'s words (`wordsIn`) are in `focus` (`all`, the focus's strings; `words`, those of them
+ * `focusWordsOf` keeps). Each focus word is searched with `indexOf` and counted where neither neighbour is a letter
+ * or digit: such a match is exactly one of `s`'s words, and one word equals at most one distinct focus string, so the
+ * sum is the count a scan of `s`'s words makes (D1910; `focusCountScan` in `render-focus.test.ts` is D1884's scan,
+ * the oracle). A string with a surrogate is read by `wordsIn`'s regex, whose words can hold an astral letter, so it
+ * is compared with every focus string.
+ */
+export function focusCount(s: string, words: readonly string[], all: readonly string[]): number {
+  if (all.length === 0) return 0;
+  if (SURROGATE.test(s)) return focusCountOf(wordsIn(s), all);
   let n = 0;
-  let start = -1;
-  for (let i = 0; i <= s.length; i++) {
-    const c = i < s.length ? s.charCodeAt(i) : 32;
-    let k = WORD_UNITS[c]!;
-    if (k === 0 && (k = readWordUnit(c)) === 0) return focusCountOf(wordsIn(s), focus);
-    if (k === 1) {
-      if (start < 0) start = i;
-    } else if (start >= 0) {
-      const len = i - start;
-      for (let f = 0; f < focus.length; f++) {
-        const w = focus[f]!;
-        if (w.length === len && s.startsWith(w, start)) {
-          n++;
-          break;
-        }
-      }
-      start = -1;
+  for (let f = 0; f < words.length; f++) {
+    const w = words[f]!;
+    let i = s.indexOf(w);
+    while (i >= 0) {
+      const end = i + w.length;
+      if ((i === 0 || unitOf(s.charCodeAt(i - 1)) !== 1) && (end === s.length || unitOf(s.charCodeAt(end)) !== 1)) {
+        n++;
+        i = s.indexOf(w, end);
+      } else i = s.indexOf(w, i + 1);
     }
   }
   return n;
@@ -722,11 +741,12 @@ function allParts(
 
 /** The parts that bear most on the request's words, at most `maxBytes`, in their own order, gaps marked "…". */
 function pick(parts: Part[], keys: readonly string[], focus: ReadonlySet<string>, maxBytes: number): string {
-  const focusWords = [...focus];
+  const focusAll = [...focus];
+  const focusWords = focusWordsOf(focusAll);
   const score = (part: Part, k: number) => {
     let n = k === 0 ? 0.5 : 0;
     // Its words in `focus`, read from its text in lower case (`readParts`' keys).
-    n += focusCount(keys[k]!, focusWords);
+    n += focusCount(keys[k]!, focusWords, focusAll);
     n += DIGIT.test(part.text) ? 1 : 0;
     return part.quoted ? (n >= 1 ? n - 0.75 : -1) : n - k * 0.001; // ties: the earlier part
   };
