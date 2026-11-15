@@ -4,7 +4,7 @@
  * literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { sanitizeForStore, secretHits } from "./secrets";
+import { sanitizeForStore, secretHits } from "./secrets.ts";
 
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/+";
 

@@ -27,6 +27,8 @@
  * `isSecretKey()` that object keys go through, which makes the two impossible
  * to drift apart again.
  */
+import { notSecret } from "./not-secret.ts";
+import { identity, type Iv, replaced, traced, union } from "./pieces.ts";
 const SECRET_NOUNS = [
   "apikey",
   "accesskey",
@@ -121,6 +123,15 @@ export function redactPem(s: string): string {
 
 /** Global, for replacing every occurrence. */
 const SECRET_INLINE = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "gi");
+/**
+ * Sticky, tried only where a match can start (`tokenPasses`'s `inlineAt`). Every match holds one of the last token
+ * pass's literals (TOKEN_PASSES) at its start, or one character after it (`[sr]k_live_`), in ASCII letters of either
+ * case, which the gate's prefilter reports (it folds case and more): so a match starts at most `INLINE_BACK` before
+ * an occurrence of one.
+ */
+const SECRET_INLINE_AT = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "iy");
+/** How far before a literal of the last token pass a match can start: 0, or 1 for `k_live_`/`k_test_`. */
+export const INLINE_BACK = 1;
 /** Non-global, so `.test()` carries no lastIndex between calls. */
 const SECRET_ANY = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "i");
 
@@ -139,6 +150,8 @@ const SECRET_ANY = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "i");
  * characters once, and the digit test runs on the match.
  */
 const SK_DASHED = /\bsk-[A-Za-z0-9_-]{8,}/gi;
+/** Sticky, tried only at the occurrences of `sk-` (`tokenPasses`'s `at.dashed`): every match starts with it. */
+const SK_DASHED_AT = /\bsk-[A-Za-z0-9_-]{8,}/iy;
 const DIGIT = /[0-9]/;
 
 function redactDashedSk(s: string): string {
@@ -192,6 +205,13 @@ function isKeyChar(c: number): boolean {
 function isSpace(c: number): boolean {
   return c === 32 || c === 9 || c === 10 || c === 13 || c === 12 || c === 11;
 }
+
+/** `ASSIGN_CLASS` values: a key character (`isKeyChar`), a character that ends a value (`endsValue`). */
+const KEY_CHAR = 1;
+const ENDS_VALUE = 2;
+/** Per ASCII code unit, its class for `scanAssignments` (a table load in its loops; D1850). */
+const ASSIGN_CLASS = new Uint8Array(128);
+for (let c = 0; c < 128; c++) ASSIGN_CLASS[c] = isKeyChar(c) ? KEY_CHAR : endsValue(c) ? ENDS_VALUE : 0;
 
 /** Where a value ends: whitespace, or a separator that starts a *different* field. */
 function endsValue(c: number): boolean {
@@ -302,20 +322,46 @@ function endsWithNoun(n: number, from: number): boolean {
  * fast-path gate was not — there is nothing here that can drift out of step
  * with the nouns.
  */
+/**
+ * Where a quoted value that opens before `from` ends: just past its closing `quote`, where a walk from `from` that
+ * steps over the character after each backslash stops (past the text's end when none closes it). By `indexOf`, not
+ * that walk: a quote closes the value when the run of backslashes before it (from `from`) is even, since a backslash
+ * outside that run is followed by a character that is not one.
+ */
+function quotedEnd(s: string, from: number, quote: number): number {
+  const char = quote === 34 ? '"' : "'";
+  let at = from;
+  for (;;) {
+    const q = s.indexOf(char, at);
+    if (q < 0) break;
+    let back = q;
+    while (back > from && s.charCodeAt(back - 1) === 92 /* \ */) back--;
+    if (((q - back) & 1) === 0) return q + 1;
+    at = q + 1;
+  }
+  // No closing quote: the walk runs to the end, stepping over the character after each backslash.
+  let end = at;
+  while (end < s.length) end += s.charCodeAt(end) === 92 ? 2 : 1;
+  return end;
+}
+
 function scanAssignments(
   s: string,
   onSecret: null | ((keyEnd: number, valueStart: number, valueEnd: number) => void),
+  excuse: boolean,
 ): boolean {
   // The next `=` and `:` at or after the cursor, by indexOf (native), rather than a test of every character.
   let eq = s.indexOf("=");
   let colon = s.indexOf(":");
   if (eq < 0 && colon < 0) return false;
+  const n = s.length;
   let found = false;
-  for (let i = 0; i < s.length; i++) {
+  let i = 0;
+  while (i < n) {
     if (eq >= 0 && eq < i) eq = s.indexOf("=", i);
     if (colon >= 0 && colon < i) colon = s.indexOf(":", i);
     if (eq < 0 && colon < 0) break;
-    i = eq < 0 ? colon : colon < 0 ? eq : Math.min(eq, colon);
+    i = eq < 0 ? colon : colon < 0 ? eq : eq < colon ? eq : colon;
 
     // Key: walk back over key characters, stepping over one optional quote so
     // that serialised JSON ("token":"…") is covered too.
@@ -325,36 +371,44 @@ function scanAssignments(
       if (q === 34 || q === 39) keyEnd--;
     }
     let keyStart = keyEnd;
-    const floor = Math.max(0, keyEnd - MAX_KEY_LEN);
-    while (keyStart > floor && isKeyChar(s.charCodeAt(keyStart - 1))) keyStart--;
-    if (keyStart === keyEnd) continue;
+    const floor = keyEnd > MAX_KEY_LEN ? keyEnd - MAX_KEY_LEN : 0;
+    while (keyStart > floor) {
+      const c = s.charCodeAt(keyStart - 1);
+      if (c >= 128 || ASSIGN_CLASS[c] !== KEY_CHAR) break;
+      keyStart--;
+    }
+    if (keyStart === keyEnd) {
+      i++;
+      continue;
+    }
 
     // Value: whitespace, then a run that stops at the next field. A quoted
     // value runs to its closing quote — commas inside it belong to the value
     // ("password":"a,b","n":1 must keep n) and an escaped quote (`\"`) does
     // not close it, or the tail of the secret survives in the clear.
     let valueStart = i + 1;
-    while (valueStart < s.length && isSpace(s.charCodeAt(valueStart))) valueStart++;
+    while (valueStart < n && isSpace(s.charCodeAt(valueStart))) valueStart++;
     let valueEnd = valueStart;
     const vq = s.charCodeAt(valueStart);
     if (vq === 34 || vq === 39) {
-      valueEnd++;
-      while (valueEnd < s.length) {
-        const c = s.charCodeAt(valueEnd);
-        if (c === 92 /* \ */) {
-          valueEnd += 2;
-          continue;
-        }
-        valueEnd++;
-        if (c === vq) break;
-      }
+      valueEnd = quotedEnd(s, valueStart + 1, vq);
     } else {
-      while (valueEnd < s.length && !endsValue(s.charCodeAt(valueEnd))) valueEnd++;
+      while (valueEnd < n) {
+        const c = s.charCodeAt(valueEnd);
+        if (c < 128 && ASSIGN_CLASS[c] === ENDS_VALUE) break;
+        valueEnd++;
+      }
     }
-    if (valueEnd === valueStart) continue;
+    if (valueEnd === valueStart) {
+      i++;
+      continue;
+    }
 
-    i = valueEnd - 1;
+    i = valueEnd;
     if (!secretKeyAt(s, keyStart, keyEnd)) continue;
+    // Code or a placeholder as the value (`maxTokens: 2_000`, `apiKey: string`) is no credential (D1850), where
+    // the caller excuses them: the secret gate runs this pass as main did and takes them back itself (compose.ts).
+    if (excuse && notSecret(s.slice(valueStart, valueEnd))) continue;
     found = true;
     if (!onSecret) return true;
     onSecret(keyEnd, valueStart, valueEnd);
@@ -371,8 +425,23 @@ function scanAssignments(
  */
 export function assignmentSpans(s: string): [number, number][] {
   const spans: [number, number][] = [];
-  scanAssignments(s, (_keyEnd, valueStart, valueEnd) => spans.push([valueStart, valueEnd]));
+  scanAssignments(s, (_keyEnd, valueStart, valueEnd) => spans.push([valueStart, valueEnd]), false);
   return spans;
+}
+
+/** `assignmentSpans`, and the ones whose value is not code or a placeholder (D1850, compose.ts). */
+export function assignmentSpansSplit(s: string): { all: [number, number][]; strict: [number, number][] } {
+  const all: [number, number][] = [];
+  const strict: [number, number][] = [];
+  scanAssignments(
+    s,
+    (_keyEnd, valueStart, valueEnd) => {
+      all.push([valueStart, valueEnd]);
+      if (!notSecret(s.slice(valueStart, valueEnd))) strict.push([valueStart, valueEnd]);
+    },
+    false,
+  );
+  return { all, strict };
 }
 
 export function redactString(s: string): string {
@@ -435,17 +504,31 @@ export function redactTokensIn(s: string, passes: number): string {
 
 /**
  * The assignment pass of `redactString`: `redactString(s)` is `redactAssignments(redactTokensIn(s, ALL_TOKEN_PASSES))`.
+ * `excuse`: leave values that are code or placeholders (D1850). Off by default, so `redactString`, `redact` and
+ * `containsSecret` redact what main did; the secret gate runs it off too, learns through `seen` whether it took one,
+ * and takes such values back itself (compose.ts), where never-less checks them.
  */
-export function redactAssignments(t: string): string {
+export function redactAssignments(
+  t: string,
+  excuse = false,
+  seen?: { excusable: boolean },
+  ranges?: [number, number][],
+): string {
   let out = "";
   let cursor = 0;
-  scanAssignments(t, (_keyEnd, valueStart, valueEnd) => {
-    // Already reduced to the sentinel by the token pass; leave it alone rather
-    // than nesting sentinels.
-    if (valueEnd - valueStart === REDACTED.length && t.startsWith(REDACTED, valueStart)) return;
-    out += t.slice(cursor, valueStart) + REDACTED;
-    cursor = valueEnd;
-  });
+  scanAssignments(
+    t,
+    (_keyEnd, valueStart, valueEnd) => {
+      // Already reduced to the sentinel by the token pass; leave it alone rather
+      // than nesting sentinels.
+      if (valueEnd - valueStart === REDACTED.length && t.startsWith(REDACTED, valueStart)) return;
+      if (seen && !seen.excusable && notSecret(t.slice(valueStart, valueEnd))) seen.excusable = true;
+      ranges?.push([valueStart, valueEnd]);
+      out += t.slice(cursor, valueStart) + REDACTED;
+      cursor = valueEnd;
+    },
+    excuse,
+  );
   return cursor === 0 ? t : out + t.slice(cursor);
 }
 
@@ -454,7 +537,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null);
+  return SECRET_ANY.test(s) || PEM_ANY.test(s) || hasDashedSk(s) || hasBasic(s) || scanAssignments(s, null, false);
 }
 
 /**
@@ -690,4 +773,188 @@ function scan(value: unknown, w: Walk, depth: number, hit: (s: string) => boolea
   } finally {
     w.path.delete(value);
   }
+}
+
+/**
+ * D1850: which characters of `s` the structural pass (`redactAssignments(redactTokensIn(s, passes))`) takes out, as a
+ * mask over `s` (1: removed). The passes run as they do there, each on the last one's output, with each character
+ * of that output traced back to `s` (a sentinel's characters to none): `all`, and `strict`, where an assignment
+ * value that is code or a placeholder (not-secret.ts) is not counted as removed (its text goes to `values` when
+ * given). The secret gate uses it to add its D1850 rules' spans to what the passes removed without letting them change
+ * what the passes see (`sanitizeForStore`).
+ */
+export function structuralMasks(s: string, passes: number, values?: string[]): { all: Uint8Array; strict: Uint8Array } {
+  return structuralMasksOf(tokenPasses(s, passes), values);
+}
+
+/** The token passes' output on a text, and the ranges each pass replaced (in its input), for `structuralMasksOf`. */
+export interface TokenPassed {
+  source: string;
+  out: string;
+  steps: [number, number][][];
+}
+
+/**
+ * D1850: `redactTokensIn(s, passes)` (its output is `out`), keeping the ranges each pass replaced, so the masks can be
+ * worked out after it without running the passes' regexes again (7 ms a megabyte each time).
+ *
+ * `at`, when given, holds every place in `s` where a match of the dashed `sk-` pass (`dashed`) and of the inline
+ * token shapes (`inline`, the last pass) can start, ascending (the secret gate's prefilter found their literals:
+ * `passStarts` in secrets.ts); each of those passes then tries its regex there alone, sticky, unless an earlier pass
+ * changed the text. The global regexes scanned every position of the text (2-3 ns a character, a sixth of the gate
+ * on a 16 KB text holding `task-`).
+ */
+export function tokenPasses(
+  s: string,
+  passes: number,
+  at?: { dashed: ArrayLike<number>; inline: ArrayLike<number> },
+): TokenPassed {
+  let cur = s;
+  const steps: [number, number][][] = [];
+  /** Replaces `ranges` of `cur` (increasing, apart) by the sentinel. */
+  const replace = (ranges: [number, number][]) => {
+    if (ranges.length === 0) return;
+    let out = "";
+    let at = 0;
+    for (const [start, end] of ranges) {
+      out += cur.slice(at, start) + REDACTED;
+      at = end;
+    }
+    cur = out + cur.slice(at);
+    steps.push(ranges);
+  };
+  /**
+   * One regex pass as `redactTokensIn` runs it (`replace`, one native pass), recording where each replaced match
+   * stood: `keep(match, group1)` says whether it goes. An `exec` loop cost 30% more on text with no match.
+   */
+  const pass = (regex: RegExp, keep: (match: string, group: string) => boolean) => {
+    const ranges: [number, number][] = [];
+    regex.lastIndex = 0;
+    const out = cur.replace(regex, (...args: unknown[]) => {
+      const match = args[0] as string;
+      if (!keep(match, args[1] as string)) return match;
+      // The offset follows the groups; a named group would add an object after it (none of these has one).
+      const at = args[args.length - 2] as number;
+      ranges.push([at, at + match.length]);
+      return REDACTED;
+    });
+    if (ranges.length > 0) {
+      cur = out;
+      steps.push(ranges);
+    }
+  };
+  if ((passes & 1) !== 0 && cur.indexOf("-----") >= 0) {
+    // redactPem's walk: each banner to the END line after it, or alone once no END is left.
+    const ranges: [number, number][] = [];
+    PEM_BEGIN.lastIndex = 0;
+    let endsLeft = true;
+    for (let m = PEM_BEGIN.exec(cur); m !== null; m = PEM_BEGIN.exec(cur)) {
+      let stop = m.index + m[0].length;
+      if (endsLeft) {
+        PEM_END.lastIndex = stop;
+        const e = PEM_END.exec(cur);
+        if (e === null) endsLeft = false;
+        else stop = e.index + e[0].length;
+      }
+      ranges.push([m.index, stop]);
+      PEM_BEGIN.lastIndex = stop;
+    }
+    replace(ranges);
+  }
+  /**
+   * `pass`, where every match starts at one of `starts` (ascending): `replace`'s matches are the leftmost match at
+   * or after the last one's end, each time, so trying the starts in order with the same regex, sticky, finds the
+   * same ones (none is empty). Only while no earlier pass changed the text (the starts are `s`'s).
+   */
+  const passAt = (sticky: RegExp, starts: ArrayLike<number>, keep: (match: string) => boolean) => {
+    const ranges: [number, number][] = [];
+    let end = 0;
+    for (let k = 0; k < starts.length; k++) {
+      const at = starts[k]!;
+      if (at < end) continue;
+      sticky.lastIndex = at;
+      const m = sticky.exec(cur);
+      if (m === null) continue;
+      end = at + m[0].length;
+      if (keep(m[0])) ranges.push([at, end]);
+    }
+    replace(ranges);
+  };
+  if ((passes & 2) !== 0) {
+    if (at && steps.length === 0) passAt(SK_DASHED_AT, at.dashed, (match) => DIGIT.test(match));
+    else pass(SK_DASHED, (match) => DIGIT.test(match));
+  }
+  if ((passes & 4) !== 0) pass(BASIC_AUTH, (_match, b64) => isBasicCredential(b64));
+  if ((passes & 8) !== 0) {
+    if (at && steps.length === 0) passAt(SECRET_INLINE_AT, at.inline, () => true);
+    else pass(SECRET_INLINE, () => true);
+  }
+  return { source: s, out: cur, steps };
+}
+
+/**
+ * D1850: what the structural pass removed from its input, as sorted merged intervals of it (pieces.ts): the token
+ * passes' ranges (`passed`) and the assignment pass's (`assigned`, the ranges `redactAssignments` replaced in
+ * `passed.out`, given through its `ranges`), all of them and only those whose value is not code or a placeholder
+ * (whose texts go to `values`). The secret gate's composer reads these instead of a mask per character.
+ */
+export function structuralRemoved(
+  passed: TokenPassed,
+  assigned: [number, number][],
+  values?: string[],
+): { all: Iv[]; strict: Iv[] } {
+  let pieces = identity(passed.source.length);
+  const tokens: Iv[][] = [];
+  for (const ranges of passed.steps) {
+    tokens.push(traced(pieces, ranges));
+    pieces = replaced(pieces, ranges, REDACTED.length);
+  }
+  const strict: Iv[] = [];
+  for (const [start, end] of assigned) {
+    const value = passed.out.slice(start, end);
+    if (notSecret(value)) values?.push(value);
+    else strict.push([start, end]);
+  }
+  return { all: union(...tokens, traced(pieces, assigned)), strict: union(...tokens, traced(pieces, strict)) };
+}
+
+/** `structuralMasks` from the token passes already run (`tokenPasses`): their ranges replayed, then the assignments. */
+export function structuralMasksOf(passed: TokenPassed, values?: string[]): { all: Uint8Array; strict: Uint8Array } {
+  const s = passed.source;
+  const removed = new Uint8Array(s.length);
+  /** Per character of the current text, its index in `s`, or -1 inside a sentinel. */
+  let map = new Int32Array(s.length);
+  for (let i = 0; i < map.length; i++) map[i] = i;
+  let length = s.length;
+  for (const ranges of passed.steps) {
+    const next = new Int32Array(length + ranges.length * REDACTED.length);
+    let n = 0;
+    let at = 0;
+    for (const [start, end] of ranges) {
+      for (let i = at; i < start; i++) next[n++] = map[i]!;
+      for (let i = start; i < end; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+      for (let i = 0; i < REDACTED.length; i++) next[n++] = -1;
+      at = end;
+    }
+    for (let i = at; i < length; i++) next[n++] = map[i]!;
+    map = next;
+    length = n;
+  }
+  const cur = passed.out;
+  // The assignment pass, last: only what it removes is wanted, not its output. Both masks share the token passes.
+  const strict = removed.slice();
+  scanAssignments(
+    cur,
+    (_keyEnd, valueStart, valueEnd) => {
+      if (valueEnd - valueStart === REDACTED.length && cur.startsWith(REDACTED, valueStart)) return;
+      for (let i = valueStart; i < valueEnd; i++) if (map[i]! >= 0) removed[map[i]!] = 1;
+      if (notSecret(cur.slice(valueStart, valueEnd))) {
+        values?.push(cur.slice(valueStart, valueEnd));
+        return;
+      }
+      for (let i = valueStart; i < valueEnd; i++) if (map[i]! >= 0) strict[map[i]!] = 1;
+    },
+    false,
+  );
+  return { all: removed, strict };
 }

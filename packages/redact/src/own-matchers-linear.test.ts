@@ -4,11 +4,11 @@
  * done, whatever else shares the cores. Secret-shaped values are assembled from parts, so no literal here is one.
  */
 import { describe, expect, test } from "bun:test";
-import { compileAllowlistRegex } from "./automaton";
-import { allowlistRegexes, prng } from "./differential";
-import { linearEngine } from "./re2-oracle";
-import { SCANNERS } from "./scanners";
-import { GATE_ENGINES, gateOf, rulesWith } from "./secrets";
+import { compileAllowlistRegex } from "./automaton.ts";
+import { allowlistRegexes, prng } from "./differential.ts";
+import { linearEngine } from "./re2-oracle.ts";
+import { SCANNERS } from "./scanners.ts";
+import { GATE_ENGINES, gateOf, rulesWith } from "./secrets.ts";
 
 const cpuMs = () => {
   const u = process.cpuUsage();

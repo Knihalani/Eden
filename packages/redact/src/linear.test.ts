@@ -6,8 +6,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
-import { linearEngine, re2Source } from "./re2-oracle";
-import { backtrackingEngine, everywhere, rulesWith, secretRules, URL_USERINFO } from "./secrets";
+import { linearEngine, re2Source } from "./re2-oracle.ts";
+import { backtrackingEngine, everywhere, rulesWith, secretRules, URL_USERINFO } from "./secrets.ts";
 
 /** mulberry32: a seeded generator, so a failure names a reproducible text. */
 function prng(seed: number): () => number {
@@ -104,6 +104,12 @@ describe("RE2 for the gitleaks rules", () => {
 describe("eden-url-userinfo", () => {
   const BEFORE = new RegExp(String.raw`\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@`, "dgi");
   const spans = (regex: RegExp, text: string) => [...text.matchAll(regex)].map((found) => found.indices![1]);
+  // The gate's regex has no `d` flag: it reads group 1 back from the match's end, before the closing `@` (spanOf).
+  const fromEnd = (text: string): ([number, number] | undefined)[] =>
+    [...text.matchAll(URL_USERINFO)].map((m) => {
+      const end = m.index + m[0].length - 1;
+      return [end - m[1]!.length, end] as [number, number];
+    });
 
   test("the lookbehind form finds exactly what the old form found", () => {
     const rnd = prng(5);
@@ -115,7 +121,7 @@ describe("eden-url-userinfo", () => {
         .concat(rnd() < 0.3 ? `postgres://u:${i}x@h` : "");
       const expected = spans(BEFORE, text);
       hits += expected.length;
-      expect(spans(URL_USERINFO, text)).toEqual(expected);
+      expect(fromEnd(text)).toEqual(expected);
     }
     expect(hits).toBeGreaterThan(1_000);
   });

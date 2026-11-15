@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { containsSecret, redactString } from "./redact";
-import { sanitizeForStore } from "./secrets";
+import * as baseline from "./redact.baseline.ts";
+import { containsSecret, redactString } from "./redact.ts";
+import { sanitizeForStore } from "./secrets.ts";
 
 // A bound on work, not on waiting: process CPU time, so a loaded machine (four test files at once) does not
 // fail it the way wall time did (weak-points-1111.md R1).
@@ -136,4 +137,18 @@ test("HTTP Basic credentials are redacted; prose after the word Basic keeps its 
   expect(sanitizeForStore("proxy auth was basic YWRtaW46aHVudGVyMjI=")).not.toContain("YWRtaW46aHVudGVyMjI");
   const accented = Buffer.from("jörg:pässwörd").toString("base64");
   expect(sanitizeForStore(`Authorization: Basic ${accented}`)).not.toContain(accented);
+});
+
+test("the assignment pass reads quoted values and keys as main did (D1850: indexOf for the closing quote)", () => {
+  // Quotes, backslashes, separators and credential keys at random: every output equals main's frozen pass.
+  const PIECES = ["password", "token", "api_key", "x", "=", ":", " ", "\n", '"', "'", "\\", "\\\\", "&", ";", "ab"];
+  let seed = 1850;
+  const rnd = (n: number) => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return (seed >>> 8) % n;
+  };
+  for (let k = 0; k < 20_000; k++) {
+    const text = Array.from({ length: 1 + rnd(40) }, () => PIECES[rnd(PIECES.length)]).join("");
+    expect(redactString(text)).toBe(baseline.redactString(text));
+  }
 });

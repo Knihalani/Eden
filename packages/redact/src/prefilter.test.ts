@@ -4,7 +4,7 @@
  * keyword-less rules always run). Secret-shaped values are assembled from parts, so no literal in this file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { sanitizeForStore, secretHits, secretRules } from "./secrets";
+import { sanitizeForStore, secretHits, secretRules } from "./secrets.ts";
 
 const alnum = (n: number, seed = 7) =>
   Array.from({ length: n }, (_, i) => "aB3dE5gH7jK9mN2pQ4sT6vW8yZ"[(i * seed + 3) % 26]).join("");

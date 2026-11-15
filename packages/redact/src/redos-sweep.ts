@@ -3,7 +3,7 @@
  * takes about 6 s, so it is split by rule index over four files that a parallel test run (`scripts/test.sh`) runs at
  * once; together they cover every rule (rule i is in shard i % SHARDS). Not exported from index.ts.
  */
-import { LINEAR_RULES, secretRules, type SecretRule } from "./secrets";
+import { LINEAR_RULES, secretRules, type SecretRule } from "./secrets.ts";
 
 export const SHARDS = 4;
 

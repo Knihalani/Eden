@@ -14,7 +14,7 @@
  * marks belong to the letter before them: they are skipped when looking for a boundary, and a match's end extends
  * over trailing marks ("café" spelled with a combining accent is matched whole, and "danáx" holds no "dana").
  */
-import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass";
+import { CLASS, classOf, FOLD, FOLD_DROP, FOLD_EXPAND, foldOf, foldString, WORD_START } from "./charclass.ts";
 
 export interface MatcherOptions {
   wholeWord?: boolean;
@@ -27,6 +27,17 @@ export type OnMatch = (pattern: number, start: number, end: number) => void;
 export interface MatchSink {
   add(pattern: number, start: number): void;
 }
+
+/** `walk`'s modes: occurrences passed to the sink, held back for it, or not reported. */
+const EMIT = 0;
+const DEFER = 1;
+const SILENT = 2;
+/** Shorter texts run one walk: two cost more than they save on a few hundred characters. */
+const PAIRED_MIN = 256;
+/** How many characters outside ASCII the two walks step over one at a time before each half goes on alone. */
+const WIDE_LIMIT = 32;
+/** Held-back lists longer than this are not kept for the next text. */
+const DEFERRED_KEPT = 1 << 16;
 
 export class MultiMatcher {
   /** The patterns as folded, in the order given. */
@@ -51,6 +62,26 @@ export class MultiMatcher {
   private readonly ringMask: number;
   /** Per ASCII code unit, its folded character's column. */
   private readonly foldCol = new Int32Array(128);
+  /**
+   * `scan`'s scratch (D1850): at a state's row (`state * cols`, as `delta` gives it, so no division), the scan's
+   * `generation` once every pattern ending there is hit and not kept in this text, so the state's later matches do
+   * nothing (`keep` only goes from 1 to 0 within a scan). A megabyte of `sk-` with nothing kept scanned in 5.4 ms,
+   * calling `emit` at every occurrence for nothing, and scans in 2.4 ms now (one byte per transition entry). A
+   * generation, not a list reset after the loop: V8 compiles the loop on stack replacement before any code after it
+   * has run, and code there without type feedback deoptimized the scan at the end of every call.
+   */
+  private readonly quiet: Uint8Array;
+  /** 1 to 255; the next scan after 255 clears `quiet`. */
+  private generation = 0;
+  /** The longest pattern, folded: how far before the middle the second half's walk starts (`contextStart`). */
+  private readonly longest: number;
+  /** `walk`'s state row and last special index when it returns. */
+  private endState = 0;
+  private endSpecial = -1;
+  /** The second half's occurrences held back, in order (`scan`): patterns and starts, `deferred` of them. */
+  private deferred = 0;
+  private deferredPattern = new Int32Array(64);
+  private deferredStart = new Int32Array(64);
 
   constructor(patterns: string[], options: MatcherOptions = {}) {
     this.wholeWord = options.wholeWord ?? false;
@@ -127,10 +158,31 @@ export class MultiMatcher {
 
     // Original offsets of the last few folded characters, to recover a match's start (folding drops marks).
     const longest = Math.max(1, ...this.lens);
+    this.longest = longest;
     const size = 1 << Math.ceil(Math.log2(longest + 1));
     this.ring = new Int32Array(size);
     this.part = new Uint8Array(size);
     this.ringMask = size - 1;
+    this.quiet = new Uint8Array(states * cols);
+    if (!this.wholeWord) this.prime();
+  }
+
+  /**
+   * Runs `scan` on two short texts that take each of its paths (both walks to the end with occurrences held back;
+   * the walks going on alone past WIDE_LIMIT), so V8 has type feedback for all of it before it compiles the loop on
+   * stack replacement: code there that had never run deoptimized the compiled loop at every call (V8 reuses that
+   * code), 31 times in 31 calls (D1850).
+   */
+  private prime(): void {
+    const n = this.patterns.length;
+    const sample = this.patterns.join(" ").slice(0, 64) || "a";
+    let ascii = "";
+    while (ascii.length < PAIRED_MIN * 2) ascii += sample + " ";
+    const wide = ascii + "é́".repeat(WIDE_LIMIT + 1) + ascii;
+    const sink: MatchSink = { add: () => {} };
+    for (const text of [ascii, wide]) {
+      this.scan(text, new Uint8Array(n), new Int32Array(n), new Uint8Array(n).fill(1), sink);
+    }
   }
 
   get stateCount(): number {
@@ -176,30 +228,158 @@ export class MultiMatcher {
   }
 
   /**
-   * `markHits`, also writing each pattern that occurs to `firsts` (in order of first match; `patterns.length`
+   * `markHits`, also writing each pattern that occurs to `firsts` (each once, in no set order; `patterns.length`
    * entries, so a caller can reset `hits` by them), and passing every occurrence of a pattern `p` with
-   * `keep[p] === 1` to `sink.add(p, start)`, in order of match end, with the start `forEach` reports. One pass; an
+   * `keep[p] === 1` to `sink.add(p, start)`, in order of match end, with the start `forEach` reports. The sink may
+   * clear `keep` entries during the scan (never set them). One pass; an
    * ASCII character costs one table load (for a prefilter that also wants to know where some of its words are). Not
    * for a `wholeWord` matcher (it throws).
    */
   scan(text: string, hits: Uint8Array, firsts: Int32Array, keep: Uint8Array, sink: MatchSink): number {
     if (this.wholeWord) throw new Error("scan does not support wholeWord");
+    if (this.generation === 255) {
+      this.quiet.fill(0);
+      this.generation = 0;
+    }
+    const generation = ++this.generation;
+    const n = text.length;
+    if (n < PAIRED_MIN) return this.walk(text, 0, n, 0, -1, hits, firsts, 0, keep, sink, EMIT);
+    // Two automata at once (D1850): one over the first half, one over the second, in one loop. Each character's
+    // transition waits for the one before it (a load whose address is the last load's result), so a single walk is
+    // bound by that latency; two independent walks overlap it. The second starts from the root early enough before
+    // the middle (`contextStart`) to be in the state one walk would be in there, and holds back what it would pass to
+    // `sink` until the first half is done (`deferred`), so the sink sees every occurrence in order of match end.
+    const mid = n >> 1;
+    const from = this.contextStart(text, mid);
+    this.walk(text, from, mid, 0, from - 1, hits, firsts, 0, keep, sink, SILENT);
+    let sB = this.endState;
+    let specialB = this.endSpecial;
+    this.deferred = 0;
+    const quiet = this.quiet;
     const packed = this.delta;
     const foldCol = this.foldCol;
     const cols = this.cols;
-    const n = text.length;
     let distinct = 0;
-    let s = 0; // the state times cols
-    // The last index whose character did not fold to exactly one (a mark dropped, a ligature expanded): a match whose
-    // characters all come after it starts `length - 1` characters before its last.
-    let special = -1;
-    for (let i = 0; i < n; i++) {
+    let sA = 0;
+    let specialA = -1;
+    /** Steps taken a walk at a time (a character outside ASCII in a half); past WIDE_LIMIT each half goes alone. */
+    let wide = 0;
+    let i = 0;
+    for (; i < mid; i++) {
+      const a = text.charCodeAt(i);
+      const b = text.charCodeAt(mid + i);
+      if ((a | b) < 128) {
+        const dA = packed[sA + foldCol[a]!]!;
+        const dB = packed[sB + foldCol[b]!]!;
+        sA = dA >> 1;
+        sB = dB >> 1;
+        if ((dA & 1) !== 0 && quiet[sA] !== generation)
+          distinct = this.emit(sA / cols, i, 0, specialA, text, hits, firsts, distinct, keep, sink, EMIT);
+        if ((dB & 1) !== 0 && quiet[sB] !== generation)
+          distinct = this.emit(sB / cols, mid + i, 0, specialB, text, hits, firsts, distinct, keep, sink, DEFER);
+        continue;
+      }
+      // A text with many such characters (accents, marks, ligatures) reads each half in one walk, where they are
+      // handled inline: a walk call a character cost more than the two automata saved.
+      if (++wide > WIDE_LIMIT) break;
+      distinct = this.walk(text, i, i + 1, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
+      sA = this.endState;
+      specialA = this.endSpecial;
+      distinct = this.walk(text, mid + i, mid + i + 1, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
+      sB = this.endState;
+      specialB = this.endSpecial;
+    }
+    // The rest in a method of its own: V8 compiles the loop on stack replacement before any code after it has run,
+    // and a comparison there without type feedback deoptimized the scan at the end of every call.
+    return this.finish(text, i, mid, sA, specialA, sB, specialB, hits, firsts, distinct, keep, sink);
+  }
+
+  /**
+   * The two walks' ends: the first half from `i` (when the walks went on alone) and the second from `mid + i`, then
+   * the second half's occurrences passed to `sink`, in order, each only while its pattern is still kept: as one walk
+   * would have passed them, after every occurrence in the first half.
+   */
+  private finish(
+    text: string,
+    i: number,
+    mid: number,
+    sA: number,
+    specialA: number,
+    sB: number,
+    specialB: number,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+  ): number {
+    distinct = this.walk(text, i, mid, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
+    distinct = this.walk(text, mid + i, text.length, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
+    const patterns = this.deferredPattern;
+    const starts = this.deferredStart;
+    for (let k = 0; k < this.deferred; k++) {
+      const p = patterns[k]!;
+      if (keep[p] === 1) sink.add(p, starts[k]!);
+    }
+    if (patterns.length > DEFERRED_KEPT) {
+      this.deferredPattern = new Int32Array(64);
+      this.deferredStart = new Int32Array(64);
+    }
+    return distinct;
+  }
+
+  /**
+   * Where a walk from the root must start to be, at `mid`, in the state a walk from the text's start is in: at least
+   * the longest pattern's length of folded characters before it (a state is the longest folded suffix that begins a
+   * pattern, never longer than the longest pattern).
+   *
+   * The bound is conservative by one: a state as long as the longest pattern is that pattern, ending just before
+   * `mid` (the first walk reports it), and its next transition is its failure state's, which a walk starting one
+   * unit later also reaches. Kept as it is: it is the plain statement of the invariant, and one unit costs nothing.
+   */
+  private contextStart(text: string, mid: number): number {
+    let at = mid;
+    let units = 0;
+    while (at > 0 && units < this.longest) {
+      at--;
+      const c = text.charCodeAt(at);
+      const f = c < 128 ? FOLD[c]! : foldOf(c);
+      if (f !== FOLD_DROP) units += f === FOLD_EXPAND ? expansionOf(c).length : 1;
+    }
+    return at;
+  }
+
+  /**
+   * One automaton over `text[from, to)` from state row `s`, `special` the last index before `from` whose character did
+   * not fold to exactly one (or an index at or before it). `mode`: pass occurrences to `sink` (EMIT), hold them back
+   * (DEFER) or report nothing (SILENT, to reach a state). Leaves its state and `special` in `endState`/`endSpecial`.
+   */
+  private walk(
+    text: string,
+    from: number,
+    to: number,
+    s: number,
+    special: number,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+    mode: number,
+  ): number {
+    const generation = mode === SILENT ? -1 : this.generation;
+    const quiet = this.quiet;
+    const packed = this.delta;
+    const foldCol = this.foldCol;
+    const cols = this.cols;
+    for (let i = from; i < to; i++) {
       const c = text.charCodeAt(i);
       let d: number;
       if (c < 128) {
         d = packed[s + foldCol[c]!]!;
         s = d >> 1;
-        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && mode !== SILENT && quiet[s] !== generation)
+          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink, mode);
         continue;
       }
       const f = foldOf(c);
@@ -210,24 +390,52 @@ export class MultiMatcher {
       if (f !== FOLD_EXPAND) {
         d = packed[s + this.column(f)]!;
         s = d >> 1;
-        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink);
+        if ((d & 1) !== 0 && mode !== SILENT && quiet[s] !== generation)
+          distinct = this.emit(s / cols, i, 0, special, text, hits, firsts, distinct, keep, sink, mode);
         continue;
       }
       special = i;
-      const expanded = foldString(String.fromCharCode(c));
-      for (let u = 0; u < expanded.length; u++) {
-        const e = expanded.charCodeAt(u);
-        d = packed[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
-        s = d >> 1;
-        if ((d & 1) !== 0) distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink);
-      }
+      distinct = this.expanded(c, i, s, text, hits, firsts, distinct, keep, sink, mode);
+      s = this.endState;
     }
+    this.endState = s;
+    this.endSpecial = special;
+    return distinct;
+  }
+
+  /**
+   * `walk`'s step over a character `c` at `i` that folds to several (a ligature), from state row `s`; leaves the state
+   * in `endState`. Its own method: as a loop inside `walk`'s, V8 compiled it on stack replacement on a text of
+   * ligatures and left that code at every later call (1,684 times in one run, D1850).
+   */
+  private expanded(
+    c: number,
+    i: number,
+    s: number,
+    text: string,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+    mode: number,
+  ): number {
+    const generation = mode === SILENT ? -1 : this.generation;
+    const expanded = expansionOf(c);
+    for (let u = 0; u < expanded.length; u++) {
+      const e = expanded.charCodeAt(u);
+      const d = this.delta[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
+      s = d >> 1;
+      if ((d & 1) !== 0 && mode !== SILENT && this.quiet[s] !== generation)
+        distinct = this.emit(s / this.cols, i, u, i, text, hits, firsts, distinct, keep, sink, mode);
+    }
+    this.endState = s;
     return distinct;
   }
 
   /**
    * The patterns ending in `state` at character `i` (unit `u` of its expansion): hits and `firsts` (returns the count
-   * of distinct patterns so far, `distinct` before), and starts for `keep`.
+   * of distinct patterns so far, `distinct` before), and starts for `keep`, passed to `sink` or held back (DEFER).
    */
   private emit(
     state: number,
@@ -240,8 +448,10 @@ export class MultiMatcher {
     distinct: number,
     keep: Uint8Array,
     sink: MatchSink,
+    mode: number,
   ): number {
     const to = this.outStart[state + 1]!;
+    let kept = false;
     for (let j = this.outStart[state]!; j < to; j++) {
       const p = this.outList[j]!;
       if (hits[p] === 0) {
@@ -249,10 +459,29 @@ export class MultiMatcher {
         firsts[distinct++] = p;
       }
       if (keep[p] !== 1) continue;
+      kept = true;
       const len = this.lens[p]!;
-      sink.add(p, i - len >= special ? i - len + 1 : startOf(text, i, u, len));
+      const start = i - len >= special ? i - len + 1 : startOf(text, i, u, len);
+      if (mode === EMIT) sink.add(p, start);
+      else this.defer(p, start);
+    }
+    if (!kept) {
+      this.quiet[state * this.cols] = this.generation;
     }
     return distinct;
+  }
+
+  private defer(pattern: number, start: number): void {
+    if (this.deferred === this.deferredPattern.length) {
+      const patterns = new Int32Array(this.deferred * 2);
+      patterns.set(this.deferredPattern);
+      this.deferredPattern = patterns;
+      const starts = new Int32Array(this.deferred * 2);
+      starts.set(this.deferredStart);
+      this.deferredStart = starts;
+    }
+    this.deferredPattern[this.deferred] = pattern;
+    this.deferredStart[this.deferred++] = start;
   }
 
   private run(text: string, onMatch: OnMatch | null, stop: (() => boolean) | null): void {
@@ -279,7 +508,7 @@ export class MultiMatcher {
         const f = foldOf(c);
         if (f === FOLD_DROP) continue;
         if (f === FOLD_EXPAND) {
-          expanded = foldString(String.fromCharCode(c));
+          expanded = expansionOf(c);
           if (expanded.length === 0) continue;
           col = this.column(expanded.charCodeAt(0));
         } else col = this.column(f);
@@ -316,6 +545,26 @@ export class MultiMatcher {
 }
 
 /**
+ * What a character that folds to several (`FOLD_EXPAND`, a ligature) folds to, worked out once per code unit: made
+ * afresh (`normalize` and a new string a character), a text of ligatures cost about 0.4 µs a character to match.
+ */
+function expansionOf(c: number): string {
+  const k = EXPANSION_AT[c]!;
+  if (k !== 0) return EXPANSIONS[k]!;
+  const expanded = foldString(String.fromCharCode(c));
+  EXPANSION_AT[c] = EXPANSIONS.length;
+  EXPANSIONS.push(expanded);
+  return expanded;
+}
+/**
+ * `expansionOf`'s answers: per code unit, its place in `EXPANSIONS` (0: not yet known), at most one per code unit
+ * that expands (a few thousand in Unicode). A typed index, not a Map: V8 read the Map at 20 ns a ligature, twice
+ * JavaScriptCore's time, and an array indexed by code unit fell into V8's slow dictionary mode (D1850).
+ */
+const EXPANSION_AT = new Uint16Array(65_536);
+const EXPANSIONS: string[] = [""];
+
+/**
  * Where a match of `len` folded characters ending at unit `u` of character `i` starts, as `run`'s ring of offsets
  * records it: counted back over what each character folds to (a mark to nothing, a ligature to its expansion).
  */
@@ -327,7 +576,7 @@ function startOf(text: string, i: number, u: number, len: number): number {
     const c = text.charCodeAt(at);
     const f = c < 128 ? FOLD[c]! : foldOf(c);
     if (f === FOLD_DROP) continue;
-    need -= f === FOLD_EXPAND ? foldString(String.fromCharCode(c)).length : 1;
+    need -= f === FOLD_EXPAND ? expansionOf(c).length : 1;
   }
   return at;
 }
