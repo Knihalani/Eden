@@ -6,10 +6,29 @@ import type { ListPage, Source } from "./source";
 
 const scope: Scope = { tenantId: "t", userId: "u" };
 
-/** A source whose list and fetch take `ms` and do not watch the signal (a connector stuck in connect). */
-function slow(ms: number): Source {
-  const wait = () => new Promise((r) => setTimeout(r, ms));
-  return {
+/**
+ * A source whose calls do not watch the signal (a connector stuck in connect) and answer only when `release` is
+ * called, or after `HOLD_MS`. Whether a call came back at its own timeout is read from `out` at its return (the source
+ * still holding the call), not from a wall-clock bound: one at 300 ms read 444 ms in a loaded gate (D1965).
+ */
+const HOLD_MS = 3_000;
+function held(): Source & { out: number; release(): void } {
+  let release = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  const timer = setTimeout(() => release(), HOLD_MS);
+  const src = {
+    out: 0,
+    release: () => {
+      clearTimeout(timer);
+      release();
+    },
+  };
+  const wait = async () => {
+    src.out++;
+    await gate;
+    src.out--;
+  };
+  return Object.assign(src, {
     id: "mail",
     kind: "test",
     description: "",
@@ -25,16 +44,18 @@ function slow(ms: number): Source {
       await wait();
       return null;
     },
-  };
+  });
 }
 
 describe("audit A5: fan-out deadlines on list and fetch", () => {
   test("search returns at its timeout (control)", async () => {
     const f = new SourceFanout({ sanitize: (x) => x });
-    const t0 = performance.now();
-    const [o] = await f.search([slow(800)], { scope, text: "x", entities: [], limit: 5 }, { timeoutMs: 50 });
+    const src = held();
+    const [o] = await f.search([src], { scope, text: "x", entities: [], limit: 5 }, { timeoutMs: 50 });
+    // Back while the source still holds the call: at the timeout, not at the source's answer.
+    expect(src.out).toBe(1);
+    src.release();
     expect(o!.status).toBe("timeout");
-    expect(performance.now() - t0).toBeLessThan(300);
   });
 
   // `list` is not raced (audit A5): the extra await moved the funnel's card batching (504 calls to 546); a listing that
@@ -42,10 +63,10 @@ describe("audit A5: fan-out deadlines on list and fetch", () => {
   // the one real case, gives up its connect at the signal (below).
   test("fetchChecked returns within its timeoutMs when the source ignores the signal", async () => {
     const f = new SourceFanout({ sanitize: (x) => x });
-    const t0 = performance.now();
-    const got = await f.fetchChecked(slow(800), scope, "r1", { timeoutMs: 50 });
-    const ms = performance.now() - t0;
-    expect(ms).toBeLessThan(300);
+    const src = held();
+    const got = await f.fetchChecked(src, scope, "r1", { timeoutMs: 50 });
+    expect(src.out).toBe(1);
+    src.release();
     expect(got).toMatchObject({ status: "failed", why: "timeout" });
   });
 

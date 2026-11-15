@@ -176,8 +176,8 @@ What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `s
 - **Bounds on work are CPU time.** 22 wall-clock ceilings around synchronous code (ReDoS and linearity guards in
   engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
   not on how long the scheduler kept the test waiting.
-- **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`; 60 s since D1945): the limit catches a
-  hang; Bun's 5 s default failed CPU-bound tests under load.
+- **120 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`; 20 s before D1945, 60 s until D1965):
+  the limit catches a hang; Bun's 5 s default failed CPU-bound tests under load.
   The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
   assert nothing about time relied on it, and the tail runs unloaded. A name filter (`bun run test -- -t X`) runs one
   invocation, unsplit, since a part it matched nothing in would fail. The run ends with the ten slowest files and every test over 3.5 s, so slowness stays
@@ -621,6 +621,93 @@ shared machine more workers take a larger share from the other agents, which wou
 thirteen funnel runs, pi-ab-resume's ten pi-ab runs, days-calls) hold most of sim's CPU and D819 already shared what
 they can.
 
+## D1965: the remaining load flakes (2026-11-15, 4 cores shared, Bun 1.4.4)
+
+The brief: every test that failed in a loaded cold gate and passed alone made robust, none deleted, skipped or run on
+less input, each changed guard shown to fail on the regression it was written for. Four busy loops beside a whole
+gate did not reproduce them on this machine (base 2deecc12d: 0 load failures in one run), so each file ran in a
+harsher harness: six copies of it at once beside eight busy loops (`while :; do :; done`), as the gate's tail starts
+eight files at once on a machine other agents load (on the base, `router-processes` ran one copy beside twelve
+loops). Base runs as counted in the table (load 11-31); after, 18 runs of each on the branch (load 10-48):
+
+| File | Base fails | After | What it guards, and what it reads now |
+|---|---|---|---|
+| `ask-deadline.test.ts` | 6 of 18 (777-921 ms against 750) | 0 of 18 | D140, one deadline for the poll and the search: `TIMEOUT` 1,500 ms, not 500, keeping the bound at 1.5x and the regression at 2x (gap 750 ms, not 250). Up to 442 ms landed past the deadline under load, most of it after it |
+| `ask-behind.test.ts` | 1 of 18 (192 ms against 150) | 0 of 18 | D430, the ask does not wait for its cut copies' searches: they wait on a promise the test releases after the ask returns, and the ask must return with them still running (neither answered nor aborted by a deadline) |
+| `push-cut-behind.test.ts` | 1 of 18 (197 ms against 150) | 0 of 18 | D405, the same for the push: no search answered and some still running at the reply; its limit 30 s (3.7 s seen under load against the tail's 5) |
+| `http.test.ts` D100 | 12 of 12 (13-19 s against the tail's 5 s) | 0 of 18 | Timed against an in-process `JSON.parse` (D1945), both sides now in this thread's CPU: in this branch's loaded gate the fastest of three sends read 33.5 ms of wall against a bound of 30; the limit is 30 s |
+| `stdio.test.ts` drip | 2 of 12 (the tail's 5 s) | 0 of 18 | D1860, arrays held per dripped line: counted already; the test's own wait is bounded at 20 s, its limit 30 s |
+| `server-messages.test.ts` ping flood | 1 of 12 (the error not seen in 100 x 5 ms) | 0 of 18 | D1873's budget: polled up to 10 s for the failure, limit 30 s; its CPU bound stays |
+| `deadlines.test.ts` | 1 of 12 ("added" not fired in 40 ms) | 0 of 18 | Adds and cancels during a fire, and the 1 ms clamp: polled until the entries fire (2 s bound) |
+| `router-processes.test.ts` D172 | 1 of 5 ("child 0 did not start in 500 ms") | 0 of 18 | A hanging restart is killed: the first start gets 4,000 ms (the restart hangs however long it is given) |
+
+The rest of the brief's list, one at a time beside six busy loops: `client.test.ts`'s "plus the wait" read 242 ms
+against `< 190` in a gate; which timeout a call got is now read from its error ("no answer within 200 ms" and "50 ms",
+the value `AbortSignal.timeout` was made with), and only lower bounds and a hang bound stay on time.
+`proxy-speculate.test.ts` read 614 ms against 500: the scripted Eden and upstream log their events, and the upstream
+call must arrive while Eden still holds its answer. `hermes-worker.test.ts` slept 100 ms for the killed worker's exit:
+it polls up to 5 s. The pool's abort test (`regressions.test.ts`) held its one worker with a 300 ms spin, which a
+descheduled main thread could outlive: the worker now blocks on `Atomics.wait` (`pool.fixture.ts`'s `hold`) until the
+test lets it go, after the next task is asked. `long-reply.test.ts`'s gap series read 0.87 against 0.85 once in a
+gate: its ratio now collects garbage before each timed call (9 runs), so neither side pays for what the fuzz tests
+before it left. It reads the process clock: the thread clock (`process.threadCpuUsage`) first used here steps by up
+to 4 ms on Bun 1.4.4 and under-reads, and with D1919's regression planted let the ratio through (D1965's review);
+with the process clock the regression reads 0.96-1.47 (failed 6 of 6 here) and the reader 0.48-0.72 (8 of 8 passed
+beside six busy loops). The D100 test reads the process clock for the same reason. Found in this branch's own loaded gate (444 ms against 300):
+`deadline-unwatched.test.ts`'s fan-out deadlines (audit A5), whose source slept 800 ms; it now holds each call until
+the test releases it, and the search and `fetchChecked` must return with the call still held (0 of 28 failed after,
+10 beside six loops and 18 in the harsh harness). Every changed file passed 10 of 10 beside six busy loops.
+
+**Planted regressions** (each restored after; every one fails its test):
+
+| Regression | Test | Fails with |
+|---|---|---|
+| The ask waits for its work behind (`within(cue.polled, 60_000)`) | ask-behind "short wait" | 0 searches still running at the answer |
+| Cut copies searched in the push's path (`pushCutBehind`'s branch off) | push-cut-behind | 0 still running at the reply |
+| A fresh deadline after the poll (pre-D140) | ask-deadline | 3,003-3,017 ms against 2,250 (two of three tests) |
+| No start deadline on a restart | router-processes D172 | 2 spawns, not 3 |
+| An external event gets the wait too / no event does | client "plus the wait" | `["200","200"]`; 51 ms against >= 190 |
+| No speculative call | proxy-speculate | five tests, "sent during the wait" false among them |
+| A timeout leaves the worker running | hermes-worker | `alive` true after 5 s |
+| An aborted queued task keeps its place (the original bug) | regressions WorkerPool | `queued` 2, not 0 |
+| A cancel during a fire ignored; a 2^40 ms delay kept | deadlines | entries missing; 3 of 4 fired |
+| No server-request budget | server-messages ping flood | no failure in 10 s |
+| One array a dripped read (D1860) | stdio drip | 29,728 arrays held against 9 |
+| The body parsed before the shape scan | http D100 | 51.8-55.8 ms of CPU against 21.3-25.0, 3 of 3 |
+| The number reader gives up at a `null` (D1919) | long-reply gap | 23.8-36.0 against 19.0-23.8, 3 of 3 |
+| `fetchChecked` not raced against its deadline; a search's flight not raced | deadline-unwatched | the source no longer holds the call (0, not 1), each |
+
+**Limits.** The main run's per-test limit is 120 s (`TEST_TIMEOUT_MS`, was 60): the brief reports render-fast,
+opt-round3 and test-cache failing on timeouts in this session's gates at load 10-35 (not reproduced here: 8 of 8
+passed, four copies at once beside six loops), and beside four busy loops the slowest main-run tests already took
+17-21 s (pi-ab-resume, client-package, gloss-packed). CPU-bound equivalence tests that named a
+shorter limit of their own now name 120 s: `gate-differential` (14.6 s under four loops, limit 30 s), `linear` (13.8,
+30), `own-matchers` (7.7, 30), `deletes` (6.6, 20), `injection-suite` (6.1, 30), `differential` (5.3, 30) and
+`sim.test`'s two quality-run tests (the brief's "user-range tallies merge", 20 s). Limits that guard a complexity
+class (the ReDoS and linear tests) were left alone.
+
+**Cold gates** (`env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check`; load is the 1, 5, 15-minute
+average before → after; every run 3,536 passed and 2 skipped of 3,538 in 333 files, as on the base):
+
+| Run | Tree | Wall (s) | Load | Failures |
+|---|---|---|---|---|
+| Quiet | base 2deecc12d | 131 | 2.9 → 8.6 | 0 |
+| Four busy loops | base 2deecc12d | 224 (tests) | 8.6 → 13.6 (read mid-run) | 1: `pi-ab-resume`, refused its resume because this branch's files changed under it mid-run (its key holds the code), not load |
+| Four busy loops, x3 | the branch before `deadline-unwatched` and the D100 thread clock | 314, 193, 437 | 16.5 → 24.5 | gate 2: `partner.test.ts`'s planner timeout (left, above); gate 3: `deadline-unwatched` (fixed) |
+| Four busy loops, x3 | the branch before the D100 thread clock | 248, 165, 151 | 6.9 → 12.9 | gate 1: the D100 400, 33.5 ms of wall against 30 (fixed) |
+| Quiet | final | 96 | 8.2 → 7.2 | 0 |
+| Four busy loops, x3 | final | 147, 152, 144 | 7.2 → 11.2 | 0, 0, 0 |
+
+`bun run eval` on the final tree: precision 0.65, recall 0.52, falseFireRate 0; acting packets on 19 of 28 neutral
+requests (1.18 items each), facts handed 10 of 11, a look-alike on 3 of 10, as on main.
+
+**Found after the brief:** `partner.test.ts`'s "serving and shadow lookups start no call their source timeout would
+cut off" (a 60 ms source timeout around a 40 ms search, then 20 x 10 ms for the shadow record; 2 of 12 failed in the
+harsh harness and 1 of this branch's loaded gates) now polls for the record up to 5 s (10 of 10 beside six busy
+loops; commit e5ce94ed6). Left: `rare-terms.test.ts`'s full-table
+tests (5.4-6.5 s against 30 s beside four loops). `proxy-a11`'s hang-up choreography and `python.test.ts` passed 12 of
+12 in the harsh harness.
+
 ## The slowest files (each alone, `bun test <file>`, wall incl. ~70 ms start-up)
 
 | File | ms | Where the time goes | Proposal |
@@ -720,8 +807,15 @@ they would contend for CPU and GC, and the stage differences are per-mode subtra
   read 2,806-10,462 ms there): where the work can be counted, count it (sse-drip counts the bytes copied and the
   searches started, D1945), and where it cannot, time it against a reference workload in the same process (the D100
   400 against a `JSON.parse` of the same body). Prove the guard by planting the regression it was written for.
-- A test over 5 s alone gives its own timeout and says why (the run's default is 60 s, D1945, 20 s before; the report
-  at the end of `bun run test` lists every test over 3.5 s).
+- A test over 5 s alone gives its own timeout and says why (the run's default is 120 s, D1965; 60 s and 20 s before;
+  the report at the end of `bun run test` lists every test over 3.5 s). A limit only ever raises the wait: a CPU-bound
+  test in the main run names none below the run's own (D1965), and slowness is caught by CPU bounds and work counts.
+- "It did not wait for X" is shown by holding X (a promise the test releases, `Atomics.wait` on a shared flag) and
+  checking that X was still running, neither answered nor called off by a deadline, when the call returned; not by a
+  wall-clock bound around a sleep (D1965: `ask-behind`, `push-cut-behind`, the pool's abort test). "It happened in
+  this order" is read from a log of the events (`proxy-speculate`), and "it happened" by polling for it under a bound
+  only a hang reaches (`deadlines`, `hermes-worker`). A deadline that must hold in wall time keeps a bound in
+  proportion to the deadline with a gap that load does not close (`ask-deadline`: 1.5x against a regression at 2x).
 - A heap bound measures in a process of its own (`Bun.spawn` of a scenario script, as
   `packages/sources/src/cache-heap.scenario.ts`): under `--parallel` a file shares its worker's heap with the files
   run before it, whose leftovers moved one reading by 1.2 MB (docs/research/b2-deflake.md).

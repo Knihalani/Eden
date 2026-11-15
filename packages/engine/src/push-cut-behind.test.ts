@@ -18,11 +18,24 @@ const SEARCH_MS = 300;
 const scope = { tenantId: "t1", userId: "u1" };
 const REQUEST = "Pay Zed Quinn for the Globex renewal today";
 
+/**
+ * While set, every search waits for it instead of `SEARCH_MS`: whether the push waited for its cut copies' searches is
+ * read from the searches still running when it returns (neither answered nor called off by a deadline), not from a
+ * wall-clock bound (one at SEARCH_MS / 2 failed at 197 ms under load, D1965).
+ */
+let searchesHeld: Promise<void> | null = null;
+/** Long enough that a push waiting for held searches is caught, short enough to end the test well inside its limit. */
+const HOLD_MS = 3_000;
+
 /** A recent-first listing source whose searches take `SEARCH_MS`, as a connector's do. */
 class SlowSearch implements Source {
   readonly kind = "test";
   readonly description = "test";
   searches = 0;
+  /** Searches that have answered. */
+  answered = 0;
+  /** The signals of the searches still out: neither answered nor failed. */
+  readonly out = new Set<AbortSignal | undefined>();
   constructor(
     readonly id: string,
     readonly items: ContextItem[],
@@ -31,11 +44,16 @@ class SlowSearch implements Source {
     /** When any source of the run last started a search (`performance.now()`). */
     readonly clock: { last: number },
   ) {}
-  async search(q: SearchQuery): Promise<ContextItem[]> {
+  async search(q: SearchQuery, signal?: AbortSignal): Promise<ContextItem[]> {
     this.searches++;
     this.log.push(`${this.id} ${q.text}`);
     this.clock.last = performance.now();
-    await Bun.sleep(SEARCH_MS);
+    // A fresh object per search, so two searches without a signal are two entries.
+    const mine = signal ?? (new AbortController().signal as AbortSignal | undefined);
+    this.out.add(mine);
+    await (searchesHeld ?? Bun.sleep(SEARCH_MS)).finally(() => this.out.delete(mine));
+    this.answered++;
+    this.clock.last = performance.now();
     const words = q.text
       .toLowerCase()
       .split(/\W+/)
@@ -78,7 +96,8 @@ function world(): { sources: SlowSearch[]; fact: ContextItem; log: string[]; clo
   return { sources, fact, log, clock };
 }
 
-async function run(config: Record<string, unknown>) {
+/** One push and one ask. `hold`: the push's searches stay unanswered until it has returned (or `HOLD_MS` passes). */
+async function run(config: Record<string, unknown>, hold = false) {
   const { sources, fact, log, clock } = world();
   const cache = new ItemCache();
   const traces: Trace[] = [];
@@ -105,11 +124,20 @@ async function run(config: Record<string, unknown>) {
   for (let i = 0; i < 200 && !partner.sync!.warm(scope); i++) await partner.sync!.tick();
   for (const s of sources) expect(partner.sync!.complete(scope, s.id)).toBe(false);
   const ref = { ...scope, sessionId: "s1" };
+  let release = () => {};
+  if (hold) searchesHeld = new Promise((r) => (release = r));
+  const fallback = setTimeout(() => release(), HOLD_MS);
   const t0 = performance.now();
-  const r = await partner.observe({ ...ref, at: T0, kind: "user_message", text: REQUEST } as AgentEvent, {
-    waitMs: 5_000,
-  });
+  const r = await partner
+    .observe({ ...ref, at: T0, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 5_000 })
+    .finally(() => {
+      clearTimeout(fallback);
+      searchesHeld = null;
+    });
   const pathMs = performance.now() - t0;
+  const answeredAtReply = sources.reduce((n, s) => n + s.answered, 0);
+  const readingAtReply = sources.reduce((n, s) => n + [...s.out].filter((x) => !x?.aborted).length, 0);
+  release();
   const got: Injection[] = r.injection ? [r.injection] : [];
   // What arrives behind the reply, until nothing is left running and no search has started for 2 x SEARCH_MS: the
   // session can look idle between two phases of the push's work (a moment with nothing in flight before the probes
@@ -131,6 +159,8 @@ async function run(config: Record<string, unknown>) {
   const ask = await partner.ask({ ...ref, question: "Is the Zed Quinn Globex renewal payment on hold?" });
   return {
     pathMs,
+    answeredAtReply,
+    readingAtReply,
     searches,
     cached: cache.get(scope, fact.id, T0) !== null,
     delivered: delivered.includes(fact.id),
@@ -145,11 +175,15 @@ async function run(config: Record<string, unknown>) {
 describe("pushCutBehind (D405)", () => {
   test("the push stops waiting on a cut copy's live search; its find still reaches the agent", async () => {
     const off = await run({ pushCutBehind: false });
-    const on = await run({ pushCutBehind: true });
+    const on = await run({ pushCutBehind: true }, true);
     // D264 on the push: it waits for the connector.
     expect(off.pathMs).toBeGreaterThanOrEqual(SEARCH_MS * 0.9);
-    // The trial: the push answers from what is held.
-    expect(on.pathMs).toBeLessThan(SEARCH_MS / 2);
+    expect(off.answeredAtReply).toBeGreaterThan(0);
+    // The trial: the push answers from what is held, with no search answered and its searches behind still being
+    // read: it waited neither for them nor for their deadline.
+    expect(on.answeredAtReply).toBe(0);
+    expect(on.readingAtReply).toBeGreaterThan(0);
+    expect(on.pathMs).toBeLessThan(HOLD_MS);
     // The search behind found the fact and stored it, and it reached the agent as with D264 on the push.
     expect(on.cached).toBe(true);
     expect(on.delivered).toBe(off.delivered);
@@ -169,5 +203,5 @@ describe("pushCutBehind (D405)", () => {
     expect(on.asked).toBe(true);
     expect(on.askSearches).toBeGreaterThan(0);
     expect(off.asked).toBe(true);
-  });
+  }, 30_000);
 });

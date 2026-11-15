@@ -20,11 +20,20 @@ const T0 = Date.UTC(2026, 10, 10, 9);
 const SEARCH_MS = 300;
 const QUESTION = "Is the Zed Quinn Globex renewal payment on hold?";
 
+/**
+ * While set, every search waits for it instead of `SEARCH_MS`: a test that asks whether an answer waited for the
+ * searches reads it from the searches still running at the answer (neither answered nor called off), not from a
+ * wall-clock bound (one at SEARCH_MS / 2 failed at 192 ms under load, D1965).
+ */
+let searchesHeld: Promise<void> | null = null;
+
 /** A recent-first listing source whose searches take `SEARCH_MS`, as a connector's do. */
 class SlowSearch implements Source {
   readonly kind = "test";
   readonly description = "test";
   searches = 0;
+  /** The signals of the searches still out: neither answered nor failed. */
+  readonly out = new Set<AbortSignal | undefined>();
   /** Set: the connector is down (no search, listing or re-read can confirm what a signal doubted). */
   down = false;
   /** Set: the source sends change notices (D125), so a signal doubts its held copies (D126). */
@@ -33,9 +42,12 @@ class SlowSearch implements Source {
     readonly id: string,
     readonly items: ContextItem[],
   ) {}
-  async search(q: SearchQuery): Promise<ContextItem[]> {
+  async search(q: SearchQuery, signal?: AbortSignal): Promise<ContextItem[]> {
     this.searches++;
-    await Bun.sleep(SEARCH_MS);
+    // A fresh object per search, so two searches without a signal are two entries.
+    const mine = signal ?? (new AbortController().signal as AbortSignal | undefined);
+    this.out.add(mine);
+    await (searchesHeld ?? Bun.sleep(SEARCH_MS)).finally(() => this.out.delete(mine));
     if (this.down) throw new Error("503 upstream down");
     const words = q.text
       .toLowerCase()
@@ -160,18 +172,35 @@ async function drain(partner: ContextPartner, ref: Scope & { sessionId: string }
   return got;
 }
 
-async function ask(config: Record<string, unknown>) {
+/** Long enough that an ask waiting for held searches is caught, short enough to end the test well inside its limit. */
+const HOLD_MS = 3_000;
+
+/**
+ * One ask. `hold`: its searches stay unanswered until the ask has returned (or `HOLD_MS` passes, which only an ask
+ * that waited for them reaches), so `readingAtAnswer` (searches neither answered nor called off by a deadline) says
+ * whether it waited, on a loaded machine as on a quiet one.
+ */
+async function ask(config: Record<string, unknown>, hold = false) {
   const { partner, worlds, traces } = await partnerFor(config, ["u1"]);
   const { sources, fact } = worlds.get("u1")!;
   // An ask-only session (an MCP client): no push has searched anything for it.
   const ref = { tenantId: "t1", userId: "u1", sessionId: "s1" };
+  let release = () => {};
+  if (hold) searchesHeld = new Promise((r) => (release = r));
+  const fallback = setTimeout(() => release(), HOLD_MS);
   const t0 = performance.now();
-  const r = await partner.ask({ ...ref, question: QUESTION });
+  const r = await partner.ask({ ...ref, question: QUESTION }).finally(() => {
+    clearTimeout(fallback);
+    searchesHeld = null;
+  });
   const askMs = performance.now() - t0;
+  const readingAtAnswer = sources.reduce((n, s) => n + [...s.out].filter((x) => !x?.aborted).length, 0);
+  release();
   const late = await drain(partner, ref);
   return {
     r,
     askMs,
+    readingAtAnswer,
     cited: r.citations.some((c) => c.itemId === fact.id),
     late,
     lateFact: late.some((x) => x.citations.some((c) => c.itemId === fact.id)),
@@ -189,8 +218,10 @@ describe("askBehind (D430)", () => {
   });
 
   test("on, short wait: the ask answers from what is held, says it is still reading, and the fact follows", async () => {
-    const on = await ask({ askBehind: true, askBehindWaitMs: 20 });
-    expect(on.askMs).toBeLessThan(SEARCH_MS / 2);
+    const on = await ask({ askBehind: true, askBehindWaitMs: 20 }, true);
+    // It answered with its searches still being read: it waited for none of them, nor for their deadline.
+    expect(on.readingAtAnswer).toBeGreaterThan(0);
+    expect(on.askMs).toBeLessThan(HOLD_MS);
     expect(on.cited).toBe(false);
     // Never an all-clear while sources are still being read (D127).
     expect(on.r.answer).toContain("Still reading");
@@ -205,7 +236,7 @@ describe("askBehind (D430)", () => {
     expect(on.searches).toBeLessThanOrEqual(off.searches);
     // The searches behind are traced, so traces still sum to what the connectors received.
     expect(on.traces.some((t) => t.reason === "cut search behind" && t.sourceCalls > 0)).toBe(true);
-  });
+  }, 30_000);
 
   test("on, the work done within the wait: the answer is D264's, with no follow-up", async () => {
     const on = await ask({ askBehind: true, askBehindWaitMs: 5_000 });
