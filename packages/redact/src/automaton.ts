@@ -126,7 +126,9 @@ const MAX_REPEAT = 1000;
 class Parser {
   private at = 0;
   private readonly cps: number[];
-  constructor(private readonly source: string) {
+  private readonly source: string;
+  constructor(source: string) {
+    this.source = source;
     this.cps = Array.from(source, (char) => char.codePointAt(0)!);
   }
 

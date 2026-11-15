@@ -1,2 +1,2 @@
-export { redact, redactString, containsSecret, REDACTED } from "./redact";
-export { gateOf, sanitizeForStore, secretHits, secretRules, warmGate } from "./secrets";
+export { redact, redactString, containsSecret, REDACTED } from "./redact.ts";
+export { gateOf, sanitizeForStore, secretHits, secretRules, warmGate } from "./secrets.ts";

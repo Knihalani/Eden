@@ -10,12 +10,12 @@
  *   bun packages/redact/src/gate-differential.ts [texts, default 1000000] [seed, default 1]
  *   bun packages/redact/src/gate-differential.ts --corpus     # the realistic corpus (bench/corpus.ts), 256 B to 1 MB
  */
-import { parseRegex, type RegexNode } from "./automaton";
-import { ALNUM, mutate, ODD, prng, sample, sourcePieces } from "./differential";
-import { redact, redactString, TOKEN_LITERALS } from "./redact";
-import { redact as redactBefore, redactString as redactStringBefore } from "./redact.reference";
-import { type Gate, gateOf, secretRules } from "./secrets";
-import { gateOf as gateOfBefore, secretRules as secretRulesBefore } from "./secrets.reference";
+import { parseRegex, type RegexNode } from "./automaton.ts";
+import { ALNUM, mutate, ODD, prng, sample, sourcePieces } from "./differential.ts";
+import { redact, redactString, TOKEN_LITERALS } from "./redact.ts";
+import { redact as redactBefore, redactString as redactStringBefore } from "./redact.reference.ts";
+import { type Gate, gateOf, secretRules } from "./secrets.ts";
+import { gateOf as gateOfBefore, secretRules as secretRulesBefore } from "./secrets.reference.ts";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 type Rnd = () => number;
@@ -102,7 +102,7 @@ const KEYS = [
 /** Eden's own shapes and the structural redactor's, assembled from parts so no literal here is a secret. */
 function edenShape(rnd: Rnd): string {
   const value = () => draw(rnd, ALNUM + (rnd() < 0.3 ? "+/_-.=" : ""), pick(rnd, [3, 6, 8, 12, 20, 24, 32, 40, 64]));
-  switch (int(rnd, 16)) {
+  switch (int(rnd, 19)) {
     case 0:
       return `${pick(rnd, KEYS)}${pick(rnd, [" is ", "=", ": ", ":", " = ", '": "', "='"])}${pick(rnd, ["", '"', "'", "“", "‘"])}${value()}${pick(rnd, ["", '"', "'", "”", "’", " "])}`;
     case 1:
@@ -133,9 +133,65 @@ function edenShape(rnd: Rnd): string {
       return `eden_local_${draw(rnd, "0123456789abcdef", 16)}`;
     case 14:
       return `{"${pick(rnd, KEYS)}":"${value()}${pick(rnd, ['\\"x', ",y", ""])}","n":1}`;
+    // D1850's shapes: an API key spelled with a space, an auth scheme as a keyword's value, an Azure account key.
+    case 15:
+      return `${pick(rnd, ["API key", "api key", "Datadog API key", "apikey"])}${pick(rnd, [" is ", ": ", " "])}${value()}`;
+    case 16:
+      return `${pick(rnd, ["token", "secret", "password"])}${pick(rnd, [" is ", "=", ": "])}${pick(rnd, ["Bearer", "basic", "Basic\t"])}${pick(rnd, [" ", "  ", ""])}${pick(rnd, [value(), "[REDACTED]"])}`;
+    case 17:
+      return `${pick(rnd, ["AccountKey=", "accountkey=", "AccountKey: "])}${draw(rnd, ALNUM + "+/", pick(rnd, [85, 86, 87]))}${pick(rnd, ["==", "=", ""])};`;
     default:
       return `curl -${pick(rnd, ["u", "H"])} ${pick(rnd, ['"', "'", ""])}${pick(rnd, ["user:", "Authorization: Bearer ", "X-Api-Key: "])}${value()}`;
   }
+}
+
+const CHAIN_KEYWORDS = [
+  "token",
+  "secret",
+  "password",
+  "pwd",
+  "credential",
+  "api_key",
+  "private key",
+  "passwd",
+  "API key",
+  "auth token",
+  "apiKey",
+  "maxTokens",
+];
+
+/**
+ * Keyword assignments chained in one text, each value a random token, an auth scheme with or without a credential,
+ * a placeholder or a number (the review's chain fuzz, which found the keyword rule's auth-scheme branch eating the
+ * next keyword).
+ */
+export function chainText(rnd: Rnd): string {
+  let text = "";
+  for (let n = 2 + int(rnd, 3); n > 0; n--) {
+    const r = rnd();
+    const value =
+      r < 0.35
+        ? `${pick(rnd, ["Bearer", "basic", "BASIC", "bearer"])}${pick(rnd, [" ", "\t", "  "])}${rnd() < 0.5 ? "" : draw(rnd, ALNUM, 1 + int(rnd, 30))}`
+        : r < 0.45
+          ? pick(rnd, [
+              "2_000",
+              "<your-key>",
+              "xxxxxxxx",
+              "changeme",
+              "${API_KEY}",
+              "process.env.TOKEN",
+              "string",
+              "1234",
+            ])
+          : draw(rnd, ALNUM + "+/", 4 + int(rnd, 40));
+    text +=
+      pick(rnd, CHAIN_KEYWORDS) +
+      pick(rnd, [" is ", ": ", "=", " = ", ":= "]) +
+      pick(rnd, ["", "'", '"']) +
+      value +
+      pick(rnd, [" ", ", ", "; ", "\n", " and ", '"', "'"]);
+  }
+  return text;
 }
 
 /** One text: one to six parts of the kinds above, joined by separators. */
@@ -143,7 +199,7 @@ export function gateText(rnd: Rnd): string {
   const parts = 1 + int(rnd, 6);
   let text = "";
   for (let i = 0; i < parts; i++) {
-    const kind = int(rnd, 10);
+    const kind = int(rnd, 11);
     let part: string;
     if (kind <= 2) {
       const at = int(rnd, RULES.length);
@@ -155,7 +211,8 @@ export function gateText(rnd: Rnd): string {
     else if (kind === 6) part = pick(rnd, PROSE);
     else if (kind === 7) part = pick(rnd, ODD);
     else if (kind === 8) part = draw(rnd, ALNUM + "_.-/+=", int(rnd, 60));
-    else part = `${recase(rnd, pick(rnd, WORDS))}${pick(rnd, SEPARATORS)}${edenShape(rnd)}`;
+    else if (kind === 9) part = `${recase(rnd, pick(rnd, WORDS))}${pick(rnd, SEPARATORS)}${edenShape(rnd)}`;
+    else part = chainText(rnd);
     text += (i > 0 ? pick(rnd, SEPARATORS) : "") + part;
   }
   return rnd() < 0.05 ? text.repeat(2 + int(rnd, 20)) : text;
@@ -210,7 +267,7 @@ export function fuzzGate(count: number, seed: number): GateFuzzResult {
  * whole, and each kind at 256 B to 1 MB. Imported on demand: it builds sim worlds, which the tests do not need.
  */
 async function corpusDifferences(): Promise<{ texts: number; failures: { text: string; why: string }[] }> {
-  const { KINDS, pieces, sample: sized } = await import("../bench/corpus");
+  const { KINDS, pieces, sample: sized } = await import("../bench/corpus.ts");
   const failures: { text: string; why: string }[] = [];
   const texts = [
     ...pieces().map((piece) => piece.text),

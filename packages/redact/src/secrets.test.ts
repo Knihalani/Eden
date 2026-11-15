@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { goRegex, sanitizeForStore, secretHits, secretRules } from "./secrets";
+import { goRegex, sanitizeForStore, secretHits, secretRules } from "./secrets.ts";
 
 const VENDORED = join(import.meta.dir, "vendor", "gitleaks", "gitleaks.toml");
 const alnum = (n: number, seed = 7) =>
@@ -22,10 +22,15 @@ describe("the vendored gitleaks rules", () => {
     const ids = secretRules().map((rule) => rule.id);
     expect(ids.filter((id) => !id.startsWith("eden-")).length).toBe(221);
     expect(ids.filter((id) => id.startsWith("eden-")).sort()).toEqual([
+      "eden-api-key-phrase",
+      "eden-api-key-phrase-legacy",
+      "eden-auth-scheme-value",
       "eden-aws-key-id",
       "eden-aws-secret",
+      "eden-azure-storage-key",
       "eden-cfat",
       "eden-discord-webhook",
+      "eden-entropy-api-key",
       "eden-entropy-keyword",
       "eden-keyword",
       "eden-legacy-keyword",
@@ -129,7 +134,7 @@ describe("what hits", () => {
       `?X-Amz-Date=20261107T000000Z&${"X-Amz-" + "Security-Token="}${alnum(40)}%2F${alnum(60, 5)}&X-Amz-Expires=60`,
       "eden-presigned-url",
     ],
-    ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"Q".repeat(16)} is set`, "eden-aws-key-id"],
+    ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"QQQQRRRR".repeat(2)} is set`, "eden-aws-key-id"],
     ["entropy + keyword", `deploy secret ${alnum(40, 5)}3 rotates monthly`, "eden-entropy-keyword"],
   ];
   for (const [name, text, rule] of cases) {
@@ -222,6 +227,37 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       alnum(40),
       "Signature%3D[REDACTED]%26X-Amz-Security-Token%3D[REDACTED]%26x%3D1",
     ],
+    // D1850: three shapes the head-to-head comparison (docs/research/redact-vs-alternatives.md) found left in clear.
+    [
+      "an API key spelled with a space, before a long token (rule (d))",
+      `[10:42] Sam: API key is ${alnum(32)} — don't share it`,
+      alnum(32),
+      "API key is [REDACTED] — don't share it",
+    ],
+    [
+      "an API key spelled with a space, a short value (the keyword rule's shape, any length as the legacy rule's)",
+      `the API key is ${"hunter" + "2xyz"}, ask Sam`,
+      "hunter" + "2xyz",
+      "the API key is [REDACTED]",
+    ],
+    [
+      "an auth scheme as a keyword's value, then another keyword assignment (the review: both secrets go)",
+      `the token is Bea${"rer"} secret is correct${"horsebattery"} ok`,
+      "correct" + "horsebattery",
+      "ok",
+    ],
+    [
+      "a bearer credential as the keyword rule's value, taken whole",
+      `[10:42] Sam: bearer token is ${"Bea" + "rer"} ${alnum(40, 5)} — don't share it`,
+      alnum(40, 5),
+      "don't share it",
+    ],
+    [
+      "an Azure storage account key starting with a slash",
+      `conn: DefaultEndpointsProtocol=https;AccountName=acme;${"Account" + "Key="}/+${alnum(84)}==;EndpointSuffix=x`,
+      `/+${alnum(84)}==`,
+      "[REDACTED];EndpointSuffix=x",
+    ],
     [
       "a private key block, whole",
       ["-----BEGIN RSA " + "PRIVATE KEY-----", alnum(64), alnum(64, 5), "-----END RSA PRIVATE KEY-----"].join("\n"),
@@ -242,4 +278,43 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
   test("text with no secret is stored as it is", () => {
     for (const text of BENIGN) expect(sanitizeForStore(text)).toBe(text);
   });
+});
+
+/** Secret-shaped values assembled from parts (CLAUDE.md), each a `[text, secret]` the stored text must not hold. */
+const s = (...parts: string[]) => parts.join("");
+describe("what main redacted stays redacted (D1850, the reviews of 2026-11-14)", () => {
+  const cases: [text: string, secret: string][] = [
+    // The first review: an auth scheme as a keyword's value swallowed the next keyword.
+    [`the token is Bea${"rer"} secret is ${s("correct", "horsebattery")}`, s("correct", "horsebattery")],
+    [`my token is Bea${"rer"} pwd is ${s("sword", "fish99x")}`, s("sword", "fish99x")],
+    [`token is basic credential is '${s("correct horse ", "battery")}'`, s("correct horse ", "battery")],
+    [`password is bearer\t passwd: BASIC   API key='${s("OmxBOm", "GGLHFv")}`, s("OmxBOm", "GGLHFv")],
+    [`auth token=Bearer  credential = "${s("S5ca", "X4O")}`, s("S5ca", "X4O")],
+    // The second: a value that starts like code or a placeholder and goes on with a secret.
+    [`DB_PASSWORD=\${DB_PASSWORD:-${s("S3cr3tP4", "ssw0rdXq9")}}`, s("S3cr3tP4", "ssw0rdXq9")],
+    [`"password": "\${DB_PASS:-${s("Zx9Qw8Er7", "Ty6Ui5Op4")}}"`, s("Zx9Qw8Er7", "Ty6Ui5Op4")],
+    [`api_key=\${API_KEY:-${s("a8f5f167f44f4964", "e6c998dee827110c")}}`, s("a8f5f167f44f4964", "e6c998dee827110c")],
+    [`token=\${TOKEN=${s("Xk39dKf93", "kdKf8QzRt77")}}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`token=\${X-${s("Xk39dKf93", "kdKf8QzRt77")}}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`password=process.env.DB_PASS||${s("Hunt3rPass", "2Real9")}`, s("Hunt3rPass", "2Real9")],
+    [`token=options.x/${s("Xk39dKf93", "kdKf8QzRt77")}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`secret=env.X:${s("Xk39dKf93", "kdKf8QzRt77")}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`api_key=this.token#${s("Cjh3Yu6uwTnnJ", "YT17TpO4qfkxFZ")}`, s("Cjh3Yu6uwTnnJ", "YT17TpO4qfkxFZ")],
+    [`secret={{x}}${s("a8f5f167f44f4964", "e6c998dee827110c")}`, s("a8f5f167f44f4964", "e6c998dee827110c")],
+    [`password=<b>${s("Xk39dKf93", "kdKf8Qz")}`, s("Xk39dKf93", "kdKf8Qz")],
+    [`password=%PASS%${s("Xk39dKf93", "kdKf8")}`, s("Xk39dKf93", "kdKf8")],
+    [`private_key:= $(${s("czDTndMIlxf6J", "JfoVHoblrXEZ")})`, s("czDTndMIlxf6J", "JfoVHoblrXEZ")],
+    [`credential='$DB_PASS/${s("tm36M47DXCqAX0o", "epChc10xyi0QUK")}'`, s("tm36M47DXCqAX0o", "epChc10xyi0QUK")],
+    [`api_key=$API_KEY:${s("GfzNkGWpPqOP9ncu", "CmoBIUUn6k1vRDKCO3")}`, s("GfzNkGWpPqOP9ncu", "CmoBIUUn6k1vRDKCO3")],
+    [`password=data.${s("Hunter2is", "MyPassw0rd")}`, s("Hunter2is", "MyPassw0rd")],
+    [`password=self.${s("Pa55w0rd", "IsHere")}`, s("Pa55w0rd", "IsHere")],
+    [`api_key=Math.${s("Xk39dKf93", "kdKf8QzRt77")}`, s("Xk39dKf93", "kdKf8QzRt77")],
+    [`password=${s("123_456", "_789")}`, s("123_456", "_789")],
+  ];
+  for (const [text, secret] of cases) {
+    test(text, () => {
+      expect(sanitizeForStore(text)).not.toContain(secret);
+      expect(secretHits(text)).not.toEqual([]);
+    });
+  }
 });

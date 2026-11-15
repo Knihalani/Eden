@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { gateOf, rulesWith, GATE_ENGINES, type AllowlistEngine, type Engine, type EngineChoice } from "./secrets";
-import { sanitizeForStore, secretRules, warmGate } from "./index";
+import { gateOf, rulesWith, GATE_ENGINES, type AllowlistEngine, type Engine, type EngineChoice } from "./secrets.ts";
+import { sanitizeForStore, secretRules, warmGate } from "./index.ts";
 
 // Secret-shaped values are assembled from parts so no literal in the repo is one (packages/redact/CLAUDE.md).
 const token = "gh" + "p_" + "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5";

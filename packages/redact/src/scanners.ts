@@ -8,7 +8,7 @@
  * Every scanner names the exact regex it implements; `secrets.ts` refuses to build the gate when the vendored rule's
  * regex differs, so a gitleaks update that changes one fails loudly instead of running the old matcher.
  */
-import type { Pattern } from "./secrets";
+import type { Pattern } from "./secrets.ts";
 
 type Span = [number, number];
 
@@ -226,7 +226,9 @@ const MEMO_FROM = 4_096;
 class Memo {
   private readonly keys: Float64Array;
   private readonly values: Int32Array;
-  constructor(private readonly size: number) {
+  private readonly size: number;
+  constructor(size: number) {
+    this.size = size;
     this.keys = new Float64Array(size).fill(-1);
     this.values = new Int32Array(size);
   }
@@ -716,11 +718,12 @@ class CurlScan {
    */
   private walks: Memo | undefined;
 
-  constructor(
-    private readonly rule: CurlRule,
-    private readonly text: string,
-    count: number,
-  ) {
+  private readonly rule: CurlRule;
+  private readonly text: string;
+
+  constructor(rule: CurlRule, text: string, count: number) {
+    this.rule = rule;
+    this.text = text;
     this.length = text.length;
     this.count = count;
     const buffers = optionBuffers(count);

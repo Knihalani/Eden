@@ -5,7 +5,7 @@
  * export it (own-matchers.test.ts checks both).
  */
 import { RE2JS } from "re2js";
-import { backtrackingEngine, LINEAR_RULES, type Engine, type EngineChoice } from "./secrets";
+import { backtrackingEngine, LINEAR_RULES, type Engine, type EngineChoice } from "./secrets.ts";
 
 type Span = [number, number];
 
