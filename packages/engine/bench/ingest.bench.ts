@@ -23,12 +23,11 @@
  * The `cpu` line prints each mode's CPU per backfilled item for the whole process (every thread) and for the main
  * thread alone (`thread-cpu.ts`): work moved to a worker thread shows as the difference (D216 measured it so).
  *
- * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [--freeze=warm|compact] [--no-gc] [users=200]
+ * Run: `bun packages/engine/bench/ingest.bench.ts [--world] [--plain] [--freeze=warm|compact] [users=200]
  * [itemsPerUser=500] [mode=all|core|shipped]`, or `bun packages/engine/bench/ingest.bench.ts --quick [--world]
  * [--plain]`. `--plain` holds item text as plain strings (`CacheLimits.packText` off), the layout before D188.
  * `--freeze` freezes every user (warm, D862, or compact, D325) between the backfill and the sweep, so the sweep thaws
- * each one first, as a daily sweep of an idle user does (D1927: the sync's stamps must survive it). `--no-gc` skips
- * the full GCs before each phase, for CPU A/Bs (its memory figures are then not a measurement).
+ * each one first, as a daily sweep of an idle user does (D1927: the sync's stamps must survive it).
  *
  * Text: by default the bench workload's (`workload.ts`: names, topics and filler, all Latin-1, which the engine holds
  * at a byte a character). `--world` takes each user's items from the sim world instead (`buildWorld` seed 1, noise
@@ -56,14 +55,12 @@ const QUICK = process.argv.includes("--quick");
 const WORLD = process.argv.includes("--world");
 /** `--plain`: the cache holds item text as plain strings (`packText` off; D188's before), in every mode. */
 const PLAIN = process.argv.includes("--plain");
-/** `--no-gc`: no full GC between the phases (CPU A/Bs with the collector left to its own timing; memory is noise). */
-const NO_GC = process.argv.includes("--no-gc");
 /** `--freeze=warm|compact`: every user frozen so between the backfill and the sweep. */
 const FREEZE = process.argv.find((a) => a.startsWith("--freeze="))?.slice("--freeze=".length);
 if (FREEZE !== undefined && FREEZE !== "warm" && FREEZE !== "compact") throw new Error("--freeze=warm or compact");
 const args = process.argv
   .slice(2)
-  .filter((a) => !["--quick", "--world", "--plain", "--no-gc"].includes(a) && !a.startsWith("--freeze="));
+  .filter((a) => !["--quick", "--world", "--plain"].includes(a) && !a.startsWith("--freeze="));
 if (QUICK && args.length > 0) throw new Error("--quick runs 40 × 500 in every mode; it takes no other arguments");
 const USERS = QUICK ? 40 : Number(args[0] ?? 200);
 const PER_USER = QUICK ? 500 : Number(args[1] ?? 500);
@@ -111,7 +108,7 @@ class ListSource implements Source {
 }
 
 const heap = () => {
-  if (!NO_GC) Bun.gc(true);
+  Bun.gc(true);
   return process.memoryUsage().heapUsed;
 };
 
@@ -303,7 +300,6 @@ if (MODE !== "all") {
       ...(WORLD ? ["--world"] : []),
       ...(PLAIN ? ["--plain"] : []),
       ...(FREEZE ? [`--freeze=${FREEZE}`] : []),
-      ...(NO_GC ? ["--no-gc"] : []),
       String(USERS),
       String(PER_USER),
     ];
