@@ -87,8 +87,9 @@ bits and held/released memory within +1%. Every condition passes; adopted. The b
 
 ### Gates
 
-On the final tree: `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` (see the D1927 hand-off for
-counts); `bun packages/eval/src/cli.ts` reads precision 0.65, recall 0.52, falseFireRate 0, acting packets on 19 of 28
+On the final tree: `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` green on its second run
+(2,988 of 2,990 tests pass, 0 fail, plus 524 of 524; the first, on a loaded machine, failed four load-sensitive tests
+and a format check of the new test file, each file passing alone after the format fix); `bun packages/eval/src/cli.ts` reads precision 0.65, recall 0.52, falseFireRate 0, acting packets on 19 of 28
 neutral requests at 1.18 items, facts handed 10 of 11, look-alikes 3 of 10, as on main; `bun run funnel --jobs 4`
 reads hidden 323/384 and decoys 294/384 on main (main's engine, run in this session) and on the branch, and
 `--baseline` against main's run reads hidden +0 −0, decoys +0 −0.
