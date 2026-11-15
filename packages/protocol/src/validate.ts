@@ -76,8 +76,12 @@ function shapeUnder(root: unknown, maxDepth: number, maxNodes: number): boolean 
  * a JSON check: whatever passes is still parsed and validated as before.
  */
 export function bodyShapeUnder(bytes: Uint8Array): boolean {
-  return bodyShapeWithin(bytes, MAX_INPUT_DEPTH + 8, MAX_INPUT_NODES + 10_000);
+  return bodyShapeWithin(bytes, BODY_MAX_DEPTH, BODY_MAX_VALUES);
 }
+
+/** `bodyShapeUnder`'s bounds: levels and values (opening brackets and commas) outside strings. */
+export const BODY_MAX_DEPTH = MAX_INPUT_DEPTH + 8;
+export const BODY_MAX_VALUES = MAX_INPUT_NODES + 10_000;
 
 /** `bodyShapeUnder` with its bounds given: the tests compare it with the plain byte loop at small bounds. */
 export function bodyShapeWithin(bytes: Uint8Array, maxDepth: number, maxValues: number): boolean {

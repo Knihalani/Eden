@@ -336,7 +336,8 @@ A change of the persistence format (`PERSIST_FORMAT`) discards older files (thos
 notes say so. It cuts the other way too: a rollback to an older build, or an older process beside newer ones on a
 shared disk or store during a rolling upgrade, discards (deletes) the newer format's files, and those users re-sync
 once. Format 6 (D1888, frozen entries carry their date facts) reads format 5's files; a build of format 5 deletes
-format 6's.
+format 6's. Format 7 (D1926, a warm blob's packed texts may be zstd) reads format 6's; a build of format 6 deletes
+format 7's.
 
 ## 12. What was validated here, and what was not
 

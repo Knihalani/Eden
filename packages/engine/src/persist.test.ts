@@ -13,9 +13,17 @@ import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
+import { isPacked, packedOf } from "./packed-text";
 import { ContextPartner } from "./partner";
 import { termIds } from "./text";
-import { EncryptedFrozenDisk, PERSIST_FORMAT, PersistKeyMismatch, type PersistEvent } from "./persist";
+import {
+  EncryptedFrozenDisk,
+  PERSIST_FORMAT,
+  PersistKeyMismatch,
+  READABLE_FORMATS,
+  type FrozenDisk,
+  type PersistEvent,
+} from "./persist";
 
 const HOUR = 3_600_000;
 const T0 = Date.now() - HOUR; // Wall-clock based: the store dates its blobs on the cache's clock.
@@ -78,6 +86,88 @@ function find(c: ItemCache, s: Scope, q: string, now: number): ContextItem[] {
 }
 
 const files = (dir: string) => readdirSync(dir).filter((f) => f.endsWith(".blob"));
+
+/**
+ * A warm blob as a build of `PERSIST_FORMAT` 6 wrote it, from this build's: every `every`-th packed text's zstd frame
+ * (tag bit 1) recompressed as raw DEFLATE level 6 and its tag's codec bit cleared, as `packItem` packed before D1926.
+ * The layout is cache.ts's `fastFreezeSteps`: "EDF2", the zstd section's length, the section (a u32 JSON length, the
+ * JSON head, then 8-byte-aligned arrays), then the texts in entry order.
+ */
+function asFormat6(blob: Uint8Array, every: number): { blob: Uint8Array; rewritten: number } {
+  const dv = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  if (blob[0] !== 0x45 || blob[3] !== 0x32) return { blob, rewritten: 0 }; // a compact blob holds no packed bytes
+  const sectionLen = dv.getUint32(4, true);
+  const body = Bun.zstdDecompressSync(blob.subarray(8, 8 + sectionLen));
+  const jsonLen = new DataView(body.buffer, body.byteOffset).getUint32(0, true);
+  const head = JSON.parse(new TextDecoder().decode(body.subarray(8, 8 + jsonLen))) as {
+    entries: { p?: [number, number] }[];
+  };
+  const align8 = (n: number) => (n + 7) & ~7;
+  let t = 8 + sectionLen;
+  let k = 0;
+  let rewritten = 0;
+  const texts: Uint8Array[] = [];
+  for (const e of head.entries) {
+    if (!e.p) continue;
+    let bytes = blob.subarray(t, t + e.p[0]);
+    t += e.p[0];
+    if ((e.p[1] & 2) !== 0 && k++ % every === 0) {
+      const frame = new Uint8Array(bytes.byteLength + 4);
+      frame.set([0x28, 0xb5, 0x2f, 0xfd]);
+      frame.set(bytes, 4);
+      bytes = Bun.deflateSync(new Uint8Array(Bun.zstdDecompressSync(frame)));
+      e.p = [bytes.byteLength, e.p[1] & 1];
+      rewritten++;
+    }
+    texts.push(bytes);
+  }
+  const json = new TextEncoder().encode(JSON.stringify(head));
+  // The arrays start 8-aligned in both bodies, so their region moves whole and keeps each array's alignment.
+  const arrays = body.subarray(align8(8 + jsonLen));
+  const out = new Uint8Array(align8(8 + json.byteLength) + arrays.byteLength);
+  new DataView(out.buffer).setUint32(0, json.byteLength, true);
+  out.set(json, 8);
+  out.set(arrays, align8(8 + json.byteLength));
+  const section = Bun.zstdCompressSync(out, { level: 3 });
+  const size = texts.reduce((n, b) => n + b.byteLength, 8 + section.byteLength);
+  const next = new Uint8Array(size);
+  next.set(blob.subarray(0, 4));
+  new DataView(next.buffer).setUint32(4, section.byteLength, true);
+  next.set(section, 8);
+  let at = 8 + section.byteLength;
+  for (const b of texts) {
+    next.set(b, at);
+    at += b.byteLength;
+  }
+  return { blob: next, rewritten };
+}
+
+/** A warm blob with its first packed text's tag set to `tag`, its texts and arrays as they were (see `asFormat6`). */
+function withTag(blob: Uint8Array, tag: number): Uint8Array {
+  const dv = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  const sectionLen = dv.getUint32(4, true);
+  const body = Bun.zstdDecompressSync(blob.subarray(8, 8 + sectionLen));
+  const jsonLen = new DataView(body.buffer, body.byteOffset).getUint32(0, true);
+  const head = JSON.parse(new TextDecoder().decode(body.subarray(8, 8 + jsonLen))) as {
+    entries: { p?: [number, number] }[];
+  };
+  head.entries.find((e) => e.p)!.p![1] = tag;
+  const align8 = (n: number) => (n + 7) & ~7;
+  const json = new TextEncoder().encode(JSON.stringify(head));
+  const arrays = body.subarray(align8(8 + jsonLen));
+  const out = new Uint8Array(align8(8 + json.byteLength) + arrays.byteLength);
+  new DataView(out.buffer).setUint32(0, json.byteLength, true);
+  out.set(json, 8);
+  out.set(arrays, align8(8 + json.byteLength));
+  const section = Bun.zstdCompressSync(out, { level: 3 });
+  const texts = blob.subarray(8 + sectionLen);
+  const next = new Uint8Array(8 + section.byteLength + texts.byteLength);
+  next.set(blob.subarray(0, 4));
+  new DataView(next.buffer).setUint32(4, section.byteLength, true);
+  next.set(section, 8);
+  next.set(texts, 8 + section.byteLength);
+  return next;
+}
 
 describe("frozen users on disk (D425)", () => {
   test("off by default: a freeze writes nothing anywhere", () => {
@@ -306,6 +396,84 @@ describe("frozen users on disk (D425)", () => {
     for (const s of [alice, bob]) for (const it of items(s.userId, 30)) expect(b.readMark(s, it.id)).toBe(0);
     expect(b.freezes.loaded).toBe(2);
     expect(files(dir)).toEqual([]);
+  });
+
+  test("a warm blob whose texts are DEFLATE (format 6's), wholly or in part, reads back exactly (D1926)", () => {
+    expect(READABLE_FORMATS.has(6)).toBe(true);
+    expect(PERSIST_FORMAT).toBe(7);
+    const long = (user: string, n: number) =>
+      items(user, n).map((it, i) => ({
+        ...it,
+        text: `${it.text}\n${`Zoë’s notes on the review — item ${i}: the Lisbon offsite, the vendor, the date. `.repeat(6)}`,
+      }));
+    for (const every of [1, 2]) {
+      const dir = tempDir();
+      const inner = disk(dir).d;
+      let rewritten = 0;
+      // Writes what a format-6 build wrote: the same blob with (every other) packed text as DEFLATE.
+      const old: FrozenDisk = {
+        has: (s) => inner.has(s),
+        read: (s, now) => inner.read(s, now),
+        write: (s, user, now) => {
+          const r = asFormat6(user.blob, every);
+          rewritten += r.rewritten;
+          return inner.write(s, { ...user, blob: r.blob }, now);
+        },
+        delete: (s) => inner.delete(s),
+        sweep: (now) => inner.sweep(now),
+      };
+      const a = new ItemCache({ warmIdleMs: 1, freezeIdleMs: 1_000, expireEveryMs: 1 });
+      a.close();
+      a.persist(old);
+      const mine = long("alice", 30);
+      a.put(alice, mine, T0, false, false, 5);
+      for (let i = 0; i < 3; i++) a.expireIdle(T0);
+      expect(a.warmCount).toBe(1);
+      expect(a.flush()).toBe(1);
+      expect(rewritten).toBe(every === 1 ? 30 : 15);
+      const b = freezing();
+      b.persist(disk(dir).d);
+      const found = find(b, alice, "quarterly budget review Friday", T0);
+      expect(found.length).toBe(30);
+      const codecs = new Set<number>();
+      for (const it of found) {
+        expect(it.text).toBe(mine.find((m) => m.id === it.id)!.text);
+        expect(isPacked(it)).toBe(true);
+        codecs.add(packedOf(it)!.tag >> 1);
+      }
+      expect([...codecs].sort()).toEqual(every === 1 ? [0] : [0, 1]);
+    }
+  });
+
+  test("a warm blob with a text tag outside 0-3 is discarded with its file, and the user starts over (D1926)", () => {
+    const dir = tempDir();
+    const inner = disk(dir).d;
+    const bad: FrozenDisk = {
+      has: (s) => inner.has(s),
+      read: (s, now) => inner.read(s, now),
+      write: (s, user, now) => inner.write(s, { ...user, blob: withTag(user.blob, 7) }, now),
+      delete: (s) => inner.delete(s),
+      sweep: (now) => inner.sweep(now),
+    };
+    const a = new ItemCache({ warmIdleMs: 1, freezeIdleMs: 1_000, expireEveryMs: 1 });
+    a.close();
+    a.persist(bad);
+    const long = items("alice", 4).map((it) => ({
+      ...it,
+      text: `${it.text} ${"the Lisbon offsite notes. ".repeat(20)}`,
+    }));
+    a.put(alice, long, T0, false, false, 5);
+    for (let i = 0; i < 3; i++) a.expireIdle(T0);
+    expect(a.flush()).toBe(1);
+    expect(files(dir).length).toBe(1);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    // Every read path meets it: a search finds nothing (no throw), the file is gone, and a put starts afresh.
+    expect(find(b, alice, "quarterly budget review Friday", T0)).toEqual([]);
+    expect(b.freezes.discarded).toBe(1);
+    expect(files(dir)).toEqual([]);
+    b.put(alice, items("alice", 2), T0);
+    expect(find(b, alice, "quarterly budget review Friday", T0).length).toBe(2);
   });
 
   // D428: a file lives until its newest item (or probe) expires, not the 7-day cap, even if nothing reads it back.

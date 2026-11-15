@@ -50,9 +50,11 @@ import { bucketOf, type Scope } from "@eden/protocol";
 // 6 (D1888): an entry may carry its date facts (`FrozenEntry.t`, `FastEntry.t`); a build before it would ignore them,
 // and discards the file as another version all the same. Files of 5 are still read: their entries have none, and
 // read them from the text at the first scan, as before.
-export const PERSIST_FORMAT = 6;
+// 7 (D1926): a warm blob's packed texts may be zstd frames (`FastEntry.p`'s tag, bit 1); a build before it would read
+// them as DEFLATE and fail. Files of 6 are still read: their texts are DEFLATE, tags 0 and 1, read as before.
+export const PERSIST_FORMAT = 7;
 /** Formats a file may have and still be read: 3's blobs are compact ones, which this build still reads (D862). */
-const READABLE_FORMATS = new Set([3, 4, 5, PERSIST_FORMAT]);
+export const READABLE_FORMATS: ReadonlySet<number> = new Set([3, 4, 5, 6, PERSIST_FORMAT]);
 
 const MAGIC = Buffer.from("EDNF", "latin1");
 const HEADER = 44;

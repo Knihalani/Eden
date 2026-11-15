@@ -2,7 +2,18 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache } from "./cache";
 import { termIds } from "./text";
-import { clearDecoded, decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
+import {
+  clearDecoded,
+  decodedCount,
+  isPacked,
+  MIN_PACK_CHARS,
+  packedFrom,
+  packedOf,
+  packItem,
+  withoutText,
+  type PackTag,
+} from "./packed-text";
+import { deflatePacked } from "./packed-text.reference";
 
 const scope = { tenantId: "t", userId: "u" };
 const NOW = Date.UTC(2026, 10, 6, 9);
@@ -75,31 +86,49 @@ describe("a packed copy reads one text, from the memo or inflated (the review of
     };
   }
 
-  test("the memo's read equals a real inflate's, and a packed copy's text equals the text packed", () => {
-    const r = rng(19130);
-    let packed = 0;
-    let boms = 0;
-    for (let i = 0; i < 3_000; i++) {
-      let text = r() < 0.2 ? "﻿" : "";
-      while (text.length < MIN_PACK_CHARS * 2) {
-        const p = PIECES[Math.floor(r() * PIECES.length)]!;
-        // Mostly words, so most texts compress and pack; the odd pieces in between.
-        text += r() < 0.7 ? "the meeting moved to Friday at noon " : p;
+  test.each(["zstd", "deflate"])(
+    "the memo's read equals a real decode's; a copy reads the text packed (%s)",
+    (codec) => {
+      const r = rng(19130);
+      let packed = 0;
+      let boms = 0;
+      for (let i = 0; i < 3_000; i++) {
+        let text = r() < 0.2 ? "﻿" : "";
+        while (text.length < MIN_PACK_CHARS * 2) {
+          const p = PIECES[Math.floor(r() * PIECES.length)]!;
+          // Mostly words, so most texts compress and pack; the odd pieces in between.
+          text += r() < 0.7 ? "the meeting moved to Friday at noon " : p;
+        }
+        const raw = item(`r${i}`, text);
+        const copy = codec === "zstd" ? packItem(raw) : deflatePacked(raw);
+        const fromMemo = copy.text;
+        clearDecoded();
+        const inflated = copy.text;
+        expect(fromMemo).toBe(inflated);
+        if (isPacked(copy)) {
+          packed++;
+          if (text.charCodeAt(0) === 0xfeff) boms++;
+          expect(inflated).toBe(text);
+          expect(packedOf(copy)!.tag >> 1).toBe(codec === "zstd" ? 1 : 0);
+          expect(packedOf(copy)!.latin1).toBe(!/[^\x00-\xff]/.test(text));
+        }
       }
-      const copy = packItem(item(`r${i}`, text));
-      const fromMemo = copy.text;
-      clearDecoded();
-      const inflated = copy.text;
-      expect(fromMemo).toBe(inflated);
-      if (isPacked(copy)) {
-        packed++;
-        if (text.charCodeAt(0) === 0xfeff) boms++;
-        expect(inflated).toBe(text);
-      }
+      // The run reached packed copies, BOM-led ones among them.
+      expect(packed).toBeGreaterThan(1_000);
+      expect(boms).toBeGreaterThan(100);
+    },
+  );
+});
+
+describe("packedFrom's tag (D1926)", () => {
+  test("a tag outside 0-3 is refused with a RangeError; each of 0-3 makes an item", () => {
+    const p = packItem(item("x", "Zoë’s long note about the review. ".repeat(20)));
+    const { bytes, tag } = packedOf(p)!;
+    for (const bad of [4, 7, -1, 1.5, Number.NaN, 255]) {
+      expect(() => packedFrom(withoutText(p), bytes, bad as PackTag)).toThrow(RangeError);
     }
-    // The run reached packed copies, BOM-led ones among them.
-    expect(packed).toBeGreaterThan(1_000);
-    expect(boms).toBeGreaterThan(100);
+    for (const ok of [0, 1, 2, 3] as const) expect(isPacked(packedFrom(withoutText(p), bytes, ok))).toBe(true);
+    expect(packedFrom(withoutText(p), bytes, tag).text).toBe(p.text);
   });
 });
 

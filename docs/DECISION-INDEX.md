@@ -824,3 +824,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1918 | 2026-11-14 | Finding (measured beside D1910-D1917): the rest of the second brief's scope has no lever worth its risk at today's shares. | finding |
 | D1919 | 2026-11-15 | Adopted (D1909's independent review, REQUEST_CHANGES on the number reader's cost; every finding fixed, no answer changed: 0 differences… | adopted |
 | D1920 | 2026-11-15 | Adopted (a third low-level brief; outputs unchanged): the rule paths' repeated per-item and per-name readings are memoised per item object… | adopted |
+| D1925 | 2026-11-15 | Adopted (a profiling survey's brief; routing unchanged): the router reads a body's top-level `userId` by one scan, not a decode and… | adopted |
+| D1926 | 2026-11-15 | Adopted (same brief; pre-registered in 86c1645bc: promote if ingest process CPU paired ≤ 0.92 and live heap a user ≤ +3%, else delete): a… | adopted |
