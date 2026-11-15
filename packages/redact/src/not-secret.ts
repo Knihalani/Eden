@@ -16,7 +16,7 @@
  * a default (`${X:-…}` holds the secret), and `changeme`-style defaults (often the real password).
  */
 
-import { Last } from "./memo.ts";
+import { Last, Recent } from "./memo.ts";
 
 /** TypeScript types as a value (`apiKey: string;`, `tokens: Set<number>`, `secret: number[]`). */
 const TYPE =
@@ -103,10 +103,11 @@ function core(value: string): string {
 /** Whether `value` (a keyword's or an assignment's value, as written) is code or a placeholder, never a secret. */
 export function notSecret(value: string): boolean {
   if (value.length > VALUE_LIMIT * 2) return false;
-  // The last value's verdict, within one call (memo.ts): a text dense in assignments repeats one (`token:"token:"…`).
-  return LAST_VALUE.has(value) ? LAST_VALUE.value! : LAST_VALUE.set(value, judge(value));
+  // The last few verdicts, within one call (memo.ts): the keyword rules, the assignment pass and the composer each ask
+  // about the same values, and a text dense in assignments repeats one (`token:"token:"…`).
+  return VERDICTS.has(value) ? VERDICTS.value : VERDICTS.set(value, judge(value));
 }
-const LAST_VALUE = new Last<boolean>();
+const VERDICTS = new Recent<boolean>(8);
 
 function judge(value: string): boolean {
   const v = core(value);

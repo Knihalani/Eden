@@ -150,6 +150,8 @@ const SECRET_ANY = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "i");
  * characters once, and the digit test runs on the match.
  */
 const SK_DASHED = /\bsk-[A-Za-z0-9_-]{8,}/gi;
+/** Sticky, tried only at the occurrences of `sk-` (`tokenPasses`'s `at.dashed`): every match starts with it. */
+const SK_DASHED_AT = /\bsk-[A-Za-z0-9_-]{8,}/iy;
 const DIGIT = /[0-9]/;
 
 function redactDashedSk(s: string): string {
@@ -796,12 +798,17 @@ export interface TokenPassed {
  * D1850: `redactTokensIn(s, passes)` (its output is `out`), keeping the ranges each pass replaced, so the masks can be
  * worked out after it without running the passes' regexes again (7 ms a megabyte each time).
  *
- * `inlineAt`, when given, holds every place in `s` where a match of the inline token shapes (the last pass) can
- * start, ascending (the secret gate's prefilter found their literals: `inlineStarts`); the pass then tries its regex
- * there alone, sticky, unless an earlier pass changed the text. The global regex scanned every position of the text
- * (2-3 ns a character, a sixth of the gate on a 16 KB text holding `task-`).
+ * `at`, when given, holds every place in `s` where a match of the dashed `sk-` pass (`dashed`) and of the inline
+ * token shapes (`inline`, the last pass) can start, ascending (the secret gate's prefilter found their literals:
+ * `passStarts` in secrets.ts); each of those passes then tries its regex there alone, sticky, unless an earlier pass
+ * changed the text. The global regexes scanned every position of the text (2-3 ns a character, a sixth of the gate
+ * on a 16 KB text holding `task-`).
  */
-export function tokenPasses(s: string, passes: number, inlineAt?: ArrayLike<number>): TokenPassed {
+export function tokenPasses(
+  s: string,
+  passes: number,
+  at?: { dashed: ArrayLike<number>; inline: ArrayLike<number> },
+): TokenPassed {
   let cur = s;
   const steps: [number, number][][] = [];
   /** Replaces `ranges` of `cur` (increasing, apart) by the sentinel. */
@@ -854,24 +861,34 @@ export function tokenPasses(s: string, passes: number, inlineAt?: ArrayLike<numb
     }
     replace(ranges);
   }
-  if ((passes & 2) !== 0) pass(SK_DASHED, (match) => DIGIT.test(match));
-  if ((passes & 4) !== 0) pass(BASIC_AUTH, (_match, b64) => isBasicCredential(b64));
-  if ((passes & 8) !== 0 && inlineAt && steps.length === 0) {
-    // `replace`'s matches: the leftmost match at or after the last one's end, each time. Every match starts at one
-    // of `inlineAt`, so trying them in order with the same regex, sticky, finds the same ones (none is empty).
+  /**
+   * `pass`, where every match starts at one of `starts` (ascending): `replace`'s matches are the leftmost match at
+   * or after the last one's end, each time, so trying the starts in order with the same regex, sticky, finds the
+   * same ones (none is empty). Only while no earlier pass changed the text (the starts are `s`'s).
+   */
+  const passAt = (sticky: RegExp, starts: ArrayLike<number>, keep: (match: string) => boolean) => {
     const ranges: [number, number][] = [];
     let end = 0;
-    for (let k = 0; k < inlineAt.length; k++) {
-      const at = inlineAt[k]!;
+    for (let k = 0; k < starts.length; k++) {
+      const at = starts[k]!;
       if (at < end) continue;
-      SECRET_INLINE_AT.lastIndex = at;
-      const m = SECRET_INLINE_AT.exec(cur);
+      sticky.lastIndex = at;
+      const m = sticky.exec(cur);
       if (m === null) continue;
       end = at + m[0].length;
-      ranges.push([at, end]);
+      if (keep(m[0])) ranges.push([at, end]);
     }
     replace(ranges);
-  } else if ((passes & 8) !== 0) pass(SECRET_INLINE, () => true);
+  };
+  if ((passes & 2) !== 0) {
+    if (at && steps.length === 0) passAt(SK_DASHED_AT, at.dashed, (match) => DIGIT.test(match));
+    else pass(SK_DASHED, (match) => DIGIT.test(match));
+  }
+  if ((passes & 4) !== 0) pass(BASIC_AUTH, (_match, b64) => isBasicCredential(b64));
+  if ((passes & 8) !== 0) {
+    if (at && steps.length === 0) passAt(SECRET_INLINE_AT, at.inline, () => true);
+    else pass(SECRET_INLINE, () => true);
+  }
   return { source: s, out: cur, steps };
 }
 

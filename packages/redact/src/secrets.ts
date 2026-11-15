@@ -404,8 +404,34 @@ function shannon(text: string): number {
   return LAST_ENTROPY.has(text) ? LAST_ENTROPY.value! : LAST_ENTROPY.set(text, entropyOf(text));
 }
 
+/** `entropyOf`'s scratch for ASCII text: a count per code unit, and the code units in order of first appearance. */
+const ASCII_COUNTS = new Int32Array(128);
+const ASCII_ORDER = new Uint8Array(128);
+
 function entropyOf(text: string): number {
   if (!text) return 0;
+  // ASCII by a count array (a Map cost 1 µs a 40-character secret): the same shares, summed in the same order (the
+  // Map's, first appearance), so the same number to the last bit.
+  let kinds = 0;
+  let ascii = true;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 128) {
+      ascii = false;
+      break;
+    }
+    if (ASCII_COUNTS[c]!++ === 0) ASCII_ORDER[kinds++] = c;
+  }
+  if (ascii) {
+    let entropy = 0;
+    for (let k = 0; k < kinds; k++) {
+      const share = ASCII_COUNTS[ASCII_ORDER[k]!]! / text.length;
+      entropy -= share * Math.log2(share);
+    }
+    for (let k = 0; k < kinds; k++) ASCII_COUNTS[ASCII_ORDER[k]!] = 0;
+    return entropy;
+  }
+  for (let k = 0; k < kinds; k++) ASCII_COUNTS[ASCII_ORDER[k]!] = 0;
   const counts = new Map<string, number>();
   for (const char of text) counts.set(char, (counts.get(char) ?? 0) + 1);
   let entropy = 0;
@@ -777,18 +803,20 @@ function isPath(token: string): boolean {
 function awsSecret(text: string): Span[] {
   const out: Span[] = [];
   const length = text.length;
-  const inAlphabet = (at: number) => {
-    const code = text.charCodeAt(at);
-    return code < 128 && BASE64_CHAR[code] === 1;
-  };
   let at = 0;
   while (at < length) {
-    if (!inAlphabet(at)) {
+    // The runs of the alphabet, by a table load a character in one loop (a closure call a character cost 5 ms a
+    // megabyte, D1850).
+    let code = text.charCodeAt(at);
+    if (code >= 128 || BASE64_CHAR[code] !== 1) {
       at++;
       continue;
     }
     const start = at;
-    while (at < length && inAlphabet(at)) at++;
+    for (at++; at < length; at++) {
+      code = text.charCodeAt(at);
+      if (code >= 128 || BASE64_CHAR[code] !== 1) break;
+    }
     const end = at;
     if (end - start !== AWS_SECRET_LENGTH) continue;
     const token = text.slice(start, end);
@@ -1053,8 +1081,9 @@ export function gateOf(rules: SecretRule[]): Gate {
   const anchorIds = rules.map((rule) => rule.anchorWords && Int32Array.from(rule.anchorWords, (w) => index.get(w)!));
   const anchorWord = new Uint8Array(words.length);
   for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
-  /** The last token pass's literals: their occurrences are kept too, for `inlineStarts`. */
+  /** The literals of the last token pass and of the dashed `sk-` pass: their occurrences are kept too (`passStarts`). */
   const inlineIds = Int32Array.from(TOKEN_PASSES[TOKEN_PASSES.length - 1]!.literals, (w) => index.get(w)!);
+  const dashedIds = Int32Array.from(TOKEN_PASSES[1]!.literals, (w) => index.get(w)!);
   const keepWord = Uint8Array.from(anchorWord);
   for (const id of inlineIds) keepWord[id] = 1;
   const found = new Occurrences(words.length, keepWord);
@@ -1115,28 +1144,27 @@ export function gateOf(rules: SecretRule[]): Gate {
     return out;
   };
   /**
-   * The structural pass the stored text goes through. Every token literal in a gated text was in `text` (the
-   * sentinel holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks
-   * would return its input unchanged and is left out (TOKEN_PASSES).
+   * Where in the text scanned last a match of the token passes read by their starts can start (`tokenPasses`'s
+   * `at`): the dashed `sk-` pass at each `sk-`, the last pass at most INLINE_BACK before each of its literals;
+   * ascending, and through `gating` (pieces.ts) where they are in the gated text (an occurrence the gating removed is
+   * gone: the sentinel holds no literal and starts no match). Undefined when neither pass runs, or when a literal's
+   * list is incomplete (past its dense limit): the passes then scan.
    */
-  /**
-   * Where in the text scanned last a match of the last token pass can start: at most INLINE_BACK before each
-   * occurrence of its literals, ascending; through `gating` (pieces.ts), where they are in the gated text (an
-   * occurrence the gating removed is gone: the sentinel holds no literal and starts no match). Undefined when the
-   * pass will not run, or when a literal's list is incomplete (past its dense limit): the pass then scans.
-   */
-  const inlineStarts = (gating?: number[]): number[] | undefined => {
-    if ((tokens & 8) === 0) return undefined;
+  const passStarts = (gating?: number[]): { dashed: number[]; inline: number[] } | undefined => {
+    if ((tokens & 10) === 0) return undefined;
+    for (const id of inlineIds) if (found.count[id]! > 0 && !found.complete(id)) return undefined;
+    return { dashed: startsOf(dashedIds, 0, gating), inline: startsOf(inlineIds, INLINE_BACK, gating) };
+  };
+  /** The starts of `ids`' occurrences, each from `back` before it to it, ascending, through `gating` if given. */
+  const startsOf = (ids: Int32Array, back: number, gating?: number[]): number[] => {
     const at: number[] = [];
-    for (const id of inlineIds) {
-      if (found.count[id] === 0) continue;
-      if (!found.complete(id)) return undefined;
+    for (const id of ids) {
       for (let e = found.head[id]!; e >= 0; e = found.next[e]!) {
         const start = found.start[e]!;
-        for (let back = Math.min(INLINE_BACK, start); back >= 0; back--) at.push(start - back);
+        for (let b = Math.min(back, start); b >= 0; b--) at.push(start - b);
       }
     }
-    at.sort((a, b) => a - b);
+    if (ids.length > 1) at.sort((x, y) => x - y);
     if (!gating) return at;
     const out: number[] = [];
     let k = 0;
@@ -1149,10 +1177,15 @@ export function gateOf(rules: SecretRule[]): Gate {
     }
     return out;
   };
+  /**
+   * The structural pass the stored text goes through. Every token literal in a gated text was in `text` (the
+   * sentinel holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks
+   * would return its input unchanged and is left out (TOKEN_PASSES).
+   */
   const pass: StructuralPass = {
     assignments: assignmentSpansSplit,
     run: (gated, seen, gating) => {
-      const passed = runTokenPasses(gated, tokens, inlineStarts(gating));
+      const passed = runTokenPasses(gated, tokens, passStarts(gating));
       const assigned: [number, number][] = [];
       return {
         stored: redactAssignments(passed.out, false, seen, assigned),
@@ -1196,7 +1229,7 @@ export function gateOf(rules: SecretRule[]): Gate {
       // No rule found anything (most stored text): the text is gated as it is, so the stored text is the structural
       // pass on it, as main ran it, unless that pass took a value that is code (then compose.ts gives it back).
       const seen = { excusable: false };
-      const stored = redactAssignments(runTokenPasses(text, tokens, inlineStarts()).out, false, seen);
+      const stored = redactAssignments(runTokenPasses(text, tokens, passStarts()).out, false, seen);
       if (!seen.excusable) return stored;
     }
     // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
