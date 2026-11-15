@@ -6747,7 +6747,7 @@ function renderedCopies(items: readonly ContextItem[], text: ItemLines, withTime
   return copiesOf(items.slice(0, renderedCount(items, text)), withTimes);
 }
 
-/** The line readers, for `shown-lines.test.ts`. */
+/** The line readers, for `opt-round3.test.ts`. */
 export const shownReadings = { itemLinesOf, noteLines, lineWords, renderedCount };
 
 /** An item's words as the ledger records them (`Ledger.revised`): a copy edited at its source hashes otherwise. */

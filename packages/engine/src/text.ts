@@ -215,7 +215,8 @@ export function extractTypedEntities(text: string, persistableCap = Infinity): E
   if (text.includes('"') || text.includes("“")) {
     for (const m of text.matchAll(/["“]([^"”\n]{3,60})["”]/g)) add(m[1], "quoted");
   }
-  // Capitalised runs. A run that starts a sentence counts only if it has two or more words.
+  // Capitalised runs, which must stay the last kind added: `persistableCap` is exact only then (D1920).
+  // A run that starts a sentence counts only if it has two or more words.
   // Any capital letter starts a word, not only ASCII ones: "Łukasz", "Émile", "Ögmundur".
   for (const m of text.matchAll(/(^|[.!?]\s+|\s)((?:\p{Lu}[\p{L}&'-]+)(?:\s+\p{Lu}[\p{L}&'-]+)*)/gu)) {
     if (persistable >= persistableCap) break;

@@ -148,6 +148,24 @@ describe("D1920: memos and code-unit passes read as the code they replaced", () 
     expect(yes).toBeLessThan(19_000);
   });
 
+  test("the memos are per object: two users' items with the same text, or cues with the same names, share nothing", () => {
+    // CLAUDE.md's isolation rule: every memo added here is keyed by object identity, never by content.
+    const text = "The review is still on, as planned, with Dana Lee.";
+    const mine: ContextItem = { id: "u1:m:1", sourceId: "mail", ref: "1", title: "Review", text };
+    const theirs: ContextItem = { id: "u2:m:1", sourceId: "mail", ref: "1", title: "Review", text };
+    expect(itemReadings.settledOf(mine)).toBe(true);
+    expect(itemReadings.settledOf(theirs)).toBe(true);
+    theirs.text = "The review moved to Friday with Dana Lee.";
+    expect(itemReadings.settledOf(theirs)).toBe(false);
+    expect(itemReadings.settledOf(mine)).toBe(true);
+    // Two requests naming the same people hold their own tests: one's anchors answer for their own entities only.
+    const a = anchorsOf(["Dana Lee"], null, "", 0);
+    const b = anchorsOf(["Jamie Fox"], null, "", 0);
+    expect(namesEntity(mine, a)).toBe(true);
+    expect(namesEntity(mine, b)).toBe(false);
+    expect(namesEntity(mine, anchorsOf(["Dana Lee"], null, "", 0))).toBe(true);
+  });
+
   test("mentionText is the regex replace, code unit for code unit", () => {
     const r = rng(19202);
     const re = /[^\p{L}\p{N}@.]+/gu;
