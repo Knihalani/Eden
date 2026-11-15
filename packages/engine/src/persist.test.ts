@@ -142,6 +142,33 @@ function asFormat6(blob: Uint8Array, every: number): { blob: Uint8Array; rewritt
   return { blob: next, rewritten };
 }
 
+/** A warm blob with its first packed text's tag set to `tag`, its texts and arrays as they were (see `asFormat6`). */
+function withTag(blob: Uint8Array, tag: number): Uint8Array {
+  const dv = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  const sectionLen = dv.getUint32(4, true);
+  const body = Bun.zstdDecompressSync(blob.subarray(8, 8 + sectionLen));
+  const jsonLen = new DataView(body.buffer, body.byteOffset).getUint32(0, true);
+  const head = JSON.parse(new TextDecoder().decode(body.subarray(8, 8 + jsonLen))) as {
+    entries: { p?: [number, number] }[];
+  };
+  head.entries.find((e) => e.p)!.p![1] = tag;
+  const align8 = (n: number) => (n + 7) & ~7;
+  const json = new TextEncoder().encode(JSON.stringify(head));
+  const arrays = body.subarray(align8(8 + jsonLen));
+  const out = new Uint8Array(align8(8 + json.byteLength) + arrays.byteLength);
+  new DataView(out.buffer).setUint32(0, json.byteLength, true);
+  out.set(json, 8);
+  out.set(arrays, align8(8 + json.byteLength));
+  const section = Bun.zstdCompressSync(out, { level: 3 });
+  const texts = blob.subarray(8 + sectionLen);
+  const next = new Uint8Array(8 + section.byteLength + texts.byteLength);
+  next.set(blob.subarray(0, 4));
+  new DataView(next.buffer).setUint32(4, section.byteLength, true);
+  next.set(section, 8);
+  next.set(texts, 8 + section.byteLength);
+  return next;
+}
+
 describe("frozen users on disk (D425)", () => {
   test("off by default: a freeze writes nothing anywhere", () => {
     const c = freezing();
@@ -416,6 +443,37 @@ describe("frozen users on disk (D425)", () => {
       }
       expect([...codecs].sort()).toEqual(every === 1 ? [0] : [0, 1]);
     }
+  });
+
+  test("a warm blob with a text tag outside 0-3 is discarded with its file, and the user starts over (D1926)", () => {
+    const dir = tempDir();
+    const inner = disk(dir).d;
+    const bad: FrozenDisk = {
+      has: (s) => inner.has(s),
+      read: (s, now) => inner.read(s, now),
+      write: (s, user, now) => inner.write(s, { ...user, blob: withTag(user.blob, 7) }, now),
+      delete: (s) => inner.delete(s),
+      sweep: (now) => inner.sweep(now),
+    };
+    const a = new ItemCache({ warmIdleMs: 1, freezeIdleMs: 1_000, expireEveryMs: 1 });
+    a.close();
+    a.persist(bad);
+    const long = items("alice", 4).map((it) => ({
+      ...it,
+      text: `${it.text} ${"the Lisbon offsite notes. ".repeat(20)}`,
+    }));
+    a.put(alice, long, T0, false, false, 5);
+    for (let i = 0; i < 3; i++) a.expireIdle(T0);
+    expect(a.flush()).toBe(1);
+    expect(files(dir).length).toBe(1);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    // Every read path meets it: a search finds nothing (no throw), the file is gone, and a put starts afresh.
+    expect(find(b, alice, "quarterly budget review Friday", T0)).toEqual([]);
+    expect(b.freezes.discarded).toBe(1);
+    expect(files(dir)).toEqual([]);
+    b.put(alice, items("alice", 2), T0);
+    expect(find(b, alice, "quarterly budget review Friday", T0).length).toBe(2);
   });
 
   // D428: a file lives until its newest item (or probe) expires, not the 7-day cap, even if nothing reads it back.

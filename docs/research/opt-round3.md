@@ -112,6 +112,75 @@ warm blob as format 6 wrote it (every packed text, and every other one) and read
 encrypted store (forcing the zstd tag on thaw fails it); `cache-freeze.test.ts` puts DEFLATE copies and finds every
 text held as zstd through warm and compact freezes.
 
+### The independent review's fixes (D1925, D1926)
+
+**A BOM inside a value (routing).** The scan decoded the `userId` value's bytes with TextDecoder's default, which
+drops a BOM at the start of whatever it decodes. Main decoded the whole body, so only a BOM at the body's first byte
+went; `{"userId":"﻿alice"}` (raw EF BB BF opening the value) routed as "alice" here and "\uFEFFalice" on main, and the
+cluster router's `bucketOf` and the D995 fence read the same `userOf`. The value decoder is now `ignoreBOM`; the scan
+still skips the body's one leading BOM. `router-user.test.ts` gained hand cases (a BOM alone, leading, inside,
+trailing, escaped, two of them, in a key, between tokens, after leading whitespace) and its generator now puts BOMs
+and other edge bytes (U+2028/9, U+FFFE, surrogates and overlong forms as UTF-8, a lone continuation byte, a cut BOM)
+inside keys and values, at their start, their end or anywhere; without the fix the file fails. After the fix and
+again after the CPU fix: 1,000,000 bodies from the file's generator and 1,000,000 from the review's own, each on a
+fresh seed, against main's `userOf`, 0 differ (38,930 routed, 11,760 with a BOM in the id). The other decodes were
+audited: `packed-text.ts` already decodes with `ignoreBOM` (D1913's review), and cache.ts's JSON decodes start at
+`{`.
+
+**Padded and many-keyed bodies (CPU).** The review measured bodies with many top-level keys and bodies past the
+values bound at 2.1-4.5x main. Two causes. An escaped top-level key was decoded and parsed (`stringAt`) to compare
+it with `userId`; it is now compared in place, a character or `\uXXXX` at a time (`escapedIsUser`). And on a body
+refused by the values bound, main's `bodyShapeUnder` byte loop reaches the bound about four times faster than the
+grammar scan; bodies without escapes (8 MB of `"a":1,`, of digits, of short strings, of small objects) were all this
+case. A first fix ran `bodyShapeUnder` before the scan on every body past 1,010,000 bytes; within the bound that made
+dense bodies pay the check on top of the scan, and handing them to main's parse instead lost every dense body's gain.
+The kept fix asks every 16,384 values whether the body, at the density read so far, would hold more than an eighth of
+the bound, and if so runs `bodyShapeUnder` once (`padded`): a padded body is refused at about main's cost, a dense one
+within the bound pays the check plus the scan against main's check plus parse, and items and events (a value every
+few hundred bytes or more, under 126 KB never) pay nothing. The scan keeps its own bounds check, so the routing does
+not depend on `padded`.
+
+CPU per body shape, each in its own process (interleaved, 9-15 rounds, medians; main's shape check and parse run
+twice, the second as the control; another agent's benchmarks shared the machine, so the control is the noise band).
+Main in ms (µs where marked); the other columns are ratios of medians to it:
+
+| Body                                         |         Main |   Control | Before (2f0fbbb38) |      After |
+| -------------------------------------------- | -----------: | --------: | -----------------: | ---------: |
+| 8 MB of `"a":1,` (past the bound)            | 12.39, 18.17 | 0.92-0.96 |         2.03-2.06x | 0.82-1.05x |
+| 2 MB of `"a":1,`                             |        22.94 |      0.81 |              0.46x |      0.85x |
+| digits, one past the bound (2 MB)            |   4.46, 4.67 | 1.01-1.33 |         2.28-2.48x | 1.04-1.14x |
+| 8 MB of digits (past the bound)              |   4.92, 5.57 | 0.80-1.17 |         3.04-3.33x | 0.90-0.97x |
+| 8 MB of `,"\u0061":1` (escaped keys)         |        69.22 |      1.25 |              3.44x |      0.66x |
+| 8 MB of `,"\u0075serId":"v"`                 |        50.52 |      1.12 |              2.84x |      0.75x |
+| 8 MB of short strings (past the bound)       |   5.84, 8.06 | 0.93-1.30 |         1.55-2.24x | 1.06-1.19x |
+| 8 MB of small objects (past the bound)       | 20.95, 25.54 | 0.77-1.00 |         1.06-1.32x | 0.59-0.66x |
+| 3.9 MB of short strings (within)             |        27.47 |      1.07 |              0.31x |      0.96x |
+| 5 MB of small objects (within)               |        30.22 |      1.24 |              0.70x |      0.92x |
+| 8 MB of `"userId":"v",` (within)             |        46.03 |      1.21 |              0.48x |      0.85x |
+| 6 MB string, then digits past the bound      |   5.09, 6.44 | 0.96-0.97 |         2.19-3.34x | 1.33-1.79x |
+| 7 MB of 70-byte strings, then digits past it |  9.54, 10.91 | 1.14-1.37 |         1.73-2.44x | 1.41-1.51x |
+| 8 MB string                                  |        12.02 |      0.95 |              0.21x |      0.19x |
+| event (µs)                                   |         0.65 |      0.75 |              0.80x |      0.75x |
+| items, tool text, 190 KB (µs)                |          534 |      0.91 |              0.57x |      0.61x |
+| items, prose, 190 KB (µs)                    |          228 |      1.27 |              0.46x |      0.44x |
+
+Two figures in a cell are two runs (9 and 15 rounds). Every shape main refused or parsed is now at or under main
+within the control's band but the last crafted two: padding that stays under the projection until late (a long
+string or sparse values first, then the bound's worth of digits) is scanned up to the checkpoint that sees it, 1.3-1.8x
+main's refusal, about 2-5 ms more on 8 MB. `--hop` on the final tree (9 rounds): event 1.07x, 12 and 193 KB of tool
+text 1.53x and 1.55x, 11 and 181 KB of prose 2.15x and 2.00x.
+
+**A bad tag in a warm blob (D1926).** `packedFrom` indexed `TEXT[tag]` unchecked, so a tag outside 0-3 from a thawed
+blob threw a TypeError inside the thaw; for a user read from disk every request then threw (the user stayed frozen).
+`packedFrom` refuses such a tag with a RangeError, and `ItemCache` drops a user read from disk whose thaw throws, with
+their file (`freezes.discarded`), as `EncryptedFrozenDisk` discards a blob that does not open; the user starts over.
+`persist.test.ts` writes a warm blob with tag 7 through the encrypted store and reads it back: nothing found, no
+throw, the file gone, a later put served; `packed-text.test.ts` checks the RangeError.
+
+**Memory (the review's measurements, not re-run here).** Peak RSS over a compact thaw paired 1.036 (1.012-1.058;
+controls 0.997, 0.993) and live RSS +1-5%: costs of zstd, inside the rule (which bounded live heap, +3%). The backfill
+storm's +11% above did not reproduce there (paired 1.030, inside the ±20% band its controls showed).
+
 ## Per-object and per-request memos in the rule paths (D1920; engine memo)
 
 Decision: D1920. A profiling survey of main 4559e0634 (`bun --cpu-prof --cpu-prof-interval=500

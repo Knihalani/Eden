@@ -1,7 +1,9 @@
 /**
  * D1925: the router's `userOf` scans the body instead of parsing it. Its oracle is the parse it replaced, kept here
  * verbatim (`userOfByParse`): over random bodies (escaped and duplicate keys, nested userIds, BOMs, invalid JSON and
- * UTF-8, non-string ids, control characters, truncations) and the large and padded ones, the two must route alike.
+ * UTF-8, non-string ids, control characters, truncations, BOMs and other edge bytes inside keys and values) and the
+ * large and padded ones, the two must route alike. A BOM is the case to watch: the parse decoded the whole body, so
+ * only one at its first byte was dropped, and one opening a value (raw or escaped) is a character of the id.
  */
 import { describe, expect, test } from "bun:test";
 import { bodyShapeUnder } from "@eden/protocol";
@@ -46,6 +48,10 @@ const concat = (...parts: (Uint8Array | number[])[]) => {
   return out;
 };
 
+/** Keys and ids with a BOM (U+FEFF, raw: EF BB BF once encoded) at their start, end or middle, or alone. */
+const BOM_KEYS = ["\ufeffuserId", "userId\ufeff", "user\ufeffId", "\ufeff"];
+const BOM_IDS = ["\ufeff", "\ufeffalice", "al\ufeffice", "alice\ufeff", "\ufeff\ufeff", "\\ufeffalice", "\\uFEFF"];
+
 /** Random JSON text with userId keys sprinkled at every level, written with odd but valid spellings. */
 function body(r: () => number): string {
   const long = () => longText(r);
@@ -54,7 +60,18 @@ function body(r: () => number): string {
   const key = (): string => {
     if (r() < 0.45) {
       // userId, sometimes with some characters escaped, sometimes near-misses
-      const k = pick(["userId", "userId", "userId", "userid", "userId ", "user", "userIdx", "useRId", "\u0000userId"]);
+      const k = pick([
+        "userId",
+        "userId",
+        "userId",
+        "userid",
+        "userId ",
+        "user",
+        "userIdx",
+        "useRId",
+        "\u0000userId",
+        ...BOM_KEYS,
+      ]);
       let out = "";
       for (const ch of k) {
         const code = ch.charCodeAt(0);
@@ -67,7 +84,20 @@ function body(r: () => number): string {
   };
   const str = (): string => {
     if (r() < 0.25) return `"${long()}"`;
-    const s = pick(["u1", "u-ü1", "", "user 2", "😀", "\\n", '\\"q\\"', "\\ud800", "\\u00e9", "a\\/b", "x".repeat(40)]);
+    const s = pick([
+      "u1",
+      "u-ü1",
+      "",
+      "user 2",
+      "😀",
+      "\\n",
+      '\\"q\\"',
+      "\\ud800",
+      "\\u00e9",
+      "a\\/b",
+      "x".repeat(40),
+      ...BOM_IDS,
+    ]);
     return `"${s}"`;
   };
   const value = (d: number): string => {
@@ -108,16 +138,46 @@ function longText(r: () => number): string {
   return out;
 }
 
-/** One random change of a byte, or none: a structural byte, a control byte, invalid UTF-8, a cut. */
+/**
+ * Byte runs that a decode might treat specially, put inside strings by `mutate`: a BOM (one, two, or cut short), the
+ * line and paragraph separators, a non-character, surrogates and overlong forms as UTF-8, a lone continuation byte.
+ */
+const EDGE = [
+  [0xef, 0xbb, 0xbf],
+  [0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf],
+  [0xef, 0xbb],
+  [0xe2, 0x80, 0xa8],
+  [0xe2, 0x80, 0xa9],
+  [0xef, 0xbf, 0xbe],
+  [0xed, 0xa0, 0x80],
+  [0xc0, 0xaf],
+  [0xf4, 0x90, 0x80, 0x80],
+  [0x80],
+  [0xc2, 0xa0],
+];
+
+/**
+ * One random change, or none: a structural byte, a control byte, invalid UTF-8 or a cut anywhere; or an `EDGE` run
+ * just after a quote (so at the start of a key or value), just before one (its end), or at any offset.
+ */
 function mutate(bytes: Uint8Array, r: () => number): Uint8Array {
   const t = r();
   if (t < 0.4 || bytes.length === 0) return bytes;
+  if (t < 0.55) {
+    const edge = EDGE[Math.floor(r() * EDGE.length)]!;
+    let at = Math.floor(r() * (bytes.length + 1));
+    const quote = bytes.indexOf(0x22, at);
+    const where = r();
+    if (quote >= 0 && where < 0.45) at = quote + 1;
+    else if (quote >= 0 && where < 0.8) at = quote;
+    return concat(bytes.subarray(0, at), edge, bytes.subarray(at));
+  }
   const at = Math.floor(r() * bytes.length);
   const junk = [0x22, 0x5c, 0x7b, 0x7d, 0x5b, 0x5d, 0x2c, 0x3a, 0x00, 0x1f, 0x7f, 0x80, 0xc3, 0xff, 0x20, 0x30, 0x2d];
   const byte = junk[Math.floor(r() * junk.length)]!;
-  if (t < 0.6) return concat(bytes.subarray(0, at), [byte], bytes.subarray(at + 1));
-  if (t < 0.75) return concat(bytes.subarray(0, at), [byte], bytes.subarray(at));
-  if (t < 0.9) return concat(bytes.subarray(0, at), bytes.subarray(at + 1));
+  if (t < 0.68) return concat(bytes.subarray(0, at), [byte], bytes.subarray(at + 1));
+  if (t < 0.8) return concat(bytes.subarray(0, at), [byte], bytes.subarray(at));
+  if (t < 0.92) return concat(bytes.subarray(0, at), bytes.subarray(at + 1));
   return bytes.subarray(0, at);
 }
 
@@ -125,10 +185,12 @@ const BOM = [0xef, 0xbb, 0xbf];
 
 describe("userOf against the parse it replaced (D1925)", () => {
   test("random bodies: escaped and duplicate keys, nesting, BOMs, invalid JSON and UTF-8, non-string ids", () => {
-    const r = rng(1925);
+    // FUZZ_SEED and FUZZ_N rerun it wider by hand (D1925: 1,000,000 bodies on other seeds).
+    const r = rng(Number(process.env.FUZZ_SEED ?? 1925));
     let differ = 0;
     let routed = 0;
-    const N = 60_000;
+    let bom = 0;
+    const N = Number(process.env.FUZZ_N ?? 60_000);
     for (let k = 0; k < N; k++) {
       let bytes: Uint8Array = enc.encode(body(r));
       const lead = r();
@@ -145,6 +207,7 @@ describe("userOf against the parse it replaced (D1925)", () => {
       bytes = room.subarray(offset, offset + bytes.length);
       const want = userOfByParse(bytes);
       if (want !== "") routed++;
+      if (want.includes("\ufeff")) bom++;
       if (userOf(bytes) !== want) {
         differ++;
         if (differ <= 5) console.error("differs:", JSON.stringify(decoder.decode(bytes)), want, userOf(bytes));
@@ -153,7 +216,8 @@ describe("userOf against the parse it replaced (D1925)", () => {
     expect(differ).toBe(0);
     // The bodies exercise both answers.
     expect(routed).toBeGreaterThan(N / 30);
-    console.error(`userOf fuzz: ${N} bodies, ${routed} routed, ${differ} differ`);
+    expect(bom).toBeGreaterThan(N / 1_000);
+    console.error(`userOf fuzz: ${N} bodies, ${routed} routed (${bom} with a BOM in the id), ${differ} differ`);
   });
 
   test("hand-picked spellings", () => {
@@ -208,6 +272,32 @@ describe("userOf against the parse it replaced (D1925)", () => {
     for (const b of bytes) expect(userOf(b)).toBe(userOfByParse(b));
   });
 
+  test("a BOM inside a key or value is a character; only the body's leading one is dropped", () => {
+    const B = [0xef, 0xbb, 0xbf];
+    const s = (x: string) => enc.encode(x);
+    const cases: [Uint8Array, string][] = [
+      [concat(s(`{"userId":"`), B, s(`"}`)), "\ufeff"], // the id is a BOM alone
+      [concat(s(`{"userId":"`), B, s(`alice"}`)), "\ufeffalice"],
+      [concat(B, s(`{"userId":"`), B, s(`alice"}`)), "\ufeffalice"], // the body's BOM goes, the value's stays
+      [concat(s(`{"userId":"al`), B, s(`ice"}`)), "al\ufeffice"],
+      [concat(s(`{"userId":"alice`), B, s(`"}`)), "alice\ufeff"],
+      [concat(s(`{"userId":"`), B, B, s(`"}`)), "\ufeff\ufeff"],
+      [concat(s(`{"userId":"\u0061`), B, s(`"}`)), "a\ufeff"], // escaped value: decoded through the parse
+      [concat(s(`{"userId":"`), B, s(`\u0061"}`)), "\ufeffa"],
+      [s(`{"userId":"\ufeffalice"}`), "\ufeffalice"],
+      [concat(s(`{"`), B, s(`userId":"k"}`)), ""], // a BOM in the key: not userId
+      [concat(s(`{"userId`), B, s(`":"k"}`)), ""],
+      [concat(s(`{"\u0075serId`), B, s(`":"k"}`)), ""],
+      [concat(s(`{"`), B, s(`userId":"k","userId":"real"}`)), "real"],
+      [concat(s(`{"userId":"a",`), B, s(`"x":1}`)), ""], // a BOM between tokens is not JSON
+      [concat(s(` `), B, s(`{"userId":"a"}`)), ""], // nor one after leading whitespace
+    ];
+    for (const [b, want] of cases) {
+      expect(userOfByParse(b)).toBe(want);
+      expect(userOf(b)).toBe(want);
+    }
+  });
+
   test("large, deep and padded bodies", () => {
     const items = Array.from({ length: 500 }, (_, i) => ({ ref: `r${i}`, text: 'x\n"é'.repeat(500), meta: { i } }));
     const cases: Uint8Array[] = [
@@ -221,9 +311,45 @@ describe("userOf against the parse it replaced (D1925)", () => {
       enc.encode(`{"userId":"v","a":[${"0,".repeat(1_010_000)}0]}`), // past it
       enc.encode(`{"userId":"s","a":"${"\\u00e9".repeat(200_000)}"}`),
     ];
+    // Dense in structure past 252 KB: `bodyShapeUnder` runs at the first 16,384 values (router.ts, `padded`), then the
+    // scan reads on.
+    const dense = `,"a":[${"0,".repeat(200_000)}0]}`;
+    cases.push(concat(BOM, enc.encode(`{"userId":"`), BOM, enc.encode(`x"${dense}`)));
+    cases.push(concat(enc.encode(`{"userId":"\\u0061"${dense}`)));
+    cases.push(concat(enc.encode(`{"a":[${"0,".repeat(200_000)}0],"userId":"late","\\u0075serId":"esc"}`)));
+    cases.push(concat(enc.encode(`{"userId":"u","a":[${"0,".repeat(200_000)}0]`))); // unended
     for (const c of cases) expect(userOf(c)).toBe(userOfByParse(c));
+    expect(userOf(cases[9]!)).toBe("\ufeffx");
+    expect(userOf(cases[11]!)).toBe("esc");
     expect(userOf(cases[0]!)).toBe("user-1");
     expect(userOf(cases[3]!)).toBe("d");
     expect(userOf(cases[4]!)).toBe("");
+  });
+
+  test("dense bodies, where the scan runs the shape check part way (`padded`), within the bounds and past them", () => {
+    const r = rng(19250);
+    const pick = <T>(xs: T[]) => xs[Math.floor(r() * xs.length)]!;
+    let differ = 0;
+    let routed = 0;
+    for (let k = 0; k < 30; k++) {
+      // One small value a few bytes, so the projection passes an eighth of the values bound at a checkpoint.
+      const unit = pick(["0,", "1,", '"a",', "[],", "{},", '{"userId":"n"},', "true,"]);
+      const count = 70_000 + Math.floor(r() * (k % 10 === 0 ? 1_000_000 : 300_000));
+      const arr = `[${unit.repeat(count)}0]`;
+      const id = JSON.stringify(pick(["u1", "\ufeffu", "é", ""]));
+      const text = pick([
+        `{"userId":${id},"a":${arr}}`,
+        `{"a":${arr},"userId":${id}}`,
+        `{"\\u0075serId":${id},"a":${arr},"b":${arr}}`,
+        `{"userId":${id},"a":${"[".repeat(1_000)}${arr}${"]".repeat(1_000)}}`,
+      ]);
+      let bytes: Uint8Array = enc.encode(text);
+      if (r() < 0.5) bytes = mutate(bytes, r);
+      const want = userOfByParse(bytes);
+      if (want !== "") routed++;
+      if (userOf(bytes) !== want) differ++;
+    }
+    expect(differ).toBe(0);
+    expect(routed).toBeGreaterThan(5);
   });
 });

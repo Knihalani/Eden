@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { ItemCache } from "./cache";
 import { termIds } from "./text";
-import { clearDecoded, decodedCount, isPacked, MIN_PACK_CHARS, packedOf, packItem } from "./packed-text";
+import {
+  clearDecoded,
+  decodedCount,
+  isPacked,
+  MIN_PACK_CHARS,
+  packedFrom,
+  packedOf,
+  packItem,
+  withoutText,
+  type PackTag,
+} from "./packed-text";
 import { deflatePacked } from "./packed-text.reference";
 
 const scope = { tenantId: "t", userId: "u" };
@@ -108,6 +118,18 @@ describe("a packed copy reads one text, from the memo or inflated (the review of
       expect(boms).toBeGreaterThan(100);
     },
   );
+});
+
+describe("packedFrom's tag (D1926)", () => {
+  test("a tag outside 0-3 is refused with a RangeError; each of 0-3 makes an item", () => {
+    const p = packItem(item("x", "Zoë’s long note about the review. ".repeat(20)));
+    const { bytes, tag } = packedOf(p)!;
+    for (const bad of [4, 7, -1, 1.5, Number.NaN, 255]) {
+      expect(() => packedFrom(withoutText(p), bytes, bad as PackTag)).toThrow(RangeError);
+    }
+    for (const ok of [0, 1, 2, 3] as const) expect(isPacked(packedFrom(withoutText(p), bytes, ok))).toBe(true);
+    expect(packedFrom(withoutText(p), bytes, tag).text).toBe(p.text);
+  });
 });
 
 describe("ItemCache with packText", () => {
