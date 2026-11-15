@@ -49,7 +49,8 @@ oracle, `src/source-map.reference.ts`; `src/migrate.ts`, the operator's command 
   has. A new table or column joins `TABLES`, `TABLE_SQL`, `COLUMNS` and `KEY_COLUMNS` (the move refuses a table whose
   columns differ, so an added column must also teach it the old set). Never move a file by renaming another over it:
   a second connection (mcp-stdio for the same user, an older process) would keep writing the old inode.
-  `source-map-migrate.test.ts` stops the move at each step (a throw, a SIGKILL) and checks one layout and every row;
+  `source-map-migrate.test.ts` (in the test tail, D811: it times a lock wait and kills children) stops the move at
+  each step (a throw, a SIGKILL) and checks one layout and every row;
   `bun packages/graph/src/migrate.ts FILE` moves a file over the cap with the server stopped.
 - `normalizeEntity` reads plain ASCII names in one pass (D1937); `normalizeEntitySlow` is the definition.
 - `source-map.reference.ts` is the map before D1935-D1937, unchanged: the oracle `source-map-fast.test.ts` runs
