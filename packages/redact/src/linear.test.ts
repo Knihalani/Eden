@@ -105,10 +105,10 @@ describe("eden-url-userinfo", () => {
   const BEFORE = new RegExp(String.raw`\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@`, "dgi");
   const spans = (regex: RegExp, text: string) => [...text.matchAll(regex)].map((found) => found.indices![1]);
   // The gate's regex has no `d` flag: it reads group 1 back from the match's end, before the closing `@` (spanOf).
-  const fromEnd = (text: string) =>
+  const fromEnd = (text: string): ([number, number] | undefined)[] =>
     [...text.matchAll(URL_USERINFO)].map((m) => {
       const end = m.index + m[0].length - 1;
-      return [end - m[1]!.length, end];
+      return [end - m[1]!.length, end] as [number, number];
     });
 
   test("the lookbehind form finds exactly what the old form found", () => {
