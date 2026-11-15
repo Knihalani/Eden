@@ -689,6 +689,16 @@ bun packages/engine/bench/pipeline.bench.ts          # performance anchor
   `*Before` references in `cards-own.test.ts` with it. `SPAN_HINT`'s month alternative and `MONTH_DAY`
   (day-facts.ts) are tried only at a month's three letters (D1916): a new alternative must begin with them, or move
   out of the sticky copy; `day-hints.test.ts` compares the two against the patterns.
+- **The third round (D1920, docs/research/opt-round3.md) memoises per item object and per request, never per
+  content.** `settledOf` lives on `READINGS` (re-read when a plain item's text or title changes); folding's anchors on
+  the `OWN` entry beside its own text; a request's cleaned names and their words on `CUE_NAMES` (per `Cue`, like
+  `FRAMES`: never change `cue.entities` after the cue is built); `namesEntity`'s patterns on `ENTITY_TESTS` (per
+  `Anchors`). A new rule path asking whether an item names a request's people calls `mentionsAny(cueNames(cue).words,
+  item)`, not `mentions` per name; `mentions` stays as the reference. `mentionText` and `lineWords` are code-unit
+  scans with the surrogate fallback (above). `namesEntity` tests the lowercased text as written, each space of an
+  entity read as `\s+`: an entity's words must hold no other spacing. `extractTypedEntities`' `persistableCap` stops
+  the capitalised runs once that many `PERSISTABLE_KINDS` are found: exact only while names are the last kind added.
+  `opt-round3.test.ts` fuzzes each against the code it replaced.
 - Tuning thresholds or rules on dev or held-out wording does not generalise (docs/research/broad-set.md): screen on
   the broad `train` suites, check blind once.
 
