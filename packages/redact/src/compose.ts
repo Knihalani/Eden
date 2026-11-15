@@ -29,11 +29,13 @@ export interface StructuralPass {
   /**
    * The structural pass on `gated` as main ran it: its output, `seen.excusable` set when it took an excused value,
    * and `removed`: what it removes from `gated`, as sorted merged intervals, all of it and only what is not an
-   * excused value (whose texts go to `values` when given), worked out from the same run.
+   * excused value (whose texts go to `values` when given), worked out from the same run. `gating` is the gated
+   * text's pieces against the original (pieces.ts), so the pass can use what the gate's scan of the original found.
    */
   run(
     gated: string,
     seen: { excusable: boolean },
+    gating: Pieces,
   ): { stored: string; removed(values?: string[]): { all: Iv[]; strict: Iv[] } };
 }
 
@@ -89,7 +91,7 @@ export function composeMasks(
   if (text.length > at) gating.push(gated.length, gated.length + text.length - at, at);
   gated += text.slice(at);
   const seen = { excusable: false };
-  const ran = pass.run(gated, seen);
+  const ran = pass.run(gated, seen, gating);
   const stored = ran.stored;
   const excusing = excused.length > 0 || assigned.all.length !== assigned.strict.length || seen.excusable;
   if (post.length === 0 && !excusing && !explain) return { stored };

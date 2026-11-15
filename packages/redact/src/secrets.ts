@@ -41,8 +41,8 @@ import { compileAllowlistRegex, parseRegex, type Tester } from "./automaton.ts";
 import { type Composed, composeMasks, composeStored, type StructuralPass } from "./compose.ts";
 import {
   assignmentSpansSplit,
+  INLINE_BACK,
   redactAssignments,
-  redactTokensIn,
   structuralRemoved,
   tokenPasses as runTokenPasses,
   TOKEN_LITERALS,
@@ -1053,7 +1053,11 @@ export function gateOf(rules: SecretRule[]): Gate {
   const anchorIds = rules.map((rule) => rule.anchorWords && Int32Array.from(rule.anchorWords, (w) => index.get(w)!));
   const anchorWord = new Uint8Array(words.length);
   for (const ids of anchorIds) if (ids) for (const id of ids) anchorWord[id] = 1;
-  const found = new Occurrences(words.length, anchorWord);
+  /** The last token pass's literals: their occurrences are kept too, for `inlineStarts`. */
+  const inlineIds = Int32Array.from(TOKEN_PASSES[TOKEN_PASSES.length - 1]!.literals, (w) => index.get(w)!);
+  const keepWord = Uint8Array.from(anchorWord);
+  for (const id of inlineIds) keepWord[id] = 1;
+  const found = new Occurrences(words.length, keepWord);
   found.lazyOnly.set(anchorWord);
   rules.forEach((rule, r) => {
     if (!rule.findsItself) for (const id of anchorIds[r] ?? []) found.lazyOnly[id] = 0;
@@ -1115,10 +1119,40 @@ export function gateOf(rules: SecretRule[]): Gate {
    * sentinel holds none and no literal spans its brackets), so a pass whose literals the text scanned last lacks
    * would return its input unchanged and is left out (TOKEN_PASSES).
    */
+  /**
+   * Where in the text scanned last a match of the last token pass can start: at most INLINE_BACK before each
+   * occurrence of its literals, ascending; through `gating` (pieces.ts), where they are in the gated text (an
+   * occurrence the gating removed is gone: the sentinel holds no literal and starts no match). Undefined when the
+   * pass will not run, or when a literal's list is incomplete (past its dense limit): the pass then scans.
+   */
+  const inlineStarts = (gating?: number[]): number[] | undefined => {
+    if ((tokens & 8) === 0) return undefined;
+    const at: number[] = [];
+    for (const id of inlineIds) {
+      if (found.count[id] === 0) continue;
+      if (!found.complete(id)) return undefined;
+      for (let e = found.head[id]!; e >= 0; e = found.next[e]!) {
+        const start = found.start[e]!;
+        for (let back = Math.min(INLINE_BACK, start); back >= 0; back--) at.push(start - back);
+      }
+    }
+    at.sort((a, b) => a - b);
+    if (!gating) return at;
+    const out: number[] = [];
+    let k = 0;
+    for (let p = 0; p < gating.length; p += 3) {
+      const from = gating[p + 2]!;
+      if (from < 0) continue;
+      const to = from + gating[p + 1]! - gating[p]!;
+      while (k < at.length && at[k]! < from) k++;
+      while (k < at.length && at[k]! < to) out.push(gating[p]! + at[k++]! - from);
+    }
+    return out;
+  };
   const pass: StructuralPass = {
     assignments: assignmentSpansSplit,
-    run: (gated, seen) => {
-      const passed = runTokenPasses(gated, tokens);
+    run: (gated, seen, gating) => {
+      const passed = runTokenPasses(gated, tokens, inlineStarts(gating));
       const assigned: [number, number][] = [];
       return {
         stored: redactAssignments(passed.out, false, seen, assigned),
@@ -1162,7 +1196,7 @@ export function gateOf(rules: SecretRule[]): Gate {
       // No rule found anything (most stored text): the text is gated as it is, so the stored text is the structural
       // pass on it, as main ran it, unless that pass took a value that is code (then compose.ts gives it back).
       const seen = { excusable: false };
-      const stored = redactAssignments(redactTokensIn(text, tokens), false, seen);
+      const stored = redactAssignments(runTokenPasses(text, tokens, inlineStarts()).out, false, seen);
       if (!seen.excusable) return stored;
     }
     // A rule's span can cut a quoted credential value short, and hide the next key from the assignment pass: with
