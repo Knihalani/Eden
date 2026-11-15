@@ -19,6 +19,7 @@ packages/engine/src/push-cut-behind.test.ts
 packages/engine/src/reader.test.ts
 packages/engine/src/source-refs.test.ts
 packages/engine/src/sync-calls.test.ts
+packages/graph/src/source-map-migrate.test.ts
 packages/primitives/src/pool.test.ts
 packages/proxy/src/proxy-a11.test.ts
 packages/proxy/src/proxy-speculate.test.ts
