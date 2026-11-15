@@ -43,7 +43,12 @@ export class TermSketch {
    * added in this epoch is still held (a fold keeps every term), so adding it again changes nothing while the sketch
    * is not `saturated`.
    */
-  epoch = nextEpoch();
+  private epochNow = nextEpoch();
+
+  /** The current epoch (above); read-only from outside, so nothing can move it back. */
+  get epoch(): number {
+    return this.epochNow;
+  }
 
   /** Bytes held. */
   get bytes(): number {
@@ -62,7 +67,7 @@ export class TermSketch {
     if (this.saturated) {
       this.bits = new Uint32Array(MAX_BITS / 32);
       this.set = 0;
-      this.epoch = nextEpoch();
+      this.epochNow = nextEpoch();
     }
     const mask = this.bits.length * 32 - 1;
     this.setBit(h1 & mask);

@@ -241,6 +241,11 @@ export interface PartnerDeps {
    */
   onPushPool?: PushPoolSink;
   /**
+   * Tests only (D1927's differential test): the partner's sync adds every listed item's words again at every store,
+   * as before D1927 (`SyncOptions.resketchForTests`). No config sets it; never set by a server or the lab.
+   */
+  syncResketchForTests?: boolean;
+  /**
    * The push check's model call (`push-check.ts`, `pushCheck`, D500, in the default since D828), with its own budget.
    * Absent (no model key), or the flag off: no call is made and the default's candidates go.
    */
@@ -843,6 +848,7 @@ export class ContextPartner {
             engagedDeep: c.syncEngagedDeep,
             // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
             unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
+            ...(deps.syncResketchForTests === true ? { resketchForTests: true } : {}),
           },
         )
       : null;
