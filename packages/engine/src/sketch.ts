@@ -11,7 +11,7 @@
  * users (D425), where it is saved encrypted with them.
  */
 import { hashString } from "@eden/primitives";
-import { isStopword, readWordUnit, stopwordAt, WORD_UNITS } from "./text";
+import { isStopword, readWordUnit, STOP_FNV, stopwordAt, WORD_UNITS } from "./text";
 
 /** The sketch's size while it fills (bits, a power of two). */
 const MAX_BITS = 1 << 15;
@@ -170,7 +170,8 @@ export function sketchTerms(text: string): string[] {
       h = Math.imul(h ^ c, 0x01000193);
     } else if (start >= 0) {
       const len = i - start;
-      if (len >= 3 && !figure && !stopwordAt(lower, start, i)) {
+      // A stopword only where its hash's mark is set (`STOP_FNV`, D1911): most words skip `stopwordAt`.
+      if (len >= 3 && !figure && (STOP_FNV[h & 4_095] === 0 || !stopwordAt(lower, start, i))) {
         // A word seen before in this text: same hash, same length, same units.
         let slot = h & mask;
         for (;;) {

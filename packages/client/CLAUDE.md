@@ -32,6 +32,9 @@ an action before it runs (`check`), and put injections into a message list (`wit
 - **Secrets.** Never log the API key; `onError` gets the error, not the request. A failure before any answer is
   reported as `eden <route>: cannot reach <baseUrl> (<why>)` (D365); `redactUrls` strips every URL in the line of
   `user:password@`, query and fragment (Node's fetch quotes a URL with credentials in its own message).
+- **Per-call CPU is not the lever (D1918).** With a stub `fetch`, `observe` and `ask` cost 1.6-2.0 µs above building
+  and reading a bare `Response` (`AbortSignal.timeout` and `JSON.stringify` the largest parts): nothing beside any
+  round trip, so keep the fail-open checks rather than trimming them.
 - **Python parity (D278).** `packages/client-python` mirrors this client call for call; change both together (its
   `python.test.ts` checks `eden_id` against `edenId`).
 
