@@ -70,7 +70,8 @@ frozen copy of it and an independently written grammar of what may be left (`src
 Measured on one machine on 2026-11-14 with each tool's recommended configuration (gitleaks 8.30.1, trufflehog 3.99.9
 with verification off, detect-secrets 1.5.0, secretlint 13.1.0 with the recommended preset), on this package's final
 code; details, inputs and the cases where this gate loses are in `docs/research/redact-vs-alternatives.md` in the
-Eden repository. Rows marked † were measured once in an earlier round, on the code before the last review.
+Eden repository. Rows marked † were measured once in an earlier round, on the code before the last review; cells
+marked ‡ on 2026-11-15, after the speed work of that day (its §13).
 
 | | this gate | gitleaks | trufflehog | detect-secrets | secretlint |
 |---|---:|---:|---:|---:|---:|
@@ -78,12 +79,12 @@ Eden repository. Rows marked † were measured once in an earlier round, on the 
 | gitleaks' own 6,040 true-positive examples (216 rules) flagged | 100% | 99.7% | 24.5% | 48.5% | 12.5% |
 | gitleaks' own 357 false-positive examples flagged (lower is better) | 23.0% | 6.2% | 7.3% | 22.4% | 7.3% |
 | findings on 13.8 MB of text with no planted secret (lower is better) | 233 | 4 | 1 | 12 | 1 |
-| in process, 16 KB of mixed text, a call | 0.27 ms (Bun), 0.34 ms (Node) | n/a | n/a | 87 ms | 0.66 ms |
-| in process, 1 MB of mixed text, a call | 19–27 ms (Bun) | n/a | n/a | 6.1 s | 29 ms |
+| in process, 16 KB of mixed text, a call | 0.16–0.24 ms (Bun), 0.18 ms (Node) ‡ | n/a | n/a | 87 ms | 0.66 ms |
+| in process, 1 MB of mixed text, a call | 14–16 ms (Bun) ‡ | n/a | n/a | 6.1 s | 29 ms |
 | one command on a 16 KB file, startup included | 0.13 s (Bun) | 0.58 s † | 2.3 s † | 0.30 s | 0.31 s |
 | one command on a 1 MB file, startup included | 0.36 s (Bun) | 0.70 s † | 2.5 s † | 6.4 s | 0.39 s |
 | slowest of 24 crafted 1 MB inputs, as a command | 0.46 s | 14.3 s | 3.2 s | >30 s on 3 † | 0.60 s |
-| crafted 1 MB inputs where it is faster than secretlint, as a command / in process | 23 / 9 of 24 | | | | |
+| crafted 1 MB inputs where it is faster than secretlint, as a command / in process | 23 / 10 of 24 | | | | |
 
 Where it loses:
 
@@ -92,13 +93,13 @@ Where it loses:
   and on the evaluation scenarios' texts two, each holding a credential-shaped value (a wifi password, a database URL
   with a password).
 - **Crafted input in process.** secretlint runs 27 provider rules and finds nothing in text built from keywords. In
-  process this gate is at or below it on 9 of the 24 crafted inputs, within 2x on 13, and 2.3–11x slower on 11
-  (15–105 ms at 1 MB against 6–16 ms), where a finding every 10–20 characters each pays for the allowlists, the
-  gating and the structural pass. All stay linear. As a command (startup included) it is faster on 23 of 24.
-- **Against the previous gate on ordinary text.** At 1 MB it is within noise of it (0.87–1.06x across text kinds; the
-  stored text is composed by intervals, `src/pieces.ts`), but small mixed text with no finding runs at 0.7–1.0x
-  (2 KB) and 0.8–0.96x (16 KB): its prefilter holds more literals and its lazy-prefix rules read their occurrences.
-- **Node** runs the same code 0.7–2.4x Bun's time.
+  process this gate is at or below it on 10 of the 24 crafted inputs and 2.6–12x slower on the nine with a finding
+  every 10–20 characters (31–113 ms at 1 MB against 8–15 ms), where each finding pays for the allowlists, the gating
+  and the structural pass. All stay linear. As a command (startup included) it is faster on 23 of 24.
+- **Against the previous gate on ordinary text.** Each alone in its process it is 1.08x of it on 2 KB of mixed text
+  with no finding, 1.27x at 16 KB and 1.3x at 1 MB; 2 KB of text whose only findings are values left as code reads
+  0.89–1.04x across runs, not clearly faster.
+- **Node** runs the same code 0.8–3.7x Bun's time (median 1.5x over the benchmark's classes in one process).
 
 ## How it is fast
 
@@ -106,8 +107,9 @@ A gate runs on every item an application touches, so it is built for typical tex
 
 1. **One prefilter pass.** Every rule names literals that each of its matches contains (gitleaks' keywords, or a
    provider prefix such as `ghp_`). One Aho–Corasick automaton over all of them, folded for case and accents, reads
-   the text once (about one table load a character) and selects the rules whose literals occur. The same pass records
-   where the anchoring literals occur and whether any of the structural pass's token literals do.
+   the text once (about one table load a character, two halves walked in one loop so their loads overlap) and selects
+   the rules whose literals occur. The same pass records where the anchoring literals occur and where the structural
+   pass's token literals do, so its token regexes are tried only there.
 2. **Anchored rules.** Most gitleaks rules have a bounded prefix from a known class before a literal. The gate reads
    that from each regex (`src/anchor.ts`) and tries the regex, made sticky, only a few characters before an
    occurrence of the literal, instead of letting the engine try every position of the text.

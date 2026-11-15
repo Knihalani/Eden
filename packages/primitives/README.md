@@ -304,3 +304,26 @@ alternating rounds):
 | 2 KB, 10% non-ASCII | 8.97 µs | 7.83 µs | 4.98 µs |
 
 The secret gate's use of it: docs/research/redact-perf.md.
+
+## Two walks in one `scan` (2026-11-15, D1850)
+
+Each character's transition is a load whose address is the last load's result, so one walk is bound by that latency
+(a 16-bit table, half the size, was 20% slower: its multiply sat on the chain). From 256 code units on, `scan` walks
+the text's two halves in one loop. The second walk starts from the root the longest pattern's length of folded
+characters before the middle (a state is the longest folded suffix that begins a pattern, so it reaches the same
+state there) and holds back the occurrences it would pass to the sink until the first half is done, then passes each
+only while its pattern is still kept, so the sink sees what one walk showed it, in order; `firsts` is in no set order.
+Past 32 characters outside ASCII each half goes alone. Four walks were no faster than two. The constructor runs
+`scan` on two short texts so V8 has type feedback for every path before it compiles the loop on stack replacement
+(code after the loop that had not run deoptimized it at every call). `matcher.test.ts` checks the kept occurrences
+against `forEach` on texts across the middle, with marks and ligatures before it and a sink that clears `keep`.
+`bench/matcher.bench.ts` before → after, p50 (back to back, one machine, ±30%):
+
+| Benchmark | before | after |
+|---|---:|---:|
+| `markHits` 256 B / 2 KB / 16 KB (one walk, unchanged) | 1.38 / 5.41 / 46.81 µs | 1.25 / 5.48 / 44.70 µs |
+| `scan`, nothing kept, corpus 16 KB | 38.70 µs | 25.56 µs |
+| `scan`, nothing kept, 64 KB of `sk-` | 160.40 µs | 108.29 µs |
+
+The secret gate's prefilter alone (its 303 literals, interleaved): 2.98 → 2.20 ns a character on 2 KB of mixed text,
+2.93 → 2.14 at 16 KB, 2.90 → 2.17 at 1 MB.
