@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildWorld } from "../world";
+import { buildWorld, type World } from "../world";
 import { recapOf } from "./pi-day";
 import {
   dayKinds,
@@ -11,9 +11,36 @@ import {
   userWorldOf,
   withDayRecaps,
 } from "./pi-user";
-import { parseSuites } from "./suites";
+import { parseSuites, prepareWorld, SUITES } from "./suites";
 
 const MIX = { hidden: 1, control: 1, neutral: 8 };
+
+/**
+ * `suiteTemplates` over one world built per seed, not one per suite: each suite plants into its own lists and maps over
+ * that world's items (as cards-disk.test.ts shares its worlds, D819), so the templates are the ones a fresh world
+ * gives; the test checks that against `suiteTemplates` and that no base item changed. Thirty users of six suites
+ * built 180 worlds (3.7 s); this builds 30.
+ */
+function sharedTemplates(seed: number, suites: readonly string[]): Record<string, string[]> {
+  const base = buildWorld({ seed: seed * 1_000 });
+  const printed = JSON.stringify([base.items, [...base.facts], base.arcs, base.people, base.user, base.sources]);
+  const out = Object.fromEntries(
+    suites.map((s) => {
+      const world: World = {
+        ...base,
+        people: [...base.people],
+        arcs: [...base.arcs],
+        facts: new Map(base.facts),
+        items: [...base.items],
+        sources: { ...base.sources },
+      };
+      prepareWorld(s, world, seed);
+      return [s, SUITES[s]!(world, seed, "hidden").map((t) => t.template)];
+    }),
+  );
+  expect(JSON.stringify([base.items, [...base.facts], base.arcs, base.people, base.user, base.sources])).toBe(printed);
+  return out;
+}
 
 describe("pi-user (H16)", () => {
   test("flags: day size and mix", () => {
@@ -55,8 +82,9 @@ describe("pi-user (H16)", () => {
     // Weeks (D874): a plan longer than the templates. Over 30 users of four weeks: no template planted twice, none
     // both planted and asked as a neutral request (its item would sit in that request's world), none twice in a day,
     // and every day's kinds as dayKinds says.
+    expect(sharedTemplates(41, suites)).toEqual(templates);
     for (let seed = 41; seed <= 70; seed++) {
-      const long = planUser(seed, suiteTemplates(seed, suites), { days: 28, size: [12, 20], mix: MIX });
+      const long = planUser(seed, sharedTemplates(seed, suites), { days: 28, size: [12, 20], mix: MIX });
       expect(long.length).toBe(28);
       const key = (e: { suite: string; template: string }) => `${e.suite}|${e.template}`;
       const planted = long

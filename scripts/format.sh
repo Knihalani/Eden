@@ -10,20 +10,23 @@ files=$(
   git ls-files --cached --others --exclude-standard -- '*.ts' '*.tsx' '*.mts' '*.js' '*.mjs' |
     grep -v -E '^archived/'
 )
-prettier=node_modules/.bin/prettier
+# Prettier runs on Bun, not on the Node its bin names: the same verdicts for about a quarter less CPU (874 files: 45 s
+# of CPU on Node 22, 36 s on Bun 1.4.4; every file, its indentation stripped and lines joined, formatted byte for byte
+# the same on both, D1945). The runtime's version is part of the key below.
+prettier="bun node_modules/prettier/bin/prettier.cjs"
 
 # The known-formatted set: one `<blob id> <path>` line per file content that Prettier found formatted, so a later run
 # hands Prettier only the files whose content (or path, which picks the parser) it has not seen. Prettier's own
 # --cache cannot do this across checkouts: it keys absolute paths, so every new git worktree started cold (13 s).
 # The set lives under the git common dir, which every worktree of the repo shares, in a file named by a key over
-# everything else that decides the result: the Prettier version, every Prettier config, ignore, .editorconfig and
-# package.json file (package.json may hold a "prettier" key or name a plugin), and bun.lock (any plugin's version). A
-# key that covers too much only re-checks more. Content is hashed from the working tree, raw (--no-filters), so
-# unstaged edits count. Writes go to a temp file renamed into place: worktrees that check at once can lose each
-# other's additions (a later run re-checks those), never corrupt the set. The cold gate (CHECK_COLD=1) reads it too
-# (D819): an entry is Prettier's own verdict on exactly that content under exactly that key, so it is not a result
-# that could go stale. FORMAT_COLD=1 checks every file without it. Any failure here falls back to checking every
-# file. `--key` prints the key (format-key.test.ts changes each input and expects a new one).
+# everything else that decides the result: the Prettier version, the version of Bun that runs it, every Prettier
+# config, ignore, .editorconfig and package.json file (package.json may hold a "prettier" key or name a plugin), and
+# bun.lock (any plugin's version). A key that covers too much only re-checks more. Content is hashed from the working
+# tree, raw (--no-filters), so unstaged edits count. Writes go to a temp file renamed into place: worktrees that check
+# at once can lose each other's additions (a later run re-checks those), never corrupt the set. The cold gate
+# (CHECK_COLD=1) reads it too (D819): an entry is Prettier's own verdict on exactly that content under exactly that
+# key, so it is not a result that could go stale. FORMAT_COLD=1 checks every file without it. Any failure here falls
+# back to checking every file. `--key` prints the key (format-key.test.ts changes each input and expects a new one).
 #
 # What enters the set comes only from Prettier's exit status and bare paths, never from parsing its log: --check runs
 # Prettier as `--list-different --no-color`, which prints each unformatted path alone on a line. (Parsing `[warn]
@@ -44,6 +47,7 @@ shared_set() {
   configs=$(printf '%s\n' "$configs" bun.lock | grep -v '^$' | sort -u)
   key=$(
     echo "prettier $version"
+    echo "runtime bun $(bun --version)"
     paste -d' ' <(git hash-object --no-filters --stdin-paths <<<"$configs") <(echo "$configs")
   ) || return 1
   key=$(git hash-object --stdin <<<"$key") || return 1
