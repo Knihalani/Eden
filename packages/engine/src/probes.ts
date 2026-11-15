@@ -786,7 +786,9 @@ function keeps(c: number): boolean {
 function mentionedIn(lower: string, w: string): boolean {
   // An empty word (never one of `mentionWords`') is in the padded text where it holds two spaces in a row.
   if (w.length === 0) return ` ${mentionText(lower)} `.includes("  ");
-  for (let i = 0; i < w.length; i++) if (!keeps(w.charCodeAt(i))) return false;
+  // A word holding a character the text drops (a space inside a phrase; `mentionWords` never gives one) is read as
+  // the reference reads it, on the copy, so a later caller passing phrases is answered alike (D1934's review).
+  for (let i = 0; i < w.length; i++) if (!keeps(w.charCodeAt(i))) return ` ${mentionText(lower)} `.includes(` ${w} `);
   let i = lower.indexOf(w);
   while (i >= 0) {
     const end = i + w.length;
