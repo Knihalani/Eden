@@ -150,6 +150,13 @@ A finding from the first case: every drop moves the table's epoch, and each page
 past 4,094 sources, or with a full table, re-adds almost every item at every listing (the oracle's cost, as before
 D1927): exact, and only that user's skip is lost.
 
+Gates on the final tree: `env -u OPENROUTER_API_KEY CHECK_COLD=1 FORMAT_COLD=1 bun run check` green on its second run
+(3,029 of 3,031 tests pass, 0 fail, plus 524 of 524; the first failed one timing test in the untouched
+`server/src/http.test.ts`, which passed alone); `bun packages/eval/src/cli.ts` reads precision 0.65, recall 0.52,
+falseFireRate 0, acting packets on 19 of 28 neutral requests at 1.18 items, facts handed 10 of 11, look-alikes 3 of
+10; `bun run funnel` reads hidden 323/384 and decoys 294/384 on main (run in this session) and on the branch, and
+`--baseline` against main's run reads hidden +0 −0, decoys +0 −0; `mutate-sync-kick.py` 35 of 35 killed.
+
 ## The router's body scan and the packed-text codec (D1925, D1926; branch claude/router-codec)
 
 Two levers from the survey: the router's `userOf` decoded and parsed a whole body to read one key (1.6 µs for 126
