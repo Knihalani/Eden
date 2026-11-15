@@ -190,6 +190,11 @@ function hex4(b: Uint8Array, i: number): number {
 /** `readNumbers`' answers besides an end index. */
 export const NOT_NUMBERS = -1;
 export const TOO_MANY = -2;
+/**
+ * The array holds what no JSON array holds where an element starts or ends (`nn`, `--1`, `1.2.3`, `1,]`): the reply is
+ * not JSON, so `JSON.parse` would throw on it, and the scan answers so at once (D1919).
+ */
+export const NOT_JSON = -4;
 /** `numbersIn`'s answer when its region ended inside the array: go on from `resumeAt`. */
 const MORE = -3;
 /** Exact powers of ten: a double holds each exactly up to 1e22. */
@@ -203,6 +208,18 @@ export let numbersRead: Element[] = [];
 let resumeAt = 0;
 /** Where, in the region `numbersIn` last read, the element it refused starts. */
 let failAt = 0;
+/**
+ * The numbers the array being read has handed to `Number` (D1919): a number past the fast path (more than 15 digits,
+ * or a power of ten past 22, such as a computed double or `1e400`) is read by `Number` on its text, which gives the
+ * double `JSON.parse` gives, at about its cost (43 ns against 56 for a 17-digit double). Up to two, and one in eight
+ * elements past that (`fallbackOk`): an array of computed doubles is left to the scan and the parse at its third
+ * element, as before, and a series with a few anywhere is read whole (giving up at one cost what had been read before
+ * it: 1.2-1.6x main). Read by `Number` throughout, a series costs 1.03-1.3x main.
+ */
+let fallbacks = 0;
+const fallbackOk = (f: number) => ++fallbacks <= 2 + (f >> 3);
+/** Calls into `readNumbers`: the tests check an array whose last element it would refuse never enters it. */
+export const numbersCalls = { count: 0 };
 /**
  * Where the last `readNumbers` that answered `NOT_NUMBERS` stopped (D1919): `at`, the index in `text` of the
  * character it stopped at, and `commas`, the commas before it. Everything from the array's first element up to `at`
@@ -218,55 +235,71 @@ export const numbersStop = { at: -1, commas: 0 };
 export const NUMBER_REGION = { first: 512, most: 32 * 1024 };
 
 /**
- * The index in `text` of the `]` that closes the array opened at `open`, when every element is a JSON number of at most
- * 15 significant digits whose power of ten (its exponent less its decimal places) is within 22, or a `null`, `true` or
- * `false` (a metrics series with gaps, D1919): `numbersRead` then holds them. `NOT_NUMBERS` for any other array (the
- * scan reads it as usual, from `numbersStop`), and `TOO_MANY` past `room` commas, where the scan would refuse it.
- * Such a number is an integer under 2^53 times or divided by an exact power of ten, which one IEEE operation rounds
- * correctly (Clinger's fast path), so it is the double `JSON.parse` gives. The array is encoded a region at a time
- * from its first element, each twice the last up to `NUMBER_REGION.most`, so a reader that gives up has cost about
- * what it read (an array of arrays nested a thousand deep costs no more than one pass), and every region goes into the
- * scratch buffer. 2.6-2.9 ms a MiB of numbers against `JSON.parse`'s 3.0-3.6 (D1900).
+ * The index in `text` of the `]` that closes the array opened at `open`, when every element is a JSON number or a
+ * `null`, `true` or `false` (a metrics series with gaps, D1919): `numbersRead` then holds them. `NOT_NUMBERS` for any
+ * other array (the scan reads it as usual, from `numbersStop`), `NOT_JSON` for one no JSON array is, and `TOO_MANY`
+ * past `room` commas, where the scan would refuse it. A number of at most 15 significant digits whose power of ten
+ * (its exponent less its decimal places) is within 22 is an integer under 2^53 times or divided by an exact power of
+ * ten, which one IEEE operation rounds correctly (Clinger's fast path), so it is the double `JSON.parse` gives; any
+ * other is read by `Number` (`fallbacks`). The array is encoded a region at a time from its first element, each
+ * twice the last up to `NUMBER_REGION.most`, so a reader that gives up has cost about what it read (an array of arrays
+ * nested a thousand deep costs no more than one pass), and every region goes into the scratch buffer. 2.6-2.9 ms a MiB
+ * of numbers against `JSON.parse`'s 3.0-3.6 (D1900).
  *
  * `close`, when given, is the next `]`, with more elements possible before it than `room`: once the first region has
  * read as numbers, the commas up to `close` are counted (`commasIn`), so a flood is refused with no more than a
  * region's numbers kept, and an array that fits is made its exact length (grown by pushes, 900,000 numbers peaked at
- * 30 MB against 13, D1908). Counting only after the first region keeps an array that is not numbers from both the
- * count and the array (D1919: 16 MiB of 17-digit floats peaked 38 MB against main's 24 when both came first).
+ * 30 MB against 13, D1908) once a sixteenth of it has read, so an array that stops before never holds one. Counting
+ * only after the first region keeps an array that is not numbers from both the count and the array (D1919: 16 MiB of
+ * 17-digit floats peaked 38 MB against main's 24 when both came first). Once counted, everything up to `close` is
+ * numbers' characters, commas and spaces, so a reader that stops after it (at an element longer than a region) says
+ * so at `close`, and the scan goes on from there.
  */
 export function readNumbers(text: string, open: number, room: number, close = -1): number {
   numbersStop.at = -1;
+  numbersCalls.count++;
   let i = open + 1;
   let c = text.charCodeAt(i);
   while (isSpaceByte(c)) c = text.charCodeAt(++i);
   if (!((c >= 0x30 && c <= 0x39) || c === 0x2d || c === 0x6e || c === 0x74 || c === 0x66)) return NOT_NUMBERS;
   let out: Element[] = [];
   filled = 0;
+  fallbacks = 0;
+  // Where the count went to, the commas before it, and the length to make the array once a sixteenth of it is read.
+  let countedTo = -1;
+  let countedCommas = 0;
+  let sizeTo = 0;
   for (let size = NUMBER_REGION.first; ; size = Math.min(2 * size, NUMBER_REGION.most)) {
     const length = encodeNumbers(text, i, Math.min(text.length, i + size));
-    const r = numbersIn(encoded, length, out, room);
+    const r = numbersIn(encoded, length, out, room, text, i);
     if (r >= 0) {
       if (out.length !== filled) out.length = filled;
       numbersRead = out;
       // Every character before the `]` was a number's, a separator or a space, so ASCII: bytes and characters line up.
       return i + r;
     }
-    if (r === TOO_MANY) return r;
-    if (r === NOT_NUMBERS) return stopped(i + failAt, filled);
+    if (r === TOO_MANY || r === NOT_JSON) return r;
+    if (r === NOT_NUMBERS) return countedTo >= 0 ? stopped(countedTo, countedCommas) : stopped(i + failAt, filled);
     // The array runs on past the end of the text, or (no progress) holds an element longer than the largest region,
     // so longer than any number this reads.
     if (i + encodedChars === text.length || (resumeAt === 0 && (size === NUMBER_REGION.most || encodedChars === 0))) {
-      return stopped(i + resumeAt, filled);
+      return countedTo >= 0 ? stopped(countedTo, countedCommas) : stopped(i + resumeAt, filled);
     }
     i += resumeAt;
+    if (sizeTo > 0 && filled >= sizeTo >> 4) {
+      const sized: Element[] = new Array(sizeTo);
+      for (let k = 0; k < filled; k++) sized[k] = out[k]!;
+      out = sized;
+      sizeTo = 0;
+    }
     if (close >= 0) {
-      // The first region read as numbers: count the rest's commas, then make the array that long.
+      // The first region read as numbers: count the rest's commas, to make the array that long.
       const commas = commasIn(text, i, close, room - filled);
       if (commas === -1) return TOO_MANY;
       if (commas === -2) return stopped(numbersStop.at, filled + numbersStop.commas);
-      const sized: Element[] = new Array(filled + commas + 1);
-      for (let k = 0; k < filled; k++) sized[k] = out[k]!;
-      out = sized;
+      countedTo = close;
+      countedCommas = filled + commas;
+      sizeTo = filled + commas + 1;
       close = -1;
     }
   }
@@ -281,9 +314,8 @@ function stopped(at: number, commas: number): number {
 /**
  * Whether the last element of the array opened at `open`, whose next `]` is at `close`, is one `readNumbers` reads,
  * when the last comma is within 64 characters of the `]` (else true: an element that long is left to `readNumbers`).
- * Asked before reading, so an array that ends in a number of more than 15 digits, or in anything else the reader
- * leaves to `JSON.parse`, is left to the scan at once: read up to its last element first, then scanned and parsed, it
- * cost 1.6-2.1x main (D1919).
+ * Asked before reading, so an array that ends in what the reader leaves to the scan (an object, a malformed element)
+ * is left to it at once: read up to its last element first, then scanned and parsed, it cost 1.6-2.1x main (D1919).
  */
 export function lastElementReads(text: string, open: number, close: number): boolean {
   const lo = Math.max(open, close - 64);
@@ -295,7 +327,7 @@ export function lastElementReads(text: string, open: number, close: number): boo
 
 /**
  * `lastElementReads` over the reply's bytes, for the byte scan (`byteShapeOrStop`): it stops for the text path only
- * where the reader would read (D1919: stopping at `[1,1,...,12345678901234567]` cost the bytes path 1.1-1.2x main, the
+ * where the reader would read (D1919: stopping at an array the reader gave up cost the bytes path 1.1-1.2x main, the
  * text scan where the byte scan would have done). Its distances are in bytes, never shorter than the text's in
  * characters, and a byte outside ASCII is no number's: so where this answers false, `lastElementReads` does too.
  */
@@ -316,11 +348,34 @@ export function lastElementReadsBytes(bytes: Uint8Array, open: number, close: nu
 /** Whether the `length` bytes in the scratch buffer are one element `numbersIn` reads and the `]` after it. */
 function lastElementIn(length: number): boolean {
   filled = 0;
-  const r = numbersIn(scratch, length, lastElement, 1);
-  lastElement.length = 0;
+  fallbacks = 0;
+  const r = numbersIn(scratch, length, verdicts, 1, undefined, 0);
+  verdicts.length = 0;
   return r >= 0;
 }
-const lastElement: Element[] = [];
+/** Where the checks below put what they read: only whether they read matters. */
+const verdicts: Element[] = [];
+
+/**
+ * Whether `readNumbers` would read the first region of the array opened at `open` in the reply's bytes, whose next
+ * `]` is past that region: asked by the byte scan before it stops for the text path (`readsAt` in `shape.ts`, D1919).
+ */
+export function firstRegionReadsBytes(bytes: Uint8Array, open: number): boolean {
+  let i = open + 1;
+  while (isSpaceByte(bytes[i]!)) i++;
+  const length = Math.min(NUMBER_REGION.first, bytes.length - i, scratch.length - 1);
+  scratch.set(bytes.subarray(i, i + length));
+  scratch[length] = 0;
+  filled = 0;
+  fallbacks = 0;
+  const c = scratch[0]!;
+  const starts = (c >= 0x30 && c <= 0x39) || c === 0x2d || c === 0x6e || c === 0x74 || c === 0x66;
+  const r = starts ? numbersIn(scratch, length, verdicts, Infinity, undefined, 0) : NOT_NUMBERS;
+  verdicts.length = 0;
+  // Zeroed here, as in `lastElementReadsBytes`.
+  scratch.fill(0, 0, length);
+  return r === MORE || r >= 0;
+}
 
 /**
  * The commas in `text[from, to)`, which holds no quote: -1 past `room` (each is a value the scan would count, so the
@@ -386,9 +441,19 @@ function encodeNumbers(text: string, start: number, end: number): number {
 /**
  * The elements of the encoded region `b[0, length)` added to `out`, up to its closing `]`: that `]`'s index, or
  * `MORE` (with `resumeAt`) when the region ends first. The region is followed by a zero byte, which no number,
- * separator or space is, so every loop stops there.
+ * separator or space is, so every loop stops there. `text`, where the region is `text` from `base`, gives the text a
+ * number past the fast path is read from; without it (a check that only asks whether the region reads) it reads as 0.
+ * An element that starts as no JSON value does, or is followed by anything but a separator, is `NOT_JSON`; one that
+ * starts as a string or a nested array or object is `NOT_NUMBERS`.
  */
-function numbersIn(b: Uint8Array, length: number, out: Element[], room: number): number {
+function numbersIn(
+  b: Uint8Array,
+  length: number,
+  out: Element[],
+  room: number,
+  text: string | undefined,
+  base: number,
+): number {
   // Kept local in the loop (a module variable written for every number cost the reader 5-10%), stored at each exit.
   let f = filled;
   let i = 0;
@@ -401,7 +466,8 @@ function numbersIn(b: Uint8Array, length: number, out: Element[], room: number):
     if (c >= 0x61) {
       // `null`, `true` and `false` are kept as they are: a series with gaps is a number array too (D1919).
       const len = literalLength(b, i, length, c);
-      if (len <= 0) return len < 0 ? more(element, f) : fail(element, f);
+      // A `{` may open an object; any other byte from here up starts no JSON value, or not this one.
+      if (len <= 0) return len < 0 ? more(element, f) : c === 0x7b ? fail(element, f) : broken(element, f);
       v = c === 0x6e ? null : c === 0x74;
       i += len;
       c = b[i]!;
@@ -419,14 +485,16 @@ function numbersIn(b: Uint8Array, length: number, out: Element[], room: number):
           m = m * 10 + (c - 0x30);
           c = b[++i]!;
         } while ((c - 0x30) >>> 0 < 10);
-      } else return i >= length ? more(element, f) : fail(element, f);
+      } else if (i >= length) return more(element, f);
+      // A quote or a `[` starts a string or an array; anything else (a sign alone, a `]` after a comma) no value.
+      else return neg || (c !== 0x22 && c !== 0x5b) ? broken(element, f) : fail(element, f);
       // A leading zero is not significant.
       let digits = m === 0 ? 0 : i - first;
       let p = 0;
       if (c === 0x2e) {
         const dot = ++i;
         c = b[i]!;
-        if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element, f) : fail(element, f);
+        if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element, f) : broken(element, f);
         do {
           m = m * 10 + (c - 0x30);
           c = b[++i]!;
@@ -438,7 +506,7 @@ function numbersIn(b: Uint8Array, length: number, out: Element[], room: number):
         c = b[++i]!;
         const negative = c === 0x2d;
         if (negative || c === 0x2b) c = b[++i]!;
-        if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element, f) : fail(element, f);
+        if ((c - 0x30) >>> 0 >= 10) return i >= length ? more(element, f) : broken(element, f);
         let e = 0;
         do {
           if (e < 10_000) e = e * 10 + (c - 0x30);
@@ -448,10 +516,14 @@ function numbersIn(b: Uint8Array, length: number, out: Element[], room: number):
       }
       // A number the region cut may have more digits after the cut.
       if (i >= length) return more(element, f);
-      // Past 15 digits the integer may not be exact; past 1e22 the power of ten is not.
-      if (digits > 15 || p > 22 || p < -22) return fail(element, f);
-      const x = p === 0 ? m : p > 0 ? m * POW10[p]! : m / POW10[-p]!;
-      v = neg ? -x : x;
+      // Past 15 digits the integer may not be exact; past 1e22 the power of ten is not: `Number` reads its text.
+      if (digits > 15 || p > 22 || p < -22) {
+        if (!fallbackOk(f)) return fail(element, f);
+        v = text === undefined ? 0 : Number(text.slice(base + element, base + i));
+      } else {
+        const x = p === 0 ? m : p > 0 ? m * POW10[p]! : m / POW10[-p]!;
+        v = neg ? -x : x;
+      }
     }
     // A comma right after the element is the common case: whitespace is looked for only when it is not.
     if (c !== 0x2c) {
@@ -461,7 +533,7 @@ function numbersIn(b: Uint8Array, length: number, out: Element[], room: number):
         filled = f;
         return i;
       }
-      if (c !== 0x2c) return i >= length ? more(element, f) : fail(element, f);
+      if (c !== 0x2c) return i >= length ? more(element, f) : broken(element, f);
     }
     out[f++] = v;
     if (f > room) return TOO_MANY;
@@ -499,6 +571,13 @@ function fail(at: number, f: number): number {
   failAt = at;
   filled = f;
   return NOT_NUMBERS;
+}
+
+/** `numbersIn` finding that no JSON array holds the element at `at`. */
+function broken(at: number, f: number): number {
+  failAt = at;
+  filled = f;
+  return NOT_JSON;
 }
 
 /** Lets go of the last numbers read, once they are kept or dropped. */

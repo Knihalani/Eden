@@ -10,10 +10,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { parseJsonBytes, parseJsonBytesWithin, parseJsonText, parseJsonTextWithin } from "./json";
 import {
+  firstRegionReadsBytes,
   lastElementReads,
   lastElementReadsBytes,
+  NOT_JSON,
   NOT_NUMBERS,
   NUMBER_REGION,
+  numbersCalls,
   numbersRead,
   numbersStop,
   readNumbers,
@@ -27,6 +30,7 @@ import {
   byteShapeOrStop,
   LONG_REPLY,
   newTextShape,
+  NOT_JSON_REPLY,
   PLAIN_STRING,
   scanText,
   STOPPED,
@@ -454,20 +458,6 @@ describe("the long-reply path stays linear", () => {
     expect(long).toBeLessThan(short * 0.85);
   });
 
-  test("a number array with a number the reader leaves to JSON.parse late in it costs what the plain path does", () => {
-    // Last: the last element is checked before reading (read whole first, then scanned and parsed, it cost 1.6-2.1x).
-    // Third from last: the scan goes on from where the reader stopped, not from where it asked (1.3-1.6x).
-    const head = "12,".repeat(900_000);
-    for (const text of [`[${head}12345678901234567]`, `[${head}12345678901234567,12,12]`]) {
-      expect(same(parseJsonText(text), JSON.parse(text))).toBe(true);
-      const plain = plainOf(text);
-      for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
-      const [long, short] = medians(() => parseJsonText(text), plain, 7);
-      // About 1.0 here; 1.6-1.9x when the scan crossed again what the reader read.
-      expect(long).toBeLessThan(short * 1.3 + 1);
-    }
-  });
-
   test("a refused number flood on the bytes path costs what the byte scan costs, and is never decoded", () => {
     const flood = encoder.encode(`[${"1,".repeat(2_000_000)}1]`);
     expect(parseJsonBytes(flood)).toBeUndefined();
@@ -497,12 +487,19 @@ describe("the readers against JSON.parse", () => {
   test("readNumbers: 30,000 seeded arrays, cut into regions anywhere, the same numbers or a refusal to read", () => {
     const r = rng(19003);
     let read = 0;
+    let notJson = 0;
     for (let i = 0; i < 30_000; i++) {
       NUMBER_REGION.first = 1 + Math.floor(r() * 24);
       NUMBER_REGION.most = NUMBER_REGION.first * (1 + Math.floor(r() * 4));
       const text = numberArray(r);
       const end = readNumbers(text, 0, 1_000);
       const want = tryParse(text);
+      if (end === NOT_JSON) {
+        // Only where `JSON.parse` throws.
+        expect(want).toBeUndefined();
+        notJson++;
+        continue;
+      }
       if (end === NOT_NUMBERS || end === TOO_MANY) continue;
       read++;
       expect(end).toBe(text.length - 1);
@@ -511,26 +508,37 @@ describe("the readers against JSON.parse", () => {
       for (let k = 0; k < numbersRead.length; k++) expect(Object.is(numbersRead[k], (want as number[])[k])).toBe(true);
     }
     expect(read).toBeGreaterThan(2_500);
+    expect(notJson).toBeGreaterThan(2_500);
   });
 
-  test("readNumbers: random digits, decimals and exponents round as JSON.parse rounds", () => {
+  test("readNumbers: random digits, decimals and exponents round as JSON.parse rounds, past the fast path too", () => {
     const r = rng(19004);
-    for (let i = 0; i < 20_000; i++) {
-      const digits = Array.from({ length: 1 + Math.floor(r() * 15) }, () => Math.floor(r() * 10)).join("");
+    let slow = 0;
+    for (let i = 0; i < 40_000; i++) {
+      // Up to 22 digits and exponents up to 400: past 15 digits or 1e22 the reader hands the text to `Number` (D1919).
+      const digits = Array.from({ length: 1 + Math.floor(r() * 22) }, () => Math.floor(r() * 10)).join("");
       const dot = Math.floor(r() * (digits.length + 1));
       let n = dot < digits.length ? `${digits.slice(0, dot) || "0"}.${digits.slice(dot)}` : digits;
       if (!n.includes(".")) n = n.replace(/^0+(?=\d)/, "");
-      if (r() < 0.4) n += `e${r() < 0.5 ? "-" : ""}${Math.floor(r() * 23)}`;
-      const text = `[${r() < 0.5 ? "-" : ""}${n}]`;
+      if (r() < 0.4) {
+        const sign = ["-", "+", ""][Math.floor(r() * 3)];
+        n += `${r() < 0.5 ? "e" : "E"}${sign}${Math.floor(r() * (r() < 0.8 ? 30 : 400))}`;
+      }
+      // Two numbers, so the second's text is found from where its region starts.
+      const text = `[${r() < 0.5 ? "-" : ""}${n}, ${r() < 0.5 ? "-" : ""}${n}]`;
       const want = tryParse(text) as number[] | undefined;
       const end = readNumbers(text, 0, 10);
       if (want === undefined) {
-        expect(end).toBe(NOT_NUMBERS);
+        expect([NOT_NUMBERS, NOT_JSON]).toContain(end);
         continue;
       }
-      if (end === NOT_NUMBERS) continue;
+      // Two in the first region are read whatever they are.
+      expect(end).toBe(text.length - 1);
+      if (digits.length > 15 || n.includes("e") || n.includes("E")) slow++;
       expect(Object.is(numbersRead[0], want[0])).toBe(true);
+      expect(Object.is(numbersRead[1], want[1])).toBe(true);
     }
+    expect(slow).toBeGreaterThan(10_000);
   });
 
   test("unescapeText: 30,000 seeded strings, the same string or a refusal to read", () => {
@@ -555,8 +563,9 @@ describe("the readers against JSON.parse", () => {
       ["null]", true],
       ["true]", true],
       ["false ]", true],
-      ["12345678901234567]", false],
-      ["1e23]", false],
+      ["12345678901234567]", true],
+      ["1e23]", true],
+      ["{}]", false],
       ["nul]", false],
       ["1 2]", false],
       ["]", false],
@@ -576,16 +585,97 @@ describe("the readers against JSON.parse", () => {
     const body = (tail: string) => encoder.encode(`{"v":[${"12,".repeat(20_000)}${tail}]}`);
     expect(byteShapeOrStop(body("12"), 1_008, 1_010_000)).toBe(STOPPED);
     expect(byteShapeOrStop(body("null"), 1_008, 1_010_000)).toBe(STOPPED);
-    expect(byteShapeOrStop(body("12345678901234567"), 1_008, 1_010_000)).toBe(WITHIN);
+    expect(byteShapeOrStop(body("12345678901234567"), 1_008, 1_010_000)).toBe(STOPPED);
+    expect(byteShapeOrStop(body("{}"), 1_008, 1_010_000)).toBe(WITHIN);
+    expect(scratchIsClear()).toBe(true);
+  });
+
+  test("the text path never enters the reader for an array whose last element it would refuse (D1919)", () => {
+    // Read up to its last element first, then scanned and parsed, such an array cost 1.6-2.1x main.
+    const head = "12,".repeat(2_000);
+    for (const tail of ["{}", "nul", "1 2", "{ }"]) {
+      const text = `{"v":[${head}${tail}]}`;
+      const before = numbersCalls.count;
+      const seen = newTextShape(text, true);
+      scanText(text, 1_008, 1_010_000, seen);
+      expect(numbersCalls.count).toBe(before);
+      expect(seen.found.length).toBe(0);
+      releaseScratch();
+    }
+    // With a number past the fast path last or late (where giving up cost 1.3-2.1x main), the same array enters it
+    // once and is read whole.
+    for (const tail of ["12345678901234567", "12345678901234567,12,12", "1e400,0.30000000000000004,12"]) {
+      const text = `{"v":[${head}${tail}]}`;
+      const before = numbersCalls.count;
+      const seen = newTextShape(text, true);
+      expect(scanText(text, 1_008, 1_010_000, seen)).toBe(WITHIN);
+      expect(numbersCalls.count).toBe(before + 1);
+      expect(same(seen.found, [JSON.parse(text).v])).toBe(true);
+      releaseScratch();
+    }
+  });
+
+  test("the byte scan stops only where the reader reads the first region too (D1919)", () => {
+    // Computed doubles end in one the reader reads, but it gives the array up at its third: the byte scan goes on.
+    const doubles = Array.from({ length: 3_000 }, (_, k) => String(Math.sin(k + 1) * 100));
+    const floats = encoder.encode(`{"v":[${doubles.join(",")},1]}`);
+    expect(byteShapeOrStop(floats, 1_008, 1_010_000)).toBe(WITHIN);
+    // A rounded series with two of them early is still read.
+    const series = Array.from({ length: 3_000 }, (_, k) => String(Math.round(Math.sin(k) * 1e4) / 100));
+    series[3] = doubles[0]!;
+    series[9] = "1e400";
+    const mixed = `{"v":[${series.join(",")}]}`;
+    expect(byteShapeOrStop(encoder.encode(mixed), 1_008, 1_010_000)).toBe(STOPPED);
+    expect(same(parseJsonBytes(encoder.encode(mixed)), JSON.parse(mixed))).toBe(true);
+    const reads = (text: string) => firstRegionReadsBytes(encoder.encode(text), 0);
+    expect(reads(`[ ${series.join(",")}]`)).toBe(true);
+    expect(reads(`[${doubles.join(",")}]`)).toBe(false);
+    expect(reads(`[1,2,nn,${series.join(",")}]`)).toBe(false);
+    expect(scratchIsClear()).toBe(true);
+  });
+
+  test("an array with a nested array or object before its next `]` is neither read nor stopped at (D1919)", () => {
+    // Every level ran past `reach` with numbers and shared the innermost `]`: each was read up to the next level.
+    const level = `[${"1,".repeat(600)}`;
+    const cases: [string, number][] = [
+      // Only the innermost level is read.
+      [`${level.repeat(50)}1${"]".repeat(50)}`, 1],
+      [`[${level}{}],${"2,".repeat(600)}2]`, 0],
+    ];
+    for (const [text, reads] of cases) {
+      const before = numbersCalls.count;
+      const seen = newTextShape(text, true);
+      expect(scanText(text, 1_008, 1_010_000, seen)).toBe(WITHIN);
+      expect(numbersCalls.count).toBe(before + reads);
+      expect(same(parseJsonText(text), JSON.parse(text))).toBe(true);
+      releaseScratch();
+    }
+    const bytes = encoder.encode(`[${"1,".repeat(600)}[${"1,".repeat(10)}1],1]`);
+    expect(byteShapeOrStop(bytes, 1_008, 1_010_000)).toBe(WITHIN);
+  });
+
+  test("an array with fewer elements than the text path keeps is neither read nor stopped at (D1919)", () => {
+    // 202 twelve-digit numbers each: past `reach` in characters, short of `LONG_REPLY.numbers` in elements.
+    const text = `[${`[${"123456789012,".repeat(201)}1],`.repeat(300)}1]`;
+    expect(byteShapeOrStop(encoder.encode(text), 1_008, 1_010_000)).toBe(WITHIN);
+    const before = numbersCalls.count;
+    const seen = newTextShape(text, true);
+    expect(scanText(text, 1_008, 1_010_000, seen)).toBe(WITHIN);
+    expect(numbersCalls.count).toBe(before);
+    // 600 of them, the same length each: read.
+    const long = `[${`[${"123456789012,".repeat(599)}1],`.repeat(3)}1]`;
+    expect(byteShapeOrStop(encoder.encode(long), 1_008, 1_010_000)).toBe(STOPPED);
+    expect(same(parseJsonText(long), JSON.parse(long))).toBe(true);
+    expect(numbersCalls.count).toBe(before + 3);
     expect(scratchIsClear()).toBe(true);
   });
 
   test("where readNumbers gives up, it says where, with the commas before it (D1919)", () => {
     for (const [text, at, commas] of [
-      ["[1,2,3,12345678901234567,4]", 7, 3],
-      ["[1, 2 ,x]", 7, 2],
-      ["[1,2,[3]]", 5, 2],
-      ["[null,true,1e400]", 11, 2],
+      ["[1,2,3,0.30000000000000004,1e400,12345678901234567,4]", 33, 5],
+      ["[1, 2 ,[3]]", 7, 2],
+      ["[1,2,{}]", 5, 2],
+      ['[null,true,"x"]', 11, 2],
     ] as [string, number, number][]) {
       expect(readNumbers(text, 0, 100)).toBe(NOT_NUMBERS);
       expect([numbersStop.at, numbersStop.commas]).toEqual([at, commas]);
@@ -593,6 +683,52 @@ describe("the readers against JSON.parse", () => {
     expect(readNumbers("[1,null,true,false,-0]", 0, 100)).toBe(21);
     expect(numbersRead).toEqual([1, null, true, false, -0]);
     expect(Object.is(numbersRead[4], -0)).toBe(true);
+    // Two such numbers, and one in eight elements past that, are read: giving up at one cost what had been read before
+    // it (1.2-1.6x main).
+    NUMBER_REGION.first = 4;
+    const late = `[${"1,".repeat(8)}0.30000000000000004,${"2,".repeat(8)}1e400,${"3,".repeat(8)}1234567890123456789,4]`;
+    expect(readNumbers(late, 0, 100)).toBe(late.length - 1);
+    expect(same(numbersRead, JSON.parse(late))).toBe(true);
+    // What no JSON array holds: the reply is not JSON.
+    for (const bad of [
+      "[1,2,nn,3]",
+      "[1,--1]",
+      "[1,1.2.3]",
+      "[1,2,]",
+      "[1,nul,2]",
+      "[1,2x]",
+      "[1,+1]",
+      "[1,.5]",
+      "[01]",
+    ]) {
+      expect(readNumbers(bad, 0, 100)).toBe(NOT_JSON);
+      expect(tryParse(bad)).toBeUndefined();
+    }
+  });
+
+  test("a counted array that stops after its count goes on from its `]`, with every comma counted (D1919)", () => {
+    // The commas up to the `]` were counted, so the scan has nothing to count again there.
+    NUMBER_REGION.first = 2;
+    NUMBER_REGION.most = 16;
+    const text = `[1,2,3,4,5,6,${"9".repeat(40)},7,8]`;
+    expect(readNumbers(text, 0, 100, text.length - 1)).toBe(NOT_NUMBERS);
+    expect([numbersStop.at, numbersStop.commas]).toEqual([text.length - 1, 8]);
+  });
+
+  test("a long reply whose number array is not JSON is refused at it, as JSON.parse refuses it (D1919)", () => {
+    const ids = Array.from({ length: 300_000 }, (_, k) => String(100_000 + ((k * 7919) % 900_000)));
+    for (const bad of ["nn", "--1", "1.2.3", "nul", "1e"]) {
+      for (const at of [170, 150_000, 299_000]) {
+        const xs = ids.slice();
+        xs[at] = bad;
+        const text = `{"ids":[${xs.join(",")}]}`;
+        expect(parseJsonText(text)).toBeUndefined();
+        expect(parseJsonBytes(encoder.encode(text))).toBeUndefined();
+        const seen = newTextShape(text, true);
+        expect(scanText(text, 1_008, 1_010_000, seen)).toBe(NOT_JSON_REPLY);
+        releaseScratch();
+      }
+    }
   });
 
   test("unescapeText leaves lone surrogates, raw quotes and controls to JSON.parse", () => {
