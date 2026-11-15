@@ -755,8 +755,47 @@ export function mentionWords(names: readonly string[]): string[][] {
  */
 export function mentionsAny(words: readonly (readonly string[])[], item: ContextItem): boolean {
   if (words.length === 0) return false;
-  const hay = ` ${mentionText(`${item.title} ${item.text} ${item.meta?.people ?? ""}`.toLowerCase())} `;
+  const lower = `${item.title} ${item.text} ${item.meta?.people ?? ""}`.toLowerCase();
+  // A string with a surrogate is read through `mentionText`'s regex, which reads a pair as one code point.
+  if (HAS_SURROGATE.test(lower) || words.some((ws) => ws.some((w) => HAS_SURROGATE.test(w)))) {
+    return mentionsAnyByText(words, lower);
+  }
+  return words.some((ws) => ws.every((w) => mentionedIn(lower, w)));
+}
+
+/** `mentionsAny` as D1920 read it: the item's text with every run of other characters made one space, then searched. */
+export function mentionsAnyByText(words: readonly (readonly string[])[], lower: string): boolean {
+  const hay = ` ${mentionText(lower)} `;
   return words.some((ws) => ws.every((w) => hay.includes(` ${w} `)));
+}
+
+const HAS_SURROGATE = /[\uD800-\uDFFF]/;
+
+/** Whether code unit `c` is one `mentionText` keeps (a letter, a digit, "@" or "."), for a string with no surrogate. */
+function keeps(c: number): boolean {
+  if (c === 64 || c === 46) return true;
+  const k = WORD_UNITS[c]!;
+  return (k !== 0 ? k : readWordUnit(c)) === 1;
+}
+
+/**
+ * `` ` ${mentionText(lower)} `.includes(` ${w} `) `` with no copy of the text (D1934), for `lower` and `w` with no
+ * surrogate: `mentionText` turns each run of characters it does not keep into one space, so ` w ` is in it exactly
+ * when `w` is all kept characters and occurs in `lower` with no kept character either side.
+ */
+function mentionedIn(lower: string, w: string): boolean {
+  // An empty word (never one of `mentionWords`') is in the padded text where it holds two spaces in a row.
+  if (w.length === 0) return ` ${mentionText(lower)} `.includes("  ");
+  for (let i = 0; i < w.length; i++) if (!keeps(w.charCodeAt(i))) return false;
+  let i = lower.indexOf(w);
+  while (i >= 0) {
+    const end = i + w.length;
+    if ((i === 0 || !keeps(lower.charCodeAt(i - 1))) && (end === lower.length || !keeps(lower.charCodeAt(end)))) {
+      return true;
+    }
+    i = lower.indexOf(w, i + 1);
+  }
+  return false;
 }
 
 const NOT_MENTION_CHARS = /[^\p{L}\p{N}@.]+/gu;

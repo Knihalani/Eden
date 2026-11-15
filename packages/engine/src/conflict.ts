@@ -20,6 +20,7 @@
  */
 import type { ContextItem } from "@eden/protocol";
 import { parseWhen } from "./grounding";
+import { isPacked } from "./packed-text";
 import { compactText } from "./render";
 
 const NO_FOCUS: ReadonlySet<string> = new Set();
@@ -361,7 +362,13 @@ const UNTIED = new RegExp(
  * What depends on the item alone (its statements, their marks, its words and references) is read once per item and
  * vocabulary (`analyse`); what depends on the request (ties, dates, amounts, the twin check) is read here each time.
  */
-export function assess(frame: Frame, item: ContextItem, now: number, extraTies?: ReadonlySet<string>): Verdict {
+export function assess(
+  frame: Frame,
+  item: ContextItem,
+  now: number,
+  extraTies?: ReadonlySet<string>,
+  quietSkipped = true,
+): Verdict {
   // A consequence probe's find (`consequence.ts`) is tied to the request by its action class's own words: "freeze"
   // and "production" tie a release request that says neither. Plural "s" dropped, as for the request's own words.
   const extra = extraTies ? new Set([...extraTies].map(stem)) : null;
@@ -433,7 +440,12 @@ export function assess(frame: Frame, item: ContextItem, now: number, extraTies?:
   // The statement before the one read, read itself or not: it ties the one after it by naming what it is about.
   let before: Statement = NO_STATEMENT;
   const statements = a.statements;
-  for (let i = 0; i < statements.length; i++) {
+  // With no amount in the request and no routine to change, a statement with no mark and no date changes nothing
+  // below: only the others are read (`activeOf`, D1935). Most of an item's statements are such.
+  const active = quietSkipped && frame.amounts.length === 0 && !frame.routine ? activeOf(a) : null;
+  const count = active ? active.length : statements.length;
+  for (let j = 0; j < count; j++) {
+    const i = active ? active[j]! : j;
     const st = statements[i]!;
     before = i > 0 ? statements[i - 1]! : NO_STATEMENT;
     if (st.skip) continue;
@@ -459,9 +471,9 @@ export function assess(frame: Frame, item: ContextItem, now: number, extraTies?:
     if (lastDone > lastClear) conflict(st, true);
     else if (lastClear > Math.max(lastBlock, lastMove)) {
       // A clearing statement with a date of its own ("EHIC valid to 2029") is about its own matter.
-      if (!(firm && st.dated && dateVerdict(frame, s, now, false, V, anchor) !== "none")) clear(st);
+      if (!(firm && st.dated && dateVerdict(frame, st, now, false, V, anchor) !== "none")) clear(st);
     } else {
-      const dated = st.dated ? dateVerdict(frame, s, now, lastBlock >= 0, V, anchor) : "none";
+      const dated = st.dated ? dateVerdict(frame, st, now, lastBlock >= 0, V, anchor) : "none";
       if (dated === "conflict") conflict(st, true);
       else if (lastMove >= 0) {
         // Moved: unless the request acts on the new day, it acts on the old one. Days after "from" are the old ones.
@@ -522,6 +534,8 @@ interface Statement {
   words?: Set<string>;
   objectWords?: string[];
   changes?: number[];
+  /** Its date patterns' matches (`planDates`), read on its first dated verdict. */
+  dates?: DatePlan;
 }
 
 /**
@@ -587,6 +601,8 @@ interface Analysis {
   whole: string;
   /** Its references, without and with domains (`refsOf`), read on first use. */
   refs: [Ref[] | undefined, Ref[] | undefined];
+  /** The statements `assess` reads when the request has no amount and no routine (`activeOf`), read on first use. */
+  active?: Int32Array;
 }
 
 /**
@@ -598,7 +614,11 @@ interface Analysis {
 const ANALYSES = new WeakMap<ContextItem, AnalysisEntry>();
 
 interface AnalysisEntry {
-  text: string;
+  /**
+   * The text it was read from, or null for a packed item, whose text cannot change (its getter reads fixed bytes):
+   * checking it would decompress the text on every read of the entry, and holding it would keep a decoded copy (D1930).
+   */
+  text: string | null;
   title: string;
   updatedAt: number | undefined;
   views: [Analysis | undefined, Analysis | undefined];
@@ -612,8 +632,16 @@ interface AnalysisEntry {
 /** The item's entry in `ANALYSES`, a fresh one when its text, title or date changed in place. */
 function entryOf(item: ContextItem): AnalysisEntry {
   let e = ANALYSES.get(item);
-  if (!e || e.text !== item.text || e.title !== item.title || e.updatedAt !== item.updatedAt) {
-    e = { text: item.text, title: item.title, updatedAt: item.updatedAt, views: [undefined, undefined], gate: 0 };
+  // A packed item's text is never read here: an object is packed or plain for life, and a packed one's bytes are fixed.
+  const packed = isPacked(item);
+  if (!e || (!packed && e.text !== item.text) || e.title !== item.title || e.updatedAt !== item.updatedAt) {
+    e = {
+      text: packed ? null : item.text,
+      title: item.title,
+      updatedAt: item.updatedAt,
+      views: [undefined, undefined],
+      gate: 0,
+    };
     ANALYSES.set(item, e);
   }
   return e;
@@ -690,6 +718,35 @@ function analysis(item: ContextItem, V: boolean, other: Analysis | undefined, pr
     whole,
     refs: other?.refs ?? [undefined, undefined],
   };
+}
+
+/**
+ * The indices of an analysis's statements that can change `assess`'s verdict for a request with no amount and no
+ * routine: read, and with a mark of some kind or a date (D1935). Any other statement leaves every variable of
+ * `assess`'s loop as it was (its marks are empty, its `lastDone` -1 and its date verdict "none"); the statement before
+ * one read is still `statements[i - 1]`, read or not.
+ */
+function activeOf(a: Analysis): Int32Array {
+  if (a.active) return a.active;
+  const out: number[] = [];
+  for (let i = 0; i < a.statements.length; i++) {
+    const st = a.statements[i]!;
+    if (st.skip) continue;
+    const marked =
+      st.blocked.length > 0 ||
+      st.objectBlocks.length > 0 ||
+      st.moves.length > 0 ||
+      st.clears.length > 0 ||
+      st.reaffirms.length > 0 ||
+      st.lastDone >= 0;
+    if (marked || st.dated) out.push(i);
+  }
+  return (a.active = Int32Array.from(out));
+}
+
+/** `assess` reading every statement, as before D1935, for tests (`opt-round4.test.ts`). */
+export function assessEvery(frame: Frame, item: ContextItem, now: number, extraTies?: ReadonlySet<string>): Verdict {
+  return assess(frame, item, now, extraTies, false);
 }
 
 /** An analysis's references (`refsOf`), with domains or without, read once. */
@@ -787,13 +844,17 @@ function marks(s: string, re: RegExp, blocking: boolean): number[] {
  */
 function dateVerdict(
   frame: Frame,
-  s: string,
+  st: Statement,
   now: number,
   blocked: boolean,
-  vocab = false,
-  anchor: number | null = null,
+  vocab: boolean,
+  anchor: number | null,
 ): Verdict {
-  const d = datesOf(s, now, vocab, anchor);
+  // The statement's patterns are read once (`planDates`, kept on it); only the days they name are worked out again
+  // from `now` (D1932). Before, every request ran every date pattern over every dated statement of every candidate.
+  let plan = st.dates;
+  if (!plan || plan.vocab !== vocab || plan.anchor !== anchor) plan = st.dates = planDates(st.s, vocab, anchor);
+  const d = replayDates(plan, now);
   if (d.spans.length === 0 && d.limits.length === 0) return "none";
   const late = d.limits.some((l) => frame.days.some((day) => day > l));
   const covered = d.spans.some((sp) => frame.days.some((day) => day >= sp.from && day <= sp.to));
@@ -951,6 +1012,133 @@ function datesOf(s: string, now: number, vocab = false, anchor: number | null = 
   // A start with no end: from then on ("pausing headcount from 19 Oct until Q1 planning").
   if (start) spans.push({ from: start, to: "9999-12-31" });
   return { spans, limits };
+}
+
+/** What a date word makes of its day in `datesOf`'s `take`: a span's start or end, a limit, or a day of its own. */
+type Role = 0 | 1 | 2 | 3;
+const ROLE_START = 0;
+const ROLE_END = 1;
+const ROLE_LIMIT = 2;
+const ROLE_DAY = 3;
+
+/**
+ * One match of `datesOf`'s patterns, in the order it reads them, with what does not depend on `now` read already.
+ * `Span`: a range or pair's two ends (`d1` of `m1`/`y1` to `d2` of `m2`/`y2`). `Take`: a dated day for `take`, the day
+ * itself when it does not depend on `now` (`day`), else `d1` of `m1`/`y1`. `Back`: "back 9 Nov", the day before
+ * `d1` of `m1` as an end.
+ */
+type DateOp =
+  | { k: 0; d1: number; m1: string; y1: string | undefined; d2: number; m2: string; y2: string | undefined }
+  | { k: 1; role: Role; yearGiven: boolean; day: string | null; d1: number; m1: string; y1: string | undefined }
+  | { k: 2; d1: number; m1: string };
+
+/** A statement's date matches (`planDates`) for one vocabulary and anchor: `replayDates` gives `datesOf`'s answer. */
+interface DatePlan {
+  vocab: boolean;
+  anchor: number | null;
+  ops: DateOp[];
+}
+
+const NO_DATE_OPS: DateOp[] = [];
+
+/**
+ * `datesOf(s, now, vocab, anchor)`'s pattern work, which depends on the sentence alone (D1932): the ranges and pairs
+ * blanked, every date pattern's matches in the order `datesOf` reads them, the deadline test and the days that do not
+ * depend on `now` (a bare year's end, a month's last day, a day counted from `anchor`). `replayDates` works out the
+ * rest. `datesOf` stays as the reference (`opt-round4.test.ts` fuzzes the two against each other).
+ */
+function planDates(s: string, vocab: boolean, anchor: number | null): DatePlan {
+  const ops: DateOp[] = [];
+  const monthed = MONTH_DATE.test(s);
+  let rest = s;
+  if (monthed) {
+    rest = s.replace(RANGE, (r, d1: string, d2: string, m: string, y: string | undefined) => {
+      ops.push({ k: 0, d1: Number(d1), m1: m, y1: y, d2: Number(d2), m2: m, y2: y });
+      return " ".repeat(r.length);
+    });
+    rest = rest.replace(PAIR, (r, ...g: (string | undefined)[]) => {
+      ops.push({ k: 0, d1: Number(g[0]), m1: g[1]!, y1: g[2], d2: Number(g[3]), m2: g[4]!, y2: g[5] });
+      return " ".repeat(r.length);
+    });
+  }
+  let deadline: boolean | undefined;
+  const roleOf = (word: string): Role =>
+    STARTS.has(word)
+      ? ROLE_START
+      : ENDS.has(word)
+        ? ROLE_END
+        : LIMITS.has(word) || (deadline ??= DEADLINE.test(rest))
+          ? ROLE_LIMIT
+          : ROLE_DAY;
+  const fixed = (word: string, day: string | null, yearGiven: boolean) => {
+    if (day) ops.push({ k: 1, role: roleOf(word), yearGiven, day, d1: 0, m1: "", y1: undefined });
+  };
+  if (monthed) {
+    for (const m of rest.matchAll(DATED)) {
+      const g = m.groups!;
+      const word = g.word ?? (g.on ? "on" : "");
+      if (!word && !g.wd) continue;
+      const yearGiven = Boolean(g.y1 ?? g.y2 ?? g.y3);
+      if (g.d1) ops.push({ k: 1, role: roleOf(word), yearGiven, day: null, d1: Number(g.d1), m1: g.m1!, y1: g.y1 });
+      else if (g.d2)
+        ops.push({ k: 1, role: roleOf(word), yearGiven, day: null, d1: Number(g.d2), m1: g.m2!, y1: g.y2 });
+      else fixed(word, lastOfMonth(g.m3!, g.y3!), yearGiven);
+    }
+  }
+  for (const m of rest.matchAll(YEAR_LIMIT)) fixed(m[1]!, `${m[2]}-12-31`, true);
+  if (vocab) {
+    const end = (word: string, day: string | null) => {
+      if (!day) return;
+      if (word === "back") fixed("until", iso(Date.parse(`${day}T00:00:00Z`) - DAY), false);
+      else fixed(word, day, false);
+    };
+    if (monthed) for (const m of rest.matchAll(BACK_DATED)) ops.push({ k: 2, d1: Number(m[1]), m1: m[2]! });
+    if (anchor !== null) {
+      for (const m of rest.matchAll(ORDINAL)) end(m[1]!, nextMonthDay(Number(m[2]), anchor));
+      for (const m of rest.matchAll(WEEKDAY_END)) end(m[1]!, nextWeekday(m[2]!, anchor));
+    }
+  }
+  return { vocab, anchor, ops: ops.length > 0 ? ops : NO_DATE_OPS };
+}
+
+/** `datesOf`'s answer at `now` from a statement's plan (`planDates`): the same spans and limits, in the same order. */
+function replayDates(plan: DatePlan, now: number): Dates {
+  const spans: { from: string; to: string }[] = [];
+  const limits: string[] = [];
+  const ops = plan.ops;
+  if (ops.length === 0) return { spans, limits };
+  let start: string | null = null;
+  const take = (role: Role, day: string, yearGiven: boolean) => {
+    if (role === ROLE_START) start = day;
+    else if (role === ROLE_END) {
+      const to = start && !yearGiven ? after(start, day) : day;
+      if (to) spans.push({ from: start ?? iso(now), to });
+      start = null;
+    } else if (role === ROLE_LIMIT) limits.push(day);
+    else spans.push({ from: day, to: day });
+  };
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i]!;
+    if (op.k === 0) {
+      const from = dayOf(op.d1, op.m1, op.y1, now);
+      const to = dayOf(op.d2, op.m2, op.y2, now);
+      const end = from && to && !op.y2 ? after(from, to) : to;
+      if (from && end && from <= end) spans.push({ from, to: end });
+    } else if (op.k === 1) {
+      const day = op.day ?? dayOf(op.d1, op.m1, op.y1, now);
+      if (day) take(op.role, day, op.yearGiven);
+    } else {
+      const day = dayOf(op.d1, op.m1, undefined, now);
+      if (day) take(ROLE_END, iso(Date.parse(`${day}T00:00:00Z`) - DAY), false);
+    }
+  }
+  if (start) spans.push({ from: start, to: "9999-12-31" });
+  return { spans, limits };
+}
+
+/** `datesOf` by its plan, for tests (`opt-round4.test.ts`). */
+export function datesByPlan(s: string, now: number, vocab: boolean, anchor: number | null): Dates {
+  return replayDates(planDates(s, vocab, anchor), now);
 }
 
 /** A limit on an amount: a threshold ("above £40,000", "over 10%") or a cap ("up to 20%", "capped at $5k"). */
