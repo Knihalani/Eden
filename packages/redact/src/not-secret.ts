@@ -113,7 +113,13 @@ function judge(value: string): boolean {
   const v = core(value);
   // One token: a value with a space or a quote inside is prose or more than one value (`'process.env.X"API key: …'`).
   if (v.length === 0 || v.length > VALUE_LIMIT || /[\s"'`]/.test(v)) return false;
-  return TYPE.test(v) || ENV.test(v) || MEMBER.test(v) || REFERENCE.test(v) || MASK.test(v) || isRun(v);
+  // Each shape by the first character it can start with (every regex is anchored at the start): TYPE, ENV and
+  // MEMBER a letter (ENV and MEMBER lower case), REFERENCE `$`, `%`, `{` or `<`, MASK a letter or a mask character.
+  const c = v.charCodeAt(0);
+  if (c >= 97 && c <= 122) return TYPE.test(v) || ENV.test(v) || MEMBER.test(v) || MASK.test(v) || isRun(v);
+  if (c >= 65 && c <= 90) return TYPE.test(v) || MASK.test(v) || isRun(v);
+  if (c === 36 || c === 37 || c === 123 || c === 60) return REFERENCE.test(v) || isRun(v);
+  return MASK.test(v) || isRun(v);
 }
 
 /** Whether a provider-shaped token is a placeholder (`MASK` or `RUN`): for the bare-shape rules. */

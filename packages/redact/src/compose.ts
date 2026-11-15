@@ -36,7 +36,12 @@ export interface StructuralPass {
     gated: string,
     seen: { excusable: boolean },
     gating: Pieces,
-  ): { stored: string; removed(values?: string[]): { all: Iv[]; strict: Iv[] } };
+  ): {
+    stored: string;
+    removed(values?: string[]): { all: Iv[]; strict: Iv[] };
+    /** Whether `removed(...).strict` is empty (nothing removed but excused values), worked out more cheaply. */
+    keepsAll?(): boolean;
+  };
 }
 
 /** What `composeMasks` works out: the stored text, and (when asked, or when D1850 changes something) the masks. */
@@ -95,6 +100,11 @@ export function composeMasks(
   const stored = ran.stored;
   const excusing = excused.length > 0 || assigned.all.length !== assigned.strict.length || seen.excusable;
   if (post.length === 0 && !excusing && !explain) return { stored };
+  // Every finding excused and the structural pass removing only excused values (code in the text, no secret): the
+  // gate removes nothing, so the text is stored as it is; the masks below would say so at more cost.
+  if (!explain && post.length === 0 && strict.length === 0 && assigned.strict.length === 0 && ran.keepsAll?.()) {
+    return { stored: text };
+  }
 
   // What main removed (`before`) and what the gate removes (`after`), as intervals of `text`: the work follows the
   // number of findings, not the text's length (D1850: masks over every character cost 20 ms a megabyte).
