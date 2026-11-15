@@ -505,7 +505,13 @@ describe("D1934: mentionsAny searches the item's text in place", () => {
   });
 
   test("a word holding a space (a phrase, never one of mentionWords') is read as the copy reads it", () => {
-    const item: ContextItem = { id: "p", sourceId: "mail", ref: "p", title: "Lunch", text: "Lunch with Dana  Lee, then Ann." };
+    const item: ContextItem = {
+      id: "p",
+      sourceId: "mail",
+      ref: "p",
+      title: "Lunch",
+      text: "Lunch with Dana  Lee, then Ann.",
+    };
     for (const words of [[["dana lee"]], [["with dana"]], [["lee, then"]], [["dana"], ["ann lee"]]]) {
       const lower = `${item.title} ${item.text} `.toLowerCase();
       expect(mentionsAny(words, item)).toBe(mentionsAnyByText(words, lower));
