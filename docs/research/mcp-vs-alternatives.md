@@ -570,8 +570,8 @@ lowest in the row; the last column is ours over the cheapest other client):
 | numbers | SSE | 1 MB | 256 | **5,442** | 6,904 | 6,522 | 17,985 | 6,456 | 84,515 | 0.84 |
 
 Ours is the cheapest client in 77 of the 90 cells (three rounds; loads 1.6-9.8 over the 35 minutes of each, the
-machine shared with another agent). Every `escapes` and `unicode` cell from 64 KB up and every SSE cell but one at
-1 KB is ours; JSON written as text costs 0.59-0.73x the cheapest other client at 1 MB, numbers 0.81-1.10x. The 13
+machine shared with another agent). Every `escapes` and `unicode` cell from 64 KB up and every SSE cell is ours (tool
+output at 1 KB one at a time ties pi at 103 µs); JSON written as text costs 0.59-0.73x the cheapest other client at 1 MB, numbers 0.79-1.10x. The 13
 losses: `lines` in JSON at 1 KB, 64 KB and 1 MB (1.09-1.38x the SDK 1.x; below), plain JSON at 1 MB one at a time
 (1.06x) and at 1 KB with 256 in flight (1.12x pi), numbers in JSON one at a time at 1 KB and 1 MB (1.15x, 1.10x) and at
 64 KB with 256 in flight (1.11x), and unicode at 1 KB one at a time (1.03x pi). Time to the first call (spawn to
