@@ -136,26 +136,12 @@ export class SourceMap {
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA synchronous = NORMAL");
     // WITHOUT ROWID (D1936): each table is its primary key's B-tree alone. With a rowid every row was stored twice
-    // (the table and the key's automatic index), so a file held about twice the pages. A file made before keeps its
-    // rowid tables (IF NOT EXISTS) and reads and writes as it did: every statement here names its columns, and a
-    // user's rows are read in the key's order in either layout (`source-map.test.ts` holds both to the same rows).
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS mention (
-        scope TEXT NOT NULL, entity TEXT NOT NULL, source_id TEXT NOT NULL,
-        count INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL,
-        PRIMARY KEY (scope, entity, source_id)
-      ) WITHOUT ROWID;
-      CREATE TABLE IF NOT EXISTS utility (
-        scope TEXT NOT NULL, situation TEXT NOT NULL, source_id TEXT NOT NULL,
-        shown INTEGER NOT NULL DEFAULT 0, used INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (scope, situation, source_id)
-      ) WITHOUT ROWID;
-      CREATE TABLE IF NOT EXISTS planner_arm (
-        scope TEXT NOT NULL, source_id TEXT NOT NULL, bucket INTEGER NOT NULL, shape TEXT NOT NULL,
-        alpha REAL NOT NULL, beta REAL NOT NULL,
-        PRIMARY KEY (scope, source_id, bucket, shape)
-      ) WITHOUT ROWID;
-    `);
+    // (the table and the key's automatic index), so a file held about twice the pages. A file made before is moved to
+    // this layout once, here (D1960, `migrateLayout`); one it cannot move (read-only, locked, full, damaged) keeps its
+    // rowid tables and reads and writes as it did: every statement here names its columns, and a user's rows are read
+    // in the key's order in either layout (`source-map-fast.test.ts` holds both to the same rows).
+    this.db.exec(TABLES.map((t) => `CREATE TABLE IF NOT EXISTS ${t} ${TABLE_SQL[t]};`).join("\n"));
+    if (path !== ":memory:" && path !== "") migrateLayout(this.db);
     this.mentionRead = this.db.query(
       "SELECT source_id, count FROM mention WHERE scope = ? AND entity = ? ORDER BY count DESC, source_id",
     );
@@ -612,6 +598,173 @@ export interface UserRows {
   mention: (string | number)[][];
   utility: (string | number)[][];
   arms: (string | number)[][];
+}
+
+/** The map's tables, in the order they are created and moved (D1960). */
+const TABLES = ["mention", "utility", "planner_arm"] as const;
+type Table = (typeof TABLES)[number];
+
+/** Each table's columns and key, WITHOUT ROWID (D1936): the one definition a new file and `migrateLayout` use. */
+const TABLE_SQL: Record<Table, string> = {
+  mention: `(
+    scope TEXT NOT NULL, entity TEXT NOT NULL, source_id TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL,
+    PRIMARY KEY (scope, entity, source_id)
+  ) WITHOUT ROWID`,
+  utility: `(
+    scope TEXT NOT NULL, situation TEXT NOT NULL, source_id TEXT NOT NULL,
+    shown INTEGER NOT NULL DEFAULT 0, used INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (scope, situation, source_id)
+  ) WITHOUT ROWID`,
+  planner_arm: `(
+    scope TEXT NOT NULL, source_id TEXT NOT NULL, bucket INTEGER NOT NULL, shape TEXT NOT NULL,
+    alpha REAL NOT NULL, beta REAL NOT NULL,
+    PRIMARY KEY (scope, source_id, bucket, shape)
+  ) WITHOUT ROWID`,
+};
+
+/** Each table's columns in order: a rowid table with any other set (an October 27 file's `last_ref`) is not moved. */
+const COLUMNS: Record<Table, readonly string[]> = {
+  mention: ["scope", "entity", "source_id", "count", "last_seen"],
+  utility: ["scope", "situation", "source_id", "shown", "used"],
+  planner_arm: ["scope", "source_id", "bucket", "shape", "alpha", "beta"],
+};
+/** How many of `COLUMNS`' first columns are the primary key. */
+const KEY_COLUMNS: Record<Table, number> = { mention: 3, utility: 3, planner_arm: 4 };
+
+/**
+ * How long the move waits for another connection's write lock before it gives up for this open (D1960): a second
+ * mcp-stdio for the same user holding the file, or one moving it at the same moment. The next open tries again.
+ */
+export const MIGRATE_BUSY_MS = 250;
+/**
+ * The largest file moved at open, in pages (D1960): 128 MiB of 4 KiB pages. The move costs about 0.13 ms a page on
+ * the shared 4-core VM (a 1M-row, 25,084-page file in 3.2-3.6 s), so this bounds an open's wait near 4.5 s there, far
+ * inside a router child's 30 s start deadline (D172). A larger file keeps its layout and works as before (one log
+ * line an open); `bun packages/graph/src/migrate.ts FILE` moves it with the server stopped.
+ */
+export const MIGRATE_MAX_PAGES = 32_768;
+
+export interface MigrateResult {
+  /** `current`: nothing to move; `migrated`: moved now; `kept`: not moved, the file is as it was. */
+  status: "current" | "migrated" | "kept";
+  /** Rows moved (`migrated`). */
+  rows?: number;
+  /** Why it was kept (an error's message, never a row). */
+  reason?: string;
+}
+
+/**
+ * Moves a file's rowid tables to the WITHOUT ROWID layout, once (D1960). One transaction (`BEGIN IMMEDIATE`, so the
+ * layout is read again under the write lock): for each rowid table a `<table>_new` WITHOUT ROWID, every row copied by
+ * named columns in key order (in rowid order the new B-tree was built at random and wrote 10x the bytes) and counted,
+ * the old table dropped and the new one renamed; then a VACUUM. A crash or an error at any statement before the
+ * commit rolls the whole move back (WAL): the file is in one layout or the other, every row in it. Not `VACUUM INTO`
+ * a copy renamed over the file: another connection open on it (a second mcp-stdio, an older process) would keep
+ * writing the old inode. Here such a connection keeps reading its snapshot and re-prepares its statements on the new
+ * schema at its next step (SQLite's schema check); one holding the write lock makes the move give up after
+ * `MIGRATE_BUSY_MS`. Never throws: a failure is one log line and the file keeps its layout. `onStep` names each step
+ * before it runs (tests stop the move there). docs/research/opt-round4-graph.md has the measurements.
+ */
+export function migrateLayout(
+  db: Database,
+  options: { log?: (line: string) => void; onStep?: (step: string) => void; maxPages?: number } = {},
+): MigrateResult {
+  const log = options.log ?? console.error;
+  const step = options.onStep ?? (() => {});
+  const maxPages = options.maxPages ?? MIGRATE_MAX_PAGES;
+  let busy: number | undefined;
+  try {
+    const old = rowidTables(db);
+    if (old.length === 0) return { status: "current" };
+    for (const t of old) {
+      const cols = (db.query(`PRAGMA main.table_info(${t})`).values() as [number, string][]).map((r) => r[1]);
+      if (cols.join() !== COLUMNS[t].join()) return kept(log, db, `${t} has the columns ${cols.join(", ")}`);
+    }
+    const pages = db.query("PRAGMA main.page_count").values()[0]![0] as number;
+    if (pages > maxPages) return kept(log, db, `${pages} pages, more than the ${maxPages} moved at open`);
+    const started = performance.now();
+    busy = db.query("PRAGMA busy_timeout").values()[0]![0] as number;
+    db.exec(`PRAGMA busy_timeout = ${MIGRATE_BUSY_MS}`);
+    let rows = 0;
+    step("begin");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      // Read again under the lock: another process may have moved the file since the look above.
+      const moving = rowidTables(db);
+      if (moving.length === 0) {
+        db.exec("ROLLBACK");
+        return { status: "current" };
+      }
+      for (const t of moving) {
+        const cols = COLUMNS[t].join(", ");
+        step(`${t}:create`);
+        db.exec(`DROP TABLE IF EXISTS ${t}_new`);
+        db.exec(`CREATE TABLE ${t}_new ${TABLE_SQL[t]}`);
+        step(`${t}:copy`);
+        const order = COLUMNS[t].slice(0, KEY_COLUMNS[t]).join(", ");
+        const copied = db
+          .query(`INSERT INTO ${t}_new (${cols}) SELECT ${cols} FROM ${t} ORDER BY ${order}`)
+          .run().changes;
+        // The copy read the key's index; the count reads the table itself, so an index missing rows cannot drop them.
+        const held = db.query(`SELECT count(*) FROM ${t} NOT INDEXED`).values()[0]![0] as number;
+        if (copied !== held) throw new Error(`${t}: copied ${copied} of ${held} rows`);
+        rows += copied;
+        step(`${t}:drop`);
+        db.exec(`DROP TABLE ${t}`);
+        step(`${t}:rename`);
+        db.exec(`ALTER TABLE ${t}_new RENAME TO ${t}`);
+      }
+      step("commit");
+      db.exec("COMMIT");
+    } catch (e) {
+      try {
+        if (db.inTransaction) db.exec("ROLLBACK");
+      } catch {
+        // SQLite already rolled back (a full disk can): the first error is the one logged.
+      }
+      throw e;
+    }
+    // The old tables' pages are free inside the file now, and the new tables were written past them, so the file is
+    // larger than before; VACUUM writes it again at its new size (half the old file). Its own transaction: a crash
+    // or a failure here leaves the moved file with free pages, which later writes reuse.
+    let compacted = "compacted";
+    try {
+      step("vacuum");
+      db.exec("VACUUM");
+      // The WAL file grew to the size of the rewrite; truncate it if no reader holds it (else it is reused).
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    } catch (e) {
+      compacted = `not compacted (${e instanceof Error ? e.message : String(e)}; later writes reuse its free pages)`;
+    }
+    const ms = Math.round(performance.now() - started);
+    log(
+      `eden: source map ${db.filename} moved to the WITHOUT ROWID layout (D1960): ${rows} rows, ${compacted}, ${ms} ms`,
+    );
+    return { status: "migrated", rows };
+  } catch (e) {
+    return kept(log, db, e instanceof Error ? e.message : String(e));
+  } finally {
+    if (busy !== undefined) {
+      try {
+        db.exec(`PRAGMA busy_timeout = ${busy}`);
+      } catch {
+        // A broken connection: the constructor's next statement reports it.
+      }
+    }
+  }
+}
+
+/** The map's tables that still have a rowid (`PRAGMA table_list`'s `wr` is 0). */
+function rowidTables(db: Database): Table[] {
+  const rows = db.query("PRAGMA main.table_list").values() as [string, string, string, number, number][];
+  const wr = new Map(rows.map((r) => [r[1], r[4]]));
+  return TABLES.filter((t) => wr.get(t) === 0);
+}
+
+function kept(log: (line: string) => void, db: Database, reason: string): MigrateResult {
+  log(`eden: source map ${db.filename} keeps its rowid layout (D1960; it works as before): ${reason}`);
+  return { status: "kept", reason };
 }
 
 const NONE = { shown: 0, used: 0 } as const;
