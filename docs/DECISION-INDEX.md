@@ -832,6 +832,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1932 | 2026-11-15 | Adopted (same brief; D1918 had not built a `datesOf` memo because its days depend on the instant): a statement's date patterns are read… | rejected |
 | D1933 | 2026-11-15 | Adopted (same brief): the ask path's smaller repeats. | adopted |
 | D1934 | 2026-11-15 | Adopted (same brief): `mentionsAny` searches the item's lowercased text in place. | adopted |
+| D1935 | 2026-11-15 | Adopted (a fourth low-level brief, the graph and index layer; every answer unchanged): the source map's reads are memoised, exactly. | adopted |
+| D1936 | 2026-11-15 | Adopted (same brief; answers unchanged): a new source-map file makes its three tables `WITHOUT ROWID`. | adopted |
+| D1937 | 2026-11-15 | Adopted (same brief; keys unchanged): `normalizeEntity` reads plain names in one pass. | adopted |
+| D1938 | 2026-11-15 | Finding (measured beside D1935-D1937): the rest of the graph and index layer has no lever worth its risk at today's shares. | finding |
 | D1940 | 2026-11-15 | Adopted: the proxy reads a request's history once, the server's shape check counts brackets before it scans, and a tool call's check skips… | adopted |
 | D1941 | 2026-11-15 | Finding (measured beside D1940): the rest of the edge has no lever. | finding |
 | D1945 | 2026-11-15 | Adopted (a dev-loop brief; no test weakened, every test still run): the gate spends about 7% less CPU, its main-run test limit is 60 s… | adopted |
