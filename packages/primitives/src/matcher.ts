@@ -164,6 +164,25 @@ export class MultiMatcher {
     this.part = new Uint8Array(size);
     this.ringMask = size - 1;
     this.quiet = new Uint8Array(states * cols);
+    if (!this.wholeWord) this.prime();
+  }
+
+  /**
+   * Runs `scan` on two short texts that take each of its paths (both walks to the end with occurrences held back;
+   * the walks going on alone past WIDE_LIMIT), so V8 has type feedback for all of it before it compiles the loop on
+   * stack replacement: code there that had never run deoptimized the compiled loop at every call (V8 reuses that
+   * code), 31 times in 31 calls (D1850).
+   */
+  private prime(): void {
+    const n = this.patterns.length;
+    const sample = this.patterns.join(" ").slice(0, 64) || "a";
+    let ascii = "";
+    while (ascii.length < PAIRED_MIN * 2) ascii += sample + " ";
+    const wide = ascii + "é́".repeat(WIDE_LIMIT + 1) + ascii;
+    const sink: MatchSink = { add: () => {} };
+    for (const text of [ascii, wide]) {
+      this.scan(text, new Uint8Array(n), new Int32Array(n), new Uint8Array(n).fill(1), sink);
+    }
   }
 
   get stateCount(): number {
@@ -270,10 +289,32 @@ export class MultiMatcher {
       sB = this.endState;
       specialB = this.endSpecial;
     }
-    if (i < mid) distinct = this.walk(text, i, mid, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
-    distinct = this.walk(text, mid + i, n, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
-    // The second half's occurrences, in order, each only while its pattern is still kept: as one walk would have
-    // passed them, after every occurrence in the first half.
+    // The rest in a method of its own: V8 compiles the loop on stack replacement before any code after it has run,
+    // and a comparison there without type feedback deoptimized the scan at the end of every call.
+    return this.finish(text, i, mid, sA, specialA, sB, specialB, hits, firsts, distinct, keep, sink);
+  }
+
+  /**
+   * The two walks' ends: the first half from `i` (when the walks went on alone) and the second from `mid + i`, then
+   * the second half's occurrences passed to `sink`, in order, each only while its pattern is still kept: as one walk
+   * would have passed them, after every occurrence in the first half.
+   */
+  private finish(
+    text: string,
+    i: number,
+    mid: number,
+    sA: number,
+    specialA: number,
+    sB: number,
+    specialB: number,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+  ): number {
+    distinct = this.walk(text, i, mid, sA, specialA, hits, firsts, distinct, keep, sink, EMIT);
+    distinct = this.walk(text, mid + i, text.length, sB, specialB, hits, firsts, distinct, keep, sink, DEFER);
     const patterns = this.deferredPattern;
     const starts = this.deferredStart;
     for (let k = 0; k < this.deferred; k++) {
@@ -326,7 +367,6 @@ export class MultiMatcher {
     const quiet = this.quiet;
     const packed = this.delta;
     const foldCol = this.foldCol;
-    const asciiCol = this.asciiCol;
     const cols = this.cols;
     for (let i = from; i < to; i++) {
       const c = text.charCodeAt(i);
@@ -351,17 +391,41 @@ export class MultiMatcher {
         continue;
       }
       special = i;
-      const expanded = expansionOf(c);
-      for (let u = 0; u < expanded.length; u++) {
-        const e = expanded.charCodeAt(u);
-        d = packed[s + (e < 128 ? asciiCol[e]! : this.column(e))]!;
-        s = d >> 1;
-        if ((d & 1) !== 0 && mode !== SILENT && quiet[s] !== generation)
-          distinct = this.emit(s / cols, i, u, special, text, hits, firsts, distinct, keep, sink, mode);
-      }
+      distinct = this.expanded(c, i, s, text, hits, firsts, distinct, keep, sink, mode);
+      s = this.endState;
     }
     this.endState = s;
     this.endSpecial = special;
+    return distinct;
+  }
+
+  /**
+   * `walk`'s step over a character `c` at `i` that folds to several (a ligature), from state row `s`; leaves the state
+   * in `endState`. Its own method: as a loop inside `walk`'s, V8 compiled it on stack replacement on a text of
+   * ligatures and left that code at every later call (1,684 times in one run, D1850).
+   */
+  private expanded(
+    c: number,
+    i: number,
+    s: number,
+    text: string,
+    hits: Uint8Array,
+    firsts: Int32Array,
+    distinct: number,
+    keep: Uint8Array,
+    sink: MatchSink,
+    mode: number,
+  ): number {
+    const generation = mode === SILENT ? -1 : this.generation;
+    const expanded = expansionOf(c);
+    for (let u = 0; u < expanded.length; u++) {
+      const e = expanded.charCodeAt(u);
+      const d = this.delta[s + (e < 128 ? this.asciiCol[e]! : this.column(e))]!;
+      s = d >> 1;
+      if ((d & 1) !== 0 && mode !== SILENT && this.quiet[s] !== generation)
+        distinct = this.emit(s / this.cols, i, u, i, text, hits, firsts, distinct, keep, sink, mode);
+    }
+    this.endState = s;
     return distinct;
   }
 

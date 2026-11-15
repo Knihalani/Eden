@@ -1219,15 +1219,13 @@ export function gateOf(rules: SecretRule[]): Gate {
   /** The spans of `text`'s rules by kind: before D1850 (found, excused) and D1850's (`post`). */
   const sorted = (text: string): { strict: Span[]; excused: Span[]; post: Span[] } => {
     const out = { strict: [] as Span[], excused: [] as Span[], post: [] as Span[] };
-    // Loops, not `push(...spans)`: a megabyte of tokens is 100,000 spans, past what a spread call takes on V8.
     for (const r of candidates(text)) {
       const rule = rules[r]!;
       const parts = rule.split ? rule.split(text, found, anchorIds[r]) : undefined;
       const spans = parts ? parts.spans : rule.spans(text, found, anchorIds[r]);
       // A D1850 rule's excused spans were never main's: they gate nothing.
-      const into = rule.post ? out.post : out.strict;
-      for (const span of spans) into.push(span);
-      if (parts && !rule.post) for (const span of parts.excused) out.excused.push(span);
+      pushAll(rule.post ? out.post : out.strict, spans);
+      if (parts && !rule.post) pushAll(out.excused, parts.excused);
     }
     return out;
   };
@@ -1264,6 +1262,15 @@ export function gateOf(rules: SecretRule[]): Gate {
     const { strict, excused, post } = sorted(text);
     return { ...composeMasks(text, strict, excused, post, pass, true), excusedSpans: excused };
   }
+}
+
+/**
+ * Appends `spans` to `into`. A loop, not `push(...spans)` (a megabyte of tokens is 100,000 spans, past what a spread
+ * call takes on V8), and in a function of its own: inside the gate's loop over rules, V8 compiled it on stack
+ * replacement and left that code at every call (442 times in one run over the benchmark's texts, D1850).
+ */
+function pushAll(into: Span[], spans: Span[]): void {
+  for (let k = 0; k < spans.length; k++) into.push(spans[k]!);
 }
 
 let gate: Gate | undefined;

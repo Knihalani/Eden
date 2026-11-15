@@ -760,23 +760,11 @@ export class LazyPrefixRegex {
    * increasing and distinct; returns how many.
    */
   private listed(found: Occurrences, ids: Int32Array): number {
-    let n = 0;
     let lists = 0;
-    for (let k = 0; k < ids.length; k++) {
-      const id = ids[k]!;
-      if (found.head[id]! >= 0) lists++;
-      for (let e = found.head[id]!; e >= 0; e = found.next[e]!) {
-        if (n === candidates.length) candidates = grow(candidates);
-        candidates[n++] = found.start[e]!;
-      }
-    }
-    if (lists > 1) candidates.subarray(0, n).sort();
-    // Two literals can occur at one position (`key` and `keys`): keep each position once.
-    let distinct = 0;
-    for (let j = 0; j < n; j++) {
-      if (j === 0 || candidates[j] !== candidates[j - 1]) candidates[distinct++] = candidates[j]!;
-    }
-    return distinct;
+    for (let k = 0; k < ids.length; k++) if (found.head[ids[k]!]! >= 0) lists++;
+    // Each loop in a function of its own, last in it: V8 compiles a long loop on stack replacement and keeps that
+    // code, and code after the loop that had not run then deoptimized it at every call (166 times in one run, D1850).
+    return distinctPrefix(gatherListed(found, ids), lists > 1);
   }
 
   /**
@@ -827,6 +815,29 @@ export class LazyPrefixRegex {
     if (this.otherSource !== undefined) this.other ??= new RegExp(this.otherSource, this.flags + "g");
     return { rest: this.rest, other: this.other };
   }
+}
+
+/** The listed occurrences of `ids` into `candidates`, list after list; returns how many. */
+function gatherListed(found: Occurrences, ids: Int32Array): number {
+  let n = 0;
+  for (let k = 0; k < ids.length; k++) {
+    for (let e = found.head[ids[k]!]!; e >= 0; e = found.next[e]!) {
+      if (n === candidates.length) candidates = grow(candidates);
+      candidates[n++] = found.start[e]!;
+    }
+  }
+  return n;
+}
+
+/** The first `n` candidates sorted (when `sort`: more than one list) and each position once; returns how many. */
+function distinctPrefix(n: number, sort: boolean): number {
+  if (sort) candidates.subarray(0, n).sort();
+  // Two literals can occur at one position (`key` and `keys`): keep each position once.
+  let distinct = 0;
+  for (let j = 0; j < n; j++) {
+    if (j === 0 || candidates[j] !== candidates[j - 1]) candidates[distinct++] = candidates[j]!;
+  }
+  return distinct;
 }
 
 /**
