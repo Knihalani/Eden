@@ -437,29 +437,25 @@ describe("the long-reply path stays linear", () => {
     expect(long).toBeLessThan(short * 1.5 + 2);
   });
 
-  /** This thread's CPU in milliseconds: the work measured, not a concurrent collector's or compiler's threads. */
-  const threadCpuMs = () => {
-    const u = process.threadCpuUsage();
-    return (u.user + u.system) / 1_000;
-  };
-
   /**
-   * `medians` with a full collection before each timed call and this thread's CPU, so neither side pays for garbage
-   * the other (or the fuzz tests before it) left: the plain process clock put this ratio at 0.87 against 0.85 once in
-   * a loaded gate (D1965), while it reads 0.4-0.7 beside busy loops and 1.0-1.2 with D1919's regression planted.
+   * `medians` with a full collection before each timed call, so neither side pays for garbage the other (or the fuzz
+   * tests before it) left: without it this ratio read 0.87 against 0.85 once in a loaded gate (D1965). The process
+   * clock, not `process.threadCpuUsage()`: on Bun 1.4.4 that steps by up to 4 ms and under-reads, and with D1919's
+   * regression planted it let the ratio through (D1965's review); with the process clock and the collections the
+   * regression reads 0.96-1.47 and the reader 0.48-0.72.
    */
   function settledMedians(f: () => unknown, g: () => unknown, runs: number): [number, number] {
     const a: number[] = [];
     const b: number[] = [];
     for (let k = 0; k < runs; k++) {
       Bun.gc(true);
-      let t = threadCpuMs();
+      let t = cpuMs();
       f();
-      a.push(threadCpuMs() - t);
+      a.push(cpuMs() - t);
       Bun.gc(true);
-      t = threadCpuMs();
+      t = cpuMs();
       g();
-      b.push(threadCpuMs() - t);
+      b.push(cpuMs() - t);
     }
     const mid = (x: number[]) => x.sort((p, q) => p - q)[x.length >> 1]!;
     return [mid(a), mid(b)];
@@ -481,7 +477,7 @@ describe("the long-reply path stays linear", () => {
     expect(same(parseJsonBytes(encoder.encode(text)), JSON.parse(text))).toBe(true);
     const plain = plainOf(text);
     for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
-    const [long, short] = settledMedians(() => parseJsonText(text), plain, 7);
+    const [long, short] = settledMedians(() => parseJsonText(text), plain, 9);
     // About 0.4 here; 1.3-1.6x when the reader gave up at the `null`.
     expect(long).toBeLessThan(short * 0.85);
   });

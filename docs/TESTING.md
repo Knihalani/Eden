@@ -176,7 +176,7 @@ What changed (`scripts/check.sh`, `scripts/test.sh`, `scripts/test-tail.txt`, `s
 - **Bounds on work are CPU time.** 22 wall-clock ceilings around synchronous code (ReDoS and linearity guards in
   engine, primitives, redact, protocol and sim) read `process.cpuUsage()` (`cpuMs`): the same bound on the same work,
   not on how long the scheduler kept the test waiting.
-- **20 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`; 60 s since D1945, 120 s since D1965):
+- **120 s a test in the main run unless it names its own** (`TEST_TIMEOUT_MS`; 20 s before D1945, 60 s until D1965):
   the limit catches a hang; Bun's 5 s default failed CPU-bound tests under load.
   The tail keeps 5 s (`TEST_TAIL_TIMEOUT_MS`): deadline tests there that
   assert nothing about time relied on it, and the tail runs unloaded. A name filter (`bun run test -- -t X`) runs one
@@ -649,9 +649,11 @@ call must arrive while Eden still holds its answer. `hermes-worker.test.ts` slep
 it polls up to 5 s. The pool's abort test (`regressions.test.ts`) held its one worker with a 300 ms spin, which a
 descheduled main thread could outlive: the worker now blocks on `Atomics.wait` (`pool.fixture.ts`'s `hold`) until the
 test lets it go, after the next task is asked. `long-reply.test.ts`'s gap series read 0.87 against 0.85 once in a
-gate: its ratio now collects garbage before each timed call and reads the thread's CPU (`process.threadCpuUsage`), so
-neither side pays for what the fuzz tests before it left (0.40-0.71 under load, four copies at once beside eight
-busy loops; 1.03-1.24 with D1919's regression planted). Found in this branch's own loaded gate (444 ms against 300):
+gate: its ratio now collects garbage before each timed call (9 runs), so neither side pays for what the fuzz tests
+before it left. It reads the process clock: the thread clock (`process.threadCpuUsage`) first used here steps by up
+to 4 ms on Bun 1.4.4 and under-reads, and with D1919's regression planted let the ratio through (D1965's review);
+with the process clock the regression reads 0.96-1.47 (failed 6 of 6 here) and the reader 0.48-0.72 (8 of 8 passed
+beside six busy loops). The D100 test reads the process clock for the same reason. Found in this branch's own loaded gate (444 ms against 300):
 `deadline-unwatched.test.ts`'s fan-out deadlines (audit A5), whose source slept 800 ms; it now holds each call until
 the test releases it, and the search and `fetchChecked` must return with the call still held (0 of 28 failed after,
 10 beside six loops and 18 in the harsh harness). Every changed file passed 10 of 10 beside six busy loops.
@@ -699,10 +701,10 @@ average before → after; every run 3,536 passed and 2 skipped of 3,538 in 333 f
 `bun run eval` on the final tree: precision 0.65, recall 0.52, falseFireRate 0; acting packets on 19 of 28 neutral
 requests (1.18 items each), facts handed 10 of 11, a look-alike on 3 of 10, as on main.
 
-**Found and left:** two load-sensitive engine tests outside the brief's list, in a package other sessions are
-editing: `partner.test.ts`'s "serving and shadow lookups start no call their source timeout would cut off" (a 60 ms
-source timeout around a 40 ms search, then 20 x 10 ms for the shadow record; 2 of 12 failed in the harsh harness and
-1 of this branch's loaded gates) and `rare-terms.test.ts`'s full-table
+**Found after the brief:** `partner.test.ts`'s "serving and shadow lookups start no call their source timeout would
+cut off" (a 60 ms source timeout around a 40 ms search, then 20 x 10 ms for the shadow record; 2 of 12 failed in the
+harsh harness and 1 of this branch's loaded gates) now polls for the record up to 5 s (10 of 10 beside six busy
+loops; commit e5ce94ed6). Left: `rare-terms.test.ts`'s full-table
 tests (5.4-6.5 s against 30 s beside four loops). `proxy-a11`'s hang-up choreography and `python.test.ts` passed 12 of
 12 in the harsh harness.
 

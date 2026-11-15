@@ -260,23 +260,24 @@ describe("request body size (D100)", () => {
       // that parsed first would take at least the reference. The fastest of three sends, so one descheduling of the
       // test does not decide it; the reference is the fastest of three parses too, so one slow sample of it does not
       // pass a handler that parsed first (D1945's review: such a handler took 0.5-0.8x of a single parse). Both sides
-      // read this thread's CPU, not the wall clock: in a loaded gate the fastest of three sends still read 33.5 ms of
-      // wall against a bound of 30 (D1965), time the thread spent descheduled; the work it did is what is bounded.
-      const threadMs = () => {
-        const u = process.threadCpuUsage();
+      // read the process's CPU, not the wall clock: in a loaded gate the fastest of three sends still read 33.5 ms of
+      // wall against a bound of 30 (D1965), time spent descheduled. Not `threadCpuUsage`: on Bun 1.4.4 it steps by up
+      // to 4 ms and reads a send of a few milliseconds as 0 (D1965's review).
+      const processMs = () => {
+        const u = process.cpuUsage();
         return (u.user + u.system) / 1_000;
       };
       let parseMs = Infinity;
       for (let i = 0; i < 3; i++) {
-        const t0 = threadMs();
+        const t0 = processMs();
         JSON.parse(body);
-        parseMs = Math.min(parseMs, threadMs() - t0);
+        parseMs = Math.min(parseMs, processMs() - t0);
       }
       let ms = Infinity;
       for (let i = 0; i < 3; i++) {
-        const t1 = threadMs();
+        const t1 = processMs();
         const res = await send(h, body);
-        ms = Math.min(ms, threadMs() - t1);
+        ms = Math.min(ms, processMs() - t1);
         expect(res.status).toBe(400);
         expect(((await res.json()) as { error: string }).error).toMatch(/too many values or nests too deep/);
       }
