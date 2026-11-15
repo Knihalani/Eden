@@ -199,14 +199,16 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
 
 ## Where it loses
 
-- **JSON replies whose long strings hold escapes**, as tool output does (a newline and quotes on every line): 1.13-1.30x
-  the SDK's CPU at 1 MB and 0.94-1.26x at 64 KB (D1870's `MCP_PROFILE_TEXT=lines` run; 1.12-1.72x before). The shape
-  check must find each string's end exactly before the parse, which costs a search per escaped quote, and Bun's
-  `res.json()`, which the others use, parses the received bytes without the string our `text()` makes. Taking
-  `res.json()` and checking after the parse was measured and refused (D1871): it gives up D1704's bound on what a
-  hostile reply can make the parse cost.
-- **On Node** the JSON read decodes bytes and then parses (Node's `text()` drops two byte-order marks where
-  `TextDecoder` drops one, D1860), so D1870's splice of long strings is Bun's only; its faster scan is not (on Node it searches with `Buffer`'s `indexOf`, 40x V8's typed-array one: the shape check of a 1 MiB reply 21-26 µs, from 805-926).
+- **Tool output in JSON** (a long string with an escaped newline and quotes every line): 1.04-1.20x the SDK's CPU at
+  64 KB and 1.08-1.16x at 1 MB (D1900's run: `MCP_PROFILE_TEXT=plain,lines,escapes,unicode,numbers`, 3 rounds, Bun
+  1.4.4, 4 cores, load 6.9 falling to 1.6; base, before D1900, 1.18-1.32x at 1 MB). The scan now crosses the string
+  in one guessed read, but Bun's `res.json()`, which the others use, parses bytes without making the string our
+  `text()` makes, and the parse is 85% of the call. Taking `res.json()` and checking after was refused (D1871). In
+  SSE the same text costs 0.80-1.18x. JSON written as text now costs 0.56-0.73x the SDK from 64 KB up (1.20-1.49x
+  before), numbers 0.70-0.93x (1.17-1.55x), plain and multi-byte text 0.6-0.8x; tiny 1 KB replies with escapes cost
+  1.22-1.46x, noise-sized differences of 10-30 µs. 93 of the run's 108 cells are below the SDK.
+- **On Node** a long body is decoded once and takes the same long-reply path (D1904); V8 parses dense escapes faster
+  than the byte unescaper, so there the literal is parsed (D1901).
 - **Features others have**: the legacy HTTP+SSE transport, output-schema validation of `structuredContent`, a
   callback listener for OAuth and client ID metadata documents (below).
 
