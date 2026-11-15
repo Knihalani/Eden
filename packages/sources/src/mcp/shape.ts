@@ -589,7 +589,8 @@ function numberArrayAt(text: string, open: number, room: number, seen: TextShape
   const close = open + window.indexOf("]");
   if (close < open || close - open < 2 * LONG_REPLY.numbers - 1) return NOT_NUMBERS;
   if (!enoughElements(commas, open, at, close)) return NOT_NUMBERS;
-  // No quote before it either (a string is no number): searched for between the brackets only. A `{` the reader meets
+  // No quote before it either (a string is no number): searched for up to the next `[` (the windows never overlap, so
+  // the searches stay linear), and a quote past the `]` is not counted. A `{` the reader meets
   // as it would a `[`, where the scan goes on (a search for it too would cross a reply that holds none once more).
   const quote = window.indexOf('"');
   if ((quote >= 0 && quote < close - open) || !lastElementReads(text, open, close)) return NOT_NUMBERS;

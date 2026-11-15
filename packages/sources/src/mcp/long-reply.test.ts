@@ -689,6 +689,14 @@ describe("the readers against JSON.parse", () => {
     const late = `[${"1,".repeat(8)}0.30000000000000004,${"2,".repeat(8)}1e400,${"3,".repeat(8)}1234567890123456789,4]`;
     expect(readNumbers(late, 0, 100)).toBe(late.length - 1);
     expect(same(numbersRead, JSON.parse(late))).toBe(true);
+    // Once 4,096 elements have read, every number past the fast path is read: a series that turned into computed
+    // doubles half way was given up near its end and parsed whole, at 1.1-1.3x main and up to 1.9x its memory.
+    const doubles = Array.from({ length: 3_000 }, (_, k) => String(k / 7 + 0.1));
+    const turned = `[${"12,".repeat(4_100)}${doubles.join(",")}]`;
+    expect(readNumbers(turned, 0, 1_010_000)).toBe(turned.length - 1);
+    expect(same(numbersRead, JSON.parse(turned))).toBe(true);
+    // Before then the rule holds: the same doubles after 1,000 rounded values are given up.
+    expect(readNumbers(`[${"12,".repeat(1_000)}${doubles.join(",")}]`, 0, 1_010_000)).toBe(NOT_NUMBERS);
     // What no JSON array holds: the reply is not JSON.
     for (const bad of [
       "[1,2,nn,3]",

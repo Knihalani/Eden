@@ -1163,6 +1163,23 @@ token (now with those too) at eleven positions of a 1,100-element array, five re
 final tree, plus 17,974 checks over three more seeds on an earlier tree; the scratch buffers clear after every reply;
 `long-reply.test.ts`. Linear: `lin.ts`'s shapes cost the same per MB or less from 2 to 16 MB.
 
+## The sixth review's fix (D1919)
+
+The sixth review (on d1ad9cf43) found no answer changed (95,652 fuzz checks on five fresh seeds, 387,072 edge checks,
+2,700 on arrays past 2 M characters, 1,000,000 hard strings for `Number` against `JSON.parse`) and one cost left.
+
+- *A series that turns into computed doubles half way* used up the fallback budget (two, and one in eight elements)
+  near its end: the reader gave up after the counted array had been made, and the reply was parsed whole. On 3 MB of
+  text, turning at 50-70%, 1.11-1.24x main without a forced GC and 1.08-1.25x with one; 6 MB at 50% held 32.7 MB cold
+  and 22.0 warmed against main's 17.4 and 12.3. Once 4,096 elements have read, every number past the fast path is
+  now read by `Number` (`fallbackOk`): 0.63-0.78x main, 21.2 MB cold and 10.2 warmed (the review's prototype, its
+  numbers). An array of computed doubles is still given up at its third element (16 MiB, 0.58-0.61x); read by
+  `Number` nearly throughout, from element 10%, 0.97-0.98x. A test checks both sides of the 4,096 rule.
+- *Siblings of 600-number arrays* also cost 1.04-1.22x on the text path (bytes 1.23-1.33x). Handing the rest of the
+  reply to a counting scan once 16 pieces are held gained 5-15% without reaching main, so it was not built.
+- *Refused floods* read 0.76-0.97x on text and 1.00-1.20x on bytes (control 1.07-1.09), not the 0.3-0.9x the README
+  said; the README is corrected.
+
 ## Packaging
 
 - **On its own**: the directory copied alone to an empty directory with `@modelcontextprotocol/sdk` 1.32.2 and zod

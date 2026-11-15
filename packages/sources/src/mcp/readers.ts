@@ -214,10 +214,12 @@ let failAt = 0;
  * double `JSON.parse` gives, at about its cost (43 ns against 56 for a 17-digit double). Up to two, and one in eight
  * elements past that (`fallbackOk`): an array of computed doubles is left to the scan and the parse at its third
  * element, as before, and a series with a few anywhere is read whole (giving up at one cost what had been read before
- * it: 1.2-1.6x main). Read by `Number` throughout, a series costs 1.03-1.3x main.
+ * it: 1.2-1.6x main). Read by `Number` throughout, a series costs 1.03-1.3x main. Once 4,096 elements have read,
+ * every such number is: a series that turned into computed doubles half way was given up near its end, with its
+ * counted array made, at 1.1-1.3x main and up to 1.9x its peak memory (the fifth review); read on, it costs 0.6-0.8x.
  */
 let fallbacks = 0;
-const fallbackOk = (f: number) => ++fallbacks <= 2 + (f >> 3);
+const fallbackOk = (f: number) => ++fallbacks <= 2 + (f >> 3) || f >= 4_096;
 /** Calls into `readNumbers`: the tests check an array whose last element it would refuse never enters it. */
 export const numbersCalls = { count: 0 };
 /**
