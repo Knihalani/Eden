@@ -6958,10 +6958,20 @@ function spanDays(c: { start?: string; end?: string }): number {
 }
 
 /** The request's words and its people's names, lowercased: what a compacted packet keeps the parts holding. */
-function focusOf(cue: Cue): Set<string> {
-  const words = `${cue.text} ${cue.entities.join(" ")}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  return new Set(words.filter((w) => w.length > 1 && !isStopword(w)));
+function focusOf(cue: Cue): ReadonlySet<string> {
+  let focus = FOCI.get(cue);
+  if (!focus) {
+    const words = `${cue.text} ${cue.entities.join(" ")}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+    FOCI.set(cue, (focus = new Set(words.filter((w) => w.length > 1 && !isStopword(w)))));
+  }
+  return focus;
 }
+
+/**
+ * Each cue's focus words, read once and dropped with the cue (D1933): an ask read them three times (its answer, its
+ * delivery's fold and packet). Shared by every reader, so read only, never changed.
+ */
+const FOCI = new WeakMap<Cue, ReadonlySet<string>>();
 
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
