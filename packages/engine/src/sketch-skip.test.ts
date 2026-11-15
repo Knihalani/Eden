@@ -1,7 +1,7 @@
 /**
  * D1927: the sync's store skips adding the words of an item whose held copy is the very object listed and whose words
  * it added under the stamp still current (`SyncManager.stampOf`, `Entry.stamp`). The skip must change nothing: two
- * engines, one skipping and one adding every listed item's words as before (`SyncManager.resketchForTests`), are
+ * engines, one skipping and one adding every listed item's words as before (`SyncOptions.resketchForTests`), are
  * driven through the same seeded sequences of backfills, sweeps, polls, edits, deletions, sketch saturation and
  * restarts, forgotten sources and users, warm and compact freezes and restarts through the encrypted store, and must
  * hold the same sketch bits and rare-word tables (the sync's snapshot), read the same routing from them and answer the
@@ -21,7 +21,6 @@ import { ContextPartner } from "./partner";
 import { EncryptedFrozenDisk } from "./persist";
 import { RareTerms } from "./rare-terms";
 import { secondHash, termHash, termHashes, TermSketch } from "./sketch";
-import { SyncManager } from "./sync";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -29,7 +28,6 @@ const KEY = new Uint8Array(32).map((_, i) => i + 7);
 
 const dirs: string[] = [];
 afterEach(() => {
-  SyncManager.resketchForTests = false;
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
@@ -149,7 +147,6 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
       const makePartner = (e: Engine) => {
         const disk = new EncryptedFrozenDisk({ dir: e.dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 365 * DAY });
         e.cache.persist(disk);
-        SyncManager.resketchForTests = e.resketch;
         const p = new ContextPartner({
           sources: async (s) => e.sources.get(key(s)) ?? [],
           sourceMap: new SourceMap(":memory:", { seed: 1 }),
@@ -159,8 +156,8 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
           now,
           after: () => () => {},
           config: { syncMaxItems: 18, syncPageSize: 3, syncPollPageSize: 2, syncCallsPerMin: 1e6 },
+          syncResketchForTests: e.resketch,
         });
-        SyncManager.resketchForTests = false;
         return p;
       };
       const engine = (resketch: boolean): Engine => {
@@ -391,7 +388,6 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
     const make = (resketch: boolean) => {
       const src = new Mutable("mail");
       const cache = new ItemCache({ expireEveryMs: 0 });
-      SyncManager.resketchForTests = resketch;
       const partner = new ContextPartner({
         sources: async () => [src],
         sourceMap: new SourceMap(":memory:", { seed: 1 }),
@@ -401,8 +397,8 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
         now: () => clock,
         after: () => () => {},
         config: { syncPageSize: 1_000, syncPollPageSize: 2, syncCallsPerMin: 1e6 },
+        syncResketchForTests: resketch,
       });
-      SyncManager.resketchForTests = false;
       return { src, partner };
     };
     const engines = [make(false), make(true)];
@@ -452,6 +448,16 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
 });
 
 describe("the invariants the skip rests on", () => {
+  test("an epoch is read-only from outside: nothing can move it back", () => {
+    for (const x of [new TermSketch(), new RareTerms()]) {
+      const before = x.epoch;
+      expect(() => {
+        (x as unknown as { epoch: number }).epoch = 0;
+      }).toThrow(TypeError);
+      expect(x.epoch).toBe(before);
+    }
+  });
+
   test("TermSketch: a term added in the current epoch, added again while not saturated, changes no bit", () => {
     const r = rng(9);
     const t = new TermSketch();
