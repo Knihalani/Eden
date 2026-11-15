@@ -928,6 +928,11 @@ scan counts only the commas, so its answer cannot change); `commasIn` stops at a
 the bytes path the byte scan stops for a candidate only where the text path would read it (`readsAt`: the `]` far
 enough, no quote before it, the last element read), so `[1,...,12345678901234567]` keeps main's byte scan.
 
+*Corrected by the fifth review:* this fixed a late `null`, `true` or `false`, a refused last element and a byte outside
+numbers' characters, not every late element. An element the reader refused but made only of numbers' characters (a
+16-17-digit number, `1e400`, `1.2.3`, `nn`) anywhere past the first region still cost the reading before it, and past
+2 M characters the count of the whole array and an array that long: 1.1-1.6x main (below).
+
 | Shape (1 MB unless given) | Path | Before, no GC / GC | After, no GC / GC | Control, no GC / GC |
 |---|---|---|---|---|
 | series, one `null` third from last | text | 1.27 / 1.52 | 0.41 / 0.62 | 0.41 / 0.63 |
@@ -1024,6 +1029,139 @@ then reads pays back little after it. Not changed here; the cells match D1909's 
 series with a late gap, a long id in the middle, numbers among `true`s) cost the same per MB from 2 to 16 MB (the
 medians of 6 runs, a forced GC before each, 0.4-1.9x main from size to size; rerun beside D1909's code, the
 level-per-reach shape at 8 and 16 MB read 38-57 and 75-81 ms against its 39-40 and 76-77).
+
+## The fifth review's fixes (D1919)
+
+A fifth independent review (of the fourth review's fixes, 99758ce67) found no answer that differed from main's and
+two cost findings in the number reader, plus docs that claimed more than the fixes did (above). Past the first region
+(512 characters), any element the reader refused but made only of numbers' characters made it give up after reading
+everything before it: an unrounded double such as 0.30000000000000004 early in a rounded series, a 17-digit id,
+`1e400`, or a malformed element (`nn`, `--1`, `1.2.3`). Past 2 M characters `commasIn` had also counted the whole
+array and `readNumbers` had made an array that long before giving up, and the scan then crossed it again.
+
+**What changed.** Six changes, each measured alone before the sweep below.
+
+- *A number past the fast path is read by `Number`* on its text (more than 15 digits, or a power of ten past 22):
+  `Number` and `JSON.parse` both round correctly, so it is the same double, at about the parse's cost (43 against 56 ns
+  for a 17-digit double, in one process). Two such numbers are read anywhere, and one in eight elements past that, so
+  an array of computed doubles is still given up at its third element (it reads no faster than the parse), and a
+  series with a few anywhere is read whole. A series that turns into computed doubles after 600 rounded values is given
+  up about 90 elements later.
+- *An element no JSON array holds* (a sign or a letter that starts no value, a number or literal followed by anything
+  but a separator, a `]` after a comma) answers `NOT_JSON`, and the scan answers `NOT_JSON_REPLY`: `JSON.parse` would
+  throw, so the reply is undefined either way and nothing is read or parsed after it.
+- *After the count*, a reader that stops goes on from the `]` (everything up to it is numbers' characters, commas and
+  spaces, and the count holds its commas), and the counted array is made only once a sixteenth of it has read, so an
+  array given up early never holds one (the review's prototype resumed at the `]` but kept the array: 5 MB more at
+  the peak).
+- *An array with a `[` before its `]`*, or with fewer than 512 elements estimated from its commas so far, is neither
+  read nor stopped at by the byte scan: nested levels were each read up to the next level, and arrays of 200 numbers
+  were read and not kept. The `]` is searched for only up to the next `[`, and the quote only between the brackets, so
+  a refused nested reply is no longer crossed to its innermost `]`. A search for `{` too was dropped: the reader stops
+  at a `{` as at a `[`, and the search would cross a reply that holds none once more.
+- *The byte scan reads the first region* of an array before it stops for the text path, so computed doubles, which
+  end in one the reader reads, keep the byte scan.
+- *The byte scan crosses digits, letters and spaces in a loop of their own*: with `continue` instead, JSC ran it at
+  1.4-2 ns a byte of numbers against main's 0.95 (16 MB of 16-digit floats: 31 against 15 ms in one process), the
+  bytes path's leftover in D1909 and the fourth review.
+
+**Method.** 4×4 Latin square of main, D1919's earlier code (99758ce67, "before"), a copy of main (the control) and
+this code, 24 rounds, each cell without and with a forced GC before every batch; ratios of main's CPU in the same
+round, medians. Text path unless given.
+
+| Shape | Before, no GC / GC | After, no GC / GC | Control |
+|---|---|---|---|
+| series, 0.30000000000000004 at element 200, 3 MB | 1.25 / 1.18 | 0.67 / 0.52 | 1.15 / 1.04 |
+| same, 6 MB | 1.23 / 1.19 | 0.55 / 0.48 | 1.07 / 1.03 |
+| ids, a 17-digit id at element 170, 3 MB | 1.19 / 1.19 | 0.64 / 0.63 | 1.05 / 0.89 |
+| same, 6 MB | 1.10 / 1.18 | 0.59 / 0.59 | 1.02 / 0.91 |
+| 13-digit ids, a 17-digit id at element 90, 6 MB | 1.33 / 1.25 | 0.62 / 0.56 | 1.19 / 0.96 |
+| ids, `1e400` at element 170, 3 MB | 1.50 / 1.29 | 0.65 / 0.71 | 1.07 / 1.00 |
+| ids, a 17-digit id in the middle, 3 MB | 1.18 / 1.38 | 0.70 / 0.61 | 1.00 / 1.08 |
+| ids, `1e400` at 97%, 3 MB | 1.06 / 1.19 | 0.61 / 0.71 | 0.77 / 0.85 |
+| same, 1 MB | 1.08 / 1.35 | 0.60 / 0.75 | 1.05 / 1.20 |
+| same, 1 MB, bytes | 1.18 / 1.32 | 0.75 / 0.80 | 0.95 / 1.00 |
+| ids, `nn` at element 170 (not JSON), 3 MB | 1.30 / 1.99 | 0.47 / 0.70 | 0.96 / 0.99 |
+| ids, `nul` at 97% (not JSON), 3 MB | 1.40 / 1.36 | 0.90 / 0.80 | 1.01 / 1.27 |
+| ids, `1.2.3` at 97% (not JSON), 3 MB | 1.26 / 1.08 | 0.86 / 0.66 | 1.16 / 0.99 |
+| ids, `--1` in the middle (not JSON), 3 MB | 1.30 / 1.56 | 0.68 / 0.86 | 1.02 / 1.46 |
+| siblings of 200 numbers with a 17-digit one second from last, 1 MB, bytes | 1.21 / 1.27 | 1.01 / 0.98 | 1.04 / 1.00 |
+| same, text | 0.97 / 1.30 | 0.88 / 0.95 | 1.05 / 0.98 |
+| series, an unrounded double every 50, 3 MB | 0.96 / 0.90 | 0.58 / 0.56 | 0.88 / 0.99 |
+| same, bytes | 0.95 / 0.98 | 0.80 / 0.84 | 1.00 / 1.00 |
+| series, rounded for 600 then computed doubles, 3 MB | 0.97 / 0.94 | 0.70 / 0.77 | 1.06 / 1.02 |
+
+**The other shapes**, the same runs (before → after, both modes):
+
+| Shape | Path | Before | After | Control |
+|---|---|---|---|---|
+| numbers, 64 KB and 1 MB | text | 0.35-0.56 | 0.36-0.51 | 0.94-1.07 |
+| numbers, 1 MB | bytes | 0.42-0.54 | 0.45-0.58 | 0.99-1.06 |
+| series with gaps, a late gap, 1-3 MB | text | 0.39-0.62 | 0.40-0.60 | 0.88-1.05 |
+| same, 3 MB | bytes | 1.00-1.01 | 0.81-0.87 | 1.02-1.03 |
+| `[true,...]`, `[null,...]`, `[1,true,...]`, 4 MB | text | 0.62-0.72 | 0.65-0.74 | 0.95-1.05 |
+| computed doubles, 16 MiB | text / bytes | 0.47-0.54 / 0.96-1.00 | 0.48-0.55 / 0.77-0.81 | 0.98-0.99 |
+| flat 16-digit floats, 16 MiB | text / bytes | 0.47-0.56 / 1.11-1.28 | 0.48-0.54 / 0.95-1.03 | 0.99-1.02 |
+| the 200-level nested reply, 16 MiB | text / bytes | 0.48-0.57 / 1.00-1.17 | 0.48-0.58 / 0.89-0.97 | 0.97-1.05 |
+| nested candidates, 6 and 12.6 MB | text | 0.50-0.92 | 0.55-0.89 | 1.00-1.07 |
+| same | bytes | 1.08-1.23 | 0.92-1.04 | 0.91-1.08 |
+| nested, a level just past the reach, 16 MB | text | 0.93-1.06 | 0.89-0.91 | 1.03-1.09 |
+| siblings of 202 twelve-digit numbers, 1 MB | text / bytes | 0.99-1.05 / 1.18-1.66 | 0.94-0.97 / 0.94-1.10 | 0.95-1.08 |
+| ids ending in a 17-digit id, 1 MB | text / bytes | 1.26-1.35 / 1.03-1.11 | 0.56-0.83 / 0.71-0.73 | 1.03-1.26 |
+| `[1,...,12345678901234567]`, 1 MB | bytes | 1.01-1.02 | 0.87-1.00 | 1.00-1.02 |
+| `[[n,2,3],...]`, 64 KB and 1 MB | text / bytes | 0.89-1.07 / 0.94-1.01 | 0.91-1.07 / 0.93-0.94 | 0.97-1.11 |
+| `[[1],[1],...]`, 64 KB and 1 MB | text / bytes | 1.00-1.38 / 0.99-1.05 | 0.95-1.08 / 1.01-1.10 | 0.98-1.28 |
+| refused number flood, 2 and 16 MB | text | 0.62-1.04 | 0.73-1.05 | 1.00-1.10 |
+| same, 16 MB | bytes | 1.06-1.15 | 0.89-1.16 | 1.03-1.07 |
+| tool output with escapes, 6.5-15.7 MB | bytes | 0.96-1.03 | 1.02-1.04 | 0.99-1.05 |
+| tool output with escapes, 1 MB | text | 0.34-0.39 | 0.33-0.38 | 0.99 |
+| multi-byte text, 1.1-1.8 MB | bytes | 0.97-1.05 | 1.00-1.07 | 0.99-1.06 |
+| plain text, 1 MB | text / bytes | 1.02-1.09 / 0.70-0.84 | 1.00-1.07 / 0.70-0.86 | 0.96-1.11 |
+| rows of objects, 1 MB | text / bytes | 1.05-1.38 / 0.95-1.01 | 0.99-1.18 / 0.87-1.03 | 0.84-1.13 |
+| siblings each broken by an object, 15 MB | text | 1.08-1.30 | 1.15-1.24 | 1.08-1.21 |
+| refused depth bomb (main 1-3 µs) | text / bytes | 1.27-1.49 / 1.33-1.69 | 1.17-1.34 / 1.28-1.80 | 0.81-1.21 |
+| hostile wrong guess | text | 1.27-1.38 | 1.27 | 1.00-1.02 |
+
+**Left over.** Siblings of number arrays long enough to read (600 elements, about 1.2 KB each) but too many for the
+parse to be spared: the reader takes the first 16, the walk that would put them back costs more than it saves, and
+the reply is parsed whole after all. On the bytes path at 1 MB: 1.22-1.28x main, as before (1.25-1.34); with `1e400`
+in each, which the reader used to give up at and now reads like the rest, 1.30-1.42x (before 1.17-1.23). Refused
+nested number arrays at 16 MiB (main refuses in 5-6 ms): a `1e400` before each next level 1.12-1.31x (before
+1.30-1.56), a `nul` there 0.92-1.21 (before 1.65-1.74). A refused 16 MB number flood on the text path is still under
+main's (0.73-0.82) but 1.12-1.19x D1919's earlier code: the search for the next `[` crosses it once more. A refused
+depth bomb and the hostile wrong guess, as before.
+
+**Memory.** Peak RSS above baseline, median of 7 processes, every arm's code loaded in every process, cold (the
+reply is the first call) and warmed (three calls on a smaller reply of the shape first), text path unless given:
+
+| Shape | main | before | after |
+|---|---|---|---|
+| ids, a 17-digit id at element 170, 6 MB, cold / warm | 25.9 / 21.0 | 28.0 / 23.5 | 18.5 / 7.8 |
+| series, an unrounded double at 200, 6 MB, cold / warm | 19.2 / 19.8 | 27.4 / 22.3 | 18.3 / 7.3 |
+| ids, `nn` at element 170 (not JSON), 6 MB, cold / warm | 4.8 / 0.1 | 13.3 / 6.6 | 5.2 / 0.1 |
+| ids, `nul` at 97% (not JSON), 6 MB, cold / warm | 19.2 / 14.2 | 30.8 / 20.7 | 17.6 / 7.8 |
+| rounded for 600 then computed doubles, 6 MB, cold / warm | 13.8 / 6.9 | 12.2 / 6.9 | 12.2 / 8.4 |
+| numbers, 6.5 MB, cold / warm | 19.3 / 20.2 | 15.5 / 6.5 | 19.0 / 7.6 |
+| series with gaps, 6.5 MB, cold / warm | 26.4 / 20.9 | 15.9 / 7.0 | 19.3 / 8.8 |
+| computed doubles, 16 MiB, cold / warm | 19.6 / 14.2 | 26.4 / 14.7 | 26.8 / 14.7 |
+| flat 16-digit floats, 16 MiB, cold / warm | 19.0 / 14.8 | 26.7 / 14.8 | 26.7 / 14.8 |
+| the 200-level nested reply, 16 MiB, cold / warm | 19.4 / 15.2 | 28.1 / 21.8 | 27.1 / 21.8 |
+| computed doubles, 16 MiB, bytes, cold / warm | 34.0 / 36.2 | 35.4 / 35.9 | 39.9 / 35.9 |
+| ids, a 17-digit id at element 170, 6 MB, bytes, cold / warm | 30.7 / 26.4 | 25.7 / 26.8 | 33.0 / 26.8 |
+| numbers, 6.5 MB, bytes, cold / warm | 30.8 / 26.4 | 32.2 / 26.4 | 33.0 / 26.9 |
+
+The readings come in steps of 6-8 MB (single runs of one arm land on either side), so a median one step apart is a
+difference of where most runs landed. The review's shapes now peak under main's. Not at or under main everywhere: a
+cold process on 16 MiB of floats or the nested reply stays a step over main, as before (the reader gives up those
+arrays in its first region now, as it did, so what is left is compiling, not the reply); a series that turns into
+computed doubles 1.5 MB over main warmed; the bytes path cold 2-6 MB over.
+
+**Answers.** No answer changed: 0 differences from main's real `json.ts` and `shape.ts` and `JSON.parse` on 31,960
+checks (15,980 fuzzed bodies over four fresh seeds, each on the text and the bytes path, with unrounded doubles,
+`1e400`, `1E-400`, 21-digit numbers and malformed elements added to the generator) and 51,480 checks of every edge
+token (now with those too) at eleven positions of a 1,100-element array, five region sizes and three separators, on the
+final tree, plus 17,974 checks over three more seeds on an earlier tree; the scratch buffers clear after every reply;
+`long-reply.test.ts`. Linear: `lin.ts`'s shapes cost the same per MB or less from 2 to 16 MB.
 
 ## Packaging
 
