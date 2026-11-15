@@ -125,7 +125,7 @@ each the skipping engine against the old store, compared after every step:
 - A user with 4,110 sources whose items are a few words each, a fresh one and some still being taken up, so the
   last sources listed have no `RareTerms` number and their words are dropped, and a word one of them dropped is later
   written by a numbered source (adding the dropped one's item again then marks the word common); adds, edits, sweeps,
-  polls, forgotten sources (numbers taken back by a renumbering), warm and compact freezes; 4 seeds of 24 steps.
+  polls, forgotten sources (numbers taken back by a renumbering), warm and compact freezes; 4 seeds of 24 steps, 15-35 s each alone (the review measured the file at 37 s alone, 126 s in a cold gate, not ~20 s), so the gate runs seed 4 (it kills the drop mutation) and `TEST_DEEP=1` runs all four.
 - Sketches restarting mid-listing: a source read again (its sketch folded small), a flood of 300-800 fresh words at a
   random place in its listing read one to three items a page, by a sweep or a poll; a lookup's put of some items
   (equal copies: the held object and its stamp kept, the entries moved last); a warm or compact freeze; a sweep. One
@@ -138,9 +138,9 @@ Mutations of the follow-ups (each applied alone, the file run whole):
 | a drop keeps its epoch (`RareTerms.add`) | killed: seeds 2 and 4 of the dropped-words case | killed by the `RareTerms` invariant only |
 | warm thaw gives entry j the stamp of j + 1 | killed: 5 of 12 restart seeds | killed by the directed freeze case |
 | compact thaw gives entry j the stamp of j + 1 | killed: 3 of 12 restart seeds | killed by the directed freeze case |
-| warm or compact thaw gives j the stamp of j − 1 | survives | survives |
+| warm or compact thaw gives j the stamp of j − 1 | survives | killed (skip count: 5 skips, not 6) |
 
-The shift back is equivalent on every path the engine has: a sync page stamps all its entries with one stamp and
+The shift back changes no state the differentials compare, only the skip count (the first entry gets stamp 0 and is re-added; the review found the directed freeze test catches it), on every path the engine has: a sync page stamps all its entries with one stamp and
 moves them last, so a source's entries run from older stamps to the current one in the cache's order, and the one
 other put that moves an entry (a lookup's) ends its listing's reuse (`raw` cleared), so that entry is not skipped at
 its next listing whatever its stamp. An entry whose words a restart lost therefore never follows one carrying the
