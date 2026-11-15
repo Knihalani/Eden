@@ -2354,7 +2354,9 @@ export class ItemCache {
    * `thaw` for a request, or undefined when a user read from disk does not thaw (a blob that decrypted and whose
    * header read but whose body does not: a tag `packedFrom` refuses, a section that does not decompress). Such a user
    * is dropped with their file, as `EncryptedFrozenDisk` discards a blob that does not open, and starts over (D8, a
-   * re-sync); left frozen, every request for them would throw. A blob this process froze itself still throws.
+   * re-sync); left frozen, every request for them would throw. Unlike that discard, `dropUser` also deletes a shared
+   * store's copy (`SharedFrozenDisk`), which would only be fetched and fail again; an allocation failure during the
+   * thaw discards too (the contents are a cache). A blob this process froze itself still throws.
    */
   private thawHeld(key: string, f: FrozenUser, recompact = false): UserCache | undefined {
     if (!f.fromDisk) return this.thaw(key, f, recompact);
