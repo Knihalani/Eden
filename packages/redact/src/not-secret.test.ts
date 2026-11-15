@@ -4,7 +4,7 @@
  * file is one.
  */
 import { describe, expect, test } from "bun:test";
-import { notSecret, placeholderToken } from "./not-secret.ts";
+import { judgeAlone, notSecret, placeholderToken } from "./not-secret.ts";
 import { redact, redactAssignments, redactString } from "./redact.ts";
 import { sanitizeForStore } from "./secrets.ts";
 
@@ -75,6 +75,86 @@ describe("code and placeholders are left, the nearest secrets are not (D1850)", 
     expect(placeholderToken(`AKIA${"QQQQRRRR".repeat(2)}`)).toBe(false);
     expect(sanitizeForStore(`id ${"AK" + "IA"}${"X".repeat(16)} is a placeholder`)).toContain("XXXX");
     expect(sanitizeForStore(`id ${"AK" + "IA"}${"QQQQRRRR".repeat(2)} is set`)).not.toContain("QQQQRRRR");
+  });
+
+  test("the native first test takes only what the hand-written verdict takes (D1850 (12))", () => {
+    // Pieces of every shape and of the near misses around them, glued at random with punctuation, quotes, spaces
+    // and the characters `core` strips: `notSecret` (FAST, then the memo) must answer as the verdict alone.
+    const pieces = [
+      "string",
+      "number[]",
+      "Set<number>",
+      "Map<string, number>",
+      "Record<K,V>",
+      "Uint8Array",
+      "process.env.",
+      "import.meta.env.",
+      "env.",
+      "API_KEY",
+      "DB_PASSWORD",
+      "this",
+      "options",
+      ".",
+      "?.",
+      "apiKey",
+      "config",
+      "res.usage.inputTokens",
+      "${",
+      "}",
+      "$",
+      "%",
+      "{{",
+      "}}",
+      "<",
+      ">",
+      "your-key",
+      "accessToken",
+      "Hunter2",
+      "9",
+      "_",
+      "-",
+      ",",
+      ";",
+      ")",
+      "]",
+      "(",
+      "[",
+      '"',
+      "'",
+      "`",
+      " ",
+      "\t",
+      "x".repeat(8),
+      "=",
+      "a",
+      // Whole shapes, so many values are excused ones with something glued on either side.
+      "process.env.API_KEY",
+      "${API_KEY}",
+      "${apiKey}",
+      "this.options.apiKey",
+      "%DB_PASS%",
+      "{{secret}}",
+      "<your-key>",
+      "$EDEN_API_KEY",
+      "env.OPENROUTER_API_KEY",
+      "Promise<string>",
+    ];
+    let seed = 1850_12;
+    const next = (n: number) => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    let taken = 0;
+    for (let i = 0; i < 40_000; i++) {
+      let value = "";
+      const parts = 1 + next(5);
+      for (let k = 0; k < parts; k++) value += pieces[next(pieces.length)];
+      const verdict = judgeAlone(value);
+      if (notSecret(value) !== verdict) throw new Error(`differs on ${JSON.stringify(value)}`);
+      if (verdict) taken++;
+    }
+    // The fuzz reaches the excused shapes, not only their misses.
+    expect(taken).toBeGreaterThan(1000);
   });
 
   test("the public structural pass excuses nothing unless asked, as main (the review of 2026-11-14)", () => {
