@@ -33,28 +33,64 @@ export function decodeRange(bytes: Uint8Array, start: number, end: number, atSta
 }
 
 const encoder = new TextEncoder();
-/** The buffer regions are encoded into, kept while it is no larger than this (a reply's long string is often 1 MB). */
-let scratch: Uint8Array = new Uint8Array(64 * 1024);
-const KEEP_SCRATCH = 4 << 20;
-/** The buffer the last region went into: `scratch`, or a larger one used once. */
+/**
+ * The buffers regions are encoded into, kept between replies: `scratch` for numbers and short strings, `wide` (grown
+ * as needed, up to `UNESCAPE_MOST` characters' worth) for a long string with dense escapes. What a reply wrote into
+ * either is zeroed when the reply is done (`releaseScratch`, from `json.ts`), so no reply's text stays in memory
+ * after the call that read it; allocating `wide` afresh for each reply instead cost a 64 KB reply 18% of its read.
+ */
+const scratch = new Uint8Array(64 * 1024);
+let wide = new Uint8Array(0);
+/** How far into `scratch` and `wide` the reply being read has written. */
+let scratchUsed = 0;
+let wideUsed = 0;
+/** The longest string `unescapeText` reads, in characters: a longer one stays in the parse, which needs no buffer. */
+export const UNESCAPE_MOST = 4 << 20;
+/** The buffer the last region went into: `scratch` or `wide`. */
 let encoded: Uint8Array = scratch;
+/** Node's and Bun's `Buffer.byteLength`: a string's UTF-8 length, so multi-byte text gets the room it needs. */
+const byteLength = (globalThis as { Buffer?: { byteLength?: (s: string, e: string) => number } }).Buffer?.byteLength;
 
 /**
  * `text[start, end)` as UTF-8 in `encoded`, followed by a zero byte; its length in bytes. ASCII, the common case, is
- * tried in a buffer of one byte a character; only text that does not fit is encoded again with room for three.
+ * tried in a buffer of one byte a character; only text that does not fit is encoded again with the room it needs.
  */
 function encodeRegion(text: string, start: number, end: number): number {
   const region = text.slice(start, end);
-  for (let room = region.length; ; room = 3 * region.length) {
-    const into = scratch.length > room ? scratch : new Uint8Array(room + 1);
-    if (into.length <= KEEP_SCRATCH) scratch = into;
+  for (let room = region.length; ; room = byteLength ? byteLength(region, "utf8") : 3 * region.length) {
+    let into = scratch;
+    if (room >= scratch.length) {
+      if (room >= wide.length) wide = new Uint8Array(Math.max(room + 1, 2 * wide.length));
+      into = wide;
+    }
     const { read, written } = encoder.encodeInto(region, into.subarray(0, room));
     if (read === region.length) {
       into[written] = 0;
+      if (into === scratch) scratchUsed = Math.max(scratchUsed, written + 1);
+      else wideUsed = Math.max(wideUsed, written + 1);
       encoded = into;
       return written;
     }
+    // A failed ASCII try wrote too.
+    if (into === scratch) scratchUsed = Math.max(scratchUsed, written);
+    else wideUsed = Math.max(wideUsed, written);
   }
+}
+
+/** Whether the buffers hold nothing but zeroes (the tests check no reply's text stays in them). */
+export function scratchIsClear(): boolean {
+  return scratch.every((b) => b === 0) && wide.every((b) => b === 0);
+}
+
+/** Zeroes what the reply just read wrote into the buffers and lets go of the numbers it read. */
+export function releaseScratch(): void {
+  if (scratchUsed > 0) scratch.fill(0, 0, scratchUsed);
+  // Kept up to 4 MiB: more (multi-byte text) is let go.
+  if (wide.length > UNESCAPE_MOST + 1) wide = new Uint8Array(0);
+  else if (wideUsed > 0) wide.fill(0, 0, wideUsed);
+  scratchUsed = wideUsed = 0;
+  encoded = scratch;
+  numbersRead = [];
 }
 
 /** What each escape's second byte stands for; 0 for none (`u` is read apart). */
@@ -160,8 +196,11 @@ const isSpaceByte = (c: number) => c === 0x20 || c === 0x0a || c === 0x0d || c =
 export let numbersRead: number[] = [];
 /** Where, in the region `numbersIn` last read, the element it could not finish starts. */
 let resumeAt = 0;
-/** The first region `readNumbers` encodes, in characters; the tests make it tiny to cut numbers at every place. */
-export const NUMBER_REGION = { first: 512 };
+/**
+ * The first region `readNumbers` encodes, in characters, and the most it encodes at once (within the scratch buffer,
+ * so reading numbers never takes a buffer of its own); the tests make them tiny to cut numbers at every place.
+ */
+export const NUMBER_REGION = { first: 512, most: 32 * 1024 };
 
 /**
  * The index in `text` of the `]` that closes the array opened at `open`, when every element is a JSON number of at most
@@ -169,28 +208,76 @@ export const NUMBER_REGION = { first: 512 };
  * holds them. `NOT_NUMBERS` for any other array (the scan reads it as usual), and `TOO_MANY` past `room` commas, where
  * the scan would refuse it. Such a number is an integer under 2^53 times or divided by an exact power of ten, which
  * one IEEE operation rounds correctly (Clinger's fast path), so it is the double `JSON.parse` gives. The array is
- * encoded a region at a time, each twice the last, from its first element, so a reader that gives up has cost about
- * what it read (an array of arrays nested a thousand deep costs no more than one pass). 2.6-2.9 ms a MiB of numbers
- * against `JSON.parse`'s 3.0-3.6 (D1900).
+ * encoded a region at a time from its first element, each twice the last up to `NUMBER_REGION.most`, so a reader that
+ * gives up has cost about what it read (an array of arrays nested a thousand deep costs no more than one pass), and
+ * every region goes into the scratch buffer. 2.6-2.9 ms a MiB of numbers against `JSON.parse`'s 3.0-3.6 (D1900).
+ * `count`, when known (`commasIn`), is the number of elements: the array is made that long at once.
  */
-export function readNumbers(text: string, open: number, room: number): number {
+export function readNumbers(text: string, open: number, room: number, count = 0): number {
   let i = open + 1;
   let c = text.charCodeAt(i);
   while (isSpaceByte(c)) c = text.charCodeAt(++i);
   if (!((c >= 0x30 && c <= 0x39) || c === 0x2d)) return NOT_NUMBERS;
-  const out: number[] = [];
-  for (let size = NUMBER_REGION.first; ; size *= 2) {
-    const end = Math.min(text.length, i + size);
-    const length = encodeRegion(text, i, end);
+  const out: number[] = count > 0 ? new Array(count) : [];
+  filled = 0;
+  for (let size = NUMBER_REGION.first; ; size = Math.min(2 * size, NUMBER_REGION.most)) {
+    const length = encodeNumbers(text, i, Math.min(text.length, i + size));
     const r = numbersIn(encoded, length, out, room);
     if (r >= 0) {
+      if (out.length !== filled) out.length = filled;
       numbersRead = out;
-      // A number array is ASCII, so its bytes and its characters line up.
+      // Every character before the `]` was a number's, a separator or a space, so ASCII: bytes and characters line up.
       return i + r;
     }
-    if (r !== MORE || end === text.length) return r === MORE ? NOT_NUMBERS : r;
+    if (r !== MORE || i + encodedChars === text.length) return r === MORE ? NOT_NUMBERS : r;
+    // No progress: an element longer than the largest region is longer than any number this reads.
+    if (resumeAt === 0 && (size === NUMBER_REGION.most || encodedChars === 0)) return NOT_NUMBERS;
     i += resumeAt;
   }
+}
+
+/**
+ * The commas in `text[from, to)`, which holds no quote: -1 past `room` (each is a value the scan would count, so the
+ * scan refuses), -2 at a character outside ASCII (no number array holds one: the scan then counts as usual). Counted
+ * a scratch region at a time with one byte compare each (about 1 ns a character, half the scan's), so a flood is
+ * refused before any of its numbers is kept, and an array that fits is read into an array of its exact length: grown
+ * by pushes, 900,000 numbers peaked at 30 MB against 13 (D1902's review).
+ */
+export function commasIn(text: string, from: number, to: number, room: number): number {
+  let commas = 0;
+  for (let p = from; p < to; p += encodedChars) {
+    const n = encodeNumbers(text, p, to);
+    const b = scratch;
+    for (let j = 0; j < n; j++) {
+      const c = b[j]!;
+      if (c === 0x2c) {
+        if (++commas > room) return -1;
+      } else if (c >= 0x80) return -2;
+    }
+    if (encodedChars === 0) return -2;
+  }
+  return commas;
+}
+
+/** Elements `numbersIn` has put in the array being read. */
+let filled = 0;
+
+/** Characters the last `encodeNumbers` encoded. */
+let encodedChars = 0;
+
+/**
+ * As many characters of `text[start, end)` as fit one byte a character in the scratch buffer, encoded there and
+ * followed by a zero byte (`encodedChars` of them); the bytes written. A character outside ASCII may stop it early, and
+ * one that fits is never a number's, so `numbersIn` stops at it: bytes and characters line up up to where it stops.
+ */
+function encodeNumbers(text: string, start: number, end: number): number {
+  const room = Math.min(end - start, scratch.length - 1);
+  const r = encoder.encodeInto(text.slice(start, start + room), scratch.subarray(0, room));
+  encodedChars = r.read;
+  scratch[r.written] = 0;
+  if (r.written >= scratchUsed) scratchUsed = r.written + 1;
+  encoded = scratch;
+  return r.written;
 }
 
 /**
@@ -252,13 +339,13 @@ function numbersIn(b: Uint8Array, length: number, out: number[], room: number): 
     if (c !== 0x2c) {
       while (isSpaceByte(c)) c = b[++i]!;
       if (c === 0x5d) {
-        out.push(neg ? -v : v);
+        out[filled++] = neg ? -v : v;
         return i;
       }
       if (c !== 0x2c) return i >= length ? more(element) : NOT_NUMBERS;
     }
-    out.push(neg ? -v : v);
-    if (out.length > room) return TOO_MANY;
+    out[filled++] = neg ? -v : v;
+    if (filled > room) return TOO_MANY;
     c = b[++i]!;
     if (c <= 0x20) while (isSpaceByte(c)) c = b[++i]!;
     if (i >= length) return more(i);
