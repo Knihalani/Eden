@@ -201,7 +201,8 @@ SDK's CPU at 1 and 16 in flight and 0.93x at 256 (it was 1.03-1.30x), and of 4 M
 
 - **Tool output in JSON** (a long string with an escaped newline and quotes every line): 1.04-1.20x the SDK's CPU at
   64 KB and 1.08-1.16x at 1 MB (D1900's run: `MCP_PROFILE_TEXT=plain,lines,escapes,unicode,numbers`, 3 rounds, Bun
-  1.4.4, 4 cores, load 6.9 falling to 1.6; base, before D1900, 1.18-1.32x at 1 MB). The scan now crosses the string
+  1.4.4, 4 cores, load 6.9 falling to 1.6; base, before D1900, 1.18-1.32x at 1 MB), and 1.09-1.38x in the
+  six-client comparison (`docs/research/mcp-vs-alternatives.md`, where ours is the cheapest in 77 of 90 cells). The scan now crosses the string
   in one guessed read, but Bun's `res.json()`, which the others use, parses bytes without making the string our
   `text()` makes, and the parse is 85% of the call. Taking `res.json()` and checking after was refused (D1871). In
   SSE the same text costs 0.80-1.18x. JSON written as text now costs 0.56-0.73x the SDK from 64 KB up (1.20-1.49x
