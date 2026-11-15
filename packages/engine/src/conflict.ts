@@ -1136,9 +1136,10 @@ function replayDates(plan: DatePlan, now: number): Dates {
   return { spans, limits };
 }
 
-/** `datesOf` by its plan, for tests (`opt-round4.test.ts`). */
-export function datesByPlan(s: string, now: number, vocab: boolean, anchor: number | null): Dates {
-  return replayDates(planDates(s, vocab, anchor), now);
+/** `datesOf` at each of `nows` from one plan of the sentence, as a cached statement is read, for tests. */
+export function datesByPlan(s: string, nows: readonly number[], vocab: boolean, anchor: number | null): Dates[] {
+  const plan = planDates(s, vocab, anchor);
+  return nows.map((now) => replayDates(plan, now));
 }
 
 /** A limit on an amount: a threshold ("above £40,000", "over 10%") or a cap ("up to 20%", "capped at $5k"). */
