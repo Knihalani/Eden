@@ -164,7 +164,17 @@ const NUMBER_BITS = [
   '"n"',
   "[1]",
   "true",
+  "null",
+  "false",
+  "nul",
+  "tru",
+  "nulll",
+  "falsee",
+  "true1",
+  "n",
 ];
+/** What a series with gaps holds besides numbers: elements `readNumbers` reads too (D1919). */
+const LITERALS = ["null", "true", "false"];
 
 function numberArray(r: () => number): string {
   const n = Math.floor(r() * 12);
@@ -172,7 +182,11 @@ function numberArray(r: () => number): string {
   const ws = () => (r() < 0.15 ? [" ", "\n", "\t ", "\r\n"][Math.floor(r() * 4)]! : "");
   const items: string[] = [];
   for (let i = 0; i < n; i++) {
-    const v = bad ? NUMBER_BITS[Math.floor(r() * NUMBER_BITS.length)]! : NUMBER_BITS[Math.floor(r() * 20)]!;
+    const v = bad
+      ? NUMBER_BITS[Math.floor(r() * NUMBER_BITS.length)]!
+      : r() < 0.1
+        ? LITERALS[Math.floor(r() * 3)]!
+        : NUMBER_BITS[Math.floor(r() * 20)]!;
     items.push(ws() + v + ws());
   }
   const trailing = r() < 0.05 ? "," : "";
@@ -404,6 +418,41 @@ describe("the long-reply path stays linear", () => {
     const [long, short] = medians(() => parseJsonText(text), plain, 7);
     // About 1.0 here; 4-6x at this size when every level counted to the innermost `]`.
     expect(long).toBeLessThan(short * 1.5 + 2);
+  });
+
+  const plainOf = (text: string) => () => {
+    LONG_REPLY.body = Infinity;
+    parseJsonText(text);
+    LONG_REPLY.body = DEFAULTS.body;
+  };
+
+  test("a series with a gap late in it is read, for less than the plain path (D1919: 1.3-1.6x before)", () => {
+    // A metrics series with one missing value near its end: the reader read up to the `null`, gave up, and the scan
+    // crossed the array again from where it had asked, so the array was crossed twice and then parsed.
+    const values = Array.from({ length: 400_000 }, (_, k) => String(Math.round(Math.sin(k) * 1e5) / 100));
+    values[values.length - 3] = "null";
+    const text = `{"result":{"structuredContent":{"values":[${values.join(",")}]}}}`;
+    expect(same(parseJsonText(text), JSON.parse(text))).toBe(true);
+    expect(same(parseJsonBytes(encoder.encode(text)), JSON.parse(text))).toBe(true);
+    const plain = plainOf(text);
+    for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
+    const [long, short] = medians(() => parseJsonText(text), plain, 7);
+    // About 0.4 here; 1.3-1.6x when the reader gave up at the `null`.
+    expect(long).toBeLessThan(short * 0.85);
+  });
+
+  test("a number array with a number the reader leaves to JSON.parse late in it costs what the plain path does", () => {
+    // Last: the last element is checked before reading (read whole first, then scanned and parsed, it cost 1.6-2.1x).
+    // Third from last: the scan goes on from where the reader stopped, not from where it asked (1.3-1.6x).
+    const head = "12,".repeat(900_000);
+    for (const text of [`[${head}12345678901234567]`, `[${head}12345678901234567,12,12]`]) {
+      expect(same(parseJsonText(text), JSON.parse(text))).toBe(true);
+      const plain = plainOf(text);
+      for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
+      const [long, short] = medians(() => parseJsonText(text), plain, 7);
+      // About 1.0 here; 1.6-1.9x when the scan crossed again what the reader read.
+      expect(long).toBeLessThan(short * 1.3 + 1);
+    }
   });
 
   test("a refused number flood on the bytes path costs what the byte scan costs, and is never decoded", () => {
