@@ -24,10 +24,17 @@
  * on a typical event body and on a 1 MB `/v1/sources/items` body.
  *
  *   bun packages/server/bench/router.bench.ts [children=4] [secondsPerStep=5] [p99TargetMs=100] [waitMs=0] [reps=3]
+ *
+ * `--hop [rounds=7]` times only the hop and starts no server: `userOf` (D1925's scan) against the parse it replaced
+ * (`userOfByParse`, kept here as the before) on a 136-byte event and 12-14 KB and 180-190 KB items bodies (text with
+ * escapes, and prose without), the two interleaved within each round; it prints the median of the rounds' µs a call.
+ *
+ *   bun packages/server/bench/router.bench.ts --hop [rounds=7]
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { bodyShapeUnder } from "@eden/protocol";
 import { loadConfig } from "../src/config";
 import { startRouter, userOf } from "../src/router";
 
@@ -46,8 +53,82 @@ if (process.argv[2] === "--serve-router") {
   const router = await startRouter({ config: { ...loadConfig(), port: 0, processes: n }, onOutput: () => {} });
   console.log(`eden router listening on http://127.0.0.1:${router.port}`);
   process.on("SIGTERM", () => void router.stop().then(() => process.exit(0)));
+} else if (process.argv[2] === "--hop") {
+  hop(Math.max(1, Number(process.argv[3] ?? 7)));
 } else {
   await main();
+}
+
+/** The router's `userOf` before D1925: the whole body decoded and parsed to read one key. */
+function userOfByParse(body: Uint8Array): string {
+  if (body.byteLength === 0 || !bodyShapeUnder(body)) return "";
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(body));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const user = (parsed as Record<string, unknown>).userId;
+      if (typeof user === "string") return user;
+    }
+  } catch {
+    // Not JSON.
+  }
+  return "";
+}
+
+function hop(rounds: number): void {
+  const enc = new TextEncoder();
+  const event = JSON.stringify({
+    userId: "user-17",
+    sessionId: "s-17",
+    kind: "user_message",
+    text: "Can you check the Globex renewal with Dana Lee before the launch?",
+  });
+  // Tool output's text: an escaped quote or newline every few dozen bytes; and prose with none.
+  const escapes = 'Dana Lee says the "Globex" renewal moves to March; Raj owns the budget.\n'.repeat(26);
+  const prose = "Dana Lee says the Globex renewal moves to March; Raj owns the budget. ".repeat(26);
+  const items = (n: number, text: string) =>
+    JSON.stringify({
+      userId: "user-17",
+      sourceId: "crm",
+      items: Array.from({ length: n }, (_, i) => ({
+        ref: `r${i}`,
+        title: `Globex renewal ${i}`,
+        text,
+        meta: { userId: "nested", i },
+      })),
+    });
+  const named: [string, string][] = [
+    ["event", event],
+    ["items, escapes", items(6, escapes)],
+    ["items, escapes", items(95, escapes)],
+    ["items, prose", items(6, prose)],
+    ["items, prose", items(95, prose)],
+  ];
+  const bodies = named.map(([, body]) => enc.encode(body));
+  const fns = { scan: userOf, parse: userOfByParse };
+  const times: Record<string, number[][]> = { scan: bodies.map(() => []), parse: bodies.map(() => []) };
+  for (let r = 0; r < rounds; r++) {
+    for (const [k, body] of bodies.entries()) {
+      const reps = Math.max(20, Math.floor(4_000_000 / body.byteLength));
+      // Alternate which runs first, so drift in the machine's load falls on both alike.
+      for (const name of r % 2 ? (["parse", "scan"] as const) : (["scan", "parse"] as const)) {
+        const fn = fns[name];
+        if (fn(body) !== "user-17") throw new Error(`${name} misread body ${k}`);
+        for (let i = 0; i < Math.min(reps, 200); i++) fn(body);
+        const t = performance.now();
+        for (let i = 0; i < reps; i++) fn(body);
+        times[name]![k]!.push(((performance.now() - t) * 1_000) / reps);
+      }
+    }
+  }
+  const med = (xs: number[]) => [...xs].sort((x, y) => x - y)[xs.length >> 1]!;
+  const rows = bodies.map((b, k) => ({
+    body: named[k]![0],
+    bytes: b.byteLength,
+    scanUs: +med(times.scan![k]!).toFixed(3),
+    parseUs: +med(times.parse![k]!).toFixed(3),
+    speedup: +(med(times.parse![k]!) / med(times.scan![k]!)).toFixed(2),
+  }));
+  console.log(JSON.stringify({ rounds, rows }, null, 2));
 }
 
 async function main() {

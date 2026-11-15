@@ -2,6 +2,8 @@ export * from "./types";
 export { BUCKETS, bucketOf, newId, itemId, scopeKey } from "./ids";
 export { edenHome } from "./home";
 export {
+  BODY_MAX_DEPTH,
+  BODY_MAX_VALUES,
   bodyShapeUnder,
   checkEvent,
   checkAsk,
