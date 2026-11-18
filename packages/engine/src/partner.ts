@@ -162,6 +162,7 @@ import { datedText } from "./days";
 import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
 import { classifySituation } from "./situation";
 import {
+  contentTerms,
   contentTermsOf,
   distinctTermIds,
   extractEntities,
@@ -365,8 +366,10 @@ interface Session {
   /**
    * Sketches and identifier numbers of items delivered in this session (bounded): a near-duplicate of one is not
    * delivered again, unless its own identifiers say it is a different thing ("order 874" beside "order 881").
+   * `turn` and `terms` (the item's own content terms, bounded) let a follow-up's `carry` read what the last
+   * request's answer was about (D1974).
    */
-  delivered: { sketch: Sketch; refs: ReadonlySet<string> }[];
+  delivered: { sketch: Sketch; refs: ReadonlySet<string>; turn: number; terms: string[] }[];
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
   pending: Injection[];
@@ -438,6 +441,13 @@ interface Session {
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
+/** Terms a follow-up's `carry` may add to its cue: its own terms plus the previous request's and the delivered
+ * items'. */
+const CARRY_TERMS = 3;
+/** Content terms `carry` keeps per delivered item (its title leads, so its most naming terms are kept). */
+const DELIVERED_TERMS = 2;
+/** How much of a delivered item's text `carry` reads terms from once its title's terms run out. */
+const DELIVERED_TEXT_CHARS = 256;
 
 interface Cue {
   text: string;
@@ -4137,8 +4147,9 @@ export class ContextPartner {
   /**
    * `carry`: a user message that names nothing of its own (no entity, at most two content terms) is a follow-up
    * on the request before it — "and the cable?", "who is he again?", "is that time free instead?". Its cue
-   * takes the last request's terms and entity words, and its named days when it names none, so the lookup reads
-   * what it is about. A cue with an entity or three terms of its own stands on its own.
+   * takes the last request's terms and entity words, the content terms of the items that request's answer
+   * delivered, and its named days when it names none, so the lookup reads what it is about. A cue with an entity
+   * or three terms of its own stands on its own.
    */
   private carry(s: Session, cue: Cue): void {
     const last = s.lastUser;
@@ -4153,7 +4164,24 @@ export class ContextPartner {
     // injection already answered it or the follow-up is noise.
     const have = new Set(own);
     const extra: string[] = [];
+    // What the last request's answer delivered carries its topic first: "order", "shipped", "arrives" live on the
+    // item handed, not in the request's words, so a sparse question otherwise shares only its own term with the
+    // sibling it asks after ("and the cable?" next to the other order). Bounded to the items that turn sent; the
+    // just-delivered item itself stays out through the delivered suppression above (`sameRef`). Kept few: every
+    // term the cue adds costs the candidates' coverage, so the cap must leave a follow-up's match a share.
+    for (const d of s.delivered) {
+      if (d.turn !== last.turn) continue;
+      for (const t of d.terms) {
+        if (extra.length >= CARRY_TERMS) break;
+        if (!have.has(t)) {
+          have.add(t);
+          extra.push(t);
+        }
+      }
+      if (extra.length >= CARRY_TERMS) break;
+    }
     for (const t of last.terms) {
+      if (extra.length >= CARRY_TERMS) break;
       if (!have.has(t)) {
         have.add(t);
         extra.push(t);
@@ -4161,6 +4189,7 @@ export class ContextPartner {
     }
     for (const e of last.entities) {
       for (const w of e.toLowerCase().split(/\s+/)) {
+        if (extra.length >= CARRY_TERMS) break;
         if (!have.has(w)) {
           have.add(w);
           extra.push(w);
@@ -6641,7 +6670,20 @@ export class ContextPartner {
       );
     }
     for (const x of scored) {
-      if (x.sketch) s.delivered.push({ sketch: x.sketch, refs: idNumbers(`${x.item.title} ${x.item.text}`) });
+      if (x.sketch) {
+        s.delivered.push({
+          sketch: x.sketch,
+          refs: idNumbers(`${x.item.title} ${x.item.text}`),
+          turn: s.turn,
+          // The topic a follow-up inherits: the request's own words may not hold it ("and the cable?" after a
+          // headphones request), the delivered item's do. Title first so its terms win the cap. Number-bearing
+          // terms are kept out: a carried identifier ("881") would make the follow-up's own `contradicts` drop
+          // the sibling it was meant to reach.
+          terms: contentTerms(`${x.item.title} ${x.item.text.slice(0, DELIVERED_TEXT_CHARS)}`, s.vocab)
+            .filter((t) => !/\d/.test(t))
+            .slice(0, DELIVERED_TERMS),
+        });
+      }
     }
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
