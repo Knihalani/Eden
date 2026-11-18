@@ -18,6 +18,7 @@ import {
   addresses,
   orgsOf,
   overlaps,
+  pushStart,
   requestedRange,
   requestedSpan,
   rolesOf,
@@ -115,6 +116,14 @@ describe("probes: what a request implies", () => {
     expect(isSubject(budget, "Check if Friday at 3pm works for a design review with Acme")).toBe(false);
     const onboarding = { ...item("15:00"), title: "Client onboarding call" };
     expect(isSubject(onboarding, "Check if I can fit in a call with a new client Friday 3pm")).toBe(false);
+    // Recurrence words alone do not name the subject unless the request names nothing else the item lacks
+    // (D1980 review): "my weekly call" is "Weekly call", but "my annual physio" is not "Annual boiler inspection".
+    const weeklyCall = { ...item("Thursday 10:00"), title: "Weekly call" };
+    expect(isSubject(weeklyCall, "Confirm my weekly call on Thursday at 10am")).toBe(true);
+    const boiler = { ...item("Tuesday 9:00"), title: "Annual boiler inspection" };
+    expect(isSubject(boiler, "When is my annual physio appointment?")).toBe(false);
+    const weeklyLunch = { ...item("Wednesday 12:30"), title: "Weekly lunch" };
+    expect(isSubject(weeklyLunch, "When is my weekly call?")).toBe(false);
   });
 
   test("the time parsers stay linear on hostile text", () => {
@@ -251,7 +260,7 @@ describe("probes in the engine (config.probes)", () => {
       { ref: "pe", title: "Parents' evening", text: "Hall B", meta: { start } },
       { ref: "standup", title: "Standup", text: "daily", meta: { start: "2026-10-29T09:00:00Z" } },
     ]);
-  const run = async (source: StaticSource, probes: boolean, text: string) => {
+  const run = async (source: StaticSource, probes: boolean, text: string, config: Record<string, unknown> = {}) => {
     let calls = 0;
     const counted: Source = {
       id: source.id,
@@ -267,7 +276,7 @@ describe("probes in the engine (config.probes)", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { ...CORE_CONFIG, probes },
+      config: { ...CORE_CONFIG, probes, ...config },
     });
     const sessionId = "s";
     const r = await p.observe({ ...scope, sessionId, at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
@@ -290,6 +299,35 @@ describe("probes in the engine (config.probes)", () => {
   test("probes stay within probeCalls", async () => {
     const { calls } = await run(calendar("2026-10-29T18:30:00Z"), true, ask);
     expect(calls).toBeLessThanOrEqual(1 + 8);
+  });
+
+  test("a question about a thing of the user's own opens the push (D1980)", async () => {
+    const physio = new StaticSource("calendar", "Calendar", [
+      { ref: "physio", title: "Physio with Dr. Ines", text: "Monday 8:30, Wellbeing Clinic" },
+      { ref: "mot", title: "Car MOT", text: "Wednesday 10:00, Kwik Fit Hammersmith" },
+    ]);
+    const PUSH = { askReader: true, readerPush: true, pushCandidates: 5, pushOpen: true };
+    expect((await run(physio, true, "When is my physio appointment?", PUSH)).got).toEqual(["calendar:physio"]);
+    // A fact of the world's, or one about something not the user's own, still opens nothing.
+    expect((await run(physio, true, "What is the capital of Australia?", PUSH)).got).toEqual([]);
+    expect((await run(physio, true, "When is the office party?", PUSH)).got).toEqual([]);
+    // A day the question names rules out the same-thing item on another day (D1980 review).
+    const twoPhysio = new StaticSource("calendar", "Calendar", [
+      { ref: "physio-mon", title: "Physio with Dr. Ines", text: "Monday 8:30" },
+      { ref: "physio-thu", title: "Physio follow-up", text: "Thursday 15:00" },
+    ]);
+    expect((await run(twoPhysio, true, "When is my physio appointment on Thursday?", PUSH)).got).toEqual([
+      "calendar:physio-thu",
+    ]);
+    // A shared recurrence adjective is not the thing asked about (D1980 review).
+    const boiler = new StaticSource("home", "Home", [
+      { ref: "boiler", title: "Annual boiler inspection", text: "Tuesday 9:00" },
+    ]);
+    expect((await run(boiler, true, "When is my annual physio appointment?", PUSH)).got).toEqual([]);
+  });
+
+  test("an own-thing question starts a listed push, so the turn gate keeps it (D1980)", () => {
+    expect(pushStart("When is my physio appointment?", { open: true, indirect: true })?.how).toBe("listed");
   });
 });
 

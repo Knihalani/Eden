@@ -107,6 +107,7 @@ import {
 } from "./grounding";
 import {
   absenceSpan,
+  ASKS_OWN,
   cleanEntities,
   daysNamed,
   isAction,
@@ -598,6 +599,7 @@ const ASKS_SCHEDULE = /\b(calendar|schedule|diary|agenda|plans?|busy|free|on for
 const ASKS_FREE = /\b(free|clash|clashing|conflict\w*|busy|double.?book\w*|overlap\w*)\b/i;
 /** A clash ask: not a day listing, but a question about one time (D1979). */
 const ASKS_CLASH = /\b(clash|clashing|conflict\w*|double.?book\w*|overlap\w*)\b/i;
+/** A wh-question about a thing of the user's own ("When is my physio appointment?", D1980; `probes.ts`). */
 /** "that time", "then": the ask's span lives in the turn it answers, not in its own words (D1979). */
 const ANAPHORIC_TIME = /\b(that time|then|that slot|same time)\b/i;
 
@@ -1103,7 +1105,8 @@ export class ContextPartner {
     const opened = start?.how === "opened";
     // An indirect start (D820) is kept out of plan alerts as an opened one is: "We should get together sometime" can
     // read as listed, and D301 measured only listed-verb requests (the review of D820).
-    if (opened || (start && event.kind === "user_message" && start.request !== event.text)) internal.open = true;
+    if (opened || start?.open === true || (start && event.kind === "user_message" && start.request !== event.text))
+      internal.open = true;
     const push =
       this.config.readerPush &&
       this.config.askReader &&
@@ -4221,6 +4224,17 @@ export class ContextPartner {
       (acts || /\?\s*$/.test(cue.raw) || isAction(cue.raw))
     ) {
       const subject = this.subject(s, cue, pool);
+      if (subject.length > 0) return { items: subject.slice(0, this.max()), how: "subject" };
+    }
+    // A wh-question about a thing of the user's own (D1980): "When is my physio appointment?" names its subject
+    // in no entity ("physio" is no name) — the item the question is about answers it.
+    if (ASKS_OWN.test(cue.raw) && (eventKind === "user_message" || eventKind === "ask")) {
+      const subject = pool.filter((x) => {
+        if (!isSubject(x.item, cue.raw)) return false;
+        if (!time || time.days.size === 0) return true;
+        const sd = startDay(x.item, cue.offset);
+        return sd === null ? x.dayCls !== undefined : time.days.has(sd);
+      });
       if (subject.length > 0) return { items: subject.slice(0, this.max()), how: "subject" };
     }
     if (!time) return none;

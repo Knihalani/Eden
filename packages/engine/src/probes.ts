@@ -316,10 +316,14 @@ function secondClause(raw: string): number {
  * (`indirectRest`, whose text is returned as `request`), a request after a first clause of context is read from where
  * it starts (`secondClause`), and `isOpenRequest` runs strict (no log lines, no chatter).
  */
-export function pushStart(
-  raw: string,
-  opts: { open: boolean; indirect: boolean },
-): { how: "listed" | "opened"; request: string } | null {
+export interface PushStart {
+  how: "listed" | "opened";
+  request: string;
+  /** A listed start that is still no plan to act on — a question about an owned thing (D1980). */
+  open?: boolean;
+}
+
+export function pushStart(raw: string, opts: { open: boolean; indirect: boolean }): PushStart | null {
   const first = pushStartOne(raw, opts);
   if (first || !opts.indirect) return first;
   const at = secondClause(raw);
@@ -342,11 +346,27 @@ const PASSIVE_NEED = new RegExp(
   "iu",
 );
 
-function pushStartOne(
-  raw: string,
-  opts: { open: boolean; indirect: boolean },
-): { how: "listed" | "opened"; request: string } | null {
+/**
+ * A question asking for a thing of the user's own (D1980): "When is my physio appointment?", "Where is my
+ * passport?" The open shape reads it as a question and starts nothing, but the lookup is the same work — the
+ * candidates' own gate decides whether anything goes. A wh-word about a thing it owns ("my", "our"), and not a
+ * fact of the world's ("What is the capital of Australia?") nor about something not theirs ("When is the office
+ * party?").
+ */
+export const ASKS_OWN = /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
+
+/**
+ * A question asking who a pronoun means (D1981): "Who is he again?", "Who's she?". It names nobody — the person
+ * it asks about is the one the last request named (its `carry` is in `partner.ts`).
+ */
+export const ASKS_WHO = /\bwho\s+(?:is|was|'s|are|were)\s+(?:he|she|they|him|her|them|that|this)\b/i;
+
+function pushStartOne(raw: string, opts: { open: boolean; indirect: boolean }): PushStart | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
+  // An own-thing question is a request the lists know, not a shape the open gate guesses at: `listed` keeps it
+  // through the turn gate, whose "opened" score a question never reaches. `open` keeps the question out of plan
+  // alerts: no plan was made by asking about one.
+  if (opts.open && ASKS_OWN.test(raw)) return { how: "listed", request: raw, open: true };
   if (opts.indirect && opts.open && PASSIVE_NEED.test(raw.slice(0, OPEN_HEAD_CHARS)))
     return { how: "opened", request: raw };
   const rest = opts.indirect ? indirectRest(raw) : null;
@@ -485,9 +505,17 @@ const MAKES_NEW = /\b(book|schedule|set up|arrange|add|fit in|put in|block|invit
  * with the request ("confirm my dentist appointment" and "Dental check-up": the same first four letters, words of
  * five letters or more that are neither scheduling words nor times). Confirming an appointment is not a clash with it.
  */
+/** Recurrence adjectives that say how often, not what (as their 4-letter stems): "my annual physio" is not
+ * "Annual boiler inspection", but a modifier-only match still counts when the request names nothing the item
+ * lacks — "my weekly call" and "Weekly call". */
+const MODIFIER_STEMS = new Set(
+  ["annual", "yearly", "monthly", "weekly", "daily", "quarterly", "regular"].map((w) => w.slice(0, 4)),
+);
+
 export function isSubject(item: ContextItem, raw: string): boolean {
-  // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new one.
-  if (!ABOUT_EXISTING.test(raw) || MAKES_NEW.test(raw)) return false;
+  // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new
+  // one. A wh-question about the user's own thing ("When is my physio appointment?") is one too (D1980).
+  if ((!ABOUT_EXISTING.test(raw) && !ASKS_OWN.test(raw)) || MAKES_NEW.test(raw)) return false;
   const stems = (text: string) =>
     new Set(
       (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? [])
@@ -495,7 +523,25 @@ export function isSubject(item: ContextItem, raw: string): boolean {
         .map((w) => w.slice(0, 4)),
     );
   const asked = stems(raw);
-  return [...stems(item.title)].some((x) => asked.has(x));
+  const own = stems(item.title);
+  const shared = [...own].filter((x) => asked.has(x));
+  if (shared.length === 0) return false;
+  if (shared.some((x) => !MODIFIER_STEMS.has(x))) return true;
+  // Only recurrence words met ("annual" … "annu"): stems can no longer tell the thing apart — the words the
+  // filters dropped are the ones that name it ("my weekly call" and "Weekly call" share "call"; "Weekly lunch"
+  // shares only "weekly"). The subject it is when an unfiltered word of four letters or more meets too.
+  const plain = (text: string) =>
+    new Set((text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((w) => !MODIFIER_STEMS.has(w.slice(0, 4))));
+  const said = plain(raw);
+  // But a modifier-only match fails when the request names a thing of its own the item lacks: "my annual physio
+  // appointment" is not "Annual boiler appointment" — "physio" never met, "appointment" names nothing.
+  const content = [...said].filter(
+    (w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w) && !GENERIC.has(w) && !QUESTIONISH.has(w),
+  );
+  const itemWords = plain(item.title);
+  if (content.some((w) => !itemWords.has(w) && ![...itemWords].some((t) => t.startsWith(w) || w.startsWith(t))))
+    return false;
+  return [...itemWords].some((w) => said.has(w));
 }
 
 /** Minutes from midnight an item starts at, in its own offset; null without a timed `meta.start`. */
@@ -528,6 +574,13 @@ const TIMEISH =
   /^(today|tonight|tomorrow|yesterday|week|weekend|next|this|last|morning|afternoon|evening|night|am|pm|\d{1,2}(:\d\d)?(am|pm)?|(mon|tues|wednes|thurs|fri|satur|sun)day|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?|\d{1,2}(st|nd|rd|th))$/;
 /** Words too common in requests to search on. */
 const GENERIC = new Set("me my our us we you your them their they it its need want like know new".split(" "));
+/** Question words and fillers that name nothing (kept beside GENERIC: topicOf already reads that set). */
+const QUESTIONISH = new Set(
+  (
+    "when where what who whom whose which how why again exactly about still right just very " +
+    "do does did done is are was were be been being start starts started begin begins end ends ended happen happens held take takes"
+  ).split(" "),
+);
 
 /**
  * The organisations the people of a request belong to, read from items returned for them: an address of theirs at a
