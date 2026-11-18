@@ -54,8 +54,29 @@ shared_set() {
   mkdir -p "$common/eden-check-cache" || return 1
   # Sets for an old key (another Prettier or config) and temp files a killed run left behind. The current key's set
   # is spared: a run that finds every file known never rewrites it, so its age says nothing about its use.
-  find "$common/eden-check-cache" -type f -mtime +14 ! -name "prettier-$key" -delete || true
+  # Each family prunes only its own name, so one family's pruning never reads a run of the other's as use.
+  find "$common/eden-check-cache" -type f -mtime +14 \( -name 'prettier-*' -o -name '*.tmp.*' \) ! -name "prettier-$key" -delete || true
   echo "$common/eden-check-cache/prettier-$key"
+}
+
+# linelen_set: the line-length pass's set, same shape as shared_set's, keyed by everything that decides its verdict:
+# the checker's source, the config it reads the limit from, the file list's definition (this script) and the Bun
+# that runs it. Under FORMAT_COLD=1 it is not used.
+linelen_set() {
+  local common key
+  common=$(git rev-parse --path-format=absolute --git-common-dir) || return 1
+  key=$(
+    echo "runtime bun $(bun --version)"
+    git hash-object --no-filters --stdin-paths <<'EOF'
+scripts/format.sh
+scripts/check-line-length.ts
+.prettierrc.json
+EOF
+  ) || return 1
+  key=$(git hash-object --stdin <<<"$key") || return 1
+  mkdir -p "$common/eden-check-cache" || return 1
+  find "$common/eden-check-cache" -type f -mtime +14 -name 'linelen-*' ! -name "linelen-$key" -delete || true
+  echo "$common/eden-check-cache/linelen-$key"
 }
 
 # entries PATHS: each path (one per line) as `<blob id> <path>`, hashed from the working tree.
@@ -89,22 +110,22 @@ if [ -n "$set_file" ]; then
   fi
 fi
 
-# remember MODE PASSED: adds PASSED (paths, one per line, all in $todo) to the set, hashed now so --write records the
-# formatted content. For check, an entry is kept only if it also is in $unknown, hashed before Prettier ran: a file
-# edited while Prettier ran was checked in some other content.
+# remember MODE SET KNOWN BEFORE PASSED: adds PASSED (paths, one per line, all in the checked list) to SET, hashed
+# now so --write records the formatted content. For check, an entry is kept only if it also is in BEFORE, hashed
+# before the checker ran: a file edited while it ran was checked in some other content.
 remember() {
-  [ -n "$set_file" ] && [ -n "$2" ] || return 0
+  local mode=$1 file=$2 known_entries=$3 before=$4 passed=$5 fresh tmp
+  [ -n "$file" ] && [ -n "$passed" ] || return 0
   {
-    local fresh tmp
-    fresh=$(entries "$2") || return 0
-    if [ "$1" = check ]; then
-      fresh=$(grep -x -F -f <(echo "$unknown") <<<"$fresh") || return 0
+    fresh=$(entries "$passed") || return 0
+    if [ "$mode" = check ]; then
+      fresh=$(grep -x -F -f <(echo "$before") <<<"$fresh") || return 0
     fi
-    tmp=$(mktemp "$set_file.tmp.XXXXXX") || return 0
+    tmp=$(mktemp "$file.tmp.XXXXXX") || return 0
     # Newest last; the cap keeps the set to a few MB however many contents it has seen.
-    if { echo "$known" && echo "$fresh"; } | grep -E '^[0-9a-f]{40,64} [^ ]+$' | awk '!seen[$0]++' |
+    if { echo "$known_entries" && echo "$fresh"; } | grep -E '^[0-9a-f]{40,64} [^ ]+$' | awk '!seen[$0]++' |
       tail -n 50000 >"$tmp"; then
-      mv -f "$tmp" "$set_file"
+      mv -f "$tmp" "$file"
     else
       rm -f "$tmp"
     fi
@@ -130,7 +151,7 @@ check() {
   out=$(FORCE_COLOR=0 $prettier --list-different --no-color $todo) || status=$?
   if [ "$status" = 0 ]; then
     echo "All matched files use Prettier code style!"
-    remember check "$todo"
+    remember check "$set_file" "$known" "$unknown" "$todo"
     return 0
   fi
   [ -z "$out" ] || sed 's/^/[warn] /' <<<"$out"
@@ -140,7 +161,7 @@ check() {
     [ "$n" = 1 ] && n="the above file" || n="$n files"
     echo "[warn] Code style issues found in $n. Run Prettier with --write to fix."
     if ! grep -q -v -x -F -f <(echo "$todo") <<<"$out"; then
-      passed=$(grep -v -x -F -f <(echo "$out") <<<"$todo") && remember check "$passed"
+      passed=$(grep -v -x -F -f <(echo "$out") <<<"$todo") && remember check "$set_file" "$known" "$unknown" "$passed"
     fi
   fi
   return "$status"
@@ -152,17 +173,47 @@ write() {
   local status=0
   # shellcheck disable=SC2086
   $prettier --write --log-level warn $todo || status=$?
-  [ "$status" != 0 ] || remember write "$todo"
+  [ "$status" != 0 ] || remember write "$set_file" "$known" "$unknown" "$todo"
   return "$status"
 }
 
 if [ "${1:-}" = "--check" ]; then
   status=0
   check || status=1
-  # Uncached and over every file, so an overlong comment is caught whatever the known-formatted set holds: the set
-  # records Prettier's verdict only, and this checker (and the limit it reads) can change without changing its key.
-  # shellcheck disable=SC2086
-  bun scripts/check-line-length.ts $files || status=1
+  # The line-length pass caches the same way, against its own key (linelen_set): the known-formatted set cannot
+  # speak for it because this checker and the limit it reads change without changing Prettier's key. Only a clean
+  # pass over the whole checked list is remembered: the checker reports its failures by path, and a failure means
+  # the run rechecks, which is the rare path.
+  ll_set= ll_known= ll_before=
+  if [ "${FORMAT_COLD:-}" != "1" ]; then
+    ll_set=$(linelen_set 2>/dev/null) || ll_set=
+  fi
+  if [ -n "$ll_set" ]; then
+    ll_entries=${current:-}
+    if [ -z "$ll_entries" ]; then
+      ll_entries=$(entries "$files" 2>/dev/null) || ll_set=
+    fi
+  fi
+  ll_todo=$files
+  if [ -n "$ll_set" ]; then
+    ll_known=$(grep -E '^[0-9a-f]{40,64} [^ ]+$' "$ll_set" 2>/dev/null) || ll_known=
+    touch -c "$ll_set" 2>/dev/null || true
+    if ll_before=$(grep -v -x -F -f <(echo "$ll_known") <<<"$ll_entries"); then
+      ll_todo=$(cut -d' ' -f2- <<<"$ll_before")
+    else
+      ll_todo= ll_before=
+    fi
+  fi
+  if [ -z "$ll_todo" ]; then
+    echo "Line length: all $(wc -l <<<"$files" | tr -d ' ') files already known within the limit (FORMAT_COLD=1 rechecks)."
+  else
+    # shellcheck disable=SC2086
+    if bun scripts/check-line-length.ts $ll_todo; then
+      remember check "$ll_set" "$ll_known" "$ll_before" "$ll_todo"
+    else
+      status=1
+    fi
+  fi
   exit $status
 fi
 write
