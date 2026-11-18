@@ -4610,6 +4610,14 @@ export class ContextPartner {
       const named = people.length > 0 ? people : last.entities;
       cue.entities = [...named];
       cue.text = named.join(" ").toLowerCase();
+      // The name is now the cue's identity: rebuild key and id so a who-ask after a different person is no
+      // repeat of this one and reads its own cache ("Who is he?" and "Who is she?" start as the same empty key);
+      // the "|who" tail keeps it apart from the request the name came from, which a plain name key would repeat.
+      cue.key = `${cue.entities
+        .map((e) => e.toLowerCase())
+        .sort()
+        .join("|")}|who`.slice(0, 200);
+      cue.id = `cue:${createHash("sha256").update(cue.key).digest("hex").slice(0, 10)}`;
     }
     cue.time ??= last.time;
   }
