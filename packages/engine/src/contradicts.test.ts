@@ -46,8 +46,24 @@ describe("contradicts", () => {
     const c = cue("Pay the Acme Logistics invoice 4471 today", ["Acme Logistics"], ["2026-11-10"]);
     const owed = scored(item("inv-4471", "Invoice 4471 from Acme Logistics", "Amount due 2,300 GBP"));
     const other = scored(item("inv-4390", "Invoice 4390 from Acme Logistics", "Paid in October"));
-    expect(p.contradicts(owed, c, true)).toBe(false);
-    expect(p.contradicts(other, c, true)).toBe(true);
+    expect(p.contradicts(owed, c)).toBe(false);
+    expect(p.contradicts(other, c)).toBe(true);
+  });
+
+  test("a currency code before the number is an amount, and a clock reading is a time, not identifiers", () => {
+    const p = partner() as any;
+    // "GBP 2,400" is a sum like "£2,400": the invoice the request means must still stand.
+    const money = cue("Pay the GBP 2,400 invoice", ["GBP"]);
+    const inv = scored(item("inv", "Invoice 4471", "Amount due 2,400 GBP"));
+    expect(p.contradicts(inv, money)).toBe(false);
+    // "at 1400" names a time of day, not a room or reference number.
+    const when = cue("What's on at 1400?");
+    const room = scored(item("room", "Room 204 booked", "Standup in room 204"));
+    expect(p.contradicts(room, when)).toBe(false);
+    // A model number trailing an all-caps word ("737 MAX") is not an identifier either.
+    const story = cue("the 737 MAX story");
+    const flight = scored(item("fl", "Flight BA 215 to Lisbon", "Boarding at gate 9"));
+    expect(p.contradicts(flight, story)).toBe(false);
   });
 
   test("a number followed by a measure word is a quantity, not an identifier", () => {
@@ -55,7 +71,7 @@ describe("contradicts", () => {
     // The limit the request needs is 750, the requester's own number is a 650 GBP budget: no conflict.
     const c = cue("Book me a hotel in Berlin, about 650 GBP for the offsite");
     const fact = scored(item("exp", "Travel expenses policy", "Hotels are capped at 750 GBP a night"));
-    expect(p.contradicts(fact, c, true)).toBe(false);
+    expect(p.contradicts(fact, c)).toBe(false);
   });
 
   test("an item dated only in a year the request has moved past is dropped, but not by a future named day", () => {
@@ -63,15 +79,15 @@ describe("contradicts", () => {
     const c = cue("Move my flight to Lisbon on 12 November to a morning slot", ["Lisbon"], ["2026-11-12"]);
     const old = scored(item("b-2025", "Your Lisbon booking, June 2025", "BA to Lisbon, June 2025"));
     const now = scored(item("b-2026", "Your Lisbon booking, 12 November 2026", "BA to Lisbon, 12 November 2026"));
-    expect(p.contradicts(old, c, true)).toBe(true);
-    expect(p.contradicts(now, c, true)).toBe(false);
+    expect(p.contradicts(old, c)).toBe(true);
+    expect(p.contradicts(now, c)).toBe(false);
     // A day ahead in the next year does not make this year's items stale.
     const ahead = cue("Extend my Delhi trip so I come back on 10 January instead", ["Delhi"], ["2027-01-10"]);
     const visa = scored(item("visa", "India e-visa", "Granted 15 September 2026, valid for one year"));
-    expect(p.contradicts(visa, ahead, true)).toBe(false);
+    expect(p.contradicts(visa, ahead)).toBe(false);
     // A request that does not act and names nothing newer keeps an old-year item.
     const remark = cue("Lisbon was lovely", ["Lisbon"]);
-    expect(p.contradicts(old, remark, false)).toBe(false);
+    expect(p.contradicts(old, remark)).toBe(false);
   });
 
   test("a qualifier tying the request's name to another organisation is dropped", () => {
@@ -79,8 +95,13 @@ describe("contradicts", () => {
     const c = cue("What's the background on Jordan Pike from Northwind?", ["Jordan Pike", "Northwind"]);
     const wrong = scored(item("jp-c", "Jordan Pike (Contoso)", "Contoso account contact"));
     const right = scored(item("jp-n", "Jordan Pike (Northwind)", "Northwind account contact"));
-    expect(p.contradicts(wrong, c, false)).toBe(true);
-    expect(p.contradicts(right, c, false)).toBe(false);
+    expect(p.contradicts(wrong, c)).toBe(true);
+    expect(p.contradicts(right, c)).toBe(false);
+    // With no second name in the request there is nothing to disambiguate: a role or pronoun in parens
+    // describes the one person meant, it does not tie them to another organisation.
+    const plain = cue("email Dana Lee", ["Dana Lee"]);
+    const ceo = scored(item("dl", "Dana Lee (CEO)", "Dana Lee's direct line"));
+    expect(p.contradicts(ceo, plain)).toBe(false);
   });
 
   test("a two-word name sharing only its first word with the request's is another vendor", () => {
@@ -88,8 +109,25 @@ describe("contradicts", () => {
     const c = cue("Pay the Acme Logistics invoice 4471 today", ["Acme Logistics"], ["2026-11-10"]);
     const catering = scored(item("cat", "Acme Catering", "Your Acme Catering order"));
     const held = scored(item("hold", "Acme Logistics hold", "Acme Logistics account is on hold"));
-    expect(p.contradicts(catering, c, true)).toBe(true);
-    expect(p.contradicts(held, c, true)).toBe(false);
+    expect(p.contradicts(catering, c)).toBe(true);
+    expect(p.contradicts(held, c)).toBe(false);
+    // A possessive is still that name: "Dana Lee's calendar" and "Acme Logistics' hold notice" are the
+    // request's own item, not a different vendor's.
+    const poss = cue("email Dana Lee", ["Dana Lee"]);
+    const cal = scored(item("cal", "Dana Lee's calendar", "Dana Lee's week"));
+    expect(p.contradicts(cal, poss)).toBe(false);
+    const poss2 = cue("pay the Acme Logistics invoice", ["Acme Logistics"]);
+    const notice = scored(item("hn", "Acme Logistics' hold notice", "Hold placed on the account"));
+    expect(p.contradicts(notice, poss2)).toBe(false);
+    // Two request names that share a first word complete either pair: introducing Sarah Chen to Sarah Cole
+    // keeps the items of both Sarahs.
+    const intro = cue("introduce Sarah Chen to Sarah Cole", ["Sarah Chen", "Sarah Cole"]);
+    const chen = scored(item("sc", "Sarah Chen", "Sarah Chen's profile"));
+    const cole = scored(item("sco", "Sarah Cole intro", "Notes on Sarah Cole"));
+    const kim = scored(item("sk", "Sarah Kim", "A different Sarah entirely"));
+    expect(p.contradicts(chen, intro)).toBe(false);
+    expect(p.contradicts(cole, intro)).toBe(false);
+    expect(p.contradicts(kim, intro)).toBe(true);
   });
 });
 

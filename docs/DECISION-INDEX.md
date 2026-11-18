@@ -848,3 +848,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1967 | 2026-11-18 | Adopted: the source map writes planner arms behind with mentions (D4, D1780). | adopted |
 | D1968 | 2026-11-18 | Adopted (outputs unchanged): `namesRequestDay` builds its day patterns once per `Anchors` (`DAY_TESTS`, via `dayNamer`), rather than once… | adopted |
 | D1969 | 2026-11-18 | Adopted (Hermes local; hosted serving unchanged): the compiled local binary ships `--bytecode`, and local mode warms the secret gate after… | adopted |
+| D1970 | 2026-11-18 | Adopted: the no-model paths drop a look-alike that contradicts the request's anchors, and an asking request's fallback hands every early… | adopted |
+| D1971 | 2026-11-18 | Adopted: D1970's `contradicts` is narrowed to a stricter reading of the request's anchors — independent review of the merged change found… | adopted |
