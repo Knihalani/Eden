@@ -601,8 +601,8 @@ An explicit `EDEN_URL` still selects the hosted setup, where `EDEN_USER_ID` is r
 
 With no sources configured, Eden stays quiet. To try it with local documents, give the Hermes process an absolute
 `EDEN_SOURCES_FILE` path to a static JSON file like [the synthetic example](../examples/personal-agent/sources.json).
-For live connectors, set `EDEN_USER_SOURCES_FILE` to a file using the
-[per-user source format](#connect-each-users-own-sources-d108), with the entry `local/local` by default.
+For live connectors, set `EDEN_USER_SOURCES_FILE` or put the file at `eden/sources.json` under your Hermes profile.
+Use the [per-user source format](#connect-each-users-own-sources-d108), with the entry `local/local` by default.
 `EDEN_USER_ID` changes the user portion (mapped through `eden_id`); local mode always uses tenant `local`.
 Keep connector tokens out of the JSON: use `{"env": "YOUR_CONNECTOR_TOKEN"}` in header values and make that token
 available only to the Hermes profile process that needs it.
@@ -621,6 +621,8 @@ you configure. Hermes still sends its prompt, including any injected context, to
 configured; use a local Hermes model and local sources if that data must not leave the machine.
 
 If the binary is missing, cannot start, or stops responding, Hermes continues without Eden context or checks.
+Startup is lazy; local HTTP calls bypass proxies. The sidecar closes on plugin unload or Hermes exit.
+Startup diagnostics go to `eden/logs/eden-local.log` under your Hermes profile.
 The check is advisory, not an authorization layer. To stop using Eden, run
 `hermes plugins disable eden` for the installed profile and restart Hermes.
 
@@ -648,6 +650,8 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
 
 Every Eden hook fails open. The lab's `hermes-eden` arm compared replacing duplicate source tools with keeping them
 alongside Eden; see [the lab write-up](research/a16-loop.md) for that retrieval study, not a local-runtime benchmark.
+See the [Python client README](../packages/client-python/README.md#hermes-plugin-d422) for custom binaries and
+advanced runtime configuration.
 
 To build the release ZIPs and `SHA256SUMS` from a checkout, use the repo's pinned Bun and run
 `python3 scripts/hermes-local/build.py --version vX.Y.Z --out-dir dist/hermes-local`.
