@@ -4148,6 +4148,9 @@ export class ContextPartner {
     // Only a question-shaped follow-up reads the request before it: a bare statement this sparse is chatter
     // about its own words, not a pointer back.
     if (!/\?\s*$/.test(cue.raw)) return;
+    // A follow-up made only of stop-words ("and him?", "what about it?") is dropped earlier by `wantsLookup`
+    // and never reaches here — chosen on purpose: no own terms to anchor the carry, and the previous request's
+    // injection already answered it or the follow-up is noise.
     const have = new Set(own);
     const extra: string[] = [];
     for (const t of last.terms) {

@@ -454,6 +454,11 @@ describe("day facts on the cache's entries (D1721)", () => {
     expect(factsClass("Piano", "weekly on Thursdays", thu)).toBe(1);
     expect(factsClass("Piano", "weekly on Thursdays", wed)).toBe(-1);
     expect(factsClass("Meds", "daily", sat)).toBe(1);
+    expect(factsClass("Run", "every morning", wed)).toBe(1);
+    expect(factsClass("Run", "every morning", sat)).toBe(1);
+    // A bare time of day is not a recurrence: "Tuesday morning" is one Tuesday, not every day.
+    expect(factsClass("Dentist", "Tuesday morning 9am", sat)).toBe(-1);
+    expect(factsClass("Dinner", "Friday evening with Sam", wed)).toBe(-1);
     // No digit in the text and no recurrence phrase: still nothing, as before.
     expect(factsClass("Note", "the usual place", wed)).toBe(-1);
     // A dated item still wins on its own reading.

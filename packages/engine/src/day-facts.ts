@@ -97,7 +97,7 @@ function plainDay(digits: string): number {
  * one Saturday, read by `namedOf`'s day keys only.
  */
 const WDAYS = "sunday monday tuesday wednesday thursday friday saturday".split(" ");
-const RECUR = /\b(every|each|daily|weekly|weekdays?|weekends?|fortnightly|nightly|mornings?|evenings?|afternoons?)\b/;
+const RECUR = /\b(every|each|daily|weekly|weekdays?|weekends?|fortnightly|nightly)\b/;
 function weekdaysOf(lower: string): number {
   if (!RECUR.test(lower)) return 0;
   let mask = 0;
@@ -106,7 +106,10 @@ function weekdaysOf(lower: string): number {
   }
   if (/\bweekdays?\b/.test(lower)) mask |= 0b0111110; // Monday–Friday.
   if (/\bweekends?\b/.test(lower)) mask |= 0b1000001; // Sunday + Saturday.
-  if (/\b(daily|every day|each day|nightly|mornings?|afternoons?|evenings?)\b/.test(lower)) mask |= 0b1111111;
+  // "every morning", "each evening", "daily": all seven days. A bare "morning" is a time of day, not a
+  // recurrence ("dentist Tuesday morning"), so it counts only next to `every`/`each`.
+  if (/\b(daily|nightly|every day|each day|(?:every|each)\s+(?:morning|afternoon|evening|night)s?)\b/.test(lower))
+    mask |= 0b1111111;
   return mask;
 }
 
