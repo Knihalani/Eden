@@ -604,9 +604,13 @@ With no sources configured, Eden stays quiet. To try it with local documents, gi
 For live connectors, set `EDEN_USER_SOURCES_FILE` to a file using the
 [per-user source format](#connect-each-users-own-sources-d108), with the entry `local/local` by default.
 `EDEN_USER_ID` changes the user portion (mapped through `eden_id`); local mode always uses tenant `local`.
+Keep connector tokens out of the JSON: use `{"env": "YOUR_CONNECTOR_TOKEN"}` in header values and make that token
+available only to the Hermes profile process that needs it.
 Eden uses read-only tools from explicitly configured HTTP MCP connectors and does not import Hermes'
 `mcp_servers` or their credentials. Use `ask_context` instead of duplicate source search tools unless Hermes needs
 them for browsing or for acting (sending, booking, writing). Restart Hermes after changing environment variables.
+Use a dedicated Hermes process for a non-default profile. Eden skips routed profiles in a shared Hermes process
+rather than reading another profile's process-wide source settings.
 
 ### What stays local
 
