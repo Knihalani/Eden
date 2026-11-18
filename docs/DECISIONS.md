@@ -856,5 +856,7 @@ weeks out and no "owner's call later"; where a cost trade-off remains, the sessi
 that day. A row here is a trial whose evidence is still being gathered by the session that opened it. The push-check
 trials were decided by D828 (promoted or deleted), so none is left here.
 
+| D1974 | 2026-11-18 | **Adopted: Eden is released under the Apache License 2.0 (the owner's choice).** `LICENSE` carries the standard Apache-2.0 text ("Copyright 2026 Kaiav Nihalani"); package manifests (`package.json`, `packages/redact/package.json`, `packages/client/pack.ts` for the npm artifact, `packages/client-python/pyproject.toml`) read `Apache-2.0`, and the README names it. Supersedes the `license: MIT` D853 set for the publish artifacts; nothing else in D853 changes. | Owner decision, applied repo-wide. |
+
 | Trial | Switch | Owner | Ends | What decides it |
 |---|---|---|---|---|

@@ -15,7 +15,7 @@ node_type    = "ccx23" # 4 vCPU, 16 GB; check price and stock at order time
 location        = "hel1"
 admin_cidr      = "203.0.113.4/32"
 ssh_public_keys = { ops = "ssh-ed25519 AAAA... ops@example" }
-# The repository is private and no key goes in user data, so the clone at first boot fails: after apply, run
+# For a private repository, no key goes in user data, so the clone at first boot fails: after apply, run
 # deploy/scripts/bootstrap-dedicated.sh with DEPLOY_KEY on each server (docs/DEPLOY.md §2), or use a public mirror.
 eden_git_url    = "git@github.com:Knihalani/Eden.git"
 eden_ref        = "main"

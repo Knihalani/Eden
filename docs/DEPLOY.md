@@ -62,7 +62,8 @@ at 100k users on a per-request store (docs/COST-MODEL.md, "Hosting").
    opens 22 (your admin range), 80 and 443, enables unattended security upgrades, clones Eden at `eden_ref` into
    `/opt/eden`, and installs `eden.service` and the daily backup timer. It holds no secret.
 
-   **Cloning the private repository.** `Knihalani/Eden` is private, so an anonymous `git clone` fails. Each server
+   **Cloning a private repository.** A public clone URL needs no credential. If your Eden repository is private
+   (a fork or mirror), an anonymous `git clone` fails and each server
    uses a read-only GitHub deploy key: make one with `ssh-keygen -t ed25519 -N '' -C eden-deploy -f
    secrets/eden_deploy` (no passphrase: the clone runs unattended) and add `secrets/eden_deploy.pub` under the
    repository's Settings → Deploy keys with write access off. `DEPLOY_KEY=secrets/eden_deploy
@@ -401,7 +402,7 @@ survived a restart of dockerd when loaded before it (as ufw does at boot), and r
 `iptables-restore --test` where it can. Not validated: ufw itself loading `after.rules` on Ubuntu 24.04 at boot.
 
 Not validated: `tofu plan` and `tofu apply` against real accounts; cloud-init and `bootstrap-dedicated.sh` on a real
-machine, including the deploy key's clone of the private repository from a server; Hetzner Object Storage's lifecycle
+machine, including the deploy key's clone of a private repository from a server; Hetzner Object Storage's lifecycle
 rule (S3-compatible per its docs; unverified); Alloy's runtime behaviour (`alloy fmt` checks syntax only) and the
 alert rules firing on real data; a real network between machines; real Ampere hardware (the arm64 run was emulated,
 so no arm64 timings are quoted).
