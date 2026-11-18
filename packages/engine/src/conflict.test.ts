@@ -163,8 +163,8 @@ describe("conflict: what would change the action", () => {
     const nonDomainFrame = frame("Pay INV-7157 today");
     const same = item("Invoice", "northwind-events.com invoice INV-7174");
 
-    expect(namesRef(domainFrame, same)).toBe(true);
     expect(namesRef(nonDomainFrame, same)).toBe(false);
+    expect(namesRef(domainFrame, same)).toBe(true);
   });
 
   test("a restriction that has ended frees the request; a thing the request needs that has ended does not", () => {
