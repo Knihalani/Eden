@@ -251,7 +251,7 @@ describe("probes in the engine (config.probes)", () => {
       { ref: "pe", title: "Parents' evening", text: "Hall B", meta: { start } },
       { ref: "standup", title: "Standup", text: "daily", meta: { start: "2026-10-29T09:00:00Z" } },
     ]);
-  const run = async (source: StaticSource, probes: boolean, text: string) => {
+  const run = async (source: StaticSource, probes: boolean, text: string, config: Record<string, unknown> = {}) => {
     let calls = 0;
     const counted: Source = {
       id: source.id,
@@ -267,7 +267,7 @@ describe("probes in the engine (config.probes)", () => {
       budget: new Budget(),
       model: null,
       now: () => at,
-      config: { ...CORE_CONFIG, probes },
+      config: { ...CORE_CONFIG, probes, ...config },
     });
     const sessionId = "s";
     const r = await p.observe({ ...scope, sessionId, at, kind: "user_message", text } as AgentEvent, { waitMs: 1_000 });
@@ -290,6 +290,18 @@ describe("probes in the engine (config.probes)", () => {
   test("probes stay within probeCalls", async () => {
     const { calls } = await run(calendar("2026-10-29T18:30:00Z"), true, ask);
     expect(calls).toBeLessThanOrEqual(1 + 8);
+  });
+
+  test("a question about a thing of the user's own opens the push (D1980)", async () => {
+    const physio = new StaticSource("calendar", "Calendar", [
+      { ref: "physio", title: "Physio with Dr. Ines", text: "Monday 8:30, Wellbeing Clinic" },
+      { ref: "mot", title: "Car MOT", text: "Wednesday 10:00, Kwik Fit Hammersmith" },
+    ]);
+    const PUSH = { askReader: true, readerPush: true, pushCandidates: 5, pushOpen: true };
+    expect((await run(physio, true, "When is my physio appointment?", PUSH)).got).toEqual(["calendar:physio"]);
+    // A fact of the world's, or one about something not the user's own, still opens nothing.
+    expect((await run(physio, true, "What is the capital of Australia?", PUSH)).got).toEqual([]);
+    expect((await run(physio, true, "When is the office party?", PUSH)).got).toEqual([]);
   });
 });
 

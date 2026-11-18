@@ -342,11 +342,22 @@ const PASSIVE_NEED = new RegExp(
   "iu",
 );
 
+/**
+ * A question asking for a thing of the user's own (D1980): "When is my physio appointment?", "Where is my
+ * passport?" The open shape reads it as a question and starts nothing, but the lookup is the same work — the
+ * candidates' own gate decides whether anything goes. A wh-word about a thing it owns ("my", "our"), and not a
+ * fact of the world's ("What is the capital of Australia?") nor about something not theirs ("When is the office
+ * party?").
+ */
+export const ASKS_OWN =
+  /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
+
 function pushStartOne(
   raw: string,
   opts: { open: boolean; indirect: boolean },
 ): { how: "listed" | "opened"; request: string } | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
+  if (opts.open && ASKS_OWN.test(raw)) return { how: "opened", request: raw };
   if (opts.indirect && opts.open && PASSIVE_NEED.test(raw.slice(0, OPEN_HEAD_CHARS)))
     return { how: "opened", request: raw };
   const rest = opts.indirect ? indirectRest(raw) : null;
@@ -486,8 +497,9 @@ const MAKES_NEW = /\b(book|schedule|set up|arrange|add|fit in|put in|block|invit
  * five letters or more that are neither scheduling words nor times). Confirming an appointment is not a clash with it.
  */
 export function isSubject(item: ContextItem, raw: string): boolean {
-  // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new one.
-  if (!ABOUT_EXISTING.test(raw) || MAKES_NEW.test(raw)) return false;
+  // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new
+  // one. A wh-question about the user's own thing ("When is my physio appointment?") is one too (D1980).
+  if ((!ABOUT_EXISTING.test(raw) && !ASKS_OWN.test(raw)) || MAKES_NEW.test(raw)) return false;
   const stems = (text: string) =>
     new Set(
       (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? [])

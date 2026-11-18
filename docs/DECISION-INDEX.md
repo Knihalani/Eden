@@ -858,3 +858,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1977 | 2026-11-18 | Adopted: `companions` — a delivered item pulls its cross-source companions. | adopted |
 | D1978 | 2026-11-18 | Adopted: a request naming days is looked up by day, and the day's items ground it. | adopted |
 | D1979 | 2026-11-18 | Adopted: a clash ask resolves "that time" from the last turns, and a bare weekday weakly names a day. | adopted |
+| D1980 | 2026-11-18 | Adopted: a wh-question about a thing of the user's own opens the push and its subject answers. | adopted |
