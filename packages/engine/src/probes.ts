@@ -355,6 +355,12 @@ const PASSIVE_NEED = new RegExp(
  */
 export const ASKS_OWN = /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
 
+/**
+ * A question asking who a pronoun means (D1981): "Who is he again?", "Who's she?". It names nobody — the person
+ * it asks about is the one the last request named (its `carry` is in `partner.ts`).
+ */
+export const ASKS_WHO = /\bwho\s+(?:is|was|'s|are|were)\s+(?:he|she|they|him|her|them|that|this)\b/i;
+
 function pushStartOne(raw: string, opts: { open: boolean; indirect: boolean }): PushStart | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
   // An own-thing question is a request the lists know, not a shape the open gate guesses at: `listed` keeps it
@@ -521,13 +527,13 @@ export function isSubject(item: ContextItem, raw: string): boolean {
   const shared = [...own].filter((x) => asked.has(x));
   if (shared.length === 0) return false;
   if (shared.some((x) => !MODIFIER_STEMS.has(x))) return true;
-  // Only recurrence words met ("annual" … "annu"): the subject it is if neither side names a thing the other
-  // lacks — "my weekly call" vs "Weekly call", not "my weekly call" vs "Weekly lunch" ("lunc" the request never
-  // said) nor "my annual physio" vs "Annual boiler inspection" ("phys" the item never held).
-  return (
-    [...asked].every((x) => own.has(x) || MODIFIER_STEMS.has(x)) &&
-    [...own].every((x) => asked.has(x) || MODIFIER_STEMS.has(x))
-  );
+  // Only recurrence words met ("annual" … "annu"): stems can no longer tell the thing apart — the words the
+  // filters dropped are the ones that name it ("my weekly call" and "Weekly call" share "call"; "Weekly lunch"
+  // shares only "weekly"). The subject it is when an unfiltered word of four letters or more meets too.
+  const plain = (text: string) =>
+    new Set((text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((w) => !MODIFIER_STEMS.has(w.slice(0, 4))));
+  const said = plain(raw);
+  return [...plain(item.title)].some((w) => said.has(w));
 }
 
 /** Minutes from midnight an item starts at, in its own offset; null without a timed `meta.start`. */
