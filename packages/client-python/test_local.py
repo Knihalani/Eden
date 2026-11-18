@@ -100,6 +100,17 @@ class LocalTests(unittest.TestCase):
         self.owners.append(owner)
         return owner
 
+    @unittest.skipUnless(sys.platform == "darwin", "the quarantine strip is macOS-only")
+    def test_darwin_quarantine_stripped_before_spawn(self):
+        with patch("eden_client.local.subprocess.run", wraps=subprocess.run) as run:
+            owner = self.owner()
+            self.assertIsNotNone(owner.endpoint())
+            owner.close()
+            self.assertIn(
+                ["xattr", "-d", "com.apple.quarantine", str(self.root / "fake")],
+                [call.args[0] for call in run.call_args_list],
+            )
+
     def test_concurrent_ready_reuse_and_shutdown(self):
         owner = self.owner()
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:

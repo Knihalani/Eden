@@ -187,14 +187,15 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No Eden release"):
             host_target("Linux", "i686")
         args = SimpleNamespace(hermes_home=None, profile=None)
-        self.assertEqual(select_home(args, {}, "Linux", self.work), self.work / ".hermes")
-        self.assertEqual(select_home(args, {}, "Windows", self.work), self.work / "AppData" / "Local" / "hermes")
+        self.assertEqual(select_home(args, {}, "Linux", self.work), (self.work / ".hermes").resolve())
+        self.assertEqual(select_home(args, {}, "Windows", self.work),
+                         (self.work / "AppData" / "Local" / "hermes").resolve())
         self.assertEqual(select_home(args, {"LOCALAPPDATA": str(self.work)}, "Windows", self.home),
-                         self.work / "hermes")
+                         (self.work / "hermes").resolve())
         self.assertEqual(select_home(args, {"LOCALAPPDATA": f"  {self.work}  "}, "Windows", self.home),
-                         self.work / "hermes")
+                         (self.work / "hermes").resolve())
         self.assertEqual(select_home(args, {"LOCALAPPDATA": "  "}, "Windows", self.work),
-                         self.work / "AppData" / "Local" / "hermes")
+                         (self.work / "AppData" / "Local" / "hermes").resolve())
 
     def test_zip_layout_and_reproducible_metadata(self):
         a, b = self.work / "a.zip", self.work / "b.zip"
@@ -210,8 +211,8 @@ class ReleaseTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(file.external_attr >> 16), 0o755)
 
 
-@unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST == "linux-x64",
-                     "set HERMES_RELEASE_SMOKE=1 to run the compiled Linux smoke")
+@unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST in ("linux-x64", "darwin-arm64", "darwin-x64"),
+                     "set HERMES_RELEASE_SMOKE=1 to run the compiled smoke on its own platform")
 class CompiledSmoke(unittest.TestCase):
     def test_install_and_run(self):
         with tempfile.TemporaryDirectory(prefix="eden-compiled-test-") as directory:
