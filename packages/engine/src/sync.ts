@@ -154,6 +154,11 @@ export interface SyncOptions {
    * passes it through); an option of one manager, not a static, so nothing leaks from one test into the next.
    */
   resketchForTests?: boolean;
+  /**
+   * Tests only: the CPU budget (ms) a store yields on (`STORE_SLICE_MS` in production). An option of one manager,
+   * like `resketchForTests`, so nothing leaks from one test into the next.
+   */
+  storeSliceMsForTests?: number;
 }
 
 export interface SyncDeps {
@@ -227,6 +232,14 @@ const USERS_AT_ONCE = 16;
 const MAX_PEOPLE = 256;
 /** Sources a user's lookups use at once (`engage`): past it, the least recently used is no longer counted. */
 const MAX_USED = 64;
+/**
+ * CPU ms one `store` may spend before yielding a loop turn between its sketch pass and `put` slices. A page is
+ * ~100 items at well over 100 µs each; whole-page stores ran 10-15 ms contiguous, which a warm user's request met
+ * as tail latency during a cold-start storm (storm.bench). ~4 ms bounds the contiguous stretch.
+ */
+const STORE_SLICE_MS = 4;
+/** Items a store's first `put` slice holds; later slices adapt to the CPU budget (`store`, `STORE_SLICE_MS`). */
+const STORE_SLICE_FIRST = 8;
 
 interface SourceSync {
   id: string;
@@ -347,6 +360,12 @@ interface UserSync {
   used: Set<string>;
   /** `rareTerms` (D600): which few of the user's sources hold each word their listings had; null until one is. */
   rare: RareTerms | null;
+  /**
+   * Store calls for this user (`store`): a whole store was atomic before slicing, so a store begun while one is
+   * still under way waits for it and stores after it, in call order — never interleaved between its slices. The
+   * queue is the user's, not a source's: two sources' stores share `rare`, whose numbering depends on add order.
+   */
+  storeTail: Promise<void>;
   /** `kick`: the user's kicked step while one runs; a tick waits for it and does not start another. */
   kicked?: Promise<void> | null;
   /** `kick`: how long the backfill's last pass must wait for its own call budget (0: it did not stop for it). */
@@ -449,6 +468,7 @@ export class SyncManager {
       people: new Set(),
       used: new Set(),
       rare: null,
+      storeTail: Promise.resolve(),
     });
     return true;
   }
@@ -638,6 +658,7 @@ export class SyncManager {
       // Saved only by a process with the earn rule's rare words on; absent or unreadable, the table fills again
       // as sources are listed.
       rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
+      storeTail: Promise.resolve(),
     };
     for (const x of snap.sources) {
       const s = newSourceSync(x.id);
@@ -760,7 +781,7 @@ export class SyncManager {
    * poll would, with no call. The source's copy is not marked current by them (other changes may have come
    * unannounced): only a poll does that. Returns how many were new or changed; 0 for a source not synced yet.
    */
-  ingest(scope: Scope, sourceId: string, items: ContextItem[], readMark?: number): number {
+  async ingest(scope: Scope, sourceId: string, items: ContextItem[], readMark?: number): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
     if (!u || !s || s.phase !== "warm") return 0;
@@ -768,7 +789,7 @@ export class SyncManager {
     const changed = new Set<string>();
     // Read under the mark its signal set (`sourceChanged` comes first): no doubt of what it brought. Items a ref notice
     // fetched (`sourceRefs`, D347) are read under the mark their call began with (D133).
-    const n = this.store(u, s, items, readMark ?? this.marks, changed);
+    const n = await this.store(u, s, items, readMark ?? this.marks, changed);
     for (const id of changed) {
       s.pushed.delete(id); // Re-insert: the map stays in arrival order.
       s.pushed.set(id, ++s.pushSeq);
@@ -1328,7 +1349,7 @@ export class SyncManager {
             });
             // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
             if (typeof page !== "string" && !u.gone)
-              this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
+              await this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
           });
           return page;
         }),
@@ -1386,7 +1407,8 @@ export class SyncManager {
           timeoutMs: this.o.timeoutMs,
           reserve: SERVING_HEADROOM,
         });
-        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
+        if (typeof page !== "string" && !u.gone)
+          await this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
       });
       flying.delete(next);
       if (u.gone) return;
@@ -1638,7 +1660,7 @@ export class SyncManager {
         else this.stats.backgroundItems += page.items.length;
         s.failures = 0;
         const stored = new Set<string>();
-        const fresh = this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
+        const fresh = await this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
         for (const id of stored) storedHere.add(id);
         changed += fresh;
         if (tally) tally.fresh += fresh;
@@ -1728,7 +1750,7 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       s.failures = 0;
-      this.store(u, s, page.items, readMark, undefined, this.o.keepCut);
+      await this.store(u, s, page.items, readMark, undefined, this.o.keepCut);
       if (page.next === null || page.items.length === 0) {
         s.deep = null;
         s.exhausted = true;
@@ -1779,7 +1801,7 @@ export class SyncManager {
       this.stats.backgroundItems += page.items.length;
       const first = sw.seen.size === 0;
       const older = (it: ContextItem) => it.updatedAt !== undefined && it.updatedAt < cut;
-      const fresh = this.store(
+      const fresh = await this.store(
         u,
         s,
         page.items.filter((it) => !older(it)),
@@ -1812,18 +1834,51 @@ export class SyncManager {
 
   /**
    * Stores a page's (redacted) items as synced, read under `readMark` (`mark` when its call began); returns how many
-   * were new or changed (their ids into `changedIds`).
+   * were new or changed (their ids into `changedIds`). Runs in slices of at most ~`STORE_SLICE_MS` CPU
+   * (`storeSliceMs`): the loop turn between slices lets a warm user's request in, where one page's sketch and `put`
+   * ran 10-15 ms contiguous before. `changedIds`, `readMark`, the page's `stamp` and the per-item bookkeeping are
+   * kept whole across slices.
    */
-  private store(
+  private async store(
     u: UserSync,
     s: SourceSync,
     items: ContextItem[],
     readMark: number,
     changedIds?: Set<string>,
     keepCut = false,
-  ): number {
+  ): Promise<number> {
     // The same user object and source state: work for a user forgotten and back since must not land.
-    if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
+    const stale = () => u.gone || this.users.get(u.key) !== u || u.sources.get(s.id) !== s;
+    if (stale() || items.length === 0) return 0;
+    // A whole `store` was atomic before slicing: it never interleaved another store's items between its own. Keep
+    // that by queueing stores of one source in call order: each waits for the one before it (which yields between
+    // its slices), so an older page's words never land past a newer store's copy.
+    const before = u.storeTail;
+    let release!: () => void;
+    u.storeTail = new Promise<void>((resolve) => (release = resolve));
+    this.stores++;
+    try {
+      await before;
+      if (stale()) return 0;
+      return await this.storeHeld(u, s, items, readMark, changedIds, keepCut, stale);
+    } finally {
+      release();
+      if (--this.stores === 0) this.wakeIdle();
+    }
+  }
+
+  /** `store` after its turn came: the sketching, filtering and `put` pass, sliced on the CPU budget. */
+  private async storeHeld(
+    u: UserSync,
+    s: SourceSync,
+    items: ContextItem[],
+    readMark: number,
+    changedIds: Set<string> | undefined,
+    keepCut: boolean,
+    stale: () => boolean,
+  ): Promise<number> {
+    const sliceMs = this.o.storeSliceMsForTests ?? STORE_SLICE_MS;
+    const since = () => performance.now();
     const now = this.deps.now();
     // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
     // `rareTerms` (D600): the same terms, in the user's one table of which few sources hold a word. Filled with or
@@ -1834,7 +1889,8 @@ export class SyncManager {
       const rare = this.o.rareTerms ? (u.rare ??= new RareTerms()) : null;
       // D1927: the stamp for this page, taken before any word is added; a restart while it is added changes the
       // epochs, so the stamp the entries get is stale and never matches again.
-      const before = this.o.resketchForTests === true ? 0 : this.stampOf(s, sketch, rare);
+      const stampBefore = this.o.resketchForTests === true ? 0 : this.stampOf(s, sketch, rare);
+      let cpu = since();
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
@@ -1842,9 +1898,9 @@ export class SyncManager {
         // skipped: each of its terms is in the sketch and the table, and adding it again would write nothing. Not
         // while the sketch is saturated (its next add restarts it, whatever the term). Anything else (new, changed,
         // a fresh copy, cut, a frozen user) is added as before.
-        if (before !== 0 && !sketch?.saturated) {
+        if (stampBefore !== 0 && !sketch?.saturated) {
           const current = this.stampOf(s, sketch, rare);
-          if (current === before && this.deps.cache.stampOf(u.scope, it) === current) {
+          if (current === stampBefore && this.deps.cache.stampOf(u.scope, it) === current) {
             this.stats.sketchSkipped++;
             continue;
           }
@@ -1855,8 +1911,14 @@ export class SyncManager {
           sketch?.add(h1, h2);
           rare?.add(s.id, h1, h2);
         }
+        if (since() - cpu >= sliceMs) {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          cpu = since();
+          // Nothing stored yet: a stale call stops here, its added sketch terms harmless.
+          if (stale()) return 0;
+        }
       }
-      stamp = before;
+      stamp = stampBefore;
     }
     // `keepCut`: a poll's or a sweep's item dated before the user's cut would be the first a trim drops (the cache's
     // synced cap evicted such items oldest synced first, which could be the user's newest mail). Not stored, and the
@@ -1872,16 +1934,35 @@ export class SyncManager {
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
     // counted as synced, or the listing would undo `removed`.
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
-    const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark, stamp);
-    // A user whose sync was forgotten by the time the put returned (it can thaw the user, and the owner's hooks run
-    // inside a thaw): what was just stored belongs to no sync state, so it goes rather than sit unswept.
-    if (u.gone) {
+    // `put` itself is one synchronous pass over its items; it is called a slice at a time, each slice sized toward
+    // the CPU budget from the last one's cost, a loop turn between. Same `now`, `readMark` and `stamp` every slice.
+    const changed: ContextItem[] = [];
+    let take = STORE_SLICE_FIRST;
+    for (let off = 0; off < own.length;) {
+      const end = Math.min(own.length, off + take);
+      const t0 = since();
+      const part = this.deps.cache.put(u.scope, own.slice(off, end), now, true, true, readMark, stamp);
+      const spent = since() - t0;
+      changed.push(...part);
+      off = end;
+      take = Math.max(1, Math.round((take * sliceMs) / Math.max(spent, 0.25)));
+      if (off < own.length) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        // A stale call stores no more of its page.
+        if (stale()) break;
+      }
+    }
+    // A user whose sync was forgotten by the time the puts returned (one can thaw the user, and the owner's hooks
+    // run inside a thaw), or a call gone stale between slices: what was just stored belongs to no sync state, so it
+    // goes rather than sit unswept.
+    if (stale()) {
       this.deps.cache.dropSynced(
         u.scope,
         changed.map((it) => it.id),
       );
       return 0;
     }
+
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
@@ -1991,14 +2072,36 @@ export class SyncManager {
   /** Pages handed a turn that has not come yet (`turn`). */
   private waiting = 0;
 
+  /** Stores in flight, including queued behind a source's `storeTail`; waiters for an idle moment (`pending`). */
+  private stores = 0;
+  /** Reads in flight (`run`), including queued behind a source's `busy`. */
+  private reads = 0;
+  private idleWaits: (() => void)[] = [];
+  private wakeIdle(): void {
+    if (this.stores > 0 || this.reads > 0 || this.idleWaits.length === 0) return;
+    const woken = this.idleWaits;
+    this.idleWaits = [];
+    for (const wake of woken) wake();
+  }
+
   /**
-   * D370: while pages wait their turn, resolves one loop turn after the last of them was let through (its store has
-   * run by then, unless redaction went to the worker pool); null when none waits. The card drain waits on it so its
-   * batches hold what arrived together (`CardEnricher.gather`).
+   * D370: while pages wait their turn, resolves one loop turn after the last of them was let through, and its
+   * sliced store has finished by then unless redaction went to the worker pool; null when none waits. The card
+   * drain waits on it so its batches hold what arrived together (`CardEnricher.gather`).
    */
   pending(): Promise<void> | null {
-    if (this.waiting === 0) return null;
-    return this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    if (this.waiting === 0 && this.stores === 0 && this.reads === 0) return null;
+    const turns =
+      this.waiting === 0
+        ? Promise.resolve()
+        : this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    return turns.then(() => this.drain());
+  }
+
+  /** Resolves once no read or store is running or queued (`pending`: async work no longer ends with its caller). */
+  private drain(): Promise<void> {
+    if (this.stores === 0 && this.reads === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => this.idleWaits.push(resolve)).then(() => this.drain());
   }
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
@@ -2012,33 +2115,38 @@ export class SyncManager {
    * stored new or changed (`SourceSync.reading`), as its `busy` does for a lookup waiting on it.
    */
   private async run(s: SourceSync, work: () => Promise<void>): Promise<number> {
-    while (s.busy) await s.busy;
-    const reading = { stored: 0 };
-    s.reading = reading;
-    const p = work()
-      .catch(() => {})
-      .then(() => reading.stored);
-    // What waiters see: settles with the read, or when the watchdog below lets the source go.
-    let free!: (stored: number) => void;
-    const busy = new Promise<number>((r) => (free = r));
-    void p.then(free);
-    s.busy = busy;
-    // A listing that ignores its signal and never answers would hold the source busy for good (every later read and
-    // lookup waits on it; the review). Past the longest a read that honours its timeouts can take, the source is let
-    // go; the stuck read, if it ever settles, changes nothing it no longer owns. A timer, not a race: one more await on
-    // the listing path moves the card drain's timing (a5-bugs.md).
-    const release = () => {
-      free(reading.stored);
-      if (s.busy === busy) s.busy = null;
-      if (s.reading === reading) s.reading = null;
-    };
-    const watchdog = setTimeout(release, (MAX_POLL_PAGES + 1) * this.o.timeoutMs);
-    (watchdog as { unref?: () => void }).unref?.();
+    this.reads++;
     try {
-      return await p;
+      while (s.busy) await s.busy;
+      const reading = { stored: 0 };
+      s.reading = reading;
+      const p = work()
+        .catch(() => {})
+        .then(() => reading.stored);
+      // What waiters see: settles with the read, or when the watchdog below lets the source go.
+      let free!: (stored: number) => void;
+      const busy = new Promise<number>((r) => (free = r));
+      void p.then(free);
+      s.busy = busy;
+      // A listing that ignores its signal and never answers would hold the source busy for good (every later read
+      // and lookup waits on it; the review). Past the longest a read that honours its timeouts can take, the source
+      // is let go; the stuck read, if it ever settles, changes nothing it no longer owns. A timer, not a race: one
+      // more await on the listing path moves the card drain's timing (a5-bugs.md).
+      const release = () => {
+        free(reading.stored);
+        if (s.busy === busy) s.busy = null;
+        if (s.reading === reading) s.reading = null;
+      };
+      const watchdog = setTimeout(release, (MAX_POLL_PAGES + 1) * this.o.timeoutMs);
+      (watchdog as { unref?: () => void }).unref?.();
+      try {
+        return await p;
+      } finally {
+        clearTimeout(watchdog);
+        release();
+      }
     } finally {
-      clearTimeout(watchdog);
-      release();
+      if (--this.reads === 0) this.wakeIdle();
     }
   }
 }

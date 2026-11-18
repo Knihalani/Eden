@@ -212,6 +212,11 @@ describe("background sync (D57)", () => {
       expect(src.limits.slice(before)).toEqual([5, 95]);
       // The source holds 70 items (40 + 30): the 5 and the other 65.
       expect(partner.sync!.stats.demandItems).toBe(70);
+      // The store's slices yield between them (STORE_SLICE_MS): the lookup's answer may land while the poll's last
+      // slice is still being stored; waiting for `current` waits the poll out before the check.
+      for (let i = 0; i < 200 && !partner.sync!.current(scope, "mail"); i++) {
+        await new Promise((r) => setTimeout(r, 1));
+      }
       for (let i = 0; i < 30; i++) expect(cache.isSynced(scope, itemId("mail", `new${i}`))).toBe(true);
       expect(partner.sync!.current(scope, "mail")).toBe(true);
     });
@@ -229,6 +234,9 @@ describe("background sync (D57)", () => {
           for (let i = 0; i < 250; i++) if (cache.isSynced(scope, itemId("mail", `new${i}`))) n++;
           return n;
         };
+        // The store's slices yield between them (STORE_SLICE_MS): a slice may still be landing when the lookup
+        // answers, so "held at the answer" is the count once the poll's pages it waited for have stored.
+        for (let i = 0; i < 200 && heldNow() < 200; i++) await new Promise((r) => setTimeout(r, 1));
         const held = heldNow();
         // The rest is read in the background, from where the lookup's poll stopped (audit A5: it restarted from the
         // top, met what the lookup had just stored, and marked the source current with 50 changes never read).

@@ -175,6 +175,8 @@ describe("the sync's store skips re-adding unchanged items' words (D1927)", () =
         for (let i = 0; i < 4; i++) {
           for (const s of USERS) await e.partner.sync!.kicked(s);
           await new Promise((res) => setTimeout(res, 0));
+          // A store yields between its slices (STORE_SLICE_MS): `pending` covers them, queued ones too.
+          for (let p = e.partner.sync!.pending(); p; p = e.partner.sync!.pending()) await p;
         }
       };
       const ticks = async (e: Engine, n: number) => {
