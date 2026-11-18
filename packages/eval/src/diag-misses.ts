@@ -57,7 +57,8 @@ for (const scenario of scenarios) {
       console.log(`  [${mark}] ${tag} turn${ti} "${String(text).slice(0, 80)}"`);
       if (expected.length) console.log(`       expected: ${expected.join(", ")}`);
       if (ids.length) console.log(`       got:      ${ids.join(", ")}`);
-      for (const t of traces) console.log(`       trace:    ${t.decision} | ${t.reason} | ${(t.itemIds ?? []).join(",")}`);
+      for (const t of traces)
+        console.log(`       trace:    ${t.decision} | ${t.reason} | ${(t.itemIds ?? []).join(",")}`);
     }
     await partner.observe({ ...who, sessionId: session.id, at: clock++, kind: "session_end" } as AgentEvent, {
       waitMs: 50,
