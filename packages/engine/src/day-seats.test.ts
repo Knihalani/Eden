@@ -8,7 +8,7 @@ import { ContextPartner } from "./partner";
 import { DEFAULT_CONFIG } from "./config";
 
 /*
- * D1977: the lookup seats the day's items too — `rank` took its day candidates from `timed` (an item's `meta.start`
+ * D1978: the lookup seats the day's items too — `rank` took its day candidates from `timed` (an item's `meta.start`
  * day), which an item whose day lives only in its text ("every weekday 09:30", "Thursday 16:15") never has. With the
  * seats read through `dated` (covers, names, recurrence), an availability ask on a named day hands what the day
  * holds, however the item writes it.
@@ -64,7 +64,7 @@ const STANDUP = item("standup", "Standup", "Team standup, every weekday 9:30-9:4
 /** An event that starts, for contrast: `timed` already seats this one. */
 const REVIEW = item("review", "Design review", "Design review with the team.", 24, "2026-11-19T14:00:00");
 
-describe("day seats (D1977): the lookup seats the items a named day holds", () => {
+describe("day seats (D1978): the lookup seats the items a named day holds", () => {
   test('"is Thursday free?" hands the recurring weekday standup (its day lives only in its text)', async () => {
     const p = setup([STANDUP, REVIEW]);
     // Priming turn pulls the fixture into the cache.

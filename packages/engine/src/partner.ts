@@ -2916,7 +2916,7 @@ export class ContextPartner {
   }
 
   /**
-   * The lookup's day seats (D1977): the push's `daySeats` applied to the scored pool of a request that names a
+   * The lookup's day seats (D1978): the push's `daySeats` applied to the scored pool of a request that names a
    * day, so an availability ask on it ("is Thursday free?", "do I have a clash then?") finds the day's items
    * however they write it — `meta.start`, a span, a written date or weekday, a recurrence. `dayCls` marks every
    * scored item that sits on a named day, for `eligible`'s `onNamedDay` and `grounded`'s day filters.
@@ -4109,7 +4109,7 @@ export class ContextPartner {
     // A look-alike that contradicts the request's anchors is not grounded either (D1970).
     const pool = candidates.filter((x) => !bulkMail(x.item) && !this.contradicts(x, cue));
     const time = cue.time;
-    // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1977).
+    // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1978).
     const onDay = (x: Scored) =>
       time !== null && (time.days.has(startDay(x.item, cue.offset) ?? "") || x.dayCls !== undefined);
     const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
@@ -4227,7 +4227,7 @@ export class ContextPartner {
     ) {
       // "Is Thursday morning free?": the day's events are the answer however the rest of the request reads
       // (D44). A clash/conflict ask is not that listing: it asks about one time, and with no span resolved
-      // to check against ("at that time" naming none yet) it stays silent rather than handing the day (D1977).
+      // to check against ("at that time" naming none yet) it stays silent rather than handing the day (D1978).
       if (!/\b(clash|clashing|conflict\w*|double.?book\w*|overlap\w*)\b/i.test(cue.raw)) {
         return { items: events.sort(soonest).slice(0, this.max()), how: "time-free" };
       }
@@ -6283,7 +6283,7 @@ export class ContextPartner {
     carded: ReadonlyMap<string, CardFind> = new Map(),
     intents: ReadonlyMap<string, IntentFind> = new Map(),
   ): Scored[] {
-    // An event on a day the request names is a candidate whatever it scores on words (D44) — and since D1977,
+    // An event on a day the request names is a candidate whatever it scores on words (D44) — and since D1978,
     // an item whose day lives in its text as well (`dayCls` covers/names).
     const onNamedDay = (x: Scored) =>
       cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true || x.dayCls !== undefined;
@@ -6420,7 +6420,7 @@ export class ContextPartner {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
-      // The day's own items sit beside the word-found ones (D1977), marked `dayCls` for `eligible`/`grounded`.
+      // The day's own items sit beside the word-found ones (D1978), marked `dayCls` for `eligible`/`grounded`.
       this.seatDays(s, cue, scored);
       // Only anchored intent hits are eligible as such, take seats or tie the judge (`anchoredIntents`).
       const intents = this.anchoredIntents(s, cue, intentFound);

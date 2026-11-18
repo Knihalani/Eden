@@ -60,7 +60,7 @@ export class StaticSource implements Source {
 
   /**
    * Lists by time when any of its items sits on a day: a `meta.start`, or a day only its text knows (a span,
-   * a date or weekday it writes, a weekday it recurs on — `dayFactsOf`, D1977).
+   * a date or weekday it writes, a weekday it recurs on — `dayFactsOf`, D1978).
    */
   get listsByTime(): boolean {
     return this.items.some((i) => i.meta?.start !== undefined || dayFactsOf(i.title, i.text) !== 0);
@@ -97,7 +97,7 @@ export class StaticSource implements Source {
         if (hits[d] === 0) found.push(d);
       }
       // A document whose day lives only in its text ("Thursday 16:15", "every weekday 9:30", "out 30 Oct – 6 Nov")
-      // lists on the days it covers or names, the same facts `ItemCache.dated` reads (D1977). One with a
+      // lists on the days it covers or names, the same facts `ItemCache.dated` reads (D1978). One with a
       // `meta.start` is a dated instance: it lists by that start, not again on every day it says it recurs on.
       const days = new Set<string>();
       for (let t = Date.parse(`${w.start}T00:00:00Z`); !Number.isNaN(t); t += 86_400_000) {
