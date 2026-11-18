@@ -587,7 +587,7 @@ You do not need an Eden account, API key, Bun install, or a separate terminal ru
    its SHA-256 with `SHA256SUMS` (`sha256sum FILE` on Linux, `shasum -a 256 FILE` on macOS, or
    `Get-FileHash FILE -Algorithm SHA256` in PowerShell). Extract the verified archive.
 2. Inside the extracted directory, run `python3 install.py` on Linux/macOS or `py -3 install.py` on Windows
-   (Python 3.11+). The installer uses your active profile; use `--profile NAME` or `--hermes-home PATH` to select
+   (Python 3.10+). The installer uses your active profile; use `--profile NAME` or `--hermes-home PATH` to select
    another. Run the enable command it prints. For an upgrade, stop Hermes first and rerun the installer.
 3. Open a new Hermes session (or restart your Hermes gateway). If you restrict toolsets, include `eden` in
    `hermes tools` or in your existing list passed via `--toolsets`. On Hermes with Tool Search, `ask_context`
@@ -648,6 +648,12 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
 
 Every Eden hook fails open. The lab's `hermes-eden` arm compared replacing duplicate source tools with keeping them
 alongside Eden; see [the lab write-up](research/a16-loop.md) for that retrieval study, not a local-runtime benchmark.
+
+To build the release ZIPs and `SHA256SUMS` from a checkout, use the repo's pinned Bun and run
+`python3 scripts/hermes-local/build.py --version vX.Y.Z --out-dir dist/hermes-local`.
+Repeat `--target` to build a subset; omit it for Linux, macOS and Windows, each on x64 and arm64.
+Before publishing, run `HERMES_RELEASE_SMOKE=1 bun test scripts/hermes-local.test.ts` on Linux and record which
+platforms were run natively.
 
 ## Other languages
 
