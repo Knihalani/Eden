@@ -497,6 +497,9 @@ const MAKES_NEW = /\b(book|schedule|set up|arrange|add|fit in|put in|block|invit
  * with the request ("confirm my dentist appointment" and "Dental check-up": the same first four letters, words of
  * five letters or more that are neither scheduling words nor times). Confirming an appointment is not a clash with it.
  */
+/** Recurrence adjectives that say how often, not what: "my annual physio" is not "Annual boiler inspection". */
+const MODIFIER_WORDS = new Set(["annual", "yearly", "monthly", "weekly", "daily", "quarterly", "regular"]);
+
 export function isSubject(item: ContextItem, raw: string): boolean {
   // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new
   // one. A wh-question about the user's own thing ("When is my physio appointment?") is one too (D1980).
@@ -504,7 +507,7 @@ export function isSubject(item: ContextItem, raw: string): boolean {
   const stems = (text: string) =>
     new Set(
       (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? [])
-        .filter((w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w))
+        .filter((w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w) && !MODIFIER_WORDS.has(w))
         .map((w) => w.slice(0, 4)),
     );
   const asked = stems(raw);
