@@ -108,6 +108,7 @@ import {
 import {
   absenceSpan,
   ASKS_OWN,
+  ASKS_WHO,
   cleanEntities,
   daysNamed,
   isAction,
@@ -1267,7 +1268,15 @@ export class ContextPartner {
     const ranked = this.rank(s, cue);
     if (ranking) spans!.close(ranking, { candidates: ranked.length });
     const sure = spans?.open("fast.confident", cue.span);
-    const fast = this.confident(ranked, cue);
+    let fast = this.confident(ranked, cue);
+    // "Who is he?" (D1981): when an item's title IS the carried person's name, it alone answers.
+    if (ASKS_WHO.test(cue.raw) && event.kind === "user_message") {
+      const who = cleanEntities(cue.entities).map((e) => e.toLowerCase());
+      if (who.length > 0) {
+        const record = ranked.filter((x) => who.includes(x.item.title.trim().toLowerCase()));
+        if (record.length > 0) fast = record;
+      }
+    }
     if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
@@ -4557,6 +4566,18 @@ export class ContextPartner {
     // request; the just-delivered item itself stays out through the delivered suppression above (`sameRef`).
     // Kept few: every term the cue adds costs the candidates' coverage, so the cap must leave a follow-up's
     // match a share.
+    // The last request's named person is what a follow-up points back at ("Who is he again?"), so the name's
+    // words go ahead of the delivered items' and the request's other terms: within the same cap, half a name
+    // ("leo" without "park") matches the right person nowhere and everything mentioning a first name.
+    for (const e of last.entities) {
+      for (const w of e.toLowerCase().split(/\s+/)) {
+        if (extra.length >= CARRY_TERMS) break;
+        if (!have.has(w)) {
+          have.add(w);
+          extra.push(w);
+        }
+      }
+    }
     for (const d of s.delivered) {
       // At or after the request's turn: a packet handed out a turn late (an intervening tool or agent event)
       // still belongs to the answer the follow-up follows.
@@ -4577,16 +4598,13 @@ export class ContextPartner {
         extra.push(t);
       }
     }
-    for (const e of last.entities) {
-      for (const w of e.toLowerCase().split(/\s+/)) {
-        if (extra.length >= CARRY_TERMS) break;
-        if (!have.has(w)) {
-          have.add(w);
-          extra.push(w);
-        }
-      }
-    }
     if (extra.length > 0) cue.text = `${cue.text} ${extra.join(" ")}`.trim();
+    // A pronoun-person follow-up ("Who is he again?", D1981) names nobody: its question words are noise, so the
+    // carried name is the whole query and joins the entities the name-paths match on.
+    if (ASKS_WHO.test(cue.raw) && last.entities.length > 0) {
+      cue.entities = [...last.entities];
+      cue.text = last.entities.join(" ").toLowerCase();
+    }
     cue.time ??= last.time;
   }
 
@@ -6626,8 +6644,18 @@ export class ContextPartner {
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       const confiding = spans?.open("confident", cue.span);
-      const sure = this.confident(scored, cue);
+      let sure = this.confident(scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
+      // "Who is he?" (D1981) asks for the person's own record — `carry` made the name the cue's entities: when the
+      // pool holds an item whose title IS that name, it alone answers; everything only mentioning the person
+      // ("Leo Park shared a photo album") is context, not the record.
+      if (ASKS_WHO.test(cue.raw) && (eventKind === "user_message" || eventKind === "ask")) {
+        const who = cleanEntities(cue.entities).map((e) => e.toLowerCase());
+        if (who.length > 0) {
+          const record = scored.filter((x) => who.includes(x.item.title.trim().toLowerCase()));
+          if (record.length > 0) sure = record;
+        }
+      }
       const probedSet = new Set(probedIds ?? []);
       const factsNow = () => this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, carded: carded });
       // The rule paths decide when no model does.
