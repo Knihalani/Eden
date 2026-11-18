@@ -6,9 +6,8 @@ by default. Read [docs/VISION.md](docs/VISION.md), [docs/ARCHITECTURE.md](docs/A
 [docs/DECISIONS.md](docs/DECISIONS.md) before changing the engine. DECISIONS wins every conflict; a change that
 departs from a decision adds a new numbered decision saying so.
 
-Everything under `archived/` is earlier products (passive memory for coding agents, the compile era, an observability
-platform). It is history: do not import from it, describe Eden from it, or run its tests. `docs/SALVAGE.md` lists
-what is worth mining from it.
+Earlier products (passive memory for coding agents, the compile era, an observability platform) were removed from
+the tree for the open-source release; they live in git history. Do not import from them or describe Eden from them.
 
 ## Repo
 
