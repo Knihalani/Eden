@@ -2045,6 +2045,10 @@ export class SyncManager {
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
+      // `own` was filtered before the put slices; a deletion notified between them (`removed`) holds the id gone in
+      // the cache, so re-adding it here would split s.ids from s.held and latch s.cut. Any delete landed before
+      // bookkeeping can never re-enter s.ids.
+      if (this.deps.cache.isHeldGone(u.scope, it.id, now)) continue;
       // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
       s.missed.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
