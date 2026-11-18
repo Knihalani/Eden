@@ -1,5 +1,5 @@
 /**
- * D1780: mentions are written behind, in one transaction a second. Reads see them before they are written, a crash
+ * D1780 and D1966: mentions and planner arms are written behind in one transaction. Reads see pending values, a crash
  * loses at most the pending batch and never a written row, and a normal exit or `close` writes them.
  */
 import { Database } from "bun:sqlite";
@@ -26,6 +26,26 @@ const onDisk = (path: string) => {
       source_id: string;
       count: number;
       last_seen: number;
+    }[];
+  } finally {
+    db.close();
+  }
+};
+/** What another connection reads from the file: written planner-arm rows only. */
+const onDiskArms = (path: string) => {
+  const db = new Database(path, { readonly: true });
+  try {
+    return db
+      .query(
+        "SELECT scope, source_id, bucket, shape, alpha, beta FROM planner_arm ORDER BY scope, source_id, bucket, shape",
+      )
+      .all() as {
+      scope: string;
+      source_id: string;
+      bucket: number;
+      shape: string;
+      alpha: number;
+      beta: number;
     }[];
   } finally {
     db.close();
@@ -333,5 +353,178 @@ describe("SourceMap mentions written behind (D1780)", () => {
     // Exits at once: the pending batch's timer does not hold the process open.
     expect(await proc.exited).toBe(0);
     expect(onDisk(path).map((r) => [r.entity, r.source_id, r.count, r.last_seen])).toEqual([["dana lee", "crm", 1, 9]]);
+  });
+});
+
+describe("SourceMap planner arms written behind (D1966)", () => {
+  test("pending rows overlay the file by scope and flush in key order", () => {
+    const path = fileOf();
+    const map = new SourceMap(path, { explore: false, mentionFlushMs: 60_000 });
+    map.saveArms(alice, "crm", [
+      { bucket: 2, shape: "terms", alpha: 2, beta: 3 },
+      { bucket: 1, shape: "each-entity", alpha: 5, beta: 2 },
+    ]);
+    map.saveArms(bob, "crm", [{ bucket: 0, shape: "terms", alpha: 3, beta: 4 }]);
+    map.saveArms(otherTenant, "crm", [{ bucket: 1, shape: "terms", alpha: 4, beta: 5 }]);
+
+    expect(onDiskArms(path)).toEqual([]);
+    const aliceRows = [
+      { bucket: 1, shape: "each-entity", alpha: 5, beta: 2 },
+      { bucket: 2, shape: "terms", alpha: 2, beta: 3 },
+    ];
+    expect(map.loadArms(alice, "crm")).toEqual(aliceRows);
+    expect(map.loadArms(bob, "crm")).toEqual([{ bucket: 0, shape: "terms", alpha: 3, beta: 4 }]);
+    expect(map.loadArms({ tenantId: "t", userId: "nobody" }, "crm")).toEqual([]);
+    expect(map.loadArms(otherTenant, "crm")).toEqual([{ bucket: 1, shape: "terms", alpha: 4, beta: 5 }]);
+
+    map.flush();
+    const scope = scopeKey(alice);
+    expect(onDiskArms(path).filter((r) => r.scope === scope)).toEqual([
+      { scope, source_id: "crm", bucket: 1, shape: "each-entity", alpha: 5, beta: 2 },
+      { scope, source_id: "crm", bucket: 2, shape: "terms", alpha: 2, beta: 3 },
+    ]);
+
+    map.saveArms(alice, "crm", [
+      { bucket: 1, shape: "each-entity", alpha: 6, beta: 7 },
+      { bucket: 0, shape: "terms", alpha: 8, beta: 9 },
+    ]);
+    const merged = [
+      { bucket: 0, shape: "terms", alpha: 8, beta: 9 },
+      { bucket: 1, shape: "each-entity", alpha: 6, beta: 7 },
+      { bucket: 2, shape: "terms", alpha: 2, beta: 3 },
+    ];
+    expect(map.loadArms(alice, "crm")).toEqual(merged);
+    map.flush();
+    expect(map.loadArms(alice, "crm")).toEqual(merged);
+    map.close();
+  });
+
+  test("repeated saves of one key keep only the last values", () => {
+    const path = fileOf();
+    const map = new SourceMap(path, { explore: false, mentionFlushMs: 60_000 });
+    for (let i = 0; i < 100; i++) map.saveArms(alice, "crm", [{ bucket: 1, shape: "terms", alpha: i, beta: i + 1 }]);
+    const copied = { bucket: 2, shape: "copied", alpha: 3, beta: 4 };
+    map.saveArms(alice, "crm", [copied]);
+    copied.alpha = 99;
+    expect(onDiskArms(path)).toEqual([]);
+    expect(map.loadArms(alice, "crm")).toEqual([
+      { bucket: 1, shape: "terms", alpha: 99, beta: 100 },
+      { bucket: 2, shape: "copied", alpha: 3, beta: 4 },
+    ]);
+    map.flush();
+    expect(onDiskArms(path)).toEqual([
+      { scope: scopeKey(alice), source_id: "crm", bucket: 1, shape: "terms", alpha: 99, beta: 100 },
+      { scope: scopeKey(alice), source_id: "crm", bucket: 2, shape: "copied", alpha: 3, beta: 4 },
+    ]);
+    map.close();
+  });
+
+  test("forget, export and import include pending arms", () => {
+    const path = fileOf();
+    const map = new SourceMap(path, { explore: false, mentionFlushMs: 60_000 });
+    map.saveArms(alice, "crm", [{ bucket: 0, shape: "terms", alpha: 2, beta: 3 }]);
+    map.saveArms(alice, "gmail", [{ bucket: 1, shape: "terms", alpha: 4, beta: 5 }]);
+    map.saveArms(bob, "crm", [{ bucket: 2, shape: "terms", alpha: 6, beta: 7 }]);
+    map.forget(alice, "crm");
+    map.flush();
+    expect(map.loadArms(alice, "crm")).toEqual([]);
+    expect(onDiskArms(path).some((r) => r.scope === scopeKey(alice) && r.source_id === "crm")).toBe(false);
+    expect(map.loadArms(alice, "gmail")).toEqual([{ bucket: 1, shape: "terms", alpha: 4, beta: 5 }]);
+    expect(map.loadArms(bob, "crm")).toEqual([{ bucket: 2, shape: "terms", alpha: 6, beta: 7 }]);
+
+    map.saveArms(alice, "gmail", [{ bucket: 3, shape: "pending", alpha: 8, beta: 9 }]);
+    expect(map.exportUser(alice).arms).toEqual([
+      ["gmail", 1, "terms", 4, 5],
+      ["gmail", 3, "pending", 8, 9],
+    ]);
+    map.saveArms(alice, "crm", [{ bucket: 0, shape: "stale", alpha: 10, beta: 11 }]);
+    map.importUser(alice, {
+      mention: [],
+      utility: [],
+      arms: [["crm", 2, "imported", 12, 13]],
+    });
+    map.flush();
+    expect(map.loadArms(alice, "crm")).toEqual([{ bucket: 2, shape: "imported", alpha: 12, beta: 13 }]);
+    expect(onDiskArms(path).filter((r) => r.scope === scopeKey(alice))).toEqual([
+      { scope: scopeKey(alice), source_id: "crm", bucket: 2, shape: "imported", alpha: 12, beta: 13 },
+    ]);
+
+    map.saveArms(alice, "crm", [{ bucket: 0, shape: "drop", alpha: 14, beta: 15 }]);
+    map.saveArms(alice, "gmail", [{ bucket: 0, shape: "drop", alpha: 16, beta: 17 }]);
+    map.forget(alice);
+    map.flush();
+    expect(map.loadArms(alice, "crm")).toEqual([]);
+    expect(map.loadArms(alice, "gmail")).toEqual([]);
+    expect(map.loadArms(bob, "crm")).toEqual([{ bucket: 2, shape: "terms", alpha: 6, beta: 7 }]);
+    map.close();
+  });
+
+  test("the timer flushes arms alone and 4,096 rows flush at once", async () => {
+    const path = fileOf();
+    const map = new SourceMap(path, { explore: false, mentionFlushMs: 5 });
+    map.saveArms(alice, "crm", [{ bucket: 0, shape: "terms", alpha: 1, beta: 2 }]);
+    expect(onDiskArms(path)).toEqual([]);
+    await Bun.sleep(40);
+    expect(onDiskArms(path)).toEqual([
+      { scope: scopeKey(alice), source_id: "crm", bucket: 0, shape: "terms", alpha: 1, beta: 2 },
+    ]);
+    map.close();
+
+    const fullPath = fileOf();
+    const full = new SourceMap(fullPath, { explore: false, mentionFlushMs: 60_000 });
+    full.saveArms(
+      alice,
+      "crm",
+      Array.from({ length: 4_096 }, (_, bucket) => ({ bucket, shape: "s", alpha: bucket + 1, beta: 2 })),
+    );
+    expect(onDiskArms(fullPath)).toHaveLength(4_096);
+    full.close();
+  });
+
+  test("a refused write restores arms without replacing newer saves or logging rows", async () => {
+    const path = fileOf();
+    const map = new SourceMap(path, { explore: false, mentionFlushMs: 5 });
+    const db = (map as unknown as { db: { transaction: (f: () => void) => () => void } }).db;
+    const real = db.transaction.bind(db);
+    db.transaction = () => () => {
+      throw new Error("SQLITE_BUSY");
+    };
+    const log = console.error;
+    const logged: unknown[][] = [];
+    console.error = (...args: unknown[]) => logged.push(args);
+    try {
+      expect(() => map.saveArms(alice, "crm", [{ bucket: 1, shape: "terms", alpha: 1, beta: 1 }])).not.toThrow();
+      await Bun.sleep(40);
+      expect(map.failedFlushes).toBeGreaterThanOrEqual(1);
+      expect(JSON.stringify(logged)).not.toContain("alice");
+      expect(() => map.saveArms(alice, "crm", [{ bucket: 1, shape: "terms", alpha: 2, beta: 3 }])).not.toThrow();
+      expect(() => map.saveArms(alice, "crm", [{ bucket: 0, shape: "each-entity", alpha: 4, beta: 5 }])).not.toThrow();
+    } finally {
+      console.error = log;
+      db.transaction = real;
+    }
+    map.flush();
+    expect(map.loadArms(alice, "crm")).toEqual([
+      { bucket: 0, shape: "each-entity", alpha: 4, beta: 5 },
+      { bucket: 1, shape: "terms", alpha: 2, beta: 3 },
+    ]);
+    expect(map.droppedArmRows).toBe(0);
+    map.close();
+  });
+
+  test("a process that exits without close writes pending arms", async () => {
+    const path = fileOf();
+    const child = `
+      const { SourceMap } = await import(${MODULE});
+      const map = new SourceMap(process.argv[1], { explore: false });
+      map.saveArms({ tenantId: "t", userId: "alice" }, "crm", [
+        { bucket: 1, shape: "terms", alpha: 2, beta: 3 },
+      ]);
+    `;
+    const proc = Bun.spawn([process.execPath, "-e", child, path], { stdout: "inherit", stderr: "inherit" });
+    expect(await proc.exited).toBe(0);
+    expect(onDiskArms(path)).toEqual([
+      { scope: scopeKey(alice), source_id: "crm", bucket: 1, shape: "terms", alpha: 2, beta: 3 },
+    ]);
   });
 });
