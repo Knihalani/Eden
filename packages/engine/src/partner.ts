@@ -577,10 +577,14 @@ const idNumbers = (text: string): Set<string> => {
   for (const m of text.matchAll(ID_NUMBERS)) {
     const n = m[0].replaceAll(",", "");
     if (/^(19|20)\d{2}$/.test(n)) continue;
-    // A number named as money or a measure ("£2,400", "650 GBP", "3 laptops" beside a noun) is an amount the
-    // request states, not the identifier an item must share.
-    if (/[\u00a3$\u20ac]\s*$/.test(text.slice(Math.max(0, m.index - 3), m.index))) continue;
-    if (QUANTITY.test(text.slice(m.index + m[0].length))) continue;
+    // A number named as money or a measure ("£2,400", "GBP 2,400", "650 GBP", "3 laptops" beside a noun), spoken
+    // as a time ("at 1400", "by 900") or a model number ("737 MAX") is an amount the request states, not the
+    // identifier an item must share.
+    const before = text.slice(Math.max(0, m.index - 8), m.index);
+    if (/[\u00a3$\u20ac]\s*$/.test(before) || /\b(?:GBP|USD|EUR|at|by|until|from|around|about)\s*$/i.test(before))
+      continue;
+    const after = text.slice(m.index + m[0].length);
+    if (QUANTITY.test(after) || /^\s+[A-Z]{2,}\b/.test(after)) continue;
     out.add(n);
   }
   return out;
@@ -3027,7 +3031,6 @@ export class ContextPartner {
     // hands what it would have handed with no seats: the pool as it stood, behind that pool's own gate.
     // A look-alike that contradicts the request's anchors (another identifier's, last year's, another
     // organisation's) leaves the pool the push can hand (D1970).
-    const acts = isImperative(cue.raw) || isAction(cue.raw) || cue.external === true || (cue.time?.days.size ?? 0) > 0;
     const open = (yes === null && gate.before ? gate.before : reported).filter(
       (x) => !bulkMail(x.item) && !this.contradicts(x, cue),
     );
@@ -3906,24 +3909,39 @@ export class ContextPartner {
       const years = `${x.item.title} ${x.item.text}`.match(YEARS);
       if (years !== null && Math.max(...years.map(Number)) < ref) return true;
     }
-    for (const e of cueNames(cue).names) {
+    const names = cueNames(cue).names;
+    for (const e of names) {
       const qualifier = qualifierOf(e, x.item.title);
       if (
         qualifier !== null &&
+        // Only a request that names a second thing asks a qualifier to disambiguate: "Dana Lee (CEO)" answers
+        // "email Dana Lee" as well as "Dana Lee (Northwind)" does when no organisation was named at all.
+        cue.entities.some((o) => o.toLowerCase() !== e.toLowerCase()) &&
         !cue.entities.some((o) => {
           const other = o.toLowerCase();
           return qualifier.includes(other) || other.includes(qualifier);
         })
       )
         return true;
-      // A two-word name the request uses shares only its first word with the item's own two-word name: "Acme
-      // Catering" is not the "Acme Logistics" the request means.
-      const parts = e.trim().split(/\s+/);
-      if (parts.length >= 2) {
-        const esc = parts[0]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const other = new RegExp(`\\b${esc}\\s+(\\p{Lu}[\\p{L}'’.-]+)`, "u").exec(x.item.title);
-        if (other !== null && other[1]!.toLowerCase() !== parts[1]!.toLowerCase()) return true;
-      }
+    }
+    // Two-word names the request uses, by first word, with possessives folded away ("Lee's" → "lee", "Logistics'"
+    // → "logistics"): a title whose second word completes one of the request's pairs is that person or vendor,
+    // not a look-alike — and "introduce Sarah Chen to Sarah Cole" keeps the item of either Sarah.
+    const pairs = new Map<string, { first: string; seconds: Set<string> }>();
+    for (const e of names) {
+      const w = e.trim().split(/\s+/);
+      if (w.length < 2) continue;
+      const key = w[0]!.toLowerCase();
+      const entry = pairs.get(key) ?? { first: w[0]!, seconds: new Set<string>() };
+      entry.seconds.add(w[1]!.toLowerCase().replace(/['’]s?$/, ""));
+      pairs.set(key, entry);
+    }
+    for (const { first, seconds } of pairs.values()) {
+      const esc = first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const other = new RegExp(`\\b${esc}\\s+(\\p{Lu}[\\p{L}'’.-]+)`, "u").exec(x.item.title);
+      if (other === null) continue;
+      const second = other[1]!.toLowerCase().replace(/['’]s?$/, "");
+      if (!seconds.has(second)) return true;
     }
     return false;
   }
