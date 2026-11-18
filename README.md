@@ -185,3 +185,11 @@ M0 (scaffold) done; M1, an eval worth tuning against, in progress, with every me
 npm, PyPI or an image registry yet: install from a checkout as above (`bun run pack:client`, `pip install
 ./packages/client-python`, `docker build`). `bun run publish:check` builds all three and runs each registry's dry
 run (D853).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The gate before merge is local: `CHECK_COLD=1 bun run check`.
+
+## License
+
+[MIT](LICENSE).

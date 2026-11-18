@@ -41,5 +41,19 @@
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "prettier": "3.9.9",
     "typescript": "5.9.3"
-  }
+  },
+  "description": "A context partner for personal and proactive agents: answers their questions with citations and injects the context they did not know to ask for.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Knihalani/Eden.git"
+  },
+  "keywords": [
+    "context",
+    "agents",
+    "mcp",
+    "memory",
+    "llm",
+    "retrieval"
+  ]
 }
