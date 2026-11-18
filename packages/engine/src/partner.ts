@@ -158,7 +158,8 @@ import {
   type Party,
 } from "./parties";
 import { safeLine } from "./line";
-import { datedText } from "./days";
+import { datedText, dayKeys } from "./days";
+import { dayFactsClass, dayFactsOf } from "./day-facts";
 import {
   anchored,
   anchorsOf,
@@ -691,6 +692,11 @@ interface Scored {
   doc?: number;
   /** A whole cue entity is in the item (`rank`'s entity bonus). */
   entity?: true;
+  /**
+   * How the item sits on a day the request names (`rank`'s `timed`/`dated` seats): 0 starts that day, 1 covers it
+   * (a span or a recurring weekday), 2 names it in text. Undefined for a word-found item off the day.
+   */
+  dayCls?: number;
   /**
    * `syncPollBehind`: delivered earlier this session and changed since (`Ledger.revised`), so the agent holds a
    * superseded copy; a follow-up delivers the corrected one (D65).
@@ -2193,7 +2199,8 @@ export class ContextPartner {
     const grounding = spans?.open("ground", cue.span);
     // What the question's people and days ground comes first (D44); a named day's other events only through it, so
     // a question about a topic is not padded with that day's calendar.
-    const onDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
+    const onDay = (x: Scored) =>
+      cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true || x.dayCls !== undefined;
     const grounded = this.grounded(
       s,
       cue,
@@ -2899,13 +2906,39 @@ export class ContextPartner {
    * at most `pushDaySeats`. None for a request that names no day or a window of more than three (a week's listing
    * is not a seat), or with the switch off.
    */
-  private daySeats(s: Session, cue: Cue, have: ReadonlySet<string>): Scored[] {
+  private daySeats(s: Session, cue: Cue, have: ReadonlySet<string>, all?: Map<number, number>): Scored[] {
     const k = this.config.pushDaySeats;
     const days = cue.time?.days;
     if (k <= 0 || !days || days.size === 0 || days.size > DAY_SEAT_DAYS) return [];
     return this.deps.cache
-      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset)
-      .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc }));
+      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset, all)
+      .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc, dayCls: h.dayCls }));
+  }
+
+  /**
+   * The lookup's day seats (D1978): the push's `daySeats` applied to the scored pool of a request that names a
+   * day, so an availability ask on it ("is Thursday free?", "do I have a clash then?") finds the day's items
+   * however they write it — `meta.start`, a span, a written date or weekday, a recurrence. `dayCls` marks every
+   * scored item that sits on a named day, for `eligible`'s `onNamedDay` and `grounded`'s day filters.
+   */
+  private seatDays(s: Session, cue: Cue, scored: Scored[]): void {
+    const days = cue.time?.days;
+    if (!days || days.size === 0) return;
+    const all = new Map<number, number>();
+    const seats = this.daySeats(s, cue, new Set(scored.map((x) => x.item.id)), all);
+    const want = dayKeys(days);
+    const clsOf = (item: ContextItem): number | undefined => {
+      const f = dayFactsOf(item.title, item.text);
+      if (f === 0) return item.meta?.start !== undefined && days.has(item.meta.start.slice(0, 10)) ? 0 : undefined;
+      const c = dayFactsClass(f, days, want, item.updatedAt ?? this.now());
+      return c > 0 ? c : undefined;
+    };
+    for (const x of scored) {
+      const c = x.doc !== undefined ? all.get(x.doc) : undefined;
+      const cls = c ?? clsOf(x.item);
+      if (cls !== undefined) x.dayCls = cls;
+    }
+    for (const seat of seats) scored.push(seat);
   }
 
   /**
@@ -4076,9 +4109,13 @@ export class ContextPartner {
     // A look-alike that contradicts the request's anchors is not grounded either (D1970).
     const pool = candidates.filter((x) => !bulkMail(x.item) && !this.contradicts(x, cue));
     const time = cue.time;
-    const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item, cue.offset) ?? "");
+    // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1978).
+    const onDay = (x: Scored) =>
+      time !== null && (time.days.has(startDay(x.item, cue.offset) ?? "") || x.dayCls !== undefined);
     const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
-    const soonest = (a: Scored, b: Scored) => startMs(a.item) - startMs(b.item);
+    // Items whose start lives only in text sort after the timed ones (NaN compares false); their day seat holds.
+    const soonest = (a: Scored, b: Scored) =>
+      (startMs(a.item) || Number.POSITIVE_INFINITY) - (startMs(b.item) || Number.POSITIVE_INFINITY);
     // A run that starts the sentence may carry the verb with it ("Email Dana Lee"): try it without its first word too.
     const people = cue.entities
       .flatMap((e) => {
@@ -4188,9 +4225,12 @@ export class ContextPartner {
       time.days.size > 0 &&
       ((onlyTime(cue) && ASKS_SCHEDULE.test(cue.raw)) || (/\?\s*$/.test(cue.raw) && ASKS_FREE.test(cue.raw)))
     ) {
-      // "Is Thursday morning free?", "do I have a clash then?": the day's events are the answer however the
-      // rest of the request reads (D44). `time-schedule` stays the narrow shape it was (the listing).
-      return { items: events.sort(soonest).slice(0, this.max()), how: "time-free" };
+      // "Is Thursday morning free?": the day's events are the answer however the rest of the request reads
+      // (D44). A clash/conflict ask is not that listing: it asks about one time, and with no span resolved
+      // to check against ("at that time" naming none yet) it stays silent rather than handing the day (D1978).
+      if (!/\b(clash|clashing|conflict\w*|double.?book\w*|overlap\w*)\b/i.test(cue.raw)) {
+        return { items: events.sort(soonest).slice(0, this.max()), how: "time-free" };
+      }
     }
     return none;
   }
@@ -5603,7 +5643,13 @@ export class ContextPartner {
     // listed whole: one span over separate days would page out the days asked for.
     const days = cue.time ? [...cue.time.days].sort() : [];
     const windows: SearchQuery["window"][] = [];
-    if (!off.has("day") && !listed && days.length > 0 && days.length <= 7 && isScheduling(cue.raw)) {
+    if (
+      !off.has("day") &&
+      !listed &&
+      days.length > 0 &&
+      days.length <= 7 &&
+      (isScheduling(cue.raw) || ASKS_FREE.test(cue.raw) || (onlyTime(cue) && ASKS_SCHEDULE.test(cue.raw)))
+    ) {
       const next = (d: string) => new Date(Date.parse(d) + 86_400_000).toISOString().slice(0, 10);
       for (let i = 0; i < days.length;) {
         let j = i;
@@ -6383,8 +6429,10 @@ export class ContextPartner {
     carded: ReadonlyMap<string, CardFind> = new Map(),
     intents: ReadonlyMap<string, IntentFind> = new Map(),
   ): Scored[] {
-    // An event on a day the request names is a candidate whatever it scores on words (D44).
-    const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
+    // An event on a day the request names is a candidate whatever it scores on words (D44) — and since D1978,
+    // an item whose day lives in its text as well (`dayCls` covers/names).
+    const onNamedDay = (x: Scored) =>
+      cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true || x.dayCls !== undefined;
     // A consequence find that does not conflict is no candidate: it shares nothing with the request but its class.
     // An intent hit (`intent`) is: its requests say the request is one it would change. The rule paths still read
     // its own words (its lexical score and terms are unchanged), so it is delivered with no model's say only where a
@@ -6518,6 +6566,8 @@ export class ContextPartner {
         probed: extra.length > 0 ? [...(probedIds ?? []), ...extra] : probedIds,
       });
       if (ranking) spans!.close(ranking, { candidates: scored.length });
+      // The day's own items sit beside the word-found ones (D1978), marked `dayCls` for `eligible`/`grounded`.
+      this.seatDays(s, cue, scored);
       // Only anchored intent hits are eligible as such, take seats or tie the judge (`anchoredIntents`).
       const intents = this.anchoredIntents(s, cue, intentFound);
       // A consequence find counts only where the conflict test, tied by its class's words, says it conflicts with the
@@ -6606,7 +6656,8 @@ export class ContextPartner {
         return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue, was);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
-      const onNamedDay = (x: Scored) => cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true;
+      const onNamedDay = (x: Scored) =>
+        cue.time?.days.has(startDay(x.item, cue.offset) ?? "") === true || x.dayCls !== undefined;
       const probed = new Set(probedIds ?? []);
       const eligible = this.eligible(scored, cue, probed, bridged, carded, intents);
       // With probes on, up to three of the probes' finds join the judge's candidates beyond the best scored: found for

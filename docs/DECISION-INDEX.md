@@ -856,3 +856,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1975 | 2026-11-18 | Adopted: a follow-up also carries what the previous turn delivered, not only the request's words. | adopted |
 | D1976 | 2026-11-18 | Adopted: `groundSubject` — a request about a subject it names is grounded in the context around it, not the best match alone. | adopted |
 | D1977 | 2026-11-18 | Adopted: `companions` — a delivered item pulls its cross-source companions. | adopted |
+| D1978 | 2026-11-18 | Adopted: a request naming days is looked up by day, and the day's items ground it. | adopted |

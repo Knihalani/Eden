@@ -1,4 +1,6 @@
 import { itemId, type ContextItem } from "@eden/protocol";
+import { dayFactsClass, dayFactsOf, type DayFacts } from "@eden/primitives/day-facts";
+import { dayKeys } from "@eden/primitives/days";
 import type { SearchQuery, Source } from "./source";
 
 export interface StaticDoc {
@@ -28,9 +30,11 @@ interface TermIndex {
   /** Row t's postings are `docs[starts[t], starts[t + 1])`. */
   starts: Uint32Array;
   docs: Uint32Array;
-  /** Documents with a start day (`meta.start`), and that day: the only ones a window can list. */
+  /** Documents with a start day (`meta.start`), and that day. */
   datedDocs: Uint32Array;
   days: string[];
+  /** Per-document day facts (`dayFactsOf`): a window also lists what covers, names or recurs on its days. */
+  facts: (DayFacts | undefined)[];
   /** Per-search scratch, one slot per document; zero between searches (search has no await). */
   hits: Uint32Array;
   dated: Uint8Array;
@@ -54,9 +58,12 @@ export class StaticSource implements Source {
     this.items = docs.map((d) => ({ ...d, id: itemId(id, d.ref), sourceId: id }));
   }
 
-  /** Lists by time when any of its items has a start (`meta.start`). */
+  /**
+   * Lists by time when any of its items sits on a day: a `meta.start`, or a day only its text knows (a span,
+   * a date or weekday it writes, a weekday it recurs on — `dayFactsOf`, D1978).
+   */
   get listsByTime(): boolean {
-    return this.items.some((i) => i.meta?.start !== undefined);
+    return this.items.some((i) => i.meta?.start !== undefined || dayFactsOf(i.title, i.text) !== 0);
   }
 
   /**
@@ -88,6 +95,24 @@ export class StaticSource implements Source {
         const d = ix.datedDocs[k]!;
         dated[d] = 1;
         if (hits[d] === 0) found.push(d);
+      }
+      // A document whose day lives only in its text ("Thursday 16:15", "every weekday 9:30", "out 30 Oct – 6 Nov")
+      // lists on the days it covers or names, the same facts `ItemCache.dated` reads (D1978). One with a
+      // `meta.start` is a dated instance: it lists by that start, not again on every day it says it recurs on.
+      const days = new Set<string>();
+      for (let t = Date.parse(`${w.start}T00:00:00Z`); !Number.isNaN(t); t += 86_400_000) {
+        const day = new Date(t).toISOString().slice(0, 10);
+        if (day >= w.end) break;
+        days.add(day);
+      }
+      const want = dayKeys(days);
+      for (let d = 0; d < ix.facts.length; d++) {
+        const f = ix.facts[d];
+        if (f === undefined || this.items[d]!.meta?.start !== undefined || dated[d] === 1) continue;
+        if (dayFactsClass(f, days, want, this.items[d]!.updatedAt) > 0) {
+          dated[d] = 1;
+          if (hits[d] === 0) found.push(d);
+        }
       }
     }
     // Dated first, then more hits, then document order: what the stable sort over all documents gave.
@@ -145,11 +170,15 @@ export class StaticSource implements Source {
     for (let d = 0, p = 0; d < n; d++) for (; p < ends[d]!; p++) docs[fill[rows[p]!]!++] = d;
     const dated: number[] = [];
     const days: string[] = [];
+    const facts: (DayFacts | undefined)[] = [];
     for (let d = 0; d < n; d++) {
       const day = this.items[d]!.meta?.start?.slice(0, 10);
-      if (!day) continue;
-      dated.push(d);
-      days.push(day);
+      if (day) {
+        dated.push(d);
+        days.push(day);
+      }
+      const f = dayFactsOf(this.items[d]!.title, this.items[d]!.text);
+      facts.push(f === 0 ? undefined : f);
     }
     return {
       ids,
@@ -157,6 +186,7 @@ export class StaticSource implements Source {
       docs,
       datedDocs: Uint32Array.from(dated),
       days,
+      facts,
       hits: new Uint32Array(n),
       dated: new Uint8Array(n),
     };

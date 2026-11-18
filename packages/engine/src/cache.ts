@@ -642,6 +642,11 @@ export interface CacheHit {
   coverage: number;
   /** Distinct query terms the item holds. */
   matched: number;
+  /**
+   * `timed`/`dated` only: how the item sits on a requested day — 0 starts that day, 1 covers it (a span, or a
+   * weekday it recurs on), 2 names it in text. Undefined for a word-found hit.
+   */
+  dayCls?: number;
 }
 
 export interface CacheLimits {
@@ -1756,7 +1761,7 @@ export class ItemCache {
     for (const e of [...candidates].sort((a, b) => a.doc - b.doc)) {
       const start = e.item.meta?.start;
       if (!start || !days.has(dayOf(start, offset)) || !this.alive(e, now)) continue;
-      out.push({ item: e.item, sketch: null, doc: e.doc, score: 0, coverage: 0, matched: 0 });
+      out.push({ item: e.item, sketch: null, doc: e.doc, score: 0, coverage: 0, matched: 0, dayCls: 0 });
     }
     // Zone-less starts read as UTC (`parseWhen`); one that does not parse sorts last (NaN compares false).
     const at = (h: CacheHit) => {
@@ -1783,6 +1788,7 @@ export class ItemCache {
     now = Date.now(),
     limit = 3,
     offset?: number,
+    all?: Map<number, number>,
   ): CacheHit[] {
     const u = this.peek(scope);
     if (!u || days.size === 0 || limit <= 0) return [];
@@ -1807,20 +1813,25 @@ export class ItemCache {
       if (start && days.has(dayOf(start, offset))) {
         const t = parseWhen(start);
         found.push({ e, cls: 0, at: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t });
+        all?.set(e.doc, 0);
         continue;
       }
       e.dates ??= e.dayIndex!;
       const cls = dayFactsClass(e.dates, days, want, e.item.updatedAt);
-      if (cls > 0) found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
+      if (cls > 0) {
+        found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
+        all?.set(e.doc, cls);
+      }
     }
     found.sort((a, b) => a.cls - b.cls || a.at - b.at || a.e.doc - b.e.doc);
-    return found.slice(0, limit).map(({ e }) => ({
+    return found.slice(0, limit).map(({ e, cls }) => ({
       item: e.item,
       sketch: sketched(u, e),
       doc: e.doc,
       score: 0,
       coverage: 0,
       matched: 0,
+      dayCls: cls,
     }));
   }
 
