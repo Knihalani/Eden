@@ -698,8 +698,8 @@ average before → after; every run 3,536 passed and 2 skipped of 3,538 in 333 f
 | Quiet | final | 96 | 8.2 → 7.2 | 0 |
 | Four busy loops, x3 | final | 147, 152, 144 | 7.2 → 11.2 | 0, 0, 0 |
 
-`bun run eval` on the final tree: precision 0.65, recall 0.52, falseFireRate 0; acting packets on 19 of 28 neutral
-requests (1.18 items each), facts handed 10 of 11, a look-alike on 3 of 10, as on main.
+`bun run eval` on the final tree: precision 0.84, recall 0.62, falseFireRate 0; acting packets on 8 of 28 neutral
+requests (0.43 items each), facts handed 10 of 11, a look-alike on 3 of 10, as on main.
 
 **Found after the brief:** `partner.test.ts`'s "serving and shadow lookups start no call their source timeout would
 cut off" (a 60 ms source timeout around a 40 ms search, then 20 x 10 ms for the shadow record; 2 of 12 failed in the
