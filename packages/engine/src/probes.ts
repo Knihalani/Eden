@@ -499,8 +499,12 @@ const MAKES_NEW = /\b(book|schedule|set up|arrange|add|fit in|put in|block|invit
  * with the request ("confirm my dentist appointment" and "Dental check-up": the same first four letters, words of
  * five letters or more that are neither scheduling words nor times). Confirming an appointment is not a clash with it.
  */
-/** Recurrence adjectives that say how often, not what: "my annual physio" is not "Annual boiler inspection". */
-const MODIFIER_WORDS = new Set(["annual", "yearly", "monthly", "weekly", "daily", "quarterly", "regular"]);
+/** Recurrence adjectives that say how often, not what (as their 4-letter stems): "my annual physio" is not
+ * "Annual boiler inspection", but a modifier-only match still counts when the request names nothing the item
+ * lacks — "my weekly call" and "Weekly call". */
+const MODIFIER_STEMS = new Set(
+  ["annual", "yearly", "monthly", "weekly", "daily", "quarterly", "regular"].map((w) => w.slice(0, 4)),
+);
 
 export function isSubject(item: ContextItem, raw: string): boolean {
   // Only a request about something already in the calendar has one there; "block", "book" or "set up" make a new
@@ -509,11 +513,17 @@ export function isSubject(item: ContextItem, raw: string): boolean {
   const stems = (text: string) =>
     new Set(
       (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? [])
-        .filter((w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w) && !MODIFIER_WORDS.has(w))
+        .filter((w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w))
         .map((w) => w.slice(0, 4)),
     );
   const asked = stems(raw);
-  return [...stems(item.title)].some((x) => asked.has(x));
+  const own = stems(item.title);
+  const shared = [...own].filter((x) => asked.has(x));
+  if (shared.length === 0) return false;
+  if (shared.some((x) => !MODIFIER_STEMS.has(x))) return true;
+  // Only recurrence words met ("annual" … "annu"): the subject it is if the request names nothing else the item
+  // lacks — "my weekly call" vs "Weekly call", not "my annual physio" vs "Annual boiler inspection".
+  return [...asked].every((x) => own.has(x) || MODIFIER_STEMS.has(x));
 }
 
 /** Minutes from midnight an item starts at, in its own offset; null without a timed `meta.start`. */

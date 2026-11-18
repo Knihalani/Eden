@@ -116,6 +116,12 @@ describe("probes: what a request implies", () => {
     expect(isSubject(budget, "Check if Friday at 3pm works for a design review with Acme")).toBe(false);
     const onboarding = { ...item("15:00"), title: "Client onboarding call" };
     expect(isSubject(onboarding, "Check if I can fit in a call with a new client Friday 3pm")).toBe(false);
+    // Recurrence words alone do not name the subject unless the request names nothing else the item lacks
+    // (D1980 review): "my weekly call" is "Weekly call", but "my annual physio" is not "Annual boiler inspection".
+    const weeklyCall = { ...item("Thursday 10:00"), title: "Weekly call" };
+    expect(isSubject(weeklyCall, "Confirm my weekly call on Thursday at 10am")).toBe(true);
+    const boiler = { ...item("Tuesday 9:00"), title: "Annual boiler inspection" };
+    expect(isSubject(boiler, "When is my annual physio appointment?")).toBe(false);
   });
 
   test("the time parsers stay linear on hostile text", () => {
