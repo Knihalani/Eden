@@ -650,7 +650,7 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
 
 Every Eden hook fails open. The lab's `hermes-eden` arm compared replacing duplicate source tools with keeping them
 alongside Eden; see [the lab write-up](research/a16-loop.md) for that retrieval study, not a local-runtime benchmark.
-See the [Python client README](../packages/client-python/README.md#hermes-plugin-d422) for custom binaries and
+See the [Python client README](../packages/client-python/README.md#hermes-plugin) for custom binaries and
 advanced runtime configuration.
 
 To build the release ZIPs and `SHA256SUMS` from a checkout, use the repo's pinned Bun and run
