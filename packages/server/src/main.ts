@@ -158,10 +158,6 @@ async function serve(config: ServerConfig): Promise<void> {
     const run = crypto.randomUUID();
     setInterval(() => console.log(JSON.stringify({ sync: { run, pid: process.pid, ...sync.stats } })), 60_000).unref();
   }
-  // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request. Local
-  // mode warms it after EDEN_LOCAL_READY instead (the owner blocks on that line, and the local path never returns
-  // a 503 while the compile runs: requests arriving during it just wait the ~35 ms once).
-  if (!local) warmGate();
   // The turn gate fails open (D1014): unreadable weights leave the start rule alone. Said once, so a missing
   // `turn-gate.bin` in an image is seen (R1), not only measured.
   const gateNotice = turnGateNotice(partner.config.pushGate, turnGate());
@@ -257,16 +253,17 @@ async function serve(config: ServerConfig): Promise<void> {
         : "") +
       ")",
   );
-  if (local && !stopping) {
-    process.stdout.write(`EDEN_LOCAL_READY ${server.port}\n`);
-    setTimeout(warmGate, 0).unref();
-  }
+  if (local && !stopping) process.stdout.write(`EDEN_LOCAL_READY ${server.port}\n`);
   if (child) {
     // The router waits for this port before it routes here; the IPC channel exists only when the router spawned us.
     process.send?.({ edenListening: server.port });
     // The router is gone (killed, crashed): nothing can reach this child any more, so it must not outlive it.
     process.on("disconnect", shutdown);
   }
+  // The secret gate compiles its ~230 rules on first use; warming it on a timer keeps that ~35 ms compile off the
+  // readiness path (the listening line, EDEN_LOCAL_READY, a router child's port report) while still landing before
+  // a request can — one that arrives inside the compile just queues behind it once (D1969's local-mode shape).
+  if (!stopping) setTimeout(warmGate, 0).unref();
 }
 
 /**
