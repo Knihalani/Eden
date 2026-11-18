@@ -852,3 +852,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1971 | 2026-11-18 | Adopted: D1970's `contradicts` is narrowed to a stricter reading of the request's anchors — independent review of the merged change found… | adopted |
 | D1972 | 2026-11-18 | Adopted (Hermes local onboarding): the release installer verifies the installed sidecar and can write a first source, and every archive… | adopted |
 | D1973 | 2026-11-18 | Adopted: questions carry their request's topic, recurring items cover their weekdays, and the asks' name check yields to questions. | adopted |
+| D1974 | 2026-11-18 | Adopted: Eden is released under the Apache License 2.0. | adopted |
+| D1975 | 2026-11-18 | Adopted: a follow-up also carries what the previous turn delivered, not only the request's words. | adopted |
+| D1976 | 2026-11-18 | Adopted: `groundSubject` — a request about a subject it names is grounded in the context around it, not the best match alone. | adopted |
