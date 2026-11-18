@@ -1,8 +1,44 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, openSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { glossOf, languagesOf, loadGlossary, MAX_GLOSS_WORDS, packGlossary, warmGlossary } from "./gloss";
+import glossaryFile from "./gloss.bin" with { type: "file" };
+
+test("only the shipped asset uses bounded whole reads after an open failure", () => {
+  const failOpen = () => {
+    throw new Error("no descriptor");
+  };
+  const normal = loadGlossary(glossaryFile)!;
+  const fallback = loadGlossary(glossaryFile, { open: failOpen })!;
+  expect(normal).not.toBeNull();
+  expect(fallback).not.toBeNull();
+  expect(fallback.langs).toEqual(normal.langs);
+  const question = "Domani voglio spostare 5.000 sterline dai risparmi al conto corrente.";
+  expect(glossOf(question, fallback)).toBe(glossOf(question, normal));
+  expect(glossOf(question, fallback)).toContain("move");
+  let opens = 0;
+  const lateFallback = loadGlossary(glossaryFile, {
+    open: (file) => {
+      if (opens++ > 0) return failOpen();
+      return openSync(file, "r");
+    },
+  })!;
+  expect(glossOf(question, lateFallback)).toBe(glossOf(question, normal));
+  let reads = 0;
+  const read = (file: string | URL) => {
+    reads++;
+    return readFileSync(file);
+  };
+  expect(loadGlossary("arbitrary.bin", { open: failOpen, read })).toBeNull();
+  expect(loadGlossary(glossaryFile, { open: failOpen, stat: () => ({ size: 4 * 1024 * 1024 + 1 }), read })).toBeNull();
+  expect(reads).toBe(0);
+  expect(
+    loadGlossary(glossaryFile, { open: failOpen, stat: () => ({ size: statSync(glossaryFile).size + 1 }), read }),
+  ).toBeNull();
+  expect(reads).toBe(1);
+  expect(loadGlossary("missing-file.bin")).toBeNull();
+});
 
 /** The packed file for languages written as version 1 wrote them (function words, `word\tgloss` lines). */
 const pack = (langs: Record<string, { fn: string[]; tsv: string }>) =>
