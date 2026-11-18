@@ -282,9 +282,10 @@ export class McpSource implements Source {
     if (result.isError) throw new FetchErrorResult(`${this.id}: ${fetchTool.name} returned an error`);
     // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
     // get_thread is `{id, messages: [...]}`, whose rows carry message ids, never the thread's; D294).
+    const json = blockJson(result.content);
     const row =
-      topObjects(result.content, result.structuredContent).find((r) => first(r, ID_KEYS) === ref) ??
-      jsonRows(result.content, result.structuredContent).find((r) => first(r, ID_KEYS) === ref);
+      topObjects(result.content, result.structuredContent, json).find((r) => first(r, ID_KEYS) === ref) ??
+      jsonRows(result.content, result.structuredContent, json).find((r) => first(r, ID_KEYS) === ref);
     return row ? rowItem(this.id, row) : null;
   }
 
@@ -307,13 +308,14 @@ export class McpSource implements Source {
     // operator's `args` that ignores `limit`) would never be listed; the page is kept whole, up to `MAX_LIST_ROWS`.
     const offset = !listTool.args && this.listMapping?.cursor?.kind === "offset";
     const keep = offset ? limit : Math.max(limit, MAX_LIST_ROWS);
-    const items = toItems(this.id, result.content, keep, result.structuredContent);
+    const json = blockJson(result.content);
+    const items = toItems(this.id, result.content, keep, result.structuredContent, json);
     const page: ListPage = { items, next: null };
     if (offset) {
       const at = cursor === undefined ? 0 : Number(cursor);
       page.next = items.length >= limit && Number.isSafeInteger(at) ? String(at + items.length) : null;
     } else if (listTool.args || this.listMapping?.cursor) {
-      page.next = nextCursorOf(result.content, result.structuredContent);
+      page.next = nextCursorOf(result.content, result.structuredContent, json);
     }
     return page;
   }
@@ -357,12 +359,18 @@ const CURSOR_HOLDERS = ["response_metadata", "pagination", "paging", "meta", "pa
  * `has_more: false` (`hasMore`, GraphQL's `hasNextPage`) has no next page whatever cursor it echoes. A fixed number of
  * key lookups: the rows are never scanned.
  */
-export function nextCursorOf(content: unknown, structured?: unknown): string | null {
+export function nextCursorOf(
+  content: unknown,
+  structured?: unknown,
+  json: BlockJson = blockJson(content),
+): string | null {
   let o: unknown = structured;
   if (!isObject(o)) {
     const blocks = Array.isArray(content) ? (content as Block[]) : [];
-    const block = blocks.find((b) => b.type === "text" && typeof b.text === "string" && b.text.trimStart()[0] === "{");
-    o = block ? parseJson(block.text!) : undefined;
+    const index = blocks.findIndex(
+      (b) => b.type === "text" && typeof b.text === "string" && b.text.trimStart()[0] === "{",
+    );
+    o = index >= 0 ? json(index) : undefined;
   }
   if (!isObject(o)) return null;
   const pick = (x: Row): string | null => {
@@ -397,17 +405,23 @@ export function nextCursorOf(content: unknown, structured?: unknown): string | n
  * items by id, so a positional ref (the n-th row of every lookup) made different items from different lookups
  * overwrite each other (docs/research/connector-lab.md, finding 5).
  */
-export function toItems(sourceId: string, content: unknown, limit: number, structured?: unknown): ContextItem[] {
+export function toItems(
+  sourceId: string,
+  content: unknown,
+  limit: number,
+  structured?: unknown,
+  json: BlockJson = blockJson(content),
+): ContextItem[] {
   const out: ContextItem[] = [];
   const fromStructured = structured === undefined ? null : rowsOf(structured, 0);
   // Only the rows kept are mapped: a row with no id is hashed and stringified, ~2 µs each, so a 100,000-row reply
   // cost ~200 ms for a search keeping 10.
   if (fromStructured) return fromStructured.slice(0, limit).map((row) => rowItem(sourceId, row));
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
-  for (const block of blocks) {
+  for (const [index, block] of blocks.entries()) {
     if (out.length >= limit) break;
     if (block.type !== "text" || !block.text) continue;
-    const parsed = parseJson(block.text);
+    const parsed = json(index);
     if (parsed === undefined) {
       const ref = contentRef(block.text);
       out.push({ id: itemId(sourceId, ref), sourceId, ref, title: "", text: block.text });
@@ -428,7 +442,7 @@ export function toItems(sourceId: string, content: unknown, limit: number, struc
  * `{data: {...}}`, to `rowsOf`'s depth). The text blocks are read even beside a structuredContent, as `jsonRows` falls
  * back to them: a server may put the record in its text and something else there (FastMCP's `{result: "<text>"}`).
  */
-function topObjects(content: unknown, structured?: unknown): Row[] {
+function topObjects(content: unknown, structured?: unknown, json: BlockJson = blockJson(content)): Row[] {
   const out: Row[] = [];
   const add = (o: unknown, depth: number): void => {
     if (depth > 3 || !isObject(o)) return;
@@ -437,17 +451,17 @@ function topObjects(content: unknown, structured?: unknown): Row[] {
   };
   add(structured, 0);
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
-  for (const b of blocks) if (b.type === "text" && b.text) add(parseJson(b.text), 0);
+  for (const [index, b] of blocks.entries()) if (b.type === "text" && b.text) add(json(index), 0);
   return out;
 }
 
 /** The rows of a tool result: its `structuredContent`, else every text block that holds JSON. Prose is no row. */
-function jsonRows(content: unknown, structured?: unknown): Row[] {
+function jsonRows(content: unknown, structured?: unknown, json: BlockJson = blockJson(content)): Row[] {
   const fromStructured = structured === undefined ? null : rowsOf(structured, 0);
   if (fromStructured) return fromStructured;
   const blocks = Array.isArray(content) ? (content as Block[]) : [];
-  return blocks.flatMap((b) => {
-    const parsed = b.type === "text" && b.text ? parseJson(b.text) : undefined;
+  return blocks.flatMap((b, index) => {
+    const parsed = b.type === "text" && b.text ? json(index) : undefined;
     return parsed === undefined ? [] : (rowsOf(parsed, 0) ?? []);
   });
 }
@@ -611,6 +625,20 @@ function parseJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** Each text block's JSON (`parseJson`) by index, parsed at most once however many readers ask. */
+export type BlockJson = (i: number) => unknown;
+export function blockJson(content: unknown): BlockJson {
+  const blocks = Array.isArray(content) ? (content as Block[]) : [];
+  const memo = new Map<number, unknown>();
+  return (i) => {
+    if (memo.has(i)) return memo.get(i);
+    const b = blocks[i];
+    const v = b?.type === "text" && b.text ? parseJson(b.text) : undefined;
+    memo.set(i, v);
+    return v;
+  };
 }
 
 const isObject = (x: unknown): x is Row => !!x && typeof x === "object" && !Array.isArray(x);
