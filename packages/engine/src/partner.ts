@@ -4616,7 +4616,8 @@ export class ContextPartner {
       cue.key = `${cue.entities
         .map((e) => e.toLowerCase())
         .sort()
-        .join("|")}|who`.slice(0, 200);
+        .join("|")
+        .slice(0, 190)}|who`;
       cue.id = `cue:${createHash("sha256").update(cue.key).digest("hex").slice(0, 10)}`;
     }
     cue.time ??= last.time;
