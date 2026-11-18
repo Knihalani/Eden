@@ -35,7 +35,8 @@
  * never decreasing), then the arena. Keys and English words are strictly increasing by bytes (checked when read: the
  * binary search relies on it). A filter at T: its size in bits (a power of two), its hash count, then the bits.
  */
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, readFileSync, statSync } from "node:fs";
+import glossaryFile from "./gloss.bin" with { type: "file" };
 import { isStopword } from "./text";
 
 /** A string table over a glossary's bytes: entry i is `bytes[base + offs[i] .. base + offs[i + 1])`. */
@@ -393,60 +394,99 @@ function readExactly(fd: number, buf: Buffer): boolean {
   return true;
 }
 
+// The shipped asset is under 3 MB; leave packing headroom without unbounded fallback allocations.
+const MAX_EMBEDDED_GLOSS_BYTES = 4 * 1024 * 1024;
+
 /**
  * The glossary in `file`: its prefix read now (null when it cannot be read or is not one), its lexicons the first
  * time a request needs them. That later read must find the file at the length the header gave (else it is I/O: told
  * once, and tried again by a later request), then the same prefix, the lexicons' CRC and valid tables (else nothing is
  * glossed for the rest of the process, told once). Either way the request in hand is left as written (fail open).
  */
-export const loadGlossary = guarded((file: string | URL): Glossary | null => {
-  const fd = openSync(file, "r");
-  let prefix: Buffer;
-  try {
-    const head = Buffer.alloc(HEADER);
-    if (!readExactly(fd, head)) return null;
-    const h = header(aligned(head).words);
-    if (!h || fstatSync(fd).size !== h.length) return null;
-    prefix = Buffer.alloc(h.lexStart);
-    if (!readExactly(fd, prefix)) return null;
-  } finally {
-    closeSync(fd);
-  }
-  const p = readPrefix(prefix);
-  if (!p) return null;
-  let told = false;
-  const tell = (why: string) => {
-    // Content-free: the reason only, once a glossary.
-    if (!told) console.error(`eden: the request glossary's lexicons ${why}; requests in other languages go unglossed`);
-    told = true;
-  };
-  const readLex = (): Lexicon | null | undefined => {
-    let whole: Buffer;
-    try {
-      // Exactly the length the prefix's header gave, never what the file has grown to since: a file replaced by a
-      // larger one is refused by its size, not read into memory.
-      const fd = openSync(file, "r");
+export const loadGlossary = guarded(
+  (
+    file: string | URL,
+    io: {
+      open?: (file: string | URL) => number;
+      stat?: (file: string | URL) => { size: number };
+      read?: (file: string | URL) => Buffer;
+    } = {},
+  ): Glossary | null => {
+    // Bun's embedded files support whole-buffer reads, but not descriptors, on every platform.
+    let wholeReads = false;
+    const openFile = (): number | null => {
+      if (wholeReads) return null;
       try {
-        if (fstatSync(fd).size !== p.h.length) throw new Error("size");
-        whole = Buffer.alloc(p.h.length);
-        if (!readExactly(fd, whole)) throw new Error("short read");
-      } finally {
-        closeSync(fd);
+        return io.open ? io.open(file) : openSync(file, "r");
+      } catch (e) {
+        if (file !== glossaryFile) throw e;
+        wholeReads = true;
+        return null;
       }
-    } catch {
-      tell("could not be read (tried again on a later request)");
-      return undefined;
+    };
+    const readWhole = (length?: number): Buffer => {
+      const size = (io.stat ? io.stat(file) : statSync(file)).size;
+      if (size > MAX_EMBEDDED_GLOSS_BYTES || (length !== undefined && size !== length)) throw new Error("size");
+      const raw = io.read ? io.read(file) : readFileSync(file);
+      if (raw.length !== size) throw new Error("size");
+      return raw;
+    };
+    const fd = openFile();
+    let prefix: Buffer;
+    try {
+      const head = Buffer.alloc(HEADER);
+      const raw = fd === null ? readWhole() : null;
+      if (raw) raw.copy(head, 0, 0, HEADER);
+      else if (!readExactly(fd!, head)) return null;
+      const h = header(aligned(head).words);
+      if (!h || (raw ? raw.length : fstatSync(fd!).size) !== h.length) return null;
+      prefix = Buffer.alloc(h.lexStart);
+      if (raw) raw.copy(prefix, 0, 0, h.lexStart);
+      else if (!readExactly(fd!, prefix)) return null;
+    } finally {
+      if (fd !== null) closeSync(fd);
     }
-    const lex = whole.subarray(0, p.h.lexStart).equals(prefix) ? (guarded(readLexicon)(whole, p.h) ?? null) : null;
-    if (!lex) tell("read wrong (a changed or corrupt file)");
-    return lex;
-  };
-  return { langs: p.langs, head: p.head, english: p.english, readLex };
-});
+    const p = readPrefix(prefix);
+    if (!p) return null;
+    let told = false;
+    const tell = (why: string) => {
+      // Content-free: the reason only, once a glossary.
+      if (!told)
+        console.error(`eden: the request glossary's lexicons ${why}; requests in other languages go unglossed`);
+      told = true;
+    };
+    const readLex = (): Lexicon | null | undefined => {
+      let whole: Buffer;
+      try {
+        // Exactly the length the prefix's header gave, never what the file has grown to since: a file replaced by a
+        // larger one is refused by its size, not read into memory.
+        const fd = openFile();
+        if (fd === null) {
+          whole = readWhole(p.h.length);
+        } else {
+          try {
+            if (fstatSync(fd).size !== p.h.length) throw new Error("size");
+            whole = Buffer.alloc(p.h.length);
+            if (!readExactly(fd, whole)) throw new Error("short read");
+          } finally {
+            closeSync(fd);
+          }
+        }
+      } catch {
+        tell("could not be read (tried again on a later request)");
+        return undefined;
+      }
+      const lex = whole.subarray(0, p.h.lexStart).equals(prefix) ? (guarded(readLexicon)(whole, p.h) ?? null) : null;
+      if (!lex) tell("read wrong (a changed or corrupt file)");
+      return lex;
+    };
+    return { langs: p.langs, head: p.head, english: p.english, readLex };
+  },
+);
 
 /** Reads the shipped glossary's prefix now (once a process), so a request does not wait for it. */
 export function warmGlossary(): Glossary | null {
-  if (loaded === undefined) loaded = loadGlossary(new URL("./gloss.bin", import.meta.url));
+  if (loaded === undefined) loaded = loadGlossary(glossaryFile);
   return loaded;
 }
 

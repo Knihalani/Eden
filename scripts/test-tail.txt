@@ -25,6 +25,7 @@ packages/proxy/src/proxy-a11.test.ts
 packages/proxy/src/proxy-speculate.test.ts
 packages/proxy/src/proxy.test.ts
 packages/server/src/http.test.ts
+packages/server/src/local-process.test.ts
 packages/server/src/router-processes.test.ts
 packages/server/src/router.test.ts
 packages/server/src/user-sources.test.ts
