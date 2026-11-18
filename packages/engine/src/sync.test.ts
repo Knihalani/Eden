@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
 import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
-import type { ListPage, SearchQuery, Source } from "@eden/sources";
+import type { ListPage, SearchQuery, Source, SourceFanout } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
+import { SyncManager, type SyncOptions } from "./sync";
 import type { Trace } from "./trace";
 
 const HOUR = 3_600_000;
@@ -713,5 +714,50 @@ describe("syncPush: a source that notifies is polled when told it changed", () =
       while (!env.partner.sync!.warm(scope)) await env.partner.sync!.tick();
       expect(env.partner.sync!.current(scope, "mail")).toBe(current);
     }
+  });
+});
+
+describe("storeHeld: a deletion notified between the store's slices", () => {
+  test("the deleted id never re-enters s.ids, so the source is not left cut (PR #398 review)", async () => {
+    const clock = { t: T0 };
+    const now = () => clock.t;
+    const cache = new ItemCache();
+    // Ten items against a first slice of eight (STORE_SLICE_FIRST): the put runs in two slices with a yield between.
+    const src = new ListSource("mail", mail(10));
+    const fanout = {
+      list: async (source: Source, s: Scope, cursor: string | undefined, limit: number) =>
+        source.list!(s, cursor, limit, new AbortController().signal),
+    } as unknown as SourceFanout;
+    const sync = new SyncManager({ sources: async () => [src], fanout, cache, now }, {
+      maxItems: 100,
+      pageSize: 10,
+      callsPerMin: 1e6,
+      staleChance: 0.5,
+      maxStaleMs: 24 * HOUR,
+      activeMs: 24 * HOUR,
+      sweepMs: HOUR,
+      dropMs: 24 * HOUR,
+      catchupPages: 1,
+      maxUsersPerTenant: 10,
+      timeoutMs: 5_000,
+    } satisfies SyncOptions);
+    // A deletion notification (`sourceRemoved`) drops the id from the sync's bookkeeping and holds it gone in the
+    // cache. Land it inside the first `put` slice — after `own` was filtered, before the bookkeeping pass: without
+    // the held-gone recheck there, the bookkeeping loop re-added the id to s.ids while s.held lost it, latching s.cut.
+    const victim = itemId("mail", "m0");
+    const put = cache.put.bind(cache);
+    cache.put = ((s: Scope, items: ContextItem[], at: number, ...rest: unknown[]) => {
+      const out = (put as (...a: unknown[]) => ContextItem[])(s, items, at, ...rest);
+      sync.removed(s, "mail", [victim]);
+      cache.removeItems(s, [victim], now(), HOUR);
+      return out;
+    }) as typeof cache.put;
+    sync.track(scope);
+    while (!sync.warm(scope)) await sync.tick();
+    expect(cache.isHeldGone(scope, victim, now())).toBe(true);
+    expect(cache.get(scope, victim, now())).toBeFalsy();
+    expect(cache.syncedCount(scope)).toBe(9);
+    // Complete: s.ids and s.held agree. Without the fix this latches s.cut and forces live searches instead.
+    expect(sync.complete(scope, "mail")).toBe(true);
   });
 });

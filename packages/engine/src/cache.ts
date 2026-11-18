@@ -1756,7 +1756,8 @@ export class ItemCache {
     for (const day of days)
       for (const raw of nearbyDays(day)) for (const e of u.starts.get(raw) ?? []) candidates.add(e);
     const out: CacheHit[] = [];
-    // Doc order is items order, as the old scan's was: equal start times keep it (the sort below has no tiebreak).
+    // Doc order is kept stable across refreshes (`put` moves refreshed items last in u.items without changing doc);
+    // it differs from the old scan's u.items order only for equal-start ties at the limit.
     for (const e of [...candidates].sort((a, b) => a.doc - b.doc)) {
       const start = e.item.meta?.start;
       if (!start || !days.has(dayOf(start, offset)) || !this.alive(e, now)) continue;

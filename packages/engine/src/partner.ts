@@ -4350,6 +4350,151 @@ export class ContextPartner {
   }
 
   /**
+   * `companions` (D1977): once a request's subject items are chosen — the grounded subject, the sources' sure
+   * pick, the fallback — a bounded second pass hands the injection what a delivered item pulls: its companions,
+   * the items holding a strong link to a chosen one — the same identifier `sameRef` reads (`idNumbers`), or two
+   * of its rare letter terms, or one of them beside a term of the request's. The pass reads the lookup's own
+   * candidates and the cache the request's words never ranked in — it never calls the sources again, so the
+   * lookup's `sourceCalls` and span tree stand exactly as before: the deck for the meeting, the thread's other
+   * mail, the invoice's bill in another system. Every bound the subject's own companions keep still applies:
+   * `contradicts`, bulk mail, delivered/`sameRef` and near-duplicate suppression, `alreadyHas`, and
+   * `maxItemsPerInjection`. An item naming an identifier the item it links to does not is a look-alike (last
+   * year's invoice beside this one's), never a companion.
+   */
+  private async withCompanions(
+    s: Session,
+    cue: Cue,
+    chosen: Scored[],
+    scored: readonly Scored[],
+    was: Map<string, LedgerEntry | undefined>,
+  ): Promise<Scored[]> {
+    // Ledger entries at selection time, like `deliverChecked`'s own `was`: the pass's await hands the event loop to
+    // the request's fast path, which may deliver (and mark) one of these meanwhile — it is dropped at delivery.
+    for (const x of chosen) if (!was.has(x.item.id)) was.set(x.item.id, s.ledger.entry(x.item.id));
+    return [...chosen, ...(await this.companions(s, cue, chosen, scored, was))];
+  }
+
+  private async companions(
+    s: Session,
+    cue: Cue,
+    chosen: readonly Scored[],
+    scored: readonly Scored[],
+    was: Map<string, LedgerEntry | undefined>,
+  ): Promise<Scored[]> {
+    const room = this.max() - chosen.length;
+    if (!this.config.companions || chosen.length === 0 || room <= 0 || s.closed) return [];
+    // Terms and identifiers per pick: a candidate must link to one pick on that pick's own evidence — a union
+    // over every pick's words would let a wrong-numbered invoice in on another pick's identifier pass.
+    const picks = chosen.map((x) => ({
+      refs: idNumbers(`${x.item.title} ${x.item.text}`),
+      terms: new Set(contentWords(`${x.item.title} ${x.item.text}`)),
+      years: new Set(`${x.item.title} ${x.item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []),
+    }));
+    const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
+    // Words of an entity the request names ("Acme Supplies", "Jordan Pike", "Lisbon") bind nothing here: every
+    // look-alike of the named thing — the vendor's promo mail, the near-namesake's card, the other event in that
+    // city — shares exactly those. A companion links on what the item is about: an identifier, its topic words.
+    const entityTerms = new Set<string>();
+    const entityPhrases: string[][] = [];
+    for (const e of cleanEntities(cue.entities)) {
+      // Stopwords drop out of both sides' term sets, so the shared-name check counts only the name's
+      // content words ("The North Face" links on "north face").
+      const words = (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w));
+      if (words.length >= 1) entityPhrases.push(words);
+      for (const w of words) entityTerms.add(w);
+    }
+    // A link term is a real word: a fragment ("s" of "client's"), a bare digit, a clock or day word, an entity
+    // the request names, and the redaction placeholder sanitize left in the text bind nothing.
+    const term = (t: string) =>
+      t.length >= 3 && /\p{L}/u.test(t) && !TIME_WORD.test(t) && !entityTerms.has(t) && t !== "redacted";
+    // The link to a chosen item: a shared identifier, two shared topic terms, or one beside a term of the
+    // request's (the shop's returns policy beside the order that leaks). Numbers count per pair: an item
+    // carrying an identifier the linked item does not is a sibling, not a companion.
+    const linked = (item: ContextItem): boolean => {
+      const n = idNumbers(`${item.title} ${item.text}`);
+      const itemYears = new Set(`${item.title} ${item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []);
+      // A Set: a word the item repeats counts once, so "shared two" is two different words of the pick's.
+      const own = new Set(contentWords(`${item.title} ${item.text}`).filter(term));
+      const ownAll = new Set(contentWords(`${item.title} ${item.text}`));
+      for (const p of picks) {
+        // A document of a different year is that topic's sibling, not its companion — last year's renewal
+        // notice beside this year's (their day numbers can agree by chance).
+        if (itemYears.size > 0 && p.years.size > 0 && ![...itemYears].some((y) => p.years.has(y))) continue;
+        let shareNumber = false;
+        for (const id of n)
+          if (p.refs.has(id)) {
+            shareNumber = true;
+            break;
+          }
+        if (!shareNumber && p.refs.size > 0 && n.size > 0) continue;
+        if (shareNumber) return true;
+        // Only a rare word binds: "Nadia" or "lunch" sit on most of the user's items, so another event named
+        // with them is a look-alike; "Globex" or a project name few items hold is the item's own topic. The
+        // cache index holds raw words, so a word whose stem differs ("meeting" -> "meet") looks absent under
+        // the stem — and absent reads rare; either form being common is evidence enough to say it is not.
+        const sharedWords = new Set<string>();
+        for (const t of own)
+          if (
+            p.terms.has(t) &&
+            this.deps.cache.isRare(s.scope, t, RARE_SHARE) &&
+            this.deps.cache.isRare(s.scope, stemWord(t), RARE_SHARE)
+          )
+            sharedWords.add(t);
+        // A name the request names, carried whole on both sides — the mail the meeting's sender sent — is a
+        // link of its own; a first-name fragment of a multi-word entity is not.
+        let entityShared = false;
+        for (const e of entityPhrases) if (e.every((w) => ownAll.has(w) && p.terms.has(w))) entityShared = true;
+        // A request word that isn't one of the counted link words is a second reason beside the link.
+        const req = [...own].some((t) => requestTerms.has(t) && !sharedWords.has(t));
+        if (sharedWords.size >= 2 || (sharedWords.size >= 1 && (req || entityShared))) return true;
+      }
+      return false;
+    };
+    const has = new Set(chosen.map((x) => x.item.id));
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    const out: Scored[] = [];
+    const take = (x: Scored): void => {
+      if (out.length >= room) return;
+      if (has.has(x.item.id) || bulkMail(x.item) || !s.ledger.isFresh(x.item.id, s.turn)) return;
+      if (s.delivered.some((d) => nearDuplicate(d.sketch, x.sketch) && sameRef(d.refs, x.item))) return;
+      // A near-duplicate of a chosen one — the same occasion on another day, the same note a quarter on — is a
+      // sibling, not a companion: a link that is the item itself read once more adds nothing.
+      if (
+        [...chosen, ...out].some(
+          (o) =>
+            (nearDuplicate(o.sketch, x.sketch) ||
+              // Two timed items — the lunch last week beside the lunch asked about — are the occasion's
+              // recurrences, not a companion (the thread's other mail, the meeting's deck have no start).
+              (o.item.meta?.start !== undefined &&
+                x.item.meta?.start !== undefined &&
+                startDay(o.item, cue.offset) !== startDay(x.item, cue.offset))) &&
+            sameRef(idNumbers(`${x.item.title} ${x.item.text}`), o.item),
+        )
+      )
+        return;
+      if (vocab !== undefined && x.doc !== undefined && this.alreadyHas(s, x.item, x.doc, vocab)) return;
+      if (this.contradicts(x, cue) || !linked(x.item)) return;
+      has.add(x.item.id);
+      // Its ledger entry at selection time, like `deliverChecked`'s `was`: a delivery that lands during the
+      // pass's await (this request's own fast path) already handed it out.
+      was.set(x.item.id, s.ledger.entry(x.item.id));
+      out.push(x);
+    };
+    // What the request's own words already ranked: a companion is often a candidate scored under them.
+    for (const x of scored) take(x);
+    // Companions the request's words never ranked in: the cache searched for the chosen items' terms.
+    if (vocab !== undefined && out.length < room) {
+      const q = termIds([...new Set(picks.flatMap((p) => [...p.terms]))].join(" "), vocab, false);
+      const query: number[] = [];
+      for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+      if (query.length > 0)
+        for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now()))
+          take({ item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc });
+    }
+    return out;
+  }
+
+  /**
    * `carry`: a user message that names nothing of its own (no entity, at most two content terms) is a follow-up
    * on the request before it — "and the cable?", "who is he again?", "is that time free instead?". Its cue
    * takes the last request's terms and entity words, the content terms of the items that request's answer
@@ -6172,16 +6317,17 @@ export class ContextPartner {
     mode: InjectionMode,
     reason: string,
     cue: Cue,
+    was?: Map<string, LedgerEntry | undefined>,
   ): Promise<Injection | null> {
     // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
     // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
     // whose ledger entry changed over the await is left out (audit A11's fuzz, default seed 2577; core seed 704). An
     // entry gone meanwhile was swept (past the cooldown, or past `MAX_LEDGER_ITEMS`), not handed out: kept (review).
-    const was = new Map(scored.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+    const held = was ?? new Map(scored.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
     const verified = await this.verifyItems(s, scored, cue);
     const kept = verified.filter((x) => {
       const now = s.ledger.entry(x.item.id);
-      return now === undefined || sameEntry(was.get(x.item.id), now);
+      return now === undefined || sameEntry(held.has(x.item.id) ? held.get(x.item.id) : now, now);
     });
     if (kept.length === 0 || s.closed) return null;
     return this.deliver(s, kept, mode, reason, cue);
@@ -6475,7 +6621,8 @@ export class ContextPartner {
         // A follow-up corrects: an item the agent was given whose words its poll changed goes out again, as it now
         // reads, whatever it scores (the agent holds the superseded copy).
         const corrected = cue.followUp ? scored.filter((x) => x.revised && !ruled.includes(x)) : [];
-        const items = [...ruled, ...corrected];
+        const was = new Map<string, LedgerEntry | undefined>();
+        const items = await this.withCompanions(s, cue, [...ruled, ...corrected], scored, was);
         dumped(
           "served",
           items,
@@ -6491,20 +6638,22 @@ export class ContextPartner {
           `after-served:${cue.id}`,
           items.map((x) => x.item),
         );
-        return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue);
+        return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue, was);
       }
       // `judgeContested`: only when more than one item scored as sure (which is meant is then the judge's call), what
       // scores as sure is judged with the rest in the same call.
       const contested = this.config.judgeContested && sure.length > 1;
       const judgeSure = contested && this.deps.model !== null;
       if (sure.length > 0 && !judgeSure) {
-        dumped("lookup", sure, "sure");
+        const was = new Map<string, LedgerEntry | undefined>();
+        const items = await this.withCompanions(s, cue, sure, scored, was);
+        dumped("lookup", items, "sure");
         done(
           "sources",
           cue.id,
-          sure.map((x) => x.item),
+          items.map((x) => x.item),
         );
-        return await this.deliverChecked(s, sure, "proactive", `sources:${cue.id}`, cue);
+        return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue, was);
       }
       // An event on a day the request names is a candidate whatever it scores on words (D44).
       const onNamedDay = (x: Scored) =>
@@ -6560,38 +6709,44 @@ export class ContextPartner {
         // What scored as sure is delivered as it would have been with no judge to ask: a failing or unaffordable
         // model is never worse than none (D41).
         if (judgeSure) {
-          dumped("lookup", sure, "sure", true);
+          const was = new Map<string, LedgerEntry | undefined>();
+          const items = await this.withCompanions(s, cue, sure, scored, was);
+          dumped("lookup", items, "sure", true);
           done(
             "sources",
             cue.id + reasonPrefix,
-            sure.map((x) => x.item),
+            items.map((x) => x.item),
           );
-          return await this.deliverChecked(s, sure, "proactive", `sources:${cue.id}`, cue);
+          return await this.deliverChecked(s, items, "proactive", `sources:${cue.id}`, cue, was);
         }
         // Grounding reads every candidate, not only the judge's few: a day's events rank after every word match.
         const grounding = spans?.open("ground", cue.span, { candidates: eligible.length });
         const grounded = this.grounded(s, cue, eligible, eventKind, bridged, consequence?.cls, carded);
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
-          dumped("lookup", grounded.items, `grounded-${grounded.how}`, true);
+          const was = new Map<string, LedgerEntry | undefined>();
+          const items = await this.withCompanions(s, cue, grounded.items, scored, was);
+          dumped("lookup", items, `grounded-${grounded.how}`, true);
           done(
             "sources",
             `grounded-${grounded.how}${reasonPrefix}:${cue.id}`,
-            grounded.items.map((x) => x.item),
+            items.map((x) => x.item),
           );
-          return await this.deliverChecked(s, grounded.items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
+          return await this.deliverChecked(s, items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue, was);
         }
         const falling = spans?.open("fallback", cue.span);
         const items = this.fallback(unsure, cue);
         if (falling) spans!.close(falling, { picked: items.length > 0 });
         dumped("lookup", items, "fallback", true);
         if (items.length > 0) {
+          const was = new Map<string, LedgerEntry | undefined>();
+          const sent = await this.withCompanions(s, cue, items, scored, was);
           done(
             "sources",
             `fallback${reasonPrefix}:${cue.id}`,
-            items.map((x) => x.item),
+            sent.map((x) => x.item),
           );
-          return await this.deliverChecked(s, items, "proactive", `fallback:${cue.id}`, cue);
+          return await this.deliverChecked(s, sent, "proactive", `fallback:${cue.id}`, cue, was);
         }
         done("silent", why);
         return null;
@@ -6669,12 +6824,14 @@ export class ContextPartner {
         done("silent", "model: none");
         return null;
       }
+      const was = new Map<string, LedgerEntry | undefined>();
+      const sent = await this.withCompanions(s, cue, picked, scored, was);
       done(
         "model",
         cue.id,
-        picked.map((x) => x.item),
+        sent.map((x) => x.item),
       );
-      return await this.deliverChecked(s, picked, "proactive", `model:${cue.id}`, cue);
+      return await this.deliverChecked(s, sent, "proactive", `model:${cue.id}`, cue, was);
     } catch {
       // A failing source map or cache never escapes as an unhandled rejection; the lookup just ends silent.
       done("silent", "error");

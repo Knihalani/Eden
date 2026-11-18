@@ -857,7 +857,7 @@ describe("no-model fallback limits (D36)", () => {
 
   test("two qualifying items: only the best one is delivered", async () => {
     const two = [qbr, { ref: "qbr2", title: "Quarterly budget review notes", text: "Marketing budget review outcome" }];
-    expect((await run(two, ask)).ids).toHaveLength(1);
+    expect((await run(two, ask, { config: { companions: false } })).ids).toHaveLength(1);
   });
 
   test("only the top candidate: when it fails the gate, a weaker one is not delivered instead", async () => {
