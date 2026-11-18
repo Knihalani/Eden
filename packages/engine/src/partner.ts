@@ -1978,9 +1978,13 @@ export class ContextPartner {
     const cited = citations
       .map((c) => this.deps.cache.get(s.scope, c.itemId, this.now()))
       .filter((i): i is ContextItem => i !== null);
+    // Each cited item's identifiers, read once and only when a party reaches it.
+    const norms: (Set<string> | undefined)[] = [];
+    const holds = (n: number, norm: string) =>
+      (norms[n] ??= new Set(partiesIn(`${cited[n]!.title}\n${cited[n]!.text}`).map((q) => q.norm))).has(norm);
     for (const p of found) {
       const k = partyKey(p.norm);
-      const holder = cited.find((i) => partiesIn(`${i.title}\n${i.text}`).some((q) => q.norm === p.norm));
+      const holder = cited.find((_, n) => holds(n, p.norm));
       map.delete(k);
       map.set(k, holder?.id ?? "");
     }

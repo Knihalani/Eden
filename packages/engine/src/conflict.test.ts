@@ -144,6 +144,29 @@ describe("conflict: what would change the action", () => {
     expect(namesRef(f, item("Payment sent", "Transfer for INV-7157"))).toBe(false);
   });
 
+  test("namesRef refreshes its memo when an item's text or title changes in place", () => {
+    const f = frame("Pay INV-7174 today");
+    const text = item("Payment sent", "Transfer for INV-7174");
+    expect(namesRef(f, text)).toBe(true);
+    text.text = "Transfer for INV-7157";
+    expect(namesRef(f, text)).toBe(false);
+
+    const title = item("INV-7174", "Transfer sent");
+    expect(namesRef(f, title)).toBe(true);
+    title.title = "Payment sent";
+    expect(namesRef(f, title)).toBe(false);
+  });
+
+  test("namesRef memo separates domain and non-domain readings", () => {
+    const request = "renew northwind-events.com";
+    const domainFrame = frameOf(request, null, NOW, cleanEntities(extractEntities(request)), true);
+    const nonDomainFrame = frame("Pay INV-7157 today");
+    const same = item("Invoice", "northwind-events.com invoice INV-7174");
+
+    expect(namesRef(nonDomainFrame, same)).toBe(false);
+    expect(namesRef(domainFrame, same)).toBe(true);
+  });
+
   test("a restriction that has ended frees the request; a thing the request needs that has ended does not", () => {
     const ended = "Your minimum term ended on 30 Jun 2026, so you can end the plan any time with no charge.";
     expect(verdict("Cancel Hooli today", "Hooli: your agreement", ended)).toBe("clear");

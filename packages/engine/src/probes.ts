@@ -652,6 +652,18 @@ const ABSENT =
   /\b((?:is|am|are|i'm|im|we're|he's|she's|they're|be|been|being)\s+away|away\s+(?:on|from|until|till|through|for|in|at|between)|on leave|annual leave|parental leave|maternity leave|paternity leave|sick leave|compassionate leave|out of (the )?office|ooo|on holiday|on vacation|off sick|off work|unavailable|not available)\b/i;
 const MONTH = "(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*";
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const SEP = "\\s*(?:-|–|—|to|until|till|through|and)\\s*";
+const DAYS_MONTH = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?${SEP}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`);
+const DATE_TO_DATE = new RegExp(
+  `\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}${SEP}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`,
+);
+const MONTH_DAYS = new RegExp(`\\b${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?${SEP}(\\d{1,2})\\b`);
+const UNTIL_DATE = new RegExp(
+  `\\b(until|till|through|thru|back(?: on)?|returning(?: on)?)\\s+(?:\\w+day,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`,
+);
+const ONE_DATE = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`);
+/** `ONE_DATE` for `matchAll`, built once: `matchAll` scans a copy, so this one's `lastIndex` stays 0. */
+const DATES_ALL = new RegExp(ONE_DATE.source, "g");
 
 /**
  * The days an item says someone is away, as ISO dates from and to (inclusive), read from the dates written near its
@@ -681,36 +693,27 @@ export function absenceSpan(item: ContextItem, now: number): { from: string; to:
   };
   const dayBefore = (d: string) => new Date(Date.parse(d) - 86_400_000).toISOString().slice(0, 10);
   const span = (from: string | null, to: string | null) => (from && to && from <= to ? { from, to } : null);
-  const sep = "\\s*(?:-|–|—|to|until|till|through|and)\\s*";
   const read = (near: string): { from: string; to: string } | null => {
     let r: RegExpExecArray | null;
     // "6–9 Nov"
-    if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
+    if ((r = DAYS_MONTH.exec(near))) {
       return span(iso(Number(r[1]), r[3]!), iso(Number(r[2]), r[3]!));
     }
     // "2 Nov to 6 Nov", "30 Oct – 2 Nov"
-    if (
-      (r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}${sep}(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(
-        near,
-      ))
-    ) {
+    if ((r = DATE_TO_DATE.exec(near))) {
       return span(iso(Number(r[1]), r[2]!), iso(Number(r[3]), r[4]!));
     }
     // "Nov 6–9"
-    if ((r = new RegExp(`\\b${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?${sep}(\\d{1,2})\\b`).exec(near))) {
+    if ((r = MONTH_DAYS.exec(near))) {
       return span(iso(Number(r[2]), r[1]!), iso(Number(r[3]), r[1]!));
     }
     // "until 9 November", "back on 9 Nov" (away until the day before)
-    if (
-      (r = new RegExp(
-        `\\b(until|till|through|thru|back(?: on)?|returning(?: on)?)\\s+(?:\\w+day,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`,
-      ).exec(near))
-    ) {
+    if ((r = UNTIL_DATE.exec(near))) {
       const d = iso(Number(r[2]), r[3]!);
       return d ? span(today, r[1]!.startsWith("back") || r[1]!.startsWith("return") ? dayBefore(d) : d) : null;
     }
     // One date: that day.
-    if ((r = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`).exec(near))) {
+    if ((r = ONE_DATE.exec(near))) {
       const d = iso(Number(r[1]), r[2]!);
       return span(d, d);
     }
@@ -861,9 +864,7 @@ export function rolesOf(raw: string, max = 2): string[] {
 export function daysNamed(item: ContextItem, now: number): string[] {
   const out: string[] = [];
   const year = new Date(now).getUTCFullYear();
-  for (const m of `${item.title} ${item.text}`
-    .toLowerCase()
-    .matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH}`, "g"))) {
+  for (const m of `${item.title} ${item.text}`.toLowerCase().matchAll(DATES_ALL)) {
     const mi = MONTHS.indexOf(m[2]!.slice(0, 3));
     const day = Number(m[1]);
     if (mi < 0 || day < 1 || day > 31) continue;
