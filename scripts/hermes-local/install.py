@@ -7,11 +7,14 @@ import json
 import os
 import platform
 import re
+import secrets
 import shlex
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 TARGETS = {
@@ -30,6 +33,28 @@ PROFILE_MARKERS = ("config.yaml", ".env", "SOUL.md", "profile.yaml", "auth.json"
 COMPONENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 ENV_REF = re.compile(r"\$\{(\w+)\}|\$(\w+)|%(\w+)%")
 PYCACHE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.(?:cpython|pypy)-[0-9]+(?:\.opt-[0-9]+)?\.pyc")
+READY = re.compile(rb"EDEN_LOCAL_READY ([0-9]{1,5})\r?\n")
+# Kept in step with eden_client.local's child environment: runtime variables plus the credential names a
+# per-user sources file references.
+RUNTIME = frozenset("PATH SYSTEMROOT WINDIR COMSPEC PATHEXT TEMP TMP TMPDIR HOME USERPROFILE LOCALAPPDATA APPDATA "
+                    "LANG LC_ALL LC_CTYPE TZ".split())
+EXAMPLE_SOURCES = {
+    "users": {
+        "local/local": [
+            {
+                "kind": "static",
+                "id": "demo",
+                "description": "Demo notes written by the Eden installer",
+                "docs": [
+                    {"ref": "gym", "title": "Gym renewal",
+                     "text": "Your gym membership renews on 1 December."},
+                    {"ref": "mandate", "title": "Change to your account mandate",
+                     "text": "Your joint account now needs both holders to approve any invoice payment."},
+                ],
+            }
+        ]
+    }
+}
 
 
 def host_target(system, machine):
@@ -173,7 +198,118 @@ def enable_command(home, system):
     return f"HERMES_HOME={shlex.quote(str(home))} {command}"
 
 
+def credential_names(value):
+    if isinstance(value, dict):
+        if set(value) == {"env"} and isinstance(value["env"], str):
+            yield value["env"]
+        for child in value.values():
+            yield from credential_names(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from credential_names(child)
+
+
+def passable(name):
+    upper = name.upper()
+    return (upper not in RUNTIME and upper not in {"HOST", "PORT", "PROXY", "OPENROUTER_API_KEY"}
+            and not upper.endswith("_PROXY")
+            and not upper.startswith(("EDEN_", "LD_", "DYLD_", "PYTHON", "BUN_", "NODE_")))
+
+
+def source_files(home, env):
+    """The source paths the plugin would use: explicit env, else ``<home>/eden/sources.json`` when present."""
+    sources = env.get("EDEN_SOURCES_FILE", "").strip() or None
+    users = env.get("EDEN_USER_SOURCES_FILE", "").strip() or None
+    if users is None and (home / "eden" / "sources.json").is_file():
+        users = str(home / "eden" / "sources.json")
+    return sources, users
+
+
+def check_env(home, env, sources, users):
+    child = {k: v for k, v in env.items() if k in RUNTIME}
+    if users is not None:
+        try:
+            names = set(credential_names(json.loads(Path(users).read_text(encoding="utf-8"))))
+            for name in names:
+                if passable(name) and name in env:
+                    child[name] = env[name]
+        except Exception:
+            pass
+    child.update(EDEN_LOCAL="1", EDEN_LOCAL_TOKEN=secrets.token_urlsafe(32), HOST="127.0.0.1", PORT="0",
+                 EDEN_HOME=str(home / "eden" / "data"))
+    for key, value in (("EDEN_SOURCES_FILE", sources), ("EDEN_USER_SOURCES_FILE", users)):
+        if value:
+            child[key] = str(value)
+    return child
+
+
+def check_sidecar(binary, env, timeout=15.0):
+    """Start the installed sidecar once and stop it: returns ``(port, startup ms)``, raises on failure."""
+    started = time.monotonic()
+    if platform.system() == "Darwin":
+        # Same strip the plugin does at runtime: a Finder/ditto-extracted binary keeps the quarantine xattr.
+        try:
+            subprocess.run(["xattr", "-d", "com.apple.quarantine", str(binary)], capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    with tempfile.TemporaryDirectory(prefix="eden-check-") as directory:
+        out_path, err_path = Path(directory) / "stdout", Path(directory) / "stderr"
+        with out_path.open("wb") as output, err_path.open("wb") as errors:
+            process = subprocess.Popen([str(binary)], stdin=subprocess.PIPE, stdout=output, stderr=errors, env=env)
+            port = None
+            try:
+                deadline = started + timeout
+                while time.monotonic() < deadline and process.poll() is None:
+                    match = READY.search(out_path.read_bytes())
+                    if match:
+                        port = int(match[1])
+                        break
+                    time.sleep(0.05)
+            finally:
+                try:
+                    process.stdin.close()
+                except OSError:
+                    pass
+                if process.poll() is None:
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+        log = err_path.read_bytes().decode("utf-8", "replace")
+        tail = " ".join(log.strip().splitlines()[-4:])[:600]
+        if port is None:
+            raise ValueError(f"the installed Eden sidecar did not become ready: {tail or 'no diagnostic'}")
+        if process.returncode != 0:
+            raise ValueError(f"the installed Eden sidecar exited {process.returncode}: {tail or 'no diagnostic'}")
+        return port, int((time.monotonic() - started) * 1000)
+
+
+def write_example(home):
+    """Write a working demo source at ``<home>/eden/sources.json``; never overwrites an existing file."""
+    path = home / "eden" / "sources.json"
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(EXAMPLE_SOURCES, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def next_steps(home, system, example_path, example_written, configured):
+    lines = [f"Enable Eden in Hermes home {home}:", f"  {enable_command(home, system)}",
+             "Then open a new Hermes session (or restart the gateway); if you restrict toolsets, include \"eden\"."]
+    if example_path is not None:
+        verb = "Wrote" if example_written else "Kept your existing"
+        lines += [f"{verb} demo sources at {example_path} - ask Hermes \"when does my gym membership renew?\".",
+                  "Replace it with your own sources; the format is in this release's GETTING-STARTED.md."]
+    elif not configured:
+        lines += ["Eden stays quiet until it has sources. Run this installer with --example for a demo, or write",
+                  f"{home / 'eden' / 'sources.json'} (format in GETTING-STARTED.md and docs/INTEGRATION.md)."]
+    return "\n".join(lines)
+
+
 def install(payload, manifest, home, force, dry_run):
+    """Copy the verified payload into ``<home>/plugins/eden``; returns the destination path."""
     plugins = home / "plugins"
     dest = plugins / "eden"
     files = manifest["files"]
@@ -210,7 +346,7 @@ def install(payload, manifest, home, force, dry_run):
         if previous == manifest:
             (dest / "bin" / binary_name(manifest["target"])).chmod(0o755)
             print(f"Eden {manifest['version']} already installed in {dest}")
-            return
+            return dest
         with tempfile.TemporaryDirectory(prefix=".eden-release-", dir=plugins) as work:
             stage = Path(work) / "eden"
             for rel in sorted(files):
@@ -244,6 +380,7 @@ def install(payload, manifest, home, force, dry_run):
     finally:
         lock.rmdir()
     print(f"Installed Eden {manifest['version']} into {dest}")
+    return dest
 
 
 def main():
@@ -255,6 +392,10 @@ def main():
     profile.add_argument("--hermes-home", type=Path, help="select the exact home for a custom Hermes build")
     parser.add_argument("--dry-run", action="store_true", help="check the release and destination without writing")
     parser.add_argument("--force", action="store_true", help="back up an existing unowned or modified Eden plugin")
+    parser.add_argument("--example", action="store_true",
+                        help="write a working demo source at <hermes home>/eden/sources.json (never overwrites)")
+    parser.add_argument("--no-check", action="store_true",
+                        help="skip the post-install check that starts the installed Eden sidecar once")
     args = parser.parse_args()
     try:
         release = Path(__file__).resolve().parent
@@ -264,9 +405,28 @@ def main():
         if manifest["target"] != target:
             raise ValueError(f"This release is for {manifest['target']}; download {target} instead")
         home = select_home(args, os.environ, system, Path.home())
-        install(release / "eden", manifest, home, args.force, args.dry_run)
+        example_path = home / "eden" / "sources.json" if args.example else None
+        example_written = write_example(home) if args.example and not args.dry_run else False
+        dest = install(release / "eden", manifest, home, args.force, args.dry_run)
         if not args.dry_run:
-            print(f"Enable Eden in Hermes home {home}:\n  {enable_command(home, system)}")
+            if not args.no_check:
+                sources, users = source_files(home, os.environ)
+                binary = dest / "bin" / binary_name(manifest["target"])
+                try:
+                    port, ms = check_sidecar(binary, check_env(home, os.environ, sources, users))
+                    print(f"Checked the Eden sidecar: ready on 127.0.0.1:{port} in {ms} ms")
+                except ValueError as error:
+                    if "SOURCES_FILE" in str(error):
+                        # A config problem, not an install problem: the user fixes the file, not the install.
+                        print(f"eden install: note: {error}")
+                    else:
+                        raise
+            if shutil.which("hermes") is None:
+                print("Note: 'hermes' is not on PATH. Hermes Agent installs from its release tag, not pip:\n"
+                      "  git clone --branch v2026.9.24 https://github.com/NousResearch/hermes-agent\n"
+                      "  (in a Python 3.12 or 3.13 environment; Hermes rejects Python 3.14)")
+            configured = any(source_files(home, os.environ))
+            print(next_steps(home, system, example_path, example_written, configured))
     except (OSError, ValueError) as error:
         parser.exit(1, f"eden install: {error}\n")
 

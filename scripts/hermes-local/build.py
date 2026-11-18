@@ -86,6 +86,7 @@ def build(target, version, output):
             {
                 **{f"eden/{name}": path for name, path in files.items()},
                 "install.py": HERE / "install.py",
+                "GETTING-STARTED.md": HERE / "GETTING-STARTED.md",
                 "LICENSE": ROOT / "LICENSE",
                 "manifest.json": manifest,
             },
