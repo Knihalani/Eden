@@ -1,8 +1,9 @@
 # @eden/engine
 
 The turn gate and glossary import their `.bin` files with Bun's `type: "file"` loader so standalone servers embed
-them. Embedded `/$bunfs/` files cannot be opened by descriptor: the glossary uses immutable bytes there, retaining
-size, prefix and CRC checks and retry-on-I/O semantics. Source files keep their bounded descriptor reads.
+them. Embedded files cannot be opened by descriptor: only the shipped glossary falls back to whole-buffer reads
+when open fails, capped at 4 MB, retaining size, prefix and CRC checks and retry-on-I/O semantics. Other files keep
+their bounded descriptor reads.
 
 `ContextPartner`: the context partner itself. `observe` sees each session event and, rarely, injects context unasked;
 `ask` answers the agent's question; `checkAction` reads a tool call before it runs (the party check, D376). Two speeds: a fast path
