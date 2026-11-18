@@ -9,7 +9,8 @@ Install the wrapper under ``<Hermes home>/plugins/eden``, enable ``plugins: enab
   ``EDEN_API_KEY`` / ``EDEN_TENANT_ID`` as for ``EdenClient``. Without a user it registers nothing.
 - Without ``EDEN_URL``, local mode defaults user/tenant to ``local`` (optional ``EDEN_USER_ID`` maps the user).
   ``EDEN_API_KEY`` / ``EDEN_TENANT_ID`` are ignored. Binary discovery: explicit ``EDEN_LOCAL_BINARY`` file,
-  wrapper-local ``bin/eden-local`` (``.exe`` on Windows), then ``<home>/plugins/eden/bin/eden-local``; no PATH lookup.
+  wrapper-local ``bin/eden-local`` (``.exe``, then a ``.cmd`` shim, on Windows), then
+  ``<home>/plugins/eden/bin/eden-local``; no PATH lookup.
   Data/logs live under ``<home>/eden``. Sources come from absolute ``EDEN_SOURCES_FILE`` /
   ``EDEN_USER_SOURCES_FILE`` paths, else ``<home>/eden/sources.json`` as per-user sources. No Hermes config is read.
 - Routed profiles are refused when active home differs from launch home: environment configuration belongs to the
@@ -131,11 +132,13 @@ class EdenHermes:
         if not self.base_url:
             if env.get("EDEN_API_KEY") or env.get("EDEN_TENANT_ID"):
                 self._warn_once("local mode ignores EDEN_API_KEY and EDEN_TENANT_ID")
-            name = "eden-local.exe" if sys.platform == "win32" else "eden-local"
-            fallback = self._home / "plugins" / "eden" / "bin" / name
+            # A .cmd shim under the exe runs through cmd.exe, for dev installs that ship no compiled binary.
+            names = ["eden-local.exe", "eden-local.cmd"] if sys.platform == "win32" else ["eden-local"]
+            fallbacks = [self._home / "plugins" / "eden" / "bin" / name for name in names]
             override = env.get("EDEN_LOCAL_BINARY")
             candidates = ([Path(override).expanduser()] if override else
-                          ([Path(plugin_file).resolve().parent / "bin" / name] if plugin_file else []) + [fallback])
+                          ([Path(plugin_file).resolve().parent / "bin" / name for name in names] if plugin_file else [])
+                          + fallbacks)
             binary = next((p for p in candidates if p.is_file()), None)
             if binary is None:
                 self._enabled = False
