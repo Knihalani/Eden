@@ -83,7 +83,7 @@ describe("carry (D1973): a sparse question follow-up reads the previous request'
   });
 });
 
-describe("carry (D1974): a sparse question also inherits the delivered items' terms", () => {
+describe("carry (D1975): a sparse question also inherits the delivered items' terms", () => {
   // The eval's order-tracking pair: the request's own words ("headphones", "arriving") share nothing with the
   // sibling order beyond "cable"; only the delivered item's terms ("order", "shipped") bridge to it.
   const H881 = item(
