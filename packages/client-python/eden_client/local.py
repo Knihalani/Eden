@@ -199,6 +199,14 @@ class LocalEden:
                 if time.monotonic() < self._retry_at:
                     return None
                 self._started = 0.0
+                if sys.platform == "darwin":
+                    # A plugin installed by Finder/ditto keeps the download's quarantine xattr, and the kernel
+                    # refuses exec of an unsigned quarantined binary (EPERM); stripping it is harmless otherwise.
+                    try:
+                        subprocess.run(["xattr", "-d", "com.apple.quarantine", self._binary],
+                                       capture_output=True, timeout=10)
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
                 token = secrets.token_urlsafe(32)
                 self._process = subprocess.Popen(
                     [self._binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
