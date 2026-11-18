@@ -563,6 +563,51 @@ const ACTS_ON = /\b(write|note|thank|chase|ping|tell|intro(duce)?)\b/i;
 /** A question about the calendar itself: then every event on the day it names is the answer (D44). */
 const ASKS_SCHEDULE = /\b(calendar|schedule|diary|agenda|plans?|busy|free|on for|happening|booked)\b/i;
 
+/**
+ * Identifier-shaped numbers a text carries: three digits or more, or thousands-separated ("2,300" → "2300"), never
+ * part of a code (the digits of "TP1357" stay letters' own). Four-digit years are not identifiers — a year pins the
+ * item's date, `requestYear` reads those.
+ */
+const ID_NUMBERS = /(?<![\p{L}\p{N}])(?:\d{1,3}(?:,\d{3})+|\d{3,})(?![\p{L}\p{N}])/gu;
+const YEARS = /\b(?:19|20)\d{2}\b/g;
+/** A number followed by a measure or money word is a quantity ("650 GBP", "30 days"), not an identifier. */
+const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|months?|years?|people|of us)\b/i;
+const idNumbers = (text: string): Set<string> => {
+  const out = new Set<string>();
+  for (const m of text.matchAll(ID_NUMBERS)) {
+    const n = m[0].replaceAll(",", "");
+    if (/^(19|20)\d{2}$/.test(n)) continue;
+    // A number named as money or a measure ("£2,400", "650 GBP", "3 laptops" beside a noun) is an amount the
+    // request states, not the identifier an item must share.
+    if (/[\u00a3$\u20ac]\s*$/.test(text.slice(Math.max(0, m.index - 3), m.index))) continue;
+    if (QUANTITY.test(text.slice(m.index + m[0].length))) continue;
+    out.add(n);
+  }
+  return out;
+};
+/**
+ * The year a request speaks from: a year it names, else the year of a day it names — never later than now, since a
+ * day ahead does not make this year's items last year's. A request naming no year or day has no reference year:
+ * most facts are written in a past year, so an undated request must not declare them stale. An item dated only
+ * earlier is last year's look-alike, not what the request means (D1970).
+ */
+function requestYear(cue: Cue): number | null {
+  let found = Math.max(...(cue.raw.match(YEARS)?.map(Number) ?? [0]));
+  for (const d of cue.time?.days ?? []) found = Math.max(found, Number(d.slice(0, 4)) || 0);
+  const now = new Date(cue.at).getUTCFullYear();
+  if (found === 0) return null; // no year or day named: nothing to be stale against
+  return Math.min(found, now);
+}
+/**
+ * When an item's title qualifies a name the request uses by a parenthesised word — "Jordan Pike (Contoso)",
+ * "Jordan Pike (Northwind)" — that qualifier: the organisation or role the item ties the name to.
+ */
+function qualifierOf(entity: string, title: string): string | null {
+  const esc = entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = new RegExp(`\\b${esc}\\s*\\(([^)]+)\\)`, "i").exec(title);
+  return m === null ? null : m[1]!.trim().toLowerCase();
+}
+
 interface Scored {
   item: ContextItem;
   score: number;
@@ -2980,12 +3025,21 @@ export class ContextPartner {
     if (reported.length === 0 && ruled.length === 0) return { items: [], pool };
     // `pushDaySeats`: a seat is the check's to name. With no answer (no checker, a late or failed check) the push
     // hands what it would have handed with no seats: the pool as it stood, behind that pool's own gate.
-    const open = (yes === null && gate.before ? gate.before : reported).filter((x) => !bulkMail(x.item));
+    // A look-alike that contradicts the request's anchors (another identifier's, last year's, another
+    // organisation's) leaves the pool the push can hand (D1970).
+    const acts = isImperative(cue.raw) || isAction(cue.raw) || cue.external === true || (cue.time?.days.size ?? 0) > 0;
+    const open = (yes === null && gate.before ? gate.before : reported).filter(
+      (x) => !bulkMail(x.item) && !this.contradicts(x, cue),
+    );
     const gated = gate.unchecked ?? like.some(Boolean);
     let items = yes
       ? [...open.filter((x) => yes.has(x.item.id)), ...ruled].slice(0, this.config.pushCandidates)
       : gated
-        ? open.slice(0, this.config.pushCandidates)
+        ? open
+            // A gated push still hands only what is actually tied: one shared word ("Thursday") is filler that
+            // ranked high on a common term, never an answer (D1970).
+            .filter((x) => x.matched >= 2 || x.entity === true)
+            .slice(0, this.config.pushCandidates)
         : [];
     // `pushLookup` (D1252): the check answered and named nothing (a non-null empty answer: this pass's call, a reused
     // or a late one read by `readerPushBehind`'s second pass; a failed, late-unread or unwired check is null), so the
@@ -3834,6 +3888,46 @@ export class ContextPartner {
     );
   }
 
+  /**
+   * Whether the candidate contradicts the request rather than answering it, on the anchors that pin a request down
+   * (D1970): its identifier numbers disagree with the one the request names (invoice 4390 against "invoice 4471"),
+   * it is dated only in years before the request's own (last year's booking or renewal, a hold since lifted), or it
+   * ties a name the request uses to a name it did not ("Jordan Pike (Contoso)" for "Jordan Pike from Northwind").
+   * Checked wherever a no-model path hands an item, so a look-alike fails at the gate the agent never sees.
+   */
+  private contradicts(x: Scored, cue: Cue): boolean {
+    const want = idNumbers(cue.raw);
+    if (want.size > 0) {
+      const have = idNumbers(`${x.item.title} ${x.item.text}`);
+      if (have.size > 0 && ![...want].some((n) => have.has(n))) return true;
+    }
+    const ref = requestYear(cue);
+    if (ref !== null) {
+      const years = `${x.item.title} ${x.item.text}`.match(YEARS);
+      if (years !== null && Math.max(...years.map(Number)) < ref) return true;
+    }
+    for (const e of cueNames(cue).names) {
+      const qualifier = qualifierOf(e, x.item.title);
+      if (
+        qualifier !== null &&
+        !cue.entities.some((o) => {
+          const other = o.toLowerCase();
+          return qualifier.includes(other) || other.includes(qualifier);
+        })
+      )
+        return true;
+      // A two-word name the request uses shares only its first word with the item's own two-word name: "Acme
+      // Catering" is not the "Acme Logistics" the request means.
+      const parts = e.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const esc = parts[0]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const other = new RegExp(`\\b${esc}\\s+(\\p{Lu}[\\p{L}'’.-]+)`, "u").exec(x.item.title);
+        if (other !== null && other[1]!.toLowerCase() !== parts[1]!.toLowerCase()) return true;
+      }
+    }
+    return false;
+  }
+
   private confident(scored: Scored[], cue: Cue): Scored[] {
     // One pass that stops at the cap: every test judges one item alone, so stopping early returns what filtering all
     // and then slicing returned. The cheap tests run first; `cleared` (the conflict test, about half the fast path's
@@ -3851,6 +3945,8 @@ export class ContextPartner {
       if (this.awayElsewhere(x.item, cue)) continue;
       // Nor, with `quietClear`, one about what the request names whose decisive value does not conflict with it.
       if (this.cleared(x, cue)) continue;
+      // Nor a look-alike: another identifier's, last year's or another organisation's item (D1970).
+      if (this.contradicts(x, cue)) continue;
       // Nor, with `quietNameOnly`, one only a name ties to the request.
       if (!this.beyondName(x, cue)) continue;
       sure.push(x);
@@ -3878,12 +3974,13 @@ export class ContextPartner {
     carded: ReadonlyMap<string, CardFind> = new Map(),
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
-    const pool = candidates.filter((x) => !bulkMail(x.item));
+    const acts = this.acts(s, cue, eventKind);
+    // A look-alike that contradicts the request's anchors is not grounded either (D1970).
+    const pool = candidates.filter((x) => !bulkMail(x.item) && !this.contradicts(x, cue));
     const time = cue.time;
     const onDay = (x: Scored) => time !== null && time.days.has(startDay(x.item, cue.offset) ?? "");
     const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
     const soonest = (a: Scored, b: Scored) => startMs(a.item) - startMs(b.item);
-    const acts = this.acts(s, cue, eventKind);
     // A run that starts the sentence may carry the verb with it ("Email Dana Lee"): try it without its first word too.
     const people = cue.entities
       .flatMap((e) => {
@@ -4258,38 +4355,49 @@ export class ContextPartner {
 
   /**
    * With no model's say, the best candidate alone, if it is strong enough: several distinct query terms and a score
-   * of at least `fallbackScore` (coverage plus the entity bonus, D36). One item at most: nothing has judged it.
+   * of at least `fallbackScore` (coverage plus the entity bonus, D36). An asking request gets every one of the
+   * first three that stands up to it at half that score, since it names more than one fact (D1970).
    */
-  private fallback(unsure: Scored[], cue?: Cue): Scored | null {
+  private fallback(unsure: Scored[], cue?: Cue): Scored[] {
     const top = unsure[0];
     const c = this.config;
-    if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settledOf(top.item))) return null;
-    if (cue && this.awayElsewhere(top.item, cue)) return null;
-    if (cue && this.cleared(top, cue)) return null;
-    // `fallbackAsks`: a request that asks (a question, or an action) about something it names, with an item that names
-    // it too, needs two of its terms, not three. A question about the world at large ("a good stretch for back pain")
-    // names nothing of the user's, and words like "good" or "week" match anything.
+    if (!top || c.fallbackMatchedTerms <= 0 || (c.quietSettled && settledOf(top.item))) return [];
+    if (cue && this.awayElsewhere(top.item, cue)) return [];
+    if (cue && this.cleared(top, cue)) return [];
+    // `fallbackAsks`: a request that asks (a question, or an action) needs an item two of its terms, not three, and
+    // half the fallback score: what it asks for is what it means, and a fact that names it is the answer. A
+    // question about the world at large ("a good stretch for back pain") names nothing of the user's, and words
+    // like "good" or "week" match anything, so the item still needs the two terms its words earn.
     const asks = cue !== undefined && c.fallbackAsks && (/\?\s*$/.test(cue.raw) || isAction(cue.raw));
     const { names: named, words } = asks ? cueNames(cue) : NO_NAMES;
-    if (named.length > 0) {
-      // The best of the first three that names what the request names: the top one may be about something else.
-      const hit = unsure
+    if (asks) {
+      // Every one of the first three that stands up to the request, not only the first that does: a request names
+      // more than one fact ("pay the Acme invoice" wants the invoice and the hold on it), and the top one may be
+      // about something else. A request that names nothing of the user's still needs two shared terms and half the
+      // bar — one common word alone is not evidence (D1970). Look-alikes that contradict it are not handed.
+      const hits = unsure
         .slice(0, 3)
-        .find(
+        .filter(
           (x) =>
-            mentionsAny(words, x.item) &&
+            (named.length > 0 ? mentionsAny(words, x.item) : true) &&
             !bulkMail(x.item) &&
             x.matched >= 2 &&
-            x.score >= c.fallbackScore &&
+            x.score >= c.fallbackScore * 0.5 &&
             !(c.quietSettled && settledOf(x.item)) &&
+            !this.contradicts(x, cue!) &&
             !this.awayElsewhere(x.item, cue!) &&
             !this.cleared(x, cue!) &&
             this.beyondName(x, cue!),
-        );
-      if (hit) return hit;
+        )
+        .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
+      if (hits.length > 0) return hits;
     }
-    const strong = !bulkMail(top.item) && top.matched >= c.fallbackMatchedTerms && top.score >= c.fallbackScore;
-    return strong && (!cue || this.beyondName(top, cue)) ? top : null;
+    const strong =
+      !bulkMail(top.item) &&
+      top.matched >= c.fallbackMatchedTerms &&
+      top.score >= c.fallbackScore &&
+      !(cue && this.contradicts(top, cue));
+    return strong && (!cue || this.beyondName(top, cue)) ? [top] : [];
   }
 
   /**
@@ -6127,12 +6235,15 @@ export class ContextPartner {
           return await this.deliverChecked(s, grounded.items, "proactive", `grounded-${grounded.how}:${cue.id}`, cue);
         }
         const falling = spans?.open("fallback", cue.span);
-        const top = this.fallback(unsure, cue);
-        if (falling) spans!.close(falling, { picked: top !== null });
-        const items = top ? [top] : [];
+        const items = this.fallback(unsure, cue);
+        if (falling) spans!.close(falling, { picked: items.length > 0 });
         dumped("lookup", items, "fallback", true);
-        if (top) {
-          done("sources", `fallback${reasonPrefix}:${cue.id}`, [top.item]);
+        if (items.length > 0) {
+          done(
+            "sources",
+            `fallback${reasonPrefix}:${cue.id}`,
+            items.map((x) => x.item),
+          );
           return await this.deliverChecked(s, items, "proactive", `fallback:${cue.id}`, cue);
         }
         done("silent", why);

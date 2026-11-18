@@ -211,8 +211,9 @@ class ReleaseTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(file.external_attr >> 16), 0o755)
 
 
-@unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST in ("linux-x64", "windows-x64"),
-                     "set HERMES_RELEASE_SMOKE=1 to run the compiled smoke on linux-x64 or windows-x64")
+@unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST in ("linux-x64", "darwin-arm64", "darwin-x64",
+                                                                  "windows-x64"),
+                     "set HERMES_RELEASE_SMOKE=1 to run the compiled smoke on its own platform")
 class CompiledSmoke(unittest.TestCase):
     def test_install_and_run(self):
         with tempfile.TemporaryDirectory(prefix="eden-compiled-test-") as directory:

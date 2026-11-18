@@ -579,7 +579,7 @@ describe("the eval's clock (D435)", () => {
     const vendor = all.find((s) => s.id === "large-vendor-freeze")!;
     const m = await on("2026-11-10T12:00:00Z", () => runScenarios([vendor], { model: null, waitMs: 2_000 }));
     // Its clock is 3 November: "today" is not the invoice's due day, so nothing settles the request and the push
-    // hands its five candidates.
-    expect(m.counts.delivered).toBe(5);
+    // hands its candidates — the two that stand up to it since D1970, the look-alikes dropped.
+    expect(m.counts.delivered).toBe(2);
   });
 });
