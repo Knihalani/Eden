@@ -25,6 +25,8 @@ TARGETS = {
 MARKER = ".eden-release.json"
 VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}")
 PROFILE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+RESERVED_PROFILES = {"hermes", "test", "tmp", "root", "sudo"}
+PROFILE_MARKERS = ("config.yaml", ".env", "SOUL.md", "profile.yaml", "auth.json", "state.db")
 COMPONENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 ENV_REF = re.compile(r"\$\{(\w+)\}|\$(\w+)|%(\w+)%")
 PYCACHE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.(?:cpython|pypy)-[0-9]+(?:\.opt-[0-9]+)?\.pyc")
@@ -130,7 +132,7 @@ def select_home(args, env, system, user_home):
     if args.hermes_home is not None:
         return expand_home(args.hermes_home, env)
     if system == "Windows":
-        local = env.get("LOCALAPPDATA") or user_home / "AppData" / "Local"
+        local = env.get("LOCALAPPDATA", "").strip() or user_home / "AppData" / "Local"
         default = Path(local) / "hermes"
     else:
         default = user_home / ".hermes"
@@ -138,19 +140,26 @@ def select_home(args, env, system, user_home):
     home = expand_home(override or default, env)
     is_profile = home.parent.name == "profiles"
     name = args.profile.strip().lower() if args.profile is not None else None
-    if is_profile and (name is None or name == home.name):
+    if is_profile and name is None:
         return home
     root = home.parent.parent if is_profile else home
     if name is None:
-        active = root / "active_profile"
-        name = active.read_text(encoding="utf-8-sig").strip().lower() if active.is_file() else "default"
-        name = name or "default"
+        try:
+            name = (root / "active_profile").read_text(encoding="utf-8").strip().lower() or "default"
+        except (OSError, UnicodeDecodeError):
+            name = "default"
     if not PROFILE.fullmatch(name):
         raise ValueError(f"Invalid Hermes profile name: {name!r}")
     if name == "default":
         return root
+    if name in RESERVED_PROFILES:
+        raise ValueError(f"Hermes profile name {name!r} is reserved")
     profile = root / "profiles" / name
-    if not profile.is_dir():
+    if (
+        not profile.is_dir()
+        or not any((profile / marker).is_file() or (profile / marker).is_symlink() for marker in PROFILE_MARKERS)
+        or (profile.parent / ".deleted" / name).exists()
+    ):
         raise ValueError(f"Hermes profile {name!r} does not exist: {profile}")
     return profile
 
@@ -243,7 +252,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     profile = parser.add_mutually_exclusive_group()
     profile.add_argument("--profile", help="select a named Hermes profile (or 'default')")
-    profile.add_argument("--hermes-home", type=Path, help="install into this exact Hermes home, ignoring active_profile")
+    profile.add_argument("--hermes-home", type=Path, help="select the exact home for a custom Hermes build")
     parser.add_argument("--dry-run", action="store_true", help="check the release and destination without writing")
     parser.add_argument("--force", action="store_true", help="back up an existing unowned or modified Eden plugin")
     args = parser.parse_args()
