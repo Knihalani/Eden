@@ -178,7 +178,12 @@ describe("Thompson routing", () => {
     const writer = `
       const { SourceMap } = await import(${JSON.stringify(join(import.meta.dir, "source-map.ts"))});
       let errors = 0, writes = 0, opened = true, map;
-      try { map = new SourceMap(process.argv[1]); } catch { opened = false; }
+      // The winner's first open may hold the file through the layout move (D1960); a loser whose busy_timeout
+      // expires while that runs retries, since a cold start under test load is slower than two MCP clients.
+      for (let i = 0; i < 3 && !map; i++) {
+        try { map = new SourceMap(process.argv[1]); }
+        catch { if (i === 2) opened = false; else await new Promise((r) => setTimeout(r, 500)); }
+      }
       const scope = { tenantId: "t", userId: "u" };
       const end = Date.now() + 400;
       while (map && Date.now() < end) {
