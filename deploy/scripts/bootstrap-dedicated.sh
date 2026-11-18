@@ -7,7 +7,7 @@
 #     git@github.com:Knihalani/Eden.git 198.51.100.7/32
 #   (then: deploy/scripts/push-secrets.sh root@203.0.113.10 single secrets/single.env)
 #
-# The repository is private, so the box needs a credential to clone it, and to fetch at every upgrade.sh.
+# When the repository is private the box needs a credential to clone it, and to fetch at every upgrade.sh.
 # DEPLOY_KEY=<path to a private key> names a read-only GitHub deploy key (docs/DEPLOY-QUICKSTART.md). Before cloud-init
 # runs, it is installed as /root/.ssh/eden_deploy (0600) with a `Host github.com` entry in /root/.ssh/config, and
 # github.com's ed25519 host key is scanned on the box into /root/.ssh/known_hosts once it matches the fingerprint

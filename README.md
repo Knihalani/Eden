@@ -176,7 +176,6 @@ docs/INTEGRATION.md).
 | `packages/eval`     | Scenario harness and metrics                                                                       |
 | `packages/sim`      | Simulated users and the lab; `bun run demo`                                                        |
 | `docs/`             | Vision, architecture, decisions, roadmap, cost, privacy, research                                  |
-| `archived/`         | Earlier products (passive memory for coding agents; compile era; observability). History, not code |
 
 ## Status
 
@@ -185,3 +184,11 @@ M0 (scaffold) done; M1, an eval worth tuning against, in progress, with every me
 npm, PyPI or an image registry yet: install from a checkout as above (`bun run pack:client`, `pip install
 ./packages/client-python`, `docker build`). `bun run publish:check` builds all three and runs each registry's dry
 run (D853).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The gate before merge is local: `CHECK_COLD=1 bun run check`.
+
+## License
+
+[Apache-2.0](LICENSE).

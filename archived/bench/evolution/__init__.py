@@ -1,1 +1,0 @@
-# Evolution replay harness

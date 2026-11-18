@@ -29,4 +29,4 @@ const tools = guardTools(eden, { send_email: sendEmail });
 - **Check your integration** against a running server with `eden doctor` (in the Eden repository: `bun run doctor`).
 - The full guide is `docs/INTEGRATION.md` in the Eden repository.
 
-MIT licence.
+Apache-2.0 licence.

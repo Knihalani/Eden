@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "A secret gate for text: gitleaks' rules and its own, linear time, no dependencies",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
   "exports": {

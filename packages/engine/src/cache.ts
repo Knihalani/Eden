@@ -582,7 +582,10 @@ function factDays(f: DayFacts): number[] {
   const n = f[at]!;
   const out = Array.from(f.subarray(at + 1, at + 1 + n));
   const mask = (f[at + 1 + n]! | (f[at + 2 + n]! << 16)) >>> 0;
-  if (closed !== 0 || open !== 0 || mask !== 0) for (let k = 0; k < 12 * 32; k++) out.push(k);
+  // A trailing `wd` weekday mask ("every Thursday") holds no named day or span: index it under every key like a
+  // span's, so `dated` still runs the exact `dayFactsClass` check on it.
+  const wd = f.length === 6 + closed + open + n ? f[f.length - 1]! : 0;
+  if (closed !== 0 || open !== 0 || mask !== 0 || wd !== 0) for (let k = 0; k < 12 * 32; k++) out.push(k);
   return out;
 }
 
