@@ -175,6 +175,28 @@ describe("groundSubject: a request about a subject it names gets the context aro
     expect(reasons.some((r) => r.startsWith("grounded-subject:"))).toBe(false);
   });
 
+  test("last year's notice about the same subject is the stale sibling, not a second pick", async () => {
+    const subs = new StaticSource("mail", "Mail", [
+      {
+        ref: "renewal",
+        title: "CloudVault Family plan renews on 8 November",
+        text: "Your CloudVault Family plan (2 TB) renews on 8 November 2026 for 99 GBP.",
+      },
+      {
+        ref: "renewal-2025",
+        title: "CloudVault Family plan renewed",
+        text: "Your CloudVault Family plan renewed on 8 November 2025 for 89 GBP.",
+      },
+    ]);
+    const { ids } = await run(
+      "Cancel my CloudVault Family subscription before it renews.",
+      { config: { groundSubject: true } },
+      [subs],
+    );
+    expect(ids).toContain("mail:renewal");
+    expect(ids).not.toContain("mail:renewal-2025");
+  });
+
   test("no entity, no subject", async () => {
     const { ids } = await run("Can you move my appointment to the Saturday morning instead?", {
       config: { groundSubject: true },
