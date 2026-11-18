@@ -59,7 +59,7 @@ def digest_xz(path):
         with lzma.open(path, "rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 sha256.update(chunk)
-    except lzma.LZMAError as error:
+    except (lzma.LZMAError, EOFError) as error:
         raise ValueError(f"Unexpected or modified file: {path}") from error
     return sha256.hexdigest()
 
@@ -68,7 +68,7 @@ def unpack_xz(source, dest):
     try:
         with lzma.open(source, "rb") as data, dest.open("wb") as out:
             shutil.copyfileobj(data, out)
-    except lzma.LZMAError as error:
+    except (lzma.LZMAError, EOFError) as error:
         raise ValueError(f"Unexpected or modified file: {source}") from error
 
 
@@ -144,8 +144,9 @@ def read_manifest(path):
     packed = manifest.get("packed", [])
     if (
         not isinstance(packed, list)
+        or not all(isinstance(name, str) for name in packed)
         or len(packed) != len(set(packed))
-        or not all(isinstance(name, str) and name in files for name in packed)
+        or not all(name in files for name in packed)
     ):
         raise ValueError(f"Invalid packed entries in {path}")
     return manifest

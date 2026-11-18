@@ -162,6 +162,10 @@ class ReleaseTest(unittest.TestCase):
         (self.dest / "plugin.yaml").write_bytes(b"edited")
         self.assertIn("modified", self.run_installer(ok=False))
         self.assertEqual((self.dest / "plugin.yaml").read_bytes(), b"edited")
+        marker = json.loads((self.dest / MARKER).read_text(encoding="utf-8"))
+        marker["packed"] = [{}]
+        (self.dest / MARKER).write_text(json.dumps(marker), encoding="utf-8")
+        self.assertIn("Refusing to replace", self.run_installer(ok=False))
 
     def test_reject_wrong_platform_and_tampering(self):
         self.manifest["target"] = "linux-arm64" if HOST != "linux-arm64" else "linux-x64"
@@ -178,9 +182,18 @@ class ReleaseTest(unittest.TestCase):
         self.assertIn("modified file", self.run_installer(ok=False))
         self.assertFalse(self.home.exists())
         self.write_release("v1")
+        packed = self.payload / f"{self.binary}.xz"
+        packed.write_bytes(packed.read_bytes()[:8])
+        self.assertIn("modified file", self.run_installer(ok=False))
+        self.assertFalse(self.home.exists())
+        self.write_release("v1")
         (self.payload / self.binary).write_bytes(b"v1")
         self.assertIn("modified file", self.run_installer(ok=False))
         self.assertFalse(self.home.exists())
+        self.write_release("v1")
+        self.manifest["packed"] = [{}]
+        self.save_manifest()
+        self.assertIn("Invalid packed entries", self.run_installer(ok=False))
         self.write_release("v1")
         self.manifest["files"]["../escape"] = "0" * 64
         self.save_manifest()
