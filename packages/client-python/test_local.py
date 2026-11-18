@@ -58,7 +58,9 @@ def lifetime():
     os._exit(0)
 if mode != "ignores-stdin": threading.Thread(target=lifetime, daemon=True).start()
 else: signal.signal(signal.SIGTERM, signal.SIG_IGN)
-print("EDEN_LOCAL_READY", server.server_port, end="\\r\\n" if mode == "crlf" else "\\n", flush=True)
+# Raw bytes: text-mode stdout on Windows translates LF again, so crlf mode must not use print(end=...).
+sys.stdout.buffer.write(b"EDEN_LOCAL_READY %d%s" % (server.server_port, b"\\r\\n" if mode == "crlf" else b"\\n"))
+sys.stdout.buffer.flush()
 if mode == "spam-stdout":
     sys.stdout.write("x" * (256 * 1024)); sys.stdout.flush()
 if mode == "spam-stderr":
@@ -67,6 +69,11 @@ if mode == "crash-after-ready":
     threading.Timer(0.2, lambda: os._exit(1)).start()
 server.serve_forever()
 '''
+
+
+# A .cmd shim's interpreter needs the system variables LocalEden forwards to the child.
+WINDOWS_ENV = ({k: os.environ[k] for k in ("SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT") if k in os.environ}
+               if sys.platform == "win32" else {})
 
 
 def wait_for(predicate, timeout=3):
@@ -92,6 +99,11 @@ class LocalTests(unittest.TestCase):
     def binary(self, mode="normal"):
         binary = self.root / "fake"
         binary.write_text(SCRIPT.format(python=sys.executable, root=str(self.root), mode=mode))
+        if sys.platform == "win32":
+            # Windows executes no shebang: a .cmd shim puts the script on PATH-free subprocess.Popen.
+            shim = self.root / "fake.cmd"
+            shim.write_text(f'@"{sys.executable}" "{binary}" %*\r\n', newline="")
+            return shim
         binary.chmod(0o700)
         return binary
 
@@ -198,7 +210,7 @@ class LocalTests(unittest.TestCase):
         names = ["CONNECTOR_TOKEN", "EDEN_LOCAL_TOKEN", "LD_PRELOAD", "PATH", "HTTP_PROXY", "OPENROUTER_API_KEY"]
         sources.write_text(json.dumps({"users": {"dev/u": [{"headers": [{"env": n} for n in names]}]}}))
         env = {n: "secret-" + n for n in names}
-        env.update(UNRELATED_SECRET="never", PATH=os.defpath, HOME=str(self.root))
+        env.update(UNRELATED_SECRET="never", PATH=os.defpath, HOME=str(self.root), **WINDOWS_ENV)
         owner = self.owner("dump-env", user_sources_file=sources, base_env=env)
         warnings = io.StringIO()
         with contextlib.redirect_stderr(warnings):
@@ -212,12 +224,13 @@ class LocalTests(unittest.TestCase):
         self.assertEqual(child["HOST"], "127.0.0.1")
         self.assertEqual(child["PORT"], "0")
         self.assertNotIn(endpoint[1], str(owner._process.args) + warnings.getvalue())
-        self.assertEqual(owner._process.args, [str(self.root / "fake")])
+        self.assertEqual(owner._process.args, [str(self.binary())])
 
     def test_invalid_sources_forward_no_credentials(self):
         source = self.root / "broken"
         source.write_text("not json")
-        owner = self.owner("dump-env", user_sources_file=source, base_env={"CONNECTOR_TOKEN": "secret"})
+        owner = self.owner("dump-env", user_sources_file=source,
+                           base_env={"CONNECTOR_TOKEN": "secret", **WINDOWS_ENV})
         self.assertIsNotNone(owner.endpoint())
         self.assertNotIn("CONNECTOR_TOKEN", json.loads((self.root / "env").read_text()))
 

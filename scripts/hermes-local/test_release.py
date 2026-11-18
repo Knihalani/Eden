@@ -87,9 +87,9 @@ class ReleaseTest(unittest.TestCase):
         (profile / "config.yaml").touch()
         (self.home / "active_profile").write_text("work\n", encoding="utf-8")
         text = self.run_installer("--dry-run")
-        self.assertIn(str(profile / "plugins" / "eden"), text)
+        self.assertIn(str((profile / "plugins" / "eden").resolve()), text)
         self.assertFalse((profile / "plugins").exists())
-        self.assertIn(str(profile), self.run_installer())
+        self.assertIn(str(profile.resolve()), self.run_installer())
         self.assertTrue((profile / "plugins" / "eden" / MARKER).exists())
         self.assertFalse(self.dest.exists())
         self.env["HERMES_HOME"] = str(profile)
@@ -98,7 +98,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertTrue(self.dest.exists())
         dedicated = self.work / "dedicated"
         text = self.run_installer("--hermes-home", str(dedicated))
-        self.assertIn(str(dedicated), text)
+        self.assertIn(str(dedicated.resolve()), text)
         self.assertTrue((dedicated / "plugins" / "eden" / MARKER).exists())
         self.assertIn("does not exist", self.run_installer("--profile", "missing", ok=False))
 
@@ -116,25 +116,25 @@ class ReleaseTest(unittest.TestCase):
             self.assertIn(message, self.run_installer("--profile", name, "--dry-run", ok=False))
         (work / "state.db").touch()
         active.write_text("  Work \n", encoding="utf-8")
-        self.assertIn(str(work), self.run_installer("--dry-run"))
-        self.assertIn(str(work), self.run_installer("--profile", "work", "--dry-run"))
+        self.assertIn(str(work.resolve()), self.run_installer("--dry-run"))
+        self.assertIn(str(work.resolve()), self.run_installer("--profile", "work", "--dry-run"))
         (profiles / ".deleted").mkdir()
         (profiles / ".deleted" / "work").touch()
         self.assertIn("does not exist", self.run_installer("--dry-run", ok=False))
         self.assertIn("does not exist", self.run_installer("--profile", "work", "--dry-run", ok=False))
-        self.assertIn(str(work), self.run_installer("--hermes-home", str(work), "--dry-run"))
+        self.assertIn(str(work.resolve()), self.run_installer("--hermes-home", str(work), "--dry-run"))
         self.env["HERMES_HOME"] = str(work)
-        self.assertIn(str(work), self.run_installer("--dry-run"))
+        self.assertIn(str(work.resolve()), self.run_installer("--dry-run"))
         self.assertIn("does not exist", self.run_installer("--profile", "work", "--dry-run", ok=False))
 
     def test_active_profile_read_errors_fall_back_but_bom_is_invalid(self):
         self.home.mkdir()
         active = self.home / "active_profile"
         active.write_bytes(b"\xff")
-        self.assertIn(str(self.dest), self.run_installer("--dry-run"))
+        self.assertIn(str(self.dest.resolve()), self.run_installer("--dry-run"))
         active.unlink()
         active.mkdir()
-        self.assertIn(str(self.dest), self.run_installer("--dry-run"))
+        self.assertIn(str(self.dest.resolve()), self.run_installer("--dry-run"))
         active.rmdir()
         active.write_text("work", encoding="utf-8-sig")
         self.assertIn("Invalid Hermes profile name", self.run_installer("--dry-run", ok=False))
@@ -187,14 +187,15 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No Eden release"):
             host_target("Linux", "i686")
         args = SimpleNamespace(hermes_home=None, profile=None)
-        self.assertEqual(select_home(args, {}, "Linux", self.work), self.work / ".hermes")
-        self.assertEqual(select_home(args, {}, "Windows", self.work), self.work / "AppData" / "Local" / "hermes")
+        self.assertEqual(select_home(args, {}, "Linux", self.work), (self.work / ".hermes").resolve())
+        self.assertEqual(select_home(args, {}, "Windows", self.work),
+                         (self.work / "AppData" / "Local" / "hermes").resolve())
         self.assertEqual(select_home(args, {"LOCALAPPDATA": str(self.work)}, "Windows", self.home),
-                         self.work / "hermes")
+                         (self.work / "hermes").resolve())
         self.assertEqual(select_home(args, {"LOCALAPPDATA": f"  {self.work}  "}, "Windows", self.home),
-                         self.work / "hermes")
+                         (self.work / "hermes").resolve())
         self.assertEqual(select_home(args, {"LOCALAPPDATA": "  "}, "Windows", self.work),
-                         self.work / "AppData" / "Local" / "hermes")
+                         (self.work / "AppData" / "Local" / "hermes").resolve())
 
     def test_zip_layout_and_reproducible_metadata(self):
         a, b = self.work / "a.zip", self.work / "b.zip"
@@ -210,8 +211,8 @@ class ReleaseTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(file.external_attr >> 16), 0o755)
 
 
-@unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST == "linux-x64",
-                     "set HERMES_RELEASE_SMOKE=1 to run the compiled Linux smoke")
+@unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST in ("linux-x64", "windows-x64"),
+                     "set HERMES_RELEASE_SMOKE=1 to run the compiled smoke on linux-x64 or windows-x64")
 class CompiledSmoke(unittest.TestCase):
     def test_install_and_run(self):
         with tempfile.TemporaryDirectory(prefix="eden-compiled-test-") as directory:
@@ -242,7 +243,12 @@ class CompiledSmoke(unittest.TestCase):
 
     def run_sidecar(self, binary, work, sources):
         token = secrets.token_hex(32)
-        env = {"HOME": str(work), "EDEN_LOCAL": "1", "EDEN_LOCAL_TOKEN": token, "EDEN_SOURCES_FILE": str(sources)}
+        env = {"HOME": str(work), "EDEN_LOCAL": "1", "EDEN_LOCAL_TOKEN": token,
+               "EDEN_SOURCES_FILE": str(sources)}
+        if HOST.startswith("windows-"):
+            for key in ("SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "PATH"):
+                if key in os.environ:
+                    env[key] = os.environ[key]
         stdout, stderr = work / "sidecar.stdout", work / "sidecar.stderr"
         with stdout.open("wb") as output, stderr.open("wb") as errors:
             process = subprocess.Popen([str(binary)], cwd=work, env=env, stdin=subprocess.PIPE,
@@ -251,7 +257,7 @@ class CompiledSmoke(unittest.TestCase):
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline and process.poll() is None:
                     details = stdout.read_text(encoding="utf-8")
-                    match = re.search(r"^EDEN_LOCAL_READY ([1-9][0-9]{0,4})\n", details, re.MULTILINE)
+                    match = re.search(r"^EDEN_LOCAL_READY ([1-9][0-9]{0,4})\r?\n", details, re.MULTILINE)
                     if match:
                         break
                     time.sleep(0.05)
