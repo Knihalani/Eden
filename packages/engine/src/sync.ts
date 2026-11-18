@@ -107,10 +107,10 @@ export interface SyncOptions {
    */
   demandTimeoutMs?: number;
   /**
-   * `syncKeepCut` (D321, a trial): the user's sync keeps to its `maxItems` after the backfill too. A poll or a sweep
-   * stores no dated item older than the user's cut (the oldest item kept when the user is at the cap; the source's
-   * copy is then cut, D264), the user's synced items are trimmed back to the cap once they pass it by a page, and a
-   * sweep stops once it has listed every id it holds for the source.
+   * `syncKeepCut` (D321, a trial): the user's sync keeps to its `maxItems` after the backfill too. A backfill page,
+   * a poll or a sweep stores no dated item older than the user's cut (the oldest item kept when the user is at the
+   * cap; the source's copy is then cut, D264), the user's synced items are trimmed back to the cap once they pass
+   * it by a page, and a sweep stops once it has listed every id it holds for the source.
    */
   keepCut?: boolean;
   /**
@@ -335,7 +335,7 @@ interface UserSync {
   gone: boolean;
   /**
    * The oldest `updatedAt` the user's synced items keep once they reached `maxItems` (`trim`); -Infinity while under
-   * it. With `keepCut`, polls and sweeps store nothing dated before it.
+   * it. With `keepCut`, backfill pages, polls and sweeps store nothing dated before it.
    */
   cutAt: number;
   /**
@@ -1291,11 +1291,11 @@ export class SyncManager {
       const now = this.deps.now();
       const filling = [...u.sources.values()].filter((s) => s.phase === "backfill");
       if (filling.length === 0) return;
-      // Over the cap, the oldest synced go; then a source whose unread items are all older than the oldest kept has
-      // nothing left that would be kept, and its backfill is done.
-      if (this.total(u) >= this.o.maxItems) {
-        const cut = this.trim(u, now);
-        for (const s of filling) if (s.frontier <= cut) this.warmUp(u, s, now);
+      // Over the cap by more than a page, the oldest synced go. Between trims, `cutAt` (the last trim's cut)
+      // still ends a source whose unread items are all older than it: they are what the next trim drops.
+      if (this.total(u) > this.o.maxItems + this.o.pageSize) this.trim(u, now);
+      if (u.cutAt > -Infinity) {
+        for (const s of filling) if (s.frontier <= u.cutAt) this.warmUp(u, s, now);
         if (filling.every((s) => s.phase === "warm")) return;
       }
       const ready = filling.filter((s) => s.phase === "backfill" && now >= s.retryAt && !s.busy);
@@ -1327,7 +1327,8 @@ export class SyncManager {
               reserve: SERVING_HEADROOM,
             });
             // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
-            if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
+            if (typeof page !== "string" && !u.gone)
+              this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
           });
           return page;
         }),
@@ -1385,7 +1386,7 @@ export class SyncManager {
           timeoutMs: this.o.timeoutMs,
           reserve: SERVING_HEADROOM,
         });
-        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
+        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
       });
       flying.delete(next);
       if (u.gone) return;
@@ -1416,11 +1417,11 @@ export class SyncManager {
       const now = this.deps.now();
       const filling = [...u.sources.values()].filter((s) => s.phase === "backfill");
       if (filling.length === 0) break;
-      if (this.total(u) >= this.o.maxItems) {
-        const cut = this.trim(u, now);
-        // A source whose page is on the wire is warmed, or not, when it lands.
-        for (const s of filling) if (s.frontier <= cut && !flying.has(s)) this.warmUp(u, s, now);
-      }
+      if (this.total(u) > this.o.maxItems + this.o.pageSize) this.trim(u, now);
+      // Between trims, `cutAt` still ends a source whose unread items are all older than the last cut. A source
+      // whose page is on the wire is warmed, or not, when it lands.
+      if (u.cutAt > -Infinity)
+        for (const s of filling) if (s.frontier <= u.cutAt && !flying.has(s)) this.warmUp(u, s, now);
       const ready = filling.filter(
         (s) => s.phase === "backfill" && now >= s.retryAt && !s.busy && !flying.has(s) && !left.has(s),
       );
@@ -1727,7 +1728,7 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       s.failures = 0;
-      this.store(u, s, page.items, readMark);
+      this.store(u, s, page.items, readMark, undefined, this.o.keepCut);
       if (page.next === null || page.items.length === 0) {
         s.deep = null;
         s.exhausted = true;
