@@ -334,6 +334,8 @@ class EdenClient:
         default_wait_ms: Optional[int] = None,
         on_error: Optional[Callable[[Exception], Any]] = _UNSET,
         shadow: bool = False,
+        *,
+        bypass_proxies: bool = False,
     ) -> None:
         # None is the default, as `??` reads it in TypeScript: `base_url=os.environ.get(...)` when it is unset.
         # Unset: the environment's EDEN_URL and EDEN_API_KEY, as the TS client, the proxy and `eden doctor` (D856).
@@ -350,6 +352,8 @@ class EdenClient:
         # Shadow mode (the TS client's `shadow`, D282): what Eden returns is not given to the agent, so the server is
         # told (`?shadow=1` on events and pending) and learns nothing from it as if the agent had been shown it.
         self._shadow = shadow is True
+        self._opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
+                        if bypass_proxies else _OPENER)
         bad = [f for f, v in (("tenantId", tenant_id), ("userId", user_id), ("sessionId", session_id))
                if (f != "tenantId" or v) and not _is_id(v)]
         # Every call would be refused (400): said once, up front, without the ids (they may be personal data).
@@ -391,7 +395,7 @@ class EdenClient:
             req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
             timeout = self._timeout if timeout_s is None else timeout_s
             deadline = time.monotonic() + timeout
-            with _OPENER.open(req, timeout=timeout) as res:
+            with self._opener.open(req, timeout=timeout) as res:
                 answer = json.loads(_read_by(res, deadline).decode())
             if valid is not None and not valid(answer):
                 name = route[len("/v1/"):]
