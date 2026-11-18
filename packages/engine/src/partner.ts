@@ -4342,16 +4342,24 @@ export class ContextPartner {
   ): Promise<Scored[]> {
     const room = this.max() - chosen.length;
     if (!this.config.companions || chosen.length === 0 || room <= 0 || s.closed) return [];
-    const refs = chosen.map((x) => idNumbers(`${x.item.title} ${x.item.text}`));
-    const subjectTerms = new Set<string>();
-    for (const x of chosen) for (const t of contentWords(`${x.item.title} ${x.item.text}`)) subjectTerms.add(t);
+    // Terms and identifiers per pick: a candidate must link to one pick on that pick's own evidence — a union
+    // over every pick's words would let a wrong-numbered invoice in on another pick's identifier pass.
+    const picks = chosen.map((x) => ({
+      refs: idNumbers(`${x.item.title} ${x.item.text}`),
+      terms: new Set(contentWords(`${x.item.title} ${x.item.text}`)),
+      years: new Set(`${x.item.title} ${x.item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []),
+    }));
     const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
     // Words of an entity the request names ("Acme Supplies", "Jordan Pike", "Lisbon") bind nothing here: every
     // look-alike of the named thing — the vendor's promo mail, the near-namesake's card, the other event in that
     // city — shares exactly those. A companion links on what the item is about: an identifier, its topic words.
     const entityTerms = new Set<string>();
-    for (const e of cleanEntities(cue.entities))
-      for (const w of e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) entityTerms.add(w);
+    const entityPhrases: string[][] = [];
+    for (const e of cleanEntities(cue.entities)) {
+      const words = e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      if (words.length >= 1) entityPhrases.push(words);
+      for (const w of words) entityTerms.add(w);
+    }
     // A link term is a real word: a fragment ("s" of "client's"), a bare digit, a clock or day word, an entity
     // the request names, and the redaction placeholder sanitize left in the text bind nothing.
     const term = (t: string) =>
@@ -4361,23 +4369,41 @@ export class ContextPartner {
     // carrying an identifier the linked item does not is a sibling, not a companion.
     const linked = (item: ContextItem): boolean => {
       const n = idNumbers(`${item.title} ${item.text}`);
-      const own = contentWords(`${item.title} ${item.text}`);
-      const req = own.some((t) => requestTerms.has(t));
-      for (const r of refs) {
+      const itemYears = new Set(`${item.title} ${item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []);
+      // A Set: a word the item repeats counts once, so "shared two" is two different words of the pick's.
+      const own = new Set(contentWords(`${item.title} ${item.text}`).filter(term));
+      const ownAll = new Set(contentWords(`${item.title} ${item.text}`));
+      for (const p of picks) {
+        // A document of a different year is that topic's sibling, not its companion — last year's renewal
+        // notice beside this year's (their day numbers can agree by chance).
+        if (itemYears.size > 0 && p.years.size > 0 && ![...itemYears].some((y) => p.years.has(y))) continue;
         let shareNumber = false;
         for (const id of n)
-          if (r.has(id)) {
+          if (p.refs.has(id)) {
             shareNumber = true;
             break;
           }
-        if (!shareNumber && r.size > 0 && n.size > 0) continue;
+        if (!shareNumber && p.refs.size > 0 && n.size > 0) continue;
         if (shareNumber) return true;
         // Only a rare word binds: "Nadia" or "lunch" sit on most of the user's items, so another event named
-        // with them is a look-alike; "Globex" or a project name few items hold is the item's own topic.
-        let shared = 0;
+        // with them is a look-alike; "Globex" or a project name few items hold is the item's own topic. The
+        // cache index holds raw words, so a word whose stem differs ("meeting" -> "meet") looks absent under
+        // the stem — and absent reads rare; either form being common is evidence enough to say it is not.
+        const sharedWords = new Set<string>();
         for (const t of own)
-          if (subjectTerms.has(t) && term(t) && this.deps.cache.isRare(s.scope, stemWord(t), RARE_SHARE)) shared++;
-        if (shared >= 2 || (shared >= 1 && req)) return true;
+          if (
+            p.terms.has(t) &&
+            this.deps.cache.isRare(s.scope, t, RARE_SHARE) &&
+            this.deps.cache.isRare(s.scope, stemWord(t), RARE_SHARE)
+          )
+            sharedWords.add(t);
+        // A name the request names, carried whole on both sides — the mail the meeting's sender sent — is a
+        // link of its own; a first-name fragment of a multi-word entity is not.
+        let entityShared = false;
+        for (const e of entityPhrases) if (e.every((w) => ownAll.has(w) && p.terms.has(w))) entityShared = true;
+        // A request word that isn't one of the counted link words is a second reason beside the link.
+        const req = [...own].some((t) => requestTerms.has(t) && !sharedWords.has(t));
+        if (sharedWords.size >= 2 || (sharedWords.size >= 1 && (req || entityShared))) return true;
       }
       return false;
     };
@@ -4415,7 +4441,7 @@ export class ContextPartner {
     for (const x of scored) take(x);
     // Companions the request's words never ranked in: the cache searched for the chosen items' terms.
     if (vocab !== undefined && out.length < room) {
-      const q = termIds([...subjectTerms].join(" "), vocab, false);
+      const q = termIds([...new Set(picks.flatMap((p) => [...p.terms]))].join(" "), vocab, false);
       const query: number[] = [];
       for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
       if (query.length > 0)
