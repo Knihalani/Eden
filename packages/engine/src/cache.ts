@@ -47,9 +47,6 @@ import { orgLabel } from "./parties";
 
 const NO_TERMS = new Uint32Array(0);
 
-/** `ItemCache.dated`: the most items one scan reads (their date facts, `day-facts.ts`, read from the text once). */
-const DATED_SCAN = 20_000;
-
 interface Entry {
   item: ContextItem;
   fetchedAt: number;
@@ -91,6 +88,11 @@ interface Entry {
    * words change is a new entry, and a new copy with the same words (`put`) keeps them, as it keeps the index.
    */
   dates: DayFacts | undefined;
+  /**
+   * The same facts as `dates`, read at `put`/thaw for the day index (`UserCache.days`): `dated` copies it into
+   * `dates` for the candidates it reads, so the lazy `dates` semantics tests hold still stand (D1888).
+   */
+  dayIndex: DayFacts | undefined;
   /**
    * D1927: the sync's stamp (`SyncManager.stampOf`) for the source sketch and rare-word table this entry's words were
    * last added to by the sync's store, or 0 when none is known (a lookup's copy, a thaw from disk). Kept while the
@@ -192,6 +194,15 @@ class UserCache {
   /** How many of `items` are synced (D57). */
   synced = 0;
   readonly byDoc: (Entry | undefined)[] = [];
+  /**
+   * The day index (D44, D1721): `starts` holds every entry with a `meta.start` under its written day
+   * (`start.slice(0,10)`; a UTC instant's own day — a query reads the wanted day plus its neighbours, since the
+   * user's offset can move a UTC start one day either way), and `days` holds entries under each month/day key
+   * their date facts name or cover (entries holding a span or an ordinal go under every key and are checked
+   * exactly). `timed`/`dated` look matches up here instead of scanning every item.
+   */
+  readonly starts = new Map<string, Set<Entry>>();
+  readonly days = new Map<number, Set<Entry>>();
   readonly vocab: Vocab;
   readonly index: SparseIndex;
   readonly sketcher: TextSketcher;
@@ -534,6 +545,68 @@ function tallyOffset(u: UserCache, item: ContextItem, by: 1 | -1): void {
   else u.offsets.delete(o);
 }
 
+/** Adds/removes an entry from a set map, deleting empty buckets. */
+function bucket<K>(map: Map<K, Set<Entry>>, key: K, e: Entry, by: 1 | -1): void {
+  if (by < 0) {
+    const set = map.get(key);
+    if (set === undefined) return;
+    set.delete(e);
+    if (set.size === 0) map.delete(key);
+    return;
+  }
+  let set = map.get(key);
+  if (set === undefined) map.set(key, (set = new Set()));
+  set.add(e);
+}
+
+/** A raw start date is enough to find UTC events after checking `dayOf` with the user's offset. */
+function rawStartDay(start: string): string | undefined {
+  return /^\d{4}-\d{2}-\d{2}/.test(start) ? start.slice(0, 10) : undefined;
+}
+
+/** The month/day keys held by date facts; span facts are candidates for every day and are checked exactly later. */
+function factDays(f: DayFacts): number[] {
+  if (f === 0) return [];
+  if (typeof f === "number") {
+    const out: number[] = [];
+    const mask = f % 2 ** 31;
+    const k1 = Math.floor(f / 2 ** 31) % 512;
+    const k2 = Math.floor(f / 2 ** 40);
+    for (const k of [k1 - 1, k2 - 1]) if (k >= 0) out.push(k);
+    if (mask !== 0) for (let k = 0; k < 12 * 32; k++) out.push(k);
+    return out;
+  }
+  const closed = f[0]!;
+  const open = f[1 + closed]!;
+  const at = 2 + closed + open;
+  const n = f[at]!;
+  const out = Array.from(f.subarray(at + 1, at + 1 + n));
+  const mask = (f[at + 1 + n]! | (f[at + 2 + n]! << 16)) >>> 0;
+  // A trailing `wd` weekday mask ("every Thursday") holds no named day or span: index it under every key like a
+  // span's, so `dated` still runs the exact `dayFactsClass` check on it.
+  const wd = f.length === 6 + closed + open + n ? f[f.length - 1]! : 0;
+  if (closed !== 0 || open !== 0 || mask !== 0 || wd !== 0) for (let k = 0; k < 12 * 32; k++) out.push(k);
+  return out;
+}
+
+function indexEntry(u: UserCache, e: Entry, by: 1 | -1): void {
+  const start = e.item.meta?.start;
+  const raw = start && rawStartDay(start);
+  if (raw) bucket(u.starts, raw, e, by);
+  const facts = e.dayIndex ?? e.dates;
+  if (facts !== undefined) for (const k of factDays(facts)) bucket(u.days, k, e, by);
+}
+
+function nearbyDays(day: string): string[] {
+  const t = Date.parse(`${day}T00:00:00Z`);
+  if (Number.isNaN(t)) return [day];
+  return [
+    day,
+    new Date(t - 86_400_000).toISOString().slice(0, 10),
+    new Date(t + 86_400_000).toISOString().slice(0, 10),
+  ];
+}
+
 /** Appends an entry to its class's list (it is the newest of its class). */
 function link(u: UserCache, e: Entry): void {
   const k = e.synced ? SYNCED : LOOSE;
@@ -873,6 +946,11 @@ export class ItemCache {
   private readonly limits: CacheLimits;
   /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
   private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
+  /**
+   * Told of every synced entry's birth (a synced put, a thaw) and death (`drop`, the whole user on `dropUser` with
+   * null ids): the sync's per-source held count (`SyncManager`).
+   */
+  private syncedHeld: ((scope: Scope, sourceId: string | null, id: string | null, held: boolean) => void) | null = null;
   /** The last revision handed out: every user's revisions are drawn from it, so one never repeats. */
   private revisions = 0;
   /** The expiry timer (`expireEveryMs`), started by the first `put`; null before then and after `close`. */
@@ -1111,6 +1189,7 @@ export class ItemCache {
     this.restoring.delete(key);
     this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
+    this.syncedHeld?.(u.scope, null, null, false);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
     clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo(); // Nor its terms in the vocabulary's decode memo (D998).
@@ -1126,6 +1205,14 @@ export class ItemCache {
    */
   onDropped(fn: (scope: Scope, ids: string[] | null) => void): void {
     this.dropped = fn;
+  }
+
+  /**
+   * Calls `fn` whenever a synced cache entry is born (a put that leaves it synced, a thaw) or dies (any drop),
+   * with null `sourceId`/`id` when the whole user goes: the sync keeps each source's held count from it.
+   */
+  onSyncedHeld(fn: (scope: Scope, sourceId: string | null, id: string | null, held: boolean) => void): void {
+    this.syncedHeld = fn;
   }
 
   /** The user's vocabulary (creating the user's cache if needed). */
@@ -1203,10 +1290,23 @@ export class ItemCache {
         unlink(u, old); // Out of the lookups' list into the sync's (re-placed below, refreshed or dropped).
         old.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
         link(u, old);
       }
       // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
       const isSynced = synced || old?.synced === true;
+      // A marked read that began after this listing's already stored its copy (`readMark` is the read's order): this
+      // page predates what is held, and its older words must not downgrade it. Two stores interleave once a store
+      // yields between slices (STORE_SLICE_MS), and the sync's reads run at once (a poll beside a notice's ingest).
+      // The item was still listed: its order and fetch time refresh, its copy stands.
+      if (old && readMark !== 0 && old.readMark > readMark) {
+        old.fetchedAt = now;
+        u.items.delete(item.id);
+        u.items.set(item.id, old);
+        unlink(u, old);
+        link(u, old);
+        continue;
+      }
       if (old && old.item === item) {
         // A listing reused the copy held (`reuseFor`): nothing about it changed, so only its fetch time and order.
         old.fetchedAt = now;
@@ -1232,6 +1332,7 @@ export class ItemCache {
           same && sameFields(old.item, item) ? old.item : this.limits.packText ? repackLike(item, old.item) : item;
         // The people and the offset counted out for the old copy and in for the new (the tallies are apart: neither
         // reads the other's state). The same object held is read once for both (`retally`, D1951).
+        indexEntry(u, old, -1);
         if (fresh === old.item) retally(u, fresh);
         else {
           tally(u, old.item, -1);
@@ -1240,6 +1341,7 @@ export class ItemCache {
         tallyOffset(u, old.item, -1);
         old.item = fresh;
         tallyOffset(u, fresh, 1);
+        indexEntry(u, old, 1);
         old.raw = from; // What this copy was redacted from, if a listing said; a lookup's copy ends the reuse.
         old.fetchedAt = now;
         old.readMark = Math.max(old.readMark, readMark); // The same words: current as of the later read.
@@ -1268,15 +1370,18 @@ export class ItemCache {
         raw: from,
         seq: ++this.seqs,
         dates: undefined,
+        dayIndex: dayFactsOf(item.title, item.text),
         stamp,
       };
       if (isSynced) {
         entry.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
       }
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       link(u, entry);
       u.byDoc[doc] = entry;
+      indexEntry(u, entry, 1);
       u.revision = ++this.revisions;
       changed.push(stored);
     }
@@ -1445,12 +1550,26 @@ export class ItemCache {
     u.seen = old.seen;
     for (const e of old.items.values()) {
       const doc = this.index(u, e.item);
-      const { item, fetchedAt, readMark, sketch, raw, dates, stamp } = e;
+      const { item, fetchedAt, readMark, sketch, dates, dayIndex, raw, stamp } = e;
       const seq = ++this.seqs; // The new index's insertion order.
-      const entry: Entry = { item, fetchedAt, readMark, doc, sketch, prev: null, next: null, raw, seq, dates, stamp };
+      const entry: Entry = {
+        item,
+        fetchedAt,
+        readMark,
+        doc,
+        sketch,
+        prev: null,
+        next: null,
+        raw,
+        seq,
+        dates,
+        dayIndex,
+        stamp,
+      };
       if (e.synced) entry.synced = true;
       u.items.set(e.item.id, entry);
       link(u, entry); // In `items` order, so each class's list keeps its order.
+      indexEntry(u, entry, 1);
       u.byDoc[doc] = entry;
     }
     u.baseline = u.vocab.size;
@@ -1493,7 +1612,11 @@ export class ItemCache {
   private drop(u: UserCache, e: Entry): void {
     u.revision = ++this.revisions;
     unlink(u, e);
-    if (e.synced) u.synced--;
+    indexEntry(u, e, -1);
+    if (e.synced) {
+      u.synced--;
+      this.syncedHeld?.(u.scope, e.item.sourceId, e.item.id, false);
+    }
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
@@ -1522,6 +1645,15 @@ export class ItemCache {
       const e = items?.get(id);
       return e && this.alive(e, now) ? e.item.updatedAt : undefined;
     };
+  }
+
+  /**
+   * Whether the user's oldest synced entry has expired (`syncTtlMs`): true until the sweep or a write drops it.
+   * `SyncManager.complete` uses it to know its `held` count can be trusted without a per-id freshness scan.
+   */
+  syncedExpired(scope: Scope, now = Date.now()): boolean {
+    const e = this.peek(scope)?.heads[SYNCED];
+    return e != null && !this.alive(e, now);
   }
 
   /** Whether each id is held as a synced item and alive, for many ids of one user (the sync's `complete`, D264). */
@@ -1606,8 +1738,8 @@ export class ItemCache {
 
   /**
    * Fresh cached items that start on one of `days` (YYYY-MM-DD of their `meta.start`: events), soonest first, at most
-   * `limit`: for requests that name a day rather than words the item holds (D44). A scan of the user's items (at most
-   * `maxItemsPerUser`), run only for such requests; the cap keeps what is scored after it small. An item's day is
+   * `limit`: for requests that name a day rather than words the item holds (D44). Read from the day index
+   * (`UserCache.starts`), run only for such requests; the cap keeps what is scored after it small. An item's day is
    * `startDay`'s at `offset` (`dayOf`): the user's, or the one the request's days were resolved at (`Cue.offset`), so
    * the engine's on-day checks agree with what this returns even if a sync moved the user's offset in between.
    */
@@ -1615,8 +1747,12 @@ export class ItemCache {
     const u = this.peek(scope);
     if (!u || days.size === 0) return [];
     offset ??= this.offsetOf(scope);
+    const candidates = new Set<Entry>();
+    for (const day of days)
+      for (const raw of nearbyDays(day)) for (const e of u.starts.get(raw) ?? []) candidates.add(e);
     const out: CacheHit[] = [];
-    for (const e of u.items.values()) {
+    // Doc order is items order, as the old scan's was: equal start times keep it (the sort below has no tiebreak).
+    for (const e of [...candidates].sort((a, b) => a.doc - b.doc)) {
       const start = e.item.meta?.start;
       if (!start || !days.has(dayOf(start, offset)) || !this.alive(e, now)) continue;
       out.push({ item: e.item, sketch: null, doc: e.doc, score: 0, coverage: 0, matched: 0 });
@@ -1636,9 +1772,8 @@ export class ItemCache {
    * `pushDaySeats` (G1, D1400): fresh cached items on one of `days` whatever their words, at most `limit`: events
    * starting that day first (soonest first), then items whose text spans the day (`coversDay`), then items that write
    * the date (`namesDay`), each newest first. `skip` leaves an item out before its text is read (bulk mail, what the
-   * pool already holds). A scan of the user's items (at most `DATED_SCAN` past the events) that checks each one's date
-   * facts (`day-facts.ts`, D1721), read from its text the first time a scan meets it and kept on its entry: run only
-   * for a request that names a day, off the fast path.
+   * pool already holds). Candidates come from the day index (`UserCache.days`, `UserCache.starts`) and are checked
+   * exactly; entries thawed without facts get theirs read once here (`Entry.dayIndex`, kept like `Entry.dates`).
    */
   dated(
     scope: Scope,
@@ -1652,9 +1787,20 @@ export class ItemCache {
     if (!u || days.size === 0 || limit <= 0) return [];
     offset ??= this.offsetOf(scope);
     const want = dayKeys(days);
-    let read = 0;
-    const found: { e: Entry; cls: number; at: number }[] = [];
+    // Legacy/thawed entries may not have facts yet; build their index once when first queried.
     for (const e of u.items.values()) {
+      if (e.dayIndex === undefined) {
+        e.dayIndex = dayFactsOf(e.item.title, e.item.text);
+        indexEntry(u, e, 1);
+      }
+    }
+    const candidates = new Set<Entry>();
+    for (const key of want) for (const e of u.days.get(key) ?? []) candidates.add(e);
+    for (const day of days) {
+      for (const raw of nearbyDays(day)) for (const e of u.starts.get(raw) ?? []) candidates.add(e);
+    }
+    const found: { e: Entry; cls: number; at: number }[] = [];
+    for (const e of candidates) {
       if (!this.alive(e, now) || skip(e.item)) continue;
       const start = e.item.meta?.start;
       if (start && days.has(dayOf(start, offset))) {
@@ -1662,9 +1808,7 @@ export class ItemCache {
         found.push({ e, cls: 0, at: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t });
         continue;
       }
-      // Past the cap no more items are read; events (told by their start alone) are still found.
-      if (++read > DATED_SCAN) continue;
-      e.dates ??= dayFactsOf(e.item.title, e.item.text);
+      e.dates ??= e.dayIndex!;
       const cls = dayFactsClass(e.dates, days, want, e.item.updatedAt);
       if (cls > 0) found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
     }
@@ -2342,14 +2486,17 @@ export class ItemCache {
         raw: r.r,
         seq: r.q,
         dates: thawedDates(r.t),
+        dayIndex: thawedDates(r.t),
         stamp: f.stamps?.[j] ?? 0,
       };
       if (r.s === 1) {
         entry.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
       }
       u.items.set(item.id, entry);
       link(u, entry);
+      indexEntry(u, entry, 1);
       u.byDoc[r.d] = entry;
       if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }
@@ -2524,14 +2671,17 @@ export class ItemCache {
         raw: r.r,
         seq: r.q,
         dates: thawedDates(r.t),
+        dayIndex: thawedDates(r.t),
         stamp: f.stamps?.[j] ?? 0,
       };
       if (r.s === 1) {
         entry.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
       }
       u.items.set(item.id, entry);
       link(u, entry);
+      indexEntry(u, entry, 1);
       entries[j] = entry;
       if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }

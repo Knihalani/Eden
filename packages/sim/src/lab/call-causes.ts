@@ -122,8 +122,8 @@ export class CallCauses {
       }
       const o = sync as Record<string, unknown>;
       const store = o.store as Fn;
-      o.store = (...args: unknown[]) => {
-        const n = store.apply(sync, args) as number;
+      o.store = async (...args: unknown[]) => {
+        const n = (await store.apply(sync, args)) as number;
         if (n > 0) {
           const cause = causeOf(als.getStore() ?? [], "list");
           this.found.set(cause, (this.found.get(cause) ?? 0) + n);
