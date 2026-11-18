@@ -33,7 +33,7 @@ async function exercise(compiled: boolean) {
       copyFileSync(output, moved);
       command = [moved];
     }
-    writeFileSync(join(dir, ".env"), "EDEN_DEV=1\nEDEN_PROCESSES=4\n");
+    writeFileSync(join(dir, ".env"), "EDEN_DEV=1\nEDEN_API_KEYS=dotenv:weak\nEDEN_PROCESSES=4\n");
     writeFileSync(join(dir, "bunfig.toml"), compiled ? 'preload = ["./poison.ts"]\n' : "[run]\nsilent = true\n");
     if (compiled) {
       writeFileSync(join(dir, "poison.ts"), 'console.log("unexpected preload"); throw new Error("autoloaded");');
