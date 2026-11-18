@@ -1344,6 +1344,9 @@ export class CardEnricher {
         }
         batch.push(q);
       }
+      // Removals change `orderQueue`'s correspondent stats (its boosts count the senders still queued), so what is
+      // left wants a re-sort before the next batch — the same order the queue was always read in before `queueDirty`.
+      if (this.limits.order && (batch.length > 0 || followers.length > 0)) u.queueDirty = true;
       if (batch.length === 0) {
         // `cardsLanes`: everything left waits on another lane's batch. Back in the queue; that lane reads them after
         // its call (as its own followers), and this one ends.
@@ -1719,6 +1722,8 @@ export class CardEnricher {
       u.queued.delete(u.queue[i]!.hash);
       u.queue.splice(i, 1);
     }
+    // `cardsOrder`: removals change `orderQueue`'s correspondent stats, so the queue wants a re-sort.
+    u.queueDirty = true;
   }
 
   get userCount(): number {
