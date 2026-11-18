@@ -48,19 +48,23 @@ if (config.dev && !config.child && process.env.OPENROUTER_API_KEY && process.env
   );
   process.exit(2);
 }
-try {
-  // D992: with EDEN_NODES (or EDEN_NODES_FILE) this process is the cluster router over machines, and holds no users.
-  const cluster = local || config.child ? null : nodesFromEnv(process.env);
-  if (cluster) {
-    await runCluster(config, cluster);
-  } else if (config.processes > 1) {
-    await runRouter(config);
-  } else {
-    await serve(config);
+// Wrapped in a call so the compiled local binary can ship `--bytecode` (top-level await forces the build off the
+// bytecode cache; nothing else in the bundle needs it).
+void (async () => {
+  try {
+    // D992: with EDEN_NODES (or EDEN_NODES_FILE) this process is the cluster router over machines, and holds no users.
+    const cluster = local || config.child ? null : nodesFromEnv(process.env);
+    if (cluster) {
+      await runCluster(config, cluster);
+    } else if (config.processes > 1) {
+      await runRouter(config);
+    } else {
+      await serve(config);
+    }
+  } catch (e) {
+    startupFailed(e, config);
   }
-} catch (e) {
-  startupFailed(e, config);
-}
+})();
 
 /**
  * A configuration mistake as one line naming the setting, exit 2 (D365). Uncaught, Bun printed ten lines of
@@ -154,8 +158,10 @@ async function serve(config: ServerConfig): Promise<void> {
     const run = crypto.randomUUID();
     setInterval(() => console.log(JSON.stringify({ sync: { run, pid: process.pid, ...sync.stats } })), 60_000).unref();
   }
-  // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request.
-  warmGate();
+  // The secret gate compiles its rules on first use; doing it here keeps that stall off the first request. Local
+  // mode warms it after EDEN_LOCAL_READY instead (the owner blocks on that line, and the local path never returns
+  // a 503 while the compile runs: requests arriving during it just wait the ~35 ms once).
+  if (!local) warmGate();
   // The turn gate fails open (D1014): unreadable weights leave the start rule alone. Said once, so a missing
   // `turn-gate.bin` in an image is seen (R1), not only measured.
   const gateNotice = turnGateNotice(partner.config.pushGate, turnGate());
@@ -251,7 +257,10 @@ async function serve(config: ServerConfig): Promise<void> {
         : "") +
       ")",
   );
-  if (local && !stopping) process.stdout.write(`EDEN_LOCAL_READY ${server.port}\n`);
+  if (local && !stopping) {
+    process.stdout.write(`EDEN_LOCAL_READY ${server.port}\n`);
+    setTimeout(warmGate, 0).unref();
+  }
   if (child) {
     // The router waits for this port before it routes here; the IPC channel exists only when the router spawned us.
     process.send?.({ edenListening: server.port });

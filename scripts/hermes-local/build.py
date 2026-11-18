@@ -60,6 +60,7 @@ def build(target, version, output):
             [
                 "bun", "build", "--compile", f"--target={TARGETS[target]}",
                 "--no-compile-autoload-dotenv", "--no-compile-autoload-bunfig",
+                "--bytecode",
                 f"--outfile={binary}", "packages/server/src/main.ts",
             ],
             cwd=ROOT,
