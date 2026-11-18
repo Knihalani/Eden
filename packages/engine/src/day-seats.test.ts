@@ -92,3 +92,61 @@ describe("day seats (D1978): the lookup seats the items a named day holds", () =
     expect(ids(p, o)).toHaveLength(0);
   });
 });
+
+const hear = (p: ContextPartner, text: string, sessionId = "s1") =>
+  p.observe({ ...ref(sessionId), at: NOW, kind: "agent_message", text } as AgentEvent, { waitMs: 2_000 });
+
+/** The recurring weekday pickup that named 16:30 in the last turn — not itself the clash. */
+const PICKUP = item(
+  "pickup",
+  "School pick-up: Leo",
+  "Weekdays 15:15, St Mary's Primary. Thursday: football club until 16:30.",
+);
+/** A one-off 1:1 whose day and time live only in a bare weekday and a written clock. */
+const ONE_ON_ONE = item("oneonone", "1:1 with manager", "1:1 with manager, Thursday 16:15-17:00.");
+
+describe("clash carry (D1979): a clash at the time just said hands the bare-weekday event it hits", () => {
+  test('"a clash at that time?" resolves the span from the last turn and hands the overlapping item', async () => {
+    const p = setup([PICKUP, ONE_ON_ONE]);
+    // `ids` drains pending injections, so earlier turns' pushes are flushed here.
+    ids(p, await say(p, "can I pick Leo up on Thursday?"));
+    ids(p, await hear(p, "Football club runs until 16:30 on Thursday."));
+    const o = await say(p, "do I have a clash at that time?");
+    expect(ids(p, o)).toContain("cal:oneonone");
+    // The pickup's own clock (15:15–16:30) ends at the asked time, not inside it.
+    expect(ids(p, o)).not.toContain("cal:pickup");
+  });
+
+  test("a bare-weekday item whose clock misses the asked time stays silent", async () => {
+    const LATE = item("gym", "Gym", "Gym with Sam, Thursday 19:15-20:00.");
+    const p = setup([PICKUP, LATE]);
+    ids(p, await say(p, "can I pick Leo up on Thursday?"));
+    ids(p, await hear(p, "Football club runs until 16:30 on Thursday."));
+    const o = await say(p, "do I have a clash at that time?");
+    expect(ids(p, o)).toHaveLength(0);
+  });
+
+  test("a dated item on another week is not a clash for this one", async () => {
+    // Same words as ONE_ON_ONE but meta.start on the following Thursday: the weekday in its
+    // text cannot pull next week's 1:1 into this week's clash ask.
+    const NEXT = item(
+      "nextone",
+      "1:1 with manager",
+      "1:1 with manager, Thursday 16:15-17:00.",
+      24,
+      "2026-11-26T16:15:00Z",
+    );
+    const p = setup([NEXT]);
+    ids(p, await say(p, "can I pick Leo up on Thursday?"));
+    ids(p, await hear(p, "Football club runs until 16:30 on Thursday."));
+    const o = await say(p, "do I have a clash at that time?");
+    expect(ids(p, o)).toHaveLength(0);
+  });
+
+  test("a free-ask still does not list a bare-weekday item (class 3 stays out of the day listing)", async () => {
+    const p = setup([ONE_ON_ONE]);
+    await say(p, "what meetings do I have?");
+    const o = await say(p, "is Thursday morning free?");
+    expect(ids(p, o)).toHaveLength(0);
+  });
+});
