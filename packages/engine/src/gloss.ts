@@ -35,7 +35,8 @@
  * never decreasing), then the arena. Keys and English words are strictly increasing by bytes (checked when read: the
  * binary search relies on it). A filter at T: its size in bits (a power of two), its hash count, then the bits.
  */
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, readFileSync, statSync } from "node:fs";
+import glossaryFile from "./gloss.bin" with { type: "file" };
 import { isStopword } from "./text";
 
 /** A string table over a glossary's bytes: entry i is `bytes[base + offs[i] .. base + offs[i + 1])`. */
@@ -400,17 +401,22 @@ function readExactly(fd: number, buf: Buffer): boolean {
  * glossed for the rest of the process, told once). Either way the request in hand is left as written (fail open).
  */
 export const loadGlossary = guarded((file: string | URL): Glossary | null => {
-  const fd = openSync(file, "r");
+  // Bun's immutable embedded files support readFileSync, but not file descriptors.
+  const embedded = typeof file === "string" && file.startsWith("/$bunfs/");
+  const fd = embedded ? null : openSync(file, "r");
   let prefix: Buffer;
   try {
     const head = Buffer.alloc(HEADER);
-    if (!readExactly(fd, head)) return null;
+    const raw = embedded ? readFileSync(file) : null;
+    if (raw) raw.copy(head, 0, 0, HEADER);
+    else if (!readExactly(fd!, head)) return null;
     const h = header(aligned(head).words);
-    if (!h || fstatSync(fd).size !== h.length) return null;
+    if (!h || (raw ? raw.length : fstatSync(fd!).size) !== h.length) return null;
     prefix = Buffer.alloc(h.lexStart);
-    if (!readExactly(fd, prefix)) return null;
+    if (raw) raw.copy(prefix, 0, 0, h.lexStart);
+    else if (!readExactly(fd!, prefix)) return null;
   } finally {
-    closeSync(fd);
+    if (fd !== null) closeSync(fd);
   }
   const p = readPrefix(prefix);
   if (!p) return null;
@@ -425,13 +431,19 @@ export const loadGlossary = guarded((file: string | URL): Glossary | null => {
     try {
       // Exactly the length the prefix's header gave, never what the file has grown to since: a file replaced by a
       // larger one is refused by its size, not read into memory.
-      const fd = openSync(file, "r");
-      try {
-        if (fstatSync(fd).size !== p.h.length) throw new Error("size");
-        whole = Buffer.alloc(p.h.length);
-        if (!readExactly(fd, whole)) throw new Error("short read");
-      } finally {
-        closeSync(fd);
+      if (embedded) {
+        if (statSync(file).size !== p.h.length) throw new Error("size");
+        whole = readFileSync(file);
+        if (whole.length !== p.h.length) throw new Error("size");
+      } else {
+        const fd = openSync(file, "r");
+        try {
+          if (fstatSync(fd).size !== p.h.length) throw new Error("size");
+          whole = Buffer.alloc(p.h.length);
+          if (!readExactly(fd, whole)) throw new Error("short read");
+        } finally {
+          closeSync(fd);
+        }
       }
     } catch {
       tell("could not be read (tried again on a later request)");
@@ -446,7 +458,7 @@ export const loadGlossary = guarded((file: string | URL): Glossary | null => {
 
 /** Reads the shipped glossary's prefix now (once a process), so a request does not wait for it. */
 export function warmGlossary(): Glossary | null {
-  if (loaded === undefined) loaded = loadGlossary(new URL("./gloss.bin", import.meta.url));
+  if (loaded === undefined) loaded = loadGlossary(glossaryFile);
   return loaded;
 }
 
