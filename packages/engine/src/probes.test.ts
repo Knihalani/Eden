@@ -122,6 +122,8 @@ describe("probes: what a request implies", () => {
     expect(isSubject(weeklyCall, "Confirm my weekly call on Thursday at 10am")).toBe(true);
     const boiler = { ...item("Tuesday 9:00"), title: "Annual boiler inspection" };
     expect(isSubject(boiler, "When is my annual physio appointment?")).toBe(false);
+    const weeklyLunch = { ...item("Wednesday 12:30"), title: "Weekly lunch" };
+    expect(isSubject(weeklyLunch, "When is my weekly call?")).toBe(false);
   });
 
   test("the time parsers stay linear on hostile text", () => {

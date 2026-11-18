@@ -521,9 +521,13 @@ export function isSubject(item: ContextItem, raw: string): boolean {
   const shared = [...own].filter((x) => asked.has(x));
   if (shared.length === 0) return false;
   if (shared.some((x) => !MODIFIER_STEMS.has(x))) return true;
-  // Only recurrence words met ("annual" … "annu"): the subject it is if the request names nothing else the item
-  // lacks — "my weekly call" vs "Weekly call", not "my annual physio" vs "Annual boiler inspection".
-  return [...asked].every((x) => own.has(x) || MODIFIER_STEMS.has(x));
+  // Only recurrence words met ("annual" … "annu"): the subject it is if neither side names a thing the other
+  // lacks — "my weekly call" vs "Weekly call", not "my weekly call" vs "Weekly lunch" ("lunc" the request never
+  // said) nor "my annual physio" vs "Annual boiler inspection" ("phys" the item never held).
+  return (
+    [...asked].every((x) => own.has(x) || MODIFIER_STEMS.has(x)) &&
+    [...own].every((x) => asked.has(x) || MODIFIER_STEMS.has(x))
+  );
 }
 
 /** Minutes from midnight an item starts at, in its own offset; null without a timed `meta.start`. */
