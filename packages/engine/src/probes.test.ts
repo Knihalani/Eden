@@ -18,6 +18,7 @@ import {
   addresses,
   orgsOf,
   overlaps,
+  pushStart,
   requestedRange,
   requestedSpan,
   rolesOf,
@@ -302,6 +303,23 @@ describe("probes in the engine (config.probes)", () => {
     // A fact of the world's, or one about something not the user's own, still opens nothing.
     expect((await run(physio, true, "What is the capital of Australia?", PUSH)).got).toEqual([]);
     expect((await run(physio, true, "When is the office party?", PUSH)).got).toEqual([]);
+    // A day the question names rules out the same-thing item on another day (D1980 review).
+    const twoPhysio = new StaticSource("calendar", "Calendar", [
+      { ref: "physio-mon", title: "Physio with Dr. Ines", text: "Monday 8:30" },
+      { ref: "physio-thu", title: "Physio follow-up", text: "Thursday 15:00" },
+    ]);
+    expect((await run(twoPhysio, true, "When is my physio appointment on Thursday?", PUSH)).got).toEqual([
+      "calendar:physio-thu",
+    ]);
+    // A shared recurrence adjective is not the thing asked about (D1980 review).
+    const boiler = new StaticSource("home", "Home", [
+      { ref: "boiler", title: "Annual boiler inspection", text: "Tuesday 9:00" },
+    ]);
+    expect((await run(boiler, true, "When is my annual physio appointment?", PUSH)).got).toEqual([]);
+  });
+
+  test("an own-thing question starts a listed push, so the turn gate keeps it (D1980)", () => {
+    expect(pushStart("When is my physio appointment?", { open: true, indirect: true })?.how).toBe("listed");
   });
 });
 

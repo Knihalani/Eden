@@ -349,15 +349,16 @@ const PASSIVE_NEED = new RegExp(
  * fact of the world's ("What is the capital of Australia?") nor about something not theirs ("When is the office
  * party?").
  */
-export const ASKS_OWN =
-  /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
+export const ASKS_OWN = /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
 
 function pushStartOne(
   raw: string,
   opts: { open: boolean; indirect: boolean },
 ): { how: "listed" | "opened"; request: string } | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
-  if (opts.open && ASKS_OWN.test(raw)) return { how: "opened", request: raw };
+  // An own-thing question is a request the lists know, not a shape the open gate guesses at: `listed` keeps it
+  // through the turn gate, whose "opened" score a question never reaches.
+  if (opts.open && ASKS_OWN.test(raw)) return { how: "listed", request: raw };
   if (opts.indirect && opts.open && PASSIVE_NEED.test(raw.slice(0, OPEN_HEAD_CHARS)))
     return { how: "opened", request: raw };
   const rest = opts.indirect ? indirectRest(raw) : null;
