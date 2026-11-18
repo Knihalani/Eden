@@ -22,6 +22,7 @@ import {
   requestedSpan,
   rolesOf,
   settled,
+  textMinutes,
   topicOf,
 } from "./probes";
 import { extractEntities } from "./text";
@@ -93,6 +94,13 @@ describe("probes: what a request implies", () => {
     expect(overlaps(ev("departs 07:10 LHR, arrives 10:35 MAD"), 430, requestedSpan("workshop at 10:00")!)).toBe(true);
     // No end stated: an hour.
     expect(endMinutes(ev("Hall B"), 1110)).toBe(1170);
+    // A clock with a pm marker is the afternoon's minutes, stuck or spaced ("4:15pm", "4:15 pm").
+    expect(textMinutes(ev("Dentist at 4:15pm"))).toBe(975);
+    expect(endMinutes(ev("Dentist 4:15 pm-5:00pm"), 975)).toBe(1020);
+    // A range written only in the title gives the end as well as the start.
+    const titled = (title: string): ContextItem => ({ ...item("notes"), title });
+    expect(textMinutes(titled("1:1 with manager, Thursday 16:15-17:00"))).toBe(975);
+    expect(endMinutes(titled("1:1 with manager, Thursday 16:15-17:00"), 975)).toBe(1020);
   });
 
   test("the event a request is about is not a clash with it; a request to make something new has no subject", () => {

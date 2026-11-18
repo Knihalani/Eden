@@ -446,13 +446,25 @@ export function requestedSpan(raw: string): { from: number; to: number } | null 
   return null;
 }
 
+/** A clock time in text: `HH:MM`, optionally with an am/pm marker ("4:15pm", "4:15 p.m."). */
+const CLOCK = /\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*([ap])\.?m\.?)?/gi;
+
+/** Minutes from midnight a clock match means: a pm hour under 12 gets twelve added, a 12am hour none. */
+const clockOf = (m: RegExpExecArray | RegExpMatchArray): number => {
+  let t = Number(m[1]) * 60 + Number(m[2]);
+  const ap = m[3]?.toLowerCase();
+  if (ap === "p" && Number(m[1]) < 12) t += 12 * 60;
+  if (ap === "a" && Number(m[1]) === 12) t -= 12 * 60;
+  return t;
+};
+
 /**
- * Minutes from midnight an event ends: the first time its text gives after its start ("10:00–11:30", "departs 07:10,
- * arrives 10:35"), within twelve hours; else an hour after it starts.
+ * Minutes from midnight an event ends: the first time its title or text gives after its start ("10:00–11:30",
+ * "departs 07:10, arrives 10:35"), within twelve hours; else an hour after it starts.
  */
 export function endMinutes(item: ContextItem, start: number): number {
-  for (const m of item.text.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)) {
-    const t = Number(m[1]) * 60 + Number(m[2]);
+  for (const m of `${item.title} ${item.text}`.matchAll(CLOCK)) {
+    const t = clockOf(m);
     if (t > start && t - start <= 12 * 60) return t;
   }
   return start + 60;
@@ -495,8 +507,8 @@ export function startMinutes(item: ContextItem): number | null {
 /** Minutes of the first clock time an item's own text writes ("Thursday 16:15-17:00"), when `meta.start`
  * gives none (D1979). */
 export function textMinutes(item: ContextItem): number | null {
-  const m = /\b([01]?\d|2[0-3]):([0-5]\d)\b/.exec(`${item.title} ${item.text}`);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  const m = new RegExp(CLOCK.source, "i").exec(`${item.title} ${item.text}`);
+  return m ? clockOf(m) : null;
 }
 
 /**
