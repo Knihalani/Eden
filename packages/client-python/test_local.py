@@ -40,16 +40,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header("Location", "/followed")
             self.end_headers(); return
-        self.send_response(200); self.end_headers(); self.wfile.write(b'{{"ok":true}}')
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b'{{}}')
+        with open(root / "requests", "a") as f:
+            f.write(json.dumps({{"path": self.path, "body": body}}) + "\\n")
+        if self.path == "/v1/ask": out = {{"answer": "answer to " + body["question"], "citations": []}}
+        elif self.path.startswith("/v1/events"): out = {{"injection": None, "pending": False}}
+        elif self.path == "/v1/pending": out = {{"injections": []}}
+        elif self.path == "/v1/check": out = {{"verdict": "proceed", "finding": None}}
+        else: out = {{"ok": True}}
+        self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(out).encode())
     do_GET = do_POST
     def log_message(self, *args): pass
+http.server.HTTPServer.request_queue_size = 64
 server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
 def lifetime():
     sys.stdin.buffer.read()
     os._exit(0)
 if mode != "ignores-stdin": threading.Thread(target=lifetime, daemon=True).start()
 else: signal.signal(signal.SIGTERM, signal.SIG_IGN)
-print("EDEN_LOCAL_READY", server.server_port, flush=True)
+print("EDEN_LOCAL_READY", server.server_port, end="\\r\\n" if mode == "crlf" else "\\n", flush=True)
 if mode == "spam-stdout":
     sys.stdout.write("x" * (256 * 1024)); sys.stdout.flush()
 if mode == "spam-stderr":
@@ -157,6 +166,9 @@ class LocalTests(unittest.TestCase):
         url, token, _ = owner.endpoint()
         client = EdenClient("u", "s", api_key=token, base_url=url, bypass_proxies=True, on_error=None)
         self.assertTrue(client.health()["ok"])
+
+    def test_crlf_ready(self):
+        self.assertIsNotNone(self.owner("crlf").endpoint())
 
     def test_backoff_doubles_caps_resets_and_warns_once(self):
         owner = LocalEden(self.root / "missing", self.root)

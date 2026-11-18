@@ -59,3 +59,32 @@ Local token, loopback host, ephemeral port, data directory and supplied sources 
 unreadable sources files forward no credentials. Other ambient secrets and Eden configuration are never inherited.
 Startup is bounded to 10 seconds, crashes back off from 1 to 60 seconds, and optional stderr logs rotate at 1 MiB
 with one backup. `close()` is idempotent; it waits up to two seconds each before terminate and kill escalation.
+
+### Hermes plugin
+
+Copy `examples/hermes/eden` into `<Hermes home>/plugins/eden`, enable `plugins: enabled: [eden]`, and select toolset
+`eden`. Install this Python package into Hermes' environment, or copy the entire `eden_client` directory into the
+plugin directory (the wrapper prefers this vendored copy). No model call is needed to discover/register the plugin.
+
+- **Hosted:** set a non-empty `EDEN_URL` and required `EDEN_USER_ID`; `EDEN_API_KEY` and `EDEN_TENANT_ID` retain
+  their usual client meaning.
+- **Local (no `EDEN_URL`):** user defaults to `local`, or `eden_id(EDEN_USER_ID)`; tenant is always `local`.
+  Ambient `EDEN_API_KEY` and `EDEN_TENANT_ID` are ignored with a warning. Supply a local-protocol binary:
+  `EDEN_LOCAL_BINARY` (existing file), else wrapper-local `bin/eden-local` (`.exe` on Windows), else
+  `<Hermes home>/plugins/eden/bin/eden-local`. Nothing is downloaded or looked up on PATH. A missing binary
+  disables registration. Child data is `<home>/eden/data`, stderr log `<home>/eden/logs/eden-local.log`.
+- Source paths `EDEN_SOURCES_FILE` and `EDEN_USER_SOURCES_FILE` become absolute. With neither set, an existing
+  `<home>/eden/sources.json` is used as the per-user source file (`{"users":{"local/local":[...]}}` for the default
+  identity). Hermes configuration is never read for sources or credentials.
+- Registration refuses active homes different from the routing/process launch home, in either mode: environment
+  variables belong to the launch profile. Every hook/tool also checks its registered home before touching Eden.
+  Without Hermes' home helpers, `$HERMES_HOME` or the platform default supplies a standalone home (`~/.hermes`,
+  Windows `%LOCALAPPDATA%/hermes` with fallback `~/AppData/Local/hermes`).
+- Registration is lazy: one supervisor per plugin instance, no child until the first Eden call. Sessions keep
+  generation-aware clients; a restarted child drops stale clients. `end_session` never starts a child.
+  Both process exit (`atexit`) and Hermes `ctx.on_unload` close it; rediscovery creates a fresh lazy owner.
+
+Configured local request budget: startup ≤10 s; `pre_llm_call` adds 3.8 s observe + 0.8 s pending (14.6 s total),
+`pre_tool_call` adds 0.8 s (10.8 s total), and `ask_context` adds 8 s (18 s total). These are below Hermes v0.21.5's
+30 s hook cap, whose `pre_tool_call` timeout can fail closed. As documented on the client's transport, urllib's
+socket timeout is not an absolute deadline for trickled HTTP status/headers; the local binary is trusted.
