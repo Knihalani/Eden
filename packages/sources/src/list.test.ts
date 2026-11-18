@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { SourceFanout } from "./guarded";
-import { ArgumentMappingError, McpSource, nextCursorOf, ReadOnlyViolation } from "./mcp-source";
+import { ArgumentMappingError, blockJson, McpSource, nextCursorOf, ReadOnlyViolation } from "./mcp-source";
 import { buildListArgs, mapListArgs } from "./schema-args";
 
 const scope = { tenantId: "t", userId: "u" };
@@ -78,6 +78,32 @@ describe("McpSource list (D57)", () => {
     expect(three.next).toBeNull();
     expect(calls).toEqual([{ maxResults: 2 }, { pageToken: "p2", maxResults: 2 }, { pageToken: "p4", maxResults: 2 }]);
     await s.close();
+  });
+
+  test("parses a token-paged text block once for its items and cursor", async () => {
+    const body = '{"messages":[{"id":"a","subject":"A","snippet":"body"}],"nextPageToken":"t"}';
+    const server = new McpServer({ name: "mail", version: "1" });
+    server.registerTool(
+      "search_mail",
+      { inputSchema: { query: z.string() }, annotations: { readOnlyHint: true } },
+      async () => ({ content: [] }),
+    );
+    server.registerTool(
+      "list_mail",
+      { inputSchema: { pageToken: z.string().optional() }, annotations: { readOnlyHint: true } },
+      async () => ({ content: [{ type: "text", text: body }] }),
+    );
+    const s = make(server, { name: "list_mail" });
+    const parse = spyOn(JSON, "parse");
+    try {
+      const page = await s.list!(scope, undefined, 10, AbortSignal.timeout(2_000));
+      expect(page.items.map((item) => item.ref)).toEqual(["a"]);
+      expect(page.next).toBe("t");
+      expect(parse.mock.calls.filter(([value]) => value === body)).toHaveLength(1);
+    } finally {
+      parse.mockRestore();
+      await s.close();
+    }
   });
 
   test("an offset-paged tool: Eden computes the next offset while pages come back full", async () => {
@@ -181,6 +207,25 @@ describe("list mapping and next cursors", () => {
     expect(nextCursorOf([], { next_cursor: "" })).toBeNull();
     expect(nextCursorOf([{ type: "text", text: "Here are your messages" }])).toBeNull();
     expect(nextCursorOf([], { cursor: "x".repeat(5_000) })).toBeNull(); // too long to be a cursor
+  });
+
+  test("block JSON is parsed once per index and ignores prose and non-text blocks", () => {
+    const body = '{"id":"a"}';
+    const parse = spyOn(JSON, "parse");
+    try {
+      const json = blockJson([
+        { type: "text", text: body },
+        { type: "image", text: body },
+        { type: "text", text: "plain words" },
+      ]);
+      expect(json(0)).toEqual({ id: "a" });
+      expect(json(0)).toEqual({ id: "a" });
+      expect(json(1)).toBeUndefined();
+      expect(json(2)).toBeUndefined();
+      expect(parse.mock.calls.filter(([value]) => value === body)).toHaveLength(1);
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   test("hostile results stay linear: deep nesting, huge strings, many keys", () => {
