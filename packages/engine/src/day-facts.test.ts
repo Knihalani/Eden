@@ -442,6 +442,29 @@ describe("day facts on the cache's entries (D1721)", () => {
     }
   });
 
+  test("a recurring item covers a day of its own week (the `wd` slot, D1973)", () => {
+    // 2026-11-16 is a Monday, the 18th a Wednesday, the 19th a Thursday, the 21st a Saturday.
+    const mon = new Set(["2026-11-16"]);
+    const wed = new Set(["2026-11-18"]);
+    const thu = new Set(["2026-11-19"]);
+    const sat = new Set(["2026-11-21"]);
+    expect(factsClass("Standup", "every weekday 09:00", mon)).toBe(1);
+    expect(factsClass("Standup", "every weekday 09:00", wed)).toBe(1);
+    expect(factsClass("Standup", "every weekday 09:00", sat)).toBe(-1);
+    expect(factsClass("Piano", "weekly on Thursdays", thu)).toBe(1);
+    expect(factsClass("Piano", "weekly on Thursdays", wed)).toBe(-1);
+    expect(factsClass("Meds", "daily", sat)).toBe(1);
+    expect(factsClass("Run", "every morning", wed)).toBe(1);
+    expect(factsClass("Run", "every morning", sat)).toBe(1);
+    // A bare time of day is not a recurrence: "Tuesday morning" is one Tuesday, not every day.
+    expect(factsClass("Dentist", "Tuesday morning 9am", sat)).toBe(-1);
+    expect(factsClass("Dinner", "Friday evening with Sam", wed)).toBe(-1);
+    // No digit in the text and no recurrence phrase: still nothing, as before.
+    expect(factsClass("Note", "the usual place", wed)).toBe(-1);
+    // A dated item still wins on its own reading.
+    expect(factsClass("Trip", "18 November", wed)).toBe(2);
+  });
+
   test("isolation: facts are per user's entry; the same id with other words elsewhere reads its own", () => {
     const cache = new ItemCache();
     const other = { tenantId: "t2", userId: "u1" };

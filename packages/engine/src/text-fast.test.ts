@@ -51,6 +51,9 @@ function entitiesBefore(text: string): Entity[] {
     while (to > from && isCalendarByPattern(words[to - 1]!)) to--;
     if (to === from) continue;
     if (to - from >= 2) words = words.slice(from, to);
+    // Same lone-honorific skip as extractTypedEntities ("Dr" of "Dr. Okafor" is no name).
+    if (words.length === 1 && "dr mr mrs ms miss prof sir madam rev st".split(" ").includes(words[0]!.toLowerCase()))
+      continue;
     const run = words.join(" ");
     if (words.length === 1 && (sentenceStart || isStopword(run.toLowerCase()) || isCalendarByPattern(run))) continue;
     if (words.every((w) => isStopword(w.toLowerCase()))) continue;
