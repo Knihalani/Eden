@@ -369,7 +369,7 @@ interface Session {
    * `turn` and `terms` (the item's own content terms, bounded) let a follow-up's `carry` read what the last
    * request's answer was about (D1974).
    */
-  delivered: { sketch: Sketch; refs: ReadonlySet<string>; turn: number; terms: string[] }[];
+  delivered: { sketch: Sketch | null; refs: ReadonlySet<string>; turn: number; terms: string[] }[];
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
   pending: Injection[];
@@ -2458,6 +2458,9 @@ export class ContextPartner {
       );
       // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
+      // An explicit ask's answer carries its topic too: its items arrive with no sketch, but a follow-up's
+      // `carry` still reads what was handed (D1974).
+      for (const item of items) this.recordDelivered(s, item, null);
       if (this.config.partyCheck) this.notePacketParties(s, answer, injection.citations);
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
       // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
@@ -4166,11 +4169,14 @@ export class ContextPartner {
     const extra: string[] = [];
     // What the last request's answer delivered carries its topic first: "order", "shipped", "arrives" live on the
     // item handed, not in the request's words, so a sparse question otherwise shares only its own term with the
-    // sibling it asks after ("and the cable?" next to the other order). Bounded to the items that turn sent; the
-    // just-delivered item itself stays out through the delivered suppression above (`sameRef`). Kept few: every
-    // term the cue adds costs the candidates' coverage, so the cap must leave a follow-up's match a share.
+    // sibling it asks after ("and the cable?" next to the other order). Bounded to the items sent since that
+    // request; the just-delivered item itself stays out through the delivered suppression above (`sameRef`).
+    // Kept few: every term the cue adds costs the candidates' coverage, so the cap must leave a follow-up's
+    // match a share.
     for (const d of s.delivered) {
-      if (d.turn !== last.turn) continue;
+      // At or after the request's turn: a packet handed out a turn late (an intervening tool or agent event)
+      // still belongs to the answer the follow-up follows.
+      if (d.turn < last.turn) continue;
       for (const t of d.terms) {
         if (extra.length >= CARRY_TERMS) break;
         if (!have.has(t)) {
@@ -6651,6 +6657,24 @@ export class ContextPartner {
     return injection;
   }
 
+  /**
+   * What a delivery handed: the item's sketch (null for an ask's answer, which arrives with none), identifier
+   * numbers and the turn, plus the bounded content terms a follow-up's `carry` inherits (D1974). Title first so
+   * its most naming terms win the cap. Number-bearing terms are kept out: a carried identifier ("881") would
+   * make the follow-up's own `contradicts` drop the sibling it was meant to reach.
+   */
+  private recordDelivered(s: Session, item: ContextItem, sketch: Sketch | null): void {
+    s.delivered.push({
+      sketch,
+      refs: idNumbers(`${item.title} ${item.text}`),
+      turn: s.turn,
+      terms: contentTerms(`${item.title} ${item.text.slice(0, DELIVERED_TEXT_CHARS)}`, s.vocab)
+        .filter((t) => !/\d/.test(t))
+        .slice(0, DELIVERED_TERMS),
+    });
+    if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+  }
+
   private build(
     s: Session,
     scored: Scored[],
@@ -6670,22 +6694,8 @@ export class ContextPartner {
       );
     }
     for (const x of scored) {
-      if (x.sketch) {
-        s.delivered.push({
-          sketch: x.sketch,
-          refs: idNumbers(`${x.item.title} ${x.item.text}`),
-          turn: s.turn,
-          // The topic a follow-up inherits: the request's own words may not hold it ("and the cable?" after a
-          // headphones request), the delivered item's do. Title first so its terms win the cap. Number-bearing
-          // terms are kept out: a carried identifier ("881") would make the follow-up's own `contradicts` drop
-          // the sibling it was meant to reach.
-          terms: contentTerms(`${x.item.title} ${x.item.text.slice(0, DELIVERED_TEXT_CHARS)}`, s.vocab)
-            .filter((t) => !/\d/.test(t))
-            .slice(0, DELIVERED_TERMS),
-        });
-      }
+      if (x.sketch) this.recordDelivered(s, x.item, x.sketch);
     }
-    if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
       scored.map((x) => x.item.id),
