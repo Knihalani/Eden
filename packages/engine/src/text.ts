@@ -230,6 +230,9 @@ export function extractTypedEntities(text: string, persistableCap = Infinity): E
     while (to > from && isCalendar(words[to - 1]!)) to--;
     if (to === from) continue; // Dates only ("Monday Tuesday").
     if (to - from >= 2) words = words.slice(from, to);
+    // A lone honorific is not the name ("Dr. Okafor" reads as "Dr" plus "Okafor"): kept it would make a request
+    // that names the person demand items that name the honorific instead.
+    if (words.length === 1 && HONORIFIC.has(words[0]!.toLowerCase())) continue;
     const run = words.join(" ");
     if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()) || isCalendar(run))) continue;
     // A capitalised run of common words ("What We", "It Is") names nothing: its bonus would push any item holding
@@ -239,6 +242,9 @@ export function extractTypedEntities(text: string, persistableCap = Infinity): E
   }
   return [...found.values()];
 }
+
+/** Titles read before a name ("Dr.", "Prof."): never an entity on their own. */
+const HONORIFIC = new Set("dr mr mrs ms miss prof sir madam rev st".split(" "));
 
 export function extractEntities(text: string): string[] {
   return extractTypedEntities(text).map((e) => e.text);

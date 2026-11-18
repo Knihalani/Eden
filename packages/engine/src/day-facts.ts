@@ -90,6 +90,29 @@ function plainDay(digits: string): number {
   return d >= 1 && d <= 31 && String(d) === digits ? d : 0;
 }
 
+/**
+ * The weekdays an item recurs on, as a 7-bit mask (bit 0 = Sunday, `Date.getDay`), when its text says it repeats
+ * ("every", "daily", "weekly", "weekdays") and names a weekday. "daily"/"every day"/"weekdays" alone imply all
+ * seven, or Monday–Friday for the working week. 0 when the text names no recurrence: a bare "Saturday brunch" is
+ * one Saturday, read by `namedOf`'s day keys only.
+ */
+const WDAYS = "sunday monday tuesday wednesday thursday friday saturday".split(" ");
+const RECUR = /\b(every|each|daily|weekly|weekdays?|weekends?|fortnightly|nightly)\b/;
+function weekdaysOf(lower: string): number {
+  if (!RECUR.test(lower)) return 0;
+  let mask = 0;
+  for (let d = 0; d < 7; d++) {
+    if (new RegExp(`\\b${WDAYS[d]}`).test(lower)) mask |= 1 << d;
+  }
+  if (/\bweekdays?\b/.test(lower)) mask |= 0b0111110; // Monday–Friday.
+  if (/\bweekends?\b/.test(lower)) mask |= 0b1000001; // Sunday + Saturday.
+  // "every morning", "each evening", "daily": all seven days. A bare "morning" is a time of day, not a
+  // recurrence ("dentist Tuesday morning"), so it counts only next to `every`/`each`.
+  if (/\b(daily|nightly|every day|each day|(?:every|each)\s+(?:morning|afternoon|evening|night)s?)\b/.test(lower))
+    mask |= 0b1111111;
+  return mask;
+}
+
 /** The days (keys, ascending) `lower` names in `dayPattern`'s forms, and the mask of days written as an ordinal. */
 function namedOf(lower: string): { keys: number[]; mask: number } {
   const keys = new Set<number>();
@@ -125,16 +148,22 @@ function namedOf(lower: string): { keys: number[]; mask: number } {
  */
 export function dayFactsOf(title: string, text: string): DayFacts {
   const lower = `${title}\n${text}`.slice(0, DATED_CHARS).toLowerCase();
-  // No digit, no date: most chat lines and short notes end here.
-  if (!/\d/.test(lower)) return 0;
+  // No digit, no date: most chat lines and short notes end here. A recurrence still has days
+  // ("every weekday 09:00", "Thursdays"): its fact names the weekdays it happens on, in a trailing `wd`.
+  if (!/\d/.test(lower)) {
+    const wd = weekdaysOf(lower);
+    return wd === 0 ? 0 : new Uint16Array([0, 0, 0, 0, 0, wd]);
+  }
   const span = spanFactsOf(lower);
   const { keys, mask } = namedOf(lower);
-  if (span === null && keys.length <= 2) {
-    return mask + (keys.length > 0 ? K1 * (keys[0]! + 1) : 0) + (keys.length > 1 ? K2 * (keys[1]! + 1) : 0);
-  }
   const closed = span?.closed ?? [];
   const open = span?.open ?? [];
-  const out = new Uint16Array(5 + closed.length + open.length + keys.length);
+  const wd = weekdaysOf(lower);
+  if (span === null && keys.length <= 2 && wd === 0) {
+    return mask + (keys.length > 0 ? K1 * (keys[0]! + 1) : 0) + (keys.length > 1 ? K2 * (keys[1]! + 1) : 0);
+  }
+  // The array form ends in one `wd` weekday mask: "every Thursday" recurs on days it does not number.
+  const out = new Uint16Array(6 + closed.length + open.length + keys.length);
   let at = 0;
   out[at++] = closed.length;
   for (let i = 0; i < closed.length; i++) out[at++] = closed[i]!;
@@ -143,7 +172,8 @@ export function dayFactsOf(title: string, text: string): DayFacts {
   out[at++] = keys.length;
   for (const k of keys) out[at++] = k;
   out[at++] = mask & 0xffff;
-  out[at] = mask >>> 16;
+  out[at++] = mask >>> 16;
+  out[at] = wd;
   return out;
 }
 
@@ -187,6 +217,15 @@ export function dayFactsClass(
     if (!real(w)) continue;
     if ((mask >>> ((w & 31) - 1)) & 1) return 2;
     for (let i = 0; i < n; i++) if (f[at + i] === w) return 2;
+  }
+  // A recurring item covers a day of its own week (the array form's trailing `wd`; D44's timed finds). The `wd`
+  // slot sits right after the named-days mask: an array that ends there (older facts) has none.
+  const wd = f.length === 6 + c + o + n ? f[f.length - 1]! : 0;
+  if (wd !== 0) {
+    for (const d of days) {
+      const t = Date.parse(`${d}T00:00:00Z`);
+      if (!Number.isNaN(t) && (wd >>> new Date(t).getUTCDay()) & 1) return 1;
+    }
   }
   return -1;
 }
