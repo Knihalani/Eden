@@ -578,29 +578,56 @@ without-Eden column, pass a log of the agent without Eden's context: `--baseline
 mode (it reports events but injects nothing) or from before Eden. On the lab's train worlds (D291) the agent alone
 made 3.38 connector calls a request; with Eden 0 at request time, plus a one-time backfill of 18 listings a user.
 
-## Hermes Agent: Eden in place of its source tools (D422)
+## Hermes Agent: install Eden locally (D1966)
 
-For [Hermes Agent](https://github.com/NousResearch/hermes-agent), install the Eden plugin and give the agent Eden's
-`ask_context` **instead of** your sources' tools. That is the `hermes-eden` shape the lab measured best (with the lab's
-plugin, which carries the packet and tool-result hooks below; the shipped plugin's tool check and its own
-`ask_context` registration were not in that run): against Hermes
-keeping its source tools beside Eden, hidden facts raised 81.9% against 72.2% (+9.7 points, +2.8..+18.1) and wall p50
-3.79 s against 5.74 s (−1.5 s); against Hermes alone, 81.9% against 9.7% (Hermes Agent on claude-haiku-5-5, train1–6,
-seeds 41–42, in-sample; docs/research/a16-loop.md, "Hermes with Eden in place of its source tools").
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) starts Eden automatically when the plugin first needs it.
+You do not need an Eden account, API key, Bun install, or a separate terminal running an Eden server.
 
-```bash
-pip install /path/to/Eden/packages/client-python          # into Hermes' own environment
-cp -r /path/to/Eden/examples/hermes/eden ~/.hermes/plugins/eden
-export EDEN_USER_ID=alice EDEN_URL=http://127.0.0.1:8790   # and EDEN_API_KEY against a keyed server
-```
+1. Download the archive for your OS and CPU from [Eden Releases](https://github.com/Knihalani/Eden/releases). Compare
+   its SHA-256 with `SHA256SUMS` (`sha256sum FILE` on Linux, `shasum -a 256 FILE` on macOS, or
+   `Get-FileHash FILE -Algorithm SHA256` in PowerShell). Extract the verified archive.
+2. Inside the extracted directory, run `python3 install.py` on Linux/macOS or `py -3 install.py` on Windows
+   (Python 3.10+). The installer uses your active profile; use `--profile NAME` to select another.
+   Use `--hermes-home PATH` to select an exact home for a custom Hermes build.
+   Run the enable command it prints. For an upgrade, stop Hermes first and rerun the installer.
+3. Open a new Hermes session (or restart your Hermes gateway). If you restrict toolsets, include `eden` in
+   `hermes tools` or in your existing list passed via `--toolsets`. On Hermes with Tool Search, `ask_context`
+   is discoverable through the tool catalog instead of always showing as an eager tool.
 
-```yaml
-# ~/.hermes/config.yaml
-plugins:
-  enabled: [eden]
-# Connect the user's mail, calendar and drive to Eden (EDEN_USER_SOURCES_FILE), not to Hermes: leave their MCP
-# servers out of mcp_servers, and enable the `eden` toolset where you choose the agent's toolsets.
-```
+If you previously used a hosted deployment, remove `EDEN_URL` from Hermes' environment to switch to local mode.
+An explicit `EDEN_URL` still selects the hosted setup, where `EDEN_USER_ID` is required and
+`EDEN_API_KEY`/`EDEN_TENANT_ID` are set as before.
+
+### Connect sources explicitly
+
+With no sources configured, Eden stays quiet. To try it with local documents, give the Hermes process an absolute
+`EDEN_SOURCES_FILE` path to a static JSON file like [the synthetic example](../examples/personal-agent/sources.json).
+For live connectors, set `EDEN_USER_SOURCES_FILE` or put the file at `eden/sources.json` under your Hermes profile.
+Use the [per-user source format](#connect-each-users-own-sources-d108), with the entry `local/local` by default.
+`EDEN_USER_ID` changes the user portion (mapped through `eden_id`); local mode always uses tenant `local`.
+Keep connector tokens out of the JSON: use `{"env": "YOUR_CONNECTOR_TOKEN"}` in header values and make that token
+available only to the Hermes profile process that needs it.
+Eden uses read-only tools from explicitly configured HTTP MCP connectors and does not import Hermes'
+`mcp_servers` or their credentials. Use `ask_context` instead of duplicate source search tools unless Hermes needs
+them for browsing or for acting (sending, booking, writing). Restart Hermes after changing environment variables.
+Use a dedicated Hermes process for a non-default profile. Eden skips routed profiles in a shared Hermes process
+rather than reading another profile's process-wide source settings.
+
+### What stays local
+
+The plugin owns a private sidecar for its lifetime. The sidecar listens only on IPv4 loopback on an OS-assigned
+port and uses a fresh bearer token never entered into Hermes' config. Eden does not use remote model roles or
+persist its cache or source map in this mode; a restart reads sources again. Eden contacts only the connectors
+you configure. Hermes still sends its prompt, including any injected context, to the model provider **you**
+configured; use a local Hermes model and local sources if that data must not leave the machine.
+
+If the binary is missing, cannot start, or stops responding, Hermes continues without Eden context or checks.
+Startup is lazy; local HTTP calls bypass proxies. The sidecar closes on plugin unload or Hermes exit.
+Startup diagnostics go to `eden/logs/eden-local.log` under your Hermes profile.
+The check is advisory, not an authorization layer. To stop using Eden, run
+`hermes plugins disable eden` for the installed profile and restart Hermes.
+
+### Hooks (D422)
 
 The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces:
 
@@ -622,15 +649,16 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   the identity down. Not `on_session_end`, which Hermes fires after every turn: ending Eden's session there would
   drop its queued packets, what it knows the agent read and its per-session budget each turn.
 
-`EDEN_USER_ID` names the user (one Hermes install serves one user; mapped with `eden_id`); without it the plugin
-registers nothing and says so on stderr. Every hook fails open. The hook names and contracts were read in Hermes'
-source at the lab's pin (06433066); the plugin is tested against a stand-in for Hermes' plugin context and the real
-Eden server (`examples/onboarding/integration-defaults.test.ts`), not run inside Hermes in this repository.
+Every Eden hook fails open. The lab's `hermes-eden` arm compared replacing duplicate source tools with keeping them
+alongside Eden; see [the lab write-up](research/a16-loop.md) for that retrieval study, not a local-runtime benchmark.
+See the [Python client README](../packages/client-python/README.md#hermes-plugin) for custom binaries and
+advanced runtime configuration.
 
-**Keep the source tools beside Eden only** when the agent needs them for what `ask_context` does not do: acting
-through the connector (sending, booking, writing: keep those tools, and the plugin checks them), browsing a whole
-listing or folder by hand, or a source you cannot connect to Eden. Keeping the read tools for retrieval cost both hidden
-facts and time in the run above.
+To build the release ZIPs and `SHA256SUMS` from a checkout, use the repo's pinned Bun and run
+`python3 scripts/hermes-local/build.py --version vX.Y.Z --out-dir dist/hermes-local`.
+Repeat `--target` to build a subset; omit it for Linux, macOS and Windows, each on x64 and arm64.
+Before publishing, run `HERMES_RELEASE_SMOKE=1 bun test scripts/hermes-local.test.ts` on Linux and record which
+platforms were run natively.
 
 ## Other languages
 
