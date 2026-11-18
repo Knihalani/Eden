@@ -20,7 +20,7 @@ import { buildPartner, startGatePool, tenantSpendFor, turnGateNotice } from "./b
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
 import { modelRolesFromEnv, NO_MODELS } from "./models";
-import { localBoundary, localConfig, watchLocalInput } from "./local";
+import { localBoundary, localConfig, redirectLocalConsole, watchLocalInput } from "./local";
 import { S3BlobStore } from "./blob-store";
 import { nodesFromEnv, runCluster } from "./cluster";
 import { Ops, serveError } from "./ops";
@@ -68,6 +68,7 @@ try {
  */
 function configOrExit(): ServerConfig {
   try {
+    if (process.env.EDEN_LOCAL === "1") redirectLocalConsole();
     const isolated = localConfig();
     if (isolated) {
       local = true;
