@@ -83,6 +83,44 @@ describe("carry (D1973): a sparse question follow-up reads the previous request'
   });
 });
 
+describe("carry (D1974): a sparse question also inherits the delivered items' terms", () => {
+  // The eval's order-tracking pair: the request's own words ("headphones", "arriving") share nothing with the
+  // sibling order beyond "cable"; only the delivered item's terms ("order", "shipped") bridge to it.
+  const H881 = item(
+    "msg-order-881",
+    "Your order 881 has shipped",
+    "Order 881: noise-cancelling headphones. Tracking DPD 15501234, arriving Thursday.",
+    2,
+  );
+  const C874 = item("msg-order-874", "Your order 874 was delivered", "Order 874: USB-C cable. Delivered Monday.", 2);
+
+  test('"and the cable?" reaches the sibling order through the delivered item\'s terms', async () => {
+    const p = setup([H881, C874]);
+    var o = await say(p, "When are my new headphones arriving?");
+    expect(ids(p, o)).toContain("mail:msg-order-881");
+    var o2 = await say(p, "And the cable?");
+    expect(ids(p, o2)).toContain("mail:msg-order-874");
+  });
+
+  test("the delivered item is not re-delivered to its own follow-up", async () => {
+    const p = setup([H881, C874]);
+    var o = await say(p, "When are my new headphones arriving?");
+    expect(ids(p, o)).toContain("mail:msg-order-881");
+    var o2 = await say(p, "And the cable?");
+    var got = ids(p, o2);
+    expect(got).toContain("mail:msg-order-874");
+    expect(got).not.toContain("mail:msg-order-881");
+  });
+
+  test("a sparse non-question stays silent", async () => {
+    const p = setup([H881, C874]);
+    var o = await say(p, "When are my new headphones arriving?");
+    expect(ids(p, o)).toContain("mail:msg-order-881");
+    var o2 = await say(p, "the cable");
+    expect(ids(p, o2)).toEqual([]);
+  });
+});
+
 describe("sameRef (D1973): near-duplicates that disagree on identifiers are not old news", () => {
   test("order 874 still delivers beside the already-shown order 881", async () => {
     const p = setup([O881, O874]);
