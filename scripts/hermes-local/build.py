@@ -95,8 +95,8 @@ def build(target, version, output):
 
 
 def main():
-    if sys.version_info < (3, 11):
-        raise SystemExit("Eden's release build requires Python 3.11 or newer.")
+    if sys.version_info < (3, 10):
+        raise SystemExit("Eden's release build requires Python 3.10 or newer.")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="release label used in artifact names")
     parser.add_argument("--out-dir", type=Path, required=True)
