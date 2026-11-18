@@ -2045,9 +2045,6 @@ export class SyncManager {
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
-      // Deleted at the source between slices (`isHeldGone` was checked before the puts): re-checking here keeps a
-      // removed id out of `s.ids`, which `completeOf` would otherwise count as synced again.
-      if (this.deps.cache.isHeldGone(u.scope, it.id, now)) continue;
       // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
       s.missed.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
