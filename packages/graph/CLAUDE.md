@@ -21,7 +21,7 @@ oracle, `src/source-map.reference.ts`; `src/migrate.ts`, the operator's command 
   `OUTCOME_FLUSH_MS` or at 256 rows; every read flushes first) with WAL and synchronous=NORMAL, about 2 µs per outcome
   instead of an fsync per commit. Keep new writes on that path; do not add a synchronous commit per event.
 - **Mentions are written behind too (D1780):** summed in memory per (user, entity, source), one transaction within
-  1 s (`MENTION_FLUSH_MS`) or at 4,096 distinct rows. Planner arms (`saveArms`, D1966) are buffered latest-per-key
+  1 s (`MENTION_FLUSH_MS`) or at 4,096 distinct rows. Planner arms (`saveArms`, D1967) are buffered latest-per-key
   and written in the same transaction; `loadArms` overlays pending values, and `forget` drops them before flushing.
   `exportUser`, `importUser` and `close` flush both buffers, and the `exit` listener writes every open file-backed map.
   What a process that dies loses is never a written row, at most the buffer: a second's mentions and arms plus a

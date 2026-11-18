@@ -1,5 +1,5 @@
 /**
- * D1780 and D1966: mentions and planner arms are written behind in one transaction. Reads see pending values, a crash
+ * D1780 and D1967: mentions and planner arms are written behind in one transaction. Reads see pending values, a crash
  * loses at most the pending batch and never a written row, and a normal exit or `close` writes them.
  */
 import { Database } from "bun:sqlite";
@@ -356,7 +356,7 @@ describe("SourceMap mentions written behind (D1780)", () => {
   });
 });
 
-describe("SourceMap planner arms written behind (D1966)", () => {
+describe("SourceMap planner arms written behind (D1967)", () => {
   test("pending rows overlay the file by scope and flush in key order", () => {
     const path = fileOf();
     const map = new SourceMap(path, { explore: false, mentionFlushMs: 60_000 });

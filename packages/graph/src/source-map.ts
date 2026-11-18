@@ -97,7 +97,7 @@ export class SourceMap {
   /** Mentions not yet written (D1780): scope key → entity → source id → [count to add, last seen]. */
   private mentions = new Map<string, Map<string, Map<string, [count: number, lastSeen: number]>>>();
   private mentionRows = 0;
-  /** Planner arms not yet written (D1966): scope key → source id → bucket and shape → latest values. */
+  /** Planner arms not yet written (D1967): scope key → source id → bucket and shape → latest values. */
   private arms = new Map<
     string,
     Map<string, Map<string, { bucket: number; shape: string; alpha: number; beta: number }>>
