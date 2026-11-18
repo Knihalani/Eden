@@ -94,6 +94,7 @@ def build(target, version, output):
                 **{f"eden/{name}.xz" if name == executable else f"eden/{name}": (packed if name == executable else path)
                    for name, path in files.items()},
                 "install.py": HERE / "install.py",
+                "GETTING-STARTED.md": HERE / "GETTING-STARTED.md",
                 "LICENSE": ROOT / "LICENSE",
                 "manifest.json": manifest,
             },

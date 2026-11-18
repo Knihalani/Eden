@@ -582,6 +582,11 @@ made 3.38 connector calls a request; with Eden 0 at request time, plus a one-tim
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) starts Eden automatically when the plugin first needs it.
 You do not need an Eden account, API key, Bun install, or a separate terminal running an Eden server.
+Every release archive also ships a short `GETTING-STARTED.md` covering the same steps.
+
+Hermes itself installs from its release tag, not pip (PyPI tops out at 0.19.x), into a Python 3.12 or
+3.13 environment (it rejects 3.14):
+`git clone --branch v2026.9.24 https://github.com/NousResearch/hermes-agent`, then `UV_PYTHON=3.12 uv sync`.
 
 1. Download the archive for your OS and CPU from [Eden Releases](https://github.com/Knihalani/Eden/releases). Compare
    its SHA-256 with `SHA256SUMS` (`sha256sum FILE` on Linux, `shasum -a 256 FILE` on macOS, or
@@ -589,6 +594,8 @@ You do not need an Eden account, API key, Bun install, or a separate terminal ru
 2. Inside the extracted directory, run `python3 install.py` on Linux/macOS or `py -3 install.py` on Windows
    (Python 3.10+). The installer uses your active profile; use `--profile NAME` to select another.
    Use `--hermes-home PATH` to select an exact home for a custom Hermes build.
+   After copying files it starts the installed sidecar once to prove it runs on this machine and to
+   surface a malformed `sources.json` at install time (`--no-check` skips that).
    Run the enable command it prints. For an upgrade, stop Hermes first and rerun the installer.
 3. Open a new Hermes session (or restart your Hermes gateway). If you restrict toolsets, include `eden` in
    `hermes tools` or in your existing list passed via `--toolsets`. On Hermes with Tool Search, `ask_context`
@@ -600,7 +607,10 @@ An explicit `EDEN_URL` still selects the hosted setup, where `EDEN_USER_ID` is r
 
 ### Connect sources explicitly
 
-With no sources configured, Eden stays quiet. To try it with local documents, give the Hermes process an absolute
+With no sources configured, Eden stays quiet. For a first answer in one step, run `install.py --example`: it writes
+a small demo static source to `eden/sources.json` under your Hermes profile (never overwriting an existing file);
+ask Hermes "when does my gym membership renew?" and replace the file with your own.
+To try it with local documents, give the Hermes process an absolute
 `EDEN_SOURCES_FILE` path to a static JSON file like [the synthetic example](../examples/personal-agent/sources.json).
 For live connectors, set `EDEN_USER_SOURCES_FILE` or put the file at `eden/sources.json` under your Hermes profile.
 Use the [per-user source format](#connect-each-users-own-sources-d108), with the entry `local/local` by default.
