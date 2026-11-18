@@ -26,6 +26,7 @@ export const PARTS = {
     groundAway: false,
     groundConflict: false,
     groundOccasion: false,
+    groundSubject: false,
     quietSettled: false,
     quietClear: false,
     quietNameOnly: false,
