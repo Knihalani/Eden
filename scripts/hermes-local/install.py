@@ -43,8 +43,11 @@ def binary_name(target):
 
 
 def digest(path):
+    sha256 = hashlib.sha256()
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 
 def plain(path, kind):
@@ -235,8 +238,8 @@ def install(payload, manifest, home, force, dry_run):
 
 
 def main():
-    if sys.version_info < (3, 11):
-        raise SystemExit("Eden's installer requires Python 3.11 or newer (like Hermes).")
+    if sys.version_info < (3, 10):
+        raise SystemExit("Eden's installer requires Python 3.10 or newer.")
     parser = argparse.ArgumentParser(description=__doc__)
     profile = parser.add_mutually_exclusive_group()
     profile.add_argument("--profile", help="select a named Hermes profile (or 'default')")
