@@ -111,8 +111,15 @@ function oracleClass(title: string, body: string, days: ReadonlySet<string>, upd
   }
   const res = named.map(oDayPattern);
   const text = `${title}\n${body}`.slice(0, 4000).toLowerCase();
-  if (!/\d/.test(text)) return -1;
-  return oracleCovers(text, days, updatedAt) ? 1 : res.some((re) => re.test(text)) ? 2 : -1;
+  // Class 3 (D1979): a bare full weekday name weakly matches a day of that weekday — after covers/names, even
+  // without digits (the production facts keep `wn` in the same early path).
+  const WN = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const wnHit = [...days].some((d) => {
+    const t = Date.parse(`${d}T00:00:00Z`);
+    return !Number.isNaN(t) && new RegExp(`\\b${WN[new Date(t).getUTCDay()]}s?\\b`).test(text);
+  });
+  if (!/\d/.test(text)) return wnHit ? 3 : -1;
+  return oracleCovers(text, days, updatedAt) ? 1 : res.some((re) => re.test(text)) ? 2 : wnHit ? 3 : -1;
 }
 
 const factsClass = (title: string, body: string, days: ReadonlySet<string>, updatedAt?: number) =>

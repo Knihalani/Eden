@@ -124,6 +124,7 @@ import {
   rolesOf,
   settled,
   startMinutes,
+  textMinutes,
   topicOf,
 } from "./probes";
 import { type TurnGate, turnGate } from "./turn-gate";
@@ -595,6 +596,10 @@ const ACTS_ON = /\b(write|note|thank|chase|ping|tell|intro(duce)?)\b/i;
 const ASKS_SCHEDULE = /\b(calendar|schedule|diary|agenda|plans?|busy|free|on for|happening|booked)\b/i;
 /** A request asking whether a day it names is open ("free then?", "a clash at that time"): its events answer. */
 const ASKS_FREE = /\b(free|clash|clashing|conflict\w*|busy|double.?book\w*|overlap\w*)\b/i;
+/** A clash ask: not a day listing, but a question about one time (D1979). */
+const ASKS_CLASH = /\b(clash|clashing|conflict\w*|double.?book\w*|overlap\w*)\b/i;
+/** "that time", "then": the ask's span lives in the turn it answers, not in its own words (D1979). */
+const ANAPHORIC_TIME = /\b(that time|then|that slot|same time)\b/i;
 
 /**
  * Identifier-shaped numbers a text carries: three digits or more, or thousands-separated ("2,300" → "2300"), never
@@ -2906,12 +2911,12 @@ export class ContextPartner {
    * at most `pushDaySeats`. None for a request that names no day or a window of more than three (a week's listing
    * is not a seat), or with the switch off.
    */
-  private daySeats(s: Session, cue: Cue, have: ReadonlySet<string>, all?: Map<number, number>): Scored[] {
+  private daySeats(s: Session, cue: Cue, have: ReadonlySet<string>, all?: Map<number, number>, weak = false): Scored[] {
     const k = this.config.pushDaySeats;
     const days = cue.time?.days;
     if (k <= 0 || !days || days.size === 0 || days.size > DAY_SEAT_DAYS) return [];
     return this.deps.cache
-      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset, all)
+      .dated(s.scope, days, (item) => have.has(item.id) || bulkMail(item), this.now(), k, cue.offset, all, weak)
       .map((h) => ({ item: h.item, matched: 0, score: 0, sketch: h.sketch, doc: h.doc, dayCls: h.dayCls }));
   }
 
@@ -2925,7 +2930,7 @@ export class ContextPartner {
     const days = cue.time?.days;
     if (!days || days.size === 0) return;
     const all = new Map<number, number>();
-    const seats = this.daySeats(s, cue, new Set(scored.map((x) => x.item.id)), all);
+    const seats = this.daySeats(s, cue, new Set(scored.map((x) => x.item.id)), all, true);
     const want = dayKeys(days);
     const clsOf = (item: ContextItem): number | undefined => {
       const f = dayFactsOf(item.title, item.text);
@@ -4109,9 +4114,10 @@ export class ContextPartner {
     // A look-alike that contradicts the request's anchors is not grounded either (D1970).
     const pool = candidates.filter((x) => !bulkMail(x.item) && !this.contradicts(x, cue));
     const time = cue.time;
-    // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1978).
+    // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1978) — except a bare-weekday one
+    // (class 3), which only a clash's overlap test may hand (D1979).
     const onDay = (x: Scored) =>
-      time !== null && (time.days.has(startDay(x.item, cue.offset) ?? "") || x.dayCls !== undefined);
+      time !== null && (time.days.has(startDay(x.item, cue.offset) ?? "") || (x.dayCls !== undefined && x.dayCls <= 2));
     const upcoming = (x: Scored) => startMs(x.item) >= cue.at;
     // Items whose start lives only in text sort after the timed ones (NaN compares false); their day seat holds.
     const soonest = (a: Scored, b: Scored) =>
@@ -4132,14 +4138,27 @@ export class ContextPartner {
     // With probes on: an action on a named day at a named time, and an event already there near that time, is a clash
     // the agent should see before it acts, whoever the event is with.
     const clash = this.config.probes && !this.config.probeOff.includes("clash");
-    const range = clash && time && time.days.size > 0 && isScheduling(cue.raw) ? requestedSpan(cue.raw) : null;
+    let range: { from: number; to: number } | null = null;
+    if (clash && time && time.days.size > 0 && (isScheduling(cue.raw) || ASKS_CLASH.test(cue.raw))) {
+      range = requestedSpan(cue.raw);
+      // "a clash at that time?" names no span — the time it means is the one the last turns just said (D1979).
+      if (range === null && ANAPHORIC_TIME.test(cue.raw)) {
+        for (const line of [...s.window].reverse().slice(0, 6)) {
+          range = requestedSpan(line);
+          if (range) break;
+        }
+      }
+    }
     if (range && time) {
-      // An event in the time asked for, other than the one the request is about (D48).
+      // An event in the time asked for, other than the one the request is about (D48). Its minutes come from
+      // `meta.start`, or from the clock its own text writes ("Thursday 16:15-17:00", D1979).
       const near = (x: Scored) => {
-        const m = startMinutes(x.item);
+        const m = startMinutes(x.item) ?? textMinutes(x.item);
         return m !== null && overlaps(x.item, m, range) && !isSubject(x.item, cue.raw);
       };
-      const clashes = pool.filter((x) => time.days.has(startDay(x.item, cue.offset) ?? "") && near(x)).sort(soonest);
+      const clashes = pool
+        .filter((x) => (time.days.has(startDay(x.item, cue.offset) ?? "") || x.dayCls !== undefined) && near(x))
+        .sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
     }
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
@@ -4228,7 +4247,7 @@ export class ContextPartner {
       // "Is Thursday morning free?": the day's events are the answer however the rest of the request reads
       // (D44). A clash/conflict ask is not that listing: it asks about one time, and with no span resolved
       // to check against ("at that time" naming none yet) it stays silent rather than handing the day (D1978).
-      if (!/\b(clash|clashing|conflict\w*|double.?book\w*|overlap\w*)\b/i.test(cue.raw)) {
+      if (!ASKS_CLASH.test(cue.raw)) {
         return { items: events.sort(soonest).slice(0, this.max()), how: "time-free" };
       }
     }

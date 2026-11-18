@@ -98,6 +98,20 @@ function plainDay(digits: string): number {
  */
 const WDAYS = "sunday monday tuesday wednesday thursday friday saturday".split(" ");
 const RECUR = /\b(every|each|daily|weekly|weekdays?|weekends?|fortnightly|nightly)\b/;
+
+/**
+ * The weekdays an item writes bare, without a recurrence word ("Thursday 16:15", "Saturday brunch"), as a 7-bit
+ * mask. Weaker than a date or a `wd` recurrence — a weekday in passing ("minutes from Thursday's call") is not a
+ * day the item sits on — so `dayFactsClass` reports it as 3, and the day listing only reads classes 0-2. The
+ * clash path takes it: an item overlapping the asked span on its own weekday is the clash (D1979).
+ */
+function weekNamesOf(lower: string): number {
+  let mask = 0;
+  for (let d = 0; d < 7; d++) {
+    if (new RegExp(`\\b${WDAYS[d]}s?\\b`).test(lower)) mask |= 1 << d;
+  }
+  return mask;
+}
 function weekdaysOf(lower: string): number {
   if (!RECUR.test(lower)) return 0;
   let mask = 0;
@@ -152,18 +166,22 @@ export function dayFactsOf(title: string, text: string): DayFacts {
   // ("every weekday 09:00", "Thursdays"): its fact names the weekdays it happens on, in a trailing `wd`.
   if (!/\d/.test(lower)) {
     const wd = weekdaysOf(lower);
-    return wd === 0 ? 0 : new Uint16Array([0, 0, 0, 0, 0, wd]);
+    const wn = weekNamesOf(lower);
+    if (wd === 0 && wn === 0) return 0;
+    return new Uint16Array([0, 0, 0, 0, 0, wd, wn]);
   }
   const span = spanFactsOf(lower);
   const { keys, mask } = namedOf(lower);
   const closed = span?.closed ?? [];
   const open = span?.open ?? [];
   const wd = weekdaysOf(lower);
-  if (span === null && keys.length <= 2 && wd === 0) {
+  const wn = weekNamesOf(lower);
+  if (span === null && keys.length <= 2 && wd === 0 && wn === 0) {
     return mask + (keys.length > 0 ? K1 * (keys[0]! + 1) : 0) + (keys.length > 1 ? K2 * (keys[1]! + 1) : 0);
   }
-  // The array form ends in one `wd` weekday mask: "every Thursday" recurs on days it does not number.
-  const out = new Uint16Array(6 + closed.length + open.length + keys.length);
+  // The array form ends in `wd`, `wn` weekday masks: "every Thursday" recurs on days it does not number, and a
+  // bare "Thursday" weakly names one (D1979).
+  const out = new Uint16Array(7 + closed.length + open.length + keys.length);
   let at = 0;
   out[at++] = closed.length;
   for (let i = 0; i < closed.length; i++) out[at++] = closed[i]!;
@@ -173,7 +191,8 @@ export function dayFactsOf(title: string, text: string): DayFacts {
   for (const k of keys) out[at++] = k;
   out[at++] = mask & 0xffff;
   out[at++] = mask >>> 16;
-  out[at] = wd;
+  out[at++] = wd;
+  out[at] = wn;
   return out;
 }
 
@@ -218,13 +237,24 @@ export function dayFactsClass(
     if ((mask >>> ((w & 31) - 1)) & 1) return 2;
     for (let i = 0; i < n; i++) if (f[at + i] === w) return 2;
   }
-  // A recurring item covers a day of its own week (the array form's trailing `wd`; D44's timed finds). The `wd`
-  // slot sits right after the named-days mask: an array that ends there (older facts) has none.
-  const wd = f.length === 6 + c + o + n ? f[f.length - 1]! : 0;
+  // A recurring item covers a day of its own week (the array form's trailing `wd`; D44's timed finds), and a
+  // bare weekday weakly names one (`wn`, class 3 — counted on a day but not listed as the day's events, D1979).
+  // Older arrays end at the named-days mask or at `wd`, so the array's length says which slots exist.
+  // `wd` sits last in the old form (length 6+c+o+n); `wn` is appended after it in the new (7+c+o+n). Anything
+  // shorter than either has neither.
+  const hasWn = f.length === 7 + c + o + n;
+  const wd = f.length >= 6 + c + o + n ? f[f.length - (hasWn ? 2 : 1)]! : 0;
   if (wd !== 0) {
     for (const d of days) {
       const t = Date.parse(`${d}T00:00:00Z`);
       if (!Number.isNaN(t) && (wd >>> new Date(t).getUTCDay()) & 1) return 1;
+    }
+  }
+  const wn = hasWn ? f[f.length - 1]! : 0;
+  if (wn !== 0) {
+    for (const d of days) {
+      const t = Date.parse(`${d}T00:00:00Z`);
+      if (!Number.isNaN(t) && (wn >>> new Date(t).getUTCDay()) & 1) return 3;
     }
   }
   return -1;

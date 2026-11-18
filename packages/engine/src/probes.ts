@@ -492,6 +492,13 @@ export function startMinutes(item: ContextItem): number | null {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
+/** Minutes of the first clock time an item's own text writes ("Thursday 16:15-17:00"), when `meta.start`
+ * gives none (D1979). */
+export function textMinutes(item: ContextItem): number | null {
+  const m = /\b([01]?\d|2[0-3]):([0-5]\d)\b/.exec(`${item.title} ${item.text}`);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
 /**
  * Words of a request that carry its topic: not a person's, not a day's, not the action's. "Send Rose Kimura the Q3
  * report" is "q3 report"; "Offer Globex 15% off so we can close their renewal this week" is "15 off close renewal".

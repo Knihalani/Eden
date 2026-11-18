@@ -582,10 +582,13 @@ function factDays(f: DayFacts): number[] {
   const n = f[at]!;
   const out = Array.from(f.subarray(at + 1, at + 1 + n));
   const mask = (f[at + 1 + n]! | (f[at + 2 + n]! << 16)) >>> 0;
-  // A trailing `wd` weekday mask ("every Thursday") holds no named day or span: index it under every key like a
-  // span's, so `dated` still runs the exact `dayFactsClass` check on it.
-  const wd = f.length === 6 + closed + open + n ? f[f.length - 1]! : 0;
-  if (closed !== 0 || open !== 0 || mask !== 0 || wd !== 0) for (let k = 0; k < 12 * 32; k++) out.push(k);
+  // Trailing `wd`/`wn` weekday masks ("every Thursday", a bare "Thursday") hold no named day or span: index them
+  // under every key like a span's, so `dated` still runs the exact `dayFactsClass` check on them. `wd` sits last
+  // at length 6+c+o+n; `wn` is appended after it at 7+c+o+n.
+  const hasWn = f.length === 7 + closed + open + n;
+  const wd = f.length >= 6 + closed + open + n ? f[f.length - (hasWn ? 2 : 1)]! : 0;
+  const wn = hasWn ? f[f.length - 1]! : 0;
+  if (closed !== 0 || open !== 0 || mask !== 0 || wd !== 0 || wn !== 0) for (let k = 0; k < 12 * 32; k++) out.push(k);
   return out;
 }
 
@@ -1789,6 +1792,7 @@ export class ItemCache {
     limit = 3,
     offset?: number,
     all?: Map<number, number>,
+    weak = false,
   ): CacheHit[] {
     const u = this.peek(scope);
     if (!u || days.size === 0 || limit <= 0) return [];
@@ -1819,8 +1823,11 @@ export class ItemCache {
       e.dates ??= e.dayIndex!;
       const cls = dayFactsClass(e.dates, days, want, e.item.updatedAt);
       if (cls > 0) {
-        found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
         all?.set(e.doc, cls);
+        // Class 3 (a bare weekday in passing, D1979) is no day seat for the push; the lookup's clash path
+        // asks for them explicitly (`weak`).
+        if (cls === 3 && !weak) continue;
+        found.push({ e, cls, at: -(e.item.updatedAt ?? 0) });
       }
     }
     found.sort((a, b) => a.cls - b.cls || a.at - b.at || a.e.doc - b.e.doc);
