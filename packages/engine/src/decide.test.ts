@@ -100,7 +100,7 @@ describe("the candidate hook (`onCandidates`)", () => {
 
   test("a delivery is never dumped as silence", async () => {
     const dumps: CandidateDump[] = [];
-    const out = await run({ groundConflict: true }, { onCandidates: (d) => dumps.push(d) });
+    const out = await run({ groundConflict: true, companions: false }, { onCandidates: (d) => dumps.push(d) });
     expect(out.u1).toEqual(["drive:n1 sources"]);
     const delivering = dumps.filter((d) => d.delivered.length > 0);
     expect(delivering.length).toBeGreaterThan(0);

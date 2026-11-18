@@ -80,7 +80,9 @@ describe("the push check in the servers (D828)", () => {
   });
 
   test("a failing check fails open to the candidates and logs one line without the key", async () => {
-    const { partner, lines, checks } = serve({}, true);
+    // `companions` out: the default pulls the hold doc into the invoice's own injection, which is a delivered
+    // item, not a candidates packet — this test is about the check's fail-open, not the pull.
+    const { partner, lines, checks } = serve({ companions: false }, true);
     const got = await push(partner);
     expect(checks().length).toBe(1);
     expect(got.length).toBe(1);
