@@ -2,13 +2,18 @@
 place of the agent's source tools and Eden's packet before each turn; plus, unmeasured inside Hermes, a check before
 each acting call.
 
-Install (docs/INTEGRATION.md, "Hermes Agent"): ``pip install`` this package into Hermes' environment, copy
-``examples/hermes/eden`` to ``~/.hermes/plugins/eden``, enable it (``plugins: enabled: [eden]``) and give the agent
-the ``eden`` toolset instead of your source MCP servers. Configuration comes from the environment:
+Install the wrapper under ``<Hermes home>/plugins/eden``, enable ``plugins: enabled: [eden]``, and select toolset
+``eden``. The wrapper uses a vendored ``eden_client`` when present, else the installed Python package.
 
-- ``EDEN_USER_ID`` (required; mapped with ``eden_id``): the end user whose sources Eden reads. Unset, the plugin
-  registers nothing and says so once.
-- ``EDEN_URL`` (default ``http://127.0.0.1:8790``), ``EDEN_API_KEY``, ``EDEN_TENANT_ID``: as for ``EdenClient``.
+- With non-empty ``EDEN_URL``, hosted mode requires ``EDEN_USER_ID`` (mapped with ``eden_id``) and accepts
+  ``EDEN_API_KEY`` / ``EDEN_TENANT_ID`` as for ``EdenClient``. Without a user it registers nothing.
+- Without ``EDEN_URL``, local mode defaults user/tenant to ``local`` (optional ``EDEN_USER_ID`` maps the user).
+  ``EDEN_API_KEY`` / ``EDEN_TENANT_ID`` are ignored. Binary discovery: explicit ``EDEN_LOCAL_BINARY`` file,
+  wrapper-local ``bin/eden-local`` (``.exe`` on Windows), then ``<home>/plugins/eden/bin/eden-local``; no PATH lookup.
+  Data/logs live under ``<home>/eden``. Sources come from absolute ``EDEN_SOURCES_FILE`` /
+  ``EDEN_USER_SOURCES_FILE`` paths, else ``<home>/eden/sources.json`` as per-user sources. No Hermes config is read.
+- Routed profiles are refused when active home differs from launch home: environment configuration belongs to the
+  launch profile. Every callback checks it is still in the registered home before touching Eden.
 - ``EDEN_CHECK_TOOLS``: which tool calls go through ``check`` first. Unset: the tools whose name carries an acting
   verb as a whole word, camelCase split (``ACTING``: send, reply, forward, share, invite, book, schedule, pay,
   transfer, grant, post, purchase, order, create, update, add, respond, deploy: ``send_email``, ``sendEmail``,
@@ -34,20 +39,25 @@ What it registers (hook names and contracts as Hermes defines them at the lab's 
 
 Each Hermes session is its own Eden session (``session_id`` through ``eden_id``; a hook with no session id falls back
 to its ``task_id``, and with neither Eden is skipped, so two conversations never share a session). Fails open (D14):
-any error, timeout or refusal is "no context" and never breaks the agent's turn.
+client errors/refusals are "no context". Hermes itself can fail closed when a ``pre_tool_call`` hook exceeds its
+timeout; local startup waits at most 10 s, below Hermes' default 30 s cap.
 """
 
 from __future__ import annotations
 
+import atexit
+import importlib
 import json
 import os
 import re
 import sys
 import threading
 from collections import OrderedDict
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from . import ASK_CONTEXT_DESCRIPTION, EdenClient, eden_id, held_result
+from .local import LocalEden
 
 #: Eden's own tool. Its answers are Eden's, so they are neither checked nor reported back.
 ASK_TOOL = "ask_context"
@@ -80,17 +90,66 @@ def _warn(message: str) -> None:
         pass
 
 
+def _homes(env=None):
+    """Active and launch identities; older Hermes/stand-ins have a standalone fallback."""
+    try:
+        constants = importlib.import_module("hermes_constants")
+    except ImportError:
+        constants = None
+    active = getattr(constants, "get_hermes_home", None)
+    launch = (getattr(constants, "get_routing_process_hermes_home", None)
+              or getattr(constants, "get_process_hermes_home", None))
+    if active:
+        return Path(active()).expanduser().resolve(), Path(launch()).expanduser().resolve() if launch else None
+    env = os.environ if env is None else env
+    home = env.get("HERMES_HOME")
+    if not home:
+        home = (Path(env.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "hermes"
+                if sys.platform == "win32" else Path.home() / ".hermes")
+    return Path(home).expanduser().resolve(), None
+
+
 class EdenHermes:
     """The plugin's state: one ``EdenClient`` per Hermes session. ``client_factory`` is for tests."""
 
     def __init__(self, env: Optional[Dict[str, str]] = None,
-                 client_factory: Optional[Callable[..., Any]] = None) -> None:
+                 client_factory: Optional[Callable[..., Any]] = None, *, plugin_file=None) -> None:
+        self._scope_env = env
+        self._warnings = set()
+        self._home, launch = _homes(env)
+        self._enabled = launch is None or launch == self._home
+        self.local = None
+        if not self._enabled:
+            self._warn_once("active Hermes home differs from launch home; Eden registers nothing")
+            return
         env = dict(os.environ if env is None else env)
         raw_user = (env.get("EDEN_USER_ID") or "").strip()
-        self.user = eden_id(raw_user) if raw_user else None
-        self.tenant = (env.get("EDEN_TENANT_ID") or "").strip() or None
         self.base_url = (env.get("EDEN_URL") or "").strip() or None
-        self.api_key = env.get("EDEN_API_KEY") or None
+        self.user = eden_id(raw_user) if raw_user else (None if self.base_url else "local")
+        self.tenant = ((env.get("EDEN_TENANT_ID") or "").strip() or None) if self.base_url else "local"
+        self.api_key = (env.get("EDEN_API_KEY") or None) if self.base_url else None
+        if not self.base_url:
+            if env.get("EDEN_API_KEY") or env.get("EDEN_TENANT_ID"):
+                self._warn_once("local mode ignores EDEN_API_KEY and EDEN_TENANT_ID")
+            name = "eden-local.exe" if sys.platform == "win32" else "eden-local"
+            fallback = self._home / "plugins" / "eden" / "bin" / name
+            override = env.get("EDEN_LOCAL_BINARY")
+            candidates = ([Path(override).expanduser()] if override else
+                          ([Path(plugin_file).resolve().parent / "bin" / name] if plugin_file else []) + [fallback])
+            binary = next((p for p in candidates if p.is_file()), None)
+            if binary is None:
+                self._enabled = False
+                self._warn_once(f"local binary not found at {candidates[0]}; Eden registers nothing")
+                return
+            sources = Path(env["EDEN_SOURCES_FILE"]).expanduser().resolve() if env.get("EDEN_SOURCES_FILE") else None
+            users = (Path(env["EDEN_USER_SOURCES_FILE"]).expanduser().resolve()
+                     if env.get("EDEN_USER_SOURCES_FILE") else None)
+            default_sources = self._home / "eden" / "sources.json"
+            if sources is None and users is None and default_sources.is_file():
+                users = default_sources
+            self.local = LocalEden(binary.resolve(), self._home / "eden" / "data", sources_file=sources,
+                                   user_sources_file=users, log_path=self._home / "eden" / "logs" / "eden-local.log",
+                                   base_env=env)
         tools = env.get("EDEN_CHECK_TOOLS")
         # None: the acting-verb default; "*": every tool; otherwise exactly the names listed (empty: none).
         self.check_mode = "acting" if tools is None else "all" if tools.strip() == "*" else "list"
@@ -98,6 +157,17 @@ class EdenHermes:
         self._factory = client_factory or EdenClient
         self._clients: "OrderedDict[str, Any]" = OrderedDict()
         self._lock = threading.Lock()
+
+    def _warn_once(self, problem):
+        if problem not in self._warnings:
+            self._warnings.add(problem)
+            _warn(problem)
+
+    def _in_scope(self):
+        try:
+            return self._enabled and _homes(self._scope_env)[0] == self._home
+        except Exception:
+            return False
 
     @staticmethod
     def session_key(session_id: Any, task_id: Any = None) -> Optional[str]:
@@ -108,21 +178,33 @@ class EdenHermes:
     def client(self, session_id: Any, task_id: Any = None) -> Optional[Any]:
         """The session's client, made on first use; None when there is no user or no session id."""
         sid = self.session_key(session_id, task_id)
-        if not self.user or sid is None:
+        if not self._in_scope() or not self.user or sid is None:
             return None
+        endpoint = self.local.endpoint() if self.local else (self.base_url, self.api_key, 0)
+        if endpoint is None:
+            return None
+        base_url, token, generation = endpoint
         with self._lock:
-            c = self._clients.get(sid)
-            if c is not None:
+            cached = self._clients.get(sid)
+            if cached is not None and cached[1] == generation:
                 self._clients.move_to_end(sid)
-                return c
+                return cached[0]
+            self._clients = OrderedDict((key, value) for key, value in self._clients.items() if value[1] == generation)
         try:
-            c = self._factory(user_id=self.user, session_id=sid, api_key=self.api_key, tenant_id=self.tenant,
-                              base_url=self.base_url, on_error=lambda e: _warn(str(e)))
+            def on_error(error):
+                self._warn_once(str(error))
+                if self.local and "cannot reach" in str(error):
+                    self.local.failed(generation)
+
+            options = {"bypass_proxies": True} if self.local else {}
+            c = self._factory(user_id=self.user, session_id=sid, api_key=token, tenant_id=self.tenant,
+                              base_url=base_url,
+                              on_error=on_error if self.local else lambda e: _warn(str(e)), **options)
         except Exception as e:  # noqa: BLE001
             _warn(f"could not make a client: {e}")
             return None
         with self._lock:
-            self._clients[sid] = c
+            self._clients[sid] = (c, generation)
             while len(self._clients) > MAX_SESSIONS:
                 self._clients.popitem(last=False)
         return c
@@ -142,6 +224,8 @@ class EdenHermes:
     def pre_llm_call(self, session_id: Any = None, user_message: Any = None, task_id: Any = None,
                      **_: Any) -> Optional[Dict[str, str]]:
         try:
+            if not self._in_scope():
+                return None
             if not isinstance(user_message, str) or not user_message.strip():
                 return None
             c = self.client(session_id, task_id)
@@ -157,6 +241,8 @@ class EdenHermes:
     def pre_tool_call(self, tool_name: Any = None, args: Any = None, session_id: Any = None, task_id: Any = None,
                       **_: Any) -> Optional[Dict[str, str]]:
         try:
+            if not self._in_scope():
+                return None
             if not self.checks(tool_name):
                 return None
             c = self.client(session_id, task_id)
@@ -174,6 +260,8 @@ class EdenHermes:
     def post_tool_call(self, tool_name: Any = None, result: Any = None, session_id: Any = None, task_id: Any = None,
                        **_: Any) -> None:
         try:
+            if not self._in_scope():
+                return None
             if not _is_tool(tool_name) or _is_ask(tool_name):
                 return None
             c = self.client(session_id, task_id)
@@ -189,6 +277,8 @@ class EdenHermes:
                               **_: Any) -> Optional[str]:
         # Eden's own answer gets queued packets appended too, as the lab's plugin (the measured arm) did.
         try:
+            if not self._in_scope():
+                return None
             if not isinstance(result, str):
                 return None
             c = self.client(session_id, task_id)
@@ -206,19 +296,23 @@ class EdenHermes:
         Hermes' CLI reset passes only the new ``session_id``: that pops a session with no client yet and sends
         nothing, and the old one was already ended by the ``on_session_finalize`` its ``/new`` fires first."""
         try:
+            if not self._in_scope():
+                return None
             sid = self.session_key(old_session_id or session_id)
             if not self.user or sid is None:
                 return None
             with self._lock:
-                c = self._clients.pop(sid, None)
-            if c is not None:
-                c.observe({"kind": "session_end"})
+                cached = self._clients.pop(sid, None)
+            if cached is not None:
+                cached[0].observe({"kind": "session_end"})
         except Exception as e:  # noqa: BLE001
             _warn(f"end_session: {e}")
         return None
 
     def ask_context(self, args: Any = None, session_id: Any = None, task_id: Any = None, **_: Any) -> str:
         try:
+            if not self._in_scope():
+                return "No context available."
             question = args.get("question") if isinstance(args, dict) else None
             if not isinstance(question, str) or not question.strip():
                 return "ask_context needs a question."
@@ -231,9 +325,15 @@ class EdenHermes:
         return "No context available."
 
     def register(self, ctx: Any) -> None:
+        if not self._in_scope():
+            return
         if not self.user:
             _warn("EDEN_USER_ID is not set: the Eden plugin registers nothing")
             return
+        if self.local:
+            atexit.register(self.local.close)
+            if callable(getattr(ctx, "on_unload", None)):
+                ctx.on_unload(self.local.close)
         ctx.register_hook("pre_llm_call", self.pre_llm_call)
         ctx.register_hook("pre_tool_call", self.pre_tool_call)
         ctx.register_hook("post_tool_call", self.post_tool_call)
@@ -259,9 +359,9 @@ def _joined(injections: Any) -> Optional[str]:
     return text or None
 
 
-def register(ctx: Any) -> None:
+def register(ctx: Any, *, plugin_file=None) -> None:
     """Hermes' plugin entry point (``register(ctx)``), configured from the environment."""
     try:
-        EdenHermes().register(ctx)
+        EdenHermes(plugin_file=plugin_file).register(ctx)
     except Exception as e:  # noqa: BLE001 - a plugin that fails to load must not stop Hermes
         _warn(f"not registered: {e}")

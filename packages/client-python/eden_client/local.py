@@ -102,7 +102,7 @@ class LocalEden:
                         ready.set()
                         break
                     if byte == 10:
-                        match = re.fullmatch(rb"EDEN_LOCAL_READY ([0-9]{1,5})", line)
+                        match = re.fullmatch(rb"EDEN_LOCAL_READY ([0-9]{1,5})\r?", line)
                         if match:
                             port = int(match[1])
                             result.append(port if 1 <= port <= 65535 else None)
