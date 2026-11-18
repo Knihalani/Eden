@@ -108,7 +108,12 @@ describe("pi-ab --resume (D813)", () => {
         // (Sequential: two concurrent attempts on one journal race on its lock, and which message the loser
         // prints is timing luck.)
         const refused = await piAb(dir, "refused", "cut.json", shape.extra);
-        const changed = await piAb(dir, "changed", "cut.json", [...shape.extra, "--resume", "--tool-exec", "sequential"]);
+        const changed = await piAb(dir, "changed", "cut.json", [
+          ...shape.extra,
+          "--resume",
+          "--tool-exec",
+          "sequential",
+        ]);
         expect(refused.status).toBe(2);
         expect(refused.stderr).toContain("pass --resume");
         expect(changed.status).toBe(2);
