@@ -359,7 +359,8 @@ export const ASKS_OWN = /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much
  * A question asking who a pronoun means (D1981): "Who is he again?", "Who's she?". It names nobody — the person
  * it asks about is the one the last request named (its `carry` is in `partner.ts`).
  */
-export const ASKS_WHO = /\bwho\s+(?:is|was|'s|are|were)\s+(?:he|she|they|him|her|them|that|this)\b/i;
+export const ASKS_WHO =
+  /\bwho(?:'s|\s+(?:is|was|'s|are|were))\s+(?:he|she|they|him|her|them|that|this)\b(?:[\s,?!.]+(?:again|exactly|anyway|though|precisely|actually|then|now))*[\s?!.]*$/i;
 
 function pushStartOne(raw: string, opts: { open: boolean; indirect: boolean }): PushStart | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
