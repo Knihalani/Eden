@@ -19,4 +19,3 @@
 | [LAB.md](LAB.md) | The lab runbook: suites, presets, harnesses, replay caches, providers, recipes with costs |
 | [TESTING.md](TESTING.md) | Test commands, parallel timings, the slowest test files |
 | [research/INDEX.md](research/INDEX.md) | Every research note with its date, decisions and status (adopted, rejected, superseded, open) |
-| [SALVAGE.md](SALVAGE.md) | What was kept from the archived memory product, and what is worth mining |
