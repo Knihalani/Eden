@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import lzma
 import os
 import platform
 import re
@@ -52,13 +53,32 @@ def digest(path):
     return sha256.hexdigest()
 
 
+def digest_xz(path):
+    sha256 = hashlib.sha256()
+    try:
+        with lzma.open(path, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                sha256.update(chunk)
+    except lzma.LZMAError as error:
+        raise ValueError(f"Unexpected or modified file: {path}") from error
+    return sha256.hexdigest()
+
+
+def unpack_xz(source, dest):
+    try:
+        with lzma.open(source, "rb") as data, dest.open("wb") as out:
+            shutil.copyfileobj(data, out)
+    except lzma.LZMAError as error:
+        raise ValueError(f"Unexpected or modified file: {source}") from error
+
+
 def plain(path, kind):
     info = path.lstat()
     if not kind(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
         raise ValueError(f"Unexpected file type: {path}")
 
 
-def verify_tree(root, files, *, installed=False):
+def verify_tree(root, files, *, installed=False, packed=frozenset()):
     plain(root, stat.S_ISDIR)
     parents = {parent.as_posix() for name in files for parent in Path(name).parents}
     seen = set()
@@ -84,9 +104,15 @@ def verify_tree(root, files, *, installed=False):
                 cache = PYCACHE.fullmatch(name)
                 if cache and (here.parent / f"{cache[1]}.py").relative_to(root).as_posix() in files:
                     continue
-            if rel not in files or digest(path) != files[rel]:
+            unpacked = rel[:-3] if rel.endswith(".xz") else rel
+            if unpacked in packed:
+                if rel == unpacked or digest_xz(path) != files[unpacked]:
+                    raise ValueError(f"Unexpected or modified file: {path}")
+                seen.add(unpacked)
+            elif rel not in files or digest(path) != files[rel]:
                 raise ValueError(f"Unexpected or modified file: {path}")
-            seen.add(rel)
+            else:
+                seen.add(rel)
     if seen != files.keys():
         raise ValueError(f"Missing files in {root}: {', '.join(sorted(files.keys() - seen))}")
 
@@ -115,6 +141,13 @@ def read_manifest(path):
         ):
             raise ValueError(f"Invalid payload entry {name!r}")
         folded.add(name.casefold())
+    packed = manifest.get("packed", [])
+    if (
+        not isinstance(packed, list)
+        or len(packed) != len(set(packed))
+        or not all(isinstance(name, str) and name in files for name in packed)
+    ):
+        raise ValueError(f"Invalid packed entries in {path}")
     return manifest
 
 
@@ -177,7 +210,8 @@ def install(payload, manifest, home, force, dry_run):
     plugins = home / "plugins"
     dest = plugins / "eden"
     files = manifest["files"]
-    verify_tree(payload, files)
+    packed = frozenset(manifest.get("packed", []))
+    verify_tree(payload, files, packed=packed)
 
     def existing():
         if os.path.lexists(plugins):
@@ -216,7 +250,10 @@ def install(payload, manifest, home, force, dry_run):
             for rel in sorted(files):
                 path = stage / rel
                 path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(payload / rel, path)
+                if rel in packed:
+                    unpack_xz(payload / f"{rel}.xz", path)
+                else:
+                    shutil.copyfile(payload / rel, path)
                 path.chmod(0o755 if rel == f"bin/{binary_name(manifest['target'])}" else 0o644)
             verify_tree(stage, files)
             (stage / MARKER).write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
