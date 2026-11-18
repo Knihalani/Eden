@@ -18,7 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from build import HERE, reproducible_zip
-from install import MARKER, TARGETS, binary_name, digest, host_target, select_home
+from install import MARKER, TARGETS, binary_name, digest, host_target, select_home, source_files
 
 HOST = host_target(platform.system(), platform.machine())
 
@@ -66,11 +66,63 @@ class ReleaseTest(unittest.TestCase):
     def save_manifest(self):
         (self.release / "manifest.json").write_text(json.dumps(self.manifest), encoding="utf-8")
 
-    def run_installer(self, *args, ok=True):
+    def run_installer(self, *args, ok=True, check=False):
+        if not check:
+            args += ("--no-check",)
         p = subprocess.run([sys.executable, str(self.installer), *args], cwd=self.work, env=self.env,
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=15)
         self.assertEqual(p.returncode, 0 if ok else 1, p.stdout + p.stderr)
         return p.stdout + p.stderr
+
+    def script_binary(self, body):
+        """Replace the release binary with a runnable script (POSIX only) and re-hash the manifest."""
+        path = self.payload / self.binary
+        path.write_bytes(body)
+        path.chmod(0o755)
+        self.manifest["files"][self.binary] = digest(path)
+        self.save_manifest()
+
+    @unittest.skipIf(os.name == "nt", "script sidecars need a POSIX shell")
+    def test_check_reports_ready_and_example_sources(self):
+        self.home.mkdir()
+        self.script_binary(b"#!/bin/sh\nprintf 'EDEN_LOCAL_READY 45678\\n'\nexec cat\n")
+        text = self.run_installer("--example", check=True)
+        self.assertIn("ready on 127.0.0.1:45678", text)
+        sources = self.home / "eden" / "sources.json"
+        written = json.loads(sources.read_text(encoding="utf-8"))
+        self.assertIn("local/local", written["users"])
+        self.assertIn("gym membership renew", text)
+        sources.write_text("{\"users\": {}}", encoding="utf-8")
+        self.assertIn("Kept your existing", self.run_installer("--example", check=True))
+        self.assertEqual(json.loads(sources.read_text(encoding="utf-8")), {"users": {}})
+
+    @unittest.skipIf(os.name == "nt", "script sidecars need a POSIX shell")
+    def test_check_fails_when_sidecar_cannot_start(self):
+        self.home.mkdir()
+        self.script_binary(b"#!/bin/sh\necho 'eden: broken build' >&2\nexit 2\n")
+        self.assertIn("did not become ready", self.run_installer(check=True, ok=False))
+
+    @unittest.skipIf(os.name == "nt", "script sidecars need a POSIX shell")
+    def test_check_warns_on_rejected_sources_file(self):
+        self.home.mkdir()
+        self.script_binary(b"#!/bin/sh\necho 'eden: EDEN_USER_SOURCES_FILE must be {\\\"users\\\"}' >&2\nexit 2\n")
+        text = self.run_installer(check=True)
+        self.assertIn("note", text)
+        self.assertIn("EDEN_USER_SOURCES_FILE", text)
+        self.assertIn("plugins enable eden", text)
+
+    def test_source_files_matches_plugin_resolution(self):
+        profile = self.home / "eden" / "sources.json"
+        profile.parent.mkdir(parents=True)
+        profile.write_text("{}", encoding="utf-8")
+        # Explicit env file wins and disables the profile fallback entirely, like hermes.py.
+        sources, users = source_files(self.home, {"EDEN_SOURCES_FILE": "~/shared.json"})
+        self.assertEqual(sources, str(Path("~/shared.json").expanduser().resolve()))
+        self.assertIsNone(users)
+        sources, users = source_files(self.home, {"EDEN_USER_SOURCES_FILE": "~/u.json"})
+        self.assertIsNone(sources)
+        self.assertEqual(users, str(Path("~/u.json").expanduser().resolve()))
+        self.assertEqual(source_files(self.home, {}), (None, str(profile)))
 
     def test_install_reinstall_upgrade(self):
         self.home.mkdir()
