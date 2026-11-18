@@ -888,7 +888,7 @@ export class SyncManager {
     return u !== undefined && this.completeOf(u, sourceId);
   }
 
-  private completeOf(u: UserSync, sourceId: string): boolean {
+  private completeOf(u: UserSync, sourceId: string, now = Date.now()): boolean {
     const s = u.sources.get(sourceId);
     if (s === undefined || s.phase !== "warm" || s.cut) return false;
     // The cache can let synced items go on its own (its `maxSyncedPerUser` cap, `syncTtlMs`): a copy is whole only
@@ -897,6 +897,16 @@ export class SyncManager {
     if (s.held.size !== s.ids.size) {
       s.cut = true;
       return false;
+    }
+    // An expired synced entry stays counted in `held` until the sweep drops it, while reads already skip it: while
+    // any synced entry is stale, fall back to the per-id fresh check so `complete` answers what reads see.
+    if (this.deps.cache.syncedExpired(u.scope, now)) {
+      const fresh = this.deps.cache.syncedReader(u.scope, now);
+      for (const id of s.ids) {
+        if (fresh(id)) continue;
+        s.cut = true;
+        return false;
+      }
     }
     return true;
   }

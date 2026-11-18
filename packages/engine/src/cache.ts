@@ -1647,6 +1647,15 @@ export class ItemCache {
     };
   }
 
+  /**
+   * Whether the user's oldest synced entry has expired (`syncTtlMs`): true until the sweep or a write drops it.
+   * `SyncManager.complete` uses it to know its `held` count can be trusted without a per-id freshness scan.
+   */
+  syncedExpired(scope: Scope, now = Date.now()): boolean {
+    const e = this.peek(scope)?.heads[SYNCED];
+    return e != null && !this.alive(e, now);
+  }
+
   /** Whether each id is held as a synced item and alive, for many ids of one user (the sync's `complete`, D264). */
   syncedReader(scope: Scope, now = Date.now()): (id: string) => boolean {
     const items = this.peek(scope)?.items;
