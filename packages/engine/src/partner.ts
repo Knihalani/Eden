@@ -4356,7 +4356,9 @@ export class ContextPartner {
     const entityTerms = new Set<string>();
     const entityPhrases: string[][] = [];
     for (const e of cleanEntities(cue.entities)) {
-      const words = e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      // Stopwords drop out of both sides' term sets, so the shared-name check counts only the name's
+      // content words ("The North Face" links on "north face").
+      const words = (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w));
       if (words.length >= 1) entityPhrases.push(words);
       for (const w of words) entityTerms.add(w);
     }
