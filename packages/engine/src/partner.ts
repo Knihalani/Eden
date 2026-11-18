@@ -367,7 +367,7 @@ interface Session {
    * Sketches and identifier numbers of items delivered in this session (bounded): a near-duplicate of one is not
    * delivered again, unless its own identifiers say it is a different thing ("order 874" beside "order 881").
    * `turn` and `terms` (the item's own content terms, bounded) let a follow-up's `carry` read what the last
-   * request's answer was about (D1974).
+   * request's answer was about (D1975).
    */
   delivered: { sketch: Sketch | null; refs: ReadonlySet<string>; turn: number; terms: string[] }[];
   /** Injections handed to the agent and not yet judged used or unused. */
@@ -2459,7 +2459,7 @@ export class ContextPartner {
       // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
       // An explicit ask's answer carries its topic too: its items arrive with no sketch, but a follow-up's
-      // `carry` still reads what was handed (D1974).
+      // `carry` still reads what was handed (D1975).
       for (const item of items) this.recordDelivered(s, item, null);
       if (this.config.partyCheck) this.notePacketParties(s, answer, injection.citations);
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
@@ -6659,7 +6659,7 @@ export class ContextPartner {
 
   /**
    * What a delivery handed: the item's sketch (null for an ask's answer, which arrives with none), identifier
-   * numbers and the turn, plus the bounded content terms a follow-up's `carry` inherits (D1974). Title first so
+   * numbers and the turn, plus the bounded content terms a follow-up's `carry` inherits (D1975). Title first so
    * its most naming terms win the cap. Number-bearing terms are kept out: a carried identifier ("881") would
    * make the follow-up's own `contradicts` drop the sibling it was meant to reach.
    */
