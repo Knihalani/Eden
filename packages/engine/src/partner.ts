@@ -159,7 +159,18 @@ import {
 } from "./parties";
 import { safeLine } from "./line";
 import { datedText } from "./days";
-import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
+import {
+  anchored,
+  anchorsOf,
+  hasDay,
+  namedDays,
+  namesDay,
+  namesEntity,
+  namesRequestDay,
+  settledCut,
+  settles,
+  type Anchors,
+} from "./settle";
 import { classifySituation } from "./situation";
 import {
   contentTerms,
@@ -367,7 +378,7 @@ interface Session {
    * Sketches and identifier numbers of items delivered in this session (bounded): a near-duplicate of one is not
    * delivered again, unless its own identifiers say it is a different thing ("order 874" beside "order 881").
    * `turn` and `terms` (the item's own content terms, bounded) let a follow-up's `carry` read what the last
-   * request's answer was about (D1975).
+   * request's answer was about (D1976).
    */
   delivered: { sketch: Sketch | null; refs: ReadonlySet<string>; turn: number; terms: string[] }[];
   /** Injections handed to the agent and not yet judged used or unused. */
@@ -604,6 +615,26 @@ const sameRef = (refs: ReadonlySet<string>, item: ContextItem): boolean => {
   if (have.size === 0) return true;
   for (const id of refs) if (have.has(id)) return true;
   return false;
+};
+
+/** A request that moves something onto a named day: the day's other timed items are the clash it would make. */
+const MOVES = /\b(move|moved|reschedul\w*|postpone|push|switch\w*|change)\b/i;
+/**
+ * An entity used as a setting or topic, not the subject ("novels set in Delhi", "books about Rome"): the word
+ * before its first mention tells them apart — "my Lisbon flight" names the subject, "in Delhi" names a place
+ * it is about. `to`/`for`/`from` stay subject words ("the flight to Lisbon", "a refund for the kettle").
+ */
+const SETTING_WORDS = new Set(["in", "about", "around", "like", "near", "called", "named"]);
+const wordBefore = (raw: string, entity: string): string => {
+  const i = raw.toLowerCase().indexOf(entity.toLowerCase());
+  if (i < 0) return "";
+  return raw.slice(0, i).trim().split(/\s+/).pop()?.toLowerCase() ?? "";
+};
+/** Content words of a text: lowercase word characters minus the stop-words (`subject` compares these). */
+const contentWords = (text: string): string[] => {
+  const out: string[] = [];
+  for (const m of text.toLowerCase().matchAll(/[\p{L}\p{N}]+/gu)) if (!isStopword(m[0])) out.push(m[0]);
+  return out;
 };
 
 const idNumbers = (text: string): Set<string> => {
@@ -2459,7 +2490,7 @@ export class ContextPartner {
       // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
       // An explicit ask's answer carries its topic too: its items arrive with no sketch, but a follow-up's
-      // `carry` still reads what was handed (D1975).
+      // `carry` still reads what was handed (D1976).
       for (const item of items) this.recordDelivered(s, item, null);
       if (this.config.partyCheck) this.notePacketParties(s, answer, injection.citations);
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
@@ -4115,6 +4146,22 @@ export class ContextPartner {
       const byPerson = [...withPerson].sort((a, b) => b.score - a.score || near(a) - near(b));
       return { items: byPerson.slice(0, 1), how: "person" };
     }
+    // `groundSubject` (D1976): a request about a subject it names gets the context around it, not the best match alone.
+    // An availability ask on a named day is not about the subject but about the day: `time-free` answers it below.
+    const asksFree =
+      time !== null &&
+      time.days.size > 0 &&
+      (eventKind === "user_message" || eventKind === "ask") &&
+      ((onlyTime(cue) && ASKS_SCHEDULE.test(cue.raw)) || (/\?\s*$/.test(cue.raw) && ASKS_FREE.test(cue.raw)));
+    if (
+      this.config.groundSubject &&
+      !asksFree &&
+      cue.entities.length > 0 &&
+      (acts || /\?\s*$/.test(cue.raw) || isAction(cue.raw))
+    ) {
+      const subject = this.subject(s, cue, pool);
+      if (subject.length > 0) return { items: subject.slice(0, this.max()), how: "subject" };
+    }
     if (!time) return none;
     const events = pool.filter((x) => (time.days.size > 0 ? onDay(x) : time.next && upcoming(x)));
     // A title that holds a name the request uses whole ("Priya Raman talk"); one shared uncommon word ("Globex" for
@@ -4145,6 +4192,120 @@ export class ContextPartner {
       return { items: events.sort(soonest).slice(0, this.max()), how: "time-free" };
     }
     return none;
+  }
+
+  /**
+   * `subject` (D1976): a request about a subject it names ("my Lisbon flight", "the Smeg kettle") gets the context
+   * around it, not the best match alone: the items about the named thing, the timed items of a day the request
+   * moves it to (the train Saturday a new flight would clash with), and a companion the context needs beside the
+   * subject (the booking's change policy, the shop's returns window). Single-word entities anchor here — the
+   * whole-word title/text match, a date or a second shared term, and `contradicts`/bulk mail/`maxItemsPerInjection`
+   * bound it the way every ground is bound.
+   */
+  private subject(s: Session, cue: Cue, pool: Scored[]): Scored[] {
+    // Entities the request uses as its subject, not its setting ("my Lisbon flight", never "novels set in Delhi");
+    // a stop-word the extractor keeps ("The Smeg") is not part of the name.
+    const entities = cue.entities
+      .map((e) =>
+        e
+          .trim()
+          .split(/\s+/)
+          .filter((w) => !isStopword(w.toLowerCase()))
+          .join(" "),
+      )
+      .filter((e) => e.length > 0 && !SETTING_WORDS.has(wordBefore(cue.raw, e)));
+    if (entities.length === 0) return [];
+    const anchors = anchorsOf(entities, cue.time?.days ?? null, cue.raw, cue.offset);
+    const entityWords = Math.max(1, ...entities.map((e) => e.trim().split(/\s+/).length));
+    const dated = (item: ContextItem) => namedDays(`${item.title} ${item.text}`).length > 0;
+    // About the named thing: the entity a whole word of its title or of its text, and the item a dated record or
+    // one also holding another of the request's terms — a bare mention is a lookalike until a second term binds it.
+    const subject = pool.filter(
+      (x) =>
+        (titleNames(entities, x.item) === "whole" || namesEntity(x.item, anchors)) &&
+        (dated(x.item) || x.matched > entityWords),
+    );
+    if (subject.length === 0) return [];
+    const out = [...subject];
+    const has = new Set(out.map((x) => x.item.id));
+    const add = (x: Scored) => {
+      if (!has.has(x.item.id)) {
+        has.add(x.item.id);
+        out.push(x);
+      }
+    };
+    // The day the request moves it to: the day's other timed items are the clash it would make — never a day the
+    // subject's items sit on, the one it moves from (a move naming both days finds those too). The day it moves
+    // from is one the request names that a subject's item also names — the booking's other days ("back Sunday 15
+    // Nov") are not it.
+    const requestNamed = namedDays(cue.raw);
+    const fromDays =
+      cue.time !== null && cue.time.days.size > 0 && MOVES.test(cue.raw)
+        ? namedDays(subject.map((x) => `${x.item.title} ${x.item.text}`).join(" ")).filter((f) =>
+            requestNamed.some((r) => r.day === f.day && r.month === f.month),
+          )
+        : [];
+    const onFromDay = (item: ContextItem) => {
+      const on = startDay(item, cue.offset);
+      const d = on === null ? null : /^\d{4}-(\d{2})-(\d{2})$/.exec(on);
+      return (
+        (d !== null && fromDays.some((f) => f.day === Number(d[2]) && f.month === Number(d[1]) - 1)) ||
+        namesDay(`${item.title} ${item.text}`, fromDays)
+      );
+    };
+    if (fromDays.length > 0 || (cue.time !== null && cue.time.days.size > 0 && MOVES.test(cue.raw))) {
+      for (const x of pool) if (!onFromDay(x.item) && namesRequestDay(x.item, anchors)) add(x);
+    }
+    // A companion the subject's context needs beside it: a term of the request's and one of the subject's (the
+    // returns policy that answers "can I still get a refund"), or two of the subject's (the booking's change
+    // policy — the request may share no word with it at all).
+    const subjectTerms = new Set<string>();
+    for (const x of subject) for (const t of contentWords(`${x.item.title} ${x.item.text}`)) subjectTerms.add(t);
+    const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
+    // Shared terms count on letters only: a bare number ("5") binds two items on nothing.
+    const companion = (item: ContextItem) => {
+      let shared = 0;
+      let req = false;
+      for (const t of contentWords(`${item.title} ${item.text}`)) {
+        if (subjectTerms.has(t)) {
+          if (/\p{L}/u.test(t)) shared++;
+        } else if (requestTerms.has(t)) req = true;
+      }
+      return shared >= 2 || (shared >= 1 && req);
+    };
+    for (const x of pool) if (!has.has(x.item.id) && !onFromDay(x.item) && companion(x.item)) add(x);
+    // Companions the request's own words never ranked in (a policy sharing nothing but the subject's terms).
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (vocab !== undefined && out.length < this.max()) {
+      const q = termIds([...subjectTerms].join(" "), vocab, false);
+      const query: number[] = [];
+      for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+      if (query.length > 0) {
+        for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now())) {
+          if (out.length >= this.max()) break;
+          if (
+            has.has(h.item.id) ||
+            bulkMail(h.item) ||
+            !s.ledger.isFresh(h.item.id, s.turn) ||
+            s.delivered.some((d) => nearDuplicate(d.sketch, h.sketch) && sameRef(d.refs, h.item)) ||
+            // A copy `rank` folded away is no more welcome as a companion (the same near-duplicate fold).
+            out.some(
+              (o) =>
+                nearDuplicate(o.sketch, h.sketch) &&
+                startDay(o.item, cue.offset) === startDay(h.item, cue.offset) &&
+                sameRef(idNumbers(`${h.item.title} ${h.item.text}`), o.item),
+            ) ||
+            this.alreadyHas(s, h.item, h.doc, vocab)
+          ) {
+            continue;
+          }
+          const x: Scored = { item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc };
+          if (this.contradicts(x, cue) || !companion(h.item)) continue;
+          add(x);
+        }
+      }
+    }
+    return out;
   }
 
   /**
@@ -6659,7 +6820,7 @@ export class ContextPartner {
 
   /**
    * What a delivery handed: the item's sketch (null for an ask's answer, which arrives with none), identifier
-   * numbers and the turn, plus the bounded content terms a follow-up's `carry` inherits (D1975). Title first so
+   * numbers and the turn, plus the bounded content terms a follow-up's `carry` inherits (D1976). Title first so
    * its most naming terms win the cap. Number-bearing terms are kept out: a carried identifier ("881") would
    * make the follow-up's own `contradicts` drop the sibling it was meant to reach.
    */

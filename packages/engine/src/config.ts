@@ -172,6 +172,15 @@ export interface EngineConfig {
    */
   groundOccasion: boolean;
   /**
+   * With no model's say, a request about a subject it names ("my Lisbon flight", "the Smeg kettle") is grounded in
+   * the context around it: the items about the named thing (its entity a whole word of the title, or of the text
+   * beside another of the request's terms), the timed items of a day the request moves it to, and a companion the
+   * context needs beside it — an item sharing a term of the request's and one of the subject's, or two of the
+   * subject's (the shop's returns policy beside the order that leaks). Bound as every ground: `contradicts`, bulk
+   * mail, `maxItemsPerInjection` (`Partner.subject`).
+   */
+  groundSubject: boolean;
+  /**
    * With no model's say, an item tied to the request by a name alone is not pushed: it shares no other word of the
    * request, is on no day the request names and holds no reference it names (`Partner.beyondName`). A passing
    * mention of someone ("Sam says hi") is no need, and the name does not say which of their items would be meant.
@@ -921,6 +930,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   quietClear: true,
   densePacket: true,
   groundOccasion: true,
+  groundSubject: true,
   quietNameOnly: true,
   conflictVocab: true,
   spans: false,
