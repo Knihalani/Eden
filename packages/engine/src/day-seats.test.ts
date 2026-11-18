@@ -126,6 +126,23 @@ describe("clash carry (D1979): a clash at the time just said hands the bare-week
     expect(ids(p, o)).toHaveLength(0);
   });
 
+  test("a dated item on another week is not a clash for this one", async () => {
+    // Same words as ONE_ON_ONE but meta.start on the following Thursday: the weekday in its
+    // text cannot pull next week's 1:1 into this week's clash ask.
+    const NEXT = item(
+      "nextone",
+      "1:1 with manager",
+      "1:1 with manager, Thursday 16:15-17:00.",
+      24,
+      "2026-11-26T16:15:00Z",
+    );
+    const p = setup([NEXT]);
+    ids(p, await say(p, "can I pick Leo up on Thursday?"));
+    ids(p, await hear(p, "Football club runs until 16:30 on Thursday."));
+    const o = await say(p, "do I have a clash at that time?");
+    expect(ids(p, o)).toHaveLength(0);
+  });
+
   test("a free-ask still does not list a bare-weekday item (class 3 stays out of the day listing)", async () => {
     const p = setup([ONE_ON_ONE]);
     await say(p, "what meetings do I have?");

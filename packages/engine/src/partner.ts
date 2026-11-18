@@ -4156,9 +4156,13 @@ export class ContextPartner {
         const m = startMinutes(x.item) ?? textMinutes(x.item);
         return m !== null && overlaps(x.item, m, range) && !isSubject(x.item, cue.raw);
       };
-      const clashes = pool
-        .filter((x) => (time.days.has(startDay(x.item, cue.offset) ?? "") || x.dayCls !== undefined) && near(x))
-        .sort(soonest);
+      // A dated item (meta.start) is a clash only on its own day; a weekday in its text is just how it
+      // says when it happens, not which week's ("Thursday" next week is not this Thursday's clash).
+      const onDay = (x: Scored) => {
+        const sd = startDay(x.item, cue.offset);
+        return sd === null ? x.dayCls !== undefined : time.days.has(sd);
+      };
+      const clashes = pool.filter((x) => onDay(x) && near(x)).sort(soonest);
       if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
     }
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
