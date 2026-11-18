@@ -2,13 +2,8 @@
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for a security problem. Report it privately
-through GitHub's **"Report a vulnerability"** feature on this repository's
-Security tab (private vulnerability reporting).
-
-If that is unavailable, contact the maintainer ([@Knihalani](https://github.com/Knihalani))
-through GitHub and mention that you have a security report — details can then
-be shared over a private channel.
+Please do not open a public issue for a security problem. Report it by email
+to **kaiav@kaiav.dev**.
 
 Please include, where you can: the affected version or commit, steps to
 reproduce, and the impact. You can expect an acknowledgement within a few days.

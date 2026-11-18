@@ -1,9 +1,8 @@
 # Contributing
 
-Thanks for your interest in Eden. This file is the short version for humans;
-[CLAUDE.md](CLAUDE.md) holds the detailed engineering rules (they apply to AI
-agents contributing too), and [docs/TESTING.md](docs/TESTING.md) lists the
-test commands.
+Thanks for your interest in Eden. [docs/TESTING.md](docs/TESTING.md) lists the
+test commands, and [docs/DECISIONS.md](docs/DECISIONS.md) records the
+engineering decisions that shape the code — read it before changing the engine.
 
 ## Getting set up
 
@@ -34,14 +33,14 @@ bun run test:changed
 - Keep changes minimal and follow the surrounding style: 120-column limit,
   comments explain why.
 - Never commit `.env`, credentials or real user data. Text that is stored,
-  indexed, logged or sent to a model must pass `sanitizeForStore` first — see
-  the engineering rules in [CLAUDE.md](CLAUDE.md) (read-only sources, per-user
-  isolation, model last, honest numbers).
+  indexed, logged or sent to a model must pass `sanitizeForStore` first.
+  Sources stay read-only, state is isolated per user, and every number in a
+  doc or PR comes from a command you ran.
 
 ## Where things are
 
-Each package has its own `CLAUDE.md` with files, rules and quick tests
-(`packages/<name>/CLAUDE.md`); the README's repository table maps the tree.
+The README's repository table maps the tree, and each package's directory
+has a README or docs entry describing it.
 
 ## License
 
