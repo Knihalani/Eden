@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -174,6 +174,20 @@ describe("McpSource fetch", () => {
     );
     expect(calls).toEqual([{ note_id: "n1" }]);
     await s.close();
+  });
+
+  test("parses a text-block rows reply once for the record and its rows", async () => {
+    const body = '{"results":[{"id":"n1","title":"Dana","text":"body"}]}';
+    const { server } = notesServer(true, () => text(body));
+    const s = make(server, { name: "get_note" });
+    const parse = spyOn(JSON, "parse");
+    try {
+      expect((await s.fetch("n1", scope, AbortSignal.timeout(2_000)))?.ref).toBe("n1");
+      expect(parse.mock.calls.filter(([value]) => value === body)).toHaveLength(1);
+    } finally {
+      parse.mockRestore();
+      await s.close();
+    }
   });
 
   test("a record the server no longer has (an error result), an Eden content-hash ref, or no fetch tool", async () => {

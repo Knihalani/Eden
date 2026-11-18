@@ -240,6 +240,9 @@ const LIMITS = new Set([
 
 /** A day and month, optionally a year, optionally after a weekday and a date word. */
 const MON = MONTH.replace("(", "(?:");
+// `matchAll` clones this /g expression, so sharing it across reads is safe.
+const QUALIFIED_REF = new RegExp(`\\b(q[1-4]|h[12]|${MON}|20\\d\\d)(?:'s)? ([a-z]{4,})\\b`, "g");
+const NON_REFERENCE_KIND = /^(am|pm|st|nd|rd|th|gb|mb|kb|px|bn|no|ref|fy|cy|utc|gmt|bst|cet|est|pst)$/;
 const DATED = new RegExp(
   `\\b(?<word>from|since|after|starting|effective|not before|until|till|through|thru|to|by|before|expires|expire|` +
     `expired|expiring|ends|end|ended|due|deadline|lapsed|lapses|valid to|valid until|no later than|on|the)?` +
@@ -622,6 +625,8 @@ interface AnalysisEntry {
   title: string;
   updatedAt: number | undefined;
   views: [Analysis | undefined, Analysis | undefined];
+  /** `namesRef`'s references of the title and text, without and with domains, read on first use. */
+  named: [Ref[] | undefined, Ref[] | undefined];
   /**
    * `gateOf`'s two readings of the item, each read on first use: bit 0 set once `mayConstrain` was read and bit 1
    * its answer, bits 2 and 3 the same for `arrangedVisit` (D1880).
@@ -640,6 +645,7 @@ function entryOf(item: ContextItem): AnalysisEntry {
       title: item.title,
       updatedAt: item.updatedAt,
       views: [undefined, undefined],
+      named: [undefined, undefined],
       gate: 0,
     };
     ANALYSES.set(item, e);
@@ -794,7 +800,9 @@ const BOILER =
 export function namesRef(frame: Frame, item: ContextItem): boolean {
   const ids = frame.refs.filter((r) => r.noun === "");
   if (ids.length === 0) return false;
-  const said = refsOf(`${item.title} ${item.text}`.slice(0, MAX_TEXT), frame.vocab === true && hasDomain(frame));
+  const domains = frame.vocab === true && hasDomain(frame);
+  const e = entryOf(item);
+  const said = (e.named[domains ? 1 : 0] ??= refsOf(`${item.title} ${item.text}`.slice(0, MAX_TEXT), domains));
   return ids.some((a) => said.some((r) => r.kind === a.kind && r.value === a.value && r.noun === a.noun));
 }
 
@@ -1208,11 +1216,11 @@ function refsOf(text: string, domains = false): Ref[] {
   for (const m of text.matchAll(/\b([A-Za-z]{2,6})-?(\d{2,9})\b/g)) {
     const kind = m[1]!.toLowerCase();
     // A time ("pm"), an ordinal, a unit or a year's prefix is not a reference.
-    if (/^(am|pm|st|nd|rd|th|gb|mb|kb|px|bn|no|ref|fy|cy|utc|gmt|bst|cet|est|pst)$/.test(kind)) continue;
+    if (NON_REFERENCE_KIND.test(kind)) continue;
     out.push({ kind, value: m[2]!, noun: "" });
   }
   const lower = text.toLowerCase();
-  for (const m of lower.matchAll(new RegExp(`\\b(q[1-4]|h[12]|${MON}|20\\d\\d)(?:'s)? ([a-z]{4,})\\b`, "g"))) {
+  for (const m of lower.matchAll(QUALIFIED_REF)) {
     const q = m[1]!;
     const kind = /^q\d$/.test(q) ? "quarter" : /^h\d$/.test(q) ? "half" : /^\d/.test(q) ? "year" : "month";
     out.push({ kind, value: kind === "month" ? q.slice(0, 3) : q, noun: m[2]! });

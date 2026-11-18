@@ -3,19 +3,22 @@
  * `createProxy` with a stub upstream and a stub Eden that answer at once, so what is timed is the proxy reading the
  * history (which messages are new, the conversation's hashes, packets kept in place), not the model or Eden.
  *
- *   bun packages/proxy/bench/proxy.bench.ts [turns=30] [reps=5] [srcB]
+ *   bun packages/proxy/bench/proxy.bench.ts [turns=30] [reps=5] [srcB] [--kept]
  *
  * Each turn is a user message, three tool rounds (a call with ~1 KB of arguments, a ~6 KB result) and a reply; every
  * model call of the turn is a request (4 a turn), so the last requests carry ~650 KB of history. Prints the µs a
  * request (all requests of the replay, and the last turn's), median of reps. With `srcB` (a directory holding another
  * copy of `proxy.ts`), arms A (this package's src) and B run interleaved, the order alternating each repetition, with
- * a self-vs-self control (A against a second A instance), and their paired ratios are printed.
+ * a self-vs-self control (A against a second A instance), and their paired ratios are printed. `--kept` makes stub
+ * Eden return one packet on turn 0's user message only, so later turns keep that placement without new packets.
  */
 import { join } from "node:path";
 
-const turns = Number(process.argv[2] ?? 30);
-const reps = Math.max(1, Number(process.argv[3] ?? 5));
-const srcB = process.argv[4];
+const args = process.argv.slice(2).filter((arg) => arg !== "--kept");
+const kept = process.argv.includes("--kept");
+const turns = Number(args[0] ?? 30);
+const reps = Math.max(1, Number(args[1] ?? 5));
+const srcB = args[2];
 
 type Proxy = (req: Request) => Promise<Response>;
 type Make = (o: Record<string, unknown>) => Proxy;
@@ -29,6 +32,12 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
   if (url.startsWith(EDEN)) {
     if (url.includes("/v1/pending")) return Response.json({ injections: [] });
+    if (kept && url.includes("/v1/events")) {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { kind?: string; text?: string };
+      if (body.kind === "user_message" && body.text?.startsWith("Turn 0:")) {
+        return Response.json({ injection: { id: "bench-kept", text: "BENCH_KEPT_PACKET" } });
+      }
+    }
     return Response.json({ injection: null, pending: false });
   }
   return realFetch(input as RequestInfo, init);

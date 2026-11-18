@@ -15,17 +15,18 @@
  * ~2 µs instead of ~190 µs (an fsync per commit, on the event loop); a crash loses at most the last few milliseconds
  * of counts, which learning shrugs off (docs/research/primitives.md).
  *
- * Mentions are written behind too (D1780): a lookup's mentions are summed in memory per (user, entity, source) and
- * written in one transaction within `MENTION_FLUSH_MS` (1 s, or at `MENTION_FLUSH_ROWS` distinct rows), which cut the
- * file's disk writes about 4x on the pipeline bench (each commit rewrites every B-tree page it touches into the WAL).
- * Reads of mentions (`sourcesFor`, so `route`) add the pending counts to what the file holds instead of flushing, or
- * every lookup's route would commit the last lookup's mentions and batch nothing; `exportUser`, `importUser`, `forget`
- * and `close` flush first. What is lost when a process dies: never a committed row (a batch is one transaction), at
- * most the mentions not yet written: the last second's, plus a batch a locked or full file refused, held for a retry
- * up to `MENTION_RETAIN_ROWS`. A process that exits normally writes them (`process.on("exit")`); SIGKILL, a power cut,
- * and a terminating signal in a process with no handler for it do not run that listener, so the servers close the map
- * on SIGTERM, SIGINT and SIGHUP (main.ts, mcp-stdio.ts). Mentions are routing evidence, learned again from the next
- * lookups that find the same names. Another process on the same file (D15) sees them up to a second late.
+ * Mentions are written behind too (D1780): a lookup's mentions are summed in memory per (user, entity, source), and
+ * planner arms are held latest-per-key; both ride the same transaction within `MENTION_FLUSH_MS` (1 s, or at 4,096
+ * distinct rows). This cut the file's disk writes about 4x on the pipeline bench (each commit rewrites every B-tree
+ * page it touches into the WAL). Reads of mentions (`sourcesFor`, so `route`) add pending counts to the file's rows
+ * instead of flushing, or every lookup's route would commit the last lookup's mentions and batch nothing; arm reads
+ * overlay their pending values without flushing. `exportUser`, `importUser`, `forget` and `close` flush first. What is
+ * lost when a process dies: never a committed row (a batch is one transaction), at most the pending batch plus a
+ * refused batch held for retry up to `MENTION_RETAIN_ROWS`. A process that exits normally writes them
+ * (`process.on("exit")`); SIGKILL, a power cut, and a terminating signal in a process with no handler for it do not
+ * run that listener, so the servers close the map on SIGTERM, SIGINT and SIGHUP (main.ts, mcp-stdio.ts). Mentions are
+ * routing evidence, learned again from the next lookups that find the same names. Another process on the same file
+ * (D15) sees them up to a second late.
  *
  * Learning is a Beta-Bernoulli estimate per (user, situation, source): `shown` counts injections that cited the
  * source, `used` those the agent then used. The mean (used+1)/(shown+2) starts at 0.5 and moves with evidence.
@@ -78,6 +79,8 @@ const OUTCOME_FLUSH_ROWS = 256;
 const MENTION_FLUSH_MS = 1_000;
 /** Distinct pending (user, entity, source) rows that flush at once: bounds the buffer to about a megabyte. */
 const MENTION_FLUSH_ROWS = 4_096;
+/** Distinct pending planner-arm rows that flush with mentions. */
+const ARM_FLUSH_ROWS = 4_096;
 /**
  * The most pending rows held while writes fail (SQLITE_BUSY past the busy timeout, a full disk): a refused batch is
  * put back for the next flush unless that would hold more than this, and is then dropped and counted
@@ -94,8 +97,14 @@ export class SourceMap {
   /** Mentions not yet written (D1780): scope key → entity → source id → [count to add, last seen]. */
   private mentions = new Map<string, Map<string, Map<string, [count: number, lastSeen: number]>>>();
   private mentionRows = 0;
+  /** Planner arms not yet written (D1967): scope key → source id → bucket and shape → latest values. */
+  private arms = new Map<
+    string,
+    Map<string, Map<string, { bucket: number; shape: string; alpha: number; beta: number }>>
+  >();
+  private armRows = 0;
   private mentionTimer: ReturnType<typeof setTimeout> | undefined;
-  /** A write of mentions failed and its rows wait: the buffer may pass `MENTION_FLUSH_ROWS` until the timer retries. */
+  /** A write failed and its rows wait: the buffer may pass a flush threshold until the timer retries. */
   private mentionRetrying = false;
   private closed = false;
   /** This map's entry in `OPEN` (file-backed maps only). */
@@ -201,7 +210,7 @@ export class SourceMap {
   }
 
   private armMentionTimer(): void {
-    if (this.mentionRows === 0 || this.mentionTimer !== undefined || this.closed) return;
+    if (this.mentionRows + this.armRows === 0 || this.mentionTimer !== undefined || this.closed) return;
     this.mentionTimer = setTimeout(() => this.flushMentionsInBackground(), this.mentionFlushMs);
     // A pending batch never holds a process open: a normal exit flushes it (`OPEN`), a crash loses it (D1780).
     this.mentionTimer.unref?.();
@@ -209,6 +218,8 @@ export class SourceMap {
 
   /** Mention rows dropped because writes kept failing past `MENTION_RETAIN_ROWS` (content-free count). */
   droppedMentionRows = 0;
+  /** Planner-arm rows dropped because writes kept failing past `MENTION_RETAIN_ROWS` (content-free count). */
+  droppedArmRows = 0;
 
   /** The timer's (and a full buffer's) mention flush: as `flushInBackground`, nothing may throw out of it. */
   private flushMentionsInBackground(): void {
@@ -216,75 +227,121 @@ export class SourceMap {
       this.flushMentions();
     } catch (e) {
       this.failedFlushes++;
-      // The error only: never the rows, which hold user ids and entity names.
+      // The error only: never the rows, which hold user ids, entity names and source ids.
       console.error("eden: source-map mention write failed", e instanceof Error ? e.message : String(e));
     }
   }
 
   /**
-   * Writes buffered mentions now, in one transaction. A refused write puts its rows back (`putBack`) for the timer to
+   * Writes buffered mentions and planner arms now, in one transaction. A refused write puts rows back for the timer to
    * try again, then throws to its caller: the background path logs it, `flush`'s callers see it as before.
    */
   private flushMentions(): void {
     if (this.mentionTimer !== undefined) clearTimeout(this.mentionTimer);
     this.mentionTimer = undefined;
-    if (this.mentionRows === 0) return;
+    if (this.mentionRows + this.armRows === 0) return;
     const pending = this.mentions;
     const rows = this.mentionRows;
+    const pendingArms = this.arms;
+    const armRows = this.armRows;
     this.mentions = new Map();
     this.mentionRows = 0;
-    this.clearMentionMemo();
-    // `count + excluded.count` and the last mention's time: the row one upsert a mention would have left.
-    const upsert = this.db.query(`
-      INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT (scope, entity, source_id) DO UPDATE SET count = count + excluded.count, last_seen = excluded.last_seen
-    `);
+    this.arms = new Map();
+    this.armRows = 0;
+    if (rows > 0) this.clearMentionMemo();
+    const mentionUpsert =
+      rows > 0
+        ? this.db.query(`
+            INSERT INTO mention (scope, entity, source_id, count, last_seen) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (scope, entity, source_id) DO UPDATE
+            SET count = count + excluded.count, last_seen = excluded.last_seen
+          `)
+        : undefined;
+    const armUpsert =
+      armRows > 0
+        ? this.db.query(
+            `INSERT INTO planner_arm (scope, source_id, bucket, shape, alpha, beta) VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT (scope, source_id, bucket, shape) DO UPDATE
+             SET alpha = excluded.alpha, beta = excluded.beta`,
+          )
+        : undefined;
     try {
       this.db.transaction(() => {
-        for (const [key, byEntity] of pending) {
-          for (const [entity, bySource] of byEntity) {
-            for (const [sourceId, [count, lastSeen]] of bySource) upsert.run(key, entity, sourceId, count, lastSeen);
+        if (mentionUpsert) {
+          for (const [key, byEntity] of pending) {
+            for (const [entity, bySource] of byEntity) {
+              for (const [sourceId, [count, lastSeen]] of bySource)
+                mentionUpsert.run(key, entity, sourceId, count, lastSeen);
+            }
+          }
+        }
+        if (armUpsert) {
+          for (const [key, bySource] of pendingArms) {
+            for (const [sourceId, byArm] of bySource) {
+              for (const arm of byArm.values())
+                armUpsert.run(key, sourceId, arm.bucket, arm.shape, arm.alpha, arm.beta);
+            }
           }
         }
       })();
     } catch (e) {
-      this.putBack(pending, rows);
+      this.putBack(pending, rows, pendingArms);
       throw e;
     }
     this.mentionRetrying = false;
   }
 
   /**
-   * A refused batch back into the buffer (counts added, the later time kept), unless the buffer would then pass
-   * `MENTION_RETAIN_ROWS`: then it is dropped and counted. The timer is armed for the retry.
+   * A refused batch goes back into the buffer (counts added, the later time kept); newer planner arms win. Rows beyond
+   * `MENTION_RETAIN_ROWS` are dropped and counted. The timer is armed for the retry.
    */
-  private putBack(batch: Map<string, Map<string, Map<string, [number, number]>>>, rows: number): void {
+  private putBack(
+    batch: Map<string, Map<string, Map<string, [number, number]>>>,
+    rows: number,
+    armBatch: Map<string, Map<string, Map<string, { bucket: number; shape: string; alpha: number; beta: number }>>>,
+  ): void {
     if (this.closed) return;
     if (this.mentionRows + rows > MENTION_RETAIN_ROWS) {
       this.droppedMentionRows += rows;
-      this.mentionRetrying = false;
-      return;
-    }
-    for (const [key, byEntity] of batch) {
-      let into = this.mentions.get(key);
-      if (!into) this.mentions.set(key, (into = new Map()));
-      for (const [entity, bySource] of byEntity) {
-        let sources = into.get(entity);
-        if (!sources) into.set(entity, (sources = new Map()));
-        for (const [sourceId, [count, lastSeen]] of bySource) {
-          const held = sources.get(sourceId);
-          if (held) {
-            held[0] += count;
-            held[1] = Math.max(held[1], lastSeen);
-          } else {
-            sources.set(sourceId, [count, lastSeen]);
-            this.mentionRows++;
+    } else {
+      for (const [key, byEntity] of batch) {
+        let into = this.mentions.get(key);
+        if (!into) this.mentions.set(key, (into = new Map()));
+        for (const [entity, bySource] of byEntity) {
+          let sources = into.get(entity);
+          if (!sources) into.set(entity, (sources = new Map()));
+          for (const [sourceId, [count, lastSeen]] of bySource) {
+            const held = sources.get(sourceId);
+            if (held) {
+              held[0] += count;
+              held[1] = Math.max(held[1], lastSeen);
+            } else {
+              sources.set(sourceId, [count, lastSeen]);
+              this.mentionRows++;
+            }
           }
         }
       }
     }
-    this.mentionRetrying = true;
-    this.armMentionTimer();
+    for (const [key, bySource] of armBatch) {
+      let into = this.arms.get(key);
+      for (const [sourceId, byArm] of bySource) {
+        let arms = into?.get(sourceId);
+        for (const [armKey, arm] of byArm) {
+          if (arms?.has(armKey)) continue;
+          if (this.armRows >= MENTION_RETAIN_ROWS) {
+            this.droppedArmRows++;
+            continue;
+          }
+          if (!into) this.arms.set(key, (into = new Map()));
+          if (!arms) into.set(sourceId, (arms = new Map()));
+          arms.set(armKey, arm);
+          this.armRows++;
+        }
+      }
+    }
+    this.mentionRetrying = this.mentionRows + this.armRows > 0;
+    if (this.mentionRetrying) this.armMentionTimer();
   }
 
   /** Records whether an injection citing `sourceId` was used, in this situation. */
@@ -308,7 +365,7 @@ export class SourceMap {
     }
   }
 
-  /** Writes everything buffered (outcomes and mentions) now. */
+  /** Writes everything buffered (outcomes, mentions and planner arms) now. */
   flush(): void {
     this.flushOutcomes();
     this.flushMentions();
@@ -475,25 +532,45 @@ export class SourceMap {
 
   /**
    * The query planner's learned arms for one user's connector (`QueryPlanner`'s store): content-free, a shape name and
-   * two Beta parameters per (bucket, shape). Shapes and numbers are checked by the planner when loaded.
+   * two Beta parameters per (bucket, shape). Pending values overlay the file without flushing; rows are sorted into
+   * primary-key order when overlaid.
    */
   loadArms(scope: Scope, sourceId: string): { bucket: number; shape: string; alpha: number; beta: number }[] {
-    return this.db
+    const key = scopeKey(scope);
+    const rows = this.db
       .query("SELECT bucket, shape, alpha, beta FROM planner_arm WHERE scope = ? AND source_id = ?")
-      .all(scopeKey(scope), sourceId) as { bucket: number; shape: string; alpha: number; beta: number }[];
+      .all(key, sourceId) as { bucket: number; shape: string; alpha: number; beta: number }[];
+    const pending = this.arms.get(key)?.get(sourceId);
+    if (!pending?.size) return rows;
+    const merged = new Map<string, { bucket: number; shape: string; alpha: number; beta: number }>();
+    for (const row of rows) merged.set(`${row.bucket}\u0000${row.shape}`, { ...row });
+    for (const [armKey, arm] of pending) merged.set(armKey, { ...arm });
+    // SQLite orders text by bytes; `<` on JS strings orders UTF-16 units, which matches for these shape names.
+    return [...merged.values()].sort(
+      (a, b) => a.bucket - b.bucket || (a.shape < b.shape ? -1 : a.shape > b.shape ? 1 : 0),
+    );
   }
 
+  /** Keeps only the latest values per (user, source, bucket, shape); writes join the mentions' background batch. */
   saveArms(
     scope: Scope,
     sourceId: string,
     arms: { bucket: number; shape: string; alpha: number; beta: number }[],
   ): void {
+    if (arms.length === 0) return;
     const key = scopeKey(scope);
-    const upsert = this.db.query(
-      `INSERT INTO planner_arm (scope, source_id, bucket, shape, alpha, beta) VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (scope, source_id, bucket, shape) DO UPDATE SET alpha = excluded.alpha, beta = excluded.beta`,
-    );
-    for (const a of arms) upsert.run(key, sourceId, a.bucket, a.shape, a.alpha, a.beta);
+    let bySource = this.arms.get(key);
+    if (!bySource) this.arms.set(key, (bySource = new Map()));
+    let byArm = bySource.get(sourceId);
+    if (!byArm) bySource.set(sourceId, (byArm = new Map()));
+    for (const arm of arms) {
+      const armKey = `${arm.bucket}\u0000${arm.shape}`;
+      if (!byArm.has(armKey)) this.armRows++;
+      byArm.set(armKey, { bucket: arm.bucket, shape: arm.shape, alpha: arm.alpha, beta: arm.beta });
+    }
+    if (this.armRows >= (this.mentionRetrying ? MENTION_RETAIN_ROWS : ARM_FLUSH_ROWS)) {
+      this.flushMentionsInBackground();
+    } else this.armMentionTimer();
   }
 
   /**
@@ -557,10 +634,22 @@ export class SourceMap {
 
   /** Deletes everything held for a user (account deletion, connector revocation). */
   forget(scope: Scope, sourceId?: string): void {
+    const key = scopeKey(scope);
+    const bySource = this.arms.get(key);
+    if (sourceId) {
+      const byArm = bySource?.get(sourceId);
+      if (byArm) {
+        this.armRows -= byArm.size;
+        bySource!.delete(sourceId);
+        if (bySource!.size === 0) this.arms.delete(key);
+      }
+    } else if (bySource) {
+      for (const byArm of bySource.values()) this.armRows -= byArm.size;
+      this.arms.delete(key);
+    }
     this.flush();
     this.clearMentionMemo();
     this.clearOutcomeMemo();
-    const key = scopeKey(scope);
     for (const table of ["mention", "utility", "planner_arm"]) {
       if (sourceId) this.db.query(`DELETE FROM ${table} WHERE scope = ? AND source_id = ?`).run(key, sourceId);
       else this.db.query(`DELETE FROM ${table} WHERE scope = ?`).run(key);

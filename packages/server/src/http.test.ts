@@ -296,11 +296,12 @@ describe("request body size (D100)", () => {
 describe("gate pool", () => {
   test("by default lookups go through the planner; its learning is per user and forget drops only theirs", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "eden-planner-")), "source-map.db");
+    const sourceMap = new SourceMap(path);
     const traces: Trace[] = [];
     const p = buildPartner({
       sources: async () => [crm],
       model: null,
-      sourceMapPath: path,
+      sourceMap,
       onTrace: (t) => traces.push(t),
     });
     const h = createHandler(p, { keys: new Map([[key, "acme"]]), dev: false });
@@ -320,12 +321,14 @@ describe("gate pool", () => {
     const plans = traces.flatMap((t) => t.plans ?? []);
     expect(plans.length).toBeGreaterThan(0);
     for (const plan of plans) expect(Object.keys(plan).sort()).toEqual(["calls", "found", "shapes", "sourceId"]);
-    const arms = (userId: string) => new SourceMap(path).loadArms({ tenantId: "acme", userId }, "crm");
+    sourceMap.flush();
+    const arms = (userId: string) => sourceMap.loadArms({ tenantId: "acme", userId }, "crm");
     expect(arms("u1").length).toBeGreaterThan(0);
     expect(arms("u2").length).toBeGreaterThan(0);
     expect((await send("/v1/forget", { userId: "u1" })).status).toBe(200);
     expect(arms("u1")).toEqual([]);
     expect(arms("u2").length).toBeGreaterThan(0);
+    sourceMap.close();
   });
 
   test("EDEN_QUERY_PLANNER: on (serving) by default (D33), 0 turns it off, junk refused", () => {
