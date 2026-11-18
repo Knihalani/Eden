@@ -17,8 +17,9 @@ mkdir -p secrets && chmod 700 secrets      # .env files live here; never commit 
 ssh-keygen -t ed25519 -N '' -C eden-deploy -f secrets/eden_deploy   # the servers' read-only deploy key
 ```
 
-The repository is private, so each server clones it (and fetches it at every upgrade) with a **read-only deploy
-key**. Make it once with the `ssh-keygen` line above: no passphrase, since the server clones with no one at the
+If your Eden repository is private, each server clones it (and fetches it at every upgrade) with a **read-only
+deploy key**; a public repository needs none. Make it once with the `ssh-keygen` line above: no passphrase, since
+the server clones with no one at the
 keyboard. In GitHub open the repository's Settings → Deploy keys → Add deploy key, paste `secrets/eden_deploy.pub`,
 and leave "Allow write access" off. `bootstrap-dedicated.sh` installs the private half on each server when
 `DEPLOY_KEY` names it (as `/root/.ssh/eden_deploy`, with a `Host github.com` entry and GitHub's host key checked
@@ -135,7 +136,6 @@ next upgrade. **Upgrade a cluster:** `deploy/scripts/rolling-upgrade.sh` (DEPLOY
 
 **On Oracle instead** of dedicated servers: `cd deploy/tofu/oci && cp terraform.tfvars.example terraform.tfvars`,
 edit it (`node_count = 3`, `router_count = 1`), `tofu init && tofu apply`, then steps 3-5 with the IPs it prints
-(`tofu output`). Step 2 still runs, with `DEPLOY_KEY`, on each instance: the cloud-init they ran at boot could not
-clone the private repository, since the key is never put in user data (with `eden_git_url` set to a public mirror
-instead, skip step 2). Oracle Object Storage's S3 endpoint is
+(`tofu output`). Step 2 still runs, with `DEPLOY_KEY`, on each instance when the repository is private: the cloud-init they ran at boot could not
+clone it, since the key is never put in user data (with a public `eden_git_url`, skip step 2). Oracle Object Storage's S3 endpoint is
 `https://<namespace>.compat.objectstorage.<region>.oraclecloud.com` with a Customer Secret Key.

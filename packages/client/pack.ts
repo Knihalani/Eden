@@ -87,7 +87,7 @@ export async function packClient(out: string): Promise<string> {
     types: "./types/client/src/index.d.ts",
     exports: { ".": { types: "./types/client/src/index.d.ts", default: "./index.js" } },
     engines: { node: ">=18" },
-    license: "MIT",
+    license: "Apache-2.0",
     keywords: ["agents", "llm", "context", "eden"],
     sideEffects: false,
     // A scoped package is private by default on npm; the first publish would be refused without this (D853).
