@@ -573,9 +573,7 @@ export function topicOf(terms: string[], entities: string[], max = 2): string {
 const TIMEISH =
   /^(today|tonight|tomorrow|yesterday|week|weekend|next|this|last|morning|afternoon|evening|night|am|pm|\d{1,2}(:\d\d)?(am|pm)?|(mon|tues|wednes|thurs|fri|satur|sun)day|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?|\d{1,2}(st|nd|rd|th))$/;
 /** Words too common in requests to search on. */
-const GENERIC = new Set(
-  "me my our us we you your them their they it its need want like know new".split(" "),
-);
+const GENERIC = new Set("me my our us we you your them their they it its need want like know new".split(" "));
 /** Question words and fillers that name nothing (kept beside GENERIC: topicOf already reads that set). */
 const QUESTIONISH = new Set(
   (
