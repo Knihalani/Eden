@@ -1343,12 +1343,13 @@ export class ContextPartner {
   ): SourceStatus[] {
     const pending = new Set(searched.behindLocal ?? []);
     const now = this.now();
+    const sv = this.sync!.view(s.scope);
     return (searched.sources ?? []).map((x) => {
       if (!pending.has(x.sourceId)) return x;
       const done = cut.get(x.sourceId);
       if (done !== undefined) return { sourceId: x.sourceId, status: done };
-      const whole = this.sync!.complete(s.scope, x.sourceId);
-      if (whole && this.sync!.current(s.scope, x.sourceId, now)) return x;
+      const whole = sv.complete(x.sourceId);
+      if (whole && sv.current(x.sourceId, now)) return x;
       if (!settled) return { sourceId: x.sourceId, status: SEARCHING };
       // The work is done and the copy is still not current: its poll failed or was skipped after failures (the
       // 2026-11-05 audit's false all-clear: never "local" or "stale"), or a cut copy got no live search (too little of
@@ -4539,8 +4540,9 @@ export class ContextPartner {
         // A spent copy the cap cut is not polled either: it is answered as held and named "unsearched". A whole copy
         // keeps its poll (a listing is no live read, and without it an ask would call the copy failed).
         const sync = this.sync;
+        const sv = sync.view(s.scope);
         const skipPoll =
-          spent && this.config.sourceYieldPolls ? (id: string) => spent.has(id) && !sync.complete(s.scope, id) : null;
+          spent && this.config.sourceYieldPolls ? (id: string) => spent.has(id) && !sv.complete(id) : null;
         const toPoll = all.filter((x) => (!pollable || pollable.has(x.id)) && !(skipPoll && skipPoll(x.id)));
         const polled = this.sync.freshen(s.scope, toPoll, signal, tally, s.abort.signal).then((calls) => {
           if (freshening) this.spans!.close(freshening, { calls, fresh: tally.fresh, ...(behind ? { behind } : {}) });
@@ -4595,9 +4597,10 @@ export class ContextPartner {
     }
     // `askBehind` (D430): which copies answered here before they were whole or current (read once the route is known).
     const now0 = this.now();
+    const svNow = this.sync?.view(s.scope);
     const notYet =
-      cue.cutStatus && local && this.sync
-        ? (id: string) => local!.has(id) && (cutBehind?.has(id) === true || !this.sync!.current(s.scope, id, now0))
+      cue.cutStatus && local && svNow
+        ? (id: string) => local!.has(id) && (cutBehind?.has(id) === true || !svNow.current(id, now0))
         : null;
     const routing = this.spans?.open("route", cue.span);
     const ranked =
@@ -4832,6 +4835,7 @@ export class ContextPartner {
     if (!this.yields || !this.sync || (!c.sourceYieldEarn && this.yields.size(s.scope) === 0)) return null;
     const now = this.now();
     const evidence = this.evidenceFor(s, cue, boost);
+    const sv = this.sync.view(s.scope);
     let out: Set<string> | null = null;
     for (const x of all) {
       const kind = evidence(x.id);
@@ -4840,7 +4844,7 @@ export class ContextPartner {
       // Half a read of slack: a run decays from the moment of its last read, so 4 reads read 3.999 a minute later.
       const spent =
         (limit > 0 && run > limit - 0.5) || (c.sourceYieldEarn && kind < 2 && !this.yields.hasYielded(s.scope, x.id));
-      if (spent && this.sync.isWarm(s.scope, x.id)) (out ??= new Set()).add(x.id);
+      if (spent && sv.isWarm(x.id)) (out ??= new Set()).add(x.id);
     }
     return out;
   }
@@ -6009,12 +6013,13 @@ export class ContextPartner {
     if (!this.sync) return null;
     const now = this.now();
     // `pushCutBehind` (D405): `cut` collects the warm cut copies admitted here, whose live search runs behind.
+    const sv = this.sync.view(s.scope);
     if (cut) {
       const local = new Set<string>();
       for (const x of all) {
-        if (!this.sync.isWarm(s.scope, x.id)) continue;
+        if (!sv.isWarm(x.id)) continue;
         local.add(x.id);
-        if (!this.sync.complete(s.scope, x.id)) cut.add(x.id);
+        if (!sv.complete(x.id)) cut.add(x.id);
       }
       return local.size > 0 ? local : null;
     }
@@ -6024,9 +6029,8 @@ export class ContextPartner {
     // is searched live (D127), within the probes' call budget.
     // With `syncLocalComplete`, only a copy that holds the whole source answers for it (D264): one the user's cap cut
     // is searched live, or a lookup would miss what is older than the cut.
-    const whole = (id: string) => !this.config.syncLocalComplete || this.sync!.complete(s.scope, id);
-    const ok = (id: string) =>
-      whole(id) && (this.sync!.current(s.scope, id, now) || (behind && this.sync!.isWarm(s.scope, id)));
+    const whole = (id: string) => !this.config.syncLocalComplete || sv.complete(id);
+    const ok = (id: string) => whole(id) && (sv.current(id, now) || (behind && sv.isWarm(id)));
     const local = new Set(all.filter((x) => ok(x.id)).map((x) => x.id));
     return local.size > 0 ? local : null;
   }
