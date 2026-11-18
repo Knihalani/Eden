@@ -610,6 +610,17 @@ const ANAPHORIC_TIME = /\b(that time|then|that slot|same time)\b/i;
  */
 const ID_NUMBERS = /(?<![\p{L}\p{N}])(?:\d{1,3}(?:,\d{3})+|\d{3,})(?![\p{L}\p{N}])/gu;
 const YEARS = /\b(?:19|20)\d{2}\b/g;
+/**
+ * The years a document is *of*: its `meta.start` year and the year in its title; the text's years only when
+ * the title names none. A later date in the body — a deadline, an offer's expiry — is not the record's own
+ * year, so an old notice that mentions one is not read as newer than the current one.
+ */
+const docYears = (item: ContextItem): number[] => {
+  const titled = item.title.match(YEARS)?.map(Number) ?? [];
+  const started = item.meta?.start !== undefined ? [Number(item.meta.start.slice(0, 4))] : [];
+  const body = titled.length === 0 ? (item.text.match(YEARS)?.map(Number) ?? []) : [];
+  return [...new Set([...titled, ...started, ...body])];
+};
 /** A number followed by a measure or money word is a quantity ("650 GBP", "30 days"), not an identifier. */
 const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|months?|years?|people|of us)\b/i;
 /**
@@ -3154,20 +3165,39 @@ export class ContextPartner {
     // items carry a newer year, one dated only earlier is the stale sibling — the same rule `linked` keeps
     // between a companion and its pick, applied between the pool's own items (the request need not name a year:
     // `requestYear` has nothing to be stale against, so `contradicts` never saw it).
-    const itemYears = (item: ContextItem) => `${item.title} ${item.text}`.match(YEARS)?.map(Number) ?? [];
-    const newest =
-      requestYear(cue) === null
-        ? Math.max(
-            this.deliveredEntityYears(s, cue),
-            ...open.filter((x) => x.entity === true).flatMap((x) => itemYears(x.item)),
-          )
-        : 0;
-    const current =
-      newest === 0
-        ? open
-        : open.filter(
-            (x) => x.entity !== true || itemYears(x.item).length === 0 || itemYears(x.item).some((y) => y >= newest),
-          );
+    const itemYears = docYears;
+    // The stale-sibling year rule applies per request entity, not across the whole request: a request naming
+    // two subjects never lets one's newer record date the other's, and when the check ruled on the pool only
+    // items it approved date anything — a newer record it rejected must not suppress the older one it handed.
+    const phrases = cue.entities.map((e) =>
+      (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
+    );
+    const anchorsPer = cue.entities.map((e) => anchorsOf([e], cue.time?.days ?? null, cue.raw, cue.offset));
+    const anchoredOf = (item: ContextItem) =>
+      cue.entities
+        .map((e, i) =>
+          phrases[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!)) ? i : -1,
+        )
+        .filter((i) => i >= 0);
+    const approved =
+      yes === null ? () => true : (x: Scored) => yes.has(x.item.id) || ruled.some((r) => r.item.id === x.item.id);
+    const deliveredYears = requestYear(cue) === null ? this.deliveredEntityYears(s, cue) : new Map<string, number>();
+    const newestE = cue.entities.map((e, i) => {
+      let n = (cleanEntities([e])[0] !== undefined ? deliveredYears.get(phrases[i]!.join(" ")) : undefined) ?? 0;
+      for (const x of open)
+        if (x.entity === true && approved(x) && anchoredOf(x.item).includes(i))
+          for (const y of itemYears(x.item)) if (y > n) n = y;
+      return n;
+    });
+    const staleSibling = (x: Scored) => {
+      if (x.entity !== true) return false;
+      const ys = itemYears(x.item);
+      if (ys.length === 0) return false;
+      const m = Math.max(...ys);
+      const an = anchoredOf(x.item);
+      return an.length > 0 && an.every((i) => m < newestE[i]!);
+    };
+    const current = open.filter((x) => !staleSibling(x));
     const gated = gate.unchecked ?? like.some(Boolean);
     let items = yes
       ? [...current.filter((x) => yes.has(x.item.id)), ...ruled].slice(0, this.config.pushCandidates)
@@ -4036,16 +4066,19 @@ export class ContextPartner {
    * judged against once the newer record has itself left the pool (delivered is not fresh, so it stops
    * ranking) — without it last year's notice goes out a turn after this year's did.
    */
-  private deliveredEntityYears(s: Session, cue: Cue): number {
+  private deliveredEntityYears(s: Session, cue: Cue): Map<string, number> {
     const entities = cleanEntities(cue.entities)
       .map((e) => (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)))
       .filter((words) => words.length > 0);
-    let newest = 0;
+    const out = new Map<string, number>();
     for (const d of s.delivered ?? []) {
-      if (!entities.some((words) => words.every((w) => d.terms.includes(w)))) continue;
-      for (const y of d.years) if (y > newest) newest = y;
+      for (const words of entities) {
+        if (!words.every((w) => d.terms.includes(w))) continue;
+        const key = words.join(" ");
+        for (const y of d.years) if (y > (out.get(key) ?? 0)) out.set(key, y);
+      }
     }
-    return newest;
+    return out;
   }
 
   /**
@@ -4343,15 +4376,33 @@ export class ContextPartner {
     // The newest dated year a pick carries is the one the request means: an item about the named thing dated
     // only earlier is last year's look-alike (the 2025 renewal notice beside the 2026 one) — a sibling, not a
     // pick, the same rule `linked` applies when a chosen item's companions are found.
-    const year = (item: ContextItem) => `${item.title} ${item.text}`.match(YEARS)?.map(Number) ?? [];
-    const newest =
-      requestYear(cue) === null
-        ? Math.max(this.deliveredEntityYears(s, cue), ...subject.flatMap((x) => year(x.item)))
-        : 0;
-    const picks =
-      newest === 0
-        ? subject
-        : subject.filter((x) => year(x.item).length === 0 || year(x.item).some((y) => y >= newest));
+    const year = docYears;
+    // Per entity, so a request naming two subjects never lets one's newer record date the other's (D1981).
+    const phraseWords = entities.map((e) =>
+      (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
+    );
+    const anchorsPer = entities.map((e) => anchorsOf([e], cue.time?.days ?? null, cue.raw, cue.offset));
+    const anchoredOf = (item: ContextItem) =>
+      entities
+        .map((e, i) =>
+          phraseWords[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!))
+            ? i
+            : -1,
+        )
+        .filter((i) => i >= 0);
+    const deliveredYears = requestYear(cue) === null ? this.deliveredEntityYears(s, cue) : new Map<string, number>();
+    const newestE = entities.map((e, i) => {
+      let n = (cleanEntities([e])[0] !== undefined ? deliveredYears.get(phraseWords[i]!.join(" ")) : undefined) ?? 0;
+      for (const x of subject) if (anchoredOf(x.item).includes(i)) for (const y of year(x.item)) if (y > n) n = y;
+      return n;
+    });
+    const picks = subject.filter((x) => {
+      const ys = year(x.item);
+      if (ys.length === 0) return true;
+      const m = Math.max(...ys);
+      const an = anchoredOf(x.item);
+      return an.length === 0 || an.some((i) => m >= newestE[i]!);
+    });
     const subjectYears = new Set(picks.flatMap((x) => year(x.item)));
     if (picks.length === 0) return [];
     const out = [...picks];
@@ -7135,7 +7186,7 @@ export class ContextPartner {
       terms: contentTerms(`${item.title} ${item.text.slice(0, DELIVERED_TEXT_CHARS)}`, s.vocab)
         .filter((t) => !/\d/.test(t))
         .slice(0, DELIVERED_TERMS),
-      years: [...new Set(`${item.title} ${item.text}`.match(YEARS)?.map(Number) ?? [])],
+      years: docYears(item),
     });
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
   }
