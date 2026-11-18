@@ -220,9 +220,10 @@ def source_files(home, env):
     """The source paths the plugin would use: explicit env, else ``<home>/eden/sources.json`` when present."""
     sources = env.get("EDEN_SOURCES_FILE", "").strip() or None
     users = env.get("EDEN_USER_SOURCES_FILE", "").strip() or None
-    if users is None and (home / "eden" / "sources.json").is_file():
+    if sources is None and users is None and (home / "eden" / "sources.json").is_file():
         users = str(home / "eden" / "sources.json")
-    return sources, users
+    expand = lambda path: str(Path(path).expanduser().resolve()) if path else path
+    return expand(sources), expand(users)
 
 
 def check_env(home, env, sources, users):

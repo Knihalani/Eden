@@ -16,7 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from build import HERE, reproducible_zip
-from install import MARKER, TARGETS, binary_name, digest, host_target, select_home
+from install import MARKER, TARGETS, binary_name, digest, host_target, select_home, source_files
 
 HOST = host_target(platform.system(), platform.machine())
 
@@ -99,6 +99,19 @@ class ReleaseTest(unittest.TestCase):
         self.assertIn("note", text)
         self.assertIn("EDEN_USER_SOURCES_FILE", text)
         self.assertIn("plugins enable eden", text)
+
+    def test_source_files_matches_plugin_resolution(self):
+        profile = self.home / "eden" / "sources.json"
+        profile.parent.mkdir(parents=True)
+        profile.write_text("{}", encoding="utf-8")
+        # Explicit env file wins and disables the profile fallback entirely, like hermes.py.
+        sources, users = source_files(self.home, {"EDEN_SOURCES_FILE": "~/shared.json"})
+        self.assertEqual(sources, str(Path("~/shared.json").expanduser().resolve()))
+        self.assertIsNone(users)
+        sources, users = source_files(self.home, {"EDEN_USER_SOURCES_FILE": "~/u.json"})
+        self.assertIsNone(sources)
+        self.assertEqual(users, str(Path("~/u.json").expanduser().resolve()))
+        self.assertEqual(source_files(self.home, {}), (None, str(profile)))
 
     def test_install_reinstall_upgrade(self):
         self.home.mkdir()
