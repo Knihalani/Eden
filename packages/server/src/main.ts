@@ -19,7 +19,8 @@ import { sourcesOrExit } from "./connectors";
 import { buildPartner, startGatePool, tenantSpendFor, turnGateNotice } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
-import { modelRolesFromEnv } from "./models";
+import { modelRolesFromEnv, NO_MODELS } from "./models";
+import { localBoundary, localConfig, watchLocalInput } from "./local";
 import { S3BlobStore } from "./blob-store";
 import { nodesFromEnv, runCluster } from "./cluster";
 import { Ops, serveError } from "./ops";
@@ -31,6 +32,7 @@ import { rehomeSourceMaps, runRouter, userOf } from "./router";
 let flushPersistReport: () => void = () => {};
 
 const started = performance.now();
+let local = false;
 const config = configOrExit();
 // Dev mode takes requests with no key as tenant "dev": say so loudly when anything but this machine can reach it (a
 // container listens on 0.0.0.0; publish its port on 127.0.0.1 for local use).
@@ -48,7 +50,7 @@ if (config.dev && !config.child && process.env.OPENROUTER_API_KEY && process.env
 }
 try {
   // D992: with EDEN_NODES (or EDEN_NODES_FILE) this process is the cluster router over machines, and holds no users.
-  const cluster = config.child ? null : nodesFromEnv(process.env);
+  const cluster = local || config.child ? null : nodesFromEnv(process.env);
   if (cluster) {
     await runCluster(config, cluster);
   } else if (config.processes > 1) {
@@ -66,6 +68,11 @@ try {
  */
 function configOrExit(): ServerConfig {
   try {
+    const isolated = localConfig();
+    if (isolated) {
+      local = true;
+      return isolated;
+    }
     return loadConfig();
   } catch (e) {
     const code = (e as { code?: unknown } | null)?.code;
@@ -98,7 +105,7 @@ function startupFailed(e: unknown, config: ServerConfig): never {
 async function serve(config: ServerConfig): Promise<void> {
   // One process (no router): the `.<i>` files a router's children wrote are merged back into this one before it is
   // opened, so forget reaches every row (D163). A router child skips this: the router did it before starting it.
-  if (!config.child) {
+  if (!local && !config.child) {
     try {
       rehomeSourceMaps(config.sourceMapPath, 1);
     } catch (e) {
@@ -106,15 +113,15 @@ async function serve(config: ServerConfig): Promise<void> {
       process.exit(2);
     }
   }
-  const engine = engineConfig();
+  const engine = local ? {} : engineConfig();
   // D425, on by default since D991: frozen users written encrypted to the machine's directory (this child's buckets,
   // D992), read back on first use; with EDEN_PERSIST_STORE also mirrored to the store every machine reaches.
-  const persist = await persistStore(config);
+  const persist = local ? null : await persistStore(config);
   // Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate
   // pool, so a bad sources file exits 2 with its message before any worker starts.
   const sources = sourcesOrExit();
   const gatePool = await startGatePool(config.gateWorkers);
-  const models = modelRolesFromEnv();
+  const models = local ? NO_MODELS : modelRolesFromEnv();
   // Held here so a shutdown can write its last outcome batch (`SourceMap.close` flushes).
   const sourceMap = new SourceMap(config.sourceMapPath);
   const child = config.child;
@@ -174,12 +181,14 @@ async function serve(config: ServerConfig): Promise<void> {
     // backstop): every six hours, a listing of the store's keys.
     setInterval(() => void persist.sweepStore(Date.now(), ops.ownsInStore), 6 * 3_600_000).unref();
   }
-  const server = Bun.serve({
+  const handler = ops.wrap(createHandler(partner, config, sources.userSources, tenants));
+  const fetch = local ? localBoundary(handler, () => server.port!, config.keys.keys().next().value!) : handler;
+  const server: ReturnType<typeof Bun.serve> = Bun.serve({
     port: config.port,
     hostname: config.host,
     // D100: Bun's default is 128 MB; the handler's content-length check cannot see chunked bodies, this cap can.
     maxRequestBodySize: config.maxBodyBytes,
-    fetch: ops.wrap(createHandler(partner, config, sources.userSources, tenants)),
+    fetch,
     // `Ops.wrap` answers a throw itself; this is the backstop for anything Bun raises around it (never a 500, R1).
     error: serveError,
   });
@@ -222,6 +231,7 @@ async function serve(config: ServerConfig): Promise<void> {
   process.on("SIGINT", shutdown);
   // A closed terminal (or a supervisor that sends it) would otherwise kill the process with its batches unwritten.
   process.on("SIGHUP", shutdown);
+  if (local) void watchLocalInput(shutdown);
   const startupMs = Math.round(performance.now() - started);
   const keys = Object.keys(engine);
   console.log(
@@ -240,6 +250,7 @@ async function serve(config: ServerConfig): Promise<void> {
         : "") +
       ")",
   );
+  if (local && !stopping) process.stdout.write(`EDEN_LOCAL_READY ${server.port}\n`);
   if (child) {
     // The router waits for this port before it routes here; the IPC channel exists only when the router spawned us.
     process.send?.({ edenListening: server.port });

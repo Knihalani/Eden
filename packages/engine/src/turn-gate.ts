@@ -11,6 +11,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import gateFile from "./turn-gate.bin" with { type: "file" };
 
 const FNV0 = 2166136261;
 const FNVP = 16777619;
@@ -565,6 +566,6 @@ let loaded: TurnGate | null | undefined;
 
 /** The shipped gate (`turn-gate.bin` beside this file), read once a process (D1010). */
 export function turnGate(): TurnGate | null {
-  if (loaded === undefined) loaded = loadTurnGate(new URL("./turn-gate.bin", import.meta.url));
+  if (loaded === undefined) loaded = loadTurnGate(gateFile);
   return loaded;
 }
