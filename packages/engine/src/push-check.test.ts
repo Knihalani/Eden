@@ -452,7 +452,7 @@ describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check
       return `{"items":[${yes.map(([t, i]) => `{"i":${i},"on":"${t}","hits":"x","act":true}`).join(",")}]}`;
     });
     const { partner } = setup(
-      { ...HELD, pushCandidates: 5, askReaderPool: 15, pushCheckItems: 15, maxItems: 1 },
+      { ...HELD, pushCandidates: 5, askReaderPool: 15, pushCheckItems: 15, maxItems: 1, companions: false },
       model,
       [],
       many,

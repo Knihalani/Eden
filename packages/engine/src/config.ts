@@ -181,6 +181,18 @@ export interface EngineConfig {
    */
   groundSubject: boolean;
   /**
+   * `companions` (D1977): once a request's subject items are chosen — the grounded subject, the sources' sure
+   * pick, the fallback — a bounded second pass hands the injection the companions a delivered item pulls: what
+   * holds a strong link to a chosen one — the same identifier `sameRef` reads, or two of its letter terms, or one
+   * of them beside a term of the request's — from the lookup's own candidates and the cache it filled; the
+   * sources are never called again, so the lookup's sourceCalls and spans stand (the deck for the meeting, the
+   * invoice's bill in another system). Every bound the subject's own companions keep still
+   * applies: `contradicts`, bulk mail, delivered/`sameRef` and near-duplicate suppression, `alreadyHas`,
+   * `maxItemsPerInjection`; an item naming an identifier its linked item does not is a look-alike, never a
+   * companion (`Partner.companions`).
+   */
+  companions: boolean;
+  /**
    * With no model's say, an item tied to the request by a name alone is not pushed: it shares no other word of the
    * request, is on no day the request names and holds no reference it names (`Partner.beyondName`). A passing
    * mention of someone ("Sam says hi") is no need, and the name does not say which of their items would be meant.
@@ -931,6 +943,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   densePacket: true,
   groundOccasion: true,
   groundSubject: true,
+  companions: true,
   quietNameOnly: true,
   conflictVocab: true,
   spans: false,

@@ -77,7 +77,13 @@ describe("quietNameOnly: a tie by a person's name alone is not pushed with no mo
   });
 
   test("a request to act on someone is a second ground: what bears on them bears on the act", async () => {
-    const config = { quietNameOnly: true, groundConflict: true, confidentScore: 99, fallbackMatchedTerms: 0 };
+    const config = {
+      quietNameOnly: true,
+      groundConflict: true,
+      confidentScore: 99,
+      fallbackMatchedTerms: 0,
+      companions: false,
+    };
     const got = await run(config, "Book a table for me and Sam Patel on Thursday evening");
     expect(got.u1).toEqual(["mail:allergy"]);
     // The same conflict for a mere mention of a dinner with them is tied by the name alone.
