@@ -4228,7 +4228,12 @@ export class ContextPartner {
     // A wh-question about a thing of the user's own (D1980): "When is my physio appointment?" names its subject
     // in no entity ("physio" is no name) — the item the question is about answers it.
     if (ASKS_OWN.test(cue.raw) && (eventKind === "user_message" || eventKind === "ask")) {
-      const subject = pool.filter((x) => isSubject(x.item, cue.raw));
+      const subject = pool.filter((x) => {
+        if (!isSubject(x.item, cue.raw)) return false;
+        if (!time || time.days.size === 0) return true;
+        const sd = startDay(x.item, cue.offset);
+        return sd === null ? x.dayCls !== undefined : time.days.has(sd);
+      });
       if (subject.length > 0) return { items: subject.slice(0, this.max()), how: "subject" };
     }
     if (!time) return none;
