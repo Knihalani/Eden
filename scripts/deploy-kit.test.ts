@@ -29,7 +29,7 @@ function stage() {
   };
   stub(
     "ssh",
-    `n=$(ls "${log}" | wc -l); printf '%s\\n' "$2" > "${log}/$n.cmd"
+    `n=$(ls "${log}" | wc -l | tr -d ' '); printf '%s\\n' "$2" > "${log}/$n.cmd"
 if [[ "$2" == *eden_deploy* ]]; then EDEN_SSH_DIR="${ssh}" exec bash -c "$2"; fi
 cat > "${log}/$n.stdin"`,
   );
