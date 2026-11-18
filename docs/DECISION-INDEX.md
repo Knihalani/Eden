@@ -847,3 +847,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1966 | 2026-11-18 | Adopted (Hermes local): the Hermes plugin starts a private, volatile Eden sidecar on demand. | adopted |
 | D1967 | 2026-11-18 | Adopted: the source map writes planner arms behind with mentions (D4, D1780). | adopted |
 | D1968 | 2026-11-18 | Adopted (outputs unchanged): `namesRequestDay` builds its day patterns once per `Anchors` (`DAY_TESTS`, via `dayNamer`), rather than once… | adopted |
+| D1969 | 2026-11-18 | Adopted (Hermes local; hosted serving unchanged): the compiled local binary ships `--bytecode`, and local mode warms the secret gate after… | adopted |

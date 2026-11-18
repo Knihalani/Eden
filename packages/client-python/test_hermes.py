@@ -269,7 +269,7 @@ class LocalHermesTests(unittest.TestCase):
         self.assertEqual(answers, ["answer to q"] * 20)
         self.assertEqual(len(self.starts()), 1)
         child_env = json.loads((self.root / "env").read_text())
-        self.assertEqual(child_env["EDEN_HOME"], str((self.home / "eden" / "data").resolve()))
+        self.assertEqual(child_env["EDEN_HOME"], str(self.home.resolve() / "eden" / "data"))
         client = p.client("0")
         self.assertEqual(client._key, child_env["EDEN_LOCAL_TOKEN"])
         requests = [json.loads(line) for line in (self.root / "requests").read_text().splitlines()]

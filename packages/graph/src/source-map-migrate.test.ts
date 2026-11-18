@@ -32,6 +32,13 @@ const dir = mkdtempSync(join(tmpdir(), "eden-map-migrate-"));
 let files = 0;
 const fileOf = () => join(dir, `m${files++}.db`);
 
+/** Byte copy of a WAL-mode file for a read-only open: the -shm/-wal a readonly connection needs must come along
+ * (a bare main-file copy reads CANTOPEN on macOS). */
+const copyDb = (src: string, dst: string) => {
+  copyFileSync(src, dst);
+  for (const ext of ["-shm", "-wal"]) if (existsSync(`${src}${ext}`)) copyFileSync(`${src}${ext}`, `${dst}${ext}`);
+};
+
 const TABLES = ["mention", "utility", "planner_arm"] as const;
 const KEYS = { mention: 3, utility: 3, planner_arm: 4 };
 const STEPS = [
@@ -137,7 +144,7 @@ describe("migrateLayout (D1960)", () => {
       const path = oldFile(seed, extra);
       const before = dump(path);
       const copy = fileOf();
-      copyFileSync(path, copy);
+      copyDb(path, copy);
       const map = new SourceMap(path, { seed, mentionFlushMs: 60_000 });
       expect(layout(path)).toEqual(["without rowid", "without rowid", "without rowid"]);
       // Unordered reads (a user's rows as exportUser reads them) come back in the same order as the old file's.
