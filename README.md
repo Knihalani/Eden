@@ -176,7 +176,6 @@ docs/INTEGRATION.md).
 | `packages/eval`     | Scenario harness and metrics                                                                       |
 | `packages/sim`      | Simulated users and the lab; `bun run demo`                                                        |
 | `docs/`             | Vision, architecture, decisions, roadmap, cost, privacy, research                                  |
-| `archived/`         | Earlier products (passive memory for coding agents; compile era; observability). History, not code |
 
 ## Status
 
