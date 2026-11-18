@@ -1,5 +1,15 @@
 # @eden/server
 
+`EDEN_LOCAL=1` is the Hermes private sidecar: `local.ts` consumes a URL-safe token, scrubs inherited Eden/model
+settings, binds an ephemeral IPv4 loopback port and fences every request by Host and absence of Origin. Stdout is
+only `EDEN_LOCAL_READY <port>`, stderr holds logs; stdin EOF and signals stop it. Sources are explicit opt-ins.
+It writes nothing, volatile by design: no generated disk key, persistent map or frozen users, so independent Hermes
+CLI/gateway sidecars cannot race persistent state. Never route local startup through `loadConfig` or `edenHome`.
+Run standalone coverage with `LOCAL_COMPILE_TEST=1 bun test packages/server/src/local-process.test.ts` from root
+(test preload required). Compilation is opt-in because it is slow; process tests are whole-tree cache inputs.
+Source-mode Bun itself writes a transpiler cache before the entry point; use `BUN_RUNTIME_TRANSPILER_CACHE_PATH=0`
+when testing the no-write guarantee under plain Bun. The standalone binary does not need this override.
+
 Eden as a service: the HTTP API (tenant API keys, per-tenant GCRA rate limit), the MCP `ask_context` server (HTTP
 wiring and stdio), configuration from the environment, and `buildPartner`, which wires the engine with the unified default (D112) and
 its model roles.
