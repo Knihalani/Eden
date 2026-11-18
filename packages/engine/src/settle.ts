@@ -157,12 +157,24 @@ interface EntityTest {
  */
 const ENTITY_TESTS = new WeakMap<Anchors, EntityTest[]>();
 
+/**
+ * Each `Anchors`' day test, built once per request rather than once per item: `namesRequestDay` built a pattern for
+ * every day of every candidate. Held weakly, with the anchors (one request's; its `days` and `named` are never changed
+ * after `anchorsOf`). The patterns are not global, so a test keeps no state.
+ */
+const DAY_TESTS = new WeakMap<Anchors, (lower: string) => boolean>();
+
 /** Whether `item` is on, or names, one of the request's days. */
 export function namesRequestDay(item: ContextItem, a: Anchors): boolean {
   if (!hasDay(a)) return false;
   const start = startDay(item, a.offset);
   if (start !== null && a.days.has(start)) return true;
-  return namesDay(`${item.title}\n${item.text}`, windowDays(a));
+  let test = DAY_TESTS.get(a);
+  if (!test) {
+    test = dayNamer(windowDays(a));
+    DAY_TESTS.set(a, test);
+  }
+  return test(`${item.title}\n${item.text}`.toLowerCase());
 }
 
 /**
