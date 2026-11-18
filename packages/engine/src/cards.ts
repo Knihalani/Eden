@@ -934,6 +934,10 @@ class UserCards {
    */
   readonly holders = new Map<string, string | Set<string>>();
   queue: Queued[] = [];
+  /** The content hashes waiting in `queue` (one entry each): `enqueue`'s duplicate read without a scan. */
+  readonly queued = new Set<string>();
+  /** `cardsOrder`: the queue has had pushes since its last `orderQueue` sort, and wants one again (`sortQueue`). */
+  queueDirty = false;
   /** Items queued so far: each one's `seq`, the order the user's items came in whatever order they are read in. */
   enlisted = 0;
   /** With `intent`: the user's requests, indexed (`intent.ts`); created with the first. */
@@ -1170,7 +1174,7 @@ export class CardEnricher {
       }
       const known = u.byHash.get(hash);
       if (known) known.seenAt = now;
-      const queued = u.queue.some((q) => q.hash === hash);
+      const queued = u.queued.has(hash);
       if (!known && !queued && defer?.(item)) {
         this.stats.deferred++;
         continue;
@@ -1231,18 +1235,28 @@ export class CardEnricher {
   private enlist(u: UserCards, q: Queued): void {
     q.seq = u.enlisted++;
     u.queue.push(q);
+    u.queued.add(q.hash);
+    u.queueDirty = true;
     if (u.queue.length <= this.limits.maxQueue) return;
     // Over the bound the oldest goes. With `cardsOrder` the front is what is read next, so the last in its order
     // goes instead, once per `enqueue` (`trim`): a sort per item would stall the store path on a large backfill.
-    if (!this.limits.order) u.queue.shift();
-    // ... and at twice the bound within one call, so the queue (which `enqueue` scans per item) stays bounded.
+    if (!this.limits.order) u.queued.delete(u.queue.shift()!.hash);
+    // ... and at twice the bound within one call, so the queue (and its hash set) stays bounded.
     else if (u.queue.length >= this.limits.maxQueue * 2) this.trim(u);
   }
 
   /** `cardsOrder`: the queue back to its bound, the last in its order dropped (`enqueue` calls it once). */
   private trim(u: UserCards): void {
     if (!this.limits.order || u.queue.length <= this.limits.maxQueue) return;
-    u.queue = orderQueue(u.queue, this.deps.now()).slice(0, this.limits.maxQueue);
+    this.sortQueue(u);
+    for (const q of u.queue.splice(this.limits.maxQueue)) u.queued.delete(q.hash);
+  }
+
+  /** `cardsOrder`: the queue back into read order, once after the pushes that marked it dirty. */
+  private sortQueue(u: UserCards): void {
+    if (!u.queueDirty) return;
+    u.queueDirty = false;
+    if (u.queue.length > 1) u.queue = orderQueue(u.queue, this.deps.now());
   }
 
   private keep(u: UserCards, hash: string, s: Stored): void {
@@ -1308,10 +1322,11 @@ export class CardEnricher {
       const batch: Queued[] = [];
       const followers: (Queued & { skey: string })[] = [];
       const inBatch = new Set<string>();
-      // `cardsOrder`: what waits is read best first; sorted before each batch, since items arrive while calls run.
-      if (this.limits.order && u.queue.length > 1) u.queue = orderQueue(u.queue, this.deps.now());
+      // `cardsOrder`: what waits is read best first; sorted when pushes arrived since the last batch's order.
+      if (this.limits.order) this.sortQueue(u);
       while (u.queue.length > 0 && batch.length < this.limits.batch) {
         const q = u.queue.shift()!;
+        u.queued.delete(q.hash);
         if (q.skey !== undefined) {
           const twin = u.bySentence.get(q.skey);
           const made = twin !== undefined ? u.byHash.get(twin) : undefined;
@@ -1333,7 +1348,9 @@ export class CardEnricher {
         // `cardsLanes`: everything left waits on another lane's batch. Back in the queue; that lane reads them after
         // its call (as its own followers), and this one ends.
         if (followers.length > 0) {
+          for (const f of followers) u.queued.add(f.hash);
           u.queue.push(...followers);
+          u.queueDirty = true;
           return;
         }
         continue;
@@ -1345,6 +1362,8 @@ export class CardEnricher {
         // Over the user's enrichment budget: what waits stays uncovered (dropped, so the queue cannot grow).
         this.stats.overBudget += batch.length + u.queue.length;
         u.queue.length = 0;
+        u.queued.clear();
+        u.queueDirty = false;
         return;
       }
       // `cardsLanes`: this batch's sentence keys are in flight, and a full batch still waiting gets a lane of its own.
@@ -1435,7 +1454,11 @@ export class CardEnricher {
           if (made) {
             this.stats.sentenceReused++;
             if (u.holders.has(f.hash)) this.keep(u, f.hash, reused(made, at, f.seq!));
-          } else u.queue.push(f);
+          } else {
+            u.queued.add(f.hash);
+            u.queue.push(f);
+            u.queueDirty = true;
+          }
         }
       } catch {
         if (spawn) for (const k of inBatch) u.flying.delete(k);
@@ -1444,7 +1467,11 @@ export class CardEnricher {
         this.stats.failures++;
         if (u.abort.signal.aborted) return;
         // `cardsLanes`: a follower may wait on another lane's batch, which this failure says nothing about.
-        if (spawn) u.queue.push(...followers);
+        if (spawn) {
+          for (const f of followers) u.queued.add(f.hash);
+          u.queue.push(...followers);
+          u.queueDirty = true;
+        }
       }
     }
   }
@@ -1687,7 +1714,11 @@ export class CardEnricher {
     if (!u) return;
     const prefix = `${sourceId}:`;
     for (const id of [...u.byItem.keys()]) if (id.startsWith(prefix)) unlink(u, id);
-    for (let i = u.queue.length - 1; i >= 0; i--) if (u.queue[i]!.item.sourceId === sourceId) u.queue.splice(i, 1);
+    for (let i = u.queue.length - 1; i >= 0; i--) {
+      if (u.queue[i]!.item.sourceId !== sourceId) continue;
+      u.queued.delete(u.queue[i]!.hash);
+      u.queue.splice(i, 1);
+    }
   }
 
   get userCount(): number {

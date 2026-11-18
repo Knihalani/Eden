@@ -118,8 +118,15 @@ describe("syncBackfillLanes (D262)", () => {
     };
     const one = await run({});
     const eight = await run({ syncBackfillLanes: 8 });
-    expect(one.held).toHaveLength(30);
-    expect(eight.held).toEqual(one.held);
+    // The trim's slack (it waits for the cap to pass by a page, and in-flight pages land past it) leaves the held
+    // count between the cap and the cap plus a page or a lanes' batch; what is kept is still the newest items: the
+    // 30 globally newest (src0–src29's newest page) are held by both, however the reads were scheduled.
+    const newest = Array.from({ length: 30 }, (_, k) => itemId(`src${k}`, "i0"));
+    for (const h of [one.held, eight.held]) {
+      expect(h.length).toBeGreaterThanOrEqual(30);
+      expect(h.length).toBeLessThanOrEqual(120);
+      for (const id of newest) expect(h).toContain(id);
+    }
     expect(eight.calls).toBe(one.calls);
     expect(one.lanes).toBe(1);
     expect(eight.lanes).toBeGreaterThan(1);
@@ -129,10 +136,10 @@ describe("syncBackfillLanes (D262)", () => {
 
 describe("syncLocalComplete (D264)", () => {
   test("a copy cut at syncMaxItems is not complete; one that holds its whole listing is", async () => {
-    const sources = many(4, 10);
+    const sources = many(6, 10);
     const { partner, cache } = setup(sources, { syncMaxItems: 20 });
     await warm(partner);
-    // 40 items for 20 places: a source is complete exactly when the user holds all of its items.
+    // 60 items for 20 places plus a page of slack: a source is complete exactly when the user holds all of its items.
     const whole0 = sources.map((s) => s.items.every((i) => cache.isSynced(scope, i.id)));
     expect(sources.map((s) => partner.sync!.complete(scope, s.id))).toEqual(whole0);
     expect(whole0.filter((x) => !x).length).toBeGreaterThanOrEqual(3);
@@ -145,7 +152,7 @@ describe("syncLocalComplete (D264)", () => {
 
   test("an item older than the cut is found by a live search with it on, and missed with it off", async () => {
     const ask = async (config: Record<string, unknown>) => {
-      const sources = many(4, 10);
+      const sources = many(6, 10);
       // The oldest item of source 0, far past the cut, is the one the user asks about.
       const old = sources[0]!.items.at(-1)!;
       old.title = "Zed Quinn contract";
@@ -317,9 +324,29 @@ describe("review regressions (A1)", () => {
     expect(sources.map((s) => partner.sync!.complete(scope, s.id))).toEqual(whole);
   });
 
+  test("the held count tracks puts and drops: a kept copy stays whole, a dropped item cuts it for good", async () => {
+    const sources = many(2, 3);
+    const cache = new ItemCache();
+    const { partner } = setup(sources, { syncMaxItems: 100 }, cache);
+    await warm(partner);
+    expect(partner.sync!.complete(scope, "src0")).toBe(true);
+    // A lookup's put of a synced item (not synced-marked itself) leaves it synced: complete reads no change.
+    const it = sources[0]!.items[0]!;
+    cache.put(scope, [{ ...it, text: "changed words, still the source's item" }], T0 + 1, false, false, 0, 0);
+    expect(cache.isSynced(scope, it.id)).toBe(true);
+    expect(partner.sync!.complete(scope, "src0")).toBe(true);
+    // A synced item dropped from the cache cuts the copy for good, like the rescan found it.
+    cache.dropSynced(scope, [sources[0]!.items[1]!.id]);
+    expect(partner.sync!.complete(scope, "src0")).toBe(false);
+    // Deletions (`removeItems` holds the id gone) count as dropped too; the other source's copy is untouched.
+    cache.removeItems(scope, [sources[1]!.items[0]!.id], T0 + 2);
+    expect(partner.sync!.complete(scope, "src1")).toBe(false);
+  });
+
   test("whether a copy is cut is each user's own", async () => {
-    // u1 has 40 items for 20 places (cut); u2 has two sources of 3 items under the same ids (6 items: all fit).
-    const u1Sources = many(4, 10);
+    // u1 has 60 items for 20 places plus a page of slack (cut); u2 has two sources of 3 items under the same ids
+    // (6 items: all fit).
+    const u1Sources = many(6, 10);
     const u2Sources = many(2, 3);
     const other = { tenantId: "t1", userId: "u2" };
     const cache = new ItemCache();

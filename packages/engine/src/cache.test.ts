@@ -743,3 +743,30 @@ describe("ItemCache sketches are computed when an item is first returned, not wh
     }
   });
 });
+
+describe("readMark: a page listed before a later read never downgrades what it stored", () => {
+  const now = 1_000;
+  test("a stale page's older words do not overwrite a copy a later read stored", () => {
+    const cache = new ItemCache();
+    // The poll's page listed v1 under mark 2; before it was stored a notice's ingest (mark 3) already held v2.
+    cache.put(alice, [item("notes", "q1", "the offsite is in Porto")], now, true, true, 3);
+    const changed = cache.put(alice, [item("notes", "q1", "the offsite is in Lisbon")], now, true, true, 2);
+    expect(changed).toHaveLength(0);
+    expect(cache.get(alice, "notes:q1", now)!.text).toContain("Porto");
+    expect(cache.isSynced(alice, "notes:q1")).toBe(true); // The stale listing still saw it.
+  });
+  test("a later read still refreshes an older copy (marks only order reads)", () => {
+    const cache = new ItemCache();
+    cache.put(alice, [item("notes", "q1", "the offsite is in Lisbon")], now, true, true, 2);
+    const changed = cache.put(alice, [item("notes", "q1", "the offsite is in Porto")], now, true, true, 3);
+    expect(changed).toHaveLength(1);
+    expect(cache.get(alice, "notes:q1", now)!.text).toContain("Porto");
+  });
+  test("an unmarked put (a lookup's copy, readMark 0) writes as before", () => {
+    const cache = new ItemCache();
+    cache.put(alice, [item("notes", "q1", "the offsite is in Porto")], now, true, true, 3);
+    const changed = cache.put(alice, [item("notes", "q1", "the offsite is in Lisbon")], now, true, true, 0);
+    expect(changed).toHaveLength(1);
+    expect(cache.get(alice, "notes:q1", now)!.text).toContain("Lisbon");
+  });
+});

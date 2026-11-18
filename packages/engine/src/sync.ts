@@ -107,10 +107,10 @@ export interface SyncOptions {
    */
   demandTimeoutMs?: number;
   /**
-   * `syncKeepCut` (D321, a trial): the user's sync keeps to its `maxItems` after the backfill too. A poll or a sweep
-   * stores no dated item older than the user's cut (the oldest item kept when the user is at the cap; the source's
-   * copy is then cut, D264), the user's synced items are trimmed back to the cap once they pass it by a page, and a
-   * sweep stops once it has listed every id it holds for the source.
+   * `syncKeepCut` (D321, a trial): the user's sync keeps to its `maxItems` after the backfill too. A backfill page,
+   * a poll or a sweep stores no dated item older than the user's cut (the oldest item kept when the user is at the
+   * cap; the source's copy is then cut, D264), the user's synced items are trimmed back to the cap once they pass
+   * it by a page, and a sweep stops once it has listed every id it holds for the source.
    */
   keepCut?: boolean;
   /**
@@ -154,6 +154,11 @@ export interface SyncOptions {
    * passes it through); an option of one manager, not a static, so nothing leaks from one test into the next.
    */
   resketchForTests?: boolean;
+  /**
+   * Tests only: the CPU budget (ms) a store yields on (`STORE_SLICE_MS` in production). An option of one manager,
+   * like `resketchForTests`, so nothing leaks from one test into the next.
+   */
+  storeSliceMsForTests?: number;
 }
 
 export interface SyncDeps {
@@ -227,6 +232,21 @@ const USERS_AT_ONCE = 16;
 const MAX_PEOPLE = 256;
 /** Sources a user's lookups use at once (`engage`): past it, the least recently used is no longer counted. */
 const MAX_USED = 64;
+/**
+ * CPU ms one `store` may spend before yielding a loop turn between its sketch pass and `put` slices. A page is
+ * ~100 items at well over 100 µs each; whole-page stores ran 10-15 ms contiguous, which a warm user's request met
+ * as tail latency during a cold-start storm (storm.bench). ~4 ms bounds the contiguous stretch.
+ */
+const STORE_SLICE_MS = 4;
+/** Items a store's first `put` slice holds; later slices adapt to the CPU budget (`store`, `STORE_SLICE_MS`). */
+const STORE_SLICE_FIRST = 8;
+
+/** Per-source status reads over one resolved `UserSync` (`SyncManager.view`): complete, current, isWarm. */
+export interface SyncView {
+  complete: (sourceId: string) => boolean;
+  current: (sourceId: string, now: number) => boolean;
+  isWarm: (sourceId: string) => boolean | undefined;
+}
 
 interface SourceSync {
   id: string;
@@ -245,8 +265,11 @@ interface SourceSync {
    * newest, so a lookup that answers the source from it can miss an older item the source would find.
    */
   cut: boolean;
-  /** The cache revision at which every synced id was last found held (`complete`), or -1. */
-  wholeAt: number;
+  /**
+   * The subset of `ids` the user's cache currently holds as synced entries (`complete`'s O(1) read of what a rescan
+   * of `ids` answered). The cache reports every synced entry's birth and death (`onSyncedHeld`), so it is exact.
+   */
+  held: IdSet;
   /** The oldest `updatedAt` the backfill has read (+Infinity before its first page): the recency merge's key. */
   frontier: number;
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
@@ -335,7 +358,7 @@ interface UserSync {
   gone: boolean;
   /**
    * The oldest `updatedAt` the user's synced items keep once they reached `maxItems` (`trim`); -Infinity while under
-   * it. With `keepCut`, polls and sweeps store nothing dated before it.
+   * it. With `keepCut`, backfill pages, polls and sweeps store nothing dated before it.
    */
   cutAt: number;
   /**
@@ -347,6 +370,12 @@ interface UserSync {
   used: Set<string>;
   /** `rareTerms` (D600): which few of the user's sources hold each word their listings had; null until one is. */
   rare: RareTerms | null;
+  /**
+   * Store calls for this user (`store`): a whole store was atomic before slicing, so a store begun while one is
+   * still under way waits for it and stores after it, in call order — never interleaved between its slices. The
+   * queue is the user's, not a source's: two sources' stores share `rare`, whose numbering depends on add order.
+   */
+  storeTail: Promise<void>;
   /** `kick`: the user's kicked step while one runs; a tick waits for it and does not start another. */
   kicked?: Promise<void> | null;
   /** `kick`: how long the backfill's last pass must wait for its own call budget (0: it did not stop for it). */
@@ -425,6 +454,31 @@ export class SyncManager {
       now: deps.now,
     });
     this.after = deps.after ?? wallAfter;
+    // The cache reports each synced entry's birth and death, keeping every source's `held` count exact (`complete`).
+    deps.cache.onSyncedHeld((scope, sourceId, id, held) => this.heldChanged(scope, sourceId, id, held));
+  }
+
+  /** A synced cache entry came or went (`ItemCache.onSyncedHeld`): keep the owning source's `held` subset of `ids`. */
+  private heldChanged(scope: Scope, sourceId: string | null, id: string | null, held: boolean): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    if (sourceId === null) {
+      for (const s of u.sources.values()) s.held.clear();
+      return;
+    }
+    const s = u.sources.get(sourceId);
+    if (!s) return;
+    if (id === null) {
+      s.held.clear();
+      return;
+    }
+    // An entry can stay synced after its id left `ids` (a trim drops the id, not the cache item), so an add only
+    // counts when the id is still synced from the source: `held` stays a subset of `ids`.
+    if (held) {
+      if (s.ids.has(id)) s.held.add(id);
+    } else {
+      s.held.delete(id);
+    }
   }
 
   /**
@@ -449,6 +503,7 @@ export class SyncManager {
       people: new Set(),
       used: new Set(),
       rare: null,
+      storeTail: Promise.resolve(),
     });
     return true;
   }
@@ -617,10 +672,14 @@ export class SyncManager {
     const existing = this.users.get(key);
     if (existing) {
       // Synced here already (tracked before the user was read back): its state stands, but the copies read back
-      // (read mark 0) are as unknown as the snapshot's, so its notifying sources count as signalled and behind.
+      // (read mark 0) are as unknown as the snapshot's, so its notifying sources count as signalled and behind. The
+      // read-back copies arrive held synced, so each source's `held` is counted again against the cache.
+      const rd = this.deps.cache.syncedReader(scope, this.deps.now());
       for (const s of existing.sources.values()) {
         s.notices++;
         s.noticedMark = signal;
+        s.held.clear();
+        for (const id of s.ids) if (rd(id)) s.held.add(id);
       }
       return false;
     }
@@ -638,6 +697,7 @@ export class SyncManager {
       // Saved only by a process with the earn rule's rare words on; absent or unreadable, the table fills again
       // as sources are listed.
       rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
+      storeTail: Promise.resolve(),
     };
     for (const x of snap.sources) {
       const s = newSourceSync(x.id);
@@ -667,6 +727,11 @@ export class SyncManager {
       s.noticesPolled = 0;
       s.noticedMark = signal;
       u.sources.set(s.id, s);
+    }
+    // The read-back copies arrived held synced before this state was restored: count `held` against the cache.
+    const rd = this.deps.cache.syncedReader(u.scope, this.deps.now());
+    for (const s of u.sources.values()) {
+      for (const id of s.ids) if (rd(id)) s.held.add(id);
     }
     this.users.set(key, u);
     return true;
@@ -760,7 +825,7 @@ export class SyncManager {
    * poll would, with no call. The source's copy is not marked current by them (other changes may have come
    * unannounced): only a poll does that. Returns how many were new or changed; 0 for a source not synced yet.
    */
-  ingest(scope: Scope, sourceId: string, items: ContextItem[], readMark?: number): number {
+  async ingest(scope: Scope, sourceId: string, items: ContextItem[], readMark?: number): Promise<number> {
     const u = this.users.get(scopeKey(scope));
     const s = u?.sources.get(sourceId);
     if (!u || !s || s.phase !== "warm") return 0;
@@ -768,7 +833,7 @@ export class SyncManager {
     const changed = new Set<string>();
     // Read under the mark its signal set (`sourceChanged` comes first): no doubt of what it brought. Items a ref notice
     // fetched (`sourceRefs`, D347) are read under the mark their call began with (D133).
-    const n = this.store(u, s, items, readMark ?? this.marks, changed);
+    const n = await this.store(u, s, items, readMark ?? this.marks, changed);
     for (const id of changed) {
       s.pushed.delete(id); // Re-insert: the map stays in arrival order.
       s.pushed.set(id, ++s.pushSeq);
@@ -786,6 +851,7 @@ export class SyncManager {
     if (!s) return;
     for (const id of ids) {
       s.ids.delete(id);
+      s.held.delete(id);
       s.pushed.delete(id);
       s.missed.delete(id);
     }
@@ -817,21 +883,39 @@ export class SyncManager {
    * Whether the user's copy of a source holds everything the source listed (D264): warm, and neither its backfill
    * nor a trim cut it at the user's `maxItems`. False for an unknown source.
    */
-  complete(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
-    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+  complete(scope: Scope, sourceId: string): boolean {
+    const u = this.users.get(scopeKey(scope));
+    return u !== undefined && this.completeOf(u, sourceId);
+  }
+
+  private completeOf(u: UserSync, sourceId: string): boolean {
+    const s = u.sources.get(sourceId);
     if (s === undefined || s.phase !== "warm" || s.cut) return false;
     // The cache can let synced items go on its own (its `maxSyncedPerUser` cap, `syncTtlMs`): a copy is whole only
-    // while it still holds every item synced from the source. Checked again only after the user's cache changed.
-    const revision = this.deps.cache.revision(scope);
-    if (s.wholeAt === revision) return true;
-    const held = this.deps.cache.syncedReader(scope, now);
-    for (const id of s.ids) {
-      if (held(id)) continue;
+    // while it still holds every item synced from the source. `s.held` tracks the held subset exactly (the cache's
+    // `onSyncedHeld` reports each synced entry's birth and death), so this reads it instead of rescanning `s.ids`.
+    if (s.held.size !== s.ids.size) {
       s.cut = true;
       return false;
     }
-    s.wholeAt = revision;
     return true;
+  }
+
+  /**
+   * The user's `UserSync` resolved once for a span of per-source reads (`complete`, `current`, `isWarm` over many
+   * sources): each call then does one map lookup instead of rebuilding the scope key and two map hops. Take a fresh
+   * view across an `await` (a user forgotten meanwhile reads as the state the object still holds).
+   */
+  view(scope: Scope): SyncView {
+    const u = this.users.get(scopeKey(scope));
+    return {
+      complete: (id) => u !== undefined && this.completeOf(u, id),
+      current: (id, now) => {
+        const s = u?.sources.get(id);
+        return s !== undefined && this.isCurrent(s, now);
+      },
+      isWarm: (id) => u?.sources.get(id)?.phase === "warm",
+    };
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
@@ -1291,11 +1375,11 @@ export class SyncManager {
       const now = this.deps.now();
       const filling = [...u.sources.values()].filter((s) => s.phase === "backfill");
       if (filling.length === 0) return;
-      // Over the cap, the oldest synced go; then a source whose unread items are all older than the oldest kept has
-      // nothing left that would be kept, and its backfill is done.
-      if (this.total(u) >= this.o.maxItems) {
-        const cut = this.trim(u, now);
-        for (const s of filling) if (s.frontier <= cut) this.warmUp(u, s, now);
+      // Over the cap by more than a page, the oldest synced go. Between trims, `cutAt` (the last trim's cut)
+      // still ends a source whose unread items are all older than it: they are what the next trim drops.
+      if (this.total(u) > this.o.maxItems + this.o.pageSize) this.trim(u, now);
+      if (u.cutAt > -Infinity) {
+        for (const s of filling) if (s.frontier <= u.cutAt) this.warmUp(u, s, now);
         if (filling.every((s) => s.phase === "warm")) return;
       }
       const ready = filling.filter((s) => s.phase === "backfill" && now >= s.retryAt && !s.busy);
@@ -1327,7 +1411,8 @@ export class SyncManager {
               reserve: SERVING_HEADROOM,
             });
             // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
-            if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
+            if (typeof page !== "string" && !u.gone)
+              await this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
           });
           return page;
         }),
@@ -1385,7 +1470,8 @@ export class SyncManager {
           timeoutMs: this.o.timeoutMs,
           reserve: SERVING_HEADROOM,
         });
-        if (typeof page !== "string" && !u.gone) this.store(u, next, page.items, readMark);
+        if (typeof page !== "string" && !u.gone)
+          await this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
       });
       flying.delete(next);
       if (u.gone) return;
@@ -1416,11 +1502,11 @@ export class SyncManager {
       const now = this.deps.now();
       const filling = [...u.sources.values()].filter((s) => s.phase === "backfill");
       if (filling.length === 0) break;
-      if (this.total(u) >= this.o.maxItems) {
-        const cut = this.trim(u, now);
-        // A source whose page is on the wire is warmed, or not, when it lands.
-        for (const s of filling) if (s.frontier <= cut && !flying.has(s)) this.warmUp(u, s, now);
-      }
+      if (this.total(u) > this.o.maxItems + this.o.pageSize) this.trim(u, now);
+      // Between trims, `cutAt` still ends a source whose unread items are all older than the last cut. A source
+      // whose page is on the wire is warmed, or not, when it lands.
+      if (u.cutAt > -Infinity)
+        for (const s of filling) if (s.frontier <= u.cutAt && !flying.has(s)) this.warmUp(u, s, now);
       const ready = filling.filter(
         (s) => s.phase === "backfill" && now >= s.retryAt && !s.busy && !flying.has(s) && !left.has(s),
       );
@@ -1515,6 +1601,7 @@ export class SyncManager {
     const gone = rest.slice(room);
     for (const g of gone) {
       g.s.ids.delete(g.id);
+      g.s.held.delete(g.id);
       g.s.cut = true;
       if (g.s.deep) g.s.deep.lost = true;
     }
@@ -1637,7 +1724,7 @@ export class SyncManager {
         else this.stats.backgroundItems += page.items.length;
         s.failures = 0;
         const stored = new Set<string>();
-        const fresh = this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
+        const fresh = await this.store(u, s, page.items, readMark, stored, this.o.keepCut && !demand);
         for (const id of stored) storedHere.add(id);
         changed += fresh;
         if (tally) tally.fresh += fresh;
@@ -1727,13 +1814,12 @@ export class SyncManager {
       this.stats.backgroundCalls++;
       this.stats.backgroundItems += page.items.length;
       s.failures = 0;
-      this.store(u, s, page.items, readMark);
+      await this.store(u, s, page.items, readMark, undefined, this.o.keepCut);
       if (page.next === null || page.items.length === 0) {
         s.deep = null;
         s.exhausted = true;
-        // Whole if no trim let any of it go meanwhile; `complete` still checks every id against the cache.
+        // Whole if no trim let any of it go meanwhile; `complete` still checks every id is held in the cache.
         s.cut = deep.lost;
-        s.wholeAt = -1;
         return;
       }
       if (s.ids.size >= this.o.maxItems / 2) {
@@ -1778,7 +1864,7 @@ export class SyncManager {
       this.stats.backgroundItems += page.items.length;
       const first = sw.seen.size === 0;
       const older = (it: ContextItem) => it.updatedAt !== undefined && it.updatedAt < cut;
-      const fresh = this.store(
+      const fresh = await this.store(
         u,
         s,
         page.items.filter((it) => !older(it)),
@@ -1798,7 +1884,10 @@ export class SyncManager {
         const missed = [...s.ids].filter((id) => !sw.seen.has(id));
         const gone = missed.filter((id) => s.missed.has(id));
         s.missed = new Set(missed.filter((id) => !s.missed.has(id)));
-        for (const id of gone) s.ids.delete(id);
+        for (const id of gone) {
+          s.ids.delete(id);
+          s.held.delete(id);
+        }
         this.stats.deleted += this.deps.cache.dropSynced(u.scope, gone);
         s.sweep = null;
         s.sweptAt = this.deps.now();
@@ -1811,18 +1900,51 @@ export class SyncManager {
 
   /**
    * Stores a page's (redacted) items as synced, read under `readMark` (`mark` when its call began); returns how many
-   * were new or changed (their ids into `changedIds`).
+   * were new or changed (their ids into `changedIds`). Runs in slices of at most ~`STORE_SLICE_MS` CPU
+   * (`storeSliceMs`): the loop turn between slices lets a warm user's request in, where one page's sketch and `put`
+   * ran 10-15 ms contiguous before. `changedIds`, `readMark`, the page's `stamp` and the per-item bookkeeping are
+   * kept whole across slices.
    */
-  private store(
+  private async store(
     u: UserSync,
     s: SourceSync,
     items: ContextItem[],
     readMark: number,
     changedIds?: Set<string>,
     keepCut = false,
-  ): number {
+  ): Promise<number> {
     // The same user object and source state: work for a user forgotten and back since must not land.
-    if (u.gone || items.length === 0 || this.users.get(u.key) !== u || u.sources.get(s.id) !== s) return 0;
+    const stale = () => u.gone || this.users.get(u.key) !== u || u.sources.get(s.id) !== s;
+    if (stale() || items.length === 0) return 0;
+    // A whole `store` was atomic before slicing: it never interleaved another store's items between its own. Keep
+    // that by queueing stores of one source in call order: each waits for the one before it (which yields between
+    // its slices), so an older page's words never land past a newer store's copy.
+    const before = u.storeTail;
+    let release!: () => void;
+    u.storeTail = new Promise<void>((resolve) => (release = resolve));
+    this.stores++;
+    try {
+      await before;
+      if (stale()) return 0;
+      return await this.storeHeld(u, s, items, readMark, changedIds, keepCut, stale);
+    } finally {
+      release();
+      if (--this.stores === 0) this.wakeIdle();
+    }
+  }
+
+  /** `store` after its turn came: the sketching, filtering and `put` pass, sliced on the CPU budget. */
+  private async storeHeld(
+    u: UserSync,
+    s: SourceSync,
+    items: ContextItem[],
+    readMark: number,
+    changedIds: Set<string> | undefined,
+    keepCut: boolean,
+    stale: () => boolean,
+  ): Promise<number> {
+    const sliceMs = this.o.storeSliceMsForTests ?? STORE_SLICE_MS;
+    const since = () => performance.now();
     const now = this.deps.now();
     // `routeSketch`: every listed item's terms, kept or not (what the cap trims still says what the source holds).
     // `rareTerms` (D600): the same terms, in the user's one table of which few sources hold a word. Filled with or
@@ -1833,7 +1955,8 @@ export class SyncManager {
       const rare = this.o.rareTerms ? (u.rare ??= new RareTerms()) : null;
       // D1927: the stamp for this page, taken before any word is added; a restart while it is added changes the
       // epochs, so the stamp the entries get is stale and never matches again.
-      const before = this.o.resketchForTests === true ? 0 : this.stampOf(s, sketch, rare);
+      const stampBefore = this.o.resketchForTests === true ? 0 : this.stampOf(s, sketch, rare);
+      let cpu = since();
       for (const it of items) {
         // Held items too: a sketch that restarted (saturated) is filled again by the next sweep's re-listing.
         if (it.sourceId !== s.id) continue;
@@ -1841,9 +1964,9 @@ export class SyncManager {
         // skipped: each of its terms is in the sketch and the table, and adding it again would write nothing. Not
         // while the sketch is saturated (its next add restarts it, whatever the term). Anything else (new, changed,
         // a fresh copy, cut, a frozen user) is added as before.
-        if (before !== 0 && !sketch?.saturated) {
+        if (stampBefore !== 0 && !sketch?.saturated) {
           const current = this.stampOf(s, sketch, rare);
-          if (current === before && this.deps.cache.stampOf(u.scope, it) === current) {
+          if (current === stampBefore && this.deps.cache.stampOf(u.scope, it) === current) {
             this.stats.sketchSkipped++;
             continue;
           }
@@ -1854,8 +1977,14 @@ export class SyncManager {
           sketch?.add(h1, h2);
           rare?.add(s.id, h1, h2);
         }
+        if (since() - cpu >= sliceMs) {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          cpu = since();
+          // Nothing stored yet: a stale call stops here, its added sketch terms harmless.
+          if (stale()) return 0;
+        }
       }
-      stamp = before;
+      stamp = stampBefore;
     }
     // `keepCut`: a poll's or a sweep's item dated before the user's cut would be the first a trim drops (the cache's
     // synced cap evicted such items oldest synced first, which could be the user's newest mail). Not stored, and the
@@ -1871,16 +2000,35 @@ export class SyncManager {
     // An item its source said is gone (`ItemCache.isHeldGone`) was listed before the deletion: neither stored nor
     // counted as synced, or the listing would undo `removed`.
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
-    const changed = this.deps.cache.put(u.scope, own, now, true, true, readMark, stamp);
-    // A user whose sync was forgotten by the time the put returned (it can thaw the user, and the owner's hooks run
-    // inside a thaw): what was just stored belongs to no sync state, so it goes rather than sit unswept.
-    if (u.gone) {
+    // `put` itself is one synchronous pass over its items; it is called a slice at a time, each slice sized toward
+    // the CPU budget from the last one's cost, a loop turn between. Same `now`, `readMark` and `stamp` every slice.
+    const changed: ContextItem[] = [];
+    let take = STORE_SLICE_FIRST;
+    for (let off = 0; off < own.length;) {
+      const end = Math.min(own.length, off + take);
+      const t0 = since();
+      const part = this.deps.cache.put(u.scope, own.slice(off, end), now, true, true, readMark, stamp);
+      const spent = since() - t0;
+      changed.push(...part);
+      off = end;
+      take = Math.max(1, Math.round((take * sliceMs) / Math.max(spent, 0.25)));
+      if (off < own.length) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        // A stale call stores no more of its page.
+        if (stale()) break;
+      }
+    }
+    // A user whose sync was forgotten by the time the puts returned (one can thaw the user, and the owner's hooks
+    // run inside a thaw), or a call gone stale between slices: what was just stored belongs to no sync state, so it
+    // goes rather than sit unswept.
+    if (stale()) {
       this.deps.cache.dropSynced(
         u.scope,
         changed.map((it) => it.id),
       );
       return 0;
     }
+
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
@@ -1888,10 +2036,13 @@ export class SyncManager {
       s.missed.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
       s.ids.add(it.id);
+      // Whether the put left it held synced (`complete`'s count): an eviction inside it may have dropped it again.
+      if (this.deps.cache.isSynced(u.scope, it.id)) s.held.add(it.id);
+      else s.held.delete(it.id);
       // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
       s.sweep?.seen.add(it.id);
     }
-    if (trimIds(s.ids, this.o.maxItems)) {
+    if (trimIds(s.ids, this.o.maxItems, (id) => s.held.delete(id))) {
       s.cut = true;
       if (s.deep) s.deep.lost = true;
     }
@@ -1990,14 +2141,36 @@ export class SyncManager {
   /** Pages handed a turn that has not come yet (`turn`). */
   private waiting = 0;
 
+  /** Stores in flight, including queued behind a source's `storeTail`; waiters for an idle moment (`pending`). */
+  private stores = 0;
+  /** Reads in flight (`run`), including queued behind a source's `busy`. */
+  private reads = 0;
+  private idleWaits: (() => void)[] = [];
+  private wakeIdle(): void {
+    if (this.stores > 0 || this.reads > 0 || this.idleWaits.length === 0) return;
+    const woken = this.idleWaits;
+    this.idleWaits = [];
+    for (const wake of woken) wake();
+  }
+
   /**
-   * D370: while pages wait their turn, resolves one loop turn after the last of them was let through (its store has
-   * run by then, unless redaction went to the worker pool); null when none waits. The card drain waits on it so its
-   * batches hold what arrived together (`CardEnricher.gather`).
+   * D370: while pages wait their turn, resolves one loop turn after the last of them was let through, and its
+   * sliced store has finished by then unless redaction went to the worker pool; null when none waits. The card
+   * drain waits on it so its batches hold what arrived together (`CardEnricher.gather`).
    */
   pending(): Promise<void> | null {
-    if (this.waiting === 0) return null;
-    return this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    if (this.waiting === 0 && this.stores === 0 && this.reads === 0) return null;
+    const turns =
+      this.waiting === 0
+        ? Promise.resolve()
+        : this.turns.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    return turns.then(() => this.drain());
+  }
+
+  /** Resolves once no read or store is running or queued (`pending`: async work no longer ends with its caller). */
+  private drain(): Promise<void> {
+    if (this.stores === 0 && this.reads === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => this.idleWaits.push(resolve)).then(() => this.drain());
   }
 
   /** One listing call, a lookup's (`demand`, also counted in its freshen's `tally`) or the background's. */
@@ -2011,33 +2184,38 @@ export class SyncManager {
    * stored new or changed (`SourceSync.reading`), as its `busy` does for a lookup waiting on it.
    */
   private async run(s: SourceSync, work: () => Promise<void>): Promise<number> {
-    while (s.busy) await s.busy;
-    const reading = { stored: 0 };
-    s.reading = reading;
-    const p = work()
-      .catch(() => {})
-      .then(() => reading.stored);
-    // What waiters see: settles with the read, or when the watchdog below lets the source go.
-    let free!: (stored: number) => void;
-    const busy = new Promise<number>((r) => (free = r));
-    void p.then(free);
-    s.busy = busy;
-    // A listing that ignores its signal and never answers would hold the source busy for good (every later read and
-    // lookup waits on it; the review). Past the longest a read that honours its timeouts can take, the source is let
-    // go; the stuck read, if it ever settles, changes nothing it no longer owns. A timer, not a race: one more await on
-    // the listing path moves the card drain's timing (a5-bugs.md).
-    const release = () => {
-      free(reading.stored);
-      if (s.busy === busy) s.busy = null;
-      if (s.reading === reading) s.reading = null;
-    };
-    const watchdog = setTimeout(release, (MAX_POLL_PAGES + 1) * this.o.timeoutMs);
-    (watchdog as { unref?: () => void }).unref?.();
+    this.reads++;
     try {
-      return await p;
+      while (s.busy) await s.busy;
+      const reading = { stored: 0 };
+      s.reading = reading;
+      const p = work()
+        .catch(() => {})
+        .then(() => reading.stored);
+      // What waiters see: settles with the read, or when the watchdog below lets the source go.
+      let free!: (stored: number) => void;
+      const busy = new Promise<number>((r) => (free = r));
+      void p.then(free);
+      s.busy = busy;
+      // A listing that ignores its signal and never answers would hold the source busy for good (every later read
+      // and lookup waits on it; the review). Past the longest a read that honours its timeouts can take, the source
+      // is let go; the stuck read, if it ever settles, changes nothing it no longer owns. A timer, not a race: one
+      // more await on the listing path moves the card drain's timing (a5-bugs.md).
+      const release = () => {
+        free(reading.stored);
+        if (s.busy === busy) s.busy = null;
+        if (s.reading === reading) s.reading = null;
+      };
+      const watchdog = setTimeout(release, (MAX_POLL_PAGES + 1) * this.o.timeoutMs);
+      (watchdog as { unref?: () => void }).unref?.();
+      try {
+        return await p;
+      } finally {
+        clearTimeout(watchdog);
+        release();
+      }
     } finally {
-      clearTimeout(watchdog);
-      release();
+      if (--this.reads === 0) this.wakeIdle();
     }
   }
 }
@@ -2109,7 +2287,7 @@ function newSourceSync(id: string): SourceSync {
     cursor: undefined,
     exhausted: false,
     cut: false,
-    wholeAt: -1,
+    held: new IdSet(),
     frontier: Infinity,
     polledAt: -Infinity,
     sweptAt: -Infinity,
@@ -2151,12 +2329,13 @@ const budgetKey = (u: UserSync, s: SourceSync) => `${u.key}|${s.id}`;
  * Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items); returns
  * whether any went (the copy is then cut, D264).
  */
-function trimIds(ids: IdSet, max: number): boolean {
+function trimIds(ids: IdSet, max: number, dropped?: (id: string) => void): boolean {
   const cap = Math.ceil(max * 1.5);
   if (ids.size <= cap) return false;
   for (const id of ids) {
     if (ids.size <= cap) break;
     ids.delete(id);
+    dropped?.(id);
   }
   return true;
 }

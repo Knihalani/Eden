@@ -730,7 +730,7 @@ describe("idle users frozen (D325), continued", () => {
         id: `${id}:alice-new-${it.ref}`,
         updatedAt: at() + i,
       }));
-      expect(sync.ingest(alice, id, pushed)).toBe(8);
+      expect(await sync.ingest(alice, id, pushed)).toBe(8);
     }
     const before = cache.syncedCount(alice);
     expect(before).toBeGreaterThan(15);
