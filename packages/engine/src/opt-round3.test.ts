@@ -166,7 +166,7 @@ function namesRequestDayBefore(item: ContextItem, a: Anchors): boolean {
   return false;
 }
 
-describe("D1967: namesRequestDay's per-request day tester", () => {
+describe("D1968: namesRequestDay's per-request day tester", () => {
   test("namesRequestDay matches its per-item pattern for seeded requests and items", () => {
     const r = rng(19661);
     const rawRequests = ["31st of October", "Oct 3", "the 12th", "30/10", "none"];
