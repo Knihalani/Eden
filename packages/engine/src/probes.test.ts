@@ -627,8 +627,10 @@ describe("the fallback for a request that asks about something it names (fallbac
     expect(await got(true, ask)).toEqual(["drive:n1"]);
   });
 
-  test("a question about the world at large names nothing of the user's: silent", async () => {
-    expect(await got(true, "What's a good stretch for back pain this week?")).toEqual([]);
+  test("a question about the world at large names nothing of the user's: one common word is not enough", async () => {
+    // D1970: an ask that names nothing may still earn a two-term hit; the digest shares "week" and "team" alone —
+    // the digest's own words no longer collide, so nothing stands up.
+    expect(await got(true, "What's a good stretch for the hamstring?")).toEqual([]);
   });
 });
 

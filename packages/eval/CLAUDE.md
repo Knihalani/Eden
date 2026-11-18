@@ -48,7 +48,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   their estimates. The lab's spend ledger meters only `claude-*` ids and lives in `@eden/sim`, which eval does not
   import.
 - **Precision over recall (D3).** A change that raises `recall` by raising `falseFireRate` needs an explicit decision.
-  The no-model run of the default reads precision 0.65, recall 0.52, falseFireRate 0 (26 of 50 expected, 40 delivered;
+  The no-model run of the default reads precision 0.84, recall 0.62, falseFireRate 0 (31 of 50 expected, 37 delivered;
   D435). D119 removed D112's false fire in `people-and-days-4` (`groundOccasion` took a lowercase first name for the
   occasion): any false fire is a regression. The pre-D128 `--live` (now `--live --judge`) still had one on that turn,
   from the judge it wires (`model:` reason; the servers wire none, D112, and neither does `--live` since D128).
@@ -62,7 +62,7 @@ privacy check (planted secrets, inert framing), direct asks, model calls and cos
   (the owed fact and its look-alike). `cli.ts` runs it apart, so precision, recall and falseFireRate stay those of the
   31 scenarios and comparable with every earlier run, and prints an `acting` block: `packetsOnNeutral` (and its
   rate), `itemsPerNeutralTurn`, `factsHanded` (of `factsOwed`, recall's window) and `decoyHanded` (owed requests
-  where a look-alike was handed). On main: 19 of 28 neutral requests get a packet (0.68, 95% Wilson 0.49–0.82), 1.18
+  where a look-alike was handed). On main: 8 of 28 neutral requests get a packet (0.29, 95% Wilson 0.15–0.47), 0.43
   items each; 10 of 11 facts handed; a look-alike on 3 of 10. `pushOpen` off: 13 of 28, 10 of 11, 3 of 10;
   `minus-candidates`: 4 of 28, 5 of 11, 1 of 10. Every labelled request starts the push (`run.test.ts` pins it), so
   the suite measures what the push hands, not its gate. Each request is its own scenario, so its own user: requests
