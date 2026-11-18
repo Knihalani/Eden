@@ -8,7 +8,7 @@ import { StaticSource } from "@eden/sources";
 // and its `eden_id` against the TypeScript `edenId` (one user must get one id from either language).
 
 const dir = join(import.meta.dir, "..");
-const python = Bun.which("python3");
+const python = Bun.which("python3") ?? Bun.which("python"); // Windows ships only `python`
 const run = async (args: string[], env: Record<string, string> = {}) => {
   const p = Bun.spawn([python!, ...args], {
     cwd: dir,
