@@ -43,7 +43,6 @@
     "typescript": "5.9.3"
   },
   "description": "A context partner for personal and proactive agents: answers their questions with citations and injects the context they did not know to ask for.",
-  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/Knihalani/Eden.git"
@@ -55,5 +54,6 @@
     "memory",
     "llm",
     "retrieval"
-  ]
+  ],
+  "license": "Apache-2.0"
 }

@@ -192,4 +192,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). The gate before merge is local: `CHECK_C
 
 ## License
 
-[MIT](LICENSE).
+[Apache-2.0](LICENSE).
