@@ -1207,6 +1207,18 @@ export class ItemCache {
       }
       // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
       const isSynced = synced || old?.synced === true;
+      // A marked read that began after this listing's already stored its copy (`readMark` is the read's order): this
+      // page predates what is held, and its older words must not downgrade it. Two stores interleave once a store
+      // yields between slices (STORE_SLICE_MS), and the sync's reads run at once (a poll beside a notice's ingest).
+      // The item was still listed: its order and fetch time refresh, its copy stands.
+      if (old && readMark !== 0 && old.readMark > readMark) {
+        old.fetchedAt = now;
+        u.items.delete(item.id);
+        u.items.set(item.id, old);
+        unlink(u, old);
+        link(u, old);
+        continue;
+      }
       if (old && old.item === item) {
         // A listing reused the copy held (`reuseFor`): nothing about it changed, so only its fetch time and order.
         old.fetchedAt = now;

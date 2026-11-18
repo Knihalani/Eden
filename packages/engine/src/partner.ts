@@ -3432,7 +3432,7 @@ export class ContextPartner {
       scope,
       clean.map((i) => i.id),
     );
-    const n = this.sync.ingest(scope, sourceId, clean);
+    const n = await this.sync.ingest(scope, sourceId, clean);
     // The source changed whether or not it is synced (a search-only source stores nothing here): a held search page
     // predates these items.
     if (clean.length > 0) this.fanout.dropResults(scope, sourceId);
@@ -3550,7 +3550,7 @@ export class ContextPartner {
               // The source's id and our id; the ref as the fan-out's gate left it (a raw ref may hold a secret, D10).
               const copy = { ...got.item, id, sourceId };
               this.deps.cache.revive(scope, [id]);
-              const n = sync.ingest(scope, sourceId, [copy], mark);
+              const n = await sync.ingest(scope, sourceId, [copy], mark);
               stored += n;
               return done(id, n > 0 ? "changed" : "confirmed", mark);
             }),
