@@ -533,7 +533,15 @@ export function isSubject(item: ContextItem, raw: string): boolean {
   const plain = (text: string) =>
     new Set((text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((w) => !MODIFIER_STEMS.has(w.slice(0, 4))));
   const said = plain(raw);
-  return [...plain(item.title)].some((w) => said.has(w));
+  // But a modifier-only match fails when the request names a thing of its own the item lacks: "my annual physio
+  // appointment" is not "Annual boiler appointment" — "physio" never met, "appointment" names nothing.
+  const content = [...said].filter(
+    (w) => !SCHEDULING.test(w) && !TIMEISH.test(w) && !LEADING.has(w) && !GENERIC.has(w) && !QUESTIONISH.has(w),
+  );
+  const itemWords = plain(item.title);
+  if (content.some((w) => !itemWords.has(w) && ![...itemWords].some((t) => t.startsWith(w) || w.startsWith(t))))
+    return false;
+  return [...itemWords].some((w) => said.has(w));
 }
 
 /** Minutes from midnight an item starts at, in its own offset; null without a timed `meta.start`. */
@@ -565,7 +573,13 @@ export function topicOf(terms: string[], entities: string[], max = 2): string {
 const TIMEISH =
   /^(today|tonight|tomorrow|yesterday|week|weekend|next|this|last|morning|afternoon|evening|night|am|pm|\d{1,2}(:\d\d)?(am|pm)?|(mon|tues|wednes|thurs|fri|satur|sun)day|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?|\d{1,2}(st|nd|rd|th))$/;
 /** Words too common in requests to search on. */
-const GENERIC = new Set("me my our us we you your them their they it its need want like know new".split(" "));
+const GENERIC = new Set(
+  "me my our us we you your them their they it its need want like know new".split(" "),
+);
+/** Question words and fillers that name nothing (kept beside GENERIC: topicOf already reads that set). */
+const QUESTIONISH = new Set(
+  "when where what who whom whose which how why again exactly about still right just very".split(" "),
+);
 
 /**
  * The organisations the people of a request belong to, read from items returned for them: an address of theirs at a
