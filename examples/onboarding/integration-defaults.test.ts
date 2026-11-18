@@ -51,8 +51,15 @@ describe("integration defaults", () => {
     try {
       const errors: unknown[] = [];
       const eden = new EdenClient({ baseUrl: s.url, userId: "u1", sessionId: "s1", onError: (e) => errors.push(e) });
-      await eden.observe({ kind: "user_message", text: REQUEST });
-      expect((await eden.ask(QUESTION))?.answer).toContain("compliance@client-services.example");
+      const obs = await eden.observe({ kind: "user_message", text: REQUEST });
+      // D1976: the request's packet hands the notice it names before the ask needs it; the ask then says "(shown
+      // above)". What Eden showed is the injection, anything queued and the answer together.
+      const shown = [
+        obs.injection?.text ?? "",
+        ...(await eden.pending()).map((i) => i.text),
+        (await eden.ask(QUESTION))?.answer ?? "",
+      ].join("\n");
+      expect(shown).toContain("compliance@client-services.example");
       const sent: unknown[] = [];
       const tools = guardTools(eden, {
         send_email: async (args: { to: string[]; cc: string[]; subject: string; body: string }) => {
@@ -175,7 +182,10 @@ print(json.dumps(out))
         expect(got.held).toContain("Not executed: send_email was held");
         expect(got.again).toBe("sent");
         expect(got.sent).toEqual([["compliance@client-services.example"]]);
-        expect(got.answer).toContain("compliance@client-services.example");
+        // D1976: the request's packet hands the notice first; the ask may then say "(shown above)".
+        expect(`${(got.context as { context: string }).context}\n${got.answer}`).toContain(
+          "compliance@client-services.example",
+        );
         expect((got.block as { action: string; message: string }).action).toBe("block");
         expect((got.block as { message: string }).message).toContain("compliance@client-services.example");
         expect(got.repeat).toBeNull();
