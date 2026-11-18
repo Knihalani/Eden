@@ -105,9 +105,14 @@ describe("pi-ab --resume (D813)", () => {
         appendFileSync(journal, '{"unit":"0|tools|w41:train1:x","data":{"results":[{"task"');
 
         // Without --resume the paid units are not overwritten; a changed configuration cannot reuse them.
-        const [refused, changed] = await Promise.all([
-          piAb(dir, "refused", "cut.json", shape.extra),
-          piAb(dir, "changed", "cut.json", [...shape.extra, "--resume", "--tool-exec", "sequential"]),
+        // (Sequential: two concurrent attempts on one journal race on its lock, and which message the loser
+        // prints is timing luck.)
+        const refused = await piAb(dir, "refused", "cut.json", shape.extra);
+        const changed = await piAb(dir, "changed", "cut.json", [
+          ...shape.extra,
+          "--resume",
+          "--tool-exec",
+          "sequential",
         ]);
         expect(refused.status).toBe(2);
         expect(refused.stderr).toContain("pass --resume");
