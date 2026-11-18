@@ -512,6 +512,48 @@ describe("SourceMap planner arms written behind (D1966)", () => {
     map.close();
   });
 
+  test("refused arm rows past the retention cap leave no empty scope or source maps", () => {
+    const map = new SourceMap(fileOf(), { explore: false, mentionFlushMs: 60_000 });
+    const db = (map as unknown as { db: { transaction: (f: () => void) => () => void } }).db;
+    const real = db.transaction.bind(db);
+    db.transaction = () => () => {
+      throw new Error("SQLITE_BUSY");
+    };
+    const log = console.error;
+    console.error = () => {};
+    const emptyScope = { tenantId: "t", userId: "empty" };
+    const armMaps = (map as unknown as { arms: Map<string, Map<string, Map<string, unknown>>> }).arms;
+    try {
+      map.saveArms(emptyScope, "empty", []);
+      expect(armMaps.has(scopeKey(emptyScope))).toBe(false);
+
+      map.saveArms(
+        alice,
+        "crm",
+        Array.from({ length: 16_384 }, (_, bucket) => ({ bucket, shape: "terms", alpha: 1, beta: 1 })),
+      );
+      expect((map as unknown as { armRows: number }).armRows).toBe(16_384);
+      expect(map.droppedArmRows).toBe(0);
+
+      for (let i = 0; i < 4; i++) {
+        const scope = { tenantId: "t", userId: `extra-${i}` };
+        map.saveArms(scope, `source-${i}`, [{ bucket: 0, shape: "terms", alpha: 2, beta: 1 }]);
+        expect(map.droppedArmRows).toBe(i + 1);
+        expect((map as unknown as { armRows: number }).armRows).toBe(16_384);
+        expect(armMaps.has(scopeKey(scope))).toBe(false);
+      }
+
+      for (const bySource of armMaps.values()) {
+        expect(bySource.size).toBeGreaterThan(0);
+        for (const byArm of bySource.values()) expect(byArm.size).toBeGreaterThan(0);
+      }
+    } finally {
+      console.error = log;
+      db.transaction = real;
+      map.close();
+    }
+  });
+
   test("a process that exits without close writes pending arms", async () => {
     const path = fileOf();
     const child = `

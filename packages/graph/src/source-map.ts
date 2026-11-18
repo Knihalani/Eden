@@ -325,16 +325,16 @@ export class SourceMap {
     }
     for (const [key, bySource] of armBatch) {
       let into = this.arms.get(key);
-      if (!into) this.arms.set(key, (into = new Map()));
       for (const [sourceId, byArm] of bySource) {
-        let arms = into.get(sourceId);
-        if (!arms) into.set(sourceId, (arms = new Map()));
+        let arms = into?.get(sourceId);
         for (const [armKey, arm] of byArm) {
-          if (arms.has(armKey)) continue;
+          if (arms?.has(armKey)) continue;
           if (this.armRows >= MENTION_RETAIN_ROWS) {
             this.droppedArmRows++;
             continue;
           }
+          if (!into) this.arms.set(key, (into = new Map()));
+          if (!arms) into.set(sourceId, (arms = new Map()));
           arms.set(armKey, arm);
           this.armRows++;
         }
@@ -557,6 +557,7 @@ export class SourceMap {
     sourceId: string,
     arms: { bucket: number; shape: string; alpha: number; beta: number }[],
   ): void {
+    if (arms.length === 0) return;
     const key = scopeKey(scope);
     let bySource = this.arms.get(key);
     if (!bySource) this.arms.set(key, (bySource = new Map()));
