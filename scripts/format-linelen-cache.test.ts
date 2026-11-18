@@ -70,6 +70,17 @@ describe("format.sh's line-length set", () => {
     expect(r.check().out).toContain("already known within the limit");
   });
 
+  test("a bun.lock change (the typescript version) rechecks every file", () => {
+    const r = repo();
+    expect(r.check().code).toBe(0);
+    r.write("bun.lock", '{ "typescript": "5.9.4" }\n');
+    expect(r.check().code).toBe(0);
+    expect(r.checked()).toEqual([
+      "scripts/check-line-length.ts src/a.ts src/b.ts",
+      "scripts/check-line-length.ts src/a.ts src/b.ts",
+    ]);
+  });
+
   test("a failure remembers nothing, not even the files that passed", () => {
     const r = repo();
     // The stub fails while any checked file holds the marker.
