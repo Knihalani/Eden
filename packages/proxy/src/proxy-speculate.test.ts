@@ -38,14 +38,15 @@ const eden = Bun.serve({
   },
 });
 /** Every upstream call's messages (the speculative call's abort is the proxy's; Bun's server does not report it). */
-const calls: { messages: any[]; aborted: boolean }[] = [];
+const calls: { messages: any[]; raw: string; aborted: boolean }[] = [];
 const failed = new Set<string>();
 const upstream = Bun.serve({
   port: 0,
   async fetch(req) {
     // A Responses body carries `input` where chat and Anthropic carry `messages`.
-    const parsed = JSON.parse(await req.text()) as { messages?: any[]; input?: unknown };
-    const call = { messages: (parsed.messages ?? [parsed.input]) as any[], aborted: false };
+    const raw = await req.text();
+    const parsed = JSON.parse(raw) as { messages?: any[]; input?: unknown };
+    const call = { messages: (parsed.messages ?? [parsed.input]) as any[], raw, aborted: false };
     calls.push(call);
     order.push(`upstream-in ${JSON.stringify(call.messages)}`);
     req.signal.addEventListener("abort", () => (call.aborted = true));
@@ -67,10 +68,10 @@ afterAll(() => {
 
 /** The proxy's own upstream fetches, and whether each was aborted by the proxy (Bun's server cannot tell). */
 const fetched: { aborted: () => boolean }[] = [];
-const proxyFor = (speculate: boolean) =>
+const proxyFor = (speculate: boolean, edenUrl = eden.url.href) =>
   createProxy({
     upstream: `${upstream.url.href}v1`,
-    edenUrl: eden.url.href,
+    edenUrl,
     edenApiKey: KEY,
     waitMs: 1_000,
     speculate,
@@ -167,8 +168,84 @@ describe("speculate (F10)", () => {
     const off = await run(false, "s-k-off");
     const on = await run(true, "s-k-on");
     expect(on.length).toBe(1);
-    expect(on[0]!.messages).toEqual(off[0]!.messages);
-    expect(JSON.stringify(on[0]!.messages)).toContain("PKT-FIRST");
+    expect(on[0]!.raw).toBe(off[0]!.raw);
+    expect(on[0]!.raw).toContain("PKT-FIRST");
+  });
+
+  test("Anthropic: a kept packet reuses the speculative body when Eden adds nothing", async () => {
+    script["anthropic first turn"] = "PKT-ANTH-FIRST";
+    const run = async (speculate: boolean, user: string) => {
+      const proxy = proxyFor(speculate);
+      const post = (messages: unknown[]) =>
+        proxy(
+          new Request("http://proxy/v1/messages", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-eden-user-id": user,
+              "x-eden-session-id": `${user}-s`,
+            },
+            body: JSON.stringify({ model: "m", max_tokens: 10, messages }),
+          }),
+        );
+      await post([u("anthropic first turn")]);
+      const before = calls.length;
+      await post([u("anthropic first turn"), { role: "assistant", content: "ok" }, u("anthropic follow-up")]);
+      return calls.slice(before);
+    };
+    const off = await run(false, "s-anth-kept-off");
+    const on = await run(true, "s-anth-kept-on");
+    expect(on.length).toBe(1);
+    expect(on[0]!.raw).toBe(off[0]!.raw);
+    expect(on[0]!.raw).toContain("PKT-ANTH-FIRST");
+  });
+
+  test("a concurrent placement change invalidates the speculative placement", async () => {
+    let releaseWait!: () => void;
+    let notifyWaitStarted!: () => void;
+    const waitForRelease = new Promise<void>((resolve) => (releaseWait = resolve));
+    const waitStarted = new Promise<void>((resolve) => (notifyWaitStarted = resolve));
+    let seedObserves = 0;
+    const raceEden = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (new URL(req.url).pathname.endsWith("/v1/pending")) return Response.json({ injections: [] });
+        const body = (await req.json()) as { kind?: string; text?: string };
+        if (body.kind !== "user_message") return Response.json({ injection: null });
+        if (body.text === "epoch wait") {
+          notifyWaitStarted();
+          await waitForRelease;
+          return Response.json({ injection: null });
+        }
+        if (body.text === "epoch seed") {
+          const text = seedObserves++ === 0 ? "PKT-EPOCH-OLD" : "PKT-EPOCH-NEW";
+          return Response.json({ injection: { id: `epoch-${seedObserves}`, text } });
+        }
+        return Response.json({ injection: null });
+      },
+    });
+    const proxy = proxyFor(true, raceEden.url.href);
+    const before = calls.length;
+    try {
+      await chat(proxy, [u("epoch seed")], "s-epoch-race");
+      const first = chat(
+        proxy,
+        [u("epoch seed"), { role: "assistant", content: "seed answer" }, u("epoch wait")],
+        "s-epoch-race",
+      );
+      await waitStarted;
+      await chat(proxy, [u("epoch seed")], "s-epoch-race");
+      releaseWait();
+      await first;
+      const firstCalls = calls.slice(before).filter((call) => JSON.stringify(call.messages).includes("epoch wait"));
+      expect(firstCalls).toHaveLength(2);
+      expect(JSON.stringify(firstCalls[0]!.messages)).toContain("PKT-EPOCH-OLD");
+      expect(JSON.stringify(firstCalls[1]!.messages)).toContain("PKT-EPOCH-NEW");
+      expect(JSON.stringify(firstCalls[1]!.messages)).not.toContain("PKT-EPOCH-OLD");
+    } finally {
+      releaseWait();
+      raceEden.stop(true);
+    }
   });
 
   test("Anthropic Messages: nothing new, one call during the wait (review)", async () => {

@@ -127,6 +127,8 @@ interface Conversation {
    */
   placed?: Map<string, { text: string; turn: number; bytes: number }>;
   placedBytes?: number;
+  /** Bumped whenever `placed` changes, so an earlier placement is known to still be current. */
+  placedEpoch?: number;
   /** With the history held by the provider: ids of the packets already sent upstream, each inserted once. */
   sent?: Set<string>;
 }
@@ -305,6 +307,12 @@ export function eventsOf(m: Message, tools: Map<string, string>): EventInput[] {
 }
 
 export function createProxy(options: ProxyOptions): (req: Request) => Promise<Response> {
+  type SpeculativeRequest = {
+    placed: Message[] | null;
+    sent: string;
+    res: Promise<Response>;
+    abort: AbortController;
+  };
   const upstream = options.upstream.replace(/\/$/, "");
   const doFetch = options.fetch ?? fetch;
   const maxSessions = options.maxSessions ?? 10_000;
@@ -447,6 +455,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       conv.packets = [];
     }
     const turn = conv.turn;
+    let speculated: { placed: Message[] | null; epoch: number } | undefined;
     const eden = new EdenClient({
       baseUrl: options.edenUrl,
       ...(options.edenApiKey ? { apiKey: options.edenApiKey } : {}),
@@ -481,11 +490,18 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     if (onSpeculate && lastUser >= 0 && held === undefined && !options.shadow) {
       // With no packet for this turn: earlier turns' packets in place (`keptInPlace` with none changes nothing).
       try {
-        onSpeculate(
-          keepPackets && conv.placed?.size
-            ? keptInPlace(conv, messages as Message[], hashes, [], turn, options.maxKeptBytes ?? MAX_KEPT_BYTES)
-            : null,
-        );
+        if (keepPackets && conv.placed?.size) {
+          const placed = keptInPlace(
+            conv,
+            messages as Message[],
+            hashes,
+            [],
+            turn,
+            options.maxKeptBytes ?? MAX_KEPT_BYTES,
+          );
+          speculated = { placed, epoch: conv.placedEpoch ?? 0 };
+          onSpeculate(placed);
+        } else onSpeculate(null);
       } catch (e) {
         report(e);
       }
@@ -519,6 +535,9 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       return withContext(messages as { role: string; content: unknown }[], fresh);
     }
     if (keepPackets) {
+      if (packets.length === 0 && speculated && speculated.epoch === (conv.placedEpoch ?? 0)) {
+        return speculated.placed;
+      }
       return keptInPlace(conv, messages as Message[], hashes, packets, turn, options.maxKeptBytes ?? MAX_KEPT_BYTES);
     }
     return withContext(messages as { role: string; content: unknown }[], packets);
@@ -637,9 +656,10 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     let sent = raw;
     let body: unknown = null;
     // `speculate` (F10): the request sent before Eden's wait, its held answer, and the way to abort it.
-    let spec: { sent: string; res: Promise<Response>; abort: AbortController } | null = null;
+    let spec: SpeculativeRequest | null = null;
+    let reused = false;
     const speculating = (options.speculate ?? true) && !options.askTool && !options.shadow;
-    const startSpec = (bodyText: string) => {
+    const startSpec = (placed: Message[] | null, bodyText: string) => {
       // Not with a provider-stored completion (`store: true`): an aborted call could leave a stored copy there. Not
       // when the provider runs tools itself (`providerRunsTools`): the early call would run them, and the packet's
       // request again.
@@ -650,7 +670,7 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
       const res = forward(req, path, bodyText, abort.signal);
       // A failed speculative call is replaced by the ordinary one below; never an unhandled rejection.
       res.catch(() => undefined);
-      spec = { sent: bodyText, res, abort };
+      spec = { placed, sent: bodyText, res, abort };
     };
     try {
       body = JSON.parse(raw);
@@ -673,9 +693,14 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
           const placed =
             view &&
             (await withEden(req, { ...(body as object), messages: view.messages }, true, undefined, undefined, (p) =>
-              startSpec(render(p)),
+              startSpec(p, render(p)),
             ));
-          messages = placed ? toAnthropic(theirs as unknown[], view!, placed) : null;
+          const heldSpec = spec as SpeculativeRequest | null;
+          if (placed && heldSpec && placed === heldSpec.placed) {
+            sent = heldSpec.sent;
+            reused = true;
+            messages = placed;
+          } else messages = placed ? toAnthropic(theirs as unknown[], view!, placed) : null;
         } else if (responses) {
           const view = fromResponses((body as { input?: unknown }).input);
           // With the history held by the provider (`conversation`, `previous_response_id`) the input is only what is
@@ -704,12 +729,18 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
         } else
           messages = await withEden(req, body as Record<string, unknown>, false, undefined, undefined, (p) =>
             startSpec(
+              p,
               p ? (withMessages(raw, p, "messages") ?? JSON.stringify({ ...(body as object), messages: p })) : raw,
             ),
           );
         const key = responses ? "input" : "messages";
-        if (messages)
-          sent = withMessages(raw, messages, key) ?? JSON.stringify({ ...(body as object), [key]: messages });
+        if (messages && !reused) {
+          const heldSpec = spec as SpeculativeRequest | null;
+          if (heldSpec && messages === heldSpec.placed) {
+            sent = heldSpec.sent;
+            reused = true;
+          } else sent = withMessages(raw, messages, key) ?? JSON.stringify({ ...(body as object), [key]: messages });
+        }
       }
     } catch (e) {
       // Anything Eden-side that threw: the request goes upstream as it came (D14).
@@ -735,9 +766,9 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
         report(e);
       }
     }
-    const held_ = spec as { sent: string; res: Promise<Response>; abort: AbortController } | null;
+    const held_ = spec as SpeculativeRequest | null;
     if (held_) {
-      if (held_.sent === sent && !req.signal.aborted) {
+      if ((reused || held_.sent === sent) && !req.signal.aborted) {
         // Eden added nothing new for the turn: the answer already on its way is exactly the one the agent would get.
         // A rate limit or a server error on that early call is not passed on: the request goes again as it would have
         // gone without the option (the review: an early 429 must not become the agent's answer).
@@ -966,6 +997,7 @@ function keptInPlace(
   const latest = keys.findLastIndex((k) => k !== null);
   const current = packets.length ? packets.map((p) => p.text).join("\n\n") : null;
   if (current !== null) {
+    conv.placedEpoch = (conv.placedEpoch ?? 0) + 1;
     const key = keys[latest]!;
     const bytes = Buffer.byteLength(current);
     const old = placed.get(key);
