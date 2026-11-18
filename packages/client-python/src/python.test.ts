@@ -22,7 +22,7 @@ const run = async (args: string[], env: Record<string, string> = {}) => {
 
 describe.skipIf(!python)("eden_client (Python)", () => {
   test("its unit tests pass", async () => {
-    const { err, code } = await run(["-m", "unittest", "test_eden_client", "test_hermes"]);
+    const { err, code } = await run(["-m", "unittest", "test_eden_client", "test_hermes", "test_local"]);
     expect(err).toContain("OK");
     expect(code).toBe(0);
   }, 30_000);
