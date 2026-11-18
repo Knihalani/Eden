@@ -324,6 +324,25 @@ describe("review regressions (A1)", () => {
     expect(sources.map((s) => partner.sync!.complete(scope, s.id))).toEqual(whole);
   });
 
+  test("the held count tracks puts and drops: a kept copy stays whole, a dropped item cuts it for good", async () => {
+    const sources = many(2, 3);
+    const cache = new ItemCache();
+    const { partner } = setup(sources, { syncMaxItems: 100 }, cache);
+    await warm(partner);
+    expect(partner.sync!.complete(scope, "src0")).toBe(true);
+    // A lookup's put of a synced item (not synced-marked itself) leaves it synced: complete reads no change.
+    const it = sources[0]!.items[0]!;
+    cache.put(scope, [{ ...it, text: "changed words, still the source's item" }], T0 + 1, false, false, 0, 0);
+    expect(cache.isSynced(scope, it.id)).toBe(true);
+    expect(partner.sync!.complete(scope, "src0")).toBe(true);
+    // A synced item dropped from the cache cuts the copy for good, like the rescan found it.
+    cache.dropSynced(scope, [sources[0]!.items[1]!.id]);
+    expect(partner.sync!.complete(scope, "src0")).toBe(false);
+    // Deletions (`removeItems` holds the id gone) count as dropped too; the other source's copy is untouched.
+    cache.removeItems(scope, [sources[1]!.items[0]!.id], T0 + 2);
+    expect(partner.sync!.complete(scope, "src1")).toBe(false);
+  });
+
   test("whether a copy is cut is each user's own", async () => {
     // u1 has 60 items for 20 places plus a page of slack (cut); u2 has two sources of 3 items under the same ids
     // (6 items: all fit).

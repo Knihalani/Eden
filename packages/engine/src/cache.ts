@@ -943,6 +943,11 @@ export class ItemCache {
   private readonly limits: CacheLimits;
   /** Told of every item that leaves (`onDropped`); null ids: the whole user. */
   private dropped: ((scope: Scope, ids: string[] | null) => void) | null = null;
+  /**
+   * Told of every synced entry's birth (a synced put, a thaw) and death (`drop`, the whole user on `dropUser` with
+   * null ids): the sync's per-source held count (`SyncManager`).
+   */
+  private syncedHeld: ((scope: Scope, sourceId: string | null, id: string | null, held: boolean) => void) | null = null;
   /** The last revision handed out: every user's revisions are drawn from it, so one never repeats. */
   private revisions = 0;
   /** The expiry timer (`expireEveryMs`), started by the first `put`; null before then and after `close`. */
@@ -1181,6 +1186,7 @@ export class ItemCache {
     this.restoring.delete(key);
     this.disk?.delete(u.scope); // Expired, evicted or forgotten: its blob on disk goes with it (D425).
     this.dropped?.(u.scope, null);
+    this.syncedHeld?.(u.scope, null, null, false);
     clearDecoded(); // An expired or evicted user's decoded text does not stay in the memo (`packed-text.ts`).
     clearParts(); // Nor its packets' parts (`render.ts`, D1882).
     clearTermMemo(); // Nor its terms in the vocabulary's decode memo (D998).
@@ -1196,6 +1202,14 @@ export class ItemCache {
    */
   onDropped(fn: (scope: Scope, ids: string[] | null) => void): void {
     this.dropped = fn;
+  }
+
+  /**
+   * Calls `fn` whenever a synced cache entry is born (a put that leaves it synced, a thaw) or dies (any drop),
+   * with null `sourceId`/`id` when the whole user goes: the sync keeps each source's held count from it.
+   */
+  onSyncedHeld(fn: (scope: Scope, sourceId: string | null, id: string | null, held: boolean) => void): void {
+    this.syncedHeld = fn;
   }
 
   /** The user's vocabulary (creating the user's cache if needed). */
@@ -1273,6 +1287,7 @@ export class ItemCache {
         unlink(u, old); // Out of the lookups' list into the sync's (re-placed below, refreshed or dropped).
         old.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
         link(u, old);
       }
       // A lookup's copy of a synced item leaves it synced: the sync still lists it, and drops it once it does not.
@@ -1358,6 +1373,7 @@ export class ItemCache {
       if (isSynced) {
         entry.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
       }
       u.items.set(item.id, entry); // Map order stays oldest-first for eviction (old entry was removed above).
       link(u, entry);
@@ -1594,7 +1610,10 @@ export class ItemCache {
     u.revision = ++this.revisions;
     unlink(u, e);
     indexEntry(u, e, -1);
-    if (e.synced) u.synced--;
+    if (e.synced) {
+      u.synced--;
+      this.syncedHeld?.(u.scope, e.item.sourceId, e.item.id, false);
+    }
     u.items.delete(e.item.id);
     u.index.remove(e.doc);
     if (u.byDoc[e.doc] === e) u.byDoc[e.doc] = undefined;
@@ -2461,6 +2480,7 @@ export class ItemCache {
       if (r.s === 1) {
         entry.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
       }
       u.items.set(item.id, entry);
       link(u, entry);
@@ -2645,6 +2665,7 @@ export class ItemCache {
       if (r.s === 1) {
         entry.synced = true;
         u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
       }
       u.items.set(item.id, entry);
       link(u, entry);

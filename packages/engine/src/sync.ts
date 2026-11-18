@@ -241,6 +241,13 @@ const STORE_SLICE_MS = 4;
 /** Items a store's first `put` slice holds; later slices adapt to the CPU budget (`store`, `STORE_SLICE_MS`). */
 const STORE_SLICE_FIRST = 8;
 
+/** Per-source status reads over one resolved `UserSync` (`SyncManager.view`): complete, current, isWarm. */
+export interface SyncView {
+  complete: (sourceId: string) => boolean;
+  current: (sourceId: string, now: number) => boolean;
+  isWarm: (sourceId: string) => boolean | undefined;
+}
+
 interface SourceSync {
   id: string;
   /**
@@ -258,8 +265,11 @@ interface SourceSync {
    * newest, so a lookup that answers the source from it can miss an older item the source would find.
    */
   cut: boolean;
-  /** The cache revision at which every synced id was last found held (`complete`), or -1. */
-  wholeAt: number;
+  /**
+   * The subset of `ids` the user's cache currently holds as synced entries (`complete`'s O(1) read of what a rescan
+   * of `ids` answered). The cache reports every synced entry's birth and death (`onSyncedHeld`), so it is exact.
+   */
+  held: IdSet;
   /** The oldest `updatedAt` the backfill has read (+Infinity before its first page): the recency merge's key. */
   frontier: number;
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
@@ -444,6 +454,31 @@ export class SyncManager {
       now: deps.now,
     });
     this.after = deps.after ?? wallAfter;
+    // The cache reports each synced entry's birth and death, keeping every source's `held` count exact (`complete`).
+    deps.cache.onSyncedHeld((scope, sourceId, id, held) => this.heldChanged(scope, sourceId, id, held));
+  }
+
+  /** A synced cache entry came or went (`ItemCache.onSyncedHeld`): keep the owning source's `held` subset of `ids`. */
+  private heldChanged(scope: Scope, sourceId: string | null, id: string | null, held: boolean): void {
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return;
+    if (sourceId === null) {
+      for (const s of u.sources.values()) s.held.clear();
+      return;
+    }
+    const s = u.sources.get(sourceId);
+    if (!s) return;
+    if (id === null) {
+      s.held.clear();
+      return;
+    }
+    // An entry can stay synced after its id left `ids` (a trim drops the id, not the cache item), so an add only
+    // counts when the id is still synced from the source: `held` stays a subset of `ids`.
+    if (held) {
+      if (s.ids.has(id)) s.held.add(id);
+    } else {
+      s.held.delete(id);
+    }
   }
 
   /**
@@ -637,10 +672,14 @@ export class SyncManager {
     const existing = this.users.get(key);
     if (existing) {
       // Synced here already (tracked before the user was read back): its state stands, but the copies read back
-      // (read mark 0) are as unknown as the snapshot's, so its notifying sources count as signalled and behind.
+      // (read mark 0) are as unknown as the snapshot's, so its notifying sources count as signalled and behind. The
+      // read-back copies arrive held synced, so each source's `held` is counted again against the cache.
+      const rd = this.deps.cache.syncedReader(scope, this.deps.now());
       for (const s of existing.sources.values()) {
         s.notices++;
         s.noticedMark = signal;
+        s.held.clear();
+        for (const id of s.ids) if (rd(id)) s.held.add(id);
       }
       return false;
     }
@@ -688,6 +727,11 @@ export class SyncManager {
       s.noticesPolled = 0;
       s.noticedMark = signal;
       u.sources.set(s.id, s);
+    }
+    // The read-back copies arrived held synced before this state was restored: count `held` against the cache.
+    const rd = this.deps.cache.syncedReader(u.scope, this.deps.now());
+    for (const s of u.sources.values()) {
+      for (const id of s.ids) if (rd(id)) s.held.add(id);
     }
     this.users.set(key, u);
     return true;
@@ -807,6 +851,7 @@ export class SyncManager {
     if (!s) return;
     for (const id of ids) {
       s.ids.delete(id);
+      s.held.delete(id);
       s.pushed.delete(id);
       s.missed.delete(id);
     }
@@ -838,21 +883,39 @@ export class SyncManager {
    * Whether the user's copy of a source holds everything the source listed (D264): warm, and neither its backfill
    * nor a trim cut it at the user's `maxItems`. False for an unknown source.
    */
-  complete(scope: Scope, sourceId: string, now = this.deps.now()): boolean {
-    const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
+  complete(scope: Scope, sourceId: string): boolean {
+    const u = this.users.get(scopeKey(scope));
+    return u !== undefined && this.completeOf(u, sourceId);
+  }
+
+  private completeOf(u: UserSync, sourceId: string): boolean {
+    const s = u.sources.get(sourceId);
     if (s === undefined || s.phase !== "warm" || s.cut) return false;
     // The cache can let synced items go on its own (its `maxSyncedPerUser` cap, `syncTtlMs`): a copy is whole only
-    // while it still holds every item synced from the source. Checked again only after the user's cache changed.
-    const revision = this.deps.cache.revision(scope);
-    if (s.wholeAt === revision) return true;
-    const held = this.deps.cache.syncedReader(scope, now);
-    for (const id of s.ids) {
-      if (held(id)) continue;
+    // while it still holds every item synced from the source. `s.held` tracks the held subset exactly (the cache's
+    // `onSyncedHeld` reports each synced entry's birth and death), so this reads it instead of rescanning `s.ids`.
+    if (s.held.size !== s.ids.size) {
       s.cut = true;
       return false;
     }
-    s.wholeAt = revision;
     return true;
+  }
+
+  /**
+   * The user's `UserSync` resolved once for a span of per-source reads (`complete`, `current`, `isWarm` over many
+   * sources): each call then does one map lookup instead of rebuilding the scope key and two map hops. Take a fresh
+   * view across an `await` (a user forgotten meanwhile reads as the state the object still holds).
+   */
+  view(scope: Scope): SyncView {
+    const u = this.users.get(scopeKey(scope));
+    return {
+      complete: (id) => u !== undefined && this.completeOf(u, id),
+      current: (id, now) => {
+        const s = u?.sources.get(id);
+        return s !== undefined && this.isCurrent(s, now);
+      },
+      isWarm: (id) => u?.sources.get(id)?.phase === "warm",
+    };
   }
 
   /** Whether the user's copy of a source has finished its backfill, current or not (`syncPollBehind`). */
@@ -1538,6 +1601,7 @@ export class SyncManager {
     const gone = rest.slice(room);
     for (const g of gone) {
       g.s.ids.delete(g.id);
+      g.s.held.delete(g.id);
       g.s.cut = true;
       if (g.s.deep) g.s.deep.lost = true;
     }
@@ -1754,9 +1818,8 @@ export class SyncManager {
       if (page.next === null || page.items.length === 0) {
         s.deep = null;
         s.exhausted = true;
-        // Whole if no trim let any of it go meanwhile; `complete` still checks every id against the cache.
+        // Whole if no trim let any of it go meanwhile; `complete` still checks every id is held in the cache.
         s.cut = deep.lost;
-        s.wholeAt = -1;
         return;
       }
       if (s.ids.size >= this.o.maxItems / 2) {
@@ -1821,7 +1884,10 @@ export class SyncManager {
         const missed = [...s.ids].filter((id) => !sw.seen.has(id));
         const gone = missed.filter((id) => s.missed.has(id));
         s.missed = new Set(missed.filter((id) => !s.missed.has(id)));
-        for (const id of gone) s.ids.delete(id);
+        for (const id of gone) {
+          s.ids.delete(id);
+          s.held.delete(id);
+        }
         this.stats.deleted += this.deps.cache.dropSynced(u.scope, gone);
         s.sweep = null;
         s.sweptAt = this.deps.now();
@@ -1970,10 +2036,13 @@ export class SyncManager {
       s.missed.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
       s.ids.add(it.id);
+      // Whether the put left it held synced (`complete`'s count): an eviction inside it may have dropped it again.
+      if (this.deps.cache.isSynced(u.scope, it.id)) s.held.add(it.id);
+      else s.held.delete(it.id);
       // Listed while a sweep is under way (by the sweep, or by a poll between its pages): the source has it.
       s.sweep?.seen.add(it.id);
     }
-    if (trimIds(s.ids, this.o.maxItems)) {
+    if (trimIds(s.ids, this.o.maxItems, (id) => s.held.delete(id))) {
       s.cut = true;
       if (s.deep) s.deep.lost = true;
     }
@@ -2218,7 +2287,7 @@ function newSourceSync(id: string): SourceSync {
     cursor: undefined,
     exhausted: false,
     cut: false,
-    wholeAt: -1,
+    held: new IdSet(),
     frontier: Infinity,
     polledAt: -Infinity,
     sweptAt: -Infinity,
@@ -2260,12 +2329,13 @@ const budgetKey = (u: UserSync, s: SourceSync) => `${u.key}|${s.id}`;
  * Keeps a source's id set at most `max * 1.5`, dropping the longest synced first (the cache bounds the items); returns
  * whether any went (the copy is then cut, D264).
  */
-function trimIds(ids: IdSet, max: number): boolean {
+function trimIds(ids: IdSet, max: number, dropped?: (id: string) => void): boolean {
   const cap = Math.ceil(max * 1.5);
   if (ids.size <= cap) return false;
   for (const id of ids) {
     if (ids.size <= cap) break;
     ids.delete(id);
+    dropped?.(id);
   }
   return true;
 }
