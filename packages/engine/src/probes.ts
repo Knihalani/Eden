@@ -316,10 +316,14 @@ function secondClause(raw: string): number {
  * (`indirectRest`, whose text is returned as `request`), a request after a first clause of context is read from where
  * it starts (`secondClause`), and `isOpenRequest` runs strict (no log lines, no chatter).
  */
-export function pushStart(
-  raw: string,
-  opts: { open: boolean; indirect: boolean },
-): { how: "listed" | "opened"; request: string } | null {
+export interface PushStart {
+  how: "listed" | "opened";
+  request: string;
+  /** A listed start that is still no plan to act on — a question about an owned thing (D1980). */
+  open?: boolean;
+}
+
+export function pushStart(raw: string, opts: { open: boolean; indirect: boolean }): PushStart | null {
   const first = pushStartOne(raw, opts);
   if (first || !opts.indirect) return first;
   const at = secondClause(raw);
@@ -351,14 +355,12 @@ const PASSIVE_NEED = new RegExp(
  */
 export const ASKS_OWN = /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
 
-function pushStartOne(
-  raw: string,
-  opts: { open: boolean; indirect: boolean },
-): { how: "listed" | "opened"; request: string } | null {
+function pushStartOne(raw: string, opts: { open: boolean; indirect: boolean }): PushStart | null {
   if (isImperative(raw, MORE_VERBS)) return { how: "listed", request: raw };
   // An own-thing question is a request the lists know, not a shape the open gate guesses at: `listed` keeps it
-  // through the turn gate, whose "opened" score a question never reaches.
-  if (opts.open && ASKS_OWN.test(raw)) return { how: "listed", request: raw };
+  // through the turn gate, whose "opened" score a question never reaches. `open` keeps the question out of plan
+  // alerts: no plan was made by asking about one.
+  if (opts.open && ASKS_OWN.test(raw)) return { how: "listed", request: raw, open: true };
   if (opts.indirect && opts.open && PASSIVE_NEED.test(raw.slice(0, OPEN_HEAD_CHARS)))
     return { how: "opened", request: raw };
   const rest = opts.indirect ? indirectRest(raw) : null;
