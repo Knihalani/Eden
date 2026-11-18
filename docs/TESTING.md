@@ -11,7 +11,7 @@
 | `bun run typecheck:fast` | The typecheck on tsgo, TypeScript 7's native preview (the gate's checker since D816) | The inner loop |
 | `bun run typecheck:parity` | tsc and tsgo one after the other; fails when their errors differ | After bumping either checker |
 | `bun run check` | format:check + typecheck + the tests whose inputs changed (D650) | While developing |
-| `CHECK_COLD=1 bun run check` | The same with every test and no Prettier, tsc or test-result cache | Before every merge and in every review (CLAUDE.md, D657) |
+| `CHECK_COLD=1 bun run check` | The same with every test and no Prettier, tsc or test-result cache | Before every merge and in every review (D657) |
 | `TEST_CACHE=0 bun run test` | Every test file, whatever passed before | When a skipped test is in doubt |
 | `bun scripts/test-cache-audit.ts --write` | Each test file under strace: what it reads against what its key covers; rewrites `scripts/test-cache-verified.txt` | After changing `scripts/test-cache.ts`; when a test reads files in a new way |
 | `bun test ./packages/x/src/y.test.ts` | One file | Debugging; **from the repo root only** |
@@ -797,7 +797,7 @@ they would contend for CPU and GC, and the stage differences are per-mode subtra
 
 ## Rules for new tests
 
-- Behaviour changes get a test first (CLAUDE.md); a regression found in review gets its own test.
+- Behaviour changes get a test first; a regression found in review gets its own test.
 - New state gets an isolation test (two users, two tenants or two sessions).
 - No real network, no real keys: fake `fetch`, `FakeModel`, injected clocks (`pacing.test.ts`).
 - A ceiling on work (a ReDoS or linearity guard) measures CPU time (`cpuMs`, D811), not wall time. A test that must
