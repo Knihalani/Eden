@@ -2012,7 +2012,7 @@ export class SyncManager {
     const own = kept.filter((it) => it.sourceId === s.id && !this.deps.cache.isHeldGone(u.scope, it.id, now));
     // `put` itself is one synchronous pass over its items; it is called a slice at a time, each slice sized toward
     // the CPU budget from the last one's cost, a loop turn between. Same `now`, `readMark` and `stamp` every slice.
-    const changed: ContextItem[] = [];
+    let changed: ContextItem[] = [];
     let take = STORE_SLICE_FIRST;
     for (let off = 0; off < own.length;) {
       const end = Math.min(own.length, off + take);
@@ -2039,9 +2039,15 @@ export class SyncManager {
       return 0;
     }
 
+    // An item a later slice's `put` evicted again is not stored: its drop hook ran, and `onStored` would remake a
+    // card or mention for an item no longer cached (`put` filters only what its own call evicted, not a later slice's).
+    changed = changed.filter((it) => this.deps.cache.isSynced(u.scope, it.id));
     if (changedIds) for (const it of changed) changedIds.add(it.id);
     if (s.reading) s.reading.stored += changed.length;
     for (const it of own) {
+      // Deleted at the source between slices (`isHeldGone` was checked before the puts): re-checking here keeps a
+      // removed id out of `s.ids`, which `completeOf` would otherwise count as synced again.
+      if (this.deps.cache.isHeldGone(u.scope, it.id, now)) continue;
       // Listed: not missing, whatever an earlier sweep thought (an offset listing may have skipped it then).
       s.missed.delete(it.id);
       s.ids.delete(it.id); // Re-insert: the set stays oldest synced first.
