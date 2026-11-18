@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import lzma
 import os
 import shutil
 import stat
@@ -44,7 +45,7 @@ def reproducible_zip(outfile, entries, executable):
             member = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
             member.create_system = 3
             member.external_attr = (stat.S_IFREG | (0o755 if name == executable else 0o644)) << 16
-            member.compress_type = zipfile.ZIP_DEFLATED
+            member.compress_type = zipfile.ZIP_STORED if name.endswith(".xz") else zipfile.ZIP_DEFLATED
             member.file_size = source.stat().st_size
             with source.open("rb") as data, archive.open(member, "w") as dest:
                 shutil.copyfileobj(data, dest)
@@ -66,6 +67,11 @@ def build(target, version, output):
             cwd=ROOT,
             check=True,
         )
+        # xz beats zip deflate on the Bun runtime (~119 MB -> ~42 MB) and Python's lzma
+        # module unpacks it offline; the manifest records the decompressed digest.
+        packed = work / f"{binary.name}.xz"
+        with binary.open("rb") as data, lzma.open(packed, "wb", preset=9 | lzma.PRESET_EXTREME) as out:
+            shutil.copyfileobj(data, out)
         files = {**release_sources(), executable: binary}
         manifest = work / "manifest.json"
         manifest.write_text(
@@ -73,6 +79,7 @@ def build(target, version, output):
                 {
                     "format": 1, "target": target, "version": version,
                     "files": {name: digest(path) for name, path in files.items()},
+                    "packed": [executable],
                 },
                 sort_keys=True,
                 indent=2,
@@ -84,14 +91,16 @@ def build(target, version, output):
         reproducible_zip(
             archive,
             {
-                **{f"eden/{name}": path for name, path in files.items()},
+                **{f"eden/{name}.xz" if name == executable else f"eden/{name}": (packed if name == executable else path)
+                   for name, path in files.items()},
                 "install.py": HERE / "install.py",
                 "LICENSE": ROOT / "LICENSE",
                 "manifest.json": manifest,
             },
             f"eden/{executable}",
         )
-        print(f"{target}: {binary.stat().st_size} bytes executable; {archive.stat().st_size} bytes ZIP", flush=True)
+        print(f"{target}: {binary.stat().st_size} bytes executable, {packed.stat().st_size} packed; "
+              f"{archive.stat().st_size} bytes ZIP", flush=True)
         return archive.replace(output / archive_name)
 
 

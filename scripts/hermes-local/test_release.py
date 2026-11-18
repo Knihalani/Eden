@@ -1,4 +1,6 @@
+import hashlib
 import json
+import lzma
 import os
 import platform
 import re
@@ -37,19 +39,28 @@ class ReleaseTest(unittest.TestCase):
         self.dest = self.home / "plugins" / "eden"
         self.write_release("v1")
 
-    def write_release(self, version):
+    def write_release(self, version, packed=True):
         self.files = {
             "__init__.py": b"from .eden_client import register\n",
             "plugin.yaml": b"name: eden\n",
             "eden_client/__init__.py": b"def register(ctx): pass\n",
             self.binary: version.encode("ascii"),
         }
+        digests = {}
         for name, data in self.files.items():
             path = self.payload / name
             path.parent.mkdir(exist_ok=True, parents=True)
-            path.write_bytes(data)
+            if packed and name == self.binary:
+                path = self.payload / f"{name}.xz"
+                path.write_bytes(lzma.compress(data))
+                digests[name] = hashlib.sha256(data).hexdigest()
+            else:
+                path.write_bytes(data)
+                digests[name] = digest(path)
         self.manifest = {"format": 1, "target": HOST, "version": version,
-                         "files": {name: digest(self.payload / name) for name in self.files}}
+                         "files": digests}
+        if packed:
+            self.manifest["packed"] = [self.binary]
         self.save_manifest()
 
     def save_manifest(self):
@@ -151,6 +162,10 @@ class ReleaseTest(unittest.TestCase):
         (self.dest / "plugin.yaml").write_bytes(b"edited")
         self.assertIn("modified", self.run_installer(ok=False))
         self.assertEqual((self.dest / "plugin.yaml").read_bytes(), b"edited")
+        marker = json.loads((self.dest / MARKER).read_text(encoding="utf-8"))
+        marker["packed"] = [{}]
+        (self.dest / MARKER).write_text(json.dumps(marker), encoding="utf-8")
+        self.assertIn("Refusing to replace", self.run_installer(ok=False))
 
     def test_reject_wrong_platform_and_tampering(self):
         self.manifest["target"] = "linux-arm64" if HOST != "linux-arm64" else "linux-x64"
@@ -159,13 +174,39 @@ class ReleaseTest(unittest.TestCase):
         self.save_manifest()
         self.assertIn("download " + HOST, self.run_installer(ok=False))
         self.write_release("v1")
-        (self.payload / self.binary).write_bytes(b"tampered")
+        (self.payload / f"{self.binary}.xz").write_bytes(lzma.compress(b"tampered"))
         self.assertIn("modified file", self.run_installer(ok=False))
         self.assertFalse(self.home.exists())
+        self.write_release("v1")
+        (self.payload / f"{self.binary}.xz").write_bytes(b"not xz")
+        self.assertIn("modified file", self.run_installer(ok=False))
+        self.assertFalse(self.home.exists())
+        self.write_release("v1")
+        packed = self.payload / f"{self.binary}.xz"
+        packed.write_bytes(packed.read_bytes()[:8])
+        self.assertIn("modified file", self.run_installer(ok=False))
+        self.assertFalse(self.home.exists())
+        self.write_release("v1")
+        (self.payload / self.binary).write_bytes(b"v1")
+        self.assertIn("modified file", self.run_installer(ok=False))
+        self.assertFalse(self.home.exists())
+        self.write_release("v1")
+        self.manifest["packed"] = [{}]
+        self.save_manifest()
+        self.assertIn("Invalid packed entries", self.run_installer(ok=False))
         self.write_release("v1")
         self.manifest["files"]["../escape"] = "0" * 64
         self.save_manifest()
         self.assertIn("Invalid payload entry", self.run_installer(ok=False))
+
+    def test_unpacked_release_still_installs(self):
+        self.home.mkdir()
+        for orphan in self.payload.rglob("*.xz"):
+            orphan.unlink()
+        self.write_release("v1", packed=False)
+        self.run_installer()
+        for name, data in self.files.items():
+            self.assertEqual((self.dest / name).read_bytes(), data)
 
     @unittest.skipIf(os.name == "nt", "Windows symlinks need additional privileges")
     def test_refuse_redirected_plugins_directory(self):
@@ -199,16 +240,17 @@ class ReleaseTest(unittest.TestCase):
 
     def test_zip_layout_and_reproducible_metadata(self):
         a, b = self.work / "a.zip", self.work / "b.zip"
-        entries = {"install.py": self.installer, f"eden/{self.binary}": self.payload / self.binary}
+        entries = {"install.py": self.installer, f"eden/{self.binary}.xz": self.payload / f"{self.binary}.xz"}
         reproducible_zip(a, entries, f"eden/{self.binary}")
         os.utime(self.installer, (100, 100))
         reproducible_zip(b, dict(reversed(list(entries.items()))), f"eden/{self.binary}")
         self.assertEqual(a.read_bytes(), b.read_bytes())
         with zipfile.ZipFile(a) as archive:
             self.assertEqual(archive.namelist(), sorted(entries))
-            file = archive.getinfo(f"eden/{self.binary}")
+            file = archive.getinfo(f"eden/{self.binary}.xz")
             self.assertEqual(file.date_time, (1980, 1, 1, 0, 0, 0))
-            self.assertEqual(stat.S_IMODE(file.external_attr >> 16), 0o755)
+            self.assertEqual(stat.S_IMODE(file.external_attr >> 16), 0o644)
+            self.assertEqual(file.compress_type, zipfile.ZIP_STORED)
 
 
 @unittest.skipUnless(os.getenv("HERMES_RELEASE_SMOKE") and HOST in ("linux-x64", "darwin-arm64", "darwin-x64",
