@@ -578,7 +578,10 @@ const GENERIC = new Set(
 );
 /** Question words and fillers that name nothing (kept beside GENERIC: topicOf already reads that set). */
 const QUESTIONISH = new Set(
-  "when where what who whom whose which how why again exactly about still right just very".split(" "),
+  (
+    "when where what who whom whose which how why again exactly about still right just very " +
+    "do does did done is are was were be been being start starts started begin begins end ends ended happen happens held take takes"
+  ).split(" "),
 );
 
 /**
