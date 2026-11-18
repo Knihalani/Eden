@@ -22,9 +22,14 @@ const run = async (args: string[], env: Record<string, string> = {}) => {
 
 describe.skipIf(!python)("eden_client (Python)", () => {
   test("its unit tests pass", async () => {
-    const { err, code } = await run(["-m", "unittest", "test_eden_client", "test_hermes", "test_local"]);
-    expect(err).toContain("OK");
-    expect(code).toBe(0);
+    // One subprocess per module, run in parallel: the modules are independent and the combined
+    // serial run is the tail of the real-time test stage.
+    const modules = ["test_eden_client", "test_hermes", "test_local"];
+    const results = await Promise.all(modules.map((m) => run(["-m", "unittest", m])));
+    for (const { err, code } of results) {
+      expect(err).toContain("OK");
+      expect(code).toBe(0);
+    }
   }, 30_000);
 
   test("end to end against the real handler: health, observe, collect, ask, explain, forwarded items", async () => {
