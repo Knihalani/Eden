@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from build import HERE, ROOT, reproducible_zip
+from build import HERE, reproducible_zip
 from install import MARKER, TARGETS, binary_name, digest, host_target, select_home
 
 HOST = host_target(platform.system(), platform.machine())
@@ -201,27 +201,21 @@ class CompiledSmoke(unittest.TestCase):
     def run_sidecar(self, binary, work, sources):
         token = secrets.token_hex(32)
         env = {"HOME": str(work), "EDEN_LOCAL": "1", "EDEN_LOCAL_TOKEN": token, "EDEN_SOURCES_FILE": str(sources)}
-        # The independent release branch starts at pre-sidecar main. On the combined tree, no legacy env is passed.
-        server = ROOT / "packages" / "server" / "src"
-        has_local = any("EDEN_LOCAL_TOKEN" in p.read_text(encoding="utf-8")
-                        for p in server.rglob("*.ts") if not p.name.endswith(".test.ts"))
-        if not has_local:
-            print("Pre-sidecar tree: exercising legacy startup; the combined smoke requires embedded glossary data.")
-            env.update(EDEN_API_KEYS="local:" + token, EDEN_PERSIST="off", HOST="127.0.0.1", PORT="0", EDEN_PROCESSES="1")
-        log = work / "sidecar.log"
-        with log.open("wb") as output:
-            process = subprocess.Popen([str(binary)], cwd=work, env=env, stdout=output, stderr=output)
+        stdout, stderr = work / "sidecar.stdout", work / "sidecar.stderr"
+        with stdout.open("wb") as output, stderr.open("wb") as errors:
+            process = subprocess.Popen([str(binary)], cwd=work, env=env, stdin=subprocess.PIPE,
+                                       stdout=output, stderr=errors)
             try:
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline and process.poll() is None:
-                    details = log.read_text(encoding="utf-8")
-                    match = re.search(r"http://127\.0\.0\.1:(\d+)", details)
+                    details = stdout.read_text(encoding="utf-8")
+                    match = re.search(r"^EDEN_LOCAL_READY ([1-9][0-9]{0,4})\n", details, re.MULTILINE)
                     if match:
                         break
                     time.sleep(0.05)
                 else:
-                    self.fail(log.read_text(encoding="utf-8"))
-                base = match.group(0)
+                    self.fail(stdout.read_text(encoding="utf-8") + stderr.read_text(encoding="utf-8"))
+                base = f"http://127.0.0.1:{match[1]}"
                 self.assertEqual(self.request(base + "/healthz"), {"ok": True})
                 who = {"tenantId": "local", "userId": "u", "sessionId": "s"}
                 with self.assertRaises(urllib.error.HTTPError) as denied:
@@ -231,18 +225,17 @@ class CompiledSmoke(unittest.TestCase):
                 question = "Ich muss heute die Rechnung des Küchenbauers über 1.450 Pfund vom gemeinsamen Konto bezahlen."
                 response = self.request(base + "/v1/ask", {**who, "question": question}, token)
                 cited = [item["itemId"] for item in response["citations"]]
-                if has_local:
-                    self.assertIn("mail:mandate", cited, log.read_text(encoding="utf-8"))
-                    self.assertNotIn("turn-gate.bin could not be read", log.read_text(encoding="utf-8"))
-                else:
-                    self.assertNotIn("mail:mandate", cited)
+                self.assertIn("mail:mandate", cited, stderr.read_text(encoding="utf-8"))
+                self.assertNotIn("turn-gate.bin could not be read", stderr.read_text(encoding="utf-8"))
             finally:
-                process.terminate()
+                process.stdin.close()
                 try:
-                    process.wait(timeout=15)
+                    exit_code = process.wait(timeout=15)
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+                    raise
+            self.assertEqual(exit_code, 0, stderr.read_text(encoding="utf-8"))
 
     def request(self, url, body=None, token=None):
         headers = {"Content-Type": "application/json"}
