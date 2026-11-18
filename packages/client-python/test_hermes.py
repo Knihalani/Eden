@@ -260,7 +260,7 @@ class LocalHermesTests(unittest.TestCase):
         self.assertEqual(answers, ["answer to q"] * 20)
         self.assertEqual(len(self.starts()), 1)
         child_env = json.loads((self.root / "env").read_text())
-        self.assertEqual(child_env["EDEN_HOME"], str(self.home / "eden" / "data"))
+        self.assertEqual(child_env["EDEN_HOME"], str(self.home.resolve() / "eden" / "data"))
         client = p.client("0")
         self.assertEqual(client._key, child_env["EDEN_LOCAL_TOKEN"])
         requests = [json.loads(line) for line in (self.root / "requests").read_text().splitlines()]
@@ -317,16 +317,16 @@ class LocalHermesTests(unittest.TestCase):
         default.parent.mkdir(parents=True)
         default.write_text('{"users": {}}')
         p, _ = self.plugin(plugin_file=str(wrapper))
-        self.assertEqual(p.local._binary, str(bundled))
-        self.assertEqual(p.local._users, default)
+        self.assertEqual(p.local._binary, str(bundled.resolve()))
+        self.assertEqual(p.local._users, default.resolve())
         p, _ = self.plugin({"EDEN_LOCAL_BINARY": str(override), "EDEN_USER_SOURCES_FILE": "relative-users.json",
                             "EDEN_SOURCES_FILE": "relative-sources.json"}, plugin_file=str(wrapper))
-        self.assertEqual(p.local._binary, str(override))
+        self.assertEqual(p.local._binary, str(override.resolve()))
         self.assertEqual(p.local._users, Path("relative-users.json").resolve())
         self.assertEqual(p.local._sources, Path("relative-sources.json").resolve())
         bundled.unlink()
         p, _ = self.plugin(plugin_file=str(wrapper))
-        self.assertEqual(p.local._binary, str(self.binary))
+        self.assertEqual(p.local._binary, str(self.binary.resolve()))
         self.assertFalse(self.starts())
 
     def test_profile_scope_guards_all_callbacks_and_environment_read(self):
@@ -360,7 +360,7 @@ class LocalHermesTests(unittest.TestCase):
             _, ctx = self.plugin({"EDEN_URL": "http://host", "EDEN_USER_ID": "u"})
             self.assertFalse(ctx.hooks)
         p, ctx = self.plugin()
-        self.assertEqual(p._home, self.home)
+        self.assertEqual(p._home, self.home.resolve())
         self.assertTrue(ctx.tools)
 
     def test_wrapper_hermes_import_prefers_vendored_package(self):
