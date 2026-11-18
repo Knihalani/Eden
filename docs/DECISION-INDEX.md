@@ -845,4 +845,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1960 | 2026-11-15 | Adopted (closes D1936's open item; every row, value and answer unchanged): a source-map file made before D1936 is moved to the WITHOUT… | adopted |
 | D1965 | 2026-11-15 | Adopted (a test-robustness brief; no test deleted, skipped or run on less input): the load-sensitive guards read what they guard instead… | adopted |
 | D1966 | 2026-11-18 | Adopted (Hermes local): the Hermes plugin starts a private, volatile Eden sidecar on demand. | adopted |
-| D1967 | 2026-11-18 | Adopted (outputs unchanged): `namesRequestDay` builds its day patterns once per `Anchors` (`DAY_TESTS`, via `dayNamer`), rather than once… | adopted |
+| D1968 | 2026-11-18 | Adopted (outputs unchanged): `namesRequestDay` builds its day patterns once per `Anchors` (`DAY_TESTS`, via `dayNamer`), rather than once… | adopted |
