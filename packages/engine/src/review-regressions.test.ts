@@ -652,3 +652,34 @@ describe("deep audit 2026-11-05 ask-false-all-clear (D127): a failed sync poll i
     expect(r.answer).toContain("Still reading mail");
   });
 });
+
+describe("day index: a weekday recurrence with no named day is still found (day-cache-index review)", () => {
+  const NOW = Date.UTC(2026, 10, 18, 9);
+  const scope = { tenantId: "t", userId: "u1" };
+  const item = (id: string, text: string): ContextItem => ({
+    id,
+    sourceId: "cal",
+    ref: id,
+    title: `Event ${id}`,
+    text,
+    updatedAt: NOW,
+  });
+  const ids = (cache: ItemCache, day: string) =>
+    cache.dated(scope, new Set([day]), () => false, NOW, 5, 0).map((h) => h.item.id);
+
+  test("an item whose only date signal is a recurrence lands in the day index", () => {
+    const cache = new ItemCache();
+    // Thursday 2026-11-19, Friday 2026-11-20: no span, named day or ordinal, so `factDays` must index the wd mask.
+    cache.put(scope, [item("standup", "Team stand-up every Thursday 6pm"), item("weekdays", "Gym on weekdays")], NOW);
+    expect(ids(cache, "2026-11-19")).toEqual(["standup", "weekdays"]);
+    expect(ids(cache, "2026-11-21")).toEqual([]); // Saturday: neither recurs.
+    expect(ids(cache, "2026-11-20")).toEqual(["weekdays"]);
+  });
+
+  test("named days mixed with a recurrence are indexed under every day too", () => {
+    const cache = new ItemCache();
+    cache.put(scope, [item("mixed", "Offsite 20 Nov, retro every Thursday")], NOW);
+    expect(ids(cache, "2026-11-19")).toEqual(["mixed"]);
+    expect(ids(cache, "2026-11-20")).toEqual(["mixed"]);
+  });
+});

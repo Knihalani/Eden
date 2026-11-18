@@ -60,18 +60,22 @@ shared_set() {
 }
 
 # linelen_set: the line-length pass's set, same shape as shared_set's, keyed by everything that decides its verdict:
-# the checker's source, the config it reads the limit from, the file list's definition (this script) and the Bun
-# that runs it. Under FORMAT_COLD=1 it is not used.
+# the checker's source, the config it reads the limit from, the file list's definition (this script), the Bun that
+# runs it, and the version of the typescript package the checker parses with (every package.json may declare it;
+# bun.lock pins it). Under FORMAT_COLD=1 it is not used.
 linelen_set() {
-  local common key
+  local common configs key
   common=$(git rev-parse --path-format=absolute --git-common-dir) || return 1
+  configs=$(
+    git ls-files --cached --others --exclude-standard |
+      grep -E '(^|/)package\.json$' |
+      grep -v -E '^archived/'
+  ) || return 1
+  configs=$(printf '%s\n' "$configs" bun.lock scripts/format.sh scripts/check-line-length.ts .prettierrc.json |
+    grep -v '^$' | sort -u)
   key=$(
     echo "runtime bun $(bun --version)"
-    git hash-object --no-filters --stdin-paths <<'EOF'
-scripts/format.sh
-scripts/check-line-length.ts
-.prettierrc.json
-EOF
+    git hash-object --no-filters --stdin-paths <<<"$configs"
   ) || return 1
   key=$(git hash-object --stdin <<<"$key") || return 1
   mkdir -p "$common/eden-check-cache" || return 1

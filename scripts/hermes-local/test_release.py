@@ -77,9 +77,15 @@ class ReleaseTest(unittest.TestCase):
     def script_binary(self, body):
         """Replace the release binary with a runnable script (POSIX only) and re-hash the manifest."""
         path = self.payload / self.binary
-        path.write_bytes(body)
-        path.chmod(0o755)
-        self.manifest["files"][self.binary] = digest(path)
+        if self.binary in self.manifest.get("packed", []):
+            path.unlink(missing_ok=True)
+            path = self.payload / f"{self.binary}.xz"
+            path.write_bytes(lzma.compress(body))
+            self.manifest["files"][self.binary] = hashlib.sha256(body).hexdigest()
+        else:
+            path.write_bytes(body)
+            path.chmod(0o755)
+            self.manifest["files"][self.binary] = digest(path)
         self.save_manifest()
 
     @unittest.skipIf(os.name == "nt", "script sidecars need a POSIX shell")

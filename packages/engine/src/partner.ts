@@ -159,9 +159,21 @@ import {
 } from "./parties";
 import { safeLine } from "./line";
 import { datedText } from "./days";
-import { anchored, anchorsOf, hasDay, settledCut, settles, type Anchors } from "./settle";
+import {
+  anchored,
+  anchorsOf,
+  hasDay,
+  namedDays,
+  namesDay,
+  namesEntity,
+  namesRequestDay,
+  settledCut,
+  settles,
+  type Anchors,
+} from "./settle";
 import { classifySituation } from "./situation";
 import {
+  contentTerms,
   contentTermsOf,
   distinctTermIds,
   extractEntities,
@@ -362,8 +374,13 @@ interface Session {
   /** Term ids the session has seen (bounded, least recently seen first). */
   seen: Set<number>;
   ledger: Ledger;
-  /** Sketches of items delivered in this session (bounded): a near-duplicate of one is not delivered again. */
-  delivered: Sketch[];
+  /**
+   * Sketches and identifier numbers of items delivered in this session (bounded): a near-duplicate of one is not
+   * delivered again, unless its own identifiers say it is a different thing ("order 874" beside "order 881").
+   * `turn` and `terms` (the item's own content terms, bounded) let a follow-up's `carry` read what the last
+   * request's answer was about (D1976).
+   */
+  delivered: { sketch: Sketch | null; refs: ReadonlySet<string>; turn: number; terms: string[] }[];
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
   pending: Injection[];
@@ -409,6 +426,12 @@ interface Session {
    */
   request?: Cue;
   /**
+   * The session's last user cue's topic (its content terms, entities and named days) and the turn it landed on:
+   * a follow-up that names nothing of its own ("And the cable?", "Who is he again?") reads the request it
+   * follows up on from here (`carry`).
+   */
+  lastUser?: { terms: string[]; entities: string[]; time: TimeWindow | null; turn: number };
+  /**
    * `readerReuse` (D193): the latest push's reading: the request it read (`requests` then), its pool's items
    * with their content hashes, and its verdict (null when it gave none).
    */
@@ -429,6 +452,13 @@ interface Session {
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
+/** Terms a follow-up's `carry` may add to its cue: its own terms plus the previous request's and the delivered
+ * items'. */
+const CARRY_TERMS = 3;
+/** Content terms `carry` keeps per delivered item (its title leads, so its most naming terms are kept). */
+const DELIVERED_TERMS = 2;
+/** How much of a delivered item's text `carry` reads terms from once its title's terms run out. */
+const DELIVERED_TEXT_CHARS = 256;
 
 interface Cue {
   text: string;
@@ -562,6 +592,8 @@ const TIME_WORD =
 const ACTS_ON = /\b(write|note|thank|chase|ping|tell|intro(duce)?)\b/i;
 /** A question about the calendar itself: then every event on the day it names is the answer (D44). */
 const ASKS_SCHEDULE = /\b(calendar|schedule|diary|agenda|plans?|busy|free|on for|happening|booked)\b/i;
+/** A request asking whether a day it names is open ("free then?", "a clash at that time"): its events answer. */
+const ASKS_FREE = /\b(free|clash|clashing|conflict\w*|busy|double.?book\w*|overlap\w*)\b/i;
 
 /**
  * Identifier-shaped numbers a text carries: three digits or more, or thousands-separated ("2,300" → "2300"), never
@@ -572,6 +604,39 @@ const ID_NUMBERS = /(?<![\p{L}\p{N}])(?:\d{1,3}(?:,\d{3})+|\d{3,})(?![\p{L}\p{N}
 const YEARS = /\b(?:19|20)\d{2}\b/g;
 /** A number followed by a measure or money word is a quantity ("650 GBP", "30 days"), not an identifier. */
 const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|months?|years?|people|of us)\b/i;
+/**
+ * Whether an item bearing these identifier numbers and another item are the same fact. Numbers on both sides that
+ * share nothing say different things however alike the words read ("order 881 has shipped" against "order 874 was
+ * delivered"); no numbers either side, or any shared one, keeps the near-duplicate read as it was.
+ */
+const sameRef = (refs: ReadonlySet<string>, item: ContextItem): boolean => {
+  if (refs.size === 0) return true;
+  const have = idNumbers(`${item.title} ${item.text}`);
+  if (have.size === 0) return true;
+  for (const id of refs) if (have.has(id)) return true;
+  return false;
+};
+
+/** A request that moves something onto a named day: the day's other timed items are the clash it would make. */
+const MOVES = /\b(move|moved|reschedul\w*|postpone|push|switch\w*|change)\b/i;
+/**
+ * An entity used as a setting or topic, not the subject ("novels set in Delhi", "books about Rome"): the word
+ * before its first mention tells them apart — "my Lisbon flight" names the subject, "in Delhi" names a place
+ * it is about. `to`/`for`/`from` stay subject words ("the flight to Lisbon", "a refund for the kettle").
+ */
+const SETTING_WORDS = new Set(["in", "about", "around", "like", "near", "called", "named"]);
+const wordBefore = (raw: string, entity: string): string => {
+  const i = raw.toLowerCase().indexOf(entity.toLowerCase());
+  if (i < 0) return "";
+  return raw.slice(0, i).trim().split(/\s+/).pop()?.toLowerCase() ?? "";
+};
+/** Content words of a text: lowercase word characters minus the stop-words (`subject` compares these). */
+const contentWords = (text: string): string[] => {
+  const out: string[] = [];
+  for (const m of text.toLowerCase().matchAll(/[\p{L}\p{N}]+/gu)) if (!isStopword(m[0])) out.push(m[0]);
+  return out;
+};
+
 const idNumbers = (text: string): Set<string> => {
   const out = new Set<string>();
   for (const m of text.matchAll(ID_NUMBERS)) {
@@ -1167,6 +1232,12 @@ export class ContextPartner {
     }
     if (event.kind === "user_message") s.situation = classifySituation(text);
     const cue = buildCue(text, terms, s.vocab, event.at, this.deps.cache.offsetOf(s.scope), this.config.probes);
+    if (event.kind === "user_message") {
+      // `carry`: a follow-up that names no person and almost no terms of its own asks about what the last
+      // request was about; its cue is widened with that request's topic before it is ranked.
+      this.carry(s, cue);
+      s.lastUser = { terms: cue.text.split(" ").filter(Boolean), entities: cue.entities, time: cue.time, turn: s.turn };
+    }
     if (event.kind === "external") cue.external = true;
     cue.arrived = this.now();
     cue.request = s.requests;
@@ -1392,7 +1463,7 @@ export class ContextPartner {
       if (!sameEntry(u.set, s.ledger.entry(id))) continue;
       s.ledger.restore(id, u.was);
       if (!u.sketch) continue;
-      const at = s.delivered.lastIndexOf(u.sketch);
+      const at = s.delivered.findIndex((d) => d.sketch === u.sketch);
       if (at >= 0) s.delivered.splice(at, 1);
     }
   }
@@ -2419,6 +2490,9 @@ export class ContextPartner {
       );
       // The answer is handed out as it is returned: its items are noted as shown now.
       this.handOut(s, injection);
+      // An explicit ask's answer carries its topic too: its items arrive with no sketch, but a follow-up's
+      // `carry` still reads what was handed (D1976).
+      for (const item of items) this.recordDelivered(s, item, null);
       if (this.config.partyCheck) this.notePacketParties(s, answer, injection.citations);
       // A packet still queued for the agent whose every item this answer says in full is not handed out again; one it
       // covers only in part stays queued (its other items are news). Removed, never `withdraw`n: the agent now has
@@ -3862,7 +3936,10 @@ export class ContextPartner {
         .filter((h) => options.ignoreLedger || revised.has(h.item.id) || s.ledger.isFresh(h.item.id, s.turn))
         // A near-duplicate of something already delivered this session (a reply quoting it, a synced copy) is old news.
         .filter(
-          (h) => options.ignoreLedger || revised.has(h.item.id) || !s.delivered.some((d) => nearDuplicate(d, h.sketch)),
+          (h) =>
+            options.ignoreLedger ||
+            revised.has(h.item.id) ||
+            !s.delivered.some((d) => nearDuplicate(d.sketch, h.sketch) && sameRef(d.refs, h.item)),
         )
         // What the agent already has in front of it (a tool result it fetched, its own read-out) is not news either.
         .filter((h) => options.ignoreLedger || !this.alreadyHas(s, h.item, h.doc, vocab))
@@ -3886,7 +3963,9 @@ export class ContextPartner {
               .slice(0, i)
               .some(
                 (y) =>
-                  nearDuplicate(x.sketch, y.sketch) && startDay(x.item, cue.offset) === startDay(y.item, cue.offset),
+                  nearDuplicate(x.sketch, y.sketch) &&
+                  startDay(x.item, cue.offset) === startDay(y.item, cue.offset) &&
+                  sameRef(idNumbers(`${x.item.title} ${x.item.text}`), y.item),
               ),
         )
     );
@@ -4068,6 +4147,22 @@ export class ContextPartner {
       const byPerson = [...withPerson].sort((a, b) => b.score - a.score || near(a) - near(b));
       return { items: byPerson.slice(0, 1), how: "person" };
     }
+    // `groundSubject` (D1976): a request about a subject it names gets the context around it, not the best match alone.
+    // An availability ask on a named day is not about the subject but about the day: `time-free` answers it below.
+    const asksFree =
+      time !== null &&
+      time.days.size > 0 &&
+      (eventKind === "user_message" || eventKind === "ask") &&
+      ((onlyTime(cue) && ASKS_SCHEDULE.test(cue.raw)) || (/\?\s*$/.test(cue.raw) && ASKS_FREE.test(cue.raw)));
+    if (
+      this.config.groundSubject &&
+      !asksFree &&
+      cue.entities.length > 0 &&
+      (acts || /\?\s*$/.test(cue.raw) || isAction(cue.raw))
+    ) {
+      const subject = this.subject(s, cue, pool);
+      if (subject.length > 0) return { items: subject.slice(0, this.max()), how: "subject" };
+    }
     if (!time) return none;
     const events = pool.filter((x) => (time.days.size > 0 ? onDay(x) : time.next && upcoming(x)));
     // A title that holds a name the request uses whole ("Priya Raman talk"); one shared uncommon word ("Globex" for
@@ -4088,10 +4183,189 @@ export class ContextPartner {
     // The whole day only for a question about the calendar and nothing else ("what's on my calendar on Sunday?"): any
     // other word, even a lowercase first name ("the agenda with sam this week"), says the day's events are not all
     // that is asked.
-    if ((eventKind === "user_message" || eventKind === "ask") && onlyTime(cue) && ASKS_SCHEDULE.test(cue.raw)) {
-      return { items: events.sort(soonest).slice(0, this.max()), how: "time-schedule" };
+    if (
+      (eventKind === "user_message" || eventKind === "ask") &&
+      time.days.size > 0 &&
+      ((onlyTime(cue) && ASKS_SCHEDULE.test(cue.raw)) || (/\?\s*$/.test(cue.raw) && ASKS_FREE.test(cue.raw)))
+    ) {
+      // "Is Thursday morning free?", "do I have a clash then?": the day's events are the answer however the
+      // rest of the request reads (D44). `time-schedule` stays the narrow shape it was (the listing).
+      return { items: events.sort(soonest).slice(0, this.max()), how: "time-free" };
     }
     return none;
+  }
+
+  /**
+   * `subject` (D1976): a request about a subject it names ("my Lisbon flight", "the Smeg kettle") gets the context
+   * around it, not the best match alone: the items about the named thing, the timed items of a day the request
+   * moves it to (the train Saturday a new flight would clash with), and a companion the context needs beside the
+   * subject (the booking's change policy, the shop's returns window). Single-word entities anchor here — the
+   * whole-word title/text match, a date or a second shared term, and `contradicts`/bulk mail/`maxItemsPerInjection`
+   * bound it the way every ground is bound.
+   */
+  private subject(s: Session, cue: Cue, pool: Scored[]): Scored[] {
+    // Entities the request uses as its subject, not its setting ("my Lisbon flight", never "novels set in Delhi");
+    // a stop-word the extractor keeps ("The Smeg") is not part of the name.
+    const entities = cue.entities
+      .map((e) =>
+        e
+          .trim()
+          .split(/\s+/)
+          .filter((w) => !isStopword(w.toLowerCase()))
+          .join(" "),
+      )
+      .filter((e) => e.length > 0 && !SETTING_WORDS.has(wordBefore(cue.raw, e)));
+    if (entities.length === 0) return [];
+    const anchors = anchorsOf(entities, cue.time?.days ?? null, cue.raw, cue.offset);
+    const entityWords = Math.max(1, ...entities.map((e) => e.trim().split(/\s+/).length));
+    const dated = (item: ContextItem) => namedDays(`${item.title} ${item.text}`).length > 0;
+    // About the named thing: the entity a whole word of its title or of its text, and the item a dated record or
+    // one also holding another of the request's terms — a bare mention is a lookalike until a second term binds it.
+    const subject = pool.filter(
+      (x) =>
+        (titleNames(entities, x.item) === "whole" || namesEntity(x.item, anchors)) &&
+        (dated(x.item) || x.matched > entityWords),
+    );
+    if (subject.length === 0) return [];
+    const out = [...subject];
+    const has = new Set(out.map((x) => x.item.id));
+    const add = (x: Scored) => {
+      if (!has.has(x.item.id)) {
+        has.add(x.item.id);
+        out.push(x);
+      }
+    };
+    // The day the request moves it to: the day's other timed items are the clash it would make — never a day the
+    // subject's items sit on, the one it moves from (a move naming both days finds those too). The day it moves
+    // from is one the request names that a subject's item also names — the booking's other days ("back Sunday 15
+    // Nov") are not it.
+    const requestNamed = namedDays(cue.raw);
+    const fromDays =
+      cue.time !== null && cue.time.days.size > 0 && MOVES.test(cue.raw)
+        ? namedDays(subject.map((x) => `${x.item.title} ${x.item.text}`).join(" ")).filter((f) =>
+            requestNamed.some((r) => r.day === f.day && r.month === f.month),
+          )
+        : [];
+    const onFromDay = (item: ContextItem) => {
+      const on = startDay(item, cue.offset);
+      const d = on === null ? null : /^\d{4}-(\d{2})-(\d{2})$/.exec(on);
+      return (
+        (d !== null && fromDays.some((f) => f.day === Number(d[2]) && f.month === Number(d[1]) - 1)) ||
+        namesDay(`${item.title} ${item.text}`, fromDays)
+      );
+    };
+    if (fromDays.length > 0 || (cue.time !== null && cue.time.days.size > 0 && MOVES.test(cue.raw))) {
+      for (const x of pool) if (!onFromDay(x.item) && namesRequestDay(x.item, anchors)) add(x);
+    }
+    // A companion the subject's context needs beside it: a term of the request's and one of the subject's (the
+    // returns policy that answers "can I still get a refund"), or two of the subject's (the booking's change
+    // policy — the request may share no word with it at all).
+    const subjectTerms = new Set<string>();
+    for (const x of subject) for (const t of contentWords(`${x.item.title} ${x.item.text}`)) subjectTerms.add(t);
+    const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
+    // Shared terms count on letters only: a bare number ("5") binds two items on nothing.
+    const companion = (item: ContextItem) => {
+      let shared = 0;
+      let req = false;
+      for (const t of contentWords(`${item.title} ${item.text}`)) {
+        if (subjectTerms.has(t)) {
+          if (/\p{L}/u.test(t)) shared++;
+        } else if (requestTerms.has(t)) req = true;
+      }
+      return shared >= 2 || (shared >= 1 && req);
+    };
+    for (const x of pool) if (!has.has(x.item.id) && !onFromDay(x.item) && companion(x.item)) add(x);
+    // Companions the request's own words never ranked in (a policy sharing nothing but the subject's terms).
+    const vocab = this.deps.cache.peekVocab(s.scope);
+    if (vocab !== undefined && out.length < this.max()) {
+      const q = termIds([...subjectTerms].join(" "), vocab, false);
+      const query: number[] = [];
+      for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+      if (query.length > 0) {
+        for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now())) {
+          if (out.length >= this.max()) break;
+          if (
+            has.has(h.item.id) ||
+            bulkMail(h.item) ||
+            !s.ledger.isFresh(h.item.id, s.turn) ||
+            s.delivered.some((d) => nearDuplicate(d.sketch, h.sketch) && sameRef(d.refs, h.item)) ||
+            // A copy `rank` folded away is no more welcome as a companion (the same near-duplicate fold).
+            out.some(
+              (o) =>
+                nearDuplicate(o.sketch, h.sketch) &&
+                startDay(o.item, cue.offset) === startDay(h.item, cue.offset) &&
+                sameRef(idNumbers(`${h.item.title} ${h.item.text}`), o.item),
+            ) ||
+            this.alreadyHas(s, h.item, h.doc, vocab)
+          ) {
+            continue;
+          }
+          const x: Scored = { item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc };
+          if (this.contradicts(x, cue) || !companion(h.item)) continue;
+          add(x);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * `carry`: a user message that names nothing of its own (no entity, at most two content terms) is a follow-up
+   * on the request before it — "and the cable?", "who is he again?", "is that time free instead?". Its cue
+   * takes the last request's terms and entity words, the content terms of the items that request's answer
+   * delivered, and its named days when it names none, so the lookup reads what it is about. A cue with an entity
+   * or three terms of its own stands on its own.
+   */
+  private carry(s: Session, cue: Cue): void {
+    const last = s.lastUser;
+    if (!last || cue.entities.length > 0 || s.turn - last.turn > 6) return;
+    const own = cue.text ? cue.text.split(" ") : [];
+    if (own.length > 2) return;
+    // Only a question-shaped follow-up reads the request before it: a bare statement this sparse is chatter
+    // about its own words, not a pointer back.
+    if (!/\?\s*$/.test(cue.raw)) return;
+    // A follow-up made only of stop-words ("and him?", "what about it?") is dropped earlier by `wantsLookup`
+    // and never reaches here — chosen on purpose: no own terms to anchor the carry, and the previous request's
+    // injection already answered it or the follow-up is noise.
+    const have = new Set(own);
+    const extra: string[] = [];
+    // What the last request's answer delivered carries its topic first: "order", "shipped", "arrives" live on the
+    // item handed, not in the request's words, so a sparse question otherwise shares only its own term with the
+    // sibling it asks after ("and the cable?" next to the other order). Bounded to the items sent since that
+    // request; the just-delivered item itself stays out through the delivered suppression above (`sameRef`).
+    // Kept few: every term the cue adds costs the candidates' coverage, so the cap must leave a follow-up's
+    // match a share.
+    for (const d of s.delivered) {
+      // At or after the request's turn: a packet handed out a turn late (an intervening tool or agent event)
+      // still belongs to the answer the follow-up follows.
+      if (d.turn < last.turn) continue;
+      for (const t of d.terms) {
+        if (extra.length >= CARRY_TERMS) break;
+        if (!have.has(t)) {
+          have.add(t);
+          extra.push(t);
+        }
+      }
+      if (extra.length >= CARRY_TERMS) break;
+    }
+    for (const t of last.terms) {
+      if (extra.length >= CARRY_TERMS) break;
+      if (!have.has(t)) {
+        have.add(t);
+        extra.push(t);
+      }
+    }
+    for (const e of last.entities) {
+      for (const w of e.toLowerCase().split(/\s+/)) {
+        if (extra.length >= CARRY_TERMS) break;
+        if (!have.has(w)) {
+          have.add(w);
+          extra.push(w);
+        }
+      }
+    }
+    if (extra.length > 0) cue.text = `${cue.text} ${extra.join(" ")}`.trim();
+    cue.time ??= last.time;
   }
 
   /**
@@ -4398,7 +4672,7 @@ export class ContextPartner {
         .slice(0, 3)
         .filter(
           (x) =>
-            (named.length > 0 ? mentionsAny(words, x.item) : true) &&
+            (named.length === 0 || (/\?\s*$/.test(cue!.raw) && x.matched >= 2) || mentionsAny(words, x.item)) &&
             !bulkMail(x.item) &&
             x.matched >= 2 &&
             x.score >= c.fallbackScore * 0.5 &&
@@ -6548,6 +6822,24 @@ export class ContextPartner {
     return injection;
   }
 
+  /**
+   * What a delivery handed: the item's sketch (null for an ask's answer, which arrives with none), identifier
+   * numbers and the turn, plus the bounded content terms a follow-up's `carry` inherits (D1976). Title first so
+   * its most naming terms win the cap. Number-bearing terms are kept out: a carried identifier ("881") would
+   * make the follow-up's own `contradicts` drop the sibling it was meant to reach.
+   */
+  private recordDelivered(s: Session, item: ContextItem, sketch: Sketch | null): void {
+    s.delivered.push({
+      sketch,
+      refs: idNumbers(`${item.title} ${item.text}`),
+      turn: s.turn,
+      terms: contentTerms(`${item.title} ${item.text.slice(0, DELIVERED_TEXT_CHARS)}`, s.vocab)
+        .filter((t) => !/\d/.test(t))
+        .slice(0, DELIVERED_TERMS),
+    });
+    if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+  }
+
   private build(
     s: Session,
     scored: Scored[],
@@ -6566,8 +6858,9 @@ export class ContextPartner {
         scored.map((x) => x.item.id),
       );
     }
-    for (const x of scored) if (x.sketch) s.delivered.push(x.sketch);
-    if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+    for (const x of scored) {
+      if (x.sketch) this.recordDelivered(s, x.item, x.sketch);
+    }
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
     s.ledger.mark(
       scored.map((x) => x.item.id),
