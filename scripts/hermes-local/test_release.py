@@ -84,6 +84,7 @@ class ReleaseTest(unittest.TestCase):
     def test_sticky_explicit_and_dedicated_profiles(self):
         profile = self.home / "profiles" / "work"
         profile.mkdir(parents=True)
+        (profile / "config.yaml").touch()
         (self.home / "active_profile").write_text("work\n", encoding="utf-8")
         text = self.run_installer("--dry-run")
         self.assertIn(str(profile / "plugins" / "eden"), text)
@@ -100,6 +101,43 @@ class ReleaseTest(unittest.TestCase):
         self.assertIn(str(dedicated), text)
         self.assertTrue((dedicated / "plugins" / "eden" / MARKER).exists())
         self.assertIn("does not exist", self.run_installer("--profile", "missing", ok=False))
+
+    def test_named_and_sticky_profiles_must_be_live(self):
+        profiles = self.home / "profiles"
+        work = profiles / "work"
+        work.mkdir(parents=True)
+        reserved = profiles / "sudo"
+        reserved.mkdir()
+        (reserved / "config.yaml").touch()
+        active = self.home / "active_profile"
+        for name, message in (("work", "does not exist"), ("sudo", "reserved")):
+            active.write_text(f"  {name.upper()}\n", encoding="utf-8")
+            self.assertIn(message, self.run_installer("--dry-run", ok=False))
+            self.assertIn(message, self.run_installer("--profile", name, "--dry-run", ok=False))
+        (work / "state.db").touch()
+        active.write_text("  Work \n", encoding="utf-8")
+        self.assertIn(str(work), self.run_installer("--dry-run"))
+        self.assertIn(str(work), self.run_installer("--profile", "work", "--dry-run"))
+        (profiles / ".deleted").mkdir()
+        (profiles / ".deleted" / "work").touch()
+        self.assertIn("does not exist", self.run_installer("--dry-run", ok=False))
+        self.assertIn("does not exist", self.run_installer("--profile", "work", "--dry-run", ok=False))
+        self.assertIn(str(work), self.run_installer("--hermes-home", str(work), "--dry-run"))
+        self.env["HERMES_HOME"] = str(work)
+        self.assertIn(str(work), self.run_installer("--dry-run"))
+        self.assertIn("does not exist", self.run_installer("--profile", "work", "--dry-run", ok=False))
+
+    def test_active_profile_read_errors_fall_back_but_bom_is_invalid(self):
+        self.home.mkdir()
+        active = self.home / "active_profile"
+        active.write_bytes(b"\xff")
+        self.assertIn(str(self.dest), self.run_installer("--dry-run"))
+        active.unlink()
+        active.mkdir()
+        self.assertIn(str(self.dest), self.run_installer("--dry-run"))
+        active.rmdir()
+        active.write_text("work", encoding="utf-8-sig")
+        self.assertIn("Invalid Hermes profile name", self.run_installer("--dry-run", ok=False))
 
     def test_refuse_clobber_and_preserve_backup(self):
         self.dest.mkdir(parents=True)
@@ -153,6 +191,10 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(select_home(args, {}, "Windows", self.work), self.work / "AppData" / "Local" / "hermes")
         self.assertEqual(select_home(args, {"LOCALAPPDATA": str(self.work)}, "Windows", self.home),
                          self.work / "hermes")
+        self.assertEqual(select_home(args, {"LOCALAPPDATA": f"  {self.work}  "}, "Windows", self.home),
+                         self.work / "hermes")
+        self.assertEqual(select_home(args, {"LOCALAPPDATA": "  "}, "Windows", self.work),
+                         self.work / "AppData" / "Local" / "hermes")
 
     def test_zip_layout_and_reproducible_metadata(self):
         a, b = self.work / "a.zip", self.work / "b.zip"

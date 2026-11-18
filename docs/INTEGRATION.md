@@ -587,8 +587,9 @@ You do not need an Eden account, API key, Bun install, or a separate terminal ru
    its SHA-256 with `SHA256SUMS` (`sha256sum FILE` on Linux, `shasum -a 256 FILE` on macOS, or
    `Get-FileHash FILE -Algorithm SHA256` in PowerShell). Extract the verified archive.
 2. Inside the extracted directory, run `python3 install.py` on Linux/macOS or `py -3 install.py` on Windows
-   (Python 3.10+). The installer uses your active profile; use `--profile NAME` or `--hermes-home PATH` to select
-   another. Run the enable command it prints. For an upgrade, stop Hermes first and rerun the installer.
+   (Python 3.10+). The installer uses your active profile; use `--profile NAME` to select another.
+   Use `--hermes-home PATH` to select an exact home for a custom Hermes build.
+   Run the enable command it prints. For an upgrade, stop Hermes first and rerun the installer.
 3. Open a new Hermes session (or restart your Hermes gateway). If you restrict toolsets, include `eden` in
    `hermes tools` or in your existing list passed via `--toolsets`. On Hermes with Tool Search, `ask_context`
    is discoverable through the tool catalog instead of always showing as an eager tool.
