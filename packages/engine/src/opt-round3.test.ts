@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { foldEchoes } from "./fold";
-import { namesParticipant } from "./grounding";
+import { namesParticipant, startDay } from "./grounding";
 import { isPacked, packItem } from "./packed-text";
 import { itemReadings, shownReadings } from "./partner";
 import { mentions, mentionsAny, mentionText, mentionWords, settled } from "./probes";
-import { type Anchors, anchorsOf, namesEntity } from "./settle";
+import { type Anchors, anchorsOf, namesEntity, namesRequestDay } from "./settle";
 import { extractTypedEntities, PERSISTABLE_KINDS } from "./text";
 
 /*
@@ -131,6 +131,129 @@ function namesEntityBefore(item: ContextItem, a: Anchors): boolean {
     return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(text);
   });
 }
+
+const OLD_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+function namesRequestDayBefore(item: ContextItem, a: Anchors): boolean {
+  if (a.days.size === 0 && a.named.length === 0) return false;
+  const start = startDay(item, a.offset);
+  if (start !== null && a.days.has(start)) return true;
+
+  const days = [...a.named];
+  for (const d of a.days) {
+    const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(d);
+    if (m) days.push({ day: Number(m[2]), month: Number(m[1]) - 1 });
+  }
+  if (days.length === 0) return false;
+  const text = `${item.title}\n${item.text}`.toLowerCase();
+  for (const { day, month } of days) {
+    const name = String.raw`${OLD_MONTHS[month]!}[a-z]*`;
+    const dd = String(day).padStart(2, "0");
+    const mm = String(month + 1).padStart(2, "0");
+    const ordinal =
+      day % 10 === 1 && day !== 11
+        ? "st"
+        : day % 10 === 2 && day !== 12
+          ? "nd"
+          : day % 10 === 3 && day !== 13
+            ? "rd"
+            : "th";
+    const pattern = new RegExp(
+      String.raw`\b${day}(?:st|nd|rd|th)?(?:\s+of)?\s+${name}\b|\b${name}\s+${day}(?:st|nd|rd|th)?\b|\b${day}${ordinal}\b|\b0?${day}/${mm}\b|\b${dd}\.${mm}\b`,
+    );
+    if (pattern.test(text)) return true;
+  }
+  return false;
+}
+
+describe("D1966: namesRequestDay's per-request day tester", () => {
+  test("namesRequestDay matches its per-item pattern for seeded requests and items", () => {
+    const r = rng(19661);
+    const rawRequests = ["31st of October", "Oct 3", "the 12th", "30/10", "none"];
+    const windows = Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`);
+    const anchors: Anchors[] = [];
+    for (let count = 0; count <= 14; count++) {
+      const shuffled = [...windows];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(r() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+      }
+      for (const raw of rawRequests) {
+        anchors.push(anchorsOf([], new Set(shuffled.slice(0, count)), raw, 0));
+      }
+    }
+
+    const forms = [
+      ["Meeting 31st of October", "No other date"],
+      ["OCT 3", "Held at noon"],
+      ["the 12th", ""],
+      ["Invoice", "due 30/10"],
+      ["", "31/11"],
+      ["", "130th"],
+      ["", "3RD OF OCTOBER"],
+      ["October 31ST", "A follow-up"],
+      ["", "30.10"],
+      ["", "31 Oct"],
+      ["Meeting on the 12TH", ""],
+      ["", "No date here"],
+    ];
+    const items: ContextItem[] = [];
+    let nextId = 0;
+    for (const [title, body] of forms) {
+      const plain: ContextItem = {
+        id: `day:${nextId++}`,
+        sourceId: "calendar",
+        ref: String(nextId),
+        title: title!,
+        text: body!,
+      };
+      items.push(plain);
+      const repeated = `${body || title} · `;
+      const packed = packItem({
+        ...plain,
+        id: `day:${nextId++}`,
+        ref: String(nextId),
+        text: repeated.repeat(40),
+      });
+      expect(isPacked(packed)).toBe(true);
+      items.push(packed);
+    }
+    for (const a of anchors) {
+      const day = a.days.values().next().value;
+      if (day) {
+        items.push({
+          id: `day:${nextId++}`,
+          sourceId: "calendar",
+          ref: String(nextId),
+          title: "Undated title",
+          text: "Undated body",
+          meta: { start: `${day}T09:00:00Z` },
+        });
+      }
+    }
+    items.push({
+      id: `day:${nextId++}`,
+      sourceId: "calendar",
+      ref: String(nextId),
+      title: "Undated title",
+      text: "Undated body",
+      meta: { start: "2027-01-01T09:00:00Z" },
+    });
+
+    let yes = 0;
+    let no = 0;
+    for (const a of anchors) {
+      for (const item of items) {
+        const want = namesRequestDayBefore(item, a);
+        expect(namesRequestDay(item, a)).toBe(want);
+        if (want) yes++;
+        else no++;
+      }
+    }
+    expect(yes).toBeGreaterThan(0);
+    expect(no).toBeGreaterThan(0);
+  });
+});
 
 describe("D1920: memos and code-unit passes read as the code they replaced", () => {
   test("settledOf, per item object, is settled afresh", () => {
