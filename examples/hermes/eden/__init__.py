@@ -1,5 +1,13 @@
-"""Hermes loads ``register(ctx)`` from here; the plugin itself is ``eden_client.hermes`` (pip install the Eden Python
-client into Hermes' environment first). Configuration: EDEN_USER_ID (required), EDEN_URL, EDEN_API_KEY,
-EDEN_TENANT_ID, EDEN_CHECK_TOOLS. See docs/INTEGRATION.md, "Hermes Agent"."""
+"""Hermes entry point: prefer vendored ``eden_client``, else the installed package. Local mode discovers
+``bin/eden-local`` beside this file; set EDEN_URL for hosted mode (then EDEN_USER_ID is required).
+Configuration and profile-isolation rules: ``eden_client.hermes`` and docs/INTEGRATION.md, "Hermes Agent".
+"""
 
-from eden_client.hermes import register  # noqa: F401
+try:
+    from .eden_client.hermes import register as _r
+except ImportError:
+    from eden_client.hermes import register as _r
+
+
+def register(ctx):
+    _r(ctx, plugin_file=__file__)

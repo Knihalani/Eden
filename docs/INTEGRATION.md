@@ -622,10 +622,23 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   the identity down. Not `on_session_end`, which Hermes fires after every turn: ending Eden's session there would
   drop its queued packets, what it knows the agent read and its per-session budget each turn.
 
-`EDEN_USER_ID` names the user (one Hermes install serves one user; mapped with `eden_id`); without it the plugin
-registers nothing and says so on stderr. Every hook fails open. The hook names and contracts were read in Hermes'
-source at the lab's pin (06433066); the plugin is tested against a stand-in for Hermes' plugin context and the real
-Eden server (`examples/onboarding/integration-defaults.test.ts`), not run inside Hermes in this repository.
+The example above selects **hosted mode**: a non-empty `EDEN_URL` requires `EDEN_USER_ID` (mapped with `eden_id`),
+else registers nothing. With **no `EDEN_URL`**, the plugin supervises a local-protocol binary: explicit
+`EDEN_LOCAL_BINARY`, else `bin/eden-local` beside the wrapper (`.exe` on Windows), else
+`<Hermes home>/plugins/eden/bin/eden-local`. No PATH lookup or download; a missing binary disables registration.
+You may vendor the whole `eden_client` directory beside the wrapper instead of pip installing; vendored wins.
+Local tenant is `local`, user is `eden_id(EDEN_USER_ID)` or `local`; ambient API key/tenant are ignored with a warning.
+Data/logs are `<home>/eden/data` and `<home>/eden/logs/eden-local.log`. Source paths come from
+`EDEN_SOURCES_FILE` / `EDEN_USER_SOURCES_FILE` (made absolute), else an existing `<home>/eden/sources.json` is used as
+the user sources file. For the default local identity its key is `local/local`. No Hermes config is read.
+
+Both modes refuse registration when active home differs from routing/process launch home, since environment
+variables belong to the launch profile. Every callback checks it is still in the registered home. Without Hermes
+home helpers, `$HERMES_HOME` or the platform default is a standalone scope. Local startup is lazy (not at registration
+or session end), clients rebuild after child restarts, and `atexit` / `ctx.on_unload` close the child. Local clients
+bypass proxies. Startup plus configured calls totals 14.6 s for pre-LLM, 10.8 s for pre-tool, 18 s for ask; urllib's
+trickled-header limitation still applies. Client failures are no context, but Hermes v0.21.5's 30 s hook timeout can
+fail closed for pre-tool. See the Python README for the full local environment and lifetime contract.
 
 **Keep the source tools beside Eden only** when the agent needs them for what `ask_context` does not do: acting
 through the connector (sending, booking, writing: keep those tools, and the plugin checks them), browsing a whole
