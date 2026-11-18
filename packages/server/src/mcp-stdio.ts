@@ -52,7 +52,8 @@ const partner = buildPartner({
   // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112), as in the HTTP server.
   models: modelRolesFromEnv(),
 });
-// Before the transport opens, so the first ask does not compile the secret gate.
-warmGate();
 const server = createMcpServer(partner, { tenantId, userId, sessionId: newId("mcp") });
 await server.connect(new StdioServerTransport());
+// After connect, so the compile stays off the client's wait for a ready server but still lands before its first
+// ask — one sent inside it just queues behind it once (the local mode's shape, D1969).
+setTimeout(warmGate, 0).unref();
