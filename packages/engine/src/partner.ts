@@ -108,6 +108,7 @@ import {
 import {
   absenceSpan,
   ASKS_OWN,
+  ASKS_WHO,
   cleanEntities,
   daysNamed,
   isAction,
@@ -1278,7 +1279,17 @@ export class ContextPartner {
     const ranked = this.rank(s, cue);
     if (ranking) spans!.close(ranking, { candidates: ranked.length });
     const sure = spans?.open("fast.confident", cue.span);
-    const fast = this.confident(ranked, cue);
+    let fast = this.confident(ranked, cue);
+    // "Who is he?" (D1982): when an item's title IS the carried person's name, it alone answers.
+    if (ASKS_WHO.test(cue.raw) && event.kind === "user_message") {
+      const who = cleanEntities(cue.entities)
+        .filter(isPersonName)
+        .map((e) => e.toLowerCase());
+      if (who.length > 0) {
+        const record = ranked.filter((x) => who.includes(x.item.title.trim().toLowerCase()));
+        if (record.length > 0) fast = record;
+      }
+    }
     if (sure) spans!.close(sure, { sure: fast.length });
     // A stale cached copy is not delivered from here: the slow path re-reads it first (D40). A cue in cooldown is not
     // looked up again, but the cache may hold something new for it (another question about the same person).
@@ -4382,7 +4393,7 @@ export class ContextPartner {
     // only earlier is last year's look-alike (the 2025 renewal notice beside the 2026 one) — a sibling, not a
     // pick, the same rule `linked` applies when a chosen item's companions are found.
     const year = docYears;
-    // Per entity, so a request naming two subjects never lets one's newer record date the other's (D1981).
+    // Per entity, so a request naming two subjects never lets one's newer record date the other's (D1982).
     const phraseWords = entities.map((e) =>
       (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
     );
@@ -4677,6 +4688,18 @@ export class ContextPartner {
     // request; the just-delivered item itself stays out through the delivered suppression above (`sameRef`).
     // Kept few: every term the cue adds costs the candidates' coverage, so the cap must leave a follow-up's
     // match a share.
+    // The last request's named person is what a follow-up points back at ("Who is he again?"), so the name's
+    // words go ahead of the delivered items' and the request's other terms: within the same cap, half a name
+    // ("leo" without "park") matches the right person nowhere and everything mentioning a first name.
+    for (const e of last.entities) {
+      for (const w of e.toLowerCase().split(/\s+/)) {
+        if (extra.length >= CARRY_TERMS) break;
+        if (!have.has(w)) {
+          have.add(w);
+          extra.push(w);
+        }
+      }
+    }
     for (const d of s.delivered) {
       // At or after the request's turn: a packet handed out a turn late (an intervening tool or agent event)
       // still belongs to the answer the follow-up follows.
@@ -4697,16 +4720,30 @@ export class ContextPartner {
         extra.push(t);
       }
     }
-    for (const e of last.entities) {
-      for (const w of e.toLowerCase().split(/\s+/)) {
-        if (extra.length >= CARRY_TERMS) break;
-        if (!have.has(w)) {
-          have.add(w);
-          extra.push(w);
-        }
-      }
-    }
     if (extra.length > 0) cue.text = `${cue.text} ${extra.join(" ")}`.trim();
+    // A pronoun-person follow-up ("Who is he again?", D1982) names nobody: its question words are noise, so the
+    // carried name is the whole query and joins the entities the name-paths match on.
+    if (ASKS_WHO.test(cue.raw) && last.entities.length > 0) {
+      // "who is he" asks after a person: of the last request's names only the person-shaped ones (two
+      // words, or an address) can answer it — "Leo Park from Acme" leaves Acme's own record out.
+      const people = last.entities.filter(isPersonName);
+      const named = people.length > 0 ? people : last.entities;
+      cue.entities = [...named];
+      cue.text = named.join(" ").toLowerCase();
+      // The name is now the cue's identity: rebuild key and id as a hash of the full carried name list, so a
+      // who-ask after a different person is no repeat of this one and reads its own cache — "Who is he?" and
+      // "Who is she?" start as the same empty key, and no name list is long enough to truncate a digest.
+      cue.key = `who:${createHash("sha256")
+        .update(
+          cue.entities
+            .map((e) => e.toLowerCase())
+            .sort()
+            .join("|"),
+        )
+        .digest("hex")
+        .slice(0, 24)}`;
+      cue.id = `cue:${createHash("sha256").update(cue.key).digest("hex").slice(0, 10)}`;
+    }
     cue.time ??= last.time;
   }
 
@@ -6746,8 +6783,20 @@ export class ContextPartner {
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       const confiding = spans?.open("confident", cue.span);
-      const sure = this.confident(scored, cue);
+      let sure = this.confident(scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
+      // "Who is he?" (D1982) asks for the person's own record — `carry` made the name the cue's entities: when the
+      // pool holds an item whose title IS that name, it alone answers; everything only mentioning the person
+      // ("Leo Park shared a photo album") is context, not the record.
+      if (ASKS_WHO.test(cue.raw) && (eventKind === "user_message" || eventKind === "ask")) {
+        const who = cleanEntities(cue.entities)
+          .filter(isPersonName)
+          .map((e) => e.toLowerCase());
+        if (who.length > 0) {
+          const record = scored.filter((x) => who.includes(x.item.title.trim().toLowerCase()));
+          if (record.length > 0) sure = record;
+        }
+      }
       const probedSet = new Set(probedIds ?? []);
       const factsNow = () => this.factsOf(s, cue, scored, eventKind, { probed: probedSet, bridged, carded: carded });
       // The rule paths decide when no model does.
@@ -7870,7 +7919,14 @@ function eventText(e: AgentEvent): string {
 /** Proactive lookups start from what the user or the world says, not from the agent's own words. */
 function wantsLookup(e: AgentEvent, text: string, terms: Uint32Array, vocab: Vocab): boolean {
   if (e.kind !== "user_message" && e.kind !== "external") return false;
+  // A "who is he?" follow-up is all stop-words of its own but is a real question: it reaches `carry` (D1982).
+  if (e.kind === "user_message" && ASKS_WHO.test(text)) return true;
   return !isChatterTerms(text, terms, vocab);
+}
+
+/** A name that can answer "who is he?": two words or more, or an address — "Leo Park", not "Acme". */
+function isPersonName(e: string): boolean {
+  return e.trim().split(/\s+/).length >= 2 || e.includes("@");
 }
 
 /** Whether a request names days and nothing but days and calendar words: a listing of the days answers it (D44). */

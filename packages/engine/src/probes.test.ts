@@ -329,6 +329,51 @@ describe("probes in the engine (config.probes)", () => {
   test("an own-thing question starts a listed push, so the turn gate keeps it (D1980)", () => {
     expect(pushStart("When is my physio appointment?", { open: true, indirect: true })?.how).toBe("listed");
   });
+
+  test("a pronoun-person follow-up carries the last request's name (D1982)", async () => {
+    const sources = [
+      new StaticSource("mail", "Email", [
+        {
+          ref: "msg-promise",
+          title: "Re: intro to Dana",
+          text: "You wrote to Leo Park: I'll send you the hiring deck by Friday.",
+        },
+        { ref: "leo-album", title: "Leo Park shared a photo album", text: "Holiday photos from Crete." },
+      ]),
+      new StaticSource("crm", "CRM", [
+        { ref: "contact-leo", title: "Leo Park", text: "Partner at Seedcamp. Last contact 3 weeks ago." },
+      ]),
+    ];
+    const p = new ContextPartner({
+      sources: async () => sources,
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => at,
+      config: { ...CORE_CONFIG, probes: true },
+    });
+    const s = { ...scope, sessionId: "s" };
+    await p.observe(
+      {
+        ...s,
+        at,
+        kind: "user_message",
+        text: "Leo Park just pinged me, what was I supposed to send him?",
+      } as AgentEvent,
+      { waitMs: 1_000 },
+    );
+    p.takePending(s);
+    const r = await p.observe(
+      { ...s, at: at + 60_000, kind: "user_message", text: "Right. Who is he again exactly?" } as AgentEvent,
+      { waitMs: 1_000 },
+    );
+    const got = [...(r.injection ? [r.injection] : []), ...p.takePending(s)].flatMap((i) =>
+      i.citations.map((c) => c.itemId),
+    );
+    // The contact record answers it — an item only mentioning the name is context, not the record.
+    expect(got).toEqual(["crm:contact-leo"]);
+  });
 });
 
 describe("probe state is the session's own (isolation)", () => {
