@@ -41,6 +41,47 @@ describe("eval harness", () => {
     expect(m.falseFireRate).toBe(0);
   });
 
+  test("refund-request: the shop's returns policy is the order's companion, found though unscored", async () => {
+    const s = JSON.parse(
+      readFileSync(join(import.meta.dir, "..", "scenarios", "refund-request.json"), "utf8"),
+    ) as Scenario;
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    expect(m.precision).toBe(1);
+    expect(m.recall).toBe(1);
+    expect(m.falseFireRate).toBe(0);
+  });
+
+  test("meeting-prep: the agenda doc links to the meeting's thread on a shared rare term", async () => {
+    const s = JSON.parse(
+      readFileSync(join(import.meta.dir, "..", "scenarios", "meeting-prep.json"), "utf8"),
+    ) as Scenario;
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    expect(m.precision).toBe(1);
+    expect(m.recall).toBe(1);
+    expect(m.falseFireRate).toBe(0);
+  });
+
+  test("promised-follow-up: a stop-word-only follow-up question carries the request before it", async () => {
+    const s = JSON.parse(
+      readFileSync(join(import.meta.dir, "..", "scenarios", "promised-follow-up.json"), "utf8"),
+    ) as Scenario;
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    expect(m.precision).toBe(1);
+    expect(m.recall).toBe(1);
+    expect(m.falseFireRate).toBe(0);
+  });
+
+  test("flight-change: the moved flight's context rides beside the clash the move would make", async () => {
+    const s = JSON.parse(
+      readFileSync(join(import.meta.dir, "..", "scenarios", "flight-change.json"), "utf8"),
+    ) as Scenario;
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    // The injection cap (maxItemsPerInjection 3) bounds what one turn hands: three of the four expected.
+    expect(m.precision).toBe(1);
+    expect(m.recall).toBeGreaterThanOrEqual(0.75);
+    expect(m.falseFireRate).toBe(0);
+  });
+
   test("reports per category, checks planted secrets in deliveries and answers, and scores asks", async () => {
     const secret = "Kq7-plover-22";
     const s: Scenario = {

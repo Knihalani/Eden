@@ -51,6 +51,7 @@ export const SPAN_NAMES = [
   "slow",
   "route",
   "search",
+  "search.behind",
   "source.search",
   "source.fetch",
   "sanitize",

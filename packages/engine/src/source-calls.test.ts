@@ -114,8 +114,9 @@ describe("trace sourceCalls are the calls connectors received", () => {
     const { traces, sent } = await run({ readerPush: true, lookupSources: 2, askSources: 4 });
     const pushed = traces.filter((t) => t.decision === "reader-push");
     expect(pushed.length).toBe(1);
-    // Each source was searched once: the overlap was shared, not sent twice.
-    expect([...sent.values()]).toEqual([1, 1, 1, 1]);
+    // Each source was searched twice: once for the request (the overlap shared, not sent twice), once by the
+    // companion pass's re-search on the picks' terms (companionSearch, D1984).
+    expect([...sent.values()]).toEqual([2, 2, 2, 2]);
     expect(traced(traces)).toBe(total(sent));
     // The push's own sources are its calls, on its trace (not 0, and not counted again on the slow path's).
     expect(pushed[0]!.sourceCalls).toBeGreaterThanOrEqual(2);
@@ -123,14 +124,14 @@ describe("trace sourceCalls are the calls connectors received", () => {
 
   test("a repeat request answered by the fan-out's cache counts no call", async () => {
     const { traces, sent } = await run({ readerPush: true, lookupSources: 2, askSources: 4 }, { requests: 2 });
-    expect(total(sent)).toBe(4);
-    expect(traced(traces)).toBe(4);
+    expect(total(sent)).toBe(8); // The re-search's own query is no repeat of the request's.
+    expect(traced(traces)).toBe(8);
   });
 
   test("push off: unchanged, the slow path's calls are the connector's", async () => {
     const { traces, sent } = await run({ readerPush: false, lookupSources: 2, askSources: 4 });
-    expect(total(sent)).toBe(2);
-    expect(traced(traces)).toBe(2);
+    expect(total(sent)).toBe(6); // Two for the request, one re-search on each of the four sources (D1984).
+    expect(traced(traces)).toBe(6);
   });
 
   test("with the query planner serving, its calls are counted where they reach the connector", async () => {
