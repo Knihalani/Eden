@@ -191,6 +191,11 @@ export const PARTS = {
    * where the push check reads them. Out, days are read by `timeWindow` alone and no seat is given.
    */
   days: { pushDaySeats: 0 },
+  /**
+   * A turn that asks starts the push as its own lookup when nothing else started it: the questions the gate
+   * stays silent on, where the benchmark read a fifth of the injected turns' accuracy (D1985).
+   */
+  ask: { pushAsk: false },
   /** A lookup does not wait for its probes past its own search (D47's grace, 100 ms, taken out). */
   probeGrace: { probeGraceMs: 100 },
 } satisfies Record<string, Partial<EngineConfig>>;

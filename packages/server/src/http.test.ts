@@ -314,7 +314,9 @@ describe("gate pool", () => {
         }),
       );
     for (const userId of ["u1", "u2"]) {
-      const ev = { userId, sessionId: "s1", kind: "user_message", text: "Where is the Globex renewal with Dana Lee?" };
+      // A statement, not a question: `pushAsk` (D1985) starts a push for a question, and a push's lookup keeps
+      // plans off its trace — only the slow path's lookup proves the planner ran.
+      const ev = { userId, sessionId: "s1", kind: "user_message", text: "the Globex renewal with Dana Lee" };
       expect((await send("/v1/events?waitMs=1000", ev)).status).toBe(200);
     }
     // Traces carry the planner's content-free outcome: connector, shape names, counts.

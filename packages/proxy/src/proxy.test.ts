@@ -73,7 +73,7 @@ const explain = async (userId: string, sessionId: string) =>
         headers: { authorization: `Bearer ${KEY}` },
         body: JSON.stringify({ userId, sessionId }),
       })
-    ).json()) as { decisions: { event: string; turn: number }[] }
+    ).json()) as { decisions: { event: string; decision?: string; turn: number }[] }
   ).decisions;
 
 describe("the proxy (D280)", () => {
@@ -117,7 +117,9 @@ describe("the proxy (D280)", () => {
     const second = seen.at(-1)!.body.messages;
     // The packet is still there for the turn's second model call, before the user message.
     expect(second.map((m: any) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
-    const events = (await explain("u2", "s2")).map((d) => d.event);
+    // The reported message is counted once: `pushAsk` (D1985) starts a push for the question, and the push's
+    // own "reader-push" trace is a second user_message event that is not a second report.
+    const events = (await explain("u2", "s2")).map((d) => (d.decision === "reader-push" ? "push" : d.event));
     expect(events.filter((e) => e === "user_message").length).toBe(1);
     expect(events).toContain("tool_call");
     expect(events).toContain("tool_result");
@@ -226,8 +228,11 @@ describe("the proxy (D280)", () => {
     const q = [{ role: "user", content: "What time is lunch with Priya Raman?" }];
     await chat(proxy, { model: "m", messages: q }, { "x-eden-user-id": "u8", "x-eden-session-id": "same" });
     await chat(proxy, { model: "m", messages: q }, { "x-eden-user-id": "u9", "x-eden-session-id": "same" });
-    expect((await explain("u8", "same")).filter((d) => d.event === "user_message").length).toBe(1);
-    expect((await explain("u9", "same")).filter((d) => d.event === "user_message").length).toBe(1);
+    // `pushAsk`'s "reader-push" trace is a push event beside the one reported message, not a second report.
+    const reported = (ds: { event: string; decision?: string }[]) =>
+      ds.filter((d) => d.event === "user_message" && d.decision !== "reader-push").length;
+    expect(reported(await explain("u8", "same"))).toBe(1);
+    expect(reported(await explain("u9", "same"))).toBe(1);
     // No session header: a changing system prompt keeps the key; a different first question is another conversation.
     const sys = (d: string) => ({ role: "system", content: `Today is ${d}.` });
     await chat(proxy, { model: "m", user: "u10", messages: [sys("Mon"), ...q] });
@@ -237,7 +242,7 @@ describe("the proxy (D280)", () => {
       messages: [sys("Tue"), ...q, { role: "assistant", content: "12:30" }],
     });
     const keyed = `c:${createHash("sha256").update(`user:${q[0]!.content}`).digest("hex").slice(0, 32)}`;
-    expect((await explain("u10", keyed)).filter((d) => d.event === "user_message").length).toBe(1);
+    expect(reported(await explain("u10", keyed))).toBe(1);
   });
 
   test("conversations past maxSessions are dropped, least recent first", async () => {

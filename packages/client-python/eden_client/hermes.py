@@ -29,6 +29,9 @@ What it registers (hook names and contracts as Hermes defines them at the lab's 
 - ``pre_llm_call``: the user's message goes to Eden (``observe``, waiting up to 3 s as the client does) and the
   turn's packet, if any, is returned as ``{"context": ...}``. Only the new packet: Hermes stores the context it sent
   on the turn's message and sends it again on later calls and turns (A27, D385), so re-sending would repeat it.
+  A question-shaped message that got no packet gets ``ASK_HINT`` instead (D1985): under deferred tools the
+  agent rarely discovers ``ask_context`` on its own (the v0.3.0 broad benchmark read 17% correct on
+  non-injected turns against 85% injected), so a one-line nudge names it. ``EDEN_ASK_HINT=0`` turns it off.
 - ``pre_tool_call``: a checked tool's call goes to ``check``; a finding blocks the call and its ``held_result``
   becomes the tool's result (``{"action": "block", "message": ...}``). Calling again with the same arguments proceeds.
 - ``post_tool_call`` / ``transform_tool_result``: each tool result is reported, and packets Eden queued since are
@@ -71,6 +74,22 @@ ACTING = re.compile(
     r"(?:^|[_\-.])(send|reply|forward|share|invite|invites|book|schedule|pay|transfer|grant|post|purchase|order"
     r"|create|update|add|respond|deploy)(?=$|[_\-.])",
     re.I,
+)
+
+#: `pushAsk`'s question shape, kept beside the engine's (`partner.ts` `QUESTION`): a leading wh- or yes/no
+#: word, or a closing question mark.
+QUESTION = re.compile(
+    r"\?\s*$|^\s*(?:who|whose|whom|what|when|where|why|how|which|is|are|was|were|do|does|did|can|could|would"
+    r"|should|am)\b",
+    re.I,
+)
+
+#: The nudge a question-shaped turn with no packet gets (D1985): a fixed line naming the deferred tool the
+#: agent rarely discovers on its own. Eden's voice (the `EDEN_NOTE` lead), an instruction of Eden's own like
+#: `CANDIDATES_LEAD`.
+ASK_HINT = (
+    "Eden: if this question is about the user's own details, before answering that you do not have them, "
+    "call ask_context with its specifics."
 )
 
 ASK_SCHEMA = {
@@ -154,6 +173,8 @@ class EdenHermes:
                                    user_sources_file=users, log_path=self._home / "eden" / "logs" / "eden-local.log",
                                    base_env=env)
         tools = env.get("EDEN_CHECK_TOOLS")
+        # ``EDEN_ASK_HINT``: the question-turn nudge; only "0" turns it off.
+        self.ask_hint = (env.get("EDEN_ASK_HINT") or "").strip() != "0"
         # None: the acting-verb default; "*": every tool; otherwise exactly the names listed (empty: none).
         self.check_mode = "acting" if tools is None else "all" if tools.strip() == "*" else "list"
         self.check_tools = {t.strip() for t in (tools or "").split(",") if t.strip()}
@@ -236,6 +257,8 @@ class EdenHermes:
                 return None
             res = c.observe({"kind": "user_message", "text": user_message})
             text = _joined(c.collect(res.get("injection") if isinstance(res, dict) else None))
+            if not text and self.ask_hint and QUESTION.search(user_message):
+                return {"context": ASK_HINT}
             return {"context": text} if text else None
         except Exception as e:  # noqa: BLE001
             _warn(f"pre_llm_call: {e}")

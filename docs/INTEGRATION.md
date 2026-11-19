@@ -645,7 +645,9 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   as the hooks.
 - **`pre_llm_call`**: the user's message goes to Eden (waiting up to 3 s, as the SDK does) and the turn's packet is
   returned as context. Only the new packet: Hermes keeps each turn's context and sends it again on later calls (A27,
-  D385), so the plugin never re-sends earlier packets.
+  D385), so the plugin never re-sends earlier packets. A question-shaped message that got no packet gets a one-line
+  nudge naming `ask_context` instead (D1985): under deferred tools the agent rarely discovers it on its own.
+  `EDEN_ASK_HINT=0` turns the nudge off.
 - **`pre_tool_call`**: an acting tool's call goes to `check` first; a finding blocks the call and becomes its result
   (calling again proceeds). By default the acting tools are those whose name carries an acting verb as a word,
   camelCase split (send, reply, forward, share, invite, book, schedule, pay, transfer, grant, post, purchase, order,
