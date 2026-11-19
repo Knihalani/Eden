@@ -1,45 +1,39 @@
-# Eden launch film
+# Eden launch trailer
 
-A 98-second, 1080p60 launch video for Eden, built entirely from code: every frame is rendered from `index.html`, and
-the score and sound design are synthesized in `scripts/score.py`. No stock footage, samples or voiceover.
+A 79-second, 1080p trailer for Eden. It cuts real stock footage together with WebGL graphics (a card-storm tunnel
+through 1,517 items, the logo assembling from about 25,000 particles, a knowledge-graph flythrough, 3D chat and
+terminal panels). Every cut lands on the beat of a licensed music track.
 
-## Story
+## Structure (124 BPM, one bar = 1.935 s)
 
-| Time   | Act             | What happens                                                                                       |
-| ------ | --------------- | -------------------------------------------------------------------------------------------------- |
-| 0–8    | The failure     | An agent is told to pay Dean's invoice to the "new bank details". It does.                        |
-| 8–14   | The warning     | Dean's email from Saturday: his inbox was compromised. The agent never knew to look.              |
-| 14–24  | The haystack    | Zoom out to all 1,517 items in the user's sources. "Agents don't fail from weak reasoning."       |
-| 24–30  | The question    | "What if it had a partner that read everything, and spoke first?"                                 |
-| 30–38  | Reveal          | Dark to light, D minor resolves to D major, logo and wordmark.                                    |
-| 38–58  | Replay          | Same request with Eden beside the agent: sources, cues, candidates, the warning injected first.   |
-| 58–70  | Montage         | Already paid. Card blocked. Chatter gets silence.                                                  |
-| 70–82  | Principles      | Not a subagent. Model as last resort. Read-only. Per-user and redacted. Any MCP read tools.       |
-| 82–90  | Integration     | One line in front of your model; `bun run demo`.                                                   |
-| 90–98  | End card        | Eden: context, before they ask.                                                                    |
+| Time      | Section      | What happens                                                                              |
+| --------- | ------------ | ----------------------------------------------------------------------------------------- |
+| 0–9.7     | Intro        | Footage: what agents do for us. Then the request: "Pay Dean's £3,800 invoice…". "DONE."   |
+| 11.6–27.1 | The miss     | WRONG ACCOUNT. Dean's warning email. A storm of 1,517 items. "A CONTEXT PROBLEM."         |
+| 27.1–29.0 | The dip      | The kick drops out: "What if your agent had a partner that spoke first?"                  |
+| 29.0–44.5 | Drop 1       | The logo assembles. Graph flythrough finds Dean's warning; context injected; 85 ms, 0, $0 |
+| 44.5–75.5 | Drop 2       | Principles, sources orbit, the one-line proxy, open source, end card on the last hit      |
 
-The requests, emails and timings (85 ms, 9 ms, 8 ms, 5 ms, 0 model calls, $0) come from a real run of `bun run demo`
-on the simulated user. The agent's "Hold on…" reply in the replay is dramatized: the demo shows what the agent
-receives, not a model's answer. The film says so on screen.
+The music is spliced on bar lines: song 0–44.533 s, then 60.014 s to the end (exactly 8 bars removed).
+
+The requests, emails and timings (85 ms, 0 model calls, $0) come from `bun run demo` on the simulated user. The agent's
+"Hold on…" reply is dramatized: the demo shows what the agent receives, not a model's answer.
 
 ## Build
 
-Needs Node with `playwright` and Chromium, Python 3 with `numpy` and `scipy`, and `ffmpeg`.
+Needs Node with `playwright` (Chromium), Python 3 with `numpy` and `scipy`, and `ffmpeg`.
 
 ```bash
-./launch-video/build.sh
+./build.sh
 ```
 
-Writes `launch-video/build/eden-launch.mp4` (H.264 + AAC, loudness-normalized to -14 LUFS). `FPS=30` halves the
-render time. To preview single frames while editing, serve the folder
-(`python3 -m http.server 8777 --bind 127.0.0.1` from `launch-video/`) and run
-`node scripts/snap.js <outdir> 3.0 31.0 45.5`.
+`fetch_assets.sh` downloads Three.js and the Mixkit footage, music and sound effects (free Mixkit licenses,
+https://mixkit.co/license/). They are fetched by ID, not committed. Output: `build/eden-launch.mp4`.
 
 ## Editing
 
-- Timing lives in two places: `cues.json` (typing segments and sound effects, read by both the page and the score)
-  and the `scene(...)` calls in `index.html` (each takes its global start and end time in seconds).
-- `renderFrame(t)` is a pure function of time, so any frame can be rendered in any order.
-- The score runs at 120 BPM, so a bar is 2 seconds and every major cut lands on a bar line.
-
-Fonts: Inter, Instrument Serif and JetBrains Mono (SIL Open Font License), from Fontsource.
+- `scripts/edit.py` is the edit decision list: every shot is placed in beats on the music's grid, with its clip,
+  source offset, zoom, color grade and text. Shot kinds other than `footage` are WebGL scenes in `web/index.html`.
+- `scripts/mix.py` places every sound effect on the same beat grid.
+- Preview single frames: serve `web/` on port 8778 and run `node scripts/snap.js <outdir> 29.4 35.0`.
+- `renderFrame(t)` is a pure function of time, so frames render in any order and in parallel.
