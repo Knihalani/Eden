@@ -997,7 +997,9 @@ describe("stale cached items go to the slow path (refreshAfterMs, D40; no fetch 
       await ask(p, "a", clock);
       clock += 3 * hour;
       expect(await ask(p, "b", clock)).toContain("11:00");
-      expect(calls.search).toBe(2); // The stale cue took the slow path's live search.
+      // The stale cue took the slow path's live search; each ask's companion pass then re-searched the picks'
+      // terms once more (companionSearch, D1984).
+      expect(calls.search).toBe(4);
       expect(calls.fetch).toBe(0);
     }
   });

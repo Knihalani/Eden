@@ -386,7 +386,8 @@ describe("deep audit 2026-11-05 ask-shown-before-handed-out: shown means handed 
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
-      config: { ...DEFAULT_CONFIG },
+      // A held source's second (re-search) call would hold forever; this fixture is about the queue, not companions.
+      config: { ...DEFAULT_CONFIG, companionSearch: 0 },
     });
     return Object.assign(p, { source });
   };

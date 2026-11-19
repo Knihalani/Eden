@@ -657,6 +657,10 @@ const contentWords = (text: string): string[] => {
   return out;
 };
 
+/** The words a text writes capitalized, lowercased for matching: proper names a bare lowercase read loses. */
+const capitalWords = (text: string): Set<string> =>
+  new Set((text.match(/\p{Lu}[\p{L}\p{N}]+/gu) ?? []).map((w) => w.toLowerCase()));
+
 const idNumbers = (text: string): Set<string> => {
   const out = new Set<string>();
   for (const m of text.matchAll(ID_NUMBERS)) {
@@ -1251,7 +1255,15 @@ export class ContextPartner {
 
     this.dropRemovedPending(s);
     const queued = s.pending.shift() ?? null;
-    const lookup = wantsLookup(event, text, terms, s.vocab);
+    const lookup =
+      wantsLookup(event, text, terms, s.vocab) ||
+      // `carryQuestions` (D1984): a user message made only of stop-words is dropped as chatter above, but a
+      // question-shaped one ("Right. Who is he again?") is a follow-up `carry` widens with the request before
+      // it — when there is a recent one to carry. With none, or as a bare statement, it stays chatter.
+      (event.kind === "user_message" &&
+        /\?\s*$/.test(text) &&
+        s.lastUser !== undefined &&
+        s.turn - s.lastUser.turn <= 6);
     if (!lookup) {
       trace("skipped", event.kind);
       return reply(queued);
@@ -4251,7 +4263,14 @@ export class ContextPartner {
         return sd === null ? x.dayCls !== undefined : time.days.has(sd);
       };
       const clashes = pool.filter((x) => onDay(x) && near(x)).sort(soonest);
-      if (clashes.length > 0) return { items: clashes.slice(0, this.max()), how: "clash" };
+      if (clashes.length > 0) {
+        // What the request is about still belongs beside the clash the move would make — but the clash is the
+        // answer: the clashing items come first, so subject records can never crowd them out of the cap (D1984).
+        const subjectItems = pool.filter((x) => isSubject(x.item, cue.raw));
+        const seen = new Set(clashes.map((x) => x.item.id));
+        const items = [...clashes, ...subjectItems.filter((x) => !seen.has(x.item.id))].slice(0, this.max());
+        return { items, how: "clash" };
+      }
     }
     // With `groundConflict`: what would change the action (or the answer), tied to what the request names or asks
     // (`conflict.ts`): a hold over the day it acts on, a limit below its amount, a thing done already (D49).
@@ -4522,9 +4541,10 @@ export class ContextPartner {
    * pick, the fallback — a bounded second pass hands the injection what a delivered item pulls: its companions,
    * the items holding a strong link to a chosen one — the same identifier `sameRef` reads (`idNumbers`), or two
    * of its rare letter terms, or one of them beside a term of the request's. The pass reads the lookup's own
-   * candidates and the cache the request's words never ranked in — it never calls the sources again, so the
-   * lookup's `sourceCalls` and span tree stand exactly as before: the deck for the meeting, the thread's other
-   * mail, the invoice's bill in another system. Every bound the subject's own companions keep still applies:
+   * candidates and the cache the request's words never ranked in; with `companionSearch` it then asks the
+   * sources once more on the picks' own terms — one bounded call each, counted with the lookup's `sourceCalls` —
+   * so a companion the request's phrasing could not fetch still links in: the deck for the meeting, the thread's
+   * other mail, the invoice's bill in another system. Every bound the subject's own companions keep still applies:
    * `contradicts`, bulk mail, delivered/`sameRef` and near-duplicate suppression, `alreadyHas`, and
    * `maxItemsPerInjection`. An item naming an identifier the item it links to does not is a look-alike (last
    * year's invoice beside this one's), never a companion.
@@ -4535,11 +4555,12 @@ export class ContextPartner {
     chosen: Scored[],
     scored: readonly Scored[],
     was: Map<string, LedgerEntry | undefined>,
+    onCalls?: (calls: number) => void,
   ): Promise<Scored[]> {
     // Ledger entries at selection time, like `deliverChecked`'s own `was`: the pass's await hands the event loop to
     // the request's fast path, which may deliver (and mark) one of these meanwhile — it is dropped at delivery.
     for (const x of chosen) if (!was.has(x.item.id)) was.set(x.item.id, s.ledger.entry(x.item.id));
-    return [...chosen, ...(await this.companions(s, cue, chosen, scored, was))];
+    return [...chosen, ...(await this.companions(s, cue, chosen, scored, was, onCalls))];
   }
 
   private async companions(
@@ -4548,14 +4569,17 @@ export class ContextPartner {
     chosen: readonly Scored[],
     scored: readonly Scored[],
     was: Map<string, LedgerEntry | undefined>,
+    onCalls?: (calls: number) => void,
   ): Promise<Scored[]> {
     const room = this.max() - chosen.length;
     if (!this.config.companions || chosen.length === 0 || room <= 0 || s.closed) return [];
     // Terms and identifiers per pick: a candidate must link to one pick on that pick's own evidence — a union
     // over every pick's words would let a wrong-numbered invoice in on another pick's identifier pass.
     const picks = chosen.map((x) => ({
+      src: x.item.sourceId,
       refs: idNumbers(`${x.item.title} ${x.item.text}`),
       terms: new Set(contentWords(`${x.item.title} ${x.item.text}`)),
+      caps: capitalWords(`${x.item.title} ${x.item.text}`),
       years: new Set(`${x.item.title} ${x.item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []),
     }));
     const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
@@ -4574,11 +4598,16 @@ export class ContextPartner {
     // A link term is a real word: a fragment ("s" of "client's"), a bare digit, a clock or day word, an entity
     // the request names, and the redaction placeholder sanitize left in the text bind nothing.
     const term = (t: string) =>
-      t.length >= 3 && /\p{L}/u.test(t) && !TIME_WORD.test(t) && !entityTerms.has(t) && t !== "redacted";
+      // A two-letter code of a letter and a digit (the "q3" of a board pack) binds like a word; a fragment does not.
+      (t.length >= 3 || (t.length === 2 && /\p{L}/u.test(t) && /\p{N}/u.test(t))) &&
+      /\p{L}/u.test(t) &&
+      !TIME_WORD.test(t) &&
+      !entityTerms.has(t) &&
+      t !== "redacted";
     // The link to a chosen item: a shared identifier, two shared topic terms, or one beside a term of the
     // request's (the shop's returns policy beside the order that leaks). Numbers count per pair: an item
     // carrying an identifier the linked item does not is a sibling, not a companion.
-    const linked = (item: ContextItem): boolean => {
+    const linked = (item: ContextItem, needReq = false): boolean => {
       const n = idNumbers(`${item.title} ${item.text}`);
       const itemYears = new Set(`${item.title} ${item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []);
       // A Set: a word the item repeats counts once, so "shared two" is two different words of the pick's.
@@ -4608,20 +4637,41 @@ export class ContextPartner {
             this.deps.cache.isRare(s.scope, stemWord(t), RARE_SHARE)
           )
             sharedWords.add(t);
+        // A proper name written capitalized on both sides binds beside request evidence even when it is not
+        // rare: the rare-word bar exists for words anyone could use (the shop's name is on most of its mail),
+        // and a name like "Lakeland" is exactly the link a returns policy has to the order that leaks. It
+        // never feeds the two-words-alone rule — common capitalized words ("Perfect", "Reply") are noise.
+        const ownCaps = capitalWords(`${item.title} ${item.text}`);
+        const sharedCaps = new Set<string>();
+        for (const t of ownAll)
+          if (
+            !sharedWords.has(t) &&
+            t.length >= 2 &&
+            !TIME_WORD.test(t) &&
+            !entityTerms.has(t) &&
+            t !== "redacted" &&
+            ownCaps.has(t) &&
+            p.caps.has(t)
+          )
+            sharedCaps.add(t);
         // A name the request names, carried whole on both sides — the mail the meeting's sender sent — is a
         // link of its own; a first-name fragment of a multi-word entity is not.
         let entityShared = false;
         for (const e of entityPhrases) if (e.every((w) => ownAll.has(w) && p.terms.has(w))) entityShared = true;
         // A request word that isn't one of the counted link words is a second reason beside the link.
-        const req = [...own].some((t) => requestTerms.has(t) && !sharedWords.has(t));
-        if (sharedWords.size >= 2 || (sharedWords.size >= 1 && (req || entityShared))) return true;
+        const req = [...own].some((t) => requestTerms.has(t) && !sharedWords.has(t) && !sharedCaps.has(t));
+        // A hit the re-search fetched from beyond the scored pool and the cache must tie to the request
+        // (shared link words alone are what any mail of one sender shares), or across sources — a document
+        // of another kind that shares two of the pick's rare words is not sender noise (D1984).
+        if (sharedWords.size + sharedCaps.size >= 1 && (req || entityShared)) return true;
+        if (sharedWords.size >= 2 && (!needReq || item.sourceId !== p.src)) return true;
       }
       return false;
     };
     const has = new Set(chosen.map((x) => x.item.id));
     const vocab = this.deps.cache.peekVocab(s.scope);
     const out: Scored[] = [];
-    const take = (x: Scored): void => {
+    const take = (x: Scored, strictLink = false): void => {
       if (out.length >= room) return;
       if (has.has(x.item.id) || bulkMail(x.item) || !s.ledger.isFresh(x.item.id, s.turn)) return;
       if (s.delivered.some((d) => nearDuplicate(d.sketch, x.sketch) && sameRef(d.refs, x.item))) return;
@@ -4641,7 +4691,7 @@ export class ContextPartner {
       )
         return;
       if (vocab !== undefined && x.doc !== undefined && this.alreadyHas(s, x.item, x.doc, vocab)) return;
-      if (this.contradicts(x, cue) || !linked(x.item)) return;
+      if (this.contradicts(x, cue) || !linked(x.item, strictLink)) return;
       has.add(x.item.id);
       // Its ledger entry at selection time, like `deliverChecked`'s `was`: a delivery that lands during the
       // pass's await (this request's own fast path) already handed it out.
@@ -4658,6 +4708,106 @@ export class ContextPartner {
       if (query.length > 0)
         for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now()))
           take({ item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc });
+    }
+    // `companionSearch` (D1984): a companion the request's own words never fetched sits outside the cache, so the
+    // picks' terms ask the sources once more — one search call per source, capped at `companionSearch` sources and
+    // counted with the lookup's `sourceCalls`. What they return is stored, then read back through the cache and
+    // the same `take` gate every companion takes: the pool still decides, and silence-by-default holds.
+    if (vocab !== undefined && out.length < room && this.config.companionSearch > 0 && !s.closed) {
+      // The query a source gets is link vocabulary, not record prose: the picks' terms that pass `term` (real
+      // words and letter+digit codes) plus the picks' refs — a companion two records share only by a number
+      // still reaches its connector — sanitized like any text that leaves the engine: a connector sees a
+      // pick's topic words, never a secret the gate already stripped.
+      const subjectText = sanitizeForStore(
+        [...[...new Set(picks.flatMap((p) => [...p.terms]))].filter(term), ...picks.flatMap((p) => [...p.refs])]
+          .slice(0, 32)
+          .join(" "),
+      );
+      const all = await this.deps.sources(s.scope).catch(() => [] as Source[]);
+      // A source the sync reads is never re-searched: a current copy already sits in the cache the first pass
+      // searched, and a poll in flight reads its boundary off what is stored — a re-search's finds, held early,
+      // would fake that boundary (`sync.isWarm`).
+      const sv = this.sync?.view(s.scope);
+      const toSearch = all.filter((x) => !(sv?.isWarm(x.id) ?? false)).slice(0, this.config.companionSearch);
+      if (subjectText.length > 0 && toSearch.length > 0) {
+        const readMark = this.sync?.mark() ?? 0;
+        const span = cue.span
+          ? this.spans?.open("search.behind", cue.span, { async: true, sources: toSearch.length })
+          : undefined;
+        const turn = s.turn;
+        const started = performance.now();
+        let madeEarly = 0;
+        let made = 0;
+        let serving = true;
+        // One call per source, stored as it settles (as `searchCutBehind` does for asks): a connector slower
+        // than `companionSearchMs` never hides what the others already answered. Only a page that reached its
+        // source is stored — a fan-out cache page was stored by the search that fetched it, under its own
+        // read mark; putting it again would mark an older copy freshly read over a newer one.
+        const searching = Promise.all(
+          toSearch.map((x) =>
+            this.fanout
+              .search(
+                [span ? this.traced(x, span.id) : x],
+                { scope: s.scope, text: subjectText, entities: [], limit: 8 },
+                {
+                  timeoutMs: this.config.sourceTimeoutMs,
+                  signal: s.abort.signal,
+                },
+              )
+              .then(([o]) => {
+                if (!o || !reachedSource(o)) return o;
+                made++;
+                if (serving) madeEarly++;
+                if (!s.closed) this.store(s, o.items, span?.id ?? cue.span ?? 0, false, readMark);
+                return o;
+              }),
+          ),
+        );
+        const finished = searching
+          .then((results) => {
+            const outcomes = results.filter((o): o is FanoutOutcome => o !== undefined);
+            this.noteLiveRead(s, cue, outcomes);
+            if (span) this.spans!.close(span, outcomeAttrs(outcomes));
+            // Calls that answered inside the wait counted with the lookup's `sourceCalls` already; the rest
+            // get a trace of their own, as a search behind does.
+            const late = made - madeEarly;
+            if (late > 0) {
+              this.trace(s, {
+                sessionId: s.id,
+                turn,
+                event: "search",
+                decision: "skipped",
+                reason: "companion search behind",
+                latencyMs: Math.round(performance.now() - started),
+                sourceCalls: late,
+                modelCalls: 0,
+                costUsd: 0,
+                itemIds: [],
+              });
+            }
+            return true;
+          })
+          .catch(() => {
+            if (span) this.spans!.close(span, {});
+            return false;
+          });
+        // Serving never waits on the re-search: what has not answered inside `companionSearchMs` still settles
+        // behind, its finds stored for the next read.
+        await Promise.race([
+          finished,
+          new Promise<boolean>((r) => setTimeout(() => r(false), this.config.companionSearchMs)),
+        ]);
+        serving = false;
+        onCalls?.(madeEarly);
+        const q = termIds(subjectText, vocab, false);
+        const query: number[] = [];
+        for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+        // Any shared subject term reads a hit back; what a hit must still prove is the link (`take`). A page
+        // that only refreshed existing items' dates still counts — a corrected date can be the link.
+        if (madeEarly > 0 && query.length > 0)
+          for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now()))
+            take({ item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc }, true);
+      }
     }
     return out;
   }
@@ -4677,9 +4827,9 @@ export class ContextPartner {
     // Only a question-shaped follow-up reads the request before it: a bare statement this sparse is chatter
     // about its own words, not a pointer back.
     if (!/\?\s*$/.test(cue.raw)) return;
-    // A follow-up made only of stop-words ("and him?", "what about it?") is dropped earlier by `wantsLookup`
-    // and never reaches here — chosen on purpose: no own terms to anchor the carry, and the previous request's
-    // injection already answered it or the follow-up is noise.
+    // A stop-word-only message that is not question-shaped ("and him", "about it") never reaches here —
+    // `wantsLookup` drops it as chatter. A question ("who is he again?") does, when a recent request is here
+    // to carry (`carryQuestions`); with no own terms it anchors entirely on the request before it.
     const have = new Set(own);
     const extra: string[] = [];
     // What the last request's answer delivered carries its topic first: "order", "shipped", "arrives" live on the
@@ -4721,7 +4871,7 @@ export class ContextPartner {
       }
     }
     if (extra.length > 0) cue.text = `${cue.text} ${extra.join(" ")}`.trim();
-    // A pronoun-person follow-up ("Who is he again?", D1982) names nobody: its question words are noise, so the
+    // A pronoun-person follow-up ("Who is he again?", D1983) names nobody: its question words are noise, so the
     // carried name is the whole query and joins the entities the name-paths match on.
     if (ASKS_WHO.test(cue.raw) && last.entities.length > 0) {
       // "who is he" asks after a person: of the last request's names only the person-shaped ones (two
@@ -5062,6 +5212,12 @@ export class ContextPartner {
             this.beyondName(x, cue!),
         )
         .slice(0, Math.min(this.config.maxItemsPerInjection, this.config.confidentItems));
+      // "Who is he?" asks for the person, not the threads about them: where a hit is the record of the named one —
+      // its title is just their name — the mails merely naming them are not the answer.
+      if (hits.length > 1 && named.length > 0 && /\bwho\b/i.test(cue!.raw)) {
+        const record = hits.filter((x) => named.some((n) => x.item.title.trim().toLowerCase() === n.toLowerCase()));
+        if (record.length > 0) return record;
+      }
       if (hits.length > 0) return hits;
     }
     const strong =
@@ -6828,7 +6984,9 @@ export class ContextPartner {
         // reads, whatever it scores (the agent holds the superseded copy).
         const corrected = cue.followUp ? scored.filter((x) => x.revised && !ruled.includes(x)) : [];
         const was = new Map<string, LedgerEntry | undefined>();
-        const items = await this.withCompanions(s, cue, [...ruled, ...corrected], scored, was);
+        const items = await this.withCompanions(s, cue, [...ruled, ...corrected], scored, was, (n) => {
+          sourceCalls += n;
+        });
         dumped(
           "served",
           items,
@@ -6852,7 +7010,9 @@ export class ContextPartner {
       const judgeSure = contested && this.deps.model !== null;
       if (sure.length > 0 && !judgeSure) {
         const was = new Map<string, LedgerEntry | undefined>();
-        const items = await this.withCompanions(s, cue, sure, scored, was);
+        const items = await this.withCompanions(s, cue, sure, scored, was, (n) => {
+          sourceCalls += n;
+        });
         dumped("lookup", items, "sure");
         done(
           "sources",
@@ -6916,7 +7076,9 @@ export class ContextPartner {
         // model is never worse than none (D41).
         if (judgeSure) {
           const was = new Map<string, LedgerEntry | undefined>();
-          const items = await this.withCompanions(s, cue, sure, scored, was);
+          const items = await this.withCompanions(s, cue, sure, scored, was, (n) => {
+            sourceCalls += n;
+          });
           dumped("lookup", items, "sure", true);
           done(
             "sources",
@@ -6931,7 +7093,9 @@ export class ContextPartner {
         if (grounding) spans!.close(grounding, { grounded: grounded.items.length });
         if (grounded.items.length > 0) {
           const was = new Map<string, LedgerEntry | undefined>();
-          const items = await this.withCompanions(s, cue, grounded.items, scored, was);
+          const items = await this.withCompanions(s, cue, grounded.items, scored, was, (n) => {
+            sourceCalls += n;
+          });
           dumped("lookup", items, `grounded-${grounded.how}`, true);
           done(
             "sources",
@@ -6946,7 +7110,9 @@ export class ContextPartner {
         dumped("lookup", items, "fallback", true);
         if (items.length > 0) {
           const was = new Map<string, LedgerEntry | undefined>();
-          const sent = await this.withCompanions(s, cue, items, scored, was);
+          const sent = await this.withCompanions(s, cue, items, scored, was, (n) => {
+            sourceCalls += n;
+          });
           done(
             "sources",
             `fallback${reasonPrefix}:${cue.id}`,
@@ -7031,7 +7197,9 @@ export class ContextPartner {
         return null;
       }
       const was = new Map<string, LedgerEntry | undefined>();
-      const sent = await this.withCompanions(s, cue, picked, scored, was);
+      const sent = await this.withCompanions(s, cue, picked, scored, was, (n) => {
+        sourceCalls += n;
+      });
       done(
         "model",
         cue.id,

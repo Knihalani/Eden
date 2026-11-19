@@ -184,14 +184,30 @@ export interface EngineConfig {
    * `companions` (D1977): once a request's subject items are chosen — the grounded subject, the sources' sure
    * pick, the fallback — a bounded second pass hands the injection the companions a delivered item pulls: what
    * holds a strong link to a chosen one — the same identifier `sameRef` reads, or two of its letter terms, or one
-   * of them beside a term of the request's — from the lookup's own candidates and the cache it filled; the
-   * sources are never called again, so the lookup's sourceCalls and spans stand (the deck for the meeting, the
-   * invoice's bill in another system). Every bound the subject's own companions keep still
+   * of them beside a term of the request's — from the lookup's own candidates and the cache it filled (the deck
+   * for the meeting, the invoice's bill in another system); with `companionSearch` the pass also asks the sources
+   * once more on the picks' terms, bounded and counted with the lookup's calls. Every bound the subject's own
+   * companions keep still
    * applies: `contradicts`, bulk mail, delivered/`sameRef` and near-duplicate suppression, `alreadyHas`,
    * `maxItemsPerInjection`; an item naming an identifier its linked item does not is a look-alike, never a
    * companion (`Partner.companions`).
    */
   companions: boolean;
+  /**
+   * `companionSearch` (D1984): the companion pass's bounded re-search — a companion the request's own words never
+   * fetched sits outside the cache (the return policy beside the leaking order, the board pack beside the meeting),
+   * so once the picks are chosen the pass asks the sources once more on the picks' own terms: at most this many
+   * sources, one search call each, counted with the lookup's `sourceCalls`, their finds stored and then read back
+   * through the cache and the same `linked` gate every companion takes; a source the sync reads is skipped (its
+   * copy, or a poll in flight's, is the cache's already). 0: cache and candidates only, as before
+   * (`Partner.companions`).
+   */
+  companionSearch: number;
+  /**
+   * `companionSearchMs` (D1984): serving never waits on the companion re-search — finds not back inside this
+   * window still settle behind, stored for the next read. Bounds only the wait, not the call (`Partner.companions`).
+   */
+  companionSearchMs: number;
   /**
    * With no model's say, an item tied to the request by a name alone is not pushed: it shares no other word of the
    * request, is on no day the request names and holds no reference it names (`Partner.beyondName`). A passing
@@ -944,6 +960,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   groundOccasion: true,
   groundSubject: true,
   companions: true,
+  companionSearch: 4,
+  companionSearchMs: 400,
   quietNameOnly: true,
   conflictVocab: true,
   spans: false,
