@@ -4,7 +4,8 @@
 Per question per arm: `hermes -z <question> --yolo -m <model> --provider openrouter --usage-file <f>`.
 The Eden arm runs with HERMES_HOME=<eden-home> in an empty cwd; the control arm with
 HERMES_HOME=<ctl-home> in <corpus>/files. Per-run records land in <out>/ab/, token usage in
-<out>/usage/. Paid model calls — check the spend before running the full set (--limit first).
+<out>/usage/. Paid model calls — check the spend before running the full set (--limit first). Like the Bun lab
+scripts, an inherited OPENROUTER_API_KEY only runs with EDEN_ALLOW_OPENROUTER=1 set.
 
 Usage:
     python3 ab_run.py --corpus corpus --hermes /path/to/.venv/bin/hermes \
@@ -34,15 +35,24 @@ ap.add_argument("--timeout", type=int, default=300)
 ap.add_argument("--limit", type=int, default=None, help="only the first N questions (smoke runs)")
 args = ap.parse_args()
 
+# The lab spend guard (scripts/lab-guard.ts) refuses Bun lab scripts under OPENROUTER_API_KEY
+# unless the owner opted the run in; this runner is plain Python, so it re-checks the opt-in itself.
+if os.environ.get("OPENROUTER_API_KEY") and os.environ.get("EDEN_ALLOW_OPENROUTER") != "1":
+    raise SystemExit(
+        "paid A/B runs need the owner's spend opt-in: rerun with EDEN_ALLOW_OPENROUTER=1 "
+        "(the same gate scripts/lab-guard.ts applies to Bun lab scripts)"
+    )
+
 QS = json.load(open(f"{args.corpus}/questions.json"))
 if args.limit:
     QS = QS[: args.limit]
-OUT = args.out
+# Absolute paths: the usage-file arg is resolved inside each child's cwd, not the runner's.
+OUT = os.path.abspath(args.out)
 os.makedirs(f"{OUT}/ab", exist_ok=True)
 os.makedirs(f"{OUT}/usage", exist_ok=True)
-EDEN_CWD = args.eden_cwd or os.path.join(OUT, "empty")
+EDEN_CWD = os.path.abspath(args.eden_cwd or os.path.join(OUT, "empty"))
 os.makedirs(EDEN_CWD, exist_ok=True)
-CTL_CWD = args.ctl_cwd or f"{args.corpus}/files"
+CTL_CWD = os.path.abspath(args.ctl_cwd or f"{args.corpus}/files")
 ARMS = [a for a in args.arms.split(",") if a in ("eden", "ctl")]
 if not ARMS:
     raise SystemExit("--arms must name eden and/or ctl")

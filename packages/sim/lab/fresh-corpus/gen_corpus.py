@@ -30,6 +30,11 @@ rng = random.Random(args.seed)
 fresh = args.seed != DEFAULT_SEED
 OUT = args.out
 os.makedirs(f"{OUT}/files", exist_ok=True)
+# Regenerating into a used directory must not leave a previous corpus's files behind: filenames
+# differ between seeds, so clear them rather than let the control arm search stale documents.
+for stale in os.listdir(f"{OUT}/files"):
+    if stale.endswith(".txt"):
+        os.remove(os.path.join(OUT, "files", stale))
 
 # ------------------------------------------------------------- perturbation
 # Every scored value lives in V once and is interpolated into both the doc text and the question's

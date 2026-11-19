@@ -92,5 +92,8 @@ out = {"turns": args.turns, "relevant_injected": inj, "neutral_false_fires": f"{
        "latency": {"p50": pct(lat, 50), "p95": pct(lat, 95), "p99": pct(lat, 99), "max": round(max(lat), 1)},
        "first50_p50": pct(lat[:50], 50), "last50_p50": pct(lat[-50:], 50),
        "rss_start_mb": rss0, "rss_end_mb": rss1, "elapsed_s": round(time.time() - t0)}
+parent = os.path.dirname(args.out)
+if parent:
+    os.makedirs(parent, exist_ok=True)
 json.dump(out, open(args.out, "w"), indent=1)
 print(json.dumps(out, indent=1))

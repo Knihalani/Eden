@@ -179,6 +179,9 @@ lat_sum = {k: {"n": len(v), "p50": pct(v, 50), "p95": pct(v, 95), "p99": pct(v, 
 results["latency"] = lat_sum
 results["elapsed_s"] = round(time.time() - t0, 1)
 out = args.out or os.path.join(os.path.dirname(CORP), "hook_results.json")
+parent = os.path.dirname(out)
+if parent:
+    os.makedirs(parent, exist_ok=True)
 json.dump(results, open(out, "w"), indent=1)
 
 qs = results["questions"]
