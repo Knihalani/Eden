@@ -96,6 +96,9 @@ describe("askDedup in renderPacket", () => {
     const words = new Set(first.toLowerCase().match(/[\p{L}\p{N}]+/gu));
     const again = renderPacket([item], { maxBytes: 2_000, focus, shownBefore: () => words });
     expect(again).toContain(`- [drive] Procurement policy v4: ${SHOWN}`);
+    // D2028: the marker still carries a focused extract — a fresh conversation sharing this session's shown state
+    // can quote the fact even though it never saw the item.
+    expect(again).toContain("CFO sign-off");
     const partly = new Set(["purchases", "above", "40", "000", "need", "two", "quotes", "and", "cfo", "sign", "off"]);
     const more = renderPacket([item], { maxBytes: 2_000, focus, shownBefore: () => partly });
     expect(more).toContain("The policy is effective from 1 Oct.");

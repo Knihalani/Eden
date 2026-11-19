@@ -62,7 +62,7 @@ export function renderPacket(
       const prior = before(item);
       if (!prior) return null;
       const parts = messageParts(item.text, (w) => prior.has(w), undefined, undefined, undefined, options.split);
-      return saysNew(parts) ? parts.map((p) => p.text).join(" ") : SHOWN;
+      return saysNew(parts) ? parts.map((p) => p.text).join(" ") : shownExtract(item.text, options.split);
     };
   }
   if (options.focus) {
@@ -87,16 +87,24 @@ export function renderPacket(
       const title = wordsIn(item.title.toLowerCase());
       const own = new Set(title);
       const prior = before?.(item);
-      const { parts, keys } = unknownParts(
-        // No year, no drop: dates stay as the source wrote them, since "expires 2 Nov" is ambiguous to an agent
-        // comparing it with the request's dates where "2 Nov 2026" is not.
-        partsOf(item, options.year, options.self, options.dense === true, options.split === true),
-        (w) => own.has(w) || shown.has(w) || prior?.has(w) === true,
-      );
-      // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, keys, focus, each, focusAll, focusWords);
+      const all = partsOf(item, options.year, options.self, options.dense === true, options.split === true);
+      const { parts, keys } = unknownParts(all, (w) => own.has(w) || shown.has(w) || prior?.has(w) === true);
+      // `compactText`, with what this session showed of the item before as known too. An item whose every part was
+      // shown still carries a focused extract of it (D2028): a later conversation of this session shares the shown
+      // words but never saw the item, and a bare marker cites text it cannot read. `held` keeps the marker's own
+      // words out of `shown` (a part saying "shown above" is still news).
+      let text: string;
+      let held: string;
+      if (prior && !saysNew(parts)) {
+        const rest = unknownParts(all, (w) => own.has(w) || shown.has(w));
+        held = pick(rest.parts, rest.keys, focus, SHOWN_EXTRACT, focusAll, focusWords);
+        text = held ? `${SHOWN} ${held}` : SHOWN;
+      } else {
+        text = pick(parts, keys, focus, each, focusAll, focusWords);
+        held = text;
+      }
       options.onParts?.(item, parts, text);
-      last = { title, text };
+      last = { title, text: held };
       return text;
     };
   }
@@ -228,8 +236,33 @@ export const LOOKUP_QUIET =
 export const READER_TAG = "Eden's reader: ";
 const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
 
-/** What an item shown before says in its place when it has nothing new (`askDedup`): its title and source stay. */
+/**
+ * What an item shown before says in its place when it has nothing new (`askDedup`): its title and source stay, with
+ * a short extract of it (D2028). A fresh agent conversation shares its session's shown state — one session id can
+ * span conversations (a user-day in the lab, an MCP connection's idle window in `mcp.ts`) — without the context
+ * that saw the item, so a bare marker was a citation to text the agent could not read.
+ */
 export const SHOWN = "(shown above)";
+
+/**
+ * The byte cap on the extract a `(shown above)` line carries (D2028): the fact stays quotable, the dedup still
+ * saves.
+ */
+const SHOWN_EXTRACT = 160;
+
+/**
+ * `SHOWN` with a short extract of the item (D2028): the part its message leads with past its sender, cut to
+ * `SHOWN_EXTRACT` bytes.
+ */
+function shownExtract(text: string, split: boolean | undefined): string {
+  const part = messageParts(text, () => false, undefined, undefined, undefined, split === true).find(
+    (p) => !/^from:/i.test(p.text),
+  );
+  if (!part) return SHOWN;
+  return (
+    `${SHOWN} ` + (utf8Length(part.text) > SHOWN_EXTRACT ? `${truncateUtf8(part.text, SHOWN_EXTRACT - 3)}…` : part.text)
+  );
+}
 
 /**
  * Whether an item's parts, read with what was shown as known (`messageParts` drops a part whose every content word is
