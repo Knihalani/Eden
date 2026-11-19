@@ -30,6 +30,17 @@ describe("eval harness", () => {
     expect(m.recall).toBeGreaterThan(0);
   });
 
+  test("large-subscription-lookalikes: last year's renewal notice is a sibling, not a second pick", async () => {
+    const s = JSON.parse(
+      readFileSync(join(import.meta.dir, "..", "scenarios", "large-subscription-lookalikes.json"), "utf8"),
+    ) as Scenario;
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    // Delivering mail:cloudvault-renewal-2025 beside mail:cloudvault-renewal halves precision.
+    expect(m.precision).toBe(1);
+    expect(m.recall).toBe(1);
+    expect(m.falseFireRate).toBe(0);
+  });
+
   test("reports per category, checks planted secrets in deliveries and answers, and scores asks", async () => {
     const secret = "Kq7-plover-22";
     const s: Scenario = {
