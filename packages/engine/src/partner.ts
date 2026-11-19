@@ -4264,11 +4264,11 @@ export class ContextPartner {
       };
       const clashes = pool.filter((x) => onDay(x) && near(x)).sort(soonest);
       if (clashes.length > 0) {
-        // What the request is about still belongs beside the clash the move would make: the booking being
-        // moved and the trip it belongs to are as much the answer as the train it would sit on top of (D1984).
+        // What the request is about still belongs beside the clash the move would make — but the clash is the
+        // answer: the clashing items come first, so subject records can never crowd them out of the cap (D1984).
         const subjectItems = pool.filter((x) => isSubject(x.item, cue.raw));
-        const seen = new Set(subjectItems.map((x) => x.item.id));
-        const items = [...subjectItems, ...clashes.filter((x) => !seen.has(x.item.id))].slice(0, this.max());
+        const seen = new Set(clashes.map((x) => x.item.id));
+        const items = [...clashes, ...subjectItems.filter((x) => !seen.has(x.item.id))].slice(0, this.max());
         return { items, how: "clash" };
       }
     }
@@ -4714,7 +4714,12 @@ export class ContextPartner {
     // counted with the lookup's `sourceCalls`. What they return is stored, then read back through the cache and
     // the same `take` gate every companion takes: the pool still decides, and silence-by-default holds.
     if (vocab !== undefined && out.length < room && this.config.companionSearch > 0 && !s.closed) {
-      const subjectText = [...new Set(picks.flatMap((p) => [...p.terms]))].slice(0, 24).join(" ");
+      // The query a source gets is link vocabulary, not record prose: the picks' terms that pass `term` (real
+      // words and letter+digit codes), sanitized like any text that leaves the engine — a connector sees no
+      // more of a private record than a pick's topic words, and never a secret the gate already stripped.
+      const subjectText = sanitizeForStore(
+        [...new Set(picks.flatMap((p) => [...p.terms]))].filter(term).slice(0, 24).join(" "),
+      );
       const all = await this.deps.sources(s.scope).catch(() => [] as Source[]);
       // A source the sync reads is never re-searched: a current copy already sits in the cache the first pass
       // searched, and a poll in flight reads its boundary off what is stored — a re-search's finds, held early,
@@ -4726,39 +4731,77 @@ export class ContextPartner {
         const span = cue.span
           ? this.spans?.open("search.behind", cue.span, { async: true, sources: toSearch.length })
           : undefined;
-        // Serving never waits on the re-search: what has not answered inside `companionSearchMs` still settles
-        // behind, its finds stored for the next read.
-        const storing = this.fanout
-          .search(
-            span ? toSearch.map((x) => this.traced(x, span.id)) : toSearch,
-            { scope: s.scope, text: subjectText, entities: [], limit: 8 },
-            { timeoutMs: this.config.sourceTimeoutMs, signal: s.abort.signal },
-          )
-          .then((outcomes) => {
+        const turn = s.turn;
+        const started = performance.now();
+        let madeEarly = 0;
+        let made = 0;
+        let stored = 0;
+        let serving = true;
+        // One call per source, stored as it settles (as `searchCutBehind` does for asks): a connector slower
+        // than `companionSearchMs` never hides what the others already answered. Only a page that reached its
+        // source is stored — a fan-out cache page was stored by the search that fetched it, under its own
+        // read mark; putting it again would mark an older copy freshly read over a newer one.
+        const searching = Promise.all(
+          toSearch.map((x) =>
+            this.fanout
+              .search(
+                [span ? this.traced(x, span.id) : x],
+                { scope: s.scope, text: subjectText, entities: [], limit: 8 },
+                {
+                  timeoutMs: this.config.sourceTimeoutMs,
+                  signal: s.abort.signal,
+                },
+              )
+              .then(([o]) => {
+                if (!o || !reachedSource(o)) return o;
+                made++;
+                if (serving) madeEarly++;
+                if (!s.closed) stored += this.store(s, o.items, span?.id ?? cue.span ?? 0, false, readMark);
+                return o;
+              }),
+          ),
+        );
+        const finished = searching
+          .then((results) => {
+            const outcomes = results.filter((o): o is FanoutOutcome => o !== undefined);
             this.noteLiveRead(s, cue, outcomes);
-            let made = 0;
-            for (const o of outcomes) {
-              if (reachedSource(o)) made++;
-              if (s.closed) break;
-              this.store(s, o.items, span?.id ?? cue.span ?? 0, false, readMark);
-            }
             if (span) this.spans!.close(span, outcomeAttrs(outcomes));
-            onCalls?.(made);
+            // Calls that answered inside the wait counted with the lookup's `sourceCalls` already; the rest
+            // get a trace of their own, as a search behind does.
+            const late = made - madeEarly;
+            if (late > 0) {
+              this.trace(s, {
+                sessionId: s.id,
+                turn,
+                event: "search",
+                decision: "skipped",
+                reason: "companion search behind",
+                latencyMs: Math.round(performance.now() - started),
+                sourceCalls: late,
+                modelCalls: 0,
+                costUsd: 0,
+                itemIds: [],
+              });
+            }
             return true;
           })
           .catch(() => {
             if (span) this.spans!.close(span, {});
             return false;
           });
-        const settled = await Promise.race([
-          storing,
+        // Serving never waits on the re-search: what has not answered inside `companionSearchMs` still settles
+        // behind, its finds stored for the next read.
+        await Promise.race([
+          finished,
           new Promise<boolean>((r) => setTimeout(() => r(false), this.config.companionSearchMs)),
         ]);
+        serving = false;
+        onCalls?.(madeEarly);
         const q = termIds(subjectText, vocab, false);
         const query: number[] = [];
         for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
         // Any shared subject term reads a hit back; what a hit must still prove is the link (`take`).
-        if (settled && query.length > 0)
+        if (stored > 0 && query.length > 0)
           for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now()))
             take({ item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc }, true);
       }
