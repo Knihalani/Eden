@@ -56,8 +56,8 @@ const explain = async (userId: string, sessionId: string) =>
         headers: { authorization: `Bearer ${KEY}` },
         body: JSON.stringify({ userId, sessionId }),
       })
-    ).json()) as { decisions: { event: string }[] }
-  ).decisions.map((d) => d.event);
+    ).json()) as { decisions: { event: string; decision?: string }[] }
+  ).decisions.map((d) => (d.decision === "reader-push" ? "push" : d.event));
 const ASK = "What time is lunch with Priya Raman?";
 
 describe("the proxy on OpenAI's Responses API (D656)", () => {

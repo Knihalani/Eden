@@ -861,6 +861,17 @@ export interface EngineConfig {
    */
   pushGate: boolean;
   /**
+   * `pushAsk` (D1985, promoted on the v0.3.0 broad benchmark; part `ask`): a turn that asks, that no push started
+   * for — the gate reads it `ask` or `qact`, or it has a question's shape (`asksQuestion`) — starts an `opened`
+   * push: the question is itself the lookup's request, and the candidates' own constraint-like gate decides
+   * whether anything goes, as for every started push. The benchmark's decisive correlation was that a turn with
+   * no packet scores 17% where an injected one scores 85%: most of the 16% of question turns the gate stays
+   * silent on were questions `ASKS_OWN`'s narrow shape and `pushStart` do not name, and ones whose rule start
+   * the gate vetoed. A turn the gate reads as chatter starts none; with no gate the question shape alone
+   * decides, as `pushStart` alone would (fail open).
+   */
+  pushAsk: boolean;
+  /**
    * D342 (A17, promoted under D112; on in the default, part `freshness`): with `revisionNotice`, an "updated:" line
    * names the times and dates (clock times, day and month, weekdays) the session was shown for the item in earlier
    * versions that the new version no longer has: "(changed at its source …; no longer: 09:30)". Over a day the update
@@ -1069,6 +1080,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushOpen: true,
   pushIndirect: true,
   pushGate: true,
+  pushAsk: true,
   revisionDiff: true,
   syncActivePollMs: 7_200_000,
   syncActivePollBackoff: true,

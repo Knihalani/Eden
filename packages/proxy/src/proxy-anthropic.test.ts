@@ -65,7 +65,7 @@ const explain = async (userId: string, sessionId: string) =>
         headers: { authorization: `Bearer ${KEY}` },
         body: JSON.stringify({ userId, sessionId }),
       })
-    ).json()) as { decisions: { event: string; turn: number }[] }
+    ).json()) as { decisions: { event: string; decision?: string; turn: number }[] }
   ).decisions;
 const ASK = "What time is lunch with Priya Raman?";
 
@@ -126,7 +126,8 @@ describe("the proxy on Anthropic's Messages API (D653)", () => {
     expect(sent.slice(1)).toEqual(tool.slice(1));
     // The same request again (a retry) reports nothing twice.
     await send(proxy, { model: "m", max_tokens: 8, messages: tool }, h);
-    const events = (await explain("a3", "s3")).map((d) => d.event);
+    // `pushAsk`'s "reader-push" trace is a push event beside the one reported message, not a second report.
+    const events = (await explain("a3", "s3")).map((d) => (d.decision === "reader-push" ? "push" : d.event));
     expect(events.filter((e) => e === "user_message").length).toBe(1);
     expect(events.filter((e) => e === "tool_call").length).toBe(1);
     expect(events.filter((e) => e === "tool_result").length).toBe(1);
@@ -153,7 +154,7 @@ describe("the proxy on Anthropic's Messages API (D653)", () => {
     const sent = seen.at(-1)!.body.messages;
     expect(sent[0]).toEqual(placed);
     expect(sent[2]).toEqual(messages[2]);
-    const events = (await explain("a4", "s4")).map((d) => d.event);
+    const events = (await explain("a4", "s4")).map((d) => (d.decision === "reader-push" ? "push" : d.event));
     expect(events.filter((e) => e === "user_message").length).toBe(1);
   });
 

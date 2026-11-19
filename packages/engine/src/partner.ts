@@ -605,6 +605,23 @@ const ASKS_CLASH = /\b(clash|clashing|conflict\w*|double.?book\w*|overlap\w*)\b/
 const ANAPHORIC_TIME = /\b(that time|then|that slot|same time)\b/i;
 
 /**
+ * `pushAsk` (D1985): the question shape a missed ask takes — a leading wh- or yes/no word, or a closing
+ * question mark. `ASKS_OWN`'s narrower shape starts `listed` in `pushStartOne` already; this reads the rest.
+ */
+const QUESTION =
+  /\?\s*$|^\s*(?:who|whose|whom|what|when|where|why|how|which|is|are|was|were|do|does|did|can|could|would|should|am)\b/i;
+
+/**
+ * Whether a turn that started no push asks a question: the gate reads it `ask` or `qact`, or it has a
+ * question's shape. A turn the gate reads as chatter is left alone even with a question mark ("you ok?"); with
+ * no gate the shape alone decides, as `pushStart` alone would (fail open).
+ */
+function asksQuestion(said: string, verdict: { kind?: string } | null): boolean {
+  if (verdict?.kind === "chatter") return false;
+  return verdict?.kind === "ask" || verdict?.kind === "qact" || QUESTION.test(said);
+}
+
+/**
  * Identifier-shaped numbers a text carries: three digits or more, or thousands-separated ("2,300" → "2300"), never
  * part of a code (the digits of "TP1357" stay letters' own). Four-digit years are not identifiers — a year pins the
  * item's date, `requestYear` reads those.
@@ -1116,6 +1133,13 @@ export class ContextPartner {
       if (this.namesComingDay(said, event.at, this.deps.cache.offsetOf(event)))
         start = { how: "opened" as const, request: said };
       if (start) internal.byDay = true;
+    }
+    // `pushAsk` (D1985): a turn that asks starts an opened push when nothing started one — the questions the
+    // turn gate stays silent on (the benchmark's 17%-vs-85% gap) and the question whose rule start the gate
+    // vetoed. The question is the lookup's request; the candidates' own gate decides whether anything goes,
+    // so silence stays the default. Chatter is left alone; with no gate the question's shape alone decides.
+    if (sent && !start && adds && this.config.pushAsk && asksQuestion(said, verdict)) {
+      start = { how: "opened" as const, request: said };
     }
     const listed = start?.how === "listed";
     const opened = start?.how === "opened";

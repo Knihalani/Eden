@@ -109,6 +109,8 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   pushIndirect: true,
   // D1014 (M13): the turn gate decides the push's start beside `pushStart`, in any language.
   pushGate: true,
+  // D1985: a turn that asks starts the push when nothing started it (the benchmark's ask-path gap).
+  pushAsk: true,
   // D342 (A17): updates name the times they drop.
   revisionDiff: true,
   // D376 (A25): checkAction holds a party only Eden's packets showed.
@@ -148,11 +150,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(85);
+    expect(differ.length).toBe(86);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(85);
+    expect(partKeys.size).toBe(86);
   });
 });
 
