@@ -330,7 +330,7 @@ describe("probes in the engine (config.probes)", () => {
     expect(pushStart("When is my physio appointment?", { open: true, indirect: true })?.how).toBe("listed");
   });
 
-  test("a pronoun-person follow-up carries the last request's name (D1981)", async () => {
+  test("a pronoun-person follow-up carries the last request's name (D1982)", async () => {
     const sources = [
       new StaticSource("mail", "Email", [
         {

@@ -356,7 +356,7 @@ const PASSIVE_NEED = new RegExp(
 export const ASKS_OWN = /^(?:when|where|what\s+(?:time|day|date)\b|how\s+(?:much|many)\b)\b[^.,;!?]*\b(?:my|our)\b/i;
 
 /**
- * A question asking who a pronoun means (D1981): "Who is he again?", "Who's she?". It names nobody — the person
+ * A question asking who a pronoun means (D1982): "Who is he again?", "Who's she?". It names nobody — the person
  * it asks about is the one the last request named (its `carry` is in `partner.ts`).
  */
 export const ASKS_WHO =

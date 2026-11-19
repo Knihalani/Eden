@@ -859,4 +859,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1978 | 2026-11-18 | Adopted: a request naming days is looked up by day, and the day's items ground it. | adopted |
 | D1979 | 2026-11-18 | Adopted: a clash ask resolves "that time" from the last turns, and a bare weekday weakly names a day. | adopted |
 | D1980 | 2026-11-18 | Adopted: a wh-question about a thing of the user's own opens the push and its subject answers. | adopted |
-| D1981 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
+| D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
+| D1982 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
