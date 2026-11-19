@@ -903,4 +903,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1988 | 2026-11-20 | Adopted: `examples/pi`, Eden as a Pi extension. | adopted |
 | D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
 | D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
-| D1985 | 2026-11-19 | Adopted: a `(shown above)` line keeps a short extract of the item — citations stay quotable across agent conversations. | adopted |
+| D2028 | 2026-11-21 | Adopted: a `(shown above)` line keeps a short extract of the item — citations stay quotable across agent conversations. | adopted |

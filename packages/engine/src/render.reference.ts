@@ -102,7 +102,7 @@ export function renderPacket(
           options.dense ? { title: item.title } : undefined,
           options.split,
         );
-        held = pick(rest, focus, SHOWN_EXTRACT);
+        held = pick(rest, focus, Math.min(each, SHOWN_EXTRACT));
         text = held ? `${SHOWN} ${held}` : SHOWN;
       } else {
         text = pick(parts, focus, each);

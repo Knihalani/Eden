@@ -97,7 +97,7 @@ export function renderPacket(
       let held: string;
       if (prior && !saysNew(parts)) {
         const rest = unknownParts(all, (w) => own.has(w) || shown.has(w));
-        held = pick(rest.parts, rest.keys, focus, SHOWN_EXTRACT, focusAll, focusWords);
+        held = pick(rest.parts, rest.keys, focus, Math.min(each, SHOWN_EXTRACT), focusAll, focusWords);
         text = held ? `${SHOWN} ${held}` : SHOWN;
       } else {
         text = pick(parts, keys, focus, each, focusAll, focusWords);
