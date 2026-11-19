@@ -4715,10 +4715,13 @@ export class ContextPartner {
     // the same `take` gate every companion takes: the pool still decides, and silence-by-default holds.
     if (vocab !== undefined && out.length < room && this.config.companionSearch > 0 && !s.closed) {
       // The query a source gets is link vocabulary, not record prose: the picks' terms that pass `term` (real
-      // words and letter+digit codes), sanitized like any text that leaves the engine — a connector sees no
-      // more of a private record than a pick's topic words, and never a secret the gate already stripped.
+      // words and letter+digit codes) plus the picks' refs — a companion two records share only by a number
+      // still reaches its connector — sanitized like any text that leaves the engine: a connector sees a
+      // pick's topic words, never a secret the gate already stripped.
       const subjectText = sanitizeForStore(
-        [...new Set(picks.flatMap((p) => [...p.terms]))].filter(term).slice(0, 24).join(" "),
+        [...[...new Set(picks.flatMap((p) => [...p.terms]))].filter(term), ...picks.flatMap((p) => [...p.refs])]
+          .slice(0, 32)
+          .join(" "),
       );
       const all = await this.deps.sources(s.scope).catch(() => [] as Source[]);
       // A source the sync reads is never re-searched: a current copy already sits in the cache the first pass
@@ -4735,7 +4738,6 @@ export class ContextPartner {
         const started = performance.now();
         let madeEarly = 0;
         let made = 0;
-        let stored = 0;
         let serving = true;
         // One call per source, stored as it settles (as `searchCutBehind` does for asks): a connector slower
         // than `companionSearchMs` never hides what the others already answered. Only a page that reached its
@@ -4756,7 +4758,7 @@ export class ContextPartner {
                 if (!o || !reachedSource(o)) return o;
                 made++;
                 if (serving) madeEarly++;
-                if (!s.closed) stored += this.store(s, o.items, span?.id ?? cue.span ?? 0, false, readMark);
+                if (!s.closed) this.store(s, o.items, span?.id ?? cue.span ?? 0, false, readMark);
                 return o;
               }),
           ),
@@ -4800,8 +4802,9 @@ export class ContextPartner {
         const q = termIds(subjectText, vocab, false);
         const query: number[] = [];
         for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
-        // Any shared subject term reads a hit back; what a hit must still prove is the link (`take`).
-        if (stored > 0 && query.length > 0)
+        // Any shared subject term reads a hit back; what a hit must still prove is the link (`take`). A page
+        // that only refreshed existing items' dates still counts — a corrected date can be the link.
+        if (madeEarly > 0 && query.length > 0)
           for (const h of this.deps.cache.search(s.scope, query, query.length, 12, this.now()))
             take({ item: h.item, matched: h.matched, score: h.coverage, sketch: h.sketch, doc: h.doc }, true);
       }
