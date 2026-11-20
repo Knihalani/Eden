@@ -522,6 +522,12 @@ interface FrozenRecorded extends Recorded {
   injectionId: string;
 }
 
+/**
+ * A user's `unverifiable` rows as a frozen list of `[item id, {mark, at}]` — the least recently noted first, so a
+ * `slice(-FROZEN_UNVERIFIABLE)` keeps the freshest (D2003).
+ */
+type FrozenUnverifiable = [string, { mark: number; at: number }][];
+
 /** Shape check for a `FrozenRecorded` read back from a blob: anything else is ignored (fails open). */
 function isFrozenRecorded(x: unknown): x is FrozenRecorded {
   const r = x as FrozenRecorded | null;
@@ -533,6 +539,23 @@ function isFrozenRecorded(x: unknown): x is FrozenRecorded {
     typeof r.situation === "string" &&
     typeof r.used === "boolean" &&
     typeof r.sessionId === "string"
+  );
+}
+
+/** Shape check for `FrozenUnverifiable` rows read back from a blob: anything else is ignored (fails open). */
+function isFrozenUnverifiable(x: unknown): x is FrozenUnverifiable {
+  return (
+    Array.isArray(x) &&
+    x.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 2 &&
+        typeof row[0] === "string" &&
+        typeof row[1] === "object" &&
+        row[1] !== null &&
+        typeof (row[1] as { mark?: unknown }).mark === "number" &&
+        typeof (row[1] as { at?: unknown }).at === "number",
+    )
   );
 }
 
@@ -968,6 +991,8 @@ export class ContextPartner {
   private readonly frozenEconomy = new Map<string, FrozenEconomy | null>();
   /** Source-yield snapshot `release` captures before `yields.forget` — `save` consumes it (D2002). */
   private readonly frozenYields = new Map<string, FrozenYields | null>();
+  /** `unverifiable` rows `release` captures before the map drops — `save` consumes them (D2003). */
+  private readonly frozenUnverifiable = new Map<string, FrozenUnverifiable | null>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -1187,6 +1212,10 @@ export class ContextPartner {
           this.frozenEconomy.delete(key);
           const yields = this.frozenYields.has(key) ? this.frozenYields.get(key) : this.yields?.snapshot(scope);
           this.frozenYields.delete(key);
+          const unverifiable = this.frozenUnverifiable.has(key)
+            ? this.frozenUnverifiable.get(key)
+            : this.unverifiableSnapshot(key);
+          this.frozenUnverifiable.delete(key);
           return {
             sync: sync?.snapshot(scope) ?? null,
             rows: this.deps.sourceMap.exportUser(scope),
@@ -1194,6 +1223,7 @@ export class ContextPartner {
             recorded,
             ...(economy ? { economy } : {}),
             ...(yields ? { yields } : {}),
+            ...(unverifiable ? { unverifiable } : {}),
           };
         },
         restored: (scope, items, extra) => {
@@ -1205,6 +1235,7 @@ export class ContextPartner {
                 recorded?: unknown;
                 economy?: unknown;
                 yields?: unknown;
+                unverifiable?: unknown;
               }
             | null
             | undefined;
@@ -1227,6 +1258,8 @@ export class ContextPartner {
           }
           if (carried?.economy && isFrozenEconomy(carried.economy)) this.economy.restore(scope, carried.economy);
           if (carried?.yields && isFrozenYields(carried.yields)) this.yields?.restore(scope, carried.yields);
+          if (carried?.unverifiable && isFrozenUnverifiable(carried.unverifiable))
+            this.restoreUnverifiable(scope, carried.unverifiable);
 
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
@@ -2256,11 +2289,13 @@ export class ContextPartner {
     // `economy.forget` below, so the snapshot must be taken first (D2001).
     this.frozenEconomy.set(key, this.economy.snapshot(scope));
     this.frozenYields.set(key, this.yields?.snapshot(scope) ?? null);
+    this.frozenUnverifiable.set(key, this.unverifiableSnapshot(key));
     const written = this.deps.cache.release(scope, write);
     this.frozenPending.delete(key);
     this.frozenRecorded.delete(key);
     this.frozenEconomy.delete(key);
     this.frozenYields.delete(key);
+    this.frozenUnverifiable.delete(key);
     this.restoredSessions.delete(key);
     this.unverifiable.delete(key);
     // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
@@ -4053,6 +4088,7 @@ export class ContextPartner {
     this.frozenRecorded.delete(key);
     this.frozenEconomy.delete(key);
     this.frozenYields.delete(key);
+    this.frozenUnverifiable.delete(key);
     // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
     this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
@@ -4322,6 +4358,30 @@ export class ContextPartner {
     tenant.delete(scopeKey(scope)); // Re-insert: Map order is least recently recorded user first.
     tenant.set(scopeKey(scope), mine);
     while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
+  }
+
+  /** The user's `unverifiable` rows as a frozen list (null when none is held), for the persist `save` hook. */
+  private unverifiableSnapshot(key: string): FrozenUnverifiable | null {
+    const mine = this.unverifiable.get(key);
+    if (!mine?.size) return null;
+    return [...mine].slice(-FROZEN_UNVERIFIABLE);
+  }
+
+  /** Seeds `unverifiable` from a restored blob's rows, under the same caps the live path enforces. */
+  private restoreUnverifiable(scope: Scope, rows: FrozenUnverifiable): void {
+    const key = scopeKey(scope);
+    const mine = new Map<string, { mark: number; at: number }>();
+    for (const [id, r] of rows.slice(-MAX_UNVERIFIABLE)) {
+      // `mark` is this process's signal counter: the dead process's value compares against nothing here —
+      // one above the new counter would hold a copy past real changes, one below re-reads needlessly.
+      // The hold's meaning is "a null said nothing as of the copy's mark": reset it to the copy's mark
+      // now, so a signal landed since (noticedMark is newer) doubts it, and the next one ends the hold.
+      mine.set(id, { mark: this.deps.cache.readMark(scope, id) ?? this.sync?.mark() ?? 0, at: r.at });
+    }
+    this.unverifiable.delete(key); // Re-insert: least recently noted user first.
+    this.unverifiable.set(key, mine);
+    while (this.unverifiable.size > MAX_UNVERIFIABLE_USERS)
+      this.unverifiable.delete(this.unverifiable.keys().next().value as string);
   }
 
   // ── retrieval ──
@@ -8634,6 +8694,8 @@ const CHECK_REUSE_MS = 30_000;
 /** `unverifiable`: items held per user, and users held (least recently noted dropped first). */
 const MAX_UNVERIFIABLE = 512;
 const MAX_UNVERIFIABLE_USERS = 4_096;
+/** `unverifiable` rows carried in a persist blob per user (D2003): the freshest `MAX_UNVERIFIABLE` of them. */
+const FROZEN_UNVERIFIABLE = 512;
 /** `unverifiable`: how long a held null stands at most, signal or not (a reply lacking the record may be transient). */
 const UNVERIFIABLE_HOLD_MS = 10 * 60_000;
 /** How long an item its source said is gone is kept from being stored again (the fan-out's stale-result window). */
