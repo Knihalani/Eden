@@ -68,7 +68,13 @@ def ensure_binary(root, work):
 
 
 def main():
-    args = argparse.ArgumentParser(description=__doc__).parse_args()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--pi-home",
+        metavar="PATH",
+        help="Pi home directory (default: $PI_HOME or ~/.pi)",
+    )
+    args = parser.parse_args()
     root = find_root(HERE)
     work = Path(os.environ.get("TMPDIR", "/tmp")) / "eden-pi-install"
     work.mkdir(parents=True, exist_ok=True)

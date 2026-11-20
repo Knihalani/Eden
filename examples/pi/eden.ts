@@ -303,7 +303,15 @@ export default function eden(pi: Pi): void {
       if (got.length > 0 && lastUser >= 0) {
         const text = got.map((p) => p.text).join("\n\n");
         if (turnFresh) keep(s.kept, keys[lastUser]!, text, new Set(keys));
-        else s.trailing.push(text);
+        else {
+          s.trailing.push(text);
+          // Bound the replay list like kept placements (D336): drop the oldest over the byte cap.
+          let bytes = 0;
+          for (const t of s.trailing) bytes += t.length;
+          while (bytes > MAX_KEPT_BYTES && s.trailing.length > 0) {
+            bytes -= s.trailing.shift()!.length;
+          }
+        }
       }
       const out: PiMessage[] = [];
       for (const [i, m] of messages.entries()) {
@@ -353,7 +361,14 @@ export default function eden(pi: Pi): void {
   });
 
   const reportResult = async (
-    event: { toolName?: string; toolCallId?: string; result?: unknown; isError?: boolean },
+    event: {
+      toolName?: string;
+      toolCallId?: string;
+      // tool_result carries `content` blocks; tool_execution_end carries the finished `result`.
+      content?: unknown;
+      result?: unknown;
+      isError?: boolean;
+    },
     ctx: PiCtx,
   ) => {
     try {
@@ -363,10 +378,13 @@ export default function eden(pi: Pi): void {
       s.reportedResults.add(event.toolCallId);
       const client = await liveClient(s);
       if (!client) return;
+      const payload = event.content ?? event.result;
       const text =
-        typeof event.result === "string"
-          ? event.result
-          : textOf((event.result as { content?: Block[] } | null | undefined)?.content);
+        typeof payload === "string"
+          ? payload
+          : Array.isArray(payload)
+            ? textOf(payload as Block[])
+            : textOf((payload as { content?: Block[] } | null | undefined)?.content);
       s.reported = s.reported.then(async () => {
         const { injection } = await client.observe(
           { kind: "tool_result", tool: event.toolName ?? "tool", text },
