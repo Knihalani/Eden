@@ -381,7 +381,9 @@ export class ProbeEconomy {
    * in Map order is the live order (least recently used first), so the tail holds the freshest.
    */
   snapshot(scope: Scope): FrozenEconomy | null {
-    const u = this.user(scope, false);
+    // Reads the user without `user()`: a snapshot is no activity, and the LRU promotion it does would
+    // hold an idle user (whose freeze triggers this) ahead of ones actually used.
+    const u = this.users.get(scopeKey(scope));
     if (!u) return null;
     const asked = (map: Map<string, Asked>, cap: number): [string, FrozenEconomyAsked][] =>
       [...map]
