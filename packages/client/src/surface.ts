@@ -96,13 +96,15 @@ export interface LocalSurfaceOptions {
 export interface LocalSurface<V = string> {
   /** Live sessions. Surfaces re-export or stash this for tests that seed stub Eden clients. */
   readonly sessions: Map<string, SurfaceSession<V>>;
-  /** The session for an agent-side id (created with a `session_start` report on first use), or null when no Eden is reachable. */
+  /** The session for an agent-side id (created with a `session_start` report on first use),
+   * or null when no Eden is reachable. */
   sessionFor(sessionId: string): Promise<SurfaceSession<V> | null>;
   /** The session's client, rebuilt on the sidecar's new endpoint after a respawn; null when the daemon is down. */
   liveClient(s: SurfaceSession<V>): Promise<EdenClient | null>;
   /** True when `key` was already reported; records it (bounded by `MAX_SEEN`) otherwise. */
   dedupe(s: SurfaceSession<V>, key: string): boolean;
-  /** Places `value` on `key`, dropping placements whose message left the window, then the oldest over `MAX_KEPT_BYTES`. */
+  /** Places `value` on `key`, dropping placements whose message left the window,
+   * then the oldest over `MAX_KEPT_BYTES`. */
   keep(map: Map<string, V>, key: string, value: V, live: Set<string>): void;
   /** Appends a mid-turn packet to the replay list, bounded like kept placements. */
   pushTrailing(s: SurfaceSession<V>, text: string): void;
