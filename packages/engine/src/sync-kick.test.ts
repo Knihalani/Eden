@@ -172,6 +172,15 @@ describe("syncKick (D751)", () => {
     expect(second.lists("u1")).toBe(6);
   });
 
+  test("an ask is a sighting: a user's first context question starts the backfill (D2005)", async () => {
+    const { partner, sync, lists, settle } = build({ syncKick: true });
+    // An ask-only integration (an MCP client) sends no events; its user's backfill starts at the first question.
+    await partner.ask({ tenantId: "t1", userId: "u1", sessionId: "s1", question: "what did leo say?" });
+    await settle();
+    expect(sync.warm(U1)).toBe(true);
+    expect(lists("u1")).toBe(6);
+  });
+
   test("off: a new user's backfill waits for the sync's tick, and no timer is set", async () => {
     const { partner, sync, clock, lists } = build({});
     await partner.observe(hello("u1"));

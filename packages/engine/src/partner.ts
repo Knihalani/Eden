@@ -2442,6 +2442,7 @@ export class ContextPartner {
     const t0 = performance.now();
     const thawing = this.deps.cache.ready(event); // D325, as in `observe`.
     if (thawing) await thawing;
+    this.seen(event); // A party check is a sighting too: the user's agent is live (D2005).
     const proceed = (reason: string): ActionCheck => ({
       verdict: "proceed",
       finding: null,
@@ -2565,6 +2566,9 @@ export class ContextPartner {
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
     const s = this.session(request);
+    // An ask is a sighting too (D2005): an ask-only integration (an MCP client) never sends `observe`, and its
+    // user's backfill still starts at their first question.
+    this.seen(s.scope);
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
