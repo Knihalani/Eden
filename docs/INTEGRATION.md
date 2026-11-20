@@ -693,6 +693,11 @@ Local mode is shared: `EDEN_LOCAL_BINARY`, then the install's own `bin/eden-loca
 selects a hosted Eden instead, and every integration fails open (D14). Each example's README covers
 its hooks and flags.
 
+One installer covers every agent whose home exists on the machine: `python3 examples/install.py`
+detects the homes, runs each agent's own `install.py`, and reports per agent (`--list` shows what
+was detected, `--agents a,b` and `--<agent>-home PATH` override, `--dry-run` prints without
+running — D2000).
+
 ## Other languages
 
 - **TypeScript or JavaScript outside this repository:** the workspace package exports TypeScript and depends on
