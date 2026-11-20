@@ -1,16 +1,24 @@
 """Eden as a gptme plugin (D1990): a package under ``~/.config/gptme/plugins/eden/`` whose ``hooks/`` and
 ``tools/`` modules delegate here.
 
-gptme's surface differs from Hermes': its hook messages append to the conversation log, so a packet yielded
-once stays where it landed — no keep machinery — and the party check runs on ``TOOL_EXECUTE_PRE``'s policy
-seam (``data.deny``), not on ``TOOL_CONFIRM``, which owns user consent.
+gptme's surface differs from Hermes': ``GENERATION_PRE`` hook messages reach only that one model call
+(they join a transient ``generation_msgs`` copy, never the log), so packets are re-yielded every
+generation until ``TURN_POST`` appends them to the log — after that they ride along in history. The
+party check runs on ``TOOL_EXECUTE_PRE`` plus ``TOOL_CONFIRM``: a pre-hook finding is stashed per call
+and the confirm hook returns ``ConfirmationResult.skip`` with the held result for the tools that
+route through confirmation (``shell``, ``save``, ``patch``…); tools that never confirm cannot be
+denied — their finding is still reported.
 
-- ``eden.generation`` (``GENERATION_PRE``): each fresh message reported — the latest ``user_message`` waits
-  for its lookup, everything else waits 0 — and fresh packets yielded as one ``system`` message.
-- ``eden.tool_pre`` (``TOOL_EXECUTE_PRE``): a checked call goes to ``check``; a finding calls ``data.deny``
-  with the held result, which is also reported so Eden sees what the agent saw.
+- ``eden.generation`` (``GENERATION_PRE``): each fresh message reported — the latest ``user_message``
+  waits for its lookup, everything else waits 0 — and every un-persisted packet yielded as ``system``
+  messages so context stays live through the turn's tool loop.
+- ``eden.tool_pre`` (``TOOL_EXECUTE_PRE``): the call reported, then checked; a finding's held result
+  is reported (Eden sees what the agent would see) and stashed for ``eden.tool_confirm``.
+- ``eden.tool_confirm`` (``TOOL_CONFIRM``): returns ``ConfirmationResult.skip`` on a stashed finding,
+  ``None`` otherwise so user consent hooks still run.
 - ``eden.tool_post`` (``TOOL_EXECUTE_POST``): the tool's result reported, deduped by call.
-- ``eden.turn`` (``TURN_POST``): the turn's last assistant message reported.
+- ``eden.turn`` (``TURN_POST``): the turn's last assistant message reported; un-persisted packets
+  appended to the log so later turns keep them.
 - ``eden.session_*`` (``SESSION_START``/``SESSION_END``): the session's start reported, its end dropped.
 - ``ask_context`` (tool): answered by ``EdenClient.ask``; never reported, never checked.
 
@@ -76,6 +84,9 @@ class EdenGptme(EdenHermes):
         self._seen: "OrderedDict[str, OrderedDict[str, int]]" = OrderedDict()
         self._first: Dict[str, bool] = {}
         self._current = DEFAULT_SESSION
+        self._delivered: Dict[str, List[str]] = {}
+        self._persisted: Dict[str, set] = {}
+        self._held: Dict[int, str] = {}
 
     def _in_scope(self) -> bool:
         # gptme runs the plugin in its own process; there is no separate launch home to mismatch.
@@ -105,6 +116,13 @@ class EdenGptme(EdenHermes):
                 found = EdenGptme._sid(inner)
                 if found:
                     return found
+        for attr in ("persisted_path", "path"):
+            inner = getattr(value, attr, None)
+            if isinstance(inner, (str, Path)) and inner:
+                # <logdir>/conversation.jsonl: the conversation id is the parent directory's name.
+                found = Path(inner).parent.name
+                if found:
+                    return found
         if isinstance(value, (str, Path)):
             text = str(value)
             return Path(text).name or DEFAULT_SESSION
@@ -129,24 +147,33 @@ class EdenGptme(EdenHermes):
 
     # -- hook callbacks (tested without gptme: the hooks/ wrappers translate gptme objects to these) -------
 
-    def generation(self, messages: List[Any], session_id: Any = None) -> Optional[str]:
-        """``GENERATION_PRE``: report fresh messages, return the packet text to yield (or ``None``)."""
+    def generation(self, messages: List[Any], session_id: Any = None) -> List[str]:
+        """``GENERATION_PRE``: report fresh messages, return the un-persisted packet texts to yield.
+
+        ``GENERATION_PRE`` context joins a transient copy of the log, so every packet the session has
+        delivered but not yet persisted is returned again each call — the packet stays live through
+        the turn's tool loop. ``persist`` moves them into the log at ``TURN_POST``.
+        """
         try:
             if not self._in_scope():
-                return None
-            c = self.client(self._session_id(session_id))
-            if c is None:
-                return None
+                return []
             sid = self._session_id(session_id)
+            c = self.client(sid)
+            if c is None:
+                return []
             seen = self._seen_for(sid)
             first = sid not in self._first
             roles = [getattr(m, "role", "") for m in messages]
             last_user = len(roles) - 1 - roles[::-1].index("user") if "user" in roles else -1
             got: List[Any] = []
+            copies: Dict[str, int] = {}
             for i, m in enumerate(messages):
                 if getattr(m, "role", "") == "system":
                     continue
-                key = _key_of(m)
+                h = _key_of(m)
+                n = copies.get(h, 0)
+                copies[h] = n + 1
+                key = f"{h}#{n}"  # the Nth copy of identical content is its own message
                 if key in seen:
                     continue
                 seen[key] = 1
@@ -158,25 +185,51 @@ class EdenGptme(EdenHermes):
                 got.extend(self._report(c, _events_of(m), waits))
             self._first[sid] = True
             got.extend(c.pending())
-            texts = [i["text"] for i in got if isinstance(i, dict) and isinstance(i.get("text"), str)]
-            text = "\n\n".join(t for t in texts if t.strip())
-            return text or None
+            fresh = [i["text"] for i in got if isinstance(i, dict) and isinstance(i.get("text"), str)]
+            fresh = [t for t in fresh if t.strip()]
+            if fresh:
+                self._delivered.setdefault(sid, []).extend(t for t in fresh if t not in self._delivered.get(sid, []))
+            return self._unpersisted(sid)
         except Exception as e:  # noqa: BLE001
             _warn(f"generation: {e}")
-            return None
+            return []
+
+    def _unpersisted(self, sid: str) -> List[str]:
+        persisted = self._persisted.setdefault(sid, set())
+        return [t for t in self._delivered.get(sid, []) if t not in persisted]
+
+    def persist(self, session_id: Any = None) -> List[str]:
+        """``TURN_POST``: the packet texts to append to the log; afterwards they ride along in history."""
+        try:
+            sid = self._session_id(session_id)
+            texts = self._unpersisted(sid)
+            self._persisted.setdefault(sid, set()).update(texts)
+            return texts
+        except Exception as e:  # noqa: BLE001
+            _warn(f"persist: {e}")
+            return []
 
     def turn_end(self, messages: List[Any], session_id: Any = None) -> None:
         """``TURN_POST``: report the turn's last assistant message if it is new."""
         try:
             if not self._in_scope():
                 return None
-            last = next((m for m in reversed(messages) if getattr(m, "role", "") == "assistant"), None)
-            if last is None:
-                return None
             sid = self._session_id(session_id)
             seen = self._seen_for(sid)
-            key = _key_of(last)
-            if key in seen:
+            copies: Dict[str, int] = {}
+            key = ""
+            for m in messages:
+                if getattr(m, "role", "") == "system":
+                    continue
+                h = _key_of(m)
+                n = copies.get(h, 0)
+                copies[h] = n + 1
+                if getattr(m, "role", "") == "assistant":
+                    key = f"{h}#{n}"
+            if not key or key in seen:
+                return None
+            last = next((m for m in reversed(messages) if getattr(m, "role", "") == "assistant"), None)
+            if last is None:
                 return None
             seen[key] = 1
             c = self.client(sid)
@@ -187,31 +240,51 @@ class EdenGptme(EdenHermes):
             _warn(f"turn_end: {e}")
         return None
 
-    def tool_pre(self, tool_name: Any, tool_input: Any = None, session_id: Any = None) -> Optional[str]:
-        """``TOOL_EXECUTE_PRE``: report the call, then the deny reason on a finding (else ``None``)."""
+    def tool_pre(self, tool_use: Any, session_id: Any = None) -> Optional[str]:
+        """``TOOL_EXECUTE_PRE``: report the call, then stash the deny reason on a finding (else ``None``).
+
+        ``tool_use`` is gptme's ToolUse (or any object with ``tool``/``content``/``args``/``kwargs``);
+        a finding is keyed by the object so ``tool_confirm`` — which fires mid-execution on the same
+        ToolUse — can skip with the held result.
+        """
+        tool_name = getattr(tool_use, "tool", None) or getattr(tool_use, "name", None)
         try:
             if not self._in_scope() or not _is_tool(tool_name) or _is_ask(tool_name):
                 return None
+            tool_input: Dict[str, Any] = {}
+            for field in ("content", "args", "kwargs"):
+                value = getattr(tool_use, field, None)
+                if value is not None:
+                    tool_input[field] = value
             c = self.client(self._session_id(session_id))
             if c is None:
                 return None
-            c.observe({"kind": "tool_call", "tool": tool_name,
-                       "input": tool_input if tool_input is not None else {}}, wait_ms=0)
+            c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input}, wait_ms=0)
             if not self.checks(tool_name):
                 return None
-            res = c.check(tool_name, tool_input if tool_input is not None else {})
+            res = c.check(tool_name, tool_input)
             finding = res.get("finding") if isinstance(res, dict) and res.get("verdict") == "finding" else None
             if not isinstance(finding, dict) or not isinstance(finding.get("text"), str):
                 return None
             held = held_result(tool_name, finding)
             c.observe({"kind": "tool_result", "tool": tool_name, "output": held}, wait_ms=0)
+            self._held[id(tool_use)] = held
             return held
         except Exception as e:  # noqa: BLE001
             _warn(f"tool_pre: {e}")
             return None
 
-    def tool_post(self, tool_name: Any, output: Any, session_id: Any = None) -> None:
+    def tool_confirm(self, tool_use: Any) -> Optional[str]:
+        """``TOOL_CONFIRM``: the held result for this call's stashed finding (else ``None``)."""
+        try:
+            return self._held.pop(id(tool_use), None)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def tool_post(self, tool_use: Any, output: Any, session_id: Any = None) -> None:
         """``TOOL_EXECUTE_POST``: report the result, deduped with whatever the log already reported."""
+        self._held.pop(id(tool_use), None)
+        tool_name = getattr(tool_use, "tool", None) or getattr(tool_use, "name", None)
         try:
             if not self._in_scope() or not _is_tool(tool_name) or _is_ask(tool_name):
                 return None
@@ -239,6 +312,9 @@ class EdenGptme(EdenHermes):
             # The next identity on this logdir is a new session: its dedup and first-call state reset.
             self._seen.pop(sid, None)
             self._first.pop(sid, None)
+            self._delivered.pop(sid, None)
+            self._persisted.pop(sid, None)
+            self._held.clear()
             self.end_session(session_id=sid)
         except Exception as e:  # noqa: BLE001
             _warn(f"session_end: {e}")
