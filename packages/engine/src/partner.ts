@@ -2403,8 +2403,14 @@ export class ContextPartner {
    * change notice reads no items and leaves a frozen user frozen.
    */
   ready(scope: Scope): Promise<void> | null {
-    this.seen(scope);
-    return this.deps.cache.ready(scope);
+    const thawing = this.deps.cache.ready(scope);
+    // After the thaw: a restored blob seeds the sync's state first, so `seen` tracks that state, never a fresh
+    // empty one the restore would then skip (and a restored user, already warm, is not kicked again).
+    if (!thawing) {
+      this.seen(scope);
+      return null;
+    }
+    return thawing.then(() => void this.seen(scope));
   }
 
   /**
