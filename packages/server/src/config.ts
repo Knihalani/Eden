@@ -108,6 +108,11 @@ export interface ServerConfig {
    */
   cluster?: { key: string | null; size: number };
   /**
+   * EDEN_LOCAL_DETACHED=1 (local mode only): the sidecar's owner detaches it, so its lifetime is not its
+   * stdin pipe — a shared daemon outlives each hook/CLI process that spawned or attached to it.
+   */
+  detached?: boolean;
+  /**
    * A shutdown's whole budget (EDEN_SHUTDOWN_GRACE_MS, default 10 s, D992): in-flight requests finish, live users are
    * written, store writes settle, then the process exits; the router kills a child still running after it. Give the
    * container more (`docker stop -t 30`, compose `stop_grace_period: 30s`).
