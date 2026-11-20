@@ -73,13 +73,21 @@ function keyOf(m: PiMessage): string {
   return createHash("sha256").update(parts.join("\0")).digest("hex").slice(0, 32);
 }
 
-function eventsOf(m: PiMessage): { kind: string; text?: string; tool?: string; input?: unknown; draft?: boolean }[] {
+function eventsOf(m: PiMessage): {
+  kind: string;
+  text?: string;
+  tool?: string;
+  input?: unknown;
+  output?: string;
+  isError?: boolean;
+  draft?: boolean;
+}[] {
   const text = textOf(m.content);
   switch (m.role) {
     case "user":
       return text ? [{ kind: "user_message", text }] : [];
     case "assistant": {
-      const out: { kind: string; text?: string; tool?: string; input?: unknown }[] = [];
+      const out: ReturnType<typeof eventsOf> = [];
       if (text) out.push({ kind: "agent_message", text });
       for (const b of Array.isArray(m.content) ? m.content : []) {
         if (b?.type === "toolCall" && b.name && b.name !== ASK) {
@@ -89,7 +97,7 @@ function eventsOf(m: PiMessage): { kind: string; text?: string; tool?: string; i
       return out;
     }
     case "toolResult":
-      return m.toolName === ASK ? [] : [{ kind: "tool_result", tool: m.toolName ?? "tool", text }];
+      return m.toolName === ASK ? [] : [{ kind: "tool_result", tool: m.toolName ?? "tool", output: text }];
     default:
       return [];
   }
@@ -348,7 +356,7 @@ export default function eden(pi: Pi): void {
         s.reportedResults.add(event.toolCallId);
         s.reported = s.reported.then(async () => {
           const { injection } = await client.observe(
-            { kind: "tool_result", tool: event.toolName ?? "tool", text: held },
+            { kind: "tool_result", tool: event.toolName ?? "tool", output: held },
             { waitMs: 0 },
           );
           if (injection) s.queued.push(injection);
@@ -387,7 +395,7 @@ export default function eden(pi: Pi): void {
             : textOf((payload as { content?: Block[] } | null | undefined)?.content);
       s.reported = s.reported.then(async () => {
         const { injection } = await client.observe(
-          { kind: "tool_result", tool: event.toolName ?? "tool", text },
+          { kind: "tool_result", tool: event.toolName ?? "tool", output: text, isError: !!event.isError },
           { waitMs: 0 },
         );
         if (injection) s.queued.push(injection);
