@@ -2074,11 +2074,14 @@ export class ContextPartner {
       const queued = new Set<string>();
       for (const p of s.pending) for (const c of p.citations) queued.add(c.itemId);
       const snap = s.ledger.snapshot();
+      // Marks and versions of queued items are dropped — they were never handed. `shown` stays: for a queued
+      // REVISION the earlier copies really were handed, and their `times` feed `revisionDiff`; dropping them
+      // would erase delivery history the agent does hold (BUG_0001).
       const ledger: LedgerSnapshot = queued.size
         ? {
             delivered: snap.delivered.filter(([id]) => !queued.has(id)),
             versions: snap.versions.filter(([id]) => !queued.has(id)),
-            shown: snap.shown.filter(([id]) => !queued.has(id)),
+            shown: snap.shown,
           }
         : snap;
       const delivered = s.delivered
