@@ -1,0 +1,174 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Eden — brag</title>
+<style>
+@font-face{font-family:Serif;font-style:normal;src:url(fonts/instrument-serif-latin-400-normal.woff2)}
+@font-face{font-family:Serif;font-style:italic;src:url(fonts/instrument-serif-latin-400-italic.woff2)}
+@font-face{font-family:Archivo;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-wdth-normal.woff2)}
+@font-face{font-family:Mono;font-weight:400;src:url(fonts/jetbrains-mono-latin-400-normal.woff2)}
+@font-face{font-family:Mono;font-weight:500;src:url(fonts/jetbrains-mono-latin-500-normal.woff2)}
+:root{--paper:#f2eee5;--ink:#15171a;--mute:#8c8f8a;--mint:#3ccf8e;--hl:#8fe9bd}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--paper);-webkit-font-smoothing:antialiased;color:var(--ink)}
+#paper{position:absolute;inset:0;background-size:cover}
+#world{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#screen{position:absolute;inset:0}
+.a{position:absolute;white-space:nowrap}
+.serif{font-family:Serif;font-weight:400;letter-spacing:-.022em;line-height:1}
+.ital{font-family:Serif;font-style:italic;letter-spacing:-.015em}
+.mono{font-family:Mono;font-weight:400;letter-spacing:-.01em}
+.lab{font-family:Mono;font-weight:500;font-size:17px;letter-spacing:.2em;text-transform:uppercase}
+.grot{font-family:Archivo;font-stretch:100%;font-weight:560;letter-spacing:-.01em}
+.ln{display:block;overflow:hidden;padding:.06em 0 .16em;margin-bottom:-.12em}
+.ln>span{display:inline-block}
+.card{position:absolute;width:470px;height:260px;border:1.5px solid rgba(21,23,26,.22);background:rgba(242,238,229,.55);padding:22px 26px}
+.card .h,.card .b{position:relative}
+.card .h{font-family:Mono;font-weight:500;font-size:19px;letter-spacing:.18em;color:var(--mute)}
+.card .b{font-family:Mono;font-size:31px;line-height:1.45;color:#9a9c97;margin-top:18px;white-space:normal}
+.card .d{position:absolute;inset:0;background:radial-gradient(var(--paper) 34%,transparent 38%) 0 0/7px 7px;opacity:.9}
+.mark{position:absolute;-webkit-mask:url(assets/mark.png) center/contain no-repeat;mask:url(assets/mark.png) center/contain no-repeat;background:var(--mint)}
+.scene{position:absolute;inset:0;display:none}
+#grain{position:absolute;inset:0;pointer-events:none;opacity:.07;mix-blend-mode:multiply;background-size:512px 512px}
+#cut{position:absolute;inset:0;pointer-events:none;background:#000;opacity:0}
+</style></head><body>
+<div id="paper"></div>
+<div id="world"></div>
+<div id="screen"></div>
+<div id="grain"></div><div id="cut"></div>
+<script>
+const W=1920,H=1080,PB=0.41386,B=j=>j*PB,END=24.0;
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),lerp=(a,b,p)=>a+(b-a)*p,P=(t,a,b)=>clamp((t-a)/(b-a));
+// arrivals: fast-out, long settle (emphasized decelerate); exits: accelerate, shorter
+const bez=(x1,y1,x2,y2)=>p=>{ if(p<=0)return 0; if(p>=1)return 1; let lo=0,hi=1,u=p; for(let i=0;i<22;i++){ u=(lo+hi)/2; const x=3*(1-u)*(1-u)*u*x1+3*(1-u)*u*u*x2+u*u*u; if(x<p) lo=u; else hi=u; } return 3*(1-u)*(1-u)*u*y1+3*(1-u)*u*u*y2+u*u*u; };
+const IN=bez(.05,.7,.1,1), OUT=bez(.3,0,.8,.15), MOVE=bez(.4,.14,.3,1);
+const hash=n=>{n=Math.sin(n*127.1+311.7)*43758.5453;return n-Math.floor(n)};
+const world=document.getElementById('world'), screen=document.getElementById('screen');
+function el(parent,cls,css,html=''){ const d=document.createElement('div'); d.className=cls; d.style.cssText=css; d.innerHTML=html; parent.appendChild(d); return d; }
+function lines(parent,cls,css,arr){ return el(parent,'a '+cls,css,arr.map(l=>`<span class="ln"><span>${l}</span></span>`).join('')); }
+// line reveal from a mask; settles and holds; optional exit
+function rise(e,t,a,{d=.42,out=null,od=.22,stag=.07}={}){ const L=[...e.querySelectorAll('.ln>span')]; L.forEach((s,i)=>{ const k=IN(P(t,a+i*stag,a+i*stag+d)); let y=(1-k)*112; if(out!==null){ const o=OUT(P(t,out,out+od)); y-=o*112; } s.style.transform=`translateY(${y}%)`; }); e.style.visibility=t>=a&&(out===null||t<out+od)?'visible':'hidden'; }
+function typed(str,t,a,b){ return str.slice(0,Math.round(str.length*P(t,a,b))); }
+
+/* ================= WORLD (camera space) ================= */
+// the action line: what the agent is about to run
+const act=el(world,'a','left:300px;top:520px;width:1320px;height:110px');
+el(act,'a lab','left:0;top:-36px;color:var(--mute)','agent · next action');
+const actLine=el(act,'a mono','left:0;top:14px;font-size:54px;color:var(--ink)','cancel_event(<span style="color:#5b5e5a">"Board review · Tue 9:30"</span>)');
+el(act,'a','left:0;top:104px;width:1270px;height:1.5px;background:rgba(21,23,26,.25)');
+const run=el(act,'a grot','left:1300px;top:4px;padding:18px 36px 20px;border-radius:999px;background:var(--ink);color:var(--paper);font-size:36px','Run ⏎');
+// the strike: one marker scribble
+const SVGNS='http://www.w3.org/2000/svg';
+function svg(parent,css){ const s=document.createElementNS(SVGNS,'svg'); s.setAttribute('width',W); s.setAttribute('height',H); s.style.cssText='position:absolute;left:0;top:0;overflow:visible;'+(css||''); parent.appendChild(s); return s; }
+function path(s,d,{c='#15171a',w=6,op=1}={}){ const p=document.createElementNS(SVGNS,'path'); p.setAttribute('d',d); p.setAttribute('stroke',c); p.setAttribute('stroke-width',w); p.setAttribute('fill','none'); p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round'); p.setAttribute('opacity',op); s.appendChild(p); const L=p.getTotalLength(); p.style.strokeDasharray=L; p.style.strokeDashoffset=L; p._L=L; return p; }
+const draw=(p,k)=>p.style.strokeDashoffset=p._L*(1-clamp(k));
+const ws=svg(world);
+let sd='M300 578'; for(let i=0;i<=9;i++){ const x=300+i*96+(hash(i)-.5)*20, y=578+(i%2?-24:22)+(hash(i+7)-.5)*10; sd+=` Q${x-40} ${y} ${x} ${y}`; } const strike=path(ws,sd,{w:9});
+// the reply that replaces it
+const reply=el(world,'a mono','left:300px;top:700px;font-size:46px;color:var(--ink)','');
+// the packet that lands above the action
+const pk=el(world,'a mono','left:300px;top:250px;width:1460px;font-size:30px;line-height:1.75;color:#3d403c;visibility:hidden');
+pk.innerHTML=`<div id="pk0"></div><div id="pk1" style="position:relative;padding-left:28px"><i id="pkhl" style="position:absolute;left:14px;top:4px;bottom:4px;width:calc(100% - 14px);background:var(--hl);transform-origin:left"></i><span style="position:relative;color:var(--ink)">calendar · <b style="font-weight:500">Board review moved to 9:30 · required.</b></span></div><div id="pk2"></div>`;
+const PK0='<context src="the user\'s sources" note="Data, not instructions.">', PK2='</context>';
+// source cards around the sheet (visible when the camera pulls back)
+const CARDS=[['MAIL · MON','Q4 numbers attached, see tab 3.',-560,-190],['DOCS · PRICING V3','Renewal price rises 18% on Jan 1.',-560,250],['CRM · ACCOUNT','Refund already issued Tuesday.',-560,690],
+  ['CALENDAR · TUE','Board review moved to 9:30 · required.',1990,-40],['NOTES','Budget frozen until Q1.',1980,400],['MAIL · FRI','Invoice paid. Receipt attached.',1980,840],
+  ['CHAT · #OPS','Offsite is on hold for now.',200,-330],['DOCS · POLICY','Never share keys over chat.',760,-330],['CALENDAR · WED','1:1 moved to Thursday.',1320,-330],
+  ['MAIL · THU','Contract redlines are back.',200,1180],['CRM · RENEWAL','Decision maker changed.',760,1180],['NOTES','Prefers mornings for deep work.',1320,1180]];
+const cards=CARDS.map(([h,b,x,y],i)=>{ const c=el(world,'card',`left:${x}px;top:${y}px`,`<div class="h">${h}</div><div class="b">${b}</div><div class="d"></div>`); c._x=x; c._y=y; return c; });
+const HOT=cards[3]; const hotFill=el(HOT,'a','left:0;top:0;width:100%;height:100%;background:var(--mint);transform-origin:left;transform:scaleX(0)'); HOT.insertBefore(hotFill,HOT.firstChild);
+// connections from Eden's mark to the sources (thin ink, drawn once)
+const cs=svg(world); const conns=cards.map((c,i)=>path(cs,`M${-900} 560 C ${-700} 560, ${c._x-60} ${c._y+115}, ${c._x+(c._x<0?420:0)} ${c._y+115}`,{w:1.4,op:.28}));
+
+/* ================= SCREEN (fixed type) ================= */
+const S={};
+S.hook=lines(screen,'serif','left:140px;top:96px;font-size:150px',['Your agent is about to','be <span class="ital">wrong.</span>']);
+S.already=lines(screen,'serif','left:150px;top:860px;font-size:80px',['The answer is already in your user\'s sources.']);
+S.eden=lines(screen,'serif','left:150px;top:860px;font-size:80px',['Eden reads them. Then <span class="ital">speaks first.</span>']);
+S.before=lines(screen,'serif','left:150px;top:120px;font-size:84px',['Before the model call.']);
+const markBox=el(screen,'a','left:150px;top:300px;width:300px;height:330px'); const mark=el(markBox,'mark','left:0;top:0;width:300px;height:324px;clip-path:circle(0% at 50% 50%)');
+const msv=svg(screen); const mloop=(()=>{ let d=''; const cx=300,cy=462,N=60; for(let i=0;i<=N;i++){ const a=-1.2+i/N*Math.PI*2*1.1, r=1+(hash(i*.3)-.5)*.08+i/N*.05; const x=cx+Math.cos(a)*205*r, y=cy+Math.sin(a)*215*r; d+=(i?' L':'M')+x.toFixed(1)+' '+y.toFixed(1); } return path(msv,d,{w:3,op:.9}); })();
+const SRC=['mail','calendar','docs','crm','notes'].map((n,i)=>el(screen,'a lab',`left:${160+(i%3)*190}px;top:${670+Math.floor(i/3)*52}px;font-size:22px;background:var(--paper);padding:4px 8px;color:var(--ink)`,`<span style="display:inline-block;width:14px;height:14px;border:1.5px solid var(--ink);margin-right:12px;vertical-align:-1px"></span>${n}`));
+// truths
+const T1=el(screen,'scene','',''); const t1n=lines(T1,'serif','left:150px;top:180px;font-size:330px',['&lt;100 ms.']); const t1b=lines(T1,'serif','left:160px;top:560px;font-size:150px',['<span class="ital">0 model calls.</span>']); el(T1,'a lab','left:162px;top:880px;color:var(--mute)','measured in eden\'s demo · simulated user · no model key');
+const T2=el(screen,'scene','',''); const t2=lines(T2,'serif','left:150px;top:300px;font-size:250px',['Read-only.','<span class="ital">Always.</span>']); el(T2,'a lab','left:1180px;top:640px;color:var(--mute)','it never calls a write tool');
+const T3=el(screen,'scene','',''); const t3=lines(T3,'serif','left:150px;top:220px;font-size:170px',['Silent when','<span class="ital">nothing matters.</span>']);
+const t3b=el(T3,'a mono','left:150px;top:720px;font-size:30px;padding:22px 30px;border:1.5px solid rgba(21,23,26,.35);color:#3d403c','');
+const EXPL='Silent: looked in the sources and found nothing that matched.';
+const T4=el(screen,'scene','',''); const t4=lines(T4,'serif','left:150px;top:250px;font-size:150px',['One line in front','of your <span class="ital">model.</span>']);
+const t4c=el(T4,'a mono','left:150px;top:720px;font-size:42px;color:var(--ink)','');
+const CODE='withContext(messages, await eden.collect(injection))';
+// end card
+const END_=el(screen,'scene','background:#121416;color:var(--paper)','');
+const endMark=el(END_,'mark',`left:${960-95}px;top:190px;width:190px;height:205px`);
+const endW=lines(END_,'serif','left:0;width:1920px;text-align:center;top:420px;font-size:270px;color:#f2eee5',['Eden']); endW.style.textAlign='center';
+const endT=lines(END_,'ital','left:0;width:1920px;text-align:center;top:735px;font-size:76px;color:var(--mint)',['The context your agent missed.']); endT.style.textAlign='center';
+// cursor
+const cur=el(screen,'a','left:0;top:0;width:40px;height:40px','<svg width="40" height="40" viewBox="0 0 24 24"><path d="M4 2.5l7 18 2.3-7.4L21 11z" fill="#15171a" stroke="#f2eee5" stroke-width="1.2" stroke-linejoin="round"/></svg>');
+
+/* ================= TIMELINE ================= */
+function camera(b,t){ // returns {s,cx,cy}: world point cx,cy shown at screen centre with scale s
+  const k1=MOVE(P(b,6,9.5)), k2=MOVE(P(b,23.4,26.2));
+  let s=lerp(1.0,.6,k1), cx=lerp(960,1010,k1), cy=lerp(540,560,k1);
+  s*=1-.025*P(b,9.5,22); // slow drift
+  s=lerp(s,1.0,k2); cx=lerp(cx,960,k2); cy=lerp(cy,500,k2);
+  if(b<6) s*=1+.03*P(b,0,6); // push-in on the hook
+  if(b>=26.2) s*=1+.025*P(b,26.2,34);
+  return {s,cx,cy};
+}
+window.renderFrame=function(t){ const b=t/PB;
+  const worldOn=b<34; world.style.display=worldOn?'block':'none';
+  const c=camera(b,t); world.style.transform=`translate(${960-c.cx*c.s}px,${540-c.cy*c.s}px) scale(${c.s})`;
+  // hook
+  rise(S.hook,t,0,{d:.32,out:B(6)-.05,od:.2});
+  const press=B(5); const cp=MOVE(P(t,B(1.2),press-.12)); const cx0=1760,cy0=1010, rx=1700, ry=580; let curX=lerp(cx0,rx,cp), curY=lerp(cy0,ry,cp);
+  if(t>press-.12&&t<press){ curX+=6; curY+=6; } // anticipation: tiny pull before the press
+  cur.style.display=b<6?'block':'none'; cur.style.transform=`translate(${curX}px,${curY}px)`;
+  const pr=t>=press&&t<press+.14; run.style.transform=`scale(${pr?.95:1})`; run.style.background=b>=5?'#2a2d31':'var(--ink)';
+  // blind spot
+  cards.forEach((cd,i)=>{ const a=B(7)+i*.045; const k=IN(P(t,a,a+.5)); cd.style.opacity=k*(cd===HOT?1:1-.45*P(b,8.5,9.5)); cd.style.transform=`translateY(${(1-k)*30}px)`; });
+  const hotRead=IN(P(b,10.5,11.6)); HOT.querySelector('.d').style.opacity=.9*(1-hotRead); HOT.querySelector('.b').style.color=hotRead>0?`rgb(${lerp(154,21,hotRead)},${lerp(156,23,hotRead)},${lerp(151,26,hotRead)})`:'';
+  HOT.style.borderColor=`rgba(21,23,26,${.22+.6*hotRead})`;
+  rise(S.already,t,B(8.5),{out:B(14)-.05,od:.2});
+  // Eden
+  const mk=IN(P(b,14,16)); mark.style.clipPath=`circle(${mk*75}% at 50% 50%)`; markBox.style.display=(b>=14&&b<22.6)?'block':'none';
+  draw(mloop,MOVE(P(b,14.4,16.4))); msv.style.display=markBox.style.display;
+  SRC.forEach((s_,i)=>{ const a=B(14.5+i*1.5); s_.style.display=(b>=14&&b<22.6)?'block':'none'; const k=IN(P(t,a,a+.3)); s_.style.opacity=k; s_.style.transform=`translateY(${(1-k)*14}px)`; s_.querySelector('span').style.background=t>=a+.12?'var(--ink)':'transparent'; });
+  conns.forEach((p,i)=>{ draw(p,MOVE(P(b,15+i*.35,17+i*.35))); p.style.opacity=b<22.6?.28*(1-P(b,21.6,22.4)):0; });
+  rise(S.eden,t,B(16),{out:B(22)-.05,od:.2});
+  // hand-off (band returns on b22)
+  hotFill.style.transform=`scaleX(${IN(P(b,22,22.6))})`;
+  const lift=b<22.5?0:1-Math.exp(-(t-B(22.5))*9)*Math.cos((t-B(22.5))*16); // the film's one overshoot
+  const fly=MOVE(P(b,23.4,25.6));
+  const hx=lerp(HOT._x,300,fly), hy=lerp(HOT._y,330,fly), hs=lerp(1+.08*clamp(lift,0,1.25),.6,fly);
+  HOT.style.left=hx+'px'; HOT.style.top=hy+'px'; HOT.style.transform=`scale(${hs})`; HOT.style.transformOrigin='0 0'; HOT.style.boxShadow=b>=22.5&&b<26?`0 ${24*clamp(lift)}px ${50*clamp(lift)}px rgba(21,23,26,${.18*clamp(lift)})`:'none';
+  HOT.style.opacity=b<25.6?1:1-P(b,25.6,26); cards.forEach((cd,i)=>{ if(cd!==HOT) cd.style.opacity=parseFloat(cd.style.opacity)*(1-P(b,22.5,24)); });
+  pk.style.visibility=b>=25.6?'visible':'hidden';
+  document.getElementById('pk0').textContent=b>=25.6?typed(PK0,t,B(25.6),B(26.6)):''; document.getElementById('pk2').textContent=b>=26.6?PK2:'';
+  document.getElementById('pk1').style.opacity=b>=25.8?1:0; document.getElementById('pkhl').style.transform=`scaleX(${IN(P(b,25.8,26.4))})`;
+  draw(strike,MOVE(P(b,27,27.7))); actLine.style.opacity=b>=27.7?.45:1;
+  const R='agent ▸ Board review moved to 9:30. It\'s required.'; reply.innerHTML=b>=28?typed(R,t,B(28),B(30)).replace('agent ▸','<span style="color:#8c8f8a">agent ▸</span>'):'';
+  rise(S.before,t,B(30),{out:B(34)-.05,od:.15});
+  // truths (hard cuts)
+  [[T1,34,38],[T2,38,42],[T3,42,46],[T4,46,52]].forEach(([s_,a,z])=>s_.style.display=(b>=a&&b<z)?'block':'none');
+  rise(t1n,t,B(34),{d:.36}); rise(t1b,t,B(34)+.18,{d:.36}); T1.lastChild.style.opacity=P(b,35,35.4);
+  rise(t2,t,B(38),{d:.36,stag:.1});
+  rise(t3,t,B(42),{d:.36,stag:.1}); t3b.textContent=b>=43?typed(EXPL,t,B(43),B(44.4)):''; t3b.style.opacity=b>=42.9?1:0;
+  rise(t4,t,B(46),{d:.36,stag:.1}); t4c.innerHTML=b>=47?typed(CODE,t,B(47),B(49)).replace('eden.collect(injection)','<span style="box-shadow:inset 0 -14px 0 var(--hl)">eden.collect(injection)</span>'):'';
+  // end: silence frames on paper b52–53, then the ink card
+  END_.style.display=b>=53?'block':'none';
+  const ek=IN(P(b,53,54.2)); endMark.style.transform=`scale(${lerp(.86,1,ek)})`; endMark.style.opacity=ek; rise(endW,t,B(53.2),{d:.5}); rise(endT,t,B(54.2),{d:.5});
+  // grain
+  const f=Math.floor(t*30); const g=document.getElementById('grain'); g.style.backgroundImage=`url(${window.GR[f%6]})`; g.style.backgroundPosition=`${(hash(f)*512)|0}px ${(hash(f+5)*512)|0}px`;
+  const cut=document.getElementById('cut'); cut.style.opacity=t>END-.35?OUT(P(t,END-.35,END)):0;
+};
+/* ================= PAPER + GRAIN ================= */
+function paper(){ const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d'); const im=x.createImageData(W,H), d=im.data;
+  const vn=(X,Y)=>{ const xi=Math.floor(X),yi=Math.floor(Y),xf=X-xi,yf=Y-yi; const h=(a,b)=>hash(a*157.31+b*311.7); const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf); return lerp(lerp(h(xi,yi),h(xi+1,yi),u),lerp(h(xi,yi+1),h(xi+1,yi+1),u),v); };
+  for(let j=0;j<H;j++) for(let i=0;i<W;i++){ const m=(vn(i*.004,j*.004)-.5)*10+(vn(i*.03,j*.03)-.5)*5+(hash(i*1.3+j*7.1)-.5)*7; const k=(j*W+i)*4; d[k]=242+m; d[k+1]=238+m; d[k+2]=229+m*.9; d[k+3]=255; }
+  x.putImageData(im,0,0); x.globalAlpha=.05; x.strokeStyle='#6b5f4b'; x.lineWidth=.6; for(let i=0;i<3600;i++){ const px=hash(i*3.3)*W,py=hash(i*5.1)*H,a=hash(i*7.7)*6.28,l=4+hash(i*9.9)*14; x.beginPath(); x.moveTo(px,py); x.lineTo(px+Math.cos(a)*l,py+Math.sin(a)*l); x.stroke(); }
+  return c.toDataURL('image/jpeg',.94); }
+window.READY=false;
+(async()=>{ await document.fonts.ready; for(const f of ['20px Serif','italic 20px Serif','560 20px Archivo','400 20px Mono','500 20px Mono']) await document.fonts.load(f);
+  document.getElementById('paper').style.backgroundImage=`url(${paper()})`;
+  window.GR=[]; for(let k=0;k<6;k++){ const c=document.createElement('canvas'); c.width=c.height=512; const x=c.getContext('2d'); const im=x.createImageData(512,512); for(let i=0;i<im.data.length;i+=4){ const v=128+(hash(i*.37+k*999)-.5)*255; im.data[i]=im.data[i+1]=im.data[i+2]=v; im.data[i+3]=255; } x.putImageData(im,0,0); GR.push(c.toDataURL()); }
+  renderFrame(0); window.READY=true; })();
+</script></body></html>

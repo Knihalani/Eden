@@ -1,0 +1,3 @@
+Your agent is about to be wrong. Eden reads your user's mail, calendar, docs and CRM and hands the agent the one fact it missed, before the model call.
+
+Music: "Carry On" (Mixkit). Sound effects: Kenney and unicae_games (CC0).
