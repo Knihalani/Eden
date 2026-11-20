@@ -188,6 +188,18 @@ class Gptme(unittest.TestCase):
         self.assertEqual(p.ask("anything"), "No context available.")
         self.assertEqual(len(c.events), 1)
 
+    def test_branched_log_keeps_the_conversations_session(self):
+        # <logdir>/branches/<name>.jsonl: the conversation id is the grandparent's name — gptme's
+        # compact/branch writes land there, and every one of them must not collapse into a "branches"
+        # session shared by all conversations.
+        class Data:
+            class log:  # noqa: N801 - mirrors gptme's ToolExecutePreData.log
+                persisted_path = "/tmp/logs/conv-1/branches/fork.jsonl"
+
+        p = plugin()
+        self.assertIsNone(p.tool_pre(ToolUse("shell", content="ls"), Data()))
+        self.assertEqual(FakeClient.made[0].kw["session_id"], eden_id("conv-1"))
+
     def test_ask_answers_and_session_end_drops(self):
         p = plugin()
         p.session_start("/tmp/logs/1")

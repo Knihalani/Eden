@@ -119,10 +119,13 @@ class EdenGptme(EdenHermes):
         for attr in ("persisted_path", "path"):
             inner = getattr(value, attr, None)
             if isinstance(inner, (str, Path)) and inner:
-                # <logdir>/conversation.jsonl: the conversation id is the parent directory's name.
-                found = Path(inner).parent.name
-                if found:
-                    return found
+                # <logdir>/conversation.jsonl: the conversation id is the parent directory's name —
+                # for branched/view logs at <logdir>/{branches,views}/name.jsonl it is the grandparent's.
+                parent = Path(inner).parent
+                if parent.name in ("branches", "views"):
+                    parent = parent.parent
+                if parent.name:
+                    return parent.name
         if isinstance(value, (str, Path)):
             text = str(value)
             return Path(text).name or DEFAULT_SESSION
