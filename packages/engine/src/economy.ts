@@ -507,9 +507,10 @@ export function isFrozenEconomy(x: unknown): x is FrozenEconomy {
 
 /**
  * Unions two blobs' economies — a shared store can hold a blob another process wrote while this one served
- * the user live (D2004); replacing it would drop the other machine's learning. Per key the row with more
- * observations wins (`n`, then `at`), with the winner's `prints`/`ids` unioned over the loser's. Scalars and
- * counters take the larger value: they only grow. `live` wins ties — it is this process's newest view.
+ * the user live (D2004); replacing it would drop the other machine's learning. Counters (`n`, `changed`,
+ * `exposure`, `at`) take the larger value: they only grow. `prints`/`ids` are the last answer's snapshot —
+ * the newer `at` row supplies them whole: a union would resurrect ids the newer answer shrank away and make
+ * the next identical answer look changed. `live` wins ties — it is this process's newest view.
  */
 export function mergeFrozenEconomy(prior: FrozenEconomy | null, live: FrozenEconomy | null): FrozenEconomy | null {
   if (!prior) return live;
@@ -526,15 +527,14 @@ export function mergeFrozenEconomy(prior: FrozenEconomy | null, live: FrozenEcon
         out.set(k, q);
         continue;
       }
-      const win = q.n > old.n || (q.n === old.n && q.at >= old.at) ? q : old;
-      const lose = win === q ? old : q;
+      const newer = q.at >= old.at ? q : old;
       out.set(k, {
-        prints: [...new Set([...lose.prints, ...win.prints])],
-        ids: [...new Set([...lose.ids, ...win.ids])],
-        at: Math.max(win.at, lose.at),
-        n: Math.max(win.n, lose.n),
-        changed: Math.max(win.changed, lose.changed),
-        exposure: Math.max(win.exposure, lose.exposure),
+        prints: newer.prints,
+        ids: newer.ids,
+        at: newer.at,
+        n: Math.max(q.n, old.n),
+        changed: Math.max(q.changed, old.changed),
+        exposure: Math.max(q.exposure, old.exposure),
       });
     }
     return [...out].slice(-cap);
