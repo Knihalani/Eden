@@ -9,6 +9,17 @@ export {
 } from "./client";
 export { defaultOnError, edenEnv, fixFor, type EdenEnv } from "./on-error";
 export { findLocalBinary, LocalEden, resolveLocalEden, type LocalEdenOptions } from "./local";
+export {
+  createLocalSurface,
+  envOf,
+  MAX_KEPT_BYTES,
+  MAX_SEEN,
+  textOf,
+  type LocalSurface,
+  type LocalSurfaceOptions,
+  type SurfaceSession,
+  type TextBlock,
+} from "./surface";
 export { guardTool, guardTools, type Checker, type GuardOptions } from "./guard";
 export { heldResult, withContext, type ChatMessageLike } from "./messages";
 // The description Eden recommends for `ask` registered as the agent's tool.
