@@ -1,0 +1,78 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Eden — v3</title>
+<style>
+@font-face{font-family:Serif;font-style:normal;src:url(fonts/instrument-serif-latin-400-normal.woff2)}
+@font-face{font-family:Serif;font-style:italic;src:url(fonts/instrument-serif-latin-400-italic.woff2)}
+@font-face{font-family:Archivo;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-wdth-normal.woff2)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#efede8}
+#c{position:absolute;inset:0;width:1920px;height:1080px}
+#ov{position:absolute;inset:0;pointer-events:none}
+.line{position:absolute;left:0;right:0;text-align:center;font-family:Serif;font-weight:400;letter-spacing:-.02em;color:#17191c;white-space:nowrap}
+.line i{font-style:italic}
+</style></head><body>
+<canvas id="c" width="1920" height="1080"></canvas><div id="ov"></div>
+<script type="importmap">{"imports":{"three":"./lib/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {RoomEnvironment} from './lib/examples/jsm/environments/RoomEnvironment.js';
+import {RoundedBoxGeometry} from './lib/examples/jsm/geometries/RoundedBoxGeometry.js';
+const W=1920,H=1080; const Q=new URLSearchParams(location.search); const SHOT=Q.get('shot')||'1';
+const COL={bg:0xefede8, ink:0x17191c, mint:0x65d0a3, teal:0x53aeb9, blue:0x4694bc, indigo:0x2f3088, green:0x74bb6a};
+const r=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,preserveDrawingBuffer:true});
+r.setPixelRatio(1); r.setSize(W,H,false); r.toneMapping=THREE.ACESFilmicToneMapping; r.toneMappingExposure=1.0; r.outputColorSpace=THREE.SRGBColorSpace;
+r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(COL.bg);
+const pm=new THREE.PMREMGenerator(r); scene.environment=pm.fromScene(new RoomEnvironment(r),.04).texture;
+const sun=new THREE.DirectionalLight(0xffffff,2.2); sun.position.set(-6,14,8); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.radius=9; sun.shadow.blurSamples=16;
+Object.assign(sun.shadow.camera,{left:-14,right:14,top:14,bottom:-14,near:1,far:40}); sun.shadow.bias=-.0004; scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShadowMaterial({opacity:.16})); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+const cam=new THREE.PerspectiveCamera(28,W/H,.1,200);
+
+/* ---------- face textures ---------- */
+function face(draw,size=512){ const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d'); draw(x,size); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t; }
+const hex=n=>'#'+n.toString(16).padStart(6,'0');
+const ICON={
+ mail:(x,s,c)=>{ x.strokeStyle=c; x.lineWidth=s*.045; x.lineJoin='round'; x.strokeRect(s*.24,s*.32,s*.52,s*.36); x.beginPath(); x.moveTo(s*.25,s*.34); x.lineTo(s*.5,s*.53); x.lineTo(s*.75,s*.34); x.stroke(); },
+ cal:(x,s,c)=>{ x.strokeStyle=c; x.lineWidth=s*.045; x.strokeRect(s*.25,s*.29,s*.5,s*.44); x.beginPath(); x.moveTo(s*.25,s*.4); x.lineTo(s*.75,s*.4); x.moveTo(s*.36,s*.23); x.lineTo(s*.36,s*.33); x.moveTo(s*.64,s*.23); x.lineTo(s*.64,s*.33); x.stroke(); x.fillStyle=c; for(let i=0;i<3;i++) for(let j=0;j<2;j++) x.fillRect(s*(.32+i*.13),s*(.47+j*.12),s*.07,s*.06); },
+ doc:(x,s,c)=>{ x.strokeStyle=c; x.lineWidth=s*.045; x.lineJoin='round'; x.beginPath(); x.moveTo(s*.3,s*.22); x.lineTo(s*.58,s*.22); x.lineTo(s*.7,s*.34); x.lineTo(s*.7,s*.78); x.lineTo(s*.3,s*.78); x.closePath(); x.stroke(); x.lineWidth=s*.035; for(let i=0;i<3;i++){ x.beginPath(); x.moveTo(s*.38,s*(.45+i*.1)); x.lineTo(s*(.62-i*.05),s*(.45+i*.1)); x.stroke(); } },
+ crm:(x,s,c)=>{ x.strokeStyle=c; x.lineWidth=s*.045; x.beginPath(); x.arc(s*.5,s*.4,s*.1,0,7); x.stroke(); x.beginPath(); x.arc(s*.5,s*.76,s*.2,Math.PI*1.1,Math.PI*1.9); x.stroke(); },
+ note:(x,s,c)=>{ x.strokeStyle=c; x.lineWidth=s*.045; x.strokeRect(s*.27,s*.25,s*.46,s*.5); x.lineWidth=s*.035; for(let i=0;i<3;i++){ x.beginPath(); x.moveTo(s*.35,s*(.38+i*.11)); x.lineTo(s*.65,s*(.38+i*.11)); x.stroke(); } },
+ chat:(x,s,c)=>{ x.strokeStyle=c; x.lineWidth=s*.045; x.lineJoin='round'; x.beginPath(); x.moveTo(s*.24,s*.3); x.lineTo(s*.76,s*.3); x.lineTo(s*.76,s*.62); x.lineTo(s*.42,s*.62); x.lineTo(s*.3,s*.74); x.lineTo(s*.3,s*.62); x.lineTo(s*.24,s*.62); x.closePath(); x.stroke(); },
+};
+const ICOL=[COL.teal,COL.blue,COL.indigo,COL.green,COL.mint];
+function tile({w=1.4,h=.34,d=1.4,color=0xf7f6f2,icon=null,ic=COL.blue,label=null,rough=.42,clear=.6}){ const g=new THREE.Group();
+  const m=new THREE.Mesh(new RoundedBoxGeometry(w,h,d,6,Math.min(w,d)*.16),new THREE.MeshPhysicalMaterial({color,roughness:rough,clearcoat:clear,clearcoatRoughness:.25})); m.castShadow=true; m.receiveShadow=true; m.position.y=h/2; g.add(m);
+  if(icon||label){ const t=face((x,s)=>{ if(icon) ICON[icon](x,s,hex(ic)); if(label){ x.fillStyle=hex(ic); x.font=`500 ${s*.2}px Archivo`; x.textAlign='center'; x.textBaseline='middle'; x.fillText(label,s/2,s/2); } });
+    const p=new THREE.Mesh(new THREE.PlaneGeometry(w*.86,d*.86),new THREE.MeshPhysicalMaterial({map:t,transparent:true,roughness:.5})); p.rotation.x=-Math.PI/2; p.position.y=h+.002; g.add(p); }
+  scene.add(g); return g; }
+
+function build(){
+const ov=document.getElementById('ov');
+function line(html,y,size){ const e=document.createElement('div'); e.className='line'; e.style.top=y+'px'; e.style.fontSize=size+'px'; e.innerHTML=html; ov.appendChild(e); return e; }
+if(SHOT==='1'){ // hook: the Run key, about to be pressed
+  const key=tile({w:3.2,h:1.0,d:3.2,color:0x15171a,label:'Run',ic:0xf2f0ea,rough:.55,clear:.25}); key.position.set(0,0,0); key.children[0].position.y=.5-.18; key.children[1].position.y=1.0-.18+.002;
+  const k2=tile({w:3.2,h:1.0,d:3.2,color:0xf7f6f2,label:'⌘',ic:0x9aa0a0}); k2.position.set(-3.7,0,.2); const k3=tile({w:3.2,h:1.0,d:3.2,color:0xf7f6f2,label:'⏎',ic:0x9aa0a0}); k3.position.set(3.7,0,-.1);
+  cam.position.set(0,7.2,9.6); cam.lookAt(0,.3,0);
+  line('Your agent is about to be <i>wrong.</i>',150,104);
+}
+if(SHOT==='2'){ // the field: everything it needs, one tile lifted
+  const icons=['mail','cal','doc','crm','note','chat']; let k=0;
+  for(let i=-6;i<=6;i++) for(let j=-2;j<=4;j++){ if(Math.abs(i)<=1&&Math.abs(j)<=1) continue; const ic=icons[(k*7+3)%6]; const t=tile({icon:ic,ic:ICOL[k%5]}); t.position.set(i*1.62,0,j*1.62); t.rotation.y=(Math.sin(k*12.9)*.04); k++;
+    if(i===3&&j===-1){ t.position.y=1.15; t.rotation.set(-.18,.25,.08); t.children[0].material=new THREE.MeshPhysicalMaterial({color:COL.mint,roughness:.3,clearcoat:1}); t.children[1].material.map=face((x,s)=>ICON.cal(x,s,'#0f2a20')); } }
+  const key=tile({w:3.2,h:1.0,d:3.2,color:0x15171a,label:'Run',ic:0xf2f0ea,rough:.55,clear:.25});
+  cam.position.set(0,14,13.5); cam.lookAt(0,0,-.6);
+  line('The answer was <i>already here.</i>',92,96);
+}
+if(SHOT==='3'){ // end: brand gradient, the mark on a tile
+  scene.background=null; document.body.style.background='linear-gradient(135deg,#65d0a3 0%,#53aeb9 30%,#4694bc 58%,#2f3088 100%)'; r.setClearColor(0x000000,0); r.setClearAlpha(0); ground.material.opacity=.22;
+  const logoTex=new THREE.TextureLoader().load('assets/logo_t.png',()=>{ render(); });
+  logoTex.colorSpace=THREE.SRGBColorSpace;
+  const t=tile({w:3.0,h:.8,d:3.0,color:0xf4f3ef,rough:.4,clear:.5}); t.position.set(0,0,-1.2); const p=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.2*916/956),new THREE.MeshBasicMaterial({map:logoTex,transparent:true,toneMapped:false})); p.rotation.x=-Math.PI/2; p.position.y=.8+.003; t.add(p);
+  t.rotation.set(0,.0,0); cam.position.set(0,10.5,6.4); cam.lookAt(0,0,.6);
+  const e=line('Eden',650,190); e.style.color='#fff'; const e2=line('<i>Context, before they ask.</i>',880,64); e2.style.color='rgba(255,255,255,.92)';
+}
+}
+function render(){ r.render(scene,cam); }
+window.READY=false; document.fonts.ready.then(async()=>{ await document.fonts.load('500 20px Archivo'); await document.fonts.load('20px Serif'); build(); render(); setTimeout(()=>{ render(); window.READY=true; },400); });
+</script></body></html>
