@@ -77,6 +77,11 @@ function keyOf(m: HookMessage): string {
   return createHash("sha256").update(parts.join("\0")).digest("hex").slice(0, 32);
 }
 
+/** A message's content-only key: the same reply hashes the same with or without a transcript id. */
+function contentKey(m: { role?: string; content?: string | Block[] }): string {
+  return keyOf({ role: m.role, content: textOf(m.content) });
+}
+
 function eventsOf(m: HookMessage): {
   kind: string;
   text?: string;
@@ -120,7 +125,8 @@ interface Session {
   options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
   generation: number;
   seen: Map<string, number>;
-  copyCounts: Map<string, number>; // message key -> transcript copies seen, so hook reports take the next copy
+  copyCounts: Map<string, number>; // content key -> transcript copies seen, so hook reports take the next copy
+  reportedAssistant: Set<string>; // content keys already reported by the reply hooks, for transcript dedup
   kept: Map<string, string>; // user-message key -> packet text prepended while it is live
   trailing: string[]; // mid-turn packets appended to context on later calls
   reported: Promise<unknown>;
@@ -209,6 +215,7 @@ async function sessionFor(sessionId: string): Promise<Session | null> {
     local: made.local,
     seen: new Map(),
     copyCounts: new Map(),
+    reportedAssistant: new Set(),
     kept: new Map(),
     trailing: [],
     queued: [],
@@ -325,11 +332,15 @@ const entry = {
         if (!(await liveClient(s))) return undefined;
         await s.reported.catch(() => undefined);
         const copies = new Map<string, number>();
+        const contentCopies = new Map<string, number>();
         const keys = messages.map((m) => {
           const k = keyOf(m);
           const n = (copies.get(k) ?? 0) + 1;
           copies.set(k, n);
-          s.copyCounts.set(k, n);
+          const ck = contentKey(m);
+          const cn = (contentCopies.get(ck) ?? 0) + 1;
+          contentCopies.set(ck, cn);
+          s.copyCounts.set(ck, cn);
           return `${k}#${n}`;
         });
         const lastUser = messages.map((m) => m.role).lastIndexOf("user");
@@ -339,6 +350,9 @@ const entry = {
           if (m.role === "system") continue;
           const k = keys[i]!;
           if (s.seen.has(k)) continue;
+          // A reply the hooks already reported is skipped here even when its transcript key differs
+          // (a transcript id the hook never sees changes keyOf, but not the content key).
+          if (m.role === "assistant" && s.reportedAssistant.has(contentKey(m))) continue;
           s.seen.set(k, 1);
           if (s.seen.size > MAX_SEEN) s.seen.delete(s.seen.keys().next().value!);
           if (s.firstCall && i < lastUser) continue; // a resumed session reports only its latest user message
@@ -429,18 +443,20 @@ const entry = {
       },
     );
 
-    const reportAssistant = async (text: string | undefined, ctx: HookCtx) => {
+    const reportAssistant = async (text: string | undefined, ctx: HookCtx, copy?: number) => {
       try {
         if (!text) return;
-        // The transcript path numbers identical texts `key#copy`; a hook-seen reply gets the copy
-        // after every transcript copy already seen, so a repeated reply is reported (not dropped as
-        // `#1`) and the same reply fired by llm_output and agent_end still dedups.
+        // A hook-seen reply gets the copy number after every transcript copy (or the real copy the
+        // caller counted in the transcript), so a repeated reply is reported (not dropped as `#1`),
+        // the same reply fired by llm_output and agent_end dedups, and a failed run's stale last
+        // assistant message — a copy already counted — is not reported again.
         const s = await sessionFor(sessionKey(ctx));
         if (!s) return;
-        const hash = keyOf({ role: "assistant", content: text });
-        const key = `${hash}#${(s.copyCounts.get(hash) ?? 0) + 1}`;
+        const hash = contentKey({ role: "assistant", content: text });
+        const key = `${hash}#${copy ?? (s.copyCounts.get(hash) ?? 0) + 1}`;
         if (s.seen.has(key)) return;
         s.seen.set(key, 1);
+        s.reportedAssistant.add(hash);
         const client = await liveClient(s);
         if (!client) return;
         s.reported = s.reported.then(async () => {
@@ -459,8 +475,13 @@ const entry = {
 
     // The last assistant message of a run must reach Eden even when no later call carries it.
     api.on("agent_end", async (event: { messages?: HookMessage[] }, ctx: HookCtx) => {
-      const last = (event.messages ?? []).filter((m) => m?.role === "assistant").at(-1);
-      await reportAssistant(last ? textOf(last.content) : undefined, ctx);
+      const assistants = (event.messages ?? []).filter((m) => m?.role === "assistant");
+      const last = assistants.at(-1);
+      // The last reply's real copy number in this transcript: a failed run's stale reply is a copy
+      // already seen, a fresh identical reply is the next one.
+      const hash = last ? contentKey(last) : "";
+      const copy = assistants.filter((m) => contentKey(m) === hash).length;
+      await reportAssistant(last ? textOf(last.content) : undefined, ctx, copy);
     });
 
     api.on("session_end", async (_event: unknown, ctx: HookCtx) => {
