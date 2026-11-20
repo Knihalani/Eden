@@ -130,4 +130,22 @@ describe("session knowledge carried with a frozen user", () => {
     b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" });
     expect(records).toHaveLength(1);
   });
+
+  test("a restored user still corrects an ended session's verdict", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    const a = partner(dir);
+    const got = await a.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), {
+      waitMs: 2_000,
+    });
+    const injectionId = got.injection!.id;
+    // session_end learns the outstanding injection "ended" (unused) into `recorded`.
+    await a.observe(ev({ kind: "session_end" }));
+    expect(a.release(user)).toBe(true);
+
+    const b = partner(dir);
+    // Any event on the scope thaws the user; the injection's session is gone — only `recorded` can answer.
+    await b.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
+    expect(b.feedback({ ...user, sessionId: "a", injectionId, used: true, how: "explicit" })).toBe(true);
+  });
 });
