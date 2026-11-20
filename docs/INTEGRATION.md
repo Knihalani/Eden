@@ -685,6 +685,7 @@ beside the agent's home:
 | OpenClaw | `examples/openclaw` | `eden.ts` plugin (`before_prompt_build`, `before/after_tool_call`, `agent_end`) | `block`/`blockReason` | `install.py` → `<openclaw-home>/extensions/eden` |
 | [gptme](https://gptme.org) | `examples/gptme` | Python plugin (`GENERATION_PRE`, `TOOL_EXECUTE_PRE`/`POST`, `TOOL_CONFIRM`, `TURN_POST`) | `ConfirmationResult.skip` | `install.py` → `~/.config/gptme/plugins/eden` |
 | [opencode](https://opencode.ai) | `examples/opencode` | bundled `index.js` (`messages.transform`, `tool.execute.before/after`, `session.idle`) | thrown `Error` | `install.py` → `~/.config/opencode/plugins/eden.js` |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `examples/claude-code` | hook commands + `eden-mcp.py` (`UserPromptSubmit`, `Pre/PostToolUse`, `Stop`, `Session*`) | `permissionDecision: "deny"` | `install.py` → `~/.claude/eden/` + `settings.json`/`~/.claude.json` merges |
 | [LangChain](https://docs.langchain.com) | `examples/langchain` | `createAgent` middleware | guarded tool wrapper | copy `eden-langchain.ts` |
 
 Local mode is shared: `EDEN_LOCAL_BINARY`, then the install's own `bin/eden-local`, with
