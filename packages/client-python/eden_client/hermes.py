@@ -133,10 +133,11 @@ class EdenHermes:
     """The plugin's state: one ``EdenClient`` per Hermes session. ``client_factory`` is for tests."""
 
     def __init__(self, env: Optional[Dict[str, str]] = None,
-                 client_factory: Optional[Callable[..., Any]] = None, *, plugin_file=None) -> None:
+                 client_factory: Optional[Callable[..., Any]] = None, *, plugin_file=None, home=None) -> None:
         self._scope_env = env
         self._warnings = set()
-        self._home, launch = _homes(env)
+        # ``home`` pins the install home for plugins on other agents (gptme); launch matching is theirs to skip.
+        self._home, launch = (Path(home).expanduser().resolve(), None) if home else _homes(env)
         self._enabled = launch is None or launch == self._home
         self.local = None
         if not self._enabled:
