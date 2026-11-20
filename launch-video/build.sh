@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds build/eden-launch.mp4: edit list -> footage frames -> WebGL frames (Playwright) -> audio mix -> mux.
-# Needs node with `playwright`, python3 with numpy+scipy, ffmpeg. Software WebGL is slow: about 25 min on 4 cores.
+# Needs node with `playwright`, python3 with numpy+scipy, ffmpeg. Software WebGL is slow: about 20 min on 4 cores.
 set -euo pipefail
 cd "$(dirname "$0")"
 FPS=${FPS:-30}; WORKERS=${WORKERS:-4}
