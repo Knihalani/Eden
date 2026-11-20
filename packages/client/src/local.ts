@@ -210,10 +210,18 @@ export class LocalEden {
   }
 
   private async spawnOnce(token: string): Promise<number | null> {
-    const child = spawn(this.command[0]!, this.command.slice(1), {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: this.childEnv(token),
-    });
+    // A .cmd/.bat shim is a command script, not an executable: on Windows it needs cmd.exe to run it.
+    const shim = process.platform === "win32" && /\.(cmd|bat)$/i.test(this.command[0]!);
+    let child: ChildProcess;
+    try {
+      child = spawn(this.command[0]!, this.command.slice(1), {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: this.childEnv(token),
+        ...(shim ? { shell: true } : {}),
+      });
+    } catch {
+      return null; // an unspawnable command is the caller's "child did not become ready"
+    }
     this.process = child;
     this.pipeStderr(child);
     return new Promise<number | null>((resolvePromise) => {
@@ -254,7 +262,12 @@ export class LocalEden {
       await this.pending.catch(() => undefined);
       return this.endpointValue;
     }
-    if (this.process && this.process.exitCode === null && this.endpointValue) return this.endpointValue;
+    // exitCode stays null when a signal killed the child; check signalCode too.
+    const alive =
+      this.process && this.process.exitCode === null && this.process.signalCode === null && !this.process.killed;
+    if (alive && this.endpointValue) return this.endpointValue;
+    // A child that died after answering is a failure like any other: it earns backoff before the next spawn.
+    if (this.process && !alive) this.failure("child exited");
     if (Date.now() < this.retryAt) return null;
     const token = randomBytes(32).toString("base64url");
     this.pending = (async () => {
@@ -276,7 +289,9 @@ export class LocalEden {
 
   /** A failed connection prompts a poll, not termination of a live child. */
   failed(generation: number): void {
-    if (generation === this.generation && this.process && this.process.exitCode !== null) {
+    const dead =
+      this.process && (this.process.exitCode !== null || this.process.signalCode !== null || this.process.killed);
+    if (generation === this.generation && dead) {
       this.endpointValue = null;
     }
   }
