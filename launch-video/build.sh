@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds build/eden-launch.mp4: edit list -> footage frames -> WebGL frames (Playwright) -> audio mix -> mux.
-# Needs node with `playwright`, python3 with numpy+scipy, ffmpeg. Software WebGL is slow: about 45 min on 4 cores.
+# Needs node with `playwright`, python3 with numpy+scipy, ffmpeg. Software WebGL is slow: about 25 min on 4 cores.
 set -euo pipefail
 cd "$(dirname "$0")"
 FPS=${FPS:-30}; WORKERS=${WORKERS:-4}
@@ -8,7 +8,7 @@ FPS=${FPS:-30}; WORKERS=${WORKERS:-4}
 mkdir -p build
 python3 scripts/edit.py
 python3 scripts/extract.py
-python3 scripts/mix.py
+python3 scripts/mix.py edit.json media build/mix.wav
 (cd web && exec python3 -m http.server 8778 --bind 127.0.0.1 >/dev/null 2>&1) & SRV=$!
 trap 'kill $SRV' EXIT
 sleep 1
