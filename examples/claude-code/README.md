@@ -38,7 +38,11 @@ and never checked.
 ## Configure
 
 Local mode (default): put source declarations in `~/.claude/eden/sources.json` — the same file
-the other agents' Eden integrations read — then start a new Claude Code session.
+the other agents' Eden integrations read — then start a new Claude Code session. Each hook is its
+own process, so the first one starts a detached `eden-local` (recorded at
+`~/.claude/eden/local-endpoint.json`) that every later hook attaches to; a fresh server per hook
+would lose the session state the tool check reads. Re-running `install.py` refreshes only the
+installed code — `sources.json`, `state/`, `data/` and `logs/` are left untouched.
 
 Hosted mode: `EDEN_URL` + `EDEN_API_KEY` (+ `EDEN_TENANT_ID`, `EDEN_USER_ID`) in the environment
 or the hook commands' env. `EDEN_LOCAL_BINARY` overrides the bundled sidecar.

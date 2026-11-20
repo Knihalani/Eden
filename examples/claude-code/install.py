@@ -68,11 +68,14 @@ def ensure_binary(root, work):
 
 
 def read_json(path):
+    """{} for a missing file; None for one that exists but isn't a JSON object (never clobbered)."""
     try:
         data = json.loads(path.read_text())
-        return data if isinstance(data, dict) else {}
-    except Exception:  # noqa: BLE001
+        return data if isinstance(data, dict) else None
+    except FileNotFoundError:
         return {}
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def write_json(path, data):
@@ -86,26 +89,34 @@ def merge_settings(home, dest):
     """Add Eden's hooks to settings.json (deduped by command) and the MCP server to .claude.json."""
     settings_path = home / "settings.json"
     settings = read_json(settings_path)
-    hooks = settings.setdefault("hooks", {})
-    for event in HOOK_EVENTS:
-        command = f"python3 {dest / 'eden-hook.py'} {HOOK_ARGS[event]}"
-        entries = hooks.setdefault(event, [])
-        commands = [
-            h.get("command")
-            for entry in entries
-            for h in (entry.get("hooks") if isinstance(entry, dict) else [])
-            if isinstance(h, dict)
-        ]
-        if command not in commands:
-            entries.append({"matcher": "*", "hooks": [{"type": "command", "command": command}]})
-    write_json(settings_path, settings)
+    if settings is None:
+        print(f"warning: {settings_path} is not a JSON object; hooks not merged "
+              "(fix or remove it and re-run)", file=sys.stderr)
+    else:
+        hooks = settings.setdefault("hooks", {})
+        for event in HOOK_EVENTS:
+            command = f"python3 {dest / 'eden-hook.py'} {HOOK_ARGS[event]}"
+            entries = hooks.setdefault(event, [])
+            commands = [
+                h.get("command")
+                for entry in entries
+                for h in (entry.get("hooks") if isinstance(entry, dict) else [])
+                if isinstance(h, dict)
+            ]
+            if command not in commands:
+                entries.append({"matcher": "*", "hooks": [{"type": "command", "command": command}]})
+        write_json(settings_path, settings)
 
     # MCP servers live in ~/.claude.json (Claude Code's own `claude mcp add` writes there).
     claude_json = home / ".claude.json" if (home / ".claude.json").exists() else home.parent / ".claude.json"
     config = read_json(claude_json)
-    servers = config.setdefault("mcpServers", {})
-    servers["eden"] = {"command": "python3", "args": [str(dest / "eden-mcp.py")]}
-    write_json(claude_json, config)
+    if config is None:
+        print(f"warning: {claude_json} is not a JSON object; the eden MCP server was not registered",
+              file=sys.stderr)
+    else:
+        servers = config.setdefault("mcpServers", {})
+        servers["eden"] = {"command": "python3", "args": [str(dest / "eden-mcp.py")]}
+        write_json(claude_json, config)
 
 
 def main():
@@ -122,8 +133,14 @@ def main():
 
     home = claude_home(args)
     dest = home / "eden"
-    if dest.is_dir():
-        shutil.rmtree(dest)
+    # Refresh only what this installer owns: sources.json, state/, data/ and logs/ are the user's
+    # (a re-run that rmtree'd the directory deleted configured sources and session state).
+    dest.mkdir(parents=True, exist_ok=True)
+    for stale in ("eden-hook.py", "eden-mcp.py"):
+        (dest / stale).unlink(missing_ok=True)
+    vendored = dest / "eden_client"
+    if vendored.is_dir():
+        shutil.rmtree(vendored)
     (dest / "bin").mkdir(parents=True, exist_ok=True)
     for name in ("eden-hook.py", "eden-mcp.py"):
         shutil.copy2(HERE / name, dest / name)
