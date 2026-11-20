@@ -27,12 +27,17 @@ tools the party check sees (comma list, `*` for all, unset for the acting-verb d
 ## What it does
 
 - `eden.generation` (`GENERATION_PRE`): fresh messages are reported — the latest `user_message` waits for
-  its lookup, everything else waits 0 — and fresh packets are yielded as one `system` message, which gptme
-  appends to the log (the packet stays where it landed; no keep machinery).
-- `eden.tool_pre` (`TOOL_EXECUTE_PRE`): a checked call goes to `check`; a finding calls `data.deny` with
-  the held result, which Eden also sees reported.
+  its lookup, everything else waits 0 — and every not-yet-persisted packet is yielded as `system`
+  messages (the hook's context is transient to that call, so packets are re-yielded until `TURN_POST`
+  appends them to the log for good).
+- `eden.tool_pre` (`TOOL_EXECUTE_PRE`): the call is reported, then checked; a finding's held result is
+  reported too, and stashed for the confirm hook.
+- `eden.tool_confirm` (`TOOL_CONFIRM`): a stashed finding answers `ConfirmationResult.skip` with the
+  held result — tools that route through confirmation (`shell`, `save`, `patch`, …) are denied; tools
+  that never confirm can't be blocked, but their finding is still reported.
 - `eden.tool_post` (`TOOL_EXECUTE_POST`): the result is reported.
-- `eden.turn` (`TURN_POST`): the turn's last assistant message is reported.
+- `eden.turn` (`TURN_POST`): the turn's last assistant message is reported, and delivered packets are
+  appended to the log so later turns keep them.
 - `eden.session_start`/`eden.session_end` (`SESSION_START`/`SESSION_END`): each gptme logdir is its own
   Eden session.
 - `ask_context` (tool): answered by `EdenClient.ask`; never reported, never checked.
