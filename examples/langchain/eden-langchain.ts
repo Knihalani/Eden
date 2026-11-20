@@ -93,6 +93,8 @@ function withPacket(m: HumanMessage, text: string): HumanMessage {
 export function edenMiddleware(eden: EdenClient) {
   /** Messages already reported, by key and copy number. */
   const seen = new Map<string, number>();
+  /** Occurrences of each message key handed out by result payloads, matching the prompt scan's copy numbering. */
+  const answerCopies = new Map<string, number>();
   let firstCall = true;
   /**
    * Packet text kept in place (D336): a turn's packet in its user message (`before`, by that message's key and copy
@@ -152,8 +154,12 @@ export function edenMiddleware(eden: EdenClient) {
       }
       for (const m of out) {
         const k = keyOf(m);
-        if (seen.has(`${k}#1`)) continue;
-        seen.set(`${k}#1`, 1);
+        const n = (answerCopies.get(k) ?? 0) + 1;
+        answerCopies.set(k, n);
+        const ck = `${k}#${n}`;
+        if (seen.has(ck)) continue;
+        seen.set(ck, 1);
+        if (seen.size > MAX_SEEN) seen.delete(seen.keys().next().value!);
         const events = eventsOf(m);
         reported = reported.then(async () => {
           for (const ev of events) {

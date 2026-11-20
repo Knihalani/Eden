@@ -133,10 +133,12 @@ class EdenHermes:
     """The plugin's state: one ``EdenClient`` per Hermes session. ``client_factory`` is for tests."""
 
     def __init__(self, env: Optional[Dict[str, str]] = None,
-                 client_factory: Optional[Callable[..., Any]] = None, *, plugin_file=None) -> None:
+                 client_factory: Optional[Callable[..., Any]] = None, *, plugin_file=None, home=None,
+                 local_shared: bool = False) -> None:
         self._scope_env = env
         self._warnings = set()
-        self._home, launch = _homes(env)
+        # ``home`` pins the install home for plugins on other agents (gptme); launch matching is theirs to skip.
+        self._home, launch = (Path(home).expanduser().resolve(), None) if home else _homes(env)
         self._enabled = launch is None or launch == self._home
         self.local = None
         if not self._enabled:
@@ -169,9 +171,12 @@ class EdenHermes:
             default_sources = self._home / "eden" / "sources.json"
             if sources is None and users is None and default_sources.is_file():
                 users = default_sources
+            # ``local_shared``: a detached server survives this process (agents whose hooks each run
+            # in their own process), recorded at ``<home>/eden/local-endpoint.json`` for the next one.
             self.local = LocalEden(binary.resolve(), self._home / "eden" / "data", sources_file=sources,
                                    user_sources_file=users, log_path=self._home / "eden" / "logs" / "eden-local.log",
-                                   base_env=env)
+                                   base_env=env,
+                                   share_path=self._home / "eden" / "local-endpoint.json" if local_shared else None)
         tools = env.get("EDEN_CHECK_TOOLS")
         # ``EDEN_ASK_HINT``: the question-turn nudge; only "0" turns it off.
         self.ask_hint = (env.get("EDEN_ASK_HINT") or "").strip() != "0"
