@@ -139,10 +139,15 @@ export function edenMiddleware(eden: EdenClient) {
   const reportAnswer = (result: unknown) => {
     try {
       const out: BaseMessage[] = [];
-      if (result instanceof AIMessage) out.push(result);
-      // A Command's messages (an end the middleware or tool chose) are the answer Eden should see too.
-      const update = (result as { update?: { messages?: unknown } } | null)?.update?.messages;
-      if (Array.isArray(update)) out.push(...update.filter((m) => m instanceof BaseMessage));
+      if (result instanceof BaseMessage) out.push(result);
+      // A Command's messages (an end the middleware or tool chose) are the answer Eden should see too, as is a
+      // result that carries its messages in a plain `messages` array (e.g. a structured-output turn's).
+      for (const list of [
+        (result as { messages?: unknown } | null)?.messages,
+        (result as { update?: { messages?: unknown } } | null)?.update?.messages,
+      ]) {
+        if (Array.isArray(list)) out.push(...list.filter((m) => m instanceof BaseMessage));
+      }
       for (const m of out) {
         const k = keyOf(m);
         if (seen.has(`${k}#1`)) continue;
@@ -245,13 +250,21 @@ export function edenMiddleware(eden: EdenClient) {
       } catch {
         held = null; // D14: a check that fails runs the tool.
       }
-      if (held === null) return handler(request);
-      return new ToolMessage({
+      if (held === null) {
+        const res = await handler(request);
+        // A `returnDirect` tool's result never reaches a later model call, so report it here; the seen key keeps a
+        // normal call's result from being reported twice when it turns up in the next request's messages.
+        reportAnswer(res);
+        return res;
+      }
+      const message = new ToolMessage({
         content: held,
         tool_call_id: request.toolCall.id ?? "",
         name,
         status: "success",
       });
+      reportAnswer(message);
+      return message;
     },
   });
 }
