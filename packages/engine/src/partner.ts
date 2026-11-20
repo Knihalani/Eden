@@ -536,8 +536,58 @@ function isFrozenRecorded(x: unknown): x is FrozenRecorded {
   );
 }
 
+/**
+ * A live session's delivery knowledge as a frozen record: items of packets still queued were never handed, so
+ * their build-time marks are left out (BUG_0002); `shown` stays, since a queued REVISION's earlier copies really
+ * were handed, and their `times` feed `revisionDiff` (BUG_0001). Null when the session handed nothing.
+ */
+function freezeSession(s: Session): FrozenSession | null {
+  const queued = new Set<string>();
+  for (const p of s.pending) for (const c of p.citations) queued.add(c.itemId);
+  const snap = s.ledger.snapshot();
+  const ledger: LedgerSnapshot = queued.size
+    ? {
+        delivered: snap.delivered.filter(([id]) => !queued.has(id)),
+        versions: snap.versions.filter(([id]) => !queued.has(id)),
+        shown: snap.shown,
+      }
+    : snap;
+  const delivered = s.delivered
+    .filter((d) => d.itemId === undefined || !queued.has(d.itemId))
+    .map((d) => ({ ...d, refs: [...d.refs], terms: [...d.terms], years: [...d.years] }));
+  if (ledger.delivered.length === 0 && ledger.shown.length === 0 && delivered.length === 0) return null;
+  const outstanding = [...s.outstanding.values()].map((o) => ({
+    injectionId: o.injectionId,
+    sourceIds: [...o.sourceIds],
+    situation: o.situation,
+    terms: [...o.tokens].map((id) => s.vocab.term(id)),
+    deliveredTurn: o.deliveredTurn,
+  }));
+  return { sessionId: s.id, turn: s.turn, ledger, delivered, outstanding };
+}
+
+/**
+ * The blob's `sessions`: the live sessions' snapshot plus frozen entries this process holds for sessions the
+ * snapshot does not (an evicted one the agent may still continue). A live snapshot wins on its sessionId; bounded.
+ */
+function mergeFrozenSessions(
+  frozen: FrozenSession[] | undefined,
+  live: FrozenSession[] | null,
+): FrozenSession[] | null {
+  const liveIds = new Set((live ?? []).map((f) => f.sessionId));
+  const out = (frozen ?? []).filter((f) => !liveIds.has(f.sessionId));
+  out.push(...(live ?? []));
+  const cut = out.slice(-MAX_FROZEN_SESSIONS);
+  return cut.length ? cut : null;
+}
+
 /** Frozen sessions kept per user (`restoredSessions`): an old one's knowledge still applies, bounded. */
 const MAX_FROZEN_SESSIONS = 8;
+/**
+ * Users `restoredSessions` holds at once. A user can leave the cache without a `release` (`expireIdle` drops them
+ * whole and only the cards hook hears it), so evicted-session knowledge (D1999) must stay bounded across churn.
+ */
+const MAX_FROZEN_USERS = 256;
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
@@ -1125,14 +1175,14 @@ export class ContextPartner {
         // process or machine keeps what was learned; they are replaced, not merged, where they land.
         save: (scope) => {
           const key = scopeKey(scope);
-          const sessions = this.frozenPending.get(key) ?? this.sessionSnapshot(scope);
+          const live = this.frozenPending.get(key) ?? this.sessionSnapshot(scope);
           this.frozenPending.delete(key);
           const recorded = this.frozenRecorded.get(key) ?? this.recordedSnapshot(scope);
           this.frozenRecorded.delete(key);
           return {
             sync: sync?.snapshot(scope) ?? null,
             rows: this.deps.sourceMap.exportUser(scope),
-            sessions,
+            sessions: mergeFrozenSessions(this.restoredSessions.get(key), live),
             recorded,
           };
         },
@@ -1157,7 +1207,7 @@ export class ContextPartner {
           }
           if (Array.isArray(carried?.sessions)) {
             const frozen = carried.sessions.filter(isFrozenSession);
-            if (frozen.length > 0) this.restoredSessions.set(scopeKey(scope), frozen.slice(-MAX_FROZEN_SESSIONS));
+            if (frozen.length > 0) this.putFrozenSessions(scopeKey(scope), frozen.slice(-MAX_FROZEN_SESSIONS));
           }
           if (Array.isArray(carried?.recorded)) {
             const rec = carried.recorded.filter(isFrozenRecorded).slice(-MAX_RECORDED);
@@ -1345,6 +1395,15 @@ export class ContextPartner {
     if (event.kind === "session_end") {
       const ended = this.sessions.get(sessionKey(event));
       if (ended) this.close(ended, true);
+      // The frozen knowledge of a session that ended seeds nothing: an ended session does not continue, and the
+      // seed gate reads a matching sessionId as one (D1999).
+      const endedUser = scopeKey(event);
+      const frozenEnded = this.restoredSessions.get(endedUser);
+      if (frozenEnded?.some((f) => f.sessionId === event.sessionId)) {
+        const kept = frozenEnded.filter((f) => f.sessionId !== event.sessionId);
+        if (kept.length) this.restoredSessions.set(endedUser, kept);
+        else this.restoredSessions.delete(endedUser);
+      }
       if (root) spans!.close(root);
       return { injection: null, pending: false };
     }
@@ -2136,35 +2195,32 @@ export class ContextPartner {
     if (!mine || mine.size === 0) return null;
     const out: FrozenSession[] = [];
     for (const s of mine) {
-      // Items of packets still queued were never handed: their build-time marks would suppress them after a
-      // restart even though the agent never saw them, so they are left out of the snapshot (BUG_0002).
-      const queued = new Set<string>();
-      for (const p of s.pending) for (const c of p.citations) queued.add(c.itemId);
-      const snap = s.ledger.snapshot();
-      // Marks and versions of queued items are dropped — they were never handed. `shown` stays: for a queued
-      // REVISION the earlier copies really were handed, and their `times` feed `revisionDiff`; dropping them
-      // would erase delivery history the agent does hold (BUG_0001).
-      const ledger: LedgerSnapshot = queued.size
-        ? {
-            delivered: snap.delivered.filter(([id]) => !queued.has(id)),
-            versions: snap.versions.filter(([id]) => !queued.has(id)),
-            shown: snap.shown,
-          }
-        : snap;
-      const delivered = s.delivered
-        .filter((d) => d.itemId === undefined || !queued.has(d.itemId))
-        .map((d) => ({ ...d, refs: [...d.refs], terms: [...d.terms], years: [...d.years] }));
-      if (ledger.delivered.length === 0 && ledger.shown.length === 0 && delivered.length === 0) continue;
-      const outstanding = [...s.outstanding.values()].map((o) => ({
-        injectionId: o.injectionId,
-        sourceIds: [...o.sourceIds],
-        situation: o.situation,
-        terms: [...o.tokens].map((id) => s.vocab.term(id)),
-        deliveredTurn: o.deliveredTurn,
-      }));
-      out.push({ sessionId: s.id, turn: s.turn, ledger, delivered, outstanding });
+      const f = freezeSession(s);
+      if (f) out.push(f);
     }
     return out.length ? out.slice(-MAX_FROZEN_SESSIONS) : null;
+  }
+
+  /** Writes a user's frozen list, most recently written last, dropping the oldest over `MAX_FROZEN_USERS`. */
+  private putFrozenSessions(user: string, list: FrozenSession[]): void {
+    this.restoredSessions.delete(user); // Re-insert: Map order is least recently written user first.
+    this.restoredSessions.set(user, list);
+    while (this.restoredSessions.size > MAX_FROZEN_USERS)
+      this.restoredSessions.delete(this.restoredSessions.keys().next().value as string);
+  }
+
+  /**
+   * Keeps an evicted session's delivery knowledge in `restoredSessions`: the agent may continue the same
+   * sessionId, and a session created for it is seeded like a thawed one, so nothing already handed is delivered
+   * again (D1999).
+   */
+  private freezeEvicted(s: Session): void {
+    const f = freezeSession(s);
+    if (!f) return;
+    const user = scopeKey(s.scope);
+    const list = (this.restoredSessions.get(user) ?? []).filter((x) => x.sessionId !== s.id);
+    list.push(f);
+    this.putFrozenSessions(user, list.slice(-MAX_FROZEN_SESSIONS));
   }
 
   /**
@@ -4023,11 +4079,13 @@ export class ContextPartner {
     // one tenant opening sessions can never push out another's.
     for (const s of this.sessions.values()) {
       if (now - s.lastActive < this.config.sessionIdleMs) break;
+      this.freezeEvicted(s);
       this.close(s, false);
     }
     if ((this.perTenant.get(e.tenantId) ?? 0) >= this.config.maxSessionsPerTenant) {
       for (const s of this.sessions.values()) {
         if (s.scope.tenantId !== e.tenantId) continue;
+        this.freezeEvicted(s);
         this.close(s, false);
         break;
       }

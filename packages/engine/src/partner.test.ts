@@ -298,6 +298,39 @@ describe("sessions", () => {
     expect(sourceMap.utility(victim, "general", "crm")).toBe(0.5);
   });
 
+  test("an evicted session's deliveries are not handed again when the session continues (D1999)", async () => {
+    const { p } = partner({ config: { maxSessionsPerTenant: 1 } });
+    const got = await p.observe(
+      { ...scope, sessionId: "v1", at: clock++, kind: "user_message", text: "Globex renewal for Dana Lee" },
+      { waitMs: 1_000 },
+    );
+    expect(got.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
+    // A second session on the same tenant pushes v1 out (the cap evicts nothing it could not serve).
+    await p.observe({ ...scope, sessionId: "v2", at: clock++, kind: "user_message", text: "hi" });
+    // v1 continues: what it already handed stays handed, as it would across a daemon respawn.
+    const again = await p.observe(
+      { ...scope, sessionId: "v1", at: clock++, kind: "user_message", text: "Globex renewal for Dana Lee" },
+      { waitMs: 1_000 },
+    );
+    expect(again.injection).toBeNull();
+  });
+
+  test("an evicted session's frozen knowledge stops seeding once it ends (D1999)", async () => {
+    const { p } = partner({ config: { maxSessionsPerTenant: 1 } });
+    await p.observe(
+      { ...scope, sessionId: "v1", at: clock++, kind: "user_message", text: "Globex renewal for Dana Lee" },
+      { waitMs: 1_000 },
+    );
+    await p.observe({ ...scope, sessionId: "v2", at: clock++, kind: "user_message", text: "hi" }); // pushes v1 out
+    await p.observe({ ...scope, sessionId: "v1", at: clock++, kind: "session_end" });
+    // A new conversation reusing the id never held those items: the ended session's marks must not suppress them.
+    const fresh = await p.observe(
+      { ...scope, sessionId: "v1", at: clock++, kind: "user_message", text: "Globex renewal for Dana Lee" },
+      { waitMs: 1_000 },
+    );
+    expect(fresh.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
+  });
+
   test("an idle session is dropped when the next session starts", async () => {
     let now = 0;
     const { p } = partner({ now: () => now, config: { sessionIdleMs: 1_000 } });
