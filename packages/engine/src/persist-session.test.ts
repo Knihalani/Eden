@@ -93,7 +93,14 @@ describe("session knowledge carried with a frozen user", () => {
     });
     // Outstanding rode the blob: explicit feedback still reaches the use verdict for `crm`.
     expect(
-      b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" }),
+      b.feedback({
+        tenantId: "t",
+        userId: "u1",
+        sessionId: "a",
+        injectionId: injectionId!,
+        used: true,
+        how: "explicit",
+      }),
     ).toBe(true);
   });
 
@@ -118,7 +125,14 @@ describe("session knowledge carried with a frozen user", () => {
     );
     await b.observe(ev({ kind: "user_message", sessionId: "a", text: "back again" }), { waitMs: 2_000 });
     expect(
-      b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" }),
+      b.feedback({
+        tenantId: "t",
+        userId: "u1",
+        sessionId: "a",
+        injectionId: injectionId!,
+        used: true,
+        how: "explicit",
+      }),
     ).toBe(true);
     expect(records).toHaveLength(1);
 

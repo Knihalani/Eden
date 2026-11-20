@@ -862,6 +862,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
+| D1999 | 2026-11-20 | Adopted: an evicted session keeps its delivery knowledge — the idle and cap sweeps freeze it into `restoredSessions`, which the persist… | adopted |
 | D1998 | 2026-11-20 | Adopted: an ended session's use-verdicts ride the frozen user too — `extra.recorded` carries the `recorded` map so a respawned daemon can… | adopted |
 | D1996 | 2026-11-20 | Adopted: the frozen session also carries `outstanding` — injections handed but not yet judged used or unused survive a respawn, so the… | adopted |
 | D1995 | 2026-11-20 | Adopted: a frozen user keeps its sessions' delivery knowledge — `extra.sessions` carries each live session's ledger snapshot and delivered… | adopted |
