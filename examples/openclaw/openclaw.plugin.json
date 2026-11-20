@@ -1,0 +1,6 @@
+{
+  "id": "eden",
+  "name": "Eden",
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}

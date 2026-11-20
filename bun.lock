@@ -42,6 +42,17 @@
         "@eden/sources": "workspace:*",
       },
     },
+    "examples/openclaw": {
+      "name": "@eden/example-openclaw",
+      "version": "0.0.0",
+      "dependencies": {
+        "@eden/client": "workspace:*",
+      },
+      "devDependencies": {
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
+      },
+    },
     "examples/personal-agent": {
       "name": "@eden/example-personal-agent",
       "version": "0.0.0",
@@ -266,6 +277,8 @@
     "@eden/example-oauth-directory": ["@eden/example-oauth-directory@workspace:examples/oauth-directory"],
 
     "@eden/example-onboarding": ["@eden/example-onboarding@workspace:examples/onboarding"],
+
+    "@eden/example-openclaw": ["@eden/example-openclaw@workspace:examples/openclaw"],
 
     "@eden/example-personal-agent": ["@eden/example-personal-agent@workspace:examples/personal-agent"],
 
