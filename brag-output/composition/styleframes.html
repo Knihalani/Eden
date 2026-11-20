@@ -1,0 +1,44 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Archivo;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-wdth-normal.woff2)}
+@font-face{font-family:Serif;font-style:italic;src:url(fonts/instrument-serif-latin-400-italic.woff2)}
+@font-face{font-family:Mono;font-weight:400;src:url(fonts/jetbrains-mono-latin-400-normal.woff2)}
+@font-face{font-family:Mono;font-weight:500;src:url(fonts/jetbrains-mono-latin-500-normal.woff2)}
+*{margin:0;padding:0;box-sizing:border-box} html,body{width:1920px;height:1080px;overflow:hidden}
+.a{position:absolute;white-space:nowrap}
+.X{font-family:Archivo;font-stretch:125%;font-weight:850;letter-spacing:-.035em;line-height:.82;text-transform:uppercase}
+.N{font-family:Archivo;font-stretch:70%;font-weight:850;letter-spacing:-.01em;line-height:.8;text-transform:uppercase}
+.M{font-family:Mono;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:17px}
+.mark{position:absolute;-webkit-mask:url(assets/mark.png) center/contain no-repeat}
+</style></head><body><div id="f"></div><script>
+const f=new URLSearchParams(location.search).get('f'); const R=document.getElementById('f'); const ink='#0b0c0d', mint='#3ff0a0', paper='#f1ede4';
+const el=(css,html='',cls='a')=>{ const d=document.createElement('div'); d.className=cls; d.style.cssText=css; d.innerHTML=html; R.appendChild(d); return d; };
+document.body.style.background=ink;
+if(f==='A'){ // BRUTAL: type as architecture
+  el(`left:0;top:0;width:1920px;height:1080px;background:${ink}`);
+  el(`left:-18px;top:40px;font-size:330px;color:${paper}`,'Your agent','a X');
+  el(`left:-14px;top:330px;font-size:330px;color:${paper}`,'is about','a X');
+  el(`left:-16px;top:620px;font-size:330px;color:${paper}`,'to be','a X');
+  const w=el(`left:1020px;top:620px;font-size:330px;color:${ink};background:${mint};padding:0 30px`,'wrong.','a X');
+  el(`left:44px;top:1030px;color:${mint}`,'cancel_event("board review · tue 9:30")  ▸  run','a M');
+  el(`right:44px;top:1030px;color:#6b706d`,'eden · 001','a M');
+}
+if(f==='B'){ // TRACE: one line out of thousands
+  el(`left:0;top:0;width:1920px;height:1080px;background:${ink}`);
+  const src=['mail','calendar','docs','crm','notes','chat']; const txt=['Q4 numbers attached, see tab 3','offsite logistics · hold','contract redlines are back','renewal price +18% on jan 1','1:1 moved to thursday','refund issued tuesday','budget frozen until q1','invoice paid · receipt attached','new deck, use v3','decision maker changed','never share keys over chat','prefers mornings for deep work','vendor shortlist v2','security review friday','standup notes · ops'];
+  let h=''; for(let r=0;r<62;r++){ let line=''; for(let c=0;c<3;c++){ const k=(r*7+c*13)%txt.length; line+=`<span style="display:inline-block;width:620px">${String(1000+r*3+c).padStart(5,'0')}  ${src[(r+c)%6].padEnd(9,' ')} ${txt[k]}</span>`; } h+=`<div style="height:17.4px">${line}</div>`; }
+  el(`left:30px;top:6px;font-family:Mono;font-size:13px;color:#2c3230;line-height:17.4px;white-space:pre`,h);
+  el(`left:0;top:487px;width:1920px;height:70px;background:${mint}`);
+  el(`left:30px;top:497px;font-family:Mono;font-weight:500;font-size:40px;color:${ink}`,'01186  calendar  Board review moved to 9:30 · required.');
+  el(`left:44px;top:120px;font-size:150px;color:${paper};text-shadow:0 0 0 ${ink}`,'1 fact. 1,517 places<br>your agent didn\'t look.','a X');
+  el(`left:44px;top:960px;font-size:84px;color:${paper};font-family:Serif;font-style:italic`,'Eden found it before the model call.','a');
+}
+if(f==='C'){ // GEOMETRY: the mark as a building
+  el(`left:0;top:0;width:1920px;height:1080px;background:${mint}`);
+  el(`left:760px;top:-240px;width:1500px;height:1620px;background:${ink}`,'','mark');
+  el(`left:70px;top:150px;font-size:210px;color:${ink}`,'Context','a X');
+  el(`left:70px;top:340px;font-size:210px;color:${ink}`,'before','a X');
+  el(`left:70px;top:530px;font-size:210px;color:${ink}`,'they ask.','a X');
+  el(`left:76px;top:820px;color:${ink};font-size:20px;line-height:1.8`,'eden — the context partner for ai agents<br>reads mail · calendar · docs · crm · speaks first','a M');
+}
+window.READY=false; document.fonts.ready.then(async()=>{ for(const x of ['850 20px Archivo','italic 20px Serif','500 20px Mono']) await document.fonts.load(x); window.READY=true; });
+</script></body></html>
