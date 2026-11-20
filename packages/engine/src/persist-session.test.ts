@@ -73,4 +73,25 @@ describe("session knowledge carried with a frozen user", () => {
     );
     expect(fresh.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
   });
+
+  test("an injection still awaiting a use verdict survives the respawn", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    const a = partner(dir);
+    const got = await a.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), {
+      waitMs: 2_000,
+    });
+    const injectionId = got.injection?.id;
+    expect(injectionId).toBeTruthy();
+    expect(a.release(user)).toBe(true);
+
+    const b = partner(dir);
+    await b.observe(ev({ kind: "user_message", sessionId: "a", text: "anything to get the session live" }), {
+      waitMs: 2_000,
+    });
+    // Outstanding rode the blob: explicit feedback still reaches the use verdict for `crm`.
+    expect(
+      b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" }),
+    ).toBe(true);
+  });
 });

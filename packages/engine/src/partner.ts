@@ -474,6 +474,18 @@ interface FrozenSession {
   turn: number;
   ledger: LedgerSnapshot;
   delivered: { sketch: Sketch | null; refs: string[]; turn: number; terms: string[]; years: number[] }[];
+  /**
+   * Injections handed but not yet judged used or unused (`Session.outstanding`): a respawn without it loses the
+   * usage signal for everything the agent held, so the source map learns nothing from those deliveries.
+   * `tokens` are vocabulary ids per session, so they ride the blob as term strings, re-interned on the seed.
+   */
+  outstanding?: {
+    injectionId: string;
+    sourceIds: string[];
+    situation: string;
+    terms: string[];
+    deliveredTurn: number;
+  }[];
 }
 
 /** Shape check for a `FrozenSession` read back from a blob: anything else is ignored (fails open). */
@@ -489,7 +501,19 @@ function isFrozenSession(x: unknown): x is FrozenSession {
     Array.isArray(s.ledger.shown) &&
     Array.isArray(s.delivered) &&
     typeof s.sessionId === "string" &&
-    typeof s.turn === "number"
+    typeof s.turn === "number" &&
+    (s.outstanding === undefined ||
+      (Array.isArray(s.outstanding) &&
+        s.outstanding.every(
+          (o) =>
+            o !== null &&
+            typeof o === "object" &&
+            typeof o.injectionId === "string" &&
+            Array.isArray(o.sourceIds) &&
+            typeof o.situation === "string" &&
+            Array.isArray(o.terms) &&
+            typeof o.deliveredTurn === "number",
+        )))
   );
 }
 
@@ -2088,7 +2112,14 @@ export class ContextPartner {
         .filter((d) => d.itemId === undefined || !queued.has(d.itemId))
         .map((d) => ({ ...d, refs: [...d.refs], terms: [...d.terms], years: [...d.years] }));
       if (ledger.delivered.length === 0 && ledger.shown.length === 0 && delivered.length === 0) continue;
-      out.push({ sessionId: s.id, turn: s.turn, ledger, delivered });
+      const outstanding = [...s.outstanding.values()].map((o) => ({
+        injectionId: o.injectionId,
+        sourceIds: [...o.sourceIds],
+        situation: o.situation,
+        terms: [...o.tokens].map((id) => s.vocab.term(id)),
+        deliveredTurn: o.deliveredTurn,
+      }));
+      out.push({ sessionId: s.id, turn: s.turn, ledger, delivered, outstanding });
     }
     return out.length ? out.slice(-MAX_FROZEN_SESSIONS) : null;
   }
@@ -3993,6 +4024,18 @@ export class ContextPartner {
         s.ledger.seed(f.ledger, f.turn);
         for (const d of f.delivered) {
           s.delivered.push({ ...d, refs: new Set(d.refs), terms: [...d.terms], years: [...d.years], turn: 0 });
+        }
+        // Injections still awaiting a use verdict ride along: the agent may still act on them, and the source
+        // map's learning must not lose the deliveries a respawn interrupted. Turn re-anchored like the ledger's.
+        for (const o of f.outstanding ?? []) {
+          if (s.outstanding.size >= MAX_OUTSTANDING || s.outstanding.has(o.injectionId)) break;
+          s.outstanding.set(o.injectionId, {
+            injectionId: o.injectionId,
+            sourceIds: [...o.sourceIds],
+            situation: o.situation,
+            tokens: new Set(o.terms.map((t) => s.vocab.intern(t))),
+            deliveredTurn: o.deliveredTurn - f.turn,
+          });
         }
       }
       if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
