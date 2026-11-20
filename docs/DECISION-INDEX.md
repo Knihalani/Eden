@@ -862,6 +862,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
+| D1990 | 2026-11-20 | Adopted: `examples/gptme`, Eden as a gptme plugin. | adopted |
 | D1989 | 2026-11-20 | Adopted: `examples/openclaw`, Eden as an OpenClaw plugin. | adopted |
 | D1988 | 2026-11-20 | Adopted: `examples/pi`, Eden as a Pi extension. | adopted |
 | D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
