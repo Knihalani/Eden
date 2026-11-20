@@ -123,6 +123,7 @@ interface HookCtx {
 interface Session {
   eden: EdenClient;
   options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
+  sessionId: string; // kept for the client rebuild a sidecar replacement needs
   generation: number | string;
   seen: Map<string, number>;
   copyCounts: Map<string, number>; // content key -> transcript copies seen, so hook reports take the next copy
@@ -160,6 +161,7 @@ function clawHome(): string {
 async function clientOptions(): Promise<{
   options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
   local: LocalEden | null;
+  generation: number | string;
 } | null> {
   const home = clawHome();
   const resolved = resolveLocalEden(process.env as Record<string, string | undefined>, {
@@ -177,6 +179,7 @@ async function clientOptions(): Promise<{
         tenantId: resolved.tenantId,
       },
       local: null,
+      generation: 0,
     };
   }
   const users =
@@ -199,6 +202,7 @@ async function clientOptions(): Promise<{
       tenantId: "local",
     },
     local,
+    generation: endpoint.generation,
   };
 }
 
@@ -212,7 +216,8 @@ async function sessionFor(sessionId: string): Promise<Session | null> {
   const session: Session = {
     eden,
     options: made.options,
-    generation: 1,
+    sessionId: key,
+    generation: made.generation,
     local: made.local,
     seen: new Map(),
     copyCounts: new Map(),
@@ -265,7 +270,7 @@ async function liveClient(s: Session): Promise<EdenClient | null> {
   // A restarted sidecar listens on a new port with a new token: rebuild the client on the new endpoint.
   if (ep.generation !== s.generation) {
     s.generation = ep.generation;
-    s.eden = new EdenClient({ ...s.options, baseUrl: ep.url, apiKey: ep.token });
+    s.eden = new EdenClient({ ...s.options, sessionId: s.sessionId, baseUrl: ep.url, apiKey: ep.token });
   }
   return s.eden;
 }
