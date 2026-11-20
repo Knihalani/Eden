@@ -93,8 +93,8 @@ import {
   type SheetCard,
 } from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
-import { isFrozenYields, SourceYield, type Evidence, type FrozenYields } from "./source-yield";
-import { isFrozenEconomy, ProbeEconomy, type FrozenEconomy, type ProbeKind } from "./economy";
+import { isFrozenYields, mergeFrozenYields, SourceYield, type Evidence, type FrozenYields } from "./source-yield";
+import { isFrozenEconomy, mergeFrozenEconomy, ProbeEconomy, type FrozenEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
   namesParticipant,
@@ -602,6 +602,27 @@ function mergeFrozenSessions(
   out.push(...(live ?? []));
   const cut = out.slice(-MAX_FROZEN_SESSIONS);
   return cut.length ? cut : null;
+}
+
+/**
+ * Unions a disk blob's `recorded` rows with this save's (D2004): keyed by injectionId, this process's rows
+ * win a collision — they are the newest write — and the tail holds the freshest in map order.
+ */
+function mergeFrozenRecorded(prior: FrozenRecorded[], live: FrozenRecorded[]): FrozenRecorded[] | null {
+  const out = new Map<string, FrozenRecorded>(prior.map((r) => [r.injectionId, r]));
+  for (const r of live) out.set(r.injectionId, r);
+  const rows = [...out.values()].slice(-MAX_RECORDED);
+  return rows.length ? rows : null;
+}
+
+/** Unions two blobs' `unverifiable` rows (D2004): per item the newer `at` wins; the freshest are kept. */
+function mergeFrozenUnverifiable(prior: FrozenUnverifiable, live: FrozenUnverifiable): FrozenUnverifiable {
+  const out = new Map<string, { mark: number; at: number }>(prior);
+  for (const [id, r] of live) {
+    const old = out.get(id);
+    if (!old || r.at >= old.at) out.set(id, r);
+  }
+  return [...out].slice(-FROZEN_UNVERIFIABLE);
 }
 
 /** Frozen sessions kept per user (`restoredSessions`): an old one's knowledge still applies, bounded. */
@@ -1202,7 +1223,7 @@ export class ContextPartner {
       deps.cache.persistHooks = {
         // D992: the user's source-map rows (routing and planner learning) go with them, so a user moved to another
         // process or machine keeps what was learned; they are replaced, not merged, where they land.
-        save: (scope) => {
+        save: (scope, prior) => {
           const key = scopeKey(scope);
           const live = this.frozenPending.get(key) ?? this.sessionSnapshot(scope);
           this.frozenPending.delete(key);
@@ -1216,14 +1237,41 @@ export class ContextPartner {
             ? this.frozenUnverifiable.get(key)
             : this.unverifiableSnapshot(key);
           this.frozenUnverifiable.delete(key);
+          // D2004: the file on disk may be another process's blob (a failover both served this user), newer
+          // than this process's thaw — its rows merge in instead of being replaced, or the later freeze
+          // silently drops what the other machine learned.
+          const carried = prior as
+            | {
+                sessions?: unknown;
+                recorded?: unknown;
+                economy?: unknown;
+                yields?: unknown;
+                unverifiable?: unknown;
+              }
+            | null
+            | undefined;
+          const priorSessions = Array.isArray(carried?.sessions) ? carried.sessions.filter(isFrozenSession) : [];
+          const priorRecorded = Array.isArray(carried?.recorded) ? carried.recorded.filter(isFrozenRecorded) : [];
+          const mergedEconomy = mergeFrozenEconomy(
+            isFrozenEconomy(carried?.economy) ? carried.economy : null,
+            economy ?? null,
+          );
+          const mergedYields = mergeFrozenYields(
+            isFrozenYields(carried?.yields) ? carried.yields : null,
+            yields ?? null,
+          );
+          const mergedUnverifiable = mergeFrozenUnverifiable(
+            isFrozenUnverifiable(carried?.unverifiable) ? carried.unverifiable : [],
+            unverifiable ?? [],
+          );
           return {
             sync: sync?.snapshot(scope) ?? null,
             rows: this.deps.sourceMap.exportUser(scope),
-            sessions: mergeFrozenSessions(this.restoredSessions.get(key), live),
-            recorded,
-            ...(economy ? { economy } : {}),
-            ...(yields ? { yields } : {}),
-            ...(unverifiable ? { unverifiable } : {}),
+            sessions: mergeFrozenSessions(priorSessions, mergeFrozenSessions(this.restoredSessions.get(key), live)),
+            recorded: mergeFrozenRecorded(priorRecorded, recorded ?? []),
+            ...(mergedEconomy ? { economy: mergedEconomy } : {}),
+            ...(mergedYields ? { yields: mergedYields } : {}),
+            ...(mergedUnverifiable.length ? { unverifiable: mergedUnverifiable } : {}),
           };
         },
         restored: (scope, items, extra) => {

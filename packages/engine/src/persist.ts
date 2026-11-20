@@ -120,6 +120,12 @@ export interface FrozenDisk {
    * to do.
    */
   invalidate?(scope: Scope): void;
+  /**
+   * Reads the user's file whether or not this store's index knows it — a blob another process wrote after this one
+   * opened (D2004: a save merges it instead of replacing it). Unlike `read` it neither indexes nor discards a file
+   * it did not know, so `has`/`sweep`/`thaw` keep seeing only this store's own users.
+   */
+  peek?(scope: Scope, now: number): PersistedUser | null;
 }
 
 export interface DiskOptions {
@@ -231,6 +237,27 @@ export class EncryptedFrozenDisk implements FrozenDisk {
     }
     const bad = this.headerProblem(file, now);
     if (bad) return this.discard(name, bad);
+    const user = this.decode(scope, file);
+    if (user === null) return this.discard(name, "corrupt");
+    this.stats.read++;
+    this.stats.readMs += performance.now() - t0;
+    return user;
+  }
+
+  peek(scope: Scope, now: number): PersistedUser | null {
+    const name = this.nameOf(scope);
+    let file: Buffer;
+    try {
+      file = readFileSync(join(this.o.dir, name));
+    } catch {
+      return null;
+    }
+    if (this.headerProblem(file, now)) return null;
+    // No discard here: a file this store never indexed is another writer's, and its corrupt copy is its problem.
+    return this.decode(scope, file);
+  }
+
+  private decode(scope: Scope, file: Buffer): PersistedUser | null {
     try {
       const header = file.subarray(0, HEADER);
       const nonce = file.subarray(HEADER - NONCE, HEADER);
@@ -240,13 +267,11 @@ export class EncryptedFrozenDisk implements FrozenDisk {
       const plain = Buffer.concat([d.update(file.subarray(HEADER, file.length - TAG)), d.final()]);
       const metaLength = plain.readUInt32LE(0);
       const meta = JSON.parse(plain.subarray(4, 4 + metaLength).toString("utf8")) as Omit<PersistedUser, "blob">;
-      if (!validMeta(meta)) return this.discard(name, "corrupt");
-      this.stats.read++;
-      this.stats.readMs += performance.now() - t0;
+      if (!validMeta(meta)) return null;
       return { ...meta, blob: new Uint8Array(plain.subarray(4 + metaLength)), expiresAt: file.readDoubleLE(24) };
     } catch {
       // Tampered, truncated, copied from another user's name, or written under another key with the same id.
-      return this.discard(name, "corrupt");
+      return null;
     }
   }
 
