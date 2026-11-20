@@ -132,9 +132,11 @@ export function edenMiddleware(eden: EdenClient) {
 
   /**
    * The reports of each answer's own messages, sent in the background so the agent does not wait on them; the next
-   * model call waits for them first, so Eden sees the conversation in order.
+   * model call waits for them first, so Eden sees the conversation in order. Injections a background observe
+   * returns are queued for that call — the server dequeues what it returns, so dropping one would lose it.
    */
   let reported: Promise<unknown> = started;
+  const queued: Injection[] = [];
 
   const reportAnswer = (result: unknown) => {
     try {
@@ -154,7 +156,10 @@ export function edenMiddleware(eden: EdenClient) {
         seen.set(`${k}#1`, 1);
         const events = eventsOf(m);
         reported = reported.then(async () => {
-          for (const ev of events) await eden.observe(ev, { waitMs: 0 });
+          for (const ev of events) {
+            const { injection } = await eden.observe(ev, { waitMs: 0 });
+            if (injection) queued.push(injection);
+          }
         });
       }
     } catch {
@@ -215,7 +220,7 @@ export function edenMiddleware(eden: EdenClient) {
             if (injection) got.push(injection);
           }
         }
-        got.push(...(await eden.pending()));
+        got.push(...(await eden.pending()), ...queued.splice(0));
         if (got.length > 0 && lastUser >= 0) {
           const text = got.map((p) => p.text).join("\n\n");
           // A new turn's packet goes into its user message; one that lands between a turn's model calls goes after
