@@ -293,6 +293,62 @@ export class LocalEden {
     return this.endpointValue;
   }
 
+  /**
+   * Serializes the attach-or-spawn section across owning processes: `<share>.lock` created O_EXCL with the
+   * holder's pid. Without it two first owners both find no record, both spawn, and the loser's daemon is
+   * orphaned — undiscoverable, holding a port (and the state dir's sqlite writes) forever. A stale lock
+   * (dead holder, or unreadable) is removed and retried. Answers false after the spawn timeout, fail-open.
+   */
+  private async shareLock(): Promise<boolean> {
+    const lock = `${this.options.sharePath}.lock`;
+    try {
+      mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
+    } catch {
+      // mkdir raced another owner; a real failure surfaces as an EEXIST-less lock below.
+    }
+    const deadline = Date.now() + this.timeout;
+    while (Date.now() < deadline) {
+      try {
+        writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+        return true;
+      } catch {
+        let stale = true;
+        try {
+          const pid = Number.parseInt(readFileSync(lock, "utf8").trim(), 10);
+          if (pid) {
+            try {
+              process.kill(pid, 0);
+            } catch (e) {
+              // ESRCH is a dead holder; anything else (EPERM, a pid we cannot signal) is a live one.
+              stale = (e as NodeJS.ErrnoException).code === "ESRCH";
+            }
+          }
+        } catch {
+          // An unreadable or half-written lock is stale.
+        }
+        if (stale) {
+          try {
+            unlinkSync(lock);
+          } catch {
+            // Another contender already removed it.
+          }
+          continue;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    return false;
+  }
+
+  /** Releases the share lock; never throws. */
+  private shareUnlock(): void {
+    try {
+      unlinkSync(`${this.options.sharePath}.lock`);
+    } catch {
+      // A contender already reaped it as stale.
+    }
+  }
+
   /** The share file, atomically (tmp + rename), readable only by its owner. */
   private writeShare(): void {
     const share = this.options.sharePath;
@@ -396,30 +452,39 @@ export class LocalEden {
     // A child that died after answering is a failure like any other: it earns backoff before the next spawn.
     if (this.process && !alive) this.failure("child exited");
     if (this.attached) return this.endpointValue;
-    if (this.options.sharePath) {
-      this.pending = this.attach().catch(() => null);
-      await this.pending;
-      this.pending = null;
-      if (this.endpointValue) return this.endpointValue;
-    }
-    if (Date.now() < this.retryAt) return null;
     const token = randomBytes(32).toString("base64url");
+    const shared = this.options.sharePath !== undefined;
     this.pending = (async () => {
-      this.startedAt = 0;
-      const port = await this.spawnOnce(token);
-      if (port === null || this.process?.exitCode !== null) {
-        this.process?.kill("SIGKILL");
-        this.failure("child did not become ready");
+      // Cross-process attach-or-spawn is one locked section, or two first owners race and orphan a daemon.
+      if (shared && !(await this.shareLock())) {
+        this.failure("the shared daemon lock was held through the spawn timeout");
         return;
       }
-      const count = (Number.parseInt(String(this.generation), 10) || 0) + 1;
-      this.generation =
-        // A shared daemon's generation must be unique across processes' restarts, or a long-lived
-        // attacher's client cache would keep a replaced daemon's endpoint.
-        this.options.sharePath ? `${count}:${randomBytes(8).toString("hex")}` : count;
-      this.startedAt = Date.now();
-      this.endpointValue = { url: `http://127.0.0.1:${port}`, token, generation: this.generation };
-      this.writeShare();
+      try {
+        if (shared) {
+          const attached = await this.attach().catch(() => null);
+          if (attached) return; // a racing owner's record, or a live daemon
+        }
+        // The spawn backoff gates spawning only — a fresh record another owner wrote is still attached above.
+        if (Date.now() < this.retryAt) return;
+        this.startedAt = 0;
+        const port = await this.spawnOnce(token);
+        if (port === null || this.process?.exitCode !== null) {
+          this.process?.kill("SIGKILL");
+          this.failure("child did not become ready");
+          return;
+        }
+        const count = (Number.parseInt(String(this.generation), 10) || 0) + 1;
+        this.generation =
+          // A shared daemon's generation must be unique across processes' restarts, or a long-lived
+          // attacher's client cache would keep a replaced daemon's endpoint.
+          shared ? `${count}:${randomBytes(8).toString("hex")}` : count;
+        this.startedAt = Date.now();
+        this.endpointValue = { url: `http://127.0.0.1:${port}`, token, generation: this.generation };
+        this.writeShare();
+      } finally {
+        if (shared) this.shareUnlock();
+      }
     })();
     await this.pending;
     this.pending = null;
@@ -428,8 +493,12 @@ export class LocalEden {
 
   /** A failed connection prompts a poll, not termination of a live child. */
   failed(generation: number | string): void {
+    // An attached daemon has no process to poll: the caller's "this generation's calls failed" is the signal
+    // — drop the cached endpoint so the next endpoint() re-probes (or replaces) the recorded server.
     const dead =
-      this.process && (this.process.exitCode !== null || this.process.signalCode !== null || this.process.killed);
+      this.attached ||
+      (this.process !== null &&
+        (this.process.exitCode !== null || this.process.signalCode !== null || this.process.killed));
     if (generation === this.generation && dead) {
       this.endpointValue = null;
     }

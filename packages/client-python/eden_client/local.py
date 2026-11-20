@@ -338,56 +338,105 @@ class LocalEden:
                     self._failure("child exited")
                 if self._attached:
                     return self._endpoint
-                if self._share is not None:
-                    attached = self._attach()
-                    if attached is not None:
-                        return attached
-                if time.monotonic() < self._retry_at:
-                    return None
-                self._started = 0.0
-                if sys.platform == "darwin":
-                    # A plugin installed by Finder/ditto keeps the download's quarantine xattr, and the kernel
-                    # refuses exec of an unsigned quarantined binary (EPERM); stripping it is harmless otherwise.
-                    try:
-                        subprocess.run(["xattr", "-d", "com.apple.quarantine", self._binary],
-                                       capture_output=True, timeout=10)
-                    except (OSError, subprocess.TimeoutExpired):
-                        pass
-                token = secrets.token_urlsafe(32)
-                if self._share is None:
-                    self._process = subprocess.Popen(
-                        [self._binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE if self._log_path else subprocess.DEVNULL,
-                        close_fds=True, env=self._child_env(token),
-                    )
-                else:
-                    self._process = self._spawn_shared(token)
-                ready, result = threading.Event(), []
-                thread = threading.Thread(target=self._stdout, args=(self._process.stdout, ready, result), daemon=True)
-                self._threads = [thread]
-                if self._log_path and self._share is None:
-                    self._threads.append(threading.Thread(target=self._stderr, args=(self._process.stderr,), daemon=True))
-                for worker in self._threads:
-                    worker.start()
-                ready.wait(self._timeout)
-                if not result or result[0] is None or self._process.poll() is not None:
-                    self._process.kill()
-                    self._failure("child did not become ready")
-                    return None
-                self._generation += 1
-                self._started = time.monotonic()
-                port = result[0]
-                # A shared daemon's generation must be unique across processes' restarts, or a
-                # long-lived attacher's client cache would keep a replaced daemon's endpoint.
-                generation = (f"{self._generation}:{secrets.token_hex(8)}" if self._share is not None
-                              else self._generation)
-                self._endpoint = (f"http://127.0.0.1:{port}", token, generation)
-                if self._share is not None:
-                    self._write_share()
-                return self._endpoint
+                # Cross-process attach-or-spawn is one locked section, or two first owners race and
+                # orphan a daemon: <share>.lock, O_EXCL, with the holder's pid; a dead or unreadable
+                # holder's lock is reaped. Held for the whole probe+spawn below.
+                locked = self._share_lock(time.monotonic() + self._timeout) if self._share is not None else False
+                try:
+                    if self._share is not None:
+                        attached = self._attach()
+                        if attached is not None:
+                            return attached
+                    # The spawn backoff gates spawning only — a fresh record another owner wrote is
+                    # still attached above.
+                    if time.monotonic() < self._retry_at:
+                        return None
+                    self._started = 0.0
+                    if sys.platform == "darwin":
+                        # A plugin installed by Finder/ditto keeps the download's quarantine xattr, and the kernel
+                        # refuses exec of an unsigned quarantined binary (EPERM); stripping it is harmless otherwise.
+                        try:
+                            subprocess.run(["xattr", "-d", "com.apple.quarantine", self._binary],
+                                           capture_output=True, timeout=10)
+                        except (OSError, subprocess.TimeoutExpired):
+                            pass
+                    token = secrets.token_urlsafe(32)
+                    if self._share is None:
+                        self._process = subprocess.Popen(
+                            [self._binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE if self._log_path else subprocess.DEVNULL,
+                            close_fds=True, env=self._child_env(token),
+                        )
+                    else:
+                        self._process = self._spawn_shared(token)
+                    ready, result = threading.Event(), []
+                    thread = threading.Thread(target=self._stdout, args=(self._process.stdout, ready, result), daemon=True)
+                    self._threads = [thread]
+                    if self._log_path and self._share is None:
+                        self._threads.append(threading.Thread(target=self._stderr, args=(self._process.stderr,), daemon=True))
+                    for worker in self._threads:
+                        worker.start()
+                    ready.wait(self._timeout)
+                    if not result or result[0] is None or self._process.poll() is not None:
+                        self._process.kill()
+                        self._failure("child did not become ready")
+                        return None
+                    self._generation += 1
+                    self._started = time.monotonic()
+                    port = result[0]
+                    # A shared daemon's generation must be unique across processes' restarts, or a
+                    # long-lived attacher's client cache would keep a replaced daemon's endpoint.
+                    generation = (f"{self._generation}:{secrets.token_hex(8)}" if self._share is not None
+                                  else self._generation)
+                    self._endpoint = (f"http://127.0.0.1:{port}", token, generation)
+                    if self._share is not None:
+                        self._write_share()
+                    return self._endpoint
+                finally:
+                    if locked:
+                        try:
+                            Path(str(self._share) + ".lock").unlink(missing_ok=True)
+                        except Exception:
+                            pass
             except Exception:
                 self._failure("could not start child")
                 return None
+
+    def _share_lock(self, deadline):
+        """The cross-process spawn lock (<share>.lock): O_EXCL with the holder's pid, reaped when the
+        holder is dead or the file unreadable; False after the deadline — fail-open, never a hang."""
+        lock = Path(str(self._share) + ".lock")
+        try:
+            lock.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        except Exception:
+            pass
+        while time.monotonic() < deadline:
+            try:
+                fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                try:
+                    os.write(fd, str(os.getpid()).encode())
+                finally:
+                    os.close(fd)
+                return True
+            except FileExistsError:
+                stale = True
+                try:
+                    os.kill(int(lock.read_text().strip()), 0)
+                    stale = False  # a live holder (or one we may not signal): wait for it
+                except ProcessLookupError:
+                    stale = True
+                except Exception:
+                    stale = True  # unreadable or half-written
+                if stale:
+                    try:
+                        lock.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    continue
+                time.sleep(0.05)
+            except Exception:
+                return False
+        return False
 
     def failed(self, generation):
         """A failed connection prompts a poll, not termination of a live child."""
