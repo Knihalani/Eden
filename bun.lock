@@ -49,6 +49,17 @@
         "@eden/client": "workspace:*",
       },
     },
+    "examples/pi": {
+      "name": "@eden/example-pi",
+      "version": "0.0.0",
+      "dependencies": {
+        "@eden/client": "workspace:*",
+      },
+      "devDependencies": {
+        "@eden/server": "workspace:*",
+        "@eden/sources": "workspace:*",
+      },
+    },
     "packages/client": {
       "name": "@eden/client",
       "version": "0.0.0",
@@ -257,6 +268,8 @@
     "@eden/example-onboarding": ["@eden/example-onboarding@workspace:examples/onboarding"],
 
     "@eden/example-personal-agent": ["@eden/example-personal-agent@workspace:examples/personal-agent"],
+
+    "@eden/example-pi": ["@eden/example-pi@workspace:examples/pi"],
 
     "@eden/graph": ["@eden/graph@workspace:packages/graph"],
 
