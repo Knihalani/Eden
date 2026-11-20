@@ -142,7 +142,9 @@ export class SourceYield {
    * already yielded, so a source the earn rule held back is re-read on weak evidence.
    */
   snapshot(scope: Scope): FrozenYields | null {
-    const u = this.user(scope, false);
+    // Reads the user without `user()`: a snapshot is no activity, and the LRU promotion it does would
+    // hold an idle user (whose freeze triggers this) ahead of ones actually used.
+    const u = this.users.get(scopeKey(scope));
     if (!u || u.sources.size === 0) return null;
     return { sources: [...u.sources].slice(-FROZEN_SOURCES).map(([s, r]) => [s, { ...r }]) };
   }
