@@ -61,14 +61,14 @@ export class Ledger {
 
   /**
    * Gives a fresh ledger what a snapshot's session knew (a user restored from a frozen blob, or a local daemon
-   * respawned between turns). Turns are session-relative, so each entry's turn moves back by the snapshot's
-   * latest: its most recent delivery counts as turn 0, and one already past the cooldown stays fresh as it was.
+   * respawned between turns). `fromTurn` is the saved session's turn when it was written: each entry's turn
+   * moves back by it, so the turns already elapsed count too — a delivery past its cooldown stays fresh after
+   * the restore instead of starting a new one.
    * Entries an existing delivery already covers keep the newer turn.
    */
-  seed(snap: LedgerSnapshot): void {
-    const latest = snap.delivered.reduce((m, [, t]) => Math.max(m, t), 0);
+  seed(snap: LedgerSnapshot, fromTurn = 0): void {
     for (const [id, t] of snap.delivered) {
-      const at = t - latest;
+      const at = t - fromTurn;
       const was = this.delivered.get(id);
       if (was === undefined || at > was) {
         this.delivered.delete(id);

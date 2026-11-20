@@ -60,10 +60,17 @@ describe("session knowledge carried with a frozen user", () => {
     expect(a.release(user)).toBe(true);
 
     const b = partner(dir);
+    // The same session continuing after the respawn: what it already handed stays handed.
     const again = await b.observe(
-      ev({ kind: "user_message", sessionId: "b", text: "What about the Globex renewal?" }),
+      ev({ kind: "user_message", sessionId: "a", text: "What about the Globex renewal?" }),
       { waitMs: 2_000 },
     );
     expect(again.injection).toBeNull();
+    // A new conversation of the same user is not seeded (BUG_0001): its agent never held the item.
+    const fresh = await b.observe(
+      ev({ kind: "user_message", sessionId: "c", text: "What about the Globex renewal?" }),
+      { waitMs: 2_000 },
+    );
+    expect(fresh.injection?.citations.map((c) => c.itemId)).toContain("crm:deal-9");
   });
 });
