@@ -311,7 +311,11 @@ export class LocalEden {
       try {
         writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
         return true;
-      } catch {
+      } catch (e) {
+        // Anything but EEXIST is not contention — an unwritable share path (EACCES, EROFS, ENOTDIR) would
+        // otherwise take the stale path and spin its three failing syscalls for the whole spawn timeout,
+        // blocking the event loop. Fail open instead, matching the Python client's `except Exception`.
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") return false;
         let stale = true;
         try {
           const pid = Number.parseInt(readFileSync(lock, "utf8").trim(), 10);
