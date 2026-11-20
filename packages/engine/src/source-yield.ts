@@ -196,8 +196,9 @@ export function isFrozenYields(x: unknown): x is FrozenYields {
 
 /**
  * Unions two blobs' per-source runs — a shared store can hold a blob another process wrote while this one
- * served the user live (D2004): per source the rows merge — `empty` takes the higher count (runs only
- * grow), `used` ORs (once earned, earned), `at` the newer — and the freshest `FROZEN_SOURCES` are kept.
+ * served the user live (D2004): per source `at` is the newer read and `used` ORs (once earned, earned), while
+ * `empty` is the newer row's — a useful delivery resets a run to zero, so the older count must not come back.
+ * The freshest `FROZEN_SOURCES` are kept.
  */
 export function mergeFrozenYields(prior: FrozenYields | null, live: FrozenYields | null): FrozenYields | null {
   if (!prior) return live;
@@ -205,7 +206,12 @@ export function mergeFrozenYields(prior: FrozenYields | null, live: FrozenYields
   const out = new Map(prior.sources);
   for (const [s, r] of live.sources) {
     const old = out.get(s);
-    out.set(s, old ? { empty: Math.max(old.empty, r.empty), at: Math.max(old.at, r.at), used: old.used || r.used } : r);
+    if (!old) {
+      out.set(s, r);
+      continue;
+    }
+    const newer = r.at >= old.at ? r : old;
+    out.set(s, { empty: newer.empty, at: Math.max(old.at, r.at), used: old.used || r.used });
   }
   return { sources: [...out].slice(-FROZEN_SOURCES) };
 }
