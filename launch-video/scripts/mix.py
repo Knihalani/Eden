@@ -1,71 +1,77 @@
-"""Audio for the v4 cut: "Carry On" (Mixkit, rock) from song beat 104, plus Mixkit sound effects placed from the edit list.
-No synthesized sound anywhere: every source is a recorded file."""
-import json, subprocess, sys, numpy as np
+"""Audio for the launch film: "Carry On" (Mixkit, live-band rock) from song beat 112, plus recorded foley that follows the
+drawing: pencil under plotted lines, marker on red annotations, paper on page turns. Nothing is synthesized."""
+import subprocess, sys, numpy as np
 from scipy.io import wavfile
-SR = 48000
-E = json.load(open(sys.argv[1])); PB, END = E["P"], E["END"]; B = lambda j: PB * j
-MEDIA, OUT = sys.argv[2], sys.argv[3]
+SR = 48000; PB = 0.41386; END = 46.2; SONG0 = 0.4431 + 112 * PB
+B = lambda j: PB * j
+MEDIA, OUT = sys.argv[1], sys.argv[2]
+rng = np.random.default_rng(11)
 def load(p):
     raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", p, "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"], capture_output=True).stdout
     return np.frombuffer(raw, np.float32).reshape(-1, 2).astype(np.float64)
 N = int(END * SR)
-song = load(f"{MEDIA}/music/1091.mp3")
-seg = song[int(E["SONG0"] * SR):]
-m = np.zeros((N, 2)); n = min(N, len(seg)); m[:n] = seg[:n]
-fi = int(.015 * SR); m[:fi] *= np.linspace(0, 1, fi)[:, None]
-music = m / np.abs(m).max() * .8
-g = np.ones(N); r = int(.012 * SR)
-i0, i1 = int(B(2) * SR), int(B(3) * SR)            # one-beat dropout under "AND BLIND."
-g[i0:i1] = .08; g[i0 - r:i0] = np.linspace(1, .08, r); g[i1 - r:i1] = np.linspace(.08, 1, r)
-for ti in (B(36), B(104)):                          # duck under the two big hits
+song = load(f"{MEDIA}/music/1091.mp3")[int(SONG0 * SR):]
+m = np.zeros((N, 2)); n = min(N, len(song)); m[:n] = song[:n]
+fi = int(.012 * SR); m[:fi] *= np.linspace(0, 1, fi)[:, None]
+music = m / np.abs(m).max() * .78
+g = np.ones(N)
+for ti in (B(28), B(96)):
     k0 = int(ti * SR); L = int(.3 * SR); g[k0:k0 + L] *= 1 - .4 * np.exp(-np.arange(L) / SR / .09)
+k0, k1 = int(B(2) * SR), int(B(2.5) * SR); g[k0:k1] *= .5                        # "And blind." lands with room
 music *= g[:, None]
 sfx = np.zeros((N, 2)); cache = {}
 def S(i):
     if i not in cache: x = load(f"{MEDIA}/sfx/{i}.mp3"); cache[i] = x / (np.abs(x).max() + 1e-9)
     return cache[i]
-def pk(i):
-    x = np.abs(S(i)).mean(1); return np.convolve(x, np.ones(480) / 480, "same").argmax() / SR
-def put(i, t, gain=.5, align="start", maxlen=None):
+def put(i, t, gain=.5, align="onset", maxlen=None, pan=0.0):
     x = S(i)
     if maxlen: x = x[:int(maxlen * SR)].copy(); f = min(len(x), int(.04 * SR)); x[-f:] *= np.linspace(1, 0, f)[:, None]
-    a = int((t - (pk(i) if align == "peak" else 0)) * SR)
+    e = np.convolve(np.abs(x).mean(1), np.ones(240) / 240, "same")
+    off = int(np.argmax(e)) if align == "peak" else int(np.argmax(e > e.max() * .3)) if align == "onset" else 0
+    a = int(t * SR) - off
     if a < 0: x = x[-a:]; a = 0
     k = min(len(x), N - a)
-    if k > 0: sfx[a:a + k] += x[:k] * gain
-WH = [1491, 1471, 1490, 1489, 166]
-for i, s in enumerate(E["shots"]):
-    t0 = s["t0"]
-    if i and abs(t0 - B(36)) > .02 and s["kind"] != "black": put(WH[i % 5], t0, .14, "peak")
-    for p in s.get("panels", []):
-        ta = t0 + p.get("at", 0) * PB
-        if ta > t0 + .01: put(166, ta, .12, "peak")
-        if p.get("word"): put(490, ta + .05, .3)
-    for tx in s.get("text", []):
-        ta = t0 + tx.get("at", 0) * PB
-        st = tx["style"]
-        if st == "mega": put(490, ta, .45); put(2295, ta, .25, maxlen=1.2)
-        elif st == "stack" and not tx.get("hold"):
-            for k, _ in enumerate(tx["lines"]):
-                la = tx.get("lineAt", [k * .07 / PB for k in range(len(tx["lines"]))])[k] * PB
-                put(2568, ta + la, .1)
-        elif st == "roll":
-            for k in range(len(tx["words"])): put(2568, ta + k * tx["every"] * PB, .12)
-        elif st in ("wordmark",): pass
-        elif st in ("slam", "big", "hero"): put(490, ta, .3)
-put(2295, 0, .5, maxlen=2.0)                                        # cold-open hit
-put(2295, B(2), .6, maxlen=2.0); put(2594, B(2), .4); put(1714, B(3), .3, "peak")
-put(2900, B(36), .4, "peak"); put(1492, B(36), .3, "peak")         # riser and suck into the band's return
-put(1143, B(36), .9); put(2295, B(36), .5); put(2350, B(39), .3, "peak")
-for b in (54, 55, 56): put(490, B(b), .5)
-put(2782, B(57), .35, maxlen=1.5)
-for k in range(6): put(2568, B(45) + k * .15, .07)                  # search pulses
-put(2589, B(48), .3, "peak"); put(2350, B(48.75), .3, "peak")
-put(2568, B(83.6), .25)
-put(1465, B(100), .3, "peak"); put(2295, B(100), .45)
-put(1143, B(104), .85); put(2782, B(104), .45)
+    if k > 0: y = x[:k] * gain; y[:, 0] *= 1 - max(0, pan); y[:, 1] *= 1 + min(0, pan); sfx[a:a + k] += y
+def bed(t0, t1, gain=.14):                       # chained pencil scratches under a drawing
+    t = t0; k = 0
+    while t < t1:
+        i = [3194, 2376, 3196, 2369][k % 4]; put(i, t, gain * rng.uniform(.8, 1.1), "start", maxlen=min(1.8, t1 - t + .1), pan=rng.uniform(-.3, .3)); t += [1.7, .85, .7, 1.05][k % 4]; k += 1
+def keys(t0, t1, n, gain=.28):
+    for k in range(n): put([2541, 2542][k % 2], t0 + (t1 - t0) * k / max(1, n - 1) + rng.uniform(-.006, .006), gain * rng.uniform(.75, 1.1), pan=rng.uniform(-.2, .2))
+MARK = lambda t, gn=.3: put(2998, t, gn, "onset", maxlen=.9, pan=rng.uniform(-.25, .25))
+HIT = lambda t, gn=.34: put(490, t, gn)
+POP = lambda t, gn=.3: put(3124, t, gn)
+SW = lambda t, gn=.2: put(1104, t, gn, "peak")
+# hook
+put(2295, 0, .45, maxlen=1.8); HIT(0); HIT(B(1)); put(2295, B(2), .55, maxlen=1.6); HIT(B(2), .5)
+for k in range(4): POP(B(4 + k * .5), .4); put(1104, B(4 + k * .5), .16, "peak")
+HIT(B(6)); SW(B(8), .25)
+for k in range(8): put(2568, B(8 + k * .5), .13)
+SW(B(12), .3); HIT(B(13), .3); put(2369, B(13), .22); put(2367, B(14), .22); HIT(B(14))
+# break and reveal
+put(1714, B(16), .25, "peak"); put(2900, B(28), .4, "peak"); put(1492, B(28), .3, "peak")
+put(1143, B(28), .9); put(2295, B(28), .45); HIT(B(29.5), .3)
+# how it works
+for b in (34, 37, 40): HIT(B(b), .38); put(2568, B(b) + .05, .1)
+for k in range(6): put(2568, B(34.5 + k * .45), .07)
+put(2350, B(40.5), .3, "peak"); SW(B(43), .3); HIT(B(43.3), .35)
+# product moment
+put(1471, B(46), .22, "peak"); POP(B(48), .55); put(1109, B(48.05), .25)
+keys(B(49.5), B(53.5), 70, .16)
+# numbers
+for b in (54, 56.67, 59.33): SW(B(b), .26); HIT(B(b), .4)
+put(2782, B(61), .25, maxlen=1.2)
+# principles
+for b in (62, 64, 66, 68): SW(B(b), .3); POP(B(b) + .05, .3)
+for k in range(10): put(2568, B(68) + .04 + k * .045 * 1.0, .07)
+# integration and scale
+HIT(B(70), .4); keys(B(71.5), B(74.5), 60, .26); put(2533, B(74.7), .45)
+HIT(B(78), .42); HIT(B(82), .42); put(1714, B(78.5), .25, "peak")
+HIT(B(88), .4); HIT(B(90), .45); put(2900, B(96), .3, "peak")
+# end
+put(1143, B(96), .85); put(2782, B(96), .4); SW(B(97), .2)
 mix = music + sfx * .85
 mix = np.tanh(mix * 1.15) / np.tanh(1.15)
-f = int(1.6 * SR); mix[-f:] *= np.linspace(1, 0, f)[:, None] ** 1.5
+f = int(1.3 * SR); mix[-f:] *= np.linspace(1, 0, f)[:, None] ** 1.5
 mix /= np.abs(mix).max() / .95
 wavfile.write(OUT, SR, (mix * 32767).astype(np.int16)); print("ok", round(len(mix) / SR, 2))
