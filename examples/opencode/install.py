@@ -94,27 +94,31 @@ def main():
     args = parser.parse_args()
     root = find_root(HERE)
     work = Path(tempfile.mkdtemp(prefix="eden-opencode-install-"))
+    try:
 
-    # opencode's plugin loader globs only `plugins/*.{ts,js}` (top-level files, not package
-    # directories), so the bundle lands as plugins/eden.js; `plugins/eden/` holds just the binary.
-    plugins = oc_home(args) / "plugins"
-    plugins.mkdir(parents=True, exist_ok=True)
-    stale = plugins / "eden"
-    if stale.is_dir():
-        shutil.rmtree(stale)
-    dest = plugins / "eden.js"
-    shutil.copy2(build_plugin(root, work), dest)
-    binary = ensure_binary(root, work)
-    bin_dir = plugins / "eden" / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    # Rename staged in the same directory: copy2 over a still-running detached server fails
-    # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
-    staged = bin_dir / f".eden-local.{os.getpid()}.tmp"
-    shutil.copy2(binary, staged)
-    staged.chmod(0o755)
-    os.replace(staged, bin_dir / "eden-local")
-    print(f"Eden installed to {dest} (sidecar at {bin_dir / 'eden-local'})")
-    print(f"Next: put sources in {oc_home(args)}/eden/sources.json (see README.md) and start a new opencode session.")
+        # opencode's plugin loader globs only `plugins/*.{ts,js}` (top-level files, not package
+        # directories), so the bundle lands as plugins/eden.js; `plugins/eden/` holds just the binary.
+        plugins = oc_home(args) / "plugins"
+        plugins.mkdir(parents=True, exist_ok=True)
+        stale = plugins / "eden"
+        if stale.is_dir():
+            shutil.rmtree(stale)
+        dest = plugins / "eden.js"
+        shutil.copy2(build_plugin(root, work), dest)
+        binary = ensure_binary(root, work)
+        bin_dir = plugins / "eden" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        # Rename staged in the same directory: copy2 over a still-running detached server fails
+        # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+        staged = bin_dir / f".eden-local.{os.getpid()}.tmp"
+        shutil.copy2(binary, staged)
+        staged.chmod(0o755)
+        os.replace(staged, bin_dir / "eden-local")
+        print(f"Eden installed to {dest} (sidecar at {bin_dir / 'eden-local'})")
+        print(f"Next: put sources in {oc_home(args)}/eden/sources.json (see README.md) and start a new opencode session.")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # the private build dir is scratch once artifacts are copied
+
 
 
 if __name__ == "__main__":

@@ -140,40 +140,44 @@ def main():
     args = parser.parse_args()
     root = find_root(HERE)
     work = Path(tempfile.mkdtemp(prefix="eden-claude-install-"))
+    try:
 
-    home = claude_home(args)
-    dest = home / "eden"
-    # Refresh only what this installer owns: sources.json, state/, data/ and logs/ are the user's
-    # (a re-run that rmtree'd the directory deleted configured sources and session state).
-    dest.mkdir(parents=True, exist_ok=True)
-    for stale in ("eden-hook.py", "eden-mcp.py"):
-        (dest / stale).unlink(missing_ok=True)
-    vendored = dest / "eden_client"
-    if vendored.is_dir():
-        shutil.rmtree(vendored)
-    (dest / "bin").mkdir(parents=True, exist_ok=True)
-    for name in ("eden-hook.py", "eden-mcp.py"):
-        shutil.copy2(HERE / name, dest / name)
-        (dest / name).chmod(0o755)
-    client_src = (root or HERE) / "packages" / "client-python" / "eden_client"
-    if not client_src.is_dir():
-        sys.exit("Need a repo checkout or release archive containing packages/client-python/eden_client")
-    shutil.copytree(
-        client_src,
-        dest / "eden_client",
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
-    binary = ensure_binary(root, work)
-    # Replace via rename staged in the same directory: copy2 over a still-running detached server
-    # fails ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
-    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
-    shutil.copy2(binary, staged)
-    staged.chmod(0o755)
-    os.replace(staged, dest / "bin" / "eden-local")
-    merge_settings(home, dest)
-    print(f"Eden installed to {dest}; hooks registered in {home}/settings.json")
-    print(f"Next: put sources in {home}/eden/sources.json (see README.md) and start a new Claude Code session.")
+        home = claude_home(args)
+        dest = home / "eden"
+        # Refresh only what this installer owns: sources.json, state/, data/ and logs/ are the user's
+        # (a re-run that rmtree'd the directory deleted configured sources and session state).
+        dest.mkdir(parents=True, exist_ok=True)
+        for stale in ("eden-hook.py", "eden-mcp.py"):
+            (dest / stale).unlink(missing_ok=True)
+        vendored = dest / "eden_client"
+        if vendored.is_dir():
+            shutil.rmtree(vendored)
+        (dest / "bin").mkdir(parents=True, exist_ok=True)
+        for name in ("eden-hook.py", "eden-mcp.py"):
+            shutil.copy2(HERE / name, dest / name)
+            (dest / name).chmod(0o755)
+        client_src = (root or HERE) / "packages" / "client-python" / "eden_client"
+        if not client_src.is_dir():
+            sys.exit("Need a repo checkout or release archive containing packages/client-python/eden_client")
+        shutil.copytree(
+            client_src,
+            dest / "eden_client",
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        binary = ensure_binary(root, work)
+        # Replace via rename staged in the same directory: copy2 over a still-running detached server
+        # fails ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+        staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+        shutil.copy2(binary, staged)
+        staged.chmod(0o755)
+        os.replace(staged, dest / "bin" / "eden-local")
+        merge_settings(home, dest)
+        print(f"Eden installed to {dest}; hooks registered in {home}/settings.json")
+        print(f"Next: put sources in {home}/eden/sources.json (see README.md) and start a new Claude Code session.")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # the private build dir is scratch once artifacts are copied
+
 
 
 if __name__ == "__main__":

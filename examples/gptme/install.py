@@ -65,36 +65,40 @@ def main():
     args = parser.parse_args()
     root = find_root(HERE)
     work = Path(tempfile.mkdtemp(prefix="eden-gptme-install-"))
+    try:
 
-    dest = gptme_home(args) / "plugins" / "eden"
-    vendor = dest / "vendor" / "eden_client"
-    if dest.is_dir():
-        shutil.rmtree(dest)
-    (dest / "bin").mkdir(parents=True, exist_ok=True)
-    shutil.copytree(
-        HERE / "plugin" / "eden",
-        dest,
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
-    client_src = (root or HERE) / "packages" / "client-python" / "eden_client"
-    if not client_src.is_dir():
-        sys.exit("Need a repo checkout or release archive containing packages/client-python/eden_client")
-    shutil.copytree(
-        client_src,
-        vendor,
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
-    binary = ensure_binary(root, work)
-    # Rename staged in the same directory: copy2 over a still-running detached server fails
-    # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
-    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
-    shutil.copy2(binary, staged)
-    staged.chmod(0o755)
-    os.replace(staged, dest / "bin" / "eden-local")
-    print(f"Eden installed to {dest}")
-    print(f"Next: put sources in {gptme_home(args)}/eden/sources.json (see README.md) and start a new gptme session.")
+        dest = gptme_home(args) / "plugins" / "eden"
+        vendor = dest / "vendor" / "eden_client"
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        (dest / "bin").mkdir(parents=True, exist_ok=True)
+        shutil.copytree(
+            HERE / "plugin" / "eden",
+            dest,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        client_src = (root or HERE) / "packages" / "client-python" / "eden_client"
+        if not client_src.is_dir():
+            sys.exit("Need a repo checkout or release archive containing packages/client-python/eden_client")
+        shutil.copytree(
+            client_src,
+            vendor,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        binary = ensure_binary(root, work)
+        # Rename staged in the same directory: copy2 over a still-running detached server fails
+        # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+        staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+        shutil.copy2(binary, staged)
+        staged.chmod(0o755)
+        os.replace(staged, dest / "bin" / "eden-local")
+        print(f"Eden installed to {dest}")
+        print(f"Next: put sources in {gptme_home(args)}/eden/sources.json (see README.md) and start a new gptme session.")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # the private build dir is scratch once artifacts are copied
+
 
 
 if __name__ == "__main__":

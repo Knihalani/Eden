@@ -102,40 +102,44 @@ def main():
     args = parser.parse_args()
     root = find_root(HERE)
     work = Path(tempfile.mkdtemp(prefix="eden-openclaw-install-"))
-    bundle = ensure_bundle(root, work)
-    binary = ensure_binary(root, work)
+    try:
+        bundle = ensure_bundle(root, work)
+        binary = ensure_binary(root, work)
 
-    home = claw_home(args)
-    dest = home / "extensions" / "eden"
-    (dest / "bin").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(bundle, dest / "index.js")
-    for name in ("openclaw.plugin.json", "package.json"):
-        src = HERE / name
-        if src.is_file():
-            shutil.copy2(src, dest / name)
-    # Rename staged in the same directory: copy2 over a still-running detached server fails
-    # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
-    bin_out = dest / "bin" / "eden-local"
-    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
-    shutil.copy2(binary, staged)
-    staged.chmod(0o755)
-    os.replace(staged, bin_out)
+        home = claw_home(args)
+        dest = home / "extensions" / "eden"
+        (dest / "bin").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundle, dest / "index.js")
+        for name in ("openclaw.plugin.json", "package.json"):
+            src = HERE / name
+            if src.is_file():
+                shutil.copy2(src, dest / name)
+        # Rename staged in the same directory: copy2 over a still-running detached server fails
+        # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+        bin_out = dest / "bin" / "eden-local"
+        staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+        shutil.copy2(binary, staged)
+        staged.chmod(0o755)
+        os.replace(staged, bin_out)
 
-    claw = shutil.which("openclaw")
-    if claw:
-        subprocess.run([claw, "plugins", "enable", "eden"], check=False)
+        claw = shutil.which("openclaw")
+        if claw:
+            subprocess.run([claw, "plugins", "enable", "eden"], check=False)
 
-    config_path = home / "openclaw.json"
-    merged = merge_grant(config_path)
-    print(f"Installed Eden to {dest}")
-    print(
-        "- Conversation access granted in openclaw.json"
-        if merged
-        else f"- Add the conversation grant to {config_path}:\n{json.dumps(GRANT, indent=2)}"
-    )
-    print("- Restart the gateway or run `openclaw plugins reload`.")
-    print("- Sources: write ~/.openclaw/eden/sources.json or set EDEN_SOURCES_FILE.")
-    print("- Hosted Eden instead: EDEN_URL + EDEN_API_KEY / EDEN_TENANT_ID.")
+        config_path = home / "openclaw.json"
+        merged = merge_grant(config_path)
+        print(f"Installed Eden to {dest}")
+        print(
+            "- Conversation access granted in openclaw.json"
+            if merged
+            else f"- Add the conversation grant to {config_path}:\n{json.dumps(GRANT, indent=2)}"
+        )
+        print("- Restart the gateway or run `openclaw plugins reload`.")
+        print("- Sources: write ~/.openclaw/eden/sources.json or set EDEN_SOURCES_FILE.")
+        print("- Hosted Eden instead: EDEN_URL + EDEN_API_KEY / EDEN_TENANT_ID.")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # the private build dir is scratch once artifacts are copied
+
 
 
 if __name__ == "__main__":
