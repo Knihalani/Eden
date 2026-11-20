@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the Eden plugin for OpenClaw: `<openclaw-home>/plugins/eden/` + `bin/eden-local`.
+"""Install the Eden plugin for OpenClaw: `<openclaw-home>/extensions/eden/` + `bin/eden-local`.
 
 Run inside an Eden release archive (which ships `index.js` and `bin/eden-local`) or a repo checkout
 (where this builds both with Bun). `--openclaw-home PATH` installs somewhere other than `~/.openclaw`.
@@ -106,7 +106,7 @@ def main():
     binary = ensure_binary(root, work)
 
     home = claw_home(args)
-    dest = home / "plugins" / "eden"
+    dest = home / "extensions" / "eden"
     (dest / "bin").mkdir(parents=True, exist_ok=True)
     shutil.copy2(bundle, dest / "index.js")
     for name in ("openclaw.plugin.json", "package.json"):

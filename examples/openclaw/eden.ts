@@ -1,5 +1,5 @@
 /**
- * Eden as an OpenClaw plugin — `<openclaw-home>/plugins/eden/index.js` with `openclaw.plugin.json`.
+ * Eden as an OpenClaw plugin — `<openclaw-home>/extensions/eden/index.js` with `openclaw.plugin.json`.
  *
  * The plugin does all of docs/INTEGRATION.md's obligations from OpenClaw's typed hook API:
  *  - `session_start` when a session opens (D755);
@@ -19,7 +19,7 @@
  *
  * Where Eden lives (D856-style): `EDEN_URL` (with `EDEN_API_KEY`/`EDEN_TENANT_ID`, `EDEN_USER_ID`)
  * picks a hosted Eden; otherwise the bundled `eden-local` binary is spawned — found at
- * `EDEN_LOCAL_BINARY`, this plugin's own `bin/eden-local`, or `<openclaw-home>/plugins/eden/bin/eden-local`
+ * `EDEN_LOCAL_BINARY`, this plugin's own `bin/eden-local`, or `<openclaw-home>/extensions/eden/bin/eden-local`
  * — with `EDEN_SOURCES_FILE` / `EDEN_USER_SOURCES_FILE` for sources (a
  * `~/.openclaw/eden/sources.json` is picked up automatically).
  */
@@ -132,7 +132,18 @@ interface Session {
 /** Live sessions, exported for tests that seed a stub Eden client. */
 export const sessions = new Map<string, Session>();
 
+let lastSession = "default";
+
 function clawHome(): string {
+  const envHome = envOf("OPENCLAW_HOME");
+  if (envHome) return envHome;
+  // An installed plugin sits at `<home>/extensions/eden/index.js` (or `plugins/eden` on older layouts):
+  // its grandparent is the OpenClaw home, so sources/data beside it are found on custom installs.
+  const pluginDir = dirname(fileURLToPath(import.meta.url));
+  const grandparent = dirname(dirname(pluginDir));
+  if (pluginDir === join(grandparent, "extensions", "eden") || pluginDir === join(grandparent, "plugins", "eden")) {
+    return grandparent;
+  }
   return join(homedir(), ".openclaw");
 }
 
@@ -145,7 +156,7 @@ async function clientOptions(): Promise<{
   const resolved = resolveLocalEden(process.env as Record<string, string | undefined>, {
     pluginDir: dirname(fileURLToPath(import.meta.url)),
     home,
-    fallbackDirs: [join(home, "plugins", "eden")],
+    fallbackDirs: [join(home, "extensions", "eden"), join(home, "plugins", "eden")],
   });
   if (!resolved) return null;
   if ("baseUrl" in resolved) {
@@ -230,7 +241,9 @@ function pushTrailing(s: Session, text: string): void {
 }
 
 function sessionKey(ctx: HookCtx | undefined): string {
-  return ctx?.sessionKey ?? ctx?.sessionId ?? "default";
+  const key = ctx?.sessionKey ?? ctx?.sessionId;
+  if (key) lastSession = key; // tracked for hooks whose ctx lacks it (e.g. the ask_context tool)
+  return key ?? lastSession;
 }
 
 async function liveClient(s: Session): Promise<EdenClient | null> {
@@ -269,7 +282,7 @@ const entry = {
   configSchema: { type: "object", additionalProperties: false },
   register(api: ClawApi): void {
     api.registerTool(
-      () => ({
+      (toolCtx: unknown) => ({
         name: ASK,
         label: "Ask context",
         description: ASK_CONTEXT_DESCRIPTION,
@@ -280,7 +293,9 @@ const entry = {
         },
         execute: async (_id: string, params: { question?: string }) => {
           try {
-            const s = await sessionFor("default");
+            // The tool's ctx carries the conversation's session when OpenClaw provides one; the last
+            // hook-seen session is the fallback so answers land where the party check looks (SEC).
+            const s = await sessionFor(sessionKey(toolCtx as HookCtx));
             if (!s) return { content: [{ type: "text", text: "No context available." }] };
             const client = await liveClient(s);
             const answer = client ? await client.ask(params.question ?? "") : null;
@@ -412,7 +427,9 @@ const entry = {
     const reportAssistant = async (text: string | undefined, ctx: HookCtx) => {
       try {
         if (!text) return;
-        const key = createHash("sha256").update(`assistant\0${text}`).digest("hex").slice(0, 32);
+        // Same key the transcript path computes for this message, so a reply reported here is not
+        // reported again when it shows up in a later before_prompt_build's messages.
+        const key = `${keyOf({ role: "assistant", content: text })}#1`;
         const s = await sessionFor(sessionKey(ctx));
         if (!s || s.seen.has(key)) return;
         s.seen.set(key, 1);

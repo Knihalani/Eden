@@ -38,12 +38,14 @@ type Handler = (event: never, ctx: never) => unknown;
 function harness(sessionKey = `oc-${++seq}`) {
   const handlers = new Map<string, Handler[]>();
   const tools = new Map<string, Record<string, never>>();
+  const ctx = { sessionKey };
   entry.register({
     on: (name: string, h: Handler) => void handlers.set(name, [...(handlers.get(name) ?? []), h]),
-    registerTool: (factory: (ctx: unknown) => Record<string, never>) =>
-      void tools.set(factory({}).name as unknown as string, factory({})),
+    registerTool: (factory: (ctx: unknown) => Record<string, never>) => {
+      const tool = factory(ctx);
+      tools.set(tool.name as unknown as string, tool);
+    },
   });
-  const ctx = { sessionKey };
   const emit = (name: string, event: object) =>
     Promise.all((handlers.get(name) ?? []).map((h) => h(event as never, ctx as never)));
   return { tools, ctx, emit };

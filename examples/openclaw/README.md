@@ -11,7 +11,7 @@ python3 examples/openclaw/install.py            # repo checkout: bundles the plu
 python3 install.py                              # inside a release archive (prebuilt index.js + bin/eden-local)
 ```
 
-It writes `~/.openclaw/plugins/eden/` (`index.js`, `openclaw.plugin.json`, `package.json`, `bin/eden-local`);
+It writes `~/.openclaw/extensions/eden/` (`index.js`, `openclaw.plugin.json`, `package.json`, `bin/eden-local`);
 `--openclaw-home PATH` picks another home. OpenClaw's conversation hooks then need a grant in
 `~/.openclaw/openclaw.json` — the installer merges it when the file exists, otherwise it prints the block:
 
