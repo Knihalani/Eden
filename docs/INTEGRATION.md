@@ -672,6 +672,26 @@ Repeat `--target` to build a subset; omit it for Linux, macOS and Windows, each 
 Before publishing, run `HERMES_RELEASE_SMOKE=1 bun test scripts/hermes-local.test.ts` on Linux and record which
 platforms were run natively.
 
+## Other local agents
+
+Each personal-agent product gets the same contract through its own extension surface — reporting,
+packet injection, `ask_context`, the party check, an installer that drops the plugin and `eden-local`
+beside the agent's home:
+
+| Agent | Package | Surface | Deny seam | Install |
+| --- | --- | --- | --- | --- |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | `eden_client.hermes` (Python) | plugin hooks | held result as the tool's output | `hermes-local` release (`install.py`) |
+| Pi | `examples/pi` | `eden.ts` extension (`context`, `tool_call`/`tool_result`, `turn_end`) | `block` with the held result | `install.py` |
+| OpenClaw | `examples/openclaw` | `eden.ts` plugin (`before_prompt_build`, `before/after_tool_call`, `agent_end`) | `block`/`blockReason` | `install.py` → `<openclaw-home>/extensions/eden` |
+| [gptme](https://gptme.org) | `examples/gptme` | Python plugin (`GENERATION_PRE`, `TOOL_EXECUTE_PRE`/`POST`, `TOOL_CONFIRM`, `TURN_POST`) | `ConfirmationResult.skip` | `install.py` → `~/.config/gptme/plugins/eden` |
+| [opencode](https://opencode.ai) | `examples/opencode` | bundled `index.js` (`messages.transform`, `tool.execute.before/after`, `session.idle`) | thrown `Error` | `install.py` → `~/.config/opencode/plugins/eden.js` |
+| [LangChain](https://docs.langchain.com) | `examples/langchain` | `createAgent` middleware | guarded tool wrapper | copy `eden-langchain.ts` |
+
+Local mode is shared: `EDEN_LOCAL_BINARY`, then the install's own `bin/eden-local`, with
+`<agent-home>/eden/sources.json` read automatically (the same file every agent reads). `EDEN_URL`
+selects a hosted Eden instead, and every integration fails open (D14). Each example's README covers
+its hooks and flags.
+
 ## Other languages
 
 - **TypeScript or JavaScript outside this repository:** the workspace package exports TypeScript and depends on
