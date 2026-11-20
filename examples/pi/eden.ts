@@ -21,21 +21,21 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import {
   ASK_CONTEXT_DESCRIPTION,
-  EdenClient,
+  createLocalSurface,
   edenId,
   heldResult,
-  LocalEden,
-  resolveLocalEden,
+  textOf,
   type Injection,
+  type SurfaceSession,
+  type TextBlock,
 } from "@eden/client";
 
-type Block = { type: string; text?: string; name?: string; id?: string; arguments?: unknown };
+type Block = TextBlock & { name?: string; id?: string; arguments?: unknown };
 type PiMessage = {
   role?: string;
   content?: string | Block[];
@@ -44,22 +44,7 @@ type PiMessage = {
   id?: string;
 };
 
-const MAX_KEPT_BYTES = 64_000;
-const MAX_SEEN = 4_000;
 const ASK = "ask_context";
-
-function envOf(name: string): string | undefined {
-  const v = process.env[name];
-  return v === undefined || v === "" ? undefined : v;
-}
-
-function textOf(content: string | Block[] | undefined): string {
-  if (typeof content === "string") return content;
-  return (content ?? [])
-    .filter((b) => b?.type === "text" && typeof b.text === "string")
-    .map((b) => b.text)
-    .join("\n");
-}
 
 function keyOf(m: PiMessage): string {
   const calls = (Array.isArray(m.content) ? m.content : []).filter((b) => b?.type === "toolCall");
@@ -113,113 +98,19 @@ interface PiCtx {
   ui?: { notify?(msg: string, level: string): void };
 }
 
-interface Session {
-  eden: EdenClient;
-  options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
-  sessionId: string; // kept for the client rebuild a sidecar replacement needs
-  generation: number | string;
-  seen: Map<string, number>;
-  kept: Map<string, string>; // message key -> packet text placed before it
-  trailing: string[]; // mid-turn packets appended after the last message
-  reported: Promise<unknown>;
-  queued: Injection[];
-  firstCall: boolean;
-  local: LocalEden | null;
-  reportedResults: Set<string>;
-}
+type Session = SurfaceSession;
+
+const surface = createLocalSurface({
+  pluginDir: dirname(fileURLToPath(import.meta.url)),
+  home: join(homedir(), ".pi"),
+  fallbackDirs: [join(homedir(), ".pi", "agent", "extensions", "eden")],
+});
 
 /** Live sessions, exported for tests that seed a stub Eden client. */
-export const sessions = new Map<string, Session>();
+export const sessions = surface.sessions;
 
-/** Client options minus the ids each session supplies, plus the sidecar to close at session end. */
-async function clientOptions(): Promise<{
-  options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
-  local: LocalEden | null;
-  generation: number | string;
-} | null> {
-  const resolved = resolveLocalEden(process.env as Record<string, string | undefined>, {
-    pluginDir: dirname(fileURLToPath(import.meta.url)),
-    home: join(homedir(), ".pi"),
-    fallbackDirs: [join(homedir(), ".pi", "agent", "extensions", "eden")],
-  });
-  if (!resolved) return null;
-  if ("baseUrl" in resolved) {
-    return {
-      options: {
-        userId: resolved.userId,
-        baseUrl: resolved.baseUrl,
-        apiKey: resolved.apiKey,
-        tenantId: resolved.tenantId,
-      },
-      local: null,
-      generation: 0,
-    };
-  }
-  const home = resolved.home;
-  const users =
-    envOf("EDEN_USER_SOURCES_FILE") ??
-    (existsSync(join(home, "eden", "sources.json")) ? join(home, "eden", "sources.json") : undefined);
-  const local = new LocalEden([resolved.binary], {
-    home: join(home, "eden", "data"),
-    sourcesFile: envOf("EDEN_SOURCES_FILE"),
-    userSourcesFile: users,
-    logPath: join(home, "eden", "logs", "eden-local.log"),
-    sharePath: join(home, "eden", "local-endpoint.json"),
-  });
-  const endpoint = await local.endpoint();
-  if (!endpoint) return null;
-  return {
-    options: {
-      userId: envOf("EDEN_USER_ID") ?? "local",
-      baseUrl: endpoint.url,
-      apiKey: endpoint.token,
-      tenantId: "local",
-    },
-    local,
-    generation: endpoint.generation,
-  };
-}
-
-async function sessionFor(sessionId: string): Promise<Session | null> {
-  const key = edenId(sessionId);
-  const existing = sessions.get(key);
-  if (existing) return existing;
-  const made = await clientOptions();
-  if (!made) return null;
-  const eden = new EdenClient({ ...made.options, sessionId: key });
-  const session: Session = {
-    eden,
-    options: made.options,
-    sessionId: key,
-    generation: made.generation,
-    local: made.local,
-    seen: new Map(),
-    kept: new Map(),
-    trailing: [],
-    queued: [],
-    firstCall: true,
-    reportedResults: new Set(),
-    reported: eden.observe({ kind: "session_start" }, { waitMs: 0 }).then(
-      () => undefined,
-      () => undefined,
-    ),
-  };
-  sessions.set(key, session);
-  return session;
-}
-
-function keep(map: Map<string, string>, key: string, text: string, live: Set<string>): void {
-  map.set(key, text);
-  // Drop placements whose message left the window, then oldest while over the byte cap (D336).
-  for (const k of [...map.keys()]) if (!live.has(k)) map.delete(k);
-  let bytes = 0;
-  for (const t of map.values()) bytes += t.length;
-  for (const k of map.keys()) {
-    if (bytes <= MAX_KEPT_BYTES) break;
-    bytes -= map.get(k)!.length;
-    map.delete(k);
-  }
-}
+const sessionFor = surface.sessionFor;
+const liveClient = surface.liveClient;
 
 function sessionKey(ctx: PiCtx): string {
   try {
@@ -229,28 +120,7 @@ function sessionKey(ctx: PiCtx): string {
   }
 }
 
-async function liveClient(s: Session): Promise<EdenClient | null> {
-  if (!s.local) return s.eden;
-  const ep = await s.local.endpoint();
-  if (!ep) return null;
-  // A restarted sidecar listens on a new port with a new token: rebuild the client on the new endpoint.
-  if (ep.generation !== s.generation) {
-    s.generation = ep.generation;
-    s.eden = new EdenClient({ ...s.options, sessionId: s.sessionId, baseUrl: ep.url, apiKey: ep.token });
-  }
-  return s.eden;
-}
-
-function report(s: Session, events: ReturnType<typeof eventsOf>, waits: boolean): Promise<Injection | null> {
-  return s.reported.then(async () => {
-    let last: Injection | null = null;
-    for (const ev of events) {
-      const { injection } = await s.eden.observe(ev, waits ? {} : { waitMs: 0 });
-      if (injection) last = injection;
-    }
-    return last;
-  });
-}
+const report = surface.report;
 
 export default function eden(pi: Pi): void {
   pi.registerTool({
@@ -299,9 +169,7 @@ export default function eden(pi: Pi): void {
       for (const [i, m] of messages.entries()) {
         if (m.role === "system") continue;
         const k = keys[i]!;
-        if (s.seen.has(k)) continue;
-        s.seen.set(k, 1);
-        if (s.seen.size > MAX_SEEN) s.seen.delete(s.seen.keys().next().value!);
+        if (surface.dedupe(s, k)) continue;
         if (s.firstCall && i < lastUser) continue; // a restarted session reports only its latest user message
         const waits = m.role === "user" && i === lastUser;
         if (waits) turnFresh = true;
@@ -316,16 +184,8 @@ export default function eden(pi: Pi): void {
       got.push(...(await s.eden.pending()), ...s.queued.splice(0));
       if (got.length > 0 && lastUser >= 0) {
         const text = got.map((p) => p.text).join("\n\n");
-        if (turnFresh) keep(s.kept, keys[lastUser]!, text, new Set(keys));
-        else {
-          s.trailing.push(text);
-          // Bound the replay list like kept placements (D336): drop the oldest over the byte cap.
-          let bytes = 0;
-          for (const t of s.trailing) bytes += t.length;
-          while (bytes > MAX_KEPT_BYTES && s.trailing.length > 0) {
-            bytes -= s.trailing.shift()!.length;
-          }
-        }
+        if (turnFresh) surface.keep(s.kept, keys[lastUser]!, text, new Set(keys));
+        else surface.pushTrailing(s, text);
       }
       const out: PiMessage[] = [];
       for (const [i, m] of messages.entries()) {
@@ -422,8 +282,7 @@ export default function eden(pi: Pi): void {
       const s = await sessionFor(sessionKey(ctx));
       if (!s) return;
       const k = `${keyOf(m)}#1`;
-      if (s.seen.has(k)) return;
-      s.seen.set(k, 1);
+      if (surface.dedupe(s, k)) return;
       s.reported = report(s, eventsOf(m), false).then((inj) => {
         if (inj) s.queued.push(inj);
       });
@@ -433,14 +292,6 @@ export default function eden(pi: Pi): void {
   });
 
   pi.on("session_shutdown", async (_event: unknown, ctx: PiCtx) => {
-    const key = edenId(sessionKey(ctx));
-    const s = sessions.get(key);
-    sessions.delete(key);
-    try {
-      await s?.reported.catch(() => undefined);
-      s?.local?.close();
-    } catch {
-      // Closing is best effort.
-    }
+    await surface.closeSession(edenId(sessionKey(ctx)));
   });
 }

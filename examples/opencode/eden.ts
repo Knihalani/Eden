@@ -22,22 +22,24 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { z } from "zod";
 import {
   ASK_CONTEXT_DESCRIPTION,
-  EdenClient,
+  createLocalSurface,
   edenId,
+  envOf,
   heldResult,
-  LocalEden,
-  resolveLocalEden,
+  MAX_KEPT_BYTES,
+  textOf,
   type Injection,
+  type SurfaceSession,
+  type TextBlock,
 } from "@eden/client";
 
-type Block = { type?: string; text?: string; name?: string; id?: string; arguments?: unknown };
+type Block = TextBlock & { name?: string; id?: string; arguments?: unknown };
 type Part = {
   id?: string;
   type?: string;
@@ -49,22 +51,7 @@ type Part = {
 type Info = { id?: string; role?: string; sessionID?: string };
 type HookMessage = { info: Info; parts: Part[] };
 
-const MAX_KEPT_BYTES = 64_000;
-const MAX_SEEN = 4_000;
 const ASK = "ask_context";
-
-function envOf(name: string): string | undefined {
-  const v = process.env[name];
-  return v === undefined || v === "" ? undefined : v;
-}
-
-function textOf(content: string | Block[] | undefined): string {
-  if (typeof content === "string") return content;
-  return (content ?? [])
-    .filter((b) => b?.type === "text" && typeof b.text === "string")
-    .map((b) => b.text)
-    .join("\n");
-}
 
 function hashOf(...parts: string[]): string {
   return createHash("sha256").update(parts.join("\0")).digest("hex").slice(0, 32);
@@ -115,28 +102,8 @@ function eventsOf(m: HookMessage): {
   return out;
 }
 
-interface Session {
-  eden: EdenClient;
-  options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
-  sessionId: string; // kept for the client rebuild a sidecar replacement needs
-  generation: number | string;
-  seen: Map<string, number>;
-  copyCounts: Map<string, number>; // content key -> transcript copies seen, so hook reports take the next copy
-  reportedAssistant: Set<string>; // content keys already reported by the event hooks, for transform dedup
-  kept: Map<string, { text: string; messageID: string }>; // injection id -> packet anchored to its user message
-  trailing: string[]; // mid-turn packets appended after the last user message
-  reported: Promise<unknown>;
-  queued: Injection[];
-  firstCall: boolean;
-  local: LocalEden | null;
-  reportedCalls: Set<string>; // callIDs already reported as tool_call
-  reportedResults: Set<string>; // callIDs already reported as tool_result
-}
-
-// Not a named export: opencode's legacy plugin loader calls every export as a plugin function,
-// so a Map export would reject the whole module. Tests seed stub clients through globalThis.
-const sessions = new Map<string, Session>();
-(globalThis as Record<string, unknown>).__edenOpencodeSessions = sessions;
+type Kept = { text: string; messageID: string }; // kept packet anchored to its user message
+type Session = SurfaceSession<Kept>;
 
 let lastSession = "default";
 
@@ -153,124 +120,23 @@ function ocHome(): string {
   return join(xdg && xdg !== "" ? xdg : join(homedir(), ".config"), "opencode");
 }
 
-/** Client options minus the ids each session supplies, plus the sidecar to close at session end. */
-async function clientOptions(): Promise<{
-  options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
-  local: LocalEden | null;
-  generation: number | string;
-} | null> {
-  const home = ocHome();
-  const resolved = resolveLocalEden(process.env as Record<string, string | undefined>, {
-    pluginDir: dirname(fileURLToPath(import.meta.url)),
-    home,
-    fallbackDirs: [join(home, "plugins", "eden")],
-  });
-  if (!resolved) return null;
-  if ("baseUrl" in resolved) {
-    return {
-      options: {
-        userId: resolved.userId,
-        baseUrl: resolved.baseUrl,
-        apiKey: resolved.apiKey,
-        tenantId: resolved.tenantId,
-      },
-      local: null,
-      generation: 0,
-    };
-  }
-  const users =
-    envOf("EDEN_USER_SOURCES_FILE") ??
-    (existsSync(join(home, "eden", "sources.json")) ? join(home, "eden", "sources.json") : undefined);
-  const local = new LocalEden([resolved.binary], {
-    home: join(home, "eden", "data"),
-    sourcesFile: envOf("EDEN_SOURCES_FILE"),
-    userSourcesFile: users,
-    logPath: join(home, "eden", "logs", "eden-local.log"),
-    sharePath: join(home, "eden", "local-endpoint.json"),
-  });
-  const endpoint = await local.endpoint();
-  if (!endpoint) return null;
-  return {
-    options: {
-      userId: envOf("EDEN_USER_ID") ?? "local",
-      baseUrl: endpoint.url,
-      apiKey: endpoint.token,
-      tenantId: "local",
-    },
-    local,
-    generation: endpoint.generation,
-  };
-}
+const surface = createLocalSurface<Kept>({
+  pluginDir: dirname(fileURLToPath(import.meta.url)),
+  home: ocHome,
+  fallbackDirs: (home) => [join(home, "plugins", "eden")],
+});
 
-async function sessionFor(sessionId: string): Promise<Session | null> {
-  const key = edenId(sessionId);
-  const existing = sessions.get(key);
-  if (existing) return existing;
-  const made = await clientOptions();
-  if (!made) return null;
-  const eden = new EdenClient({ ...made.options, sessionId: key });
-  const session: Session = {
-    eden,
-    options: made.options,
-    sessionId: key,
-    generation: made.generation,
-    local: made.local,
-    seen: new Map(),
-    copyCounts: new Map(),
-    reportedAssistant: new Set(),
-    kept: new Map(),
-    trailing: [],
-    queued: [],
-    firstCall: true,
-    reportedCalls: new Set(),
-    reportedResults: new Set(),
-    reported: eden.observe({ kind: "session_start" }, { waitMs: 0 }).then(
-      () => undefined,
-      () => undefined,
-    ),
-  };
-  sessions.set(key, session);
-  return session;
-}
+// Not a named export: opencode's legacy plugin loader calls every export as a plugin function,
+// so a Map export would reject the whole module. Tests seed stub clients through globalThis.
+const sessions = surface.sessions;
+(globalThis as Record<string, unknown>).__edenOpencodeSessions = sessions;
+
+const sessionFor = surface.sessionFor;
+const liveClient = surface.liveClient;
 
 function sessionKey(sessionId: string | undefined): string {
   if (sessionId) lastSession = sessionId; // tracked for callers whose ctx lacks it (the ask_context tool)
   return sessionId ?? lastSession;
-}
-
-async function liveClient(s: Session): Promise<EdenClient | null> {
-  if (!s.local) return s.eden;
-  const ep = await s.local.endpoint();
-  if (!ep) return null;
-  // A restarted sidecar listens on a new port with a new token: rebuild the client on the new endpoint.
-  if (ep.generation !== s.generation) {
-    s.generation = ep.generation;
-    s.eden = new EdenClient({ ...s.options, sessionId: s.sessionId, baseUrl: ep.url, apiKey: ep.token });
-  }
-  return s.eden;
-}
-
-async function closeSession(key: string): Promise<void> {
-  const s = sessions.get(key);
-  sessions.delete(key);
-  try {
-    await s?.reported.catch(() => undefined);
-    s?.local?.close();
-  } catch {
-    // Closing is best effort.
-  }
-}
-
-async function endAll(): Promise<void> {
-  await Promise.all([...sessions.keys()].map(closeSession));
-}
-
-function pushTrailing(s: Session, text: string): void {
-  s.trailing.push(text);
-  // Bound the replay list like kept placements (D336): drop the oldest over the byte cap.
-  let bytes = 0;
-  for (const t of s.trailing) bytes += t.length;
-  while (bytes > MAX_KEPT_BYTES && s.trailing.length > 0) bytes -= s.trailing.shift()!.length;
 }
 
 /** The transform seam: report fresh messages and re-apply packet injections to the live prompt. */
@@ -299,9 +165,7 @@ async function transform(output: { messages: HookMessage[] }): Promise<void> {
   for (const [i, m] of messages.entries()) {
     if (m.info.role === "system") continue;
     const k = keys[i]!;
-    if (s.seen.has(k)) continue;
-    s.seen.set(k, 1);
-    if (s.seen.size > MAX_SEEN) s.seen.delete(s.seen.keys().next().value!);
+    if (surface.dedupe(s, k)) continue;
     // A reply the event hooks already reported emits only its non-text events here — its tool
     // calls still reach Eden — even when its transcript id differs.
     const ck = contentKey({
@@ -349,7 +213,7 @@ async function transform(output: { messages: HookMessage[] }): Promise<void> {
   if (got.length > 0 && lastUser >= 0) {
     const text = got.map((p) => p.text).join("\n\n");
     if (turnFresh) s.kept.set(injectionId(text), { text, messageID: messages[lastUser]!.info.id ?? "" });
-    else pushTrailing(s, text);
+    else surface.pushTrailing(s, text);
   }
   // Injections live only for this call (the transform rebuilds the prompt): re-apply every kept
   // packet while under the byte cap, dropping the oldest first (D336).
@@ -396,8 +260,7 @@ async function reportAssistant(text: string | undefined, sid: string | undefined
     if (!s) return;
     const hash = contentKey({ role: "assistant", text });
     const key = `${hash}#${(s.copyCounts.get(hash) ?? 0) + 1}`;
-    if (s.seen.has(key)) return;
-    s.seen.set(key, 1);
+    if (surface.dedupe(s, key)) return;
     s.reportedAssistant.add(hash);
     const client = await liveClient(s);
     if (!client) return;
@@ -492,7 +355,7 @@ export const Eden = async (ctx: {
       const event = input.event ?? {};
       const props = event.properties ?? {};
       if (event.type === "session.deleted") {
-        await closeSession(edenId(props.info?.id ?? props.id ?? lastSession));
+        await surface.closeSession(edenId(props.info?.id ?? props.id ?? lastSession));
         return;
       }
       // The reply a part's `time.end` finalizes: reported now, not on a later transform that never comes.
@@ -528,7 +391,7 @@ export const Eden = async (ctx: {
         const s = await sessionFor(sessionKey(sid));
         if (!s) return;
         const key = `${hash}#${copy || (s.copyCounts.get(hash) ?? 0) + 1}`;
-        if (s.seen.has(key)) return;
+        if (s.seen.has(key)) return; // reportAssistant counts its own copy; marking here would shadow it
         await reportAssistant(text, sid);
       }
     } catch {
@@ -555,7 +418,7 @@ export const Eden = async (ctx: {
   },
 
   dispose: async () => {
-    await endAll();
+    await surface.endAll();
   },
 });
 

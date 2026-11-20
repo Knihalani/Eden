@@ -25,21 +25,22 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import {
   ASK_CONTEXT_DESCRIPTION,
-  EdenClient,
+  createLocalSurface,
   edenId,
+  envOf,
   heldResult,
-  LocalEden,
-  resolveLocalEden,
+  textOf,
   type Injection,
+  type SurfaceSession,
+  type TextBlock,
 } from "@eden/client";
 
-type Block = { type?: string; text?: string; name?: string; id?: string; arguments?: unknown };
+type Block = TextBlock & { name?: string; id?: string; arguments?: unknown };
 type HookMessage = {
   role?: string;
   content?: string | Block[];
@@ -48,22 +49,7 @@ type HookMessage = {
   id?: string;
 };
 
-const MAX_KEPT_BYTES = 64_000;
-const MAX_SEEN = 4_000;
 const ASK = "ask_context";
-
-function envOf(name: string): string | undefined {
-  const v = process.env[name];
-  return v === undefined || v === "" ? undefined : v;
-}
-
-function textOf(content: string | Block[] | undefined): string {
-  if (typeof content === "string") return content;
-  return (content ?? [])
-    .filter((b) => b?.type === "text" && typeof b.text === "string")
-    .map((b) => b.text)
-    .join("\n");
-}
 
 function keyOf(m: HookMessage): string {
   const calls = (Array.isArray(m.content) ? m.content : []).filter((b) => b?.type === "toolCall");
@@ -120,25 +106,7 @@ interface HookCtx {
   sessionId?: string;
 }
 
-interface Session {
-  eden: EdenClient;
-  options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
-  sessionId: string; // kept for the client rebuild a sidecar replacement needs
-  generation: number | string;
-  seen: Map<string, number>;
-  copyCounts: Map<string, number>; // content key -> transcript copies seen, so hook reports take the next copy
-  reportedAssistant: Set<string>; // content keys already reported by the reply hooks, for transcript dedup
-  kept: Map<string, string>; // user-message key -> packet text prepended while it is live
-  trailing: string[]; // mid-turn packets appended to context on later calls
-  reported: Promise<unknown>;
-  queued: Injection[];
-  firstCall: boolean;
-  local: LocalEden | null;
-  reportedResults: Set<string>;
-}
-
-/** Live sessions, exported for tests that seed a stub Eden client. */
-export const sessions = new Map<string, Session>();
+type Session = SurfaceSession;
 
 let lastSession = "default";
 
@@ -157,137 +125,22 @@ function clawHome(): string {
   return join(homedir(), ".openclaw");
 }
 
-/** Client options minus the ids each session supplies, plus the sidecar to close at session end. */
-async function clientOptions(): Promise<{
-  options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
-  local: LocalEden | null;
-  generation: number | string;
-} | null> {
-  const home = clawHome();
-  const resolved = resolveLocalEden(process.env as Record<string, string | undefined>, {
-    pluginDir: dirname(fileURLToPath(import.meta.url)),
-    home,
-    fallbackDirs: [join(home, "extensions", "eden"), join(home, "plugins", "eden")],
-  });
-  if (!resolved) return null;
-  if ("baseUrl" in resolved) {
-    return {
-      options: {
-        userId: resolved.userId,
-        baseUrl: resolved.baseUrl,
-        apiKey: resolved.apiKey,
-        tenantId: resolved.tenantId,
-      },
-      local: null,
-      generation: 0,
-    };
-  }
-  const users =
-    envOf("EDEN_USER_SOURCES_FILE") ??
-    (existsSync(join(home, "eden", "sources.json")) ? join(home, "eden", "sources.json") : undefined);
-  const local = new LocalEden([resolved.binary], {
-    home: join(home, "eden", "data"),
-    sourcesFile: envOf("EDEN_SOURCES_FILE"),
-    userSourcesFile: users,
-    logPath: join(home, "eden", "logs", "eden-local.log"),
-    sharePath: join(home, "eden", "local-endpoint.json"),
-  });
-  const endpoint = await local.endpoint();
-  if (!endpoint) return null;
-  return {
-    options: {
-      userId: envOf("EDEN_USER_ID") ?? "local",
-      baseUrl: endpoint.url,
-      apiKey: endpoint.token,
-      tenantId: "local",
-    },
-    local,
-    generation: endpoint.generation,
-  };
-}
+const surface = createLocalSurface({
+  pluginDir: dirname(fileURLToPath(import.meta.url)),
+  home: clawHome,
+  fallbackDirs: (home) => [join(home, "extensions", "eden"), join(home, "plugins", "eden")],
+});
 
-async function sessionFor(sessionId: string): Promise<Session | null> {
-  const key = edenId(sessionId);
-  const existing = sessions.get(key);
-  if (existing) return existing;
-  const made = await clientOptions();
-  if (!made) return null;
-  const eden = new EdenClient({ ...made.options, sessionId: key });
-  const session: Session = {
-    eden,
-    options: made.options,
-    sessionId: key,
-    generation: made.generation,
-    local: made.local,
-    seen: new Map(),
-    copyCounts: new Map(),
-    reportedAssistant: new Set(),
-    kept: new Map(),
-    trailing: [],
-    queued: [],
-    firstCall: true,
-    reportedResults: new Set(),
-    reported: eden.observe({ kind: "session_start" }, { waitMs: 0 }).then(
-      () => undefined,
-      () => undefined,
-    ),
-  };
-  sessions.set(key, session);
-  return session;
-}
+/** Live sessions, exported for tests that seed a stub Eden client. */
+export const sessions = surface.sessions;
 
-function keep(map: Map<string, string>, key: string, text: string, live: Set<string>): void {
-  map.set(key, text);
-  // Drop placements whose message left the window, then oldest while over the byte cap (D336).
-  for (const k of [...map.keys()]) if (!live.has(k)) map.delete(k);
-  let bytes = 0;
-  for (const t of map.values()) bytes += t.length;
-  for (const k of map.keys()) {
-    if (bytes <= MAX_KEPT_BYTES) break;
-    bytes -= map.get(k)!.length;
-    map.delete(k);
-  }
-}
-
-function pushTrailing(s: Session, text: string): void {
-  s.trailing.push(text);
-  // Bound the replay list like kept placements (D336): drop the oldest over the byte cap.
-  let bytes = 0;
-  for (const t of s.trailing) bytes += t.length;
-  while (bytes > MAX_KEPT_BYTES && s.trailing.length > 0) bytes -= s.trailing.shift()!.length;
-}
+const sessionFor = surface.sessionFor;
+const liveClient = surface.liveClient;
 
 function sessionKey(ctx: HookCtx | undefined): string {
   const key = ctx?.sessionKey ?? ctx?.sessionId;
   if (key) lastSession = key; // tracked for hooks whose ctx lacks it (e.g. the ask_context tool)
   return key ?? lastSession;
-}
-
-async function liveClient(s: Session): Promise<EdenClient | null> {
-  if (!s.local) return s.eden;
-  const ep = await s.local.endpoint();
-  if (!ep) return null;
-  // A restarted sidecar listens on a new port with a new token: rebuild the client on the new endpoint.
-  if (ep.generation !== s.generation) {
-    s.generation = ep.generation;
-    s.eden = new EdenClient({ ...s.options, sessionId: s.sessionId, baseUrl: ep.url, apiKey: ep.token });
-  }
-  return s.eden;
-}
-
-async function closeSession(key: string): Promise<void> {
-  const s = sessions.get(key);
-  sessions.delete(key);
-  try {
-    await s?.reported.catch(() => undefined);
-    s?.local?.close();
-  } catch {
-    // Closing is best effort.
-  }
-}
-
-async function endAll(): Promise<void> {
-  await Promise.all([...sessions.keys()].map(closeSession));
 }
 
 // The entry object matches `definePluginEntry`'s normalized shape without depending on the
@@ -355,9 +208,7 @@ const entry = {
         for (const [i, m] of messages.entries()) {
           if (m.role === "system") continue;
           const k = keys[i]!;
-          if (s.seen.has(k)) continue;
-          s.seen.set(k, 1);
-          if (s.seen.size > MAX_SEEN) s.seen.delete(s.seen.keys().next().value!);
+          if (surface.dedupe(s, k)) continue;
           // A reply the hooks already reported emits only its non-text events here — its tool calls
           // still reach Eden — even when its transcript key differs (a transcript id the hook never
           // sees changes keyOf, but not the content key).
@@ -377,8 +228,8 @@ const entry = {
         got.push(...(await s.eden.pending()), ...s.queued.splice(0));
         if (got.length > 0 && lastUser >= 0) {
           const text = got.map((p) => p.text).join("\n\n");
-          if (turnFresh) keep(s.kept, keys[lastUser]!, text, new Set(keys));
-          else pushTrailing(s, text);
+          if (turnFresh) surface.keep(s.kept, keys[lastUser]!, text, new Set(keys));
+          else surface.pushTrailing(s, text);
         }
         const live = new Set(
           messages.map((m, i) => (m.role === "user" ? keys[i]! : null)).filter((k): k is string => k !== null),
@@ -462,8 +313,7 @@ const entry = {
         if (!s) return;
         const hash = contentKey({ role: "assistant", content: text });
         const key = `${hash}#${copy ?? (s.copyCounts.get(hash) ?? 0) + 1}`;
-        if (s.seen.has(key)) return;
-        s.seen.set(key, 1);
+        if (surface.dedupe(s, key)) return;
         s.reportedAssistant.add(hash);
         const client = await liveClient(s);
         if (!client) return;
@@ -493,10 +343,10 @@ const entry = {
     });
 
     api.on("session_end", async (_event: unknown, ctx: HookCtx) => {
-      await closeSession(edenId(sessionKey(ctx)));
+      await surface.closeSession(edenId(sessionKey(ctx)));
     });
     api.on("gateway_stop", async () => {
-      await endAll();
+      await surface.endAll();
     });
   },
 };
