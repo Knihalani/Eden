@@ -724,6 +724,29 @@ describe("a restart with persisted users (D425)", () => {
     expect(p2.sync!.signalledSince(alice, "mail", 0)).toBe(true);
   });
 
+  test("a sighting before the thaw tracks the restored sync state, not a fresh one (D2005)", async () => {
+    const dir = tempDir();
+    let clock = T0;
+    const src = Object.assign(new ListSource("mail", 6), { notifies: true });
+    const a = freezing();
+    a.persist(disk(dir).d);
+    const p1 = partnerOver(src, a, () => clock);
+    p1.sync!.track(alice);
+    for (let i = 0; i < 50 && !p1.sync!.warm(alice); i++, clock += 1_000) await p1.sync!.tick();
+    const id = itemId("mail", "m0");
+    expect(p1.sync!.signalledSince(alice, "mail", a.readMark(alice, id)!)).toBe(false);
+    freezeAll(a, clock);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    const p2 = partnerOver(src, b, () => clock);
+    // `seen` before `ready`: the sighting's `track` waits for the thaw, so it meets the restored sync state —
+    // no fresh record is made for the restore to skip over the saved one, and the restored doubt stands.
+    p2.seen(alice);
+    await p2.ready(alice);
+    await Bun.sleep(0);
+    expect(p2.sync!.signalledSince(alice, "mail", 0)).toBe(true);
+  });
+
   test("a source removed while the user was on disk: its items are gone before the first event is served", async () => {
     const dir = tempDir();
     let clock = T0;

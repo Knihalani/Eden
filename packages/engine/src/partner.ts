@@ -1528,9 +1528,7 @@ export class ContextPartner {
     }
     const s = this.session(event);
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
-    const fresh = this.sync?.track(s.scope, this.now());
-    // `syncKick` (D751): a new user's backfill starts with their first event, not at the sync's next tick.
-    if (fresh && this.config.syncKick) this.sync!.kick(s.scope);
+    this.seen(s.scope);
     s.turn++;
     if (event.kind === "user_message") {
       s.requests++;
@@ -2409,6 +2407,39 @@ export class ContextPartner {
   }
 
   /**
+   * The user's first sighting by a serving route (`observe` does the same for a first event): their sources are
+   * tracked and — with `syncKick` — the backfill starts now, not at the first request or a `session_start` the
+   * integrator may never send (D2005, o4-new-user). Routes that only thaw (`ready`: a forget broadcasts it to
+   * every worker, so a worker that never served the user must not start their backfill) are not sightings.
+   * O(1), no I/O; `track` is idempotent, so later calls cost nothing.
+   */
+  seen(scope: Scope): void {
+    // A sighting before the user's thaw tracks after it settles: `ready` resolves once the owner's restore ran,
+    // so `track` meets the sync state the blob restored — never a fresh empty one whose existing record the
+    // restore would then skip (and a restored user, already warm, is not kicked again). The deferred call goes
+    // to `seenNow`, not `seen`: re-entering `ready` would fetch the shared store a second time on a miss or an
+    // outage. A whole-user `forget` that lands while the thaw waits is not undone by this sighting.
+    const thawing = this.deps.cache.ready(scope);
+    if (thawing !== null) {
+      const key = scopeKey(scope);
+      void thawing.then(
+        () => {
+          if (!this.forgotten.has(key)) this.seenNow(scope);
+        },
+        () => {},
+      );
+      return;
+    }
+    this.seenNow(scope);
+  }
+
+  private seenNow(scope: Scope): void {
+    this.forgotten.delete(scopeKey(scope));
+    const fresh = this.sync?.track(scope, this.now());
+    if (fresh && this.config.syncKick) this.sync!.kick(scope);
+  }
+
+  /**
    * The party check (`partyCheck`, D375, D376; docs/research/a25-action-guard.md): an agent's tool call, before it
    * runs, checked with no model and no source call for a party (an address, an account) it adds that this session's
    * packets showed, the user's own request does not name and no correspondent of the user's vouches for
@@ -2428,6 +2459,7 @@ export class ContextPartner {
       latencyMs: Math.round(performance.now() - t0),
     });
     if (!this.config.partyCheck || event.kind !== "tool_call") return proceed("off");
+    this.seen(event); // A live party check is a sighting too: the user's agent is working (D2005).
     // A session Eden handed no identifier has nothing to hold, and none is opened for a call in a session Eden never
     // saw.
     if (!this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
@@ -2544,6 +2576,9 @@ export class ContextPartner {
     const spans = this.spans;
     const root = spans?.open("ask", 0, { async: true });
     const s = this.session(request);
+    // An ask is a sighting too (D2005): an ask-only integration (an MCP client) never sends `observe`, and its
+    // user's backfill still starts at their first question.
+    this.seen(s.scope);
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
@@ -4141,8 +4176,15 @@ export class ContextPartner {
    * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
    * aborted, and their results discarded.
    */
+  /** Users a whole-user `forget` dropped, so a sighting deferred behind their thaw does not track them again. */
+  private readonly forgotten = new Set<string>();
+
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
+    if (sourceId === undefined) {
+      this.forgotten.add(key);
+      if (this.forgotten.size > 4_096) this.forgotten.clear();
+    }
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);
