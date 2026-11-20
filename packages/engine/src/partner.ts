@@ -593,13 +593,24 @@ function freezeSession(s: Session): FrozenSession | null {
  * The blob's `sessions`: the live sessions' snapshot plus frozen entries this process holds for sessions the
  * snapshot does not (an evicted one the agent may still continue). A live snapshot wins on its sessionId; bounded.
  */
-function mergeFrozenSessions(
+export function mergeFrozenSessions(
   frozen: FrozenSession[] | undefined,
   live: FrozenSession[] | null,
+  judged?: ReadonlySet<string>,
 ): FrozenSession[] | null {
   const liveIds = new Set((live ?? []).map((f) => f.sessionId));
   const out = (frozen ?? []).filter((f) => !liveIds.has(f.sessionId));
   out.push(...(live ?? []));
+  // An injectionId the merged `recorded` already judged is not outstanding: kept, a continued session would
+  // seed it and the delivery counts a second verdict (review of D2004).
+  if (judged) {
+    for (const f of out) {
+      if (f.outstanding?.length) {
+        const left = f.outstanding.filter((o) => !judged.has(o.injectionId));
+        f.outstanding = left.length ? left : undefined;
+      }
+    }
+  }
   const cut = out.slice(-MAX_FROZEN_SESSIONS);
   return cut.length ? cut : null;
 }
@@ -1264,11 +1275,17 @@ export class ContextPartner {
             isFrozenUnverifiable(carried?.unverifiable) ? carried.unverifiable : [],
             unverifiable ?? [],
           );
+          const mergedRecorded = mergeFrozenRecorded(priorRecorded, recorded ?? []);
+          const judged = new Set(mergedRecorded?.map((r) => r.injectionId));
           return {
             sync: sync?.snapshot(scope) ?? null,
             rows: this.deps.sourceMap.exportUser(scope),
-            sessions: mergeFrozenSessions(priorSessions, mergeFrozenSessions(this.restoredSessions.get(key), live)),
-            recorded: mergeFrozenRecorded(priorRecorded, recorded ?? []),
+            sessions: mergeFrozenSessions(
+              priorSessions,
+              mergeFrozenSessions(this.restoredSessions.get(key), live, judged),
+              judged,
+            ),
+            recorded: mergedRecorded,
             ...(mergedEconomy ? { economy: mergedEconomy } : {}),
             ...(mergedYields ? { yields: mergedYields } : {}),
             ...(mergedUnverifiable.length ? { unverifiable: mergedUnverifiable } : {}),
