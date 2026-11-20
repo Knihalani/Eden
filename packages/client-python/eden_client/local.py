@@ -237,12 +237,16 @@ class LocalEden:
         """A live shared server recorded by an earlier process, else None (and the stale file removed).
 
         A recorded daemon that predates the current source configuration is stopped and replaced,
-        else new sessions would keep attaching to a server that knows no sources."""
+        else new sessions would keep attaching to a server that knows no sources. Its pid is only
+        signalled when it answered healthz — the file pairs pid with the server, so the pid is still
+        that daemon's (a recycled dead pid belongs to something else and is left alone)."""
         try:
             data = json.loads(self._share.read_text())
             url, token, generation = str(data["url"]), str(data["token"]), str(data["generation"])
-            if data.get("sources", []) != self._sources_sig():
-                raise ValueError("source configuration changed")
+        except Exception:
+            return None
+        stale = data.get("sources", []) != self._sources_sig()
+        try:
             # Bypass proxies: some environments route loopback through a refusing HTTP proxy.
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             req = urllib.request.Request(f"{url}/healthz", headers={"Authorization": f"Bearer {token}"})
@@ -251,12 +255,13 @@ class LocalEden:
                     raise ValueError(f"healthz answered {resp.status}")
         except Exception:
             try:
-                # Stop the stale daemon only when /proc proves it is our binary (a recycled pid of
-                # another process must never be signalled). On Windows it is left: nothing attaches.
-                pid = int(data.get("pid")) if isinstance(data, dict) else None
-                cmdline = Path(f"/proc/{pid}/cmdline").read_bytes() if pid else b""
-                if pid and str(self._binary).encode() in cmdline:
-                    os.kill(pid, signal.SIGTERM)
+                self._share.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return None
+        if stale:
+            try:
+                os.kill(int(data["pid"]), signal.SIGTERM)
             except Exception:
                 pass
             try:

@@ -155,8 +155,9 @@ def main():
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     binary = ensure_binary(root, work)
-    # Replace via rename: copy2 over a still-running detached server fails with ETXTBSY on Linux.
-    staged = work / f"eden-local-staged-{os.getpid()}"
+    # Replace via rename staged in the same directory: copy2 over a still-running detached server
+    # fails ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
     shutil.copy2(binary, staged)
     staged.chmod(0o755)
     os.replace(staged, dest / "bin" / "eden-local")
