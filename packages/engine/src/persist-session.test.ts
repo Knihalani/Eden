@@ -15,6 +15,7 @@ import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG } from "./parts";
 import { EncryptedFrozenDisk } from "./persist";
+import type { UsageRecord } from "./trace";
 
 const HOUR = 3_600_000;
 const KEY = new Uint8Array(32).map((_, i) => i + 3);
@@ -35,7 +36,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-function partner(dir: string): ContextPartner {
+function partner(dir: string, onUsage?: (record: UsageRecord) => void, idleMs?: number): ContextPartner {
   const cache = new ItemCache();
   cache.persist(new EncryptedFrozenDisk({ dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 7 * 24 * HOUR }));
   return new ContextPartner({
@@ -44,7 +45,8 @@ function partner(dir: string): ContextPartner {
     cache,
     budget: new Budget(),
     model: null,
-    config: { ...CORE_CONFIG },
+    config: { ...CORE_CONFIG, ...(idleMs === undefined ? {} : { sessionIdleMs: idleMs }) },
+    onUsage,
   });
 }
 
@@ -93,5 +95,39 @@ describe("session knowledge carried with a frozen user", () => {
     expect(
       b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" }),
     ).toBe(true);
+  });
+
+  test("a judged injection is not re-seeded when the session is evicted and reopened", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    const a = partner(dir);
+    const got = await a.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), {
+      waitMs: 2_000,
+    });
+    const injectionId = got.injection?.id;
+    expect(injectionId).toBeTruthy();
+    expect(a.release(user)).toBe(true);
+
+    const records: UsageRecord[] = [];
+    const b = partner(
+      dir,
+      (r) => {
+        if (r.injectionId === injectionId) records.push(r);
+      },
+      0,
+    );
+    await b.observe(ev({ kind: "user_message", sessionId: "a", text: "back again" }), { waitMs: 2_000 });
+    expect(
+      b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" }),
+    ).toBe(true);
+    expect(records).toHaveLength(1);
+
+    // `sessionIdleMs: 0`: creating session "x" evicts "a" without learning; the user then returns to it before
+    // any re-freeze, so `restoredSessions` still holds the blob it was thawed from.
+    await b.observe(ev({ kind: "user_message", sessionId: "x", text: "unrelated" }), { waitMs: 0 });
+    await b.observe(ev({ kind: "user_message", sessionId: "a", text: "and again" }), { waitMs: 0 });
+    // The judged injection must not come back as outstanding: a second verdict would count it twice.
+    b.feedback({ tenantId: "t", userId: "u1", sessionId: "a", injectionId: injectionId!, used: true, how: "explicit" });
+    expect(records).toHaveLength(1);
   });
 });

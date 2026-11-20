@@ -4027,6 +4027,9 @@ export class ContextPartner {
         }
         // Injections still awaiting a use verdict ride along: the agent may still act on them, and the source
         // map's learning must not lose the deliveries a respawn interrupted. Turn re-anchored like the ledger's.
+        // Seeding consumes them: the live session owns the verdicts now, and a stale copy kept in `restoredSessions`
+        // would re-seed an evicted-then-reopened session — a judged injection then counts a second outcome (a later
+        // session_end learns it again as "ended", or feedback records it twice).
         for (const o of f.outstanding ?? []) {
           if (s.outstanding.size >= MAX_OUTSTANDING || s.outstanding.has(o.injectionId)) break;
           s.outstanding.set(o.injectionId, {
@@ -4037,6 +4040,7 @@ export class ContextPartner {
             deliveredTurn: o.deliveredTurn - f.turn,
           });
         }
+        f.outstanding = [];
       }
       if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
     }
