@@ -350,15 +350,17 @@ const entry = {
           if (m.role === "system") continue;
           const k = keys[i]!;
           if (s.seen.has(k)) continue;
-          // A reply the hooks already reported is skipped here even when its transcript key differs
-          // (a transcript id the hook never sees changes keyOf, but not the content key).
-          if (m.role === "assistant" && s.reportedAssistant.has(contentKey(m))) continue;
           s.seen.set(k, 1);
           if (s.seen.size > MAX_SEEN) s.seen.delete(s.seen.keys().next().value!);
+          // A reply the hooks already reported emits only its non-text events here — its tool calls
+          // still reach Eden — even when its transcript key differs (a transcript id the hook never
+          // sees changes keyOf, but not the content key).
+          const hookSeen = m.role === "assistant" && s.reportedAssistant.has(contentKey(m));
           if (s.firstCall && i < lastUser) continue; // a resumed session reports only its latest user message
           const waits = m.role === "user" && i === lastUser;
           if (waits) turnFresh = true;
           for (const ev of eventsOf(m)) {
+            if (hookSeen && ev.kind === "agent_message") continue;
             const w = ev.kind === "user_message" && waits;
             const { injection } = await s.eden.observe(ev, w ? {} : { waitMs: 0 });
             if (injection) got.push(injection);
