@@ -95,20 +95,21 @@ def main():
     work = Path(os.environ.get("TMPDIR", "/tmp")) / "eden-opencode-install"
     work.mkdir(parents=True, exist_ok=True)
 
-    dest = oc_home(args) / "plugins" / "eden"
-    if dest.is_dir():
-        shutil.rmtree(dest)
-    (dest / "bin").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(build_plugin(root, work), dest / "index.js")
-    # opencode loads immediate plugin-package directories; the manifest names the entry.
-    (dest / "package.json").write_text(
-        '{\n  "name": "eden",\n  "version": "0.0.0",\n  "type": "module",\n'
-        '  "main": "index.js"\n}\n'
-    )
+    # opencode's plugin loader globs only `plugins/*.{ts,js}` (top-level files, not package
+    # directories), so the bundle lands as plugins/eden.js; `plugins/eden/` holds just the binary.
+    plugins = oc_home(args) / "plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    stale = plugins / "eden"
+    if stale.is_dir():
+        shutil.rmtree(stale)
+    dest = plugins / "eden.js"
+    shutil.copy2(build_plugin(root, work), dest)
     binary = ensure_binary(root, work)
-    shutil.copy2(binary, dest / "bin" / "eden-local")
-    (dest / "bin" / "eden-local").chmod(0o755)
-    print(f"Eden installed to {dest}")
+    bin_dir = plugins / "eden" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(binary, bin_dir / "eden-local")
+    (bin_dir / "eden-local").chmod(0o755)
+    print(f"Eden installed to {dest} (sidecar at {bin_dir / 'eden-local'})")
     print(f"Next: put sources in {oc_home(args)}/eden/sources.json (see README.md) and start a new opencode session.")
 
 

@@ -1,5 +1,5 @@
 /**
- * Eden as an opencode plugin — `<opencode-home>/plugins/eden/index.js` (D1991).
+ * Eden as an opencode plugin — `<opencode-home>/plugins/eden.js` (D1991).
  *
  * The plugin does all of docs/INTEGRATION.md's obligations from opencode's V1 hook API:
  *  - `session_start` when a session first appears (D755);
@@ -23,7 +23,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { z } from "zod";
@@ -107,13 +107,11 @@ function eventsOf(m: HookMessage): {
     return text ? [{ kind: "user_message", text }] : [];
   }
   if (role !== "assistant") return [];
+  // Tool parts are reported from the transform's callID-deduped pass below — emitting a
+  // `tool_call` here too would report every call twice.
   const out: ReturnType<typeof eventsOf> = [];
   const text = textOf(m.parts.map((p) => ({ type: p.type, text: p.text })));
   if (text) out.push({ kind: "agent_message", text });
-  for (const p of m.parts) {
-    if (p.type !== "tool" || p.tool === ASK) continue;
-    out.push({ kind: "tool_call", tool: p.tool ?? "tool", input: p.state?.input ?? {} });
-  }
   return out;
 }
 
@@ -124,7 +122,7 @@ interface Session {
   seen: Map<string, number>;
   copyCounts: Map<string, number>; // content key -> transcript copies seen, so hook reports take the next copy
   reportedAssistant: Set<string>; // content keys already reported by the event hooks, for transform dedup
-  kept: Map<string, string>; // injection id -> packet text live while its user message is in the window
+  kept: Map<string, { text: string; messageID: string }>; // injection id -> packet anchored to its user message
   trailing: string[]; // mid-turn packets appended after the last user message
   reported: Promise<unknown>;
   queued: Injection[];
@@ -134,8 +132,10 @@ interface Session {
   reportedResults: Set<string>; // callIDs already reported as tool_result
 }
 
-/** Live sessions, exported for tests that seed a stub Eden client. */
-export const sessions = new Map<string, Session>();
+// Not a named export: opencode's legacy plugin loader calls every export as a plugin function,
+// so a Map export would reject the whole module. Tests seed stub clients through globalThis.
+const sessions = new Map<string, Session>();
+(globalThis as Record<string, unknown>).__edenOpencodeSessions = sessions;
 
 let lastSession = "default";
 
@@ -143,11 +143,11 @@ function ocHome(): string {
   const envHome = envOf("OPENCODE_HOME");
   if (envHome === "~") return homedir();
   if (envHome) return envHome.startsWith("~/") ? join(homedir(), envHome.slice(2)) : envHome;
-  // An installed plugin sits at `<home>/plugins/eden/index.js`: its grandparent is the opencode home,
-  // so sources/data beside it are found on custom installs.
+  // opencode's loader globs `plugins/*.{ts,js}`: an installed plugin is `<home>/plugins/eden.js`
+  // (earlier layout: `plugins/eden/index.js`), so the opencode home is the parent of `plugins`.
   const pluginDir = dirname(fileURLToPath(import.meta.url));
-  const grandparent = dirname(dirname(pluginDir));
-  if (pluginDir === join(grandparent, "plugins", "eden")) return grandparent;
+  const pluginsDir = basename(pluginDir) === "eden" ? dirname(pluginDir) : pluginDir;
+  if (basename(pluginsDir) === "plugins") return dirname(pluginsDir);
   const xdg = envOf("XDG_CONFIG_HOME");
   return join(xdg && xdg !== "" ? xdg : join(homedir(), ".config"), "opencode");
 }
@@ -342,33 +342,44 @@ async function transform(output: { messages: HookMessage[] }): Promise<void> {
   got.push(...(await s.eden.pending()), ...s.queued.splice(0));
   if (got.length > 0 && lastUser >= 0) {
     const text = got.map((p) => p.text).join("\n\n");
-    if (turnFresh) s.kept.set(injectionId(text), text);
+    if (turnFresh) s.kept.set(injectionId(text), { text, messageID: messages[lastUser]!.info.id ?? "" });
     else pushTrailing(s, text);
   }
   // Injections live only for this call (the transform rebuilds the prompt): re-apply every kept
   // packet while under the byte cap, dropping the oldest first (D336).
   let bytes = 0;
-  for (const t of s.kept.values()) bytes += t.length;
+  for (const t of s.kept.values()) bytes += t.text.length;
   for (const k of [...s.kept.keys()]) {
     if (bytes <= MAX_KEPT_BYTES) break;
-    bytes -= s.kept.get(k)!.length;
+    bytes -= s.kept.get(k)!.text.length;
     s.kept.delete(k);
   }
   if (lastUser < 0) return;
-  const target = messages[lastUser]!;
-  const existing = new Set(target.parts.map((p) => p.id ?? ""));
-  const texts = [...s.kept.values(), ...s.trailing];
-  for (const text of texts) {
-    const id = injectionId(text);
-    if (existing.has(id)) continue;
-    target.parts.push({
-      id,
-      type: "text",
-      text,
-      sessionID: target.info.sessionID,
-      messageID: target.info.id,
-    } as Part);
+  // A kept packet anchors to the user message it followed: attaching it to the latest message
+  // each call would rewrite earlier messages (prompt-prefix churn) and keep the packet alive
+  // after its own message left the window.
+  const byId = new Map(messages.map((m) => [m.info.id ?? "", m]));
+  for (const [id, entry] of [...s.kept]) {
+    const target = entry.messageID ? byId.get(entry.messageID) : messages[lastUser];
+    if (!target) {
+      s.kept.delete(id);
+      continue;
+    }
+    pushPart(target, id, entry.text);
   }
+  const last = messages[lastUser]!;
+  for (const text of s.trailing) pushPart(last, injectionId(text), text);
+}
+
+function pushPart(target: HookMessage, id: string, text: string): void {
+  if (target.parts.some((p) => p.id === id)) return;
+  target.parts.push({
+    id,
+    type: "text",
+    text,
+    sessionID: target.info.sessionID,
+    messageID: target.info.id,
+  } as Part);
 }
 
 /** `session.idle` and `message.updated`: the turn's last reply, which no later transform carries. */

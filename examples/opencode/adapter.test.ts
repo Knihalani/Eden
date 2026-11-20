@@ -3,7 +3,11 @@ import { EdenClient, edenId } from "@eden/client";
 import { buildPartner, createHandler } from "@eden/server";
 import { StaticSource } from "@eden/sources";
 import { diagnose, fetchCounts } from "../../packages/server/src/doctor";
-import Eden, { sessions } from "./eden";
+import Eden from "./eden";
+
+// The plugin's live sessions are reached through globalThis: opencode's legacy loader calls
+// every named export as a plugin function, so `sessions` cannot be an export.
+const sessions = (globalThis as Record<string, unknown>).__edenOpencodeSessions as Map<string, any>;
 
 // The opencode plugin does each integration obligation from opencode's V1 hook surface: the
 // messages transform reports and injects, `tool.execute.before` runs the party check and throws
@@ -83,6 +87,84 @@ describe("Eden as an opencode plugin", () => {
     expect(injected.length).toBe(1);
   });
 
+  test("a transcript tool part reports its call and result once", async () => {
+    const { hooks, sessionID } = await harness();
+    const kinds: string[] = [];
+    sessions.set(edenId(sessionID), {
+      eden: {
+        observe: async (ev: { kind: string }) => (kinds.push(ev.kind), { injection: null }),
+        pending: async () => [],
+        check: async () => ({ verdict: "ok" }),
+      } as unknown as EdenClient,
+      options: {},
+      generation: 1,
+      local: null,
+      seen: new Map(),
+      copyCounts: new Map(),
+      reportedAssistant: new Set(),
+      kept: new Map<string, { text: string; messageID: string }>(),
+      trailing: [],
+      queued: [],
+      firstCall: false,
+      reportedCalls: new Set(),
+      reportedResults: new Set(),
+      reported: Promise.resolve(),
+    });
+    const msg = {
+      info: { id: "a1", role: "assistant", sessionID },
+      parts: [
+        {
+          id: "a1-t",
+          type: "tool",
+          tool: "bash",
+          callID: "k1",
+          state: { status: "completed", input: { cmd: "ls" }, output: "ok" },
+        },
+      ],
+    };
+    for (let i = 0; i < 2; i++) {
+      await hooks["experimental.chat.messages.transform"]!({}, { messages: [msg] } as never);
+    }
+    expect(kinds.filter((k) => k === "tool_call").length).toBe(1);
+    expect(kinds.filter((k) => k === "tool_result").length).toBe(1);
+  });
+
+  test("a kept packet stays anchored to its own user message", async () => {
+    const { hooks, sessionID } = await harness();
+    let injected = 0;
+    sessions.set(edenId(sessionID), {
+      eden: {
+        observe: async (ev: { kind: string }) => ({
+          injection: ev.kind === "user_message" && injected++ === 0 ? { id: "i1", text: "PACKET" } : null,
+        }),
+        pending: async () => [],
+        check: async () => ({ verdict: "ok" }),
+      } as unknown as EdenClient,
+      options: {},
+      generation: 1,
+      local: null,
+      seen: new Map(),
+      copyCounts: new Map(),
+      reportedAssistant: new Set(),
+      kept: new Map<string, { text: string; messageID: string }>(),
+      trailing: [],
+      queued: [],
+      firstCall: false,
+      reportedCalls: new Set(),
+      reportedResults: new Set(),
+      reported: Promise.resolve(),
+    });
+    const u1 = userMsg("u1", sessionID, "hi");
+    await hooks["experimental.chat.messages.transform"]!({}, { messages: [u1] } as never);
+    const u2 = userMsg("u2", sessionID, "more");
+    await hooks["experimental.chat.messages.transform"]!({}, { messages: [u1, u2] } as never);
+    expect(u1.parts.filter((p) => p.text === "PACKET").length).toBe(1);
+    expect(u2.parts.filter((p) => p.text === "PACKET").length).toBe(0);
+    // u1 gone from the window: its packet goes with it instead of moving to u2.
+    await hooks["experimental.chat.messages.transform"]!({}, { messages: [u2] } as never);
+    expect(u2.parts.filter((p) => p.text === "PACKET").length).toBe(0);
+  });
+
   test("ask_context answers; a finding blocks the call with the held result; a failing check runs it", async () => {
     const { hooks, sessionID } = await harness();
     const tool = hooks.tool!.ask_context as {
@@ -106,7 +188,7 @@ describe("Eden as an opencode plugin", () => {
       seen: new Map(),
       copyCounts: new Map(),
       reportedAssistant: new Set(),
-      kept: new Map(),
+      kept: new Map<string, { text: string; messageID: string }>(),
       trailing: [],
       queued: [],
       firstCall: false,

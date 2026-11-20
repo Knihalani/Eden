@@ -1,6 +1,6 @@
 # Eden as an opencode plugin
 
-Eden runs inside [opencode](https://opencode.ai) as a plugin under `~/.config/opencode/plugins/eden/`:
+Eden runs inside [opencode](https://opencode.ai) as a plugin file `~/.config/opencode/plugins/eden.js`:
 it reports the conversation, injects context packets as text parts on the latest user message, answers
 `ask_context`, and holds tool calls the party check flags.
 
@@ -10,9 +10,9 @@ it reports the conversation, injects context packets as text parts on the latest
 python3 examples/opencode/install.py            # or a release archive's install.py
 ```
 
-It writes `~/.config/opencode/plugins/eden/` (`index.js` — `eden.ts` bundled with its dependencies —
-plus `package.json`) and drops `bin/eden-local` (the local sidecar, used when no `EDEN_URL` is set).
-opencode discovers plugin packages under `~/.config/opencode/plugins` automatically.
+It writes `~/.config/opencode/plugins/eden.js` (`eden.ts` bundled with its dependencies — opencode
+auto-discovers `plugins/*.{ts,js}`) and drops `plugins/eden/bin/eden-local` (the local sidecar, used
+when no `EDEN_URL` is set).
 
 ## Configure
 
