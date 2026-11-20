@@ -298,6 +298,8 @@ export function createHandler(
         if (bad) return fail(400, `${bad} must be 1-128 characters of [A-Za-z0-9._:@-]`);
         if (typeof body.used !== "boolean") return fail(400, "used must be true or false");
         stats.feedback(tenant);
+        // D325: the verdict may sit in a frozen blob (D1998), so thaw before `feedback` reads `recorded`.
+        await partner.ready({ tenantId: tenant, userId: body.userId as string });
         const applied = partner.feedback({
           tenantId: tenant,
           userId: body.userId as string,
