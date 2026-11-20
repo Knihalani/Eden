@@ -2403,20 +2403,15 @@ export class ContextPartner {
    * change notice reads no items and leaves a frozen user frozen.
    */
   ready(scope: Scope): Promise<void> | null {
-    const thawing = this.deps.cache.ready(scope);
-    // After the thaw: a restored blob seeds the sync's state first, so `seen` tracks that state, never a fresh
-    // empty one the restore would then skip (and a restored user, already warm, is not kicked again).
-    if (!thawing) {
-      this.seen(scope);
-      return null;
-    }
-    return thawing.then(() => void this.seen(scope));
+    return this.deps.cache.ready(scope);
   }
 
   /**
-   * The user's first sighting by any route (`observe` does the same for a first event): their sources are tracked
-   * and — with `syncKick` — the backfill starts now, not at the first request or a `session_start` the integrator
-   * may never send (D2005, o4-new-user). O(1), no I/O; `track` is idempotent, so later calls cost nothing.
+   * The user's first sighting by a serving route (`observe` does the same for a first event): their sources are
+   * tracked and — with `syncKick` — the backfill starts now, not at the first request or a `session_start` the
+   * integrator may never send (D2005, o4-new-user). Routes that only thaw (`ready`: a forget broadcasts it to
+   * every worker, so a worker that never served the user must not start their backfill) are not sightings.
+   * O(1), no I/O; `track` is idempotent, so later calls cost nothing.
    */
   seen(scope: Scope): void {
     const fresh = this.sync?.track(scope, this.now());

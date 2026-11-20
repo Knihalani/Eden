@@ -262,6 +262,7 @@ export function createHandler(
         stats.pending(tenant, who.userId, who.sessionId, shadow);
         // D325: the take checks new items against the session's plans (`checkPlans`), which reads the user's items.
         await partner.ready(who);
+        partner.seen(who); // D2005: draining the queue is a sighting, as an event is.
         return json({ injections: partner.takePending(who, shadow ? { shadow } : {}) });
       }
       case "/v1/whoami": {
@@ -300,6 +301,7 @@ export function createHandler(
         stats.feedback(tenant);
         // D325: the verdict may sit in a frozen blob (D1998), so thaw before `feedback` reads `recorded`.
         await partner.ready({ tenantId: tenant, userId: body.userId as string });
+        partner.seen({ tenantId: tenant, userId: body.userId as string }); // D2005: feedback is a sighting too.
         const applied = partner.feedback({
           tenantId: tenant,
           userId: body.userId as string,
