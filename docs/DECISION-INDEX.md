@@ -862,5 +862,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
+| D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
 | D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
 | D1986 | 2026-11-20 | Adopted: `examples/langchain`, Eden as one `createAgent` middleware for LangChain agents. | adopted |
