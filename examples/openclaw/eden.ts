@@ -120,6 +120,7 @@ interface Session {
   options: Omit<import("@eden/client").EdenClientOptions, "sessionId">;
   generation: number;
   seen: Map<string, number>;
+  copyCounts: Map<string, number>; // message key -> transcript copies seen, so hook reports take the next copy
   kept: Map<string, string>; // user-message key -> packet text prepended while it is live
   trailing: string[]; // mid-turn packets appended to context on later calls
   reported: Promise<unknown>;
@@ -136,7 +137,9 @@ let lastSession = "default";
 
 function clawHome(): string {
   const envHome = envOf("OPENCLAW_HOME");
-  if (envHome) return envHome;
+  // '~' is not expanded for env values; a literal tilde home would resolve under the cwd.
+  if (envHome === "~") return homedir();
+  if (envHome) return envHome.startsWith("~/") ? join(homedir(), envHome.slice(2)) : envHome;
   // An installed plugin sits at `<home>/extensions/eden/index.js` (or `plugins/eden` on older layouts):
   // its grandparent is the OpenClaw home, so sources/data beside it are found on custom installs.
   const pluginDir = dirname(fileURLToPath(import.meta.url));
@@ -205,6 +208,7 @@ async function sessionFor(sessionId: string): Promise<Session | null> {
     generation: 1,
     local: made.local,
     seen: new Map(),
+    copyCounts: new Map(),
     kept: new Map(),
     trailing: [],
     queued: [],
@@ -325,6 +329,7 @@ const entry = {
           const k = keyOf(m);
           const n = (copies.get(k) ?? 0) + 1;
           copies.set(k, n);
+          s.copyCounts.set(k, n);
           return `${k}#${n}`;
         });
         const lastUser = messages.map((m) => m.role).lastIndexOf("user");
@@ -427,11 +432,14 @@ const entry = {
     const reportAssistant = async (text: string | undefined, ctx: HookCtx) => {
       try {
         if (!text) return;
-        // Same key the transcript path computes for this message, so a reply reported here is not
-        // reported again when it shows up in a later before_prompt_build's messages.
-        const key = `${keyOf({ role: "assistant", content: text })}#1`;
+        // The transcript path numbers identical texts `key#copy`; a hook-seen reply gets the copy
+        // after every transcript copy already seen, so a repeated reply is reported (not dropped as
+        // `#1`) and the same reply fired by llm_output and agent_end still dedups.
         const s = await sessionFor(sessionKey(ctx));
-        if (!s || s.seen.has(key)) return;
+        if (!s) return;
+        const hash = keyOf({ role: "assistant", content: text });
+        const key = `${hash}#${(s.copyCounts.get(hash) ?? 0) + 1}`;
+        if (s.seen.has(key)) return;
         s.seen.set(key, 1);
         const client = await liveClient(s);
         if (!client) return;
