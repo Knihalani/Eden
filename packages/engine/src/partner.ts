@@ -1137,12 +1137,15 @@ export class ContextPartner {
           };
         },
         restored: (scope, items, extra) => {
-          const carried = extra as {
-            sync?: unknown;
-            rows?: UserRows;
-            sessions?: unknown;
-            recorded?: unknown;
-          } | null | undefined;
+          const carried = extra as
+            | {
+                sync?: unknown;
+                rows?: UserRows;
+                sessions?: unknown;
+                recorded?: unknown;
+              }
+            | null
+            | undefined;
           const saved = carried?.sync;
           if (sync && saved) sync.restore(scope, saved);
           if (carried?.rows && typeof carried.rows === "object") {
