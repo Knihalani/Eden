@@ -36,6 +36,12 @@ def _key(text: str) -> str:
 class EdenClaude(EdenHermes):
     """Per-event Eden calls with on-disk dedup; ``home`` is the agent's own (e.g. ``~/.claude``)."""
 
+    def __init__(self, env: Optional[Dict[str, str]] = None,
+                 client_factory: Optional[Callable[..., Any]] = None, *, plugin_file=None, home=None) -> None:
+        # Every hook is its own process, so the local server must outlive it (a fresh one per hook
+        # would lose the delivered-packet record the party check reads).
+        super().__init__(env, client_factory, plugin_file=plugin_file, home=home, local_shared=True)
+
     def _in_scope(self) -> bool:
         # Each hook is its own process; there is no separate launch home to mismatch.
         return self._enabled
@@ -53,10 +59,26 @@ class EdenClaude(EdenHermes):
         try:
             path = self._state_path(session_id)
             path.parent.mkdir(parents=True, exist_ok=True)
+            if session_id is not None:
+                state["session_id"] = str(session_id)  # the MCP server attributes its asks to it
             # Bounded: keys roll over so the file stays small across long sessions.
             state["reported"] = state.get("reported", [])[-400:]
             state["copies"] = dict(list(state.get("copies", {}).items())[-400:])
+            state["stashed"] = state.get("stashed", [])[-40:]
             path.write_text(json.dumps(state))
+        except Exception:  # noqa: BLE001
+            pass
+
+    @staticmethod
+    def _stash(state: Dict[str, Any], c: Any, res: Any) -> None:
+        """Packets an observe handed out that this hook cannot show (a PreToolUse has no context
+        channel): kept in the state file for the next hook that can show them — ``post_tool`` or
+        ``prompt``. The server marks them delivered, so dropping them here would lose them."""
+        try:
+            stash = state.setdefault("stashed", [])
+            for item in c.collect(res.get("injection") if isinstance(res, dict) else None):
+                if item not in stash:
+                    stash.append(item)
         except Exception:  # noqa: BLE001
             pass
 
@@ -90,6 +112,7 @@ class EdenClaude(EdenHermes):
                 res = c.observe({"kind": "user_message", "text": text})
                 got += c.collect(res.get("injection") if isinstance(res, dict) else None)
             got += c.pending()
+            got = list(state.pop("stashed", [])) + got
             self._save(session_id, state)
             joined = _joined(got)
             if not joined and self.ask_hint and QUESTION.search(text):
@@ -111,7 +134,9 @@ class EdenClaude(EdenHermes):
             uid = str(tool_use_id or _key(f"{tool_name}:{tool_input}"))
             if uid not in state["reported"]:
                 state["reported"].append(uid)
-                c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input or {}}, wait_ms=0)
+                res = c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input or {}},
+                                wait_ms=0)
+                self._stash(state, c, res)
             self._save(session_id, state)
             if not self.checks(tool_name):
                 return None
@@ -127,7 +152,7 @@ class EdenClaude(EdenHermes):
             return None
 
     def post_tool(self, tool_name: Any = None, result: Any = None, tool_use_id: Any = None,
-                  session_id: Any = None, **_: Any) -> None:
+                  session_id: Any = None, **_: Any) -> Optional[Dict[str, str]]:
         try:
             if not self._in_scope() or _is_ask(str(tool_name or "")) or not tool_name:
                 return None
@@ -139,9 +164,13 @@ class EdenClaude(EdenHermes):
             if uid in state["reported"]:
                 return None
             state["reported"].append(uid)
-            self._save(session_id, state)
             output = result if isinstance(result, str) else json.dumps(result, default=str)
-            c.observe({"kind": "tool_result", "tool": tool_name, "output": output}, wait_ms=0)
+            res = c.observe({"kind": "tool_result", "tool": tool_name, "output": output}, wait_ms=0)
+            self._stash(state, c, res)
+            # PostToolUse can add context: deliver anything stashed by hooks that could not.
+            context = _joined(state.pop("stashed", []))
+            self._save(session_id, state)
+            return {"context": context} if context else None
         except Exception:  # noqa: BLE001
             pass
         return None
@@ -177,20 +206,41 @@ class EdenClaude(EdenHermes):
             if seen_key in state["reported"]:
                 return None
             state["reported"].append(seen_key)
+            res = c.observe({"kind": "agent_message", "text": last}, wait_ms=0)
+            self._stash(state, c, res)
             self._save(session_id, state)
-            c.observe({"kind": "agent_message", "text": last}, wait_ms=0)
         except Exception:  # noqa: BLE001
             pass
         return None
 
     def session_end(self, session_id: Any = None, **_: Any) -> None:
         try:
-            sid = self.session_key(session_id)
-            if sid is not None:
-                self.end_session(sid)
+            # The parent's ``end_session`` pops the in-process client cache, which a fresh hook
+            # process never has — report the end on a fresh client of the same session instead.
+            c = self.client(session_id)
+            if c is not None:
+                c.observe({"kind": "session_end"}, wait_ms=0)
             self._state_path(session_id).unlink(missing_ok=True)
         except Exception:  # noqa: BLE001
             pass
+        return None
+
+
+def latest_session_id(home: Any) -> Optional[str]:
+    """The session whose state file changed most recently — what an outside process (the MCP
+    server, which Claude Code gives no session id) attributes its calls to."""
+    try:
+        best, sid = 0.0, None
+        for p in (Path(home).expanduser().resolve() / "eden" / STATE_DIR).glob("*.json"):
+            try:
+                data = json.loads(p.read_text())
+                mtime = p.stat().st_mtime
+                if data.get("session_id") and mtime > best:
+                    best, sid = mtime, str(data["session_id"])
+            except Exception:  # noqa: BLE001
+                continue
+        return sid
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -205,8 +255,8 @@ def dispatch(plugin: EdenClaude, event: str, payload: Dict[str, Any]) -> Optiona
         return plugin.pre_tool(payload.get("tool_name"), payload.get("tool_input"),
                                payload.get("tool_use_id"), sid)
     elif event == "post_tool_use":
-        plugin.post_tool(payload.get("tool_name"), payload.get("tool_response"),
-                         payload.get("tool_use_id"), sid)
+        return plugin.post_tool(payload.get("tool_name"), payload.get("tool_response"),
+                                payload.get("tool_use_id"), sid)
     elif event == "stop":
         plugin.stop(sid, payload.get("transcript_path"))
     elif event == "session_end":

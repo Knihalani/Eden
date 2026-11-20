@@ -27,14 +27,17 @@ TOOLS = [
 ]
 
 
-def _plugin():
+def _home():
     import os
 
+    env_home = next((os.environ[n] for n in ("CLAUDE_HOME", "CLAUDE_CONFIG_DIR") if os.environ.get(n)), None)
+    return Path(env_home).expanduser() if env_home else Path.home() / ".claude"
+
+
+def _plugin():
     from eden_client.claude import EdenClaude
 
-    env_home = next((os.environ[n] for n in ("CLAUDE_HOME", "CLAUDE_CONFIG_DIR") if os.environ.get(n)), None)
-    return EdenClaude(home=Path(env_home).expanduser() if env_home else Path.home() / ".claude",
-                      plugin_file=Path(__file__).resolve())
+    return EdenClaude(home=_home(), plugin_file=Path(__file__).resolve())
 
 
 def reply(msg_id, result):
@@ -71,8 +74,12 @@ def main() -> int:
                 plugin = _plugin()
             question = str((params.get("arguments") or {}).get("question") or "")
             try:
-                # MCP calls carry no Claude session id: one stable pseudo-session per install.
-                answer = plugin.ask_context({"question": question}, session_id="eden-mcp")
+                # MCP calls carry no Claude session id; the hooks' state files name the live one,
+                # so the ask lands in the same session the tool hooks check.
+                from eden_client.claude import latest_session_id
+
+                sid = latest_session_id(_home()) or "eden-mcp"
+                answer = plugin.ask_context({"question": question}, session_id=sid)
             except Exception:  # noqa: BLE001
                 answer = None
             reply(msg_id, {"content": [{"type": "text", "text": answer or "No context available."}]})

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from eden_client import held_result
-from eden_client.claude import EdenClaude
+from eden_client.claude import EdenClaude, latest_session_id
 
 PACKET = {"text": "packet-text"}
 
@@ -21,6 +21,7 @@ class FakeClient:
         self.kw = kw
         self.events = []
         self.check_answer = {"verdict": "proceed", "finding": None}
+        self.inject_kinds = set()  # extra event kinds an observe answers with a packet
         self.fail = False
         FakeClient.made.append(self)
 
@@ -28,7 +29,8 @@ class FakeClient:
         if self.fail:
             raise RuntimeError("down")
         self.events.append((event, wait_ms))
-        packet = PACKET if event.get("kind") == "user_message" else None
+        kinds = {"user_message"} | self.inject_kinds
+        packet = PACKET if event.get("kind") in kinds else None
         return {"injection": packet, "pending": False}
 
     def collect(self, injection):
@@ -97,6 +99,26 @@ class EdenClaudeTests(unittest.TestCase):
         p.post_tool("bash", {"stdout": "ok"}, "u1", "s1")
         self.assertEqual(kinds(FakeClient.made[0]), ["tool_result"])
 
+    def test_post_tool_delivers_a_packet_its_observe_collected(self):
+        p = plugin()
+        FakeClient.made.clear()
+        p.session_start("s1")
+        FakeClient.made[0].inject_kinds.add("tool_result")
+        out = p.post_tool("bash", {"stdout": "ok"}, "u1", "s1")
+        self.assertEqual(out["context"], PACKET["text"])
+        FakeClient.made[0].inject_kinds.clear()
+        self.assertIsNone(p.post_tool("read", "x", "u2", "s1"))  # nothing left to deliver
+
+    def test_pre_tool_stashes_a_packet_the_next_prompt_delivers(self):
+        home = tempfile.mkdtemp()
+        p = plugin(home=home)
+        p.session_start("s1")
+        FakeClient.made[0].inject_kinds.add("tool_call")
+        self.assertIsNone(p.pre_tool("read", {}, "u1", "s1"))
+        # The next process delivers it: a fresh adapter shares the state file.
+        out = plugin(home=home).prompt("s1", "thanks")
+        self.assertIn(PACKET["text"], out["context"])
+
     def test_stop_reports_the_last_reply_once(self):
         with tempfile.TemporaryDirectory() as td:
             transcript = Path(td) / "t.jsonl"
@@ -113,13 +135,21 @@ class EdenClaudeTests(unittest.TestCase):
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0][0], {"kind": "agent_message", "text": "All set."})
 
-    def test_session_end_removes_the_state_file(self):
+    def test_session_end_reports_on_a_fresh_client_and_removes_the_state_file(self):
         home = tempfile.mkdtemp()
         p = plugin(home=home)
         p.prompt("s1", "hi")
         self.assertTrue(list(Path(home, "eden", "state").glob("*.json")))
-        p.session_end("s1")
+        FakeClient.made.clear()
+        plugin(home=home).session_end("s1")  # a fresh "process": no cached client
+        self.assertEqual(kinds(FakeClient.made[0]), ["session_end"])
         self.assertFalse(list(Path(home, "eden", "state").glob("*.json")))
+
+    def test_latest_session_id_names_the_live_session(self):
+        home = tempfile.mkdtemp()
+        self.assertIsNone(latest_session_id(home))
+        plugin(home=home).prompt("s1", "hi")
+        self.assertEqual(latest_session_id(home), "s1")
 
     def test_everything_fails_open(self):
         p = plugin()
