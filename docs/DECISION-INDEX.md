@@ -863,3 +863,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
 | D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
+| D1986 | 2026-11-20 | Adopted: `examples/langchain`, Eden as one `createAgent` middleware for LangChain agents. | adopted |
