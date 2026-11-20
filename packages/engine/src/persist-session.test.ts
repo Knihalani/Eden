@@ -36,7 +36,12 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-function partner(dir: string, onUsage?: (record: UsageRecord) => void, idleMs?: number): ContextPartner {
+function partner(
+  dir: string,
+  onUsage?: (record: UsageRecord) => void,
+  idleMs?: number,
+  cfg?: Partial<typeof CORE_CONFIG>,
+): ContextPartner {
   const cache = new ItemCache();
   cache.persist(new EncryptedFrozenDisk({ dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 7 * 24 * HOUR }));
   return new ContextPartner({
@@ -45,7 +50,7 @@ function partner(dir: string, onUsage?: (record: UsageRecord) => void, idleMs?: 
     cache,
     budget: new Budget(),
     model: null,
-    config: { ...CORE_CONFIG, ...(idleMs === undefined ? {} : { sessionIdleMs: idleMs }) },
+    config: { ...CORE_CONFIG, ...(idleMs === undefined ? {} : { sessionIdleMs: idleMs }), ...cfg },
     onUsage,
   });
 }
@@ -169,6 +174,28 @@ describe("session knowledge carried with a frozen user", () => {
     // number under 1 — not the never-asked 1 a fresh economy returns.
     expect(econ(b).askedAt(user, "crm", "globex renewal")).toBe(askedAt);
     expect(econ(b).changeChance(user, "crm", "globex renewal", clock + 8 * 60_000)).toBeLessThan(1);
+  });
+
+  test("a restored user keeps what each source earned it (D2002)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    const a = partner(dir, undefined, undefined, { sourceYield: true });
+    await a.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), { waitMs: 2_000 });
+    const yields = (p: ContextPartner) =>
+      (p as unknown as { yields: import("./source-yield").SourceYield | null }).yields!;
+    // crm has been read twice with nothing used, and a second source earned its reads already.
+    yields(a).read(user, ["crm", "files"], clock);
+    yields(a).read(user, ["crm"], clock + 1_000);
+    yields(a).used(user, ["files"], clock + 2_000);
+    expect(yields(a).run(user, "crm", clock + 2_000)).toBeGreaterThan(1);
+    expect(yields(a).hasYielded(user, "files")).toBe(true);
+    expect(a.release(user)).toBe(true);
+
+    const b = partner(dir, undefined, undefined, { sourceYield: true });
+    await b.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
+    // Runs and yields rode the blob: crm's run is not restarted at 0, and files still counts as earned.
+    expect(yields(b).run(user, "crm", clock + 2_000)).toBeGreaterThan(1);
+    expect(yields(b).hasYielded(user, "files")).toBe(true);
   });
 
   test("a restored user still corrects an ended session's verdict", async () => {

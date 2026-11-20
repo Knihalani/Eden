@@ -136,6 +136,27 @@ export class SourceYield {
     }
   }
 
+  /**
+   * What the user's sources have earned, JSON-shaped for the frozen blob (D2002): a respawn without it
+   * restarts every source's run at 0 — a source mid-penalty is read again too soon — and forgets which
+   * already yielded, so a source the earn rule held back is re-read on weak evidence.
+   */
+  snapshot(scope: Scope): FrozenYields | null {
+    const u = this.user(scope, false);
+    if (!u || u.sources.size === 0) return null;
+    return { sources: [...u.sources].slice(-FROZEN_SOURCES).map(([s, r]) => [s, { ...r }]) };
+  }
+
+  /** Re-seeds what `snapshot` saved — the blob is the newer truth, so its rows replace same-source live ones. */
+  restore(scope: Scope, f: FrozenYields): void {
+    if (!isFrozenYields(f)) return;
+    const u = this.user(scope, true)!;
+    for (const [s, r] of f.sources.slice(-MAX_SOURCES)) {
+      u.sources.delete(s);
+      u.sources.set(s, { ...r });
+    }
+  }
+
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
     if (sourceId === undefined) this.drop(key, scope.tenantId);
@@ -146,4 +167,27 @@ export class SourceYield {
   size(scope: Scope): number {
     return this.users.get(scopeKey(scope))?.sources.size ?? 0;
   }
+}
+
+/** Sources carried per user in the frozen blob — the freshest by the map's LRU order (D2002). */
+const FROZEN_SOURCES = 512;
+
+/** A `User`'s per-source runs as the persist layer stores them (D2002). */
+export interface FrozenYields {
+  sources: [string, { empty: number; at: number; used: boolean }][];
+}
+
+/** Shape-checks a blob's `yields` — fail-open like the other `extra` fields. */
+export function isFrozenYields(x: unknown): x is FrozenYields {
+  if (!x || typeof x !== "object" || !Array.isArray((x as FrozenYields).sources)) return false;
+  return (x as FrozenYields).sources.every(
+    (r) =>
+      Array.isArray(r) &&
+      r.length === 2 &&
+      typeof r[0] === "string" &&
+      !!r[1] &&
+      typeof (r[1] as Run).empty === "number" &&
+      typeof (r[1] as Run).at === "number" &&
+      typeof (r[1] as Run).used === "boolean",
+  );
 }

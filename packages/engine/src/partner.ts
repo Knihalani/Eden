@@ -93,7 +93,7 @@ import {
   type SheetCard,
 } from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
-import { SourceYield, type Evidence } from "./source-yield";
+import { isFrozenYields, SourceYield, type Evidence, type FrozenYields } from "./source-yield";
 import { isFrozenEconomy, ProbeEconomy, type FrozenEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
@@ -966,6 +966,8 @@ export class ContextPartner {
   private readonly frozenRecorded = new Map<string, FrozenRecorded[]>();
   /** Economy snapshot `release` captures before `economy.forget` — `save` consumes it (D2001). */
   private readonly frozenEconomy = new Map<string, FrozenEconomy | null>();
+  /** Source-yield snapshot `release` captures before `yields.forget` — `save` consumes it (D2002). */
+  private readonly frozenYields = new Map<string, FrozenYields | null>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -1183,12 +1185,15 @@ export class ContextPartner {
           this.frozenRecorded.delete(key);
           const economy = this.frozenEconomy.has(key) ? this.frozenEconomy.get(key) : this.economy.snapshot(scope);
           this.frozenEconomy.delete(key);
+          const yields = this.frozenYields.has(key) ? this.frozenYields.get(key) : this.yields?.snapshot(scope);
+          this.frozenYields.delete(key);
           return {
             sync: sync?.snapshot(scope) ?? null,
             rows: this.deps.sourceMap.exportUser(scope),
             sessions: mergeFrozenSessions(this.restoredSessions.get(key), live),
             recorded,
             ...(economy ? { economy } : {}),
+            ...(yields ? { yields } : {}),
           };
         },
         restored: (scope, items, extra) => {
@@ -1199,6 +1204,7 @@ export class ContextPartner {
                 sessions?: unknown;
                 recorded?: unknown;
                 economy?: unknown;
+                yields?: unknown;
               }
             | null
             | undefined;
@@ -1220,6 +1226,7 @@ export class ContextPartner {
             if (rec.length > 0) this.restoreRecorded(scope, rec);
           }
           if (carried?.economy && isFrozenEconomy(carried.economy)) this.economy.restore(scope, carried.economy);
+          if (carried?.yields && isFrozenYields(carried.yields)) this.yields?.restore(scope, carried.yields);
 
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
@@ -2248,10 +2255,12 @@ export class ContextPartner {
     // The probe economy's learned rates and arms too: `save` runs inside `cache.release`, after
     // `economy.forget` below, so the snapshot must be taken first (D2001).
     this.frozenEconomy.set(key, this.economy.snapshot(scope));
+    this.frozenYields.set(key, this.yields?.snapshot(scope) ?? null);
     const written = this.deps.cache.release(scope, write);
     this.frozenPending.delete(key);
     this.frozenRecorded.delete(key);
     this.frozenEconomy.delete(key);
+    this.frozenYields.delete(key);
     this.restoredSessions.delete(key);
     this.unverifiable.delete(key);
     // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
@@ -4042,6 +4051,8 @@ export class ContextPartner {
     this.restoredSessions.delete(key);
     this.frozenPending.delete(key);
     this.frozenRecorded.delete(key);
+    this.frozenEconomy.delete(key);
+    this.frozenYields.delete(key);
     // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
     this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
