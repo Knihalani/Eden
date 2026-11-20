@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { localBoundary, localConfig } from "./local";
 
 const token = "a".repeat(43);
@@ -22,6 +25,25 @@ test("local configuration scrubs capabilities and consumes the token", () => {
     console.log = log;
     console.info = info;
   }
+});
+
+test("a state dir makes local state durable: a generated key, frozen dir, file source map", () => {
+  const dir = mkdtempSync(join(tmpdir(), "eden-local-state-"));
+  const env = { EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_LOCAL_STATE_DIR: dir };
+  const config = localConfig(env)!;
+  expect(config.persist).not.toBeNull();
+  expect(config.persist!.dir).toBe(join(dir, "frozen"));
+  expect(config.persist!.discard).toBe(true);
+  expect(config.sourceMapPath).toBe(join(dir, "source-map.db"));
+  expect(Object.keys(env)).toEqual(["EDEN_LOCAL"]);
+  // The key is generated once, mode 0600, and reused by every later daemon of the directory.
+  const keyFile = join(dir, "persist.key");
+  const first = readFileSync(keyFile, "utf8");
+  expect(first.trim()).toMatch(/^[0-9a-f]{64}$/);
+  expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+  const second = localConfig({ EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_LOCAL_STATE_DIR: dir })!;
+  expect(readFileSync(keyFile, "utf8")).toBe(first);
+  expect(second.persist!.dir).toBe(config.persist!.dir);
 });
 
 test("all local console diagnostics leave stdout empty", async () => {

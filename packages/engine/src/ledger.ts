@@ -33,6 +33,16 @@ export interface LedgerEntry {
   version?: number;
 }
 
+/** A session's ledger written beside a frozen user's blob, all JSON-safe (D425/D992 carry it with the user). */
+export interface LedgerSnapshot {
+  /** Item id → the session turn it was last marked delivered in, oldest first. */
+  delivered: [string, number][];
+  /** Item id → the version recorded at that delivery. */
+  versions: [string, number][];
+  /** Item id → the copy the agent was handed (`noteShown`), least recently shown first. */
+  shown: [string, ShownCopy][];
+}
+
 export class Ledger {
   private readonly delivered = new Map<string, number>();
   private readonly versions = new Map<string, number>();
@@ -43,6 +53,40 @@ export class Ledger {
   private readonly shown = new Map<string, ShownCopy>();
 
   constructor(private readonly cooldownTurns = 40) {}
+
+  /** Everything `seed` needs to hand this ledger's knowledge to a session that replaces it. */
+  snapshot(): LedgerSnapshot {
+    return { delivered: [...this.delivered], versions: [...this.versions], shown: [...this.shown] };
+  }
+
+  /**
+   * Gives a fresh ledger what a snapshot's session knew (a user restored from a frozen blob, or a local daemon
+   * respawned between turns). `fromTurn` is the saved session's turn when it was written: each entry's turn
+   * moves back by it, so the turns already elapsed count too — a delivery past its cooldown stays fresh after
+   * the restore instead of starting a new one.
+   * Entries an existing delivery already covers keep the newer turn.
+   */
+  seed(snap: LedgerSnapshot, fromTurn = 0): void {
+    for (const [id, t] of snap.delivered) {
+      const at = t - fromTurn;
+      const was = this.delivered.get(id);
+      if (was === undefined || at > was) {
+        this.delivered.delete(id);
+        this.delivered.set(id, at);
+      }
+    }
+    for (const [id, v] of snap.versions) if (!this.versions.has(id)) this.versions.set(id, v);
+    for (const [id, copy] of snap.shown) {
+      if (!this.shown.has(id)) {
+        this.shown.set(id, { ...copy, times: copy.times ? [...copy.times] : undefined });
+      }
+    }
+    while (this.shown.size > MAX_SHOWN_COPIES) this.shown.delete(this.shown.keys().next().value as string);
+    while (this.delivered.size > MAX_LEDGER_ITEMS) {
+      const oldest = this.delivered.keys().next().value as string;
+      this.delivered.delete(oldest);
+    }
+  }
 
   isFresh(itemId: string, turn: number): boolean {
     const at = this.delivered.get(itemId);

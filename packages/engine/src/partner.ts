@@ -132,7 +132,7 @@ import {
 import { type TurnGate, turnGate } from "./turn-gate";
 import { foldEchoes } from "./fold";
 import type { Facts } from "./decide";
-import { Ledger, type LedgerEntry } from "./ledger";
+import { Ledger, type LedgerEntry, type LedgerSnapshot } from "./ledger";
 import { isPacked } from "./packed-text";
 import {
   ASK_LATE_LEAD,
@@ -384,7 +384,15 @@ interface Session {
    * `turn` and `terms` (the item's own content terms, bounded) let a follow-up's `carry` read what the last
    * request's answer was about (D1976).
    */
-  delivered: { sketch: Sketch | null; refs: ReadonlySet<string>; turn: number; terms: string[]; years: number[] }[];
+  delivered: {
+    sketch: Sketch | null;
+    refs: ReadonlySet<string>;
+    /** The item this entry came from, when known: lets a snapshot leave out items whose packet was never taken. */
+    itemId?: string;
+    turn: number;
+    terms: string[];
+    years: number[];
+  }[];
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
   pending: Injection[];
@@ -453,6 +461,40 @@ interface Session {
   /** `planConflict` (D301): ids a plan packet has sent, at most `PLAN_SENT`: each is said once per session. */
   planSent?: Set<string>;
 }
+
+/**
+ * What a frozen user keeps of a live session's delivery knowledge (its blob's `extra.sessions`): the ledger
+ * snapshot and the delivered list, JSON-safe so the blob's zstd JSON carries it. A restored user's next sessions
+ * are seeded from it, so a daemon respawned between turns does not hand the agent the same packet again.
+ */
+interface FrozenSession {
+  /** The saved session's key: a restored blob seeds only a session that continues it, never a new conversation. */
+  sessionId: string;
+  /** The saved session's turn at write: `Ledger.seed` re-anchors by it so elapsed cooldown turns still count. */
+  turn: number;
+  ledger: LedgerSnapshot;
+  delivered: { sketch: Sketch | null; refs: string[]; turn: number; terms: string[]; years: number[] }[];
+}
+
+/** Shape check for a `FrozenSession` read back from a blob: anything else is ignored (fails open). */
+function isFrozenSession(x: unknown): x is FrozenSession {
+  const s = x as FrozenSession | null;
+  return (
+    s !== null &&
+    typeof s === "object" &&
+    s.ledger !== null &&
+    typeof s.ledger === "object" &&
+    Array.isArray(s.ledger.delivered) &&
+    Array.isArray(s.ledger.versions) &&
+    Array.isArray(s.ledger.shown) &&
+    Array.isArray(s.delivered) &&
+    typeof s.sessionId === "string" &&
+    typeof s.turn === "number"
+  );
+}
+
+/** Frozen sessions kept per user (`restoredSessions`): an old one's knowledge still applies, bounded. */
+const MAX_FROZEN_SESSIONS = 8;
 
 /** Items whose shown words a session keeps (`askDedup`). */
 const MAX_SHOWN = 64;
@@ -813,6 +855,17 @@ export class ContextPartner {
   private readonly sessions = new Map<string, Session>();
   /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
   private readonly userSessions = new Map<string, Set<Session>>();
+  /**
+   * Session knowledge restored with a frozen user (`persistHooks.restored`): each saved session's ledger snapshot
+   * and delivered list. Every new session of the user is seeded from it, so a daemon respawned between turns does
+   * not hand the agent the same packet again (D). Read-only: sessions keep their own copies.
+   */
+  private readonly restoredSessions = new Map<string, FrozenSession[]>();
+  /**
+   * Session snapshots taken in `release` before the user's sessions close (`close` removes them from
+   * `userSessions`, so a snapshot read by the save hook then would be empty). Consumed by `save`.
+   */
+  private readonly frozenPending = new Map<string, FrozenSession[] | null>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -1022,9 +1075,14 @@ export class ContextPartner {
       deps.cache.persistHooks = {
         // D992: the user's source-map rows (routing and planner learning) go with them, so a user moved to another
         // process or machine keeps what was learned; they are replaced, not merged, where they land.
-        save: (scope) => ({ sync: sync?.snapshot(scope) ?? null, rows: this.deps.sourceMap.exportUser(scope) }),
+        save: (scope) => {
+          const key = scopeKey(scope);
+          const sessions = this.frozenPending.get(key) ?? this.sessionSnapshot(scope);
+          this.frozenPending.delete(key);
+          return { sync: sync?.snapshot(scope) ?? null, rows: this.deps.sourceMap.exportUser(scope), sessions };
+        },
         restored: (scope, items, extra) => {
-          const carried = extra as { sync?: unknown; rows?: UserRows } | null | undefined;
+          const carried = extra as { sync?: unknown; rows?: UserRows; sessions?: unknown } | null | undefined;
           const saved = carried?.sync;
           if (sync && saved) sync.restore(scope, saved);
           if (carried?.rows && typeof carried.rows === "object") {
@@ -1033,6 +1091,10 @@ export class ContextPartner {
             } catch {
               // Fails open: the user keeps whatever this process's file holds for them (or learns again).
             }
+          }
+          if (Array.isArray(carried?.sessions)) {
+            const frozen = carried.sessions.filter(isFrozenSession);
+            if (frozen.length > 0) this.restoredSessions.set(scopeKey(scope), frozen.slice(-MAX_FROZEN_SESSIONS));
           }
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
@@ -1998,6 +2060,40 @@ export class ContextPartner {
   }
 
   /**
+   * The live sessions' delivery knowledge for a user, written beside its frozen blob (`persistHooks.save`): each
+   * session's ledger snapshot and delivered list, so a restore's fresh sessions do not hand the agent again what
+   * an earlier process already delivered (a local daemon respawned between turns).
+   */
+  private sessionSnapshot(scope: Scope): FrozenSession[] | null {
+    const mine = this.userSessions.get(scopeKey(scope));
+    if (!mine || mine.size === 0) return null;
+    const out: FrozenSession[] = [];
+    for (const s of mine) {
+      // Items of packets still queued were never handed: their build-time marks would suppress them after a
+      // restart even though the agent never saw them, so they are left out of the snapshot (BUG_0002).
+      const queued = new Set<string>();
+      for (const p of s.pending) for (const c of p.citations) queued.add(c.itemId);
+      const snap = s.ledger.snapshot();
+      // Marks and versions of queued items are dropped — they were never handed. `shown` stays: for a queued
+      // REVISION the earlier copies really were handed, and their `times` feed `revisionDiff`; dropping them
+      // would erase delivery history the agent does hold (BUG_0001).
+      const ledger: LedgerSnapshot = queued.size
+        ? {
+            delivered: snap.delivered.filter(([id]) => !queued.has(id)),
+            versions: snap.versions.filter(([id]) => !queued.has(id)),
+            shown: snap.shown,
+          }
+        : snap;
+      const delivered = s.delivered
+        .filter((d) => d.itemId === undefined || !queued.has(d.itemId))
+        .map((d) => ({ ...d, refs: [...d.refs], terms: [...d.terms], years: [...d.years] }));
+      if (ledger.delivered.length === 0 && ledger.shown.length === 0 && delivered.length === 0) continue;
+      out.push({ sessionId: s.id, turn: s.turn, ledger, delivered });
+    }
+    return out.length ? out.slice(-MAX_FROZEN_SESSIONS) : null;
+  }
+
+  /**
    * Hands a user to the process that now owns them (D992: a machine joined or left, or a machine's child count
    * changed): their sessions end, their state is written with their sync state and source-map rows (`release`), and
    * everything this process held for them goes as on `forget`, except the blob just written. The rows are deleted here
@@ -2006,9 +2102,13 @@ export class ContextPartner {
    */
   release(scope: Scope, write = true): boolean {
     const key = scopeKey(scope);
+    // Take the sessions' delivery knowledge before closing them: `close` drops them from `userSessions`.
+    this.frozenPending.set(key, this.sessionSnapshot(scope));
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     const written = this.deps.cache.release(scope, write);
+    this.frozenPending.delete(key);
+    this.restoredSessions.delete(key);
     this.unverifiable.delete(key);
     // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
     if (written || !write) this.deps.sourceMap.forget(scope);
@@ -3793,6 +3893,10 @@ export class ContextPartner {
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);
+    // Restored or pending session snapshots carry content-derived terms and refs of the user's items: they go
+    // with everything else, or a later persist could write the forgotten content back (SEC_0001).
+    this.restoredSessions.delete(key);
+    this.frozenPending.delete(key);
     // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
     this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
@@ -3878,6 +3982,21 @@ export class ContextPartner {
     let mine = this.userSessions.get(user);
     if (!mine) this.userSessions.set(user, (mine = new Set()));
     mine.add(s);
+    // A user back from a frozen blob (a daemon respawned between turns): its sessions' knowledge of what was
+    // already handed comes with it, so nothing is delivered twice across the restart.
+    const frozen = this.restoredSessions.get(user);
+    if (frozen) {
+      // Only the session the blob continues is seeded: a new conversation's agent never held those items, so
+      // their marks would suppress context it never saw (BUG_0001).
+      for (const f of frozen) {
+        if (f.sessionId !== s.id) continue;
+        s.ledger.seed(f.ledger, f.turn);
+        for (const d of f.delivered) {
+          s.delivered.push({ ...d, refs: new Set(d.refs), terms: [...d.terms], years: [...d.years], turn: 0 });
+        }
+      }
+      if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
+    }
     this.perTenant.set(e.tenantId, (this.perTenant.get(e.tenantId) ?? 0) + 1);
     return s;
   }
@@ -7438,6 +7557,7 @@ export class ContextPartner {
     s.delivered.push({
       sketch,
       refs: idNumbers(`${item.title} ${item.text}`),
+      itemId: item.id,
       turn: s.turn,
       terms: contentTerms(`${item.title} ${item.text.slice(0, DELIVERED_TEXT_CHARS)}`, s.vocab)
         .filter((t) => !/\d/.test(t))

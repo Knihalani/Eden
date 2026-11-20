@@ -4,15 +4,55 @@
  * other Eden/model env is scrubbed.
  */
 import { Console } from "node:console";
-import { timingSafeEqual } from "node:crypto";
-import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+  type WriteStream,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { DEFAULT_MAX_BODY_BYTES, PersistKey, type ServerConfig } from "./config";
 import { keyOf } from "./auth";
 
-const ALLOWED = new Set(["EDEN_LOCAL", "EDEN_LOCAL_TOKEN", "EDEN_SOURCES_FILE", "EDEN_USER_SOURCES_FILE"]);
+const ALLOWED = new Set([
+  "EDEN_LOCAL",
+  "EDEN_LOCAL_TOKEN",
+  "EDEN_LOCAL_DETACHED",
+  "EDEN_LOCAL_LOG",
+  "EDEN_LOCAL_STATE_DIR",
+  "EDEN_SOURCES_FILE",
+  "EDEN_USER_SOURCES_FILE",
+]);
 
-/** Keeps stdout reserved for the owner's readiness protocol, including diagnostic console methods. */
-export function redirectLocalConsole(): void {
-  const stderr = new Console({ stdout: process.stderr, stderr: process.stderr });
+/** The detached daemon's stderr cap: the file is renamed to `.1` past it, once per start (as the client's cap). */
+const LOCAL_LOG_CAP = 1024 * 1024;
+
+/**
+ * Keeps stdout reserved for the owner's readiness protocol, including diagnostic console methods. With
+ * EDEN_LOCAL_LOG set (a detached daemon, whose owner cannot drain its stderr), writes go to that file instead.
+ */
+export function redirectLocalConsole(env = process.env): void {
+  let target: { stdout: WriteStream | NodeJS.WriteStream; stderr: WriteStream | NodeJS.WriteStream } = {
+    stdout: process.stderr,
+    stderr: process.stderr,
+  };
+  const logPath = env.EDEN_LOCAL_LOG;
+  if (logPath) {
+    try {
+      mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
+      if (existsSync(logPath) && statSync(logPath).size > LOCAL_LOG_CAP) renameSync(logPath, `${logPath}.1`);
+      const stream = createWriteStream(logPath, { flags: "a" });
+      target = { stdout: stream, stderr: stream };
+    } catch {
+      // An unwritable log keeps stderr; the daemon runs either way.
+    }
+  }
+  const stderr = new Console(target);
   for (const method of [
     "log",
     "info",
@@ -43,10 +83,51 @@ export function redirectLocalConsole(): void {
           : ArrayBuffer.isView(part)
             ? Buffer.from(part.buffer, part.byteOffset, part.byteLength)
             : Buffer.from(part);
-      process.stderr.write(bytes);
+      target.stderr.write(bytes);
       written += bytes.byteLength;
     }
     return written;
+  };
+}
+
+/**
+ * EDEN_LOCAL_STATE_DIR (local mode only): durable local state — the source map and the encrypted
+ * frozen-user blobs live under the directory, so a shared daemon that is replaced (a sources change,
+ * a reboot) resumes rather than re-reading every user's sources. The persistence key is generated once
+ * into `<dir>/persist.key` (0600, tmp+rename) and never leaves the directory; the frozen-user store is
+ * discarded rather than blocking a start a rotated/corrupt key cannot read (a local daemon has no
+ * operator to re-key it). Unset, local state stays volatile in memory (D1966).
+ */
+function localState(dir: string | undefined): {
+  persist: NonNullable<ServerConfig["persist"]>;
+  sourceMapPath: string;
+} | null {
+  if (!dir?.trim()) return null;
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const keyPath = join(dir, "persist.key");
+  let key: Uint8Array | null = null;
+  try {
+    const raw = readFileSync(keyPath, "utf8").trim();
+    key = raw.length === 64 ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+    if (key.length !== 32) key = null;
+  } catch {
+    key = null;
+  }
+  if (key === null) {
+    key = randomBytes(32);
+    const tmp = `${keyPath}.tmp`;
+    writeFileSync(tmp, `${Buffer.from(key).toString("hex")}\n`, { mode: 0o600 });
+    renameSync(tmp, keyPath);
+  }
+  return {
+    persist: {
+      dir: join(dir, "frozen"),
+      key: new PersistKey(key),
+      maxBytes: 256 * 1_048_576,
+      store: null,
+      discard: true,
+    },
+    sourceMapPath: join(dir, "source-map.db"),
   };
 }
 
@@ -68,6 +149,8 @@ export function localConfig(env = process.env): ServerConfig | null {
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
     throw new Error("EDEN_LOCAL_TOKEN must be 32-256 URL-safe characters");
   }
+  const state = localState(env.EDEN_LOCAL_STATE_DIR);
+  delete env.EDEN_LOCAL_STATE_DIR;
   return {
     keys: new Map([[token, "local"]]),
     dev: false,
@@ -76,8 +159,13 @@ export function localConfig(env = process.env): ServerConfig | null {
     processes: 1,
     child: null,
     gateWorkers: 0,
-    persist: null,
-    sourceMapPath: ":memory:",
+    // EDEN_LOCAL_DETACHED=1: the owner (a shared LocalEden) detaches the server so it outlives every
+    // short-lived hook/CLI process; stdin carries no lifetime meaning and is closed.
+    detached: env.EDEN_LOCAL_DETACHED === "1" ? true : undefined,
+    // EDEN_LOCAL_STATE_DIR: durable local state under it (a shared daemon keeps its source map and frozen
+    // users across a replacement respawn or a reboot) — the local default stays volatile (D1966).
+    persist: state?.persist ?? null,
+    sourceMapPath: state?.sourceMapPath ?? ":memory:",
     queryPlanner: "serve",
     tenantRatePerSec: 200,
     tenantBurst: 400,

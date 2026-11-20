@@ -862,6 +862,13 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
+| D1995 | 2026-11-20 | Adopted: a frozen user keeps its sessions' delivery knowledge — `extra.sessions` carries each live session's ledger snapshot and delivered… | adopted |
+| D1994 | 2026-11-20 | Adopted: `EDEN_LOCAL_STATE_DIR` makes a shared local daemon's state durable — the source map and encrypted frozen users live under it. | adopted |
+| D1993 | 2026-11-20 | Adopted: shared local daemons — `LocalEden` (py and ts) can run one detached `eden-local` per agent home instead of one sidecar per hook… | adopted |
+| D1992 | 2026-11-20 | Adopted: `examples/claude-code`, Eden for Claude Code through its hook system plus an MCP server. | adopted |
+| D1991 | 2026-11-20 | Adopted: `examples/opencode`, Eden as an opencode plugin. | adopted |
+| D1990 | 2026-11-20 | Adopted: `examples/gptme`, Eden as a gptme plugin. | adopted |
+| D1989 | 2026-11-20 | Adopted: `examples/openclaw`, Eden as an OpenClaw plugin. | adopted |
+| D1988 | 2026-11-20 | Adopted: `examples/pi`, Eden as a Pi extension. | adopted |
 | D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
 | D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
-| D1986 | 2026-11-20 | Adopted: `examples/langchain`, Eden as one `createAgent` middleware for LangChain agents. | adopted |

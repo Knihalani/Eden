@@ -8,15 +8,18 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
   appendFileSync,
+  chmodSync,
   existsSync,
   mkdirSync,
   openSync,
   renameSync,
   statSync,
   truncateSync,
+  unlinkSync,
   writeSync,
   closeSync,
   readFileSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -59,6 +62,13 @@ export interface LocalEdenOptions {
   sourcesFile?: string;
   userSourcesFile?: string;
   logPath?: string;
+  /**
+   * For agents whose events each run in their own process (an opencode plugin, a Pi hook): the first
+   * process starts a detached server (EDEN_LOCAL_DETACHED, outliving its spawner), records it at this
+   * path, and every later process attaches to it instead of spawning a fresh Eden — which would lose the
+   * session state (delivered packets, checked parties) the check depends on.
+   */
+  sharePath?: string;
   /** The environment the child filters down from (default `process.env`). */
   env?: Record<string, string | undefined>;
   readyTimeoutMs?: number;
@@ -69,13 +79,16 @@ export interface LocalEdenOptions {
 /** One endpoint per generation; a dead child is restarted lazily on the next `endpoint()` with backoff. */
 export class LocalEden {
   private process: ChildProcess | null = null;
-  private endpointValue: { url: string; token: string; generation: number } | null = null;
-  private generation = 0;
+  private endpointValue: { url: string; token: string; generation: number | string } | null = null;
+  private generation: number | string = 0;
+  private attached = false;
   private closed = false;
   private retryAt = 0;
   private backoff = 1;
   private startedAt = 0;
   private pending: Promise<unknown> | null = null;
+  /** True when `shareLock` gave up because the lock could not be created at all, not because it was held. */
+  private lockFailed = false;
   private readonly warned = new Set<string>();
   private readonly timeout: number;
   private readonly env: Record<string, string | undefined>;
@@ -179,7 +192,10 @@ export class LocalEden {
     const child = this.process;
     this.process = null;
     this.endpointValue = null;
+    this.attached = false;
     if (!child) return;
+    // A shared server outlives this process by design: let it run, just drop our handle.
+    if (this.options.sharePath && child.exitCode === null && child.signalCode === null) return;
     try {
       child.stdin?.end();
       const killer = setTimeout(() => {
@@ -209,27 +225,202 @@ export class LocalEden {
     this.warn(problem);
   }
 
+  /** The configured source files' identity: a server started before they existed/changed is stale. */
+  private sourcesSig(): [string, number | null, number | null][] {
+    const sig: [string, number | null, number | null][] = [];
+    for (const p of [this.options.sourcesFile, this.options.userSourcesFile]) {
+      if (!p) continue;
+      try {
+        const st = statSync(resolve(p), { bigint: true });
+        sig.push([String(p), Number(st.mtimeNs), Number(st.size)]);
+      } catch {
+        sig.push([String(p), null, null]);
+      }
+    }
+    return sig;
+  }
+
+  /**
+   * A live shared server recorded by an earlier process, else null (and the stale file removed).
+   *
+   * A recorded daemon that predates the current source configuration is stopped and replaced, else new
+   * sessions would keep attaching to a server that knows no sources. Its pid is only signalled when it
+   * answered healthz — the file pairs pid with the server, so the pid is still that daemon's (a recycled
+   * dead pid belongs to something else and is left alone).
+   */
+  private async attach(): Promise<{ url: string; token: string; generation: number | string } | null> {
+    const share = this.options.sharePath!;
+    let data: { url?: unknown; token?: unknown; generation?: unknown; pid?: unknown; sources?: unknown };
+    try {
+      data = JSON.parse(readFileSync(share, "utf8"));
+    } catch {
+      return null;
+    }
+    const url = String(data.url ?? "");
+    const token = String(data.token ?? "");
+    const generation = String(data.generation ?? "");
+    if (!url || !token || !generation) return null;
+    const stale = JSON.stringify(data.sources ?? []) !== JSON.stringify(this.sourcesSig());
+    try {
+      // Node's fetch never honors HTTP(S)_PROXY, so loopback cannot be routed through a refusing proxy.
+      const res = await fetch(`${url}/healthz`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (res.status !== 200) throw new Error(`healthz answered ${res.status}`);
+    } catch {
+      try {
+        unlinkSync(share);
+      } catch {
+        // Gone already.
+      }
+      return null;
+    }
+    if (stale) {
+      try {
+        process.kill(Number(data.pid), "SIGTERM");
+      } catch {
+        // Already gone.
+      }
+      try {
+        unlinkSync(share);
+      } catch {
+        // Gone already.
+      }
+      return null;
+    }
+    this.attached = true;
+    this.generation = generation;
+    this.endpointValue = { url, token, generation };
+    return this.endpointValue;
+  }
+
+  /**
+   * Serializes the attach-or-spawn section across owning processes: `<share>.lock` created O_EXCL with the
+   * holder's pid. Without it two first owners both find no record, both spawn, and the loser's daemon is
+   * orphaned — undiscoverable, holding a port (and the state dir's sqlite writes) forever. A stale lock
+   * (dead holder, or unreadable) is removed and retried. Answers false after the spawn timeout, fail-open.
+   */
+  private async shareLock(): Promise<boolean> {
+    const lock = `${this.options.sharePath}.lock`;
+    try {
+      mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
+    } catch {
+      // mkdir raced another owner; a real failure surfaces as an EEXIST-less lock below.
+    }
+    const deadline = Date.now() + this.timeout;
+    while (Date.now() < deadline) {
+      try {
+        writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+        return true;
+      } catch (e) {
+        // Anything but EEXIST is not contention — an unwritable share path (EACCES, EROFS, ENOTDIR) would
+        // otherwise take the stale path and spin its three failing syscalls for the whole spawn timeout,
+        // blocking the event loop. Fail open instead, matching the Python client's `except Exception`.
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
+          this.lockFailed = true;
+          return false;
+        }
+        let stale = true;
+        try {
+          const pid = Number.parseInt(readFileSync(lock, "utf8").trim(), 10);
+          if (pid) {
+            try {
+              process.kill(pid, 0);
+            } catch (e) {
+              // ESRCH is a dead holder; anything else (EPERM, a pid we cannot signal) is a live one.
+              stale = (e as NodeJS.ErrnoException).code === "ESRCH";
+            }
+          }
+        } catch {
+          // An unreadable or half-written lock is stale.
+        }
+        if (stale) {
+          try {
+            unlinkSync(lock);
+          } catch {
+            // Another contender already removed it.
+          }
+          continue;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    return false;
+  }
+
+  /** Releases the share lock; never throws. */
+  private shareUnlock(): void {
+    try {
+      unlinkSync(`${this.options.sharePath}.lock`);
+    } catch {
+      // A contender already reaped it as stale.
+    }
+  }
+
+  /** The share file, atomically (tmp + rename), readable only by its owner. */
+  private writeShare(): void {
+    const share = this.options.sharePath;
+    if (!share || !this.endpointValue || !this.process) return;
+    try {
+      mkdirSync(dirname(share), { recursive: true, mode: 0o700 });
+      const tmp = `${share}.tmp`;
+      writeFileSync(
+        tmp,
+        JSON.stringify({
+          url: this.endpointValue.url,
+          token: this.endpointValue.token,
+          pid: this.process.pid,
+          generation: this.endpointValue.generation,
+          sources: this.sourcesSig(),
+        }),
+      );
+      chmodSync(tmp, 0o600);
+      renameSync(tmp, share);
+    } catch {
+      // A share file that never lands costs a fresh spawn next process — fail open.
+    }
+  }
+
   private async spawnOnce(token: string): Promise<number | null> {
     // A .cmd/.bat shim is a command script, not an executable: on Windows it needs cmd.exe to run it.
     const shim = process.platform === "win32" && /\.(cmd|bat)$/i.test(this.command[0]!);
+    const shared = this.options.sharePath !== undefined;
     let child: ChildProcess;
     try {
+      // A detached server keeps no stderr pipe to drain: it appends to the log itself (EDEN_LOCAL_LOG).
       child = spawn(this.command[0]!, this.command.slice(1), {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: this.childEnv(token),
+        stdio: shared ? ["ignore", "pipe", "ignore"] : ["pipe", "pipe", "pipe"],
+        env: shared
+          ? {
+              ...this.childEnv(token),
+              EDEN_LOCAL_DETACHED: "1",
+              ...(this.options.logPath ? { EDEN_LOCAL_LOG: this.options.logPath } : {}),
+              // The share file's directory is the daemon's durable home (D1994).
+              EDEN_LOCAL_STATE_DIR: dirname(this.options.sharePath!),
+            }
+          : this.childEnv(token),
+        detached: shared,
         ...(shim ? { shell: true } : {}),
       });
     } catch {
       return null; // an unspawnable command is the caller's "child did not become ready"
     }
     this.process = child;
-    this.pipeStderr(child);
+    if (shared) {
+      // The pipe ends when this process exits; nothing writes stdout after READY.
+      child.unref();
+    } else {
+      this.pipeStderr(child);
+    }
     return new Promise<number | null>((resolvePromise) => {
       let settled = false;
       const done = (port: number | null) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        // The detached server outlives us: drop our read end once the line came (or never will).
+        if (shared) child.stdout?.destroy();
         resolvePromise(port);
       };
       const timer = setTimeout(() => done(null), this.timeout);
@@ -253,9 +444,10 @@ export class LocalEden {
 
   /**
    * `(loopback URL, bearer token, generation)` or null; never throws. A live child answers at once; a dead or
-   * missing one is spawned unless the backoff says wait.
+   * missing one is spawned unless the backoff says wait — with `sharePath`, a live recorded daemon is
+   * attached instead, so every process of the agent talks to the same Eden.
    */
-  async endpoint(): Promise<{ url: string; token: string; generation: number } | null> {
+  async endpoint(): Promise<{ url: string; token: string; generation: number | string } | null> {
     if (this.closed) return null;
     // Serialize startups: concurrent callers wait on the one spawn in flight.
     if (this.pending) {
@@ -268,19 +460,44 @@ export class LocalEden {
     if (alive && this.endpointValue) return this.endpointValue;
     // A child that died after answering is a failure like any other: it earns backoff before the next spawn.
     if (this.process && !alive) this.failure("child exited");
-    if (Date.now() < this.retryAt) return null;
+    if (this.attached) return this.endpointValue;
     const token = randomBytes(32).toString("base64url");
+    const shared = this.options.sharePath !== undefined;
     this.pending = (async () => {
-      this.startedAt = 0;
-      const port = await this.spawnOnce(token);
-      if (port === null || this.process?.exitCode !== null) {
-        this.process?.kill("SIGKILL");
-        this.failure("child did not become ready");
+      // Cross-process attach-or-spawn is one locked section, or two first owners race and orphan a daemon.
+      if (shared && !(await this.shareLock())) {
+        this.failure(
+          this.lockFailed
+            ? "the shared daemon lock could not be created (check the share directory is writable)"
+            : "the shared daemon lock was held through the spawn timeout",
+        );
         return;
       }
-      this.generation += 1;
-      this.startedAt = Date.now();
-      this.endpointValue = { url: `http://127.0.0.1:${port}`, token, generation: this.generation };
+      try {
+        if (shared) {
+          const attached = await this.attach().catch(() => null);
+          if (attached) return; // a racing owner's record, or a live daemon
+        }
+        // The spawn backoff gates spawning only — a fresh record another owner wrote is still attached above.
+        if (Date.now() < this.retryAt) return;
+        this.startedAt = 0;
+        const port = await this.spawnOnce(token);
+        if (port === null || this.process?.exitCode !== null) {
+          this.process?.kill("SIGKILL");
+          this.failure("child did not become ready");
+          return;
+        }
+        const count = (Number.parseInt(String(this.generation), 10) || 0) + 1;
+        this.generation =
+          // A shared daemon's generation must be unique across processes' restarts, or a long-lived
+          // attacher's client cache would keep a replaced daemon's endpoint.
+          shared ? `${count}:${randomBytes(8).toString("hex")}` : count;
+        this.startedAt = Date.now();
+        this.endpointValue = { url: `http://127.0.0.1:${port}`, token, generation: this.generation };
+        this.writeShare();
+      } finally {
+        if (shared) this.shareUnlock();
+      }
     })();
     await this.pending;
     this.pending = null;
@@ -288,12 +505,17 @@ export class LocalEden {
   }
 
   /** A failed connection prompts a poll, not termination of a live child. */
-  failed(generation: number): void {
+  failed(generation: number | string): void {
+    // An attached daemon has no process to poll: the caller's "this generation's calls failed" is the signal
+    // — drop the cached endpoint so the next endpoint() re-probes (or replaces) the recorded server.
     const dead =
-      this.process && (this.process.exitCode !== null || this.process.signalCode !== null || this.process.killed);
+      this.attached ||
+      (this.process !== null &&
+        (this.process.exitCode !== null || this.process.signalCode !== null || this.process.killed));
     if (generation === this.generation && dead) {
       this.endpointValue = null;
     }
+    if (this.options.sharePath) this.attached = false; // the next endpoint() call re-probes the recorded server
   }
 
   close(): void {
