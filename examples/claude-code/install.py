@@ -155,8 +155,11 @@ def main():
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     binary = ensure_binary(root, work)
-    shutil.copy2(binary, dest / "bin" / "eden-local")
-    (dest / "bin" / "eden-local").chmod(0o755)
+    # Replace via rename: copy2 over a still-running detached server fails with ETXTBSY on Linux.
+    staged = work / f"eden-local-staged-{os.getpid()}"
+    shutil.copy2(binary, staged)
+    staged.chmod(0o755)
+    os.replace(staged, dest / "bin" / "eden-local")
     merge_settings(home, dest)
     print(f"Eden installed to {dest}; hooks registered in {home}/settings.json")
     print(f"Next: put sources in {home}/eden/sources.json (see README.md) and start a new Claude Code session.")

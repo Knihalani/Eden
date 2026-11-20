@@ -6,6 +6,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import subprocess
 import sys
 import threading
@@ -219,16 +220,45 @@ class LocalEden:
         self._backoff = min(60.0, self._backoff * 2)
         self._warn(problem)
 
+    def _sources_sig(self):
+        """The configured source files' identity: a server started before they existed/changed is stale."""
+        sig = []
+        for p in (self._sources, self._users):
+            if not p:
+                continue
+            try:
+                st = Path(p).expanduser().resolve().stat()
+                sig.append([str(p), st.st_mtime_ns, st.st_size])
+            except Exception:
+                sig.append([str(p), None, None])
+        return sig
+
     def _attach(self):
-        """A live shared server recorded by an earlier process, else None (and the stale file removed)."""
+        """A live shared server recorded by an earlier process, else None (and the stale file removed).
+
+        A recorded daemon that predates the current source configuration is stopped and replaced,
+        else new sessions would keep attaching to a server that knows no sources."""
         try:
             data = json.loads(self._share.read_text())
-            url, token, generation = str(data["url"]), str(data["token"]), int(data["generation"])
+            url, token, generation = str(data["url"]), str(data["token"]), str(data["generation"])
+            if data.get("sources", []) != self._sources_sig():
+                raise ValueError("source configuration changed")
+            # Bypass proxies: some environments route loopback through a refusing HTTP proxy.
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             req = urllib.request.Request(f"{url}/healthz", headers={"Authorization": f"Bearer {token}"})
-            with urllib.request.urlopen(req, timeout=2) as resp:
+            with opener.open(req, timeout=2) as resp:
                 if resp.status != 200:
                     raise ValueError(f"healthz answered {resp.status}")
         except Exception:
+            try:
+                # Stop the stale daemon only when /proc proves it is our binary (a recycled pid of
+                # another process must never be signalled). On Windows it is left: nothing attaches.
+                pid = int(data.get("pid")) if isinstance(data, dict) else None
+                cmdline = Path(f"/proc/{pid}/cmdline").read_bytes() if pid else b""
+                if pid and str(self._binary).encode() in cmdline:
+                    os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
             try:
                 self._share.unlink(missing_ok=True)
             except Exception:
@@ -243,7 +273,8 @@ class LocalEden:
             self._share.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             tmp = self._share.with_name(self._share.name + ".tmp")
             tmp.write_text(json.dumps({"url": self._endpoint[0], "token": self._endpoint[1],
-                                       "pid": self._process.pid, "generation": self._endpoint[2]}))
+                                       "pid": self._process.pid, "generation": self._endpoint[2],
+                                       "sources": self._sources_sig()}))
             os.chmod(tmp, 0o600)
             tmp.replace(self._share)
         except Exception:
@@ -337,7 +368,12 @@ class LocalEden:
                     return None
                 self._generation += 1
                 self._started = time.monotonic()
-                self._endpoint = (f"http://127.0.0.1:{result[0]}", token, self._generation)
+                port = result[0]
+                # A shared daemon's generation must be unique across processes' restarts, or a
+                # long-lived attacher's client cache would keep a replaced daemon's endpoint.
+                generation = (f"{self._generation}:{secrets.token_hex(8)}" if self._share is not None
+                              else self._generation)
+                self._endpoint = (f"http://127.0.0.1:{port}", token, generation)
                 if self._share is not None:
                     self._write_share()
                 return self._endpoint

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -58,14 +59,25 @@ class EdenClaude(EdenHermes):
     def _save(self, session_id: Any, state: Dict[str, Any]) -> None:
         try:
             path = self._state_path(session_id)
-            path.parent.mkdir(parents=True, exist_ok=True)
+            # The stash carries retrieved source text: keep the directory and file owner-only.
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            try:
+                os.chmod(path.parent, 0o700)
+            except OSError:
+                pass
             if session_id is not None:
                 state["session_id"] = str(session_id)  # the MCP server attributes its asks to it
             # Bounded: keys roll over so the file stays small across long sessions.
             state["reported"] = state.get("reported", [])[-400:]
             state["copies"] = dict(list(state.get("copies", {}).items())[-400:])
             state["stashed"] = state.get("stashed", [])[-40:]
-            path.write_text(json.dumps(state))
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(json.dumps(state))
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
         except Exception:  # noqa: BLE001
             pass
 
