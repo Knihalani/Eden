@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SourceMap } from "@eden/graph";
 import { Budget } from "@eden/llm";
-import type { AgentEvent, Scope } from "@eden/protocol";
+import { itemId, type AgentEvent, type ContextItem, type Scope } from "@eden/protocol";
 import { StaticSource, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
@@ -214,5 +214,69 @@ describe("session knowledge carried with a frozen user", () => {
     // Any event on the scope thaws the user; the injection's session is gone — only `recorded` can answer.
     await b.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
     expect(b.feedback({ ...user, sessionId: "a", injectionId, used: true, how: "explicit" })).toBe(true);
+  });
+
+  test("a restored user keeps its held unverifiable re-reads (D2003)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    // An MCP-like source whose null fetch proves nothing (`fetchReportsGone` false): the re-read's
+    // "unverifiable" stands until the next signal.
+    const docs = [{ ref: "m1", title: "Quarterly plan", text: "quarterly plan draft for review" }];
+    const mail = new (class extends StaticSource {
+      override readonly fetchReportsGone = false;
+      readonly notifies = true;
+      fetches = 0;
+      override async fetch(): Promise<null> {
+        this.fetches++;
+        return null;
+      }
+      gone = false; // Upstream delete: the poll's page no longer lists m1, so its held copy stays in doubt.
+      async list(): Promise<{ items: ContextItem[]; next: null }> {
+        const items = this.gone ? [] : docs.map((d) => ({ ...d, id: itemId("mail", d.ref), sourceId: "mail" }));
+        return { items, next: null };
+      }
+    })("mail", "Mail", docs);
+    const make = () => {
+      const cache = new ItemCache();
+      cache.persist(new EncryptedFrozenDisk({ dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 7 * 24 * HOUR }));
+      return new ContextPartner({
+        sources: async () => [mail],
+        sourceMap: new SourceMap(),
+        cache,
+        budget: new Budget(),
+        model: null,
+        config: {
+          ...CORE_CONFIG,
+          verifyDelivery: true,
+          sync: true,
+          syncPush: true,
+          syncOnDemand: true,
+          syncPageSize: 5,
+          syncPollPageSize: 5,
+          syncCallsPerMin: 600,
+        },
+      });
+    };
+    const held = (p: ContextPartner) =>
+      (p as unknown as { unverifiable: Map<string, Map<string, { mark: number }>> }).unverifiable;
+    const a = make();
+    // Warm the user's sync state so `sourceChanged` doubts the held copy (an unsynced source ignores it).
+    a.sync!.track(user);
+    for (let i = 0; i < 20 && !a.sync!.warm(user); i++) await a.sync!.tick();
+    // First ask syncs m1 into the user's cache; the signal doubts that copy, so the next delivery
+    // re-reads it — a null that proves nothing, held "unverifiable" (D211).
+    mail.gone = true;
+    expect(a.sourceChanged(user, "mail")).toBe(true);
+    await a.ask({ ...user, sessionId: "s1", question: "quarterly plan draft" });
+    expect(mail.fetches).toBe(1);
+    expect(held(a).get("t/u1")?.size ?? 0).toBe(1);
+    const mark = held(a).get("t/u1")!.values().next().value!.mark;
+    expect(a.release(user)).toBe(true);
+
+    const b = make();
+    await b.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
+    // The held re-read rode the blob: same mark, no new fetch on the next delivery's check.
+    expect(held(b).get("t/u1")?.values().next().value?.mark).toBe(mark);
+    expect(mail.fetches).toBe(1);
   });
 });
