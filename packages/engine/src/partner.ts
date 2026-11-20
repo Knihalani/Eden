@@ -1259,7 +1259,7 @@ export class ContextPartner {
           if (carried?.economy && isFrozenEconomy(carried.economy)) this.economy.restore(scope, carried.economy);
           if (carried?.yields && isFrozenYields(carried.yields)) this.yields?.restore(scope, carried.yields);
           if (carried?.unverifiable && isFrozenUnverifiable(carried.unverifiable))
-            this.restoreUnverifiable(scopeKey(scope), carried.unverifiable);
+            this.restoreUnverifiable(scope, carried.unverifiable);
 
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
@@ -4368,8 +4368,16 @@ export class ContextPartner {
   }
 
   /** Seeds `unverifiable` from a restored blob's rows, under the same caps the live path enforces. */
-  private restoreUnverifiable(key: string, rows: FrozenUnverifiable): void {
-    const mine = new Map<string, { mark: number; at: number }>(rows.slice(-MAX_UNVERIFIABLE));
+  private restoreUnverifiable(scope: Scope, rows: FrozenUnverifiable): void {
+    const key = scopeKey(scope);
+    const mine = new Map<string, { mark: number; at: number }>();
+    for (const [id, r] of rows.slice(-MAX_UNVERIFIABLE)) {
+      // `mark` is this process's signal counter: the dead process's value compares against nothing here —
+      // one above the new counter would hold a copy past real changes, one below re-reads needlessly.
+      // The hold's meaning is "a null said nothing as of the copy's mark": reset it to the copy's mark
+      // now, so a signal landed since (noticedMark is newer) doubts it, and the next one ends the hold.
+      mine.set(id, { mark: this.deps.cache.readMark(scope, id) ?? this.sync?.mark() ?? 0, at: r.at });
+    }
     this.unverifiable.delete(key); // Re-insert: least recently noted user first.
     this.unverifiable.set(key, mine);
     while (this.unverifiable.size > MAX_UNVERIFIABLE_USERS)

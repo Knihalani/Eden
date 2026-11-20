@@ -269,14 +269,19 @@ describe("session knowledge carried with a frozen user", () => {
     expect(a.sourceChanged(user, "mail")).toBe(true);
     await a.ask({ ...user, sessionId: "s1", question: "quarterly plan draft" });
     expect(mail.fetches).toBe(1);
-    expect(held(a).get("t/u1")?.size ?? 0).toBe(1);
-    const mark = held(a).get("t/u1")!.values().next().value!.mark;
+    const m1 = itemId("mail", "m1");
+    expect(held(a).get("t/u1")?.has(m1)).toBe(true);
     expect(a.release(user)).toBe(true);
 
     const b = make();
     await b.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
-    // The held re-read rode the blob: same mark, no new fetch on the next delivery's check.
-    expect(held(b).get("t/u1")?.values().next().value?.mark).toBe(mark);
-    expect(mail.fetches).toBe(1);
+    // The held re-read rode the blob, and its mark was re-read as the copy's mark in this process —
+    // the saved counter compares against nothing here (the dead process's mark space).
+    const row = held(b).get("t/u1")?.get(m1);
+    expect(row).toBeDefined();
+    const copyMark = (
+      b as unknown as { deps: { cache: { readMark(s: Scope, id: string): number | undefined } } }
+    ).deps.cache.readMark(user, m1);
+    expect(row!.mark).toBe(copyMark);
   });
 });
