@@ -2416,15 +2416,25 @@ export class ContextPartner {
   seen(scope: Scope): void {
     // A sighting before the user's thaw tracks after it settles: `ready` resolves once the owner's restore ran,
     // so `track` meets the sync state the blob restored — never a fresh empty one whose existing record the
-    // restore would then skip (and a restored user, already warm, is not kicked again).
+    // restore would then skip (and a restored user, already warm, is not kicked again). The deferred call goes
+    // to `seenNow`, not `seen`: re-entering `ready` would fetch the shared store a second time on a miss or an
+    // outage. A whole-user `forget` that lands while the thaw waits is not undone by this sighting.
     const thawing = this.deps.cache.ready(scope);
     if (thawing !== null) {
+      const key = scopeKey(scope);
       void thawing.then(
-        () => this.seen(scope),
+        () => {
+          if (!this.forgotten.has(key)) this.seenNow(scope);
+        },
         () => {},
       );
       return;
     }
+    this.seenNow(scope);
+  }
+
+  private seenNow(scope: Scope): void {
+    this.forgotten.delete(scopeKey(scope));
     const fresh = this.sync?.track(scope, this.now());
     if (fresh && this.config.syncKick) this.sync!.kick(scope);
   }
@@ -2442,7 +2452,6 @@ export class ContextPartner {
     const t0 = performance.now();
     const thawing = this.deps.cache.ready(event); // D325, as in `observe`.
     if (thawing) await thawing;
-    this.seen(event); // A party check is a sighting too: the user's agent is live (D2005).
     const proceed = (reason: string): ActionCheck => ({
       verdict: "proceed",
       finding: null,
@@ -2450,6 +2459,7 @@ export class ContextPartner {
       latencyMs: Math.round(performance.now() - t0),
     });
     if (!this.config.partyCheck || event.kind !== "tool_call") return proceed("off");
+    this.seen(event); // A live party check is a sighting too: the user's agent is working (D2005).
     // A session Eden handed no identifier has nothing to hold, and none is opened for a call in a session Eden never
     // saw.
     if (!this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
@@ -4166,8 +4176,15 @@ export class ContextPartner {
    * rows, and the user's live sessions (their windows and queued injections hold content). In-flight lookups are
    * aborted, and their results discarded.
    */
+  /** Users a whole-user `forget` dropped, so a sighting deferred behind their thaw does not track them again. */
+  private readonly forgotten = new Set<string>();
+
   forget(scope: Scope, sourceId?: string): void {
     const key = scopeKey(scope);
+    if (sourceId === undefined) {
+      this.forgotten.add(key);
+      if (this.forgotten.size > 4_096) this.forgotten.clear();
+    }
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.recorded.get(scope.tenantId)?.delete(key);
     this.deps.cache.forget(scope, sourceId);

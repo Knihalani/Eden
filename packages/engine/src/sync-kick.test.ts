@@ -15,6 +15,7 @@ import { ItemCache } from "./cache";
 import type { EngineConfig } from "./config";
 import { CORE_CONFIG } from "./parts";
 import { ContextPartner } from "./partner";
+import type { FrozenDisk } from "./persist";
 import { SyncManager, type SyncOptions } from "./sync";
 
 const T0 = Date.UTC(2026, 10, 10, 9);
@@ -696,5 +697,73 @@ describe("syncKick (D751)", () => {
     expect(lists("u1")).toBe(6);
     expect(lists("u2")).toBe(0);
     expect(sync.warm(scopeOf("u2"))).toBe(false);
+  });
+});
+
+/** A shared-store stub: `fetch` reports the user's blob checked, and waits on `gate` when set. */
+function stubDisk(): FrozenDisk & { fetches: number; gate: Promise<void> | null } {
+  const disk = {
+    fetches: 0,
+    gate: null as Promise<void> | null,
+    has: () => false,
+    read: () => null,
+    write: () => true,
+    delete: () => {},
+    sweep: () => 0,
+    thawed: () => {},
+    fetch: (_scope: Scope): Promise<void> | null => {
+      disk.fetches++;
+      return disk.gate ?? Promise.resolve();
+    },
+  };
+  return disk;
+}
+
+describe("sighting edge cases (D2005)", () => {
+  test("a whole-user forget landing mid-thaw is not undone by the deferred sighting", async () => {
+    const { partner, sync, cache, lists, settle, resolved } = build({ syncKick: true });
+    const disk = stubDisk();
+    let open = () => {};
+    disk.gate = new Promise<void>((r) => (open = r));
+    cache.persist(disk);
+    partner.seen(U1); // The sighting defers: the user's fetch is still waiting on the store.
+    partner.forget(U1); // The forget lands while it does.
+    open();
+    await Bun.sleep(0);
+    await settle();
+    expect(lists("u1")).toBe(0);
+    expect(resolved()).toBe(0);
+    expect(sync.kicked(U1)).toBeNull();
+  });
+
+  test("a cold sighting on a store that keeps promising kicks, fetching only boundedly", async () => {
+    const { partner, cache, lists, settle } = build({ syncKick: true });
+    // The store's fetch always returns a promise (an outage's retry, or a disk without `absent`): a sighting that
+    // re-entered `ready` on settling would fetch forever — the deferred call runs `seenNow`, not `seen`.
+    const disk = stubDisk();
+    cache.persist(disk);
+    partner.seen(U1);
+    await Bun.sleep(0); // The fetch resolves: the deferred track runs, without asking the store again.
+    await settle();
+    // One fetch for the sighting's `ready`, one for the kicked step's own thaw check — then the backfill runs.
+    expect(disk.fetches).toBe(2);
+    expect(lists("u1")).toBe(6);
+  });
+
+  test("a party check with the check off is no sighting: nothing syncs", async () => {
+    const { partner, lists, resolved, settle } = build({ syncKick: true, partyCheck: false });
+    const check = await partner.checkAction({
+      tenantId: "t1",
+      userId: "u1",
+      sessionId: "s1",
+      at: T0,
+      kind: "tool_call",
+      tool: "gmail.send",
+      input: { body: "hi" },
+    } as AgentEvent);
+    await settle();
+    expect(check.verdict).toBe("proceed");
+    expect(lists("u1")).toBe(0);
+    expect(resolved()).toBe(0);
   });
 });
