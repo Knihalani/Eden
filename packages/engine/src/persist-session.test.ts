@@ -216,26 +216,61 @@ describe("session knowledge carried with a frozen user", () => {
     expect(b.feedback({ ...user, sessionId: "a", injectionId, used: true, how: "explicit" })).toBe(true);
   });
 
+  test("a second process's save merges the blob the first wrote (D2004)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    // Two live partners on one persist dir, both holding the user: a failover both machines served.
+    const a = partner(dir);
+    const b = partner(dir);
+    await b.observe(ev({ kind: "user_message", sessionId: "b", text: "hi" }), { waitMs: 0 });
+    // a learns a verdict and releases; its blob holds idA.
+    const first = await a.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), {
+      waitMs: 2_000,
+    });
+    const idA = first.injection!.id;
+    await a.observe(ev({ kind: "session_end" }));
+    expect(a.release(user)).toBe(true);
+    // b — live since before a's release — learns a second verdict and releases. Without the merge its
+    // save replaces a's blob and idA's verdict is lost.
+    const second = await b.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), {
+      waitMs: 2_000,
+    });
+    const idB = second.injection!.id;
+    await b.observe(ev({ kind: "session_end" }));
+    expect(b.release(user)).toBe(true);
+    // c thaws the survivor: both verdicts answer feedback.
+    const c = partner(dir);
+    await c.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
+    expect(c.feedback({ ...user, sessionId: "a", injectionId: idA, used: true, how: "explicit" })).toBe(true);
+    expect(c.feedback({ ...user, sessionId: "b", injectionId: idB, used: true, how: "explicit" })).toBe(true);
+  });
+
   test("a restored user keeps its held unverifiable re-reads (D2003)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
     dirs.push(dir);
     // An MCP-like source whose null fetch proves nothing (`fetchReportsGone` false): the re-read's
     // "unverifiable" stands until the next signal.
     const docs = [{ ref: "m1", title: "Quarterly plan", text: "quarterly plan draft for review" }];
-    const mail = new (class extends StaticSource {
-      override readonly fetchReportsGone = false;
+    const mail = new (class implements Source {
+      readonly id = "mail";
+      readonly kind = "test";
+      readonly description = "Mail";
+      readonly fetchReportsGone = false;
       readonly notifies = true;
       fetches = 0;
-      override async fetch(): Promise<null> {
-        this.fetches++;
-        return null;
-      }
       gone = false; // Upstream delete: the poll's page no longer lists m1, so its held copy stays in doubt.
+      async search(): Promise<ContextItem[]> {
+        return [];
+      }
       async list(): Promise<{ items: ContextItem[]; next: null }> {
         const items = this.gone ? [] : docs.map((d) => ({ ...d, id: itemId("mail", d.ref), sourceId: "mail" }));
         return { items, next: null };
       }
-    })("mail", "Mail", docs);
+      async fetch(): Promise<null> {
+        this.fetches++;
+        return null;
+      }
+    })();
     const make = () => {
       const cache = new ItemCache();
       cache.persist(new EncryptedFrozenDisk({ dir, key: KEY, maxBytes: 64 << 20, maxAgeMs: 7 * 24 * HOUR }));
@@ -282,6 +317,7 @@ describe("session knowledge carried with a frozen user", () => {
     const copyMark = (
       b as unknown as { deps: { cache: { readMark(s: Scope, id: string): number | undefined } } }
     ).deps.cache.readMark(user, m1);
-    expect(row!.mark).toBe(copyMark);
+    expect(copyMark).toBeDefined();
+    expect(row!.mark).toBe(copyMark!);
   });
 });

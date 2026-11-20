@@ -933,7 +933,12 @@ export class ItemCache {
    * blob, and what to do once a user written by an earlier process is thawed here.
    */
   persistHooks: {
-    save(scope: Scope): unknown;
+    /**
+     * The user's state to save beside the blob. `prior` is the `extra` the user's file on disk already
+     * carries, when one is there: a shared store (D992) may hold a blob another process wrote while this
+     * one served the user live, and replacing it would drop its learning — the owner merges it in.
+     */
+    save(scope: Scope, prior: unknown): unknown;
     /** May return a promise: a `ready` that read the user back resolves only once it settles. */
     restored(scope: Scope, items: ContextItem[], extra: unknown): Promise<unknown> | void;
   } | null = null;
@@ -1079,7 +1084,10 @@ export class ItemCache {
     if (disk === null) return false;
     let extra: unknown;
     try {
-      extra = this.persistHooks?.save(f.scope);
+      const now = this.clock();
+      // `read` is index-gated; `peek` sees a file another process wrote after this store opened (D2004).
+      const prior = (disk.read(f.scope, now) ?? disk.peek?.(f.scope, now))?.extra;
+      extra = this.persistHooks?.save(f.scope, prior);
     } catch {
       extra = undefined;
     }

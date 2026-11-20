@@ -504,3 +504,82 @@ export function isFrozenEconomy(x: unknown): x is FrozenEconomy {
     f.forms.every((r) => isRow(r) && typeof (r[1] as { any: number }).any === "number")
   );
 }
+
+/**
+ * Unions two blobs' economies — a shared store can hold a blob another process wrote while this one served
+ * the user live (D2004); replacing it would drop the other machine's learning. Counters (`n`, `changed`,
+ * `exposure`, `at`) take the larger value: they only grow. `prints`/`ids` are the last answer's snapshot —
+ * the newer `at` row supplies them whole: a union would resurrect ids the newer answer shrank away and make
+ * the next identical answer look changed. `live` wins ties — it is this process's newest view.
+ */
+export function mergeFrozenEconomy(prior: FrozenEconomy | null, live: FrozenEconomy | null): FrozenEconomy | null {
+  if (!prior) return live;
+  if (!live) return prior;
+  const asked = (
+    a: [string, FrozenEconomyAsked][],
+    b: [string, FrozenEconomyAsked][],
+    cap: number,
+  ): [string, FrozenEconomyAsked][] => {
+    const out = new Map<string, FrozenEconomyAsked>(a);
+    for (const [k, q] of b) {
+      const old = out.get(k);
+      if (!old) {
+        out.set(k, q);
+        continue;
+      }
+      const newer = q.at >= old.at ? q : old;
+      out.set(k, {
+        prints: newer.prints,
+        ids: newer.ids,
+        at: newer.at,
+        n: Math.max(q.n, old.n),
+        changed: Math.max(q.changed, old.changed),
+        exposure: Math.max(q.exposure, old.exposure),
+      });
+    }
+    return [...out].slice(-cap);
+  };
+  const scored = <T extends { n: number }>(a: [string, T][], b: [string, T][], cap: number) => {
+    const out = new Map<string, T>(a);
+    for (const [k, v] of b) {
+      const old = out.get(k);
+      if (!old || v.n >= old.n) out.set(k, v);
+    }
+    return [...out].slice(-cap);
+  };
+  return {
+    n: Math.max(prior.n, live.n),
+    changed: Math.max(prior.changed, live.changed),
+    exposure: Math.max(prior.exposure, live.exposure),
+    asked: asked(prior.asked, live.asked, FROZEN_ASKED),
+    side: asked(prior.side, live.side, FROZEN_SIDE),
+    arms: scored(prior.arms, live.arms, MAX_ARMS),
+    kinds: scored(
+      prior.kinds.map(
+        ([k, v]) => [k, { a: v.a, b: v.b, n: v.a + v.b }] as [string, { a: number; b: number; n: number }],
+      ),
+      live.kinds.map(
+        ([k, v]) => [k, { a: v.a, b: v.b, n: v.a + v.b }] as [string, { a: number; b: number; n: number }],
+      ),
+      MAX_ARMS,
+    ).map(([k, v]) => [k as ProbeKind, { a: v.a, b: v.b }]),
+    finds: scored(
+      prior.finds.map(
+        ([k, v]) =>
+          [k, { ...v, n: v.arm ? 1 : 0 }] as [string, { arm: string; kind: ProbeKind; open: boolean; n: number }],
+      ),
+      live.finds.map(
+        ([k, v]) => [k, { ...v, n: 1 }] as [string, { arm: string; kind: ProbeKind; open: boolean; n: number }],
+      ),
+      FROZEN_FINDS,
+    ).map(([k, v]) => [k, { arm: v.arm, kind: v.kind, open: v.open }]),
+    forms: (() => {
+      const out = new Map<string, { any: number; all: number }>(prior.forms);
+      for (const [k, v] of live.forms) {
+        const old = out.get(k);
+        out.set(k, { any: Math.max(old?.any ?? 0, v.any), all: Math.max(old?.all ?? 0, v.all) });
+      }
+      return [...out];
+    })(),
+  };
+}
