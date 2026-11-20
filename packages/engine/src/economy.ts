@@ -373,4 +373,134 @@ export class ProbeEconomy {
   get userCount(): number {
     return this.users.size;
   }
+
+  /**
+   * What the user learned, JSON-shaped for the frozen blob (D2001): a shared local daemon respawning
+   * between turns would otherwise drop every rate and arm the warmups made the user pay for again.
+   * The copy is capped smaller than the live maps — the blob is zstd, not free — newest entries first
+   * in Map order is the live order (least recently used first), so the tail holds the freshest.
+   */
+  snapshot(scope: Scope): FrozenEconomy | null {
+    // Reads the user without `user()`: a snapshot is no activity, and the LRU promotion it does would
+    // hold an idle user (whose freeze triggers this) ahead of ones actually used.
+    const u = this.users.get(scopeKey(scope));
+    if (!u) return null;
+    const asked = (map: Map<string, Asked>, cap: number): [string, FrozenEconomyAsked][] =>
+      [...map]
+        .slice(-cap)
+        .map(([k, q]) => [
+          k,
+          { prints: [...q.prints], ids: q.ids, at: q.at, n: q.n, changed: q.changed, exposure: q.exposure },
+        ]);
+    return {
+      n: u.n,
+      changed: u.changed,
+      exposure: u.exposure,
+      asked: asked(u.asked, FROZEN_ASKED),
+      side: asked(u.side, FROZEN_SIDE),
+      arms: [...u.arms].slice(-MAX_ARMS).map(([k, a]) => [k, { a: a.a, b: a.b, n: a.n }]),
+      kinds: [...u.kinds].map(([k, v]) => [k, { a: v.a, b: v.b }]),
+      finds: [...u.finds].slice(-FROZEN_FINDS).map(([id, f]) => [id, { arm: f.arm, kind: f.kind, open: f.open }]),
+      forms: [...u.forms].map(([s, f]) => [s, { any: f.any, all: f.all }]),
+    };
+  }
+
+  /** Re-seeds what `snapshot` saved — the blob is the newer truth, so its rows replace same-key live ones. */
+  restore(scope: Scope, f: FrozenEconomy): void {
+    if (!isFrozenEconomy(f)) return;
+    const u = this.user(scope, true);
+    u.n = f.n;
+    u.changed = f.changed;
+    u.exposure = f.exposure;
+    const asked = (map: Map<string, Asked>, rows: [string, FrozenEconomyAsked][], cap: number) => {
+      for (const [k, q] of rows.slice(-cap)) {
+        map.delete(k);
+        map.set(k, {
+          prints: new Set(q.prints),
+          ids: q.ids,
+          at: q.at,
+          n: q.n,
+          changed: q.changed,
+          exposure: q.exposure,
+        });
+      }
+    };
+    asked(u.asked, f.asked, MAX_QUERIES);
+    asked(u.side, f.side, MAX_SIDE_QUERIES);
+    for (const [k, a] of f.arms.slice(-MAX_ARMS)) {
+      u.arms.delete(k);
+      u.arms.set(k, a);
+    }
+    for (const [k, v] of f.kinds) u.kinds.set(k, v);
+    for (const [id, find] of f.finds.slice(-MAX_FINDS)) {
+      u.finds.delete(id);
+      u.finds.set(id, find);
+    }
+    for (const [s, form] of f.forms.slice(-MAX_FORMS)) u.forms.set(s, form);
+  }
+}
+
+/** Per-user economy rows the frozen blob carries: smaller caps than live — the freshest entries. */
+const FROZEN_ASKED = 128;
+const FROZEN_SIDE = 64;
+const FROZEN_FINDS = 256;
+
+interface FrozenEconomyAsked {
+  prints: number[];
+  ids: string[];
+  at: number;
+  n: number;
+  changed: number;
+  exposure: number;
+}
+
+/** A `UserEconomy` as the persist layer stores it (D2001). */
+export interface FrozenEconomy {
+  n: number;
+  changed: number;
+  exposure: number;
+  asked: [string, FrozenEconomyAsked][];
+  side: [string, FrozenEconomyAsked][];
+  arms: [string, { a: number; b: number; n: number }][];
+  kinds: [ProbeKind, { a: number; b: number }][];
+  finds: [string, { arm: string; kind: ProbeKind; open: boolean }][];
+  forms: [string, { any: number; all: number }][];
+}
+
+const isAsked = (q: unknown): q is FrozenEconomyAsked =>
+  !!q &&
+  typeof q === "object" &&
+  Array.isArray((q as FrozenEconomyAsked).prints) &&
+  Array.isArray((q as FrozenEconomyAsked).ids) &&
+  typeof (q as FrozenEconomyAsked).at === "number" &&
+  typeof (q as FrozenEconomyAsked).n === "number" &&
+  typeof (q as FrozenEconomyAsked).changed === "number" &&
+  typeof (q as FrozenEconomyAsked).exposure === "number";
+
+const isRow = (x: unknown): x is [string, unknown] => Array.isArray(x) && x.length === 2 && typeof x[0] === "string";
+
+/** Shape-checks a blob's `economy` — fail-open like `rows` and `sessions`: bad data is dropped, never thrown. */
+export function isFrozenEconomy(x: unknown): x is FrozenEconomy {
+  if (!x || typeof x !== "object") return false;
+  const f = x as FrozenEconomy;
+  const askedRows = (rows: unknown) => Array.isArray(rows) && rows.every((r) => isRow(r) && isAsked(r[1]));
+  const num2 = (o: unknown) =>
+    !!o && typeof (o as { a: number }).a === "number" && typeof (o as { b: number }).b === "number";
+  return (
+    typeof f.n === "number" &&
+    typeof f.changed === "number" &&
+    typeof f.exposure === "number" &&
+    askedRows(f.asked) &&
+    askedRows(f.side) &&
+    Array.isArray(f.arms) &&
+    f.arms.every((r) => isRow(r) && num2(r[1]) && typeof (r[1] as { n: number }).n === "number") &&
+    Array.isArray(f.kinds) &&
+    f.kinds.every((r) => isRow(r) && num2(r[1])) &&
+    Array.isArray(f.finds) &&
+    f.finds.every(
+      (r) => isRow(r) && !!r[1] && typeof (r[1] as Find).arm === "string" && typeof (r[1] as Find).open === "boolean",
+    ) &&
+    Array.isArray(f.forms) &&
+    f.forms.every((r) => isRow(r) && typeof (r[1] as { any: number }).any === "number")
+  );
 }

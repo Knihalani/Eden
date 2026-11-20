@@ -145,6 +145,32 @@ describe("session knowledge carried with a frozen user", () => {
     expect(records).toHaveLength(1);
   });
 
+  test("a restored user keeps the probe economy it learned (D2001)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
+    dirs.push(dir);
+    const a = partner(dir);
+    await a.observe(ev({ kind: "user_message", text: "What about the Globex renewal?" }), { waitMs: 2_000 });
+    const econ = (p: ContextPartner) => (p as unknown as { economy: import("./economy").ProbeEconomy }).economy;
+    const items = [{ id: "deal-9", sourceId: "crm", ref: "deal-9", title: "Globex renewal", text: "the renewal" }];
+    // Six re-asks past FRESH_WARMUP: the answer's change chance is a learned number under the never-asked 1.
+    for (let i = 0; i < 7; i++) {
+      econ(a).answered(user, "crm", "globex renewal", items, clock + i * 60_000);
+    }
+    const askedAt = econ(a).askedAt(user, "crm", "globex renewal");
+    const learned = econ(a).changeChance(user, "crm", "globex renewal", clock + 8 * 60_000);
+    expect(learned).toBeLessThan(1);
+    expect(econ(a).userCount).toBe(1);
+    expect(a.release(user)).toBe(true);
+    expect(econ(a).userCount).toBe(0);
+
+    const b = partner(dir);
+    await b.observe(ev({ kind: "user_message", sessionId: "n1", text: "hi" }), { waitMs: 0 });
+    // The learned rates rode the blob: askedAt comes back exactly, and the same query is a known
+    // number under 1 — not the never-asked 1 a fresh economy returns.
+    expect(econ(b).askedAt(user, "crm", "globex renewal")).toBe(askedAt);
+    expect(econ(b).changeChance(user, "crm", "globex renewal", clock + 8 * 60_000)).toBeLessThan(1);
+  });
+
   test("a restored user still corrects an ended session's verdict", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-sess-"));
     dirs.push(dir);
