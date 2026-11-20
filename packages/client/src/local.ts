@@ -87,6 +87,8 @@ export class LocalEden {
   private backoff = 1;
   private startedAt = 0;
   private pending: Promise<unknown> | null = null;
+  /** True when `shareLock` gave up because the lock could not be created at all, not because it was held. */
+  private lockFailed = false;
   private readonly warned = new Set<string>();
   private readonly timeout: number;
   private readonly env: Record<string, string | undefined>;
@@ -315,7 +317,10 @@ export class LocalEden {
         // Anything but EEXIST is not contention — an unwritable share path (EACCES, EROFS, ENOTDIR) would
         // otherwise take the stale path and spin its three failing syscalls for the whole spawn timeout,
         // blocking the event loop. Fail open instead, matching the Python client's `except Exception`.
-        if ((e as NodeJS.ErrnoException).code !== "EEXIST") return false;
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
+          this.lockFailed = true;
+          return false;
+        }
         let stale = true;
         try {
           const pid = Number.parseInt(readFileSync(lock, "utf8").trim(), 10);
@@ -461,7 +466,11 @@ export class LocalEden {
     this.pending = (async () => {
       // Cross-process attach-or-spawn is one locked section, or two first owners race and orphan a daemon.
       if (shared && !(await this.shareLock())) {
-        this.failure("the shared daemon lock was held through the spawn timeout");
+        this.failure(
+          this.lockFailed
+            ? "the shared daemon lock could not be created (check the share directory is writable)"
+            : "the shared daemon lock was held through the spawn timeout",
+        );
         return;
       }
       try {
