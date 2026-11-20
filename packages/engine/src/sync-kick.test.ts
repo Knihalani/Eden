@@ -149,6 +149,24 @@ const dupes = (xs: string[]) => xs.filter((x, i) => xs.indexOf(x) !== i);
 const SLOW_BUDGET = { syncCallsPerMin: 6 };
 
 describe("syncKick (D751)", () => {
+  test("a first sighting that is not an event starts the backfill (D2005)", async () => {
+    const { partner, sync, cache, lists, settle, resolved } = build({ syncKick: true });
+    // `seen` is what a user-scoped route (`/v1/sources`, `ready`) calls: no session event ever came.
+    partner.seen(U1);
+    await settle();
+    expect(sync.warm(U1)).toBe(true);
+    expect(cache.syncedCount(U1)).toBe(60);
+    expect(lists("u1")).toBe(6);
+    expect(resolved()).toBe(1);
+    // `ready` does the same sighting, and the first event after does not kick again (`track` is idempotent).
+    const second = build({ syncKick: true });
+    await second.partner.ready(U1);
+    await second.partner.observe(hello("u1"));
+    await second.settle();
+    expect(second.sync.warm(U1)).toBe(true);
+    expect(second.lists("u1")).toBe(6); // six pages once: neither `ready` nor the event kicked a second time
+  });
+
   test("off: a new user's backfill waits for the sync's tick, and no timer is set", async () => {
     const { partner, sync, clock, lists } = build({});
     await partner.observe(hello("u1"));

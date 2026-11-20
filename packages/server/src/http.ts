@@ -381,6 +381,9 @@ export function createHandler(
         const status = await userSources.status({ tenantId: tenant, userId: body.userId as string });
         // The caller's (the integrator's) configuration for this user, not an internal failure: 422, not 5xx.
         if (status.error !== null) return fail(422, `source configuration: ${status.error}`);
+        // The user has sources: the backfill starts at this first sighting, not at a `session_start` the
+        // integrator may never send (D2005).
+        partner.seen({ tenantId: tenant, userId: body.userId as string });
         return json({ sources: status.sources });
       }
       default:

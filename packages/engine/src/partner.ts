@@ -1528,9 +1528,7 @@ export class ContextPartner {
     }
     const s = this.session(event);
     // The user is active: their sources are synced (and polled) while they are (D57). O(1), no I/O.
-    const fresh = this.sync?.track(s.scope, this.now());
-    // `syncKick` (D751): a new user's backfill starts with their first event, not at the sync's next tick.
-    if (fresh && this.config.syncKick) this.sync!.kick(s.scope);
+    this.seen(s.scope);
     s.turn++;
     if (event.kind === "user_message") {
       s.requests++;
@@ -2405,7 +2403,18 @@ export class ContextPartner {
    * change notice reads no items and leaves a frozen user frozen.
    */
   ready(scope: Scope): Promise<void> | null {
+    this.seen(scope);
     return this.deps.cache.ready(scope);
+  }
+
+  /**
+   * The user's first sighting by any route (`observe` does the same for a first event): their sources are tracked
+   * and — with `syncKick` — the backfill starts now, not at the first request or a `session_start` the integrator
+   * may never send (D2005, o4-new-user). O(1), no I/O; `track` is idempotent, so later calls cost nothing.
+   */
+  seen(scope: Scope): void {
+    const fresh = this.sync?.track(scope, this.now());
+    if (fresh && this.config.syncKick) this.sync!.kick(scope);
   }
 
   /**

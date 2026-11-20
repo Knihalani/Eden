@@ -864,6 +864,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
 | D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
 | D2003 | 2026-11-20 | Adopted: a user's held "unverifiable" re-reads ride the frozen user blob — a respawn no longer re-fetches what a null already failed to… | adopted |
+| D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
+| D2003 | 2026-11-20 | Adopted: a user's held "unverifiable" re-reads ride the frozen user blob — a respawn no longer re-fetches what a null already failed to… | adopted |
 | D2002 | 2026-11-20 | Adopted: each source's earned reads ride the frozen user blob too — a respawn no longer restarts a source's penalty run or forgets it… | adopted |
 | D2001 | 2026-11-20 | Adopted: the probe economy rides the frozen user blob — a respawn no longer relearns what probes were worth. | adopted |
 | D2000 | 2026-11-20 | Adopted: `examples/install.py`, one installer for every local agent home. | adopted |
