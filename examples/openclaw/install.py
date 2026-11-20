@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -100,8 +101,7 @@ def main():
     )
     args = parser.parse_args()
     root = find_root(HERE)
-    work = Path(os.environ.get("TMPDIR", "/tmp")) / "eden-openclaw-install"
-    work.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="eden-openclaw-install-"))
     bundle = ensure_bundle(root, work)
     binary = ensure_binary(root, work)
 
@@ -113,9 +113,13 @@ def main():
         src = HERE / name
         if src.is_file():
             shutil.copy2(src, dest / name)
+    # Rename staged in the same directory: copy2 over a still-running detached server fails
+    # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
     bin_out = dest / "bin" / "eden-local"
-    shutil.copy2(binary, bin_out)
-    bin_out.chmod(0o755)
+    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+    shutil.copy2(binary, staged)
+    staged.chmod(0o755)
+    os.replace(staged, bin_out)
 
     claw = shutil.which("openclaw")
     if claw:

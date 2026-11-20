@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -76,16 +77,19 @@ def main():
     )
     args = parser.parse_args()
     root = find_root(HERE)
-    work = Path(os.environ.get("TMPDIR", "/tmp")) / "eden-pi-install"
-    work.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="eden-pi-install-"))
     bundle = ensure_bundle(root, work)
     binary = ensure_binary(root, work)
 
     dest = pi_home(args) / "agent" / "extensions" / "eden"
     (dest / "bin").mkdir(parents=True, exist_ok=True)
     shutil.copy2(bundle, dest / "index.js")
-    shutil.copy2(binary, dest / "bin" / "eden-local")
-    (dest / "bin" / "eden-local").chmod(0o755)
+    # Rename staged in the same directory: copy2 over a still-running detached server fails
+    # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+    shutil.copy2(binary, staged)
+    staged.chmod(0o755)
+    os.replace(staged, dest / "bin" / "eden-local")
     print(f"Eden installed to {dest}")
     print("Next: put sources in ~/.pi/eden/sources.json (see README.md) and start a new Pi session.")
 

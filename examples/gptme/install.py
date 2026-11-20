@@ -10,6 +10,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -63,8 +64,7 @@ def main():
     )
     args = parser.parse_args()
     root = find_root(HERE)
-    work = Path(os.environ.get("TMPDIR", "/tmp")) / "eden-gptme-install"
-    work.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="eden-gptme-install-"))
 
     dest = gptme_home(args) / "plugins" / "eden"
     vendor = dest / "vendor" / "eden_client"
@@ -87,8 +87,12 @@ def main():
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     binary = ensure_binary(root, work)
-    shutil.copy2(binary, dest / "bin" / "eden-local")
-    (dest / "bin" / "eden-local").chmod(0o755)
+    # Rename staged in the same directory: copy2 over a still-running detached server fails
+    # ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
+    staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+    shutil.copy2(binary, staged)
+    staged.chmod(0o755)
+    os.replace(staged, dest / "bin" / "eden-local")
     print(f"Eden installed to {dest}")
     print(f"Next: put sources in {gptme_home(args)}/eden/sources.json (see README.md) and start a new gptme session.")
 

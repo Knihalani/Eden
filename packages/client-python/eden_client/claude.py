@@ -18,11 +18,17 @@ Everything fails open (D14): a hook that errors returns ``None`` and Claude Code
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
+
+try:
+    import fcntl
+except ImportError:  # Windows: hooks degrade to unlocked read-modify-write, as before
+    fcntl = None
 
 from . import held_result
 from .hermes import ASK_HINT, QUESTION, EdenHermes, _is_ask, _joined
@@ -49,6 +55,32 @@ class EdenClaude(EdenHermes):
 
     def _state_path(self, session_id: Any) -> Path:
         return self._home / "eden" / STATE_DIR / f"{_key(str(session_id))}.json"
+
+    @contextlib.contextmanager
+    def _locked_state(self, session_id: Any) -> Iterator[Dict[str, Any]]:
+        """load → mutate → save under a per-session file lock. A parallel tool batch runs each
+        ``pre_tool`` in its own process; without the lock a read-modify-write can overwrite a
+        packet a sibling hook just stashed, and the server has already dequeued it."""
+        path = self._state_path(session_id)
+        fd: Optional[int] = None
+        try:
+            if fcntl is not None:
+                path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                fd = os.open(str(path) + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+                fcntl.flock(fd, fcntl.LOCK_EX)
+        except Exception:  # noqa: BLE001
+            fd = None
+        state = self._load(session_id)
+        try:
+            yield state
+        finally:
+            self._save(session_id, state)
+            if fd is not None:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    os.close(fd)
+                except Exception:  # noqa: BLE001
+                    pass
 
     def _load(self, session_id: Any) -> Dict[str, Any]:
         try:
@@ -113,19 +145,19 @@ class EdenClaude(EdenHermes):
             c = self.client(session_id)
             if c is None:
                 return None
-            state = self._load(session_id)
-            ck = _key(text)
-            copies = state["copies"]
-            copies[ck] = copies.get(ck, 0) + 1
-            seen_key = f"{ck}#{copies[ck]}"
-            got = []
-            if seen_key not in state["reported"]:
-                state["reported"].append(seen_key)
-                res = c.observe({"kind": "user_message", "text": text})
-                got += c.collect(res.get("injection") if isinstance(res, dict) else None)
-            got += c.pending()
-            got = list(state.pop("stashed", [])) + got
-            self._save(session_id, state)
+            with self._locked_state(session_id) as state:
+                ck = _key(text)
+                copies = state["copies"]
+                copies[ck] = copies.get(ck, 0) + 1
+                # `u:` — a reply with the same text is a different event (kind-prefixed dedup).
+                seen_key = f"u:{ck}#{copies[ck]}"
+                got = []
+                if seen_key not in state["reported"]:
+                    state["reported"].append(seen_key)
+                    res = c.observe({"kind": "user_message", "text": text})
+                    got += c.collect(res.get("injection") if isinstance(res, dict) else None)
+                got += c.pending()
+                got = list(state.pop("stashed", [])) + got
             joined = _joined(got)
             if not joined and self.ask_hint and QUESTION.search(text):
                 return {"context": ASK_HINT}
@@ -142,14 +174,13 @@ class EdenClaude(EdenHermes):
             c = self.client(session_id)
             if c is None:
                 return None
-            state = self._load(session_id)
-            uid = str(tool_use_id or _key(f"{tool_name}:{tool_input}"))
-            if uid not in state["reported"]:
-                state["reported"].append(uid)
-                res = c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input or {}},
-                                wait_ms=0)
-                self._stash(state, c, res)
-            self._save(session_id, state)
+            with self._locked_state(session_id) as state:
+                uid = str(tool_use_id or _key(f"{tool_name}:{tool_input}"))
+                if uid not in state["reported"]:
+                    state["reported"].append(uid)
+                    res = c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input or {}},
+                                    wait_ms=0)
+                    self._stash(state, c, res)
             if not self.checks(tool_name):
                 return None
             res = c.check(tool_name, tool_input if tool_input is not None else {})
@@ -171,17 +202,16 @@ class EdenClaude(EdenHermes):
             c = self.client(session_id)
             if c is None:
                 return None
-            state = self._load(session_id)
-            uid = f"result:{tool_use_id or _key(str(result))}"
-            if uid in state["reported"]:
-                return None
-            state["reported"].append(uid)
-            output = result if isinstance(result, str) else json.dumps(result, default=str)
-            res = c.observe({"kind": "tool_result", "tool": tool_name, "output": output}, wait_ms=0)
-            self._stash(state, c, res)
-            # PostToolUse can add context: deliver anything stashed by hooks that could not.
-            context = _joined(state.pop("stashed", []))
-            self._save(session_id, state)
+            with self._locked_state(session_id) as state:
+                uid = f"result:{tool_use_id or _key(str(result))}"
+                if uid in state["reported"]:
+                    return None
+                state["reported"].append(uid)
+                output = result if isinstance(result, str) else json.dumps(result, default=str)
+                res = c.observe({"kind": "tool_result", "tool": tool_name, "output": output}, wait_ms=0)
+                self._stash(state, c, res)
+                # PostToolUse can add context: deliver anything stashed by hooks that could not.
+                context = _joined(state.pop("stashed", []))
             return {"context": context} if context else None
         except Exception:  # noqa: BLE001
             pass
@@ -213,14 +243,14 @@ class EdenClaude(EdenHermes):
             last = assistant_texts[-1]
             ck = _key(last)
             copy_n = sum(1 for t in assistant_texts if _key(t) == ck)
-            state = self._load(session_id)
-            seen_key = f"{ck}#{copy_n}"
-            if seen_key in state["reported"]:
-                return None
-            state["reported"].append(seen_key)
-            res = c.observe({"kind": "agent_message", "text": last}, wait_ms=0)
-            self._stash(state, c, res)
-            self._save(session_id, state)
+            with self._locked_state(session_id) as state:
+                # `a:` — a prompt with the same text is a different event (kind-prefixed dedup).
+                seen_key = f"a:{ck}#{copy_n}"
+                if seen_key in state["reported"]:
+                    return None
+                state["reported"].append(seen_key)
+                res = c.observe({"kind": "agent_message", "text": last}, wait_ms=0)
+                self._stash(state, c, res)
         except Exception:  # noqa: BLE001
             pass
         return None

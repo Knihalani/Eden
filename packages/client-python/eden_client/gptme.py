@@ -55,7 +55,9 @@ ASK_FUNCTION = {
 
 def _gptme_home(env: Optional[Dict[str, str]] = None) -> Path:
     env = os.environ if env is None else env
-    return Path(env.get("GPTME_HOME") or _DEFAULT_HOME).expanduser().resolve()
+    # Same default as the installer: XDG_CONFIG_HOME honoured, else ~/.config/gptme.
+    default = Path(env.get("XDG_CONFIG_HOME") or _DEFAULT_HOME.parent) / "gptme"
+    return Path(env.get("GPTME_HOME") or default).expanduser().resolve()
 
 
 def _message_text(message: Any) -> str:
@@ -259,10 +261,18 @@ class EdenGptme(EdenHermes):
                 value = getattr(tool_use, field, None)
                 if value is not None:
                     tool_input[field] = value
-            c = self.client(self._session_id(session_id))
+            sid = self._session_id(session_id)
+            c = self.client(sid)
             if c is None:
                 return None
-            c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input}, wait_ms=0)
+            res = c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input}, wait_ms=0)
+            # The observe may hand out a packet: it is already dequeued server-side, so stash its
+            # texts for the next ``generation`` yield — discarding it loses the context for good.
+            if isinstance(res, dict) and res.get("injection"):
+                for item in c.collect(res["injection"]):
+                    text = item.get("text") if isinstance(item, dict) else None
+                    if isinstance(text, str) and text.strip() and text not in self._delivered.get(sid, []):
+                        self._delivered.setdefault(sid, []).append(text)
             if not self.checks(tool_name):
                 return None
             res = c.check(tool_name, tool_input)

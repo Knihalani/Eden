@@ -11,9 +11,11 @@ refreshes the install; existing hooks and MCP servers are left untouched.
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -82,6 +84,10 @@ def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2) + "\n")
+    # Keep the file's permissions (a bare replace resets them to the umask's 0o644); a new file
+    # holding hook/MCP settings — which may carry env credentials — starts owner-only.
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
+    tmp.chmod(mode)
     tmp.replace(path)
 
 
@@ -95,7 +101,7 @@ def merge_settings(home, dest):
     else:
         hooks = settings.setdefault("hooks", {})
         for event in HOOK_EVENTS:
-            command = f"python3 {dest / 'eden-hook.py'} {HOOK_ARGS[event]}"
+            command = f"python3 {shlex.quote(str(dest / 'eden-hook.py'))} {HOOK_ARGS[event]}"
             entries = hooks.setdefault(event, [])
             commands = [
                 h.get("command")
@@ -115,7 +121,12 @@ def merge_settings(home, dest):
               file=sys.stderr)
     else:
         servers = config.setdefault("mcpServers", {})
-        servers["eden"] = {"command": "python3", "args": [str(dest / "eden-mcp.py")]}
+        # Merge over an existing entry: a previous install's extra keys (a hosted setup's env,
+        # e.g. EDEN_URL/EDEN_API_KEY) survive a reinstall while command/args refresh.
+        existing = servers.get("eden")
+        entry = dict(existing) if isinstance(existing, dict) else {}
+        entry.update({"command": "python3", "args": [str(dest / "eden-mcp.py")]})
+        servers["eden"] = entry
         write_json(claude_json, config)
 
 
@@ -128,8 +139,7 @@ def main():
     )
     args = parser.parse_args()
     root = find_root(HERE)
-    work = Path(os.environ.get("TMPDIR", "/tmp")) / "eden-claude-install"
-    work.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="eden-claude-install-"))
 
     home = claude_home(args)
     dest = home / "eden"
