@@ -94,7 +94,7 @@ import {
 } from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
 import { SourceYield, type Evidence } from "./source-yield";
-import { ProbeEconomy, type ProbeKind } from "./economy";
+import { isFrozenEconomy, ProbeEconomy, type FrozenEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
 import {
   namesParticipant,
@@ -964,6 +964,8 @@ export class ContextPartner {
    * `release` deleted it, so a live read there would be empty). Consumed by `save`.
    */
   private readonly frozenRecorded = new Map<string, FrozenRecorded[]>();
+  /** Economy snapshot `release` captures before `economy.forget` — `save` consumes it (D2001). */
+  private readonly frozenEconomy = new Map<string, FrozenEconomy | null>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -1179,11 +1181,14 @@ export class ContextPartner {
           this.frozenPending.delete(key);
           const recorded = this.frozenRecorded.get(key) ?? this.recordedSnapshot(scope);
           this.frozenRecorded.delete(key);
+          const economy = this.frozenEconomy.has(key) ? this.frozenEconomy.get(key) : this.economy.snapshot(scope);
+          this.frozenEconomy.delete(key);
           return {
             sync: sync?.snapshot(scope) ?? null,
             rows: this.deps.sourceMap.exportUser(scope),
             sessions: mergeFrozenSessions(this.restoredSessions.get(key), live),
             recorded,
+            ...(economy ? { economy } : {}),
           };
         },
         restored: (scope, items, extra) => {
@@ -1193,6 +1198,7 @@ export class ContextPartner {
                 rows?: UserRows;
                 sessions?: unknown;
                 recorded?: unknown;
+                economy?: unknown;
               }
             | null
             | undefined;
@@ -1213,6 +1219,8 @@ export class ContextPartner {
             const rec = carried.recorded.filter(isFrozenRecorded).slice(-MAX_RECORDED);
             if (rec.length > 0) this.restoreRecorded(scope, rec);
           }
+          if (carried?.economy && isFrozenEconomy(carried.economy)) this.economy.restore(scope, carried.economy);
+
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
           const checked = sync ? sync.reconcile(scope, this.config.sourceTimeoutMs) : Promise.resolve(0);
@@ -2237,9 +2245,13 @@ export class ContextPartner {
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
     this.frozenRecorded.set(key, this.recordedSnapshot(scope) ?? []);
     this.recorded.get(scope.tenantId)?.delete(key);
+    // The probe economy's learned rates and arms too: `save` runs inside `cache.release`, after
+    // `economy.forget` below, so the snapshot must be taken first (D2001).
+    this.frozenEconomy.set(key, this.economy.snapshot(scope));
     const written = this.deps.cache.release(scope, write);
     this.frozenPending.delete(key);
     this.frozenRecorded.delete(key);
+    this.frozenEconomy.delete(key);
     this.restoredSessions.delete(key);
     this.unverifiable.delete(key);
     // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
