@@ -128,10 +128,14 @@ class EdenClaude(EdenHermes):
 
     # -- events (each returns the hook's payload or None: fail open) ----------------------------------
 
-    def session_start(self, session_id: Any = None, **_: Any) -> None:
+    def session_start(self, session_id: Any = None, source: Any = None, **_: Any) -> None:
         try:
             c = self.client(session_id)
             if c is not None:
+                # A compacted or cleared transcript lost what the session was shown: reset its delivery
+                # marks first (D2006), so the session may be told the same items again.
+                if source in ("compact", "clear"):
+                    c.observe({"kind": "context_reset"}, wait_ms=0)
                 c.observe({"kind": "session_start"}, wait_ms=0)
         except Exception:  # noqa: BLE001
             pass
@@ -290,7 +294,7 @@ def dispatch(plugin: EdenClaude, event: str, payload: Dict[str, Any]) -> Optiona
     """Map a Claude Code hook event name to the plugin call."""
     sid = payload.get("session_id")
     if event == "session_start":
-        plugin.session_start(sid)
+        plugin.session_start(sid, source=payload.get("source"))
     elif event == "user_prompt_submit":
         return plugin.prompt(sid, payload.get("prompt"))
     elif event == "pre_tool_use":
