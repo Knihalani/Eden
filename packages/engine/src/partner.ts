@@ -517,6 +517,25 @@ function isFrozenSession(x: unknown): x is FrozenSession {
   );
 }
 
+/** A `Recorded` row frozen with its injection id: feedback can still correct an ended session's verdict. */
+interface FrozenRecorded extends Recorded {
+  injectionId: string;
+}
+
+/** Shape check for a `FrozenRecorded` read back from a blob: anything else is ignored (fails open). */
+function isFrozenRecorded(x: unknown): x is FrozenRecorded {
+  const r = x as FrozenRecorded | null;
+  return (
+    r !== null &&
+    typeof r === "object" &&
+    typeof r.injectionId === "string" &&
+    Array.isArray(r.sourceIds) &&
+    typeof r.situation === "string" &&
+    typeof r.used === "boolean" &&
+    typeof r.sessionId === "string"
+  );
+}
+
 /** Frozen sessions kept per user (`restoredSessions`): an old one's knowledge still applies, bounded. */
 const MAX_FROZEN_SESSIONS = 8;
 
@@ -890,6 +909,11 @@ export class ContextPartner {
    * `userSessions`, so a snapshot read by the save hook then would be empty). Consumed by `save`.
    */
   private readonly frozenPending = new Map<string, FrozenSession[] | null>();
+  /**
+   * `recorded` rows taken in `release` before the user's map entry drops (the save hook reads `recorded` after
+   * `release` deleted it, so a live read there would be empty). Consumed by `save`.
+   */
+  private readonly frozenRecorded = new Map<string, FrozenRecorded[]>();
   private readonly perTenant = new Map<string, number>();
   private readonly built = new WeakMap<Injection, Built>();
   /**
@@ -1103,10 +1127,22 @@ export class ContextPartner {
           const key = scopeKey(scope);
           const sessions = this.frozenPending.get(key) ?? this.sessionSnapshot(scope);
           this.frozenPending.delete(key);
-          return { sync: sync?.snapshot(scope) ?? null, rows: this.deps.sourceMap.exportUser(scope), sessions };
+          const recorded = this.frozenRecorded.get(key) ?? this.recordedSnapshot(scope);
+          this.frozenRecorded.delete(key);
+          return {
+            sync: sync?.snapshot(scope) ?? null,
+            rows: this.deps.sourceMap.exportUser(scope),
+            sessions,
+            recorded,
+          };
         },
         restored: (scope, items, extra) => {
-          const carried = extra as { sync?: unknown; rows?: UserRows; sessions?: unknown } | null | undefined;
+          const carried = extra as {
+            sync?: unknown;
+            rows?: UserRows;
+            sessions?: unknown;
+            recorded?: unknown;
+          } | null | undefined;
           const saved = carried?.sync;
           if (sync && saved) sync.restore(scope, saved);
           if (carried?.rows && typeof carried.rows === "object") {
@@ -1119,6 +1155,10 @@ export class ContextPartner {
           if (Array.isArray(carried?.sessions)) {
             const frozen = carried.sessions.filter(isFrozenSession);
             if (frozen.length > 0) this.restoredSessions.set(scopeKey(scope), frozen.slice(-MAX_FROZEN_SESSIONS));
+          }
+          if (Array.isArray(carried?.recorded)) {
+            const rec = carried.recorded.filter(isFrozenRecorded).slice(-MAX_RECORDED);
+            if (rec.length > 0) this.restoreRecorded(scope, rec);
           }
           // A source removed while the user was on disk: its synced items go before the first event is served (the
           // returning event's `ready` waits on this, bounded by the source timeout).
@@ -2136,9 +2176,11 @@ export class ContextPartner {
     // Take the sessions' delivery knowledge before closing them: `close` drops them from `userSessions`.
     this.frozenPending.set(key, this.sessionSnapshot(scope));
     for (const s of [...this.sessions.values()]) if (scopeKey(s.scope) === key) this.close(s, false);
+    this.frozenRecorded.set(key, this.recordedSnapshot(scope) ?? []);
     this.recorded.get(scope.tenantId)?.delete(key);
     const written = this.deps.cache.release(scope, write);
     this.frozenPending.delete(key);
+    this.frozenRecorded.delete(key);
     this.restoredSessions.delete(key);
     this.unverifiable.delete(key);
     // Rows go once they are in the blob, or when another machine holds newer ones (a drop, `write` false).
@@ -3928,6 +3970,7 @@ export class ContextPartner {
     // with everything else, or a later persist could write the forgotten content back (SEC_0001).
     this.restoredSessions.delete(key);
     this.frozenPending.delete(key);
+    this.frozenRecorded.delete(key);
     // Any forget drops the user's held outcomes (one source's ids are not told apart from the rest here).
     this.unverifiable.delete(key);
     this.deps.sourceMap.forget(scope, sourceId);
@@ -4176,6 +4219,25 @@ export class ContextPartner {
 
   private recordedOf(scope: Scope): Map<string, Recorded> | undefined {
     return this.recorded.get(scope.tenantId)?.get(scopeKey(scope));
+  }
+
+  /** The user's `recorded` as a frozen list (null when nothing is held), for the persist `save` hook. */
+  private recordedSnapshot(scope: Scope): FrozenRecorded[] | null {
+    const mine = this.recordedOf(scope);
+    if (!mine?.size) return null;
+    return [...mine].map(([injectionId, r]) => ({ injectionId, ...r }));
+  }
+
+  /** Seeds `recorded` from a restored blob's rows, under the same caps the live path enforces. */
+  private restoreRecorded(scope: Scope, rec: FrozenRecorded[]): void {
+    const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
+    this.recorded.set(scope.tenantId, tenant);
+    const mine = new Map<string, Recorded>();
+    for (const { injectionId, ...r } of rec) mine.set(injectionId, r);
+    while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
+    tenant.delete(scopeKey(scope)); // Re-insert: Map order is least recently recorded user first.
+    tenant.set(scopeKey(scope), mine);
+    while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
   }
 
   // ── retrieval ──

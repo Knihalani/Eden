@@ -863,6 +863,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
 | D1996 | 2026-11-20 | Adopted: the frozen session also carries `outstanding` — injections handed but not yet judged used or unused survive a respawn, so the… | adopted |
+| D1998 | 2026-11-20 | Adopted: an ended session's use-verdicts ride the frozen user too — `extra.recorded` carries the `recorded` map so a respawned daemon can… | adopted |
 | D1995 | 2026-11-20 | Adopted: a frozen user keeps its sessions' delivery knowledge — `extra.sessions` carries each live session's ledger snapshot and delivered… | adopted |
 | D1994 | 2026-11-20 | Adopted: `EDEN_LOCAL_STATE_DIR` makes a shared local daemon's state durable — the source map and encrypted frozen users live under it. | adopted |
 | D1993 | 2026-11-20 | Adopted: shared local daemons — `LocalEden` (py and ts) can run one detached `eden-local` per agent home instead of one sidecar per hook… | adopted |
