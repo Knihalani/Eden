@@ -121,7 +121,7 @@ async function serve(config: ServerConfig): Promise<void> {
   const engine = local ? {} : engineConfig();
   // D425, on by default since D991: frozen users written encrypted to the machine's directory (this child's buckets,
   // D992), read back on first use; with EDEN_PERSIST_STORE also mirrored to the store every machine reaches.
-  const persist = local ? null : await persistStore(config);
+  const persist = await persistStore(config);
   // Per-user sources when EDEN_USER_SOURCES_FILE is set (D108); forget closes their connections. Before the gate
   // pool, so a bad sources file exits 2 with its message before any worker starts.
   const sources = sourcesOrExit();

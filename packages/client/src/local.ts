@@ -331,6 +331,8 @@ export class LocalEden {
               ...this.childEnv(token),
               EDEN_LOCAL_DETACHED: "1",
               ...(this.options.logPath ? { EDEN_LOCAL_LOG: this.options.logPath } : {}),
+              // The share file's directory is the daemon's durable home (D1994).
+              EDEN_LOCAL_STATE_DIR: dirname(this.options.sharePath!),
             }
           : this.childEnv(token),
         detached: shared,
