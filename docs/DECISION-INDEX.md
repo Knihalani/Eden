@@ -863,6 +863,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
 | D2000 | 2026-11-20 | Adopted: `examples/install.py`, one installer for every local agent home. | adopted |
+| D2002 | 2026-11-20 | Adopted: each source's earned reads ride the frozen user blob too — a respawn no longer restarts a source's penalty run or forgets it… | adopted |
 | D2001 | 2026-11-20 | Adopted: the probe economy rides the frozen user blob — a respawn no longer relearns what probes were worth. | adopted |
 | D1999 | 2026-11-20 | Adopted: an evicted session keeps its delivery knowledge — the idle and cap sweeps freeze it into `restoredSessions`, which the persist… | adopted |
 | D1998 | 2026-11-20 | Adopted: an ended session's use-verdicts ride the frozen user too — `extra.recorded` carries the `recorded` map so a respawned daemon can… | adopted |
