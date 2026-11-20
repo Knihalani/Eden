@@ -16,25 +16,34 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
-# agent -> the env var / default path its installer resolves for its home. Detection checks the
-# default location only; a `--<agent>-home PATH` flag selects the agent even when the default
-# is absent (the path is handed straight through).
+# agent -> (env vars / default path its installer resolves for its home, its installer's
+# home-flag name). Detection checks the default location only; a `--<agent>-home PATH` flag
+# selects the agent even when the default is absent (the path is handed straight through, under
+# the flag name that agent's installer actually accepts).
 AGENTS = {
-    "claude-code": ("CLAUDE_HOME", Path.home() / ".claude"),
-    "gptme": ("GPTME_HOME", Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gptme"),
-    "openclaw": ("OPENCLAW_HOME", Path.home() / ".openclaw"),
-    "opencode": ("OPENCODE_HOME", Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode"),
-    "pi": ("PI_HOME", Path.home() / ".pi"),
+    "claude-code": (("CLAUDE_HOME", "CLAUDE_CONFIG_DIR"), Path.home() / ".claude", "--claude-home"),
+    "gptme": (("GPTME_HOME",), Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gptme", "--gptme-home"),
+    "openclaw": (("OPENCLAW_HOME",), Path.home() / ".openclaw", "--openclaw-home"),
+    "opencode": (("OPENCODE_HOME",), Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode", "--opencode-home"),
+    "pi": (("PI_HOME",), Path.home() / ".pi", "--pi-home"),
 }
 
 
+def resolved_home(name):
+    """The home an agent's installer would use, same env/default resolution it performs."""
+    envs, default, _ = AGENTS[name]
+    for env in envs:
+        if os.environ.get(env):
+            return Path(os.environ[env]).expanduser()
+    return Path(default).expanduser()
+
+
+def home_override(args, name):
+    return getattr(args, f"{name.replace('-', '_')}_home")
+
+
 def detected():
-    found = []
-    for name, (env, default) in AGENTS.items():
-        home = Path(os.environ.get(env, default)).expanduser()
-        if home.is_dir():
-            found.append(name)
-    return found
+    return [name for name in AGENTS if resolved_home(name).is_dir()]
 
 
 def main():
@@ -65,13 +74,12 @@ def main():
             sys.exit(f"unknown agents: {', '.join(unknown)} (known: {', '.join(AGENTS)})")
     else:
         # A --<agent>-home flag selects that agent even when its default home is absent.
-        chosen = detected() + [a for a in AGENTS if getattr(args, f"{a.replace('-', '_')}_home")]
+        chosen = detected() + [a for a in AGENTS if home_override(args, a)]
         chosen = list(dict.fromkeys(chosen))
 
     if args.list:
         for name in AGENTS:
-            env, default = AGENTS[name]
-            home = Path(os.environ.get(env, default)).expanduser()
+            home = Path(home_override(args, name) or resolved_home(name)).expanduser()
             mark = "detected" if name in chosen else ("home absent" if not home.is_dir() else "skipped")
             print(f"{name:12} {mark:12} {home}")
         return 0
@@ -79,7 +87,7 @@ def main():
     if not chosen:
         print(
             "No local agents detected. Looked for "
-            + ", ".join(f"{n} ({h})" for n, (_, h) in AGENTS.items())
+            + ", ".join(f"{n} ({resolved_home(n)})" for n in AGENTS)
             + " — or pass --agents."
         )
         return 1
@@ -88,9 +96,9 @@ def main():
     for name in chosen:
         installer = HERE / name / "install.py"
         cmd = [sys.executable, str(installer)]
-        home = getattr(args, f"{name.replace('-', '_')}_home")
+        home = home_override(args, name)
         if home:
-            cmd += [f"--{name}-home", home]
+            cmd += [AGENTS[name][2], home]
         if args.dry_run:
             print(f"{name:12} {' '.join(cmd)}")
             continue

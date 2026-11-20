@@ -43,4 +43,13 @@ describe.skipIf(!python)("the unified installer", () => {
     expect(bad.exitCode).not.toBe(0);
     expect(bad.stderr.toString()).toContain("not-an-agent");
   });
+
+  test("each agent's own home flag is forwarded, and --list shows an override's path", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-install-all-"));
+    const dry = run(["--claude-code-home", "/opt/cc", "--dry-run"], home);
+    // claude-code's installer takes --claude-home, not --claude-code-home.
+    expect(dry.stdout.toString()).toContain("claude-code/install.py --claude-home /opt/cc");
+    const listed = run(["--list", "--pi-home", "/work/pi"], home);
+    expect(listed.stdout.toString()).toContain("/work/pi");
+  });
 });
