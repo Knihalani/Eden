@@ -1,0 +1,19 @@
+{
+  "name": "@eden/example-openclaw",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Eden as an OpenClaw plugin: context injection, ask_context, and the party check.",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "dependencies": {
+    "@eden/client": "workspace:*"
+  },
+  "devDependencies": {
+    "@eden/server": "workspace:*",
+    "@eden/sources": "workspace:*"
+  }
+}
