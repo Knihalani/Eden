@@ -42,34 +42,35 @@ MARK = lambda t, gn=.3: put(2998, t, gn, "onset", maxlen=.9, pan=rng.uniform(-.2
 HIT = lambda t, gn=.34: put(490, t, gn)
 POP = lambda t, gn=.3: put(3124, t, gn)
 SW = lambda t, gn=.2: put(1104, t, gn, "peak")
-# hook
-put(2295, 0, .45, maxlen=1.8); HIT(0); HIT(B(1)); put(2295, B(2), .55, maxlen=1.6); HIT(B(2), .5)
-for k in range(4): POP(B(4 + k * .5), .4); put(1104, B(4 + k * .5), .16, "peak")
-HIT(B(6)); SW(B(8), .25)
-for k in range(8): put(2568, B(8 + k * .5), .13)
-SW(B(12), .3); HIT(B(13), .3); put(2369, B(13), .22); put(2367, B(14), .22); HIT(B(14))
-# break and reveal
-put(1714, B(16), .25, "peak"); put(2900, B(28), .4, "peak"); put(1492, B(28), .3, "peak")
+# hook: one hit per word, the redaction bar slams
+put(2295, 0, .45, maxlen=1.4)
+for bt in (0, .5, 1, 1.5): HIT(B(bt), .4)
+HIT(B(3), .45); put(2295, B(4), .5, maxlen=1.4); POP(B(4), .5)
+for k in range(4): POP(B(5 + k * .5), .4); SW(B(5 + k * .5), .14)
+SW(B(7), .25)
+for k in range(8): put(2568, B(7 + k * .5), .13)
+SW(B(11), .3); put(2369, B(12), .3); POP(B(12), .3); SW(B(13), .35); HIT(B(13), .3)
+# break: the mark is drawn
+put(1714, B(15), .25, "peak"); bed(B(15.5), B(26.5), .08); put(2900, B(28), .4, "peak"); put(1492, B(28), .3, "peak")
 put(1143, B(28), .9); put(2295, B(28), .45); HIT(B(29.5), .3)
 # how it works
-for b in (34, 37, 40): HIT(B(b), .38); put(2568, B(b) + .05, .1)
-for k in range(6): put(2568, B(34.5 + k * .45), .07)
-put(2350, B(40.5), .3, "peak"); SW(B(43), .3); HIT(B(43.3), .35)
-# product moment
-put(1471, B(46), .22, "peak"); POP(B(48), .55); put(1109, B(48.05), .25)
-keys(B(49.5), B(53.5), 70, .16)
-# numbers
-for b in (54, 56.67, 59.33): SW(B(b), .26); HIT(B(b), .4)
-put(2782, B(61), .25, maxlen=1.2)
-# principles
-for b in (62, 64, 66, 68): SW(B(b), .3); POP(B(b) + .05, .3)
-for k in range(10): put(2568, B(68) + .04 + k * .045 * 1.0, .07)
-# integration and scale
-HIT(B(70), .4); keys(B(71.5), B(74.5), 60, .26); put(2533, B(74.7), .45)
-HIT(B(78), .42); HIT(B(82), .42); put(1714, B(78.5), .25, "peak")
-HIT(B(88), .4); HIT(B(90), .45); put(2900, B(96), .3, "peak")
-# end
-put(1143, B(96), .85); put(2782, B(96), .4); SW(B(97), .2)
+for bt in (34, 37, 40): HIT(B(bt), .38); SW(B(bt), .2)
+for k in range(3): POP(B(34.8 + k * .5), .25)
+for k in range(5): put(2568, B(37.4 + k * .3), .1)
+POP(B(41), .5); put(1109, B(41.05), .22)
+for k in range(3): POP(B(43 + k * .33), .35)
+HIT(B(44.2), .4)
+# the difference
+HIT(B(46), .3); put(2369, B(48), .35); put(2998, B(48), .25, maxlen=.8); SW(B(49.5), .35); POP(B(49.6), .35)
+# numbers, principles
+for bt in (54, 56.67, 59.33): SW(B(bt), .26); HIT(B(bt), .4)
+for bt in (62, 64, 66, 68): SW(B(bt), .3); HIT(B(bt), .32)
+for k in range(10): put(2568, B(68) + .06 + k * .045, .07)
+# one line, scale, close
+HIT(B(70), .4); SW(B(71.2), .22); keys(B(71.6), B(74.4), 60, .26); put(2533, B(74.6), .45)
+HIT(B(78), .42); put(1714, B(78.3), .25, "peak"); HIT(B(82), .42)
+HIT(B(88), .4); SW(B(90), .3); HIT(B(90), .45); put(2900, B(96), .3, "peak")
+put(1143, B(96), .85); put(2782, B(96), .4)
 mix = music + sfx * .85
 mix = np.tanh(mix * 1.15) / np.tanh(1.15)
 f = int(1.3 * SR); mix[-f:] *= np.linspace(1, 0, f)[:, None] ** 1.5
