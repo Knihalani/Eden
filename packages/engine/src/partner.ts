@@ -2414,6 +2414,17 @@ export class ContextPartner {
    * O(1), no I/O; `track` is idempotent, so later calls cost nothing.
    */
   seen(scope: Scope): void {
+    // A sighting before the user's thaw tracks after it settles: `ready` resolves once the owner's restore ran,
+    // so `track` meets the sync state the blob restored — never a fresh empty one whose existing record the
+    // restore would then skip (and a restored user, already warm, is not kicked again).
+    const thawing = this.deps.cache.ready(scope);
+    if (thawing !== null) {
+      void thawing.then(
+        () => this.seen(scope),
+        () => {},
+      );
+      return;
+    }
     const fresh = this.sync?.track(scope, this.now());
     if (fresh && this.config.syncKick) this.sync!.kick(scope);
   }
