@@ -27,6 +27,16 @@ HERE = Path(__file__).resolve().parent
 
 # agent -> (home dir whose presence means the agent is installed, its MCP config path,
 #           merge format). The config flag per agent is ``--<agent>-config``.
+def _vscode_user():
+    """VS Code's user-data dir for this OS — the installer runs where the agent does."""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Application Support/Code/User")
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
+        return os.path.join(base, "Code", "User")
+    return os.path.expanduser("~/.config/Code/User")
+
+
 AGENTS = {
     "cline": ("~/.cline",
               "~/.cline/data/settings/cline_mcp_settings.json", "mcpservers"),
@@ -44,8 +54,9 @@ AGENTS = {
     "continue": ("~/.continue", "~/.continue/mcpServers/eden.json", "own-file"),
     # Kilo Code v7+: the JSONC kilo.jsonc file; `mcp` holds {type:"local", command:[...]} entries.
     "kilo-code": ("~/.config/kilo", "~/.config/kilo/kilo.jsonc", "kilo"),
-    # VS Code's own agent mode reads the user-level mcp.json; `servers` entries are plain stdio.
-    "vscode": ("~/.config/Code/User", "~/.config/Code/User/mcp.json", "servers"),
+    # VS Code's own agent mode reads the user-level mcp.json; `servers` entries are plain
+    # stdio, and the user-data dir is per-OS (callables resolve it where the agent runs).
+    "vscode": (_vscode_user, lambda: os.path.join(_vscode_user(), "mcp.json"), "servers"),
     # Junie (JetBrains IDE + CLI) reads one mcp.json at both scopes; the global is the user file.
     "junie": ("~/.junie", "~/.junie/mcp/mcp.json", "mcpservers"),
 }
@@ -349,11 +360,18 @@ def install_payload(eden_home, root, remote, dry):
     return mcp_py
 
 
+def _p(p):
+    return p() if callable(p) else p
+
+
 def config_path(args, name, default):
     override = getattr(args, f"{name.replace('-', '_')}_config", None)
     env_override = os.environ.get(f"EDEN_MCP_{name.upper().replace('-', '_')}_CONFIG")
-    raw = override or env_override or default
-    return Path(raw).expanduser().resolve()def main():
+    raw = override or env_override or _p(default)
+    return Path(raw).expanduser().resolve()
+
+
+def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--agents", help="comma-separated subset of: " + ", ".join(AGENTS))
     ap.add_argument("--eden-home", default=os.environ.get("EDEN_MCP_HOME", "~/.eden-mcp"),
@@ -370,7 +388,7 @@ def config_path(args, name, default):
 
     if args.list:
         for name, (home, cfg, _) in AGENTS.items():
-            found = Path(home).expanduser().exists() or Path(cfg).expanduser().exists()
+            found = Path(_p(home)).expanduser().exists() or Path(_p(cfg)).expanduser().exists()
             print(f"{name:10} {'detected' if found else 'home absent'}")
         return 0
 
