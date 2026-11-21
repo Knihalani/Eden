@@ -220,6 +220,13 @@ class UserCache {
   /** The parties' names and first names, lowercased (`isPerson`), computed on demand; reset as the tally changes. */
   personNames: Set<string> | undefined;
   /**
+   * The user's alias table (D2009): each name part, lowercased, → the full names of their parties it belongs to
+   * ("webb" → {"marcus webb"}), computed on demand from `parties`; reset as the tally changes. A request naming a
+   * person by part of their name anchors to items naming the whole, and one naming the whole anchors to items
+   * naming a part (`aliasExpand`).
+   */
+  aliases: Map<string, Set<string>> | undefined;
+  /**
    * `partyCheck` (D375): the addresses in the items' party header lines (`PARTY_LINES`), lowercased, and their
    * domains ("@globex.com"), with how many items carry each (`isCorrespondent`). Built on first use (about 26 ms at
    * 1,500 items), then kept as items come and go (`tally`); a freeze does not carry it: a thawed user rebuilds it.
@@ -531,6 +538,7 @@ function tallyRead(u: UserCache, addresses: Set<string> | undefined, names: stri
   }
   u.self = undefined;
   u.personNames = undefined;
+  u.aliases = undefined;
 }
 
 /** Counts an item's start offset in or out of the user's tally (`offsetOf`). */
@@ -1987,6 +1995,29 @@ export class ItemCache {
       }
     }
     return u.personNames.has(name.trim().replace(/\s+/g, " ").toLowerCase());
+  }
+
+  /**
+   * The user's alias table (D2009): each part of a party's name → the full names it belongs to, all lowercased
+   * (`partiesOf`): "webb" → {"marcus webb"}. Empty while no items name anyone. A freeze does not carry it: a thawed
+   * user rebuilds it from `parties`, which does ride the blob. O(parts) on first use after a change.
+   */
+  aliasTable(scope: Scope): Map<string, Set<string>> {
+    const u = this.peek(scope);
+    if (!u) return new Map();
+    if (u.aliases === undefined) {
+      const table = new Map<string, Set<string>>();
+      for (const full of u.parties.keys()) {
+        const name = full.toLowerCase();
+        for (const w of name.match(/\p{L}+/gu) ?? []) {
+          let set = table.get(w);
+          if (set === undefined) table.set(w, (set = new Set()));
+          set.add(name);
+        }
+      }
+      u.aliases = table;
+    }
+    return u.aliases;
   }
 
   /**

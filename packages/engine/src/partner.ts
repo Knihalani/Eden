@@ -165,6 +165,7 @@ import { datedText, dayKeys } from "./days";
 import { dayFactsClass, dayFactsOf } from "./day-facts";
 import {
   anchored,
+  aliasExpand,
   anchorsOf,
   hasDay,
   namedDays,
@@ -3649,7 +3650,7 @@ export class ContextPartner {
     const phrases = cue.entities.map((e) =>
       (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
     );
-    const anchorsPer = cue.entities.map((e) => anchorsOf([e], cue.time?.days ?? null, cue.raw, cue.offset));
+    const anchorsPer = cue.entities.map((e) => this.requestAnchors(s.scope, [e], cue));
     const anchoredOf = (item: ContextItem) =>
       cue.entities
         .map((e, i) =>
@@ -3699,7 +3700,7 @@ export class ContextPartner {
     // Only on the session's first request: later ones carry the session's own context, and there the records saved
     // the agent almost no search but stayed in its transcript (D1252's days run: agent $ +0.015/1k, −0.08 calls).
     if (yes && yes.size === 0 && this.config.pushLookup > 0 && s.requests <= 1) {
-      const a = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      const a = this.requestAnchors(s.scope, cue.entities, cue);
       // Only plain records: a constraint-like item here is one the check read and judged not to change the request
       // (a look-alike), and handed as reference the agent raised it anyway (round 5: the ISA look-alike on 4 of 4
       // control seeds). What the agent looks up on a silent turn is the meeting, the contact, the thread.
@@ -3715,7 +3716,7 @@ export class ContextPartner {
     let anchors: Anchors | undefined;
     const fewer = this.config.pushCandidatesSettled;
     if ((this.config.askNudge || fewer > 0) && items.length > 0 && !lookup) {
-      anchors = anchorsOf(cue.entities, cue.time?.days ?? null, cue.raw, cue.offset);
+      anchors = this.requestAnchors(s.scope, cue.entities, cue);
       const handed = items.map((x) => x.item);
       if (!settles(handed, anchors)) {
         if (this.config.askNudge && (!this.config.askNudgeDeep || this.anchoredPast(pool, items, anchors)))
@@ -3780,6 +3781,19 @@ export class ContextPartner {
   private anchoredPast(pool: readonly Scored[], handed: readonly Scored[], anchors: Anchors): boolean {
     const ids = new Set(handed.map((x) => x.item.id));
     return pool.some((x) => !ids.has(x.item.id) && !bulkMail(x.item) && anchored(x.item, anchors));
+  }
+
+  /**
+   * A request's anchors (D2009): its entities expanded through the user's alias table (`aliasExpand`), so a person
+   * asked for by full name anchors to items naming them by surname and vice versa.
+   */
+  private requestAnchors(scope: Scope, entities: readonly string[], cue: Cue): Anchors {
+    return anchorsOf(
+      aliasExpand(this.deps.cache.aliasTable(scope), entities),
+      cue.time?.days ?? null,
+      cue.raw,
+      cue.offset,
+    );
   }
 
   /** `planConflict` (D301): the request the push ran for, kept so items stored later are checked against it. */
@@ -4992,7 +5006,7 @@ export class ContextPartner {
       )
       .filter((e) => e.length > 0 && !SETTING_WORDS.has(wordBefore(cue.raw, e)));
     if (entities.length === 0) return [];
-    const anchors = anchorsOf(entities, cue.time?.days ?? null, cue.raw, cue.offset);
+    const anchors = this.requestAnchors(s.scope, entities, cue);
     const entityWords = Math.max(1, ...entities.map((e) => e.trim().split(/\s+/).length));
     const dated = (item: ContextItem) => namedDays(`${item.title} ${item.text}`).length > 0;
     // About the named thing: the entity a whole word of its title or of its text, and the item a dated record or
@@ -5011,7 +5025,7 @@ export class ContextPartner {
     const phraseWords = entities.map((e) =>
       (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
     );
-    const anchorsPer = entities.map((e) => anchorsOf([e], cue.time?.days ?? null, cue.raw, cue.offset));
+    const anchorsPer = entities.map((e) => this.requestAnchors(s.scope, [e], cue));
     const anchoredOf = (item: ContextItem) =>
       entities
         .map((e, i) =>

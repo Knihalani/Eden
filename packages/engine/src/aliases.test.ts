@@ -1,0 +1,158 @@
+import { describe, expect, test } from "bun:test";
+import { SourceMap } from "@eden/graph";
+import { Budget } from "@eden/llm";
+import type { AgentEvent, ContextItem } from "@eden/protocol";
+import type { Source } from "@eden/sources";
+import { ItemCache } from "./cache";
+import { ContextPartner, type PushPoolReport } from "./partner";
+import { CORE_CONFIG } from "./parts";
+import { aliasExpand, anchorsOf, namesEntity, settles } from "./settle";
+
+// D2009: a per-user alias table, built at ingest from the items' parties (no model). A request naming a person by
+// full name anchors to items naming them by surname, and one naming them by surname anchors to items listing the
+// person as a participant.
+
+/** Tuesday 27 October 2026, 09:00 UTC. */
+const NOW = Date.parse("2026-10-27T09:00:00Z");
+const HOUR = 3_600_000;
+const SCOPE = { tenantId: "t", userId: "u1" };
+
+const item = (id: string, title: string, text: string, ageH = 24, people?: string): ContextItem => ({
+  id: `mail:${id}`,
+  sourceId: "mail",
+  ref: id,
+  title,
+  text,
+  updatedAt: NOW - ageH * HOUR,
+  ...(people ? { meta: { people } } : {}),
+});
+
+const table = (names: string[]): Map<string, Set<string>> => {
+  const out = new Map<string, Set<string>>();
+  for (const full of names) {
+    const lower = full.toLowerCase();
+    for (const w of lower.match(/\p{L}+/gu) ?? []) {
+      let set = out.get(w);
+      if (!set) out.set(w, (set = new Set()));
+      set.add(lower);
+    }
+  }
+  return out;
+};
+
+describe("aliasExpand (D2009): name forms the user's alias table knows", () => {
+  const aliases = table(["Marcus Webb", "Sara Webb", "Anish Patel"]);
+
+  test("a full name gains its surname part, so a surname-only item anchors it", () => {
+    const webbOnly = item("w", "Contract renewal", "The Webb contract needs a countersign.");
+    const bare = anchorsOf(["Marcus Webb"], null, "the Marcus Webb contract", 0);
+    expect(namesEntity(webbOnly, bare)).toBe(false);
+    const grown = anchorsOf(aliasExpand(aliases, ["Marcus Webb"]), null, "the Marcus Webb contract", 0);
+    expect(grown.entities).toContain("webb");
+    expect(namesEntity(webbOnly, grown)).toBe(true);
+    expect(settles([webbOnly], grown)).toBe(true);
+  });
+
+  test("a lone part gains each full name holding it, so a participant-only item anchors it", () => {
+    const listed = item("l", "Stand-up", "Minutes attached.", 1, "Marcus Webb <m.webb@webb.example>");
+    const bare = anchorsOf(["webb"], null, "the webb stand-up", 0);
+    expect(namesEntity(listed, bare)).toBe(false);
+    const grown = anchorsOf(aliasExpand(aliases, ["webb"]), null, "the webb stand-up", 0);
+    expect(grown.entities).toContain("marcus webb");
+    expect(grown.entities).toContain("sara webb");
+    expect(namesEntity(listed, grown)).toBe(true);
+  });
+
+  test("a non-person entity gains nothing; originals stay first and are not duplicated", () => {
+    expect(aliasExpand(aliases, ["plan sl-0381442"])).toEqual(["plan sl-0381442"]);
+    expect(aliasExpand(aliases, ["Marcus Webb", "webb"])).toEqual(["Marcus Webb", "webb", "sara webb"]);
+    expect(aliasExpand(new Map(), ["Marcus Webb"])).toEqual(["Marcus Webb"]);
+  });
+
+  test("expansion is capped", () => {
+    const many = table(["Webb A", "Webb B", "Webb C", "Webb D", "Webb E", "Webb F", "Webb G", "Webb H", "Webb I"]);
+    const grown = aliasExpand(many, ["webb"], 3);
+    expect(grown.length).toBe(1 + 3);
+  });
+});
+
+describe("ItemCache.aliasTable (D2009): the per-user table, kept as items come and go", () => {
+  test("a party's name parts map to their full names", () => {
+    const cache = new ItemCache();
+    cache.put(SCOPE, [item("s1", "Notes", "Minutes.", 1, "Marcus Webb <m.webb@webb.example>; Anish Patel")]);
+    const t = cache.aliasTable(SCOPE);
+    expect(t.get("webb")).toEqual(new Set(["marcus webb"]));
+    expect(t.get("marcus")).toEqual(new Set(["marcus webb"]));
+    expect(t.get("patel")).toEqual(new Set(["anish patel"]));
+    expect(t.get("nope")).toBeUndefined();
+    // A scope with no items: an empty table, not a thrown user.
+    expect(cache.aliasTable({ tenantId: "t", userId: "u2" }).size).toBe(0);
+  });
+
+  test("the table follows the tally when the naming item goes", () => {
+    const cache = new ItemCache();
+    const seed = item("s1", "Notes", "Minutes.", 1, "Marcus Webb");
+    cache.put(SCOPE, [seed]);
+    expect(cache.aliasTable(SCOPE).get("webb")).toEqual(new Set(["marcus webb"]));
+    cache.put(SCOPE, [{ ...seed, meta: {} }]);
+    expect(cache.aliasTable(SCOPE).get("webb")).toBeUndefined();
+  });
+});
+
+describe("partner wiring (D2009): requests anchor through the table", () => {
+  let ITEMS: ContextItem[] = [];
+  let CACHE = new ItemCache();
+  function setup(config: Record<string, unknown>, onPushPool?: (r: PushPoolReport) => void) {
+    CACHE = new ItemCache();
+    const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS };
+    return new ContextPartner({
+      sources: async () => [source],
+      sourceMap: new SourceMap(),
+      cache: CACHE,
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: {
+        ...CORE_CONFIG,
+        askReader: true,
+        readerPush: true,
+        readerGate: true,
+        confidentScore: 99,
+        fallbackMatchedTerms: 99,
+        askNudge: true,
+        pushCandidates: 1,
+        ...config,
+      },
+      ...(onPushPool ? { onPushPool } : {}),
+    });
+  }
+  const ref = () => ({ ...SCOPE, sessionId: "s1" });
+  const say = (p: ContextPartner, text: string) =>
+    p.observe({ ...ref(), at: NOW, kind: "user_message", text } as AgentEvent, { waitMs: 2_000 });
+
+  test("an item naming the person by surname settles the full-name request", async () => {
+    const pools: PushPoolReport[] = [];
+    ITEMS = [
+      // The freshest item names only the surname: without the table it does not anchor "Marcus Webb".
+      item("webb", "Contract renewal", "Payments to Webb are on hold until the contract countersigns.", 1),
+      // An older item lists the person: it builds the table and stays past the single candidate seat.
+      item("seed", "Project notes", "Notes on the venue deposit work.", 400, "Marcus Webb <m.webb@webb.example>"),
+    ];
+    const p = setup({}, (r) => pools.push(r));
+    await say(p, "Sign the Marcus Webb contract.");
+    expect(pools.at(-1)!.unsettled).toBe(false);
+  });
+
+  test("a name nobody's items know is not expanded (no false settle)", async () => {
+    const pools: PushPoolReport[] = [];
+    // Same items as the positive test; the request names someone the table does not join to Webb.
+    ITEMS = [
+      item("webb", "Contract renewal", "Payments to Webb are on hold until the contract countersigns.", 1),
+      item("seed", "Project notes", "Notes on the venue deposit work.", 400, "Marcus Webb <m.webb@webb.example>"),
+    ];
+    const p = setup({}, (r) => pools.push(r));
+    // The table joins "webb" to "marcus webb" only, so "Sara Webb" gains no alias and the item stays unsettled.
+    await say(p, "Sign the Sara Webb contract.");
+    expect(pools.at(-1)!.unsettled).toBe(true);
+  });
+});
