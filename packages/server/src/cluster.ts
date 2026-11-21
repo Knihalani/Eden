@@ -715,7 +715,8 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   };
 }
 
-/** The doc a leader publishes its membership to under the store's prefix: one per cell when the fleet is cell'd (S1-P8). */
+/** The doc a leader publishes its membership to under the store's prefix: one per
+ * cell when the fleet is cell'd (S1-P8). */
 export function membershipKey(prefix: string, cell: string | null): string {
   return `${prefix}cluster-membership${cell === null ? "" : `.${cell}`}`;
 }
