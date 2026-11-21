@@ -327,4 +327,13 @@ describe("pages", () => {
     expect(padded).not.toBe(index);
     expect(unpadded(padded)).toBe(unpadded(index));
   });
+
+  test("unpadded keeps a literal escaped pipe inside a cell as content (D2016)", () => {
+    // `\\|` is a literal pipe inside a cell, not a cell edge: texts that differ around it must not
+    // collapse to the same normalized form (a spacing change there is real content drift, not padding).
+    const a = "| D1 | d | `a \\| b` | |";
+    const b = "| D1 | d | `a \\ |b` | |";
+    expect(unpadded(a)).not.toBe(unpadded(b));
+    expect(unpadded(`| ${a.slice(1)}`.replace("| D1 |", "|  D1   |")).replace(" | d |", "|  d    |")).toContain("\\|");
+  });
 });

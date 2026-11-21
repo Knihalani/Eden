@@ -618,7 +618,7 @@ export const unpadded = (text: string) =>
     .map((line) =>
       line.startsWith("|")
         ? line
-            .split("|")
+            .split(/(?<!\\)\|/) // unescaped separators only: a literal `\|` is cell content, not a cell edge
             .map((c) => c.trim())
             .join("|")
         : line,
