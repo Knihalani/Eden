@@ -14,6 +14,7 @@ export { AimdLimiter, type LimiterOptions, type Outcome } from "./limiter";
 export { Histogram, RollingHistogram } from "./histogram";
 export { SparseIndex, type IndexSnapshot, type SearchResults, type SparseIndexOptions } from "./sparse-index";
 export { truncateUtf8, utf8Length } from "./utf8";
+export { tmpDir } from "./tmpdir";
 export {
   betaInc,
   betaIncInv,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpDir } from "@eden/primitives";
 import { AskReader, type ReaderInput, type ReaderMaker } from "@eden/engine";
 import { Budget, type ChatRequest, type Model } from "@eden/llm";
 import {
@@ -28,7 +28,7 @@ const request = (n: number): ChatRequest => ({
 
 describe("ReplayModel misses (--reader replay)", () => {
   test("an empty cache file: every call is a miss, counted, and throws (the ask fails open)", async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "empty.jsonl");
+    const file = join(tmpDir("reader-"), "empty.jsonl");
     writeFileSync(file, "");
     const m = new ReplayModel(file, null, "m");
     for (const n of [1, 2, 3]) await expect(m.chat(request(n))).rejects.toThrow("no cached call");
@@ -54,7 +54,7 @@ describe("ReplayModel stop sequences (D240's screen)", () => {
   });
 
   test("a request with a stop keys apart, replays a line recorded without it cut, and counts it", async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "stop.jsonl");
+    const file = join(tmpDir("reader-"), "stop.jsonl");
     const plain = request(1);
     const k = promptKey("claude-haiku-5-5", plain);
     writeFileSync(file, `${JSON.stringify({ k, ...line })}\n`);
@@ -86,7 +86,7 @@ describe("ReplayModel per-call timings (reader-latency-fit.ts)", () => {
   });
 
   test("a live call's line keeps usage, latency and TTFT (counts and timings), and its replay reports them", async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "timed.jsonl");
+    const file = join(tmpDir("reader-"), "timed.jsonl");
     const live = new ReplayModel(file, timed(420), "m");
     await live.chat(request(1));
     const line = JSON.parse(readFileSync(file, "utf8").trim()) as Record<string, unknown>;
@@ -107,7 +107,7 @@ describe("ReplayModel per-call timings (reader-latency-fit.ts)", () => {
   });
 
   test("a call that was not streamed has no ttftMs in its line, and null in calls", async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "plain.jsonl");
+    const file = join(tmpDir("reader-"), "plain.jsonl");
     const m = new ReplayModel(file, timed(), "m");
     await m.chat(request(2));
     expect(readFileSync(file, "utf8")).not.toContain("ttftMs");
@@ -171,7 +171,7 @@ describe("SubsetReplay (--reader-subset)", () => {
     }) as ChatRequest;
   const user = (r: ChatRequest) => r.messages[1]!.content;
   const write = (lines: object[]) => {
-    const file = join(mkdtempSync(join(tmpdir(), "subset-")), "log.jsonl");
+    const file = join(tmpDir("subset-"), "log.jsonl");
     writeFileSync(file, lines.map((l) => JSON.stringify(l)).join("\n"));
     return file;
   };
@@ -203,7 +203,7 @@ describe("SubsetReplay (--reader-subset)", () => {
   });
 
   test("ReplayModel answers a cache miss from it, counted apart from misses and replays", async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "reader-")), "empty.jsonl");
+    const file = join(tmpDir("reader-"), "empty.jsonl");
     writeFileSync(file, "");
     const m = new ReplayModel(file, null, "m", { subset: new SubsetReplay([log], "m", sys) });
     const res = await m.chat(req([1, 2]));

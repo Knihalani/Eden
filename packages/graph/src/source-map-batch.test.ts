@@ -4,10 +4,9 @@
  */
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scopeKey } from "@eden/protocol";
+import { tmpDir } from "@eden/primitives";
 import { SourceMap } from "./source-map";
 
 const alice = { tenantId: "t", userId: "alice" };
@@ -15,7 +14,7 @@ const bob = { tenantId: "t", userId: "bob" };
 const otherTenant = { tenantId: "t2", userId: "alice" };
 const MODULE = JSON.stringify(join(import.meta.dir, "source-map.ts"));
 
-const fileOf = () => join(mkdtempSync(join(tmpdir(), "eden-sm-batch-")), "map.db");
+const fileOf = () => join(tmpDir("eden-sm-batch-"), "map.db");
 /** What another connection (another process) reads from the file: written rows only. */
 const onDisk = (path: string) => {
   const db = new Database(path, { readonly: true });

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "./hermes-worker";
@@ -16,8 +16,14 @@ rl.on("line", (line) => {
 });
 `;
 
+const dirs: string[] = [];
+afterAll(() => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
+
 function stub(): { worker: Worker; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), "hermes-worker-"));
+  dirs.push(dir);
   writeFileSync(join(dir, "stub.js"), STUB);
   return { worker: new Worker([process.execPath, join(dir, "stub.js")], {}, join(dir, "log")), dir };
 }
@@ -61,6 +67,7 @@ describe("a hermes-ab worker", () => {
 
   test("a worker that cannot start is not ready, and runs nothing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hermes-worker-"));
+    dirs.push(dir);
     const worker = new Worker([join(dir, "no-such-python")], {}, join(dir, "log"));
     const ready = await worker.started();
     expect(ready.ok).toBe(false);

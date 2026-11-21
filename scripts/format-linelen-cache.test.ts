@@ -5,9 +5,9 @@
  * the shell plumbing, not the tools.
  */
 import { describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpDir } from "../packages/primitives/src/tmpdir";
 
 const script = join(import.meta.dir, "format.sh");
 
@@ -17,7 +17,7 @@ function repo(): {
   checked: () => string[];
   write: (path: string, text: string) => void;
 } {
-  const dir = mkdtempSync(join(tmpdir(), "eden-linelen-cache-"));
+  const dir = tmpDir("eden-linelen-cache-");
   const write = (path: string, text: string) => {
     mkdirSync(join(dir, path, ".."), { recursive: true });
     writeFileSync(join(dir, path), text);
