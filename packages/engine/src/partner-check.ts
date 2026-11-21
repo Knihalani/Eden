@@ -301,6 +301,7 @@ export abstract class PartnerCheck extends PartnerDelivery {
         this.recordRow(s.scope, id, {
           sourceIds: o.sourceIds,
           situation: o.situation,
+          pending: true,
           used,
           sessionId: s.id,
           bytes: o.bytes,

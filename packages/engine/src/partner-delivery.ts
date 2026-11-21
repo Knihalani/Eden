@@ -676,6 +676,7 @@ export abstract class PartnerDelivery extends PartnerCore {
           this.recordRow(s.scope, id, {
             sourceIds: o.sourceIds,
             situation: o.situation,
+            pending: true,
             used: false,
             sessionId: s.id,
             bytes: o.bytes,

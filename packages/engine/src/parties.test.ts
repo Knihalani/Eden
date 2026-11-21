@@ -149,9 +149,22 @@ describe("checkAction with partyCheck", () => {
 
   test("a held finding is usage-tracked like any injection: the record carries its bytes (C1)", async () => {
     const got: { injectionId: string; used: boolean; how: string; injectionBytes?: number }[] = [];
+    const sm = new SourceMap();
+    const corrected: unknown[] = [];
+    const recordedOutcomes: boolean[] = [];
+    const correctOutcome = sm.correctOutcome.bind(sm);
+    sm.correctOutcome = (scope, situation, sourceId, used) => {
+      corrected.push({ sourceId, used });
+      return correctOutcome(scope, situation, sourceId, used);
+    };
+    const recordOutcome = sm.recordOutcome.bind(sm);
+    sm.recordOutcome = (scope, situation, sourceId, used) => {
+      recordedOutcomes.push(used);
+      return recordOutcome(scope, situation, sourceId, used);
+    };
     const p = new ContextPartner({
       sources: async () => [mail()],
-      sourceMap: new SourceMap(),
+      sourceMap: sm,
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
@@ -179,6 +192,21 @@ describe("checkAction with partyCheck", () => {
     expect(rec).toMatchObject({ used: false, how: "ended" });
     expect(rec!.injectionBytes).toBeGreaterThan(0);
     expect(recorded).toBe(0);
+    // Feedback on the ended warning records a verdict — it does not correct another delivery's.
+    corrected.length = 0;
+    recordedOutcomes.length = 0;
+    expect(
+      p.feedback({
+        tenantId: "t1",
+        userId: "u-finding",
+        sessionId: "s1",
+        injectionId: held.finding!.id,
+        used: true,
+        how: "explicit",
+      }),
+    ).toBe(true);
+    expect(corrected).toEqual([]);
+    expect(recordedOutcomes).toContain(true);
   });
 
   test("a held finding expiring unused records no outcome on its sources", async () => {
