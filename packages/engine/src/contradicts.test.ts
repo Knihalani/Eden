@@ -156,4 +156,50 @@ describe("fallback asks", () => {
     const got = p.fallback([look, owed], c);
     expect(got.map((x: any) => x.item.id)).toEqual([owed.item.id]);
   });
+
+  test("a thing a named third party owns is a look-alike beside the user's own (D2060)", () => {
+    const p = partner() as any;
+    const c = cue("Move my Lisbon flight on 12 November to the evening departure.", ["Lisbon"], ["2026-11-12"]);
+    const mine = scored(
+      item(
+        "b-nov",
+        "Your booking: London to Lisbon, 12 November",
+        "Flight TP1351 departs Heathrow 07:40 on 12 November 2026.",
+      ),
+    );
+    const sams = scored(
+      item(
+        "b-sam",
+        "Fwd: Sam Okoro's flight to Lisbon",
+        "Sam's booking reference ZZ81KD: TP1357, 18:05 from Heathrow on 12 November 2026.",
+      ),
+    );
+    expect(p.contradicts(mine, c)).toBe(false);
+    expect(p.contradicts(sams, c)).toBe(true);
+    // The owner the request itself names is no look-alike.
+    const theirs = cue("Move my booking and Sam Okoro's flight to Lisbon", ["Lisbon"]);
+    expect(p.contradicts(sams, theirs)).toBe(false);
+    // No first-person claim, no look-alike: "reschedule Sam Okoro's flight" asks about his.
+    expect(p.contradicts(sams, cue("Reschedule Sam Okoro's flight to Lisbon", ["Lisbon"]))).toBe(false);
+    // A possessive at the title's end names no owned thing ("Rosa's" is the place).
+    const rosas = scored(item("b-rosa", "Brunch at Rosa's", "Sunday 11:00"));
+    expect(p.contradicts(rosas, cue("Book our anniversary dinner"))).toBe(false);
+  });
+
+  test("a record that declares itself dead is dead beside a dated ask too (D2060)", () => {
+    const p = partner() as any;
+    const dead = item(
+      "h",
+      "Cancelled: Hotel Alfama, Lisbon",
+      "Your reservation at Hotel Alfama for 12 to 14 November 2026 has been cancelled at your request.",
+    );
+    // A dated ask looks up the period's records — a cancelled one is none of them.
+    expect(p.staleSelf(dead, cue("Move my Lisbon flight on 12 November to the evening departure."))).toBe(true);
+    expect(p.staleSelf(dead, cue("What Lisbon hotel do I have in November?"))).toBe(true);
+    // A request about the cancellation itself wants the record.
+    expect(p.staleSelf(dead, cue("Was my Lisbon hotel cancelled?"))).toBe(false);
+    // The dated exemption still stands for a deadline since passed: the period is what it asks about.
+    const lapsed = item("o", "Lisbon offer", "Booking offer expires 8 November 2026.");
+    expect(p.staleSelf(lapsed, cue("What Lisbon offers ran in November 2026?"))).toBe(false);
+  });
 });

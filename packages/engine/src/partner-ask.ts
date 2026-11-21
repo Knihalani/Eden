@@ -413,9 +413,13 @@ export abstract class PartnerAsk extends PartnerVerdict {
       "ask",
     ).items;
     if (grounding) spans!.close(grounding, { grounded: grounded.length });
+    // The pool `grounded` reads was gated on `contradicts`; the tail beside it was not — a look-alike scoring
+    // on shared words alone (another party's booking, another year's) would ride it in ungated (D2060).
     const lexical = [
       ...grounded,
-      ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
+      ...scored.filter(
+        (x) => x.score >= this.config.candidateScore && !grounded.includes(x) && !this.contradicts(x, cue),
+      ),
     ];
     const fused = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
     // The stale sibling answers the ask no better than the current record, so it sorts after everything that

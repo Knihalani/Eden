@@ -935,3 +935,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2057 | 2026-11-21 | Adopted: a rule document of a pick's matter links as a companion on one shared term, common words allowed. | adopted |
 | D2058 | 2026-11-21 | Adopted: one rule document may ride beside the packet the pick cap already closed. | adopted |
 | D2059 | 2026-11-21 | Adopted: a trailing joiner is not part of a term. | adopted |
+| D2060 | 2026-11-21 | Adopted: a look-alike by ownership or by death is no pick, dated ask or not. | adopted |
