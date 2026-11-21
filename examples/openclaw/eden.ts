@@ -136,6 +136,7 @@ export const sessions = surface.sessions;
 
 const sessionFor = surface.sessionFor;
 const liveClient = surface.liveClient;
+const report = surface.report;
 
 function sessionKey(ctx: HookCtx | undefined): string {
   const key = ctx?.sessionKey ?? ctx?.sessionId;
@@ -340,6 +341,23 @@ const entry = {
       const hash = last ? contentKey(last) : "";
       const copy = assistants.filter((m) => contentKey(m) === hash).length;
       await reportAssistant(last ? textOf(last.content) : undefined, ctx, copy);
+    });
+
+    // `after_compaction` fires once the transcript is summarized away: the packets anchored to the old
+    // messages are gone from the agent's context, so Eden's shown marks reset too (D2006) — a later
+    // delivery of the same item is news again. `firstCall` re-arms so the post-compact prompt reports
+    // only its latest user message, not the whole compacted transcript.
+    api.on("after_compaction", async (_event: unknown, ctx: HookCtx) => {
+      try {
+        const s = await sessionFor(sessionKey(ctx));
+        if (!s) return;
+        s.firstCall = true;
+        s.kept.clear();
+        s.trailing = [];
+        s.reported = report(s, [{ kind: "context_reset" }], false).then(() => undefined);
+      } catch {
+        // D14
+      }
     });
 
     api.on("session_end", async (_event: unknown, ctx: HookCtx) => {

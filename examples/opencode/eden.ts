@@ -133,6 +133,7 @@ const sessions = surface.sessions;
 
 const sessionFor = surface.sessionFor;
 const liveClient = surface.liveClient;
+const report = surface.report;
 
 function sessionKey(sessionId: string | undefined): string {
   if (sessionId) lastSession = sessionId; // tracked for callers whose ctx lacks it (the ask_context tool)
@@ -356,6 +357,19 @@ export const Eden = async (ctx: {
       const props = event.properties ?? {};
       if (event.type === "session.deleted") {
         await surface.closeSession(edenId(props.info?.id ?? props.id ?? lastSession));
+        return;
+      }
+      // `session.compacted` fires once the transcript is summarized away: the packets anchored to the
+      // old messages are gone from the agent's context, so Eden's shown marks reset too (D2006) — a
+      // later delivery of the same item is news again. `firstCall` re-arms so the post-compact replay
+      // reports only its latest user message, not the whole compacted transcript.
+      if (event.type === "session.compacted") {
+        const s = await sessionFor(sessionKey(props.sessionID ?? props.info?.id ?? lastSession));
+        if (!s) return;
+        s.firstCall = true;
+        s.kept.clear();
+        s.trailing = [];
+        s.reported = report(s, [{ kind: "context_reset" }], false).then(() => undefined);
         return;
       }
       // The reply a part's `time.end` finalizes: reported now, not on a later transform that never comes.

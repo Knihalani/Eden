@@ -151,4 +151,36 @@ describe("Eden as an OpenClaw plugin", () => {
       expect(checks.find((c) => c.id === id)?.status, id).not.toBe("unmet");
     }
   });
+
+  test("a compaction resets the session's shown marks (D2006)", async () => {
+    const h = harness("oc-compact");
+    const kinds: string[] = [];
+    const s = {
+      eden: {
+        observe: async (e: { kind: string }) => (kinds.push(e.kind), { injection: null }),
+        pending: async () => [],
+      } as unknown as EdenClient,
+      options: {},
+      sessionId: edenId("oc-compact"),
+      generation: 0,
+      local: null,
+      seen: new Map(),
+      copyCounts: new Map(),
+      reportedAssistant: new Set(),
+      kept: new Map([["k0", "packet"]]),
+      trailing: ["mid"],
+      queued: [],
+      firstCall: false,
+      reportedCalls: new Set(),
+      reportedResults: new Set(),
+      reported: Promise.resolve(),
+    };
+    sessions.set(edenId("oc-compact"), s as never);
+    await h.emit("after_compaction", { compactedCount: 3 });
+    await s.reported;
+    expect(kinds).toContain("context_reset");
+    expect(s.firstCall).toBe(true);
+    expect(s.kept.size).toBe(0);
+    expect(s.trailing).toEqual([]);
+  });
 });
