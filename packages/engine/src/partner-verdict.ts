@@ -2212,7 +2212,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const out: Scored[] = [];
     // One rule document may ride beside the packet the pick cap already closed: the fare rules belong
     // next to the booking they govern whether or not a slot is free — the cap counts picks, not the
-    // rules that constrain them (D2058).
+    // rules that constrain them (D2058). The allowance is spent only when a rule document actually
+    // rides beside the cap — one admitted inside it holds a normal slot like any companion, and a
+    // decrement there would spend the allowance twice and close the passes on free slots.
     let policyRoom = 1;
     const take = (x: Scored, strictLink = false): void => {
       const pol = ruleDoc(new Set(contentWords(`${x.item.title} ${x.item.text}`).filter(term)));
@@ -2237,7 +2239,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (vocab !== undefined && x.doc !== undefined && this.alreadyHas(s, x.item, x.doc, vocab)) return;
       if (this.contradicts(x, cue) || this.staleSelf(x.item, cue) || staleOf(x.item) || !linked(x.item, strictLink))
         return;
-      if (pol) policyRoom--;
+      if (pol && out.length >= room) policyRoom--;
       has.add(x.item.id);
       // Its ledger entry at selection time, like `deliverChecked`'s `was`: a delivery that lands during the
       // pass's await (this request's own fast path) already handed it out.

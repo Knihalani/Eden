@@ -202,6 +202,38 @@ describe("companions: a delivered item pulls its cross-source companions (D1977)
     expect(ids).not.toContain("mail:tap-policy");
   });
 
+  test("a rule document inside the cap does not spend the beside-cap allowance (D2058)", async () => {
+    const mail = new StaticSource("mail", "Mail", [
+      {
+        ref: "ba-booking",
+        title: "Your booking ABC123: London to Lisbon",
+        text: "Flight BA 500, Friday 13 Nov, departs LHR 07:25, seat 14C. Booking reference ABC123.",
+      },
+      {
+        ref: "ba-bags",
+        title: "BA baggage allowance",
+        text: "Baggage fees and surcharges on your booking confirmation.",
+      },
+      {
+        ref: "ba-policy",
+        title: "Changing your BA booking",
+        text: "Changes to Economy Light fares cost 65 GBP per person plus any fare difference.",
+      },
+      {
+        ref: "ba-refund",
+        title: "BA booking refunds",
+        text: "Refunds carry cancellation charges and penalties per passenger.",
+      },
+    ]);
+    // Two rule documents sit inside the cap and a third rides beside it: the allowance is spent by
+    // the one beside it, not by the ones holding normal slots.
+    const { ids } = await run("What does my Lisbon flight itinerary say?", [mail]);
+    expect(ids).toContain("mail:ba-booking");
+    expect(ids).toContain("mail:ba-policy");
+    expect(ids).toContain("mail:ba-refund");
+    expect(ids).toContain("mail:ba-bags");
+  });
+
   test("off, the packet is the request's own picks only", async () => {
     const mail = new StaticSource("mail", "Mail", [
       {
