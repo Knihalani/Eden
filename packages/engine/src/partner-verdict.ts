@@ -454,6 +454,28 @@ export const docYears = (item: ContextItem): number[] => {
  * word of names and places ("Old Town", "old friends") too often to condemn a document on. What it was
  * about may still be asked for — `asksOld` is the request's say for that.
  */
+// The words a rule document is written in: an item carrying two or more is the policy of the matter a
+// pick already names (the fare rules beside the booking), not a look-alike of it.
+const POLICY_WORDS = new Set([
+  "policy",
+  "policies",
+  "fare",
+  "fares",
+  "fee",
+  "fees",
+  "penalty",
+  "penalties",
+  "cancellation",
+  "cancellations",
+  "refund",
+  "refunds",
+  "surcharge",
+  "surcharges",
+  "eligibility",
+  "charge",
+  "charges",
+]);
+
 const STALE_TAG = /[\[(（【]\s*(?:old|superseded|expired|outdated|out[- ]of[- ]date|previous|archived|void)\b/i;
 const STALE_CAPS = /\b(?:OLD|SUPERSEDED|EXPIRED|OUTDATED|VOID)\b/;
 const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b/i;
@@ -2113,6 +2135,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // A Set: a word the item repeats counts once, so "shared two" is two different words of the pick's.
       const own = new Set(contentWords(`${item.title} ${item.text}`).filter(term));
       const ownAll = new Set(contentWords(`${item.title} ${item.text}`));
+      // A rule document reads as one on its own words, before any pick: two or more of the words a
+      // policy is written in.
+      const isPolicy = [...own].filter((t) => POLICY_WORDS.has(t)).length >= 2;
       for (const p of picks) {
         // A document of a different year is that topic's sibling, not its companion — last year's renewal
         // notice beside this year's (their day numbers can agree by chance).
@@ -2125,6 +2150,10 @@ export abstract class PartnerVerdict extends PartnerCheck {
           }
         if (!shareNumber && p.refs.size > 0 && n.size > 0) continue;
         if (shareNumber) return true;
+        // A rule document of the pick's own matter — the fare rules beside the booking they govern —
+        // links on one shared term. It asks for no rare word and no request word: a policy's own words
+        // are common by nature, and the pick already names the matter.
+        if (isPolicy && [...own].some((t) => p.terms.has(t))) return true;
         // Only a rare word binds: "Nadia" or "lunch" sit on most of the user's items, so another event named
         // with them is a look-alike; "Globex" or a project name few items hold is the item's own topic. The
         // cache index holds raw words, so a word whose stem differs ("meeting" -> "meet") looks absent under
