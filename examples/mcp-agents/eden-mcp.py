@@ -97,8 +97,11 @@ def main() -> int:
     agent = {"name": None}
     try:
         from eden_client.hermes import _joined
+        from eden_client.claude import latest_session_id
 
-        sid = _session_id(plugin, None)
+        # No minting here — the agent's clientInfo name has not arrived yet; tools/call
+        # mints the tagged id. Only an already-present hook session is worth a client.
+        sid = latest_session_id(plugin.home)
         if sid:
             clients[sid] = plugin.client(sid)
     except Exception:  # noqa: BLE001
