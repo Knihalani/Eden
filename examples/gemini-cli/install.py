@@ -102,25 +102,28 @@ def strip_jsonc(text):
 
 
 def read_json(path):
-    """{} for a missing file; None for one that exists but isn't a JSON object (never clobbered)."""
+    """{} for a missing file; None for one that exists but isn't a JSON object (never clobbered).
+    Settings are UTF-8 regardless of the platform locale; a file that only parses with its
+    comments stripped returns (data, True) so the caller can keep the original beside it."""
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return {}
+        return {}, False
     try:
         data = json.loads(text)
     except Exception:  # noqa: BLE001
         try:
             data = json.loads(strip_jsonc(text))
         except Exception:  # noqa: BLE001
-            return None
-    return data if isinstance(data, dict) else None
+            return None, False
+        return (data if isinstance(data, dict) else None), True
+    return (data if isinstance(data, dict) else None), False
 
 
 def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     # Keep the file's permissions (a bare replace resets them to the umask's 0o644); a new file
     # holding hook/MCP settings — which may carry env credentials — starts owner-only.
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
@@ -131,7 +134,7 @@ def write_json(path, data):
 def merge_settings(home, dest):
     """Add Eden's hooks and the MCP server to settings.json (both deduped by command/name)."""
     settings_path = home / "settings.json"
-    settings = read_json(settings_path)
+    settings, had_comments = read_json(settings_path)
     if settings is None:
         print(f"warning: {settings_path} is not a JSON object; hooks and the MCP server not merged "
               "(fix or remove it and re-run)", file=sys.stderr)
@@ -155,6 +158,14 @@ def merge_settings(home, dest):
     entry = dict(existing) if isinstance(existing, dict) else {}
     entry.update({"command": "python3", "args": [str(dest / "eden-mcp.py")]})
     servers["eden"] = entry
+    if had_comments:
+        # The merged file is rewritten as plain JSON — keep the commented original beside it
+        # rather than silently deleting the user's notes and commented-out settings.
+        backup = settings_path.with_suffix(".json.eden-backup")
+        if not backup.exists():
+            backup.write_bytes(settings_path.read_bytes())
+        print(f"note: {settings_path} had comments; the original is kept at {backup}",
+              file=sys.stderr)
     write_json(settings_path, settings)
 
 
