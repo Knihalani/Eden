@@ -54,7 +54,7 @@ async function warm(sources: Source[], extra: Partial<PartnerDeps> = {}) {
   return { p, sessionId };
 }
 
-describe("askExpand: an ask's words read as OR-groups of stems and phrasing-family words (D2028)", () => {
+describe("askExpand: an ask's words read as OR-groups of stems and phrasing-family words (D2029)", () => {
   test("a phrasing the item writes differently still ranks its item: 'emergency number' meets 'emergencies', 'who manages' meets 'landlord agent'", async () => {
     const { p, sessionId } = await warm([docs]);
     const res = await p.ask({

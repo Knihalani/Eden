@@ -628,7 +628,7 @@ export interface EngineConfig {
    */
   requestGloss: boolean;
   /**
-   * Phrasing expansion on explicit asks (D2028): each content word of the question stands for one OR-group — the
+   * Phrasing expansion on explicit asks (D2029): each content word of the question stands for one OR-group — the
    * index's terms sharing its stem plus its phrasing family (`ASK_FAMILY`) — and coverage is counted per group at
    * its rarest variant's idf. Explicit `ask` calls only; the engine's own reader-push reads keep exact words, so the
    * proactive false-fire rate is untouched.

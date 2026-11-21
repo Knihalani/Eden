@@ -781,7 +781,7 @@ export abstract class PartnerDelivery extends PartnerCore {
     const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
     const query: number[] = [];
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
-    // `askExpand` (D2028): each of the question's content words stands for its stem-family in the index and its
+    // `askExpand` (D2029): each of the question's content words stands for its stem-family in the index and its
     // phrasing family's words (`ASK_FAMILY`), one OR-group per word seeded by its own exact term (a compound like
     // "wi-fi" keeps its match). The search reads the union; each word's group then credits a doc holding any of its
     // variants once — at the group's rarest variant's idf — so "emergency" meets "emergencies" and "who manages"

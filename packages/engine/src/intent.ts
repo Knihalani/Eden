@@ -63,7 +63,7 @@ export function stemWord(w: string): string {
 const undouble = (s: string) => (/([b-df-hj-np-tv-z])\1$/.test(s) && !/(?:ll|ss|zz)$/.test(s) ? s.slice(0, -1) : s);
 
 /**
- * Phrasing families for `askExpand` (D2028): how a question tends to word the thing an item records, keyed by the
+ * Phrasing families for `askExpand` (D2029): how a question tends to word the thing an item records, keyed by the
  * question word's stem. "who manages my flat" asks for the "landlord agent" line; "how much rent" asks for the
  * standing order; "policy number" asks for "policy PP-55231". One OR-group per word, so a family member can only
  * ever stand in for its own word — a common synonym ("month" behind "monthly") never out-scores the topic.
