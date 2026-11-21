@@ -24,10 +24,13 @@
  *                     re-read on SIGHUP and when it changes.
  *   EDEN_CLUSTER_KEY  the shared secret of the membership messages (24+ characters), the same on every node.
  */
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync, watch } from "node:fs";
+import { type BlobStore, ShardedBlobStore } from "@eden/engine";
 import { Gcra, OwnerTable, BUCKETS } from "@eden/primitives";
 import { bucketOf, keylessOriginAllowed } from "@eden/protocol";
 import { keyOf } from "./auth";
+import { S3BlobStore, storeConfig } from "./blob-store";
 import { DEFAULT_MAX_BODY_BYTES, type ServerConfig } from "./config";
 import { sumMetrics } from "./ops";
 import { sumUsage, userOf } from "./router";
@@ -139,7 +142,37 @@ export interface ClusterOptions {
    * connections and hangs must not hold the router's requests open for ever. Well above an event's 5 s wait.
    */
   forwardTimeoutMs?: number;
+  /**
+   * The shared store and key the leader publishes its membership to (S1-P7): the same EDEN_PERSIST_STORE the
+   * nodes write frozen users to. A leader without it runs alone, as before.
+   */
+  membership?: { store: BlobStore; key: string };
+  /**
+   * Follow the published membership instead of leading (S1-P7, EDEN_CLUSTER_FOLLOW): no probes, no membership
+   * messages, no rebalances — a stateless forwarder of the leader's placement, so several routers can sit behind
+   * the LB. `everyMs`: the store poll (default 1 s).
+   */
+  follow?: { everyMs?: number };
   log?: (line: string) => void;
+}
+
+/** The published membership (S1-P7): byte for byte what a follower makes its own state. */
+interface MembershipDoc {
+  epoch: number;
+  /** Nodes up and serving; placement is over these. */
+  live: string[];
+  /** Every member: the fan-out list for /v1/forget and /v1/usage. */
+  all: string[];
+  /**
+   * The members' specs (id + url): the leader's list is the one truth — a follower never needs a nodes file of
+   * its own to reach a node the leader added.
+   */
+  specs: NodeSpec[];
+  /** Buckets mid-move: a request for one gets the 503 retry, as on the leader. */
+  moved: number[];
+  at: number;
+  /** HMAC-SHA256 of the rest of the doc under EDEN_CLUSTER_KEY — a follower forwards tenant keys to these urls. */
+  sig: string;
 }
 
 const UNAVAILABLE = "temporarily unable to serve context";
@@ -287,6 +320,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
       const est = ((leaving.get(n.id) ?? 0) / owned) * (heldBy.get(n.id) ?? 0);
       return rebalanceMs + Math.round(est * releasePerUserMs);
     };
+    publish(movedBuckets);
     const answers = await Promise.all(
       told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? deadlineFor(n) : 2_000)),
     );
@@ -302,6 +336,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     }
     table = next;
     for (const b of movedBuckets) moving[b] = 0;
+    publish([]);
     for (const n of told) if (n.draining && answers[told.indexOf(n)] !== null) n.draining = false;
     nodes = nodes.filter((n) => n.member || n.up || n.draining);
     const r: Rebalance = {
@@ -379,14 +414,91 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     return changed ? doRebalance(changed, mode) : null;
   };
 
-  // First membership: every node that answers now (one probe each, no waiting for `recoverAfter`).
-  const first = await Promise.all(nodes.map(probe));
-  nodes.forEach((n, i) => (n.up = first[i] === "up"));
-  if (!nodes.some((n) => n.up)) log("eden cluster: no node answers /readyz yet; serving 503 until one does");
-  await rebalance("start");
+  /**
+   * Writes the current membership for followers to adopt (S1-P7); failures log, never break the rebalance.
+   * Each publication takes its own epoch (the move's staging and its completion must both adopt) and is signed:
+   * a follower forwards tenant credentials to the urls it reads here, so an unsigned doc is refused.
+   */
+  const publish = (moved: number[]) => {
+    const m = options.membership;
+    if (!m || options.follow) return;
+    const body = {
+      epoch: nextEpoch(),
+      live: nodes.filter((n) => n.member && n.up).map((n) => n.id),
+      all: nodes.filter((n) => n.member).map((n) => n.id),
+      specs: nodes.filter((n) => n.member).map((n) => ({ id: n.id, url: n.url })),
+      moved,
+      at: Date.now(),
+    };
+    const doc: MembershipDoc = {
+      ...body,
+      sig: createHmac("sha256", clusterKey).update(JSON.stringify(body)).digest("hex"),
+    };
+    void m.store
+      .put(m.key, new TextEncoder().encode(JSON.stringify(doc)))
+      .catch((err) =>
+        log(`eden cluster: membership not published: ${err instanceof Error ? err.message : String(err)}`),
+      );
+  };
 
-  const timer =
-    (options.healthEveryMs ?? 2_000) > 0 ? setInterval(() => void checkHealth(), options.healthEveryMs ?? 2_000) : null;
+  /** A follower makes the published membership its own, on a newer epoch only (S1-P7). */
+  const poll = async () => {
+    const m = options.membership;
+    if (!m || !options.follow) return;
+    const raw = await m.store.get(m.key).catch(() => null);
+    if (raw === null) return;
+    let doc: MembershipDoc;
+    try {
+      doc = JSON.parse(new TextDecoder().decode(raw)) as MembershipDoc;
+    } catch {
+      return; // A torn or malformed doc: the last good one stands.
+    }
+    if (typeof doc.epoch !== "number" || doc.epoch <= epoch || !Array.isArray(doc.live) || !Array.isArray(doc.all))
+      return;
+    // Only a doc signed with the cluster key may move the table: write access to the store alone must not hand
+    // a follower urls to forward tenant credentials to.
+    const { sig, ...body } = doc;
+    const want = Buffer.from(createHmac("sha256", clusterKey).update(JSON.stringify(body)).digest("hex"), "utf8");
+    const have = typeof sig === "string" ? Buffer.from(sig, "utf8") : Buffer.alloc(0);
+    // Byte lengths first: a sig long enough in characters but not in bytes must not throw inside timingSafeEqual.
+    if (have.length !== want.length || !timingSafeEqual(have, want)) return;
+    epoch = doc.epoch;
+    const liveSet = new Set(doc.live);
+    const allSet = new Set(doc.all);
+    // The published specs are the truth: a node the leader added that this router's list never held is adopted
+    // with its url; a listed one's url is refreshed.
+    for (const s of doc.specs ?? []) {
+      const known = nodes.find((n) => n.id === s.id);
+      if (known) known.url = s.url;
+      else nodes.push({ ...s, up: false, fails: 0, oks: 0, member: false, draining: false, reset: false });
+    }
+    for (const n of nodes) {
+      n.member = allSet.has(n.id);
+      n.up = liveSet.has(n.id);
+    }
+    table = new OwnerTable(doc.live);
+    moving.fill(0);
+    for (const b of doc.moved ?? []) if (Number.isInteger(b) && b >= 0 && b < BUCKETS) moving[b] = 1;
+  };
+
+  // First membership: every node that answers now (one probe each, no waiting for `recoverAfter`). A follower
+  // runs none of this — it only polls the store for the leader's published membership (S1-P7).
+  let timer: ReturnType<typeof setInterval> | null = null;
+  if (options.follow) {
+    await poll();
+    if (epoch <= 0) log("eden cluster: no membership published yet; serving 503 until the leader writes one");
+    timer = setInterval(() => void poll(), options.follow.everyMs ?? 1_000);
+  } else {
+    const first = await Promise.all(nodes.map(probe));
+    nodes.forEach((n, i) => (n.up = first[i] === "up"));
+    if (!nodes.some((n) => n.up)) log("eden cluster: no node answers /readyz yet; serving 503 until one does");
+    await rebalance("start");
+
+    timer =
+      (options.healthEveryMs ?? 2_000) > 0
+        ? setInterval(() => void checkHealth(), options.healthEveryMs ?? 2_000)
+        : null;
+  }
 
   const tenantOf = (req: Request): string | null => {
     const key = keyOf(req);
@@ -539,6 +651,16 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     rebalances,
     checkHealth,
     setNodes(specs: NodeSpec[]) {
+      if (options.follow) {
+        // A follower drives no membership: the list only refreshes the urls it may forward to.
+        const byId = new Map(specs.map((s) => [s.id, s]));
+        for (const n of nodes) if (byId.has(n.id)) n.url = byId.get(n.id)!.url;
+        for (const s of specs) {
+          if (!nodes.some((n) => n.id === s.id))
+            nodes.push({ ...s, up: false, fails: 0, oks: 0, member: false, draining: false, reset: false });
+        }
+        return Promise.resolve(null);
+      }
       // On `chain` like a health round: its probes, resets and member flags share the same one-at-a-time rule.
       return serialize(async () => {
         const ids = new Set(specs.map((s) => s.id));
@@ -575,7 +697,32 @@ export async function runCluster(
   config: ServerConfig,
   spec: { nodes: NodeSpec[]; file: string | null },
 ): Promise<void> {
-  const router = await startCluster({ config, nodes: spec.nodes });
+  // S1-P7: the membership store is the nodes' EDEN_PERSIST_STORE (the router holds no users, so `config.persist`
+  // is not built for it — the same env is read here). `cluster-membership` under the shared prefix names no
+  // blob: the sweeps skip it, and under sharding it sits on the first store (S1-P4).
+  const cfg = storeConfig(process.env);
+  const membership =
+    cfg === null
+      ? undefined
+      : {
+          store:
+            cfg.buckets.length === 1
+              ? new S3BlobStore({ ...cfg, bucket: cfg.buckets[0]! })
+              : new ShardedBlobStore(
+                  cfg.buckets.map((bucket) => new S3BlobStore({ ...cfg, bucket })),
+                  cfg.prefix,
+                ),
+          key: `${cfg.prefix}cluster-membership`,
+        };
+  const follow = process.env.EDEN_CLUSTER_FOLLOW === "1";
+  if (follow && membership === undefined)
+    throw new Error("EDEN_CLUSTER_FOLLOW needs EDEN_PERSIST_STORE, the store the leader publishes its membership to");
+  const router = await startCluster({
+    config,
+    nodes: spec.nodes,
+    membership,
+    follow: follow ? {} : undefined,
+  });
   const reload = () => {
     if (!spec.file) return;
     try {

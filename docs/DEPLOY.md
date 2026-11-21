@@ -271,8 +271,11 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   machine count: divides each tenant's spend cap, D993). A node clears its local copies at start: the store is the
   copy of record. A Hetzner vSwitch (the private network between dedicated servers) joins at most 100 servers.
 - **Cluster router** (`deploy/compose/cluster-router`): `EDEN_NODES_FILE` (`id=url` lines; ids are stable names),
-  `EDEN_API_KEYS` (to hold each tenant's whole rate, D993) and the cluster key. Two behind a load balancer for
-  redundancy (they hold no state and compute the same placement). TLS in front as in §3.
+  `EDEN_API_KEYS` (to hold each tenant's whole rate, D993) and the cluster key. For redundancy run more behind the
+  load balancer with `EDEN_CLUSTER_FOLLOW=1` and the same `EDEN_PERSIST_STORE`: a follower probes and tells nothing —
+  it polls the `cluster-membership` doc the leader writes into the store and adopts its placement (S1-P7), so two
+  routers never drive competing memberships; when the leader stops writing, a follower's last adopted table keeps
+  serving until it is restarted without the flag (or a new leader is started by removing it). TLS in front as in §3.
 - **Placement:** each user's bucket (16 bits of a hash of tenant and user) is owned by the node that scores highest
   for it (rendezvous hashing): adding a node moves about 1/(n+1) of users, all to it; losing one moves only its
   users.
