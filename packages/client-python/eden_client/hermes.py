@@ -119,10 +119,14 @@ def _warn(message: str) -> None:
 # `safeLine`'s rule on the client side: source text is attacker-controlled, so a citation line holds no
 # controls or line breaks a title could use to forge another `[n]` line.
 def _line(text: str) -> str:
-    return _LINE_CHARS.sub(lambda m: "&lt;" if m.group(0) == "<" else " ", text).strip()
+    return _LINE_CHARS.sub(
+        lambda m: "&lt;" if m.group(0) in "<\uff1c\ufe64" else " ", text
+    ).strip()
 
 
-_LINE_CHARS = re.compile(r"[<\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+_LINE_CHARS = re.compile(
+    r"[<\uff1c\ufe64\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\U000e0000-\U000e007f]"
+)
 
 
 def _homes(env=None):

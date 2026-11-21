@@ -41,9 +41,13 @@ export function heldResult(tool: string, finding: Injection): string {
 }
 
 // `safeLine`'s rule on the client side: source text is attacker-controlled, so a citation line holds no
-// controls or line breaks a title could use to forge another `[n]` line.
-const LINE_CHARS = /[<\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
-const line = (text: string) => text.replace(LINE_CHARS, (m) => (m === "<" ? "&lt;" : " ")).trim();
+// controls, bidi marks, invisible tag characters or line breaks a title could use to forge another `[n]`
+// line or smuggle instructions; `<` and its full-width and small look-alikes escape so none opens the
+// envelope.
+const LINE_CHARS =
+  /[<\uFF1C\uFE64\x00-\x1f\x7f-\x9f\u061C\u200E\u200F\u2028\u2029\u202a-\u202e\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
+const line = (text: string) =>
+  text.replace(LINE_CHARS, (m) => (m === "<" || m === "\uFF1C" || m === "\uFE64" ? "&lt;" : " ")).trim();
 
 /**
  * An ask answer's text with its citations as `Sources` lines (D2022): each names its item id so an `item`
