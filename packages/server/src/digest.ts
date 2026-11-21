@@ -84,7 +84,7 @@ export interface Digest {
    * many did. The agent's model re-reads a session's packets on every later request; roughly four bytes a
    * token. A record from before the field shipped carries none, so a log mixing versions undercounts.
    */
-  packets: { bytes: number; counted: number };
+  packets: { bytes: number; counted: number; total: number };
   silent: { events: number; reasons: Record<string, number>; nothingToLookUp: number };
   connectors: ConnectorCalls;
   /** The same counts from a log without Eden's context (`--baseline`: shadow mode, or before Eden), if given. */
@@ -225,6 +225,9 @@ export function digest(lines: Iterable<string>): Digest {
   const packets = {
     bytes: records.reduce((a, r) => a + (typeof r.injectionBytes === "number" ? r.injectionBytes : 0), 0),
     counted: records.filter((r) => typeof r.injectionBytes === "number").length,
+    // Every handed injection is the coverage denominator, `reset` rows included — a sized reset
+    // must not hide an older sizeless record behind a "full coverage" line.
+    total: records.length,
   };
   const connectors = connectorCalls(traces, syncRuns);
   return {
