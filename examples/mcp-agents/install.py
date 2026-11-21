@@ -261,7 +261,7 @@ def merge_goose(path, mcp_py, env, remove=False):
         child = ext_indent + 2
 
     # drop an `eden:` entry at the child indent (or shallower-but-still-under-extensions)
-    kept, skipping = [], False
+    kept, skipping, pending = [], False, []
     for l in lines[ext_i + 1:end]:
         stripped = l.lstrip()
         if l.strip() and ext_indent < indent(l) <= child and re.match(r"^eden\s*:", stripped):
@@ -269,13 +269,18 @@ def merge_goose(path, mcp_py, env, remove=False):
             continue
         if skipping and l.strip() and not stripped.startswith("#") and indent(l) <= child:
             skipping = False
+            # Comments seen while dropping resurface at the child indent: re-indenting
+            # keeps them out of any preceding extension's block scalar (whose content
+            # sits deeper than child) while preserving the user's commented-out lines.
+            kept.extend(" " * child + c.lstrip() for c in pending)
+            pending = []
         if not skipping:
             kept.append(l)
-        elif indent(l) <= child and (not l.strip() or stripped.startswith("#")):
-            # A blank or comment at the child indent (or shallower) is a sibling line,
-            # not Eden's own. A deeper one rides inside the dropped block — keeping it
-            # could let a preceding extension's block scalar absorb it into its value.
-            kept.append(l)
+        elif not l.strip():
+            kept.append(l)  # a blank absorbed into a scalar is a harmless trailing newline
+        elif stripped.startswith("#"):
+            pending.append(l)
+    kept.extend(" " * child + c.lstrip() for c in pending)
 
     out = lines[:ext_i + 1] + kept + lines[end:]
     if not remove:
