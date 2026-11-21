@@ -3,7 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { SourceFanout } from "./guarded";
-import { ArgumentMappingError, McpSource, ReadOnlyViolation, structureOf } from "./mcp-source";
+import { ArgumentMappingError, McpSource, ReadOnlyViolation, structureOf, toItems } from "./mcp-source";
 import { FetchErrorResult } from "./source";
 import { StaticSource } from "./static-source";
 
@@ -499,5 +499,19 @@ describe("McpSource.fetch: the record where the reply puts it (D294)", () => {
     const s = fetching({ content: [{ type: "text", text: JSON.stringify({ data: { ...record, id: "t9" } }) }] });
     expect(await s.fetch("t1", scope, AbortSignal.timeout(2_000))).toBeNull();
     await s.close();
+  });
+});
+
+describe("a row's ref from its identifying content", () => {
+  test("field order does not change it (D2077)", () => {
+    const text = (o: Record<string, unknown>) => [{ type: "text", text: JSON.stringify(o) }];
+    const a = toItems("s", text({ title: "Standup", body: "moved to 10", attendees: 3 }), 10);
+    const b = toItems("s", text({ attendees: 3, body: "moved to 10", title: "Standup" }), 10);
+    expect(a[0]!.id).toBe(b[0]!.id);
+    expect(a[0]!.ref).toBe(b[0]!.ref);
+    expect(a[0]!.ref).toStartWith("eden-h-");
+    // And a different row still differs.
+    const c = toItems("s", text({ title: "Standup", body: "moved to 11", attendees: 3 }), 10);
+    expect(c[0]!.ref).not.toBe(a[0]!.ref);
   });
 });
