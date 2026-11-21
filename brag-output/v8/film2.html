@@ -242,5 +242,6 @@ if(SHOT==='L'){ // the mark: silence, one light crossing it
     DOF(8.6-.5*u,.0016); uT.value=t; };
 }
 window.renderAt=t=>{ FRAME(t); updText(t); film.uniforms.uSeed.value=(t*24.0%97)+1.3; composer.render(); };
+if(new URLSearchParams(location.search).get('notext')) document.getElementById('ov').style.display='none';
 window.READY=false; document.fonts.ready.then(()=>document.fonts.load('20px Book')).then(()=>{ window.READY=true; });
 </script></body></html>
