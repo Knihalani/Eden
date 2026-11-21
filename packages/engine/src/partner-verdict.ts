@@ -629,7 +629,7 @@ export const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|mo
  */
 export const sameRef = (refs: ReadonlySet<string>, item: ContextItem): boolean => {
   if (refs.size === 0) return true;
-  const have = idNumbers(`${item.title} ${item.text}`);
+  const have = itemRefs(item);
   if (have.size === 0) return true;
   for (const id of refs) if (have.has(id)) return true;
   return false;
@@ -686,6 +686,33 @@ export const idNumbers = (text: string): Set<string> => {
   }
   return out;
 };
+
+/**
+ * The features the pool passes extract from an item, computed once each. `contradicts`, `companions`, the stale
+ * reads and the pick bookkeeping each re-ran their regexes over `${title} ${text}` — `linked` scanned one item's
+ * text four times — per candidate, per request. The WeakMap keeps a feature alive only as long as the item object
+ * is (the same pattern as `staleMemo`), and items are immutable once stored. The text itself is not kept: a packed
+ * item's `text` decodes on read under a bounded memo (`packed-text.ts`), and a pinned concat would hold every
+ * scanned item's whole decoded body for the item's life — the extracted feature is the small part.
+ */
+const ITEM_FEATURES = new WeakMap<
+  ContextItem,
+  { words?: string[]; caps?: Set<string>; refs?: Set<string>; years?: Set<number> }
+>();
+const itemText = (item: ContextItem): string => `${item.title} ${item.text}`;
+const itemFeatures = (item: ContextItem) => {
+  let f = ITEM_FEATURES.get(item);
+  if (f === undefined) {
+    f = {};
+    ITEM_FEATURES.set(item, f);
+  }
+  return f;
+};
+const itemWords = (item: ContextItem): string[] => (itemFeatures(item).words ??= contentWords(itemText(item)));
+const itemCaps = (item: ContextItem): Set<string> => (itemFeatures(item).caps ??= capitalWords(itemText(item)));
+const itemRefs = (item: ContextItem): Set<string> => (itemFeatures(item).refs ??= idNumbers(itemText(item)));
+const itemYears = (item: ContextItem): Set<number> =>
+  (itemFeatures(item).years ??= new Set((itemText(item).match(YEARS) ?? []).map(Number)));
 
 /**
  * The year a request speaks from: a year it names, else the year of a day it names — never later than now, since a
@@ -1675,13 +1702,13 @@ export abstract class PartnerVerdict extends PartnerCheck {
   protected contradicts(x: Scored, cue: Cue): boolean {
     const want = idNumbers(cue.raw);
     if (want.size > 0) {
-      const have = idNumbers(`${x.item.title} ${x.item.text}`);
+      const have = itemRefs(x.item);
       if (have.size > 0 && ![...want].some((n) => have.has(n))) return true;
     }
     const ref = requestYear(cue);
     if (ref !== null) {
-      const years = `${x.item.title} ${x.item.text}`.match(YEARS);
-      if (years !== null && Math.max(...years.map(Number)) < ref) return true;
+      const years = itemYears(x.item);
+      if (years.size > 0 && Math.max(...years) < ref) return true;
     }
     const names = cueNames(cue).names;
     for (const e of names) {
@@ -1978,7 +2005,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     if (entities.length === 0) return [];
     const anchors = this.requestAnchors(s.scope, entities, cue);
     const entityWords = Math.max(1, ...entities.map((e) => e.trim().split(/\s+/).length));
-    const dated = (item: ContextItem) => namedDays(`${item.title} ${item.text}`).length > 0;
+    const dated = (item: ContextItem) => namedDays(itemText(item)).length > 0;
     // About the named thing: the entity a whole word of its title or of its text, and the item a dated record or
     // one also holding another of the request's terms — a bare mention is a lookalike until a second term binds it.
     const subject = pool.filter(
@@ -2026,7 +2053,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const requestNamed = namedDays(cue.raw);
     const fromDays =
       cue.time !== null && cue.time.days.size > 0 && MOVES.test(cue.raw)
-        ? namedDays(picks.map((x) => `${x.item.title} ${x.item.text}`).join(" ")).filter((f) =>
+        ? namedDays(picks.map((x) => itemText(x.item)).join(" ")).filter((f) =>
             requestNamed.some((r) => r.day === f.day && r.month === f.month),
           )
         : [];
@@ -2035,7 +2062,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       const d = on === null ? null : /^\d{4}-(\d{2})-(\d{2})$/.exec(on);
       return (
         (d !== null && fromDays.some((f) => f.day === Number(d[2]) && f.month === Number(d[1]) - 1)) ||
-        namesDay(`${item.title} ${item.text}`, fromDays)
+        namesDay(itemText(item), fromDays)
       );
     };
     if (fromDays.length > 0 || (cue.time !== null && cue.time.days.size > 0 && MOVES.test(cue.raw))) {
@@ -2045,7 +2072,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // returns policy that answers "can I still get a refund"), or two of the subject's (the booking's change
     // policy — the request may share no word with it at all).
     const subjectTerms = new Set<string>();
-    for (const x of picks) for (const t of contentWords(`${x.item.title} ${x.item.text}`)) subjectTerms.add(t);
+    for (const x of picks) for (const t of itemWords(x.item)) subjectTerms.add(t);
     const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
     // Shared terms count on letters only: a bare number ("5") binds two items on nothing.
     const companion = (item: ContextItem) => {
@@ -2059,7 +2086,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (ys.length > 0 && relevant.size > 0 && !ys.some((y) => relevant.has(y))) return false;
       let shared = 0;
       let req = false;
-      for (const t of contentWords(`${item.title} ${item.text}`)) {
+      for (const t of itemWords(item)) {
         if (subjectTerms.has(t)) {
           if (/\p{L}/u.test(t)) shared++;
         } else if (requestTerms.has(t)) req = true;
@@ -2086,7 +2113,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
               (o) =>
                 nearDuplicate(o.sketch, h.sketch) &&
                 startDay(o.item, cue.offset) === startDay(h.item, cue.offset) &&
-                sameRef(idNumbers(`${h.item.title} ${h.item.text}`), o.item),
+                sameRef(itemRefs(h.item), o.item),
             ) ||
             this.alreadyHas(s, h.item, h.doc, vocab)
           ) {
@@ -2142,10 +2169,10 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // over every pick's words would let a wrong-numbered invoice in on another pick's identifier pass.
     const picks = chosen.map((x) => ({
       src: x.item.sourceId,
-      refs: idNumbers(`${x.item.title} ${x.item.text}`),
-      terms: new Set(contentWords(`${x.item.title} ${x.item.text}`)),
-      caps: capitalWords(`${x.item.title} ${x.item.text}`),
-      years: new Set(`${x.item.title} ${x.item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []),
+      refs: itemRefs(x.item),
+      terms: new Set(itemWords(x.item)),
+      caps: itemCaps(x.item),
+      years: itemYears(x.item),
     }));
     const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
     // Words of an entity the request names ("Acme Supplies", "Jordan Pike", "Lisbon") bind nothing here: every
@@ -2173,16 +2200,16 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // request's (the shop's returns policy beside the order that leaks). Numbers count per pair: an item
     // carrying an identifier the linked item does not is a sibling, not a companion.
     const linked = (item: ContextItem, needReq = false): boolean => {
-      const n = idNumbers(`${item.title} ${item.text}`);
-      const itemYears = new Set(`${item.title} ${item.text}`.match(/\b(?:19|20)\d{2}\b/g) ?? []);
+      const n = itemRefs(item);
+      const candidateYears = itemYears(item);
       // A Set: a word the item repeats counts once, so "shared two" is two different words of the pick's.
-      const own = new Set(contentWords(`${item.title} ${item.text}`).filter(term));
-      const ownAll = new Set(contentWords(`${item.title} ${item.text}`));
+      const own = new Set(itemWords(item).filter(term));
+      const ownAll = new Set(itemWords(item));
       const isPolicy = ruleDoc(own);
       for (const p of picks) {
         // A document of a different year is that topic's sibling, not its companion — last year's renewal
         // notice beside this year's (their day numbers can agree by chance).
-        if (itemYears.size > 0 && p.years.size > 0 && ![...itemYears].some((y) => p.years.has(y))) continue;
+        if (candidateYears.size > 0 && p.years.size > 0 && ![...candidateYears].some((y) => p.years.has(y))) continue;
         let shareNumber = false;
         for (const id of n)
           if (p.refs.has(id)) {
@@ -2197,11 +2224,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         // Lufthansa's beside the TAP booking shares "booking" alone — so a proper name both carry
         // (the carrier) must bind it; rarity over the small request-time cache would misread a word
         // common in the unfetched corpus as rare.
-        if (
-          isPolicy &&
-          [...own].some((t) => p.terms.has(t)) &&
-          [...capitalWords(`${item.title} ${item.text}`)].some((c) => p.caps.has(c))
-        )
+        if (isPolicy && [...own].some((t) => p.terms.has(t)) && [...itemCaps(item)].some((c) => p.caps.has(c)))
           return true;
         // Only a rare word binds: "Nadia" or "lunch" sit on most of the user's items, so another event named
         // with them is a look-alike; "Globex" or a project name few items hold is the item's own topic. The
@@ -2219,7 +2242,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         // rare: the rare-word bar exists for words anyone could use (the shop's name is on most of its mail),
         // and a name like "Lakeland" is exactly the link a returns policy has to the order that leaks. It
         // never feeds the two-words-alone rule — common capitalized words ("Perfect", "Reply") are noise.
-        const ownCaps = capitalWords(`${item.title} ${item.text}`);
+        const ownCaps = itemCaps(item);
         const sharedCaps = new Set<string>();
         for (const t of ownAll)
           if (
@@ -2257,7 +2280,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // decrement there would spend the allowance twice and close the passes on free slots.
     let policyRoom = 1;
     const take = (x: Scored, strictLink = false): void => {
-      const pol = ruleDoc(new Set(contentWords(`${x.item.title} ${x.item.text}`).filter(term)));
+      const pol = ruleDoc(new Set(itemWords(x.item).filter(term)));
       if (out.length >= room + (pol ? policyRoom : 0)) return;
       if (has.has(x.item.id) || bulkMail(x.item) || !s.ledger.isFresh(x.item.id, s.turn)) return;
       if (s.delivered.some((d) => nearDuplicate(d.sketch, x.sketch) && sameRef(d.refs, x.item))) return;
@@ -2272,7 +2295,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
               (o.item.meta?.start !== undefined &&
                 x.item.meta?.start !== undefined &&
                 startDay(o.item, cue.offset) !== startDay(x.item, cue.offset))) &&
-            sameRef(idNumbers(`${x.item.title} ${x.item.text}`), o.item),
+            sameRef(itemRefs(x.item), o.item),
         )
       )
         return;
