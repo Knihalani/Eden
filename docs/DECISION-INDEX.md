@@ -937,3 +937,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2059 | 2026-11-21 | Adopted: a trailing joiner is not part of a term. | adopted |
 | D2060 | 2026-11-21 | Adopted: a look-alike by ownership or by death is no pick, dated ask or not. | adopted |
 | D2061 | 2026-11-21 | Adopted: the earliest year a request names is the look-alike floor. | adopted |
+| D2062 | 2026-11-21 | Adopted: a CPU-cost bound reads the least run, not the median. | adopted |
