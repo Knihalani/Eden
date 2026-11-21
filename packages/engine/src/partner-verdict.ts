@@ -1286,7 +1286,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         void running.then(
           (r) => {
             if (r.called) this.traceCheck(s, r, t0);
-            void this.deliverLateCheck(s, cue, read, r, requestAt);
+            void this.deliverLateCheck(s, cue, gate, r, requestAt);
           },
           () => undefined,
         );
@@ -1352,16 +1352,47 @@ export abstract class PartnerVerdict extends PartnerCheck {
   private async deliverLateCheck(
     s: Session,
     cue: Cue,
-    read: readonly Scored[],
+    gate: PushGate,
     r: PushCheckRead,
     requestAt: number,
   ): Promise<void> {
     try {
       if (!r.yes?.size || s.closed || s.requests !== requestAt) return;
-      const undelivered = read.filter((x) => r.yes!.has(x.item.id) && s.ledger.isFresh(x.item.id, s.turn));
+      // The check's answer goes through the same filters the in-time push applies (`candidatesOf`: look-alikes,
+      // stale siblings, bulk mail, the candidates cap) — a named item the rules would have kept out stays out —
+      // and an item already delivered is left out (`isFresh`).
+      const undelivered = this.candidatesOf(s, cue, gate, r).items.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       if (undelivered.length === 0) return;
-      const injection = await this.deliverChecked(s, undelivered, "proactive", `candidates:${cue.id}`, cue);
-      if (injection !== null && !s.closed && s.requests === requestAt) s.pending.push(injection);
+      // `deliverChecked`'s re-reads take a moment: what the ledger held before them, so a discarded packet's
+      // marks can be undone the way `withdraw` undoes a replaced one's.
+      const was = new Map(undelivered.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+      // The candidates' own frame: `build` marks every item it cites, so a packet cut by the ordinary byte cap
+      // would suppress items its text never carried.
+      const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+      const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
+      const injection = await this.deliverChecked(s, undelivered, "proactive", `candidates:${cue.id}`, cue, was, {
+        lead: CANDIDATES_LEAD,
+        itemBytes: each,
+        maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
+      });
+      if (injection === null) return;
+      if (s.closed || s.requests !== requestAt) {
+        // A session that closed or moved to a newer request during the re-reads gets no packet — and keeps the
+        // marks undone too: the agent never saw the items, so they stay deliverable to what it asks next.
+        const undo: Undo = new Map();
+        for (const x of undelivered) {
+          const set = s.ledger.entry(x.item.id);
+          const before = was.get(x.item.id);
+          if (!set || sameEntry(set, before)) continue;
+          undo.set(x.item.id, { was: before, set, sketch: x.sketch });
+        }
+        if (undo.size > 0) {
+          this.undoable.set(injection, undo);
+          this.withdraw(s, injection);
+        }
+        return;
+      }
+      s.pending.push(injection);
     } catch {
       // Best-effort: a late check's delivery must never break the session it serves.
     }
@@ -4016,6 +4047,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     reason: string,
     cue: Cue,
     was?: Map<string, LedgerEntry | undefined>,
+    frame?: PacketFrame,
   ): Promise<Injection | null> {
     // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
     // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
@@ -4028,7 +4060,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       return now === undefined || sameEntry(held.has(x.item.id) ? held.get(x.item.id) : now, now);
     });
     if (kept.length === 0 || s.closed) return null;
-    return this.deliver(s, kept, mode, reason, cue);
+    return this.deliver(s, kept, mode, reason, cue, undefined, frame);
   }
 
   /**

@@ -475,6 +475,48 @@ describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check
     expect(partner.takePending(ref).filter((x) => x.reason.startsWith("candidates:"))).toEqual([]);
   });
 
+  test("a late check's named look-alike stays out, as the in-time push's rules keep it out (review, D2082)", async () => {
+    const dead = item("dead", "Cancelled: Harlow venue booking", "The Harlow venue booking was cancelled.", 1);
+    const slow: Model = {
+      id: "slow",
+      chat: async (req) => {
+        await sleep(60);
+        return says(["Cancelled: Harlow venue booking", "Harlow venue"]).chat(req);
+      },
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckWaitMs: 10 }, slow, [], [...ITEMS, dead]);
+    expect(await handed(partner)).toEqual(["mail:plain", "mail:other"]);
+    await sleep(120);
+    const got = partner.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
+    // The self-cancelled record the check named is kept out by the push's own rules; the live hold goes.
+    expect(got?.citations.map((c) => c.itemId)).toEqual(["mail:hold"]);
+    // The packet carries the candidates' frame: its items were named by a check but the cut is the candidates' cut.
+    expect(got?.text).toContain("may bear on this request");
+  });
+
+  test("a discarded late packet leaves its items deliverable to the next request (review, D2082)", async () => {
+    const slow: Model = {
+      id: "slow",
+      chat: async (req) => {
+        await sleep(60);
+        return says(["Invoice archive"]).chat(req);
+      },
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckWaitMs: 10, cueCooldownTurns: 0 }, slow);
+    await handed(partner);
+    // The request moves on before the first check settles: its late packet is discarded — and must not mark
+    // the archive, or the third request could never get it.
+    await partner.observe(
+      { ...ref, at: NOW + 100, kind: "user_message", text: "What is the weather in Leeds?" } as AgentEvent,
+      { waitMs: 10 },
+    );
+    await sleep(120);
+    await partner.observe({ ...ref, at: NOW + 200, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 10 });
+    await sleep(120);
+    const got = partner.takePending(ref).find((x) => x.citations.some((c) => c.itemId === "mail:other"));
+    expect(got?.citations.map((c) => c.itemId)).toContain("mail:other");
+  });
+
   test("a check that answers late does not take back the candidates it failed open to (review)", async () => {
     const slow: Model = {
       id: "slow",
