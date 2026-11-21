@@ -391,6 +391,8 @@ export abstract class PartnerAsk extends PartnerVerdict {
     const scored = this.rank(s, cue, {
       ignoreLedger: true,
       probed: extra.length > 0 ? [...(probed ?? []), ...extra] : probed,
+      // `askExpand` (D2028): explicit asks only — the push's own reads stay on the exact-word path.
+      expand: this.config.askExpand && internal.push !== true,
     });
     if (ranking) spans!.close(ranking, { candidates: scored.length });
     // Only anchored intent hits are fused in (`anchoredIntents`); every hit still withholds the guard's line.

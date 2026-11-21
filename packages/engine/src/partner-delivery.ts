@@ -9,8 +9,9 @@ import {
   type InjectionMode,
   type Scope,
 } from "@eden/protocol";
-import { Vocab } from "@eden/primitives";
+import { tokenize, Vocab } from "@eden/primitives";
 import { nearDuplicate, type ItemCache, type Sketch } from "./cache";
+import { ASK_FAMILY, stemWord } from "./intent";
 import { gateOf } from "./conflict";
 import { cardNames, CLEARED_STATES, couldClear, type CardNames, STANDING_KINDS, type Card } from "./cards";
 import { startDay } from "./grounding";
@@ -769,13 +770,51 @@ export abstract class PartnerDelivery extends PartnerCore {
    * Scores cached items for a cue: idf-weighted query coverage, plus a bonus when the item names a cue entity as
    * whole terms ("Al" never matches "also"). Both come from the cache's index: the item's text is never rescanned.
    */
-  protected rank(s: Session, cue: Cue, options: { ignoreLedger?: boolean; probed?: string[] } = {}): Scored[] {
+  protected rank(
+    s: Session,
+    cue: Cue,
+    options: { ignoreLedger?: boolean; probed?: string[]; expand?: boolean } = {},
+  ): Scored[] {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
     const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
     const query: number[] = [];
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
+    // `askExpand` (D2028): each of the question's content words stands for its stem-family in the index and its
+    // phrasing family's words (`ASK_FAMILY`), one OR-group per word seeded by its own exact term (a compound like
+    // "wi-fi" keeps its match). The search reads the union; each word's group then credits a doc holding any of its
+    // variants once — at the group's rarest variant's idf — so "emergency" meets "emergencies" and "who manages"
+    // meets "landlord agent" without a common synonym outscoring the topic. Terms no live item holds are left out:
+    // a freed word's idf still weighs positive and would punish the survivors.
+    let groups: { ids: number[]; idf: number }[] | undefined;
+    if (options.expand) {
+      groups = [];
+      const seen = new Set<string>();
+      // Raw words, tokenized as the query was ("wi-fi" is one term) — including words the index never saw, whose
+      // phrasing family may still match: "manages" meets "agent" though "manages" interns nowhere.
+      for (const w of tokenize(`${cue.text} ${cue.entities.join(" ")}`, new Vocab())) {
+        if (isStopword(w)) continue;
+        const stem = stemWord(w);
+        if (seen.has(stem)) continue;
+        seen.add(stem);
+        const ids = new Set<number>();
+        const own = vocab.lookup(w);
+        if (own >= 0 && cache.hasTerm(s.scope, own)) ids.add(own);
+        for (const other of cache.stemIds(s.scope, stem) ?? []) if (cache.hasTerm(s.scope, other)) ids.add(other);
+        for (const syn of ASK_FAMILY[stem] ?? [])
+          for (const other of cache.stemIds(s.scope, stemWord(syn)) ?? [])
+            if (cache.hasTerm(s.scope, other)) ids.add(other);
+        if (ids.size === 0) continue;
+        let idf = 0;
+        for (const other of ids) idf = Math.max(idf, cache.idfOf(s.scope, other));
+        groups.push({ ids: [...ids], idf });
+      }
+      if (groups.length > 0) {
+        query.length = 0;
+        for (const g of groups) query.push(...g.ids);
+      }
+    }
     // Events on a day the request names are candidates whether or not they share its words (D44); they rank after
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now(), 30, cue.offset) : [];
@@ -808,7 +847,10 @@ export abstract class PartnerDelivery extends PartnerCore {
       }
       return n;
     };
-    const found = query.length > 0 ? cache.search(s.scope, query, query.length, 12, this.now()) : [];
+    // `askExpand`'s union reads wider than 12: a doc matching many of one word's variants must not push the doc
+    // holding the rare topic word off the shortlist before the per-group coverage is counted.
+    const found =
+      query.length > 0 ? cache.search(s.scope, query, query.length, groups !== undefined ? 48 : 12, this.now()) : [];
     for (const h of timed) if (!found.some((f) => f.item.id === h.item.id)) found.push(h);
     // The probes' finds for the request's people, organisations and day are candidates whatever they share in words.
     const probed = options.probed?.length ? cache.hits(s.scope, options.probed, this.now()) : [];
@@ -839,8 +881,25 @@ export abstract class PartnerDelivery extends PartnerCore {
           const entityHit = entities.some(
             (ids) => ids.length > 0 && cache.containsAll(s.scope, h.doc, ids, ids.length),
           );
-          const score = h.coverage + (entityHit ? this.config.entityBonus : 0);
-          const scored: Scored = { item: h.item, matched: h.matched, score, sketch: h.sketch, doc: h.doc };
+          // `askExpand`: coverage is over the question's words, one OR-group each, so a doc holding several variants
+          // of one word is credited that word once, not once per variant.
+          let coverage = h.coverage;
+          let matched = h.matched;
+          if (groups !== undefined && groups.length > 0) {
+            let total = 0;
+            let covered = 0;
+            matched = 0;
+            for (const g of groups) {
+              total += g.idf;
+              if (cache.holdsAny(s.scope, h.doc, g.ids)) {
+                covered += g.idf;
+                matched++;
+              }
+            }
+            coverage = total > 0 ? covered / total : 0;
+          }
+          const score = coverage + (entityHit ? this.config.entityBonus : 0);
+          const scored: Scored = { item: h.item, matched, score, sketch: h.sketch, doc: h.doc };
           if (people.length > 0) scored.beyond = beyondOf(h.doc);
           if (entityHit) scored.entity = true;
           if (revised.has(h.item.id)) scored.revised = true;

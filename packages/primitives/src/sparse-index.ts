@@ -324,6 +324,11 @@ export class SparseIndex {
     return this.liveTerms;
   }
 
+  /** Whether some live doc holds this term. */
+  hasTerm(term: number): boolean {
+    return term < this.df.length && this.df[term]! > 0;
+  }
+
   /** Adds a one-field doc from its term ids in order (repeats are its term frequencies). Returns its doc number. */
   add(terms: Uint32Array, n: number): number {
     return this.addFields([terms], [n]);

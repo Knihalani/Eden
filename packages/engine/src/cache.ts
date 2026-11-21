@@ -43,6 +43,7 @@ import { clearDecoded, packedFrom, packedOf, packItem, repackLike, withoutText, 
 import { clearParts } from "./render";
 import type { FrozenDisk } from "./persist";
 import { head, termIds } from "./text";
+import { stemWord } from "./intent";
 import { orgLabel } from "./parties";
 
 const NO_TERMS = new Uint32Array(0);
@@ -2044,6 +2045,55 @@ export class ItemCache {
   /** True if the cached item `doc` contains every term id in `ids[0..n)`: whole-term matching, no text rescans. */
   containsAll(scope: Scope, doc: number, ids: ArrayLike<number>, n: number): boolean {
     return this.peek(scope)?.index.containsAll(doc, ids, n) ?? false;
+  }
+
+  /** Whether the cached item `doc` holds any of `ids` (the OR an expanded query's variants ask for). */
+  holdsAny(scope: Scope, doc: number, ids: readonly number[]): boolean {
+    for (const id of ids) if (this.containsAll(scope, doc, [id], 1)) return true;
+    return false;
+  }
+
+  /** A term's BM25 idf in the user's index (0 when the index does not know it). */
+  idfOf(scope: Scope, term: number): number {
+    return this.peek(scope)?.index.idf(term) ?? 0;
+  }
+
+  /** Whether some live item in the user's index holds `term` (a freed word's idf alone would still weigh it). */
+  hasTerm(scope: Scope, term: number): boolean {
+    return this.peek(scope)?.index.hasTerm(term) ?? false;
+  }
+
+  /**
+   * Per-vocabulary index of live terms by stem, for phrasing expansion (`askExpand`): a question's word then meets
+   * the item's inflections ("emergency" meets "emergencies") and its phrasing family's words. Stamped on the
+   * vocabulary's own shape, so the map is rebuilt only when the index's words change.
+   */
+  private stems = new WeakMap<Vocab, { stamp: number; map: Map<string, number[]> }>();
+  private stemMapOf(scope: Scope): Map<string, number[]> | undefined {
+    const u = this.peek(scope);
+    if (!u) return undefined;
+    const v = u.vocab;
+    const stamp = v.size * 16_384 + v.live;
+    let e = this.stems.get(v);
+    if (e?.stamp !== stamp) {
+      const map = new Map<string, number[]>();
+      for (let id = 0; id < v.size; id++) {
+        const t = v.term(id);
+        if (t.length === 0) continue;
+        const s = stemWord(t);
+        const g = map.get(s);
+        if (g !== undefined) g.push(id);
+        else map.set(s, [id]);
+      }
+      e = { stamp, map };
+      this.stems.set(v, e);
+    }
+    return e.map;
+  }
+
+  /** The index's live terms under `stem` ("emergency" finds "emergencies"), for `askExpand`'s OR-groups. */
+  stemIds(scope: Scope, stem: string): readonly number[] | undefined {
+    return this.stemMapOf(scope)?.get(stem);
   }
 
   /**

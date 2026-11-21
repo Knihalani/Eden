@@ -628,6 +628,13 @@ export interface EngineConfig {
    */
   requestGloss: boolean;
   /**
+   * Phrasing expansion on explicit asks (D2028): each content word of the question stands for one OR-group — the
+   * index's terms sharing its stem plus its phrasing family (`ASK_FAMILY`) — and coverage is counted per group at
+   * its rarest variant's idf. Explicit `ask` calls only; the engine's own reader-push reads keep exact words, so the
+   * proactive false-fire rate is untouched.
+   */
+  askExpand: boolean;
+  /**
    * The ask-time model reader (D95, `reader.ts`): for an `ask` about an action, one budgeted model call reads the top
    * `askReaderPool` candidates the ask already ranked (compact, redacted, fenced as data) and says which would block,
    * limit or change the request, or show it done; those lead the answer, each with a short bearing, and the usual
@@ -1063,6 +1070,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   intentWeight: 1,
   intentSeats: 1,
   requestGloss: true,
+  askExpand: true,
   askReader: true,
   askReaderPool: 15,
   askReaderWaitMs: 2_500,
