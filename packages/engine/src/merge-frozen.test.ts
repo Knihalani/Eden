@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { mergeFrozenEconomy, type FrozenEconomy } from "./economy";
-import { mergeFrozenSessions } from "./partner";
+import { mergeFrozenSessions } from "./partner-freeze";
 import { mergeFrozenYields } from "./source-yield";
 
 const eco = (asked: FrozenEconomy["asked"]): FrozenEconomy => ({
