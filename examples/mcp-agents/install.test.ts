@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -137,5 +137,55 @@ describe.skipIf(!python)("the MCP-only installer", () => {
     expect(out.exitCode).toBe(1);
     expect(out.stderr.toString()).toContain("not a JSON object");
     expect(readFileSync(bad, "utf8")).toBe("not json at all {{{");
+  });
+
+  test("Goose indents/comments, Continue preserves other servers, Codex drops env subtables, remote env rides, modes stay 0600", () => {
+    const base = mkdtempSync(join(tmpdir(), "eden-mcp-agents-"));
+    const env = { EDEN_URL: "https://e", EDEN_API_KEY: "k9", EDEN_USER_ID: "u1", EDEN_TENANT_ID: "t1" };
+
+    // Goose: a comment may trail `extensions:` and children may sit at four spaces — the sibling
+    // must stay a sibling (not nested under eden) and eden must adopt the file's indent.
+    const goose = dir(base, "g/config.yaml");
+    writeFileSync(goose, "extensions: # managed\n    developer:\n      type: builtin\n");
+    const r = run(["--goose-config", goose, "--agents", "goose", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(r.exitCode, r.stderr.toString()).toBe(0);
+    const g = readFileSync(goose, "utf8");
+    expect(g).toContain("    eden:\n      type: stdio");
+    expect(g).toContain("    developer:\n      type: builtin");
+    expect(g).toContain("EDEN_USER_ID: u1");
+    expect(g).toContain("EDEN_TENANT_ID: t1");
+    expect(g.split("eden:").length - 1).toBe(1);
+
+    // Continue: a --continue-config holding other servers is merged, and uninstall keeps them.
+    const cont = dir(base, "cont/mcpServers/eden.json");
+    writeFileSync(cont, JSON.stringify({ mcpServers: { other: { command: "x" } } }));
+    const ci = run(["--continue-config", cont, "--agents", "continue", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(ci.exitCode, ci.stderr.toString()).toBe(0);
+    const cd = JSON.parse(readFileSync(cont, "utf8"));
+    expect(cd.mcpServers.other).toEqual({ command: "x" });
+    expect(cd.mcpServers.eden.env.EDEN_USER_ID).toBe("u1");
+    const cu = run(["--continue-config", cont, "--agents", "continue", "--uninstall", "--eden-home", join(base, "eh")]);
+    expect(cu.exitCode, cu.stderr.toString()).toBe(0);
+    const ca = JSON.parse(readFileSync(cont, "utf8"));
+    expect(ca.mcpServers.other).toEqual({ command: "x" });
+    expect(ca.mcpServers.eden).toBeUndefined();
+
+    // Codex: a legacy [mcp_servers.eden.env] subtable must not survive a reinstall.
+    const codex = dir(base, "x/config.toml");
+    writeFileSync(codex, '[mcp_servers.eden]\ncommand = "old"\n\n[mcp_servers.eden.env]\nEDEN_URL = "stale"\n');
+    const xr = run(["--codex-config", codex, "--agents", "codex", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(xr.exitCode, xr.stderr.toString()).toBe(0);
+    const x = readFileSync(codex, "utf8");
+    expect(x).not.toContain("[mcp_servers.eden.env]");
+    expect(x).not.toContain("stale");
+    expect(x.split("[mcp_servers.eden]").length - 1).toBe(1);
+    expect(x).toContain('EDEN_USER_ID = "u1"');
+
+    // A merged config may hold the API key: group/other must never read it, even on a 0644 file.
+    const cline = dir(base, "c/settings.json");
+    writeFileSync(cline, "{}");
+    const cr = run(["--cline-config", cline, "--agents", "cline", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(cr.exitCode, cr.stderr.toString()).toBe(0);
+    expect(statSync(cline).mode & 0o077).toBe(0);
   });
 });
