@@ -81,7 +81,7 @@ describe("the commands the docs name exist (D2016)", () => {
         if (ref.script.includes(":") && !existsSync(join(root, "package.json"))) return;
         if (!(ref.script in scripts) && !existsSync(join(root, `scripts/${ref.script}.ts`))) {
           // An alias may be a shell script (scripts/test.sh style) or a package.json script.
-          expect.soft(existsSync(join(root, "scripts", `${ref.script}.sh`))).toBe(true);
+          expect(existsSync(join(root, "scripts", `${ref.script}.sh`))).toBe(true);
           return;
         }
         file = resolve(ref.script);
