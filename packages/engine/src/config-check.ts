@@ -18,6 +18,7 @@
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { CORE_CONFIG } from "./parts";
 import { READER_KINDS } from "./reader";
+import { extraKindRules } from "./source-prior";
 
 type Key = keyof EngineConfig;
 
@@ -108,6 +109,7 @@ export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
   syncActivePollBackoff: "syncActivePollMs",
   syncActivePollPriced: "syncActivePollMs",
   syncActivePollCap: "syncActivePollMs",
+  sourceKindPriorExtra: "sourceKindPrior",
 };
 
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
@@ -146,6 +148,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   sourceYieldNames: ["sync", "sourceYield", "sourceYieldEarn"],
   sourceYieldEngage: ["sync", "sourceYield", "sourceYieldEarn"],
   sourceKindPrior: SYNC,
+  sourceKindPriorExtra: SYNC,
   syncKeepCut: SYNC,
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,
@@ -394,6 +397,14 @@ function checkKey(where: string, key: string, given: unknown): void {
     const unknown = names ? (given as string[]).find((entry) => !names.includes(entry)) : undefined;
     if (names && unknown !== undefined) {
       throw new Error(`${where}: "${key}" has "${unknown}", which is not one of ${names.join(", ")}`);
+    }
+    // sourceKindPriorExtra's grammar: malformed entries would throw per ask otherwise (live routing → 503).
+    if (key === "sourceKindPriorExtra") {
+      try {
+        extraKindRules(given as string[]);
+      } catch (error) {
+        throw new Error(`${where}: ${(error as Error).message}`);
+      }
     }
   } else if (typeof fallback === "number") {
     // Every numeric setting is a count, a size, a time or a score, none negative.

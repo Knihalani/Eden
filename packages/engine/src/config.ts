@@ -397,6 +397,14 @@ export interface EngineConfig {
    */
   sourceKindPrior: number;
   /**
+   * Extra kind rules for `sourceKindPrior`, consulted before the static table (`source-prior.ts`): each entry
+   * `"word word …:mean"` gives sources whose name holds one of the words a draw of `mean` (0-1) — a hyphenated
+   * token (`"google-calendar"`) names the connector id it appears in — so a screen — or a tenant's own counts, if
+   * the o4-new-user §5a prior is ever adopted — can mark the connectors it knows are used.
+   * []: the static table alone.
+   */
+  sourceKindPriorExtra: string[];
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -1039,6 +1047,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldNames: 4,
   sourceYieldEngage: true,
   sourceKindPrior: 20,
+  sourceKindPriorExtra: [],
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,

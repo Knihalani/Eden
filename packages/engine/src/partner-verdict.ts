@@ -2891,7 +2891,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       this.config.routeSketch && wide ? this.sketchRouteHits(s, cue) : undefined,
     );
     // `sourceKindPrior` (D2015): a cold user's draw favours the kinds a person's requests usually land in.
-    const priors = sourcePriors(all, this.config.sourceKindPrior);
+    const priors = sourcePriors(all, this.config.sourceKindPrior, this.config.sourceKindPriorExtra);
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask with `askBehind` off waits for its poll, so a poll and a search with deadlines of their
     // own could hold the reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -3600,7 +3600,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const byId = sourcesById(all);
     const allIds = all.map((x) => x.id);
     // `sourceKindPrior` (D2015): the same cold-user prior as the lookup's own route.
-    const priors = sourcePriors(all, this.config.sourceKindPrior);
+    const priors = sourcePriors(all, this.config.sourceKindPrior, this.config.sourceKindPriorExtra);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
       this.deps.sourceMap
         .route({

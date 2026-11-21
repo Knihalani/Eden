@@ -21,6 +21,23 @@ export const SOURCE_KIND_PRIOR: readonly { words: readonly string[]; mean: numbe
   { words: ["contacts", "directory"], mean: 0.65 },
 ];
 
+const ENTRY = /^((?:[\w-]+ +)*[\w-]+):(0(?:\.\d+)?|1(?:\.0*)?)$/;
+
+/**
+ * `sourceKindPriorExtra` entries (`"word word …:mean"`, mean 0-1) as rules of `SOURCE_KIND_PRIOR`'s shape, consulted
+ * before it, so a screen can mark the connectors a tenant's own users are known to use (the oracle arm of
+ * o4-new-user §5a's tenant prior). A malformed entry is an error, not a silent no-op: it would reshape no draw.
+ */
+export function extraKindRules(extra: readonly string[] | undefined): readonly { words: string[]; mean: number }[] {
+  if (!extra || extra.length === 0) return [];
+  return extra.map((e, i) => {
+    const m = ENTRY.exec(e);
+    // The error names the entry's place, never its text: a pasted secret would land in startup logs otherwise.
+    if (!m) throw new Error(`sourceKindPriorExtra: entry ${i} is not "word word …:mean"`);
+    return { words: m[1]!.toLowerCase().split(/ +/), mean: Number(m[2]) };
+  });
+}
+
 /**
  * Each source's Beta draw parameters for `RouteRequest.priors`: a known kind draws
  * Beta(used + 1 + S·m, shown − used + 1 + S·(1−m)) and an unknown kind Beta(used + 1, shown − used + 1 + S/2),
@@ -30,8 +47,11 @@ export const SOURCE_KIND_PRIOR: readonly { words: readonly string[]; mean: numbe
 export function sourcePriors(
   sources: readonly Pick<Source, "id" | "description">[],
   strength: number,
+  extra?: readonly string[],
 ): Map<string, { alpha: number; beta: number }> | undefined {
   if (strength <= 0) return undefined;
+  const rules = extraKindRules(extra);
+  const table = rules.length > 0 ? [...rules, ...SOURCE_KIND_PRIOR] : SOURCE_KIND_PRIOR;
   const priors = new Map<string, { alpha: number; beta: number }>();
   for (const s of sources) {
     const words = new Set(
@@ -40,7 +60,10 @@ export function sourcePriors(
         .split(/\W+/)
         .filter((w) => w.length > 0),
     );
-    const kind = SOURCE_KIND_PRIOR.find((k) => k.words.some((w) => words.has(w)));
+    // A plain word matches the source's words; a hyphenated token ("google-calendar") matches as a
+    // substring of the id, so it overrides the connector it names and not every source sharing one word.
+    const id = s.id.toLowerCase();
+    const kind = table.find((k) => k.words.some((w) => words.has(w) || (w.includes("-") && id.includes(w))));
     priors.set(
       s.id,
       kind === undefined
