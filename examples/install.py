@@ -2,11 +2,9 @@
 """Install Eden into every local agent home found: claude-code, cursor, gemini-cli, gptme, openclaw,
 opencode, pi, qwen-code.
 opencode, pi.
+"""Install Eden into every local agent home found: claude-code, cursor, gemini-cli, gptme, openclaw,
+"""Install Eden into every local agent home found: claude-code, cursor, devin-cli, gemini-cli, gptme, openclaw,
 opencode, pi.
-"""Install Eden into every local agent home found: claude-code, gemini-cli, gptme, openclaw,
-opencode, pi.
-"""Install Eden into every local agent home found: claude-code, gemini-cli, gptme, openclaw,
-opencode, pi, devin-cli.
 
 Each agent ships its own `examples/<agent>/install.py`; this detects which agents are present
 (their home directories exist, or `--agents` names them) and runs each installer in turn,
