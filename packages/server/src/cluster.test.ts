@@ -369,3 +369,44 @@ test("a node's release bound scales with the users it is expected to move (S1-P6
     n3.server.stop(true);
   }
 });
+
+test("health rounds run one at a time: concurrent checkHealth calls share the round (D2049)", async () => {
+  // A readyz that takes a beat: two checkHealth calls during it probe the node once, not twice — the interval
+  // fires while a round is still in `reset`, and stacking rounds would count fails/oks beside each other.
+  let probes = 0;
+  const stub = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === "/readyz") {
+        probes++;
+        await Bun.sleep(30);
+        return Response.json({ ready: true });
+      }
+      if (path === "/internal/cluster") return Response.json({ released: 0, written: 0, pending: 0, ms: 0 });
+      return new Response("no", { status: 404 });
+    },
+  });
+  const router = await startCluster({
+    config: {
+      port: 0,
+      host: "127.0.0.1",
+      keys: new Map([[KEY, "acme"]]),
+      dev: false,
+      cluster: { key: CLUSTER_KEY, size: 1 },
+    },
+    nodes: [{ id: "s", url: `http://127.0.0.1:${stub.port}` }],
+    healthEveryMs: 0,
+    log: () => {},
+  });
+  try {
+    const start = probes;
+    const [a, b] = await Promise.all([router.checkHealth(), router.checkHealth()]);
+    expect(a).toBe(b); // the same shared round
+    expect(probes - start).toBe(1); // one probe, not one per call
+  } finally {
+    await router.stop();
+    stub.stop(true);
+  }
+});

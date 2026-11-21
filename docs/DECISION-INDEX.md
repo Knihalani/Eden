@@ -923,4 +923,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2043 | 2026-11-21 | Adopted: a dry-run autoscale plan — `deploy/scripts/autoscale-plan.py` reads `/metrics` from every node, plans a node count with… | adopted |
 | D2047 | 2026-11-21 | Adopted: `deploy/monitoring/alerts.yaml` covers the fleet SLOs of s1-scale-1m.md §8 (S1-P10). | adopted |
 | D2048 | 2026-11-21 | Adopted: `eden_sync_first_value_seconds` and the first-page backlog are per source, not per user's first source. | adopted |
+| D2049 | 2026-11-21 | Adopted: cluster membership mutation is serialized on one chain, and the rebalance log is bounded. | adopted |
 | D2050 | 2026-11-21 | Adopted: pacing classes default `now` to `Date.now`, not a fresh arrow per instance. | adopted |
