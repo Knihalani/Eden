@@ -931,3 +931,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2051 | 2026-11-21 | Adopted: the machine router's forwarded requests and membership fan-out are bounded like the cluster router's. | adopted |
 | D2054 | 2026-11-21 | Adopted: the user-range tally test runs with `sync` on, so the cache is full before each session. | adopted |
 | D2055 | 2026-11-21 | Adopted: an undated block repeats a dated conflict only when the dated one was tied too. | adopted |
+| D2056 | 2026-11-21 | Adopted: the user-range tally test also runs with `syncPollBehind` off. | adopted |
