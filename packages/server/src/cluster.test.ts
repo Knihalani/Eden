@@ -316,3 +316,56 @@ test("a node that takes a request and never answers gets the caller a 503 after 
     hung.stop(true);
   }
 });
+
+test("a node's release bound scales with the users it is expected to move (S1-P6)", async () => {
+  // Stub nodes record their membership messages; each reports how many users it holds.
+  const stub = async (id: string, held: number) => {
+    const bodies: { deadlineMs?: number; nodes: string[] }[] = [];
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname;
+        if (path === "/readyz") return Response.json({ ready: true });
+        if (path === "/internal/cluster") {
+          bodies.push((await req.json()) as { deadlineMs?: number; nodes: string[] });
+          return Response.json({ released: 0, written: 0, pending: 0, held, ms: 1 });
+        }
+        return new Response("nf", { status: 404 });
+      },
+    });
+    return { id, url: `http://127.0.0.1:${server.port}`, bodies, server };
+  };
+  const n1 = await stub("n1", 3_000);
+  const n2 = await stub("n2", 3_000);
+  const n3 = await stub("n3", 0);
+  const router = await startCluster({
+    config: {
+      port: 0,
+      host: "127.0.0.1",
+      keys: new Map([[KEY, "acme"]]),
+      dev: false,
+      cluster: { key: CLUSTER_KEY, size: 3 },
+    },
+    nodes: [n1, n2].map(({ id, url }) => ({ id, url })),
+    healthEveryMs: 0,
+    rebalanceMs: 1_000,
+    releasePerUserMs: 10,
+    log: () => {},
+  });
+  try {
+    // Start: both report 3,000 held. The added node moves about a third of each one's buckets: its bound is the
+    // base (nothing reported yet), n1/n2's bounds grow by ~a third of 3,000 x 10 ms — about +10,000.
+    await router.setNodes([n1, n2, n3].map(({ id, url }) => ({ id, url })));
+    const d1 = n1.bodies.at(-1)!.deadlineMs!;
+    const d3 = n3.bodies.at(-1)!.deadlineMs!;
+    expect(d1).toBeGreaterThan(9_000);
+    expect(d1).toBeLessThan(12_000);
+    expect(d3).toBe(1_000);
+  } finally {
+    await router.stop();
+    n1.server.stop(true);
+    n2.server.stop(true);
+    n3.server.stop(true);
+  }
+});

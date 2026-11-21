@@ -177,7 +177,7 @@ Recommendations (the parent's call, not built here unless asked): a process-wide
 | P3 | **A drain that writes everyone**: profile `flush` (the 26 ms a user), make it cheap enough for a full box inside the grace, measured with the soak's restart (D1076's rule: users whose first request after the restart finds their state) | B3 | `devin/eden-drain-lean` | **shipped** (D2041: recency order + lean "EDF3" blob; ~5.5 ms a user at 1,500 items) |
 | P4 | **Store sharded over buckets** (`EDEN_PERSIST_STORE` naming several; a user's bucket picks one) | B6 | `devin/eden-store-shards` | **shipped** (D2042: comma-separated URLs, `ShardedBlobStore` routes by bucket mod count) |
 | P5 | **Autoscale planner** (dry run): `/metrics` from every node to a node count and a tofu/nodes-file plan, with hysteresis and peak-hour guard; burst-tier tofu (OCI exists; AWS module plan-only) | B5 | `claude/s1-fleet` | next |
-| P6 | **Scale-out in steps**: the planner never moves more than ~10% of users in one membership change; the router's release bound scaled to users moved | B7 | with P5 | next |
+| P6 | **Scale-out in steps**: the planner never moves more than ~10% of users in one membership change; the router's release bound scaled to users moved | B7 | with P5 | shipped |
 | P7 | Cluster router redundancy: several router processes behind the LB (stateless, same placement), measured throughput | B9 | with P5 | design |
 | P8 | Cells: ~10-20 nodes, their own routers, store buckets and alert scope; a tenant above one cell spread over cells by bucket range, a static top table | B10 | design only | design |
 | P9 | Model roles: a process-wide 429 backoff, contract-sized tenant cap | B8 | the parent's call | recommend |

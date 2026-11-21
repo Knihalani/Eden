@@ -1199,6 +1199,11 @@ export class ContextPartner extends PartnerAsk {
       this.restoredSessions.delete(this.restoredSessions.keys().next().value as string);
   }
 
+  /** How many users this process holds, live or frozen (the router's base for estimating a move's size, S1-P6). */
+  heldCount(): number {
+    return this.deps.cache.heldScopes().length;
+  }
+
   /**
    * Releases every held user `moved` says another process now owns (D992), within `deadlineMs`; returns the users
    * released and how many of them were written. Users past the deadline stay here, unserved (the router no longer

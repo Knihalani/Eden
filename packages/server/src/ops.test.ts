@@ -189,3 +189,47 @@ test("the roles' prompt-cache use reaches /metrics by role, counted through the 
       expect(text).toMatch(new RegExp(`^eden_model_${name}_total\\{role="${role}"\\} \\d+$`, "m"));
   expect(sumMetrics([text, text])).toContain(`eden_model_calls_total{role="check"} ${2 * c.calls}`);
 });
+
+test("the router's deadline stretches the node's release budget; the node reports how many it holds (S1-P6)", async () => {
+  // A shared disk whose hand-offs take 200 ms; the node's own releaseMs is 50.
+  const build = async () => {
+    const cache = new ItemCache();
+    cache.close();
+    cache.put({ tenantId: "t", userId: "u1" }, [
+      { id: "mail:d1", sourceId: "mail", ref: "d1", title: "t", text: "hello", updatedAt: 0 },
+    ]);
+    const partner = new ContextPartner({
+      sources: async () => [],
+      sourceMap: new SourceMap(":memory:"),
+      cache,
+      budget: new Budget(),
+      model: null,
+    });
+    const disk = {
+      handOff: async () => {
+        await Bun.sleep(200);
+      },
+      forgetAbsent: () => {},
+      backlog: 1,
+      local: { dropWhere: () => {} },
+      setWritable: () => {},
+    };
+    return new Ops(partner, disk as never, {
+      clusterKey: KEY,
+      child: { index: 0, count: 1 },
+      releaseMs: 50,
+    });
+  };
+  // nodes=["b"] with self "a": u1's bucket is no longer this machine's, so u1 moves.
+  // No deadlineMs: the node's own releaseMs rules and the 200 ms hand-off is reported pending.
+  const o1 = await build();
+  const a1 = await o1.cluster({ self: "a", nodes: ["b"], epoch: 1, mode: "release" });
+  expect(a1.released).toBe(1);
+  expect(a1.pending).toBe(1);
+  expect(a1.held).toBe(1);
+  // deadlineMs=4,000: the budget becomes 4,000-2,000 = 2,000 and the same hand-off lands inside it.
+  const o2 = await build();
+  const a2 = await o2.cluster({ self: "a", nodes: ["b"], epoch: 1, mode: "release", deadlineMs: 4_000 });
+  expect(a2.released).toBe(1);
+  expect(a2.pending).toBe(0);
+});
