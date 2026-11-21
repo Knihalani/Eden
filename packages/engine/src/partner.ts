@@ -3892,8 +3892,7 @@ export class ContextPartner {
     const sent = s.planSent;
     // D2010: an alert said once repeats once at a request past the one it was sent on — while the copy is still
     // the one the session holds (not `isFresh`: the alert's own delivery marks it read).
-    const repeats =
-      sent === undefined ? false : [...sent.values()].some((m) => m.n === 1 && m.at < s.turn);
+    const repeats = sent === undefined ? false : [...sent.values()].some((m) => m.n === 1 && m.at < s.turn);
     if ((!waiting || waiting.size === 0) && !repeats) return;
     const now = this.now();
     const sentMap = (s.planSent ??= new Map());
