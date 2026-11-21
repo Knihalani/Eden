@@ -168,7 +168,7 @@ describe("the backfill and fairness gauges (S1-P2)", () => {
     // The second page is refused: the kick ends with the first pass in progress — phase backfill, ids held,
     // polledAt still unset — exactly the restore that used to measure first value again.
     a.list = (s: Scope, c: string | undefined, l: number) =>
-      c === undefined ? list(s, c, l) : ("limited" as unknown as ListPage);
+      c === undefined ? list(s, c, l) : Promise.resolve("limited" as unknown as ListPage);
     const { sync } = build([a]);
     sync.track(U1);
     sync.kick(U1);
