@@ -232,6 +232,38 @@ describe("OpenRouterModel", () => {
     expect(hold.held()).toBe(false);
   });
 
+  test("a hold that lands mid-call stops the cache-fallback resend (D2046, S1-P9)", async () => {
+    let calls = 0;
+    const hold = new RateHold({ now: () => 1_000_000 });
+    const fake = (async () => {
+      calls++;
+      if (calls === 1) {
+        // Another role's 429 lands while this call is in-flight (the hold is shared per account).
+        hold.note(new Response("slow down", { status: 429, headers: { "retry-after": "60" } }));
+        return new Response("cache fields refused", { status: 400 });
+      }
+      return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    const b = new OpenRouterModel({
+      apiKey: "k",
+      model: "anthropic/x",
+      anthropicCache: true,
+      fetch: fake,
+      rateHold: hold,
+    });
+    const req = {
+      messages: [
+        { role: "system" as const, content: "fixed instructions" },
+        { role: "user" as const, content: "hi" },
+      ],
+      maxTokens: 5,
+    };
+    // The first send got a 400 cache refusal, but resending during the hold would send into the limit.
+    await expect(b.chat(req)).rejects.toBeInstanceOf(ModelHeldError);
+    expect(calls).toBe(1);
+    expect(hold.skipped).toBe(1);
+  });
+
   test("a free model (OpenRouter's :free suffix) is priced at zero; an unknown one stays priced high", () => {
     expect(priceFor("nvidia/nemotron-3.5-super-vl:free", {})).toEqual({ input: 0, output: 0 });
     expect(priceFor("someone/unknown-model", {})).toEqual({ input: 1, output: 4 });

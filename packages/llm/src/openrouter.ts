@@ -149,6 +149,13 @@ export class OpenRouterModel implements Model {
         level = (
           level === 2 && breakpoints(request.messages, 1).size > 0 && asksHour(request.messages) ? 1 : 0
         ) as CacheLevel;
+        // A 429 that landed while this call was in-flight holds the fallback too, not only new calls.
+        if (hold?.held()) {
+          hold.skipped++;
+          throw new ModelHeldError(
+            `openrouter: rate limit hold, ${this.options.model} cache-fallback refused without sending`,
+          );
+        }
         continue;
       }
       throw new Error(`openrouter ${res.status}: ${text}`);
