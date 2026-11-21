@@ -179,7 +179,7 @@ Recommendations (the parent's call, not built here unless asked): a process-wide
 | P5 | **Autoscale planner** (dry run): `/metrics` from every node to a node count and a tofu/nodes-file plan, with hysteresis and peak-hour guard; burst-tier tofu (OCI exists; AWS module plan-only) | B5 | `devin/eden-autoscale-plan` | **shipped** |
 | P6 | **Scale-out in steps**: the planner never moves more than ~10% of users in one membership change; the router's release bound scaled to users moved | B7 | with P5 | shipped |
 | P7 | Cluster router redundancy: several router processes behind the LB (stateless, same placement), measured throughput | B9 | with P5 | **shipped** (D2045: `EDEN_CLUSTER_FOLLOW` followers adopt the leader's signed membership doc; PR pending merge) |
-| P8 | Cells: ~10-20 nodes, their own routers, store buckets and alert scope; a tenant above one cell spread over cells by bucket range, a static top table | B10 | design only | design |
+| P8 | Cells: ~10-20 nodes, their own routers, store buckets and alert scope; a tenant above one cell spread over cells by bucket range, a static top table | B10 | §11 | designed |
 | P9 | Model roles: a process-wide 429 backoff, contract-sized tenant cap | B8 | the parent's call | **shipped** (D2046: shared `RateHold`, `ModelHeldError` fail-fast; tenant cap was already D128's `usdPerTenantDay`) |
 | P10 | Monitoring at fleet scale: recording rules per cell, paid tier or self-hosted Prometheus | B11 | shipped | the §8 SLO rows as real alerts in `deploy/monitoring/alerts.yaml` (D2047): first value p90, first-page backlog, connector 429 ratio, kick-queue starvation; a paid tier or self-hosted Prometheus stays the operator's choice (config.alloy writes to either) |
 
@@ -247,3 +247,30 @@ The tenant's a month **[EST]** (COST-MODEL.md (b): 300-1,200 connector calls a u
 - AWS r7g.4xlarge: https://calculator.holori.com/aws/ec2/r7g.4xlarge/us-east-1
 - Cloudflare R2: https://developers.cloudflare.com/r2/pricing
 - Anthropic rate limits: https://docs.anthropic.com/en/api/rate-limits (tier tables disagree between sources)
+
+## 11. Cells: the P8 design (B10)
+
+A cell is a self-contained slice of the fleet: ~10-20 nodes, its own router processes behind the cell's LB, its own
+store buckets and its own alert scope. Everything per-user stays inside the cell — cluster membership, placement,
+the kick queue, `RateHold`, the frozen-blob paths — so a bad config, a store outage or a runaway deploy reaches one
+cell's users and no more.
+
+- **The top table.** One static table maps a user's bucket to a cell: the user bucket already exists
+  (`bucketNumber`, P4's shard key), so the table is a range list — `buckets 0-31 → cell a, 32-63 → cell b` — shipped
+  in config beside today's nodes file. The edge derives the bucket from the request's user id with the same pure
+  hash; no lookup service. Nothing in the table changes at runtime; a new cell is appended rows.
+- **A tenant over one cell.** User buckets hash uniformly, so a tenant's users spread over cells in proportion to
+  the ranges: a 1M-user tenant on five equal cells lands ~200k a cell with no per-tenant routing, and §10's
+  one-spare-a-cell sizing holds.
+- **Inside a cell nothing new is needed.** Membership is scoped by the nodes file's cell column; P1's
+  (tenant, connector) paces are already per process; P4 hands each cell its own bucket count; P5's planner sizes
+  nodes per cell; P10's recording rules are per cell.
+- **Shared across cells:** only the top table and monitoring federation. Two cells never share a membership, a
+  store bucket or a router.
+- **A cell's failure** is §8's SLOs read per cell: a cell's store outage alerts on its buckets' backlog only. The
+  top table is static config read at boot — the same blast-radius class as today's nodes file.
+- **Migration:** below ~100k users the fleet is one cell — the table maps every bucket to it and nothing behaves
+  differently. When the table first names a second cell, a range move lands users on it the way membership moves
+  them between nodes today (release through the store, P6's stepped bound on range changes too). At §10's sizing
+  1M users is five cells of ~11 nodes.
+
