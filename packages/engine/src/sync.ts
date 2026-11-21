@@ -289,7 +289,8 @@ interface SourceSync {
   frontier: number;
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
   polledAt: number;
-  /** When this source's first page was stored; undefined while it has produced none (S1-P2's first value is per source). */
+  /** When this source's first page was stored; undefined while it has produced none
+   * (S1-P2's first value is per source). */
   firstPageAt?: number;
   sweptAt: number;
   /**

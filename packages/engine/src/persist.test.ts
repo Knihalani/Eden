@@ -814,6 +814,36 @@ describe("a restart with persisted users (D425)", () => {
     expect(p2.sync!.signalledSince(alice, "mail", 0)).toBe(true);
   });
 
+  test("an owner's restore that rejects is not re-raised as an unhandled rejection (D2052)", async () => {
+    const dir = tempDir();
+    let clock = T0;
+    const src = new ListSource("mail", 6);
+    const a = freezing();
+    a.persist(disk(dir).d);
+    const p1 = partnerOver(src, a, () => clock);
+    p1.sync!.track(alice);
+    for (let i = 0; i < 50 && !p1.sync!.warm(alice); i++, clock += 1_000) await p1.sync!.tick();
+    freezeAll(a, clock);
+    expect(files(dir).length).toBe(1);
+    const b = freezing();
+    b.persist(disk(dir).d);
+    b.persistHooks = {
+      save: () => null,
+      restored: () => Promise.reject(new Error("owner restore failed")),
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => void unhandled.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      // `ready` resolves all the same: the `restoring` entry has its own seat; only the cleanup arm needed one.
+      await b.ready(alice);
+      await Bun.sleep(30);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("a source removed while the user was on disk: its items are gone before the first event is served", async () => {
     const dir = tempDir();
     let clock = T0;

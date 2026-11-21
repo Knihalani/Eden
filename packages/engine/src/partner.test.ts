@@ -140,6 +140,27 @@ describe("observe", () => {
     expect(next.injection?.citations[0]?.itemId).toBe("crm:deal-9");
   });
 
+  test("a lookup that fails past the reply is not an unhandled rejection (D2052)", async () => {
+    const { p } = partner();
+    const open = p as unknown as { slowPath: (...a: unknown[]) => Promise<unknown> };
+    open.slowPath = async () => {
+      await Bun.sleep(5);
+      throw new Error("lookup failed");
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => void unhandled.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      // No wait: the reply is out before the lookup settles, so its failure lands on the fire-and-forget arm.
+      const r = await p.observe(ev({ kind: "user_message", text: "What does Dana Lee want on the Globex renewal?" }));
+      expect(r).toEqual({ injection: null, pending: true });
+      await Bun.sleep(30);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("once cached, the same context is served on the fast path, and never twice in a session", async () => {
     const { p, traces } = partner();
     await p.observe(ev({ kind: "user_message", text: "Globex renewal status for Dana Lee?" }), { waitMs: 1_000 });
