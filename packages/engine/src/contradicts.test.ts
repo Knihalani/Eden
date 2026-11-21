@@ -210,6 +210,12 @@ describe("fallback asks", () => {
     const single = cue("What was my revenue in 2024?");
     expect(p.contradicts(earlier, single)).toBe(true);
     expect(p.contradicts(later, single)).toBe(false);
+    // A price is no named year: "£1950" in a 2026 lookup does not lower the floor onto 1950.
+    const lease25 = scored(item("l-25", "Lease 2025", "Signed lease for the 2025 term."));
+    const lease26 = scored(item("l-26", "Lease 2026", "Signed lease for the 2026 term."));
+    const priced = cue("Find my 2026 lease of £1950");
+    expect(p.contradicts(lease25, priced)).toBe(true);
+    expect(p.contradicts(lease26, priced)).toBe(false);
   });
 
   test("a record that declares itself dead is dead beside a dated ask too (D2060)", () => {
