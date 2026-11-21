@@ -226,7 +226,9 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   plan) or any Prometheus. Eden's own series: under 300 per box.
 - **Alerts:** `deploy/monitoring/alerts.yaml`: down, a process or node down, 5xx over 1%, `/v1/events` p99 over
   500 ms, memory over 75% (plan a box) and 90% (act), store failures and backlog, disk over 80%, model calls failing
-  (`EdenModelFailing`: thrown errors, not unreadable replies; D1690).
+  (`EdenModelFailing`: thrown errors, not unreadable replies; D1690), and the scale SLOs of s1-scale-1m.md §8 —
+  time to first value p90 over 15 min, the first-page backlog or kick queue still growing after 30 min, and over
+  5% of connector listing calls throttled (D2047).
 - **Prompt cache (D1790, D1800):** the model roles (`role="check"`, `"cards"`, `"reader"`) report, per process since
   it started, `eden_model_calls_total`, `eden_model_cache_breakpoint_calls_total` (calls whose request carried a
   `cache_control` breakpoint), `eden_model_input_tokens_total`, `eden_model_cache_read_tokens_total` and

@@ -289,6 +289,8 @@ interface SourceSync {
   frontier: number;
   /** When the last complete poll (or the backfill) ended; -Infinity before. */
   polledAt: number;
+  /** When this source's first page was stored; undefined while it has produced none (S1-P2's first value is per source). */
+  firstPageAt?: number;
   sweptAt: number;
   /**
    * The sweep under way, read across ticks: its next page and every id it (or any other read of the source since it
@@ -404,8 +406,6 @@ interface UserSync {
   ticking?: boolean;
   /** When this process first tracked the user (S1-P2's time to first value starts at their first event). */
   trackedAt: number;
-  /** When their first page was stored; undefined while no source has produced one. */
-  firstPageAt?: number;
   /** `activePollCap` (D1747): floor polls the user may still make, and when that allowance was last refilled. */
   floorAllowance?: number;
   floorRefilledAt?: number;
@@ -745,11 +745,6 @@ export class SyncManager {
       rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
       storeTail: Promise.resolve(),
       trackedAt: this.deps.now(),
-      // A user who already had a first page when they went to disk is not measured for first value again: a whole
-      // pass done (`polledAt`), or the ids a stored page left behind — a pass in progress has pages but no `polledAt`.
-      firstPageAt: snap.sources.some((x) => num(x.polledAt, -Infinity) > -Infinity || x.ids.length > 0)
-        ? this.deps.now()
-        : undefined,
     };
     for (const x of snap.sources) {
       const s = newSourceSync(x.id);
@@ -761,6 +756,9 @@ export class SyncManager {
       s.cut = x.cut;
       s.frontier = num(x.frontier, Infinity);
       s.polledAt = num(x.polledAt, -Infinity);
+      // A source whose snapshot shows a finished first pass (`polledAt`) or the ids a stored page left behind has
+      // delivered first value already: not measured again, and it does not hold the user in the backlog gauge.
+      if (s.polledAt > -Infinity || x.ids.length > 0) s.firstPageAt = this.deps.now();
       s.sweptAt = num(x.sweptAt, -Infinity);
       s.missed = new Set(x.missed);
       if (x.alpha > 0 && x.beta > 0) {
@@ -2001,11 +1999,12 @@ export class SyncManager {
     try {
       await before;
       if (stale()) return 0;
-      // S1-P2: the first page stored for the user is their first value — measured from their first event. `polledAt`
-      // cannot mark it: it moves only when a whole first pass ends (`warmUp`), pages past the cap included.
-      if (u.firstPageAt === undefined) {
-        u.firstPageAt = this.deps.now();
-        const secs = Math.max(0, (u.firstPageAt - u.trackedAt) / 1_000);
+      // S1-P2: each source's first stored page is a first value — measured from the user's first event, so the
+      // histogram sees a source that lands late (the §8 SLO reads "the first page of every source", not the first
+      // of any one). `polledAt` cannot mark it: it moves only when a whole first pass ends (`warmUp`).
+      if (s.firstPageAt === undefined) {
+        s.firstPageAt = this.deps.now();
+        const secs = Math.max(0, (s.firstPageAt - u.trackedAt) / 1_000);
         for (let i = 0; i < FIRST_VALUE_LE.length; i++) {
           if (secs <= FIRST_VALUE_LE[i]!) this.stats.firstPageSeconds[i]!++;
         }
@@ -2255,13 +2254,21 @@ export class SyncManager {
     let waitingFirstPage = 0;
     for (const u of this.users.values()) {
       if (u.gone) continue;
-      let started = false;
       let backfill = false;
-      for (const s of u.sources.values()) if (s.phase === "backfill") backfill = true;
-      if (backfill) backfilling++;
       // A user still queued for a first step has no sources found yet (the step discovers them): `queued` is the
-      // sign they are waiting, so a surge does not hide them from the backlog.
-      if (u.firstPageAt === undefined && (u.sources.size > 0 || u.queued)) waitingFirstPage++;
+      // sign they are waiting, so a surge does not hide them from the backlog. A queued user WITH sources is a
+      // resumed step waiting its turn — deeper pages of a source that already gave first value — and the sources
+      // say what is owed. A backfilling source with no page stored yet is first value still owed (a warm source
+      // that listed empty is not).
+      let waiting = u.queued === true && u.sources.size === 0;
+      for (const s of u.sources.values()) {
+        if (s.phase === "backfill") {
+          backfill = true;
+          if (s.firstPageAt === undefined) waiting = true;
+        }
+      }
+      if (backfill) backfilling++;
+      if (waiting) waitingFirstPage++;
     }
     let kickQueuedUsers = 0;
     for (const q of this.kickQueue.values()) kickQueuedUsers += q.length;
