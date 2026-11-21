@@ -276,10 +276,10 @@ def merge_goose(path, mcp_py, env, remove=False):
             pending = []
         if not skipping:
             kept.append(l)
-        elif not l.strip():
-            kept.append(l)  # a blank absorbed into a scalar is a harmless trailing newline
         elif stripped.startswith("#"):
             pending.append(l)
+        # A blank line inside the dropped block carries nothing — and left in place it
+        # could be absorbed into a preceding extension's block scalar, so it goes too.
     kept.extend(" " * child + c.lstrip() for c in pending)
 
     out = lines[:ext_i + 1] + kept + lines[end:]
