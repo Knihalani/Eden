@@ -31,6 +31,7 @@ describe.skipIf(!python)("the unified installer", () => {
     expect(text).toMatch(/claude-code\s+home absent/);
     expect(text).toMatch(/cursor\s+home absent/);
     expect(text).toMatch(/qwen-code\s+home absent/);
+    expect(text).toMatch(/devin-cli\s+home absent/);
     expect(text).toMatch(/gemini-cli\s+home absent/);
     expect(text).toMatch(/openclaw\s+home absent/);
   });
