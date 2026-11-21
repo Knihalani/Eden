@@ -333,7 +333,8 @@ model spend cap is divided by N x machines (D993; once the micro models replace 
 `deploy/scripts/autoscale-plan.py` does this arithmetic for you (S1-P5, D2043): point it at the nodes file and it
 reads every node's `/metrics`, measures the live MB a user, projects the peak (held x 1.22), and prints the
 `node_count` for the varset and the nodes-file lines to apply by hand. Scaling in needs three consecutive
-below-need readings and never runs inside peak hours; a node that does not answer counts as full. Example:
+below-need readings and never runs inside peak hours; a node that does not answer counts as full. A nodes
+file naming cells (§9) must be planned one cell at a time — pass `--cell`, once per cell. Example:
 
     python3 -I deploy/scripts/autoscale-plan.py --nodes-file nodes.txt --ram-gb 128 --processes 16 --cidr 10.1.0.0/16
 
