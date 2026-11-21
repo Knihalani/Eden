@@ -35,6 +35,10 @@ export interface FrozenSession {
     situation: string;
     terms: string[];
     deliveredTurn: number;
+    /** The handed injection's UTF-8 size (`Outstanding.bytes`): a respawn's usage record still names it. */
+    bytes?: number;
+    /** `Outstanding.warning`: a respawn must keep it or a retried call is wrongly credited. */
+    warning?: boolean;
   }[];
 }
 
@@ -62,7 +66,9 @@ export function isFrozenSession(x: unknown): x is FrozenSession {
             Array.isArray(o.sourceIds) &&
             typeof o.situation === "string" &&
             Array.isArray(o.terms) &&
-            typeof o.deliveredTurn === "number",
+            typeof o.deliveredTurn === "number" &&
+            (o.bytes === undefined || typeof o.bytes === "number") &&
+            (o.warning === undefined || typeof o.warning === "boolean"),
         )))
   );
 }
@@ -136,6 +142,8 @@ export function freezeSession(s: Session): FrozenSession | null {
     situation: o.situation,
     terms: [...o.tokens].map((id) => s.vocab.term(id)),
     deliveredTurn: o.deliveredTurn,
+    bytes: o.bytes,
+    warning: o.warning,
   }));
   return { sessionId: s.id, turn: s.turn, ledger, delivered, outstanding };
 }

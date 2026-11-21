@@ -78,7 +78,42 @@ describe("digest (D293)", () => {
     expect(d.added).toBeGreaterThan(0);
     expect(d.used.measured).toBe(true);
     expect(d.used.used).toBeGreaterThan(0);
+    // The packet text's bytes ride the usage records (C1): the digest reports what the agent's model re-reads.
+    expect(d.packets.bytes).toBeGreaterThan(0);
+    expect(d.packets.counted).toBe(d.used.injections);
+    expect(formatDigest(d)).toContain("packet text handed to the agent");
     for (const text of [lines.join("\n"), formatDigest(d)]) expect(text).not.toContain("Dana");
+  });
+
+  test("a usage record without a size (an older log) is not counted and says so", () => {
+    const withSize = JSON.stringify({
+      usage: { sessionId: "s", injectionId: "i1", used: true, how: "explicit", sourceIds: ["g"], injectionBytes: 400 },
+    });
+    const d = digest([t({}), u("i2", false, "ended"), withSize]);
+    expect(d.packets).toEqual({ bytes: 400, counted: 1, total: 2 });
+    expect(formatDigest(d)).toContain("1 of 2 injections name a size");
+    expect(formatDigest(digest([t({}), u("i1", true)]))).not.toContain("packet text handed");
+  });
+  test("a reset record counts the handed bytes but no verdict", () => {
+    const reset = JSON.stringify({
+      usage: {
+        sessionId: "s",
+        injectionId: "i1",
+        used: false,
+        how: "reset",
+        sourceIds: ["g"],
+        injectionBytes: 400,
+      },
+    });
+    const d = digest([t({}), u("i2", false, "ended"), reset]);
+    // The compacted packet's bytes reach the agent's bill; the reset row is no verdict on the source.
+    expect(d.packets).toEqual({ bytes: 400, counted: 1, total: 2 });
+    expect(d.used.injections).toBe(1);
+    expect(d.used.used).toBe(0);
+    // The reset's own sourceId adds no verdict row; "gmail" is i2's, alone.
+    expect(d.used.bySource).toEqual({ gmail: { injections: 1, used: 0 } });
+    // A sized reset must not hide the sizeless record: coverage is partial, and says so.
+    expect(formatDigest(d)).toContain("1 of 2 injections name a size");
   });
   test("connector calls per request: the agent's tool calls, Eden's lookups' and its sync's last count per process", () => {
     const sync = (pid: number, backgroundCalls: number) =>

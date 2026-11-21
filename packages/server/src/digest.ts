@@ -79,6 +79,12 @@ export interface Digest {
     explicit: number;
     bySource: Record<string, { injections: number; used: number }>;
   };
+  /**
+   * Packet text handed to the agent (C1): UTF-8 bytes summed over the usage records that name them, and how
+   * many did. The agent's model re-reads a session's packets on every later request; roughly four bytes a
+   * token. A record from before the field shipped carries none, so a log mixing versions undercounts.
+   */
+  packets: { bytes: number; counted: number; total: number };
   silent: { events: number; reasons: Record<string, number>; nothingToLookUp: number };
   connectors: ConnectorCalls;
   /** The same counts from a log without Eden's context (`--baseline`: shadow mode, or before Eden), if given. */
@@ -205,15 +211,24 @@ export function digest(lines: Iterable<string>): Digest {
       sources[s] = (sources[s] ?? 0) + 1;
     }
   }
+  // A `reset` record is no verdict — a compaction ended the tracking (D2006); it counts only the handed bytes.
+  const verdicts = records.filter((r) => r.how !== "reset");
   const bySource: Digest["used"]["bySource"] = {};
-  for (const r of records) {
+  for (const r of verdicts) {
     for (const s of new Set(r.sourceIds)) {
       const e = (bySource[s] ??= { injections: 0, used: 0 });
       e.injections++;
       if (r.used) e.used++;
     }
   }
-  const explicit = records.filter((r) => r.how === "explicit").length;
+  const explicit = verdicts.filter((r) => r.how === "explicit").length;
+  const packets = {
+    bytes: records.reduce((a, r) => a + (typeof r.injectionBytes === "number" ? r.injectionBytes : 0), 0),
+    counted: records.filter((r) => typeof r.injectionBytes === "number").length,
+    // Every handed injection is the coverage denominator, `reset` rows included — a sized reset
+    // must not hide an older sizeless record behind a "full coverage" line.
+    total: records.length,
+  };
   const connectors = connectorCalls(traces, syncRuns);
   return {
     events: report.events,
@@ -225,11 +240,12 @@ export function digest(lines: Iterable<string>): Digest {
     used: {
       // Inference reads the agent's own messages and tool calls; with none reported and no feedback, use is unknown.
       measured: explicit > 0 || agentEvents > 0,
-      injections: records.length,
-      used: records.filter((r) => r.used).length,
+      injections: verdicts.length,
+      used: verdicts.filter((r) => r.used).length,
       explicit,
       bySource,
     },
+    packets,
     silent: {
       events: Object.values(report.silentReasons).reduce((a, b) => a + b, 0),
       reasons: report.silentReasons,
@@ -341,6 +357,19 @@ export function formatDigest(d: Digest): string {
     `- request-time model spend $${r.costUsd.toFixed(4)} ($${r.costUsdPer1kEvents.toFixed(4)} per 1,000 events); ` +
       "background cards and intent are billed by the model provider, not traced",
   );
+  if (d.packets.counted > 0) {
+    const tokens = Math.round(d.packets.bytes / 4);
+    const per1k = r.events > 0 ? Math.round(tokens / (r.events / 1_000)) : 0;
+    const partial =
+      d.packets.counted < d.packets.total
+        ? ` (${d.packets.counted} of ${d.packets.total} injections name a size — a log from before the field ships none)`
+        : "";
+    out.push(
+      `- packet text handed to the agent: ~${tokens.toLocaleString()} tokens` +
+        (per1k > 0 ? ` (${per1k.toLocaleString()} per 1,000 events)` : "") +
+        ` — the agent's model re-reads a session's packets on every later request${partial}`,
+    );
+  }
   out.push("", "## Connector calls and their price", "");
   const c = callsPer1k(d.connectors);
   const bg =

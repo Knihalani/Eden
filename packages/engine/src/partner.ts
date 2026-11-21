@@ -247,6 +247,8 @@ export interface Recorded {
    * recording an outcome (D2006): a compaction is no verdict. Feedback records it fresh, not as a flip.
    */
   pending?: boolean;
+  /** The handed injection's UTF-8 size, so a later correction's usage record still names it (C1). */
+  bytes?: number;
 }
 
 export interface Session {
@@ -661,14 +663,26 @@ export class ContextPartner extends PartnerAsk {
       if (seed !== undefined) {
         // The seed an evicted session left carries its outstanding deliveries too: a reset keeps them pending like
         // a live session's — `feedback` on a pre-reset delivery still lands (D2006 review).
-        for (const o of seed.outstanding ?? [])
+        for (const o of seed.outstanding ?? []) {
+          // As `resetContext`: no verdict, but the handed bytes reach the digest (C1); the pending row waits for
+          // a later correction.
+          this.usage({
+            sessionId: seed.sessionId,
+            injectionId: o.injectionId,
+            used: false,
+            how: "reset",
+            sourceIds: o.sourceIds,
+            injectionBytes: o.bytes,
+          });
           this.recordRow(event, o.injectionId, {
             sourceIds: o.sourceIds,
             situation: o.situation,
             used: false,
             sessionId: seed.sessionId,
             pending: true,
+            bytes: o.bytes,
           });
+        }
         const kept = frozenReset!.filter((f) => f !== seed);
         if (kept.length) this.restoredSessions.set(resetUser, kept);
         else this.restoredSessions.delete(resetUser);

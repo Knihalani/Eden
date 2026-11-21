@@ -44,8 +44,19 @@ describe("onUsage (D293)", () => {
     const { p, got } = setup();
     const id = await delivered(p);
     await p.observe(ev({ kind: "agent_message", text: "Dana Lee wants 12% off; it must be signed by 2026-11-20." }));
-    expect(got).toEqual([{ sessionId: "s", injectionId: id, used: true, how: "inferred", sourceIds: ["crm"] }]);
-    // No content in a record: only ids, a flag and the way it was learned.
+    expect(got).toEqual([
+      {
+        sessionId: "s",
+        injectionId: id,
+        used: true,
+        how: "inferred",
+        sourceIds: ["crm"],
+        injectionBytes: expect.any(Number),
+      },
+    ]);
+    // The handed injection's UTF-8 size rides the record (C1): the digest prices the agent's re-reads off it.
+    expect(got[0]!.injectionBytes).toBeGreaterThan(0);
+    // No content in a record: only ids, a flag, a byte count and the way it was learned.
     expect(JSON.stringify(got)).not.toContain("Dana");
   });
 
@@ -70,7 +81,16 @@ describe("onUsage (D293)", () => {
     const { p, got } = setup();
     const id = await delivered(p);
     p.feedback({ ...ref, injectionId: id, used: false, how: "explicit" });
-    expect(got).toEqual([{ sessionId: "s", injectionId: id, used: false, how: "explicit", sourceIds: ["crm"] }]);
+    expect(got).toEqual([
+      {
+        sessionId: "s",
+        injectionId: id,
+        used: false,
+        how: "explicit",
+        sourceIds: ["crm"],
+        injectionBytes: expect.any(Number),
+      },
+    ]);
     const bad = new ContextPartner({
       sources: async () => [new StaticSource("crm", "deals", [DOC])],
       sourceMap: new SourceMap(),

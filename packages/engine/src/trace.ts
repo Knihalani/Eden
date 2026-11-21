@@ -106,7 +106,9 @@ export const SILENT_REASONS: readonly string[] = [
 /**
  * Whether the agent used one injection (D293), when that becomes known: inferred from a later agent message or tool
  * call repeating its distinctive terms (D18), counted unused when its usage window passed (`expired`) or its session
- * ended (`ended`), or reported by the integration (`explicit`, D13; a correction of an earlier outcome too). Ids, a
+ * ended (`ended`), or reported by the integration (`explicit`, D13; a correction of an earlier outcome too). `reset`
+ * is no verdict: a `context_reset` ends the tracking without one (D2006), recorded so the handed bytes still reach
+ * the digest's packet accounting; the row stays pending for a later correction. Ids, a
  * flag and the connector ids only, like a trace (D56): never the injection's or the event's text. An injection id is
  * random (`newId`), not derived from content.
  */
@@ -114,9 +116,14 @@ export interface UsageRecord {
   sessionId: string;
   injectionId: string;
   used: boolean;
-  how: "inferred" | "expired" | "ended" | "explicit";
+  how: "inferred" | "expired" | "ended" | "explicit" | "reset";
   /** The connectors whose items the injection carried (configuration ids, as in a trace's item ids). */
   sourceIds: string[];
+  /**
+   * The handed injection's UTF-8 size (C1): a content-free count the digest sums into the packet text the
+   * agent's model re-reads on every later request of its session. Absent on a record from before the field.
+   */
+  injectionBytes?: number;
 }
 
 export type UsageSink = (record: UsageRecord) => void;
