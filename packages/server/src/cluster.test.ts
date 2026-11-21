@@ -569,3 +569,47 @@ test("health rounds run one at a time: concurrent checkHealth calls share the ro
     stub.stop(true);
   }
 });
+
+test("a cell'd router labels its own metrics with the cell (S1-P8)", async () => {
+  const stub = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: (req) => {
+      const p = new URL(req.url).pathname;
+      if (p === "/readyz") return Response.json({ ready: true });
+      if (p === "/internal/cluster") return Response.json({ released: 0, written: 0, pending: 0, ms: 0 });
+      return new Response("no", { status: 404 });
+    },
+  });
+  const make = (cell?: string) =>
+    startCluster({
+      config: {
+        port: 0,
+        host: "127.0.0.1",
+        keys: new Map([[KEY, "acme"]]),
+        dev: false,
+        cluster: { key: CLUSTER_KEY, size: 1 },
+      },
+      nodes: [{ id: "s", url: `http://127.0.0.1:${stub.port}` }],
+      healthEveryMs: 0,
+      recoverAfter: 1,
+      cell,
+      log: () => {},
+    });
+  const withCell = await make("cell-a");
+  const without = await make();
+  try {
+    await withCell.checkHealth();
+    await without.checkHealth();
+    const a = await (await fetch(`http://127.0.0.1:${withCell.port}/metrics`)).text();
+    expect(a).toContain('eden_cluster_nodes{cell="cell-a"} 1');
+    expect(a).toContain('eden_cluster_nodes_up{cell="cell-a"} 1');
+    const b = await (await fetch(`http://127.0.0.1:${without.port}/metrics`)).text();
+    expect(b).toContain("eden_cluster_nodes 1");
+    expect(b).not.toContain("cell=");
+  } finally {
+    await withCell.stop();
+    await without.stop();
+    stub.stop(true);
+  }
+});

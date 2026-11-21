@@ -941,3 +941,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2063 | 2026-11-21 | Adopted: an item's searchable text is scanned once, not once a pass. | adopted |
 | D2064 | 2026-11-21 | Adopted: the P8 cell design. | adopted |
 | D2065 | 2026-11-21 | Adopted: the nodes file's cell column scopes the router's membership (S1-P8's first increment). | adopted |
+| D2066 | 2026-11-21 | Adopted: a cell'd router labels its own metrics with the cell (S1-P8). | adopted |

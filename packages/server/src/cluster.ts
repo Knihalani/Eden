@@ -176,6 +176,11 @@ export interface ClusterOptions {
    * the LB. `everyMs`: the store poll (default 1 s).
    */
   follow?: { everyMs?: number };
+  /**
+   * The cell this router serves (S1-P8, EDEN_CELL): its `eden_cluster_*` metrics carry `cell="…"` so a per-cell
+   * SLO alert reads one cell's series and no other cell's.
+   */
+  cell?: string;
   log?: (line: string) => void;
 }
 
@@ -649,17 +654,19 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
         ),
       ),
     );
+    const cell = options.cell === undefined ? "" : `{cell="${options.cell}"}`;
+    const cells = options.cell === undefined ? "" : `,cell="${options.cell}"`;
     const own = [
       "# HELP eden_cluster_nodes_up Nodes answering /readyz",
       "# TYPE eden_cluster_nodes_up gauge",
-      `eden_cluster_nodes_up ${live().length}`,
+      `eden_cluster_nodes_up${cell} ${live().length}`,
       "# HELP eden_cluster_nodes Nodes listed",
       "# TYPE eden_cluster_nodes gauge",
-      `eden_cluster_nodes ${nodes.length}`,
+      `eden_cluster_nodes${cell} ${nodes.length}`,
       "# TYPE eden_cluster_requests_total counter",
-      ...[...counts].map(([k, v]) => `eden_cluster_requests_total{outcome="${k}"} ${v}`),
+      ...[...counts].map(([k, v]) => `eden_cluster_requests_total{outcome="${k}"${cells}} ${v}`),
       "# TYPE eden_cluster_rebalances_total counter",
-      `eden_cluster_rebalances_total ${rebalanceTotal}`,
+      `eden_cluster_rebalances_total${cell} ${rebalanceTotal}`,
       "",
     ].join("\n");
     return new Response(sumMetrics([own, ...texts]), { headers: { "content-type": "text/plain; version=0.0.4" } });
@@ -753,6 +760,7 @@ export async function runCluster(
     nodes: spec.nodes,
     membership,
     follow: follow ? {} : undefined,
+    cell: spec.cell ?? undefined,
   });
   const reload = () => {
     if (!spec.file) return;
