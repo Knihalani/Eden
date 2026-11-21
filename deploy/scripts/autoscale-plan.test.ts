@@ -254,6 +254,98 @@ test("--cidr renders the nodes-file lines the new count implies (tofu cidrhost N
   expect(out).toContain("n3=http://10.1.0.13:8790");
 });
 
+test("a cell'd nodes file plans only --cell's rows, and refuses without it (S1-P8)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "eden-auto-cell-"));
+  dirs.push(dir);
+  writeFileSync(
+    join(dir, "nodes.txt"),
+    "n1=http://10.0.0.1:8790 cell-a\nn2=http://10.0.0.2:8790 cell-a\nn3=http://10.0.0.3:8790 cell-b\n",
+  );
+  const md = join(dir, "m");
+  mkdirSync(md);
+  for (const id of ["n1", "n2", "n3"]) writeFileSync(join(md, `${id}.metrics`), metrics(1000, 1000));
+  const go = (extra: string[]) => {
+    const p = Bun.spawnSync(
+      [
+        "python3",
+        "-I",
+        script,
+        "--nodes-file",
+        join(dir, "nodes.txt"),
+        "--metrics-dir",
+        md,
+        "--state",
+        join(dir, "s.json"),
+        "--ram-gb",
+        "4",
+        "--processes",
+        "16",
+        "--now",
+        at(12),
+        ...extra,
+      ],
+      { env: { ...process.env, TZ: "UTC" } },
+    );
+    return { out: p.stdout.toString() + p.stderr.toString(), code: p.exitCode };
+  };
+  const bare = go([]);
+  expect(bare.code).not.toBe(0);
+  expect(bare.out).toContain("--cell");
+  const a = go(["--cell", "cell-a"]);
+  expect(a.code).toBe(0);
+  expect(a.out).toContain("fleet: 2 nodes");
+  expect(a.out).not.toContain("n3");
+  const b = go(["--cell", "cell-b"]);
+  expect(b.out).toContain("fleet: 1 nodes");
+});
+
+test("a cell's scale-in confirmations are its own: another cell starts at zero (review)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "eden-auto-streak-"));
+  dirs.push(dir);
+  writeFileSync(
+    join(dir, "nodes.txt"),
+    "n1=http://10.0.0.1:8790 cell-a\nn2=http://10.0.0.2:8790 cell-a\n" +
+      "n3=http://10.0.0.3:8790 cell-b\nn4=http://10.0.0.4:8790 cell-b\n",
+  );
+  const md = join(dir, "m");
+  mkdirSync(md);
+  // 128 GB a box plans ~19k users; 2 nodes x 50 users with no spares is below need -> scale-in streaks.
+  for (const id of ["n1", "n2", "n3", "n4"]) writeFileSync(join(md, `${id}.metrics`), metrics(50, 300));
+  const state = join(dir, "s.json");
+  const go = (cell: string) => {
+    const p = Bun.spawnSync(
+      [
+        "python3",
+        "-I",
+        script,
+        "--nodes-file",
+        join(dir, "nodes.txt"),
+        "--metrics-dir",
+        md,
+        "--state",
+        state,
+        "--ram-gb",
+        "128",
+        "--processes",
+        "16",
+        "--spares",
+        "0",
+        "--now",
+        at(22), // off-peak
+        "--cell",
+        cell,
+      ],
+      { env: { ...process.env, TZ: "UTC" } },
+    );
+    return p.stdout.toString() + p.stderr.toString();
+  };
+  expect(go("cell-a")).toContain("plan: keep 2 nodes");
+  expect(go("cell-a")).toContain("plan: keep 2 nodes");
+  expect(go("cell-a")).toContain("plan: remove 1 node(s) → 1");
+  // cell-b has never read below need: one shared state file must not lend it cell-a's three confirmations.
+  expect(go("cell-b")).toContain("plan: keep 2 nodes");
+});
+
 test("a draining node's held users still count as demand", () => {
   // ready=0 on a drain: the node is leaving but its users are real — replacing them with users_per_box (~152
   // here) would lose demand. n1 drains with 400 held; with them counted the fleet needs 5, without them it

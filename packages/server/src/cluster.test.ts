@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUCKETS, OwnerTable } from "@eden/primitives";
 import { bucketOf } from "@eden/protocol";
-import { parseNodes, startCluster, type ClusterRouter } from "./cluster";
+import { membershipKey, nodesFromEnv, parseNodes, startCluster, type ClusterRouter } from "./cluster";
 import { fakeS3 } from "./fixtures/fake-s3";
 
 const KEY = "k_acme_0123456789abcdef";
@@ -115,6 +115,46 @@ describe("the cluster router over three machines (D992)", () => {
     ]);
     for (const bad of ["a", "a=ftp://x", "a b=http://x:1", "a=http://x:1,a=http://y:1"])
       expect(() => parseNodes(bad)).toThrow(/EDEN_NODES/);
+  });
+
+  test("parseNodes scopes a cell'd list to the router's cell (S1-P8)", () => {
+    const text = "a=http://h:1 cell-a\nb=http://h:2 cell-a\nc=http://h:3 cell-b";
+    expect(parseNodes(text, "cell-a")).toEqual([
+      { id: "a", url: "http://h:1", cell: "cell-a" },
+      { id: "b", url: "http://h:2", cell: "cell-a" },
+    ]);
+    expect(parseNodes(text, "cell-b")).toEqual([{ id: "c", url: "http://h:3", cell: "cell-b" }]);
+    // A cell'd list with no EDEN_CELL must not merge the cells into one membership.
+    expect(() => parseNodes(text)).toThrow(/EDEN_CELL/);
+    // A cell on one row only would scope the bare rows everywhere.
+    expect(() => parseNodes("a=http://h:1 cell-a\nb=http://h:2", "cell-a")).toThrow(/on every row/);
+    expect(() => parseNodes("a=http://h:1 a!!")).toThrow(/cell must be/);
+    // A list naming no cell parses as before, whichever EDEN_CELL says.
+    expect(parseNodes("a=http://h:1", "cell-a")).toEqual([]);
+  });
+
+  test("nodesFromEnv reads EDEN_CELL and scopes the list to it", () => {
+    const env = { EDEN_NODES: "a=http://h:1 cell-a,b=http://h:2 cell-b", EDEN_CELL: "cell-b" };
+    expect(nodesFromEnv(env)).toEqual({
+      nodes: [{ id: "b", url: "http://h:2", cell: "cell-b" }],
+      file: null,
+      cell: "cell-b",
+    });
+    expect(nodesFromEnv({ EDEN_NODES: "a=http://h:1" })).toEqual({
+      nodes: [{ id: "a", url: "http://h:1" }],
+      file: null,
+      cell: null,
+    });
+    expect(() => nodesFromEnv({ EDEN_NODES: "a=http://h:1 cell-a" })).toThrow(/EDEN_CELL/);
+    expect(() => nodesFromEnv({ EDEN_NODES: "a=http://h:1 cell-a", EDEN_CELL: "cell-b" })).toThrow(
+      /no node in cell cell-b/,
+    );
+    expect(() => nodesFromEnv({ EDEN_NODES: "a=http://h:1", EDEN_CELL: "a!!" })).toThrow(/EDEN_CELL must be/);
+  });
+
+  test("membershipKey gives each cell its own published doc (S1-P8)", () => {
+    expect(membershipKey("p/", null)).toBe("p/cluster-membership");
+    expect(membershipKey("p/", "cell-a")).toBe("p/cluster-membership.cell-a");
   });
 
   test("placement, a node added, a node killed, a node removed, forget", async () => {

@@ -21,7 +21,10 @@
  *
  *   EDEN_NODES        "a=http://10.0.0.11:8790,b=http://10.0.0.12:8790" (id=url, ids stable: re-addressing a machine
  *                     moves nobody), or EDEN_NODES_FILE, a file of the same text (one per line or comma-separated),
- *                     re-read on SIGHUP and when it changes.
+ *                     re-read on SIGHUP and when it changes. A row may name its cell as a second token
+ *                     (`a=http://… cell-a`, S1-P8); a cell'd list needs EDEN_CELL to say which the router serves.
+ *   EDEN_CELL         the cell this router serves, when the nodes list names cells (S1-P8): membership, placement
+ *                     and the published membership doc are then scoped to that cell's rows.
  *   EDEN_CLUSTER_KEY  the shared secret of the membership messages (24+ characters), the same on every node.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -38,42 +41,62 @@ import { sumUsage, userOf } from "./router";
 export interface NodeSpec {
   id: string;
   url: string;
+  /** The node's cell (S1-P8), when the list names cells: the second token of `id=url cell`. */
+  cell?: string;
 }
 
-/** Parses "id=url" entries, comma- or newline-separated; blank lines and # comments are skipped. */
-export function parseNodes(text: string): NodeSpec[] {
-  const out: NodeSpec[] = [];
+/**
+ * Parses "id=url" entries, comma- or newline-separated; blank lines and # comments are skipped. An entry may name
+ * its cell as a second token (`a=http://h:1 cell-a`, S1-P8): every entry must then name one — a list part-cell'd
+ * would scope some nodes everywhere. With `cell` the rows of that cell are answered; without it every row, unless
+ * the list names cells at all — then the caller must say which it routes for, or one router would merge cells back
+ * into one membership. Cells name as ids do (`[A-Za-z0-9._-]`).
+ */
+export function parseNodes(text: string, cell?: string): NodeSpec[] {
+  let out: NodeSpec[] = [];
   const ids = new Set<string>();
+  let cellRows = 0;
   for (const raw of text.split(/[,\n]/)) {
     const entry = raw.replace(/#.*/, "").trim();
     if (entry === "") continue;
     const eq = entry.indexOf("=");
+    const rest = eq < 0 ? "" : entry.slice(eq + 1).trim();
+    const space = rest.search(/\s/);
+    const url = (space < 0 ? rest : rest.slice(0, space)).replace(/\/+$/, "");
+    const rowCell = space < 0 ? "" : rest.slice(space).trim();
     const id = eq < 0 ? "" : entry.slice(0, eq).trim();
-    const url =
-      eq < 0
-        ? ""
-        : entry
-            .slice(eq + 1)
-            .trim()
-            .replace(/\/+$/, "");
     if (!/^[A-Za-z0-9._-]{1,64}$/.test(id)) throw new Error(`EDEN_NODES: "${entry}" must be id=url, id [A-Za-z0-9._-]`);
     if (!/^https?:\/\/[^\s/]+$/.test(url)) throw new Error(`EDEN_NODES: node ${id}'s url must be http(s)://host:port`);
+    if (rowCell !== "" && !/^[A-Za-z0-9._-]{1,64}$/.test(rowCell))
+      throw new Error(`EDEN_NODES: node ${id}'s cell must be [A-Za-z0-9._-]`);
     if (ids.has(id)) throw new Error(`EDEN_NODES: node ${id} is listed twice`);
     ids.add(id);
-    out.push({ id, url });
+    if (rowCell !== "") cellRows++;
+    out.push({ id, url, ...(rowCell === "" ? {} : { cell: rowCell }) });
   }
+  if (cellRows > 0 && cellRows < out.length) throw new Error("EDEN_NODES: a cell on one row must be on every row");
+  if (cell === undefined && cellRows > 0)
+    throw new Error(
+      `EDEN_NODES names cells (${[...new Set(out.map((n) => n.cell!))].join(", ")}): set EDEN_CELL to the one this router serves`,
+    );
+  if (cell !== undefined) out = out.filter((n) => n.cell === cell);
   return out;
 }
 
 /** The nodes from EDEN_NODES or EDEN_NODES_FILE, or null when neither is set (not a cluster router). */
-export function nodesFromEnv(env: NodeJS.ProcessEnv): { nodes: NodeSpec[]; file: string | null } | null {
+export function nodesFromEnv(
+  env: NodeJS.ProcessEnv,
+): { nodes: NodeSpec[]; file: string | null; cell: string | null } | null {
   const file = env.EDEN_NODES_FILE ?? "";
   const text = env.EDEN_NODES ?? "";
   if (file === "" && text === "") return null;
   if (file !== "" && text !== "") throw new Error("set EDEN_NODES or EDEN_NODES_FILE, not both");
-  const nodes = parseNodes(file !== "" ? readFileSync(file, "utf8") : text);
-  if (nodes.length === 0) throw new Error("EDEN_NODES lists no node");
-  return { nodes, file: file === "" ? null : file };
+  const cell = env.EDEN_CELL ?? "";
+  if (cell !== "" && !/^[A-Za-z0-9._-]{1,64}$/.test(cell)) throw new Error("EDEN_CELL must be [A-Za-z0-9._-]");
+  const nodes = parseNodes(file !== "" ? readFileSync(file, "utf8") : text, cell === "" ? undefined : cell);
+  if (nodes.length === 0)
+    throw new Error(cell === "" ? "EDEN_NODES lists no node" : `EDEN_NODES lists no node in cell ${cell}`);
+  return { nodes, file: file === "" ? null : file, cell: cell === "" ? null : cell };
 }
 
 interface NodeState extends NodeSpec {
@@ -692,14 +715,22 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   };
 }
 
+/** The doc a leader publishes its membership to under the store's prefix: one per
+ * cell when the fleet is cell'd (S1-P8). */
+export function membershipKey(prefix: string, cell: string | null): string {
+  return `${prefix}cluster-membership${cell === null ? "" : `.${cell}`}`;
+}
+
 /** `main.ts` with EDEN_NODES or EDEN_NODES_FILE: the cluster router, re-reading the file on SIGHUP or change. */
 export async function runCluster(
   config: ServerConfig,
-  spec: { nodes: NodeSpec[]; file: string | null },
+  spec: { nodes: NodeSpec[]; file: string | null; cell: string | null },
 ): Promise<void> {
   // S1-P7: the membership store is the nodes' EDEN_PERSIST_STORE (the router holds no users, so `config.persist`
   // is not built for it — the same env is read here). `cluster-membership` under the shared prefix names no
-  // blob: the sweeps skip it, and under sharding it sits on the first store (S1-P4).
+  // blob: the sweeps skip it, and under sharding it sits on the first store (S1-P4). A cell'd fleet shares the
+  // store across cells, so each cell's doc is its own (S1-P8) — else two cells' leaders would clobber one
+  // another's published membership.
   const cfg = storeConfig(process.env);
   const membership =
     cfg === null
@@ -712,7 +743,7 @@ export async function runCluster(
                   cfg.buckets.map((bucket) => new S3BlobStore({ ...cfg, bucket })),
                   cfg.prefix,
                 ),
-          key: `${cfg.prefix}cluster-membership`,
+          key: membershipKey(cfg.prefix, spec.cell),
         };
   const follow = process.env.EDEN_CLUSTER_FOLLOW === "1";
   if (follow && membership === undefined)
@@ -726,7 +757,7 @@ export async function runCluster(
   const reload = () => {
     if (!spec.file) return;
     try {
-      void router.setNodes(parseNodes(readFileSync(spec.file, "utf8")));
+      void router.setNodes(parseNodes(readFileSync(spec.file, "utf8"), spec.cell ?? undefined));
     } catch (e) {
       console.error(`eden cluster: ${spec.file} not applied: ${e instanceof Error ? e.message : String(e)}`);
     }

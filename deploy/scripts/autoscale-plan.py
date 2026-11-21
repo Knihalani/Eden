@@ -53,19 +53,28 @@ class Node:
     down: bool = False
 
 
-def parse_nodes_file(text: str) -> list[Node]:
-    """`id=url` lines, as EDEN_NODES_FILE (cluster.ts parseNodes)."""
+def parse_nodes_file(text: str, cell: str | None = None) -> list[Node]:
+    """`id=url [cell]` lines, as EDEN_NODES_FILE (cluster.ts parseNodes, S1-P8)."""
     nodes = []
+    cells: set[str] = set()
     for line in re.split(r"[\n,]", text):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        ident, sep, url = line.partition("=")
-        if not sep or not ident.strip() or not url.strip():
+        ident, sep, rest = line.partition("=")
+        parts = rest.strip().split()
+        if not sep or not ident.strip() or not parts:
             raise SystemExit(f"nodes file: bad line {line!r} (want id=url)")
-        nodes.append(Node(ident.strip(), url.strip().rstrip("/")))
+        if len(parts) > 1:
+            cells.add(parts[1])
+        if cell is None or (len(parts) > 1 and parts[1] == cell):
+            nodes.append(Node(ident.strip(), parts[0].rstrip("/")))
+    if cells and cell is None:
+        raise SystemExit(
+            f"nodes file: rows name cells ({', '.join(sorted(cells))}): pass --cell to plan one"
+        )
     if not nodes:
-        raise SystemExit("nodes file: no nodes")
+        raise SystemExit("nodes file: no nodes" + (f" in cell {cell!r}" if cell else ""))
     return nodes
 
 
@@ -143,12 +152,16 @@ def plan(args: dict, nodes: list[Node], now: float) -> dict:
     target = count + move
 
     state_path = args["state"]
-    streak = 0
+    streaks: dict = {}
     if os.path.exists(state_path):
         try:
-            streak = json.loads(open(state_path).read()).get("below_streak", 0)
+            prev = json.loads(open(state_path).read()).get("below_streak", 0)
+            # The pre-cell file held one number for the whole fleet.
+            streaks = prev if isinstance(prev, dict) else {"": prev}
         except Exception:
-            streak = 0
+            streaks = {}
+    cell_key = args["cell"] or ""
+    streak = streaks.get(cell_key, 0) if isinstance(streaks.get(cell_key, 0), int) else 0
     below = need < count
     streak = streak + 1 if below else 0
     hold_in = ""
@@ -161,8 +174,9 @@ def plan(args: dict, nodes: list[Node], now: float) -> dict:
             hold_in = f"below need for {streak} of {args['confirm_in']} consecutive readings: holding"
         if hold_in:
             target = count
+    streaks[cell_key] = streak
     with open(state_path, "w") as f:
-        f.write(json.dumps({"below_streak": streak, "ts": now}))
+        f.write(json.dumps({"below_streak": streaks, "ts": now}))
 
     return {
         "count": count,
@@ -187,6 +201,7 @@ def main() -> int:
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--nodes-file", required=True)
+    p.add_argument("--cell", help="plan only this cell's rows; a nodes file naming cells requires it")
     p.add_argument("--metrics-dir", help="read <id>.metrics files instead of scraping http")
     p.add_argument("--ram-gb", type=float, required=True)
     p.add_argument("--processes", type=int, required=True)
@@ -203,7 +218,7 @@ def main() -> int:
     args = vars(p.parse_args())
     now = args["now"] if args["now"] is not None else time.time()
 
-    nodes = parse_nodes_file(open(args["nodes_file"]).read())
+    nodes = parse_nodes_file(open(args["nodes_file"]).read(), args["cell"])
     if args["metrics_dir"]:
         for n in nodes:
             try:
