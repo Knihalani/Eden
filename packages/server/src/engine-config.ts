@@ -17,6 +17,7 @@
  */
 import { readFileSync } from "node:fs";
 import { checkEngineConfig, DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
+import { sanitizeForStore } from "@eden/redact";
 
 // The checks themselves (keys, types, `RANGES`, list entries, `NEEDS_DEP`) live in @eden/engine's config-check.ts,
 // shared with the lab's CLIs.
@@ -29,13 +30,13 @@ export function engineConfig(env: Record<string, string | undefined> = process.e
   try {
     text = readFileSync(path, "utf8");
   } catch (error) {
-    throw new Error(`EDEN_ENGINE_CONFIG: cannot read ${path} (${(error as Error).message})`);
+    throw new Error(`EDEN_ENGINE_CONFIG: cannot read ${sanitizeForStore(path)} (${(error as Error).message})`);
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new Error(`EDEN_ENGINE_CONFIG: ${path} is not JSON (${(error as Error).message})`);
+    throw new Error(`EDEN_ENGINE_CONFIG: ${sanitizeForStore(path)} is not JSON (${(error as Error).message})`);
   }
   // D5: a key the running version does not have is warned about and skipped, not fatal — the file may have been
   // written for another version. `Object.hasOwn`, not `in`: "__proto__" and "constructor" are not settings.
@@ -43,11 +44,16 @@ export function engineConfig(env: Record<string, string | undefined> = process.e
     const kept: Record<string, unknown> = {};
     for (const [key, given] of Object.entries(parsed)) {
       if (Object.hasOwn(DEFAULT_CONFIG, key)) kept[key] = given;
-      else console.error(`eden: EDEN_ENGINE_CONFIG (${path}) has unknown key "${key}", ignored`);
+      // Logged, so the path and key pass sanitizeForStore; whitespace collapses so a key cannot forge a log line.
+      else
+        console.error(
+          `eden: EDEN_ENGINE_CONFIG (${sanitizeForStore(path)}) has unknown key ` +
+            `"${sanitizeForStore(key).replace(/\s+/g, " ")}", ignored`,
+        );
     }
     parsed = kept;
   }
-  return parseEngineConfig(parsed, `EDEN_ENGINE_CONFIG (${path})`);
+  return parseEngineConfig(parsed, `EDEN_ENGINE_CONFIG (${sanitizeForStore(path)})`);
 }
 
 /**
