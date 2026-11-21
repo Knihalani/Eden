@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Install Eden into every local agent home found: claude-code, cursor, gemini-cli, gptme, openclaw,
-opencode, pi, qwen-code.
+"""Install Eden into every local agent home found: claude-code, cursor, devin-cli, gemini-cli, gptme,
+openclaw, opencode, pi, qwen-code.
 
 Each agent ships its own `examples/<agent>/install.py`; this detects which agents are present
 (their home directories exist, or `--agents` names them) and runs each installer in turn,
@@ -26,6 +26,9 @@ AGENTS = {
     "cursor": (("CURSOR_HOME",), Path.home() / ".cursor", "--cursor-home"),
     "gemini-cli": (("GEMINI_CLI_HOME",), Path.home() / ".gemini", "--gemini-home"),
     "qwen-code": (("QWEN_CODE_HOME", "QWEN_CLI_HOME"), Path.home() / ".qwen", "--qwen-home"),
+    "devin-cli": (("DEVIN_CLI_HOME",),
+                    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "devin",
+                    "--devin-home"),
     "gptme": (("GPTME_HOME",), Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gptme", "--gptme-home"),
     "openclaw": (("OPENCLAW_HOME",), Path.home() / ".openclaw", "--openclaw-home"),
     "opencode": (("OPENCODE_HOME",), Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode", "--opencode-home"),

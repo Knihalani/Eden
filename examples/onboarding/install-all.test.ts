@@ -23,7 +23,17 @@ describe.skipIf(!python)("the unified installer", () => {
     const out = run(["--list"], home);
     expect(out.exitCode, out.stderr.toString()).toBe(0);
     const text = out.stdout.toString();
-    for (const name of ["claude-code", "cursor", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
+    for (const name of [
+      "claude-code",
+      "cursor",
+      "devin-cli",
+      "gemini-cli",
+      "gptme",
+      "openclaw",
+      "opencode",
+      "pi",
+      "qwen-code",
+    ]) {
       expect(text).toContain(name);
     }
     expect(text).toMatch(/pi\s+detected/);
@@ -31,6 +41,7 @@ describe.skipIf(!python)("the unified installer", () => {
     expect(text).toMatch(/claude-code\s+home absent/);
     expect(text).toMatch(/cursor\s+home absent/);
     expect(text).toMatch(/qwen-code\s+home absent/);
+    expect(text).toMatch(/devin-cli\s+home absent/);
     expect(text).toMatch(/gemini-cli\s+home absent/);
     expect(text).toMatch(/openclaw\s+home absent/);
   });
