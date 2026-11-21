@@ -80,3 +80,6 @@ deploy/tofu/**/.terraform/
 deploy/tofu/**/*.tfstate*
 deploy/tofu/**/terraform.tfvars
 deploy/compose/cluster-router/nodes
+
+# fresh-corpus eval: generated corpus (regenerate per run, never commit)
+packages/sim/lab/fresh-corpus/corpus/

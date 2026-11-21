@@ -149,9 +149,22 @@ describe("checkAction with partyCheck", () => {
 
   test("a held finding is usage-tracked like any injection: the record carries its bytes (C1)", async () => {
     const got: { injectionId: string; used: boolean; how: string; injectionBytes?: number }[] = [];
+    const sm = new SourceMap();
+    const corrected: unknown[] = [];
+    const recordedOutcomes: boolean[] = [];
+    const correctOutcome = sm.correctOutcome.bind(sm);
+    sm.correctOutcome = (scope, situation, sourceId, used) => {
+      corrected.push({ sourceId, used });
+      return correctOutcome(scope, situation, sourceId, used);
+    };
+    const recordOutcome = sm.recordOutcome.bind(sm);
+    sm.recordOutcome = (scope, situation, sourceId, used) => {
+      recordedOutcomes.push(used);
+      return recordOutcome(scope, situation, sourceId, used);
+    };
     const p = new ContextPartner({
       sources: async () => [mail()],
-      sourceMap: new SourceMap(),
+      sourceMap: sm,
       cache: new ItemCache(),
       budget: new Budget(),
       model: null,
@@ -163,6 +176,14 @@ describe("checkAction with partyCheck", () => {
     await primed(p, w, "Email Priya that the board pack draft is fine.");
     const held = await p.checkAction(ev(w, email(["compliance@client-services.example"])));
     expect(held.verdict).toBe("finding");
+    // The warning's job is the block: an unused verdict for it never runs `record`'s outcome path.
+    let recorded = 0;
+    const anyP = p as unknown as { record(...a: unknown[]): unknown };
+    const record = anyP.record.bind(p);
+    anyP.record = (...a: unknown[]) => {
+      if (a[1] === held.finding!.id) recorded++;
+      return record(...a);
+    };
     // The blocked call reported as an event is not the warning being used: no inferred credit.
     await p.observe(ev(w, email(["compliance@client-services.example"])));
     expect(got.find((u) => u.injectionId === held.finding!.id)).toBeUndefined();
@@ -170,6 +191,51 @@ describe("checkAction with partyCheck", () => {
     const rec = got.find((u) => u.injectionId === held.finding!.id);
     expect(rec).toMatchObject({ used: false, how: "ended" });
     expect(rec!.injectionBytes).toBeGreaterThan(0);
+    expect(recorded).toBe(0);
+    // Feedback on the ended warning records a verdict — it does not correct another delivery's.
+    corrected.length = 0;
+    recordedOutcomes.length = 0;
+    expect(
+      p.feedback({
+        tenantId: "t1",
+        userId: "u-finding",
+        sessionId: "s1",
+        injectionId: held.finding!.id,
+        used: true,
+        how: "explicit",
+      }),
+    ).toBe(true);
+    expect(corrected).toEqual([]);
+    expect(recordedOutcomes).toContain(true);
+  });
+
+  test("a held finding expiring unused records no outcome on its sources", async () => {
+    const got: { injectionId: string; used: boolean; how: string }[] = [];
+    const p = new ContextPartner({
+      sources: async () => [mail()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { ...CORE_CONFIG, partyCheck: true },
+      onUsage: (u) => got.push(u),
+    });
+    const w = who("u-finding-expire");
+    await primed(p, w, "Email Priya that the board pack draft is fine.");
+    const held = await p.checkAction(ev(w, email(["compliance@client-services.example"])));
+    expect(held.verdict).toBe("finding");
+    let recorded = 0;
+    const anyP = p as unknown as { record(...a: unknown[]): unknown };
+    const record = anyP.record.bind(p);
+    anyP.record = (...a: unknown[]) => {
+      if (a[1] === held.finding!.id) recorded++;
+      return record(...a);
+    };
+    for (let i = 0; i < 8; i++) await p.observe(ev(w, { kind: "user_message", text: `unrelated turn ${i}` }));
+    const rec = got.find((u) => u.injectionId === held.finding!.id);
+    expect(rec).toMatchObject({ used: false, how: "expired" });
+    expect(recorded).toBe(0);
   });
 
   test("a payment to account details only a packet showed is held", async () => {

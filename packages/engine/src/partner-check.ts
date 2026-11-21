@@ -294,7 +294,21 @@ export abstract class PartnerCheck extends PartnerDelivery {
       if (!used && !expired) continue;
       s.outstanding.delete(id);
       const how = used ? "inferred" : "expired";
-      this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how, bytes: o.bytes });
+      // A warning's job is the block: unused at expiry is not the source's failure — the packet's
+      // accounting emits with no outcome on its sources (the quiet path a context_reset takes).
+      if (o.warning && !used) {
+        this.usage({ sessionId: s.id, injectionId: id, used, how, sourceIds: o.sourceIds, injectionBytes: o.bytes });
+        this.recordRow(s.scope, id, {
+          sourceIds: o.sourceIds,
+          situation: o.situation,
+          pending: true,
+          used,
+          sessionId: s.id,
+          bytes: o.bytes,
+        });
+      } else {
+        this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how, bytes: o.bytes });
+      }
     }
   }
 

@@ -1605,6 +1605,9 @@ export class ItemCache {
     u.synced = old.synced;
     u.offsets = old.offsets;
     u.offset = old.offset;
+    // And the probe memos (D46): they name item ids, which the rebuild leaves alone, so each still stands —
+    // a rebuild must not cost the source call a warm probe exists to save. A freeze keeps them the same way.
+    u.probes = old.probes;
     this.users.set(scopeKey(scope), u); // Same key: the user's place in the eviction order is unchanged.
   }
 
