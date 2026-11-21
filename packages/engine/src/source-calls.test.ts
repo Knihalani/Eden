@@ -111,7 +111,9 @@ async function run(
 describe("trace sourceCalls are the calls connectors received", () => {
   test("readerPush: push and slow path search the same query; the sum of sourceCalls is the connector's count", async () => {
     // The slow path asks 2 sources, the push 4: the two it shares join (or are cached), the other two are the push's.
-    const { traces, sent } = await run({ readerPush: true, lookupSources: 2, askSources: 4 });
+    // maxItemsPerInjection stays a slot above the picks' cap (confidentItems): a full packet leaves no room for the
+    // companion pass, so whether it runs would ride on the push's race against the slow path's picks (D2053).
+    const { traces, sent } = await run({ readerPush: true, lookupSources: 2, askSources: 4, maxItemsPerInjection: 4 });
     const pushed = traces.filter((t) => t.decision === "reader-push");
     expect(pushed.length).toBe(1);
     // Each source was searched twice: once for the request (the overlap shared, not sent twice), once by the
@@ -123,7 +125,10 @@ describe("trace sourceCalls are the calls connectors received", () => {
   });
 
   test("a repeat request answered by the fan-out's cache counts no call", async () => {
-    const { traces, sent } = await run({ readerPush: true, lookupSources: 2, askSources: 4 }, { requests: 2 });
+    const { traces, sent } = await run(
+      { readerPush: true, lookupSources: 2, askSources: 4, maxItemsPerInjection: 4 },
+      { requests: 2 },
+    );
     expect(total(sent)).toBe(8); // The re-search's own query is no repeat of the request's.
     expect(traced(traces)).toBe(8);
   });

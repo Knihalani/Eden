@@ -49,6 +49,9 @@
  * EDEN_CLUSTER_KEY   the cluster router's membership messages (D992), 24+ characters, the same on every machine;
  *                    EDEN_CLUSTER_SIZE the machine count, which divides the tenant's spend cap with N (D993).
  * EDEN_NODES, EDEN_NODES_FILE  this process is the cluster router over those machines (cluster.ts); it holds no users.
+ *                    EDEN_CLUSTER_FOLLOW=1 makes it a follower: it drives no probes or membership and adopts the
+ *                    leader's published table from the EDEN_PERSIST_STORE `cluster-membership` key (S1-P7), so a
+ *                    second router behind the LB takes over without two leaders fighting over the nodes.
  * EDEN_SHUTDOWN_GRACE_MS a stop's budget (default 10,000, D994); EDEN_DRAIN_DELAY_MS how long a draining process keeps
  *                    serving after /readyz turned 503 (default 0; 5,000 behind Caddy or a load balancer).
  */
