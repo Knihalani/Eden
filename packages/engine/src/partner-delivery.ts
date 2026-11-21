@@ -930,17 +930,18 @@ export abstract class PartnerDelivery extends PartnerCore {
         .sort((a, b) => b.score - a.score)
         // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
         // Occurrences of a recurring event read alike but are not the same thing: another day is another item.
-        .filter(
-          (x, i, all) =>
-            !all
-              .slice(0, i)
-              .some(
-                (y) =>
-                  nearDuplicate(x.sketch, y.sketch) &&
-                  startDay(x.item, cue.offset) === startDay(y.item, cue.offset) &&
-                  sameRef(idNumbers(`${x.item.title} ${x.item.text}`), y.item),
-              ),
-        )
+        .filter((x, i, all) => {
+          // x's own refs once: inside the `some` it would be scanned again for every earlier candidate.
+          const refs = idNumbers(`${x.item.title} ${x.item.text}`);
+          return !all
+            .slice(0, i)
+            .some(
+              (y) =>
+                nearDuplicate(x.sketch, y.sketch) &&
+                startDay(x.item, cue.offset) === startDay(y.item, cue.offset) &&
+                sameRef(refs, y.item),
+            );
+        })
     );
   }
 
