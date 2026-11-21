@@ -147,6 +147,28 @@ describe("checkAction with partyCheck", () => {
     expect((await p.checkAction(call)).verdict).toBe("proceed");
   });
 
+  test("a held finding is usage-tracked like any injection: the record carries its bytes (C1)", async () => {
+    const got: { injectionId: string; used: boolean; how: string; injectionBytes?: number }[] = [];
+    const p = new ContextPartner({
+      sources: async () => [mail()],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: { ...CORE_CONFIG, partyCheck: true },
+      onUsage: (u) => got.push(u),
+    });
+    const w = who("u-finding");
+    await primed(p, w, "Email Priya that the board pack draft is fine.");
+    const held = await p.checkAction(ev(w, email(["compliance@client-services.example"])));
+    expect(held.verdict).toBe("finding");
+    await p.observe(ev(w, { kind: "session_end" }));
+    const rec = got.find((u) => u.injectionId === held.finding!.id);
+    expect(rec).toMatchObject({ used: false, how: "ended" });
+    expect(rec!.injectionBytes).toBeGreaterThan(0);
+  });
+
   test("a payment to account details only a packet showed is held", async () => {
     const p = partner({});
     const w = who("u2");

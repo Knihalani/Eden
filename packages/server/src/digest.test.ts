@@ -94,6 +94,24 @@ describe("digest (D293)", () => {
     expect(formatDigest(d)).toContain("1 of 2 injections name a size");
     expect(formatDigest(digest([t({}), u("i1", true)]))).not.toContain("packet text handed");
   });
+  test("a reset record counts the handed bytes but no verdict", () => {
+    const reset = JSON.stringify({
+      usage: {
+        sessionId: "s",
+        injectionId: "i1",
+        used: false,
+        how: "reset",
+        sourceIds: ["g"],
+        injectionBytes: 400,
+      },
+    });
+    const d = digest([t({}), u("i2", false, "ended"), reset]);
+    // The compacted packet's bytes reach the agent's bill; the reset row is no verdict on the source.
+    expect(d.packets).toEqual({ bytes: 400, counted: 1 });
+    expect(d.used.injections).toBe(1);
+    expect(d.used.used).toBe(0);
+    expect(d.used.bySource["g"]).toBeUndefined();
+  });
   test("connector calls per request: the agent's tool calls, Eden's lookups' and its sync's last count per process", () => {
     const sync = (pid: number, backgroundCalls: number) =>
       JSON.stringify({

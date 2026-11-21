@@ -211,15 +211,17 @@ export function digest(lines: Iterable<string>): Digest {
       sources[s] = (sources[s] ?? 0) + 1;
     }
   }
+  // A `reset` record is no verdict — a compaction ended the tracking (D2006); it counts only the handed bytes.
+  const verdicts = records.filter((r) => r.how !== "reset");
   const bySource: Digest["used"]["bySource"] = {};
-  for (const r of records) {
+  for (const r of verdicts) {
     for (const s of new Set(r.sourceIds)) {
       const e = (bySource[s] ??= { injections: 0, used: 0 });
       e.injections++;
       if (r.used) e.used++;
     }
   }
-  const explicit = records.filter((r) => r.how === "explicit").length;
+  const explicit = verdicts.filter((r) => r.how === "explicit").length;
   const packets = {
     bytes: records.reduce((a, r) => a + (typeof r.injectionBytes === "number" ? r.injectionBytes : 0), 0),
     counted: records.filter((r) => typeof r.injectionBytes === "number").length,
@@ -235,8 +237,8 @@ export function digest(lines: Iterable<string>): Digest {
     used: {
       // Inference reads the agent's own messages and tool calls; with none reported and no feedback, use is unknown.
       measured: explicit > 0 || agentEvents > 0,
-      injections: records.length,
-      used: records.filter((r) => r.used).length,
+      injections: verdicts.length,
+      used: verdicts.filter((r) => r.used).length,
       explicit,
       bySource,
     },

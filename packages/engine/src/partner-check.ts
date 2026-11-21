@@ -1,5 +1,5 @@
-import { showsUse } from "./usage";
-import {} from "./text";
+import { distinctiveTokens, showsUse } from "./usage";
+import { termIds } from "./text";
 import {} from "./settle";
 import { renderAnswer, renderPacket, shownText } from "./render";
 import { mentionsOf } from "./partner-core";
@@ -37,7 +37,7 @@ import {
   within,
 } from "./partner";
 
-import { PartnerDelivery } from "./partner-delivery";
+import { MAX_OUTSTANDING, PartnerDelivery, utf8 } from "./partner-delivery";
 /**
  * `ContextPartner`'s check slice (R3, D2020): `checkAction` and the freshness machinery behind the verify step —
  * `check`/`checkAhead`/`checkUsage`/`checkedOut`, the seen/forgotten marks, plan mentions and unverifiable holds.
@@ -172,6 +172,19 @@ export abstract class PartnerCheck extends PartnerDelivery {
       const said = [...s.window].reverse().find((w) => w.startsWith("user_message: "));
       const found = this.partyFinding(s, event, said ? said.slice("user_message: ".length) : "");
       if (!found) return proceed("clear");
+      // A held call's finding is handed to the agent like any injection: track it so the usage record can carry
+      // its bytes and a verdict (C1); without this the digest never saw a party finding's text at all.
+      const foundTerms = termIds(found.text, s.vocab, true);
+      s.outstanding.set(found.id, {
+        injectionId: found.id,
+        sourceIds: [...new Set(found.citations.map((c) => c.sourceId))],
+        situation: s.situation,
+        bytes: utf8.encode(found.text).byteLength,
+        tokens: distinctiveTokens(foundTerms.ids, foundTerms.n, s.seen, s.vocab),
+        deliveredTurn: s.turn,
+      });
+      while (s.outstanding.size > MAX_OUTSTANDING)
+        s.outstanding.delete(s.outstanding.keys().next().value as string);
       const latencyMs = Math.round(performance.now() - t0);
       this.trace(s, {
         sessionId: s.id,

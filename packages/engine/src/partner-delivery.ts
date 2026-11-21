@@ -81,7 +81,7 @@ export interface Built {
  */
 export const MAX_OUTSTANDING = 64;
 
-const utf8 = new TextEncoder();
+export const utf8 = new TextEncoder();
 
 export const PLAN_QUOTE_CHARS = 200;
 
@@ -628,7 +628,17 @@ export abstract class PartnerDelivery extends PartnerCore {
     s.agentHas = [];
     // Shown but judged by nothing: kept for a later correction, with no outcome recorded — a compaction is no
     // verdict on what was shown (feedback on it lands fresh in `feedback`).
-    for (const [id, o] of s.outstanding)
+    for (const [id, o] of s.outstanding) {
+      // No verdict — a compaction scores nothing — but the bytes were handed: a `reset` record keeps the packet in
+      // the digest's accounting (C1) while the pending row waits for a later correction.
+      this.usage({
+        sessionId: s.id,
+        injectionId: id,
+        used: false,
+        how: "reset",
+        sourceIds: o.sourceIds,
+        injectionBytes: o.bytes,
+      });
       this.recordRow(s.scope, id, {
         sourceIds: o.sourceIds,
         situation: o.situation,
@@ -637,6 +647,7 @@ export abstract class PartnerDelivery extends PartnerCore {
         pending: true,
         bytes: o.bytes,
       });
+    }
     s.outstanding.clear();
     s.checked?.clear();
     s.packetParties?.clear();
