@@ -161,6 +161,10 @@ describe("quality runner", () => {
       // loop is wall-clock timing, and verdict gates read it — a shard's run and the whole run would
       // otherwise differ by when the poll landed, not by anything the merge does (D2054).
       sync: true,
+      // `syncPollBehind` off: a poll left running behind a lookup emits its own "skipped: sync poll behind"
+      // trace when it settles, and whether the poll stored calls by then is the same wall-clock race —
+      // waiting for the poll inside the lookup keeps the trace set deterministic.
+      config: { syncPollBehind: false },
     };
     const untimed = (r: QualityReport) => JSON.stringify({ ...r, latency: null, cpu: null });
     const whole = await runQuality(o);
