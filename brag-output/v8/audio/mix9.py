@@ -35,7 +35,12 @@ tiles=['impactGlass_light_001','impactGlass_light_002','impactGlass_light_003','
 for k in range(34): put(I(tiles[k%6]),B(12)+k*.032+rng.uniform(0,.02),.13*(1-k/40),rng.uniform(-.7,.7))   # the wave runs across the field
 for b in (16,18,20,22): put(mk('1461'),B(b),.16,rng.uniform(-.3,.3)); put(U('click_002'),B(b),.12)  # one angle per source
 put(mk('1489'),B(27),.25,align='peak')                    # crane up
-put(I('impactSoft_medium_002'),B(30.5),.28); put(mk('1490'),B(37.7),.42,align='peak')   # lift, fly to camera
+put(I('impactSoft_medium_002'),B(30.5),.28)   # the lift
+KB=sorted(__import__('glob').glob(K+'keyboard/*.wav'))[:8] or [K+'keyboard/'+x for x in []]
+REQ="Draft this quarter's renewal quote"; t0=B(34.15); dt=B(1.6)/len(REQ)
+for i,ch in enumerate(REQ):
+    if KB: put(KB[i%len(KB)],t0+i*dt+rng.uniform(-.004,.004),(.10 if ch!=' ' else .13)*rng.uniform(.8,1.05),rng.uniform(-.12,.12))
+put(U('drop_002'),B(35.1),.3); put(I('impactSoft_medium_001'),B(35.1),.16)   # Eden's card lands before the request is finished
 TB=B(41); put(mk('1492'),TB,.5,align='peak'); put(I('impactPlate_heavy_000'),TB,.5); put(I('impactGlass_heavy_002'),TB+.02,.42)
 for j in range(9): put(I('impactPlate_light_00%d'%(j%5)),TB+.08+j*.06+rng.uniform(0,.04),.13*(1-j/12),rng.uniform(-.6,.6))
 put(I('impactBell_heavy_000'),B(44),.42); put(I('impactSoft_heavy_000'),B(44),.5); put(mk('1143'),B(44),.35)   # silence, then the mark
