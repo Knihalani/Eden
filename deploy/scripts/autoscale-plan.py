@@ -99,7 +99,7 @@ def in_peak(now: float, hours: str) -> bool:
     a, _, b = hours.partition("-")
     lo, hi = int(a), int(b)
     h = time.localtime(now).tm_hour
-    return lo <= h < hi
+    return lo <= h < hi if lo <= hi else h >= lo or h < hi  # 19-7 wraps midnight
 
 
 def usable_mb(ram_gb: float, processes: int) -> float:
@@ -108,11 +108,29 @@ def usable_mb(ram_gb: float, processes: int) -> float:
 
 def plan(args: dict, nodes: list[Node], now: float) -> dict:
     count = len(nodes)
-    total = sum(n.users for n in nodes)
-    any_down = any(n.down for n in nodes)
     per_users = [n.rss_mb / n.users for n in nodes if not n.down and n.users > 0]
     rss_plan = max([*per_users, args["rss_per_user"]])
     users_per_box = usable_mb(args["ram_gb"], args["processes"]) / 1.024 / rss_plan
+    # A node's user count is missing data when it did not answer, or partial when fewer children answered /metrics
+    # than --processes run there (the node's router sums only responding children): estimate both from what is
+    # seen — a partial node's count scales by the missing share, a silent node's by the live nodes' mean (the
+    # fleet spreads users evenly), or a whole box's planned users when nothing answered. Missing data never
+    # shrinks the fleet and never erases demand.
+    missing = []
+    measured = []
+    for n in nodes:
+        if n.down:
+            missing.append(n)
+        elif n.ready <= 0:
+            measured.append(users_per_box)
+        elif n.ready < args["processes"]:
+            measured.append(n.users * args["processes"] / n.ready)
+        else:
+            measured.append(n.users)
+    fill = (sum(measured) / len(measured)) if measured else users_per_box
+    total = sum(measured) + len(missing) * fill
+    partial = any(not n.down and n.ready < args["processes"] for n in nodes)
+    any_down = bool(missing) or partial
     projected = total * args["peak_factor"]
     need_load = math.ceil(projected / users_per_box) if users_per_box > 0 else count
     urgent = [n.id for n in nodes if not n.down and n.rss_mb > 0.85 * args["ram_gb"] * 1024]
@@ -135,7 +153,7 @@ def plan(args: dict, nodes: list[Node], now: float) -> dict:
     hold_in = ""
     if target < count:
         if any_down:
-            hold_in = "a node did not answer: holding (missing data never shrinks the fleet)"
+            hold_in = "a node did not answer or reports partial data: holding (missing data never shrinks the fleet)"
         elif in_peak(now, args["peak_hours"]):
             hold_in = f"inside peak hours {args['peak_hours']}: holding"
         elif streak < args["confirm_in"]:

@@ -18,7 +18,7 @@ function metrics(users: number, rssMb: number, extra = "") {
   return (
     `eden_users_held ${users}\n` +
     `eden_process_resident_bytes ${Math.round(rssMb * 1_048_576)}\n` +
-    `eden_processes_ready 1\n` +
+    `eden_processes_ready 16\n` +
     `eden_sync_users_waiting_first_page 0\n` +
     `eden_sync_kick_queue_users 0\n` +
     extra
@@ -160,7 +160,7 @@ test("a node that does not answer counts as full: missing data never shrinks the
     ["--ram-gb", "128", "--processes", "16", "--now", at(22)],
   );
   expect(out).toContain("DOWN (counts as full)");
-  expect(out).toContain("a node did not answer: holding");
+  expect(out).toContain("missing data never shrinks the fleet");
   expect(out).toContain("plan: keep 3 nodes");
 });
 
@@ -176,6 +176,71 @@ test("a node over 85% RSS forces a scale-out whatever the user math says", () =>
   );
   expect(out).toContain("URGENT: n1 over 85% RSS");
   expect(out).toContain("plan: add 1 node(s) → 3");
+});
+
+test("a silent node still carries demand: the live mean stands in, so load is never erased", () => {
+  // n2 silent, n1 at 100 users: the silent node is estimated at the live mean (100), so 200 projected users
+  // a ~194-a-box fleet needs 2 + 1 spare = 3 > 2. Without the stand-in the plan would wrongly keep 2.
+  const { out } = run(
+    [
+      ["n1", metrics(100, 300)],
+      ["n2", null],
+    ],
+    ["--ram-gb", "4", "--processes", "16", "--now", at(12)],
+  );
+  expect(out).toContain("plan: add 1 node(s) → 3");
+});
+
+test("a node with children missing from its own scrape reports partial data — never a scale-in basis", () => {
+  const partial = metrics(50, 300).replace("eden_processes_ready 16", "eden_processes_ready 3");
+  const { out } = run(
+    [
+      ["n1", metrics(50, 300)],
+      ["n2", metrics(50, 300)],
+      ["n3", partial],
+    ],
+    ["--ram-gb", "128", "--processes", "16", "--now", at(22)],
+  );
+  expect(out).toContain("missing data never shrinks the fleet");
+  expect(out).toContain("plan: keep 3 nodes");
+});
+
+test("a peak range that wraps midnight still guards the night hours", () => {
+  const nodes: [string, string][] = [
+    ["n1", metrics(50, 300)],
+    ["n2", metrics(50, 300)],
+    ["n3", metrics(50, 300)],
+  ];
+  const dir = mkdtempSync(join(tmpdir(), "eden-auto-"));
+  dirs.push(dir);
+  for (let i = 0; i < 4; i++) {
+    const r = run(nodes, ["--ram-gb", "128", "--processes", "16", "--now", at(22)]);
+    const p = Bun.spawnSync(
+      [
+        "python3",
+        "-I",
+        script,
+        "--nodes-file",
+        join(r.dir, "nodes.txt"),
+        "--metrics-dir",
+        join(r.dir, "m"),
+        "--state",
+        join(dir, "s.json"),
+        "--ram-gb",
+        "128",
+        "--processes",
+        "16",
+        "--now",
+        at(22),
+        "--peak-hours",
+        "19-7",
+      ],
+      { env: { ...process.env, TZ: "UTC" } },
+    );
+    const out = p.stdout.toString() + p.stderr.toString();
+    expect(out).toContain("inside peak hours 19-7: holding");
+    expect(out).toContain("plan: keep 3 nodes");
+  }
 });
 
 test("--cidr renders the nodes-file lines the new count implies (tofu cidrhost N+11)", () => {
