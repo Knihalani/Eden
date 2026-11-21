@@ -178,7 +178,7 @@ Recommendations (the parent's call, not built here unless asked): a process-wide
 | P4 | **Store sharded over buckets** (`EDEN_PERSIST_STORE` naming several; a user's bucket picks one) | B6 | `devin/eden-store-shards` | **shipped** (D2042: comma-separated URLs, `ShardedBlobStore` routes by bucket mod count) |
 | P5 | **Autoscale planner** (dry run): `/metrics` from every node to a node count and a tofu/nodes-file plan, with hysteresis and peak-hour guard; burst-tier tofu (OCI exists; AWS module plan-only) | B5 | `claude/s1-fleet` | next |
 | P6 | **Scale-out in steps**: the planner never moves more than ~10% of users in one membership change; the router's release bound scaled to users moved | B7 | with P5 | shipped |
-| P7 | Cluster router redundancy: several router processes behind the LB (stateless, same placement), measured throughput | B9 | with P5 | design |
+| P7 | Cluster router redundancy: several router processes behind the LB (stateless, same placement), measured throughput | B9 | `devin/eden-router-followers` | **shipped** (D2045: `EDEN_CLUSTER_FOLLOW` followers adopt the leader's `cluster-membership` doc from the shared store) |
 | P8 | Cells: ~10-20 nodes, their own routers, store buckets and alert scope; a tenant above one cell spread over cells by bucket range, a static top table | B10 | design only | design |
 | P9 | Model roles: a process-wide 429 backoff, contract-sized tenant cap | B8 | the parent's call | recommend |
 | P10 | Monitoring at fleet scale: recording rules per cell, paid tier or self-hosted Prometheus | B11 | docs | design |

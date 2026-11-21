@@ -369,3 +369,83 @@ test("a node's release bound scales with the users it is expected to move (S1-P6
     n3.server.stop(true);
   }
 });
+
+test("a follower router serves the leader's published placement (S1-P7)", async () => {
+  const objects = new Map<string, Uint8Array>();
+  const store = {
+    put: async (k: string, b: Uint8Array) => {
+      objects.set(k, b);
+    },
+    get: async (k: string) => objects.get(k) ?? null,
+    delete: async (k: string) => {
+      objects.delete(k);
+    },
+    list: async function* () {},
+  };
+  const stub = async (id: string) => {
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname;
+        if (path === "/readyz") return Response.json({ ready: true });
+        if (path === "/internal/cluster") return Response.json({ released: 0, written: 0, pending: 0, ms: 1 });
+        return new Response("nf", { status: 404 });
+      },
+    });
+    return { id, url: `http://127.0.0.1:${server.port}`, server };
+  };
+  const n1 = await stub("n1");
+  const n2 = await stub("n2");
+  const n3 = await stub("n3");
+  const cfg = {
+    port: 0,
+    host: "127.0.0.1",
+    keys: new Map([[KEY, "acme"]]),
+    dev: false,
+    cluster: { key: CLUSTER_KEY, size: 3 },
+  };
+  const membership = { store: store as never, key: "frozen/cluster-membership" };
+  const leader = await startCluster({
+    config: cfg,
+    nodes: [n1, n2].map(({ id, url }) => ({ id, url })),
+    membership,
+    healthEveryMs: 0,
+    log: () => {},
+  });
+  const follower = await startCluster({
+    config: { ...cfg },
+    nodes: [n1, n2].map(({ id, url }) => ({ id, url })),
+    membership,
+    follow: { everyMs: 50 },
+    healthEveryMs: 0,
+    log: () => {},
+  });
+  try {
+    // The first poll inside startCluster adopted the start membership: same owner for every bucket.
+    for (const b of [0, 100, 1234, 33333, 65535]) expect(follower.owner(b)).toBe(leader.owner(b));
+    expect(
+      follower.nodes
+        .filter((n) => n.up)
+        .map((n) => n.id)
+        .sort(),
+    ).toEqual(["n1", "n2"]);
+    // The leader resizes; the follower sees the published table within a poll — without a probe or a tell.
+    await leader.setNodes([n1, n2, n3].map(({ id, url }) => ({ id, url })));
+    await Bun.sleep(150);
+    for (const b of [0, 100, 1234, 33333, 65535]) expect(follower.owner(b)).toBe(leader.owner(b));
+    expect(
+      follower.nodes
+        .filter((n) => n.up)
+        .map((n) => n.id)
+        .sort(),
+    ).toEqual(["n1", "n2", "n3"]);
+    expect(follower.rebalances).toHaveLength(0);
+  } finally {
+    await leader.stop();
+    await follower.stop();
+    n1.server.stop(true);
+    n2.server.stop(true);
+    n3.server.stop(true);
+  }
+});
