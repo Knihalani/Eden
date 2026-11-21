@@ -27,31 +27,13 @@ describe.skipIf(!python)("eden_client (Python)", () => {
     const modules = [
       "test_claude",
       "test_cursor",
-      "test_eden_client",
-      "test_gemini",
-      "test_gptme",
-      "test_hermes",
-      "test_local",
-    ];
-    const modules = ["test_claude", "test_eden_client", "test_gemini", "test_gptme", "test_hermes", "test_local"];
-    const modules = [
-      "test_claude",
-      "test_eden_client",
-      "test_gemini",
-      "test_gptme",
-      "test_hermes",
-      "test_local",
-      "test_qwen",
-    ];
-    const modules = ["test_claude", "test_eden_client", "test_gemini", "test_gptme", "test_hermes", "test_local"];
-    const modules = [
-      "test_claude",
       "test_devincli",
       "test_eden_client",
       "test_gemini",
       "test_gptme",
       "test_hermes",
       "test_local",
+      "test_qwen",
     ];
     const results = await Promise.all(modules.map((m) => run(["-m", "unittest", m])));
     for (const { err, code } of results) {
