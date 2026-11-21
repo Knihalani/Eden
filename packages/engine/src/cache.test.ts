@@ -192,6 +192,16 @@ describe("expireIdle: idle users and expired items are freed, not held until the
     expect(cache.revision(bob)).toBeGreaterThan(0);
   });
 
+  test("a vocabulary rebuild keeps the user's probe memos", () => {
+    // Forgetting a source without releaseTerms always rebuilds; the probe names item ids, which stand.
+    const cache = new ItemCache({ releaseTerms: false, expireEveryMs: 0 });
+    cache.put(alice, [item("crm", "1", "Quentavious renewal"), item("mail", "2", "Globex renewal call")], t0);
+    cache.rememberProbe(alice, "q", ["mail:2"], 8, t0);
+    cache.forget(alice, "crm");
+    const hits = cache.probeHits(alice, "q", 60_000, t0 + 1_000);
+    expect(hits?.map((h) => h.item.id)).toEqual(["mail:2"]);
+  });
+
   test("a user with only a recent probe memo is kept; once the probe is old too, dropped", () => {
     const cache = new ItemCache({ expireEveryMs: 60_000 });
     cache.put(alice, [], t0);
