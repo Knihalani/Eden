@@ -68,6 +68,7 @@ export const PARTS = {
     sourceYieldEarn: false,
     sourceYieldNames: 0,
     sourceYieldEngage: false,
+    sourceKindPrior: 0,
   },
   /**
    * Routing by the user's own index: sources holding the request's best local matches first (D265), and by each

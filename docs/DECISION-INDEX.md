@@ -862,6 +862,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
+| D2015 | 2026-11-20 | Adopted: a static per-connector-kind prior reshapes a cold source's routing draw (Q7(b) of `docs/research/o4-new-user.md`). | adopted |
 | D2009 | 2026-11-20 | Adopted: a per-user alias table — name parts to their full names — expands a request's anchors, so a person asked for by one form anchors… | adopted |
 | D2011 | 2026-11-20 | Adopted: `pushOpenConstraint` — an opt-in mild filter: on a request the push opened by shape rather than a listed verb, a packet goes only… | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |

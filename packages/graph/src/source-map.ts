@@ -49,6 +49,11 @@ export interface RouteRequest {
    * request's best local matches each source holds. Absent: none.
    */
   boost?: ReadonlyMap<string, number>;
+  /**
+   * A static per-source prior for the usefulness draw (`sourceKindPrior`, D2015): the draw's base parameters become
+   * Beta(used + 1 + alpha, shown − used + 1 + beta). A source absent from the map draws flat, Beta(1,1), as before.
+   */
+  priors?: ReadonlyMap<string, { alpha: number; beta: number }>;
 }
 
 export interface RankedSource {
@@ -521,8 +526,10 @@ export class SourceMap {
       .map((sourceId) => {
         const entityHits = hits.get(sourceId) ?? 0;
         const { shown, used } = known.get(sourceId) ?? NONE;
-        const utility = (used + 1) / (shown + 2);
-        const sampled = this.explore ? this.rng.beta(used + 1, shown - used + 1) : utility;
+        const prior = request.priors?.get(sourceId);
+        const [a, b] = [1 + (prior?.alpha ?? 0), 1 + (prior?.beta ?? 0)];
+        const utility = (used + a) / (shown + a + b);
+        const sampled = this.explore ? this.rng.beta(used + a, shown - used + b) : utility;
         const boost = request.boost?.get(sourceId) ?? 0;
         return { sourceId, entityHits, utility, sampled, score: entityHits + boost + 2 * sampled };
       })

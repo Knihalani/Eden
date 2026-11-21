@@ -144,6 +144,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   sourceYieldRare: ["sync", "sourceYield", "sourceYieldEarn"],
   sourceYieldNames: ["sync", "sourceYield", "sourceYieldEarn"],
   sourceYieldEngage: ["sync", "sourceYield", "sourceYieldEarn"],
+  sourceKindPrior: SYNC,
   syncKeepCut: SYNC,
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,

@@ -22,5 +22,6 @@
   "sourceYield": false,
   "sourceYieldEarn": false,
   "sourceYieldNames": 0,
-  "sourceYieldEngage": false
+  "sourceYieldEngage": false,
+  "sourceKindPrior": 0
 }

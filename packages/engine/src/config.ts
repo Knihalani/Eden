@@ -381,6 +381,15 @@ export interface EngineConfig {
   sourceYieldNames: number;
   sourceYieldEngage: boolean;
   /**
+   * A static per-connector-kind routing prior (D2015, Q7(b) of docs/research/weak-points-1111.md): this many
+   * pseudo-observations reshape a cold source's usefulness draw before anything is learned — the kinds
+   * `SOURCE_KIND_PRIOR` lists (mail, calendar, contacts) draw from a strong posterior, every other kind from a weak
+   * one (`source-prior.ts`), so a new user's first lookups search the connectors that usually answer them instead of
+   * a flat draw over all of them. 0: off, a flat Beta(1,1) for every source as before. The prior yields to each
+   * source's own `used`/`shown` within its first few routed calls.
+   */
+  sourceKindPrior: number;
+  /**
    * On in the default (D265): routing adds, for each source, log2(1 + its items among the request's best matches in
    * the user's own index) to its score, so a source whose items share the request's words is searched and probed
    * first when a user has more sources than a lookup searches. No call. Off: names a source mentioned, and learned
@@ -1014,6 +1023,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   sourceYieldRare: 2,
   sourceYieldNames: 4,
   sourceYieldEngage: true,
+  sourceKindPrior: 20,
   routeLocalHits: true,
   syncKeepCut: true,
   routeSketch: true,
