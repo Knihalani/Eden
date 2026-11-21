@@ -261,3 +261,4 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D1912 | Rejected (measured): a packed text deflated by libdeflate (`Bun.deflateSync`'s `library: "libdeflate"`, level 6) in place of zlib. | measured |
 | D1917 | Rejected (measured beside D1910-D1916): an in-place JS xxHash32 so `sketchTerms` makes no string a word, and one-class lookahead prefixes… | measured beside D1910-D1916 |
 | D1932 | Adopted (same brief; D1918 had not built a `datesOf` memo because its days depend on the instant): a statement's date patterns are read… | because its days depend on the instant): a statement's date patterns are read once and its days worked out… |
+| D2080 | Rejected: the tenant prior (o4-new-user §5a, O5). |  |

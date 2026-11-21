@@ -952,3 +952,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2074 | 2026-11-21 | Adopted: Eden for Windsurf Cascade (the twelfth agent surface). | adopted |
 | D2075 | 2026-11-21 | Adopted: the python.test.ts union-mangle on main is repaired. | adopted |
 | D2076 | 2026-11-21 | Adopted: the MCP-only agents get pull context through one shared server (surfaces thirteen to twenty-five). | adopted |
+| D2077 | 2026-11-21 | Adopted: a content-hash ref sorts a row's fields before hashing. | adopted |
+| D2078 | 2026-11-21 | Adopted: a top-level `hasNextPage: false` ends a token page like `has_more` does. | adopted |
+| D2079 | 2026-11-21 | Adopted: `sourceKindPriorExtra` adds kind rules ahead of the static table. | adopted |
+| D2080 | 2026-11-21 | Rejected: the tenant prior (o4-new-user §5a, O5). | rejected |
+| D2081 | 2026-11-21 | Finding: Eden ~2×s hidden facts over ten-day horizons with a weak agent. | finding |
