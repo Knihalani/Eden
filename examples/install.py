@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install Eden into every local agent home found: claude-code, gemini-cli, gptme, openclaw,
+"""Install Eden into every local agent home found: claude-code, cursor, gemini-cli, gptme, openclaw,
 opencode, pi.
 
 Each agent ships its own `examples/<agent>/install.py`; this detects which agents are present
@@ -23,6 +23,7 @@ HERE = Path(__file__).resolve().parent
 # the flag name that agent's installer actually accepts).
 AGENTS = {
     "claude-code": (("CLAUDE_HOME", "CLAUDE_CONFIG_DIR"), Path.home() / ".claude", "--claude-home"),
+    "cursor": (("CURSOR_HOME",), Path.home() / ".cursor", "--cursor-home"),
     "gemini-cli": (("GEMINI_CLI_HOME",), Path.home() / ".gemini", "--gemini-home"),
     "gptme": (("GPTME_HOME",), Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gptme", "--gptme-home"),
     "openclaw": (("OPENCLAW_HOME",), Path.home() / ".openclaw", "--openclaw-home"),
