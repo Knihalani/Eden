@@ -281,6 +281,11 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   it polls the `cluster-membership` doc the leader writes into the store and adopts its placement (S1-P7), so two
   routers never drive competing memberships; when the leader stops writing, a follower's last adopted table keeps
   serving until it is restarted without the flag (or a new leader is started by removing it). TLS in front as in §3.
+- **The edge over the cells** (S1-P8): above ~100k users, run `eden` with `EDEN_TOP_TABLE_FILE` —
+  `lo-hi=url` rows (the nodes file's grammar) mapping inclusive user-bucket ranges `0-65535` to each cell's load
+  balancer; the file must cover every bucket exactly once. The edge derives the request's user bucket with the
+  same hash the whole fleet shares and forwards to that cell's LB — `/v1/forget` to the one cell, `/v1/usage`
+  summed over all of them. It holds no state and re-reads nothing: a new table is a restart.
 - **Placement:** each user's bucket (16 bits of a hash of tenant and user) is owned by the node that scores highest
   for it (rendezvous hashing): adding a node moves about 1/(n+1) of users, all to it; losing one moves only its
   users.
