@@ -451,3 +451,24 @@ describe("assess: an item's analysis is read once and reused", () => {
     expect(assess(frame("Book a call with Robert Haddad on Monday 2 November"), b, NOW)).toBe("conflict");
   });
 });
+
+describe("an amount under a limit clears only its own matter", () => {
+  test("a bare cap does not erase a tied conflict on something else", () => {
+    // "Cancelled" is a block with no date: non-firm, so any real clearance wins. A room rate under the cap is a
+    // clearance of the amount only — the cancellation it says nothing about still stands.
+    expect(
+      verdict(
+        "Book the Ritz at £300 a night",
+        "Ritz booking",
+        "Your Ritz booking was cancelled. We still have rooms at up to £400 a night.",
+      ),
+    ).toBe("conflict");
+    // The same cap with no other conflict still clears; and above the limit still conflicts.
+    expect(verdict("Book the Ritz at £300 a night", "Rate note", "The Ritz rate is capped at £400 a night.")).toBe(
+      "clear",
+    );
+    expect(verdict("Book the Ritz at £500 a night", "Rate note", "The Ritz rate is capped at £400 a night.")).toBe(
+      "conflict",
+    );
+  });
+});

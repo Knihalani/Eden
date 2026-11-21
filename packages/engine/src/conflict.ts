@@ -403,6 +403,10 @@ export function assess(
   // statement about the same matter (sharing a word with it) undoes it. "Passport expires 2 Nov" stands after
   // "driving licence renewed 2024"; "SOC 2 report expired 30 Sep" falls to "the renewed report was accepted".
   let firm: Set<string> | null = null;
+  // The words of the current tied conflict, whatever its firmness: an amount under a limit clears only a conflict
+  // about the same matter — a rate cap's words are not a cancelled booking's, so "up to £400" cannot erase a
+  // conflict the request's own words tie to it. A clearing statement resets it (`clear`), as does the clear below.
+  let conflictMatter: Set<string> | null = null;
   // Cleared by a date: the block is about other days.
   let elsewhere = false;
   const conflict = (st: Statement, isFirm: boolean, money = false) => {
@@ -413,6 +417,7 @@ export function assess(
     tiedConflict = state === "conflict" ? tiedConflict || t : t;
     state = "conflict";
     if (isFirm) firm = wordsFor(st);
+    if (t) conflictMatter = wordsFor(st);
     if (V && t) conflictWords = wordsFor(st);
   };
   // A clearance is a near-miss twin's mark only where something could have blocked: after a blocking statement in
@@ -435,6 +440,7 @@ export function assess(
     state = "clear";
     firm = null;
     conflictWords = null;
+    conflictMatter = null;
     elsewhere = false;
   };
   const titled = tied(a.title);
@@ -455,7 +461,13 @@ export function assess(
     const s = st.s;
     const money = amountVerdict(frame, s);
     if (money === "conflict") conflict(st, true, true);
-    else if (money === "clear") [state, firm] = ["clear", null];
+    // An amount under the limit is a clearance of the amount aspect only: it undoes a tied conflict sharing its
+    // matter, never one it says nothing about (a cancelled booking is not a room rate).
+    else if (money === "clear" && (!conflictMatter || [...wordsFor(st)].some((w) => conflictMatter!.has(w)))) {
+      state = "clear";
+      firm = null;
+      conflictMatter = null;
+    }
     if (money !== "none") continue;
     const blocked =
       V && st.objectBlocks.length > 0 && objectTied(st) ? [...st.blocked, ...st.objectBlocks] : st.blocked;
