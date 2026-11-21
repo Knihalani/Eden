@@ -291,6 +291,23 @@ export default function eden(pi: Pi): void {
     }
   });
 
+  // `session_compact` fires once the transcript is replaced: the packets and marks anchored to the old
+  // messages are gone from the agent's context, so Eden's shown marks reset too (D2006) — a later delivery
+  // of the same item is news again. `firstCall` re-arms so the post-compact replay reports only its
+  // latest user message, not the whole compacted transcript.
+  pi.on("session_compact", async (_event: unknown, ctx: PiCtx) => {
+    try {
+      const s = await sessionFor(sessionKey(ctx));
+      if (!s) return;
+      s.firstCall = true;
+      s.kept.clear();
+      s.trailing = [];
+      s.reported = report(s, [{ kind: "context_reset" }], false).then(() => undefined);
+    } catch {
+      // D14
+    }
+  });
+
   pi.on("session_shutdown", async (_event: unknown, ctx: PiCtx) => {
     await surface.closeSession(edenId(sessionKey(ctx)));
   });
