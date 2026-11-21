@@ -919,5 +919,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2041 | 2026-11-21 | Adopted: the shutdown drain writes live users most recently seen first, in a lean blob that leaves the index and vocabulary out… | adopted |
 | D2042 | 2026-11-21 | Adopted: `EDEN_PERSIST_STORE` may name several buckets, comma-separated; a user's shard is their bucket mod the count. | adopted |
 | D2044 | 2026-11-21 | Adopted: a node's release bound scales with the users it is expected to move (S1-P6). | adopted |
-| D2043 | 2026-11-21 | Adopted: a dry-run autoscale plan — `deploy/scripts/autoscale-plan.py` reads `/metrics` from every node, plans a node count with… | adopted |
 | D2046 | 2026-11-21 | Adopted: a process-wide `RateHold` shared by the model roles — a 429 holds every caller, and a call made while held fails fast without… | adopted |
+| D2043 | 2026-11-21 | Adopted: a dry-run autoscale plan — `deploy/scripts/autoscale-plan.py` reads `/metrics` from every node, plans a node count with… | adopted |
+| D2049 | 2026-11-21 | Adopted: cluster membership mutation is serialized on one chain, and the rebalance log is bounded. | adopted |
