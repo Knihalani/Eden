@@ -1003,14 +1003,16 @@ export abstract class PartnerVerdict extends PartnerCheck {
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
     // `itemId` (D2022, A2): an earlier citation's id asks for that item itself — the parts bearing on the question
-    // in full, where an answer's items are cut at `askItemBytes`. The cache is the only source read: a cited item
-    // is held. No search, no model, nothing charged; a session's tally is untouched.
+    // in full, where an answer's items are cut at `askItemBytes`. The item comes from the cache — a cited item is
+    // held — and a copy a sweep or signal doubted is re-read as an ordinary answer would check it. No search, no
+    // model, nothing charged; a session's tally is untouched.
     if (request.itemId !== undefined) {
       const at = this.now();
       const item = this.deps.cache.get(s.scope, request.itemId, at);
-      if (root) spans!.close(root, { item: item === null ? 0 : 1 });
-      const latencyMs = performance.now() - t0;
-      if (item === null) return { answer: ITEM_GONE, citations: [], usedModel: false, costUsd: 0, latencyMs };
+      if (item === null) {
+        if (root) spans!.close(root, { item: 0 });
+        return { answer: ITEM_GONE, citations: [], usedModel: false, costUsd: 0, latencyMs: performance.now() - t0 };
+      }
       const itemCue: Cue = {
         text: question,
         entities: [],
@@ -1021,6 +1023,15 @@ export abstract class PartnerVerdict extends PartnerCheck {
         raw: question,
         offset: this.deps.cache.offsetOf(s.scope),
       };
+      if (root) itemCue.span = root.id;
+      // The same freshness check an ordinary answer applies (the review): a copy a sweep or signal doubted is
+      // re-read before it is served, and one the sources no longer hold answers as gone.
+      const held = await this.verifyItems(s, [{ item, score: 0, matched: 0, sketch: null }], itemCue);
+      const latencyMs = performance.now() - t0;
+      if (root) spans!.close(root, { item: held.length === 0 ? 0 : 1 });
+      if (held.length === 0 || s.closed) {
+        return { answer: ITEM_GONE, citations: [], usedModel: false, costUsd: 0, latencyMs };
+      }
       const focus = focusOf(itemCue);
       const answer = renderPacket([item], {
         maxBytes: ASK_ITEM_BYTES + 1_024,
