@@ -127,6 +127,7 @@ describe.skipIf(!python)("the MCP-only installer", () => {
       "warp",
       "continue",
       "kilo-code",
+      "vscode",
     ]) {
       expect(listed.stdout.toString()).toContain(name);
     }
@@ -200,6 +201,16 @@ describe.skipIf(!python)("the MCP-only installer", () => {
       enabled: true,
       environment: { EDEN_URL: "https://e", EDEN_API_KEY: "k9", EDEN_USER_ID: "u1", EDEN_TENANT_ID: "t1" },
     });
+
+    // VS Code user mcp.json: a plain `servers` table, stdio entries.
+    const vsc = dir(base, "vsc/User/mcp.json");
+    writeFileSync(vsc, "{}");
+    const vr = run(["--vscode-config", vsc, "--agents", "vscode", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(vr.exitCode, vr.stderr.toString()).toBe(0);
+    const v = JSON.parse(readFileSync(vsc, "utf8"));
+    expect(v.servers.eden.type).toBe("stdio");
+    expect(v.servers.eden.command).toBe("python3");
+    expect(v.servers.eden.env.EDEN_API_KEY).toBe("k9");
 
     // A merged config may hold the API key: group/other must never read it, even on a 0644 file.
     const cline = dir(base, "c/settings.json");

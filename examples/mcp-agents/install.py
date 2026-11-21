@@ -44,6 +44,8 @@ AGENTS = {
     "continue": ("~/.continue", "~/.continue/mcpServers/eden.json", "own-file"),
     # Kilo Code v7+: the JSONC kilo.jsonc file; `mcp` holds {type:"local", command:[...]} entries.
     "kilo-code": ("~/.config/kilo", "~/.config/kilo/kilo.jsonc", "kilo"),
+    # VS Code's own agent mode reads the user-level mcp.json; `servers` entries are plain stdio.
+    "vscode": ("~/.config/Code/User", "~/.config/Code/User/mcp.json", "servers"),
 }
 
 
@@ -138,9 +140,9 @@ def entry_for(fmt, mcp_py, env):
         if env:
             e["environment"] = env
         return e
-    if fmt in ("mcpservers", "crush"):
+    if fmt in ("mcpservers", "crush", "servers"):
         e = {"command": "python3", "args": [str(mcp_py)]}
-        if fmt == "crush":
+        if fmt in ("crush", "servers"):
             e["type"] = "stdio"
         if env:
             e["env"] = env
@@ -160,7 +162,7 @@ def merge_json(config, fmt, mcp_py, env, remove=False):
               "(fix or remove it and re-run)", file=sys.stderr)
         return False
     key = {"mcpservers": "mcpServers", "crush": "mcp", "kilo": "mcp",
-           "zed": "context_servers"}[fmt]
+           "zed": "context_servers", "servers": "servers"}[fmt]
     servers = data.setdefault(key, {})
     if not isinstance(servers, dict):
         print(f"warning: {config}'s {key} is not an object; skipped", file=sys.stderr)
