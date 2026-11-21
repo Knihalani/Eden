@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { mergeFrozenEconomy, type FrozenEconomy } from "./economy";
-import { mergeFrozenSessions } from "./partner-freeze";
+import { freezeSession, isFrozenSession, mergeFrozenSessions } from "./partner-freeze";
 import { mergeFrozenYields } from "./source-yield";
 
 const eco = (asked: FrozenEconomy["asked"]): FrozenEconomy => ({
@@ -56,5 +56,40 @@ describe("the blob merge's semantics (D2004 review)", () => {
     // All judged: the field goes away entirely, and a session without the flag keeps it.
     const gone = mergeFrozenSessions(prior, null, new Set(["i1", "i2"]))!;
     expect(gone[0]!.outstanding).toBeUndefined();
+  });
+});
+
+describe("freezeSession", () => {
+  test("a held-check warning's flag survives the freeze: a respawn cannot credit a retry", () => {
+    const s = {
+      id: "s",
+      turn: 3,
+      pending: [],
+      ledger: { snapshot: () => ({ delivered: [["i1", 1]], versions: [], shown: [["x", 1]] }) },
+      delivered: [],
+      outstanding: new Map([
+        [
+          "i1",
+          {
+            injectionId: "i1",
+            sourceIds: ["g"],
+            situation: "general",
+            bytes: 10,
+            warning: true,
+            tokens: new Set([7]),
+            deliveredTurn: 2,
+          },
+        ],
+      ]),
+      vocab: { term: (id: number) => `t${id}` },
+    };
+    const f = freezeSession(s as never)!;
+    expect(f.outstanding![0]).toMatchObject({ warning: true, bytes: 10 });
+    expect(isFrozenSession(f)).toBe(true);
+    // A row without the flag freezes without it (older blobs stay valid).
+    delete (s.outstanding.get("i1")! as { warning?: boolean }).warning;
+    const plain = freezeSession(s as never)!;
+    expect(plain.outstanding![0]!.warning).toBeUndefined();
+    expect(isFrozenSession(plain)).toBe(true);
   });
 });

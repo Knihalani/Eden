@@ -598,6 +598,7 @@ export abstract class PartnerDelivery extends PartnerCore {
             sourceIds: [...o.sourceIds],
             situation: o.situation,
             bytes: o.bytes,
+            warning: o.warning,
             tokens: new Set(o.terms.map((t) => s.vocab.intern(t))),
             deliveredTurn: o.deliveredTurn - f.turn,
           });
