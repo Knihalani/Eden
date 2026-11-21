@@ -865,6 +865,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
 | D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
 | D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
+| D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
 | D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
 | D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
 | D2003 | 2026-11-20 | Adopted: a user's held "unverifiable" re-reads ride the frozen user blob — a respawn no longer re-fetches what a null already failed to… | adopted |
