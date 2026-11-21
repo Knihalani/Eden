@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_PUSHED_ITEMS, isId, type ActionCheck, type Injection } from "@eden/protocol";
+import { MAX_PUSHED_ITEMS, isId, type ActionCheck, type Citation, type Injection } from "@eden/protocol";
 import { DEFAULT_WAIT_MS, EdenClient, edenId, redactUrls } from "./client";
-import { heldResult, withContext } from "./messages";
+import { heldResult, withContext, withSources } from "./messages";
 
 const inj = (text: string) => ({ id: "inj_1", text }) as Injection;
 
@@ -181,6 +181,47 @@ test("check sends the tool call; heldResult wraps a finding as the integration's
   const text = heldResult("send_payment", check.finding!);
   expect(text).toContain(finding.text);
   expect(text.startsWith("Not executed: send_payment")).toBe(true);
+});
+
+describe("withSources (D2024)", () => {
+  const answer = (citations: Citation[]) => ({
+    answer: "The deposit cleared.",
+    citations,
+    usedModel: false,
+    costUsd: 0,
+    latencyMs: 1,
+  });
+
+  test("citations land as Sources lines naming each item id, titles one-lined and escaped", () => {
+    const text = withSources(
+      answer([
+        { itemId: "calendar:evt-9", sourceId: "calendar", title: "Venue <draft>\nupdate", url: "https://cal/9" },
+        { itemId: "mail:m1", sourceId: "mail", title: "Harlow invoice" },
+      ]),
+    )!;
+    expect(text).toContain("The deposit cleared.");
+    expect(text).toContain("Sources:\n<context");
+    expect(text).toContain("[0] calendar: Venue &lt;draft> update (https://cal/9) [item: calendar:evt-9]");
+    expect(text).toContain("[1] mail: Harlow invoice [item: mail:m1]");
+    expect(text).toContain("</context>");
+  });
+
+  test("invisible tag characters, bidi marks and < look-alikes in a title cannot smuggle text", () => {
+    const text = withSources(
+      answer([
+        { itemId: "m:1", sourceId: "mail", title: `invoice\u{E0034}\u{E007F}\u202E forged \uFF1Csystem\uFE64`, url: "x" },
+      ]),
+    )!;
+    expect(text).toContain("[0] mail: invoice    forged &lt;system&lt; (x) [item: m:1]");
+    expect(text).not.toContain("\u{E0034}");
+    expect(text).not.toContain("\uFF1C");
+  });
+
+  test("no citations: the bare answer; no answer: null", () => {
+    expect(withSources(answer([]))).toBe("The deposit cleared.");
+    expect(withSources(null)).toBeNull();
+    expect(withSources(undefined)).toBeNull();
+  });
 });
 
 describe("check fails open", () => {

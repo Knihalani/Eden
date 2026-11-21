@@ -13,9 +13,13 @@ from eden_client import ASK_CONTEXT_DESCRIPTION
 from eden_client.gptme import plugin
 
 
-def ask_context(question: str) -> str:
-    """Ask Eden for context about the user, workspace or world."""
-    return plugin().ask(question)
+def ask_context(question: str, item: str = "") -> str:
+    """Ask Eden for context about the user, workspace or world.
+
+    ``item`` (optional): an item id from an earlier answer's Sources list
+    (``[item: ...]``); the answer returns that item's parts in full.
+    """
+    return plugin().ask(question, item=item or None)
 
 
 tool = ToolSpec(

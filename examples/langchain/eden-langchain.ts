@@ -33,7 +33,7 @@
  * agent's loop: forward them with `eden.sourceChanged(sourceId, { refs })` from the webhook handler.
  */
 import { createHash } from "node:crypto";
-import { ASK_CONTEXT_DESCRIPTION, heldResult, type EdenClient, type Injection } from "@eden/client";
+import { ASK_CONTEXT_DESCRIPTION, heldResult, withSources, type EdenClient, type Injection } from "@eden/client";
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage, createMiddleware, tool } from "langchain";
 
 /** The text of a message's text blocks (`BaseMessage.text` joins them). */
@@ -174,13 +174,22 @@ export function edenMiddleware(eden: EdenClient) {
   };
 
   const askContext = tool(
-    async (input: { question: string }) => (await eden.ask(input.question))?.answer ?? "No context available.",
+    async (input: { question: string; item?: string }) =>
+      withSources(await eden.ask(input.question, typeof input.item === "string" ? { itemId: input.item } : {})) ??
+      "No context available.",
     {
       name: "ask_context",
       description: ASK_CONTEXT_DESCRIPTION,
       schema: {
         type: "object",
-        properties: { question: { type: "string", description: "The question, in plain words." } },
+        properties: {
+          question: { type: "string", description: "The question, in plain words." },
+          item: {
+            type: "string",
+            description:
+              "An item id from an earlier answer's Sources list ([item: ...]): return that item's parts in full.",
+          },
+        },
         required: ["question"],
       },
     },

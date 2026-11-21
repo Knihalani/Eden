@@ -29,7 +29,7 @@
  * loop: forward them with `eden.sourceChanged(sourceId, { refs })` from the webhook handler.
  */
 import { createHash } from "node:crypto";
-import { ASK_CONTEXT_DESCRIPTION, heldResult, type EdenClient, type Injection } from "@eden/client";
+import { ASK_CONTEXT_DESCRIPTION, heldResult, withSources, type EdenClient, type Injection } from "@eden/client";
 import {
   jsonSchema,
   tool,
@@ -266,12 +266,21 @@ export function edenSession(eden: EdenClient): EdenSession {
   const tools: ToolSet = {
     ask_context: tool({
       description: ASK_CONTEXT_DESCRIPTION,
-      inputSchema: jsonSchema<{ question: string }>({
+      inputSchema: jsonSchema<{ question: string; item?: string }>({
         type: "object",
-        properties: { question: { type: "string", description: "The question, in plain words." } },
+        properties: {
+          question: { type: "string", description: "The question, in plain words." },
+          item: {
+            type: "string",
+            description:
+              "An item id from an earlier answer's Sources list ([item: ...]): return that item's parts in full.",
+          },
+        },
         required: ["question"],
       }),
-      execute: async ({ question }) => (await eden.ask(question))?.answer ?? "No context available.",
+      execute: async ({ question, item }) =>
+        withSources(await eden.ask(question, typeof item === "string" ? { itemId: item } : {})) ??
+        "No context available.",
     }),
   };
 

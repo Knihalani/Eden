@@ -333,9 +333,11 @@ class EdenGptme(EdenHermes):
             _warn(f"session_end: {e}")
         return None
 
-    def ask(self, question: Any) -> str:
-        """The ``ask_context`` tool body: the question as a plain string."""
-        return self.ask_context({"question": question} if isinstance(question, str) else {},
+    def ask(self, question: Any, item: Any = None) -> str:
+        """The ``ask_context`` tool body: the question as a plain string; ``item`` is a citation's id."""
+        if not isinstance(question, str):
+            return self.ask_context({}, session_id=self._current)
+        return self.ask_context({"question": question, **({"item": item} if isinstance(item, str) else {})},
                                 session_id=self._current)
 
 

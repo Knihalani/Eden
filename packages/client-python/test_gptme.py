@@ -45,8 +45,9 @@ class FakeClient:
         self.checks.append((tool, data))
         return self.check_answer
 
-    def ask(self, question):
+    def ask(self, question, item=None):
         self._maybe_fail()
+        self.asked = (question, item)
         return {"answer": f"answer to {question}", "citations": []}
 
 
@@ -205,6 +206,9 @@ class Gptme(unittest.TestCase):
         p.session_start("/tmp/logs/1")
         self.assertEqual(FakeClient.made[0].events[0][0]["kind"], "session_start")
         self.assertEqual(p.ask("wifi?"), "answer to wifi?")
+        # The tool's item arg (D2024) reaches the client's ask as `item`.
+        p.ask("the deposit?", item="mail:m1")
+        self.assertEqual(FakeClient.made[0].asked, ("the deposit?", "mail:m1"))
         p.session_end("/tmp/logs/1")
         # A new identity on the same logdir gets a fresh client (and its own packet).
         self.assertEqual(p.generation([Msg("user", "hi")], "/tmp/logs/1"), [PACKET["text"]])

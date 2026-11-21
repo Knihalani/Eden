@@ -196,6 +196,32 @@ describe("Eden in a LangChain agent", () => {
     expect(sent).toEqual(["a@b.c"]);
   });
 
+  test("ask_context's item arg reaches the ask; the answer cites it in Sources (D2024)", async () => {
+    const rec = recorder();
+    const c = client("u-item");
+    const seen: ({ itemId?: string } | undefined)[] = [];
+    const realAsk = c.ask.bind(c);
+    c.ask = async (q, opts) => {
+      seen.push(opts);
+      return realAsk(q, opts);
+    };
+    const agent = createAgent({
+      model: new Scripted([
+        { tool: ["ask_context", { question: "When is lunch?" }] },
+        { tool: ["ask_context", { question: "When is lunch?", item: "calendar:evt-priya" }] },
+        { text: "done" },
+      ]) as unknown as BaseChatModel<BaseChatModelCallOptions>,
+      tools: [],
+      middleware: [edenMiddleware(c), rec.mw],
+    });
+    await agent.invoke({ messages: [new HumanMessage(ASK)] });
+    expect(seen[0]?.itemId).toBeUndefined();
+    expect(seen[1]?.itemId).toBe("calendar:evt-priya");
+    const askResult = rec.prompts.at(-1)!.find((m) => m.getType() === "tool")!;
+    expect(blob(askResult)).toContain("Sources:");
+    expect(blob(askResult)).toContain("[item: calendar:evt-priya]");
+  });
+
   test("Eden down: the agent runs with its prompt as it came and ask_context says no context", async () => {
     const rec = recorder();
     const agent = createAgent({
