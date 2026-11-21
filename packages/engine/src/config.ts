@@ -844,6 +844,13 @@ export interface EngineConfig {
    */
   pushOpen: boolean;
   /**
+   * Q4.2 (docs/research/weak-points-1111.md; o3-push-open §5, screened and not built): on a request the push opened
+   * by shape rather than a listed verb, a packet goes only when a constraint-like item is among those handed — the
+   * pool holding one is not enough. Screened: −25% of the neutral packets `pushOpen` adds for −8% of its added
+   * facts. Opt-in: a privacy-strict tenant takes it for the added silence (Q4.3). Inert when `pushOpen` is off.
+   */
+  pushOpenConstraint: boolean;
+  /**
    * P2 (D820, promoted by D828, part `indirect`; docs/research/p2-push-check.md): the push also starts for a request
    * phrased as a need, a plan, a wish or a question about acting ("I need to pay …", "We should move …", "I want you
    * to book …", "Should I book …?", a request after a first clause of context), read as the imperative after its
@@ -1078,6 +1085,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,
+  pushOpenConstraint: false,
   pushIndirect: true,
   pushGate: true,
   pushAsk: true,

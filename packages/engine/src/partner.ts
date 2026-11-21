@@ -1780,6 +1780,9 @@ export class ContextPartner {
           push: true,
           request: internal.request,
           turn: internal.turn,
+          // The first pass's `open` carries over: a refreshed push of an opened request is still an opened push
+          // (pushOpenConstraint, D2011) — the poll finding new items must not hand what the first pass refused.
+          open: internal.open,
           again: { searched: again, prev },
         });
       })
@@ -2871,7 +2874,36 @@ export class ContextPartner {
         return now === undefined || sameEntry(was.get(x.item.id), now);
       });
       const still = internal.request === undefined || internal.request === s.requests;
-      const delivering = checked.length > 0 && !s.closed && still;
+      // `pushOpenConstraint` (Q4.2, opt-in; o3-push-open §5, screened and not built): on a request the push opened
+      // by shape rather than a listed verb, a packet goes only when a constraint-like item is among those it would
+      // hand — the pool holding one is not enough, and a constraint the agent already took does not count (its copy
+      // left `fresh` in the ledger step above). A `pushLookup` packet is reference, not candidates, and an item the
+      // push check itself named counts: the model already judged it against the request.
+      // An item the push check named counts: the model already judged it against the request. A named rule stands
+      // for the card, still the item's at any revision; a `yes` stands for the copy read — a revision the re-reads
+      // found is another item (`itemMark`'s id and content hash, as `packetHeedsCheck`).
+      const approved = (x: Scored): boolean => {
+        if (check === null) return false;
+        if (check.rules?.has(x.item.id) === true) return true;
+        if (check.yes?.has(x.item.id) !== true) return false;
+        const mark = check.marks?.get(x.item.id);
+        return (
+          mark === undefined ||
+          mark === itemMark(readerItem(x.item, readerFocus(cue.raw), undefined, this.config.pushCheckItemChars))
+        );
+      };
+      const delivering =
+        checked.length > 0 &&
+        !s.closed &&
+        still &&
+        !(
+          candidates !== null &&
+          candidates.lookup === undefined &&
+          internal.open === true &&
+          this.config.pushOpenConstraint &&
+          gate !== null &&
+          !checked.some((x) => this.constraintLike(x, gate.cards) || approved(x))
+        );
       if (replacing && (delivering || !candidates)) {
         const at = s.pending.indexOf(prev!);
         if (at >= 0) {
@@ -3280,7 +3312,7 @@ export class ContextPartner {
     // rather than being pushed past the cap by the others.
     const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
     const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
-    if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+    if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
     // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
     // opens a hand-out no model judged. A push only the day started has no such hand-out at all.
     const before = pool.slice();
@@ -3301,7 +3333,7 @@ export class ContextPartner {
     // constraint-like: the day's own evidence, not a pool the request's words happened to fill (D1401).
     const quiet = byDay && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
     const like = quiet ? all.map(() => false) : all;
-    return { pool, like, seats, before, unchecked };
+    return { pool, like, seats, before, unchecked, cards };
   }
 
   /**
@@ -3482,6 +3514,7 @@ export class ContextPartner {
       return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
         ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
+        marks: kept.marks,
         costUsd: 0,
         called: false,
         overBudget: false,
@@ -3509,7 +3542,10 @@ export class ContextPartner {
     try {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
-      if (got) return withSheet(fresh ? got : { ...got, costUsd: 0, called: false });
+      if (got)
+        return withSheet(
+          fresh ? { ...got, marks: kept.marks } : { ...got, costUsd: 0, called: false, marks: kept.marks },
+        );
       // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
@@ -8873,6 +8909,8 @@ interface KeptCheck {
 interface PushGate {
   pool: Scored[];
   like: boolean[];
+  /** The pool's cards, as `pushPool` read them — `candidatesOf`'s constraint test needs them for ruled items too. */
+  cards: ReadonlyMap<string, Card>;
   /** `pushDaySeats`: the pool's items seated for the request's day; handed only when the check names them. */
   seats?: Set<string>;
   /** `pushDaySeats`: the pool before the seats, and whether a push with no check answer hands its candidates. */

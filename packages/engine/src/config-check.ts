@@ -192,6 +192,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushLookupQuiet: [...PUSH, "pushCheck"],
   pushCandidatesSettled: PUSH,
   pushOpen: PUSH,
+  pushOpenConstraint: [...PUSH, "pushOpen"],
   pushIndirect: PUSH,
   pushGate: PUSH,
   pushAsk: PUSH,
