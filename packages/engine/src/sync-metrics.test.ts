@@ -162,6 +162,22 @@ describe("the backfill and fairness gauges (S1-P2)", () => {
     expect(sync.gauges()).toMatchObject({ kickQueuedUsers: 0, kickQueuedTenants: 0, kickRunning: 0 });
   });
 
+  test("first value is per source: one source's page does not end the wait for another's", async () => {
+    const results: Record<string, "limited"> = { b: "limited" };
+    const { sync, clock, settle } = build([new Listing("a"), new Listing("b")], results);
+    sync.track(U1);
+    sync.kick(U1);
+    await sync.kicked(U1);
+    // A stored its first page, b's was refused: one first value counted, the user still waiting on b.
+    expect(sync.stats.firstPageCount).toBe(1);
+    expect(sync.gauges().waitingFirstPage).toBe(1);
+    delete (results as Record<string, string>).b;
+    await clock.advance(600, settle);
+    // B's page lands: a second first value, measured from the same first event, and nobody left waiting.
+    expect(sync.stats.firstPageCount).toBe(2);
+    expect(sync.gauges().waitingFirstPage).toBe(0);
+  });
+
   test("a restored backfill with pages behind it does not wait or count first value again", async () => {
     const a = new Listing("a", 15);
     const list = a.list.bind(a);
