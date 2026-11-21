@@ -3891,8 +3891,9 @@ export class ContextPartner {
     if (!this.config.planConflict || s.closed || !s.acted) return;
     const sent = s.planSent;
     // D2010: an alert said once repeats once at a request past the one it was sent on — while the copy is still
-    // the one the session holds (not `isFresh`: the alert's own delivery marks it read).
-    const repeats = sent === undefined ? false : [...sent.values()].some((m) => m.n === 1 && m.at < s.turn);
+    // the one the session holds (not `isFresh`: the alert's own delivery marks it read). `at` counts requests,
+    // not turns: a tool result's take must not spend the repeat before the next request arrives.
+    const repeats = sent === undefined ? false : [...sent.values()].some((m) => m.n === 1 && m.at < s.requests);
     if ((!waiting || waiting.size === 0) && !repeats) return;
     const now = this.now();
     const sentMap = (s.planSent ??= new Map());
@@ -3910,7 +3911,7 @@ export class ContextPartner {
     waiting?.clear();
     if (waiting) for (const id of later) waiting.add(id);
     for (const [id, mark] of sentMap) {
-      if (mark.n !== 1 || mark.at >= s.turn || fresh.has(id)) continue;
+      if (mark.n !== 1 || mark.at >= s.requests || fresh.has(id)) continue;
       const it = this.deps.cache.get(s.scope, id, now);
       if (it && !(this.config.verifyDelivery && this.doubted(s, it))) fresh.add(id);
     }
@@ -3929,7 +3930,7 @@ export class ContextPartner {
       for (const x of bearing) {
         said.add(x.item.id);
         const mark = sentMap.get(x.item.id);
-        sentMap.set(x.item.id, { n: (mark?.n ?? 0) + 1, at: s.turn });
+        sentMap.set(x.item.id, { n: (mark?.n ?? 0) + 1, at: s.requests });
         if (sentMap.size > PLAN_SENT) sentMap.delete(sentMap.keys().next().value as string);
       }
       // The user's own (redacted) words, on one line, their double quotes made single so the quote cannot be closed

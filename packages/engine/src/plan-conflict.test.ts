@@ -208,6 +208,25 @@ describe("planConflict (A9): a new item that bears on an earlier acting request 
     expect(plans(await say(t.partner, "And after lunch?", "s1", t.now())).length).toBe(0);
   });
 
+  test("a tool result's take does not spend the repeat (D2010)", async () => {
+    const t = await setup({ planConflict: true });
+    await say(t.partner, BOOK, "s1", t.now());
+    await t.arrive(CANCEL);
+    expect(plans(await say(t.partner, LATER, "s1", t.now())).length).toBe(1);
+    // A non-request event moves the turn, not the request count: the repeat waits for the next request.
+    await t.partner.observe({
+      ...scope,
+      sessionId: "s1",
+      at: t.now(),
+      kind: "tool_result",
+      tool: "calendar.list",
+      output: "[]",
+    } as AgentEvent);
+    expect(plans(t.partner.takePending({ ...scope, sessionId: "s1" })).length).toBe(0);
+    expect(plans(await say(t.partner, "Anything else on the canteen lunch?", "s1", t.now())).length).toBe(1);
+    expect(plans(await say(t.partner, "And after lunch?", "s1", t.now())).length).toBe(0);
+  });
+
   test("an item that ranks for no acting request, or in a pool with nothing constraint-like, is not sent", async () => {
     const t = await setup({ planConflict: true });
     await say(t.partner, BOOK, "s1", t.now());
