@@ -108,6 +108,7 @@ export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
   syncActivePollBackoff: "syncActivePollMs",
   syncActivePollPriced: "syncActivePollMs",
   syncActivePollCap: "syncActivePollMs",
+  sourceKindPriorExtra: "sourceKindPrior",
 };
 
 export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
@@ -146,6 +147,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   sourceYieldNames: ["sync", "sourceYield", "sourceYieldEarn"],
   sourceYieldEngage: ["sync", "sourceYield", "sourceYieldEarn"],
   sourceKindPrior: SYNC,
+  sourceKindPriorExtra: SYNC,
   syncKeepCut: SYNC,
   routeSketch: SYNC,
   syncEngagedDeep: SYNC,

@@ -54,4 +54,27 @@ describe("sourcePriors (D2015)", () => {
     const r = map.route({ scope, entities: [], situation: "chat", sourceIds: ids, limit: 1, priors });
     expect(r[0]!.sourceId).toBe("noise-1");
   });
+
+  test("extra rules lead the static table and reject malformed entries", () => {
+    const sources = [
+      { id: "crm", description: "the tenant's CRM" },
+      { id: "gmail", description: "the user's mail" },
+      { id: "wiki-23", description: "A wiki" },
+    ];
+    // crm elevated by the extra rule even though no static kind names it.
+    const p = sourcePriors(sources, 20, ["crm tickets:0.75"])!;
+    expect(p.get("crm")).toEqual({ alpha: 15, beta: 5 });
+    expect(p.get("gmail")).toEqual({ alpha: 15, beta: 5 });
+    expect(p.get("wiki-23")).toEqual({ alpha: 0, beta: 10 });
+    // An extra rule wins over the static table when both match.
+    const over = sourcePriors(sources, 20, ["gmail:0.3"])!;
+    expect(over.get("gmail")).toEqual({ alpha: 6, beta: 14 });
+    // A malformed entry throws (a silent no-op would reshape no draw).
+    expect(() => sourcePriors(sources, 20, ["crm 0.75"])).toThrow("sourceKindPriorExtra");
+    expect(() => sourcePriors(sources, 20, ["crm:2"])).toThrow("sourceKindPriorExtra");
+    expect(() => sourcePriors(sources, 20, [":0.5"])).toThrow("sourceKindPriorExtra");
+    // Empty extra is the static table alone; strength 0 stays off.
+    expect(sourcePriors(sources, 20, [])!.get("crm")).toEqual({ alpha: 0, beta: 10 });
+    expect(sourcePriors(sources, 0, ["crm:0.75"])).toBeUndefined();
+  });
 });
