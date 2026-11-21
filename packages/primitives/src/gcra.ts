@@ -58,7 +58,9 @@ export class Gcra<K = string> {
   available(key: K): number {
     const now = this.now();
     const tat = Math.max(this.tat.get(key) ?? now, now);
-    return Math.max(0, Math.floor((now - tat + this.tolerance) / this.interval) + 1);
+    // floor((now-tat+tolerance)/interval)+1, but with the integer `burst` kept out of the division: at a non-round
+    // interval the product can floor a hair low and report burst−1 on a full bucket.
+    return Math.max(0, Math.floor((now - tat) / this.interval) + this.burst);
   }
 
   /**
