@@ -23,7 +23,15 @@ export interface FrozenSession {
   /** The saved session's turn at write: `Ledger.seed` re-anchors by it so elapsed cooldown turns still count. */
   turn: number;
   ledger: LedgerSnapshot;
-  delivered: { sketch: Sketch | null; refs: string[]; turn: number; terms: string[]; years: number[] }[];
+  delivered: {
+    sketch: Sketch | null;
+    refs: string[];
+    turn: number;
+    terms: string[];
+    years: number[];
+    span?: [number, number];
+    itemId?: string;
+  }[];
   /**
    * Injections handed but not yet judged used or unused (`Session.outstanding`): a respawn without it loses the
    * usage signal for everything the agent held, so the source map learns nothing from those deliveries.
@@ -134,7 +142,13 @@ export function freezeSession(s: Session): FrozenSession | null {
     : snap;
   const delivered = s.delivered
     .filter((d) => d.itemId === undefined || !queued.has(d.itemId))
-    .map((d) => ({ ...d, refs: [...d.refs], terms: [...d.terms], years: [...d.years] }));
+    .map((d) => ({
+      ...d,
+      refs: [...d.refs],
+      terms: [...d.terms],
+      years: [...d.years],
+      span: d.span === undefined ? undefined : ([...d.span] as [number, number]),
+    }));
   if (ledger.delivered.length === 0 && ledger.shown.length === 0 && delivered.length === 0) return null;
   const outstanding = [...s.outstanding.values()].map((o) => ({
     injectionId: o.injectionId,

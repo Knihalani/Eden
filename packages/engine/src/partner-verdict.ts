@@ -447,6 +447,153 @@ export const docYears = (item: ContextItem): number[] => {
   return [...new Set([...titled, ...started, ...body])];
 };
 
+/**
+ * The words a document writes to say it is itself dead: a bracketed or capitalized marker in its title
+ * ("[OLD]", "(superseded)", "— EXPIRED"), a staleness word in its title, or a phrase in its opening lines
+ * declaring it superseded, replaced, expired, withdrawn or out of date. A bare "old" is not one: it is a
+ * word of names and places ("Old Town", "old friends") too often to condemn a document on. What it was
+ * about may still be asked for — `asksOld` is the request's say for that.
+ */
+const STALE_TAG = /[\[(（【]\s*(?:old|superseded|expired|outdated|out[- ]of[- ]date|previous|archived|void)\b/i;
+const STALE_CAPS = /\b(?:OLD|SUPERSEDED|EXPIRED|OUTDATED|VOID)\b/;
+const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b/i;
+const STALE_DECLARED =
+  /\b(?:superseded by|has been superseded|has been replaced by|no longer valid|was withdrawn|has been withdrawn|out of date)\b/i;
+/** How far into a document its own death notice is read (`STALE_DECLARED`): the preamble where it is written. */
+const STALE_CHARS = 400;
+/** The request names the old version or a stale state itself: the stale copy is then the answer, not a look-alike. */
+const ASKS_OLD =
+  /\b(?:old|previous|earlier|former|prior|original|superseded?|expired?|outdated|out[- ]of[- ]date|obsolete|last year(?:'s)?|used to|before the (?:new|change|update|revision|renewal))\b/i;
+const MONTHS3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+/** A month name ("Jan", "September") as a capturing regex fragment — `partner`'s `TIME_OR_DATE` uses it too. */
+export const MONTH =
+  "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|" +
+  "nov(?:ember)?|dec(?:ember)?)";
+/**
+ * The words that lead a document's own expiry ("expires", "valid until", "offer ends", "closing date"):
+ * each followed by the date it runs out. A bare "until" or "ends" is no lead — a meeting "ends on Friday"
+ * is an occurrence's time, not a record's death; nor is past-tense "expired" one — "your passport expired
+ * on 30 Sep" reports the subject's state, and the notice itself is the current record.
+ */
+const EXPIRY_LEAD =
+  /\b(?:expires?|expiry|valid(?:ity)?\s+(?:until|through|to|till)|offer ends|ends on|closing(?:\s+date)?|available (?:until|through|to)|runs (?:until|out on)|last day)\s*:?\s*/gi;
+/**
+ * The date an `EXPIRY_LEAD` match's tail writes: ISO, day-month(-year), month-day(-year), or month-year.
+ * Groups: 1-3 ISO; 4 day, 5 month, 6 year; 7 month, 8 day, 9 year; 10 month, 11 year (`MONTH` captures).
+ */
+const EXPIRY_DATE = new RegExp(
+  String.raw`(\d{4})-(\d{1,2})-(\d{1,2})|(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|(?:${MONTH})\b\s*,?\s*(\d{4})?`,
+  "y",
+);
+/** The expiry a document declares, as the latest end it names (ms): its last deadline is when it dies. */
+const expiryOf = (item: ContextItem, writtenAt: number): number | null => {
+  const lower = `${item.title} ${item.text.slice(0, 1_500)}`.toLowerCase();
+  let latest: number | null = null;
+  for (const m of lower.matchAll(EXPIRY_LEAD)) {
+    EXPIRY_DATE.lastIndex = m.index + m[0].length;
+    const d = EXPIRY_DATE.exec(lower);
+    if (d === null) continue;
+    let y = Number(d[1] ?? d[6] ?? d[9] ?? d[11]);
+    const month = d[2] !== undefined ? Number(d[2]) - 1 : MONTHS3.indexOf((d[5] ?? d[7] ?? d[10])!.slice(0, 3));
+    let day = Number(d[3] ?? d[4] ?? d[8] ?? 0);
+    if (d[10] !== undefined) day = 0; // month-year alone: the month is the deadline
+    if (month < 0 || month > 11 || day > 31) continue;
+    if (!y) {
+      // No year written: the first such date on or after the day it was written is the one it means
+      // ("expires 15 March" in a mail of December is next March). A bare month is its own end:
+      // "offer ends November" written mid-November runs out this November, not next year's.
+      y = new Date(writtenAt).getUTCFullYear();
+      const ref = day === 0 ? Date.UTC(y, month + 1, 0) : Date.UTC(y, month, day);
+      if (ref < writtenAt - 86_400_000) y++;
+    }
+    const end = day === 0 ? Date.UTC(y, month + 1, 0) + 86_400_000 : Date.UTC(y, month, day) + 86_400_000;
+    if (latest === null || end > latest) latest = end;
+  }
+  return latest;
+};
+/**
+ * A document whose title names its own date, or `meta.start` (its day): the range it is *of*, as
+ * `[lo, hi)` milliseconds. The title's full dates (day-month-year) and month-years ("March 2026") first; a
+ * bare year is the whole year; a date with no year is read in the year it was written (or the year before
+ * when that month is still ahead). The body's dates never date the record — an expiry it mentions is not
+ * the record's own time (`docYears`'s rule, D1982). Null when nothing dates it.
+ */
+export const docSpan = (item: ContextItem, written: number): [number, number] | null => {
+  let lo = Infinity;
+  let hi = 0;
+  const stretch = (a: number, b: number) => {
+    if (a < lo) lo = a;
+    if (b > hi) hi = b;
+  };
+  if (item.meta?.start !== undefined) {
+    const t = Date.parse(item.meta.start);
+    if (!Number.isNaN(t)) stretch(t, t + 86_400_000);
+  }
+  for (const m of item.title.matchAll(DOC_DATE)) {
+    let y = Number(m[1] ?? m[6] ?? m[9] ?? m[11]);
+    const month =
+      m[2] !== undefined
+        ? Number(m[2]) - 1
+        : MONTHS3.indexOf((m[5] ?? m[7] ?? m[10] ?? m[12])!.slice(0, 3).toLowerCase());
+    let day = Number(m[3] ?? m[4] ?? m[8] ?? 0);
+    // A month alone — year'd ("March 2026") or set off by a separator ("— September") — is the month's range.
+    if (m[10] !== undefined || m[12] !== undefined) day = 0;
+    if (month < 0 || month > 11 || day > 31) continue;
+    if (!y) {
+      // No year written: the nearest year's date — a "September statement" updated in November is this
+      // September's (which would otherwise outrank the current November revision), and "renews on
+      // 8 November" written three days earlier is the coming one, not last year's.
+      y = new Date(written).getUTCFullYear();
+      const half = (365.25 * 86_400_000) / 2;
+      const d = Date.UTC(y, month, day || 1);
+      if (d - written > half) y--;
+      else if (written - d > half) y++;
+    }
+    day === 0
+      ? stretch(Date.UTC(y, month, 1), Date.UTC(y, month + 1, 1))
+      : stretch(Date.UTC(y, month, day), Date.UTC(y, month, day + 1));
+  }
+  if (hi === 0) {
+    // No full or month date: a bare year in the title is the record's year.
+    for (const y of item.title.match(YEARS)?.map(Number) ?? []) stretch(Date.UTC(y, 0, 1), Date.UTC(y + 1, 0, 1));
+  }
+  if (hi === 0) {
+    // The title names no date at all: the body's years stand in, as `docYears` reads them (a later expiry
+    // in the text is not the record's year — but it is all the date the record carries).
+    for (const y of item.text.match(YEARS)?.map(Number) ?? []) stretch(Date.UTC(y, 0, 1), Date.UTC(y + 1, 0, 1));
+  }
+  return hi === 0 ? null : [lo, hi];
+};
+/**
+ * Every date form `docSpan` reads of a title: ISO, "13 November 2026", "November 13, 2026", "March 2026".
+ * Groups: 1-3 ISO; 4 day, 5 month, 6 year; 7 month, 8 day, 9 year; 10 month, 11 year (`MONTH` captures).
+ */
+const DOC_DATE = new RegExp(
+  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s*,?\s*(\d{4})|[-–—:(|]\s*(${MONTH})\b(?!\s*,?\s*\d)`,
+  "gi",
+);
+/** What `staleSelf` and `staleIds` read of an item once: whether it declares itself dead, and its own expiry. */
+const staleOf = (item: ContextItem, written: number): { declared: boolean; expiry: number | null } => {
+  let r = staleMemo.get(item);
+  if (r === undefined) {
+    r = {
+      declared:
+        STALE_TAG.test(item.title) ||
+        STALE_CAPS.test(item.title) ||
+        STALE_TITLE.test(item.title) ||
+        STALE_DECLARED.test(item.text.slice(0, STALE_CHARS)),
+      // Resolved once, against the write time first seen: a yearless deadline that has already
+      // passed does not roll into next year on every later request.
+      expiry: expiryOf(item, written),
+    };
+    staleMemo.set(item, r);
+  }
+  return r;
+};
+const staleMemo = new WeakMap<ContextItem, { declared: boolean; expiry: number | null }>();
+/** A month name in the request's own words ("balance on 30 September?") — like a literal year, it dates the ask. */
+const MONTH_NAME = new RegExp(String.raw`\b(?:${MONTH})\b`, "i");
+
 /** A number followed by a measure or money word is a quantity ("650 GBP", "30 days"), not an identifier. */
 export const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|months?|years?|people|of us)\b/i;
 
@@ -1165,46 +1312,17 @@ export abstract class PartnerVerdict extends PartnerCheck {
       (x) => !bulkMail(x.item) && !this.contradicts(x, cue),
     );
     // Last year's look-alike beside this year's record about the named thing: when the pool's entity-anchored
-    // items carry a newer year, one dated only earlier is the stale sibling — the same rule `linked` keeps
+    // items carry a newer record, one dated only earlier is the stale sibling — the same rule `linked` keeps
     // between a companion and its pick, applied between the pool's own items (the request need not name a year:
-    // `requestYear` has nothing to be stale against, so `contradicts` never saw it).
-    const itemYears = docYears;
-    // The stale-sibling year rule applies per request entity, not across the whole request: a request naming
-    // two subjects never lets one's newer record date the other's, and when the check ruled on the pool only
-    // items it approved date anything — a newer record it rejected must not suppress the older one it handed.
-    const phrases = cue.entities.map((e) =>
-      (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
-    );
-    const anchorsPer = cue.entities.map((e) => this.requestAnchors(s.scope, [e], cue));
-    const anchoredOf = (item: ContextItem) =>
-      cue.entities
-        .map((e, i) =>
-          phrases[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!)) ? i : -1,
-        )
-        .filter((i) => i >= 0);
+    // `requestYear` has nothing to be stale against, so `contradicts` never saw it). `staleSibling` covers the
+    // document that itself reads stale too: declared superseded or expired, its deadline past.
+    // The rule applies per request entity, not across the whole request: a request naming two subjects never
+    // lets one's newer record date the other's, and when the check ruled on the pool only items it approved
+    // date anything — a newer record it rejected must not suppress the older one it handed.
     const approved =
       yes === null ? () => true : (x: Scored) => yes.has(x.item.id) || ruled.some((r) => r.item.id === x.item.id);
-    const yearless = requestYear(cue) === null;
-    const deliveredYears = yearless ? this.deliveredEntityYears(s, cue) : new Map<string, number>();
-    const newestE = cue.entities.map((e, i) => {
-      // A request naming a year asks for that year's record: the sibling rule is for the yearless case only.
-      if (!yearless) return 0;
-      let n = (cleanEntities([e])[0] !== undefined ? deliveredYears.get(phrases[i]!.join(" ")) : undefined) ?? 0;
-      for (const x of open)
-        if (x.entity === true && approved(x) && anchoredOf(x.item).includes(i))
-          for (const y of itemYears(x.item)) if (y > n) n = y;
-      return n;
-    });
-    const staleSibling = (x: Scored) => {
-      // A timed item is a dated occurrence, not a record's year: December's booking is never January's stale
-      // sibling (the next-event selection, not the year rule, orders occurrences).
-      if (x.entity !== true || x.item.meta?.start !== undefined) return false;
-      const ys = itemYears(x.item);
-      if (ys.length === 0) return false;
-      const m = Math.max(...ys);
-      const an = anchoredOf(x.item);
-      return an.length > 0 && an.every((i) => m < newestE[i]!);
-    };
+    const staleOf = this.staleSibling(s, cue, cue.entities, open, (x) => x.entity === true && approved(x));
+    const staleSibling = (x: Scored) => this.staleSelf(x.item, cue) || (x.entity === true && staleOf(x.item));
     const current = open.filter((x) => !staleSibling(x));
     const gated = gate.unchecked ?? like.some(Boolean);
     let items = yes
@@ -1402,24 +1520,99 @@ export abstract class PartnerVerdict extends PartnerCheck {
   protected override readonly forgotten = new Set<string>();
 
   /**
-   * The newest year an item already handed in this session carries, among those sharing a request entity
-   * (whole content words of one in the delivery's kept terms): the reference a stale same-entity sibling is
-   * judged against once the newer record has itself left the pool (delivered is not fresh, so it stops
-   * ranking) — without it last year's notice goes out a turn after this year's did.
+   * The newest record (`docSpan`) an item already handed in this session carries, among those sharing a
+   * request entity (whole content words of one in the delivery's kept terms): the reference a stale
+   * same-entity sibling is judged against once the newer record has itself left the pool (delivered is
+   * not fresh, so it stops ranking) — without it last year's notice goes out a turn after this year's did.
    */
-  private deliveredEntityYears(s: Session, cue: Cue): Map<string, number> {
+  private deliveredEntitySpans(s: Session, cue: Cue): Map<string, [number, number]> {
     const entities = cleanEntities(cue.entities)
       .map((e) => (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)))
       .filter((words) => words.length > 0);
-    const out = new Map<string, number>();
+    const out = new Map<string, [number, number]>();
     for (const d of s.delivered ?? []) {
       for (const words of entities) {
         if (!words.every((w) => d.terms.includes(w))) continue;
         const key = words.join(" ");
-        for (const y of d.years) if (y > (out.get(key) ?? 0)) out.set(key, y);
+        const span = d.span ?? null;
+        if (span === null) {
+          // Deliveries recorded before spans were kept still date their entity by `years`.
+          let n = 0;
+          for (const y of d.years) if (y > n) n = y;
+          if (n > 0 && (out.get(key)?.[0] ?? 0) < Date.UTC(n, 0, 1))
+            out.set(key, [Date.UTC(n, 0, 1), Date.UTC(n + 1, 0, 1)]);
+          continue;
+        }
+        const have = out.get(key);
+        if (have === undefined || span[0] > have[0]) out.set(key, span);
       }
     }
     return out;
+  }
+
+  /**
+   * Whether the item itself reads stale: it declares its own death ("[OLD]", "(superseded)", "no longer
+   * valid") or the deadline it names is already past. When the request asks for an old or previous state
+   * the stale copy is the answer (`ASKS_OLD`), so nothing counts as stale.
+   */
+  protected staleSelf(item: ContextItem, cue: Cue): boolean {
+    // A request that names its own year asks for that year's record: whatever state it is in now is the
+    // answer. The year is the raw text's alone — "today" resolving to a day of this year is no exemption.
+    if (ASKS_OLD.test(cue.raw) || cue.raw.match(YEARS) !== null || MONTH_NAME.test(cue.raw)) return false;
+    const r = staleOf(item, item.updatedAt ?? cue.at);
+    return r.declared || (r.expiry !== null && r.expiry <= cue.at);
+  }
+
+  /**
+   * The stale-sibling predicate for a request's entities (D1982, generalized to `docSpan`): an item dated
+   * earlier than the newest record the pool (or a delivered item, `deliveredEntitySpans`) carries for
+   * every entity it anchors to — last year's notice beside this year's, the January statement beside
+   * March's — and an item that declares itself dead or whose named deadline has passed. A request naming
+   * its own year asks for that year's record, so the sibling rule is for the yearless case only; a timed
+   * item (`meta.start`) is a dated occurrence, not a record, and never the stale sibling.
+   * `peers` are the items a newer record may be found among (the same pool `stale` runs on), `approve` the
+   * pass's own gate on which of them may date anything (a newer record a check rejected must not suppress
+   * the older one it handed).
+   */
+  protected staleSibling(
+    s: Session,
+    cue: Cue,
+    entities: readonly string[],
+    peers: readonly Scored[],
+    approve: (x: Scored) => boolean = () => true,
+  ): (item: ContextItem) => boolean {
+    const phrases = entities.map((e) => (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)));
+    const anchorsPer = entities.map((e) => this.requestAnchors(s.scope, [e], cue));
+    const anchoredOf = (item: ContextItem) =>
+      entities
+        .map((e, i) =>
+          phrases[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!)) ? i : -1,
+        )
+        .filter((i) => i >= 0);
+    const yearless = cue.raw.match(YEARS) === null && !MONTH_NAME.test(cue.raw);
+    const deliveredSpans = yearless ? this.deliveredEntitySpans(s, cue) : new Map<string, [number, number]>();
+    // Per entity, the newest start among the pool's approved, anchored, not-self-stale records: a newer
+    // record itself declared dead cannot make anything its sibling.
+    const newestE = entities.map((e, i) => {
+      if (!yearless) return -Infinity;
+      let n = -Infinity;
+      const d = cleanEntities([e])[0] !== undefined ? deliveredSpans.get(phrases[i]!.join(" ")) : undefined;
+      if (d !== undefined) n = d[0];
+      for (const x of peers)
+        if (approve(x) && !this.staleSelf(x.item, cue) && anchoredOf(x.item).includes(i)) {
+          const span = docSpan(x.item, x.item.updatedAt ?? cue.at);
+          if (span !== null && span[0] > n) n = span[0];
+        }
+      return n;
+    });
+    return (item: ContextItem) => {
+      if (item.meta?.start !== undefined) return false;
+      if (!yearless || ASKS_OLD.test(cue.raw)) return false;
+      const span = docSpan(item, item.updatedAt ?? cue.at);
+      if (span === null) return false;
+      const an = anchoredOf(item);
+      return an.length > 0 && an.every((i) => span[1] <= newestE[i]!);
+    };
   }
 
   /**
@@ -1477,11 +1670,12 @@ export abstract class PartnerVerdict extends PartnerCheck {
     return false;
   }
 
-  protected confident(scored: Scored[], cue: Cue): Scored[] {
+  protected confident(s: Session, scored: Scored[], cue: Cue): Scored[] {
     // One pass that stops at the cap: every test judges one item alone, so stopping early returns what filtering all
     // and then slicing returned. The cheap tests run first; `cleared` (the conflict test, about half the fast path's
     // CPU in pipeline.bench) and `beyondName` run only on what survives them, and only until the cap is reached.
     const cap = Math.min(this.config.maxItemsPerInjection, this.config.confidentItems);
+    const staleOf = this.staleSibling(s, cue, cue.entities, scored);
     const sure: Scored[] = [];
     for (const x of scored) {
       if (sure.length >= cap) break;
@@ -1496,6 +1690,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (this.cleared(x, cue)) continue;
       // Nor a look-alike: another identifier's, last year's or another organisation's item (D1970).
       if (this.contradicts(x, cue)) continue;
+      // Nor the copy that reads stale: it declares itself superseded, the deadline it names has passed, or a
+      // newer record about the same thing sits beside it.
+      if (this.staleSelf(x.item, cue) || staleOf(x.item)) continue;
       // Nor, with `quietNameOnly`, one only a name ties to the request.
       if (!this.beyondName(x, cue)) continue;
       sure.push(x);
@@ -1524,8 +1721,12 @@ export abstract class PartnerVerdict extends PartnerCheck {
   ): { items: Scored[]; how: string } {
     const none = { items: [] as Scored[], how: "" };
     const acts = this.acts(s, cue, eventKind);
-    // A look-alike that contradicts the request's anchors is not grounded either (D1970).
-    const pool = candidates.filter((x) => !bulkMail(x.item) && !this.contradicts(x, cue));
+    // A look-alike that contradicts the request's anchors is not grounded either (D1970), nor the copy that
+    // reads stale beside the current one.
+    const staleOf = this.staleSibling(s, cue, cue.entities, candidates);
+    const pool = candidates.filter(
+      (x) => !bulkMail(x.item) && !this.contradicts(x, cue) && !this.staleSelf(x.item, cue) && !staleOf(x.item),
+    );
     const time = cue.time;
     // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1978) — except a bare-weekday one
     // (class 3), which only a clash's overlap test may hand (D1979).
@@ -1721,40 +1922,24 @@ export abstract class PartnerVerdict extends PartnerCheck {
         (dated(x.item) || x.matched > entityWords),
     );
     if (subject.length === 0) return [];
-    // The newest dated year a pick carries is the one the request means: an item about the named thing dated
-    // only earlier is last year's look-alike (the 2025 renewal notice beside the 2026 one) — a sibling, not a
-    // pick, the same rule `linked` applies when a chosen item's companions are found.
+    // The newest dated record a pick carries is the one the request means: an item about the named thing
+    // dated only earlier is the stale sibling — last year's renewal notice beside this year's — a sibling,
+    // not a pick, the same rule `linked` applies when a chosen item's companions are found, and the same
+    // `staleSibling` keeps in the push pool (per entity: a request naming two subjects never lets one's
+    // newer record date the other's, D1982).
     const year = docYears;
-    // Per entity, so a request naming two subjects never lets one's newer record date the other's (D1982).
-    const phraseWords = entities.map((e) =>
-      (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)),
-    );
+    const staleOf = this.staleSibling(s, cue, entities, subject);
     const anchorsPer = entities.map((e) => this.requestAnchors(s.scope, [e], cue));
     const anchoredOf = (item: ContextItem) =>
       entities
         .map((e, i) =>
-          phraseWords[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!))
+          (e.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !isStopword(w)).length > 0 &&
+          (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!))
             ? i
             : -1,
         )
         .filter((i) => i >= 0);
-    const yearless = requestYear(cue) === null;
-    const deliveredYears = yearless ? this.deliveredEntityYears(s, cue) : new Map<string, number>();
-    const newestE = entities.map((e, i) => {
-      if (!yearless) return 0;
-      let n = (cleanEntities([e])[0] !== undefined ? deliveredYears.get(phraseWords[i]!.join(" ")) : undefined) ?? 0;
-      for (const x of subject) if (anchoredOf(x.item).includes(i)) for (const y of year(x.item)) if (y > n) n = y;
-      return n;
-    });
-    const picks = subject.filter((x) => {
-      // A timed item is a dated occurrence, not a record's year (same exemption as `candidatesOf`).
-      if (x.item.meta?.start !== undefined) return true;
-      const ys = year(x.item);
-      if (ys.length === 0) return true;
-      const m = Math.max(...ys);
-      const an = anchoredOf(x.item);
-      return an.length === 0 || an.some((i) => m >= newestE[i]!);
-    });
+    const picks = subject.filter((x) => !this.staleSelf(x.item, cue) && !staleOf(x.item));
     // The year a companion is judged against is per anchored entity of the picks, so a pick on another
     // subject's year cannot keep this one's stale sibling alive.
     const pickYearsE = entities.map(() => new Set<number>());
@@ -1799,6 +1984,8 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const requestTerms = new Set(cue.text.split(" ").filter(Boolean));
     // Shared terms count on letters only: a bare number ("5") binds two items on nothing.
     const companion = (item: ContextItem) => {
+      // The dead copy and the older sibling are never the companion either (`staleSibling`'s same rule).
+      if (this.staleSelf(item, cue) || staleOf(item)) return false;
       // A document naming a different year than the picks' is that topic's sibling, not its companion —
       // last year's renewal notice beside this year's (the same rule `linked` keeps).
       const ys = year(item);
@@ -1983,6 +2170,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     };
     const has = new Set(chosen.map((x) => x.item.id));
     const vocab = this.deps.cache.peekVocab(s.scope);
+    const staleOf = this.staleSibling(s, cue, cue.entities, [...chosen, ...scored]);
     const out: Scored[] = [];
     const take = (x: Scored, strictLink = false): void => {
       if (out.length >= room) return;
@@ -2004,7 +2192,8 @@ export abstract class PartnerVerdict extends PartnerCheck {
       )
         return;
       if (vocab !== undefined && x.doc !== undefined && this.alreadyHas(s, x.item, x.doc, vocab)) return;
-      if (this.contradicts(x, cue) || !linked(x.item, strictLink)) return;
+      if (this.contradicts(x, cue) || this.staleSelf(x.item, cue) || staleOf(x.item) || !linked(x.item, strictLink))
+        return;
       has.add(x.item.id);
       // Its ledger entry at selection time, like `deliverChecked`'s `was`: a delivery that lands during the
       // pass's await (this request's own fast path) already handed it out.
@@ -2515,6 +2704,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
             x.score >= c.fallbackScore * 0.5 &&
             !(c.quietSettled && settledOf(x.item)) &&
             !this.contradicts(x, cue!) &&
+            !this.staleSelf(x.item, cue!) &&
             !this.awayElsewhere(x.item, cue!) &&
             !this.cleared(x, cue!) &&
             this.beyondName(x, cue!),
@@ -2532,7 +2722,8 @@ export abstract class PartnerVerdict extends PartnerCheck {
       !bulkMail(top.item) &&
       top.matched >= c.fallbackMatchedTerms &&
       top.score >= c.fallbackScore &&
-      !(cue && this.contradicts(top, cue));
+      !(cue && this.contradicts(top, cue)) &&
+      !(cue && this.staleSelf(top.item, cue));
     return strong && (!cue || this.beyondName(top, cue)) ? [top] : [];
   }
 
@@ -3958,7 +4149,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       );
       if (conflicting) spans!.close(conflicting, { bridged: bridged.size });
       const confiding = spans?.open("confident", cue.span);
-      let sure = this.confident(scored, cue);
+      let sure = this.confident(s, scored, cue);
       if (confiding) spans!.close(confiding, { sure: sure.length });
       // "Who is he?" (D1982) asks for the person's own record — `carry` made the name the cue's entities: when the
       // pool holds an item whose title IS that name, it alone answers; everything only mentioning the person

@@ -38,6 +38,7 @@ import {
   TIME_WORD,
   bulkMail,
   docYears,
+  docSpan,
   idNumbers,
   itemLinesOf,
   pairKey,
@@ -1064,6 +1065,9 @@ export abstract class PartnerDelivery extends PartnerCore {
         .filter((t) => !/\d/.test(t))
         .slice(0, DELIVERED_TERMS),
       years: docYears(item),
+      ...(docSpan(item, item.updatedAt ?? this.now()) !== null
+        ? { span: docSpan(item, item.updatedAt ?? this.now())! }
+        : {}),
     });
     if (s.delivered.length > 200) s.delivered.splice(0, s.delivered.length - 200);
   }

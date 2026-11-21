@@ -417,7 +417,12 @@ export abstract class PartnerAsk extends PartnerVerdict {
       ...grounded,
       ...scored.filter((x) => x.score >= this.config.candidateScore && !grounded.includes(x)),
     ];
-    const order = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
+    const fused = intents.size > 0 ? this.fuseIntent(lexical, scored, intents) : lexical;
+    // The stale sibling answers the ask no better than the current record, so it sorts after everything that
+    // is not stale: demoted past the cap it still reaches the widened pool for `askReader` to see it there.
+    const staleOf = this.staleSibling(s, cue, cue.entities, fused);
+    const stale = (x: Scored) => this.staleSelf(x.item, cue) || staleOf(x.item);
+    const order = [...fused.filter((x) => !stale(x)), ...fused.filter(stale)];
     let chosen = order.slice(0, limit);
     // `askReader` (D95): one budgeted model call reads the widened pool; the items it says bind lead, with its bearing.
     // An explicit ask waits `askReaderWaitMs` for it; the push waits for the reading itself (the observe that started
