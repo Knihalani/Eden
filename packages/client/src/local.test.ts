@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { findLocalBinary, LocalEden, resolveLocalEden } from "./local";
+import type { EdenClient } from "./client";
 
 const root = resolve(import.meta.dir, "../../..");
 
