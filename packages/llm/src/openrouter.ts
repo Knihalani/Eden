@@ -11,6 +11,7 @@
  * docs/research/edge-freelab.md). Nothing reads it from the environment: `fromEnv`, and so the server, never sets it.
  */
 import { createHash } from "node:crypto";
+import { ModelHeldError, type RateHold } from "./pacing";
 import { costOf, priceFor } from "./pricing";
 import { estimateTokens } from "./tokens";
 import type { ChatMessage, ChatRequest, ChatResponse, Model, Usage } from "./types";
@@ -44,6 +45,12 @@ export interface OpenRouterOptions {
   anthropicCache?: boolean;
   /** The wall clock for `anthropicCache`'s read watch (tests pass their own). */
   now?: () => number;
+  /**
+   * A hold shared with the process's other model roles (D2046, S1-P9): a 429 against the shared account rate limit
+   * holds every caller, and a call made while held throws `ModelHeldError` without sending anything, so the engine's
+   * deadlines are not spent on a request that would come back limited anyway.
+   */
+  rateHold?: RateHold;
 }
 
 /**
@@ -116,12 +123,18 @@ export class OpenRouterModel implements Model {
     const t0 = performance.now();
     const timeout = AbortSignal.timeout(this.options.timeoutMs ?? 20_000);
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
+    const hold = this.options.rateHold;
+    if (hold?.held()) {
+      hold.skipped++;
+      throw new ModelHeldError(`openrouter: rate limit hold, ${this.options.model} call refused without sending`);
+    }
     const first = this.cacheLevel;
     const sentAt = (this.options.now ?? Date.now)();
     let level = first;
     for (;;) {
       const res = await this.post(request, level, signal);
       if (res.ok) {
+        hold?.ok();
         this.noteLevel(request.messages, first, level);
         const out = await this.read(res, t0);
         const marks = breakpoints(request.messages, level);
@@ -129,12 +142,20 @@ export class OpenRouterModel implements Model {
         this.watchReads(request.messages, marks, level, out.usage.cachedInputTokens, sentAt);
         return { ...out, cacheBreakpoints: marks.size };
       }
+      if (res.status === 429) hold?.note(res);
       const text = (await res.text()).slice(0, 300);
       // A refusal of the cache fields must not cost the call: send again with less (at most twice a call).
       if (res.status === 400 && breakpoints(request.messages, level).size > 0) {
         level = (
           level === 2 && breakpoints(request.messages, 1).size > 0 && asksHour(request.messages) ? 1 : 0
         ) as CacheLevel;
+        // A 429 that landed while this call was in-flight holds the fallback too, not only new calls.
+        if (hold?.held()) {
+          hold.skipped++;
+          throw new ModelHeldError(
+            `openrouter: rate limit hold, ${this.options.model} cache-fallback refused without sending`,
+          );
+        }
         continue;
       }
       throw new Error(`openrouter ${res.status}: ${text}`);

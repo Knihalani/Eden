@@ -920,4 +920,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2042 | 2026-11-21 | Adopted: `EDEN_PERSIST_STORE` may name several buckets, comma-separated; a user's shard is their bucket mod the count. | adopted |
 | D2045 | 2026-11-21 | Adopted: a second cluster router runs as a follower — `EDEN_CLUSTER_FOLLOW=1` — adopting the leader's published membership instead of… | adopted |
 | D2044 | 2026-11-21 | Adopted: a node's release bound scales with the users it is expected to move (S1-P6). | adopted |
+| D2046 | 2026-11-21 | Adopted: a process-wide `RateHold` shared by the model roles — a 429 holds every caller, and a call made while held fails fast without… | adopted |
 | D2043 | 2026-11-21 | Adopted: a dry-run autoscale plan — `deploy/scripts/autoscale-plan.py` reads `/metrics` from every node, plans a node count with… | adopted |
+| D2047 | 2026-11-21 | Adopted: `deploy/monitoring/alerts.yaml` covers the fleet SLOs of s1-scale-1m.md §8 (S1-P10). | adopted |
+| D2048 | 2026-11-21 | Adopted: `eden_sync_first_value_seconds` and the first-page backlog are per source, not per user's first source. | adopted |

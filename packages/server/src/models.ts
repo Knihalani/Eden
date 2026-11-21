@@ -20,7 +20,7 @@
  *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */
-import { OpenRouterModel, type Model, type OpenRouterOptions } from "@eden/llm";
+import { OpenRouterModel, RateHold, type Model, type OpenRouterOptions } from "@eden/llm";
 
 /** The measured model (Haiku 5.5, D98, D99), through OpenRouter. */
 export const DEFAULT_ROLE_MODEL = "anthropic/claude-haiku-5.5";
@@ -68,11 +68,15 @@ export function modelRolesFromEnv(
   const usdPerTenantDay = tenantCap(env.EDEN_MODEL_USD_PER_TENANT_DAY);
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return { ...NO_MODELS, usdPerTenantDay };
+  // One hold for every role (D2046, S1-P9): the account's rate limit is shared, so a 429 on one role holds them
+  // all, and a call made while held fails fast without sending.
+  const rateHold = new RateHold();
   const base = {
     apiKey,
     model: env.EDEN_MODEL || DEFAULT_ROLE_MODEL,
     baseUrl: env.OPENROUTER_BASE_URL,
     zdr: env.EDEN_MODEL_ZDR !== "off",
+    rateHold,
     // On by default (D1790); `OpenRouterModel` sends them to `anthropic/*` models only and falls back on a refusal.
     ...(cacheOn(env.EDEN_MODEL_CACHE) ? { anthropicCache: true } : {}),
   };
