@@ -550,3 +550,47 @@ describe("a child that ignores SIGTERM (R1)", () => {
     expect(await exited(pid)).toBe(true);
   });
 });
+
+describe("a child that answers connections but hangs on the request (R1's hole in the router, D2051)", () => {
+  test.concurrent(
+    "the router's forward timeout ends it in a 503, not an open request",
+    { timeout: 20_000 },
+    async () => {
+      const dir = tempDir("eden-router-hungreq-");
+      // Listens and reports its port like main.ts, then never answers any request: a hung event loop behind an open
+      // port. Without forwardTimeoutMs the forwarded fetch waits until the child's socket dies.
+      const entry = join(dir, "hung.ts");
+      writeFileSync(
+        entry,
+        'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: (req) =>\n' +
+          "  new URL(req.url).pathname === '/metrics'\n" +
+          "    // Headers, then a body that never comes: the scrape's bound must still drop it, not the scrape.\n" +
+          "    ? new Response(new ReadableStream({ start: () => {} }))\n" +
+          "    : new Promise<Response>(() => {}) });\n" +
+          "process.send?.({ edenListening: s.port });\n",
+      );
+      const env = { ...process.env, EDEN_HOME: dir, EDEN_DEV: "1" };
+      const config = { ...loadConfig(env), port: 0, processes: 1 };
+      const router = await startRouter({
+        config,
+        env,
+        entry,
+        forwardTimeoutMs: 300,
+        log: () => {},
+        onOutput: () => {},
+      });
+      try {
+        const t0 = performance.now();
+        const r = await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, { method: "POST" });
+        expect(r.status).toBe(503);
+        expect(performance.now() - t0).toBeLessThan(5_000); // the bound, not a killed socket
+        // /metrics is bounded too: the hung child's text drops out, the router's own gauges still answer.
+        const m = await fetch(`http://127.0.0.1:${router.port}/metrics`);
+        expect(m.status).toBe(200);
+        expect(await m.text()).toContain("eden_router_children");
+      } finally {
+        await router.stop();
+      }
+    },
+  );
+});

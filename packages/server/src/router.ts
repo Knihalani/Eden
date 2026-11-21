@@ -490,6 +490,12 @@ export interface RouterOptions {
    * default 30 s. A first start past it fails `startRouter`; a restart past it is retried with backoff (D172).
    */
   startTimeoutMs?: number;
+  /**
+   * How long a request forwarded to a child may take before the router answers 503 (default 60 s — R1's bound in
+   * cluster.ts, the same hole here): a child that accepts the connection and hangs must not hold the router's
+   * request open for ever.
+   */
+  forwardTimeoutMs?: number;
   /** Receives each child's stdout (tests, the bench); unset, children write to the router's stdout. */
   onOutput?: (index: number, text: string) => void;
   /** Told each child's pid as it is spawned (tests check that a failed start leaves no child running). */
@@ -531,6 +537,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
   const entry = options.entry ?? fileURLToPath(new URL("./main.ts", import.meta.url));
   const baseRestartMs = options.restartMs ?? 1_000;
   const startTimeoutMs = options.startTimeoutMs ?? 30_000;
+  const forwardTimeoutMs = options.forwardTimeoutMs ?? 60_000;
   const log = options.log ?? console.error;
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
@@ -727,6 +734,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
         method: req.method,
         headers,
         body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
+        signal: AbortSignal.timeout(forwardTimeoutMs),
       });
     } catch {
       // Refused or reset: the child died under this request, or between its exit and the router hearing of it.
@@ -776,10 +784,12 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     const texts = await Promise.all(
       children.map((c) =>
         c.up
-          ? fetch(`http://127.0.0.1:${c.port}/metrics`).then(
-              (r) => (r.ok ? r.text() : ""),
-              () => "",
-            )
+          ? // A child hung mid-answer must not stall the scrape: bound it and its text drops out, as a down one's.
+            // The catch, not `then`'s second seat: a body stalled past the signal rejects in `r.text()` — after
+            // the fetch resolved — and only a chained catch still lands it as "".
+            fetch(`http://127.0.0.1:${c.port}/metrics`, { signal: AbortSignal.timeout(5_000) })
+              .then((r) => (r.ok ? r.text() : ""))
+              .catch(() => "")
           : Promise.resolve(""),
       ),
     );
@@ -799,6 +809,15 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     const body = new Uint8Array(await req.arrayBuffer());
     const membership = { auth: req.headers.get("authorization") ?? "", body };
     deliveringMembership = membership;
+    // The cluster router's own deadline rides the message (S1-P6's scaled bound); the child plans inside it, so a
+    // hung child's tell is cut a beat past it rather than hanging this answer behind its own caller's timeout.
+    let bound = forwardTimeoutMs + 5_000;
+    try {
+      const d = (JSON.parse(new TextDecoder().decode(body)) as { deadlineMs?: number }).deadlineMs;
+      if (Number.isFinite(d)) bound = d! + 5_000;
+    } catch {
+      // Not the membership body the cluster sends: the plain bound stands.
+    }
     const answers = await Promise.all(
       children.map(async (c) => {
         if (!c.up && !replaying.has(c)) return null;
@@ -807,6 +826,7 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
             method: "POST",
             headers: { authorization: req.headers.get("authorization") ?? "", "content-type": "application/json" },
             body,
+            signal: AbortSignal.timeout(bound),
           });
           return r.ok ? ((await r.json()) as Record<string, number>) : null;
         } catch {
