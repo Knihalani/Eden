@@ -43,14 +43,21 @@ TOOLS = [
 def _home():
     import os
 
-    env_home = os.environ.get("GEMINI_CLI_HOME")
-    return Path(env_home).expanduser() if env_home else Path.home() / ".gemini"
+    env_home = os.environ.get("DEVIN_CLI_HOME")
+    if env_home:
+        return Path(env_home).expanduser()
+    here = Path(__file__).resolve()
+    # Installed as <home>/eden/eden-mcp.py; in a repo checkout, the default home.
+    if here.parent.name == "eden":
+        return here.parents[1]
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return xdg / "devin"
 
 
 def _plugin():
-    from eden_client.gemini import EdenGemini
+    from eden_client.devincli import EdenDevinCli
 
-    return EdenGemini(home=_home(), plugin_file=Path(__file__).resolve())
+    return EdenDevinCli(home=_home(), plugin_file=Path(__file__).resolve())
 
 
 def reply(msg_id, result):
@@ -78,7 +85,7 @@ def main() -> int:
             })
         elif method == "tools/list":
             reply(msg_id, {"tools": TOOLS})
-        elif msg_id == "tools/call":
+        elif method == "tools/call":
             params = msg.get("params") or {}
             if plugin is None:
                 plugin = _plugin()

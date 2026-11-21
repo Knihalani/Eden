@@ -36,8 +36,15 @@ def main() -> int:
         from eden_client.devincli import EdenDevinCli, dispatch
 
         env_home = os.environ.get("DEVIN_CLI_HOME")
-        home = (Path(env_home).expanduser() if env_home
-                else Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "devin")
+        here = Path(__file__).resolve()
+        if env_home:
+            home = Path(env_home).expanduser()
+        elif here.parent.name == "eden":
+            # Installed as <home>/eden/eden-hook.py: the install home is the grandparent.
+            home = here.parents[1]
+        else:
+            xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+            home = xdg / "devin"
         plugin = EdenDevinCli(home=home, plugin_file=Path(__file__).resolve())
         result = dispatch(plugin, event, payload)
         if not isinstance(result, dict):
