@@ -138,6 +138,45 @@ describe("eval harness", () => {
     expect(m.counts.found).toBe(2);
   });
 
+  test("a context_reset clears the scorer's session credit: only a re-delivery meets a later expect (D2006)", async () => {
+    const docs = [
+      { ref: "e1", title: "Dentist with Dr. Okafor", text: "Tuesday 9:00 at Harley Street, check-up" },
+      { ref: "e2", title: "Boiler service", text: "Thursday 14:00, the engineer brings the flue kit" },
+    ];
+    const s: Scenario = {
+      id: "reset",
+      description: "",
+      sources: [{ id: "cal", description: "calendar", docs }],
+      sessions: [
+        {
+          id: "a",
+          turns: [
+            {
+              event: { kind: "user_message", text: "When is my dentist appointment with Dr. Okafor?" },
+              expect: { items: ["cal:e1"] },
+            },
+            // The reset turn is unscored: a packet queued pre-reset legitimately stands across it (its take
+            // lands here).
+            { event: { kind: "context_reset" } },
+            {
+              event: { kind: "user_message", text: "What time is the boiler engineer coming?" },
+              expect: { items: ["cal:e2"] },
+            },
+            // e1 reached the agent only before the reset and nothing since re-delivered it: it must not count as
+            // found here — without `had`'s reset it still would.
+            {
+              event: { kind: "user_message", text: "Is my garage door opener working?" },
+              expect: { items: ["cal:e1"] },
+            },
+          ],
+        },
+      ],
+    };
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    expect(m.counts.expected).toBe(3);
+    expect(m.counts.found).toBe(2);
+  });
+
   test("the leak check fires: a declared secret the engine does not redact is counted, delivered or answered", async () => {
     // "bring Q3 numbers" is ordinary text in an item the seed scenario delivers: declared a secret, every delivery or
     // answer carrying it must count as a leak.
