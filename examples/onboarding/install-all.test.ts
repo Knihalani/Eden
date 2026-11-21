@@ -33,23 +33,6 @@ describe.skipIf(!python)("the unified installer", () => {
       "opencode",
       "pi",
       "qwen-code",
-    ]) {
-    for (const name of ["claude-code", "cursor", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
-    for (const name of ["claude-code", "cursor", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
-    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
-    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi", "windsurf"]) {
-    for (const name of ["claude-code", "cursor", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
-    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
-    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi", "windsurf"]) {
-    for (const name of [
-      "claude-code",
-      "cursor",
-      "gemini-cli",
-      "gptme",
-      "openclaw",
-      "opencode",
-      "pi",
-      "qwen-code",
       "windsurf",
     ]) {
       expect(text).toContain(name);
