@@ -853,7 +853,12 @@ export async function runCluster(
  */
 export interface EdgeOptions {
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev"> &
-    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst">>;
+    Partial<
+      Pick<
+        ServerConfig,
+        "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "shutdownGraceMs" | "drainDelayMs"
+      >
+    >;
   ranges: TopRange[];
   /** A forwarded request's bound (default 60 s, as the cluster router's). */
   forwardTimeoutMs?: number;
@@ -978,7 +983,17 @@ export async function startEdge(options: EdgeOptions): Promise<Edge> {
     },
     error: () => fail(503, "temporarily unable to serve context"),
   });
-  return { port: server.port ?? 0, stop: async () => server.stop(true) };
+  return {
+    port: server.port ?? 0,
+    // Drains as every server does (D994): the LB's delay, in-flight requests given most of the grace, the rest
+    // closed. `server.stop(true)` alone would cut a forwarded request its cell may already have observed.
+    async stop() {
+      if ((config.drainDelayMs ?? 0) > 0) await Bun.sleep(config.drainDelayMs!);
+      const grace = config.shutdownGraceMs ?? 10_000;
+      await Promise.race([server.stop(false), Bun.sleep(grace * 0.4)]);
+      void server.stop(true);
+    },
+  };
 }
 
 /** `main.ts` with EDEN_TOP_TABLE or EDEN_TOP_TABLE_FILE: the edge over the cells (S1-P8). */
