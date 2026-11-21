@@ -321,8 +321,11 @@ export function gradeMessages(task: Task, answer: string): Msg[] {
         "details (times, dates, places, amounts, references, names) must match; paraphrase is fine; a fact only " +
         "hinted at or with different details is false. " +
         (task.kind === "hidden"
-          ? "Here each required fact is a consideration the assistant should raise: true only if the answer brings " +
-            "it up (as a warning, a question or a change of plan), not if it ignores it. "
+          ? "Here each required fact is a consideration the assistant should raise: true if the answer brings it " +
+            "up (as a warning, a question or a change of plan) with its operative specifics right — what it is, " +
+            "who or what it touches, the date or name it turns on. The answer need not repeat the fact's every " +
+            "detail (its source, an author's name, a venue) to count; false only if it ignores the fact or gets " +
+            "its operative specifics wrong. "
           : task.kind === "control"
             ? "Here each required fact is a false concern: true only if the answer actually claims it (as a fact, a " +
               "warning or a reason to change plan), not if it merely mentions the topic or asks an open question. "
