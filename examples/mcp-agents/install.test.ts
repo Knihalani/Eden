@@ -159,7 +159,10 @@ describe.skipIf(!python)("the MCP-only installer", () => {
     // Continue: a --continue-config holding other servers is merged, and uninstall keeps them.
     const cont = dir(base, "cont/mcpServers/eden.json");
     writeFileSync(cont, JSON.stringify({ mcpServers: { other: { command: "x" } } }));
-    const ci = run(["--continue-config", cont, "--agents", "continue", "--remote", "--eden-home", join(base, "eh")], env);
+    const ci = run(
+      ["--continue-config", cont, "--agents", "continue", "--remote", "--eden-home", join(base, "eh")],
+      env,
+    );
     expect(ci.exitCode, ci.stderr.toString()).toBe(0);
     const cd = JSON.parse(readFileSync(cont, "utf8"));
     expect(cd.mcpServers.other).toEqual({ command: "x" });
