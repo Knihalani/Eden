@@ -4,16 +4,20 @@
  * minus a part" (@eden/engine's `PARTS`), or a measured trial; the lab's presets stay in `@eden/sim` and are not read
  * here, so the file names its settings itself.
  *
- * Every key is checked at startup against `DEFAULT_CONFIG`: an unknown key (a typo, a flag from another version) or a
- * value of the wrong type stops the server with a message naming it, rather than running silently on the default.
- * So does a number outside the key's range (`RANGES`) or a list entry the engine does not know. The
+ * Every key is checked at startup against `DEFAULT_CONFIG`: a value of the wrong type, a number outside the key's
+ * range (`RANGES`) or a list entry the engine does not know stops the server with a message naming it, rather than
+ * running silently on the default. An unknown key (a typo, or a flag a file written for another version names —
+ * removed, renamed or not yet shipped) is named on stderr and skipped instead (D5 of weak-points-1111.md): an
+ * upgrade must not stop the server over a key it no longer has, nor a rollback over one it has not gained. The
+ * strict check is kept in `parseEngineConfig`, which the lab's CLIs run. The
  * servers wire both model-role dependencies (cards and the reader, build.ts) whenever OPENROUTER_API_KEY is set, so
  * no card or reader key is refused for want of a dependency: without a key those parts are inert by design and the
  * default runs its no-model path (D112), whatever the file says. Sync is accepted: static sources list nothing, and
  * per-user MCP sources with a list tool (D108) are synced (engine-config.test.ts, `sync over per-user sources`).
  */
 import { readFileSync } from "node:fs";
-import { checkEngineConfig, type EngineConfig } from "@eden/engine";
+import { checkEngineConfig, DEFAULT_CONFIG, type EngineConfig } from "@eden/engine";
+import { sanitizeForStore } from "@eden/redact";
 
 // The checks themselves (keys, types, `RANGES`, list entries, `NEEDS_DEP`) live in @eden/engine's config-check.ts,
 // shared with the lab's CLIs.
@@ -26,15 +30,30 @@ export function engineConfig(env: Record<string, string | undefined> = process.e
   try {
     text = readFileSync(path, "utf8");
   } catch (error) {
-    throw new Error(`EDEN_ENGINE_CONFIG: cannot read ${path} (${(error as Error).message})`);
+    throw new Error(`EDEN_ENGINE_CONFIG: cannot read ${sanitizeForStore(path)} (${(error as Error).message})`);
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new Error(`EDEN_ENGINE_CONFIG: ${path} is not JSON (${(error as Error).message})`);
+    throw new Error(`EDEN_ENGINE_CONFIG: ${sanitizeForStore(path)} is not JSON (${(error as Error).message})`);
   }
-  return parseEngineConfig(parsed, `EDEN_ENGINE_CONFIG (${path})`);
+  // D5: a key the running version does not have is warned about and skipped, not fatal — the file may have been
+  // written for another version. `Object.hasOwn`, not `in`: "__proto__" and "constructor" are not settings.
+  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    const kept: Record<string, unknown> = {};
+    for (const [key, given] of Object.entries(parsed)) {
+      if (Object.hasOwn(DEFAULT_CONFIG, key)) kept[key] = given;
+      // Logged, so the path and key pass sanitizeForStore; whitespace collapses so a key cannot forge a log line.
+      else
+        console.error(
+          `eden: EDEN_ENGINE_CONFIG (${sanitizeForStore(path)}) has unknown key ` +
+            `"${sanitizeForStore(key).replace(/\s+/g, " ")}", ignored`,
+        );
+    }
+    parsed = kept;
+  }
+  return parseEngineConfig(parsed, `EDEN_ENGINE_CONFIG (${sanitizeForStore(path)})`);
 }
 
 /**
