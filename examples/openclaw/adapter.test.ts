@@ -122,6 +122,44 @@ describe("Eden as an OpenClaw plugin", () => {
     expect(open).toBeUndefined();
   });
 
+  test("ask_context's item arg asks for that item; the answer cites it in Sources (D2024)", async () => {
+    const h = harness("oc-item");
+    const asks: { q: string; opts?: { itemId?: string } }[] = [];
+    sessions.set(edenId("oc-item"), {
+      eden: {
+        ask: async (q: string, opts?: { itemId?: string }) => {
+          asks.push({ q, opts });
+          return {
+            answer: "The deposit cleared.",
+            citations: [
+              { itemId: "calendar:evt-9", sourceId: "calendar", title: "Venue <draft>", url: "https://cal/9" },
+            ],
+          };
+        },
+      } as unknown as EdenClient,
+      options: {},
+      generation: 1,
+      local: null,
+      seen: new Map(),
+      kept: new Map(),
+      trailing: [],
+      queued: [],
+      firstCall: false,
+      reportedResults: new Set(),
+      reported: Promise.resolve(),
+    });
+    const tool = h.tools.get("ask_context") as {
+      execute(id: string, params: { question: string; item?: string }): Promise<{ content: { text: string }[] }>;
+    };
+    const out = await tool.execute("c1", { question: "deposit?", item: "calendar:evt-9" });
+    expect(asks[0]!.opts?.itemId).toBe("calendar:evt-9");
+    const text = out.content[0]!.text;
+    expect(text).toContain("The deposit cleared.");
+    expect(text).toContain("Sources:");
+    expect(text).toContain("Venue &lt;draft>");
+    expect(text).toContain("[item: calendar:evt-9]");
+  });
+
   test("after_tool_call reports the result once, agent_end reports the last reply", async () => {
     const h = harness();
     await h.emit("after_tool_call", {

@@ -35,6 +35,7 @@ import {
   envOf,
   heldResult,
   textOf,
+  withSources,
   type Injection,
   type SurfaceSession,
   type TextBlock,
@@ -159,18 +160,27 @@ const entry = {
         description: ASK_CONTEXT_DESCRIPTION,
         parameters: {
           type: "object",
-          properties: { question: { type: "string", description: "The question, in plain words." } },
+          properties: {
+            question: { type: "string", description: "The question, in plain words." },
+            item: {
+              type: "string",
+              description:
+                "An item id from an earlier answer's Sources list ([item: ...]): return that item's parts in full.",
+            },
+          },
           required: ["question"],
         },
-        execute: async (_id: string, params: { question?: string }) => {
+        execute: async (_id: string, params: { question?: string; item?: string }) => {
           try {
             // The tool's ctx carries the conversation's session when OpenClaw provides one; the last
             // hook-seen session is the fallback so answers land where the party check looks (SEC).
             const s = await sessionFor(sessionKey(toolCtx as HookCtx));
             if (!s) return { content: [{ type: "text", text: "No context available." }] };
             const client = await liveClient(s);
-            const answer = client ? await client.ask(params.question ?? "") : null;
-            return { content: [{ type: "text", text: answer?.answer ?? "No context available." }] };
+            const answer = client
+              ? await client.ask(params.question ?? "", typeof params.item === "string" ? { itemId: params.item } : {})
+              : null;
+            return { content: [{ type: "text", text: withSources(answer) ?? "No context available." }] };
           } catch {
             return { content: [{ type: "text", text: "No context available." }] };
           }

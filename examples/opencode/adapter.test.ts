@@ -204,6 +204,46 @@ describe("Eden as an opencode plugin", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("ask_context's item arg asks for that item; the answer cites it in Sources (D2024)", async () => {
+    const { hooks, sessionID } = await harness();
+    const asks: { q: string; opts?: { itemId?: string } }[] = [];
+    sessions.set(edenId(sessionID), {
+      eden: {
+        ask: async (q: string, opts?: { itemId?: string }) => {
+          asks.push({ q, opts });
+          return {
+            answer: "The deposit cleared.",
+            citations: [
+              { itemId: "calendar:evt-9", sourceId: "calendar", title: "Venue <draft>", url: "https://cal/9" },
+            ],
+          };
+        },
+      } as unknown as EdenClient,
+      options: {},
+      generation: 1,
+      local: null,
+      seen: new Map(),
+      copyCounts: new Map(),
+      reportedAssistant: new Set(),
+      kept: new Map<string, { text: string; messageID: string }>(),
+      trailing: [],
+      queued: [],
+      firstCall: false,
+      reportedCalls: new Set(),
+      reportedResults: new Set(),
+      reported: Promise.resolve(),
+    });
+    const tool = hooks.tool!.ask_context as {
+      execute(args: { question: string; item?: string }, ctx: { sessionID: string }): Promise<string>;
+    };
+    const out = await tool.execute({ question: "deposit?", item: "calendar:evt-9" }, { sessionID });
+    expect(asks[0]!.opts?.itemId).toBe("calendar:evt-9");
+    expect(out).toContain("The deposit cleared.");
+    expect(out).toContain("Sources:");
+    expect(out).toContain("Venue &lt;draft>");
+    expect(out).toContain("[item: calendar:evt-9]");
+  });
+
   test("tool.execute.after reports the result once; session.idle reports the last reply", async () => {
     const { hooks, sessionID } = await harness(undefined, [
       { info: { role: "assistant" }, parts: [{ type: "text", text: "All set." }] },

@@ -135,6 +135,50 @@ describe("Eden in a Pi session", () => {
     expect(ok).toBeUndefined();
   });
 
+  test("ask_context's item arg asks for that item; the answer cites it in Sources (D2024)", async () => {
+    const h = harness("pi-item");
+    const asks: { q: string; opts?: { itemId?: string } }[] = [];
+    sessions.set(edenId("pi-item"), {
+      eden: {
+        ask: async (q: string, opts?: { itemId?: string }) => {
+          asks.push({ q, opts });
+          return {
+            answer: "The deposit cleared.",
+            citations: [
+              { itemId: "calendar:evt-9", sourceId: "calendar", title: "Venue <draft>", url: "https://cal/9" },
+            ],
+          };
+        },
+      } as unknown as EdenClient,
+      options: {},
+      generation: 0,
+      local: null,
+      seen: new Map(),
+      kept: new Map(),
+      trailing: [],
+      reported: Promise.resolve(),
+      queued: [],
+      firstCall: false,
+      reportedResults: new Set(),
+    });
+    const tool = h.tools.get("ask_context") as {
+      execute(
+        id: string,
+        p: { question: string; item?: string },
+        s: unknown,
+        u: unknown,
+        c: unknown,
+      ): Promise<{ content: { text: string }[] }>;
+    };
+    const out = await tool.execute("t", { question: "deposit?", item: "calendar:evt-9" }, undefined, undefined, h.ctx);
+    expect(asks[0]!.opts?.itemId).toBe("calendar:evt-9");
+    const text = out.content[0]!.text;
+    expect(text).toContain("The deposit cleared.");
+    expect(text).toContain("Sources:");
+    expect(text).toContain("Venue &lt;draft>");
+    expect(text).toContain("[item: calendar:evt-9]");
+  });
+
   test("Eden down: context returns the messages as they came and ask_context says no context", async () => {
     const url = process.env.EDEN_URL;
     delete process.env.EDEN_URL;

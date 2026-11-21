@@ -30,6 +30,7 @@ import {
   edenId,
   heldResult,
   textOf,
+  withSources,
   type Injection,
   type SurfaceSession,
   type TextBlock,
@@ -129,16 +130,31 @@ export default function eden(pi: Pi): void {
     description: ASK_CONTEXT_DESCRIPTION,
     parameters: {
       type: "object",
-      properties: { question: { type: "string", description: "The question, in plain words." } },
+      properties: {
+        question: { type: "string", description: "The question, in plain words." },
+        item: {
+          type: "string",
+          description:
+            "An item id from an earlier answer's Sources list ([item: ...]): return that item's parts in full.",
+        },
+      },
       required: ["question"],
     },
-    async execute(_id: string, params: { question?: string }, _signal: AbortSignal, _update: unknown, ctx: PiCtx) {
+    async execute(
+      _id: string,
+      params: { question?: string; item?: string },
+      _signal: AbortSignal,
+      _update: unknown,
+      ctx: PiCtx,
+    ) {
       const text = async () => {
         const s = await sessionFor(sessionKey(ctx));
         if (!s) return "No context available.";
         const client = await liveClient(s);
-        const answer = client ? await client.ask(params.question ?? "") : null;
-        return answer?.answer ?? "No context available.";
+        const answer = client
+          ? await client.ask(params.question ?? "", typeof params.item === "string" ? { itemId: params.item } : {})
+          : null;
+        return withSources(answer) ?? "No context available.";
       };
       try {
         return { content: [{ type: "text", text: await text() }], details: {} };

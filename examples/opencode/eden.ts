@@ -34,6 +34,7 @@ import {
   heldResult,
   MAX_KEPT_BYTES,
   textOf,
+  withSources,
   type Injection,
   type SurfaceSession,
   type TextBlock,
@@ -416,14 +417,24 @@ export const Eden = async (ctx: {
   tool: {
     [ASK]: {
       description: ASK_CONTEXT_DESCRIPTION,
-      args: { question: z.string().describe("The question, in plain words.") },
-      async execute(args: { question: string }, toolCtx: { sessionID?: string }) {
+      args: {
+        question: z.string().describe("The question, in plain words."),
+        item: z
+          .string()
+          .optional()
+          .describe(
+            "An item id from an earlier answer's Sources list ([item: ...]): return that item's parts in full.",
+          ),
+      },
+      async execute(args: { question: string; item?: string }, toolCtx: { sessionID?: string }) {
         try {
           const s = await sessionFor(sessionKey(toolCtx.sessionID));
           if (!s) return "No context available.";
           const client = await liveClient(s);
-          const answer = client ? await client.ask(args.question ?? "") : null;
-          return answer?.answer ?? "No context available.";
+          const answer = client
+            ? await client.ask(args.question ?? "", typeof args.item === "string" ? { itemId: args.item } : {})
+            : null;
+          return withSources(answer) ?? "No context available.";
         } catch {
           return "No context available.";
         }
