@@ -254,7 +254,7 @@ def merge_goose(path, mcp_py, env, remove=False):
         l = lines[end]
         if l.strip() and indent(l) <= ext_indent:
             break
-        if l.strip() and child is None:
+        if l.strip() and not l.lstrip().startswith("#") and child is None:
             child = indent(l)
         end += 1
     if child is None:
@@ -266,7 +266,7 @@ def merge_goose(path, mcp_py, env, remove=False):
         if l.strip() and ext_indent < indent(l) <= child and re.match(r"^eden\s*:", l.lstrip()):
             skipping = True
             continue
-        if skipping and l.strip() and indent(l) <= child:
+        if skipping and l.strip() and not l.lstrip().startswith("#") and indent(l) <= child:
             skipping = False
         if not skipping:
             kept.append(l)
