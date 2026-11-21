@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -98,12 +98,35 @@ describe.skipIf(!python)("the MCP-only installer", () => {
     const after = JSON.parse(readFileSync(cline, "utf8"));
     expect(after.mcpServers.eden).toBeUndefined();
     expect(after.mcpServers.other).toEqual({ command: "x" });
+
+    // Continue drops its own file under mcpServers/ — written, then removed whole
+    const cont = join(base, "cont", "mcpServers", "eden.json");
+    const ci = run(["--continue-config", cont, "--agents", "continue", "--remote", "--eden-home", join(base, "eh")], {
+      EDEN_URL: "https://e",
+      EDEN_API_KEY: "k9",
+    });
+    expect(ci.exitCode, ci.stderr.toString()).toBe(0);
+    expect(JSON.parse(readFileSync(cont, "utf8")).mcpServers.eden.env.EDEN_API_KEY).toBe("k9");
+    const cu = run(["--continue-config", cont, "--agents", "continue", "--uninstall", "--eden-home", join(base, "eh")]);
+    expect(cu.exitCode, cu.stderr.toString()).toBe(0);
+    expect(existsSync(cont)).toBe(false);
   });
 
   test("--list reports each agent's detection, and a config that isn't JSON is warned, not clobbered", () => {
     const base = mkdtempSync(join(tmpdir(), "eden-mcp-agents-"));
     const listed = run(["--list"], { HOME: base });
-    for (const name of ["cline", "roo-code", "amazon-q", "crush", "zed", "goose", "codex"]) {
+    for (const name of [
+      "cline",
+      "roo-code",
+      "amazon-q",
+      "crush",
+      "zed",
+      "goose",
+      "codex",
+      "kiro",
+      "warp",
+      "continue",
+    ]) {
       expect(listed.stdout.toString()).toContain(name);
     }
     const bad = dir(base, "c/settings.json");

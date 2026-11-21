@@ -1,6 +1,6 @@
 # Eden for MCP-only agents
 
-Seven agent products expose an MCP client but no hook surface — nothing Eden can observe
+Ten agent products expose an MCP client but no hook surface — nothing Eden can observe
 prompts, check tool calls or report replies through. They still get Eden's **pull** path:
 
 - `ask_context(question, item?)` — a natural-language question about the user's context in
@@ -17,6 +17,9 @@ prompts, check tool calls or report replies through. They still get Eden's **pul
 | Zed | `~/.config/zed/settings.json` (JSONC tolerated) | `context_servers.eden` |
 | Goose | `~/.config/goose/config.yaml` | `extensions.eden` (`type: stdio`) |
 | Codex CLI | `~/.codex/config.toml` | `[mcp_servers.eden]` |
+| Kiro | `~/.kiro/settings/mcp.json` | `mcpServers.eden` |
+| Warp | `~/.warp/.mcp.json` | `mcpServers.eden` |
+| Continue | `~/.continue/mcpServers/eden.json` | own file (`mcpServers.eden`) |
 
 ## Install
 

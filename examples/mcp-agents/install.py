@@ -37,6 +37,10 @@ AGENTS = {
     "zed": ("~/.config/zed", "~/.config/zed/settings.json", "zed"),
     "goose": ("~/.config/goose", "~/.config/goose/config.yaml", "goose"),
     "codex": ("~/.codex", "~/.codex/config.toml", "codex"),
+    "kiro": ("~/.kiro", "~/.kiro/settings/mcp.json", "mcpservers"),
+    "warp": ("~/.warp", "~/.warp/.mcp.json", "mcpservers"),
+    # Continue reads every *.json in mcpServers/ as a config of its own — no merge needed.
+    "continue": ("~/.continue", "~/.continue/mcpServers/eden.json", "own-file"),
 }
 
 
@@ -230,6 +234,12 @@ def merge_codex(path, mcp_py, env, remove=False):
 
 
 def merge_agent(name, config, fmt, mcp_py, env, remove=False):
+    if fmt == "own-file":
+        if remove:
+            config.unlink(missing_ok=True)
+        else:
+            write_json(config, {"mcpServers": {"eden": entry_for("mcpservers", mcp_py, env)}})
+        return True
     if fmt == "goose":
         return merge_goose(config, mcp_py, env, remove)
     if fmt == "codex":

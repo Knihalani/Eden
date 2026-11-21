@@ -694,7 +694,7 @@ beside the agent's home:
 | [Cursor](https://cursor.com)                                  | `examples/cursor`             | hook commands + `eden-mcp.py` (`beforeSubmitPrompt`, `pre/postToolUse`, `afterAgentResponse`, `preCompact`, `session*`) | `permission: "deny"` | `install.py` → `~/.cursor/eden/` + `hooks.json`/`mcp.json` merges |
 | [LangChain](https://docs.langchain.com)                       | `examples/langchain`          | `createAgent` middleware                                                                  | guarded tool wrapper             | copy `eden-langchain.ts`                                                   |
 | [Windsurf Cascade](https://docs.windsurf.com/windsurf/cascade/hooks) (legacy in Devin Desktop) | `examples/windsurf` | hook commands + `eden-mcp.py` (`pre/post_user_prompt`, `pre/post_run_command`/`write_code`/`read_code`/`mcp_tool_use`, `post_cascade_response`) | exit 2 + stderr | `install.py` -> `~/.codeium/windsurf/eden/` + `hooks.json`/`mcp_config.json` merges |
-| Cline, Roo Code, Amazon Q, Crush, Zed, Goose, Codex CLI      | `examples/mcp-agents`         | MCP-only (pull): `ask_context` + `pending_context` — no hooks, so nothing is observed, injected or checked | — | `install.py` → `~/.eden-mcp/eden/` + each agent's MCP config merge |
+| Cline, Roo Code, Amazon Q, Crush, Zed, Goose, Codex CLI, Kiro, Warp, Continue | `examples/mcp-agents`         | MCP-only (pull): `ask_context` + `pending_context` — no hooks, so nothing is observed, injected or checked | — | `install.py` → `~/.eden-mcp/eden/` + each agent's MCP config merge |
 
 Local mode is shared: `EDEN_LOCAL_BINARY`, then the install's own `bin/eden-local`, with
 `<agent-home>/eden/sources.json` read automatically (the same file every agent reads). `EDEN_URL`
