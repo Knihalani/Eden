@@ -204,6 +204,8 @@ describe("list mapping and next cursors", () => {
     expect(nextCursorOf([], { pageInfo: { endCursor: "d", hasNextPage: true } })).toBe("d");
     expect(nextCursorOf([], { pageInfo: { endCursor: "d", hasNextPage: false } })).toBeNull();
     expect(nextCursorOf([], { has_more: false, next_cursor: "e" })).toBeNull();
+    // Top-level `hasNextPage: false` is authoritative too: a holder's cursor is not a next page.
+    expect(nextCursorOf([], { hasNextPage: false, pageInfo: { endCursor: "f" } })).toBeNull();
     expect(nextCursorOf([], { next_cursor: "" })).toBeNull();
     expect(nextCursorOf([{ type: "text", text: "Here are your messages" }])).toBeNull();
     expect(nextCursorOf([], { cursor: "x".repeat(5_000) })).toBeNull(); // too long to be a cursor

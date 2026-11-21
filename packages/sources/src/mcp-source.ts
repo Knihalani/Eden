@@ -382,7 +382,7 @@ export function nextCursorOf(
     }
     return null;
   };
-  if (o.has_more === false || o.hasMore === false) return null;
+  if (o.has_more === false || o.hasMore === false || o.hasNextPage === false) return null;
   const top = pick(o);
   if (top !== null) return top;
   for (const h of CURSOR_HOLDERS) {
