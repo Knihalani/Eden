@@ -854,10 +854,7 @@ export async function runCluster(
 export interface EdgeOptions {
   config: Pick<ServerConfig, "port" | "host" | "keys" | "dev"> &
     Partial<
-      Pick<
-        ServerConfig,
-        "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "shutdownGraceMs" | "drainDelayMs"
-      >
+      Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst" | "shutdownGraceMs" | "drainDelayMs">
     >;
   ranges: TopRange[];
   /** A forwarded request's bound (default 60 s, as the cluster router's). */
@@ -882,6 +879,9 @@ export async function startEdge(options: EdgeOptions): Promise<Edge> {
     counts.set(`${cell ?? ""} ${k}`, (counts.get(`${cell ?? ""} ${k}`) ?? 0) + 1);
   const fail = (status: number, error: string) => Response.json({ error }, { status });
   const cellOf = (b: number) => ranges.find((r) => b >= r.lo && b <= r.hi)!.url;
+  // One cell may own several ranges: usage fans out to it once (its reply already covers all its users), and
+  // the cells gauge and /readyz count cells, not rows. First-named order keeps ranges[0]'s row first.
+  const cells = [...new Set(ranges.map((r) => r.url))];
 
   const tenantOf = (req: Request): string | null => {
     const key = keyOf(req);
@@ -922,14 +922,14 @@ export async function startEdge(options: EdgeOptions): Promise<Edge> {
     maxRequestBodySize: maxBodyBytes,
     async fetch(req) {
       const url = new URL(req.url);
-      if (req.method === "GET" && url.pathname === "/healthz") return Response.json({ ok: true, cells: ranges.length });
+      if (req.method === "GET" && url.pathname === "/healthz") return Response.json({ ok: true, cells: cells.length });
       if (req.method === "GET" && url.pathname === "/readyz")
-        return Response.json({ ready: true, cells: ranges.length });
+        return Response.json({ ready: true, cells: cells.length });
       if (req.method === "GET" && url.pathname === "/metrics") {
         const own = [
           "# HELP eden_edge_cells Cells in the top table",
           "# TYPE eden_edge_cells gauge",
-          `eden_edge_cells ${ranges.length}`,
+          `eden_edge_cells ${cells.length}`,
           "# HELP eden_edge_requests_total Requests by outcome and cell",
           "# TYPE eden_edge_requests_total counter",
           ...[...counts].map(([k, v]) => {
@@ -964,7 +964,7 @@ export async function startEdge(options: EdgeOptions): Promise<Edge> {
       if (url.pathname === "/v1/usage") {
         // Usage is per tenant across every cell: each answers its users' share (the cluster's `everywhere`).
         const parts: Record<string, unknown>[] = [];
-        for (const r of await Promise.all(ranges.map((c) => forward(c.url, req, url, body)))) {
+        for (const r of await Promise.all(cells.map((c) => forward(c, req, url, body)))) {
           if (r.status < 200 || r.status >= 300) {
             void r.arrayBuffer().catch(() => {});
             continue;
@@ -976,7 +976,7 @@ export async function startEdge(options: EdgeOptions): Promise<Edge> {
           }
         }
         if (parts.length === 0) return fail(503, "temporarily unable to serve context");
-        return Response.json({ ...sumUsage(parts), cellsDown: ranges.length - parts.length });
+        return Response.json({ ...sumUsage(parts), cellsDown: cells.length - parts.length });
       }
       count("forwarded", cell);
       return forward(cell, req, url, body);

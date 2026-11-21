@@ -661,7 +661,9 @@ test("the edge routes a request to its user's bucket's cell, forget to one, usag
   const edge = await startEdge({
     config: { port: 0, host: "127.0.0.1", keys: new Map([[KEY, "acme"]]), dev: false },
     ranges: [
-      { lo: 0, hi: BUCKETS / 2 - 1, url: `http://127.0.0.1:${a.port}` },
+      // Cell a owns two disjoint ranges: still one cell for usage and the cells gauge.
+      { lo: 0, hi: 99, url: `http://127.0.0.1:${a.port}` },
+      { lo: 100, hi: BUCKETS / 2 - 1, url: `http://127.0.0.1:${a.port}` },
       { lo: BUCKETS / 2, hi: BUCKETS - 1, url: `http://127.0.0.1:${b.port}` },
     ],
   });
@@ -680,10 +682,14 @@ test("the edge routes a request to its user's bucket's cell, forget to one, usag
     await post(inA, "/v1/forget");
     expect(seen.a).toEqual(["/v1/forget"]);
     expect(seen.b).toEqual([]);
-    // Usage sums across every cell.
+    // Usage sums across every cell, once each: cell a's two ranges are one fetch.
     const usage = (await (await post(inA, "/v1/usage")).json()) as { calls: number; cellsDown: number };
     expect(usage.calls).toBe(2);
     expect(usage.cellsDown).toBe(0);
+    expect(seen.a.filter((p) => p === "/v1/usage")).toEqual(["/v1/usage"]);
+    expect(seen.b.filter((p) => p === "/v1/usage")).toEqual(["/v1/usage"]);
+    const ready = (await (await fetch(`http://127.0.0.1:${edge.port}/readyz`)).json()) as { cells: number };
+    expect(ready.cells).toBe(2);
     // Metrics name the cells the requests were counted for.
     const text = await (await fetch(`http://127.0.0.1:${edge.port}/metrics`)).text();
     expect(text).toContain("eden_edge_cells 2");
