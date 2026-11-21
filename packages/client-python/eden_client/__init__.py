@@ -352,6 +352,8 @@ class EdenClient:
         # Shadow mode (the TS client's `shadow`, D282): what Eden returns is not given to the agent, so the server is
         # told (`?shadow=1` on events and pending) and learns nothing from it as if the agent had been shown it.
         self._shadow = shadow is True
+        # Sources a bare-signal advice was already reported for (D2008): once per source and process.
+        self._signal_advice_seen: set = set()
         self._opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
                         if bypass_proxies else _OPENER)
         bad = [f for f, v in (("tenantId", tenant_id), ("userId", user_id), ("sessionId", session_id))
@@ -527,9 +529,18 @@ class EdenClient:
         res = self._post("/v1/sources/changed", {**self._who(session=False), "sourceId": source_id})
         if not isinstance(res, dict):
             return None
+        # The server can re-read this source's items by ref, so a bare signal is the expensive shape (D2008):
+        # once per source and process, as ``n``'s distinct-problem-once rule has it.
+        if res.get("advice") == "refs" and source_id not in self._signal_advice_seen:
+            self._signal_advice_seen.add(source_id)
+            self._report(EdenError(
+                "eden /v1/sources/changed: this source re-reads items by ref; send the changed refs "
+                "(/v1/sources/refs) or the items themselves, not a bare signal (a signal re-reads every held copy)"))
         out: Dict[str, Any] = {"synced": res.get("synced") is True}
         if res.get("reason") in _REASONS:
             out["reason"] = res["reason"]
+        if res.get("advice") == "refs":
+            out["advice"] = "refs"
         return out
 
     def _pushed(self, path: str, field: str, count: str, source_id: str, part: List[Any]) -> Optional[int]:

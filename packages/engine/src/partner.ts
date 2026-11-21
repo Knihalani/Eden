@@ -4058,7 +4058,9 @@ export class ContextPartner {
     // A held search page predates the change: the next lookup asks the source again.
     this.fanout.dropResults(scope, sourceId);
     if (took) this.pollRevised(scope, sourceId);
-    return took ? { synced: true } : { synced: false, reason: this.sync.ignoredBecause(scope, sourceId) };
+    if (!took) return { synced: false, reason: this.sync.ignoredBecause(scope, sourceId) };
+    // A bare signal on a source that re-reads by ref costs every held copy: name what changed instead (D2008).
+    return this.sync.fetchesById(scope, sourceId) ? { synced: true, advice: "refs" } : { synced: true };
   }
 
   /**

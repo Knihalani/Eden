@@ -288,6 +288,19 @@ class Calls(unittest.TestCase):
             stub.close()
 
 
+    def test_a_bare_signal_on_a_ref_fetching_source_warns_once(self):
+        # D2008: the server's `advice: "refs"` is reported to ``n`` once per source and process.
+        stub = Stub(lambda path, body: (200, {"ok": True, "synced": True, "advice": "refs"}))
+        try:
+            c, errors = client(stub.url)
+            self.assertEqual(c.source_notice("mail"), {"synced": True, "advice": "refs"})
+            self.assertEqual(c.source_notice("mail"), {"synced": True, "advice": "refs"})
+            self.assertEqual(c.source_notice("news"), {"synced": True, "advice": "refs"})
+            self.assertEqual(len(errors), 2)
+            self.assertIn("refs", str(errors[0]))
+        finally:
+            stub.close()
+
     def test_shadow_sends_shadow_on_events_and_pending(self):
         # Parity with the TS client's `shadow` (D282): without `?shadow=1` the server learns from packets no agent saw.
         def answer(path, body):

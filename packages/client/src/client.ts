@@ -220,6 +220,8 @@ type EventInput = AgentEvent extends infer E
 export class EdenClient {
   private readonly baseUrl: string;
   private readonly onError: ((error: unknown) => void) | null;
+  /** Sources a bare-signal advice was already reported for (D2008): once per source and process. */
+  private readonly signalAdviceSeen = new Set<string>();
   private readonly apiKey: string | undefined;
 
   constructor(private readonly options: EdenClientOptions) {
@@ -462,14 +464,26 @@ export class EdenClient {
    */
   async sourceNotice(sourceId: string): Promise<SourceChangedResult | null> {
     const { tenantId, userId } = this.options;
-    const res = await this.post<{ synced?: unknown; reason?: unknown }>("/v1/sources/changed", {
+    const res = await this.post<{ synced?: unknown; reason?: unknown; advice?: unknown }>("/v1/sources/changed", {
       ...(tenantId ? { tenantId } : {}),
       userId,
       sourceId,
     });
     if (!res) return null;
+    // The server can re-read this source's items by ref, so a bare signal — which re-reads every held copy — is the
+    // expensive shape (D2008). Said once per source and process, as `onError`'s distinct-problem-once rule has it.
+    if (res.advice === "refs" && !this.signalAdviceSeen.has(sourceId)) {
+      this.signalAdviceSeen.add(sourceId);
+      this.report(
+        new Error(
+          "eden /v1/sources/changed: this source re-reads items by ref; send the changed refs " +
+            "(/v1/sources/refs) or the items themselves, not a bare signal (a signal re-reads every held copy)",
+        ),
+      );
+    }
     const reason = typeof res.reason === "string" && REASONS.has(res.reason) ? res.reason : undefined;
-    return { synced: res.synced === true, ...(reason ? { reason: reason as SourceChangedReason } : {}) };
+    const advice = res.advice === "refs" ? { advice: "refs" as const } : {};
+    return { synced: res.synced === true, ...(reason ? { reason: reason as SourceChangedReason } : {}), ...advice };
   }
 
   /** `/v1/sources/refs` (D347): the server's answer, or null when it did not take the call. */

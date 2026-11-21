@@ -338,6 +338,43 @@ describe("sourceRefs (D347): a notice naming its changed refs", () => {
     expect(kept.map((x) => x.item.text).join(" ")).toContain("30 November");
   });
 
+  test("a bare signal on a ref-fetching source answers with the refs advice (D2008)", async () => {
+    const { p, user } = await setup();
+    expect(p.sourceNotice(user, "mail")).toEqual({ synced: true, advice: "refs" });
+  });
+
+  test("no refs advice when the source cannot re-read by ref (D2008)", async () => {
+    const src = new Mail();
+    for (let i = 0; i < 3; i++) src.add(`n${i}`, `Note ${i}`, `Note ${i}`, T0 - i * HOUR);
+    (src as { fetchesById?: boolean }).fetchesById = false;
+    let clock = T0;
+    const user = { tenantId: "t1", userId: "u3" };
+    const p = new ContextPartner({
+      sources: async () => [src],
+      sourceMap: new SourceMap(":memory:", { seed: 1 }),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => clock,
+      config: {
+        ...CORE_CONFIG,
+        sync: true,
+        syncPush: true,
+        syncOnDemand: true,
+        syncPageSize: 1,
+        syncPollPageSize: 1,
+        syncCallsPerMin: 600,
+        verifyDelivery: true,
+      },
+    });
+    p.sync!.track(user, clock);
+    while (!p.sync!.warm(user)) {
+      clock += 1_000;
+      await p.sync!.tick();
+    }
+    expect(p.sourceNotice(user, "mail")).toEqual({ synced: true });
+  });
+
   test("a landed read is noted in that user's sessions only: another user's sessions are not walked", async () => {
     const { p, src, user, user2, at } = await setup();
     type S = { checks?: Map<string, unknown>; closed: boolean };

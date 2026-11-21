@@ -508,6 +508,21 @@ describe("change notifications", () => {
     expect(await odd.sourceChanged("mail")).toBe(false);
   });
 
+  test("a bare signal on a ref-fetching source warns once via onError (D2008)", async () => {
+    const errors: unknown[] = [];
+    const eden = new EdenClient({
+      userId: "u",
+      sessionId: "s",
+      fetch: replying(() => ({ ok: true, synced: true, advice: "refs" })),
+      onError: (e) => errors.push(e),
+    });
+    expect(await eden.sourceNotice("mail")).toEqual({ synced: true, advice: "refs" });
+    expect(await eden.sourceNotice("mail")).toEqual({ synced: true, advice: "refs" });
+    expect(await eden.sourceNotice("news")).toEqual({ synced: true, advice: "refs" });
+    expect(errors.length).toBe(2);
+    expect(String(errors[0])).toContain("refs");
+  });
+
   test("unreachable or an error status: sourceNotice null, sourceChanged false, reported to onError", async () => {
     const errors: unknown[] = [];
     const down = new EdenClient({
