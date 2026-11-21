@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""`ask_context` for Gemini CLI as a minimal MCP stdio server (newline-delimited JSON-RPC).
+"""`ask_context` for Qwen Code as a minimal MCP stdio server (newline-delimited JSON-RPC).
 
-Gemini CLI cannot add tools through hooks, so the installer registers this as an MCP server
+Qwen Code cannot add tools through hooks, so the installer registers this as an MCP server
 (`mcpServers.eden` in settings.json). It implements the three messages the host sends —
-`initialize`, `tools/list`, `tools/call` — and answers `ask_context` through `EdenGemini`'s own
+`initialize`, `tools/list`, `tools/call` — and answers `ask_context` through `EdenQwen`'s own
 ask path. `pending_context` drains the packets Eden pushed; an `ask_context` reply carries them
 too, after the answer — the pending queue is the shared one the hooks drain, so a packet goes
 once. Never reported, never checked. Stdlib only; dies quietly on anything unexpected.
@@ -43,14 +43,19 @@ TOOLS = [
 def _home():
     import os
 
-    env_home = os.environ.get("GEMINI_CLI_HOME")
-    return Path(env_home).expanduser() if env_home else Path.home() / ".gemini"
+    env_home = next((os.environ.get(n) for n in ("QWEN_CODE_HOME", "QWEN_CLI_HOME")
+                     if os.environ.get(n)), None)
+    if env_home:
+        return Path(env_home).expanduser()
+    here = Path(__file__).resolve()
+    # Installed as <home>/eden/eden-mcp.py; in a repo checkout, the default home.
+    return here.parents[1] if here.parent.name == "eden" else Path.home() / ".qwen"
 
 
 def _plugin():
-    from eden_client.gemini import EdenGemini
+    from eden_client.qwen import EdenQwen
 
-    return EdenGemini(home=_home(), plugin_file=Path(__file__).resolve())
+    return EdenQwen(home=_home(), plugin_file=Path(__file__).resolve())
 
 
 def reply(msg_id, result):
@@ -78,12 +83,12 @@ def main() -> int:
             })
         elif method == "tools/list":
             reply(msg_id, {"tools": TOOLS})
-        elif msg_id == "tools/call":
+        elif method == "tools/call":
             params = msg.get("params") or {}
             if plugin is None:
                 plugin = _plugin()
             try:
-                # MCP calls carry no Gemini session id; the hooks' state files name the live one,
+                # MCP calls carry no Qwen session id; the hooks' state files name the live one,
                 # so the ask lands in the same session the tool hooks check.
                 from eden_client.claude import latest_session_id
                 from eden_client.hermes import _joined

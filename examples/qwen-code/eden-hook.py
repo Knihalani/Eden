@@ -37,7 +37,12 @@ def main() -> int:
 
         env_home = next((os.environ.get(n) for n in ("QWEN_CODE_HOME", "QWEN_CLI_HOME")
                          if os.environ.get(n)), None)
-        home = Path(env_home).expanduser() if env_home else Path.home() / ".qwen"
+        if env_home:
+            home = Path(env_home).expanduser()
+        else:
+            here = Path(__file__).resolve()
+            # Installed as <home>/eden/eden-hook.py; in a repo checkout, the default home.
+            home = here.parents[1] if here.parent.name == "eden" else Path.home() / ".qwen"
         plugin = EdenQwen(home=home, plugin_file=Path(__file__).resolve())
         result = dispatch(plugin, event, payload)
         if not isinstance(result, dict):

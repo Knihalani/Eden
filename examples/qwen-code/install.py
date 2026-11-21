@@ -147,7 +147,7 @@ def merge_settings(home, dest):
         commands = [
             h.get("command")
             for entry in entries
-            for h in (entry.get("hooks") if isinstance(entry, dict) else [])
+            for h in ((entry.get("hooks") or []) if isinstance(entry, dict) else [])
             if isinstance(h, dict)
         ]
         if command not in commands:
@@ -162,9 +162,11 @@ def merge_settings(home, dest):
     if had_comments:
         # The merged file is rewritten as plain JSON — keep the commented original beside it
         # rather than silently deleting the user's notes and commented-out settings.
+        # Refresh every time (the latest commented original is the one worth keeping) and match
+        # the source file's mode — it may hold commented-out credentials.
         backup = settings_path.with_suffix(".json.eden-backup")
-        if not backup.exists():
-            backup.write_bytes(settings_path.read_bytes())
+        backup.write_bytes(settings_path.read_bytes())
+        backup.chmod(settings_path.stat().st_mode & 0o777)
         print(f"note: {settings_path} had comments; the original is kept at {backup}",
               file=sys.stderr)
     write_json(settings_path, settings)
