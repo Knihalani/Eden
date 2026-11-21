@@ -87,6 +87,14 @@ describe("the grader on a neutral task", () => {
     expect(gradeMessages(task("control"), "x")[0]!.content).not.toContain("any other");
     expect(gradeMessages(task("hidden"), "x")[0]!.content).not.toContain("any other");
   });
+  test("the hidden prompt credits the substance: operative specifics, not every detail (D2085)", () => {
+    const sys = gradeMessages(task("hidden"), "x")[0]!.content;
+    expect(sys).toContain("operative specifics");
+    expect(sys).toContain("need not repeat the fact's every detail");
+    // Only the hidden branch loosens: control and neutral keep their own wording.
+    expect(gradeMessages(task("control"), "x")[0]!.content).not.toContain("operative specifics");
+    expect(gradeMessages(task("neutral"), "x")[0]!.content).not.toContain("operative specifics");
+  });
 });
 
 describe("the funnel's neutral summary", () => {
