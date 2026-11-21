@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "../../packages/primitives/src/tmpdir";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // The MCP-only installer (examples/mcp-agents/install.py) merges one `eden` server entry into each
@@ -24,7 +24,7 @@ const dir = (base: string, rel: string) => {
 
 describe.skipIf(!python)("the MCP-only installer", () => {
   test("merges JSON (mcpServers/mcp/context_servers), Goose YAML and Codex TOML; reinstall dedupes; uninstall removes", () => {
-    const base = mkdtempSync(join(tmpdir(), "eden-mcp-agents-"));
+    const base = tmpDir("eden-mcp-agents-");
     const cline = dir(base, "cline/settings.json");
     writeFileSync(cline, JSON.stringify({ mcpServers: { other: { command: "x" } } }));
     const zed = dir(base, "zed/settings.json");
@@ -113,7 +113,7 @@ describe.skipIf(!python)("the MCP-only installer", () => {
   });
 
   test("--list reports each agent's detection, and a config that isn't JSON is warned, not clobbered", () => {
-    const base = mkdtempSync(join(tmpdir(), "eden-mcp-agents-"));
+    const base = tmpDir("eden-mcp-agents-");
     const listed = run(["--list"], { HOME: base });
     for (const name of [
       "cline",
@@ -143,7 +143,7 @@ describe.skipIf(!python)("the MCP-only installer", () => {
   });
 
   test("Goose indents/comments, Continue preserves other servers, Codex drops env subtables, remote env rides, modes stay 0600", () => {
-    const base = mkdtempSync(join(tmpdir(), "eden-mcp-agents-"));
+    const base = tmpDir("eden-mcp-agents-");
     const env = { EDEN_URL: "https://e", EDEN_API_KEY: "k9", EDEN_USER_ID: "u1", EDEN_TENANT_ID: "t1" };
 
     // Goose: a comment may trail `extensions:` and children may sit at four spaces — the sibling

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readerKey, type ReaderInput, type ReaderMaker } from "@eden/engine";
 import {
@@ -74,7 +74,7 @@ describe("distilled reader", () => {
   });
 
   test("cascade: a confident call never reaches the reader; the rest do, counted per suite", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "distill-"));
+    const dir = tmpDir("distill-");
     const file = join(dir, "m.json");
     const inner = new Fixed();
     const silent = new DistilledReaderMaker("cascade", inner, file, flat(0.01, 0.05, null));
@@ -101,7 +101,7 @@ describe("distilled reader", () => {
   });
 
   test("record writes the verdict; labels replays it by task and key with no model", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "distill-"));
+    const dir = tmpDir("distill-");
     const rec = join(dir, "rec.jsonl");
     const inner = new Fixed();
     const r = new DistilledReaderMaker("record", inner, rec);

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CARD_FORM_REQUESTS, cardKey, type CardBatch, type CardMakeOptions, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
@@ -15,7 +15,7 @@ const signal = new AbortController().signal;
 const F = { form: CARD_FORM_REQUESTS };
 
 function file(): string {
-  const f = join(mkdtempSync(join(tmpdir(), "eden-form-")), "cards.jsonl");
+  const f = join(tmpDir("eden-form-"), "cards.jsonl");
   const lines = [
     { h: cardKey(it1), c: null, r: ["old request"] },
     { h: formKey(it1, CARD_FORM_REQUESTS), c: null, r: ["new request"] },
@@ -59,12 +59,12 @@ test("a requests-only re-ask replays the form's requests, and asks the live make
 });
 
 test("a file with no line of the form replays as recorded (the full index predates it); one with any does not mix", async () => {
-  const f = join(mkdtempSync(join(tmpdir(), "eden-form-")), "old.jsonl");
+  const f = join(tmpDir("eden-form-"), "old.jsonl");
   writeFileSync(f, `${JSON.stringify({ h: cardKey(it1), c: null, r: ["old request"] })}\n`);
   const old = await new DiskCardMaker(f).make([it1, it2], "2026-10-27", signal, false, true, F);
   expect(old.requests).toEqual([["old request"], null]);
   // `file()` holds form-3 lines: an item with only a shipped-form line is a miss under the form.
-  const both = join(mkdtempSync(join(tmpdir(), "eden-form-")), "both.jsonl");
+  const both = join(tmpDir("eden-form-"), "both.jsonl");
   writeFileSync(
     both,
     [
@@ -89,7 +89,7 @@ test("shipped coverage under form 3 covers only the shards holding form-3 lines 
 });
 
 test("the cards and the requests choose their replay form apart (a form-3 cards file beside a shipped-form intent file)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-form-"));
+  const dir = tmpDir("eden-form-");
   const cards = join(dir, "cards.jsonl");
   const intent = join(dir, "intent.jsonl");
   writeFileSync(cards, `${JSON.stringify({ h: formKey(it1, CARD_FORM_REQUESTS), c: null })}\n`);
@@ -102,8 +102,8 @@ test("the cards and the requests choose their replay form apart (a form-3 cards 
 });
 
 test("a live form-19 none card with a state is recorded with it and replays with it (cardsState, D1193)", async () => {
-  const out = join(mkdtempSync(join(tmpdir(), "eden-form-")), "out.jsonl");
-  const writes = join(mkdtempSync(join(tmpdir(), "eden-form-")), "cards.jsonl");
+  const out = join(tmpDir("eden-form-"), "out.jsonl");
+  const writes = join(tmpDir("eden-form-"), "cards.jsonl");
   // A file holding the form's lines (one for another item), so it is read under the form's keys.
   writeFileSync(writes, `${JSON.stringify({ h: formKey(it2, CARD_FORM_REQUESTS + 16), c: null, r: ["x"] })}\n`);
   const cleared = { kind: "none", actions: [], entities: [], statement: "fitters hold lifted", state: "lifted" };

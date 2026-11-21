@@ -3,9 +3,9 @@
  * SDK's stdio client, one full round trip.
  */
 import { Database } from "bun:sqlite";
+import { tmpDir } from "@eden/primitives";
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -90,7 +90,7 @@ describe("StdioServerTransport", () => {
 });
 
 test("mcp-stdio.ts as a subprocess: the SDK's stdio client initializes, lists and asks", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-stdio-"));
+  const dir = tmpDir("eden-stdio-");
   const sources = join(dir, "sources.json");
   writeFileSync(
     sources,
@@ -125,7 +125,7 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   test(`mcp-stdio.ts stopped by ${signal} after an ask writes the mentions it learned (D1780's review)`, async () => {
     // Mentions are written behind, within a second; a signal's default action skips the `exit` listener that would
     // write them, so mcp-stdio closes the map on each signal. Before, this file held 0 mention rows after the ask.
-    const dir = mkdtempSync(join(tmpdir(), "eden-stdio-sig-"));
+    const dir = tmpDir("eden-stdio-sig-");
     const sources = join(dir, "sources.json");
     const doc = (ref: string, title: string, text: string) => ({ ref, title, text });
     writeFileSync(

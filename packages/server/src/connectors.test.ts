@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sourcesFromEnv, staticSources } from "./connectors";
 import { SourceConfigError } from "./user-sources";
 
-const dir = mkdtempSync(join(tmpdir(), "eden-conn-"));
+const dir = tmpDir("eden-conn-");
 let n = 0;
 const write = (body: unknown) => {
   const p = join(dir, `s${++n}.json`);

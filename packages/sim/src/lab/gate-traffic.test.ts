@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Label } from "../sessions";
 import {
@@ -105,7 +105,7 @@ describe("reuse across one user's sessions", () => {
 });
 
 describe("gate-traffic end to end (one seed, 15 sessions, no model)", () => {
-  const out = join(mkdtempSync(join(tmpdir(), "gate-traffic-")), "g.json");
+  const out = join(tmpDir("gate-traffic-"), "g.json");
   const run = spawnSync(
     "bun",
     [join(import.meta.dir, "gate-traffic.ts"), "--seeds", "41", "--sessions", "15", "--reuse", "--json", out],

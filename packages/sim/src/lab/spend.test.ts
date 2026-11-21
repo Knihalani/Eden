@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SpendCapReached, SpendLedger, summarizeLedger, type LedgerLine } from "./spend";
 
@@ -15,7 +15,7 @@ const record = (costUsd: number) => ({
 
 describe("SpendLedger", () => {
   test("refuses a call that would pass the cap, counting other processes' lines", () => {
-    const path = join(mkdtempSync(join(tmpdir(), "spend-")), "ledger.jsonl");
+    const path = join(tmpDir("spend-"), "ledger.jsonl");
     const a = new SpendLedger(path, 1, "a", 0.1);
     const b = new SpendLedger(path, 1, "b", 0.1);
     const ma = a.meter("agent");

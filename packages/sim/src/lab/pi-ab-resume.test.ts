@@ -6,8 +6,8 @@
  * results file equals the one an unbroken run writes.
  */
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunResult } from "./ab-common";
 import { partialPath } from "./run-journal";
@@ -90,7 +90,7 @@ describe("pi-ab --resume (D813)", () => {
     test(
       shape.name,
       async () => {
-        const dir = mkdtempSync(join(tmpdir(), "pi-ab-resume-"));
+        const dir = tmpDir("pi-ab-resume-");
         const [whole, cut] = await Promise.all([
           piAb(dir, "whole", "whole.json", shape.extra),
           piAb(dir, "cut", "cut.json", shape.extra, shape.killAfter),
