@@ -498,14 +498,15 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       });
       // An expected item the agent already has (delivered earlier in the session) counts as met: delivering it again
       // would be a repeat, which the engine rightly suppresses — until a context_reset (D2006) drops the session's
-      // shown marks. `had` models that same memory: cleared on a reset turn, so a pre-reset delivery is no credit
-      // toward a later expect and the item must be delivered again to be found.
+      // shown marks. `had` models that same memory — but by ARRIVAL (`deliveries` is take-indexed, unlike
+      // `byOrigin`'s cause-indexing): a packet decided pre-reset and taken after it is held after it, so a reset
+      // that falls between decision and take must not clear it; a pre-reset arrival clears as before.
       const had = new Set<string>();
       session.turns.forEach((turn, i) => {
         if (turn.event.kind === "context_reset") had.clear();
+        for (const id of deliveries[i] ?? []) had.add(id);
         const got = byOrigin[i]!;
         const before = new Set(had);
-        for (const id of got) had.add(id);
         if (!turn.expect) return;
         // The acting suite's labels (D810) are scored apart, so the three headline numbers keep their meaning.
         if (turn.expect === "neutral") {
