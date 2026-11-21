@@ -159,7 +159,9 @@ export {
   MAX_CANDIDATE_BYTES,
   READER_POOL_CAP,
   TIME_WORD,
+  MONTH,
   docYears,
+  docSpan,
   idNumbers,
   sameEntry,
   sameRef,
@@ -174,6 +176,7 @@ export type {
   ReaderSink,
   Undo,
 } from "./partner-verdict";
+import { MONTH } from "./partner-verdict";
 import { isPacked } from "./packed-text";
 import {
   ASK_LATE_LEAD,
@@ -296,6 +299,8 @@ export interface Session {
     turn: number;
     terms: string[];
     years: number[];
+    /** The record's own date range (`docSpan`), kept so a stale same-entity sibling is judged against it. */
+    span?: [number, number];
   }[];
   /** Injections handed to the agent and not yet judged used or unused. */
   outstanding: Map<string, Outstanding>;
@@ -784,7 +789,7 @@ export class ContextPartner extends PartnerAsk {
     const ranked = this.rank(s, cue);
     if (ranking) spans!.close(ranking, { candidates: ranked.length });
     const sure = spans?.open("fast.confident", cue.span);
-    let fast = this.confident(ranked, cue);
+    let fast = this.confident(s, ranked, cue);
     // "Who is he?" (D1982): when an item's title IS the carried person's name, it alone answers.
     if (ASKS_WHO.test(cue.raw) && event.kind === "user_message") {
       const who = cleanEntities(cue.entities)
@@ -1840,9 +1845,6 @@ export function copiesOf(items: readonly ContextItem[], withTimes: boolean): Cop
       : { id: it.id, sourceId: it.sourceId, version: versionOf(it) },
   );
 } /** A clock time ("9:15", "14:00", "3pm"), a day and month either way round, or a weekday (`revisionDiff`). */
-export const MONTH =
-  "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|" +
-  "nov(?:ember)?|dec(?:ember)?)";
 export const TIME_OR_DATE = new RegExp(
   "\\b(?:([01]?\\d|2[0-3]):([0-5]\\d)(?:\\s?([ap]m))?|(1[0-2]|0?[1-9])\\s?([ap]m)|" +
     `(\\d{1,2})(?:st|nd|rd|th)?\\s${MONTH}|${MONTH}\\s(\\d{1,2})(?:st|nd|rd|th)?|` +
