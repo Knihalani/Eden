@@ -36,6 +36,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D17 | 2026-10-27 | Session lifecycle: each session owns an AbortController; session_end, eviction and `forget` abort its in-flight work, and no step after an… | adopted |
 | D18 | 2026-10-27 | Usage tracking starts when an injection is handed to the agent, not when it is built; explicit feedback corrects an outcome already… | adopted |
 | D19 | 2026-10-27 | No free model text reaches the agent outside the data envelope: the judge returns indexes only, and ask answers are wrapped in the same… | adopted |
+| D2016 | 2026-11-21 | Adopted: a test runs every command the docs name. | adopted |
 | D20 | 2026-10-27 | `@eden/primitives` holds the direction-agnostic building blocks (hashing, tokenizer + interner, multi-pattern matcher, top-k, S3-FIFO… | adopted |
 | D21 | 2026-10-27 | The secret gate prefilters rules with one Aho–Corasick pass over all keywords; keyword-less rules get literals every match contains. | adopted |
 | D22 | 2026-10-27 | Hot kernels stay in TypeScript on Bun: no Rust (bun:ffi, napi-rs or WASM) for now. | adopted |

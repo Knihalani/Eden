@@ -608,6 +608,23 @@ export const PATHS = {
   deadEnds: join(DOCS, "DEAD-ENDS.md"),
 };
 
+/**
+ * A page's content with the table padding taken out: the committed pages are prettier-formatted (padded cells) and
+ * `stale` must not read that as out of date — it compares cells, not bytes.
+ */
+export const unpadded = (text: string) =>
+  text
+    .split("\n")
+    .map((line) =>
+      line.startsWith("|")
+        ? line
+            .split(/(?<!\\)\|/) // unescaped separators only: a literal `\|` is cell content, not a cell edge
+            .map((c) => c.trim())
+            .join("|")
+        : line,
+    )
+    .join("\n");
+
 /** The committed pages that differ from what would be generated now; empty when both are current. */
 export function stale(): string[] {
   const { index, deadEnds } = generate(readFileSync(PATHS.decisions, "utf8"));
@@ -619,8 +636,10 @@ export function stale(): string[] {
     }
   };
   const out: string[] = [];
-  if (read(PATHS.index) !== index) out.push("docs/DECISION-INDEX.md");
-  if (read(PATHS.deadEnds) !== deadEnds) out.push("docs/DEAD-ENDS.md");
+  if (read(PATHS.index) === null || unpadded(read(PATHS.index)!) !== unpadded(index))
+    out.push("docs/DECISION-INDEX.md");
+  if (read(PATHS.deadEnds) === null || unpadded(read(PATHS.deadEnds)!) !== unpadded(deadEnds))
+    out.push("docs/DEAD-ENDS.md");
   return out;
 }
 
