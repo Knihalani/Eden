@@ -122,7 +122,8 @@ def plan(args: dict, nodes: list[Node], now: float) -> dict:
         if n.down:
             missing.append(n)
         elif n.ready <= 0:
-            measured.append(users_per_box)
+            # Zero readiness is also a draining node's — its held users are still real demand; keep at least them.
+            measured.append(max(n.users, users_per_box))
         elif n.ready < args["processes"]:
             measured.append(n.users * args["processes"] / n.ready)
         else:

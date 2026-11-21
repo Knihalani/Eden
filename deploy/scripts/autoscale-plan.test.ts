@@ -253,3 +253,22 @@ test("--cidr renders the nodes-file lines the new count implies (tofu cidrhost N
   );
   expect(out).toContain("n3=http://10.1.0.13:8790");
 });
+
+test("a draining node's held users still count as demand", () => {
+  // ready=0 on a drain: the node is leaving but its users are real — replacing them with users_per_box (~152
+  // here) would lose demand. n1 drains with 400 held; with them counted the fleet needs 5, without them it
+  // only holds (a scale-in is already blocked by the missing data).
+  const draining = metrics(400, 300).replace("eden_processes_ready 16", "eden_processes_ready 0");
+  const r = run(
+    [
+      ["n1", draining],
+      ["n2", metrics(30, 300)],
+      ["n3", metrics(30, 300)],
+      ["n4", metrics(30, 300)],
+    ],
+    ["--ram-gb", "4", "--processes", "16", "--now", at(12)],
+  );
+  expect(r.code).toBe(0);
+  expect(r.out).toMatch(/add/i);
+  expect(r.out).not.toMatch(/release/i);
+});
