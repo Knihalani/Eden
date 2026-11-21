@@ -151,7 +151,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   const recoverAfter = options.recoverAfter ?? 2;
   const rebalanceMs = options.rebalanceMs ?? 60_000;
   const releasePerUserMs = options.releasePerUserMs ?? 15;
-  /** Users each node last reported holding: the estimate base for its next move's deadline (S1-P6). */
+  /** Users each node last reported holding — on every probe and every membership answer (S1-P6). */
   const heldBy = new Map<string, number>();
   const retryRefusedMs = options.retryRefusedMs ?? 5_000;
   const forwardTimeoutMs = options.forwardTimeoutMs ?? 60_000;
@@ -186,7 +186,10 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     try {
       const r = await fetch(`${n.url}/readyz?all=1`, { signal: AbortSignal.timeout(1_500) });
       if (r.ok) {
-        void r.arrayBuffer().catch(() => {});
+        // The machine's held count rides its ready answer (S1-P6): the next resize's estimate is fresh, not the
+        // count at the last membership — users accrue between them.
+        const body = (await r.json().catch(() => null)) as { held?: number } | null;
+        if (typeof body?.held === "number") heldBy.set(n.id, body.held);
         return "up";
       }
       const body = (await r.json().catch(() => null)) as { error?: string } | null;

@@ -152,9 +152,11 @@ export class Ops {
     return async (req) => {
       const path = pathOf(req.url);
       if (req.method === "GET" && path === "/readyz") {
+        // `held` (S1-P6): the cluster router's probe reads it to keep its per-node move estimate fresh between
+        // memberships; a machine's router sums its children's.
         return this.draining
           ? Response.json({ ready: false, error: "draining" }, { status: 503 })
-          : Response.json({ ready: true });
+          : Response.json({ ready: true, held: this.partner.heldCount() });
       }
       if (req.method === "GET" && path === "/metrics") {
         return new Response(this.metrics(), { headers: { "content-type": "text/plain; version=0.0.4" } });

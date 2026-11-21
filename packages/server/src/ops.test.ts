@@ -220,9 +220,12 @@ test("the router's deadline stretches the node's release budget; the node report
       releaseMs: 50,
     });
   };
+  // The held count also rides /readyz: the cluster probe reads it to keep its move estimate fresh (S1-P6).
+  const o1 = await build();
+  const readyz = await o1.wrap(() => new Response("api"))(new Request("http://x/readyz"));
+  expect((await readyz.json()).held).toBe(1);
   // nodes=["b"] with self "a": u1's bucket is no longer this machine's, so u1 moves.
   // No deadlineMs: the node's own releaseMs rules and the 200 ms hand-off is reported pending.
-  const o1 = await build();
   const a1 = await o1.cluster({ self: "a", nodes: ["b"], epoch: 1, mode: "release" });
   expect(a1.released).toBe(1);
   expect(a1.pending).toBe(1);

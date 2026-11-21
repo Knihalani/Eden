@@ -818,11 +818,12 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     const got = answers.filter((a): a is Record<string, number> => a !== null);
     if (got.length === 0) return fail(503, UNAVAILABLE);
     lastMembership = membership;
-    const sum = { released: 0, written: 0, pending: 0, ms: 0, processesDown: n - got.length };
+    const sum = { released: 0, written: 0, pending: 0, held: 0, ms: 0, processesDown: n - got.length };
     for (const a of got) {
       sum.released += a.released ?? 0;
       sum.written += a.written ?? 0;
       sum.pending += a.pending ?? 0;
+      sum.held += a.held ?? 0; // (S1-P6): the machine's users held, summed over its children
       sum.ms = Math.max(sum.ms, a.ms ?? 0);
     }
     return Response.json(sum);
@@ -867,7 +868,28 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
           // child's crash must not take every user of the machine out, as /healthz says below.
           const up = children.filter((c) => c.up).length;
           const all = url.searchParams.get("all") === "1";
-          if (!draining && (all ? up === n : up > 0)) return Response.json({ ready: true, processes: n, up });
+          if (!draining && (all ? up === n : up > 0)) {
+            // `held` (S1-P6): the cluster probe reads the machine's held count to keep its per-node move estimate
+            // fresh between memberships. Summed from the up children; one not answering counts 0 (its share is
+            // then under-estimated, the bound only tighter — never looser than before).
+            let held = 0;
+            if (all) {
+              held = (
+                await Promise.all(
+                  children.map((c) =>
+                    c.up
+                      ? fetch(`http://127.0.0.1:${c.port}/readyz`, { signal: AbortSignal.timeout(800) })
+                          .then(async (r) =>
+                            r.ok ? (((await r.json().catch(() => null)) as { held?: number } | null)?.held ?? 0) : 0,
+                          )
+                          .catch(() => 0)
+                      : Promise.resolve(0),
+                  ),
+                )
+              ).reduce((s, x) => s + x, 0);
+            }
+            return Response.json({ ready: true, processes: n, up, held });
+          }
           const error = draining ? "draining" : `${n - up} of ${n} processes down`;
           return Response.json({ ready: false, processes: n, up, error }, { status: 503 });
         }
