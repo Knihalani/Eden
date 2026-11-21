@@ -416,11 +416,14 @@ export function assess(
     const t = money || tied(tieOf(st, V)) || (!(V && st.s.startsWith("|")) && tied(tieOf(before, V))) || titled;
     tiedConflict = state === "conflict" ? tiedConflict || t : t;
     state = "conflict";
-    // A statement too terse to name its matter ("Max £200") must not stand as one: an empty set can never share a
-    // word, so every clearance would be blocked forever — an amount's matter is the amount, cleared by amounts.
-    if (isFirm) firm = nonEmpty(wordsFor(st));
+    // A conflict too terse to name its matter ("Max £200" holds no word of four letters or more) is an amount's:
+    // `conflictMatter` stores null for it so a corrected amount can clear it — the gate guards other matters, and
+    // an empty set could never share a word, so kept it would block every amount-clear forever. `firm` and
+    // `conflictWords` keep the empty set instead: no prose clearance or table row can prove it is about the terse
+    // conflict ("the cap was lifted" is indistinguishable from "passport renewed"), so the conservative gate stands.
+    if (isFirm) firm = wordsFor(st);
     if (t) conflictMatter = nonEmpty(wordsFor(st));
-    if (V && t) conflictWords = nonEmpty(wordsFor(st));
+    if (V && t) conflictWords = wordsFor(st);
   };
   // A clearance is a near-miss twin's mark only where something could have blocked: after a blocking statement in
   // the item, or in words that say a block is gone ("lifted", "back from leave", "unchanged"). "Happy to jump on a
