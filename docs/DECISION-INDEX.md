@@ -865,24 +865,14 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2009 | 2026-11-20 | Adopted: a per-user alias table — name parts to their full names — expands a request's anchors, so a person asked for by one form anchors… | adopted |
 | D2011 | 2026-11-20 | Adopted: `pushOpenConstraint` — an opt-in mild filter: on a request the push opened by shape rather than a listed verb, a packet goes only… | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
-| D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
-| D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
 | D2013 | 2026-11-21 | Adopted: `AsyncEden` — the Python client's calls as coroutines. | adopted |
+| D2014 | 2026-11-21 | Adopted: the MCP server drains the pending queue — an MCP-only agent gets push too. | adopted |
 | D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
-| D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
-| D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
-| D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
-| D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
 | D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
 | D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
 | D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
 | D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
 | D2010 | 2026-11-20 | Adopted: a plan-conflict alert repeats once at a request past the one it was sent on. | adopted |
-| D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
-| D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
-| D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
-| D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
-| D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
 | D2003 | 2026-11-20 | Adopted: a user's held "unverifiable" re-reads ride the frozen user blob — a respawn no longer re-fetches what a null already failed to… | adopted |
 | D2002 | 2026-11-20 | Adopted: each source's earned reads ride the frozen user blob too — a respawn no longer restarts a source's penalty run or forgets it… | adopted |
 | D2001 | 2026-11-20 | Adopted: the probe economy rides the frozen user blob — a respawn no longer relearns what probes were worth. | adopted |
