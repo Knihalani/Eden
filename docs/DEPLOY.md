@@ -271,7 +271,10 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
   machine count: divides each tenant's spend cap, D993). A node clears its local copies at start: the store is the
   copy of record. A Hetzner vSwitch (the private network between dedicated servers) joins at most 100 servers.
 - **Cluster router** (`deploy/compose/cluster-router`): `EDEN_NODES_FILE` (`id=url` lines; ids are stable names),
-  `EDEN_API_KEYS` (to hold each tenant's whole rate, D993) and the cluster key. For redundancy run more behind the
+  `EDEN_API_KEYS` (to hold each tenant's whole rate, D993) and the cluster key. For cells (S1-P8, above ~100k
+  users) add each row's cell as a second token (`a=http://… cell-a`) and set `EDEN_CELL` on each cell's routers:
+  membership, placement and the published `cluster-membership.<cell>` doc then scope to that cell's rows, and a
+  cell'd list refuses to boot without `EDEN_CELL` (one router must never merge cells). For redundancy run more behind the
   load balancer with `EDEN_CLUSTER_FOLLOW=1` and the same `EDEN_PERSIST_STORE`: a follower probes and tells nothing —
   it polls the `cluster-membership` doc the leader writes into the store and adopts its placement (S1-P7), so two
   routers never drive competing memberships; when the leader stops writing, a follower's last adopted table keeps
