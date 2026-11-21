@@ -176,6 +176,8 @@ interface MembershipDoc {
 }
 
 const UNAVAILABLE = "temporarily unable to serve context";
+/** The rebalance log kept for callers (`rebalances`); the counter `rebalanceTotal` never trims. */
+const MAX_REBALANCES = 100;
 
 export async function startCluster(options: ClusterOptions): Promise<ClusterRouter> {
   const { config } = options;
@@ -208,11 +210,21 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   let table = new OwnerTable([]);
   const moving = new Uint8Array(BUCKETS);
   const rebalances: Rebalance[] = [];
+  let rebalanceTotal = 0;
   const counts = new Map<string, number>();
   const count = (k: string) => counts.set(k, (counts.get(k) ?? 0) + 1);
   let draining = false;
-  // Rebalances run one at a time, in order.
+  // Everything that mutates membership — a health round, a resize's probe-and-admit, a rebalance — runs one at a
+  // time, in order: an interval's next checkHealth otherwise probes and counts while a round still in flight (its
+  // `reset` may wait a whole `rebalanceMs`) increments fails/oks beside it and drops or readmits nodes too early.
   let chain: Promise<unknown> = Promise.resolve();
+  const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
+    const p = chain.then(fn, fn);
+    chain = p.catch(() => {});
+    return p;
+  };
+  /** The health round in flight (or queued on `chain`): interval callers share it rather than stack rounds. */
+  let checking: Promise<Rebalance | null> | null = null;
 
   /** One `/readyz` probe: up, draining (a stop in progress: a planned leave), or down. */
   const probe = async (n: NodeState): Promise<"up" | "draining" | "down"> => {
@@ -271,80 +283,83 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
    * (another machine now serves those users from the store). A node that does not answer a release is not trusted
    * with its old users: it is taken out and must be reset before it is admitted again (review of D992).
    */
-  const rebalance = (reason: string, mode: "release" | "drop" = "release"): Promise<Rebalance | null> => {
-    const run = async (): Promise<Rebalance | null> => {
-      const ids = nodes.filter((n) => n.member && n.up).map((n) => n.id);
-      const next = new OwnerTable(ids);
-      const movedBuckets = table.moved(next);
-      // Every node that can hear it: the live ones, a draining one (it still holds users), and for a drop the lost one.
-      const told = nodes.filter((n) => n.up || n.draining || (mode === "drop" && n.reset));
-      if (movedBuckets.length === 0 && told.every((n) => n.member && n.up)) {
-        table = next;
-        return null;
-      }
-      const t0 = performance.now();
-      const e = nextEpoch();
-      for (const b of movedBuckets) moving[b] = 1;
-      // S1-P6: each node's bound scales to the users it is expected to move — the buckets leaving it (the old
-      // table still stands here) times the users it reported per bucket — so a big move gets a longer bound
-      // instead of the node falling silent mid-write and being taken out as reset.
-      const ownedBy = new Map<string, number>();
-      const leaving = new Map<string, number>();
-      for (let b = 0; b < BUCKETS; b++) {
-        const o = table.owner(b);
-        if (o !== null) ownedBy.set(o, (ownedBy.get(o) ?? 0) + 1);
-      }
-      for (const b of movedBuckets) {
-        const o = table.owner(b)!;
-        leaving.set(o, (leaving.get(o) ?? 0) + 1);
-      }
-      const deadlineFor = (n: NodeState) => {
-        const owned = ownedBy.get(n.id) ?? 0;
-        if (owned === 0) return rebalanceMs;
-        const est = ((leaving.get(n.id) ?? 0) / owned) * (heldBy.get(n.id) ?? 0);
-        return rebalanceMs + Math.round(est * releasePerUserMs);
-      };
-      publish(movedBuckets);
-      const answers = await Promise.all(
-        told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? deadlineFor(n) : 2_000)),
-      );
-      const silent = told.filter((n, i) => answers[i] === null && n.up && mode === "release");
-      for (const n of silent) {
-        n.up = false;
-        n.reset = true;
-        n.oks = 0;
-      }
-      if (silent.length > 0) {
-        // Routing excludes them now; the next round re-places their buckets the drop way.
-        void Promise.resolve().then(() => rebalance(`no answer from ${silent.map((n) => n.id).join(", ")}`, "drop"));
-      }
+  const rebalance = (reason: string, mode: "release" | "drop" = "release"): Promise<Rebalance | null> =>
+    serialize(() => doRebalance(reason, mode));
+
+  /** The rebalance itself; already-serialized callers (a health round, `setNodes`)
+      run it inside their own `chain` turn. */
+  const doRebalance = async (reason: string, mode: "release" | "drop" = "release"): Promise<Rebalance | null> => {
+    const ids = nodes.filter((n) => n.member && n.up).map((n) => n.id);
+    const next = new OwnerTable(ids);
+    const movedBuckets = table.moved(next);
+    // Every node that can hear it: the live ones, a draining one (it still holds users), and for a drop the lost one.
+    const told = nodes.filter((n) => n.up || n.draining || (mode === "drop" && n.reset));
+    if (movedBuckets.length === 0 && told.every((n) => n.member && n.up)) {
       table = next;
-      for (const b of movedBuckets) moving[b] = 0;
-      publish([]);
-      for (const n of told) if (n.draining && answers[told.indexOf(n)] !== null) n.draining = false;
-      nodes = nodes.filter((n) => n.member || n.up || n.draining);
-      const r: Rebalance = {
-        reason,
-        moved: movedBuckets.length,
-        share: movedBuckets.length / BUCKETS,
-        released: answers.reduce((s, a) => s + (a?.released ?? 0), 0),
-        ms: Math.round(performance.now() - t0),
-        unanswered: told.filter((_, i) => answers[i] === null).map((n) => n.id),
-      };
-      rebalances.push(r);
-      const pending = answers.reduce((s, a) => s + (a?.pending ?? 0), 0);
-      log(
-        `eden cluster: ${reason}: ${r.moved} of ${BUCKETS} buckets moved (${(r.share * 100).toFixed(1)}%), ` +
-          `${r.released} users ${mode === "drop" ? "dropped" : "released"} in ${r.ms} ms; nodes ` +
-          `${ids.join(", ") || "none"}` +
-          (r.unanswered.length > 0 ? `; no answer from ${r.unanswered.join(", ")}` : "") +
-          (pending > 0 ? `; ${pending} store writes still pending (those users may start from an older copy)` : ""),
-      );
-      return r;
+      return null;
+    }
+    const t0 = performance.now();
+    const e = nextEpoch();
+    for (const b of movedBuckets) moving[b] = 1;
+    // S1-P6: each node's bound scales to the users it is expected to move — the buckets leaving it (the old
+    // table still stands here) times the users it reported per bucket — so a big move gets a longer bound
+    // instead of the node falling silent mid-write and being taken out as reset.
+    const ownedBy = new Map<string, number>();
+    const leaving = new Map<string, number>();
+    for (let b = 0; b < BUCKETS; b++) {
+      const o = table.owner(b);
+      if (o !== null) ownedBy.set(o, (ownedBy.get(o) ?? 0) + 1);
+    }
+    for (const b of movedBuckets) {
+      const o = table.owner(b)!;
+      leaving.set(o, (leaving.get(o) ?? 0) + 1);
+    }
+    const deadlineFor = (n: NodeState) => {
+      const owned = ownedBy.get(n.id) ?? 0;
+      if (owned === 0) return rebalanceMs;
+      const est = ((leaving.get(n.id) ?? 0) / owned) * (heldBy.get(n.id) ?? 0);
+      return rebalanceMs + Math.round(est * releasePerUserMs);
     };
-    const p = chain.then(run, run);
-    chain = p.catch(() => {});
-    return p;
+    publish(movedBuckets);
+    const answers = await Promise.all(
+      told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? deadlineFor(n) : 2_000)),
+    );
+    const silent = told.filter((n, i) => answers[i] === null && n.up && mode === "release");
+    for (const n of silent) {
+      n.up = false;
+      n.reset = true;
+      n.oks = 0;
+    }
+    if (silent.length > 0) {
+      // Routing excludes them now; the next round re-places their buckets the drop way.
+      void Promise.resolve().then(() => rebalance(`no answer from ${silent.map((n) => n.id).join(", ")}`, "drop"));
+    }
+    table = next;
+    for (const b of movedBuckets) moving[b] = 0;
+    publish([]);
+    for (const n of told) if (n.draining && answers[told.indexOf(n)] !== null) n.draining = false;
+    nodes = nodes.filter((n) => n.member || n.up || n.draining);
+    const r: Rebalance = {
+      reason,
+      moved: movedBuckets.length,
+      share: movedBuckets.length / BUCKETS,
+      released: answers.reduce((s, a) => s + (a?.released ?? 0), 0),
+      ms: Math.round(performance.now() - t0),
+      unanswered: told.filter((_, i) => answers[i] === null).map((n) => n.id),
+    };
+    // The log a reader inspects, bounded: the metric counts on `rebalanceTotal` so the trim costs nothing.
+    rebalances.push(r);
+    rebalanceTotal++;
+    if (rebalances.length > MAX_REBALANCES) rebalances.splice(0, rebalances.length - MAX_REBALANCES);
+    const pending = answers.reduce((s, a) => s + (a?.pending ?? 0), 0);
+    log(
+      `eden cluster: ${reason}: ${r.moved} of ${BUCKETS} buckets moved (${(r.share * 100).toFixed(1)}%), ` +
+        `${r.released} users ${mode === "drop" ? "dropped" : "released"} in ${r.ms} ms; nodes ` +
+        `${ids.join(", ") || "none"}` +
+        (r.unanswered.length > 0 ? `; no answer from ${r.unanswered.join(", ")}` : "") +
+        (pending > 0 ? `; ${pending} store writes still pending (those users may start from an older copy)` : ""),
+    );
+    return r;
   };
 
   /**
@@ -360,7 +375,12 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     return ok;
   };
 
-  const checkHealth = async (): Promise<Rebalance | null> => {
+  const checkHealth = (): Promise<Rebalance | null> =>
+    (checking ??= serialize(checkHealthRound).finally(() => {
+      checking = null;
+    }));
+
+  const checkHealthRound = async (): Promise<Rebalance | null> => {
     const results = await Promise.all(nodes.map(probe));
     let changed = "";
     let mode: "release" | "drop" = "release";
@@ -391,7 +411,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
         }
       }
     }
-    return changed ? rebalance(changed, mode) : null;
+    return changed ? doRebalance(changed, mode) : null;
   };
 
   /**
@@ -616,7 +636,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
       "# TYPE eden_cluster_requests_total counter",
       ...[...counts].map(([k, v]) => `eden_cluster_requests_total{outcome="${k}"} ${v}`),
       "# TYPE eden_cluster_rebalances_total counter",
-      `eden_cluster_rebalances_total ${rebalances.length}`,
+      `eden_cluster_rebalances_total ${rebalanceTotal}`,
       "",
     ].join("\n");
     return new Response(sumMetrics([own, ...texts]), { headers: { "content-type": "text/plain; version=0.0.4" } });
@@ -641,22 +661,26 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
         }
         return Promise.resolve(null);
       }
-      const ids = new Set(specs.map((s) => s.id));
-      for (const n of nodes) n.member = ids.has(n.id);
-      for (const s of specs) {
-        const known = nodes.find((n) => n.id === s.id);
-        if (known) known.url = s.url;
-        else nodes.push({ ...s, up: false, fails: 0, oks: 0, member: true, draining: false, reset: false });
-      }
-      // A new node joins once it answers: probe the new ones now rather than waiting for the timer's rounds.
-      return Promise.all(
-        nodes.map(async (n) => {
-          if (n.member && !n.up && !n.draining && (await probe(n)) === "up" && (await reset(n))) {
-            n.up = true;
-            n.oks = recoverAfter;
-          }
-        }),
-      ).then(() => rebalance("membership changed"));
+      // On `chain` like a health round: its probes, resets and member flags share the same one-at-a-time rule.
+      return serialize(async () => {
+        const ids = new Set(specs.map((s) => s.id));
+        for (const n of nodes) n.member = ids.has(n.id);
+        for (const s of specs) {
+          const known = nodes.find((n) => n.id === s.id);
+          if (known) known.url = s.url;
+          else nodes.push({ ...s, up: false, fails: 0, oks: 0, member: true, draining: false, reset: false });
+        }
+        // A new node joins once it answers: probe the new ones now rather than waiting for the timer's rounds.
+        await Promise.all(
+          nodes.map(async (n) => {
+            if (n.member && !n.up && !n.draining && (await probe(n)) === "up" && (await reset(n))) {
+              n.up = true;
+              n.oks = recoverAfter;
+            }
+          }),
+        );
+        return doRebalance("membership changed");
+      });
     },
     async stop() {
       draining = true;
