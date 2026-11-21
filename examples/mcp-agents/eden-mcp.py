@@ -50,6 +50,34 @@ def _plugin():
     return EdenGemini(home=_home(), plugin_file=Path(__file__).resolve())
 
 
+def _session_id(plugin, agent):
+    """The newest sibling hook session's id; a pull-only home has none, so the server's own —
+    ``eden-mcp`` (+ the agent's MCP clientInfo name, so ten agents do not share a session) —
+    kept in the state dir for later runs and for hooks sharing the home."""
+    base = "eden-mcp"
+    try:
+        from eden_client.claude import latest_session_id
+
+        sid = latest_session_id(plugin.home)
+        if sid:
+            return sid
+    except Exception:  # noqa: BLE001
+        pass
+    if agent:
+        tag = "".join(c for c in agent.lower() if c.isalnum() or c in "-_")[:24]
+        if tag:
+            base = f"{base}-{tag}"
+    try:
+        # Minting writes the state file once (session_id so latest_session_id finds us);
+        # writing every call would keep our mtime newest and drown a real hook session.
+        if not plugin._state_path(base).exists():
+            with plugin._locked_state(base):
+                pass
+    except Exception:  # noqa: BLE001
+        pass
+    return base
+
+
 def _queued(plugin, client, sid):
     """Queued packets plus any a sibling hook stashed for a channel-less event. Falls back
     to the live queue."""
@@ -66,10 +94,11 @@ def _queued(plugin, client, sid):
 def main() -> int:
     plugin = _plugin()
     clients = {}
+    agent = {"name": None}
     try:
-        from eden_client.hermes import _joined, latest_session_id
+        from eden_client.hermes import _joined
 
-        sid = latest_session_id(plugin.home)
+        sid = _session_id(plugin, None)
         if sid:
             clients[sid] = plugin.client(sid)
     except Exception:  # noqa: BLE001
@@ -91,6 +120,14 @@ def main() -> int:
         method = msg.get("method")
         try:
             if method == "initialize":
+                info = (msg.get("params") or {}).get("clientInfo") or {}
+                if isinstance(info.get("name"), str) and info["name"].strip():
+                    agent["name"] = info["name"].strip()[:40]
+                try:
+                    # A pull-only session is not born of a hook: tell Eden it exists.
+                    plugin.session_start(_session_id(plugin, agent["name"]))
+                except Exception:  # noqa: BLE001
+                    pass
                 emit({"jsonrpc": "2.0", "id": msg_id, "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
@@ -109,7 +146,7 @@ def main() -> int:
                 args = (msg.get("params") or {}).get("arguments") or {}
                 answer = None
                 try:
-                    sid = latest_session_id(plugin.home) if latest_session_id else None
+                    sid = _session_id(plugin, agent["name"])
                     if sid:
                         client = clients.get(sid) or plugin.client(sid)
                         if client is not None:
