@@ -2151,9 +2151,17 @@ export abstract class PartnerVerdict extends PartnerCheck {
         if (!shareNumber && p.refs.size > 0 && n.size > 0) continue;
         if (shareNumber) return true;
         // A rule document of the pick's own matter — the fare rules beside the booking they govern —
-        // links on one shared term. It asks for no rare word and no request word: a policy's own words
-        // are common by nature, and the pick already names the matter.
-        if (isPolicy && [...own].some((t) => p.terms.has(t))) return true;
+        // links on one shared term. It asks for no request word: a policy's own words are common by
+        // nature, and the pick already names the matter. Another party's policy is not its rules —
+        // Lufthansa's beside the TAP booking shares "booking" alone — so a proper name both carry
+        // (the carrier) must bind it; rarity over the small request-time cache would misread a word
+        // common in the unfetched corpus as rare.
+        if (
+          isPolicy &&
+          [...own].some((t) => p.terms.has(t)) &&
+          [...capitalWords(`${item.title} ${item.text}`)].some((c) => p.caps.has(c))
+        )
+          return true;
         // Only a rare word binds: "Nadia" or "lunch" sit on most of the user's items, so another event named
         // with them is a look-alike; "Globex" or a project name few items hold is the item's own topic. The
         // cache index holds raw words, so a word whose stem differs ("meeting" -> "meet") looks absent under

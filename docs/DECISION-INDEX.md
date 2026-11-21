@@ -933,3 +933,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2055 | 2026-11-21 | Adopted: an undated block repeats a dated conflict only when the dated one was tied too. | adopted |
 | D2056 | 2026-11-21 | Adopted: the user-range tally test also runs with `syncPollBehind` off. | adopted |
 | D2057 | 2026-11-21 | Adopted: a rule document of a pick's matter links as a companion on one shared term, common words allowed. | adopted |
+| D2058 | 2026-11-21 | Adopted: one rule document may ride beside the packet the pick cap already closed. | adopted |

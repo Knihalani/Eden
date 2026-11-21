@@ -187,11 +187,14 @@ describe("companions: a delivered item pulls its cross-source companions (D1977)
       { ref: "rail-1", title: "Booking change", text: "Your booking on the 10:00 was moved." },
       // A rule document of another matter links nothing: its words are policy's but no pick shares one.
       { ref: "visa-policy", title: "Visa fee schedule", text: "Fees and surcharges for each visa class." },
+      // Another party's policy is not the pick's rules: TAP's shares "booking" and no name or rare word.
+      { ref: "tap-policy", title: "Changing your TAP booking", text: "Change fees and penalties apply." },
     ]);
     const { ids } = await run("What does my Lisbon flight itinerary say?", [mail]);
     expect(ids).toContain("mail:ba-booking");
     expect(ids).toContain("mail:ba-policy");
     expect(ids).not.toContain("mail:visa-policy");
+    expect(ids).not.toContain("mail:tap-policy");
   });
 
   test("off, the packet is the request's own picks only", async () => {
