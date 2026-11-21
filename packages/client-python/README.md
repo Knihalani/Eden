@@ -1,7 +1,8 @@
 # eden-client (Python)
 
 The Python client for Eden: the same calls and the same fail-open contract as `@eden/client` (TypeScript). Standard
-library only (`urllib`), Python 3.9+, synchronous (from asyncio, wrap calls in `asyncio.to_thread`).
+library only (`urllib`), Python 3.9+, synchronous; asyncio agents use `eden_client.aio.AsyncEden`
+(the same calls as coroutines, run in a worker thread — D2013).
 
 ```python
 from eden_client import EdenClient, with_context, eden_id, ASK_CONTEXT_DESCRIPTION

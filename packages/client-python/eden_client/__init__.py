@@ -10,7 +10,7 @@
 
 Fails open, always (D14): a network error, a timeout, a non-2xx or an answer of the wrong shape is "no context"
 (``None``, ``[]``, or ``proceed`` for ``check``), never an exception in the agent's loop. Errors go to ``on_error``.
-Standard library only (``urllib``), synchronous; from asyncio, call it through ``asyncio.to_thread``.
+Standard library only (``urllib``), synchronous; asyncio agents use ``eden_client.aio.AsyncEden``.
 Never logs the API key; ``on_error`` gets the error, never the request.
 """
 
