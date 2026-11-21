@@ -879,7 +879,11 @@ async function runWorld(
             i.citations.map((c) => c.itemId),
             i.text,
           );
-          tl.point("eden.inject", { items: i.citations.length, chars: i.text.length });
+          tl.point("eden.inject", {
+            items: i.citations.length,
+            chars: i.text.length,
+            ids: i.citations.map((c) => c.itemId),
+          });
         }
         return items.map((i) => i.text).join("\n\n");
       };
