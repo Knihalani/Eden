@@ -312,8 +312,10 @@ def main():
         if not url:
             sys.exit("--remote needs EDEN_URL set")
         env = {"EDEN_URL": url}
-        if os.environ.get("EDEN_API_KEY"):
-            env["EDEN_API_KEY"] = os.environ["EDEN_API_KEY"]
+        # Remote Eden keys the session by user+tenant — without EDEN_USER_ID no client registers.
+        for k in ("EDEN_API_KEY", "EDEN_USER_ID", "EDEN_TENANT_ID"):
+            if os.environ.get(k):
+                env[k] = os.environ[k]
 
     root = find_root(HERE)
     # Uninstall only edits configs — no payload is installed (and none is needed to find
