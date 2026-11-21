@@ -507,8 +507,10 @@ export function assess(
         if (lastBlock >= 0) clear(st);
         elsewhere = true;
       }
-      // A block with no date of its own repeats a dated one before it ("… while Robert is away").
-      else if (lastBlock >= 0 && !firm && !elsewhere) conflict(st, false);
+      // A block with no date of its own repeats a dated one before it ("… while Robert is away"). Once a
+      // *tied* conflict stands the repeat adds nothing, so it is only read again while the dated conflict
+      // before it was another matter's — an untied deadline cannot hide a tied cancellation.
+      else if (lastBlock >= 0 && (!firm || !tiedConflict) && !elsewhere) conflict(st, false);
     }
   }
   // (`state` is set in the closures above, which narrowing does not see.)

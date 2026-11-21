@@ -956,6 +956,9 @@ generated pages (`.gitattributes` merges them as a union so a merge never stops 
 | D2054 | 2026-11-21 | **Adopted: the user-range tally test runs with `sync` on, so the cache is full before each session.** The test merged two shards' tallies and compared the report to the whole run's — but verdict gates read the background sync's progress against the event loop, which is wall-clock timing: whether a poll landed before a request flipped `verify`/`silent`/delivery counts (~2 runs in 6, post-D1982's finer-grained stale gates). `sync` (the lab's prefill, D356) puts every item in the cache up front, so a shard's run and the whole run differ only in what the merge itself does — which is what the test asserts. The flag changes nothing about `mergeTallies`/`qualityReport` under test; the `userRange` validation and sample-concatenation checks are unchanged. |
 
 ||||||| 280f6b5f8
+
+| D2055 | 2026-11-21 | **Adopted: an undated block repeats a dated conflict only when the dated one was tied too.** `assess`'s undated-block branch required `!firm` — a dedup so "… while Robert is away" doesn't re-record the dated block it repeats. But `firm` is set by any dated conflict, tied or not, so an untied past deadline ("supplier invoices were due by 20 October") suppressed a later *tied* undated block ("the Harlow booking is cancelled"): `state` stayed `conflict` yet `tiedConflict` never set, and the final `!tiedConflict → none` dropped a real conflict. The guard is now `!firm || !tiedConflict`: when the dated conflict was itself tied the repeat still adds nothing, and when it was another matter's the tied repeat records its own tie. Falsified in `conflict.test.ts` by restoring `!firm`. |
+
 ## Trial switches
 
 A trial is decided in the branch or session that opened it, as soon as its evidence is in (D814): promoted into
