@@ -102,6 +102,57 @@ export function anchorsOf(
   return { entities, days: set, named, offset };
 }
 
+/**
+ * D2009: `entities` plus the name forms the user's alias table (`ItemCache.aliasTable`) knows for them. A multi-word
+ * name grows by each non-first part the table joins to that same name ("marcus webb" → also "webb"), so an item
+ * naming the person by surname alone anchors the request; a lone part ("webb") grows by each full name holding it,
+ * so an item listing the person as a participant anchors too. The table only joins words that belong to one full
+ * name, so a non-person entity ("plan sl-0381442") gains nothing. At most `cap` extra entities, after the originals.
+ */
+export function aliasExpand(
+  aliases: ReadonlyMap<string, ReadonlySet<string>>,
+  entities: readonly string[],
+  cap = 8,
+): string[] {
+  const out = [...entities];
+  if (aliases.size === 0 || out.length === 0) return out;
+  const seen = new Set(out.map((e) => e.toLowerCase().replace(/\s+/g, " ").trim()));
+  const push = (e: string): "added" | "dup" | "full" => {
+    const key = e.toLowerCase().replace(/\s+/g, " ").trim();
+    if (seen.has(key)) return "dup";
+    if (out.length >= entities.length + cap) return "full";
+    seen.add(key);
+    out.push(e);
+    return "added";
+  };
+  const own: string[][] = entities.map((e) => e.toLowerCase().match(/\p{L}+/gu) ?? []);
+  for (let i = 0; i < entities.length; i++) {
+    const entity = entities[i]!;
+    const ws = own[i]!;
+    if (ws.length === 0) continue;
+    // An identifier's letters are not a name: "LEE-123" must not grow "marcus lee" into its anchors.
+    if (/\d/.test(entity)) continue;
+    if (ws.length === 1) {
+      // A dup only means the name is already there; a full `out` is what stops the sweep.
+      for (const full of aliases.get(ws[0]!) ?? []) if (push(full) === "full") break;
+      continue;
+    }
+    for (const w of ws.slice(1)) {
+      // Two requested people sharing the part must not collapse into it: "marcus webb, sara webb" + "webb" makes
+      // one person's record anchor the other person's name, and `staleSibling` drops the older.
+      if (own.some((w2, j) => j !== i && w2.includes(w))) continue;
+      for (const full of aliases.get(w) ?? []) {
+        const nw: string[] = full.match(/\p{L}+/gu) ?? [];
+        if (ws.every((x) => nw.includes(x))) {
+          push(w);
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export const hasDay = (a: Anchors) => a.days.size > 0 || a.named.length > 0;
 
 /** The calendar days of the time window as `NamedDay`s, so an item that writes the date out ("Fri 13 Nov") matches. */
