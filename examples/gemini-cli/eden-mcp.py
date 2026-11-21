@@ -44,13 +44,31 @@ def _home():
     import os
 
     env_home = os.environ.get("GEMINI_CLI_HOME")
-    return Path(env_home).expanduser() if env_home else Path.home() / ".gemini"
+    if env_home:
+        return Path(env_home).expanduser()
+    here = Path(__file__).resolve()
+    # Installed as <home>/eden/eden-mcp.py; in a repo checkout, the default home.
+    return here.parents[1] if here.parent.name == "eden" else Path.home() / ".gemini"
 
 
 def _plugin():
     from eden_client.gemini import EdenGemini
 
     return EdenGemini(home=_home(), plugin_file=Path(__file__).resolve())
+
+
+def _queued(plugin, client, sid):
+    """Queued packets plus any a sibling hook stashed: a PreToolUse observes this MCP call
+    and cannot show its packets, so it parks them in the session's state file — the reply
+    is the channel that can. Falls back to the live queue if the state file is unreadable."""
+    from eden_client.hermes import _joined
+
+    try:
+        with plugin._locked_state(sid) as state:
+            return _joined(list(state.pop("stashed", []))
+                           + (client.pending() if client is not None else []))
+    except Exception:  # noqa: BLE001
+        return _joined(client.pending()) if client is not None else None
 
 
 def reply(msg_id, result):
@@ -78,7 +96,7 @@ def main() -> int:
             })
         elif method == "tools/list":
             reply(msg_id, {"tools": TOOLS})
-        elif msg_id == "tools/call":
+        elif method == "tools/call":
             params = msg.get("params") or {}
             if plugin is None:
                 plugin = _plugin()
@@ -91,7 +109,7 @@ def main() -> int:
                 sid = latest_session_id(_home()) or "eden-mcp"
                 client = plugin.client(sid)
                 if params.get("name") == "pending_context":
-                    answer = _joined(client.pending()) if client is not None else None
+                    answer = _queued(plugin, client, sid)
                 elif params.get("name") == "ask_context":
                     call_args = params.get("arguments") or {}
                     question = str(call_args.get("question") or "")
@@ -100,7 +118,7 @@ def main() -> int:
                         {"question": question, **({"item": item} if isinstance(item, str) else {})},
                         session_id=sid)
                     # The queue's packets ride the reply: an MCP-only agent has no other channel.
-                    pushed = _joined(client.pending()) if client is not None else None
+                    pushed = _queued(plugin, client, sid)
                     answer = "\n\n".join(t for t in (answer, pushed) if t)
                 else:
                     reply(msg_id, {"content": [{"type": "text", "text": "Unknown tool."}], "isError": True})

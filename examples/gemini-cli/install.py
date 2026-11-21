@@ -146,7 +146,7 @@ def merge_settings(home, dest):
         commands = [
             h.get("command")
             for entry in entries
-            for h in (entry.get("hooks") if isinstance(entry, dict) else [])
+            for h in ((entry.get("hooks") or []) if isinstance(entry, dict) else [])
             if isinstance(h, dict)
         ]
         if command not in commands:

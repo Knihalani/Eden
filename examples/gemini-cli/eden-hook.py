@@ -36,7 +36,12 @@ def main() -> int:
         from eden_client.gemini import EdenGemini, dispatch
 
         env_home = os.environ.get("GEMINI_CLI_HOME")
-        home = Path(env_home).expanduser() if env_home else Path.home() / ".gemini"
+        if env_home:
+            home = Path(env_home).expanduser()
+        else:
+            here = Path(__file__).resolve()
+            # Installed as <home>/eden/eden-hook.py; in a repo checkout, the default home.
+            home = here.parents[1] if here.parent.name == "eden" else Path.home() / ".gemini"
         plugin = EdenGemini(home=home, plugin_file=Path(__file__).resolve())
         result = dispatch(plugin, event, payload)
         if not isinstance(result, dict):
