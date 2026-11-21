@@ -255,6 +255,24 @@ test("surface closeSession reports session_end on the session's queue, then drop
   expect(kinds).toEqual(["session_end"]);
 });
 
+test("surface closeSession during an in-flight sessionFor discards the made session", async () => {
+  const { createLocalSurface } = await import("./surface");
+  // EDEN_URL answers resolveLocalEden's hosted path with no probe, so create() succeeds without a server;
+  // the doomed session's session_start/session_end observes just fail to reach it and are swallowed.
+  const surface = createLocalSurface({
+    pluginDir: "/nope",
+    home: "/nope",
+    env: { EDEN_URL: "http://127.0.0.1:1", EDEN_USER_ID: "u" },
+  });
+  const pending = surface.sessionFor("s-zombie");
+  await surface.closeSession("s-zombie");
+  expect(await pending).toBeNull();
+  expect(surface.sessions.has("s-zombie")).toBe(false);
+  // A later sighting of the same conversation creates it fresh — the tombstone does not stick.
+  expect(await surface.sessionFor("s-zombie")).not.toBeNull();
+  expect(surface.sessions.has("s-zombie")).toBe(true);
+});
+
 test("surface report serializes concurrent callers on the session's queue", async () => {
   const { createLocalSurface } = await import("./surface");
   const surface = createLocalSurface({ pluginDir: "/nope", home: "/nope" });
