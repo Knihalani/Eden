@@ -132,7 +132,7 @@ import {
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
-  CANDIDATES_LEAD,
+  CHECKED_LEAD,
   LOOKUP_HEAD_LEAD,
   LOOKUP_LEAD,
   LOOKUP_QUIET,
@@ -1368,10 +1368,8 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // newer request's delivery landing during the await is never rolled back as if it were ours (review).
       const was = new Map(undelivered.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
       const replaced = new Map<string, LedgerEntry | undefined>();
-      // The candidates' own frame: `build` marks every item it cites, so a packet cut by the ordinary byte cap
-      // would suppress items its text never carried.
-      const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
-      const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
+      // The checked frame: `build` marks every item it cites, so a packet cut by the ordinary byte cap
+      // would suppress items its text never carried; the lead says a check read the items.
       const injection = await this.deliverChecked(
         s,
         undelivered,
@@ -1379,11 +1377,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         `candidates:${cue.id}`,
         cue,
         was,
-        {
-          lead: CANDIDATES_LEAD,
-          itemBytes: each,
-          maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
-        },
+        this.checkedFrame(),
         replaced,
       );
       if (injection === null) return;
@@ -1441,7 +1435,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head"; checked?: boolean } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
@@ -1548,6 +1542,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
       pool,
       ...(unsettled ? { unsettled } : {}),
       ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
+      // `pushCheckedCandidates` (D2083): a check answer decided the packet — its items carry CHECKED_LEAD, not
+      // the unchecked candidates' hedge (a lookup packet keeps its own frame regardless).
+      ...(yes !== null ? { checked: true } : {}),
     };
   }
 
@@ -4054,6 +4051,20 @@ export abstract class PartnerVerdict extends PartnerCheck {
   }
 
   /** `deliver`, after `verifyItems`: null when every item was found gone, or the session closed meanwhile. */
+  /**
+   * `CHECKED_LEAD`'s packet (D2083): how a check's named items are framed and cut — the same bounds as the
+   * candidates' packet (`candidateFrame`), a lead that says the items were read against the request.
+   */
+  protected checkedFrame(nudge = false): PacketFrame {
+    const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
+    const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+    return {
+      lead: nudge ? `${CHECKED_LEAD} ${ASK_NUDGE}` : CHECKED_LEAD,
+      itemBytes: each,
+      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
+    };
+  }
+
   private async deliverChecked(
     s: Session,
     scored: Scored[],
