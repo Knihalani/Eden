@@ -968,6 +968,7 @@ A trial is decided in the branch or session that opened it, as soon as its evide
 `DEFAULT_CONFIG` (measured better or neutral at no extra paid cost) or deleted with its code and tests. No end date
 weeks out and no "owner's call later"; where a cost trade-off remains, the session recommends and the parent decides
 that day. A row here is a trial whose evidence is still being gathered by the session that opened it. The push-check
+| D2077 | 2026-11-21 | **Adopted: a content-hash ref sorts a row's fields before hashing.** `identity()` stringified a row's entries in the server's own order; a connector that fields the same record differently across queries (map iteration, projection) minted a second `eden-h-` ref for it — the cache, ledger and dedup, all keyed by id, would treat it as a new item. Entries are now sorted by key before hashing, volatile-field fallback included. |
 trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |

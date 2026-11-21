@@ -593,11 +593,16 @@ function first(row: Row, keys: string[]): string | undefined {
  * Lee with different emails, two "Standup" events on different days) never share one.
  */
 function identity(row: Row): string {
-  const stable = Object.entries(row).filter(([k]) => !VOLATILE.test(k));
+  // Key order decides the hash, so entries are sorted: a server that fields a row differently across queries would
+  // otherwise mint a second ref for the same record.
+  const byKey = ([a]: [string, unknown], [b]: [string, unknown]) => (a < b ? -1 : a > b ? 1 : 0);
+  const stable = Object.entries(row)
+    .filter(([k]) => !VOLATILE.test(k))
+    .sort(byKey);
   // A row told apart only by a volatile field (a title and a snippet, nothing else) keeps that field: two such rows
   // must not share a ref, and a row with nothing stable has no better identity.
   const distinct = stable.some(([k]) => !TITLE_KEYS.includes(k));
-  return JSON.stringify(Object.fromEntries(distinct ? stable : Object.entries(row)));
+  return JSON.stringify(Object.fromEntries(distinct ? stable : Object.entries(row).sort(byKey)));
 }
 
 /**
