@@ -26,6 +26,14 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     ).toThrow(/"readerPushKinds" has "block"/);
     expect(() => checkEngineConfig([])).toThrow(/must be a JSON object/);
     expect(() => checkEngineConfig({ x: 1 }, { where: "--set" })).toThrow(/^--set: unknown key "x"/);
+    // A malformed sourceKindPriorExtra entry is refused at startup, not per ask (live routing would 503).
+    expect(() => checkEngineConfig({ sourceKindPriorExtra: ["crm 0.75"] })).toThrow(
+      /sourceKindPriorExtra: "crm 0\.75"/,
+    );
+    expect(() => checkEngineConfig({ sourceKindPriorExtra: ["crm:2"] })).toThrow(/sourceKindPriorExtra/);
+    expect(() =>
+      checkEngineConfig({ sourceKindPriorExtra: ["crm tickets:0.75", "google-calendar:0.3"] }),
+    ).not.toThrow();
   });
 
   test("a key needing an unwired dependency is refused off its default, accepted when the caller wires it", () => {

@@ -69,10 +69,15 @@ describe("sourcePriors (D2015)", () => {
     // An extra rule wins over the static table when both match.
     const over = sourcePriors(sources, 20, ["gmail:0.3"])!;
     expect(over.get("gmail")).toEqual({ alpha: 6, beta: 14 });
-    // A malformed entry throws (a silent no-op would reshape no draw).
+    // An entry named like a hyphenated connector id matches it (the words split on hyphens too).
+    const hyph = sourcePriors([{ id: "google-calendar", description: "the calendar" }], 20, ["google-calendar:0.3"])!;
+    expect(hyph.get("google-calendar")).toEqual({ alpha: 6, beta: 14 });
+    // A malformed entry throws (a silent no-op would reshape no draw), the entry bounded and one line.
     expect(() => sourcePriors(sources, 20, ["crm 0.75"])).toThrow("sourceKindPriorExtra");
     expect(() => sourcePriors(sources, 20, ["crm:2"])).toThrow("sourceKindPriorExtra");
     expect(() => sourcePriors(sources, 20, [":0.5"])).toThrow("sourceKindPriorExtra");
+    expect(() => sourcePriors(sources, 20, ["bad\nentry:0.5"])).toThrow(/^sourceKindPriorExtra: "bad\\nentry:0\.5" /);
+    expect(() => sourcePriors(sources, 20, ["x".repeat(500)])).toThrow(/\.{3}" /);
     // Empty extra is the static table alone; strength 0 stays off.
     expect(sourcePriors(sources, 20, [])!.get("crm")).toEqual({ alpha: 0, beta: 10 });
     expect(sourcePriors(sources, 0, ["crm:0.75"])).toBeUndefined();

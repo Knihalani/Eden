@@ -32,8 +32,13 @@ export function extraKindRules(extra: readonly string[] | undefined): readonly {
   if (!extra || extra.length === 0) return [];
   return extra.map((e) => {
     const m = ENTRY.exec(e);
-    if (!m) throw new Error(`sourceKindPriorExtra: "${e}" is not "word word …:mean"`);
-    return { words: m[1]!.toLowerCase().split(/ +/), mean: Number(m[2]) };
+    if (!m) {
+      // JSON.stringify keeps the quoted entry on one line and bounds escapes; the slice bounds its length.
+      const shown = JSON.stringify(e.length > 120 ? `${e.slice(0, 117)}...` : e);
+      throw new Error(`sourceKindPriorExtra: ${shown} is not "word word …:mean"`);
+    }
+    // Words split on hyphens too: a rule named like a hyphenated connector id ("google-calendar") matches it.
+    return { words: m[1]!.toLowerCase().split(/[ -]+/), mean: Number(m[2]) };
   });
 }
 
