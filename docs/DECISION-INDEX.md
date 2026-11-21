@@ -950,3 +950,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2072 | 2026-11-21 | Adopted: Eden for Devin CLI / Devin Desktop — the eleventh agent surface. | adopted |
 | D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |
 | D2075 | 2026-11-21 | Adopted: the python.test.ts union-mangle on main is repaired. | adopted |
+| D2074 | 2026-11-21 | Adopted: Eden for Windsurf Cascade (the twelfth agent surface). | adopted |

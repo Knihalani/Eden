@@ -34,6 +34,10 @@ describe.skipIf(!python)("the unified installer", () => {
       "pi",
       "qwen-code",
     ]) {
+    for (const name of ["claude-code", "cursor", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
+    for (const name of ["claude-code", "cursor", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
+    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
+    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi", "windsurf"]) {
       expect(text).toContain(name);
     }
     expect(text).toMatch(/pi\s+detected/);
@@ -44,6 +48,7 @@ describe.skipIf(!python)("the unified installer", () => {
     expect(text).toMatch(/devin-cli\s+home absent/);
     expect(text).toMatch(/gemini-cli\s+home absent/);
     expect(text).toMatch(/openclaw\s+home absent/);
+    expect(text).toMatch(/windsurf\s+home absent/);
   });
 
   test("--agents selects absent homes too, and rejects names it does not know", () => {
