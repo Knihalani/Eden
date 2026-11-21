@@ -150,6 +150,7 @@ import {
   type FrozenSession,
   type FrozenUnverifiable,
 } from "./partner-freeze";
+import { PartnerCore, mentionsOf } from "./partner-core";
 import { isPacked } from "./packed-text";
 import {
   ASK_LATE_LEAD,
@@ -783,7 +784,7 @@ interface Scored {
  * What a push packet's delivery marked (`readerPushBehind`): per item it marked, the ledger entry before and after,
  * and the sketch it added to the session's near-duplicate memory.
  */
-type Undo = Map<string, { was: LedgerEntry | undefined; set: LedgerEntry; sketch: Sketch | null }>;
+export type Undo = Map<string, { was: LedgerEntry | undefined; set: LedgerEntry; sketch: Sketch | null }>;
 
 /** How one source an ask chose fared (D127; `AskResponse.sources`). */
 type SourceStatus = NonNullable<AskResponse["sources"]>[number];
@@ -811,7 +812,7 @@ const STATUS_WORDS: Record<string, string> = {
   throttled: "rate-limited",
 };
 
-interface Built {
+export interface Built {
   sourceIds: string[];
   /** The delivered items, for the planner's delivery credit when the injection is handed out (D39). */
   items: { sourceId: string; id: string }[];
@@ -839,351 +840,7 @@ const MAX_RECORDED_USERS = 10_000;
  * source map that the sources answering its asks are useless.
  */
 const MAX_OUTSTANDING = 64;
-
-export class ContextPartner {
-  readonly config: EngineConfig;
-  /** The turn gate (`pushGate`, D1014), or null: the rule alone. */
-  private readonly gate: TurnGate | null;
-  private readonly sessions = new Map<string, Session>();
-  /** By user scope key, that user's live sessions (no larger than `sessions`); a session leaves on close. */
-  private readonly userSessions = new Map<string, Set<Session>>();
-  /**
-   * Session knowledge restored with a frozen user (`persistHooks.restored`): each saved session's ledger snapshot
-   * and delivered list. Every new session of the user is seeded from it, so a daemon respawned between turns does
-   * not hand the agent the same packet again (D). Read-only: sessions keep their own copies.
-   */
-  private readonly restoredSessions = new Map<string, FrozenSession[]>();
-  /**
-   * Session snapshots taken in `release` before the user's sessions close (`close` removes them from
-   * `userSessions`, so a snapshot read by the save hook then would be empty). Consumed by `save`.
-   */
-  private readonly frozenPending = new Map<string, FrozenSession[] | null>();
-  /**
-   * `recorded` rows taken in `release` before the user's map entry drops (the save hook reads `recorded` after
-   * `release` deleted it, so a live read there would be empty). Consumed by `save`.
-   */
-  private readonly frozenRecorded = new Map<string, FrozenRecorded[]>();
-  /** Economy snapshot `release` captures before `economy.forget` — `save` consumes it (D2001). */
-  private readonly frozenEconomy = new Map<string, FrozenEconomy | null>();
-  /** Source-yield snapshot `release` captures before `yields.forget` — `save` consumes it (D2002). */
-  private readonly frozenYields = new Map<string, FrozenYields | null>();
-  /** `unverifiable` rows `release` captures before the map drops — `save` consumes them (D2003). */
-  private readonly frozenUnverifiable = new Map<string, FrozenUnverifiable | null>();
-  private readonly perTenant = new Map<string, number>();
-  private readonly built = new WeakMap<Injection, Built>();
-  /**
-   * `revisionNotice`: by user scope key, the live sessions handed at least one item (`Ledger.noteShown`), so a store
-   * looks at those sessions alone; a session leaves on close. And the polls a change notice started for them
-   * (`revisionsSettled`).
-   */
-  private readonly watching = new Map<string, Set<Session>>();
-  /** `planConflict` (D301): by user scope key, the live sessions with acting requests; a session leaves on close. */
-  private readonly acting = new Map<string, Set<Session>>();
-  private readonly revisionPolls = new Map<string, Promise<void>>();
-  /** By user and source: the notice poll's state (`pollRevised`), at most `MAX_REVISION_SOURCES`, idle ones dropped. */
-  private readonly revisionSources = new Map<string, RevisionSource>();
-  /** `stopSync` was called (and no `startSync` since): notices start no revision poll. */
-  private revisionsStopped = false;
-  /**
-   * `sourceRefs` (D347): by user and item, the re-read a ref notice started and has not finished. The item is in doubt
-   * until it lands (`doubted`), and a delivery's re-read waits on it rather than make a second call (`check`).
-   */
-  private readonly refreshing = new Map<string, { mark: number; outcome: Promise<CheckOutcome> }>();
-  /**
-   * `readerPushBehind`: what a push packet's delivery changed in its own session, so a second reading that withdraws
-   * the packet untaken can undo it (`withdraw`). Keyed by the packet, so it goes with it.
-   */
-  private readonly undoable = new WeakMap<Injection, Undo>();
-  /** `packetHeedsCheck` (D1450): the user request each rule-path packet was made for (its cue's). */
-  private readonly madeFor = new WeakMap<Injection, number>();
-  /** Tenant → user scope key → injection id → outcome; both inner maps least recently recorded first. */
-  private readonly recorded = new Map<string, Map<string, Map<string, Recorded>>>();
-  private readonly now: () => number;
-  private readonly fanout: SourceFanout;
-  /**
-   * `verifyDelivery`'s outcomes since start: items checked, confirmed, changed, gone, unverifiable, calls made; and
-   * gone-holds the cache's caps dropped while still live (`ItemCache.holdsEvicted`), which reopen D126's race.
-   */
-  readonly freshness = {
-    checked: 0,
-    confirmed: 0,
-    changed: 0,
-    gone: 0,
-    failed: 0,
-    calls: 0,
-    holdsEvicted: 0,
-    /** `sourceRefs` (D347): refs read, and notices that fell back to the plain signal. */
-    refsRead: 0,
-    refsFallback: 0,
-  };
-  /**
-   * Re-reads that came back "unverifiable" because the source's null proves nothing (an MCP fetch, `fetchReportsGone`
-   * false, whose reply lacked the record), by user, then item id: the read mark the re-read began under and when. The
-   * item is delivered and cited as held either way (D126, D211), so until the source signals again, and for at most
-   * `UNVERIFIABLE_HOLD_MS`, a fetch would most likely say the same: `doubted` is false for it. Without this every later
-   * delivery past `CHECK_REUSE_MS`, and every other session of the user, fetched it again (A5's lead, A8, D298). An
-   * error result (`FetchErrorResult`, "error-result") is never held: it may pass, and a changed copy behind it must
-   * be read at the next delivery. Least recently noted first; `MAX_UNVERIFIABLE` per user, `MAX_UNVERIFIABLE_USERS`.
-   */
-  private readonly unverifiable = new Map<string, Map<string, { mark: number; at: number }>>();
-  /** The secret gate every item passes before it is held (D10): the fanout's, and `sourceItems`'. */
-  private readonly redact: (items: ContextItem[]) => ContextItem[] | Promise<ContextItem[]>;
-  /** What each user's probes bring back (`probeFresh`, `probeYield`). */
-  private readonly economy = new ProbeEconomy();
-  /** `sourceYield` (D505): each source's run of live reads with nothing used; null when off. */
-  private readonly yields: SourceYield | null;
-  /** Span tracing (`spans.ts`): null when off, so each phase's call site is one null check. */
-  private readonly spans: Tracer | null;
-  private readonly stats: SpanStats | null;
-  /**
-   * The background sync (`sync`, D57), or null when off. Its `tick` does the background work: a server runs it on a
-   * timer (`startSync`), a simulation calls it on its own clock.
-   */
-  readonly sync: SyncManager | null;
-  private syncTimer: ReturnType<typeof setInterval> | null = null;
-
-  constructor(private readonly deps: PartnerDeps) {
-    this.config = { ...DEFAULT_CONFIG, ...deps.config };
-    // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
-    this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
-    // `requestGloss` (F1, D1153): the glossary's prefix is read here too, once a process (D1710: function words,
-    // English words, the keys' filters); its lexicons only when a request could be read as another language.
-    if (this.config.requestGloss) warmGlossary();
-    this.now = deps.now ?? Date.now;
-    const maxText = deps.cache.maxTextChars;
-    const stats = this.config.spans ? new SpanStats() : null;
-    const sink = deps.onSpan;
-    this.stats = stats;
-    this.spans =
-      stats || sink
-        ? new Tracer((x) => {
-            stats?.record(x);
-            sink?.(x);
-          })
-        : null;
-    const gate = deps.gatePool
-      ? pooledSanitizer(deps.gatePool, maxText)
-      : (items: ContextItem[]) => items.map((i) => sanitizeItem(i, maxText));
-    this.redact = gate;
-    const spans = this.spans;
-    // The card enrichment (`cards`) reports its background calls into the same spans.
-    if (spans && deps.cards && this.config.cards) deps.cards.tracer = spans;
-    // A card is held no longer than its item: an item leaving the cache (or the whole user) takes its card along.
-    if (deps.cards && this.config.cards) {
-      const cards = deps.cards;
-      deps.cache.onDropped((scope, ids) => (ids ? cards.forgetItems(scope, ids) : cards.forget(scope)));
-      // Dates in an item resolve against the user's day, as the request's do (D44).
-      cards.offsetOf = (scope) => deps.cache.offsetOf(scope);
-      if (this.config.cardsEconomy) cards.economize();
-      // `intent`: the same calls write each item's requests, and what the prefilter rejects is read for them.
-      if (this.config.intent) cards.intend();
-      // `cardsLean`: what the prefilter rejects is read for requests only when a person wrote it recently.
-      if (this.config.intent && this.config.cardsLean) cards.lean(this.config.cardsLeanDays);
-      // `cardsOrder` (D482, D483): a user's waiting items are read best first (worded, ahead, correspondents, recent).
-      if (this.config.cardsOrder) cards.order();
-      // `cardsLanes` (N4, D521, D522): a new user's backfill read by several calls at once.
-      if (this.config.cardsLanes > 1) cards.lanes(this.config.cardsLanes);
-      // `cardsRequestsFix` (D1060): the requests list shown in the prompt's first example; a dropped list asked again.
-      if (this.config.intent && this.config.cardsRequestsFix) cards.showRequests();
-      // `cardsState` (F2, D1193): each card says whether its constraint still holds.
-      if (this.config.cardsState) cards.askState();
-    }
-    this.yields = this.config.sourceYield ? new SourceYield(this.config.sourceYieldHalfLifeMs) : null;
-    this.fanout = new SourceFanout({
-      // With spans on, the gate's span is a child of the source call whose page it redacts (`Tracer.page`).
-      sanitize: spans
-        ? (items, signal) => {
-            // An empty page is no work: no span (the gate's spans are the most numerous, half of them empty).
-            if (items.length === 0) return gate(items, signal);
-            const sp = spans.open("sanitize", spans.pageOf(items), { items: items.length });
-            const out = gate(items, signal);
-            if (!(out instanceof Promise)) {
-              spans.close(sp);
-              return out;
-            }
-            return out.finally(() => spans.close(sp, { async: true }));
-          }
-        : gate,
-      // One clock for the whole engine: rate limits, result freshness and breakers run on the same time as the
-      // cache and sessions (an injected clock that skipped the fan-out made simulated time hit real-time limits).
-      now: this.now,
-    });
-    const c = this.config;
-    this.sync = c.sync
-      ? new SyncManager(
-          {
-            sources: deps.sources,
-            fanout: this.fanout,
-            cache: deps.cache,
-            now: this.now,
-            // Synced items name people as looked-up ones do: the source map learns which sources mention whom.
-            onListed: (scope, ids) => {
-              if (this.config.cards) this.deps.cards?.touch(scope, ids);
-            },
-            onStored: (scope, items) => {
-              const mentions = mentionsOf(items);
-              this.enqueueCards(scope, items, this.cardDefer(scope, items, mentions));
-              this.recordMentions(scope, items, 0, mentions);
-              this.queueRevised(scope, items);
-              this.queuePlanConflicts(scope, items);
-            },
-            tracer: spans,
-            after: deps.after,
-          },
-          {
-            maxItems: c.syncMaxItems,
-            pageSize: c.syncPageSize,
-            backfillLanes: c.syncBackfillLanes,
-            kickLanes: c.syncKick ? c.syncKickLanes : 0,
-            kickRetryMs: c.syncKick ? c.syncKickRetryMs : 0,
-            pollPageSize: c.syncPollPageSize,
-            staleChance: c.syncStaleChance,
-            maxStaleMs: c.syncMaxStaleMs,
-            ...(c.syncActivePollMs > 0
-              ? {
-                  activePollMs: c.syncActivePollMs,
-                  activePollBackoff: c.syncActivePollBackoff,
-                  activePollPriced: c.syncActivePollPriced,
-                  activePollCap: c.syncActivePollCap,
-                }
-              : {}),
-            activeMs: c.syncActiveMs,
-            sweepMs: c.syncSweepMs,
-            dropMs: c.syncDropMs,
-            callsPerMin: c.syncCallsPerMin,
-            catchupPages: c.syncCatchupPages,
-            maxUsersPerTenant: c.syncMaxUsersPerTenant,
-            timeoutMs: Math.max(c.sourceTimeoutMs, 5_000),
-            demandTimeoutMs: c.sourceTimeoutMs,
-            push: c.syncPush,
-            ingestTurns: c.syncIngestTurns,
-            pushMaxStaleMs: c.syncPushMaxStaleMs,
-            keepCut: c.syncKeepCut,
-            sketch: c.routeSketch,
-            rareTerms: c.sourceYield && c.sourceYieldEarn && c.sourceYieldRare > 0,
-            engagedDeep: c.syncEngagedDeep,
-            // Only with `verifyDelivery`: the longer sweep is safe only because deliveries re-read its old copies.
-            unusedSweepMs: c.verifyDelivery ? c.syncUnusedSweepMs : 0,
-            ...(deps.syncResketchForTests === true ? { resketchForTests: true } : {}),
-          },
-        )
-      : null;
-    // D370: with `syncIngestTurns`, the card drain gathers what waits for its turn, so its batches follow the items.
-    const sync = this.sync;
-    if (sync && c.syncIngestTurns && c.cards && deps.cards) deps.cards.gather = () => sync.pending();
-    // D425 (opt-in): a user frozen to disk carries the sync's state for them; one read back by a later process takes
-    // it again (so the restart polls, not backfills) and has its items carded again, as a re-sync would (cards are
-    // not persisted). Set only when the embedder made the cache persist.
-    if (deps.cache.persisting) {
-      deps.cache.persistHooks = {
-        // D992: the user's source-map rows (routing and planner learning) go with them, so a user moved to another
-        // process or machine keeps what was learned; they are replaced, not merged, where they land.
-        save: (scope, prior) => {
-          const key = scopeKey(scope);
-          const live = this.frozenPending.get(key) ?? this.sessionSnapshot(scope);
-          this.frozenPending.delete(key);
-          const recorded = this.frozenRecorded.get(key) ?? this.recordedSnapshot(scope);
-          this.frozenRecorded.delete(key);
-          const economy = this.frozenEconomy.has(key) ? this.frozenEconomy.get(key) : this.economy.snapshot(scope);
-          this.frozenEconomy.delete(key);
-          const yields = this.frozenYields.has(key) ? this.frozenYields.get(key) : this.yields?.snapshot(scope);
-          this.frozenYields.delete(key);
-          const unverifiable = this.frozenUnverifiable.has(key)
-            ? this.frozenUnverifiable.get(key)
-            : this.unverifiableSnapshot(key);
-          this.frozenUnverifiable.delete(key);
-          // D2004: the file on disk may be another process's blob (a failover both served this user), newer
-          // than this process's thaw — its rows merge in instead of being replaced, or the later freeze
-          // silently drops what the other machine learned.
-          const carried = prior as
-            | {
-                sessions?: unknown;
-                recorded?: unknown;
-                economy?: unknown;
-                yields?: unknown;
-                unverifiable?: unknown;
-              }
-            | null
-            | undefined;
-          const priorSessions = Array.isArray(carried?.sessions) ? carried.sessions.filter(isFrozenSession) : [];
-          const priorRecorded = Array.isArray(carried?.recorded) ? carried.recorded.filter(isFrozenRecorded) : [];
-          const mergedEconomy = mergeFrozenEconomy(
-            isFrozenEconomy(carried?.economy) ? carried.economy : null,
-            economy ?? null,
-          );
-          const mergedYields = mergeFrozenYields(
-            isFrozenYields(carried?.yields) ? carried.yields : null,
-            yields ?? null,
-          );
-          const mergedUnverifiable = mergeFrozenUnverifiable(
-            isFrozenUnverifiable(carried?.unverifiable) ? carried.unverifiable : [],
-            unverifiable ?? [],
-          );
-          const mergedRecorded = mergeFrozenRecorded(priorRecorded, recorded ?? []);
-          const judged = new Set(mergedRecorded?.map((r) => r.injectionId));
-          return {
-            sync: sync?.snapshot(scope) ?? null,
-            rows: this.deps.sourceMap.exportUser(scope),
-            sessions: mergeFrozenSessions(
-              priorSessions,
-              mergeFrozenSessions(this.restoredSessions.get(key), live, judged),
-              judged,
-            ),
-            recorded: mergedRecorded,
-            ...(mergedEconomy ? { economy: mergedEconomy } : {}),
-            ...(mergedYields ? { yields: mergedYields } : {}),
-            ...(mergedUnverifiable.length ? { unverifiable: mergedUnverifiable } : {}),
-          };
-        },
-        restored: (scope, items, extra) => {
-          const carried = extra as
-            | {
-                sync?: unknown;
-                rows?: UserRows;
-                sessions?: unknown;
-                recorded?: unknown;
-                economy?: unknown;
-                yields?: unknown;
-                unverifiable?: unknown;
-              }
-            | null
-            | undefined;
-          const saved = carried?.sync;
-          if (sync && saved) sync.restore(scope, saved);
-          if (carried?.rows && typeof carried.rows === "object") {
-            try {
-              this.deps.sourceMap.importUser(scope, carried.rows);
-            } catch {
-              // Fails open: the user keeps whatever this process's file holds for them (or learns again).
-            }
-          }
-          if (Array.isArray(carried?.sessions)) {
-            const frozen = carried.sessions.filter(isFrozenSession);
-            if (frozen.length > 0) this.putFrozenSessions(scopeKey(scope), frozen.slice(-MAX_FROZEN_SESSIONS));
-          }
-          if (Array.isArray(carried?.recorded)) {
-            const rec = carried.recorded.filter(isFrozenRecorded).slice(-MAX_RECORDED);
-            if (rec.length > 0) this.restoreRecorded(scope, rec);
-          }
-          if (carried?.economy && isFrozenEconomy(carried.economy)) this.economy.restore(scope, carried.economy);
-          if (carried?.yields && isFrozenYields(carried.yields)) this.yields?.restore(scope, carried.yields);
-          if (carried?.unverifiable && isFrozenUnverifiable(carried.unverifiable))
-            this.restoreUnverifiable(scope, carried.unverifiable);
-
-          // A source removed while the user was on disk: its synced items go before the first event is served (the
-          // returning event's `ready` waits on this, bounded by the source timeout).
-          const checked = sync ? sync.reconcile(scope, this.config.sourceTimeoutMs) : Promise.resolve(0);
-          return checked.then(() => {
-            if (items.length > 0 && this.config.cards && this.deps.cards) {
-              const kept = items.filter((it) => this.deps.cache.get(scope, it.id, this.now()) !== null);
-              if (kept.length > 0) this.enqueueCards(scope, kept, this.cardDefer(scope, kept, mentionsOf(kept)));
-            }
-          });
-        },
-      };
-    }
-  }
-
+export class ContextPartner extends PartnerCore {
   /**
    * Runs the background sync's `tick` every `everyMs` (`sync` on; a no-op otherwise). The timer does not keep the
    * process alive, and a tick never overlaps another.
@@ -1963,7 +1620,7 @@ export class ContextPartner {
    * may not render the item (a size cut, a fold, a reader that does not pick it); one that does drops the update when
    * it is handed out (`watchCopies`, `withoutCoveredUpdates`).
    */
-  private queueRevised(scope: Scope, items: readonly ContextItem[]): void {
+  protected queueRevised(scope: Scope, items: readonly ContextItem[]): void {
     if (!this.config.revisionNotice || items.length === 0) return;
     const sessions = this.watching.get(scopeKey(scope));
     if (!sessions) return;
@@ -2184,7 +1841,7 @@ export class ContextPartner {
    * session's ledger snapshot and delivered list, so a restore's fresh sessions do not hand the agent again what
    * an earlier process already delivered (a local daemon respawned between turns).
    */
-  private sessionSnapshot(scope: Scope): FrozenSession[] | null {
+  protected sessionSnapshot(scope: Scope): FrozenSession[] | null {
     const mine = this.userSessions.get(scopeKey(scope));
     if (!mine || mine.size === 0) return null;
     const out: FrozenSession[] = [];
@@ -2196,7 +1853,7 @@ export class ContextPartner {
   }
 
   /** Writes a user's frozen list, most recently written last, dropping the oldest over `MAX_FROZEN_USERS`. */
-  private putFrozenSessions(user: string, list: FrozenSession[]): void {
+  protected putFrozenSessions(user: string, list: FrozenSession[]): void {
     this.restoredSessions.delete(user); // Re-insert: Map order is least recently written user first.
     this.restoredSessions.set(user, list);
     while (this.restoredSessions.size > MAX_FROZEN_USERS)
@@ -3694,7 +3351,7 @@ export class ContextPartner {
    * of their user with acting requests, for the session's next take (`checkPlans`): by then the item's card, made in
    * the background as it was stored, can say whether it constrains. No index or card work here, on the store's path.
    */
-  private queuePlanConflicts(scope: Scope, items: readonly ContextItem[]): void {
+  protected queuePlanConflicts(scope: Scope, items: readonly ContextItem[]): void {
     if (!this.config.planConflict || items.length === 0) return;
     const sessions = this.acting.get(scopeKey(scope));
     if (!sessions) return;
@@ -4441,14 +4098,14 @@ export class ContextPartner {
   }
 
   /** The user's `recorded` as a frozen list (null when nothing is held), for the persist `save` hook. */
-  private recordedSnapshot(scope: Scope): FrozenRecorded[] | null {
+  protected recordedSnapshot(scope: Scope): FrozenRecorded[] | null {
     const mine = this.recordedOf(scope);
     if (!mine?.size) return null;
     return [...mine].map(([injectionId, r]) => ({ injectionId, ...r }));
   }
 
   /** Seeds `recorded` from a restored blob's rows, under the same caps the live path enforces. */
-  private restoreRecorded(scope: Scope, rec: FrozenRecorded[]): void {
+  protected restoreRecorded(scope: Scope, rec: FrozenRecorded[]): void {
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
     this.recorded.set(scope.tenantId, tenant);
     const mine = new Map<string, Recorded>();
@@ -4460,14 +4117,14 @@ export class ContextPartner {
   }
 
   /** The user's `unverifiable` rows as a frozen list (null when none is held), for the persist `save` hook. */
-  private unverifiableSnapshot(key: string): FrozenUnverifiable | null {
+  protected unverifiableSnapshot(key: string): FrozenUnverifiable | null {
     const mine = this.unverifiable.get(key);
     if (!mine?.size) return null;
     return [...mine].slice(-FROZEN_UNVERIFIABLE);
   }
 
   /** Seeds `unverifiable` from a restored blob's rows, under the same caps the live path enforces. */
-  private restoreUnverifiable(scope: Scope, rows: FrozenUnverifiable): void {
+  protected restoreUnverifiable(scope: Scope, rows: FrozenUnverifiable): void {
     const key = scopeKey(scope);
     const mine = new Map<string, { mark: number; at: number }>();
     for (const [id, r] of rows.slice(-MAX_UNVERIFIABLE)) {
@@ -6679,7 +6336,7 @@ export class ContextPartner {
   }
 
   /** `cards`: what is new to the cache (looked up or synced) is read for constraints in the background, off-path. */
-  private enqueueCards(scope: Scope, added: ContextItem[], defer?: (item: ContextItem) => boolean): void {
+  protected enqueueCards(scope: Scope, added: ContextItem[], defer?: (item: ContextItem) => boolean): void {
     if (this.config.cards && this.deps.cards && added.length > 0) this.deps.cards.enqueue(scope, added, defer);
   }
 
@@ -6688,7 +6345,7 @@ export class ContextPartner {
    * unread: those of a source no lookup of the user's has searched that name none of the names the user's requests
    * named (`mentions`: each item's names, as the source map records them). Undefined (read all) otherwise.
    */
-  private cardDefer(
+  protected cardDefer(
     scope: Scope,
     items: readonly ContextItem[],
     mentions: readonly { entities: string[] }[],
@@ -6786,7 +6443,7 @@ export class ContextPartner {
   }
 
   /** Records the entity mentions of items new to the user's cache or changed (lookups and the sync, D57). */
-  private recordMentions(
+  protected recordMentions(
     scope: Scope,
     added: ContextItem[],
     parent = 0,
@@ -8144,7 +7801,7 @@ const UPDATED_NOTE = " (changed at its source since shown earlier; this version 
 const REVISION_POLL_GAP_MS = 30_000;
 const MAX_REVISION_SOURCES = 10_000;
 
-interface RevisionSource {
+export interface RevisionSource {
   running: boolean;
   /** A notice came while the poll ran: one more poll once it settles. */
   again: boolean;
@@ -8789,7 +8446,7 @@ const DAY_SEAT_DAYS = 3;
  * (the call failed with a plain error, worth one retry) and "failed" (a timeout, a 429, the caller giving up, our
  * gate).
  */
-type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "skipped" | "unverifiable";
+export type CheckOutcome = "confirmed" | "changed" | "gone" | "failed" | "flaked" | "skipped" | "unverifiable";
 /** Re-reads a session keeps (`Session.checks`), and how long one is reused before an item is read again (ms). */
 const MAX_CHECKS = 64;
 /** Below this much of an ask's wait left (or a quarter of it, if less), the ask starts no reader call of its own. */
@@ -8827,18 +8484,6 @@ function bulkMail(item: ContextItem): boolean {
 }
 
 /** The entities an item's mentions record keeps, its first of `PERSISTABLE_KINDS`. */
-const MAX_MENTIONS = 20;
-
-/** The names each item mentions, as the source map records them (D57): at most 20 an item, persistable kinds. */
-function mentionsOf(items: readonly ContextItem[]): { sourceId: string; entities: string[] }[] {
-  return items.map((item) => ({
-    sourceId: item.sourceId,
-    entities: extractTypedEntities(`${item.title}. ${item.text}`, MAX_MENTIONS)
-      .filter((e) => PERSISTABLE_KINDS.has(e.kind))
-      .slice(0, MAX_MENTIONS)
-      .map((e) => e.text),
-  }));
-}
 
 /** `routeSketch`: a request's terms matched against the sources' sketches, at most (its first). */
 const MAX_SKETCH_TERMS = 16;
