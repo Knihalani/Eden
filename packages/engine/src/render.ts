@@ -186,6 +186,16 @@ export const CANDIDATES_LEAD =
   "not, ignore it and do not mention it.";
 
 /**
+ * `pushCheckLate`/`pushCheckedCandidates` (D2083): the lead of a packet whose items a check read against the
+ * request and judged to bear on it — `CANDIDATES_LEAD`'s "nothing has checked them" would read the check's own
+ * answer back as unvetted. The verify-it-yourself tail stays: a checked item is a recommendation, not a command.
+ */
+export const CHECKED_LEAD =
+  `${EDEN_NOTE}items from the user's sources a check read against this request and judged to bear on it. ` +
+  "If one is not about the same person, thing and date as the request, or is no longer current, ignore it and do " +
+  "not mention it.";
+
+/**
  * `planConflict` (D301): the framing line of a packet about an earlier request; the request's own words follow, quoted.
  * Like the candidates' lead, it asks the agent to check before using an item, and to say nothing of one that does not
  * bear on that request.

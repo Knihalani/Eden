@@ -648,7 +648,9 @@ export abstract class PartnerAsk extends PartnerVerdict {
                 undefined,
                 candidates.lookup
                   ? this.lookupFrame(candidates.lookup)
-                  : this.candidateFrame(candidates.unsettled !== undefined),
+                  : candidates.checked
+                    ? this.checkedFrame(candidates.unsettled !== undefined)
+                    : this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -1018,7 +1020,10 @@ export abstract class PartnerAsk extends PartnerVerdict {
     };
   }
 
-  /** `pushCandidates` (D236): how the candidates' packet is framed and cut. */
+  /**
+   * `pushCandidates` (D236): how the candidates' packet is framed and cut — `CANDIDATES_LEAD`'s "nothing has
+   * checked them" hedge; a check-named packet takes `checkedFrame`'s `CHECKED_LEAD` instead (D2083).
+   */
   private candidateFrame(nudge = false): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);

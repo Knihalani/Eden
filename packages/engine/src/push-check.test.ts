@@ -441,6 +441,27 @@ describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check
     // on pending alone.
     const got = partner.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
     expect(got?.citations.map((c) => c.itemId)).toEqual(["mail:other"]);
+    // A packet the check named carries the checked lead, not the unchecked hedge (D2083).
+    expect(got?.text).toContain("a check read against this request");
+    expect(got?.text).not.toContain("nothing has checked them");
+  });
+
+  test("a packet the check named says it was checked; the unchecked push keeps the hedge (D2083)", async () => {
+    const { partner } = setup({ pushCheck: true }, says(["Harlow deposit"]));
+    await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
+    });
+    const got = partner.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
+    expect(got?.text).toContain("a check read against this request");
+    expect(got?.text).not.toContain("nothing has checked them");
+
+    const { partner: noCheck } = setup({ pushCheck: true }, null);
+    await noCheck.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
+    });
+    const plain = noCheck.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
+    expect(plain?.text).toContain("nothing has checked them");
+    expect(plain?.text).not.toContain("a check read against this request");
   });
 
   test("a late check naming only delivered items queues nothing (D2082)", async () => {
@@ -490,8 +511,8 @@ describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check
     const got = partner.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
     // The self-cancelled record the check named is kept out by the push's own rules; the live hold goes.
     expect(got?.citations.map((c) => c.itemId)).toEqual(["mail:hold"]);
-    // The packet carries the candidates' frame: its items were named by a check but the cut is the candidates' cut.
-    expect(got?.text).toContain("may bear on this request");
+    // The packet carries the checked frame: a check read the items against the request — the lead says so.
+    expect(got?.text).toContain("a check read against this request");
   });
 
   test("a discarded late packet leaves its items deliverable to the next request (review, D2082)", async () => {
