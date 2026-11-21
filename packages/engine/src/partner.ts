@@ -93,6 +93,7 @@ import {
   type SheetCard,
 } from "./push-check";
 import { actionClass, classTies, matchesClass, type ActionClass } from "./consequence";
+import { sourcePriors } from "./source-prior";
 import { isFrozenYields, mergeFrozenYields, SourceYield, type Evidence, type FrozenYields } from "./source-yield";
 import { isFrozenEconomy, mergeFrozenEconomy, ProbeEconomy, type FrozenEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
@@ -5969,6 +5970,8 @@ export class ContextPartner {
       // `routeSketch` (D322): the sources whose sketches hold the request's rarer terms, read or trimmed.
       this.config.routeSketch && wide ? this.sketchRouteHits(s, cue) : undefined,
     );
+    // `sourceKindPrior` (D2015): a cold user's draw favours the kinds a person's requests usually land in.
+    const priors = sourcePriors(all, this.config.sourceKindPrior);
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask with `askBehind` off waits for its poll, so a poll and a search with deadlines of their
     // own could hold the reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -6000,6 +6003,7 @@ export class ContextPartner {
           sourceIds: all.map((x) => x.id),
           limit: Math.max(width, limit),
           ...(boost ? { boost } : {}),
+          ...(priors ? { priors } : {}),
         });
         pollable = new Set(preRanked.map((r) => r.sourceId));
       }
@@ -6082,6 +6086,7 @@ export class ContextPartner {
         sourceIds: all.map((x) => x.id),
         limit,
         ...(boost ? { boost } : {}),
+        ...(priors ? { priors } : {}),
       });
     if (routing) this.spans!.close(routing, { sources: ranked.length, local: local?.size ?? 0, syncCalls });
     const byId = sourcesById(all);
@@ -6674,6 +6679,8 @@ export class ContextPartner {
     // sources mention which names (any source may, not only the lookup's): three per name, not every source.
     const byId = sourcesById(all);
     const allIds = all.map((x) => x.id);
+    // `sourceKindPrior` (D2015): the same cold-user prior as the lookup's own route.
+    const priors = sourcePriors(all, this.config.sourceKindPrior);
     const routeFor = (name: string, limit = c.probePeopleSources) =>
       this.deps.sourceMap
         .route({
@@ -6683,6 +6690,7 @@ export class ContextPartner {
           sourceIds: allIds,
           limit,
           ...(opts.boost ? { boost: opts.boost } : {}),
+          ...(priors ? { priors } : {}),
         })
         .map((r) => byId.get(r.sourceId)!)
         .filter(Boolean);
