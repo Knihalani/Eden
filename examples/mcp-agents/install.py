@@ -110,7 +110,15 @@ def strip_jsonc(text):
             continue
         elif ch == ",":
             # A trailing comma is legal JSONC: drop it when only whitespace/comments stand
-            # between it and the closing bracket.
+            # between it and the closing bracket. A comma straight after '{'/'[' is not
+            # trailing — keep it so malformed files still fail to parse.
+            prev = len(out) - 1
+            while prev >= 0 and out[prev] in " \t\r\n":
+                prev -= 1
+            if prev < 0 or out[prev] in "{[":
+                out.append(ch)
+                i += 1
+                continue
             j = i + 1
             while j < len(text):
                 if text[j] in " \t\r\n":
