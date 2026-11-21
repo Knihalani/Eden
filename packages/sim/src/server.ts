@@ -24,7 +24,7 @@
  *                     ({"maxTicks"?: 400}); returns ticks, ms, background calls, users tracked and warm
  */
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpDir } from "@eden/primitives";
 import { join } from "node:path";
 import { ContextPartner, GATE_MODULE, ItemCache, type Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -92,7 +92,7 @@ async function main() {
     counters.costUsd += t.costUsd;
     counters.sourceCalls += t.sourceCalls;
   };
-  const dir = mkdtempSync(join(tmpdir(), "eden-sim-"));
+  const dir = tmpDir("eden-sim-");
   const sourceMap = new SourceMap(arg("source-map", "file") === "file" ? join(dir, "source-map.db") : ":memory:");
   const gateWorkers = Number(arg("gate-workers", "0"));
   const gatePool =

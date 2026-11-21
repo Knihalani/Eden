@@ -22,7 +22,7 @@
  * No model, no network.
  */
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpDir } from "@eden/primitives";
 import { join } from "node:path";
 import { EncryptedFrozenDisk, type ContextPartner, type ItemCache } from "@eden/engine";
 import type { ContextItem, Scope } from "@eden/protocol";
@@ -403,7 +403,7 @@ function rssMB(pid: number): number {
 }
 
 async function orchestrate(): Promise<void> {
-  const root = mkdtempSync(join(tmpdir(), "eden-soak-"));
+  const root = tmpDir("eden-soak-");
   const dirs = Array.from({ length: PROCS }, (_, i) => join(root, `p${i}`));
   for (const d of dirs) mkdirSync(d, { recursive: true });
   const t0 = Date.now();

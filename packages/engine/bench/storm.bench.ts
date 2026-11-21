@@ -18,7 +18,7 @@
  * who arrive just after a tick; the probe users are still synced back to back).
  */
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpDir } from "@eden/primitives";
 import { join } from "node:path";
 import { SourceMap } from "@eden/graph";
 import { Budget, DEFAULT_LIMITS } from "@eden/llm";
@@ -99,7 +99,7 @@ for (const u of storm) byUser.set(u, userSources(u, PER_USER));
 const cache = new ItemCache({ maxUsersPerTenant: USERS + PROBE + 1 });
 const partner = new ContextPartner({
   sources: async (s) => byUser.get(s.userId)!,
-  sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-storm-")), "source-map.db")),
+  sourceMap: new SourceMap(join(tmpDir("eden-storm-"), "source-map.db")),
   cache,
   budget: new Budget(DEFAULT_LIMITS),
   model: null,

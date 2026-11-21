@@ -12,8 +12,8 @@
  * (`ItemCache.dated`) before the measure, so every entry holds its date facts (D1721). No model, no network.
  */
 import { estimateShallowMemoryUsageOf as shallow } from "bun:jsc";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
@@ -110,7 +110,7 @@ const enricher = CARDS ? stubCards(() => clock) : undefined;
 const partner = new ContextPartner({
   ...(enricher ? { cards: enricher } : {}),
   sources: async (scope) => byUser.get(scope.userId)!,
-  sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-live-heap-")), "source-map.db")),
+  sourceMap: new SourceMap(join(tmpDir("eden-live-heap-"), "source-map.db")),
   cache,
   budget: new Budget(DEFAULT_LIMITS),
   model: null,
