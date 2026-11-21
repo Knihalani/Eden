@@ -223,6 +223,15 @@ interface PollResume {
 
 /** Background sync calls leave this many of the serving rate limit's tokens for lookups. */
 const SERVING_HEADROOM = 2;
+/**
+ * The background reads' tiers under the tenant's pace (S1-P1's value order): a source's first page, then polls of
+ * sources already read, then deeper backfill pages, then sweeps. Each higher tier asks more of the tenant bucket
+ * be free, so a tight pace is spent on the reads that matter first.
+ */
+const FIRST_PAGE_TIER = 0;
+const POLL_TIER = 1;
+const DEEPER_TIER = 2;
+const SWEEP_TIER = 3;
 const HOUR = 3_600_000;
 /** Pushed item ids held per source between polls (`SourceSync.pushed`); past it the oldest are let go. */
 const MAX_PUSHED = 1_000;
@@ -1434,6 +1443,7 @@ export class SyncManager {
             page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
               timeoutMs: this.o.timeoutMs,
               reserve: SERVING_HEADROOM,
+              tier: next.cursor === undefined ? FIRST_PAGE_TIER : DEEPER_TIER,
             });
             // Stored within the read, so what it stored is the read's (`SourceSync.reading`).
             if (typeof page !== "string" && !u.gone)
@@ -1494,6 +1504,7 @@ export class SyncManager {
         page = await this.list("backfill", source, u.scope, next.cursor, this.o.pageSize, {
           timeoutMs: this.o.timeoutMs,
           reserve: SERVING_HEADROOM,
+          tier: next.cursor === undefined ? FIRST_PAGE_TIER : DEEPER_TIER,
         });
         if (typeof page !== "string" && !u.gone)
           await this.store(u, next, page.items, readMark, undefined, this.o.keepCut);
@@ -1734,6 +1745,7 @@ export class SyncManager {
           timeoutMs: this.o.timeoutMs,
           signal,
           reserve: demand ? 0 : SERVING_HEADROOM,
+          tier: POLL_TIER,
         });
         if (u.gone) return;
         if (typeof page === "string") {
@@ -1829,6 +1841,7 @@ export class SyncManager {
       const page = await this.list("backfill", source, u.scope, deep.cursor, this.o.pageSize, {
         timeoutMs: this.o.timeoutMs,
         reserve: SERVING_HEADROOM,
+        tier: deep.cursor === undefined ? FIRST_PAGE_TIER : DEEPER_TIER,
       });
       if (u.gone) return;
       if (typeof page === "string") {
@@ -1877,6 +1890,7 @@ export class SyncManager {
       const page = await this.list("sweep", source, u.scope, sw.cursor, this.o.pageSize, {
         timeoutMs: this.o.timeoutMs,
         reserve: SERVING_HEADROOM,
+        tier: SWEEP_TIER,
       });
       if (u.gone) return;
       if (typeof page === "string") {
@@ -2132,7 +2146,7 @@ export class SyncManager {
     scope: Scope,
     cursor: string | undefined,
     limit: number,
-    given: { timeoutMs: number; signal?: AbortSignal; reserve?: number },
+    given: { timeoutMs: number; signal?: AbortSignal; reserve?: number; tier?: number },
   ): ReturnType<SourceFanout["list"]> {
     // Items the cache holds unchanged are not redacted again (most of a poll or a sweep re-lists what is held).
     const options = {

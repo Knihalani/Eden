@@ -719,6 +719,27 @@ describe("the tenant's pace per connector (S1-P1)", () => {
     expect(await f.list(failing, at("t2", "w1"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
   });
 
+  test("a tight pace is spent in value order: a sweep waits while a source's first page goes", async () => {
+    const f = new SourceFanout({
+      sanitize: (x) => x,
+      cacheBytes: 0,
+      tenantRatePerSec: 0.5,
+      tenantBurst: 4,
+      now: () => 0,
+    });
+    const s = listing();
+    const scope = at("t1", "u1");
+    const bg = { timeoutMs: 1_000, reserve: 2 };
+    // Three of the bucket's four tokens spent on first pages: one is free — enough for the next first page
+    // (tier 0) or a poll (tier 1), not for a deeper backfill page or a sweep, which ask a fuller bucket.
+    for (let i = 0; i < 3; i++)
+      expect(await f.list(s, scope, undefined, 10, { ...bg, tier: 0 })).toMatchObject({ items: expect.any(Array) });
+    expect(await f.list(s, scope, undefined, 10, { ...bg, tier: 3 })).toBe("limited"); // sweep
+    expect(await f.list(s, scope, undefined, 10, { ...bg, tier: 2 })).toBe("limited"); // deeper backfill
+    expect(await f.list(s, scope, undefined, 10, { ...bg, tier: 1 })).toBe("limited"); // a poll asks two free
+    expect(await f.list(s, scope, undefined, 10, { ...bg, tier: 0 })).toMatchObject({ items: expect.any(Array) });
+  });
+
   test("unset, the tenant's users are paced per (user, source) only", async () => {
     const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
     const s = listing();

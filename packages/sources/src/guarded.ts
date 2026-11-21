@@ -216,6 +216,9 @@ const PARK_IDLE_MS = 2 * CALL_LATENCY_WINDOW_MS;
  */
 const PARK_SCAN = 64;
 
+/** Tiers under the tenant's pace (S1-P1's value order): first page, poll, deeper backfill, sweep. */
+const TENANT_TIERS = 4;
+
 /**
  * A results-cache key: the (user, source) pair, length-prefixed so the pair is read back exactly (`pairOf`) whatever
  * characters a tenant, user or source id holds, then the rest of the query.
@@ -304,11 +307,29 @@ export class SourceFanout {
             now: this.now,
           })
         : null;
+    this.tenantBurst =
+      options.tenantRatePerSec === undefined
+        ? 1
+        : (options.tenantBurst ?? Math.max(1, Math.ceil(options.tenantRatePerSec * 2)));
   }
 
   /** The tenant's pace key for (scope, source) — `${tenantId}|${sourceId}` — or null with the pace unset. */
   private tenantKey(scope: Scope, sourceId: string): string | null {
     return this.tenantRate === null ? null : `${scope.tenantId}|${sourceId}`;
+  }
+
+  /** The tenant bucket the pace was built with; 1 with the pace unset (every tier then asks the same token). */
+  private readonly tenantBurst: number;
+
+  /**
+   * How much of the tenant bucket a background read of `tier` asks to be free (S1-P1's value order): tier 0 — a
+   * source's first page — goes whenever the pace holds any token; the top tier — a sweep — only when the bucket is
+   * nearly full, so under a tight pace the connector's calls are spent on the reads that matter first.
+   */
+  private tenantNeed(tier: number): number {
+    return (
+      1 + Math.floor(((this.tenantBurst - 1) * Math.max(0, Math.min(tier, TENANT_TIERS - 1))) / (TENANT_TIERS - 1))
+    );
   }
 
   /**
@@ -436,6 +457,8 @@ export class SourceFanout {
       timeoutMs: number;
       signal?: AbortSignal;
       reserve?: number;
+      /** The read's tier under the tenant's pace (S1-P1's value order), 0 the highest: see `tenantNeed`. */
+      tier?: number;
       reuse?: ListReuse;
       /** Awaited after the source answered and before its page is redacted (the sync's `syncIngestTurns`, D328). */
       turn?: () => Promise<void>;
@@ -448,7 +471,8 @@ export class SourceFanout {
     const tenant = this.tenantKey(scope, source.id);
     if (
       (options.reserve ?? 0) > 0 &&
-      (this.rate.available(key) < 1 + options.reserve! || (tenant !== null && this.tenantRate!.available(tenant) < 1))
+      (this.rate.available(key) < 1 + options.reserve! ||
+        (tenant !== null && this.tenantRate!.available(tenant) < this.tenantNeed(options.tier ?? 0)))
     )
       return "limited";
     const s = this.state(key);

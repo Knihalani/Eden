@@ -117,6 +117,12 @@ describe("Gcra", () => {
     rl.penalize("u", 1_000);
     expect(rl.available("u")).toBe(0);
   });
+  test("a full bucket reports its whole burst at a non-round interval", () => {
+    // 940 calls a minute → rate 15.66…/s, burst 32: the product (burst−1)×interval divided back by interval could
+    // floor a hair low and report 31 — a caller needing the whole burst (a sweep under the tenant pace) never went.
+    const rl = new Gcra({ ratePerSec: 940 / 60, burst: 32, now: () => 0 });
+    expect(rl.available("k")).toBe(32);
+  });
 });
 
 describe("Gcra validation (finding 6)", () => {

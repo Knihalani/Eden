@@ -914,3 +914,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2036 | 2026-11-21 | Adopted: staleness is read of the document, at day and month granularity, and applied to every pick — `docSpan`, `expiryOf`, `staleSelf`… | adopted |
 | D2037 | 2026-11-21 | Adopted: a pace per (tenant, connector) shared by the tenant's users, configured by `tenantCallsPerMin` and holding only background reads. | adopted |
 | D2038 | 2026-11-21 | Adopted: a kicked step's freed turn goes to the waiting tenants in turn, not to the first-come queue. | adopted |
+| D2039 | 2026-11-21 | Adopted: a tight tenant pace is spent in value order — a background read's `tier` asks more of the bucket be free. | adopted |
