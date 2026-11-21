@@ -1388,7 +1388,11 @@ export class ContextPartner {
       event.kind !== "session_end" &&
       event.kind !== "context_reset" &&
       !(event.kind === "user_message" && event.draft === true);
-    const thawing = reads ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
+    // A `context_reset` reads no item either, but it mutates the persisted marks: a cold user's saved session seed
+    // must be thawed to be dropped, so it asks `ready` like a reader — `pendingThaw` would leave the seed on disk
+    // for the next event to re-seed (D2006 review).
+    const thawing =
+      reads || event.kind === "context_reset" ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
     if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
@@ -1539,8 +1543,19 @@ export class ContextPartner {
       // this one's ledger and delivered list are exactly what the reset dropped.
       const resetUser = scopeKey(event);
       const frozenReset = this.restoredSessions.get(resetUser);
-      if (frozenReset?.some((f) => f.sessionId === event.sessionId)) {
-        const kept = frozenReset.filter((f) => f.sessionId !== event.sessionId);
+      const seed = frozenReset?.find((f) => f.sessionId === event.sessionId);
+      if (seed !== undefined) {
+        // The seed an evicted session left carries its outstanding deliveries too: a reset keeps them pending like
+        // a live session's — `feedback` on a pre-reset delivery still lands (D2006 review).
+        for (const o of seed.outstanding ?? [])
+          this.recordRow(event, o.injectionId, {
+            sourceIds: o.sourceIds,
+            situation: o.situation,
+            used: false,
+            sessionId: seed.sessionId,
+            pending: true,
+          });
+        const kept = frozenReset!.filter((f) => f !== seed);
         if (kept.length) this.restoredSessions.set(resetUser, kept);
         else this.restoredSessions.delete(resetUser);
       }
