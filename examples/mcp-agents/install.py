@@ -42,6 +42,8 @@ AGENTS = {
     "warp": ("~/.warp", "~/.warp/.mcp.json", "mcpservers"),
     # Continue reads every *.json in mcpServers/ as a config of its own — no merge needed.
     "continue": ("~/.continue", "~/.continue/mcpServers/eden.json", "own-file"),
+    # Kilo Code v7+: the JSONC kilo.jsonc file; `mcp` holds {type:"local", command:[...]} entries.
+    "kilo-code": ("~/.config/kilo", "~/.config/kilo/kilo.jsonc", "kilo"),
 }
 
 
@@ -131,6 +133,11 @@ def write_json(path, data):
 
 
 def entry_for(fmt, mcp_py, env):
+    if fmt == "kilo":
+        e = {"type": "local", "command": ["python3", str(mcp_py)], "enabled": True}
+        if env:
+            e["environment"] = env
+        return e
     if fmt in ("mcpservers", "crush"):
         e = {"command": "python3", "args": [str(mcp_py)]}
         if fmt == "crush":
@@ -152,7 +159,8 @@ def merge_json(config, fmt, mcp_py, env, remove=False):
         print(f"warning: {config} is not a JSON object; the Eden server was not merged "
               "(fix or remove it and re-run)", file=sys.stderr)
         return False
-    key = {"mcpservers": "mcpServers", "crush": "mcp", "zed": "context_servers"}[fmt]
+    key = {"mcpservers": "mcpServers", "crush": "mcp", "kilo": "mcp",
+           "zed": "context_servers"}[fmt]
     servers = data.setdefault(key, {})
     if not isinstance(servers, dict):
         print(f"warning: {config}'s {key} is not an object; skipped", file=sys.stderr)

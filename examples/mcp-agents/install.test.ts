@@ -126,6 +126,7 @@ describe.skipIf(!python)("the MCP-only installer", () => {
       "kiro",
       "warp",
       "continue",
+      "kilo-code",
     ]) {
       expect(listed.stdout.toString()).toContain(name);
     }
@@ -183,6 +184,22 @@ describe.skipIf(!python)("the MCP-only installer", () => {
     expect(x).not.toContain("stale");
     expect(x.split("[mcp_servers.eden]").length - 1).toBe(1);
     expect(x).toContain('EDEN_USER_ID = "u1"');
+
+    // Kilo Code (JSONC): the mcp table gets a "local" entry with a command array + environment.
+    const kilo = dir(base, "kilo/kilo.jsonc");
+    writeFileSync(kilo, '{ // kilo is jsonc\n  "mcp": {}}');
+    const kr = run(
+      ["--kilo-code-config", kilo, "--agents", "kilo-code", "--remote", "--eden-home", join(base, "eh")],
+      env,
+    );
+    expect(kr.exitCode, kr.stderr.toString()).toBe(0);
+    const k = JSON.parse(readFileSync(kilo, "utf8"));
+    expect(k.mcp.eden).toEqual({
+      type: "local",
+      command: ["python3", expect.any(String)],
+      enabled: true,
+      environment: { EDEN_URL: "https://e", EDEN_API_KEY: "k9", EDEN_USER_ID: "u1", EDEN_TENANT_ID: "t1" },
+    });
 
     // A merged config may hold the API key: group/other must never read it, even on a 0644 file.
     const cline = dir(base, "c/settings.json");
