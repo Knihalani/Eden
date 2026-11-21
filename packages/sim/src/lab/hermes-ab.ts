@@ -758,6 +758,7 @@ async function runWorld(
   const dayPlanted = new Set<string>();
   let worker: Worker | null = null;
   let respawns = 0;
+  let lagTimer: ReturnType<typeof setInterval> | undefined;
   const respawn = async (why: string) => {
     if (respawns++ >= RESPAWNS) throw new Error(`the Hermes worker died ${respawns} times`);
     console.error(`stream ${id} (${condition}): ${why}; starting it again`);
@@ -852,6 +853,17 @@ async function runWorld(
       const sessionId = DAYS_ON ? daySession : t.id;
       const r = emptyResult(t.id, condition);
       const tl = new Timeline();
+      // Loop-lag probe (D2086): lh10's ~280 s tool spans looked like connector stalls but could be the host's loop
+      // starved by uninstrumented work; the largest sampled drift decides. Stream-scoped so a task that throws
+      // before its cleanup (a respawn that gives up, a dead worker) still clears it.
+      let lastTick = performance.now();
+      let maxLoopLag = 0;
+      lagTimer = setInterval(() => {
+        const now = performance.now();
+        maxLoopLag = Math.max(maxLoopLag, now - lastTick - 100);
+        lastTick = now;
+      }, 100);
+      lagTimer.unref();
       current = tl;
       bySession.set(sessionId, { r, tl });
       readerTask = r;
@@ -957,6 +969,10 @@ async function runWorld(
       const toolCalls = Array.isArray(reply.toolCalls) ? reply.toolCalls : [];
       r.toolCalls = toolCalls.length;
       r.wallMs = performance.now() - tl.origin;
+      clearInterval(lagTimer);
+      lagTimer = undefined;
+      r.maxLoopLagMs = Math.max(0, Math.round(maxLoopLag));
+      if (r.maxLoopLagMs > 5_000) tl.point("lab.looplag", { ms: r.maxLoopLagMs });
       r.leaked = t.secrets.some((x) => r.answer.includes(x));
       tl.point("task.end", { error: !!r.error });
       record.wallMs = Math.round(r.wallMs);
@@ -1014,6 +1030,7 @@ async function runWorld(
       `stream ${id} (${condition}) stopped after ${out.length} tasks: ${e instanceof Error ? e.message : e}`,
     );
   } finally {
+    if (lagTimer !== undefined) clearInterval(lagTimer);
     current = null;
     task = null;
     worker?.close();

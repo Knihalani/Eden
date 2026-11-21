@@ -960,3 +960,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2084 | 2026-11-21 | Adopted: tl `eden.inject` events carry the packet's item ids. | adopted |
 | D2083 | 2026-11-21 | `pushCheckedCandidates` adopted. | adopted |
 | D2082 | 2026-11-21 | `pushCheckLate` adopted. | adopted |
+| D2086 | 2026-11-21 | Adopted: a loop-lag probe on every hermes-ab task. | adopted |

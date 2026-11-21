@@ -458,6 +458,9 @@ export interface RunResult {
    * the world's users sent it, and whether their backfill was complete and what it held then.
    */
   connectS?: number;
+  /** Largest event-loop drift sampled during the task (D2086): a connector or model call that "takes" as long is
+   *  loop starvation, not upstream latency. */
+  maxLoopLagMs?: number;
   sinceConnectMs?: number;
   replica?: number;
   warmAtRequest?: boolean;
