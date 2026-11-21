@@ -174,13 +174,29 @@ async function surfaceClientOptions(opts: LocalSurfaceOptions): Promise<{
 
 export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): LocalSurface<V> {
   const sessions = new Map<string, SurfaceSession<V>>();
+  /** Session creations in flight: concurrent hooks for one agent session share the one being made. */
+  const making = new Map<string, Promise<SurfaceSession<V> | null>>();
 
   async function sessionFor(sessionId: string): Promise<SurfaceSession<V> | null> {
     const key = edenId(sessionId);
     const existing = sessions.get(key);
     if (existing) return existing;
+    const inFlight = making.get(key);
+    if (inFlight) return inFlight;
+    const created = create(key).finally(() => making.delete(key));
+    making.set(key, created);
+    return created;
+  }
+
+  async function create(key: string): Promise<SurfaceSession<V> | null> {
     const made = await surfaceClientOptions(opts);
     if (!made) return null;
+    // A slower caller may have won while options resolved: its session stands, this one is redundant.
+    const won = sessions.get(key);
+    if (won) {
+      made.local?.close();
+      return won;
+    }
     const eden = new EdenClient({ ...made.options, sessionId: key });
     const session: SurfaceSession<V> = {
       eden,
