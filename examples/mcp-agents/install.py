@@ -353,10 +353,12 @@ def install_payload(eden_home, root, remote, dry):
             src = ensure_binary(root, Path(work_d))
             bin_dest = dest / "bin"
             bin_dest.mkdir(exist_ok=True)
-            tmp = bin_dest / f".eden-local.{os.getpid()}"
+            # The client's win32 discovery looks for .exe/.cmd only — name it that there.
+            name = "eden-local.exe" if sys.platform == "win32" else "eden-local"
+            tmp = bin_dest / f".{name}.{os.getpid()}"
             shutil.copy2(src, tmp)
             tmp.chmod(0o755)
-            os.replace(tmp, bin_dest / "eden-local")
+            os.replace(tmp, bin_dest / name)
     return mcp_py
 
 
