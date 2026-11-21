@@ -458,6 +458,23 @@ test("a follower router serves the leader's published placement (S1-P7)", async 
     );
     await Bun.sleep(150);
     expect([0, 100, 1234, 33333, 65535].map((b) => follower.owner(b))).toEqual(owners);
+    // A signature long enough in characters but not in bytes is refused too, without the poll throwing.
+    objects.set(
+      "frozen/cluster-membership",
+      new TextEncoder().encode(
+        JSON.stringify({
+          epoch: Date.now() + 2_000_000,
+          live: ["n1"],
+          all: ["n1"],
+          specs: [{ id: "n1", url: n1.url }],
+          moved: [],
+          at: Date.now(),
+          sig: "Ā".repeat(64),
+        }),
+      ),
+    );
+    await Bun.sleep(150);
+    expect([0, 100, 1234, 33333, 65535].map((b) => follower.owner(b))).toEqual(owners);
     expect(
       follower.nodes
         .filter((n) => n.up)

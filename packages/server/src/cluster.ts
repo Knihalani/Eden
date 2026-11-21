@@ -438,9 +438,10 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     // Only a doc signed with the cluster key may move the table: write access to the store alone must not hand
     // a follower urls to forward tenant credentials to.
     const { sig, ...body } = doc;
-    const want = createHmac("sha256", clusterKey).update(JSON.stringify(body)).digest("hex");
-    if (typeof sig !== "string" || sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want)))
-      return;
+    const want = Buffer.from(createHmac("sha256", clusterKey).update(JSON.stringify(body)).digest("hex"), "utf8");
+    const have = typeof sig === "string" ? Buffer.from(sig, "utf8") : Buffer.alloc(0);
+    // Byte lengths first: a sig long enough in characters but not in bytes must not throw inside timingSafeEqual.
+    if (have.length !== want.length || !timingSafeEqual(have, want)) return;
     epoch = doc.epoch;
     const liveSet = new Set(doc.live);
     const allSet = new Set(doc.all);
