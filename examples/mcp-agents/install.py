@@ -16,6 +16,7 @@ Run inside a release archive (ships ``bin/eden-local``) or a repo checkout (buil
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -161,46 +162,71 @@ def merge_json(config, fmt, mcp_py, env, remove=False):
 
 
 def merge_goose(path, mcp_py, env, remove=False):
-    """Rewrite the ``eden`` extension in config.yaml. Line-level surgery: an existing
-    ``  eden:`` block under ``extensions:`` is replaced in place; missing structure is
-    appended. Anything not recognisably YAML config is left alone with a warning."""
+    """Rewrite the ``eden`` extension in config.yaml. Line-level surgery under ``extensions:``
+    (a comment may trail the colon): an existing ``eden:`` entry — at whatever child indent the
+    file uses — is dropped and the fresh block is inserted at that same indent, so an install
+    can neither nest siblings under Eden nor duplicate the key."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         lines = []
-    # drop an existing "  eden:" block under extensions:
-    out, skipping, in_ext = [], False, False
-    for line in lines:
-        if line.strip() == "extensions:":
-            in_ext = True
-        elif in_ext and line and not line[0].isspace():
-            in_ext = False
-        if in_ext and line.startswith("  eden:"):
-            skipping = True
-            continue
-        if skipping:
-            if line.startswith("    ") or not line.strip():
-                continue
-            skipping = False
-        out.append(line)
-    if remove:
-        write_text(path, "\n".join(out) + ("\n" if out else ""))
-        return True
-    block = ["  eden:", "    type: stdio", "    name: eden", "    enabled: true",
-             "    timeout: 300", "    cmd: python3", "    args:", f"      - {mcp_py}"]
-    if env:
-        block.append("    envs:")
-        block += [f"      {k}: {v}" for k, v in env.items()]
-    # insert after the extensions: line, or append a fresh section
-    for i, line in enumerate(out):
-        if line.strip() == "extensions:":
-            out[i + 1:i + 1] = block
-            break
-    else:
+
+    def indent(line):
+        return len(line) - len(line.lstrip())
+
+    ext_i = next((i for i, l in enumerate(lines)
+                  if re.match(r"^\s*extensions\s*:\s*(#.*)?$", l)), None)
+    if ext_i is None:
+        if remove:
+            if lines:
+                write_text(path, "\n".join(lines) + "\n")
+            return True
+        block = ["  eden:", "    type: stdio", "    name: eden", "    enabled: true",
+                 "    timeout: 300", "    cmd: python3", "    args:", f"      - {mcp_py}"]
+        if env:
+            block.append("    envs:")
+            block += [f"      {k}: {v}" for k, v in env.items()]
+        out = list(lines)
         if out and out[-1].strip():
             out.append("")
         out.append("extensions:")
         out.extend(block)
+        write_text(path, "\n".join(out) + "\n")
+        return True
+
+    ext_indent = indent(lines[ext_i])
+    end, child = ext_i + 1, None
+    while end < len(lines):
+        l = lines[end]
+        if l.strip() and indent(l) <= ext_indent:
+            break
+        if l.strip() and child is None:
+            child = indent(l)
+        end += 1
+    if child is None:
+        child = ext_indent + 2
+
+    # drop an `eden:` entry at the child indent (or shallower-but-still-under-extensions)
+    kept, skipping = [], False
+    for l in lines[ext_i + 1:end]:
+        if l.strip() and ext_indent < indent(l) <= child and re.match(r"^eden\s*:", l.lstrip()):
+            skipping = True
+            continue
+        if skipping and l.strip() and indent(l) <= child:
+            skipping = False
+        if not skipping:
+            kept.append(l)
+
+    out = lines[:ext_i + 1] + kept + lines[end:]
+    if not remove:
+        pad = " " * child
+        block = [f"{pad}eden:", f"{pad}  type: stdio", f"{pad}  name: eden",
+                 f"{pad}  enabled: true", f"{pad}  timeout: 300", f"{pad}  cmd: python3",
+                 f"{pad}  args:", f"{pad}    - {mcp_py}"]
+        if env:
+            block.append(f"{pad}  envs:")
+            block += [f"{pad}    {k}: {v}" for k, v in env.items()]
+        out = lines[:ext_i + 1] + block + kept + lines[end:]
     write_text(path, "\n".join(out) + "\n")
     return True
 
