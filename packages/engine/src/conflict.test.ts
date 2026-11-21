@@ -471,4 +471,14 @@ describe("an amount under a limit clears only its own matter", () => {
       "conflict",
     );
   });
+
+  test("a terse conflict with no words to name its matter is no gate (review finding)", () => {
+    // "Max £200" holds no word of four letters or more: its matter is the amount itself, so a corrected amount
+    // clears it. An empty word set must not stand as a matter no clearance could ever share.
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200. Correction: max £400.")).toBe("clear");
+    // The same for a prose clearance against a terse firm conflict: "cap lifted" ends the £200 cap.
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200. The cap was lifted.")).toBe("clear");
+    // And the conflict still stands without a clearing statement.
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200.")).toBe("conflict");
+  });
 });

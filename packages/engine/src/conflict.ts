@@ -416,9 +416,11 @@ export function assess(
     const t = money || tied(tieOf(st, V)) || (!(V && st.s.startsWith("|")) && tied(tieOf(before, V))) || titled;
     tiedConflict = state === "conflict" ? tiedConflict || t : t;
     state = "conflict";
-    if (isFirm) firm = wordsFor(st);
-    if (t) conflictMatter = wordsFor(st);
-    if (V && t) conflictWords = wordsFor(st);
+    // A statement too terse to name its matter ("Max £200") must not stand as one: an empty set can never share a
+    // word, so every clearance would be blocked forever — an amount's matter is the amount, cleared by amounts.
+    if (isFirm) firm = nonEmpty(wordsFor(st));
+    if (t) conflictMatter = nonEmpty(wordsFor(st));
+    if (V && t) conflictWords = nonEmpty(wordsFor(st));
   };
   // A clearance is a near-miss twin's mark only where something could have blocked: after a blocking statement in
   // the item, or in words that say a block is gone ("lifted", "back from leave", "unchanged"). "Happy to jump on a
@@ -837,6 +839,9 @@ function wordsOf(s: string): Set<string> {
       .map((w) => w.slice(0, 5)),
   );
 }
+
+/** A statement's words as a matter, or null when it has none to gate a clearance by ("Max £200"). */
+const nonEmpty = (words: Set<string>): Set<string> | null => (words.size === 0 ? null : words);
 
 /**
  * Positions of a pattern's matches that are not negated just before ("not approved", "no restrictions" read as
