@@ -86,13 +86,13 @@ def main() -> int:
 
                 sid = latest_session_id(_home()) or "eden-mcp"
                 client = plugin.client(sid)
-                pushed = _joined(client.pending()) if client is not None else None
                 if params.get("name") == "pending_context":
-                    answer = pushed
+                    answer = _joined(client.pending()) if client is not None else None
                 elif params.get("name") == "ask_context":
                     question = str((params.get("arguments") or {}).get("question") or "")
                     answer = plugin.ask_context({"question": question}, session_id=sid)
                     # The queue's packets ride the reply: an MCP-only agent has no other channel.
+                    pushed = _joined(client.pending()) if client is not None else None
                     answer = "\n\n".join(t for t in (answer, pushed) if t)
                 else:
                     reply(msg_id, {"content": [{"type": "text", "text": "Unknown tool."}], "isError": True})
