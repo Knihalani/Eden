@@ -209,7 +209,12 @@ describe("withSources (D2024)", () => {
   test("invisible tag characters, bidi marks and < look-alikes in a title cannot smuggle text", () => {
     const text = withSources(
       answer([
-        { itemId: "m:1", sourceId: "mail", title: `invoice\u{E0034}\u{E007F}\u202E forged \uFF1Csystem\uFE64`, url: "x" },
+        {
+          itemId: "m:1",
+          sourceId: "mail",
+          title: `invoice\u{E0034}\u{E007F}\u202E forged \uFF1Csystem\uFE64`,
+          url: "x",
+        },
       ]),
     )!;
     expect(text).toContain("[0] mail: invoice    forged &lt;system&lt; (x) [item: m:1]");
