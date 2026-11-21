@@ -10,7 +10,8 @@ in each payload picks the path) and registers the MCP server in
 ``~/.codeium/windsurf/mcp_config.json`` ``mcpServers.eden``.
 
 ``--local`` (the default) runs ``<home>/eden/eden-local`` over stdio; ``--remote`` or
-``EDEN_HERMES_URL`` installs a remote endpoint instead (needs ``EDEN_API_KEY``).
+``EDEN_URL``/``EDEN_HERMES_URL`` installs a remote endpoint instead (``EDEN_API_KEY``
+authenticates it).
 """
 
 from __future__ import annotations
@@ -134,7 +135,17 @@ def _unmerged(hooks: dict, command: str) -> dict:
 
 def install(home: Path, local_bin: str | None, remote: bool, dry: bool) -> None:
     dest = home / "eden"
-    command = f"python3 {shlex.quote(str(dest / 'eden-hook.py'))}"
+    env_prefix = ""
+    if remote:
+        url = os.environ.get("EDEN_URL") or os.environ.get("EDEN_HERMES_URL")
+        key = os.environ.get("EDEN_API_KEY") or ""
+        # The hook config has no env field: the endpoint rides the bash command itself.
+        env_prefix = (
+            "env " + shlex.quote(f"EDEN_URL={url}")
+            + (" " + shlex.quote(f"EDEN_API_KEY={key}") if key else "")
+            + " "
+        )
+    command = f"{env_prefix}python3 {shlex.quote(str(dest / 'eden-hook.py'))}"
 
     if not dry:
         dest.mkdir(parents=True, exist_ok=True)
@@ -180,11 +191,11 @@ def install(home: Path, local_bin: str | None, remote: bool, dry: bool) -> None:
     servers = mcp.get("mcpServers") if isinstance(mcp.get("mcpServers"), dict) else {}
     env = {}
     if remote:
-        url = os.environ.get("EDEN_HERMES_URL")
+        url = os.environ.get("EDEN_URL") or os.environ.get("EDEN_HERMES_URL")
         if not url:
-            print("[eden] --remote needs EDEN_HERMES_URL set")
+            print("[eden] --remote needs EDEN_URL or EDEN_HERMES_URL set")
             sys.exit(1)
-        env["EDEN_HERMES_URL"] = url
+        env["EDEN_URL"] = url
         if os.environ.get("EDEN_API_KEY"):
             env["EDEN_API_KEY"] = os.environ["EDEN_API_KEY"]
     servers["eden"] = {
@@ -246,7 +257,7 @@ def main() -> None:
         uninstall(home, args.dry_run)
         return
 
-    remote = args.remote or bool(os.environ.get("EDEN_HERMES_URL"))
+    remote = args.remote or bool(os.environ.get("EDEN_URL") or os.environ.get("EDEN_HERMES_URL"))
     local_bin = None
     if not remote:
         local_bin = build_local(args.dry_run)

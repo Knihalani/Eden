@@ -9,14 +9,14 @@ timestamp, model_name, tool_info}``; ``trajectory_id`` keys the session.
 Event map (``agent_action_name`` values — one payload names its own event):
 
 - ``pre_user_prompt`` -> the ``user_message``: reported and stashed (Cascade shows hook
-  stdout only in the UI — a prompt's packet cannot be injected, so it rides the next
-  ``post_*`` hook or an MCP ask, like a PreToolUse's stash);
+  stdout only in the UI — a prompt's packet cannot be injected, so it waits for the
+  MCP reply, like a PreToolUse's stash);
 - ``pre_run_command``/``pre_write_code``/``pre_read_code``/``pre_mcp_tool_use`` -> the
   ``tool_call`` plus the party check; a finding exits 2 with the held text on stderr —
   the only channel that reaches the agent;
 - ``post_run_command``/``post_write_code``/``post_read_code``/``post_mcp_tool_use`` -> the
   ``tool_result`` (the event's ``tool_info``; ``post_mcp_tool_use`` also carries
-  ``mcp_result``), and any stashed packet leaves on stdout for the transcript;
+  ``mcp_result``); the stash stays parked for the MCP reply (stdout is UI-only);
 - ``post_cascade_response`` -> the turn's final reply (``tool_info.response``) once per copy;
 - ``post_user_prompt``, ``post_setup_worktree``, ``post_cascade_response_with_transcript``
   -> ignored: the prompt is already reported, the response is already reported, and a
@@ -34,7 +34,6 @@ from typing import Any, Dict, Optional
 
 from .claude import _key
 from .gemini import EdenGemini
-from .hermes import _joined
 
 
 class EdenWindsurf(EdenGemini):
@@ -43,8 +42,8 @@ class EdenWindsurf(EdenGemini):
 
     def prompt_stash(self, session_id: Any = None, text: Any = None, **_: Any) -> None:
         """``pre_user_prompt``: report the message; park the packet it yields — Cascade shows
-        hook stdout in the UI only, so the packet waits for the next ``post_*`` hook or an
-        MCP ask instead of being collected into a reply the agent never sees."""
+        hook stdout in the UI only, so the packet waits for the MCP reply instead of
+        being collected into a channel the agent never sees."""
         try:
             if not self._in_scope() or not isinstance(text, str) or not text.strip():
                 return None
@@ -72,11 +71,24 @@ class EdenWindsurf(EdenGemini):
     def post_tool_stash_out(self, tool_name: Any = None, result: Any = None,
                             tool_use_id: Any = None, session_id: Any = None,
                             **_: Any) -> Optional[str]:
-        """``post_*``: report the result like ``post_tool``, then return the stash's text so
-        the hook can echo it — Cascade keeps a post hook's stdout for the transcript."""
-        out = super().post_tool(tool_name, result, tool_use_id, session_id)
-        if isinstance(out, dict):
-            return out.get("context")
+        """``post_*``: report the result like ``post_tool``, but keep the stash: Cascade's
+        stdout never reaches the model, so popping it here would drop the packet the MCP
+        reply is the only channel for."""
+        saved: list = []
+        try:
+            saved = list(self._load(session_id).get("stashed", []))
+        except Exception:  # noqa: BLE001
+            saved = []
+        super().post_tool(tool_name, result, tool_use_id, session_id)
+        if saved:
+            try:
+                with self._locked_state(session_id) as state:
+                    stash = state.setdefault("stashed", [])
+                    for item in saved:
+                        if item not in stash:
+                            stash.append(item)
+            except Exception:  # noqa: BLE001
+                pass
         return None
 
 
@@ -94,7 +106,7 @@ def _input(tool_info: Any) -> Dict[str, Any]:
 
 def dispatch(plugin: EdenWindsurf, payload: Dict[str, Any]) -> Optional[str]:
     """Map a Cascade hook payload to the plugin call. Returns deny text (the hook exits 2
-    with it on stderr) or stdout text for the transcript; ``None`` reports silently."""
+    with it on stderr); ``None`` reports silently."""
     sid = payload.get("trajectory_id")
     event = str(payload.get("agent_action_name") or "")
     info = _input(payload.get("tool_info"))

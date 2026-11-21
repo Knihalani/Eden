@@ -92,14 +92,15 @@ class WindsurfHookTest(unittest.TestCase):
         self.assertIsNone(out)
         self.assertIn("tool_call", kinds())
 
-    def test_post_reports_and_surfaces_stash(self):
+    def test_post_reports_and_keeps_the_stash(self):
+        # Cascade's stdout is UI-only: the stashed packet stays parked for the MCP reply —
+        # draining it on a post hook would drop the packet with no channel.
         p = make()
         dispatch(p, payload("pre_user_prompt", {"user_prompt": "hi"}))
         out = dispatch(p, payload("post_run_command", {"command_line": "ls"}))
+        self.assertIsNone(out)
         self.assertIn("tool_result", kinds())
-        self.assertIn("packet-text", out or "")
-        # And the stash is drained once shown.
-        self.assertIsNone(dispatch(p, payload("post_read_code", {"file_path": "a"}), ))
+        self.assertIn(PACKET, p._load("t-1").get("stashed", []))
 
     def test_mcp_events_map_tool_names(self):
         p = make()

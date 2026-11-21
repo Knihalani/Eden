@@ -15,7 +15,7 @@ python3 examples/windsurf/install.py --dry-run  # preview
 python3 examples/windsurf/install.py --uninstall
 ```
 
-- `EDEN_HERMES_URL`/`EDEN_API_KEY` or `--remote` installs against a remote endpoint instead.
+- `EDEN_URL` (or `EDEN_HERMES_URL`) + `EDEN_API_KEY`, or `--remote`, installs against a remote endpoint instead — the hook command and the MCP env both carry it.
 - `WINDSURF_HOME` (or `CODEIUM_WINDSURF_HOME`) overrides the `~/.codeium/windsurf` home.
 
 The installer merges one `bash` hook command into each of these event lists in
@@ -25,7 +25,7 @@ The installer merges one `bash` hook command into each of these event lists in
 | --- | --- |
 | `pre_user_prompt` | Reports the `user_message`; parks the packet for the next `post_*` hook or an MCP ask — Cascade shows hook stdout in the UI only |
 | `pre_run_command` / `pre_write_code` / `pre_read_code` / `pre_mcp_tool_use` | Reports the `tool_call`; a party finding **exits 2 with the held text on stderr**, Cascade's only blocking channel |
-| `post_run_command` / `post_write_code` / `post_read_code` / `post_mcp_tool_use` | Reports the `tool_result` (and `mcp_result` on the MCP event); a stashed packet rides stdout into the transcript |
+| `post_run_command` / `post_write_code` / `post_read_code` / `post_mcp_tool_use` | Reports the `tool_result` (and `mcp_result` on the MCP event); the stash stays parked for the MCP reply |
 | `post_cascade_response` | Reports the turn's final reply once per copy |
 
 `post_user_prompt`, `post_setup_worktree` and `post_cascade_response_with_transcript` are
@@ -36,10 +36,10 @@ ignored (the prompt and response are already reported; a worktree is no agent ac
 Cascade puts a hook's **stdout in the UI, not the model context** — a pre-hook cannot inject.
 Two channels remain:
 
-- `post_*` hooks echo a stashed packet on stdout, which lands in the trajectory transcript.
 - The `eden` MCP server exposes `pending_context` (the queue plus anything a prompt/check
   stashed for a channel-less event) and `ask_context` (a natural-language question, plus an
-  optional `item` id from a Sources line to go deeper).
+  optional `item` id from a Sources line to go deeper). Post hooks deliberately keep the
+  stash parked: printing it to stdout would drop the packet with no channel left.
 
 Cascade has no session lifecycle events: the session starts with the first hook that reports
 it and `session_end` is never sent — a documented gap, matching what the contract offers.

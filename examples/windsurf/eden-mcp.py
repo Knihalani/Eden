@@ -115,7 +115,16 @@ def main() -> int:
                         if name == "pending_context":
                             answer = _queued(plugin, client, sid)
                         elif name == "ask_context":
-                            answer = client.ask(args.get("question") or "", args.get("item"))
+                            question = str(args.get("question") or "")
+                            item = args.get("item")
+                            answer = plugin.ask_context(
+                                {"question": question,
+                                 **({"item": item} if isinstance(item, str) else {})},
+                                session_id=sid)
+                            # The queue's packets ride the reply: an agent on MCP alone
+                            # has no other channel.
+                            pushed = _queued(plugin, client, sid)
+                            answer = "\n\n".join(t for t in (answer, pushed) if t)
                 except Exception:  # noqa: BLE001
                     answer = None
                 emit({"jsonrpc": "2.0", "id": msg_id, "result": {
