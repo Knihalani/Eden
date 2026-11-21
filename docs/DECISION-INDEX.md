@@ -958,3 +958,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2080 | 2026-11-21 | Rejected: the tenant prior (o4-new-user §5a, O5). | rejected |
 | D2081 | 2026-11-21 | Finding: Eden ~2×s hidden facts over ten-day horizons with a weak agent. | finding |
 | D2085 | 2026-11-21 | Adopted: the hidden-fact grader credits the substance, not the detail list. | adopted |
+| D2083 | 2026-11-21 | `pushCheckedCandidates` adopted. | adopted |
+| D2082 | 2026-11-21 | `pushCheckLate` adopted. | adopted |
