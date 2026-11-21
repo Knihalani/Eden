@@ -56,6 +56,8 @@ describe("EDEN_PERSIST_* (D425, on by default since D991)", () => {
     expect(
       loadConfig({ ...prod, EDEN_NODES: "a=http://h:1", EDEN_CLUSTER_KEY: node.EDEN_CLUSTER_KEY }).persist,
     ).toBeNull();
+    // The stateless edge over the cells holds no user either (D2067).
+    expect(loadConfig({ ...prod, EDEN_TOP_TABLE: "0-65535=http://h:1" }).persist).toBeNull();
     // Paths come from the env given, not only the process's (review of D992).
     const home = join(root, "own-home");
     expect(loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_HOME: home }).sourceMapPath).toBe(

@@ -252,8 +252,9 @@ const NO_KEY =
  * A child's cap is its 1/N share (`share`) of EDEN_PERSIST_MAX_MB.
  */
 function persistConfig(env: NodeJS.ProcessEnv, share: number, dev: boolean, memoryBytes: number) {
-  // The cluster router (D992, EDEN_NODES) holds no user: nothing of its own to persist.
-  if (env.EDEN_NODES || env.EDEN_NODES_FILE) return null;
+  // The cluster router (D992, EDEN_NODES) and the edge over the cells (D2067, EDEN_TOP_TABLE) hold no user:
+  // nothing of their own to persist.
+  if (env.EDEN_NODES || env.EDEN_NODES_FILE || env.EDEN_TOP_TABLE || env.EDEN_TOP_TABLE_FILE) return null;
   const mode = env.EDEN_PERSIST ?? "";
   if (!["", "on", "off"].includes(mode)) throw new Error(`EDEN_PERSIST must be "on" or "off", got ${mode}`);
   const dir = env.EDEN_PERSIST_FROZEN_DIR ?? "";
