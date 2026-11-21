@@ -241,6 +241,8 @@ export function checkEvent(v: unknown, sourceChars = Infinity): Checked<AgentEve
       return { ok: true, value: { ...base, kind: "session_start", agent: isText(v.agent, 200) ? v.agent : undefined } };
     case "session_end":
       return { ok: true, value: { ...base, kind: "session_end" } };
+    case "context_reset":
+      return { ok: true, value: { ...base, kind: "context_reset" } };
     case "user_message":
     case "agent_message":
       if (!isText(v.text)) return { ok: false, error: textError(`${v.kind}.text`, MAX_TEXT_CHARS) };

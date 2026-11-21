@@ -345,6 +345,11 @@ interface Recorded {
   used: boolean;
   /** The session the injection was delivered in: a later correction's usage record names it (D293). */
   sessionId: string;
+  /**
+   * Delivered but judged by nothing yet — a `context_reset` kept the entry for a later correction without
+   * recording an outcome (D2006): a compaction is no verdict. Feedback records it fresh, not as a flip.
+   */
+  pending?: boolean;
 }
 
 interface Session {
@@ -538,7 +543,8 @@ function isFrozenRecorded(x: unknown): x is FrozenRecorded {
     Array.isArray(r.sourceIds) &&
     typeof r.situation === "string" &&
     typeof r.used === "boolean" &&
-    typeof r.sessionId === "string"
+    typeof r.sessionId === "string" &&
+    (r.pending === undefined || typeof r.pending === "boolean")
   );
 }
 
@@ -1378,8 +1384,15 @@ export class ContextPartner {
     // A user frozen while idle (D325) is thawed in slices first, so other users' events do not wait behind it. A
     // session's end and a draft read no item (`observeEvent` returns before any): they start no thaw, but wait on one
     // an earlier event of theirs waits on, or they would run before it (A24 and its review).
-    const reads = event.kind !== "session_end" && !(event.kind === "user_message" && event.draft === true);
-    const thawing = reads ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
+    const reads =
+      event.kind !== "session_end" &&
+      event.kind !== "context_reset" &&
+      !(event.kind === "user_message" && event.draft === true);
+    // A `context_reset` reads no item either, but it mutates the persisted marks: a cold user's saved session seed
+    // must be thawed to be dropped, so it asks `ready` like a reader — `pendingThaw` would leave the seed on disk
+    // for the next event to re-seed (D2006 review).
+    const thawing =
+      reads || event.kind === "context_reset" ? this.deps.cache.ready(event) : this.deps.cache.pendingThaw(event);
     if (thawing) await thawing;
     // `readerPush`: a request that acts is also read by the ask-time reader, as an ask of the engine's own; what it
     // flags is queued as a packet. The observe waits for it within its own wait, so an agent that never calls
@@ -1518,6 +1531,35 @@ export class ContextPartner {
         else this.restoredSessions.delete(endedUser);
       }
       if (root) spans!.close(root);
+      return { injection: null, pending: false };
+    }
+    if (event.kind === "context_reset") {
+      // The agent compacted (or replaced) its transcript: what this session showed it is gone from its context,
+      // so the marks that keep the session from repeating itself go too — a later delivery is news, not a repeat
+      // (A3, D2006). The session stays open: the conversation continues where the transcript left off.
+      const resetting = this.sessions.get(sessionKey(event));
+      if (resetting) this.resetContext(resetting);
+      // Its saved marks must not re-seed it either: a restored blob seeds a session that continues this one, and
+      // this one's ledger and delivered list are exactly what the reset dropped.
+      const resetUser = scopeKey(event);
+      const frozenReset = this.restoredSessions.get(resetUser);
+      const seed = frozenReset?.find((f) => f.sessionId === event.sessionId);
+      if (seed !== undefined) {
+        // The seed an evicted session left carries its outstanding deliveries too: a reset keeps them pending like
+        // a live session's — `feedback` on a pre-reset delivery still lands (D2006 review).
+        for (const o of seed.outstanding ?? [])
+          this.recordRow(event, o.injectionId, {
+            sourceIds: o.sourceIds,
+            situation: o.situation,
+            used: false,
+            sessionId: seed.sessionId,
+            pending: true,
+          });
+        const kept = frozenReset!.filter((f) => f !== seed);
+        if (kept.length) this.restoredSessions.set(resetUser, kept);
+        else this.restoredSessions.delete(resetUser);
+      }
+      if (root) spans!.close(root, { decision: "reset" });
       return { injection: null, pending: false };
     }
     // A draft the user is still typing is never a request, and moves no turn: it is ignored (no session is even
@@ -3962,6 +4004,20 @@ export class ContextPartner {
     // The session may have ended (and counted the injection unused): the user's record outlives it.
     const r = this.recordedOf(scope)?.get(f.injectionId);
     if (!r) return false;
+    if (r.pending === true) {
+      // Judged by nothing yet (a `context_reset` kept it): the verdict records, it does not correct (D2006).
+      r.pending = undefined;
+      r.used = f.used;
+      for (const sourceId of r.sourceIds) this.deps.sourceMap.recordOutcome(scope, r.situation, sourceId, f.used);
+      this.usage({
+        sessionId: r.sessionId,
+        injectionId: f.injectionId,
+        used: f.used,
+        how: "explicit",
+        sourceIds: r.sourceIds,
+      });
+      return true;
+    }
     if (r.used !== f.used) {
       for (const sourceId of r.sourceIds) this.deps.sourceMap.correctOutcome(scope, r.situation, sourceId, f.used);
       r.used = f.used;
@@ -4322,6 +4378,35 @@ export class ContextPartner {
    * Ends a session. `learn` is true only for a real session_end: then injections the agent never showed use of count
    * as unused. Eviction and forget learn nothing, since the session did not run its course.
    */
+  /**
+   * `context_reset` (A3, D2006): the agent's transcript was compacted — the items this session showed it are gone
+   * from its context. The delivery marks clear (the ledger's delivered/versions/shown, the near-duplicate
+   * `delivered` list, `agentHas`, the party digests and shown words, the plan alerts already sent), so a later
+   * packet or answer may show the same items again. `outstanding` drops quietly — a compaction is no use-verdict
+   * on what was shown — while request state, cues, learned economy (`pushRead`/`pushChecks`/`checks`) and queued
+   * packets stand: they are not the agent's memory of a delivery.
+   */
+  private resetContext(s: Session): void {
+    s.ledger.reset();
+    s.delivered = [];
+    s.agentHas = [];
+    // Shown but judged by nothing: kept for a later correction, with no outcome recorded — a compaction is no
+    // verdict on what was shown (feedback on it lands fresh in `feedback`).
+    for (const [id, o] of s.outstanding)
+      this.recordRow(s.scope, id, {
+        sourceIds: o.sourceIds,
+        situation: o.situation,
+        used: false,
+        sessionId: s.id,
+        pending: true,
+      });
+    s.outstanding.clear();
+    s.checked?.clear();
+    s.packetParties?.clear();
+    s.shown?.clear();
+    s.planSent?.clear();
+  }
+
   private close(s: Session, learn: boolean): void {
     if (s.closed) return;
     s.closed = true;
@@ -4433,13 +4518,18 @@ export class ContextPartner {
   ): void {
     this.usage({ sessionId: report.sessionId, injectionId, used, how: report.how, sourceIds });
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
+    this.recordRow(scope, injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
+  }
+
+  /** A row in `recorded`, under the same per-user and per-tenant caps `record` enforces. */
+  private recordRow(scope: Scope, injectionId: string, row: Recorded): void {
     const key = scopeKey(scope);
     const tenant = this.recorded.get(scope.tenantId) ?? new Map<string, Map<string, Recorded>>();
     this.recorded.set(scope.tenantId, tenant);
     const mine = tenant.get(key) ?? new Map<string, Recorded>();
     tenant.delete(key); // Re-insert: Map order is least recently recorded user first.
     tenant.set(key, mine);
-    mine.set(injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
+    mine.set(injectionId, row);
     while (mine.size > MAX_RECORDED) mine.delete(mine.keys().next().value as string);
     while (tenant.size > MAX_RECORDED_USERS) tenant.delete(tenant.keys().next().value as string);
   }

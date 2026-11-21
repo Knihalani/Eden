@@ -35,7 +35,14 @@ export type AgentEvent =
   | (EventBase & { kind: "tool_result"; tool: string; output: string; isError?: boolean })
   /** Something outside the conversation the agent is acting on: a new email, a calendar change, a webhook. */
   | (EventBase & { kind: "external"; source: string; text: string })
-  | (EventBase & { kind: "session_end" });
+  | (EventBase & { kind: "session_end" })
+  /**
+   * The agent compacted, restarted, or replaced its transcript: everything it was shown is gone from its context.
+   * The session's delivery marks clear, so a later packet or answer may show the same items again — a repeat to
+   * the agent would be new information it no longer has. Reads nothing; waits on an in-flight thaw like
+   * `session_end`, so it cannot pass an event of the same session still queued behind one.
+   */
+  | (EventBase & { kind: "context_reset" });
 
 export type AgentEventKind = AgentEvent["kind"];
 

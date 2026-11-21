@@ -151,6 +151,18 @@ class EdenClaudeTests(unittest.TestCase):
         plugin(home=home).prompt("s1", "hi")
         self.assertEqual(latest_session_id(home), "s1")
 
+    def test_a_compact_session_start_resets_then_starts(self):
+        p = plugin()
+        p.session_start("s1", source="compact")
+        c = FakeClient.made[0]
+        self.assertEqual(kinds(c), ["context_reset", "session_start"])
+
+    def test_a_plain_session_start_sends_no_reset(self):
+        p = plugin()
+        p.session_start("s1")
+        c = FakeClient.made[0]
+        self.assertEqual(kinds(c), ["session_start"])
+
     def test_everything_fails_open(self):
         p = plugin()
         p.session_start("s1")  # makes the client

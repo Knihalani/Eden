@@ -54,6 +54,16 @@ export class Ledger {
 
   constructor(private readonly cooldownTurns = 40) {}
 
+  /**
+   * `context_reset` (D2006): the agent's transcript was compacted or replaced, so the marks that keep a session
+   * from repeating itself go — a delivery after the reset is news again, not a repeat.
+   */
+  reset(): void {
+    this.delivered.clear();
+    this.versions.clear();
+    this.shown.clear();
+  }
+
   /** Everything `seed` needs to hand this ledger's knowledge to a session that replaces it. */
   snapshot(): LedgerSnapshot {
     return { delivered: [...this.delivered], versions: [...this.versions], shown: [...this.shown] };
