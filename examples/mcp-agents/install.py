@@ -240,7 +240,8 @@ def merge_codex(path, mcp_py, env, remove=False):
         lines = []
     out, skipping = [], False
     for line in lines:
-        if line.strip() == "[mcp_servers.eden]":
+        head = line.strip()
+        if head == "[mcp_servers.eden]" or head.startswith("[mcp_servers.eden."):
             skipping = True
             continue
         if skipping and line.strip().startswith("["):
