@@ -867,8 +867,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2009 | 2026-11-20 | Adopted: a per-user alias table — name parts to their full names — expands a request's anchors, so a person asked for by one form anchors… | adopted |
 | D2011 | 2026-11-20 | Adopted: `pushOpenConstraint` — an opt-in mild filter: on a request the push opened by shape rather than a listed verb, a packet goes only… | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
-| D2026 | 2026-11-21 | Adopted: a surface session's teardown reports `session_end` on its report queue. | adopted |
 | D2027 | 2026-11-21 | Adopted: the report queue binds inside `surface.report`, not in its callers. | adopted |
+| D2026 | 2026-11-21 | Adopted: a surface session's teardown reports `session_end` on its report queue. | adopted |
 | D2024 | 2026-11-21 | Adopted: the `item` argument and Sources lines reach every `ask_context` surface (A2, the last mile). | adopted |
 | D2023 | 2026-11-21 | Adopted: `partner-ask.ts` — the ask path out of the verdict core, the top of the chain. | adopted |
 | D2022 | 2026-11-21 | Adopted: an optional `item` argument on `ask_context` — a citation's id returns that item's parts in full. | adopted |
