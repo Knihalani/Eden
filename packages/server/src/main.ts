@@ -23,7 +23,7 @@ import { createHandler } from "./http";
 import { modelRolesFromEnv, NO_MODELS } from "./models";
 import { localBoundary, localConfig, redirectLocalConsole, watchLocalInput } from "./local";
 import { S3BlobStore } from "./blob-store";
-import { nodesFromEnv, runCluster } from "./cluster";
+import { nodesFromEnv, runCluster, runEdge, topTableFromEnv } from "./cluster";
 import { Ops, serveError } from "./ops";
 import { childOwns, prunePersistDirs } from "./persist";
 import { keyOf } from "./auth";
@@ -53,10 +53,15 @@ if (config.dev && !config.child && process.env.OPENROUTER_API_KEY && process.env
 // bytecode cache; nothing else in the bundle needs it).
 void (async () => {
   try {
-    // D992: with EDEN_NODES (or EDEN_NODES_FILE) this process is the cluster router over machines, and holds no users.
-    const cluster = local || config.child ? null : nodesFromEnv(process.env);
-    if (cluster) {
-      await runCluster(config, cluster);
+    // D992: with EDEN_NODES (or EDEN_NODES_FILE) this process is the cluster router over machines, and holds no
+    // users. S1-P8: with EDEN_TOP_TABLE (or _FILE) it is the edge in front of the cells instead — one or the
+    // other, since an edge forwarding into itself would loop.
+    const spec = local || config.child ? null : { top: topTableFromEnv(process.env), nodes: nodesFromEnv(process.env) };
+    if (spec?.top && spec.nodes) throw new Error("set EDEN_TOP_TABLE(_FILE) or EDEN_NODES(_FILE), not both");
+    if (spec?.top) {
+      await runEdge(config, spec.top);
+    } else if (spec?.nodes) {
+      await runCluster(config, spec.nodes);
     } else if (config.processes > 1) {
       await runRouter(config);
     } else {

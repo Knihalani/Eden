@@ -11,7 +11,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUCKETS, OwnerTable } from "@eden/primitives";
 import { bucketOf } from "@eden/protocol";
-import { membershipKey, nodesFromEnv, parseNodes, startCluster, type ClusterRouter } from "./cluster";
+import {
+  membershipKey,
+  nodesFromEnv,
+  parseNodes,
+  parseTopTable,
+  startCluster,
+  startEdge,
+  type ClusterRouter,
+} from "./cluster";
 import { fakeS3 } from "./fixtures/fake-s3";
 
 const KEY = "k_acme_0123456789abcdef";
@@ -611,5 +619,78 @@ test("a cell'd router labels its own metrics with the cell (S1-P8)", async () =>
     await withCell.stop();
     await without.stop();
     stub.stop(true);
+  }
+});
+
+test("parseTopTable covers every bucket exactly once, and refuses the rest (S1-P8)", () => {
+  expect(parseTopTable("0-32767=https://a\n32768-65535=https://b:443/\n")).toEqual([
+    { lo: 0, hi: 32767, url: "https://a" },
+    { lo: 32768, hi: 65535, url: "https://b:443" },
+  ]);
+  // One cell is the whole range; comments and commas are the nodes file's grammar.
+  expect(parseTopTable("# fleet\n0-65535=http://only:8790")).toEqual([{ lo: 0, hi: 65535, url: "http://only:8790" }]);
+  expect(() => parseTopTable("")).toThrow("lists no range");
+  expect(() => parseTopTable("cell-a=https://a")).toThrow("must be lo-hi=url");
+  expect(() => parseTopTable("0-99999=https://a")).toThrow("inside 0-65535");
+  expect(() => parseTopTable("5-1=https://a")).toThrow("inside 0-65535");
+  expect(() => parseTopTable("0-65535=ftp://a")).toThrow("must be http(s)");
+  // A gap blackholes its users; an overlap routes one user to two cells — both refused.
+  expect(() => parseTopTable("0-10=https://a\n12-65535=https://b")).toThrow("bucket 11 is in no row");
+  expect(() => parseTopTable("0-20=https://a\n20-65535=https://b")).toThrow("bucket 20 is named by two rows");
+});
+
+test("the edge routes a request to its user's bucket's cell, forget to one, usage across all (S1-P8)", async () => {
+  // Two stub cells record which requests reach them.
+  const seen = { a: [] as string[], b: [] as string[] };
+  const stub = (name: "a" | "b") =>
+    Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname;
+        seen[name].push(path);
+        if (path === "/v1/usage") return Response.json({ calls: 1, spend: 0, cells: 1 });
+        return Response.json({ cell: name });
+      },
+    });
+  const a = stub("a");
+  const b = stub("b");
+  // The top table's ranges are over user buckets; find users hashing into each half.
+  const inA = Array.from({ length: 400 }, (_, i) => `u${i}`).find((u) => bucketOf("acme", u) < BUCKETS / 2)!;
+  const inB = Array.from({ length: 400 }, (_, i) => `u${i}`).find((u) => bucketOf("acme", u) >= BUCKETS / 2)!;
+  const edge = await startEdge({
+    config: { port: 0, host: "127.0.0.1", keys: new Map([[KEY, "acme"]]), dev: false },
+    ranges: [
+      { lo: 0, hi: BUCKETS / 2 - 1, url: `http://127.0.0.1:${a.port}` },
+      { lo: BUCKETS / 2, hi: BUCKETS - 1, url: `http://127.0.0.1:${b.port}` },
+    ],
+  });
+  const post = (userId: string, path: string) =>
+    fetch(`http://127.0.0.1:${edge.port}${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ userId, sessionId: "s1", kind: "user_message", text: "x" }),
+    });
+  try {
+    expect(await (await post(inA, "/v1/events")).json()).toEqual({ cell: "a" });
+    expect(await (await post(inB, "/v1/events")).json()).toEqual({ cell: "b" });
+    // Forget rides the same deterministic placement: only the user's own cell hears it.
+    seen.a.length = 0;
+    seen.b.length = 0;
+    await post(inA, "/v1/forget");
+    expect(seen.a).toEqual(["/v1/forget"]);
+    expect(seen.b).toEqual([]);
+    // Usage sums across every cell.
+    const usage = (await (await post(inA, "/v1/usage")).json()) as { calls: number; cellsDown: number };
+    expect(usage.calls).toBe(2);
+    expect(usage.cellsDown).toBe(0);
+    // Metrics name the cells the requests were counted for.
+    const text = await (await fetch(`http://127.0.0.1:${edge.port}/metrics`)).text();
+    expect(text).toContain("eden_edge_cells 2");
+    expect(text).toContain(`cell="http://127.0.0.1:${a.port}",outcome="forwarded"} 2`);
+  } finally {
+    await edge.stop();
+    a.stop(true);
+    b.stop(true);
   }
 });

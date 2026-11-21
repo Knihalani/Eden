@@ -83,6 +83,58 @@ export function parseNodes(text: string, cell?: string): NodeSpec[] {
   return out;
 }
 
+/** A row of the fleet's top table (S1-P8): the user buckets `lo..hi` (inclusive) the cell at `url` serves. */
+export interface TopRange {
+  lo: number;
+  hi: number;
+  url: string;
+}
+
+/**
+ * Parses the fleet's top table (S1-P8): `lo-hi=url` entries, comma- or newline-separated, blank lines and
+ * `#` comments skipped. `lo`/`hi` are inclusive bucket bounds inside `0..BUCKETS-1`; `url` is the cell's load
+ * balancer (in front of that cell's routers). The ranges must cover every bucket exactly once — a gap would
+ * blackhole its users' requests, an overlap could route one user to either of two cells. A one-cell fleet is
+ * one `0-65535` row. Nothing in the table changes at runtime: a range move lands users on the new cell through
+ * the store, as membership moves them between nodes.
+ */
+export function parseTopTable(text: string): TopRange[] {
+  const seen = new Uint8Array(BUCKETS);
+  const out: TopRange[] = [];
+  for (const raw of text.split(/[,\n]/)) {
+    const entry = raw.replace(/#.*/, "").trim();
+    if (entry === "") continue;
+    const eq = entry.indexOf("=");
+    const range = eq < 0 ? "" : entry.slice(0, eq).trim();
+    const url = (eq < 0 ? "" : entry.slice(eq + 1).trim()).replace(/\/+$/, "");
+    const m = /^(\d+)-(\d+)$/.exec(range);
+    if (!m) throw new Error(`EDEN_TOP_TABLE: "${entry}" must be lo-hi=url, e.g. 0-32767=https://cell-a`);
+    const lo = Number(m[1]);
+    const hi = Number(m[2]);
+    if (lo > hi || hi >= BUCKETS) throw new Error(`EDEN_TOP_TABLE: "${entry}"'s range must be inside 0-${BUCKETS - 1}`);
+    if (!/^https?:\/\/[^\s/]+$/.test(url))
+      throw new Error(`EDEN_TOP_TABLE: range ${range}'s url must be http(s)://host:port`);
+    for (let b = lo; b <= hi; b++) {
+      if (seen[b]) throw new Error(`EDEN_TOP_TABLE: bucket ${b} is named by two rows`);
+      seen[b] = 1;
+    }
+    out.push({ lo, hi, url });
+  }
+  if (out.length === 0) throw new Error("EDEN_TOP_TABLE lists no range");
+  for (let b = 0; b < BUCKETS; b++)
+    if (!seen[b]) throw new Error(`EDEN_TOP_TABLE: bucket ${b} is in no row (0-${BUCKETS - 1} must all be covered)`);
+  return out;
+}
+
+/** The top table from EDEN_TOP_TABLE or EDEN_TOP_TABLE_FILE, or null when neither is set (not an edge). */
+export function topTableFromEnv(env: NodeJS.ProcessEnv): { ranges: TopRange[]; file: string | null } | null {
+  const file = env.EDEN_TOP_TABLE_FILE ?? "";
+  const text = env.EDEN_TOP_TABLE ?? "";
+  if (file === "" && text === "") return null;
+  if (file !== "" && text !== "") throw new Error("set EDEN_TOP_TABLE or EDEN_TOP_TABLE_FILE, not both");
+  return { ranges: parseTopTable(file !== "" ? readFileSync(file, "utf8") : text), file: file === "" ? null : file };
+}
+
 /** The nodes from EDEN_NODES or EDEN_NODES_FILE, or null when neither is set (not a cluster router). */
 export function nodesFromEnv(
   env: NodeJS.ProcessEnv,
@@ -784,5 +836,159 @@ export async function runCluster(
   console.log(
     `eden cluster router listening on http://${config.host}:${router.port} (${spec.nodes.length} nodes: ` +
       `${spec.nodes.map((n) => n.id).join(", ")}; users placed by rendezvous hashing of their bucket, D992)`,
+  );
+}
+
+/**
+ * The fleet's edge (S1-P8): a stateless router in front of the cells. Each request's user bucket
+ * (`bucketOf(tenant, userOf(body))`, the same pure hash the whole fleet shares) picks the cell whose top-table
+ * row covers it; the bytes go to that cell's load balancer. No membership, no probes, nothing mutable: the cell
+ * LBs health-check their own routers, and the table is static by design — a range move is a deploy-time event,
+ * so a changing file is not re-read here (a new table is rolled out as a restart, while a live move between
+ * cells rides the store the way a move between nodes does).
+ *
+ * `/v1/forget` needs only the user's cell (a user lives in exactly one range); `/v1/usage` sums across all of
+ * them. GETs and keyless POSTs go to the first row's cell — they carry no body to hash (as the cluster router
+ * forwards them to its first live node).
+ */
+export interface EdgeOptions {
+  config: Pick<ServerConfig, "port" | "host" | "keys" | "dev"> &
+    Partial<Pick<ServerConfig, "maxBodyBytes" | "tenantRatePerSec" | "tenantBurst">>;
+  ranges: TopRange[];
+  /** A forwarded request's bound (default 60 s, as the cluster router's). */
+  forwardTimeoutMs?: number;
+  /** How long a request is retried while the cell's LB refuses connections (a rollout); default 5 s. */
+  retryRefusedMs?: number;
+}
+
+export interface Edge {
+  port: number;
+  stop: () => Promise<void>;
+}
+
+export async function startEdge(options: EdgeOptions): Promise<Edge> {
+  const { config, ranges } = options;
+  const forwardTimeoutMs = options.forwardTimeoutMs ?? 60_000;
+  const retryRefusedMs = options.retryRefusedMs ?? 5_000;
+  const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const limiter = new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
+  const counts = new Map<string, number>();
+  const count = (k: string, cell?: string) =>
+    counts.set(`${cell ?? ""} ${k}`, (counts.get(`${cell ?? ""} ${k}`) ?? 0) + 1);
+  const fail = (status: number, error: string) => Response.json({ error }, { status });
+  const cellOf = (b: number) => ranges.find((r) => b >= r.lo && b <= r.hi)!.url;
+
+  const tenantOf = (req: Request): string | null => {
+    const key = keyOf(req);
+    if (key && config.keys.has(key)) return config.keys.get(key)!;
+    return config.dev && !key ? "dev" : null;
+  };
+
+  const forward = async (cell: string, req: Request, url: URL, body?: Uint8Array): Promise<Response> => {
+    const headers: Record<string, string> = {};
+    const auth = req.headers.get("authorization");
+    if (auth !== null) headers.authorization = auth;
+    const type = req.headers.get("content-type");
+    if (type !== null) headers["content-type"] = type;
+    // A refused connection is a cell mid-rollout: the request never reached it, so it is retried for up to
+    // `retryRefusedMs`. Any other failure is not: an event must not be observed twice (the cluster rule).
+    const until = performance.now() + retryRefusedMs;
+    for (;;) {
+      try {
+        return await fetch(`${cell}${url.pathname}${url.search}`, {
+          method: req.method,
+          headers,
+          body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
+          signal: AbortSignal.timeout(forwardTimeoutMs),
+        });
+      } catch (e) {
+        const code = (e as { code?: string } | null)?.code ?? "";
+        if (!/ECONNREFUSED|ConnectionRefused/i.test(code) || performance.now() > until)
+          return fail(503, "temporarily unable to serve context");
+        count("retried_refused", cell);
+        await Bun.sleep(200);
+      }
+    }
+  };
+
+  const server = Bun.serve({
+    port: config.port,
+    hostname: config.host,
+    maxRequestBodySize: maxBodyBytes,
+    async fetch(req) {
+      const url = new URL(req.url);
+      if (req.method === "GET" && url.pathname === "/healthz") return Response.json({ ok: true, cells: ranges.length });
+      if (req.method === "GET" && url.pathname === "/readyz")
+        return Response.json({ ready: true, cells: ranges.length });
+      if (req.method === "GET" && url.pathname === "/metrics") {
+        const own = [
+          "# HELP eden_edge_cells Cells in the top table",
+          "# TYPE eden_edge_cells gauge",
+          `eden_edge_cells ${ranges.length}`,
+          "# HELP eden_edge_requests_total Requests by outcome and cell",
+          "# TYPE eden_edge_requests_total counter",
+          ...[...counts].map(([k, v]) => {
+            const [cell, outcome] = k.split(" ", 2);
+            const labels = cell === "" ? `outcome="${outcome}"` : `cell="${cell}",outcome="${outcome}"`;
+            return `eden_edge_requests_total{${labels}} ${v}`;
+          }),
+          "",
+        ].join("\n");
+        return new Response(own, { headers: { "content-type": "text/plain; version=0.0.4" } });
+      }
+      if (url.pathname.startsWith("/internal/")) return fail(404, "not found");
+      const tenant = tenantOf(req);
+      if (req.method !== "POST" || tenant === null) return forward(ranges[0]!.url, req, url);
+      if (tenant === "dev" && !keyOf(req) && !keylessOriginAllowed(req.headers.get("origin")))
+        return fail(403, "dev mode serves no key-less request from another site's page");
+      const waitMs = limiter.take(tenant);
+      if (waitMs > 0)
+        return Response.json(
+          { error: "rate limited" },
+          { status: 429, headers: { "retry-after": String(Math.ceil(waitMs / 1_000)) } },
+        );
+      if (Number(req.headers.get("content-length") ?? NaN) > maxBodyBytes)
+        return fail(413, `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`);
+      let body: Uint8Array;
+      try {
+        body = new Uint8Array(await req.arrayBuffer());
+      } catch {
+        return fail(400, "body could not be read");
+      }
+      const cell = cellOf(bucketOf(tenant, userOf(body)));
+      if (url.pathname === "/v1/usage") {
+        // Usage is per tenant across every cell: each answers its users' share (the cluster's `everywhere`).
+        const parts: Record<string, unknown>[] = [];
+        for (const r of await Promise.all(ranges.map((c) => forward(c.url, req, url, body)))) {
+          if (r.status < 200 || r.status >= 300) {
+            void r.arrayBuffer().catch(() => {});
+            continue;
+          }
+          try {
+            parts.push((await r.json()) as Record<string, unknown>);
+          } catch {
+            // Left out, as a cell that did not answer.
+          }
+        }
+        if (parts.length === 0) return fail(503, "temporarily unable to serve context");
+        return Response.json({ ...sumUsage(parts), cellsDown: ranges.length - parts.length });
+      }
+      count("forwarded", cell);
+      return forward(cell, req, url, body);
+    },
+    error: () => fail(503, "temporarily unable to serve context"),
+  });
+  return { port: server.port ?? 0, stop: async () => server.stop(true) };
+}
+
+/** `main.ts` with EDEN_TOP_TABLE or EDEN_TOP_TABLE_FILE: the edge over the cells (S1-P8). */
+export async function runEdge(config: ServerConfig, spec: { ranges: TopRange[]; file: string | null }): Promise<void> {
+  const edge = await startEdge({ config, ranges: spec.ranges });
+  const stop = () => void edge.stop().then(() => process.exit(0));
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+  console.log(
+    `eden edge listening on http://${config.host}:${edge.port} (${spec.ranges.length} cell(s): ` +
+      `${spec.ranges.map((r) => `${r.lo}-${r.hi}=${r.url}`).join(", ")}; users placed by the top table, S1-P8)`,
   );
 }
