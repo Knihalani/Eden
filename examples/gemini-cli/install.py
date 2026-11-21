@@ -160,10 +160,12 @@ def merge_settings(home, dest):
     servers["eden"] = entry
     if had_comments:
         # The merged file is rewritten as plain JSON — keep the commented original beside it
-        # rather than silently deleting the user's notes and commented-out settings.
+        # rather than silently deleting the user's notes and commented-out settings. Refresh it
+        # every time (the latest commented original is the one worth keeping) and match the
+        # source file's mode — it may hold commented-out credentials.
         backup = settings_path.with_suffix(".json.eden-backup")
-        if not backup.exists():
-            backup.write_bytes(settings_path.read_bytes())
+        backup.write_bytes(settings_path.read_bytes())
+        backup.chmod(settings_path.stat().st_mode & 0o777)
         print(f"note: {settings_path} had comments; the original is kept at {backup}",
               file=sys.stderr)
     write_json(settings_path, settings)
