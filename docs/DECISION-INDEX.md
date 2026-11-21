@@ -36,7 +36,6 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D17 | 2026-10-27 | Session lifecycle: each session owns an AbortController; session_end, eviction and `forget` abort its in-flight work, and no step after an… | adopted |
 | D18 | 2026-10-27 | Usage tracking starts when an injection is handed to the agent, not when it is built; explicit feedback corrects an outcome already… | adopted |
 | D19 | 2026-10-27 | No free model text reaches the agent outside the data envelope: the judge returns indexes only, and ask answers are wrapped in the same… | adopted |
-| D2016 | 2026-11-21 | Adopted: a test runs every command the docs name. | adopted |
 | D20 | 2026-10-27 | `@eden/primitives` holds the direction-agnostic building blocks (hashing, tokenizer + interner, multi-pattern matcher, top-k, S3-FIFO… | adopted |
 | D21 | 2026-10-27 | The secret gate prefilters rules with one Aho–Corasick pass over all keywords; keyword-less rules get literals every match contains. | adopted |
 | D22 | 2026-10-27 | Hot kernels stay in TypeScript on Bun: no Rust (bun:ffi, napi-rs or WASM) for now. | adopted |
@@ -624,18 +623,19 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D993 | 2026-11-11 | Per-tenant caps across machines: held whole at the cluster router, divided below it. | adopted |
 | D994 | 2026-11-11 | Readiness, metrics and a draining shutdown. | adopted |
 | D995 | 2026-11-11 | Fencing and forget across machines (the reviewer's findings on D992-D994). | adopted |
-| D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
-| D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
-| D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
 | D996 | 2026-11-11 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | rejected |
 | D997 | 2026-11-11 | The kit's configs are checked statically, since the tools could not run here. | adopted |
 | D998 | 2026-11-11 | A heavy user's memory, cut where it was exact to cut; card state frozen with its user rejected. | adopted |
-| D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
-| D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
-| D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
-| D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
-| D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
-| D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D940 | 2026-11-11 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | superseded (deleted by D948) |
+| D941 | 2026-11-11 | Adopted (lab tooling, M8), at commit d42d30b9 with the engine hooks it needs; the Python trainers stay in `packages/sim/lab/m8/`… | lab |
+| D942 | 2026-11-11 | Pre-registered rule for D940 | lab |
+| D943 | 2026-11-11 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | superseded (deleted by D949) |
+| D944 | 2026-11-11 | Finding: the router's frozen model and its parity (c2923a86; deleted with the router, D948). | finding |
+| D945 | 2026-11-11 | Approved for the trial, then deleted with it (D948), so D603 stands unchanged: a departure from D603's "a read on strong evidence is never… | adopted |
+| D946 | 2026-11-11 | Finding: rare-connector facts are lost after fetching, not before. | finding |
+| D947 | 2026-11-11 | The parent's decisions on D942's rule (recorded with their reasons). | adopted |
+| D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
+| D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
 | D1000 | 2026-11-11 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | rejected |
 | D1001 | 2026-11-11 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | rejected |
 | D1002 | 2026-11-11 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… | rejected |
@@ -647,31 +647,15 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1013 | 2026-11-11 | Adopted (lab tooling, M13): `packages/sim/lab/m13/`: contrastive data generators (`gen_train.py`, `gen_logs.py`, `gen_extra.py`)… | lab |
 | D1014 | 2026-11-11 | The owner's decision: `pushGate` (M13's turn gate, round 3's frozen model, the union with `pushStart` at veto 0.25) is in… | adopted |
 | D1015 | 2026-11-11 | Stopgap on D1014's gate: no start by the gate alone for a turn of fewer than three words (`MIN_ADD_WORDS`, `turn-gate.ts`); round 4's… | adopted |
-| D1060 | 2026-11-11 | Trial `cardsRequestsFix`: the card prompt's first example reply shows the requests list, and a batch whose reply still drops it is asked… | adopted (by D1062) |
-| D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
-| D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
-| D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
-| D940 | 2026-11-11 | Rejected (deleted by D948): trial `routerGate`, a learned connector router. | superseded (deleted by D948) |
-| D941 | 2026-11-11 | Adopted (lab tooling, M8), at commit d42d30b9 with the engine hooks it needs; the Python trainers stay in `packages/sim/lab/m8/`… | lab |
-| D942 | 2026-11-11 | Pre-registered rule for D940 | lab |
-| D943 | 2026-11-11 | Rejected (deleted with the router, D949): trial `routerDormantMs`: a source on D356's weekly sweep that the router has not found likely… | superseded (deleted by D949) |
-| D944 | 2026-11-11 | Finding: the router's frozen model and its parity (c2923a86; deleted with the router, D948). | finding |
-| D945 | 2026-11-11 | Approved for the trial, then deleted with it (D948), so D603 stands unchanged: a departure from D603's "a read on strong evidence is never… | adopted |
-| D946 | 2026-11-11 | Finding: rare-connector facts are lost after fetching, not before. | finding |
-| D947 | 2026-11-11 | The parent's decisions on D942's rule (recorded with their reasons). | adopted |
-| D948 | 2026-11-11 | Rejected and deleted (stopped on its Pi clause, D814): `routerGate`, its model, asset, hooks and tests; D603 stands. | rejected |
-| D949 | 2026-11-11 | `routerDormantMs` passed its powered re-test but is deleted with the router (D948) | rejected |
-| D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
 | D1020 | 2026-11-11 | Adopted (lab tooling, M14): two more task generators on M2's schema and labels, G2 and G3. | lab |
 | D1021 | 2026-11-11 | Adopted (lab tooling, M14): the leave-one-generator-out screen is the standard transfer check for a micro model. | lab |
 | D1022 | 2026-11-11 | Finding: M2's fact-versus-twin separation is mostly length. | finding |
 | D1023 | 2026-11-11 | Finding: no transfer recipe closes the gap to the sim's hand-written families; mixing generators does not beat M2 alone. | finding |
 | D1024 | 2026-11-11 | Adopted (lab data, M14): a length-debiased M2 (`m2lb`), the M2 slice a micro model is screened on. | lab |
 | D1025 | 2026-11-11 | Rejected: the recipes that did not help on the held-out sources. | rejected |
-| D1071 | 2026-11-11 | A persistence key that opens none of the persisted users stops the start (the parent's decision on R1's finding; amends D425 and D991). | adopted |
-| D1072 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | finding |
-| D1073 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | rejected |
-| D1074 | 2026-11-12 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | rejected |
+| D1030 | 2026-11-11 | Finding and lab tooling: where a user's day of packet bytes goes, and `days-calls --packets` to read it | finding |
+| D1031 | 2026-11-11 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | rejected |
+| D1032 | 2026-11-11 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | rejected |
 | D1040 | 2026-11-11 | Adopted (lab tooling, B19): an Eden arm at any commit beside a pinned harness. | lab |
 | D1041 | 2026-11-11 | Lab only: pi-ab loads P3's `hits` helper (`lexical-hits.ts`) only for the `hits` arm | lab |
 | D1042 | 2026-11-11 | Lab fix: hermes-ab wires the push check | adopted |
@@ -681,18 +665,31 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1046 | 2026-11-11 | Lab only: B19's coverage when the final default keys its cards apart | lab |
 | D1047 | 2026-11-11 | Lab only: B19's harnesses load against an older engine through `compat.py`, and `go.sh` checks it before spending. | lab |
 | D1048 | 2026-11-12 | Finding (B19, blind heldout19, read once): the night's wave raised hidden facts on both harnesses with no confirmed concern. | finding |
+| D1050 | 2026-11-11 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | rejected |
+| D1051 | 2026-11-11 | Rejected, not built: a no-model skip rule and a speculative start for the push check | rejected |
+| D1052 | 2026-11-11 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | rejected |
+| D1053 | 2026-11-11 | Finding: the shipped card-and-intent prompt leaves the whole requests list out of about a quarter of its replies; a fix is recommended as… | finding |
+| D1054 | 2026-11-11 | Finding: full intent coverage adds no facts over the lean selection when the requests are the same | finding |
+| D1055 | 2026-11-11 | Adopted (lab tooling, H2): `h2-cards-screen.ts` (the card call's shapes on fixed items, `--arms`, `--show`), `packages/sim/lab/h2/skip.py`… | lab |
+| D1060 | 2026-11-11 | Trial `cardsRequestsFix`: the card prompt's first example reply shows the requests list, and a batch whose reply still drops it is asked… | adopted (by D1062) |
+| D1061 | 2026-11-11 | Precision over recall, an explicit exception (the parent's decision): `cardsRequestsFix` goes ahead with funnel decoys +11 of 608. | adopted |
+| D1062 | 2026-11-11 | `cardsRequestsFix` joins the default (closes D1060's trial; parts `cards` and `intent`). | adopted |
+| D1063 | 2026-11-11 | Adopted (lab tooling): the card prompt's form in replay. | lab |
+| D1070 | 2026-11-11 | Release readiness: the deploy kit's correctness fixes; amends D994 and D995. | adopted |
+| D1071 | 2026-11-11 | A persistence key that opens none of the persisted users stops the start (the parent's decision on R1's finding; amends D425 and D991). | adopted |
+| D1072 | 2026-11-11 | Finding: the push check's wait is mostly fixed, and neither concurrent split calls nor a line reply cut it | finding |
+| D1073 | 2026-11-11 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | rejected |
+| D1074 | 2026-11-12 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | rejected |
 | D1075 | 2026-11-12 | Finding: the smallest recommended box holds its sizing; a restart of a full box keeps only the users its shutdown budget writes. | finding |
 | D1076 | 2026-11-12 | Rejected: a shutdown's flush writing the most recently used users first. | rejected |
 | D1080 | 2026-11-12 | Lab only: `heldout20` is the blind suite for the F1–F3 fixes, registered unread | lab |
-| D1120 | 2026-11-12 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | superseded (deleted by D1121) |
-| D1121 | 2026-11-12 | Rejected (stopped on its pre-registered rule, D1120): `packetWhy`, Eden's no-model note on why an item bears on the request; deleted (code… | rejected |
 | D1100 | 2026-11-12 | Lab only: `dev20a`–`dev20d` (`--suite dev20`), four tuning suites on the weak points | lab |
-| D1140 | 2026-11-12 | Finding (F2, train, reworded and longtail seeds 41–42; Anthropic-direct lab $1.00 before the credit ran out, then a subagent-simulated… | finding |
-| D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
+| D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
 | D1102 | 2026-11-12 | Lab only: shipped coverage re-recorded on the world's clock, served by subagents per item; the old shipped baselines were pessimistic | lab |
 | D1103 | 2026-11-12 | Lab only: `--realism heavy`, a heavy real user's sources | lab |
 | D1104 | 2026-11-12 | Finding (lab): no subagent recipe gives an API-faithful read of a push-check prompt arm; check-prompt arms need the API | finding |
-| D1101 | 2026-11-12 | Lab only: the queue transport (`EDEN_LAB_QUEUE=DIR`): every lab model call answered by Claude Code subagents through files, at $0 | lab |
+| D1120 | 2026-11-12 | Trial `packetWhy` (F3, off): each item a packet or ask answer hands over gets Eden's own note on why it bears on the request, when the… | superseded (deleted by D1121) |
+| D1121 | 2026-11-12 | Rejected (stopped on its pre-registered rule, D1120): `packetWhy`, Eden's no-model note on why an item bears on the request; deleted (code… | rejected |
 | D1122 | 2026-11-12 | Trial `packetWhy` (v2; F3, off; re-opens D1120's switch after D1121, for a suite that can show it): the note with D1121's two parser… | superseded (deleted by D1126) |
 | D1123 | 2026-11-12 | Trial `packetChanges` (F3, off): Eden keeps what changed in an item at its source and says it when it hands the item over; with it, silent… | superseded (deleted by D1126) |
 | D1124 | 2026-11-12 | Lab only: the pre-registered rule for D1122 and D1123 | lab |
@@ -705,50 +702,52 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1131 | 2026-11-12 | Trial `syncActivePollMs`: a background poll floor for active users, so a silent edit is stored before the request that needs it and no… | adopted |
 | D1132 | 2026-11-12 | Promoted: the freshness floor (`syncActivePollMs` 2 h, D1131) into the default, with two cost guards: `syncActivePollBackoff` (on in the… | adopted |
 | D1133 | 2026-11-12 | Amends D1132 (the parent's fail-safe condition): the freshness floor polls only a source marked first-party or flat-rate… | adopted |
-| D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
-| D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
-| D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |
-| D1250 | 2026-11-12 | Finding: with Eden the agent takes fewer turns and connector calls, and the calls it still makes are on the turns Eden stays silent. | finding |
-| D1251 | 2026-11-12 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. | rejected |
-| D1252 | 2026-11-12 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | rejected |
-| D1192 | 2026-11-12 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | rejected |
+| D1140 | 2026-11-12 | Finding (F2, train, reworded and longtail seeds 41–42; Anthropic-direct lab $1.00 before the credit ran out, then a subagent-simulated… | finding |
+| D1141 | 2026-11-12 | Rejected: trial `pushCheckRecall`. | rejected |
 | D1150 | 2026-11-12 | Finding (F1, subagent-simulated; rejected as built, no engine trial): an encoder's candidates added to the push check's pool. | finding |
 | D1151 | 2026-11-12 | Finding (F1, subagent-simulated; not built): the narrow encoder variant in the push check fails its rule by one neutral task. | finding |
 | D1152 | 2026-11-12 | Finding (F1, served by subagents, D1101): the request glossary's queue pair fails its neutral bar. | finding |
 | D1153 | 2026-11-12 | Promoted (F1, served by subagents, D1101; D814; rule b5b6b58b, the integrator's English-parity bar): `requestGloss` is in the default. | adopted |
+| D1154 | 2026-11-12 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | rejected |
+| D1155 | 2026-11-12 | Lab only: pi-ab and hermes-ab place the packet a tool result's observe hands out. | lab |
+| D1156 | 2026-11-12 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | rejected |
+| D1160 | 2026-11-12 | Rejected and deleted (stopped on the pre-registered rule of 56b375d9): F6's uptake levers, `checkedLead` (a checked packet led by "a check… | rejected |
 | D1180 | 2026-11-12 | Promoted on subagent evidence; the API confirmation is owed when credit returns (F5, D814, the integrator's decision): the rule sheet… | adopted |
 | D1181 | 2026-11-12 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | rejected |
 | D1182 | 2026-11-12 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | rejected |
 | D1183 | 2026-11-12 | Guard on D1180 (F5, the integrator's question): a user with more active rule cards than `pushCheckSheet` (80) gets no rule sheet. | adopted |
+| D1190 | 2026-11-12 | Finding: the push check's own bill has little left that keeps its replies; its wait is the larger prize, and neither skipping nor… | finding |
+| D1191 | 2026-11-12 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… | rejected |
+| D1192 | 2026-11-12 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | rejected |
+| D1193 | 2026-11-12 | Promoted (F2, the integrator's decision): `cardsState` + `pushStateFilter`, on in the default: the card says whether its constraint still… | adopted |
+| D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | adopted |
 | D1197 | 2026-11-12 | Adopted (F7; the integrator's decision to keep the rule sheet and make it as cheap as it can be): the push check's rule sheet (D1180) is… | adopted |
-| D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
-| D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
-| D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |
-| D1154 | 2026-11-12 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | rejected |
+| D1250 | 2026-11-12 | Finding: with Eden the agent takes fewer turns and connector calls, and the calls it still makes are on the turns Eden stays silent. | finding |
+| D1251 | 2026-11-12 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. | rejected |
+| D1252 | 2026-11-12 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | rejected |
 | D1270 | 2026-11-12 | Finding: a CPU-only band on the push check (a semantic rule index) cannot take the model off the request path at facts in the 90s | finding |
 | D1271 | 2026-11-12 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | rejected |
 | D1272 | 2026-11-12 | Finding: a learned no-model skip of the push check reaches about 20% of calls at 1% of facts lost, not the 40% asked | finding |
 | D1273 | 2026-11-12 | Promoted by the integrator: the turn goes upstream during Eden's wait and its held answer is used when the request after the wait is byte… | adopted |
 | D1274 | 2026-11-12 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | rejected |
-| D1550 | 2026-11-12 | Finding: the agent's wait, read task by task, puts the default level with the agent alone at the lab's connector latency and slower at 0.3… | finding |
-| D1552 | 2026-11-12 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). | rejected |
-| D1155 | 2026-11-12 | Lab only: pi-ab and hermes-ab place the packet a tool result's observe hands out. | lab |
-| D1500 | 2026-11-12 | Finding (G3, served by subagents, D1101; every $ and second [EST]): no lever makes agent + Eden no dearer than the agent alone at the… | finding |
-| D1156 | 2026-11-12 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | rejected |
-| D1193 | 2026-11-12 | Promoted (F2, the integrator's decision): `cardsState` + `pushStateFilter`, on in the default: the card says whether its constraint still… | adopted |
-| D1455 | 2026-11-12 | Finding: most look-alikes reach the agent round the push check, not through it. | finding |
+| D1300 | 2026-11-12 | Finding: in the sim, nothing in a world foreshadows its requests, so plan-driven anticipation cannot be measured there; constraint-driven… | finding |
+| D1301 | 2026-11-12 | Rejected: `anticipate`, a background pass per user that writes, for each rule on the user's sheet, the requests it bears on, their days… | rejected |
+| D1302 | 2026-11-12 | Finding: on train and dev20 the hidden facts never retrieved are a meaning gap between twins, and no lever with no model (or within +2 ms… | finding |
+| D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
+| D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
+| D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |
 | D1450 | 2026-11-12 | Promoted: `packetHeedsCheck`, on in the default: a rule path's proactive packet is not handed when the request's push check read every… | adopted |
 | D1451 | 2026-11-12 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… | rejected |
 | D1452 | 2026-11-12 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | rejected |
 | D1453 | 2026-11-12 | Rejected and deleted: a `why` field on the check's ruled-out entries (clear, other, background), the ask leaving out only go-aheads. | rejected |
 | D1454 | 2026-11-12 | Finding: `pushCheckItemChars` 400 is not a facts lever. | finding |
+| D1455 | 2026-11-12 | Finding: most look-alikes reach the agent round the push check, not through it. | finding |
 | D1456 | 2026-11-12 | Adopted: `pushStateFilter` keeps a lift notice in the push's pool when the user has a constraint card it could clear. | adopted |
-| D1400 | 2026-11-12 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | superseded (deleted by D1402) |
-| D1401 | 2026-11-12 | Trial opened: `pushDayStartSeated`, a third arm of D1400's pair, registered before any live result of that pair was read. | adopted |
-| D1402 | 2026-11-12 | Promoted by the integrator, below G1's own ship rule, as a strict gain: `pushDaySeats` 3 in `DEFAULT_CONFIG` (part `days`) with D1401's… | adopted |
-| D1196 | 2026-11-12 | Trial `EDEN_MODEL_CACHE=on`: the servers' roles send Anthropic `cache_control` breakpoints on their stable system prefix through OpenRouter | adopted |
-| D1690 | 2026-11-12 | Adopted: model-call failures are counted by role and kind on `/metrics` (`eden_model_failures_total{role="reader"\|"check",kind="error"\|"unr…` | adopted |
+| D1500 | 2026-11-12 | Finding (G3, served by subagents, D1101; every $ and second [EST]): no lever makes agent + Eden no dearer than the agent alone at the… | finding |
+| D1550 | 2026-11-12 | Finding: the agent's wait, read task by task, puts the default level with the agent alone at the lab's connector latency and slower at 0.3… | finding |
+| D1552 | 2026-11-12 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). | rejected |
 | D1600 | 2026-11-12 | The server image runs on Bun's distroless image. | adopted |
+| D1690 | 2026-11-12 | Adopted: model-call failures are counted by role and kind on `/metrics` (`eden_model_failures_total{role="reader"\|"check",kind="error"\|"unr…` | adopted |
 | D1700 | 2026-11-12 | The server image leaves out the lab, tests and benches. | adopted |
 | D1701 | 2026-11-12 | Finding: every technical choice reviewed; two switches (D1600, D1700), the rest kept or left as candidates with what each needs. | finding |
 | D1702 | 2026-11-12 | A node drops port 8790 from outside the private range in DOCKER-USER. | adopted |
@@ -772,10 +771,10 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1771 | 2026-11-13 | Rejected at $0 on train: seating constraint cards in the push's and the ask's order. | rejected |
 | D1772 | 2026-11-13 | Rejected at $0 on train for this bar: day seats ordered constraint-carded first, and day ranges read whole. | rejected |
 | D1773 | 2026-11-13 | Adopted (a correctness fix, D1772's finding): `timeWindow` reads a day range whole. | adopted |
+| D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
 | D1781 | 2026-11-13 | Finding: no lever lowers a server process's memory floor by the bar (10 MB or 15% a process, first request within noise); kept as it is. | finding |
 | D1782 | 2026-11-13 | Finding: the cold gate cannot be made 20% faster by the listed levers (fuzz counts behind a deep switch, serial bottlenecks in… | finding |
 | D1790 | 2026-11-13 | Adopted: the servers send Anthropic `cache_control` breakpoints on the roles' stable prefix through OpenRouter by default… | adopted |
-| D1780 | 2026-11-13 | Adopted (D1720's candidate): the source map writes mentions behind, as it writes outcomes (D4): summed in memory per (user, entity… | adopted |
 | D1800 | 2026-11-13 | Adopted: the push check's rule sheet carries its 1-hour cache breakpoint only when caching it is likely to pay for that user… | adopted |
 | D1810 | 2026-11-14 | Rejected: the push check's fixed instructions sent with no cache breakpoint at all, as a third choice of `SystemTtlPolicy` beside the hour… | rejected |
 | D1830 | 2026-11-14 | Adopted (eval tooling; no engine change): `bun run eval --live` reports the push check and fails loudly when it measured no model. | adopted |
@@ -862,54 +861,55 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1980 | 2026-11-18 | Adopted: a wh-question about a thing of the user's own opens the push and its subject answers. | adopted |
 | D1982 | 2026-11-18 | Adopted: last year's same-subject record is a sibling, not a second pick — and it stays stale once the newer one was handed. | adopted |
 | D1983 | 2026-11-18 | Adopted: a pronoun-person follow-up carries the last request's name, and the person's own record answers it. | adopted |
+| D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
 | D1985 | 2026-11-19 | Adopted: a turn that asks starts the push when nothing started it — `pushAsk` — and Hermes names `ask_context` on a packetless question. | adopted |
-| D2015 | 2026-11-20 | Adopted: a static per-connector-kind prior reshapes a cold source's routing draw (Q7(b) of `docs/research/o4-new-user.md`). | adopted |
+| D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
+| D1988 | 2026-11-20 | Adopted: `examples/pi`, Eden as a Pi extension. | adopted |
+| D1989 | 2026-11-20 | Adopted: `examples/openclaw`, Eden as an OpenClaw plugin. | adopted |
+| D1990 | 2026-11-20 | Adopted: `examples/gptme`, Eden as a gptme plugin. | adopted |
+| D1991 | 2026-11-20 | Adopted: `examples/opencode`, Eden as an opencode plugin. | adopted |
+| D1992 | 2026-11-20 | Adopted: `examples/claude-code`, Eden for Claude Code through its hook system plus an MCP server. | adopted |
+| D1993 | 2026-11-20 | Adopted: shared local daemons — `LocalEden` (py and ts) can run one detached `eden-local` per agent home instead of one sidecar per hook… | adopted |
+| D1994 | 2026-11-20 | Adopted: `EDEN_LOCAL_STATE_DIR` makes a shared local daemon's state durable — the source map and encrypted frozen users live under it. | adopted |
+| D1995 | 2026-11-20 | Adopted: a frozen user keeps its sessions' delivery knowledge — `extra.sessions` carries each live session's ledger snapshot and delivered… | adopted |
+| D1996 | 2026-11-20 | Adopted: the frozen session also carries `outstanding` — injections handed but not yet judged used or unused survive a respawn, so the… | adopted |
+| D1998 | 2026-11-20 | Adopted: an ended session's use-verdicts ride the frozen user too — `extra.recorded` carries the `recorded` map so a respawned daemon can… | adopted |
+| D1999 | 2026-11-20 | Adopted: an evicted session keeps its delivery knowledge — the idle and cap sweeps freeze it into `restoredSessions`, which the persist… | adopted |
+| D2000 | 2026-11-20 | Adopted: `examples/install.py`, one installer for every local agent home. | adopted |
+| D2001 | 2026-11-20 | Adopted: the probe economy rides the frozen user blob — a respawn no longer relearns what probes were worth. | adopted |
+| D2002 | 2026-11-20 | Adopted: each source's earned reads ride the frozen user blob too — a respawn no longer restarts a source's penalty run or forgets it… | adopted |
+| D2003 | 2026-11-20 | Adopted: a user's held "unverifiable" re-reads ride the frozen user blob — a respawn no longer re-fetches what a null already failed to… | adopted |
+| D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
+| D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
+| D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
+| D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
+| D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
 | D2009 | 2026-11-20 | Adopted: a per-user alias table — name parts to their full names — expands a request's anchors, so a person asked for by one form anchors… | adopted |
+| D2010 | 2026-11-20 | Adopted: a plan-conflict alert repeats once at a request past the one it was sent on. | adopted |
 | D2011 | 2026-11-20 | Adopted: `pushOpenConstraint` — an opt-in mild filter: on a request the push opened by shape rather than a listed verb, a packet goes only… | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
-| D2029 | 2026-11-21 | Adopted: a held warning's unused verdict writes no source-map outcome. | adopted |
-| D2032 | 2026-11-21 | Adopted: a vocabulary `rebuild` keeps the user's probe memos (D46). | adopted |
-| D2031 | 2026-11-21 | Adopted: `closeSession` tombstones a key whose session is still being made — the finished creation reports `session_end` and detaches… | adopted |
-| D2030 | 2026-11-21 | Adopted: concurrent `sessionFor` calls for one agent session share the creation in flight. | adopted |
-| D2027 | 2026-11-21 | Adopted: the report queue binds inside `surface.report`, not in its callers. | adopted |
-| D2026 | 2026-11-21 | Adopted: a surface session's teardown reports `session_end` on its report queue. | adopted |
-| D2025 | 2026-11-21 | Adopted: the usage record carries the handed injection's size — the digest prices the agent's re-reads (C1's report clause). | adopted |
-| D2024 | 2026-11-21 | Adopted: the `item` argument and Sources lines reach every `ask_context` surface (A2, the last mile). | adopted |
-| D2023 | 2026-11-21 | Adopted: `partner-ask.ts` — the ask path out of the verdict core, the top of the chain. | adopted |
-| D2022 | 2026-11-21 | Adopted: an optional `item` argument on `ask_context` — a citation's id returns that item's parts in full. | adopted |
-| D2021 | 2026-11-21 | Adopted: `partner-verdict.ts` — the verdict core the push and ask paths share, as the next class down. | adopted |
-| D2020 | 2026-11-21 | Adopted: `partner-check.ts` — the partner's check slice as the next class down. | adopted |
-| D2019 | 2026-11-21 | Adopted: `partner-delivery.ts` — the partner's delivery slice as the middle class. | adopted |
-| D2018 | 2026-11-21 | Adopted: `partner-core.ts` — the partner's fields and wiring as a base class. | adopted |
-| D2017 | 2026-11-21 | Adopted: `partner.ts` splits, first its frozen-blob slice into `partner-freeze.ts`. | adopted |
 | D2013 | 2026-11-21 | Adopted: `AsyncEden` — the Python client's calls as coroutines. | adopted |
 | D2014 | 2026-11-21 | Adopted: the MCP server drains the pending queue — an MCP-only agent gets push too. | adopted |
-| D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
-| D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
-| D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
-| D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
-| D2004 | 2026-11-20 | Adopted: a save merges the blob another process wrote — two processes holding one user no longer replace each other's carried rows. | adopted |
-| D2010 | 2026-11-20 | Adopted: a plan-conflict alert repeats once at a request past the one it was sent on. | adopted |
-| D2003 | 2026-11-20 | Adopted: a user's held "unverifiable" re-reads ride the frozen user blob — a respawn no longer re-fetches what a null already failed to… | adopted |
-| D2002 | 2026-11-20 | Adopted: each source's earned reads ride the frozen user blob too — a respawn no longer restarts a source's penalty run or forgets it… | adopted |
-| D2001 | 2026-11-20 | Adopted: the probe economy rides the frozen user blob — a respawn no longer relearns what probes were worth. | adopted |
-| D2000 | 2026-11-20 | Adopted: `examples/install.py`, one installer for every local agent home. | adopted |
-| D1999 | 2026-11-20 | Adopted: an evicted session keeps its delivery knowledge — the idle and cap sweeps freeze it into `restoredSessions`, which the persist… | adopted |
-| D1998 | 2026-11-20 | Adopted: an ended session's use-verdicts ride the frozen user too — `extra.recorded` carries the `recorded` map so a respawned daemon can… | adopted |
-| D1996 | 2026-11-20 | Adopted: the frozen session also carries `outstanding` — injections handed but not yet judged used or unused survive a respawn, so the… | adopted |
-| D1995 | 2026-11-20 | Adopted: a frozen user keeps its sessions' delivery knowledge — `extra.sessions` carries each live session's ledger snapshot and delivered… | adopted |
-| D1994 | 2026-11-20 | Adopted: `EDEN_LOCAL_STATE_DIR` makes a shared local daemon's state durable — the source map and encrypted frozen users live under it. | adopted |
-| D1993 | 2026-11-20 | Adopted: shared local daemons — `LocalEden` (py and ts) can run one detached `eden-local` per agent home instead of one sidecar per hook… | adopted |
-| D1992 | 2026-11-20 | Adopted: `examples/claude-code`, Eden for Claude Code through its hook system plus an MCP server. | adopted |
-| D1991 | 2026-11-20 | Adopted: `examples/opencode`, Eden as an opencode plugin. | adopted |
-| D1990 | 2026-11-20 | Adopted: `examples/gptme`, Eden as a gptme plugin. | adopted |
-| D1989 | 2026-11-20 | Adopted: `examples/openclaw`, Eden as an OpenClaw plugin. | adopted |
-| D1988 | 2026-11-20 | Adopted: `examples/pi`, Eden as a Pi extension. | adopted |
-| D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
-| D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
+| D2015 | 2026-11-20 | Adopted: a static per-connector-kind prior reshapes a cold source's routing draw (Q7(b) of `docs/research/o4-new-user.md`). | adopted |
+| D2016 | 2026-11-21 | Adopted: a test runs every command the docs name. | adopted |
+| D2017 | 2026-11-21 | Adopted: `partner.ts` splits, first its frozen-blob slice into `partner-freeze.ts`. | adopted |
+| D2018 | 2026-11-21 | Adopted: `partner-core.ts` — the partner's fields and wiring as a base class. | adopted |
+| D2019 | 2026-11-21 | Adopted: `partner-delivery.ts` — the partner's delivery slice as the middle class. | adopted |
+| D2020 | 2026-11-21 | Adopted: `partner-check.ts` — the partner's check slice as the next class down. | adopted |
+| D2021 | 2026-11-21 | Adopted: `partner-verdict.ts` — the verdict core the push and ask paths share, as the next class down. | adopted |
+| D2022 | 2026-11-21 | Adopted: an optional `item` argument on `ask_context` — a citation's id returns that item's parts in full. | adopted |
+| D2023 | 2026-11-21 | Adopted: `partner-ask.ts` — the ask path out of the verdict core, the top of the chain. | adopted |
+| D2024 | 2026-11-21 | Adopted: the `item` argument and Sources lines reach every `ask_context` surface (A2, the last mile). | adopted |
+| D2025 | 2026-11-21 | Adopted: the usage record carries the handed injection's size — the digest prices the agent's re-reads (C1's report clause). | adopted |
+| D2026 | 2026-11-21 | Adopted: a surface session's teardown reports `session_end` on its report queue. | adopted |
+| D2027 | 2026-11-21 | Adopted: the report queue binds inside `surface.report`, not in its callers. | adopted |
 | D2028 | 2026-11-21 | Adopted: a `(shown above)` line keeps a short extract of the item — citations stay quotable across agent conversations. | adopted |
-| D2034 | 2026-11-21 | Adopted: an amount under a limit clears only a conflict about the same matter (`conflictMatter`). | adopted |
+| D2029 | 2026-11-21 | Adopted: a held warning's unused verdict writes no source-map outcome. | adopted |
+| D2030 | 2026-11-21 | Adopted: concurrent `sessionFor` calls for one agent session share the creation in flight. | adopted |
+| D2031 | 2026-11-21 | Adopted: `closeSession` tombstones a key whose session is still being made — the finished creation reports `session_end` and detaches… | adopted |
+| D2032 | 2026-11-21 | Adopted: a vocabulary `rebuild` keeps the user's probe memos (D46). | adopted |
 | D2033 | 2026-11-21 | Adopted: the v0.3.0 broad-benchmark harness lives in the repo as `packages/sim/lab/fresh-corpus`, regenerated per quarter (build item 4). | adopted |
+| D2034 | 2026-11-21 | Adopted: an amount under a limit clears only a conflict about the same matter (`conflictMatter`). | adopted |
 | D2035 | 2026-11-21 | Adopted: an explicit ask's words read as OR-groups — each content word's stem-family in the index plus its phrasing family (`ASK_FAMILY`)… | adopted |
 | D2036 | 2026-11-21 | Adopted: staleness is read of the document, at day and month granularity, and applied to every pick — `docSpan`, `expiryOf`, `staleSelf`… | adopted |
 | D2037 | 2026-11-21 | Adopted: a pace per (tenant, connector) shared by the tenant's users, configured by `tenantCallsPerMin` and holding only background reads. | adopted |
@@ -918,17 +918,17 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2040 | 2026-11-21 | Adopted: the sync's backfill and fairness signals in `/metrics` (S1-P2). | adopted |
 | D2041 | 2026-11-21 | Adopted: the shutdown drain writes live users most recently seen first, in a lean blob that leaves the index and vocabulary out… | adopted |
 | D2042 | 2026-11-21 | Adopted: `EDEN_PERSIST_STORE` may name several buckets, comma-separated; a user's shard is their bucket mod the count. | adopted |
-| D2045 | 2026-11-21 | Adopted: a second cluster router runs as a follower — `EDEN_CLUSTER_FOLLOW=1` — adopting the leader's published membership instead of… | adopted |
-| D2044 | 2026-11-21 | Adopted: a node's release bound scales with the users it is expected to move (S1-P6). | adopted |
-| D2046 | 2026-11-21 | Adopted: a process-wide `RateHold` shared by the model roles — a 429 holds every caller, and a call made while held fails fast without… | adopted |
 | D2043 | 2026-11-21 | Adopted: a dry-run autoscale plan — `deploy/scripts/autoscale-plan.py` reads `/metrics` from every node, plans a node count with… | adopted |
+| D2044 | 2026-11-21 | Adopted: a node's release bound scales with the users it is expected to move (S1-P6). | adopted |
+| D2045 | 2026-11-21 | Adopted: a second cluster router runs as a follower — `EDEN_CLUSTER_FOLLOW=1` — adopting the leader's published membership instead of… | adopted |
+| D2046 | 2026-11-21 | Adopted: a process-wide `RateHold` shared by the model roles — a 429 holds every caller, and a call made while held fails fast without… | adopted |
 | D2047 | 2026-11-21 | Adopted: `deploy/monitoring/alerts.yaml` covers the fleet SLOs of s1-scale-1m.md §8 (S1-P10). | adopted |
 | D2048 | 2026-11-21 | Adopted: `eden_sync_first_value_seconds` and the first-page backlog are per source, not per user's first source. | adopted |
 | D2049 | 2026-11-21 | Adopted: cluster membership mutation is serialized on one chain, and the rebalance log is bounded. | adopted |
 | D2050 | 2026-11-21 | Adopted: pacing classes default `now` to `Date.now`, not a fresh arrow per instance. | adopted |
+| D2051 | 2026-11-21 | Adopted: the machine router's forwarded requests and membership fan-out are bounded like the cluster router's. | adopted |
 | D2052 | 2026-11-21 | Adopted: a fire-and-forget `.then`/`.finally` arm always carries a rejection seat. | adopted |
 | D2053 | 2026-11-21 | Adopted: a call-count test that expects the companion pass keeps its injection a slot wider than the picks' cap. | adopted |
-| D2051 | 2026-11-21 | Adopted: the machine router's forwarded requests and membership fan-out are bounded like the cluster router's. | adopted |
 | D2054 | 2026-11-21 | Adopted: the user-range tally test runs with `sync` on, so the cache is full before each session. | adopted |
 | D2055 | 2026-11-21 | Adopted: an undated block repeats a dated conflict only when the dated one was tied too. | adopted |
 | D2056 | 2026-11-21 | Adopted: the user-range tally test also runs with `syncPollBehind` off. | adopted |
@@ -945,5 +945,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2067 | 2026-11-21 | Adopted: the top table and its edge router (S1-P8). | adopted |
 | D2068 | 2026-11-21 | Adopted: a reset clears the cue cooldown, and the scorer measures a reset. | adopted |
 | D2069 | 2026-11-21 | Adopted: Eden for Gemini CLI (the eighth agent surface). | adopted |
-| D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |
 | D2070 | 2026-11-21 | Adopted: Eden for Cursor — the ninth agent surface. | adopted |
+| D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |

@@ -64,25 +64,25 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D914 | Rejected (stopped on its pre-registered hand-written gate, M3b): `pushSupersede` with H10 retrained and compressed; findings and lab kit… | stopped on its pre-registered hand-written gate, M3b |
 | D930 | Rejected (stopped on its offline bar): a no-model pre-screen in front of the push check, `pushPrescreen` | stopped on its offline bar |
 | D950 | Rejected (stopped on its ceiling, before any candidate was frozen): a per-user alias resolver | stopped on its ceiling, before any candidate was frozen |
+| D1000 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | deleted with its code |
 | D1031 | Rejected and deleted: `leadOnce`, the candidates' lead said whole once a session and pointed back to after | Failed its rule (pre-registered in b3cc3f12, extended once in 9ba0cc2d before the call): hidden raised… |
 | D1050 | Rejected (stopped on its pre-registered screen): a leaner push-check pool | stopped on its pre-registered screen |
 | D1051 | Rejected, not built: a no-model skip rule and a speculative start for the push check | Skip a pool silent when no item read shares a content word or number with the request: it settles 39 of… |
-| D1000 | Rejected (deleted with its code): `pushWide`, the push's lexical search read 60 deep with a re-ranker for the pool's tail seats | deleted with its code |
 | D1073 | Rejected (stopped on its pre-registered Pi clause): `pushCheckDedupe`, the check reading the pool's head less same-titled copies, ten… | stopped on its pre-registered Pi clause |
 | D1074 | Rejected again on the powered re-test (the parent's call after D1073): `pushCheckDedupe` 10 is deleted | Hidden raised −0.2 points (−1.533..+1.271), 3,066 pairs over 384 templates (Haiku's own grade not read for… |
 | D1141 | Rejected: trial `pushCheckRecall`. | D1140 |
-| D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
-| D1252 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | hidden −5.6 points (72 → 63 of 160) |
-| D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
+| D1156 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | because the funnel's on-demand poll already hands current copies, while connector calls rose 3.52 → 5.52 a… |
 | D1181 | Deleted: `cardsKeepOnly` and `pushCheckSheetAlways`. | F5, D814 |
 | D1182 | Rejected and deleted (F5 with F10, D814; the integrator's bar): `pushCheckSheetSelect`, the rule sheet picked per request by F10's rule… | The bar: on a user with 300 rule cards, the selection must bring back at least half of what a 300-card sheet… |
+| D1191 | Deleted unmeasured (D814; the integrator's decision): F7's trials `pushCheckLeanStop` (the check's yeses first and its reply stopped at… |  |
+| D1192 | Rejected (stopped on its pre-registered rule, F7 §10): `pushSearchedLead`, a checked candidates packet saying Eden searched the user's… | stopped on its pre-registered rule, F7 §10 |
+| D1252 | Rejected, not promoted: `pushLookup`, `pushLookupAny` and `pushLookupQuiet`, off in the default. | hidden −5.6 points (72 → 63 of 160) |
 | D1271 | Rejected: `pushCheckView`, the check reading the pool's first 8 items and the 3 rules nearest the request by meaning | asked of the check it lost facts: planted handed 94 against main's 99 of 120 hidden rows (bar: ≥ 96)… |
 | D1274 | Rejected before building: trial `pushCheckSkip`, a no-model skip of the push check at the integrator's second bar (≥ 18% of the 1:1:8 mix… | $0; `skip.py --no-encoder`. |
-| D1552 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). |  |
-| D1156 | Rejected before any live run: `freshenHanded`, re-reading the push gate's first constraint-like items beside the check so a silent edit… | because the funnel's on-demand poll already hands current copies, while connector calls rose 3.52 → 5.52 a… |
+| D1400 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | killed by D1402: Pre-registered rule (the owner's bar for G1, fixed before any live run): on dev20 seeds 41–44, hidden… |
 | D1451 | Rejected and deleted: `stateFilterWide`, F2's cleared-state test (D1193) on rule-path packets and on an explicit ask in a request the push… |  |
 | D1452 | Rejected and deleted: `askHeedsCheck`, an ask that leaves out what its request's push check turned down. | every item it read and did not say yes to, 127 / 362 |
-| D1400 | Trial opened (G1, target 2: hidden facts found and given): `pushDaySeats` 3, a plan with a day is an action on that day. | killed by D1402: Pre-registered rule (the owner's bar for G1, fixed before any live run): on dev20 seeds 41–44, hidden… |
+| D1552 | Rejected: `pushLookupUnchecked`, the lookup's reference records on turns whose pool holds nothing constraint-like (no check is asked). |  |
 | D1741 | Rejected: `pushCheckSheetAppend`, the push check's rule sheet in the order its cards were made, one text block a rule, the breakpoint on… |  |
 | D1771 | Rejected at $0 on train: seating constraint cards in the push's and the ask's order. | The bar (+8 hidden retrieved or surfaced, decoys surfaced not up) is not met by any arm |
 | D1810 | Rejected: the push check's fixed instructions sent with no cache breakpoint at all, as a third choice of `SystemTtlPolicy` beside the hour… | because a per-tenant policy cannot see the other tenant (D9) and a plain request reads nothing |
@@ -245,11 +245,11 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D824 | Rejected at $0: opening arm N's anchored gate only on the pool's first few items |  |
 | D909 | Rejected: H1, a learned request–item ranker, scrapped; no variant came near its pre-registered bar. | the owner's decision |
 | D912 | Rejected (stopped on its pre-registered rule, 3e05b16d): M5's ledger with typed comparisons at match time | stopped on its pre-registered rule, 3e05b16d |
-| D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
 | D996 | Rejected (stopped on its pre-registered rule, 327c9fb2): a shorter warm-to-compact window for daily agents' peak hour. | stopped on its pre-registered rule, 327c9fb2 |
 | D1001 | Rejected (deleted with its code): `poolExpand`, a query-side expansion distilled from M1's 8B teacher | deleted with its code |
 | D1002 | Rejected (stopped on the round-3 rule before any held-out read; deleted with its engine code): `poolScan`, a request × item scorer… |  |
 | D1015 | part of: round 4's retrain is not taken | Round 4 (addendum C, pre-registered; 1,645 generated greetings and throwaway turns added, R2f retrained… |
+| D1032 | Rejected and deleted: `leanItems`, deterministic boilerplate rules in compaction | Failed its rule (b3cc3f12): one request a session (train 41–44, Sonnet, template-clustered) hidden +0.9… |
 | D1076 | Rejected: a shutdown's flush writing the most recently used users first. | R1d, r1-release.md §Round 4 |
 | D1251 | Rejected and deleted (F11, pre-registered rules of 6b40a740, 7f705cf6 and 0170bc89): `ask_context` as the agent's first search. |  |
 | D1715 | Rejected: a binary layout specialised to a frozen user's structures, in place of the compact form's zstd JSON and the warm form's ("EDF2")… | measured, docs only; docs/research/frozen-binary.md |
