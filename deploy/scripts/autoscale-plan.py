@@ -152,12 +152,16 @@ def plan(args: dict, nodes: list[Node], now: float) -> dict:
     target = count + move
 
     state_path = args["state"]
-    streak = 0
+    streaks: dict = {}
     if os.path.exists(state_path):
         try:
-            streak = json.loads(open(state_path).read()).get("below_streak", 0)
+            prev = json.loads(open(state_path).read()).get("below_streak", 0)
+            # The pre-cell file held one number for the whole fleet.
+            streaks = prev if isinstance(prev, dict) else {"": prev}
         except Exception:
-            streak = 0
+            streaks = {}
+    cell_key = args["cell"] or ""
+    streak = streaks.get(cell_key, 0) if isinstance(streaks.get(cell_key, 0), int) else 0
     below = need < count
     streak = streak + 1 if below else 0
     hold_in = ""
@@ -170,8 +174,9 @@ def plan(args: dict, nodes: list[Node], now: float) -> dict:
             hold_in = f"below need for {streak} of {args['confirm_in']} consecutive readings: holding"
         if hold_in:
             target = count
+    streaks[cell_key] = streak
     with open(state_path, "w") as f:
-        f.write(json.dumps({"below_streak": streak, "ts": now}))
+        f.write(json.dumps({"below_streak": streaks, "ts": now}))
 
     return {
         "count": count,
