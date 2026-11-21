@@ -970,7 +970,6 @@ weeks out and no "owner's call later"; where a cost trade-off remains, the sessi
 that day. A row here is a trial whose evidence is still being gathered by the session that opened it. The push-check
 | D2077 | 2026-11-21 | **Adopted: a content-hash ref sorts a row's fields before hashing.** `identity()` stringified a row's entries in the server's own order; a connector that fields the same record differently across queries (map iteration, projection) minted a second `eden-h-` ref for it — the cache, ledger and dedup, all keyed by id, would treat it as a new item. Entries are now sorted by key before hashing, volatile-field fallback included. |
 | D2078 | 2026-11-21 | **Adopted: a top-level `hasNextPage: false` ends a token page like `has_more` does.** `nextCursorOf` early-outs on `has_more`/`hasMore` at the top level but not `hasNextPage`, so `{hasNextPage: false, pageInfo: {endCursor}}` still handed back a cursor — a GraphQL-shaped reply saying "last page" would be listed again. The check now names all three flags; the per-object `pick` and the holder check already did. |
->>>>>>> 9d29cc4f9 (sources: a top-level hasNextPage: false ends a token page too (D2078))
 trials were decided by D828 (promoted or deleted), so none is left here.
 
 | Trial | Switch | Owner | Ends | What decides it |
