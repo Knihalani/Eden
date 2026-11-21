@@ -265,9 +265,12 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
   async function closeSession(key: string): Promise<void> {
     const s = sessions.get(key);
     sessions.delete(key);
+    if (!s) return;
     try {
-      await s?.reported.catch(() => undefined);
-      s?.local?.close();
+      // The agent's conversation ended: report `session_end` so the engine learns "ended" verdicts
+      // for the packets it handed — eviction's inferred/expired is the fallback, not the rule.
+      await report(s, [{ kind: "session_end" }], false).catch(() => undefined);
+      s.local?.close();
     } catch {
       // Closing is best effort.
     }
