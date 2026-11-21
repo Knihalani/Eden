@@ -931,16 +931,16 @@ export abstract class PartnerDelivery extends PartnerCore {
         // Of near-duplicates among the candidates, keep the best scored: one packet never says the same thing twice.
         // Occurrences of a recurring event read alike but are not the same thing: another day is another item.
         .filter((x, i, all) => {
-          // x's own refs once: inside the `some` it would be scanned again for every earlier candidate.
-          const refs = idNumbers(`${x.item.title} ${x.item.text}`);
-          return !all
+          const earlier = all
             .slice(0, i)
-            .some(
-              (y) =>
-                nearDuplicate(x.sketch, y.sketch) &&
-                startDay(x.item, cue.offset) === startDay(y.item, cue.offset) &&
-                sameRef(refs, y.item),
+            .filter(
+              (y) => nearDuplicate(x.sketch, y.sketch) && startDay(x.item, cue.offset) === startDay(y.item, cue.offset),
             );
+          // A candidate with no same-day near-duplicate ahead of it never reads its refs at all; with some,
+          // its refs are scanned once, not once a duplicate.
+          if (earlier.length === 0) return true;
+          const refs = idNumbers(`${x.item.title} ${x.item.text}`);
+          return !earlier.some((y) => sameRef(refs, y.item));
         })
     );
   }

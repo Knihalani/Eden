@@ -688,24 +688,26 @@ export const idNumbers = (text: string): Set<string> => {
 };
 
 /**
- * An item's searchable text and the features the pool passes extract from it, computed once. `contradicts`,
- * `companions`, the stale reads and the pick bookkeeping each re-built `${title} ${text}` and re-ran the same
- * regexes over it — four scans of one string, per candidate, per request. The WeakMap keeps a feature alive only
- * as long as the item object is (the same pattern as `staleMemo`), and items are immutable once stored.
+ * The features the pool passes extract from an item, computed once each. `contradicts`, `companions`, the stale
+ * reads and the pick bookkeeping each re-ran their regexes over `${title} ${text}` — `linked` scanned one item's
+ * text four times — per candidate, per request. The WeakMap keeps a feature alive only as long as the item object
+ * is (the same pattern as `staleMemo`), and items are immutable once stored. The text itself is not kept: a packed
+ * item's `text` decodes on read under a bounded memo (`packed-text.ts`), and a pinned concat would hold every
+ * scanned item's whole decoded body for the item's life — the extracted feature is the small part.
  */
 const ITEM_FEATURES = new WeakMap<
   ContextItem,
-  { text: string; words?: string[]; caps?: Set<string>; refs?: Set<string>; years?: Set<number> }
+  { words?: string[]; caps?: Set<string>; refs?: Set<string>; years?: Set<number> }
 >();
+const itemText = (item: ContextItem): string => `${item.title} ${item.text}`;
 const itemFeatures = (item: ContextItem) => {
   let f = ITEM_FEATURES.get(item);
   if (f === undefined) {
-    f = { text: `${item.title} ${item.text}` };
+    f = {};
     ITEM_FEATURES.set(item, f);
   }
   return f;
 };
-const itemText = (item: ContextItem): string => itemFeatures(item).text;
 const itemWords = (item: ContextItem): string[] => (itemFeatures(item).words ??= contentWords(itemText(item)));
 const itemCaps = (item: ContextItem): Set<string> => (itemFeatures(item).caps ??= capitalWords(itemText(item)));
 const itemRefs = (item: ContextItem): Set<string> => (itemFeatures(item).refs ??= idNumbers(itemText(item)));
