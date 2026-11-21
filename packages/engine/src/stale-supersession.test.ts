@@ -345,6 +345,26 @@ describe("stale supersession: the current record ranks and hands ahead of the de
     expect(ids).not.toContain("mail:oct-statement");
   });
 
+  test("a day-month-year after a separator keeps its year", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "tariff-2025",
+        // The "— November 1, 2025" date is last year's: the November 2026 revision supersedes it.
+        title: "Octopus tariff summary — November 1, 2025",
+        text: "Flexible Octopus: unit rate 28.00p/kWh.",
+      },
+      {
+        ref: "tariff-2026",
+        title: "Octopus tariff summary — November 2026",
+        text: "Flexible Octopus: unit rate 24.50p/kWh.",
+      },
+    ]);
+    const { p } = partner({ config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } }, [docs]);
+    const ids = await say(p, "What is my Octopus unit rate?", [docs], { config: { groundSubject: true } });
+    expect(ids).toContain("mail:tariff-2026");
+    expect(ids).not.toContain("mail:tariff-2025");
+  });
+
   test("a month-only deadline runs out that month, not next year's", async () => {
     const docs = new StaticSource("mail", "Mail", [
       {
