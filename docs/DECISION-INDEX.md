@@ -868,6 +868,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2011 | 2026-11-20 | Adopted: `pushOpenConstraint` — an opt-in mild filter: on a request the push opened by shape rather than a listed verb, a packet goes only… | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
 | D2029 | 2026-11-21 | Adopted: a held warning's unused verdict writes no source-map outcome. | adopted |
+| D2032 | 2026-11-21 | Adopted: a vocabulary `rebuild` keeps the user's probe memos (D46). | adopted |
 | D2031 | 2026-11-21 | Adopted: `closeSession` tombstones a key whose session is still being made — the finished creation reports `session_end` and detaches… | adopted |
 | D2030 | 2026-11-21 | Adopted: concurrent `sessionFor` calls for one agent session share the creation in flight. | adopted |
 | D2027 | 2026-11-21 | Adopted: the report queue binds inside `surface.report`, not in its callers. | adopted |
