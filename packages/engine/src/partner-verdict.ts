@@ -639,8 +639,9 @@ export const sameRef = (refs: ReadonlySet<string>, item: ContextItem): boolean =
 export const MOVES = /\b(move|moved|reschedul\w*|postpone|push|switch\w*|change)\b/i;
 /** The request claims a thing for the user: "my flight", "our booking". */
 const FIRST_PERSON = /\b(?:my|mine|our|ours)\b/i;
-/** The mark of a document handed on from its holder: "Fwd:" / "FW:" say the thing it names is someone else's. */
-const FORWARDED = /^\s*(?:fwd?|fw)\s*:/i;
+/** The mark of a document handed on from its holder: "Fwd:" / "FW:" — also behind a reply's "Re:" — say the
+ * thing it names is someone else's. A bare "Re:" is a thread's own reply, not a hand-off. */
+const FORWARDED = /^\s*(?:(?:re|fwd?|fw)\s*:\s*)*fwd?\s*:/i;
 /** A forwarded title declaring a named party's thing: "Fwd: Sam Okoro's flight to Lisbon" — owner, then the thing. */
 const OWNED_BY = /\b([\p{Lu}][\p{L}]+(?:\s+[\p{Lu}][\p{L}]+){0,2})['’]s\s+([\p{L}\p{N}]+)/gu;
 

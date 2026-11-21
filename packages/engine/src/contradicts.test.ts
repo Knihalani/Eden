@@ -188,6 +188,12 @@ describe("fallback asks", () => {
     // calendar is the user's own — only a forward mark makes the named owner a third party.
     const own = scored(item("b-own", "Kai Nihalani's appointment", "Dentist, Tuesday 15:00."));
     expect(p.contradicts(own, cue("Reschedule my appointment"))).toBe(false);
+    // The mark survives a reply's "Re:" prefix — "Re: Fwd: Sam's flight" is still the forwarded third-party
+    // document; a bare "Re:" is a thread's own reply and stays ambiguous.
+    const refwd = scored(item("b-rf", "Re: Fwd: Sam Okoro's flight to Lisbon", sams.item.text));
+    expect(p.contradicts(refwd, c)).toBe(true);
+    const re = scored(item("b-re", "Re: Sam Okoro's flight to Lisbon", sams.item.text));
+    expect(p.contradicts(re, c)).toBe(false);
   });
 
   test("a question naming two years keeps the earlier side's records (D2061)", () => {
