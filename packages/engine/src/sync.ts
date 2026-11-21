@@ -745,8 +745,11 @@ export class SyncManager {
       rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
       storeTail: Promise.resolve(),
       trackedAt: this.deps.now(),
-      // A user who already had a first page when they went to disk is not measured for first value again.
-      firstPageAt: snap.sources.some((x) => num(x.polledAt, -Infinity) > -Infinity) ? this.deps.now() : undefined,
+      // A user who already had a first page when they went to disk is not measured for first value again: a whole
+      // pass done (`polledAt`), or the ids a stored page left behind — a pass in progress has pages but no `polledAt`.
+      firstPageAt: snap.sources.some((x) => num(x.polledAt, -Infinity) > -Infinity || x.ids.length > 0)
+        ? this.deps.now()
+        : undefined,
     };
     for (const x of snap.sources) {
       const s = newSourceSync(x.id);
@@ -2256,7 +2259,9 @@ export class SyncManager {
       let backfill = false;
       for (const s of u.sources.values()) if (s.phase === "backfill") backfill = true;
       if (backfill) backfilling++;
-      if (u.sources.size > 0 && u.firstPageAt === undefined) waitingFirstPage++;
+      // A user still queued for a first step has no sources found yet (the step discovers them): `queued` is the
+      // sign they are waiting, so a surge does not hide them from the backlog.
+      if (u.firstPageAt === undefined && (u.sources.size > 0 || u.queued)) waitingFirstPage++;
     }
     let kickQueuedUsers = 0;
     for (const q of this.kickQueue.values()) kickQueuedUsers += q.length;

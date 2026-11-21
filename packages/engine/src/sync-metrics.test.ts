@@ -147,10 +147,46 @@ describe("the backfill and fairness gauges (S1-P2)", () => {
       sync.kick(u);
     }
     await Bun.sleep(20);
-    expect(sync.gauges()).toMatchObject({ kickRunning: 4, kickQueuedUsers: 3, kickQueuedTenants: 2 });
+    // All seven wait for a first page: the four running (their sources found, nothing stored) and the three
+    // queued — a queued user's step has not discovered their sources yet, so `sources.size` alone would hide them.
+    expect(sync.gauges()).toMatchObject({
+      kickRunning: 4,
+      kickQueuedUsers: 3,
+      kickQueuedTenants: 2,
+      waitingFirstPage: 7,
+    });
     open();
-    for (let i = 0; i < 60 && sync.gauges().kickQueuedUsers > 0; i++) await Bun.sleep(5);
+    for (let i = 0; i < 120 && sync.gauges().kickQueuedUsers + sync.gauges().kickRunning > 0; i++) {
+      await Bun.sleep(5);
+    }
     expect(sync.gauges()).toMatchObject({ kickQueuedUsers: 0, kickQueuedTenants: 0, kickRunning: 0 });
+  });
+
+  test("a restored backfill with pages behind it does not wait or count first value again", async () => {
+    const a = new Listing("a", 15);
+    const list = a.list.bind(a);
+    // The second page is refused: the kick ends with the first pass in progress — phase backfill, ids held,
+    // polledAt still unset — exactly the restore that used to measure first value again.
+    a.list = (s: Scope, c: string | undefined, l: number) =>
+      c === undefined ? list(s, c, l) : ("limited" as unknown as ListPage);
+    const { sync } = build([a]);
+    sync.track(U1);
+    sync.kick(U1);
+    await sync.kicked(U1);
+    // One of two pages stored: first value recorded, the first pass still in progress (polledAt is only set at its
+    // end), so the snapshot's source row is phase backfill with ids and a cursor but polledAt null.
+    expect(sync.stats.firstPageCount).toBe(1);
+    const snap = sync.snapshot(U1)!;
+    expect(snap.sources[0]!.phase).toBe("backfill");
+    expect(snap.sources[0]!.polledAt).toBeNull();
+    expect(snap.sources[0]!.ids.length).toBeGreaterThan(0);
+    const { sync: again } = build([new Listing("a", 15)]);
+    expect(again.restore(U1, snap)).toBe(true);
+    // The ids say a page already landed: not waiting, and the rest of the pass records no second first value.
+    expect(again.gauges().waitingFirstPage).toBe(0);
+    again.kick(U1);
+    await again.kicked(U1);
+    expect(again.stats.firstPageCount).toBe(0);
   });
 });
 
