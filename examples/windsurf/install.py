@@ -146,6 +146,10 @@ def install(home: Path, local_bin: str | None, remote: bool, dry: bool) -> None:
             + " "
         )
     command = f"{env_prefix}python3 {shlex.quote(str(dest / 'eden-hook.py'))}"
+    shown = command
+    if remote and key:
+        # The summary must not leak the credential the bash command has to carry.
+        shown = command.replace(shlex.quote(f"EDEN_API_KEY={key}"), "EDEN_API_KEY=***")
 
     if not dry:
         dest.mkdir(parents=True, exist_ok=True)
@@ -214,7 +218,7 @@ def install(home: Path, local_bin: str | None, remote: bool, dry: bool) -> None:
     else:
         print(f"[dry] would register the MCP server in {mcp_path}")
 
-    print(f"[eden] hooks: {len(EVENTS)} events -> {command}")
+    print(f"[eden] hooks: {len(EVENTS)} events -> {shown}")
     print("[eden] deny channel: exit 2 + stderr; context rides MCP (stdout is UI-only).")
     print("[eden] done.")
 
