@@ -291,6 +291,10 @@ export function checkAsk(v: unknown): Checked<AskRequest> {
   if (!isText(v.question, MAX_QUESTION_CHARS)) return { ok: false, error: textError("question", MAX_QUESTION_CHARS) };
   if (!v.question.trim()) return { ok: false, error: "question must be non-empty" };
   const maxItems = typeof v.maxItems === "number" ? Math.max(1, Math.min(20, Math.floor(v.maxItems))) : undefined;
+  // `itemId` (D2022): a citation's `sourceId:ref` id, bounded like a ref is, not a scope id.
+  if (v.itemId !== undefined && !isText(v.itemId, 1_024)) {
+    return { ok: false, error: textError("itemId", 1_024) };
+  }
   return {
     ok: true,
     value: {
@@ -299,6 +303,7 @@ export function checkAsk(v: unknown): Checked<AskRequest> {
       sessionId: v.sessionId as string,
       question: v.question,
       maxItems,
+      ...(typeof v.itemId === "string" ? { itemId: v.itemId } : {}),
     },
   };
 }

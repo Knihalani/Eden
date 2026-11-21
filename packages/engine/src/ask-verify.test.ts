@@ -5,6 +5,7 @@ import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
+import { ITEM_GONE } from "./partner-verdict";
 import { CORE_CONFIG } from "./parts";
 
 // D211: an ask's citations a change signal put in doubt are re-read (`verifyItems`, as deliveries are) and a doubted
@@ -247,4 +248,38 @@ test("our rate limit's ordinary use (no 429) leaves no live item out of quick as
     expect(r.answer).not.toContain("Left out");
     expect(r.citations.length).toBe(before);
   }
+});
+
+describe("the `item` ask runs the same freshness check (D2022, the review)", () => {
+  test("a deleted item's follow-up re-reads it, finds it gone, and answers as gone — never the stale copy", async () => {
+    const { src, p, user, ask, deleteBySignal } = await setup();
+    expect(citedIds(await ask())).toContain(HOLD);
+    deleteBySignal();
+    const r = await p.ask({ ...user, sessionId: "s1", question: "Is the Harlow invoice on hold?", itemId: HOLD });
+    expect(r.answer).toBe(ITEM_GONE);
+    expect(citedIds(r)).toEqual([]);
+    expect(src.fetches).toBeGreaterThan(0);
+  });
+
+  test("a still-held item's follow-up re-reads it, confirms it, and serves it", async () => {
+    const { p, user, ask } = await setup();
+    expect(citedIds(await ask())).toContain(HOLD);
+    // Doubt without deletion: the re-read confirms the copy and the item is served.
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    const r = await p.ask({ ...user, sessionId: "s1", question: "Is the Harlow invoice on hold?", itemId: HOLD });
+    expect(r.answer).toContain("Harlow invoice on hold");
+    expect(citedIds(r)).toEqual([HOLD]);
+  });
+
+  test("a re-read that finds a newer copy serves the new version, not the superseded one (the review)", async () => {
+    const { src, p, user, ask } = await setup();
+    expect(citedIds(await ask())).toContain(HOLD);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    // The source now holds a changed copy of the same ref.
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments resumed once the dispute settled", T0);
+    const r = await p.ask({ ...user, sessionId: "s1", question: "Is the Harlow invoice on hold?", itemId: HOLD });
+    expect(citedIds(r)).toEqual([HOLD]);
+    expect(r.answer).toContain("resumed once the dispute settled");
+    expect(r.answer).not.toContain("until the dispute ends");
+  });
 });

@@ -39,7 +39,17 @@ describe("the hand-written server against the SDK's Client", () => {
         description: ASK_CONTEXT_DESCRIPTION,
         inputSchema: {
           type: "object",
-          properties: { question: { type: "string", minLength: 1, maxLength: 2_000 } },
+          properties: {
+            question: { type: "string", minLength: 1, maxLength: 2_000 },
+            item: {
+              type: "string",
+              minLength: 1,
+              maxLength: 1_024,
+              description:
+                "An item id from a previous answer's Sources list ([item: ...]): return that item's parts in full, " +
+                "where an answer's excerpts are cut short.",
+            },
+          },
           required: ["question"],
         },
         annotations: { readOnlyHint: true },

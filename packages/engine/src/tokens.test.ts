@@ -67,6 +67,18 @@ describe("compactParts in messageParts", () => {
     expect(on).toContain("| Rose Kimura | pending |");
     expect(Buffer.byteLength(on)).toBeLessThanOrEqual(80);
   });
+
+  test("a row of one-character cells is data, not a repeat: the known test does not drop it (D2022, the review)", () => {
+    const rows = "| A | 2 | | B | 7 |";
+    const on = messageParts(rows, undefined, 2026, "Robin Carter", undefined, true).map((p) => p.text);
+    expect(on).toContain("| A | 2 |");
+    expect(on).toContain("| B | 7 |");
+    // A row whose evidence word was already shown is still a repeat; one it was not is kept.
+    const known = new Set(["2"]);
+    const dup = messageParts(rows, (w) => known.has(w), 2026, "Robin Carter", undefined, true).map((p) => p.text);
+    expect(dup).not.toContain("| A | 2 |");
+    expect(dup).toContain("| B | 7 |");
+  });
 });
 
 describe("askDedup in renderPacket", () => {
@@ -190,6 +202,33 @@ describe("compactAsk and askDedup through the engine", () => {
     const second = await p.ask({ ...scope, sessionId: "a", question: po });
     expect(second.answer).toContain(SHOWN);
     expect(second.citations).toEqual(first.citations);
+  });
+
+  test("askDedup: one-character rows shown once do not re-fill a re-rendered item (D2022, the review)", async () => {
+    // An item cut to `askItemBytes` is shown in part; asked again, its kept rows are repeats — the shown words of
+    // one character (`noteShown`) suppress them while the parts never rendered say something new.
+    const rows: ContextItem = {
+      ...policy,
+      title: "Cell ledger",
+      text:
+        "| A | 2 | | B | 7 | The ledger lists seat codes row by row, office by office, floor by floor. " +
+        "Copies of the master plan arrive every quarter without change to the numbering. " +
+        "Rows are audited twice yearly by the floor wardens on each site. " +
+        "Maps hang beside each lift lobby for quick reference during drills. " +
+        "Corrections go through the office of the plan clerk before posting. " +
+        "Zebra quotas reset in March.",
+    };
+    const p = partner({ compactAsk: true, askDedup: true, compactParts: true }, rows);
+    const q = "zebra quotas";
+    const first = await p.ask({ ...scope, sessionId: "a", question: q });
+    expect(first.answer).toContain("Zebra quotas reset in March.");
+    expect(first.answer).toContain("| A | 2 |");
+    expect(first.answer).not.toContain("Corrections go through the office");
+    const second = await p.ask({ ...scope, sessionId: "a", question: q });
+    expect(second.answer).not.toContain(SHOWN);
+    expect(second.answer).toContain("Corrections go through the office");
+    expect(second.answer).not.toContain("| A | 2 |");
+    expect(second.answer).not.toContain("Copies of the master plan");
   });
 
   test("askDedup: an item changed at its source under the same id is not shown, though its words are", async () => {

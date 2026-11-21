@@ -1648,8 +1648,9 @@ export class ContextPartner extends PartnerVerdict {
       if (!item || !line.startsWith(`- [${item.sourceId}] `)) break;
       const key = shownKey(item);
       const words = shown.get(key) ?? new Set<string>([year]);
-      // Only words of two or more characters: the known test that reads these asks of no other (`saysUnknown`, D1933).
-      for (const w of lineWords(item.sourceId, line)) if (w.length > 1) words.add(w);
+      // Words of one character too: the known test asks of them for a part holding no longer word — a table row
+      // of single cells (`saysUnknown`, D1933, D2022).
+      for (const w of lineWords(item.sourceId, line)) words.add(w);
       shown.delete(key); // re-inserted last: the most recently shown is dropped last
       shown.set(key, words);
     }

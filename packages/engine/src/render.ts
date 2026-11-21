@@ -75,13 +75,13 @@ export function renderPacket(
     const focusAll = [...focus];
     const focusWords = focusWordsOf(focusAll);
     // The last item's title and text, whose words join `shown` only when another item is read (D1933): the known
-    // test reads `shown` for the items after it, so the last item read adds nothing. Only words of two or more
-    // characters: the known test asks of no other (`saysUnknown`).
+    // test reads `shown` for the items after it, so the last item read adds nothing. Words of one character too:
+    // `saysUnknown` asks of them for a part holding no longer word (D2022).
     let last: { title: string[]; text: string } | null = null;
     sayOf = (item) => {
       if (last) {
-        for (const w of last.title) if (w.length > 1) shown.add(w);
-        for (const w of wordsIn(last.text.toLowerCase())) if (w.length > 1) shown.add(w);
+        for (const w of last.title) shown.add(w);
+        for (const w of wordsIn(last.text.toLowerCase())) shown.add(w);
         last = null;
       }
       const title = wordsIn(item.title.toLowerCase());
@@ -506,22 +506,33 @@ function unknownParts(all: AllParts, known: (word: string) => boolean): { parts:
  */
 function saysUnknown(s: string, known: (word: string) => boolean): boolean {
   let start = -1;
+  // A part with no word of two or more characters is tested by its one-character words instead (D2022, the review):
+  // a flattened table's row of single cells ("| A | 2") is data, not a repeat — `known` holds no word of one
+  // character, so any non-stopword one answers.
+  let long = false;
+  let short = false;
   for (let i = 0; i <= s.length; i++) {
     const c = i < s.length ? s.charCodeAt(i) : 32;
     let k = WORD_UNITS[c]!;
-    if (k === 0 && (k = readWordUnit(c)) === 0)
-      return wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w));
+    if (k === 0 && (k = readWordUnit(c)) === 0) {
+      const ws = wordsIn(s);
+      const anyLong = ws.some((w) => w.length > 1);
+      return ws.some((w) => (w.length > 1 || !anyLong) && !isStopword(w) && !known(w));
+    }
     if (k === 1) {
       if (start < 0) start = i;
     } else if (start >= 0) {
+      const w = s.slice(start, i);
       if (i - start > 1) {
-        const w = s.slice(start, i);
+        long = true;
         if (!isStopword(w) && !known(w)) return true;
+      } else if (!isStopword(w) && !known(w)) {
+        short = true;
       }
       start = -1;
     }
   }
-  return false;
+  return !long && short;
 }
 
 /** A code unit in a surrogate pair's range: `wordsIn` then reads the string by its regex. */

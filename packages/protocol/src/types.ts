@@ -89,6 +89,12 @@ export interface AskRequest extends Scope {
   question: string;
   /** Upper bound on items the answer may cite. */
   maxItems?: number;
+  /**
+   * A citation's `itemId` from an earlier answer (`ask_context`'s `item` argument, D2022, A2): the answer is that
+   * item's parts in full — an answer's excerpts are cut at a few hundred bytes and the agent could not otherwise
+   * read the rest. No search and no model call run.
+   */
+  itemId?: string;
 }
 
 export interface AskResponse {

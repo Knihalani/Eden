@@ -306,6 +306,15 @@ export interface ReaderReport {
 
 export type ReaderSink = (report: ReaderReport) => void;
 
+/**
+ * The `item` ask's answer cap in code units (D2022, A2): the cited item's parts in full — an answer's excerpts
+ * stop at `askItemBytes` — bounded so one item's answer stays a packet, not a dump.
+ */
+export const ASK_ITEM_BYTES = 16_000;
+
+/** The `item` ask's answer when the cited id holds nothing (evicted, dropped or never cited). */
+export const ITEM_GONE = "That item is no longer held: it left the user's sources or was never cited here.";
+
 /** Terms a follow-up's `carry` may add to its cue: its own terms plus the previous request's and the delivered
  * items'. */
 export const CARRY_TERMS = 3;
@@ -993,6 +1002,48 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // An ask-only session (an MCP client) never runs observe, which keeps the session vocabulary bounded.
     if (s.vocab.size > this.config.maxSessionTerms) rebuildVocab(s, this.config.maxSessionTerms);
     const question = sanitizeForStore(request.question);
+    // `itemId` (D2022, A2): an earlier citation's id asks for that item itself — the parts bearing on the question
+    // in full, where an answer's items are cut at `askItemBytes`. The item comes from the cache — a cited item is
+    // held — and a copy a sweep or signal doubted is re-read as an ordinary answer would check it. No search, no
+    // model, nothing charged; a session's tally is untouched.
+    if (request.itemId !== undefined) {
+      const at = this.now();
+      const item = this.deps.cache.get(s.scope, request.itemId, at);
+      if (item === null) {
+        if (root) spans!.close(root, { item: 0 });
+        return { answer: ITEM_GONE, citations: [], usedModel: false, costUsd: 0, latencyMs: performance.now() - t0 };
+      }
+      const itemCue: Cue = {
+        text: question,
+        entities: [],
+        key: "",
+        id: "item",
+        time: null,
+        at,
+        raw: question,
+        offset: this.deps.cache.offsetOf(s.scope),
+      };
+      if (root) itemCue.span = root.id;
+      // The same freshness check an ordinary answer applies (the review): a copy a sweep or signal doubted is
+      // re-read before it is served, and one the sources no longer hold answers as gone.
+      const held = await this.verifyItems(s, [{ item, score: 0, matched: 0, sketch: null }], itemCue);
+      const latencyMs = performance.now() - t0;
+      if (root) spans!.close(root, { item: held.length === 0 ? 0 : 1 });
+      if (held.length === 0 || s.closed) {
+        return { answer: ITEM_GONE, citations: [], usedModel: false, costUsd: 0, latencyMs };
+      }
+      // `held` carries the copy the re-read confirmed — a changed one, where `item` is the superseded copy in hand.
+      const fresh = held[0]!.item;
+      const focus = focusOf(itemCue);
+      const answer = renderPacket([fresh], {
+        maxBytes: ASK_ITEM_BYTES + 1_024,
+        focus,
+        itemBytes: ASK_ITEM_BYTES,
+        self: this.deps.cache.selfOf(s.scope),
+        ...(this.config.compactParts ? { split: true } : {}),
+      });
+      return { answer, citations: this.cited([fresh]), usedModel: false, costUsd: 0, latencyMs };
+    }
     // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
     // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
     const gloss = this.config.requestGloss ? glossOf(question) : "";

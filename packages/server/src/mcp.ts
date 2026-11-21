@@ -34,7 +34,17 @@ const ASK_CONTEXT_TOOL = {
   description: ASK_CONTEXT_DESCRIPTION,
   inputSchema: {
     type: "object",
-    properties: { question: { type: "string", minLength: 1, maxLength: MAX_QUESTION_CHARS } },
+    properties: {
+      question: { type: "string", minLength: 1, maxLength: MAX_QUESTION_CHARS },
+      item: {
+        type: "string",
+        minLength: 1,
+        maxLength: 1_024,
+        description:
+          "An item id from a previous answer's Sources list ([item: ...]): return that item's parts in full, " +
+          "where an answer's excerpts are cut short.",
+      },
+    },
     required: ["question"],
   },
   annotations: { readOnlyHint: true },
@@ -57,14 +67,19 @@ export interface EdenMcpServer {
   onclose?: () => void;
 }
 
-/** The question, or why the arguments are not valid. Extra arguments are ignored, as zod's object did. */
-function questionOf(args: unknown): string | { invalid: string } {
+/** The arguments, or why they are not valid. Extra arguments are ignored, as zod's object did. */
+function argsOf(args: unknown): { question: string; item?: string } | { invalid: string } {
   const q = args && typeof args === "object" ? (args as Record<string, unknown>).question : undefined;
   if (typeof q !== "string") return { invalid: "question must be a string" };
   if (q.length < 1 || q.length > MAX_QUESTION_CHARS) {
     return { invalid: `question must be 1 to ${MAX_QUESTION_CHARS} characters, not ${q.length}` };
   }
-  return q;
+  // `item` (D2022, A2): a citation id from an earlier answer's Sources list, asking for that item in full.
+  const item = (args as Record<string, unknown>).item;
+  if (item !== undefined && (typeof item !== "string" || item.length < 1 || item.length > 1_024)) {
+    return { invalid: "item must be a string of 1 to 1024 characters" };
+  }
+  return { question: q, ...(typeof item === "string" ? { item } : {}) };
 }
 
 const toolError = (text: string): CallToolResult => ({ content: [{ type: "text", text }], isError: true });
@@ -109,18 +124,21 @@ export function createMcpServer(
     inFlight.delete(sessionId);
     if (ending.has(sessionId)) end(sessionId);
   };
-  const askContext = async (question: string): Promise<CallToolResult> => {
+  const askContext = async (question: string, item?: string): Promise<CallToolResult> => {
     const sessionId = begin();
     let res;
     try {
-      res = await partner.ask({ ...who, sessionId, question });
+      res = await partner.ask({ ...who, sessionId, question, ...(item !== undefined ? { itemId: item } : {}) });
     } finally {
       finish(sessionId);
     }
     // Titles and URLs are source text (an email subject is attacker-controlled): they go in a data envelope too, one
-    // line each (`safeLine`, D221), so a line break in a title cannot forge another `[n]` source line.
+    // line each (`safeLine`, D221), so a line break in a title cannot forge another `[n]` source line. Each line
+    // names the citation's item id so a follow-up `item` ask can read it in full (D2022).
     const cites = res.citations.map(
-      (c, i) => `[${i}] ${safeLine(c.sourceId)}: ${safeLine(c.title)}${c.url ? ` (${safeLine(c.url)})` : ""}`,
+      (c, i) =>
+        `[${i}] ${safeLine(c.sourceId)}: ${safeLine(c.title)}${c.url ? ` (${safeLine(c.url)})` : ""}` +
+        ` [item: ${safeLine(c.itemId)}]`,
     );
     const text = cites.length ? `${res.answer}\n\nSources:\n${renderAnswer(cites.join("\n"))}` : res.answer;
     return { content: [{ type: "text", text }] };
@@ -131,15 +149,15 @@ export function createMcpServer(
     if (params.name !== ASK_CONTEXT_TOOL.name) {
       return toolError(`MCP error ${ErrorCode.InvalidParams}: Tool ${String(params.name)} not found`);
     }
-    const question = questionOf(params.arguments);
-    if (typeof question !== "string") {
+    const args = argsOf(params.arguments);
+    if (!("question" in args)) {
       return toolError(
         `MCP error ${ErrorCode.InvalidParams}: Input validation error: Invalid arguments for tool ask_context: ` +
-          question.invalid,
+          args.invalid,
       );
     }
     try {
-      return await askContext(question);
+      return await askContext(args.question, args.item);
     } catch (e) {
       // The message only, as the SDK gave it: the partner's own errors name no user content.
       return toolError(e instanceof Error ? e.message : String(e));
