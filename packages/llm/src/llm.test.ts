@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Budget, TenantSpend } from "./budget";
 import { CACHE_TRIP_CALLS, minCacheTokens, OpenRouterModel } from "./openrouter";
+import { ModelHeldError, RateHold } from "./pacing";
 import { costOf, priceFor } from "./pricing";
 
 describe("pricing", () => {
@@ -190,6 +191,45 @@ describe("OpenRouterModel", () => {
     await new OpenRouterModel({ apiKey: "k", model: "m:free", fetch: fake, allowLogging: true }).chat(req);
     expect(sent[0].provider).toMatchObject({ data_collection: "deny", zdr: true });
     expect(sent[1].provider).toMatchObject({ data_collection: "allow", zdr: false });
+  });
+
+  test("a 429 holds every role sharing the RateHold; held calls send nothing (D2046, S1-P9)", async () => {
+    let now = 1_000_000;
+    let calls = 0;
+    let status = 200;
+    const fake = (async () => {
+      calls++;
+      if (status === 200) return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+      return new Response("slow down", { status: 429, headers: { "retry-after": "5" } });
+    }) as unknown as typeof fetch;
+    const hold = new RateHold({ now: () => now });
+    const a = new OpenRouterModel({ apiKey: "k", model: "m", fetch: fake, rateHold: hold });
+    const b = new OpenRouterModel({ apiKey: "k", model: "m", fetch: fake, rateHold: hold });
+    const req = { messages: [{ role: "user" as const, content: "hi" }], maxTokens: 5 };
+
+    status = 429;
+    await expect(a.chat(req)).rejects.toThrow("openrouter 429");
+    // Another role sharing the hold sends nothing while the server-named delay runs.
+    const held = await b.chat(req).then(
+      () => null,
+      (e) => e,
+    );
+    expect(held).toBeInstanceOf(ModelHeldError);
+    expect(calls).toBe(1);
+    expect(hold.skipped).toBe(1);
+    // Still held inside the delay; past it, calls go through and the streak clears.
+    now += 4_000;
+    const still = await a.chat(req).then(
+      () => null,
+      (e) => e,
+    );
+    expect(still).toBeInstanceOf(ModelHeldError);
+    expect(calls).toBe(1);
+    now += 2_000;
+    status = 200;
+    await b.chat(req);
+    expect(calls).toBe(2);
+    expect(hold.held()).toBe(false);
   });
 
   test("a free model (OpenRouter's :free suffix) is priced at zero; an unknown one stays priced high", () => {

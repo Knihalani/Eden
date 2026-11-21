@@ -201,3 +201,56 @@ export class Pacer {
     };
   }
 }
+
+/**
+ * A held model call throws this: nothing was sent, the account's rate limit is still cooling down. The engine counts
+ * it apart from real failures (`eden_model_failures_total{kind="held"}`) and takes its no-model path as on any throw.
+ */
+export class ModelHeldError extends Error {
+  override name = "ModelHeldError";
+}
+
+/**
+ * A process-wide hold the model roles share (`modelRolesFromEnv`): OpenRouter's rate limit applies to the whole
+ * account, so a 429 on one role means none of them should call. A held call throws `ModelHeldError` at once instead
+ * of sending anything: the engine's calls have their own deadlines, and failing fast beats a timeout (D2046, S1-P9).
+ *
+ * - `note(res)` on a 429: the delay the server asked for (`retryAfterMs`), else jittered exponential over the streak
+ *   of 429s since the last success;
+ * - `ok()` on an answered call clears the streak;
+ * - `held()` gates the send; `skipped` counts refused calls.
+ */
+export class RateHold {
+  /** Calls refused while held (no request was sent). */
+  skipped = 0;
+  private streak = 0;
+  private until = 0;
+  private readonly now: () => number;
+  private readonly random: () => number;
+  private readonly baseDelayMs: number;
+  private readonly maxDelayMs: number;
+
+  constructor(options: { now?: () => number; random?: () => number; baseDelayMs?: number; maxDelayMs?: number } = {}) {
+    this.now = options.now ?? (() => Date.now());
+    this.random = options.random ?? Math.random;
+    this.baseDelayMs = options.baseDelayMs ?? 2_000;
+    this.maxDelayMs = options.maxDelayMs ?? 60_000;
+  }
+
+  held(): boolean {
+    return this.now() < this.until;
+  }
+
+  /** A 429 holds every caller: the server's delay when it named one, else a doubling backoff. */
+  note(res: Response): void {
+    const asked = retryAfterMs(res, this.now());
+    const delay = asked ?? Math.min(this.maxDelayMs, this.baseDelayMs * 2 ** this.streak) * (0.5 + this.random() * 0.5);
+    this.streak++;
+    this.until = Math.max(this.until, this.now() + delay);
+  }
+
+  /** An answered call clears the backoff streak. */
+  ok(): void {
+    this.streak = 0;
+  }
+}
