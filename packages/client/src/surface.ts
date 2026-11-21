@@ -176,6 +176,8 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
   const sessions = new Map<string, SurfaceSession<V>>();
   /** Session creations in flight: concurrent hooks for one agent session share the one being made. */
   const making = new Map<string, Promise<SurfaceSession<V> | null>>();
+  /** Keys `closeSession` answered while their creation was still in flight: the made session must not outlive it. */
+  const closing = new Set<string>();
 
   async function sessionFor(sessionId: string): Promise<SurfaceSession<V> | null> {
     const key = edenId(sessionId);
@@ -183,7 +185,10 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
     if (existing) return existing;
     const inFlight = making.get(key);
     if (inFlight) return inFlight;
-    const created = create(key).finally(() => making.delete(key));
+    const created = create(key).finally(() => {
+      making.delete(key);
+      closing.delete(key);
+    });
     making.set(key, created);
     return created;
   }
@@ -218,6 +223,13 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
         () => undefined,
       ),
     };
+    // The conversation ended while this session was being made (closeSession tombstoned the key):
+    // send `session_end` on its queue as a live close would, detach its sidecar, and yield nothing.
+    if (closing.has(key)) {
+      await report(session, [{ kind: "session_end" }], false).catch(() => undefined);
+      made.local?.close();
+      return null;
+    }
     sessions.set(key, session);
     return session;
   }
@@ -288,7 +300,11 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
   async function closeSession(key: string): Promise<void> {
     const s = sessions.get(key);
     sessions.delete(key);
-    if (!s) return;
+    if (!s) {
+      // A creation in flight must not land past the close — `create` answers the tombstone itself.
+      if (making.has(key)) closing.add(key);
+      return;
+    }
     try {
       // The agent's conversation ended: report `session_end` so the engine learns "ended" verdicts
       // for the packets it handed — eviction's inferred/expired is the fallback, not the rule.
