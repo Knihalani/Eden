@@ -476,6 +476,9 @@ const POLICY_WORDS = new Set([
   "charges",
 ]);
 
+// A rule document reads as one on its own words, before any pick: two or more of the policy vocabulary.
+const ruleDoc = (words: ReadonlySet<string>) => [...words].filter((t) => POLICY_WORDS.has(t)).length >= 2;
+
 const STALE_TAG = /[\[(（【]\s*(?:old|superseded|expired|outdated|out[- ]of[- ]date|previous|archived|void)\b/i;
 const STALE_CAPS = /\b(?:OLD|SUPERSEDED|EXPIRED|OUTDATED|VOID)\b/;
 const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b/i;
@@ -2094,7 +2097,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     onCalls?: (calls: number) => void,
   ): Promise<Scored[]> {
     const room = this.max() - chosen.length;
-    if (!this.config.companions || chosen.length === 0 || room <= 0 || s.closed) return [];
+    if (!this.config.companions || chosen.length === 0 || room < 0 || s.closed) return [];
     // Terms and identifiers per pick: a candidate must link to one pick on that pick's own evidence — a union
     // over every pick's words would let a wrong-numbered invoice in on another pick's identifier pass.
     const picks = chosen.map((x) => ({
@@ -2135,9 +2138,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // A Set: a word the item repeats counts once, so "shared two" is two different words of the pick's.
       const own = new Set(contentWords(`${item.title} ${item.text}`).filter(term));
       const ownAll = new Set(contentWords(`${item.title} ${item.text}`));
-      // A rule document reads as one on its own words, before any pick: two or more of the words a
-      // policy is written in.
-      const isPolicy = [...own].filter((t) => POLICY_WORDS.has(t)).length >= 2;
+      const isPolicy = ruleDoc(own);
       for (const p of picks) {
         // A document of a different year is that topic's sibling, not its companion — last year's renewal
         // notice beside this year's (their day numbers can agree by chance).
@@ -2209,8 +2210,15 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const vocab = this.deps.cache.peekVocab(s.scope);
     const staleOf = this.staleSibling(s, cue, cue.entities, [...chosen, ...scored]);
     const out: Scored[] = [];
+    // One rule document may ride beside the packet the pick cap already closed: the fare rules belong
+    // next to the booking they govern whether or not a slot is free — the cap counts picks, not the
+    // rules that constrain them (D2058). The allowance is spent only when a rule document actually
+    // rides beside the cap — one admitted inside it holds a normal slot like any companion, and a
+    // decrement there would spend the allowance twice and close the passes on free slots.
+    let policyRoom = 1;
     const take = (x: Scored, strictLink = false): void => {
-      if (out.length >= room) return;
+      const pol = ruleDoc(new Set(contentWords(`${x.item.title} ${x.item.text}`).filter(term)));
+      if (out.length >= room + (pol ? policyRoom : 0)) return;
       if (has.has(x.item.id) || bulkMail(x.item) || !s.ledger.isFresh(x.item.id, s.turn)) return;
       if (s.delivered.some((d) => nearDuplicate(d.sketch, x.sketch) && sameRef(d.refs, x.item))) return;
       // A near-duplicate of a chosen one — the same occasion on another day, the same note a quarter on — is a
@@ -2231,6 +2239,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (vocab !== undefined && x.doc !== undefined && this.alreadyHas(s, x.item, x.doc, vocab)) return;
       if (this.contradicts(x, cue) || this.staleSelf(x.item, cue) || staleOf(x.item) || !linked(x.item, strictLink))
         return;
+      if (pol && out.length >= room) policyRoom--;
       has.add(x.item.id);
       // Its ledger entry at selection time, like `deliverChecked`'s `was`: a delivery that lands during the
       // pass's await (this request's own fast path) already handed it out.
@@ -2240,7 +2249,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // What the request's own words already ranked: a companion is often a candidate scored under them.
     for (const x of scored) take(x);
     // Companions the request's words never ranked in: the cache searched for the chosen items' terms.
-    if (vocab !== undefined && out.length < room) {
+    if (vocab !== undefined && out.length < room + policyRoom) {
       const q = termIds([...new Set(picks.flatMap((p) => [...p.terms]))].join(" "), vocab, false);
       const query: number[] = [];
       for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
@@ -2252,7 +2261,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // picks' terms ask the sources once more — one search call per source, capped at `companionSearch` sources and
     // counted with the lookup's `sourceCalls`. What they return is stored, then read back through the cache and
     // the same `take` gate every companion takes: the pool still decides, and silence-by-default holds.
-    if (vocab !== undefined && out.length < room && this.config.companionSearch > 0 && !s.closed) {
+    if (vocab !== undefined && out.length < room + policyRoom && this.config.companionSearch > 0 && !s.closed) {
       // The query a source gets is link vocabulary, not record prose: the picks' terms that pass `term` (real
       // words and letter+digit codes) plus the picks' refs — a companion two records share only by a number
       // still reaches its connector — sanitized like any text that leaves the engine: a connector sees a
