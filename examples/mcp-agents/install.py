@@ -97,6 +97,25 @@ def strip_jsonc(text):
                 break
             i = end + 2
             continue
+        elif ch == ",":
+            # A trailing comma is legal JSONC: drop it when only whitespace/comments stand
+            # between it and the closing bracket.
+            j = i + 1
+            while j < len(text):
+                if text[j] in " \t\r\n":
+                    j += 1
+                elif text[j:j + 2] == "//":
+                    k = text.find("\n", j)
+                    j = len(text) if k == -1 else k + 1
+                elif text[j:j + 2] == "/*":
+                    k = text.find("*/", j + 2)
+                    j = len(text) if k == -1 else k + 2
+                else:
+                    break
+            if j < len(text) and text[j] in "]}":
+                i += 1
+                continue
+            out.append(ch)
         else:
             out.append(ch)
         i += 1
@@ -334,10 +353,7 @@ def config_path(args, name, default):
     override = getattr(args, f"{name.replace('-', '_')}_config", None)
     env_override = os.environ.get(f"EDEN_MCP_{name.upper().replace('-', '_')}_CONFIG")
     raw = override or env_override or default
-    return Path(raw).expanduser().resolve()
-
-
-def main():
+    return Path(raw).expanduser().resolve()def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--agents", help="comma-separated subset of: " + ", ".join(AGENTS))
     ap.add_argument("--eden-home", default=os.environ.get("EDEN_MCP_HOME", "~/.eden-mcp"),
