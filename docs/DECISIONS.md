@@ -957,8 +957,13 @@ generated pages (`.gitattributes` merges them as a union so a merge never stops 
 
 ||||||| 280f6b5f8
 
+| D2055 | 2026-11-21 | **Adopted: an undated block repeats a dated conflict only when the dated one was tied too.** `assess`'s undated-block branch required `!firm` — a dedup so "… while Robert is away" doesn't re-record the dated block it repeats. But `firm` is set by any dated conflict, tied or not, so an untied past deadline ("supplier invoices were due by 20 October") suppressed a later *tied* undated block ("the Harlow booking is cancelled"): `state` stayed `conflict` yet `tiedConflict` never set, and the final `!tiedConflict → none` dropped a real conflict. The guard is now `!firm || !tiedConflict`: when the dated conflict was itself tied the repeat still adds nothing, and when it was another matter's the tied repeat records its own tie. Falsified in `conflict.test.ts` by restoring `!firm`. |
+
+||||||| b268f408f
+
 | D2056 | 2026-11-21 | **Adopted: the user-range tally test also runs with `syncPollBehind` off.** D2054's `sync` prefill left one wall-clock race: `syncPollBehind` lets a lookup answer while its on-demand poll runs behind, and the poll emits its own "skipped: sync poll behind" trace when it settles — whether the poll had stored calls by then depends on when the promise landed against the event loop, so the merged shards' `needDecisions` could carry a `> skipped:sync poll behind` suffix the whole run's did not (or the reverse). With the flag off the lookup waits for its poll, so the trace set is deterministic: 3/3 clean runs where the first CHECK_COLD after D2054 flaked on exactly this key. |
 
+||||||| cdadc89f5
 ## Trial switches
 
 A trial is decided in the branch or session that opened it, as soon as its evidence is in (D814): promoted into

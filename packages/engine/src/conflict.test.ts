@@ -484,3 +484,42 @@ describe("an amount under a limit clears only its own matter", () => {
     expect(verdict("Spend £300 on the event", "Budget note", "Max £200.")).toBe("conflict");
   });
 });
+
+describe("an untied dated conflict hides no later tied block", () => {
+  test("a deadline on another matter does not suppress a cancellation", () => {
+    // The undated block ("… is cancelled") repeats a dated one only when the dated conflict was tied too: an
+    // untied past deadline must not stop the tied cancellation recording its tie.
+    expect(
+      verdict(
+        "Book the Harlow venue for Thursday 5 November",
+        "Notes",
+        "Supplier invoices were due by 20 October. The Harlow booking is cancelled.",
+      ),
+    ).toBe("conflict");
+    expect(verdict("Book the Harlow venue for Thursday 5 November", "Notes", "The Harlow booking is cancelled.")).toBe(
+      "conflict",
+    );
+    // And with no tied block at all the untied deadline still answers "none".
+    expect(
+      verdict("Book the Harlow venue for Thursday 5 November", "Notes", "Supplier invoices were due by 20 October."),
+    ).toBe("none");
+    // A reinstatement of the tied cancellation still clears: the untied deadline's words are no gate on a
+    // clearance of the tied conflict (review finding — `firm` kept the deadline's words since the cancellation
+    // is not firm).
+    expect(
+      verdict(
+        "Book the Harlow venue for Thursday 5 November",
+        "Notes",
+        "Supplier invoices were due by 20 October. The Harlow booking is cancelled. The Harlow booking is reinstated.",
+      ),
+    ).toBe("clear");
+    // But a clearance sharing no word with either the firm's or the tied conflict's matter still does not clear.
+    expect(
+      verdict(
+        "Book the Harlow venue for Thursday 5 November",
+        "Notes",
+        "Supplier invoices were due by 20 October. The Harlow booking is cancelled. The parking dispute was lifted.",
+      ),
+    ).toBe("conflict");
+  });
+});
