@@ -240,8 +240,12 @@ def guard_tool(eden: Any, name: str, fn: Callable[..., Any], held: Optional[Call
     (default ``held_result``: hold, show the finding, say that calling again with the same arguments goes ahead; the
     server proceeds on the repeat). Fails open (D14): a check or a ``held`` that raises runs the tool as if Eden were
     absent; ``on_error`` gets what was swallowed. The tool's own exceptions are its own and propagate. An ``async``
-    tool gets an ``async`` wrapper, whose check runs in a thread (the client is synchronous).
+    tool gets an ``async`` wrapper, whose check runs in a thread (the client is synchronous). An ``AsyncEden``
+    unwraps to its ``EdenClient`` — its coroutine ``check`` would answer nothing here.
     """
+
+    # `aio.AsyncEden`'s calls are coroutines; the check itself is synchronous work for the thread to run.
+    eden = getattr(eden, "sync", eden)
 
     def report(e: Exception) -> None:
         try:

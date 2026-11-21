@@ -124,6 +124,40 @@ class AsyncSurface(unittest.TestCase):
         self.assertEqual(asks["answer"], "a")
         self.assertEqual(pending, [INJ])
 
+    def test_guard_tool_holds_a_finding(self):
+        """An AsyncEden under guard_tool/guard_tools still runs the party check (review of D2013): the wrapper's
+        coroutine `check` must not read as a pass."""
+
+        def deny(path, _body):
+            if path == "/v1/check":
+                return 200, {"verdict": "finding",
+                             "finding": {"id": "f1", "text": "the recipient is not Oskar"}}
+            return answer(path, _body)
+
+        stub = Stub(deny)
+        try:
+            e = AsyncEden(user_id="u", session_id="s", base_url=stub.url, timeout_s=2.0)
+            from eden_client import guard_tool, guard_tools
+            ran = []
+
+            def send(to):
+                ran.append(to)
+                return "sent"
+
+            guarded = guard_tool(e, "send", send)
+            self.assertIn("Not executed", guarded("mallory"))
+            self.assertEqual(ran, [])
+
+            async def send_async(to):
+                ran.append(to)
+                return "sent"
+
+            wrapped = guard_tools(e, {"send_async": send_async})["send_async"]
+            self.assertIn("Not executed", asyncio.run(wrapped("mallory")))
+            self.assertEqual(ran, [])
+        finally:
+            stub.close()
+
     def test_wraps_an_existing_client(self):
         errors = []
         sync = EdenClient(user_id="u", session_id="s", base_url="http://127.0.0.1:9", timeout_s=0.2,
