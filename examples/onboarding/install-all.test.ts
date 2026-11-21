@@ -23,12 +23,13 @@ describe.skipIf(!python)("the unified installer", () => {
     const out = run(["--list"], home);
     expect(out.exitCode, out.stderr.toString()).toBe(0);
     const text = out.stdout.toString();
-    for (const name of ["claude-code", "gptme", "openclaw", "opencode", "pi"]) {
+    for (const name of ["claude-code", "gemini-cli", "gptme", "openclaw", "opencode", "pi"]) {
       expect(text).toContain(name);
     }
     expect(text).toMatch(/pi\s+detected/);
     expect(text).toMatch(/opencode\s+detected/);
     expect(text).toMatch(/claude-code\s+home absent/);
+    expect(text).toMatch(/gemini-cli\s+home absent/);
     expect(text).toMatch(/openclaw\s+home absent/);
   });
 
