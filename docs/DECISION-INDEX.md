@@ -868,6 +868,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
 | D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
+| D2010 | 2026-11-20 | Adopted: a plan-conflict alert repeats once at a request past the one it was sent on. | adopted |
+| D2008 | 2026-11-20 | Adopted: a bare change signal on a source that re-reads by ref answers with `advice: "refs"` — and the clients say so once per source. | adopted |
 | D2007 | 2026-11-20 | Adopted: every personal-agent surface forwards its compaction signal as `context_reset`. | adopted |
 | D2006 | 2026-11-20 | Adopted: a `context_reset` event clears the session's shown marks — a compacted or restarted transcript may be told the same items again. | adopted |
 | D2005 | 2026-11-20 | Adopted: a user's first sighting — any user-scoped call, not only their first event — starts the sync backfill. | adopted |
