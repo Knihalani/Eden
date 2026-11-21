@@ -184,3 +184,54 @@ describe("pushOpen (D702, promoted by D710)", () => {
     expect(acted(listed)).toBe(1);
   });
 });
+
+describe("pushOpenConstraint (Q4.2, opt-in): an opened push goes only when a constraint-like is handed", () => {
+  // The constraint-like item is in the pool (the pool gate passes) but ranks below the handed cut.
+  const ITEMS3 = [
+    item("qa", "Boiler quote", "The boiler quote from Halden for the Premium Bonds money: the PDF is attached."),
+    item("qb", "Leeds itinerary", "Oskar's train tickets to the Leeds client visit: times and seats attached."),
+    item("qc", "Premium Bonds", "Premium Bonds withdrawals are on hold until the boiler dispute with Halden ends."),
+  ];
+  const SOURCE3: Source = { id: "mail", kind: "test", description: "Mail", search: async () => ITEMS3 };
+  const partner = (config: Record<string, unknown>) =>
+    new ContextPartner({
+      sources: async () => [SOURCE3],
+      sourceMap: new SourceMap(),
+      cache: new ItemCache(),
+      budget: new Budget(),
+      model: null,
+      now: () => NOW,
+      config: {
+        ...CORE_CONFIG,
+        askReader: true,
+        readerPush: true,
+        readerGate: true,
+        confidentScore: 99,
+        fallbackMatchedTerms: 99,
+        pushCandidates: 2,
+        ...config,
+      },
+    });
+  const OPENED = "Top up the Halden boiler quote and file Oskar's Leeds itinerary.";
+
+  test("a pool constraint-like below the cut: the packet is suppressed on, goes off", async () => {
+    expect((await packets(partner({ pushOpen: true, pushOpenConstraint: true }), OPENED)).length).toBe(0);
+    const off = await packets(partner({ pushOpen: true }), OPENED);
+    expect(off.length).toBe(1);
+    // The two plain items are handed; the constraint-like sits in the pool below the cut.
+    expect(off[0]!.citations.map((c) => c.itemId).sort()).toEqual([ITEMS3[0]!.id, ITEMS3[1]!.id].sort());
+  });
+
+  test("a constraint-like among those handed keeps the packet", async () => {
+    const got = await packets(partner({ pushOpen: true, pushOpenConstraint: true }), REQUEST);
+    expect(got.length).toBe(1);
+  });
+
+  test("a listed request with the same pool is untouched", async () => {
+    const got = await packets(
+      partner({ pushOpen: true, pushOpenConstraint: true }),
+      "Pay Oskar for the Leeds itinerary and the Halden boiler quote.",
+    );
+    expect(got.length).toBe(1);
+  });
+});

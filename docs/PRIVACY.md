@@ -115,6 +115,12 @@ and a statement on training (none).
   GCS; plain, JSON-escaped or percent-encoded) are redacted. Not covered: CloudFront, SigV2 and Azure SAS signatures
   (generic parameter names), and a Sentry DSN (public by Sentry's design).
 - **Fail-open client:** an Eden outage never blocks the tenant's agent.
+- **A privacy-strict tenant can speak less (Q4.3):** the dials and their measured price on the lab's worlds.
+  `pushOpenConstraint` (D2011): on a request the push opened by shape rather than a listed verb, a packet goes only
+  when a constraint-like item is among those handed — screened at −25% of the neutral packets `pushOpen` adds for
+  −8% of its added facts. `pushOpen: false` (part `open`): no push on a verb the lists do not know — 132 of 768
+  hidden facts unraised (−4.1 points, D710). `pushCandidates: 0` (part `candidates`): no unvetted candidates at
+  all; the request's item text then reaches nothing outside Eden unless a key is set and the paid reader runs.
 
 ## Open items
 

@@ -2832,7 +2832,7 @@ export class ContextPartner {
           latencyMs: Math.round(performance.now() - t0),
         };
       }
-      const candidates = gate ? this.candidatesOf(s, cue, gate, check) : null;
+      const candidates = gate ? this.candidatesOf(s, cue, gate, check, internal.open === true) : null;
       const flagged = candidates
         ? candidates.items
         : reading
@@ -3280,7 +3280,8 @@ export class ContextPartner {
     // rather than being pushed past the cap by the others.
     const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
     const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
-    if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)) };
+    if (seated.length === 0 && !byDay)
+      return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
     // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
     // opens a hand-out no model judged. A push only the day started has no such hand-out at all.
     const before = pool.slice();
@@ -3301,7 +3302,7 @@ export class ContextPartner {
     // constraint-like: the day's own evidence, not a pool the request's words happened to fill (D1401).
     const quiet = byDay && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
     const like = quiet ? all.map(() => false) : all;
-    return { pool, like, seats, before, unchecked };
+    return { pool, like, seats, before, unchecked, cards };
   }
 
   /**
@@ -3622,6 +3623,7 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
+    opened = false,
   ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
@@ -3727,6 +3729,11 @@ export class ContextPartner {
         items = items.slice(0, settledCut(handed, anchors, fewer));
       }
     }
+    // `pushOpenConstraint` (Q4.2, opt-in; o3-push-open §5, screened and not built): on a request the push opened by
+    // shape rather than a listed verb, a packet goes only when a constraint-like item is among those handed — the
+    // pool holding one is not enough. Screened: −25% of the neutral packets `pushOpen` adds for −8% of its facts.
+    if (opened && this.config.pushOpenConstraint && !lookup)
+      items = items.some((x) => this.constraintLike(x, gate.cards)) ? items : [];
     // The arguments are built only when the lab's hook is wired (an optional call evaluates none otherwise).
     const read = anchors;
     this.deps.onPushPool?.({
@@ -8873,6 +8880,8 @@ interface KeptCheck {
 interface PushGate {
   pool: Scored[];
   like: boolean[];
+  /** The pool's cards, as `pushPool` read them — `candidatesOf`'s constraint test needs them for ruled items too. */
+  cards: ReadonlyMap<string, Card>;
   /** `pushDaySeats`: the pool's items seated for the request's day; handed only when the check names them. */
   seats?: Set<string>;
   /** `pushDaySeats`: the pool before the seats, and whether a push with no check answer hands its candidates. */
