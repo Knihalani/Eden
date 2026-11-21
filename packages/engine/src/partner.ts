@@ -2879,6 +2879,19 @@ export class ContextPartner {
       // hand — the pool holding one is not enough, and a constraint the agent already took does not count (its copy
       // left `fresh` in the ledger step above). A `pushLookup` packet is reference, not candidates, and an item the
       // push check itself named counts: the model already judged it against the request.
+      // An item the push check named counts: the model already judged it against the request. A named rule stands
+      // for the card, still the item's at any revision; a `yes` stands for the copy read — a revision the re-reads
+      // found is another item (`itemMark`'s id and content hash, as `packetHeedsCheck`).
+      const approved = (x: Scored): boolean => {
+        if (check === null) return false;
+        if (check.rules?.has(x.item.id) === true) return true;
+        if (check.yes?.has(x.item.id) !== true) return false;
+        const mark = check.marks?.get(x.item.id);
+        return (
+          mark === undefined ||
+          mark === itemMark(readerItem(x.item, readerFocus(cue.raw), undefined, this.config.pushCheckItemChars))
+        );
+      };
       const delivering =
         checked.length > 0 &&
         !s.closed &&
@@ -2889,7 +2902,7 @@ export class ContextPartner {
           internal.open === true &&
           this.config.pushOpenConstraint &&
           gate !== null &&
-          !checked.some((x) => this.constraintLike(x, gate.cards) || (check?.yes?.has(x.item.id) ?? false))
+          !checked.some((x) => this.constraintLike(x, gate.cards) || approved(x))
         );
       if (replacing && (delivering || !candidates)) {
         const at = s.pending.indexOf(prev!);
@@ -3501,6 +3514,7 @@ export class ContextPartner {
       return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
         ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
+        marks: kept.marks,
         costUsd: 0,
         called: false,
         overBudget: false,
@@ -3528,7 +3542,10 @@ export class ContextPartner {
     try {
       const got = await Promise.race([running, late]);
       // A check this pass did not start (a second pass reading the first's) cost this pass nothing.
-      if (got) return withSheet(fresh ? got : { ...got, costUsd: 0, called: false });
+      if (got)
+        return withSheet(
+          fresh ? { ...got, marks: kept.marks } : { ...got, costUsd: 0, called: false, marks: kept.marks },
+        );
       // Past the wait: the call goes on behind; the pass that started it traces it when it settles ("check-late"),
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {

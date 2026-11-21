@@ -162,6 +162,9 @@ export interface PushCheckRead {
   rules?: ReadonlySet<string>;
   /** `pushCheckSheet` (F5): the sheet's item ids as read, set by the partner for the lab's pool report. */
   sheet?: readonly string[];
+  /** The pool items as this read saw them (`itemMark`), set by the partner: a `yes` stands for that copy, so a
+   *  revision the delivery's re-reads found is not approved. Absent on reads the partner did not make. */
+  marks?: ReadonlyMap<string, string>;
   costUsd: number;
   /** Whether this read made a (budgeted) model call. */
   called: boolean;
