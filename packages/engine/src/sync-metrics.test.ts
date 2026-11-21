@@ -88,7 +88,11 @@ const OPTS = {
 } satisfies SyncOptions;
 
 /** A SyncManager whose fan-out answers each source id as `results` names, else lists the page itself. */
-function build(sources: Source[], results: Record<string, "limited" | "throttled" | "busy"> = {}) {
+function build(
+  sources: Source[],
+  results: Record<string, "limited" | "throttled" | "busy"> = {},
+  opts: Partial<SyncOptions> = {},
+) {
   const clock = manual();
   const fanout = {
     list: async (source: Source, scope: Scope, cursor: string | undefined, limit: number) => {
@@ -99,7 +103,7 @@ function build(sources: Source[], results: Record<string, "limited" | "throttled
   } as unknown as SourceFanout;
   const sync = new SyncManager(
     { sources: async () => sources, fanout, cache: new ItemCache(), now: clock.now, after: clock.after },
-    OPTS,
+    { ...OPTS, ...opts },
   );
   /** `clock.advance`'s settle: waits out the kicked steps of `users` until none runs (one ending can start another). */
   const settle = async (...users: Scope[]) => {
@@ -160,6 +164,36 @@ describe("the backfill and fairness gauges (S1-P2)", () => {
       await Bun.sleep(5);
     }
     expect(sync.gauges()).toMatchObject({ kickQueuedUsers: 0, kickQueuedTenants: 0, kickRunning: 0 });
+  });
+
+  test("a queued deeper-page resume is not first value owed (D2048)", async () => {
+    const deep = new Listing("deep", 210); // 21 pages: a 2-call burst leaves the backfill to resume
+    const held = new Listing("held", 10);
+    const { sync, clock, settle } = build([deep, held], {}, { callsPerMin: 6 });
+    sync.track(U1);
+    sync.kick(U1);
+    await sync.kicked(U1);
+    // Both sources' first pages stored; deep's backfill is left to its budget's resume.
+    expect(sync.stats.firstPageCount).toBe(2);
+    expect(sync.gauges().waitingFirstPage).toBe(0);
+    // Four users hold the kick lanes on `held`; u1's resume then queues behind them.
+    let open!: () => void;
+    held.gate = new Promise((r) => (open = r));
+    const running = [U("t1", "a"), U("t1", "b"), U("t1", "c"), U("t1", "d")];
+    for (const u of running) {
+      sync.track(u);
+      sync.kick(u);
+    }
+    await Bun.sleep(20);
+    await clock.advance(60_000, settle);
+    // Queued, but not waiting for first value: every source of u1's already produced a page. The four running
+    // users wait on `held`'s.
+    expect(sync.gauges()).toMatchObject({ kickRunning: 4, kickQueuedUsers: 1, waitingFirstPage: 4 });
+    open();
+    for (let i = 0; i < 120 && sync.gauges().kickQueuedUsers + sync.gauges().kickRunning > 0; i++) {
+      await Bun.sleep(5);
+    }
+    expect(sync.gauges().waitingFirstPage).toBe(0);
   });
 
   test("first value is per source: one source's page does not end the wait for another's", async () => {

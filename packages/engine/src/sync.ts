@@ -2256,9 +2256,11 @@ export class SyncManager {
       if (u.gone) continue;
       let backfill = false;
       // A user still queued for a first step has no sources found yet (the step discovers them): `queued` is the
-      // sign they are waiting, so a surge does not hide them from the backlog. A backfilling source with no page
-      // stored yet is first value still owed (a warm source that listed empty is not).
-      let waiting = u.queued === true;
+      // sign they are waiting, so a surge does not hide them from the backlog. A queued user WITH sources is a
+      // resumed step waiting its turn — deeper pages of a source that already gave first value — and the sources
+      // say what is owed. A backfilling source with no page stored yet is first value still owed (a warm source
+      // that listed empty is not).
+      let waiting = u.queued === true && u.sources.size === 0;
       for (const s of u.sources.values()) {
         if (s.phase === "backfill") {
           backfill = true;
