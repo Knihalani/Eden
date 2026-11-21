@@ -163,6 +163,9 @@ describe("checkAction with partyCheck", () => {
     await primed(p, w, "Email Priya that the board pack draft is fine.");
     const held = await p.checkAction(ev(w, email(["compliance@client-services.example"])));
     expect(held.verdict).toBe("finding");
+    // The blocked call reported as an event is not the warning being used: no inferred credit.
+    await p.observe(ev(w, email(["compliance@client-services.example"])));
+    expect(got.find((u) => u.injectionId === held.finding!.id)).toBeUndefined();
     await p.observe(ev(w, { kind: "session_end" }));
     const rec = got.find((u) => u.injectionId === held.finding!.id);
     expect(rec).toMatchObject({ used: false, how: "ended" });

@@ -182,9 +182,9 @@ export abstract class PartnerCheck extends PartnerDelivery {
         bytes: utf8.encode(found.text).byteLength,
         tokens: distinctiveTokens(foundTerms.ids, foundTerms.n, s.seen, s.vocab),
         deliveredTurn: s.turn,
+        warning: true,
       });
-      while (s.outstanding.size > MAX_OUTSTANDING)
-        s.outstanding.delete(s.outstanding.keys().next().value as string);
+      while (s.outstanding.size > MAX_OUTSTANDING) s.outstanding.delete(s.outstanding.keys().next().value as string);
       const latencyMs = Math.round(performance.now() - t0);
       this.trace(s, {
         sessionId: s.id,
@@ -287,7 +287,9 @@ export abstract class PartnerCheck extends PartnerDelivery {
     const actsOnIt = event.kind === "agent_message" || event.kind === "tool_call";
     if (s.outstanding.size === 0) return;
     for (const [id, o] of s.outstanding) {
-      const used = actsOnIt && showsUse(terms, o.tokens, s.vocab);
+      // A warning's terms are the blocked call's own: a matching tool_call is the call it warned
+      // about retried, not use — only the agent's words can credit it.
+      const used = actsOnIt && !(o.warning && event.kind === "tool_call") && showsUse(terms, o.tokens, s.vocab);
       const expired = s.turn - o.deliveredTurn > this.config.usageWindowTurns;
       if (!used && !expired) continue;
       s.outstanding.delete(id);

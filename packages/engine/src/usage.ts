@@ -17,6 +17,11 @@ export interface Outstanding {
   deliveredTurn: number;
   /** The handed injection's UTF-8 size, for the usage record's `injectionBytes` (C1). */
   bytes?: number;
+  /**
+   * A held-check warning: its terms are the blocked call's own, so a reported `tool_call` matching
+   * them is the call it warned about (a retry, not a use) — only `agent_message` text can credit it.
+   */
+  warning?: boolean;
 }
 
 const hasDigit = (t: string) => /\d/.test(t);
