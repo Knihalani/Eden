@@ -164,10 +164,19 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
   });
 
-  test("an unknown key stops startup with an error naming it", () => {
+  test("an unknown key is warned about and skipped; the strict parse still stops on it (D5)", () => {
     const path = file("typo.json", JSON.stringify({ probes: true, askReder: true }));
-    expect(() => engineConfig({ EDEN_ENGINE_CONFIG: path })).toThrow(/unknown key "askReder"/);
-    // Inherited object keys are not settings.
+    // A flag from another version no longer stops the server: it is named on stderr and the known keys still apply.
+    const errs: string[] = [];
+    const prev = console.error;
+    console.error = (...a: unknown[]) => errs.push(String(a[0]));
+    try {
+      expect(engineConfig({ EDEN_ENGINE_CONFIG: path })).toEqual({ probes: true });
+    } finally {
+      console.error = prev;
+    }
+    expect(errs.some((m) => m.includes('unknown key "askReder"'))).toBe(true);
+    // `parseEngineConfig` (the lab's) stays strict; inherited object keys are not settings.
     expect(() => parseEngineConfig(JSON.parse('{"__proto__": {"probes": true}}'))).toThrow(/unknown key "__proto__"/);
     expect(() => parseEngineConfig({ toString: "x" })).toThrow(/unknown key "toString"/);
   });
