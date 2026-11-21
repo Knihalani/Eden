@@ -261,11 +261,27 @@ def merge_codex(path, mcp_py, env, remove=False):
 
 def merge_agent(name, config, fmt, mcp_py, env, remove=False):
     if fmt == "own-file":
+        # Continue reads every *.json in mcpServers/ as a config of its own — but the file may
+        # still hold other servers (a hand-named --continue-config): merge, never clobber.
+        data = read_json(config)
+        if data is None:
+            print(f"warning: {config} is not a JSON object; skipped", file=sys.stderr)
+            return False
+        servers = data.setdefault("mcpServers", {})
+        if not isinstance(servers, dict):
+            print(f"warning: {config}'s mcpServers is not an object; skipped", file=sys.stderr)
+            return False
         if remove:
-            config.unlink(missing_ok=True)
+            servers.pop("eden", None)
+            if servers or len(data) > 1:
+                write_json(config, data)
+            else:
+                config.unlink(missing_ok=True)
         else:
-            write_json(config, {"mcpServers": {"eden": entry_for("mcpservers", mcp_py, env)}})
+            servers["eden"] = entry_for("mcpservers", mcp_py, env)
+            write_json(config, data)
         return True
+
     if fmt == "goose":
         return merge_goose(config, mcp_py, env, remove)
     if fmt == "codex":
