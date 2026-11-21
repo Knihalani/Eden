@@ -196,8 +196,8 @@ const KICK_RESUMES = 128;
 /** `kick`: how soon a backfill one of our own guards stopped (a busy source, a rate limit's reserve) is tried again. */
 const KICK_RESUME_MS = 500;
 /**
- * `kick`: kicked steps running at once, across users and tenants; a kick past it waits its turn (first come, first
- * started, so one tenant's storm delays another's new user as a tick's queue does). A tick works on `USERS_AT_ONCE`
+ * `kick`: kicked steps running at once, across users and tenants; a kick past it waits its turn, and tenants take
+ * turns, so one tenant's storm cannot hold another's new user behind it. A tick works on `USERS_AT_ONCE`
  * (16) users in batches of `syncBackfillLanes` (8): 128 listings at once at most. Four kicked users of
  * `syncKickLanes` (32) are the same 128, and a tick does not step a user waiting for a kick turn, so the kicks of
  * users arriving together (a deploy, a morning) read no more at once than a tick already reads, beside the tick's
@@ -432,7 +432,8 @@ export class SyncManager {
   private marks = 0;
   /** `kick`: kicked steps running, the users waiting for a turn, and whether kicks are stopped (`stopKicks`). */
   private kicking = 0;
-  private kickQueue: UserSync[] = [];
+  /** Users waiting for a kick turn, one list a tenant, tenants served in turn (B2: a surge holds only its own). */
+  private kickQueue = new Map<string, UserSync[]>();
   private kicksStopped = false;
   private readonly after: (ms: number, fn: () => void) => () => void;
   readonly stats: SyncStats = {
@@ -548,7 +549,9 @@ export class SyncManager {
     }
     if (this.kicking >= KICKS_AT_ONCE) {
       u.queued = true;
-      this.kickQueue.push(u);
+      let q = this.kickQueue.get(u.scope.tenantId);
+      if (!q) this.kickQueue.set(u.scope.tenantId, (q = []));
+      q.push(u);
       return;
     }
     this.kicking++;
@@ -572,9 +575,13 @@ export class SyncManager {
         } catch {
           u.resume = null;
         }
-        // The turn this step held goes to the users waiting, first come first.
-        while (this.kicking < KICKS_AT_ONCE && this.kickQueue.length > 0) {
-          const next = this.kickQueue.shift()!;
+        // The turn this step held goes to the users waiting, tenants in turn: each dequeue moves the served
+        // tenant's list to the back, so the first turn of a waiting tenant comes before a served tenant's second.
+        while (this.kicking < KICKS_AT_ONCE && this.kickQueue.size > 0) {
+          const [tenant, q] = this.kickQueue.entries().next().value!;
+          this.kickQueue.delete(tenant);
+          const next = q.shift()!;
+          if (q.length > 0) this.kickQueue.set(tenant, q);
           next.queued = false;
           this.kickDue(next);
         }
@@ -598,8 +605,8 @@ export class SyncManager {
    */
   stopKicks(): void {
     this.kicksStopped = true;
-    for (const u of this.kickQueue) u.queued = false;
-    this.kickQueue = [];
+    for (const q of this.kickQueue.values()) for (const u of q) u.queued = false;
+    this.kickQueue.clear();
     for (const u of this.users.values()) this.unkick(u);
   }
 
