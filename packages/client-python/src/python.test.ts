@@ -34,6 +34,7 @@ describe.skipIf(!python)("eden_client (Python)", () => {
       "test_hermes",
       "test_local",
       "test_qwen",
+      "test_windsurf",
     ];
     const results = await Promise.all(modules.map((m) => run(["-m", "unittest", m])));
     for (const { err, code } of results) {

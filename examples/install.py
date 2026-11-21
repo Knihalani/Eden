@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Install Eden into every local agent home found: claude-code, cursor, devin-cli, gemini-cli, gptme,
-openclaw, opencode, pi, qwen-code.
+openclaw, opencode, pi, qwen-code, windsurf.
 
 Each agent ships its own `examples/<agent>/install.py`; this detects which agents are present
 (their home directories exist, or `--agents` names them) and runs each installer in turn,
@@ -33,6 +33,7 @@ AGENTS = {
     "openclaw": (("OPENCLAW_HOME",), Path.home() / ".openclaw", "--openclaw-home"),
     "opencode": (("OPENCODE_HOME",), Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode", "--opencode-home"),
     "pi": (("PI_HOME",), Path.home() / ".pi", "--pi-home"),
+    "windsurf": (("WINDSURF_HOME", "CODEIUM_WINDSURF_HOME"), Path.home() / ".codeium" / "windsurf", "--windsurf-home"),
 }
 
 def resolved_home(name):

@@ -693,6 +693,7 @@ beside the agent's home:
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli)     | `examples/gemini-cli`         | hook commands + `eden-mcp.py` (`BeforeAgent`, `Before/AfterTool`, `AfterAgent`, `PreCompress`, `Session*`) | `decision: "deny"`  | `install.py` → `~/.gemini/eden/` + `settings.json` merge |
 | [Cursor](https://cursor.com)                                  | `examples/cursor`             | hook commands + `eden-mcp.py` (`beforeSubmitPrompt`, `pre/postToolUse`, `afterAgentResponse`, `preCompact`, `session*`) | `permission: "deny"` | `install.py` → `~/.cursor/eden/` + `hooks.json`/`mcp.json` merges |
 | [LangChain](https://docs.langchain.com)                       | `examples/langchain`          | `createAgent` middleware                                                                  | guarded tool wrapper             | copy `eden-langchain.ts`                                                   |
+| [Windsurf Cascade](https://docs.windsurf.com/windsurf/cascade/hooks) (legacy in Devin Desktop) | `examples/windsurf` | hook commands + `eden-mcp.py` (`pre/post_user_prompt`, `pre/post_run_command`/`write_code`/`read_code`/`mcp_tool_use`, `post_cascade_response`) | exit 2 + stderr | `install.py` -> `~/.codeium/windsurf/eden/` + `hooks.json`/`mcp_config.json` merges |
 
 Local mode is shared: `EDEN_LOCAL_BINARY`, then the install's own `bin/eden-local`, with
 `<agent-home>/eden/sources.json` read automatically (the same file every agent reads). `EDEN_URL`

@@ -33,6 +33,7 @@ describe.skipIf(!python)("the unified installer", () => {
       "opencode",
       "pi",
       "qwen-code",
+      "windsurf",
     ]) {
       expect(text).toContain(name);
     }
@@ -44,6 +45,7 @@ describe.skipIf(!python)("the unified installer", () => {
     expect(text).toMatch(/devin-cli\s+home absent/);
     expect(text).toMatch(/gemini-cli\s+home absent/);
     expect(text).toMatch(/openclaw\s+home absent/);
+    expect(text).toMatch(/windsurf\s+home absent/);
   });
 
   test("--agents selects absent homes too, and rejects names it does not know", () => {
