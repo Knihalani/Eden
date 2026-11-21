@@ -662,7 +662,27 @@ export abstract class PartnerDelivery extends PartnerCore {
     s.abort.abort();
     if (learn) {
       for (const [id, o] of s.outstanding) {
-        this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended", bytes: o.bytes });
+        // A held warning's job is the block: ending unused is not its sources' failure — emit
+        // the record's accounting with no outcome on them (the quiet path a reset takes).
+        if (o.warning) {
+          this.usage({
+            sessionId: s.id,
+            injectionId: id,
+            used: false,
+            how: "ended",
+            sourceIds: o.sourceIds,
+            injectionBytes: o.bytes,
+          });
+          this.recordRow(s.scope, id, {
+            sourceIds: o.sourceIds,
+            situation: o.situation,
+            used: false,
+            sessionId: s.id,
+            bytes: o.bytes,
+          });
+        } else {
+          this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended", bytes: o.bytes });
+        }
       }
     }
     s.outstanding.clear();
