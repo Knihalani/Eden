@@ -947,6 +947,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2069 | 2026-11-21 | Adopted: Eden for Gemini CLI (the eighth agent surface). | adopted |
 | D2070 | 2026-11-21 | Adopted: Eden for Cursor — the ninth agent surface. | adopted |
 | D2071 | 2026-11-21 | Adopted: Eden for Qwen Code — the tenth agent surface. | adopted |
-| D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |
 | D2072 | 2026-11-21 | Adopted: Eden for Devin CLI / Devin Desktop — the eleventh agent surface. | adopted |
 | D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |
