@@ -322,6 +322,13 @@ Steps, in order:
 What stays per machine: the cluster router holds each tenant's whole rate; children keep 1/N as a backstop; the
 model spend cap is divided by N x machines (D993; once the micro models replace the paid roles it bounds nothing).
 
+`deploy/scripts/autoscale-plan.py` does this arithmetic for you (S1-P5, D2043): point it at the nodes file and it
+reads every node's `/metrics`, measures the live MB a user, projects the peak (held x 1.22), and prints the
+`node_count` for the varset and the nodes-file lines to apply by hand. Scaling in needs three consecutive
+below-need readings and never runs inside peak hours; a node that does not answer counts as full. Example:
+
+    python3 -I deploy/scripts/autoscale-plan.py --nodes-file nodes.txt --ram-gb 128 --processes 16 --cidr 10.1.0.0/16
+
 ## 11. Upgrades with minimal downtime
 
 **One box** (`deploy/scripts/upgrade.sh <compose dir> <ref>`): builds the new image while the old one serves, then
