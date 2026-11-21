@@ -152,8 +152,7 @@ import {
 } from "./partner-freeze";
 import { PartnerCore, mentionsOf } from "./partner-core";
 import { PartnerDelivery } from "./partner-delivery";
-import { PartnerVerdict } from "./partner-verdict";
-import { PartnerCheck } from "./partner-check";
+import { PartnerAsk } from "./partner-ask";
 export type { Built } from "./partner-delivery";
 export {
   CHECK_REUSE_MS,
@@ -460,7 +459,7 @@ export interface Scored {
 /** `askBehind` (D430): the reason prefix of an ask's follow-up packet, withdrawn untaken at the next request. */
 export const ASK_BEHIND = "ask-behind:"; // MAX_RECORDED lives in partner-freeze.ts (imported below).
 export const MAX_RECORDED_USERS = 10_000;
-export class ContextPartner extends PartnerVerdict {
+export class ContextPartner extends PartnerAsk {
   /**
    * Runs the background sync's `tick` every `everyMs` (`sync` on; a no-op otherwise). The timer does not keep the
    * process alive, and a tick never overlaps another.
