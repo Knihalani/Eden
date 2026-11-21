@@ -1038,6 +1038,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         focus,
         itemBytes: ASK_ITEM_BYTES,
         self: this.deps.cache.selfOf(s.scope),
+        ...(this.config.compactParts ? { split: true } : {}),
       });
       return { answer, citations: this.cited([item]), usedModel: false, costUsd: 0, latencyMs };
     }
