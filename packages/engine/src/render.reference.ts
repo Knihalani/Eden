@@ -63,7 +63,10 @@ export function renderPacket(
       const prior = before(item);
       if (!prior) return item;
       const parts = messageParts(item.text, (w) => prior.has(w), undefined, undefined, undefined, options.split);
-      return { ...item, text: saysNew(parts) ? parts.map((p) => p.text).join(" ") : SHOWN };
+      return {
+        ...item,
+        text: saysNew(parts) ? parts.map((p) => p.text).join(" ") : shownExtract(item.text, options.split),
+      };
     });
   }
   if (options.focus) {
@@ -86,11 +89,28 @@ export function renderPacket(
         options.dense ? { title: item.title } : undefined,
         options.split,
       );
-      // `compactText`, with what this session showed of the item before as known too.
-      const text = prior && !saysNew(parts) ? SHOWN : pick(parts, focus, each);
+      // `compactText`, with what this session showed of the item before as known too. An item whose every part
+      // was shown still carries a focused extract of it (D2028).
+      let text: string;
+      let held: string;
+      if (prior && !saysNew(parts)) {
+        const rest = messageParts(
+          item.text,
+          (w) => own.has(w) || shown.has(w),
+          options.year,
+          options.self,
+          options.dense ? { title: item.title } : undefined,
+          options.split,
+        );
+        held = pick(rest, focus, Math.min(each, SHOWN_EXTRACT));
+        text = held ? `${SHOWN} ${held}` : SHOWN;
+      } else {
+        text = pick(parts, focus, each);
+        held = text;
+      }
       options.onParts?.(item, parts, text);
       for (const w of title) shown.add(w);
-      for (const w of text.toLowerCase().match(WORDS) ?? []) shown.add(w);
+      for (const w of held.toLowerCase().match(WORDS) ?? []) shown.add(w);
       return { ...item, text };
     });
   }
@@ -214,6 +234,20 @@ const READER_PREFIX = /^Eden's reader: [^|\n]*\| /;
 
 /** What an item shown before says in its place when it has nothing new (`askDedup`): its title and source stay. */
 export const SHOWN = "(shown above)";
+
+/** The byte cap on the extract a `(shown above)` line carries (D2028). */
+const SHOWN_EXTRACT = 160;
+
+/** `SHOWN` with a short extract of the item (D2028): the part its message leads with past its sender. */
+function shownExtract(text: string, split: boolean | undefined): string {
+  const part = messageParts(text, () => false, undefined, undefined, undefined, split === true).find(
+    (p) => !/^from:/i.test(p.text),
+  );
+  if (!part) return SHOWN;
+  return (
+    `${SHOWN} ` + (utf8Length(part.text) > SHOWN_EXTRACT ? `${truncateUtf8(part.text, SHOWN_EXTRACT - 3)}…` : part.text)
+  );
+}
 
 /**
  * Whether an item's parts, read with what was shown as known (`messageParts` drops a part whose every content word is

@@ -96,6 +96,13 @@ describe("askDedup in renderPacket", () => {
     const words = new Set(first.toLowerCase().match(/[\p{L}\p{N}]+/gu));
     const again = renderPacket([item], { maxBytes: 2_000, focus, shownBefore: () => words });
     expect(again).toContain(`- [drive] Procurement policy v4: ${SHOWN}`);
+    // D2028: the marker still carries a focused extract — a fresh conversation sharing this session's shown state
+    // can quote the fact even though it never saw the item.
+    expect(again).toContain("CFO sign-off");
+    // The extract stays inside the item's byte budget, marker aside: `itemBytes` bounds the item's own words.
+    const tight = renderPacket([item], { maxBytes: 2_000, focus, itemBytes: 60, shownBefore: () => words });
+    const line = tight.split("\n").find((l) => l.startsWith("- [drive]"))!;
+    expect(line.length - "- [drive] Procurement policy v4: ".length).toBeLessThanOrEqual(SHOWN.length + 1 + 60);
     const partly = new Set(["purchases", "above", "40", "000", "need", "two", "quotes", "and", "cfo", "sign", "off"]);
     const more = renderPacket([item], { maxBytes: 2_000, focus, shownBefore: () => partly });
     expect(more).toContain("The policy is effective from 1 Oct.");
