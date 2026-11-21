@@ -299,7 +299,11 @@ export class Ops {
       // tenant or a user is never a label (D56's rule for traces).
       const g = sync.gauges();
       gauge("eden_sync_users_backfilling", "Users with a source still in its first pass", g.backfilling);
-      gauge("eden_sync_users_waiting_first_page", "Users with no source page stored yet", g.waitingFirstPage);
+      gauge(
+        "eden_sync_users_waiting_first_page",
+        "Users with a source still to store its first page",
+        g.waitingFirstPage,
+      );
       gauge("eden_sync_kick_queue_users", "Users waiting for a kick turn", g.kickQueuedUsers);
       gauge("eden_sync_kick_queue_tenants", "Tenants with users waiting for a kick turn", g.kickQueuedTenants);
       gauge("eden_sync_kick_running", "Kicked backfill steps running", g.kickRunning);

@@ -61,6 +61,45 @@ groups:
         annotations:
           summary: "{{ $labels.instance }}: memory above 90%: the kernel may kill Eden; add a box or move users now"
 
+      - alert: EdenFirstValueSlow
+        # S1 §8: a new user's time to first value (the first page of every source stored) — p90 above 15 min.
+        expr: |
+          histogram_quantile(0.9, sum by (le) (rate(eden_sync_first_value_seconds_bucket[15m]))) > 900
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: "time to first value p90 above 15 min; if the tenant's quota pace is the cause it is not a fault"
+
+      - alert: EdenBackfillBacklog
+        # S1 §8: users waiting for a first page, and the queue still growing after half an hour.
+        expr: |
+          eden_sync_users_waiting_first_page > 0
+            and deriv(eden_sync_users_waiting_first_page[30m]) > 0
+        for: 30m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: the first-page backlog keeps growing; the fleet is behind the surge"
+
+      - alert: EdenConnectorThrottled
+        # S1 §8: over 5% of listing calls throttled (429) for 10 min — the pace is above the connector's quota.
+        expr: |
+          sum by (instance) (rate(eden_sync_listing_throttled_total[10m]))
+            / sum by (instance) (rate(eden_sync_listing_calls_total[10m])) > 0.05
+        for: 10m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: over 5% of connector listing calls throttled; lower the pace for the tenant"
+
+      - alert: EdenKickStarving
+        # S1 §8 (fairness, by proxy — no per-tenant series): the kick queue keeps growing for half an hour.
+        expr: |
+          eden_sync_kick_queue_users > 0
+            and deriv(eden_sync_kick_queue_users[30m]) > 0
+        for: 30m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }}: users keep joining the kick queue faster than kicks run; a tenant surge may be starving the rest"
+
       - alert: EdenModelFailing
         expr: increase(eden_model_failures_total{kind="error"}[15m]) > 5
         labels: { severity: page }
