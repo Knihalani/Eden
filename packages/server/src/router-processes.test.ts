@@ -562,7 +562,11 @@ describe("a child that answers connections but hangs on the request (R1's hole i
       const entry = join(dir, "hung.ts");
       writeFileSync(
         entry,
-        'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Promise<Response>(() => {}) });\n' +
+        'const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: (req) =>\n' +
+          "  new URL(req.url).pathname === '/metrics'\n" +
+          "    // Headers, then a body that never comes: the scrape's bound must still drop it, not the scrape.\n" +
+          "    ? new Response(new ReadableStream({ start: () => {} }))\n" +
+          "    : new Promise<Response>(() => {}) });\n" +
           "process.send?.({ edenListening: s.port });\n",
       );
       const env = { ...process.env, EDEN_HOME: dir, EDEN_DEV: "1" };

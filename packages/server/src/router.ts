@@ -785,10 +785,11 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
       children.map((c) =>
         c.up
           ? // A child hung mid-answer must not stall the scrape: bound it and its text drops out, as a down one's.
-            fetch(`http://127.0.0.1:${c.port}/metrics`, { signal: AbortSignal.timeout(5_000) }).then(
-              (r) => (r.ok ? r.text() : ""),
-              () => "",
-            )
+            // The catch, not `then`'s second seat: a body stalled past the signal rejects in `r.text()` — after
+            // the fetch resolved — and only a chained catch still lands it as "".
+            fetch(`http://127.0.0.1:${c.port}/metrics`, { signal: AbortSignal.timeout(5_000) })
+              .then((r) => (r.ok ? r.text() : ""))
+              .catch(() => "")
           : Promise.resolve(""),
       ),
     );
