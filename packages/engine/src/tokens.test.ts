@@ -204,6 +204,33 @@ describe("compactAsk and askDedup through the engine", () => {
     expect(second.citations).toEqual(first.citations);
   });
 
+  test("askDedup: one-character rows shown once do not re-fill a re-rendered item (D2022, the review)", async () => {
+    // An item cut to `askItemBytes` is shown in part; asked again, its kept rows are repeats — the shown words of
+    // one character (`noteShown`) suppress them while the parts never rendered say something new.
+    const rows: ContextItem = {
+      ...policy,
+      title: "Cell ledger",
+      text:
+        "| A | 2 | | B | 7 | The ledger lists seat codes row by row, office by office, floor by floor. " +
+        "Copies of the master plan arrive every quarter without change to the numbering. " +
+        "Rows are audited twice yearly by the floor wardens on each site. " +
+        "Maps hang beside each lift lobby for quick reference during drills. " +
+        "Corrections go through the office of the plan clerk before posting. " +
+        "Zebra quotas reset in March.",
+    };
+    const p = partner({ compactAsk: true, askDedup: true, compactParts: true }, rows);
+    const q = "zebra quotas";
+    const first = await p.ask({ ...scope, sessionId: "a", question: q });
+    expect(first.answer).toContain("Zebra quotas reset in March.");
+    expect(first.answer).toContain("| A | 2 |");
+    expect(first.answer).not.toContain("Corrections go through the office");
+    const second = await p.ask({ ...scope, sessionId: "a", question: q });
+    expect(second.answer).not.toContain(SHOWN);
+    expect(second.answer).toContain("Corrections go through the office");
+    expect(second.answer).not.toContain("| A | 2 |");
+    expect(second.answer).not.toContain("Copies of the master plan");
+  });
+
   test("askDedup: an item changed at its source under the same id is not shown, though its words are", async () => {
     // Only a stopword changes ("need" to "do not need"): every content word was shown, the fact is new. The items
     // are in the cache (as a sync puts them) and no source is asked.

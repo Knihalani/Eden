@@ -75,13 +75,13 @@ export function renderPacket(
     const focusAll = [...focus];
     const focusWords = focusWordsOf(focusAll);
     // The last item's title and text, whose words join `shown` only when another item is read (D1933): the known
-    // test reads `shown` for the items after it, so the last item read adds nothing. Only words of two or more
-    // characters: the known test asks of no other (`saysUnknown`).
+    // test reads `shown` for the items after it, so the last item read adds nothing. Words of one character too:
+    // `saysUnknown` asks of them for a part holding no longer word (D2022).
     let last: { title: string[]; text: string } | null = null;
     sayOf = (item) => {
       if (last) {
-        for (const w of last.title) if (w.length > 1) shown.add(w);
-        for (const w of wordsIn(last.text.toLowerCase())) if (w.length > 1) shown.add(w);
+        for (const w of last.title) shown.add(w);
+        for (const w of wordsIn(last.text.toLowerCase())) shown.add(w);
         last = null;
       }
       const title = wordsIn(item.title.toLowerCase());
