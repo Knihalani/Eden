@@ -209,6 +209,25 @@ the tenant", the 995 others not): if hidden facts at 0-10 s do not move towards 
 dead at no cost. It only matters before the backfill's first pages are in, which `syncKick` brings down to about
 15 s (§3), so the window it can help is short.
 
+**The screen ran — the idea is dead at $0.** The knob (`sourceKindPriorExtra`, D2079, #506) let the oracle arm mark
+the three world connectors the static table misses (`crm drive slack:0.75`), putting all five world connectors at
+~0.75 against the 995 noise sources. Two `new-user.py` arms at `--connect-at` over the same worlds and seeds
+(864 rows each):
+
+| at s | default hidden/48 | oracle hidden/48 |
+|---|---|---|
+| 0 | 22 (45.8%) | 23 (47.9%) |
+| 10 | 25 (52.1%) | 23 (47.9%) |
+| 25 | 38 (79.2%) | 41 (85.4%) |
+| 60 | 38 (79.2%) | 38 (79.2%) |
+| 120 | 38 (79.2%) | 42 (87.5%) |
+| 300 | 41 (85.4%) | 41 (85.4%) |
+
+At 0-10 s the oracle moves nothing — 23/48 against the settled-user bar of 38, level with the default. The early
+gap is not the flat connector prior's doing; the backfill's first pages were always going to beat it. The small
+uplift at 25-120 s is under the noise of n=48. The proposal stays a proposal only in the sense that the screen it
+called for is now answered: do not build it.
+
 **Alternatives that cross nothing.** (a) The tenant says which connectors matter, in its own configuration (a
 static weight per connector name): no user's data is read, and the tenant knows its product. (b) A default weight
 by connector kind shipped with Eden (mail and calendar ahead of a wiki): no data at all. Both can be screened the
