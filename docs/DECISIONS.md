@@ -956,6 +956,9 @@ generated pages (`.gitattributes` merges them as a union so a merge never stops 
 | D2054 | 2026-11-21 | **Adopted: the user-range tally test runs with `sync` on, so the cache is full before each session.** The test merged two shards' tallies and compared the report to the whole run's — but verdict gates read the background sync's progress against the event loop, which is wall-clock timing: whether a poll landed before a request flipped `verify`/`silent`/delivery counts (~2 runs in 6, post-D1982's finer-grained stale gates). `sync` (the lab's prefill, D356) puts every item in the cache up front, so a shard's run and the whole run differ only in what the merge itself does — which is what the test asserts. The flag changes nothing about `mergeTallies`/`qualityReport` under test; the `userRange` validation and sample-concatenation checks are unchanged. |
 
 ||||||| 280f6b5f8
+
+| D2056 | 2026-11-21 | **Adopted: the user-range tally test also runs with `syncPollBehind` off.** D2054's `sync` prefill left one wall-clock race: `syncPollBehind` lets a lookup answer while its on-demand poll runs behind, and the poll emits its own "skipped: sync poll behind" trace when it settles — whether the poll had stored calls by then depends on when the promise landed against the event loop, so the merged shards' `needDecisions` could carry a `> skipped:sync poll behind` suffix the whole run's did not (or the reverse). With the flag off the lookup waits for its poll, so the trace set is deterministic: 3/3 clean runs where the first CHECK_COLD after D2054 flaked on exactly this key. |
+
 ## Trial switches
 
 A trial is decided in the branch or session that opened it, as soon as its evidence is in (D814): promoted into
