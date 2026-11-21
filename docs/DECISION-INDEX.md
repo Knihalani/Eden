@@ -908,6 +908,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D1987 | 2026-11-20 | Adopted: `@eden/client` grows `LocalEden`, the TypeScript port of `eden_client/local.py`, so TS personal agents get local mode without the… | adopted |
 | D1984 | 2026-11-18 | Adopted: a request may re-search its sources once, bounded and counted, for companions the cache never saw — `companionSearch`. | adopted |
 | D2028 | 2026-11-21 | Adopted: a `(shown above)` line keeps a short extract of the item — citations stay quotable across agent conversations. | adopted |
+| D2034 | 2026-11-21 | Adopted: an amount under a limit clears only a conflict about the same matter (`conflictMatter`). | adopted |
 | D2033 | 2026-11-21 | Adopted: the v0.3.0 broad-benchmark harness lives in the repo as `packages/sim/lab/fresh-corpus`, regenerated per quarter (build item 4). | adopted |
 | D2029 | 2026-11-21 | Adopted: an explicit ask's words read as OR-groups — each content word's stem-family in the index plus its phrasing family (`ASK_FAMILY`)… | adopted |
 | D2031 | 2026-11-21 | Adopted: the v0.3.0 broad-benchmark harness lives in the repo as `packages/sim/lab/fresh-corpus`, regenerated per quarter (build item 4). | adopted |

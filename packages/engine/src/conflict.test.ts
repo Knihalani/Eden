@@ -451,3 +451,36 @@ describe("assess: an item's analysis is read once and reused", () => {
     expect(assess(frame("Book a call with Robert Haddad on Monday 2 November"), b, NOW)).toBe("conflict");
   });
 });
+
+describe("an amount under a limit clears only its own matter", () => {
+  test("a bare cap does not erase a tied conflict on something else", () => {
+    // "Cancelled" is a block with no date: non-firm, so any real clearance wins. A room rate under the cap is a
+    // clearance of the amount only — the cancellation it says nothing about still stands.
+    expect(
+      verdict(
+        "Book the Ritz at £300 a night",
+        "Ritz booking",
+        "Your Ritz booking was cancelled. We still have rooms at up to £400 a night.",
+      ),
+    ).toBe("conflict");
+    // The same cap with no other conflict still clears; and above the limit still conflicts.
+    expect(verdict("Book the Ritz at £300 a night", "Rate note", "The Ritz rate is capped at £400 a night.")).toBe(
+      "clear",
+    );
+    expect(verdict("Book the Ritz at £500 a night", "Rate note", "The Ritz rate is capped at £400 a night.")).toBe(
+      "conflict",
+    );
+  });
+
+  test("a terse conflict with no words to name its matter is no gate (review finding)", () => {
+    // "Max £200" holds no word of four letters or more: its matter is the amount itself, so a corrected amount
+    // clears it. An empty word set must not stand as a matter no clearance could ever share.
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200. Correction: max £400.")).toBe("clear");
+    // But a terse firm conflict's matter is unprovable to prose: an unrelated renewal must not erase the cap, and
+    // since "the cap was lifted" is indistinguishable from it, prose clearances do not fire either (round 2).
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200. Passport renewed.")).toBe("conflict");
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200. The cap was lifted.")).toBe("conflict");
+    // And the conflict still stands without a clearing statement.
+    expect(verdict("Spend £300 on the event", "Budget note", "Max £200.")).toBe("conflict");
+  });
+});
