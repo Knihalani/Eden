@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import {RoomEnvironment} from './lib/examples/jsm/environments/RoomEnvironment.js';
 import {EffectComposer} from './lib/examples/jsm/postprocessing/EffectComposer.js';
 import {RenderPass} from './lib/examples/jsm/postprocessing/RenderPass.js';
+import {SSAOPass} from './lib/examples/jsm/postprocessing/SSAOPass.js';
 import {BokehPass} from './lib/examples/jsm/postprocessing/BokehPass.js';
 import {UnrealBloomPass} from './lib/examples/jsm/postprocessing/UnrealBloomPass.js';
 import {ShaderPass} from './lib/examples/jsm/postprocessing/ShaderPass.js';
@@ -30,7 +31,7 @@ r.setPixelRatio(1); r.setSize(W,H,false); r.toneMapping=THREE.ACESFilmicToneMapp
 r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene(); scene.background=BG; scene.fog=new THREE.FogExp2(BG,.045);
 const env=new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(r),.04).texture; scene.environment=env;
-const cam=new THREE.PerspectiveCamera(30,W/H,.1,200);
+const cam=new THREE.PerspectiveCamera(30,W/H,.1,60);
 /* ===== procedural surface textures: grain, mottling, scratches ===== */
 function hash(n){ n=Math.sin(n*127.1+311.7)*43758.5453; return n-Math.floor(n); }
 function noiseCanvas(size,fn){ const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d'); const im=x.createImageData(size,size);
@@ -48,12 +49,28 @@ function roundedHex(rad,round){ const pts=[]; for(let i=0;i<6;i++){ const a=Math
   const s=new THREE.Shape(); for(let i=0;i<6;i++){ const p=pts[i],a=pts[(i+5)%6],b=pts[(i+1)%6]; const p0=p.clone().add(a.clone().sub(p).normalize().multiplyScalar(round*1.6)), p1=p.clone().add(b.clone().sub(p).normalize().multiplyScalar(round*1.6)); if(i===0) s.moveTo(p0.x,p0.y); else s.lineTo(p0.x,p0.y); s.quadraticCurveTo(p.x,p.y,p1.x,p1.y); } s.closePath(); return s; }
 function hexRingGeo(rad=R){ const s=roundedHex(rad,ROUND); const h=roundedHex(rad-STROKE/Math.cos(Math.PI/6),ROUND*.6); s.holes.push(new THREE.Path(h.getPoints(48).reverse()));
   const g=new THREE.ExtrudeGeometry(s,{depth:DEPTH,bevelEnabled:true,bevelThickness:.05,bevelSize:.045,bevelSegments:5,curveSegments:10}); g.translate(0,0,-DEPTH/2); return g; }
-function gradMat(level=1,{rough=.55,coat=.5,bump=.012}={}){ const m=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:rough,roughnessMap:ROUGH,bumpMap:BUMP,bumpScale:bump,metalness:0,clearcoat:coat,clearcoatRoughness:.35,clearcoatRoughnessMap:ROUGH,envMapIntensity:.4,sheen:.4,sheenRoughness:.6,sheenColor:new THREE.Color('#bfe8dc')});
-  m.onBeforeCompile=sh=>{ sh.uniforms.uRamp={value:RAMP}; sh.uniforms.uLevel={value:level};
-    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying float vH; varying vec3 vObj;').replace('#include <begin_vertex>','#include <begin_vertex>\nvH=clamp(.5-position.y/2.,0.,1.); vObj=position;');
-    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D uRamp; uniform float uLevel; varying float vH; varying vec3 vObj;\nfloat h3(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }\nfloat n3(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z); }')
-      .replace('vec4 diffuseColor = vec4( diffuse, opacity );','float mott=.9+.14*n3(vObj*6.)+.06*n3(vObj*23.); vec4 diffuseColor = vec4( texture2D(uRamp,vec2(.5,1.-vH)).rgb*uLevel*mott, opacity );'); };
-  m.customProgramCacheKey=()=>'g8'+level; return m; }
+const SURF=`
+float h3(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }
+float n3(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z); }
+float wor(vec3 p){ vec3 i=floor(p),f=fract(p); float d=1.5; for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)for(int z=-1;z<=1;z++){ vec3 g=vec3(float(x),float(y),float(z)); vec3 o=vec3(h3(i+g),h3(i+g+17.1),h3(i+g+31.7)); d=min(d,length(g+o-f)); } return d; }
+float scr(vec3 p){ float s=0.; for(int k=0;k<4;k++){ float a=float(k)*2.13+.4; vec3 q=vec3(cos(a)*p.x+sin(a)*p.y,-sin(a)*p.x+cos(a)*p.y,p.z);
+  float l=abs(n3(vec3(q.x*1.6,q.y*140.,q.z*3.)+float(k)*7.3)-.5); float m=smoothstep(.66,.85,n3(q*1.8+float(k)*3.1)); s=max(s,(1.-smoothstep(0.,.022,l))*m*.6); } return s; }
+float pits(vec3 p){ return (1.-smoothstep(.05,.15,wor(p*11.)))*smoothstep(.35,.6,n3(p*2.)); }
+float edgeM(){ vec3 n=normalize(vONorm); float t=1.-abs(abs(n.z)*2.-1.); return smoothstep(.05,.9,t); }
+float wearF(){ return edgeM()*smoothstep(.35,.85,n3(vObj*5.)*.7+n3(vObj*23.)*.3)*uWear*.55; }
+float hgt(vec3 p){ return .3*n3(p*2.2)+.1*n3(p*38.)+.05*n3(p*110.)-.6*pits(p)-.25*scr(p); }`;
+function gradMat(level=1,{rough=.6,coat=.3,bump=.014,wear=1}={}){ const m=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:rough,bumpMap:BUMP,bumpScale:.002,metalness:0,clearcoat:coat,clearcoatRoughness:.3,envMapIntensity:.4,sheen:.3,sheenRoughness:.6,sheenColor:new THREE.Color('#bfe8dc')});
+  m.userData.u={uLevel:{value:level},uBumpAmt:{value:bump},uWear:{value:wear}};
+  m.onBeforeCompile=sh=>{ sh.uniforms.uRamp={value:RAMP}; Object.assign(sh.uniforms,m.userData.u);
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying float vH; varying vec3 vObj; varying vec3 vONorm;').replace('#include <begin_vertex>','#include <begin_vertex>\nvH=clamp(.5-position.y/2.,0.,1.); vObj=position; vONorm=objectNormal;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D uRamp; uniform float uLevel; uniform float uBumpAmt; uniform float uWear; varying float vH; varying vec3 vObj; varying vec3 vONorm;\n'+SURF)
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );',`vec3 base=texture2D(uRamp,vec2(.5,1.-vH)).rgb; float mott=.84+.22*n3(vObj*3.5)+.1*n3(vObj*17.);
+        float pt=pits(vObj), sc=scr(vObj), wr=wearF(); float grime=mix(.55,1.,smoothstep(-.22,.16,vObj.z))*(1.-.6*pt)*(1.-.3*sc);
+        vec3 col=base*uLevel*mott*grime; col=mix(col,mix(base,vec3(.9,.88,.82),.3)*uLevel*1.25,wr);
+        vec4 diffuseColor = vec4( col, opacity );`)
+      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor*(.7+.6*n3(vObj*2.7))+.3*pits(vObj)+.15*scr(vObj)-.35*wearF(),.1,1.);')
+      .replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n{ float hh=hgt(vObj); normal=perturbNormalArb(-vViewPosition,normal,vec2(dFdx(hh),dFdy(hh))*uBumpAmt*40.,faceDirection); }'); };
+  m.customProgramCacheKey=()=>'g9'; return m; }
 function bandsTex(){ const c=document.createElement('canvas'); c.width=c.height=1024; const x=c.getContext('2d'); x.fillStyle='#ebf7d4'; x.fillRect(0,0,1024,1024);
   const ys=[470,560,640,720,800]; BANDS.forEach((col,k)=>{ x.fillStyle=col; x.beginPath(); x.moveTo(0,1024); for(let i=0;i<=64;i++){ const X=i/64*1024; x.lineTo(X,ys[k]+Math.sin(X/1024*6.2+k*1.3)*55+Math.sin(X/1024*13+k)*16); } x.lineTo(1024,1024); x.closePath(); x.fill(); });
   x.fillStyle='#2e2e84'; x.fillRect(0,900,1024,124);
@@ -79,14 +96,14 @@ function dust(n,box){ const g=new THREE.BufferGeometry(); const p=new Float32Arr
   const m=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,vertexShader:'attribute float aS; varying float vS; void main(){ vS=aS; vec4 mv=modelViewMatrix*vec4(position,1.); gl_PointSize=(1.2+aS*3.)*(14./-mv.z); gl_Position=projectionMatrix*mv; }',
     fragmentShader:'varying float vS; void main(){ float d=length(gl_PointCoord-.5); float a=smoothstep(.5,.0,d); gl_FragColor=vec4(vec3(1.,.95,.88)*a*(.12+.25*vS),1.); }'}); const pts=new THREE.Points(g,m); scene.add(pts); return pts; }
 /* post: DOF, bloom, then film (halation, CA, grain, vignette) */
-const composer=new EffectComposer(r); composer.addPass(new RenderPass(scene,cam));
+const composer=new EffectComposer(r); const AO=new URLSearchParams(location.search).get('ao')??'1'; const ssao=new SSAOPass(scene,cam,W,H); ssao.kernelRadius=.5; ssao.minDistance=.0004; ssao.maxDistance=.02; if(AO==='0') composer.addPass(new RenderPass(scene,cam)); else { if(AO==='2') ssao.output=SSAOPass.OUTPUT.SSAO; composer.addPass(new RenderPass(scene,cam)); composer.addPass(ssao); }
 const bokeh=new BokehPass(scene,cam,{focus:12,aperture:.0018,maxblur:.012}); composer.addPass(bokeh);
 const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.22,.6,.9); composer.addPass(bloom);
 const film=new ShaderPass({uniforms:{tDiffuse:{value:null},uSeed:{value:Math.random()*10}},vertexShader:'varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
   fragmentShader:`uniform sampler2D tDiffuse; uniform float uSeed; varying vec2 vUv; float h(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233))+uSeed)*43758.5453); }
   void main(){ vec2 d=vUv-.5; float r2=dot(d,d); vec3 c; c.r=texture2D(tDiffuse,vUv-d*.0035).r; c.g=texture2D(tDiffuse,vUv).g; c.b=texture2D(tDiffuse,vUv+d*.0035).b;
-    vec3 hal=vec3(0.); for(int i=0;i<8;i++){ float a=float(i)*.785; hal+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*.004).rgb; } hal/=8.; c+=max(hal-.55,0.)*vec3(.55,.18,.08)*1.2;
-    c*=1.-.6*smoothstep(.12,.55,r2); float g=h(vUv*vec2(1920.,1080.))-.5; c+=g*.05*(.4+.6*(1.-c.g));
+    vec3 hal=vec3(0.); for(int i=0;i<8;i++){ float a=float(i)*.785; hal+=texture2D(tDiffuse,vUv+vec2(cos(a),sin(a))*.004).rgb; } hal/=8.; c+=max(hal-.45,0.)*vec3(.6,.2,.08)*1.6;
+    c*=1.-.6*smoothstep(.12,.55,r2); float g=h(vUv*vec2(1920.,1080.))-.5; c+=g*.065*(.35+.65*(1.-c.g)); c=pow(max(c,0.),vec3(1.06));
     gl_FragColor=vec4(c,1.); }`}); composer.addPass(film); composer.addPass(new OutputPass());
 const ov=document.getElementById('ov'); function T(html,css){ const e=document.createElement('div'); e.className='t'; e.style.cssText=css; e.innerHTML=html; ov.appendChild(e); return e; }
 
@@ -96,6 +113,7 @@ if(SHOT==='A'){ // close, off-axis: the field, one cell holds the answer
   cam.position.set(-1.5,.4,9.5); cam.lookAt(1.2,.1,0); bokeh.uniforms.focus.value=9.2; bokeh.uniforms.aperture.value=.0028;
   key.intensity=.35; scene.traverse(o=>{ if(o.isHemisphereLight) o.intensity=.08; }); new Set(F.userData.cells.filter(c=>c!==hot).map(c=>c.m.material)).forEach(m=>m.envMapIntensity=.12);
   const sp=new THREE.SpotLight(0xfff0dc,260,0,.32,.85,1.6); const hp=hot.m.getWorldPosition(new THREE.Vector3()); sp.position.copy(hp).add(new THREE.Vector3(-5,4,7)); sp.target.position.copy(hp); sp.castShadow=true; sp.shadow.mapSize.set(2048,2048); sp.shadow.bias=-.0003; scene.add(sp,sp.target);
+  b.material=b.material.clone(); b.material.emissiveIntensity=.85; const pl=new THREE.PointLight(0xa8f5d2,8,4.2,2); pl.position.set(hot.x,hot.y-.1,hot.m.position.z+.15); F.add(pl);
   dust(900,[14,8,10]);
   T('Somewhere in here is the thing your agent missed.','left:0;right:0;text-align:center;top:930px;font-size:52px');
 }
@@ -112,6 +130,17 @@ if(SHOT==='B'){ // the hero e, raking light, field soft behind
   cam.position.set(-.8,.2,8.6); cam.lookAt(.5,.1,0); bokeh.uniforms.focus.value=8.4; bokeh.uniforms.aperture.value=.0022;
   dust(700,[12,7,9]);
   T('Eden','left:150px;top:790px;font-size:96px'); T('Context, before they ask.','left:154px;top:905px;font-size:40px;opacity:.85');
+}
+if(SHOT==='C'){ // the field ignites: a path of found things running to the horizon
+  const F=field(16,10); F.rotation.set(-1.18,0,.12); F.position.set(0,-1.2,-2);
+  const lit=F.userData.cells.filter(c=>c.i>=-9&&c.i<=12&&c.j===Math.round(Math.sin(c.i*.42)*2.2)).sort((a,b)=>a.i-b.i);
+  lit.forEach((c,k)=>{ const lv=.55+.45*Math.sin(k*1.7)**2; c.m.material=gradMat(lv); c.m.position.z+=.18; const b=bandsGeo(R); b.material=b.material.clone(); b.material.emissiveIntensity=.5+lv; b.position.set(c.x,c.y,c.m.position.z); F.add(b);
+    if(k%3===1&&k<16){ const pl=new THREE.PointLight(0xa8f5d2,7,3.6,2); pl.position.set(c.x,c.y,c.m.position.z+.3); F.add(pl); } });
+  key.intensity=.5; key.position.set(-6,2.5,-3); rim.intensity=.25; scene.traverse(o=>{ if(o.isHemisphereLight) o.intensity=.05; });
+  new Set(F.userData.cells.filter(c=>!lit.includes(c)).map(c=>c.m.material)).forEach(m=>m.envMapIntensity=.1);
+  cam.position.set(-2.2,1.1,6.5); cam.lookAt(1.5,-.6,-6); cam.fov=34; cam.updateProjectionMatrix(); bokeh.uniforms.focus.value=7.5; bokeh.uniforms.aperture.value=.0022;
+  dust(900,[16,6,14]);
+  T('Eden finds it.','left:0;right:0;text-align:center;top:118px;font-size:52px');
 }
 window.READY=false; document.fonts.ready.then(()=>document.fonts.load('20px Book')).then(()=>{ composer.render(); setTimeout(()=>{ composer.render(); window.READY=true; },400); });
 </script></body></html>
