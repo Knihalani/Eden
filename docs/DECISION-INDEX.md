@@ -936,3 +936,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2058 | 2026-11-21 | Adopted: one rule document may ride beside the packet the pick cap already closed. | adopted |
 | D2059 | 2026-11-21 | Adopted: a trailing joiner is not part of a term. | adopted |
 | D2060 | 2026-11-21 | Adopted: a look-alike by ownership or by death is no pick, dated ask or not. | adopted |
+| D2061 | 2026-11-21 | Adopted: the earliest year a request names is the look-alike floor. | adopted |

@@ -702,7 +702,7 @@ export function requestYear(cue: Cue): number | null {
   // The earliest year named is the look-alike floor: a request that names two years asks across them both —
   // "how did 2023 compare with 2024" wants the earlier side's records, not 2024's alone (D2061). A day ahead
   // still makes this year's items no older, so the floor is capped at now either way.
-  return Math.min(Math.max(...named), new Date(cue.at).getUTCFullYear());
+  return Math.min(Math.min(...named), new Date(cue.at).getUTCFullYear());
 }
 
 /**

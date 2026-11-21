@@ -190,4 +190,36 @@ describe("fallback asks", () => {
     expect(p.contradicts(own, cue("Reschedule my appointment"))).toBe(false);
   });
 
-  
+  test("a question naming two years keeps the earlier side's records (D2061)", () => {
+    const p = partner() as any;
+    const c = cue("How did my 2023 revenue compare with 2024?");
+    const earlier = scored(item("r-23", "Revenue report: 2023", "Total revenue for fiscal year 2023."));
+    const later = scored(item("r-24", "Revenue report: 2024", "Total revenue for fiscal year 2024."));
+    // Both ends of the comparison are the answer; only a year before the earliest named is a look-alike.
+    expect(p.contradicts(earlier, c)).toBe(false);
+    expect(p.contradicts(later, c)).toBe(false);
+    const before = scored(item("r-20", "Revenue report: 2020", "Total revenue for fiscal year 2020."));
+    expect(p.contradicts(before, c)).toBe(true);
+    // One year named, one floor: last year's record is still the look-alike it always was.
+    const single = cue("What was my revenue in 2024?");
+    expect(p.contradicts(earlier, single)).toBe(true);
+    expect(p.contradicts(later, single)).toBe(false);
+  });
+
+  test("a record that declares itself dead is dead beside a dated ask too (D2060)", () => {
+    const p = partner() as any;
+    const dead = item(
+      "h",
+      "Cancelled: Hotel Alfama, Lisbon",
+      "Your reservation at Hotel Alfama for 12 to 14 November 2026 has been cancelled at your request.",
+    );
+    // A dated ask looks up the period's records — a cancelled one is none of them.
+    expect(p.staleSelf(dead, cue("Move my Lisbon flight on 12 November to the evening departure."))).toBe(true);
+    expect(p.staleSelf(dead, cue("What Lisbon hotel do I have in November?"))).toBe(true);
+    // A request about the cancellation itself wants the record.
+    expect(p.staleSelf(dead, cue("Was my Lisbon hotel cancelled?"))).toBe(false);
+    // The dated exemption still stands for a deadline since passed: the period is what it asks about.
+    const lapsed = item("o", "Lisbon offer", "Booking offer expires 8 November 2026.");
+    expect(p.staleSelf(lapsed, cue("What Lisbon offers ran in November 2026?"))).toBe(false);
+  });
+});
