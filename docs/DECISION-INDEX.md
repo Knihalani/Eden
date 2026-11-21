@@ -944,3 +944,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2066 | 2026-11-21 | Adopted: a cell'd router labels its own metrics with the cell (S1-P8). | adopted |
 | D2067 | 2026-11-21 | Adopted: the top table and its edge router (S1-P8). | adopted |
 | D2068 | 2026-11-21 | Adopted: a reset clears the cue cooldown, and the scorer measures a reset. | adopted |
+| D2069 | 2026-11-21 | Adopted: Eden for Gemini CLI (the eighth agent surface). | adopted |
