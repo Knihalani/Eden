@@ -14,6 +14,7 @@ import { afterAll } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { tmpDirClean } from "../packages/primitives/src/tmpdir";
 
 for (const key of Object.keys(process.env)) {
   if (key.startsWith("EDEN_") || key.startsWith("OPENROUTER_")) delete process.env[key];
@@ -34,8 +35,9 @@ process.env.EDEN_HOME = join(home, ".eden");
 // cannot keep a finished run open. Remove it once Bun no longer spins (re-run the repro in docs/TESTING.md).
 const keepAlive = setInterval(() => {}, 3_600_000);
 
-// A global hook: process "exit" handlers do not run under `bun test`.
+// A global hook: process "exit" handlers do not run under `bun test`, so scratch cleanup is per file here.
 afterAll(() => {
   clearInterval(keepAlive);
+  tmpDirClean();
   rmSync(home, { recursive: true, force: true });
 });
