@@ -4,6 +4,9 @@
 Claude Code cannot add tools through hooks, so the installer registers this as an MCP server
 (`mcpServers.eden`). It implements the three messages the host sends — `initialize`,
 `tools/list`, `tools/call` — and answers `ask_context` through `EdenClaude`'s own ask path.
+`pending_context` drains the packets Eden pushed (D2013-era fix for an MCP-only agent getting
+answers but no push, weak-points-1111.md D5); an `ask_context` reply carries them too, after the
+answer — the pending queue is the shared one the hooks drain, so a packet goes once.
 Never reported, never checked. Stdlib only; dies quietly on anything unexpected.
 """
 
@@ -23,7 +26,13 @@ TOOLS = [
             "properties": {"question": {"type": "string", "description": "The question, in plain words."}},
             "required": ["question"],
         },
-    }
+    },
+    {
+        "name": "pending_context",
+        "description": "Context Eden pushed for this session since the last call; the queue drains, so each packet "
+        "is seen once. Call between turns — an agent on MCP alone gets Eden's answers but no push without it.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -67,19 +76,27 @@ def main() -> int:
             reply(msg_id, {"tools": TOOLS})
         elif method == "tools/call":
             params = msg.get("params") or {}
-            if params.get("name") != "ask_context":
-                reply(msg_id, {"content": [{"type": "text", "text": "Unknown tool."}], "isError": True})
-                continue
             if plugin is None:
                 plugin = _plugin()
-            question = str((params.get("arguments") or {}).get("question") or "")
             try:
                 # MCP calls carry no Claude session id; the hooks' state files name the live one,
                 # so the ask lands in the same session the tool hooks check.
                 from eden_client.claude import latest_session_id
+                from eden_client.hermes import _joined
 
                 sid = latest_session_id(_home()) or "eden-mcp"
-                answer = plugin.ask_context({"question": question}, session_id=sid)
+                client = plugin.client(sid)
+                if params.get("name") == "pending_context":
+                    answer = _joined(client.pending()) if client is not None else None
+                elif params.get("name") == "ask_context":
+                    question = str((params.get("arguments") or {}).get("question") or "")
+                    answer = plugin.ask_context({"question": question}, session_id=sid)
+                    # The queue's packets ride the reply: an MCP-only agent has no other channel.
+                    pushed = _joined(client.pending()) if client is not None else None
+                    answer = "\n\n".join(t for t in (answer, pushed) if t)
+                else:
+                    reply(msg_id, {"content": [{"type": "text", "text": "Unknown tool."}], "isError": True})
+                    continue
             except Exception:  # noqa: BLE001
                 answer = None
             reply(msg_id, {"content": [{"type": "text", "text": answer or "No context available."}]})
