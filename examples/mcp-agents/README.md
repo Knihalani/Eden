@@ -1,6 +1,6 @@
 # Eden for MCP-only agents
 
-Twelve agent products expose an MCP client but no hook surface — nothing Eden can observe
+Thirteen agent products expose an MCP client but no hook surface — nothing Eden can observe
 prompts, check tool calls or report replies through. They still get Eden's **pull** path:
 
 - `ask_context(question, item?)` — a natural-language question about the user's context in
@@ -22,6 +22,7 @@ prompts, check tool calls or report replies through. They still get Eden's **pul
 | Continue | `~/.continue/mcpServers/eden.json` | own file (`mcpServers.eden`) |
 | Kilo Code | `~/.config/kilo/kilo.jsonc` | `mcp.eden` (JSONC; `type:"local"`, `command` array, `environment`) |
 | VS Code (Copilot agent mode) | `~/.config/Code/User/mcp.json` | `servers.eden` (`type:"stdio"`) |
+| Junie (JetBrains) | `~/.junie/mcp/mcp.json` | `mcpServers.eden` |
 
 ## Install
 

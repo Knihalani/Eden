@@ -46,6 +46,8 @@ AGENTS = {
     "kilo-code": ("~/.config/kilo", "~/.config/kilo/kilo.jsonc", "kilo"),
     # VS Code's own agent mode reads the user-level mcp.json; `servers` entries are plain stdio.
     "vscode": ("~/.config/Code/User", "~/.config/Code/User/mcp.json", "servers"),
+    # Junie (JetBrains IDE + CLI) reads one mcp.json at both scopes; the global is the user file.
+    "junie": ("~/.junie", "~/.junie/mcp/mcp.json", "mcpservers"),
 }
 
 

@@ -128,6 +128,7 @@ describe.skipIf(!python)("the MCP-only installer", () => {
       "continue",
       "kilo-code",
       "vscode",
+      "junie",
     ]) {
       expect(listed.stdout.toString()).toContain(name);
     }
