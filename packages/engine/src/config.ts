@@ -263,6 +263,13 @@ export interface EngineConfig {
   /** The sync's own budget, per (user, source): listing calls per minute. */
   syncCallsPerMin: number;
   /**
+   * The tenant's pace per connector (S1-P1), shared by the tenant's users on a process: the operator's fleet-wide
+   * figure divided by processes and machines, in calls a minute. Only background calls (the sync's reserved
+   * listings) are held by it — a lookup's own poll, search or fetch is never held — while the connector's own
+   * 429 pushes the whole tenant's background calls back, not one user's. 0: per (user, source) pacing only.
+   */
+  tenantCallsPerMin: number;
+  /**
    * A lookup that finds a synced source stale polls it (at most `syncCatchupPages` pages, within its deadline) and
    * then answers from the local index, rather than sending the source its search and probes.
    */
@@ -1009,6 +1016,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   syncSweepMs: 24 * 3_600_000,
   syncDropMs: 7 * 24 * 3_600_000,
   syncCallsPerMin: 30,
+  tenantCallsPerMin: 0,
   syncOnDemand: true,
   syncPollBehind: true,
   syncCatchupPages: 2,

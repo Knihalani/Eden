@@ -225,6 +225,8 @@ export abstract class PartnerCore {
       // One clock for the whole engine: rate limits, result freshness and breakers run on the same time as the
       // cache and sessions (an injected clock that skipped the fan-out made simulated time hit real-time limits).
       now: this.now,
+      // `tenantCallsPerMin` (S1-P1): the tenant's pace per connector, unset (0) unless the operator sets it.
+      tenantRatePerSec: this.config.tenantCallsPerMin > 0 ? this.config.tenantCallsPerMin / 60 : undefined,
     });
     const c = this.config;
     this.sync = c.sync
