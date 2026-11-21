@@ -168,6 +168,35 @@ describe("companions: a delivered item pulls its cross-source companions (D1977)
     expect(ids).not.toContain("mail:acme-invoice-old");
   });
 
+  test("a rule document of a pick's matter links on one common term: the fare rules beside the booking", async () => {
+    const mail = new StaticSource("mail", "Mail", [
+      {
+        ref: "ba-booking",
+        title: "Your booking ABC123: London to Lisbon",
+        text: "Flight BA 500, Friday 13 Nov, departs LHR 07:25, seat 14C. Booking reference ABC123.",
+      },
+      {
+        ref: "ba-policy",
+        title: "Changing your BA booking",
+        text: "Changes to Economy Light fares cost 65 GBP per person plus any fare difference.",
+      },
+      // "booking" sits on most of the user's mail, so it is not a rare word to link on; the policy's own
+      // vocabulary is what says it belongs beside the booking.
+      { ref: "hotel-1", title: "Your booking at Memmo", text: "Booking confirmed for 13-16 Nov." },
+      { ref: "hotel-2", title: "Booking receipt", text: "Your booking charge of 412 GBP." },
+      { ref: "rail-1", title: "Booking change", text: "Your booking on the 10:00 was moved." },
+      // A rule document of another matter links nothing: its words are policy's but no pick shares one.
+      { ref: "visa-policy", title: "Visa fee schedule", text: "Fees and surcharges for each visa class." },
+      // Another party's policy is not the pick's rules: TAP's shares "booking" and no name or rare word.
+      { ref: "tap-policy", title: "Changing your TAP booking", text: "Change fees and penalties apply." },
+    ]);
+    const { ids } = await run("What does my Lisbon flight itinerary say?", [mail]);
+    expect(ids).toContain("mail:ba-booking");
+    expect(ids).toContain("mail:ba-policy");
+    expect(ids).not.toContain("mail:visa-policy");
+    expect(ids).not.toContain("mail:tap-policy");
+  });
+
   test("off, the packet is the request's own picks only", async () => {
     const mail = new StaticSource("mail", "Mail", [
       {
