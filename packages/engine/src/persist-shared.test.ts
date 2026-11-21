@@ -14,7 +14,7 @@ import { bucketOf, itemId, type AgentEvent, type ContextItem, type Scope } from 
 import type { ListPage, SearchQuery, Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { ContextPartner } from "./partner";
-import { type BlobStore, SharedFrozenDisk } from "./persist-shared";
+import { type BlobStore, ShardedBlobStore, SharedFrozenDisk } from "./persist-shared";
 import { termIds } from "./text";
 
 const HOUR = 3_600_000;
@@ -466,4 +466,55 @@ test("a released user lands on another machine with its sync state and source-ma
     (x) => x?.citations.map((c) => c.itemId) ?? [],
   );
   expect(got).toContain(itemId("mail", "m0"));
+});
+
+test("a store sharded over buckets (S1-P4): a user's blob lands in their bucket's shard; the marker and lists span them", async () => {
+  // Two users whose buckets split over two shards; a name's shard is its first four hex digits mod the count.
+  const names = ["alice", "bob", "carol", "dana", "erin", "fred"];
+  const byShard: Scope[][] = [[], []];
+  for (const u of names) byShard[bucketOf("t", u) % 2]!.push({ tenantId: "t", userId: u });
+  const m0 = new MemoryStore();
+  const m1 = new MemoryStore();
+  const sharded = new ShardedBlobStore([m0, m1], "f/");
+  const a = freezing();
+  const da = shared(sharded);
+  a.persist(da);
+  const frozen: Scope[] = [];
+  for (const u of [...byShard[0]!, ...byShard[1]!].slice(0, 4)) {
+    a.put(u, items(u.userId, 10), T0);
+    frozen.push(u);
+  }
+  freezeAll(a, T0);
+  expect(await da.settle(1_000)).toBe(0);
+  for (const u of frozen) {
+    const key = `f/${da.local.nameOf(u)}`;
+    const inShard = bucketOf(u.tenantId, u.userId) % 2 === 0 ? m0 : m1;
+    const other = inShard === m0 ? m1 : m0;
+    expect(inShard.objects.has(key)).toBe(true);
+    expect(other.objects.has(key)).toBe(false);
+  }
+  expect(m0.objects.size + m1.objects.size).toBe(frozen.length);
+
+  // The key marker names no blob: it sits on the first store.
+  await da.verifyStoreKey(false);
+  expect(m0.objects.has("f/key-id")).toBe(true);
+  expect(m1.objects.has("f/key-id")).toBe(false);
+
+  // A list merges every shard (the sweep and the key check's sample read across them).
+  const listed: string[] = [];
+  for await (const o of sharded.list("f/")) listed.push(o.key);
+  expect(listed.length).toBe(m0.objects.size + m1.objects.size);
+
+  // A second machine fetches a user from their shard, and a delete reaches the same one.
+  const b = freezing();
+  const db = shared(sharded, tempDir());
+  b.persist(db);
+  const u = frozen[0]!;
+  await db.fetch(u);
+  const inShard = bucketOf(u.tenantId, u.userId) % 2 === 0 ? m0 : m1;
+  expect(db.local.has(u)).toBe(true);
+  db.delete(u);
+  await da.settle(1_000);
+  await db.settle(1_000);
+  expect(inShard.objects.has(`f/${da.local.nameOf(u)}`)).toBe(false);
 });

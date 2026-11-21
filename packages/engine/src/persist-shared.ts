@@ -52,6 +52,47 @@ export const MAX_ABSENT = 100_000;
 type Job = { kind: "put"; bytes: Uint8Array } | { kind: "delete" };
 
 const NAME = /^([0-9a-f]{4})-[0-9a-f]{40}\.blob$/;
+
+/**
+ * Several stores behind one (S1-P4): each user's blobs go to the store their bucket names — a name's first four hex
+ * digits are its bucket (NAME), and shard = bucket mod the number of stores — so one bucket's request-rate bound is
+ * not the whole fleet's. A key that names no blob (the key-id marker) sits on the first store.
+ *
+ * Changing the shard count moves every user: a fetch looks in the shard the name routes to now, misses a copy written
+ * under another count, and the user re-syncs; the orphaned copy is found by `sweepStore`'s merged list and deleted by
+ * age. Plan a count change for a quiet window.
+ */
+export class ShardedBlobStore implements BlobStore {
+  private readonly stores: readonly BlobStore[];
+  private readonly prefix: string;
+
+  constructor(stores: readonly BlobStore[], prefix: string) {
+    if (stores.length === 0) throw new Error("ShardedBlobStore needs at least one store");
+    this.stores = stores;
+    this.prefix = prefix;
+  }
+
+  private of(key: string): BlobStore {
+    const m = NAME.exec(key.slice(this.prefix.length));
+    return this.stores[m ? parseInt(m[1]!, 16) % this.stores.length : 0]!;
+  }
+
+  put(key: string, bytes: Uint8Array): Promise<void> {
+    return this.of(key).put(key, bytes);
+  }
+
+  get(key: string): Promise<Uint8Array | null> {
+    return this.of(key).get(key);
+  }
+
+  delete(key: string): Promise<void> {
+    return this.of(key).delete(key);
+  }
+
+  async *list(prefix: string): AsyncIterable<{ key: string; modified: number }> {
+    for (const s of this.stores) yield* s.list(prefix);
+  }
+}
 /** The store's marker of the key its users were written with (D1071); not a blob name: no sweep or fetch reads it. */
 const KEY_MARK = "key-id";
 
