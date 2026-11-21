@@ -157,6 +157,10 @@ describe("quality runner", () => {
       updates: 0.5,
       deletes: 0.1,
       push: "signals" as const,
+      // `sync` prefills the cache before each session: the background sync's progress against the event
+      // loop is wall-clock timing, and verdict gates read it — a shard's run and the whole run would
+      // otherwise differ by when the poll landed, not by anything the merge does (D2054).
+      sync: true,
     };
     const untimed = (r: QualityReport) => JSON.stringify({ ...r, latency: null, cpu: null });
     const whole = await runQuality(o);

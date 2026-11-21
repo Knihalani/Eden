@@ -953,6 +953,9 @@ generated pages (`.gitattributes` merges them as a union so a merge never stops 
 ||||||| adf64052e
 ||||||| 400821b9c
 
+| D2054 | 2026-11-21 | **Adopted: the user-range tally test runs with `sync` on, so the cache is full before each session.** The test merged two shards' tallies and compared the report to the whole run's — but verdict gates read the background sync's progress against the event loop, which is wall-clock timing: whether a poll landed before a request flipped `verify`/`silent`/delivery counts (~2 runs in 6, post-D1982's finer-grained stale gates). `sync` (the lab's prefill, D356) puts every item in the cache up front, so a shard's run and the whole run differ only in what the merge itself does — which is what the test asserts. The flag changes nothing about `mergeTallies`/`qualityReport` under test; the `userRange` validation and sample-concatenation checks are unchanged. |
+
+||||||| 280f6b5f8
 ## Trial switches
 
 A trial is decided in the branch or session that opened it, as soon as its evidence is in (D814): promoted into
