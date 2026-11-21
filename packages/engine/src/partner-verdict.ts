@@ -481,14 +481,14 @@ const ruleDoc = (words: ReadonlySet<string>) => [...words].filter((t) => POLICY_
 
 const STALE_TAG = /[\[(（【]\s*(?:old|superseded|expired|outdated|out[- ]of[- ]date|previous|archived|void)\b/i;
 const STALE_CAPS = /\b(?:OLD|SUPERSEDED|EXPIRED|OUTDATED|VOID)\b/;
-const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b/i;
+const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b|^\s*cancell?ed\b/i;
 const STALE_DECLARED =
   /\b(?:superseded by|has been superseded|has been replaced by|no longer valid|was withdrawn|has been withdrawn|out of date)\b/i;
 /** How far into a document its own death notice is read (`STALE_DECLARED`): the preamble where it is written. */
 const STALE_CHARS = 400;
 /** The request names the old version or a stale state itself: the stale copy is then the answer, not a look-alike. */
 const ASKS_OLD =
-  /\b(?:old|previous|earlier|former|prior|original|superseded?|expired?|outdated|out[- ]of[- ]date|obsolete|last year(?:'s)?|used to|before the (?:new|change|update|revision|renewal))\b/i;
+  /\b(?:old|previous|earlier|former|prior|original|superseded?|expired?|outdated|out[- ]of[- ]date|obsolete|last year(?:'s)?|used to|before the (?:new|change|update|revision|renewal)|cancell?ed|cancell?ation)\b/i;
 const MONTHS3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 /** A month name ("Jan", "September") as a capturing regex fragment — `partner`'s `TIME_OR_DATE` uses it too. */
 export const MONTH =
@@ -637,6 +637,13 @@ export const sameRef = (refs: ReadonlySet<string>, item: ContextItem): boolean =
 
 /** A request that moves something onto a named day: the day's other timed items are the clash it would make. */
 export const MOVES = /\b(move|moved|reschedul\w*|postpone|push|switch\w*|change)\b/i;
+/** The request claims a thing for the user: "my flight", "our booking". */
+const FIRST_PERSON = /\b(?:my|mine|our|ours)\b/i;
+/** The mark of a document handed on from its holder: "Fwd:" / "FW:" — also behind a reply's "Re:" — say the
+ * thing it names is someone else's. A bare "Re:" is a thread's own reply, not a hand-off. */
+const FORWARDED = /^\s*(?:(?:re|fwd?|fw)\s*:\s*)*fwd?\s*:/i;
+/** A forwarded title declaring a named party's thing: "Fwd: Sam Okoro's flight to Lisbon" — owner, then the thing. */
+const OWNED_BY = /\b([\p{Lu}][\p{L}]+(?:\s+[\p{Lu}][\p{L}]+){0,2})['’]s\s+([\p{L}\p{N}]+)/gu;
 
 /**
  * An entity used as a setting or topic, not the subject ("novels set in Delhi", "books about Rome"): the word
@@ -687,11 +694,25 @@ export const idNumbers = (text: string): Set<string> => {
  * earlier is last year's look-alike, not what the request means (D1970).
  */
 export function requestYear(cue: Cue): number | null {
-  let found = Math.max(...(cue.raw.match(YEARS)?.map(Number) ?? [0]));
-  for (const d of cue.time?.days ?? []) found = Math.max(found, Number(d.slice(0, 4)) || 0);
-  const now = new Date(cue.at).getUTCFullYear();
-  if (found === 0) return null; // no year or day named: nothing to be stale against
-  return Math.min(found, now);
+  // A 19xx/20xx number that prices something is no year the request names ("£1,950" is an amount — the same
+  // money context `idNumbers` drops). No preposition filter: "at 2023" and "by 2023" name years as readily as
+  // clock times, and a spurious year only weakens the floor where a dropped one loses records.
+  const named: number[] = [];
+  YEARS.lastIndex = 0;
+  for (const m of cue.raw.matchAll(YEARS)) {
+    const before = cue.raw.slice(Math.max(0, m.index - 8), m.index);
+    if (/[£$€]\s*$/.test(before) || /\b(?:GBP|USD|EUR)\s*$/i.test(before)) continue;
+    named.push(Number(m[0]));
+  }
+  for (const d of cue.time?.days ?? []) {
+    const y = Number(d.slice(0, 4)) || 0;
+    if (y > 0) named.push(y);
+  }
+  if (named.length === 0) return null; // no year or day named: nothing to be stale against
+  // The earliest year named is the look-alike floor: a request that names two years asks across them both —
+  // "how did 2023 compare with 2024" wants the earlier side's records, not 2024's alone (D2061). A day ahead
+  // still makes this year's items no older, so the floor is capped at now either way.
+  return Math.min(Math.min(...named), new Date(cue.at).getUTCFullYear());
 }
 
 /**
@@ -1583,8 +1604,12 @@ export abstract class PartnerVerdict extends PartnerCheck {
   protected staleSelf(item: ContextItem, cue: Cue): boolean {
     // A request that names its own year asks for that year's record: whatever state it is in now is the
     // answer. The year is the raw text's alone — "today" resolving to a day of this year is no exemption.
-    if (ASKS_OLD.test(cue.raw) || cue.raw.match(YEARS) !== null || MONTH_NAME.test(cue.raw)) return false;
+    if (ASKS_OLD.test(cue.raw)) return false;
     const r = staleOf(item, item.updatedAt ?? cue.at);
+    // A dated ask looks up the period's records, so a deadline since passed is no staleness; a record that
+    // declares itself dead is dead whatever day the ask names, though (D2060) — "Cancelled: Hotel Alfama"
+    // is no more the booking "move my Lisbon flight on 12 November" wants than it is an undated ask's.
+    if (cue.raw.match(YEARS) !== null || MONTH_NAME.test(cue.raw)) return r.declared;
     return r.declared || (r.expiry !== null && r.expiry <= cue.at);
   }
 
@@ -1647,7 +1672,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
    * ties a name the request uses to a name it did not ("Jordan Pike (Contoso)" for "Jordan Pike from Northwind").
    * Checked wherever a no-model path hands an item, so a look-alike fails at the gate the agent never sees.
    */
-  private contradicts(x: Scored, cue: Cue): boolean {
+  protected contradicts(x: Scored, cue: Cue): boolean {
     const want = idNumbers(cue.raw);
     if (want.size > 0) {
       const have = idNumbers(`${x.item.title} ${x.item.text}`);
@@ -1691,6 +1716,21 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (other === null) continue;
       const second = other[1]!.toLowerCase().replace(/['’]s?$/, "");
       if (!seconds.has(second)) return true;
+    }
+    // A thing a forwarded document declares a named party's, when the request claims that thing for the
+    // user (D2060): "Fwd: Sam Okoro's flight to Lisbon" is not the booking "move my flight" acts on. The
+    // forward mark is what makes the owner a third party — "Kai Nihalani's appointment" on the user's own
+    // calendar is the user's own, however the request phrases it. The owner the request itself names is
+    // no look-alike ("reschedule Sam's flight"), nor is a bare possessive at the title's end ("Brunch at
+    // Rosa's"), which names no owned thing.
+    if (FIRST_PERSON.test(cue.raw) && FORWARDED.test(x.item.title)) {
+      const raw = cue.raw.toLowerCase();
+      OWNED_BY.lastIndex = 0;
+      for (const m of x.item.title.matchAll(OWNED_BY)) {
+        const owner = m[1]!.toLowerCase();
+        if (raw.includes(owner) || owner.split(/\s+/).some((p) => raw.includes(p))) continue;
+        if (raw.includes(m[2]!.toLowerCase())) return true;
+      }
     }
     return false;
   }

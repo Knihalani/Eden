@@ -156,4 +156,91 @@ describe("fallback asks", () => {
     const got = p.fallback([look, owed], c);
     expect(got.map((x: any) => x.item.id)).toEqual([owed.item.id]);
   });
+
+  test("a thing a named third party owns is a look-alike beside the user's own (D2060)", () => {
+    const p = partner() as any;
+    const c = cue("Move my Lisbon flight on 12 November to the evening departure.", ["Lisbon"], ["2026-11-12"]);
+    const mine = scored(
+      item(
+        "b-nov",
+        "Your booking: London to Lisbon, 12 November",
+        "Flight TP1351 departs Heathrow 07:40 on 12 November 2026.",
+      ),
+    );
+    const sams = scored(
+      item(
+        "b-sam",
+        "Fwd: Sam Okoro's flight to Lisbon",
+        "Sam's booking reference ZZ81KD: TP1357, 18:05 from Heathrow on 12 November 2026.",
+      ),
+    );
+    expect(p.contradicts(mine, c)).toBe(false);
+    expect(p.contradicts(sams, c)).toBe(true);
+    // The owner the request itself names is no look-alike.
+    const theirs = cue("Move my booking and Sam Okoro's flight to Lisbon", ["Lisbon"]);
+    expect(p.contradicts(sams, theirs)).toBe(false);
+    // No first-person claim, no look-alike: "reschedule Sam Okoro's flight" asks about his.
+    expect(p.contradicts(sams, cue("Reschedule Sam Okoro's flight to Lisbon", ["Lisbon"]))).toBe(false);
+    // A possessive at the title's end names no owned thing ("Rosa's" is the place).
+    const rosas = scored(item("b-rosa", "Brunch at Rosa's", "Sunday 11:00"));
+    expect(p.contradicts(rosas, cue("Book our anniversary dinner"))).toBe(false);
+    // A bare possessive title is too ambiguous to condemn: "Kai Nihalani's appointment" on the user's own
+    // calendar is the user's own — only a forward mark makes the named owner a third party.
+    const own = scored(item("b-own", "Kai Nihalani's appointment", "Dentist, Tuesday 15:00."));
+    expect(p.contradicts(own, cue("Reschedule my appointment"))).toBe(false);
+    // The mark survives a reply's "Re:" prefix — "Re: Fwd: Sam's flight" is still the forwarded third-party
+    // document; a bare "Re:" is a thread's own reply and stays ambiguous.
+    const refwd = scored(item("b-rf", "Re: Fwd: Sam Okoro's flight to Lisbon", sams.item.text));
+    expect(p.contradicts(refwd, c)).toBe(true);
+    const re = scored(item("b-re", "Re: Sam Okoro's flight to Lisbon", sams.item.text));
+    expect(p.contradicts(re, c)).toBe(false);
+  });
+
+  test("a question naming two years keeps the earlier side's records (D2061)", () => {
+    const p = partner() as any;
+    const c = cue("How did my 2023 revenue compare with 2024?");
+    const earlier = scored(item("r-23", "Revenue report: 2023", "Total revenue for fiscal year 2023."));
+    const later = scored(item("r-24", "Revenue report: 2024", "Total revenue for fiscal year 2024."));
+    // Both ends of the comparison are the answer; only a year before the earliest named is a look-alike.
+    expect(p.contradicts(earlier, c)).toBe(false);
+    expect(p.contradicts(later, c)).toBe(false);
+    const before = scored(item("r-20", "Revenue report: 2020", "Total revenue for fiscal year 2020."));
+    expect(p.contradicts(before, c)).toBe(true);
+    // One year named, one floor: last year's record is still the look-alike it always was.
+    const single = cue("What was my revenue in 2024?");
+    expect(p.contradicts(earlier, single)).toBe(true);
+    expect(p.contradicts(later, single)).toBe(false);
+    // A price is no named year: "£1950" in a 2026 lookup does not lower the floor onto 1950.
+    const lease25 = scored(item("l-25", "Lease 2025", "Signed lease for the 2025 term."));
+    const lease26 = scored(item("l-26", "Lease 2026", "Signed lease for the 2026 term."));
+    const priced = cue("Find my 2026 lease of £1950");
+    expect(p.contradicts(lease25, priced)).toBe(true);
+    expect(p.contradicts(lease26, priced)).toBe(false);
+    // "at" and "by" are year prepositions too: only the money context drops a number.
+    const conf = cue("Compare my talks at 2023 and 2024 conferences");
+    expect(p.contradicts(earlier, conf)).toBe(false);
+    expect(p.contradicts(later, conf)).toBe(false);
+    expect(p.contradicts(before, conf)).toBe(true);
+  });
+
+  test("a record that declares itself dead is dead beside a dated ask too (D2060)", () => {
+    const p = partner() as any;
+    const dead = item(
+      "h",
+      "Cancelled: Hotel Alfama, Lisbon",
+      "Your reservation at Hotel Alfama for 12 to 14 November 2026 has been cancelled at your request.",
+    );
+    // A dated ask looks up the period's records — a cancelled one is none of them.
+    expect(p.staleSelf(dead, cue("Move my Lisbon flight on 12 November to the evening departure."))).toBe(true);
+    expect(p.staleSelf(dead, cue("What Lisbon hotel do I have in November?"))).toBe(true);
+    // A request about the cancellation itself wants the record.
+    expect(p.staleSelf(dead, cue("Was my Lisbon hotel cancelled?"))).toBe(false);
+    // A leading "Cancelled:" declares the record dead; "budget review cancelled" mid-title reports an event
+    // — the notice is fresh news, not a dead record.
+    const notice = item("n", "Dana Lee: budget review cancelled", "Dana Lee cancelled the budget review.");
+    expect(p.staleSelf(notice, cue("What's new with Dana Lee?"))).toBe(false);
+    // The dated exemption still stands for a deadline since passed: the period is what it asks about.
+    const lapsed = item("o", "Lisbon offer", "Booking offer expires 8 November 2026.");
+    expect(p.staleSelf(lapsed, cue("What Lisbon offers ran in November 2026?"))).toBe(false);
+  });
 });
