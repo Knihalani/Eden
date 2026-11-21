@@ -232,6 +232,12 @@ const FIRST_PAGE_TIER = 0;
 const POLL_TIER = 1;
 const DEEPER_TIER = 2;
 const SWEEP_TIER = 3;
+const SYNC_TIERS = 4;
+/**
+ * Buckets (seconds) of the time-to-first-value histogram (S1-P2): a new user's first page should land in minutes —
+ * the SLO reads p90 under five — while a backfill that could not start yet sits in the +Inf tail, not a bucket.
+ */
+export const FIRST_VALUE_LE = [15, 30, 60, 120, 300, 600, 900, 1800];
 const HOUR = 3_600_000;
 /** Pushed item ids held per source between polls (`SourceSync.pushed`); past it the oldest are let go. */
 const MAX_PUSHED = 1_000;
@@ -396,6 +402,10 @@ interface UserSync {
   queued?: boolean;
   /** A tick's step is running for the user (`kick` waits for it). */
   ticking?: boolean;
+  /** When this process first tracked the user (S1-P2's time to first value starts at their first event). */
+  trackedAt: number;
+  /** When their first page was stored; undefined while no source has produced one. */
+  firstPageAt?: number;
   /** `activePollCap` (D1747): floor polls the user may still make, and when that allowance was last refilled. */
   floorAllowance?: number;
   floorRefilledAt?: number;
@@ -413,6 +423,18 @@ export interface SyncStats {
   deleted: number;
   /** D1927: listed items whose words the store did not add again (held unchanged, added under the current stamp). */
   sketchSkipped: number;
+  /** S1-P2: background listing calls that reached the connector, by tier (0 first page … 3 sweep). */
+  callsByTier: number[];
+  /** S1-P2: background calls the pace refused outright ("limited"), by tier: it holding background reads back. */
+  heldByTier: number[];
+  /** S1-P2: background calls the connector itself rate-limited ("throttled"), by tier. */
+  throttledByTier: number[];
+  /** S1-P2: demand (a lookup's own) listing calls the connector rate-limited. */
+  demandThrottled: number;
+  /** S1-P2: first-event → first stored page seconds, cumulative over `FIRST_VALUE_LE` (count and sum beside). */
+  firstPageSeconds: number[];
+  firstPageCount: number;
+  firstPageSumSeconds: number;
 }
 
 /** `activePollBackoff`: a quiet source's floor interval doubles at most this often (a 2 h floor waits up to 8 h). */
@@ -452,6 +474,13 @@ export class SyncManager {
     demandItems: 0,
     deleted: 0,
     sketchSkipped: 0,
+    callsByTier: new Array<number>(SYNC_TIERS).fill(0),
+    heldByTier: new Array<number>(SYNC_TIERS).fill(0),
+    throttledByTier: new Array<number>(SYNC_TIERS).fill(0),
+    demandThrottled: 0,
+    firstPageSeconds: new Array<number>(FIRST_VALUE_LE.length).fill(0),
+    firstPageCount: 0,
+    firstPageSumSeconds: 0,
   };
 
   constructor(
@@ -514,6 +543,7 @@ export class SyncManager {
       used: new Set(),
       rare: null,
       storeTail: Promise.resolve(),
+      trackedAt: now,
     });
     return true;
   }
@@ -714,6 +744,9 @@ export class SyncManager {
       // as sources are listed.
       rare: this.o.rareTerms && snap.rare !== undefined ? RareTerms.load(snap.rare) : null,
       storeTail: Promise.resolve(),
+      trackedAt: this.deps.now(),
+      // A user who already had a first page when they went to disk is not measured for first value again.
+      firstPageAt: snap.sources.some((x) => num(x.polledAt, -Infinity) > -Infinity) ? this.deps.now() : undefined,
     };
     for (const x of snap.sources) {
       const s = newSourceSync(x.id);
@@ -1965,6 +1998,17 @@ export class SyncManager {
     try {
       await before;
       if (stale()) return 0;
+      // S1-P2: the first page stored for the user is their first value — measured from their first event. `polledAt`
+      // cannot mark it: it moves only when a whole first pass ends (`warmUp`), pages past the cap included.
+      if (u.firstPageAt === undefined) {
+        u.firstPageAt = this.deps.now();
+        const secs = Math.max(0, (u.firstPageAt - u.trackedAt) / 1_000);
+        for (let i = 0; i < FIRST_VALUE_LE.length; i++) {
+          if (secs <= FIRST_VALUE_LE[i]!) this.stats.firstPageSeconds[i]!++;
+        }
+        this.stats.firstPageCount++;
+        this.stats.firstPageSumSeconds += secs;
+      }
       return await this.storeHeld(u, s, items, readMark, changedIds, keepCut, stale);
     } finally {
       release();
@@ -2156,16 +2200,73 @@ export class SyncManager {
       ...(this.o.ingestTurns && phase !== "demand" ? { turn: this.turn } : {}),
     };
     const tracer = this.deps.tracer;
-    if (!tracer) return this.deps.fanout.list(source, scope, cursor, limit, options);
+    if (!tracer) {
+      const page = await this.deps.fanout.list(source, scope, cursor, limit, options);
+      this.countListing(phase, given.tier, page);
+      return page;
+    }
     const sp = tracer.open("sync.list", 0, { async: true, phase, source: source.id });
     try {
       const page = await this.deps.fanout.list(source, scope, cursor, limit, options);
+      this.countListing(phase, given.tier, page);
       tracer.close(sp, typeof page === "string" ? { status: page } : { status: "ok", items: page.items.length });
       return page;
     } catch (e) {
       tracer.close(sp, { error: true });
       throw e;
     }
+  }
+
+  /**
+   * The listing-call counters by S1-P1 tier (S1-P2): the pace's holds, the calls that reached the connector, and
+   * its own refusals, each where the sync saw them — the call's tier is only known here.
+   */
+  private countListing(phase: string, tier: number | undefined, page: unknown): void {
+    if (phase === "demand") {
+      if (page === "throttled") this.stats.demandThrottled++;
+      return;
+    }
+    const t = Math.max(0, Math.min(tier ?? 0, SYNC_TIERS - 1));
+    if (page === "limited") {
+      this.stats.heldByTier[t]!++;
+      return;
+    }
+    if (page === "busy") return;
+    this.stats.callsByTier[t]!++;
+    if (page === "throttled") this.stats.throttledByTier[t]!++;
+  }
+
+  /**
+   * The backfill and fairness gauges `/metrics` exports (S1-P2, B4): users still in a first pass, users whose no
+   * source has produced a page yet (the backfill backlog's measure), and the kick queue's depth — users waiting,
+   * tenants waiting, kicked steps running. Computed on the scrape: O(users + sources), nothing kept between.
+   */
+  gauges(): {
+    backfilling: number;
+    waitingFirstPage: number;
+    kickQueuedUsers: number;
+    kickQueuedTenants: number;
+    kickRunning: number;
+  } {
+    let backfilling = 0;
+    let waitingFirstPage = 0;
+    for (const u of this.users.values()) {
+      if (u.gone) continue;
+      let started = false;
+      let backfill = false;
+      for (const s of u.sources.values()) if (s.phase === "backfill") backfill = true;
+      if (backfill) backfilling++;
+      if (u.sources.size > 0 && u.firstPageAt === undefined) waitingFirstPage++;
+    }
+    let kickQueuedUsers = 0;
+    for (const q of this.kickQueue.values()) kickQueuedUsers += q.length;
+    return {
+      backfilling,
+      waitingFirstPage,
+      kickQueuedUsers,
+      kickQueuedTenants: this.kickQueue.size,
+      kickRunning: this.kicking,
+    };
   }
 
   /** The last turn handed out (`turn`). */
